@@ -2,6 +2,7 @@
   "name": "axrone",
   "version": "0.0.1",
   "private": true,
+  "type": "module",
   "workspaces": [
     "packages/*"
   ],
@@ -36,6 +37,7 @@
     "lerna": "^8.2.2",
     "lint-staged": "^15.5.1",
     "prettier": "^3.5.3",
+    "punycode2": "^1.0.1",
     "rimraf": "^6.0.1",
     "rollup": "^4.40.0",
     "rollup-plugin-dts": "^6.2.1",

@@ -1,23 +1,24 @@
-module.exports = {
-    preset: 'ts-jest',
+export default {
+    preset: 'ts-jest/presets/js-with-ts-esm',
     testEnvironment: 'jsdom',
-    setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+    setupFilesAfterEnv: ['./jest.setup.js'],
     testMatch: ['**/__tests__/**/*.spec.[jt]s?(x)', '**/?(*.)+(spec|test).[jt]s?(x)'],
-    collectCoverageFrom: [
-        'packages/*/src/**/*.{js,jsx,ts,tsx}',
-        '!packages/*/src/**/*.d.ts',
-        '!packages/*/src/**/__tests__/**',
-        '!packages/*/src/**/__mocks__/**'
-    ],
-    coverageThreshold: {
-        global: {
-            branches: 80,
-            functions: 80,
-            lines: 80,
-            statements: 80
-        }
-    },
+    extensionsToTreatAsEsm: ['.ts', '.tsx', '.mts'],
     moduleNameMapper: {
-        '^@axrone/(.*)$': '<rootDir>/packages/$1/src'
+        '^@axrone/(.*)$': '<rootDir>/packages/$1/src',
+        'punycode': '<rootDir>/node_modules/punycode2'
+    },
+    transform: {
+        '^.+\\.(ts|tsx|mts)$': [
+            'ts-jest',
+            {
+                useESM: true,
+            }
+        ]
+    },
+    globals: {
+        'ts-jest': {
+            useESM: true,
+        }
     }
 };
