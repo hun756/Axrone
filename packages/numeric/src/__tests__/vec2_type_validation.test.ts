@@ -7,7 +7,7 @@ import {
     Vec2Tuple,
     Vec2Like,
     Scalar,
-} from '../vec2_legacy';
+} from '../vec2';
 
 describe('Vector Type Guards', () => {
     const vecObj: ReadonlyVec2 = Object.freeze({ x: 1, y: 2 });

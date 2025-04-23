@@ -1,4 +1,4 @@
-import { isVec2, isVec2Tuple, isVec2Like } from '../vec2_legacy';
+import { isVec2, isVec2Tuple, isVec2Like } from '../vec2';
 import {
     createValidVec2Objects,
     createInvalidVec2Objects,
