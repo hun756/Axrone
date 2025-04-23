@@ -395,3 +395,48 @@ export const TransformedDistribution = <TInput, TOutput>(
         quantile: source.quantile,
     };
 };
+
+export const NormalPool = <T extends RandomGenerator = DefaultRandomGenerator>(
+    options: BoxMullerOptions<T> & { poolSize?: number } = {}
+): NormalDistribution & { refill: () => void } => {
+    const distribution = BoxMullerTransform(options);
+    const poolSize = options.poolSize ?? 1000;
+
+    validatePositive(poolSize, 'poolSize');
+    validateInteger(poolSize, 'poolSize');
+
+    let values: number[] = distribution.sampleMany(poolSize) as number[];
+    let index = 0;
+
+    const refill = (): void => {
+        values = distribution.sampleMany(poolSize) as number[];
+        index = 0;
+    };
+
+    const sample = (): number => {
+        if (index >= values.length) {
+            refill();
+        }
+        return values[index++];
+    };
+
+    const sampleMany = (count: number): readonly number[] => {
+        validatePositive(count, 'count');
+        validateInteger(count, 'count');
+
+        if (count <= poolSize - index) {
+            const result = values.slice(index, index + count);
+            index += count;
+            return result;
+        }
+
+        return distribution.sampleMany(count);
+    };
+
+    return {
+        ...distribution,
+        sample,
+        sampleMany,
+        refill,
+    };
+};
