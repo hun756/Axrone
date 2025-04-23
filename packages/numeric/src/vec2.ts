@@ -78,7 +78,16 @@ export const randomBox = (minX: Scalar, maxX: Scalar, minY: Scalar, maxY: Scalar
     y: minY + Math.random() * (maxY - minY),
 });
 
+// TODO: fix it 
 export const randomBoxFast = (minX: Scalar, maxX: Scalar, minY: Scalar, maxY: Scalar): Vec2 => ({
     x: minX + _fastRandom() * (maxX - minX),
     y: minY + _fastRandom() * (maxY - minY),
 });
+
+export const lengthSq = (v: Vec2Like): Scalar => {
+    const x = _x(v);
+    const y = _y(v);
+    return x * x + y * y;
+};
+
+export const length = (v: Vec2Like): Scalar => Math.sqrt(lengthSq(v));
