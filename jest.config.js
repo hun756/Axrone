@@ -13,12 +13,9 @@ export default {
             'ts-jest',
             {
                 useESM: true,
+                isolatedModules: true,
+                sourceMap: true
             }
         ]
-    },
-    globals: {
-        'ts-jest': {
-            useESM: true,
-        }
     }
 };
