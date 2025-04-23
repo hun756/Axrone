@@ -130,3 +130,222 @@ export const validateInRange = (
         );
     }
 };
+
+export const BoxMullerTransform = <TRandom extends RandomGenerator = DefaultRandomGenerator>(
+    options: BoxMullerOptions<TRandom> = {}
+): NormalDistribution => {
+    const generator =
+        typeof options.randomGenerator === 'function'
+            ? options.randomGenerator()
+            : (options.randomGenerator ?? DefaultRandomGenerator.getInstance());
+
+    const mean = options.mean ?? DEFAULT_MEAN;
+    const stdDev = options.standardDeviation ?? DEFAULT_STD_DEV;
+    const useCache = options.useCache ?? DEFAULT_CACHE;
+    const algorithm = options.algorithm ?? DEFAULT_ALGORITHM;
+    const isOptimizedForSpeed =
+        options.optimizeFor === 'speed' || options.optimizeFor === undefined;
+
+    validateFinite(mean, 'mean');
+    validateFinite(stdDev, 'standardDeviation');
+    validatePositive(stdDev, 'standardDeviation');
+
+    let hasCache = false;
+    let cachedValue = 0;
+
+    const metadata: DistributionMetadata = {
+        mean,
+        standardDeviation: stdDev,
+        variance: stdDev * stdDev,
+        algorithm,
+    };
+
+    const transformStandard = (): number => {
+        if (useCache && hasCache) {
+            hasCache = false;
+            return cachedValue;
+        }
+
+        const u1 = generator.next();
+        if (u1 <= 0) return transformStandard();
+
+        const u2 = generator.next();
+        const r = Math.sqrt(-2.0 * Math.log(u1));
+        const theta = TWO_PI * u2;
+
+        const z0 = r * Math.cos(theta);
+
+        if (useCache) {
+            cachedValue = r * Math.sin(theta);
+            hasCache = true;
+        }
+
+        return z0;
+    };
+
+    const transformPolar = (): number => {
+        if (useCache && hasCache) {
+            hasCache = false;
+            return cachedValue;
+        }
+
+        let x: number, y: number, s: number;
+
+        do {
+            x = 2.0 * generator.next() - 1.0;
+            y = 2.0 * generator.next() - 1.0;
+            s = x * x + y * y;
+        } while (s >= 1.0 || s === 0);
+
+        const scale = Math.sqrt((-2.0 * Math.log(s)) / s);
+
+        if (useCache) {
+            cachedValue = y * scale;
+            hasCache = true;
+        }
+
+        return x * scale;
+    };
+
+    const transformZiggurat = (): number => {
+        let u, v, x, y, q;
+
+        do {
+            u = 2.0 * generator.next() - 1.0;
+            v = 1.7156 * (2.0 * generator.next() - 1.0);
+
+            x = u - 0.449871;
+            y = Math.abs(v) + 0.386595;
+            q = x * x + y * (0.196 * y - 0.25472 * x);
+        } while (q > 0.27597 && (q > 0.27846 || v * v > -4.0 * Math.log(u) * u * u));
+
+        return v / u;
+    };
+
+    const generateRandomNormal = (): number => {
+        if (algorithm === 'standard') return transformStandard();
+        if (algorithm === 'ziggurat') return transformZiggurat();
+        return transformPolar();
+    };
+
+    const sample = (): number => mean + stdDev * generateRandomNormal();
+
+    const createSample = (value: number): DistributionSample => ({
+        value,
+        zscore: (value - mean) / stdDev,
+    });
+
+    const sampleWithMetadata = (): DistributionSample => {
+        const value = sample();
+        return createSample(value);
+    };
+
+    const sampleMany = (count: number): readonly number[] => {
+        validatePositive(count, 'count');
+        validateInteger(count, 'count');
+
+        if (isOptimizedForSpeed && useCache) {
+            const result = new Array<number>(count);
+
+            for (let i = 0; i < count - (count % 2); i += 2) {
+                const u1 = generator.next();
+                if (u1 <= 0) {
+                    i -= 2;
+                    continue;
+                }
+
+                const u2 = generator.next();
+                const r = Math.sqrt(-2.0 * Math.log(u1));
+                const theta = TWO_PI * u2;
+
+                result[i] = mean + stdDev * r * Math.cos(theta);
+                result[i + 1] = mean + stdDev * r * Math.sin(theta);
+            }
+
+            if (count % 2 !== 0) {
+                result[count - 1] = sample();
+            }
+
+            return result;
+        }
+
+        const result = new Array<number>(count);
+        for (let i = 0; i < count; i++) {
+            result[i] = sample();
+        }
+
+        return result;
+    };
+
+    const sampleManyWithMetadata = (count: number): readonly DistributionSample[] => {
+        const values = sampleMany(count);
+        const samples = new Array<DistributionSample>(count);
+
+        for (let i = 0; i < count; i++) {
+            samples[i] = createSample(values[i]);
+        }
+
+        return samples;
+    };
+
+    const probability = (x: number): number => {
+        validateFinite(x, 'value');
+        const z = (x - mean) / stdDev;
+        return (INV_SQRT_TWO_PI / stdDev) * Math.exp(-0.5 * z * z);
+    };
+
+    const cumulativeProbability = (x: number): number => {
+        validateFinite(x, 'value');
+        const z = (x - mean) / stdDev;
+        return 0.5 * (1.0 + erf(z / Math.SQRT2));
+    };
+
+    const quantile = (p: number): number => {
+        validateFinite(p, 'probability');
+        validateInRange(p, 0, 1, 'probability');
+
+        if (p === 0) return -Infinity;
+        if (p === 1) return Infinity;
+        if (p === 0.5) return mean;
+
+        return mean + stdDev * Math.SQRT2 * erfInv(2 * p - 1);
+    };
+
+    const erf = (x: number): number => {
+        const sign = x >= 0 ? 1 : -1;
+        x = Math.abs(x);
+
+        const a1 = 0.254829592;
+        const a2 = -0.284496736;
+        const a3 = 1.421413741;
+        const a4 = -1.453152027;
+        const a5 = 1.061405429;
+        const p = 0.3275911;
+
+        const t = 1.0 / (1.0 + p * x);
+        const y = 1.0 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+
+        return sign * y;
+    };
+
+    const erfInv = (x: number): number => {
+        const sign = x >= 0 ? 1 : -1;
+        x = Math.abs(x);
+
+        const a = 0.147;
+        const y = 2.0 / (Math.PI * a) + Math.log(1.0 - x * x) / 2.0;
+        const s1 = Math.sqrt(Math.sqrt(y * y - Math.log(1.0 - x * x) / a) - y);
+
+        return sign * s1;
+    };
+
+    return {
+        sample,
+        sampleMany,
+        sampleWithMetadata,
+        sampleManyWithMetadata,
+        probability,
+        cumulativeProbability,
+        quantile,
+    };
+};
