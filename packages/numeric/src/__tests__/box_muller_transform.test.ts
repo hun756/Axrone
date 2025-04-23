@@ -127,7 +127,7 @@ describe('BoxMullerTransform', () => {
             const calculatedMean = calculateMean(samples as number[]);
             const calculatedStdDev = calculateStdDev(samples as number[], calculatedMean);
 
-            // TODO: Fix broken test ???
+            // TODO: Fix broken test ??? (sometimes true sometimes false)
             expect(isApproximately(calculatedMean, mean)).toBe(true);
             expect(isApproximately(calculatedStdDev, stdDev)).toBe(true);
         });

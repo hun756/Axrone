@@ -349,3 +349,49 @@ export const BoxMullerTransform = <TRandom extends RandomGenerator = DefaultRand
         quantile,
     };
 };
+
+export const TransformedDistribution = <TInput, TOutput>(
+    source: NormalDistribution<TInput>,
+    transform: (value: TInput) => TOutput
+): NormalDistribution<TOutput> => {
+    const sample = (): TOutput => transform(source.sample());
+
+    const sampleMany = (count: number): readonly TOutput[] => {
+        validatePositive(count, 'count');
+        validateInteger(count, 'count');
+
+        return source.sampleMany(count).map(transform);
+    };
+
+    const sampleWithMetadata = source.sampleWithMetadata
+        ? (): DistributionSample<TOutput> => {
+              const sample = source.sampleWithMetadata!();
+              return {
+                  value: transform(sample.value),
+                  zscore: sample.zscore,
+              };
+          }
+        : undefined;
+
+    const sampleManyWithMetadata = source.sampleManyWithMetadata
+        ? (count: number): readonly DistributionSample<TOutput>[] => {
+              validatePositive(count, 'count');
+              validateInteger(count, 'count');
+
+              return source.sampleManyWithMetadata!(count).map((sample) => ({
+                  value: transform(sample.value),
+                  zscore: sample.zscore,
+              }));
+          }
+        : undefined;
+
+    return {
+        sample,
+        sampleMany,
+        sampleWithMetadata,
+        sampleManyWithMetadata,
+        probability: source.probability,
+        cumulativeProbability: source.cumulativeProbability,
+        quantile: source.quantile,
+    };
+};
