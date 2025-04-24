@@ -6,10 +6,13 @@ export type ReadonlyVec2 = Readonly<Vec2>;
 export type Vec2Tuple = readonly [Scalar, Scalar];
 export type Vec2Like = ReadonlyVec2 | Vec2Tuple;
 
-export const EPSILON = 1e-6;
+export const EPSILON = 1e-10;
 export const PI_2 = Math.PI * 2;
 export const DEG_TO_RAD = Math.PI / 180;
+export const RAD_TO_DEG = 180 / Math.PI;
 export const SQRT2 = Math.SQRT2;
+export const HALF_PI = Math.PI / 2;
+export const INV_PI = 1 / Math.PI;
 
 const _x = (v: Vec2Like): Scalar => (Array.isArray(v) ? v[0] : (v as ReadonlyVec2).x);
 const _y = (v: Vec2Like): Scalar => (Array.isArray(v) ? v[1] : (v as ReadonlyVec2).y);
@@ -100,6 +103,106 @@ export const randomBoxNormal = (minX: Scalar, maxX: Scalar, minY: Scalar, maxY: 
     x: minX + (_normalRandom() + 1) * 0.5 * (maxX - minX),
     y: minY + (_normalRandom() + 1) * 0.5 * (maxY - minY),
 });
+
+export const set = <T extends Vec2>(v: T, x: Scalar, y: Scalar): T => {
+    v.x = x;
+    v.y = y;
+    return v;
+};
+
+export const copy = <T extends Vec2>(out: T, v: Vec2Like): T => {
+    out.x = _x(v);
+    out.y = _y(v);
+    return out;
+};
+
+export const add = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like): T => {
+    out.x = _x(a) + _x(b);
+    out.y = _y(a) + _y(b);
+    return out;
+};
+
+export const addScalar = <T extends Vec2>(out: T, v: Vec2Like, s: Scalar): T => {
+    out.x = _x(v) + s;
+    out.y = _y(v) + s;
+    return out;
+};
+
+export const subtract = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like): T => {
+    out.x = _x(a) - _x(b);
+    out.y = _y(a) - _y(b);
+    return out;
+};
+
+export const subtractScalar = <T extends Vec2>(out: T, v: Vec2Like, s: Scalar): T => {
+    out.x = _x(v) - s;
+    out.y = _y(v) - s;
+    return out;
+};
+
+export const multiply = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like): T => {
+    out.x = _x(a) * _x(b);
+    out.y = _y(a) * _y(b);
+    return out;
+};
+
+export const multiplyScalar = <T extends Vec2>(out: T, v: Vec2Like, s: Scalar): T => {
+    out.x = _x(v) * s;
+    out.y = _y(v) * s;
+    return out;
+};
+
+export const divide = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like): T => {
+    const bx = _x(b);
+    const by = _y(b);
+
+    if (Math.abs(bx) < EPSILON || Math.abs(by) < EPSILON) {
+        throw new Error('Division by zero or near-zero value');
+    }
+
+    out.x = _x(a) / bx;
+    out.y = _y(a) / by;
+    return out;
+};
+
+export const divideScalar = <T extends Vec2>(out: T, v: Vec2Like, s: Scalar): T => {
+    if (Math.abs(s) < EPSILON) {
+        throw new Error('Division by zero or near-zero value');
+    }
+
+    const invS = 1 / s;
+    out.x = _x(v) * invS;
+    out.y = _y(v) * invS;
+    return out;
+};
+
+export const negate = <T extends Vec2>(out: T, v: Vec2Like): T => {
+    out.x = -_x(v);
+    out.y = -_y(v);
+    return out;
+};
+
+export const inverse = <T extends Vec2>(out: T, v: Vec2Like): T => {
+    const vx = _x(v);
+    const vy = _y(v);
+
+    if (Math.abs(vx) < EPSILON || Math.abs(vy) < EPSILON) {
+        throw new Error('Inversion of zero or near-zero value');
+    }
+
+    out.x = 1 / vx;
+    out.y = 1 / vy;
+    return out;
+};
+
+export const inverseSafe = <T extends Vec2>(out: T, v: Vec2Like, defaultValue = 0): T => {
+    const vx = _x(v);
+    const vy = _y(v);
+
+    out.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
+    out.y = Math.abs(vy) < EPSILON ? defaultValue : 1 / vy;
+    return out;
+};
 
 export const lengthSq = (v: Vec2Like): Scalar => {
     const x = _x(v);
