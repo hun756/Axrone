@@ -50,7 +50,18 @@ const standardNormalDist = BoxMullerFactory.createStandard({
     optimizeFor: 'speed',
 });
 
-const _normalRandom = (): Scalar => standardNormalDist.sample() * 0.289;
+const _boundedNormalRandom = (): Scalar => {
+    const MAX_ATTEMPTS = 10;
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        const value = standardNormalDist.sample();
+        if (value >= -1 && value <= 1) {
+            return value;
+        }
+    }
+    return Math.max(-1, Math.min(1, standardNormalDist.sample()));
+};
+
+const _normalRandom = (): Scalar => _boundedNormalRandom();
 
 export const random = (scale = 1): Vec2 => {
     const u = 1 - Math.random();
@@ -86,8 +97,8 @@ export const randomBox = (minX: Scalar, maxX: Scalar, minY: Scalar, maxY: Scalar
 });
 
 export const randomBoxNormal = (minX: Scalar, maxX: Scalar, minY: Scalar, maxY: Scalar): Vec2 => ({
-    x: minX + _normalRandom() * (maxX - minX),
-    y: minY + _normalRandom() * (maxY - minY),
+    x: minX + (_normalRandom() + 1) * 0.5 * (maxX - minX),
+    y: minY + (_normalRandom() + 1) * 0.5 * (maxY - minY),
 });
 
 export const lengthSq = (v: Vec2Like): Scalar => {
