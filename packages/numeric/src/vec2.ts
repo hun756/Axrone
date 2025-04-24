@@ -1,3 +1,5 @@
+import { BoxMullerFactory } from './box_muller';
+
 export type Scalar = number;
 export type Vec2 = { x: Scalar; y: Scalar };
 export type ReadonlyVec2 = Readonly<Vec2>;
@@ -7,7 +9,7 @@ export type Vec2Like = ReadonlyVec2 | Vec2Tuple;
 export const EPSILON = 1e-6;
 export const PI_2 = Math.PI * 2;
 export const DEG_TO_RAD = Math.PI / 180;
-export const SQRT2 = Math.SQRT2
+export const SQRT2 = Math.SQRT2;
 
 const _x = (v: Vec2Like): Scalar => (Array.isArray(v) ? v[0] : (v as ReadonlyVec2).x);
 const _y = (v: Vec2Like): Scalar => (Array.isArray(v) ? v[1] : (v as ReadonlyVec2).y);
@@ -41,6 +43,14 @@ export const fromDegrees = (degrees: Scalar, magnitude = 1): Vec2 =>
     fromAngle(degrees * DEG_TO_RAD, magnitude);
 
 export const fromPolar = (radius: Scalar, angleRad: Scalar): Vec2 => fromAngle(angleRad, radius);
+
+const standardNormalDist = BoxMullerFactory.createStandard({
+    algorithm: 'polar',
+    useCache: true,
+    optimizeFor: 'speed',
+});
+
+const _normalRandom = (): Scalar => standardNormalDist.sample() * 0.289;
 
 const _fastRandom = (): Scalar =>
     (Math.random() + Math.random() + Math.random() + Math.random() - 2) / 2;
@@ -78,10 +88,9 @@ export const randomBox = (minX: Scalar, maxX: Scalar, minY: Scalar, maxY: Scalar
     y: minY + Math.random() * (maxY - minY),
 });
 
-// TODO: fix it 
-export const randomBoxFast = (minX: Scalar, maxX: Scalar, minY: Scalar, maxY: Scalar): Vec2 => ({
-    x: minX + _fastRandom() * (maxX - minX),
-    y: minY + _fastRandom() * (maxY - minY),
+export const randomBoxNormal = (minX: Scalar, maxX: Scalar, minY: Scalar, maxY: Scalar): Vec2 => ({
+    x: minX + _normalRandom() * (maxX - minX),
+    y: minY + _normalRandom() * (maxY - minY),
 });
 
 export const lengthSq = (v: Vec2Like): Scalar => {

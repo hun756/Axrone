@@ -4,7 +4,7 @@ import {
     random,
     randomNormal,
     randomBox,
-    randomBoxFast,
+    randomBoxNormal,
     EPSILON,
     length,
 } from '../vec2';
@@ -68,18 +68,18 @@ describe('Random Vector Generation', () => {
         }
     });
 
-    test('randomBoxFast should generate vectors within the specified bounds', () => {
+    test('randomBoxNormal should generate vectors within the specified bounds', () => {
         const minX = -2,
             maxX = 2;
         const minY = -10,
             maxY = -5;
 
         for (let i = 0; i < SAMPLES; i++) {
-            const v = randomBoxFast(minX, maxX, minY, maxY);
+            const v = randomBoxNormal(minX, maxX, minY, maxY);
             expect(isValidVec2(v)).toBe(true);
-            // expect(v.x).toBeGreaterThanOrEqual(minX - EPSILON);
+            expect(v.x).toBeGreaterThanOrEqual(minX - EPSILON);
             expect(v.x).toBeLessThanOrEqual(maxX + EPSILON);
-            // expect(v.y).toBeGreaterThanOrEqual(minY - EPSILON);
+            expect(v.y).toBeGreaterThanOrEqual(minY - EPSILON);
             expect(v.y).toBeLessThanOrEqual(maxY + EPSILON);
         }
     });
