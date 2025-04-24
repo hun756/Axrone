@@ -1,4 +1,4 @@
-import { lerp, lerpUnclamped, slerp, smootherStep, smoothStep, Vec2Tuple } from '../vec2';
+import { cubicBezier, lerp, lerpUnclamped, slerp, smootherStep, smoothStep, Vec2Tuple } from '../vec2';
 
 describe('lerp function', () => {
     it('should return the starting point when t = 0', () => {
@@ -407,3 +407,107 @@ describe('smootherStep function', () => {
     });
 });
 
+describe('cubicBezier function', () => {
+    it('should return the starting point when t = 0', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const c1 = { x: 15, y: 25 };
+        const c2 = { x: 25, y: 35 };
+        const b = { x: 30, y: 40 };
+        const result = cubicBezier(out, a, c1, c2, b, 0);
+        expect(result.x).toBeCloseTo(10);
+        expect(result.y).toBeCloseTo(20);
+    });
+
+    it('should return the end point when t = 1', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const c1 = { x: 15, y: 25 };
+        const c2 = { x: 25, y: 35 };
+        const b = { x: 30, y: 40 };
+        const result = cubicBezier(out, a, c1, c2, b, 1);
+        expect(result.x).toBeCloseTo(30);
+        expect(result.y).toBeCloseTo(40);
+    });
+
+    it('should return the correct Bezier value when t = 0.5', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const c1 = { x: 15, y: 25 };
+        const c2 = { x: 25, y: 35 };
+        const b = { x: 30, y: 40 };
+
+        // Formula for t = 0.5:
+        // B(0.5) = (1-0.5)³a + 3(1-0.5)²(0.5)c1 + 3(1-0.5)(0.5)²c2 + (0.5)³b
+        //        = 0.125a + 0.375c1 + 0.375c2 + 0.125b
+        const expected_x = 0.125 * 10 + 0.375 * 15 + 0.375 * 25 + 0.125 * 30;
+        const expected_y = 0.125 * 20 + 0.375 * 25 + 0.375 * 35 + 0.125 * 40;
+
+        const result = cubicBezier(out, a, c1, c2, b, 0.5);
+        expect(result.x).toBeCloseTo(expected_x);
+        expect(result.y).toBeCloseTo(expected_y);
+    });
+
+    it('should clamp values of t < 0 to 0', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const c1 = { x: 15, y: 25 };
+        const c2 = { x: 25, y: 35 };
+        const b = { x: 30, y: 40 };
+        const result = cubicBezier(out, a, c1, c2, b, -0.5);
+        expect(result.x).toBeCloseTo(10);
+        expect(result.y).toBeCloseTo(20);
+    });
+
+    it('should clamp values of t > 1 to 1', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const c1 = { x: 15, y: 25 };
+        const c2 = { x: 25, y: 35 };
+        const b = { x: 30, y: 40 };
+        const result = cubicBezier(out, a, c1, c2, b, 1.5);
+        expect(result.x).toBeCloseTo(30);
+        expect(result.y).toBeCloseTo(40);
+    });
+
+    it('should perform linear interpolation when control points are aligned', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const c1 = { x: 10 + (30 - 10) / 3, y: 20 + (40 - 20) / 3 };
+        const c2 = { x: 10 + (2 * (30 - 10)) / 3, y: 20 + (2 * (40 - 20)) / 3 };
+        const b = { x: 30, y: 40 };
+
+        const result = cubicBezier(out, a, c1, c2, b, 0.5);
+        expect(result.x).toBeCloseTo(20);
+        expect(result.y).toBeCloseTo(30);
+    });
+
+    it('should process vectors in different formats correctly', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const c1 = [15, 25] as Vec2Tuple;
+        const c2 = { x: 25, y: 35 };
+        const b = [30, 40] as Vec2Tuple;
+
+        const result = cubicBezier(out, a, c1, c2, b, 0.5);
+        expect(result.x).toBeGreaterThan(10);
+        expect(result.x).toBeLessThan(30);
+    });
+
+    it('should be consistent for high-precision t values', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const c1 = { x: 15, y: 25 };
+        const c2 = { x: 25, y: 35 };
+        const b = { x: 30, y: 40 };
+
+        const t1 = 0.3333333;
+        const t2 = 0.3333334;
+
+        const result1 = cubicBezier(out, a, c1, c2, b, t1);
+        const result2 = cubicBezier(out, a, c1, c2, b, t2);
+
+        expect(Math.abs(result1.x - result2.x)).toBeLessThan(1e-6);
+        expect(Math.abs(result1.y - result2.y)).toBeLessThan(1e-6);
+    });
+});
