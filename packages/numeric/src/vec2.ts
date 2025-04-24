@@ -14,6 +14,15 @@ export const SQRT2 = Math.SQRT2;
 export const HALF_PI = Math.PI / 2;
 export const INV_PI = 1 / Math.PI;
 
+export const ZERO = Object.freeze<ReadonlyVec2>({ x: 0, y: 0 });
+export const ONE = Object.freeze<ReadonlyVec2>({ x: 1, y: 1 });
+export const UNIT_X = Object.freeze<ReadonlyVec2>({ x: 1, y: 0 });
+export const UNIT_Y = Object.freeze<ReadonlyVec2>({ x: 0, y: 1 });
+export const UP = UNIT_Y;
+export const DOWN = Object.freeze<ReadonlyVec2>({ x: 0, y: -1 });
+export const LEFT = Object.freeze<ReadonlyVec2>({ x: -1, y: 0 });
+export const RIGHT = UNIT_X;
+
 const _x = (v: Vec2Like): Scalar => (Array.isArray(v) ? v[0] : (v as ReadonlyVec2).x);
 const _y = (v: Vec2Like): Scalar => (Array.isArray(v) ? v[1] : (v as ReadonlyVec2).y);
 
@@ -211,3 +220,72 @@ export const lengthSq = (v: Vec2Like): Scalar => {
 };
 
 export const length = (v: Vec2Like): Scalar => Math.sqrt(lengthSq(v));
+
+export const fastLength = (v: Vec2Like): Scalar => {
+    // Fast approximation of vector length (~3.4% error max)
+    const x = Math.abs(_x(v));
+    const y = Math.abs(_y(v));
+    const min = Math.min(x, y);
+    const max = Math.max(x, y);
+    return max + 0.3 * min;
+};
+
+export const normalize = <T extends Vec2>(out: T, v: Vec2Like): T => {
+    const x = _x(v);
+    const y = _y(v);
+    let lenSq = x * x + y * y;
+
+    if (lenSq > EPSILON) {
+        const invLen = 1 / Math.sqrt(lenSq);
+        out.x = x * invLen;
+        out.y = y * invLen;
+    } else {
+        out.x = 0;
+        out.y = 0;
+    }
+
+    return out;
+};
+
+export const normalizeFast = <T extends Vec2>(out: T, v: Vec2Like): T => {
+    const x = _x(v);
+    const y = _y(v);
+    const lenSq = x * x + y * y;
+
+    if (lenSq > EPSILON) {
+        // Fast inverse square root approximation (Q_rsqrt)
+        let i = 0;
+        const buf = new ArrayBuffer(4);
+        const view = new DataView(buf);
+        view.setFloat32(0, lenSq);
+        i = view.getInt32(0);
+        i = 0x5f3759df - (i >> 1);
+        view.setInt32(0, i);
+        let invLen = view.getFloat32(0);
+        invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
+
+        out.x = x * invLen;
+        out.y = y * invLen;
+    } else {
+        out.x = 0;
+        out.y = 0;
+    }
+
+    return out;
+};
+
+export const distanceSq = (a: Vec2Like, b: Vec2Like): Scalar => {
+    const dx = _x(a) - _x(b);
+    const dy = _y(a) - _y(b);
+    return dx * dx + dy * dy;
+};
+
+export const distance = (a: Vec2Like, b: Vec2Like): Scalar => Math.sqrt(distanceSq(a, b));
+
+export const fastDistance = (a: Vec2Like, b: Vec2Like): Scalar => {
+    const dx = Math.abs(_x(a) - _x(b));
+    const dy = Math.abs(_y(a) - _y(b));
+    const min = Math.min(dx, dy);
+    const max = Math.max(dx, dy);
+    return max + 0.3 * min;
+};
