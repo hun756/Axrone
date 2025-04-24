@@ -1,4 +1,4 @@
-import { lerp, Vec2Tuple } from '../vec2';
+import { lerp, lerpUnclamped, Vec2Tuple } from '../vec2';
 
 describe('lerp function', () => {
     it('should return the starting point when t = 0', () => {
@@ -82,5 +82,61 @@ describe('lerp function', () => {
         const result = lerp(out, a, b, 0.7);
         expect(result.x).toBeCloseTo(24);
         expect(result.y).toBeCloseTo(34);
+    });
+});
+
+describe('lerpUnclamped function', () => {
+    it('should return the starting point when t = 0', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const b = { x: 30, y: 40 };
+        const result = lerpUnclamped(out, a, b, 0);
+        expect(result.x).toBeCloseTo(10);
+        expect(result.y).toBeCloseTo(20);
+    });
+
+    it('should return the end point when t = 1', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const b = { x: 30, y: 40 };
+        const result = lerpUnclamped(out, a, b, 1);
+        expect(result.x).toBeCloseTo(30);
+        expect(result.y).toBeCloseTo(40);
+    });
+
+    it('should extrapolate for t > 1', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const b = { x: 30, y: 40 };
+        const result = lerpUnclamped(out, a, b, 2);
+        expect(result.x).toBeCloseTo(50);
+        expect(result.y).toBeCloseTo(60);
+    });
+
+    it('should extrapolate for t < 0', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const b = { x: 30, y: 40 };
+        const result = lerpUnclamped(out, a, b, -1);
+        expect(result.x).toBeCloseTo(-10);
+        expect(result.y).toBeCloseTo(0);
+    });
+
+    it('should work correctly for mixed vector formats', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const b = [30, 40] as Vec2Tuple;
+        const result = lerpUnclamped(out, a, b, 0.5);
+        expect(result.x).toBeCloseTo(20);
+        expect(result.y).toBeCloseTo(30);
+    });
+
+    it('should work correctly for extreme t values', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const b = { x: 30, y: 40 };
+        const result = lerpUnclamped(out, a, b, 1000);
+        expect(result.x).toBeCloseTo(20010);
+        expect(result.y).toBeCloseTo(20020);
     });
 });
