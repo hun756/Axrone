@@ -262,6 +262,8 @@ export const normalizeFast = <T extends Vec2>(out: T, v: Vec2Like): T => {
         i = 0x5f3759df - (i >> 1);
         view.setInt32(0, i);
         let invLen = view.getFloat32(0);
+        
+        invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
         invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
 
         out.x = x * invLen;
