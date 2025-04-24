@@ -166,8 +166,23 @@ export const BoxMullerTransform = <TRandom extends RandomGenerator = DefaultRand
             return cachedValue;
         }
 
-        const u1 = generator.next();
-        if (u1 <= 0) return transformStandard();
+        let attempts = 0;
+        const MAX_ATTEMPTS = 50;
+        let u1: number;
+        do {
+            u1 = generator.next();
+            attempts++;
+            if (u1 <= 1e-10) {
+                u1 = 1e-10;
+                break;
+            }
+            if (attempts > MAX_ATTEMPTS) {
+                throw createError(
+                    ErrorCodes.RUNTIME_ERROR,
+                    'Failed to generate valid random number after multiple attempts'
+                );
+            }
+        } while (u1 <= 0);
 
         const u2 = generator.next();
         const r = Math.sqrt(-2.0 * Math.log(u1));
@@ -190,11 +205,19 @@ export const BoxMullerTransform = <TRandom extends RandomGenerator = DefaultRand
         }
 
         let x: number, y: number, s: number;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 50;
 
         do {
             x = 2.0 * generator.next() - 1.0;
             y = 2.0 * generator.next() - 1.0;
             s = x * x + y * y;
+            attempts++;
+
+            if (attempts > MAX_ATTEMPTS) {
+                s = 0.99;
+                break;
+            }
         } while (s >= 1.0 || s === 0);
 
         const scale = Math.sqrt((-2.0 * Math.log(s)) / s);
@@ -207,50 +230,46 @@ export const BoxMullerTransform = <TRandom extends RandomGenerator = DefaultRand
         return x * scale;
     };
 
-    const transformZiggurat = (): number => {
-        let u, v, x, y, q;
-
-        do {
-            u = 2.0 * generator.next() - 1.0;
-            v = 1.7156 * (2.0 * generator.next() - 1.0);
-
-            x = u - 0.449871;
-            y = Math.abs(v) + 0.386595;
-            q = x * x + y * (0.196 * y - 0.25472 * x);
-        } while (q > 0.27597 && (q > 0.27846 || v * v > -4.0 * Math.log(u) * u * u));
-
-        return v / u;
-    };
-
-    const generateRandomNormal = (): number => {
-        if (algorithm === 'standard') return transformStandard();
-        if (algorithm === 'ziggurat') return transformZiggurat();
-        return transformPolar();
-    };
-
-    const sample = (): number => mean + stdDev * generateRandomNormal();
-
-    const createSample = (value: number): DistributionSample => ({
-        value,
-        zscore: (value - mean) / stdDev,
-    });
-
-    const sampleWithMetadata = (): DistributionSample => {
-        const value = sample();
-        return createSample(value);
-    };
-
     const sampleMany = (count: number): readonly number[] => {
         validatePositive(count, 'count');
         validateInteger(count, 'count');
 
+        const MAX_SAFE_BATCH = 1000;
+
+        if (count > MAX_SAFE_BATCH && isOptimizedForSpeed) {
+            const result = new Array<number>(count);
+            let processed = 0;
+
+            while (processed < count) {
+                const batchSize = Math.min(MAX_SAFE_BATCH, count - processed);
+                const batch = sampleManyInternal(batchSize);
+
+                for (let i = 0; i < batchSize; i++) {
+                    result[processed + i] = batch[i];
+                }
+
+                processed += batchSize;
+            }
+
+            return result;
+        }
+
+        return sampleManyInternal(count);
+    };
+
+    const sampleManyInternal = (count: number): readonly number[] => {
         if (isOptimizedForSpeed && useCache) {
             const result = new Array<number>(count);
+            let maxAttempts = Math.min(count * 5, 500);
 
-            for (let i = 0; i < count - (count % 2); i += 2) {
+            for (let i = 0; i < count - (count % 2); ) {
                 const u1 = generator.next();
+
                 if (u1 <= 0) {
-                    i -= 2;
+                    maxAttempts--;
+                    if (maxAttempts <= 0) {
+                        break;
+                    }
                     continue;
                 }
 
@@ -259,11 +278,14 @@ export const BoxMullerTransform = <TRandom extends RandomGenerator = DefaultRand
                 const theta = TWO_PI * u2;
 
                 result[i] = mean + stdDev * r * Math.cos(theta);
-                result[i + 1] = mean + stdDev * r * Math.sin(theta);
+                if (i + 1 < count) {
+                    result[i + 1] = mean + stdDev * r * Math.sin(theta);
+                }
+                i += 2;
             }
 
-            if (count % 2 !== 0) {
-                result[count - 1] = sample();
+            for (let i = count - (count % 2); i < count; i++) {
+                result[i] = sample();
             }
 
             return result;
@@ -275,6 +297,46 @@ export const BoxMullerTransform = <TRandom extends RandomGenerator = DefaultRand
         }
 
         return result;
+    };
+
+    const sample = (): number => mean + stdDev * generateRandomNormal();
+
+    const generateRandomNormal = (): number => {
+        if (algorithm === 'standard') return transformStandard();
+        if (algorithm === 'ziggurat') return transformZiggurat();
+        return transformPolar();
+    };
+
+    const transformZiggurat = (): number => {
+        let u, v, x, y, q;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 50;
+
+        do {
+            u = 2.0 * generator.next() - 1.0;
+            v = 1.7156 * (2.0 * generator.next() - 1.0);
+
+            x = u - 0.449871;
+            y = Math.abs(v) + 0.386595;
+            q = x * x + y * (0.196 * y - 0.25472 * x);
+
+            attempts++;
+            if (attempts > MAX_ATTEMPTS) {
+                return 0;
+            }
+        } while (q > 0.27597 && (q > 0.27846 || v * v > -4.0 * Math.log(u) * u * u));
+
+        return v / u;
+    };
+
+    const createSample = (value: number): DistributionSample => ({
+        value,
+        zscore: (value - mean) / stdDev,
+    });
+
+    const sampleWithMetadata = (): DistributionSample => {
+        const value = sample();
+        return createSample(value);
     };
 
     const sampleManyWithMetadata = (count: number): readonly DistributionSample[] => {
@@ -329,6 +391,10 @@ export const BoxMullerTransform = <TRandom extends RandomGenerator = DefaultRand
     };
 
     const erfInv = (x: number): number => {
+        if (Math.abs(x) >= 1.0 - EPSILON) {
+            return x >= 0 ? 8.0 : -8.0;
+        }
+
         const sign = x >= 0 ? 1 : -1;
         x = Math.abs(x);
 
@@ -440,3 +506,27 @@ export const NormalPool = <T extends RandomGenerator = DefaultRandomGenerator>(
         refill,
     };
 };
+
+export const StandardNormal = (
+    options: Omit<BoxMullerOptions, 'mean' | 'standardDeviation'> = {}
+): NormalDistribution =>
+    BoxMullerTransform({
+        ...options,
+        mean: 0,
+        standardDeviation: 1,
+    });
+
+export const isRandomGenerator = <T = number>(obj: unknown): obj is RandomGenerator<T> =>
+    obj !== null &&
+    typeof obj === 'object' &&
+    'next' in obj &&
+    typeof (obj as RandomGenerator<T>).next === 'function';
+
+export const isNormalDistribution = <T = number>(obj: unknown): obj is NormalDistribution<T> =>
+    obj !== null &&
+    typeof obj === 'object' &&
+    'sample' in obj &&
+    'sampleMany' in obj &&
+    typeof (obj as NormalDistribution<T>).sample === 'function' &&
+    typeof (obj as NormalDistribution<T>).sampleMany === 'function';
+
