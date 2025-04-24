@@ -1,4 +1,13 @@
-import { cubicBezier, lerp, lerpUnclamped, slerp, smootherStep, smoothStep, Vec2Tuple } from '../vec2';
+import {
+    cubicBezier,
+    hermite,
+    lerp,
+    lerpUnclamped,
+    slerp,
+    smootherStep,
+    smoothStep,
+    Vec2Tuple,
+} from '../vec2';
 
 describe('lerp function', () => {
     it('should return the starting point when t = 0', () => {
@@ -509,5 +518,128 @@ describe('cubicBezier function', () => {
 
         expect(Math.abs(result1.x - result2.x)).toBeLessThan(1e-6);
         expect(Math.abs(result1.y - result2.y)).toBeLessThan(1e-6);
+    });
+});
+
+describe('hermite function', () => {
+    it('should return the starting point when t = 0', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 10, y: 20 };
+        const m0 = { x: 5, y: 5 };
+        const p1 = { x: 30, y: 40 };
+        const m1 = { x: 5, y: 5 };
+        const result = hermite(out, p0, m0, p1, m1, 0);
+        expect(result.x).toBeCloseTo(10);
+        expect(result.y).toBeCloseTo(20);
+    });
+
+    it('should return the end point when t = 1', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 10, y: 20 };
+        const m0 = { x: 5, y: 5 };
+        const p1 = { x: 30, y: 40 };
+        const m1 = { x: 5, y: 5 };
+        const result = hermite(out, p0, m0, p1, m1, 1);
+        expect(result.x).toBeCloseTo(30);
+        expect(result.y).toBeCloseTo(40);
+    });
+
+    it('should match derivative with m0 when t = 0', () => {
+        const out1 = { x: 0, y: 0 };
+        const out2 = { x: 0, y: 0 };
+        const p0 = { x: 10, y: 20 };
+        const m0 = { x: 5, y: 7 };
+        const p1 = { x: 30, y: 40 };
+        const m1 = { x: 6, y: 8 };
+
+        const epsilon = 0.0001;
+        const result1 = hermite(out1, p0, m0, p1, m1, 0);
+        const result2 = hermite(out2, p0, m0, p1, m1, epsilon);
+
+        const derivX = (result2.x - result1.x) / epsilon;
+        const derivY = (result2.y - result1.y) / epsilon;
+
+        expect(derivX).toBeCloseTo(m0.x);
+        expect(derivY).toBeCloseTo(m0.y);
+    });
+
+    it('should match derivative with m1 when t = 1', () => {
+        const out1 = { x: 0, y: 0 };
+        const out2 = { x: 0, y: 0 };
+        const p0 = { x: 10, y: 20 };
+        const m0 = { x: 5, y: 7 };
+        const p1 = { x: 30, y: 40 };
+        const m1 = { x: 6, y: 8 };
+
+        const epsilon = 0.0001;
+        const result1 = hermite(out1, p0, m0, p1, m1, 1 - epsilon);
+        const result2 = hermite(out2, p0, m0, p1, m1, 1);
+
+        const derivX = (result2.x - result1.x) / epsilon;
+        const derivY = (result2.y - result1.y) / epsilon;
+
+        expect(derivX).toBeCloseTo(m1.x);
+        expect(derivY).toBeCloseTo(m1.y);
+    });
+
+    it('should calculate correctly when t = 0.5', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 10, y: 20 };
+        const m0 = { x: 5, y: 7 };
+        const p1 = { x: 30, y: 40 };
+        const m1 = { x: 6, y: 8 };
+
+        // hermite formula for t = 0.5:
+        // h00 = 2t³ - 3t² + 1 = 2(0.5)³ - 3(0.5)² + 1 = 0.25 - 0.75 + 1 = 0.5
+        // h10 = t³ - 2t² + t = (0.5)³ - 2(0.5)² + 0.5 = 0.125 - 0.5 + 0.5 = 0.125
+        // h01 = -2t³ + 3t² = -2(0.5)³ + 3(0.5)² = -0.25 + 0.75 = 0.5
+        // h11 = t³ - t² = (0.5)³ - (0.5)² = 0.125 - 0.25 = -0.125
+
+        const h00 = 0.5;
+        const h10 = 0.125;
+        const h01 = 0.5;
+        const h11 = -0.125;
+
+        const expected_x = h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x;
+        const expected_y = h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y;
+
+        const result = hermite(out, p0, m0, p1, m1, 0.5);
+        expect(result.x).toBeCloseTo(expected_x);
+        expect(result.y).toBeCloseTo(expected_y);
+    });
+
+    it('should clamp values of t < 0 to 0', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 10, y: 20 };
+        const m0 = { x: 5, y: 5 };
+        const p1 = { x: 30, y: 40 };
+        const m1 = { x: 5, y: 5 };
+        const result = hermite(out, p0, m0, p1, m1, -0.5);
+        expect(result.x).toBeCloseTo(10);
+        expect(result.y).toBeCloseTo(20);
+    });
+
+    it('should clamp values of t > 1 to 1', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 10, y: 20 };
+        const m0 = { x: 5, y: 5 };
+        const p1 = { x: 30, y: 40 };
+        const m1 = { x: 5, y: 5 };
+        const result = hermite(out, p0, m0, p1, m1, 1.5);
+        expect(result.x).toBeCloseTo(30);
+        expect(result.y).toBeCloseTo(40);
+    });
+
+    it('should perform linear interpolation when tangent vectors are zero', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 10, y: 20 };
+        const m0 = { x: 0, y: 0 };
+        const p1 = { x: 30, y: 40 };
+        const m1 = { x: 0, y: 0 };
+
+        const result = hermite(out, p0, m0, p1, m1, 0.5);
+
+        expect(result.x).toBeCloseTo(20);
+        expect(result.y).toBeCloseTo(30);
     });
 });
