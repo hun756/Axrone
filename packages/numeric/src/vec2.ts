@@ -7,7 +7,7 @@ export type Vec2Like = ReadonlyVec2 | Vec2Tuple;
 export const EPSILON = 1e-6;
 export const PI_2 = Math.PI * 2;
 export const DEG_TO_RAD = Math.PI / 180;
-export const SQRT2 = Math.sqrt(2);
+export const SQRT2 = Math.SQRT2
 
 const _x = (v: Vec2Like): Scalar => (Array.isArray(v) ? v[0] : (v as ReadonlyVec2).x);
 const _y = (v: Vec2Like): Scalar => (Array.isArray(v) ? v[1] : (v as ReadonlyVec2).y);
