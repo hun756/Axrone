@@ -507,8 +507,8 @@ export const NormalPool = <T extends RandomGenerator = DefaultRandomGenerator>(
     };
 };
 
-export const StandardNormal = (
-    options: Omit<BoxMullerOptions, 'mean' | 'standardDeviation'> = {}
+export const StandardNormal = <T extends RandomGenerator = DefaultRandomGenerator>(
+    options: Omit<BoxMullerOptions<T>, 'mean' | 'standardDeviation'> = {}
 ): NormalDistribution =>
     BoxMullerTransform({
         ...options,
@@ -530,3 +530,44 @@ export const isNormalDistribution = <T = number>(obj: unknown): obj is NormalDis
     typeof (obj as NormalDistribution<T>).sample === 'function' &&
     typeof (obj as NormalDistribution<T>).sampleMany === 'function';
 
+export const BoxMullerFactory = {
+    createNormal: <T extends RandomGenerator = DefaultRandomGenerator>(
+        mean: number,
+        stdDev: number,
+        options: Omit<BoxMullerOptions<T>, 'mean' | 'standardDeviation'> = {}
+    ): NormalDistribution =>
+        BoxMullerTransform<T>({
+            ...options,
+            mean,
+            standardDeviation: stdDev,
+        }),
+
+    createStandard: <T extends RandomGenerator = DefaultRandomGenerator>(
+        options: Omit<BoxMullerOptions<T>, 'mean' | 'standardDeviation'> = {}
+    ): NormalDistribution => StandardNormal<T>(options as any),
+
+    createTransformed: <TInput, TOutput, T extends RandomGenerator = DefaultRandomGenerator>(
+        transform: (value: TInput) => TOutput,
+        options: BoxMullerOptions<T> = {}
+    ): NormalDistribution<TOutput> => {
+        const source = BoxMullerTransform<T>(options) as unknown as NormalDistribution<TInput>;
+        return TransformedDistribution<TInput, TOutput>(source, transform);
+    },
+
+    createPool: <T extends RandomGenerator = DefaultRandomGenerator>(
+        options: BoxMullerOptions<T> & { poolSize?: number } = {}
+    ): NormalDistribution & { refill: () => void } => NormalPool<T>(options),
+};
+
+export default {
+    BoxMullerTransform,
+    StandardNormal,
+    TransformedDistribution,
+    NormalPool,
+    DefaultRandomGenerator,
+    BoxMullerFactory,
+    createDefaultRandomGenerator,
+    isRandomGenerator,
+    isNormalDistribution,
+    ErrorCodes,
+};
