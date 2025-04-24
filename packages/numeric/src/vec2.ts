@@ -52,9 +52,6 @@ const standardNormalDist = BoxMullerFactory.createStandard({
 
 const _normalRandom = (): Scalar => standardNormalDist.sample() * 0.289;
 
-const _fastRandom = (): Scalar =>
-    (Math.random() + Math.random() + Math.random() + Math.random() - 2) / 2;
-
 export const random = (scale = 1): Vec2 => {
     const u = 1 - Math.random();
     const v = Math.random();
