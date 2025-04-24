@@ -1,4 +1,4 @@
-import { lerp, lerpUnclamped, Vec2Tuple } from '../vec2';
+import { lerp, lerpUnclamped, slerp, Vec2Tuple } from '../vec2';
 
 describe('lerp function', () => {
     it('should return the starting point when t = 0', () => {
@@ -138,5 +138,99 @@ describe('lerpUnclamped function', () => {
         const result = lerpUnclamped(out, a, b, 1000);
         expect(result.x).toBeCloseTo(20010);
         expect(result.y).toBeCloseTo(20020);
+    });
+});
+
+describe('slerp function', () => {
+    it('should return the starting point when t = 0', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 1, y: 0 }; // Unit vector, 0°
+        const b = { x: 0, y: 1 }; // Unit vector, 90°
+        const result = slerp(out, a, b, 0);
+        expect(result.x).toBeCloseTo(1);
+        expect(result.y).toBeCloseTo(0);
+    });
+
+    it('should return the end point when t = 1', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 1, y: 0 }; // Unit vector, 0°
+        const b = { x: 0, y: 1 }; // Unit vector, 90°
+        const result = slerp(out, a, b, 1);
+        expect(result.x).toBeCloseTo(0);
+        expect(result.y).toBeCloseTo(1);
+    });
+
+    it('should return the correct angular point when t = 0.5', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 1, y: 0 }; // Unit vector, 0°
+        const b = { x: 0, y: 1 }; // Unit vector, 90°
+        const result = slerp(out, a, b, 0.5);
+        // Should be at 45° angle, like (1/√2, 1/√2)
+        expect(result.x).toBeCloseTo(Math.sqrt(0.5));
+        expect(result.y).toBeCloseTo(Math.sqrt(0.5));
+
+        expect(Math.sqrt(result.x * result.x + result.y * result.y)).toBeCloseTo(1);
+    });
+
+    it('should clamp values of t < 0 to 0', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 1, y: 0 };
+        const b = { x: 0, y: 1 };
+        const result = slerp(out, a, b, -0.5);
+        expect(result.x).toBeCloseTo(1);
+        expect(result.y).toBeCloseTo(0);
+    });
+
+    it('should clamp values of t > 1 to 1', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 1, y: 0 };
+        const b = { x: 0, y: 1 };
+        const result = slerp(out, a, b, 1.5);
+        expect(result.x).toBeCloseTo(0);
+        expect(result.y).toBeCloseTo(1);
+    });
+
+    it('should choose the correct direction for 180° angle vectors', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 1, y: 0 }; // 0°
+        const b = { x: -1, y: 0 }; // 180°
+        const result = slerp(out, a, b, 0.5);
+
+        // Should be at 90° angle, either (0,1) or (0,-1)
+        const length = Math.sqrt(result.x * result.x + result.y * result.y);
+        expect(length).toBeCloseTo(1);
+        expect(Math.abs(result.x)).toBeCloseTo(0);
+        expect(Math.abs(result.y)).toBeCloseTo(1);
+    });
+
+    it('should correctly interpolate length for vectors of different magnitudes', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 1, y: 0 }; // Len 1
+        const b = { x: 0, y: 2 }; // Len 2
+        const result = slerp(out, a, b, 0.5);
+
+        // Angle 90°, length should be 1.5
+        expect(Math.sqrt(result.x * result.x + result.y * result.y)).toBeCloseTo(1.5);
+    });
+
+    it('should return a safe result for zero vectors', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 0, y: 0 };
+        const b = { x: 1, y: 0 };
+        const result = slerp(out, a, b, 0.5);
+
+        expect(result.x).toBeCloseTo(0.5);
+        expect(result.y).toBeCloseTo(0);
+    });
+
+    it('should correctly normalize angular difference (>PI case)', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 1, y: 0 }; // 0°
+        const b = { x: -0.5, y: -0.866 }; // 240°
+        const result = slerp(out, a, b, 0.5);
+        
+        // Expect interpolation in -60° direction (shortest path)
+        const angle = Math.atan2(result.y, result.x);
+        expect(angle < 0).toBe(true); // Should interpolate clockwise =)
     });
 });
