@@ -262,7 +262,7 @@ export const normalizeFast = <T extends Vec2>(out: T, v: Vec2Like): T => {
         i = 0x5f3759df - (i >> 1);
         view.setInt32(0, i);
         let invLen = view.getFloat32(0);
-        
+
         invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
         invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
 
@@ -275,6 +275,40 @@ export const normalizeFast = <T extends Vec2>(out: T, v: Vec2Like): T => {
 
     return out;
 };
+
+export const perpendicular = <T extends Vec2>(out: T, v: Vec2Like): T => {
+    const x = _x(v);
+    const y = _y(v);
+    
+    if (x === 0 && y === 0) {
+        out.x = 0;
+        out.y = 0;
+        return out;
+    }
+    
+    out.x = -y;
+    out.y = x;
+    return out;
+};
+
+export const perpendicularCCW = <T extends Vec2>(out: T, v: Vec2Like): T => {
+    const x = _x(v);
+    const y = _y(v);
+    
+    if (x === 0 && y === 0) {
+        out.x = 0;
+        out.y = 0;
+        return out;
+    }
+    
+    out.x = y;
+    out.y = -x;
+    return out;
+};
+
+export const dot = (a: Vec2Like, b: Vec2Like): Scalar => _x(a) * _x(b) + _y(a) * _y(b);
+
+export const cross = (a: Vec2Like, b: Vec2Like): Scalar => _x(a) * _y(b) - _y(a) * _x(b);
 
 export const distanceSq = (a: Vec2Like, b: Vec2Like): Scalar => {
     const dx = _x(a) - _x(b);
@@ -290,4 +324,125 @@ export const fastDistance = (a: Vec2Like, b: Vec2Like): Scalar => {
     const min = Math.min(dx, dy);
     const max = Math.max(dx, dy);
     return max + 0.3 * min;
+};
+
+export const angle = (v: Vec2Like): Scalar => Math.atan2(_y(v), _x(v));
+
+export const fastAngle = (v: Vec2Like): Scalar => {
+    const x = _x(v);
+    const y = _y(v);
+
+    if (x === 0 && y === 0) return 0;
+    if (x === 0) return y > 0 ? HALF_PI : -HALF_PI;
+
+    const abs_y = Math.abs(y);
+    const abs_x = Math.abs(x);
+    const a = abs_x > abs_y ? abs_y / abs_x : abs_x / abs_y;
+    const s = a * a;
+    let r = ((-0.0464964749 * s + 0.15931422) * s - 0.327622764) * s * a + a;
+
+    if (abs_y > abs_x) r = HALF_PI - r;
+    if (x < 0) r = Math.PI - r;
+    if (y < 0) r = -r;
+
+    return r;
+};
+
+export const angleDeg = (v: Vec2Like): Scalar => angle(v) * RAD_TO_DEG;
+
+export const angleBetween = (a: Vec2Like, b: Vec2Like): Scalar => {
+    const lenSqA = lengthSq(a);
+    const lenSqB = lengthSq(b);
+
+    if (lenSqA < EPSILON || lenSqB < EPSILON) return 0;
+
+    const dotProduct = dot(a, b);
+    const lenProduct = Math.sqrt(lenSqA * lenSqB);
+
+    return Math.acos(Math.min(Math.max(dotProduct / lenProduct, -1), 1));
+};
+
+export const fastAngleBetween = (a: Vec2Like, b: Vec2Like): Scalar => {
+    // Faster approximation using cross product
+    const lenSqA = lengthSq(a);
+    const lenSqB = lengthSq(b);
+
+    if (lenSqA < EPSILON || lenSqB < EPSILON) return 0;
+
+    const crossProduct = cross(a, b);
+    const lenProduct = Math.sqrt(lenSqA * lenSqB);
+
+    return Math.asin(Math.min(Math.max(crossProduct / lenProduct, -1), 1));
+};
+
+export const angleBetweenSigned = (a: Vec2Like, b: Vec2Like): Scalar =>
+    Math.atan2(cross(a, b), dot(a, b));
+
+export const rotate = <T extends Vec2>(out: T, v: Vec2Like, angle: Scalar): T => {
+    const x = _x(v);
+    const y = _y(v);
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+
+    out.x = x * c - y * s;
+    out.y = x * s + y * c;
+    return out;
+};
+
+export const fastRotate = <T extends Vec2>(out: T, v: Vec2Like, angle: Scalar): T => {
+    const x = _x(v);
+    const y = _y(v);
+
+    // lookup tables or approximations for very common angles
+    if (angle === Math.PI) {
+        out.x = -x;
+        out.y = -y;
+        return out;
+    }
+
+    if (angle === HALF_PI) {
+        out.x = -y;
+        out.y = x;
+        return out;
+    }
+
+    if (angle === -HALF_PI) {
+        out.x = y;
+        out.y = -x;
+        return out;
+    }
+
+    // small angles, sin(θ) ≈ θ and cos(θ) ≈ 1 - θ²/2
+    if (Math.abs(angle) < 0.1) {
+        const θ2_2 = (angle * angle) / 2;
+        const s = angle;
+        const c = 1 - θ2_2;
+
+        out.x = x * c - y * s;
+        out.y = x * s + y * c;
+        return out;
+    }
+
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+
+    out.x = x * c - y * s;
+    out.y = x * s + y * c;
+    return out;
+};
+
+export const rotateAround = <T extends Vec2>(
+    out: T,
+    v: Vec2Like,
+    origin: Vec2Like,
+    angle: Scalar
+): T => {
+    const x = _x(v) - _x(origin);
+    const y = _y(v) - _y(origin);
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+
+    out.x = x * c - y * s + _x(origin);
+    out.y = x * s + y * c + _y(origin);
+    return out;
 };
