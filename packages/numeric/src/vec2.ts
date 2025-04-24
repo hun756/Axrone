@@ -279,13 +279,13 @@ export const normalizeFast = <T extends Vec2>(out: T, v: Vec2Like): T => {
 export const perpendicular = <T extends Vec2>(out: T, v: Vec2Like): T => {
     const x = _x(v);
     const y = _y(v);
-    
+
     if (x === 0 && y === 0) {
         out.x = 0;
         out.y = 0;
         return out;
     }
-    
+
     out.x = -y;
     out.y = x;
     return out;
@@ -294,13 +294,13 @@ export const perpendicular = <T extends Vec2>(out: T, v: Vec2Like): T => {
 export const perpendicularCCW = <T extends Vec2>(out: T, v: Vec2Like): T => {
     const x = _x(v);
     const y = _y(v);
-    
+
     if (x === 0 && y === 0) {
         out.x = 0;
         out.y = 0;
         return out;
     }
-    
+
     out.x = y;
     out.y = -x;
     return out;
@@ -444,5 +444,142 @@ export const rotateAround = <T extends Vec2>(
 
     out.x = x * c - y * s + _x(origin);
     out.y = x * s + y * c + _y(origin);
+    return out;
+};
+
+export const lerp = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like, t: Scalar): T => {
+    const ax = _x(a);
+    const ay = _y(a);
+    const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+
+    out.x = ax + t1 * (_x(b) - ax);
+    out.y = ay + t1 * (_y(b) - ay);
+    return out;
+};
+
+export const lerpUnclamped = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like, t: Scalar): T => {
+    const ax = _x(a);
+    const ay = _y(a);
+
+    out.x = ax + t * (_x(b) - ax);
+    out.y = ay + t * (_y(b) - ay);
+    return out;
+};
+
+export const slerp = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like, t: Scalar): T => {
+    const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+    const angleA = angle(a);
+    const angleB = angle(b);
+    let angleDiff = angleB - angleA;
+
+    if (angleDiff > Math.PI) {
+        angleDiff -= PI_2;
+    } else if (angleDiff < -Math.PI) {
+        angleDiff += PI_2;
+    }
+
+    const resultAngle = angleA + t1 * angleDiff;
+    const lenA = length(a);
+    const lenB = length(b);
+    const resultLen = lenA + t1 * (lenB - lenA);
+
+    out.x = Math.cos(resultAngle) * resultLen;
+    out.y = Math.sin(resultAngle) * resultLen;
+    return out;
+};
+
+export const smoothStep = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like, t: Scalar): T => {
+    const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+    // 3t² - 2t³
+    const t2 = t1 * t1 * (3 - 2 * t1);
+
+    const ax = _x(a);
+    const ay = _y(a);
+
+    out.x = ax + t2 * (_x(b) - ax);
+    out.y = ay + t2 * (_y(b) - ay);
+    return out;
+};
+
+export const smootherStep = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like, t: Scalar): T => {
+    const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+    // 6t⁵ - 15t⁴ + 10t³
+    const t2 = t1 * t1 * t1 * (t1 * (t1 * 6 - 15) + 10);
+
+    const ax = _x(a);
+    const ay = _y(a);
+
+    out.x = ax + t2 * (_x(b) - ax);
+    out.y = ay + t2 * (_y(b) - ay);
+    return out;
+};
+
+export const cubicBezier = <T extends Vec2>(
+    out: T,
+    a: Vec2Like,
+    c1: Vec2Like,
+    c2: Vec2Like,
+    b: Vec2Like,
+    t: Scalar
+): T => {
+    const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+    const oneMinusT = 1 - t1;
+    const oneMinusT2 = oneMinusT * oneMinusT;
+    const t2 = t1 * t1;
+
+    const oneMinusT3 = oneMinusT2 * oneMinusT;
+    const t3 = t2 * t1;
+    const oneMinusT2_3t = oneMinusT2 * 3 * t1;
+    const oneMinusT_3t2 = oneMinusT * 3 * t2;
+
+    out.x = oneMinusT3 * _x(a) + oneMinusT2_3t * _x(c1) + oneMinusT_3t2 * _x(c2) + t3 * _x(b);
+    out.y = oneMinusT3 * _y(a) + oneMinusT2_3t * _y(c1) + oneMinusT_3t2 * _y(c2) + t3 * _y(b);
+    return out;
+};
+
+export const hermite = <T extends Vec2>(
+    out: T,
+    p0: Vec2Like,
+    m0: Vec2Like,
+    p1: Vec2Like,
+    m1: Vec2Like,
+    t: Scalar
+): T => {
+    const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+    const t2 = t1 * t1;
+    const t3 = t2 * t1;
+
+    const h00 = 2 * t3 - 3 * t2 + 1;
+    const h10 = t3 - 2 * t2 + t1;
+    const h01 = -2 * t3 + 3 * t2;
+    const h11 = t3 - t2;
+
+    out.x = h00 * _x(p0) + h10 * _x(m0) + h01 * _x(p1) + h11 * _x(m1);
+    out.y = h00 * _y(p0) + h10 * _y(m0) + h01 * _y(p1) + h11 * _y(m1);
+    return out;
+};
+
+export const catmullRom = <T extends Vec2>(
+    out: T,
+    p0: Vec2Like,
+    p1: Vec2Like,
+    p2: Vec2Like,
+    p3: Vec2Like,
+    t: Scalar,
+    tension = 0.5
+): T => {
+    const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+    const t2 = t1 * t1;
+    const t3 = t2 * t1;
+
+    const s = (1 - tension) / 2;
+
+    const b0 = s * ((-t3 + 2 * t2 - t1) * 2);
+    const b1 = s * ((-t3 + t2) * 3) + (-2 * t3 + 3 * t2);
+    const b2 = s * ((t3 - 2 * t2 + t1) * 3) + (2 * t3 - 3 * t2 + 1);
+    const b3 = s * ((t3 - t2) * 2);
+
+    out.x = b0 * _x(p0) + b1 * _x(p1) + b2 * _x(p2) + b3 * _x(p3);
+    out.y = b0 * _y(p0) + b1 * _y(p1) + b2 * _y(p2) + b3 * _y(p3);
     return out;
 };
