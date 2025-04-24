@@ -1,4 +1,4 @@
-import { lerp, lerpUnclamped, slerp, smoothStep, Vec2Tuple } from '../vec2';
+import { lerp, lerpUnclamped, slerp, smootherStep, smoothStep, Vec2Tuple } from '../vec2';
 
 describe('lerp function', () => {
     it('should return the starting point when t = 0', () => {
@@ -321,3 +321,89 @@ describe('smoothStep function', () => {
         }
     });
 });
+
+describe('smootherStep function', () => {
+    it('should return the starting point when t = 0', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const b = { x: 30, y: 40 };
+        const result = smootherStep(out, a, b, 0);
+        expect(result.x).toBeCloseTo(10);
+        expect(result.y).toBeCloseTo(20);
+    });
+
+    it('should return the end point when t = 1', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const b = { x: 30, y: 40 };
+        const result = smootherStep(out, a, b, 1);
+        expect(result.x).toBeCloseTo(30);
+        expect(result.y).toBeCloseTo(40);
+    });
+
+    it('should perform correct interpolation when t = 0.5', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const b = { x: 30, y: 40 };
+        const result = smootherStep(out, a, b, 0.5);
+
+        // smootherstep value for 0.5: 6(0.5)⁵ - 15(0.5)⁴ + 10(0.5)³ = 0.5
+        expect(result.x).toBeCloseTo(20);
+        expect(result.y).toBeCloseTo(30);
+    });
+
+    it('should perform smoother interpolation when t = 0.25', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const b = { x: 30, y: 40 };
+
+        // calculated polynomial value for 0.25
+        const t = 0.25;
+        const t3 = t * t * t;
+        const t4 = t3 * t;
+        const t5 = t4 * t;
+        const smootherT = 6 * t5 - 15 * t4 + 10 * t3;
+
+        const result = smootherStep(out, a, b, 0.25);
+        expect(result.x).toBeCloseTo(10 + smootherT * 20);
+        expect(result.y).toBeCloseTo(20 + smootherT * 20);
+    });
+
+    it('should clamp values of t < 0 to 0', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const b = { x: 30, y: 40 };
+        const result = smootherStep(out, a, b, -0.5);
+        expect(result.x).toBeCloseTo(10);
+        expect(result.y).toBeCloseTo(20);
+    });
+
+    it('should clamp values of t > 1 to 1', () => {
+        const out = { x: 0, y: 0 };
+        const a = { x: 10, y: 20 };
+        const b = { x: 30, y: 40 };
+        const result = smootherStep(out, a, b, 1.5);
+        expect(result.x).toBeCloseTo(30);
+        expect(result.y).toBeCloseTo(40);
+    });
+
+    it('should test the differences between smootherStep and smoothStep', () => {
+        const out1 = { x: 0, y: 0 };
+        const out2 = { x: 0, y: 0 };
+        const a = { x: 0, y: 0 };
+        const b = { x: 1, y: 1 };
+
+        // At 0.3, smootherStep should provide a smoother transition
+        const smoothResult = smoothStep(out1, a, b, 0.3);
+        const smootherResult = smootherStep(out2, a, b, 0.3);
+
+        // At 0.3, the smootherStep value should be less than smoothStep
+        expect(smootherResult.x).toBeLessThan(smoothResult.x);
+
+        // Conversely, at 0.7, the smootherStep value should be greater
+        const smoothResult2 = smoothStep(out1, a, b, 0.7);
+        const smootherResult2 = smootherStep(out2, a, b, 0.7);
+        expect(smootherResult2.x).toBeGreaterThan(smoothResult2.x);
+    });
+});
+
