@@ -1,4 +1,5 @@
-import { ICloneable } from "@axrone/utility";
+import { ICloneable } from '@axrone/utility';
+import { EPSILON } from './vec2_legacy';
 
 export interface IVec2Like {
     x: number;
@@ -45,5 +46,93 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2> {
 
     clone(): Vec2 {
         return new Vec2(this.x, this.y);
+    }
+
+    static add<T extends IVec2Like>(a: T, b: T, out?: T): T {
+        if (out) {
+            out.x = a.x + b.x;
+            out.y = a.y + b.y;
+            return out;
+        } else {
+            return { x: a.x + b.x, y: a.y + b.y } as T;
+        }
+    }
+
+    static addScalar<T extends IVec2Like>(a: T, b: number, out?: T): T {
+        if (out) {
+            out.x = a.x + b;
+            out.y = a.y + b;
+            return out;
+        } else {
+            return { x: a.x + b, y: a.y + b } as T;
+        }
+    }
+
+    static subtract<T extends IVec2Like>(a: T, b: T, out?: T): T {
+        if (out) {
+            out.x = a.x - b.x;
+            out.y = a.y - b.y;
+            return out;
+        } else {
+            return { x: a.x - b.x, y: a.y - b.y } as T;
+        }
+    }
+
+    static subtractScalar<T extends IVec2Like>(a: T, b: number, out?: T): T {
+        if (out) {
+            out.x = a.x - b;
+            out.y = a.y - b;
+            return out;
+        } else {
+            return { x: a.x - b, y: a.y - b } as T;
+        }
+    }
+    
+    static multiply<T extends IVec2Like>(a: T, b: T, out?: T): T {
+        if (out) {
+            out.x = a.x * b.x;
+            out.y = a.y * b.y;
+            return out;
+        } else {
+            return { x: a.x * b.x, y: a.y * b.y } as T;
+        }
+    }
+
+    static multiplyScalar<T extends IVec2Like>(a: T, b: number, out?: T): T {
+        if (out) {
+            out.x = a.x * b;
+            out.y = a.y * b;
+            return out;
+        } else {
+            return { x: a.x * b, y: a.y * b } as T;
+        }
+    }
+
+    static divide<T extends IVec2Like>(a: T, b: T, out?: T): T {
+        if (Math.abs(b.x) < EPSILON || Math.abs(b.y) < EPSILON) {
+            throw new Error('Division by zero or near-zero value is not allowed');
+        }
+
+        if (out) {
+            out.x = a.x / b.x;
+            out.y = a.y / b.y;
+            return out;
+        } else {
+            return { x: a.x / b.x, y: a.y / b.y } as T;
+        }
+    }
+
+    static divideScalar<T extends IVec2Like>(a: T, b: number, out?: T): T {
+        if (Math.abs(b) < EPSILON) {
+            throw new Error('Division by zero or near-zero value is not allowed');
+        }
+
+        if (out) {
+            out.x = a.x / b;
+            out.y = a.y / b;
+            return out;
+        } else {
+            return { x: a.x / b, y: a.y / b } as T;
+        }
     }
 }
