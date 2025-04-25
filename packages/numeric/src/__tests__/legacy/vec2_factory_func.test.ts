@@ -9,7 +9,6 @@ import {
     fromValues,
     ReadonlyVec2,
     SQRT2,
-    Vec2Tuple,
 } from '../../vec2_legacy';
 
 describe('Vector Factory Functions', () => {
@@ -26,14 +25,14 @@ describe('Vector Factory Functions', () => {
     });
 
     test('fromArray should create vectors from tuples', () => {
-        const tuple: Vec2Tuple = [5, -6];
+        const tuple: number[] = [5, -6];
         expect(fromArray(tuple)).toEqual({ x: 5, y: -6 });
         expect(fromArray([0, 0])).toEqual({ x: 0, y: 0 });
     });
 
     test('clone should create a new mutable Vec2 instance from Vec2Like', () => {
         const objVec: ReadonlyVec2 = { x: 1, y: 2 };
-        const tupleVec: Vec2Tuple = [3, 4];
+        const vecLike: ReadonlyVec2 = { x: 3, y: 4 }; // Extra propert
 
         const clone1 = clone(objVec);
         expect(clone1).toEqual({ x: 1, y: 2 });
@@ -42,11 +41,11 @@ describe('Vector Factory Functions', () => {
         expect(clone1.x).toBe(10);
         expect(objVec.x).toBe(1);
 
-        const clone2 = clone(tupleVec);
+        const clone2 = clone(vecLike);
         expect(clone2).toEqual({ x: 3, y: 4 });
         clone2.y = 20;
         expect(clone2.y).toBe(20);
-        expect(tupleVec[1]).toBe(4);
+        expect(vecLike.y).toBe(4);
     });
 
     test('fromAngle should create vectors from radians', () => {

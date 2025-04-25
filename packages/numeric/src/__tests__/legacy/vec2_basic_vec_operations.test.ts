@@ -1,10 +1,10 @@
 import * as vec2 from '../../vec2_legacy';
-import { Vec2, ReadonlyVec2, Vec2Tuple } from '../../vec2_legacy';
+import { Vec2, ReadonlyVec2 } from '../../vec2_legacy';
 
 describe('Basic Vector Operations (inplace)', () => {
     let out: Vec2;
     const v1: ReadonlyVec2 = Object.freeze({ x: 1, y: 2 });
-    const v2: Vec2Tuple = Object.freeze([3, 4]);
+    const v2: ReadonlyVec2 = Object.freeze({ x: 3, y: 4 });
     const v3: Vec2 = { x: -1, y: 0.5 };
 
     beforeEach(() => {
@@ -69,7 +69,7 @@ describe('Basic Vector Operations (inplace)', () => {
 
     test('divide should divide components of two Vec2Likes', () => {
         const vA = vec2.create(6, -8);
-        const vB: Vec2Tuple = [3, 2];
+        const vB = vec2.create(3, 2);
         vec2.divide(out, vA, vB); // {6,-8} / [3,2]
         expect(out).toEqual({ x: 2, y: -4 });
     });
@@ -78,8 +78,8 @@ describe('Basic Vector Operations (inplace)', () => {
         const vA = vec2.create(1, 1);
         expect(() => vec2.divide(out, vA, { x: 0, y: 1 })).toThrow();
         expect(() => vec2.divide(out, vA, { x: 1, y: 0 })).toThrow();
-        expect(() => vec2.divide(out, vA, [1e-12, 1])).toThrow();
-        expect(() => vec2.divide(out, vA, [1, 1e-12])).toThrow();
+        expect(() => vec2.divide(out, vA, { x: 1e-12, y: 1 })).toThrow();
+        expect(() => vec2.divide(out, vA, { x: 1, y: 1e-12 })).toThrow();
     });
 
     test('divideScalar should divide components by scalar', () => {
@@ -108,7 +108,7 @@ describe('Basic Vector Operations (inplace)', () => {
     test('inverse should throw on inversion of zero or near-zero', () => {
         expect(() => vec2.inverse(out, { x: 0, y: 1 })).toThrow();
         expect(() => vec2.inverse(out, { x: 1, y: 0 })).toThrow();
-        expect(() => vec2.inverse(out, [1e-12, 1])).toThrow();
+        expect(() => vec2.inverse(out, { x: 1e-12, y: 1 })).toThrow();
     });
 
     test('inverseSafe should invert non-zero components and use default for zero', () => {
@@ -124,8 +124,8 @@ describe('Basic Vector Operations (inplace)', () => {
     });
 
     test('operations should return the modified out vector (chaining)', () => {
-        vec2.add(out, v1, v2);                      // out = {1,2} + [3,4] = {4,6}
-        vec2.multiplyScalar(out, out, 2);           // out = {4,6} * 2 = {8,12}
+        vec2.add(out, v1, v2); // out = {1,2} + [3,4] = {4,6}
+        vec2.multiplyScalar(out, out, 2); // out = {4,6} * 2 = {8,12}
         const result = vec2.addScalar(out, out, 1); // out = {8,12} + 1 = {9,13}
 
         expect(result).toBe(out);
@@ -134,7 +134,7 @@ describe('Basic Vector Operations (inplace)', () => {
 
     test('input vectors should remain unchanged', () => {
         const v1Before = { ...v1 };
-        const v2Before = [...v2];
+        const v2Before = { ...v2 };
         const v3Before = { ...v3 };
 
         vec2.add(out, v1, v2);

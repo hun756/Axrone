@@ -11,13 +11,12 @@ import {
     normalizeFast,
     ReadonlyVec2,
     Vec2,
-    Vec2Tuple,
     ZERO,
 } from '../../vec2_legacy';
 
 describe('Vector Length, Normalization, and Distance', () => {
     const v34: ReadonlyVec2 = Object.freeze({ x: 3, y: 4 }); // length 5
-    const vNeg12: Vec2Tuple = Object.freeze([-1, 2]); // length sqrt(5) ~ 2.236
+    const vNeg12: ReadonlyVec2 = Object.freeze({ x: -1, y: 2 }); // length sqrt(5) ~ 2.236
     const vZero = ZERO; // {0,0}
 
     // --- Length ---
@@ -88,7 +87,7 @@ describe('Vector Length, Normalization, and Distance', () => {
 
     // --- Distance ---
     const p1: Vec2 = { x: 1, y: 2 };
-    const p2: Vec2Tuple = [4, 6]; // Diff = (3, 4), dist = 5
+    const p2: Vec2 = { x: 4, y: 6 }; // Diff = (3, 4), dist = 5
     const p3: ReadonlyVec2 = { x: 1, y: 2 }; // Same as p1
 
     test('distanceSq should return the squared distance between points', () => {

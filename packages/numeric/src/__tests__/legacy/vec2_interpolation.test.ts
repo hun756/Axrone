@@ -7,7 +7,6 @@ import {
     slerp,
     smootherStep,
     smoothStep,
-    Vec2Tuple,
 } from '../../vec2_legacy';
 
 describe('lerp function', () => {
@@ -57,14 +56,6 @@ describe('lerp function', () => {
         expect(result.y).toBeCloseTo(40);
     });
 
-    it('should process vectors in array format correctly', () => {
-        const out = { x: 0, y: 0 };
-        const a = [10, 20] as Vec2Tuple;
-        const b = [30, 40] as Vec2Tuple;
-        const result = lerp(out, a, b, 0.5);
-        expect(result.x).toBeCloseTo(20);
-        expect(result.y).toBeCloseTo(30);
-    });
 
     it('should work correctly with zero vectors', () => {
         const out = { x: 0, y: 0 };
@@ -135,7 +126,7 @@ describe('lerpUnclamped function', () => {
     it('should work correctly for mixed vector formats', () => {
         const out = { x: 0, y: 0 };
         const a = { x: 10, y: 20 };
-        const b = [30, 40] as Vec2Tuple;
+        const b = { x: 30, y: 40 };
         const result = lerpUnclamped(out, a, b, 0.5);
         expect(result.x).toBeCloseTo(20);
         expect(result.y).toBeCloseTo(30);
@@ -495,9 +486,9 @@ describe('cubicBezier function', () => {
     it('should process vectors in different formats correctly', () => {
         const out = { x: 0, y: 0 };
         const a = { x: 10, y: 20 };
-        const c1 = [15, 25] as Vec2Tuple;
+        const c1 = { x: 15, y: 25 };
         const c2 = { x: 25, y: 35 };
-        const b = [30, 40] as Vec2Tuple;
+        const b = { x: 30, y: 40 };
 
         const result = cubicBezier(out, a, c1, c2, b, 0.5);
         expect(result.x).toBeGreaterThan(10);
