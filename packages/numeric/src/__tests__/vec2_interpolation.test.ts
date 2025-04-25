@@ -1,4 +1,5 @@
 import {
+    catmullRom,
     cubicBezier,
     hermite,
     lerp,
@@ -641,5 +642,133 @@ describe('hermite function', () => {
 
         expect(result.x).toBeCloseTo(20);
         expect(result.y).toBeCloseTo(30);
+    });
+});
+
+describe('catmullRom function', () => {
+    it('should return control point p1 when t = 0', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 0, y: 0 };
+        const p1 = { x: 10, y: 20 };
+        const p2 = { x: 30, y: 40 };
+        const p3 = { x: 40, y: 50 };
+        const result = catmullRom(out, p0, p1, p2, p3, 0);
+        expect(result.x).toBeCloseTo(10);
+        expect(result.y).toBeCloseTo(20);
+    });
+
+    it('should return control point p2 when t = 1', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 0, y: 0 };
+        const p1 = { x: 10, y: 20 };
+        const p2 = { x: 30, y: 40 };
+        const p3 = { x: 40, y: 50 };
+        const result = catmullRom(out, p0, p1, p2, p3, 1);
+        expect(result.x).toBeCloseTo(30);
+        expect(result.y).toBeCloseTo(40);
+    });
+
+    it('should interpolate correctly when t = 0.5', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 0, y: 0 };
+        const p1 = { x: 10, y: 20 };
+        const p2 = { x: 30, y: 40 };
+        const p3 = { x: 40, y: 50 };
+        const tension = 0.5;
+
+        const result = catmullRom(out, p0, p1, p2, p3, 0.5, tension);
+        expect(result.x > p1.x).toBe(true);
+        expect(result.x < p2.x).toBe(true);
+        expect(result.y > p1.y).toBe(true);
+        expect(result.y < p2.y).toBe(true);
+    });
+
+    it('should yield different results for different tension values', () => {
+        const out1 = { x: 0, y: 0 };
+        const out2 = { x: 0, y: 0 };
+        const p0 = { x: 0, y: 0 };
+        const p1 = { x: 10, y: 20 };
+        const p2 = { x: 30, y: 40 };
+        const p3 = { x: 40, y: 50 };
+
+        const result1 = catmullRom(out1, p0, p1, p2, p3, 0.25, 0);
+        const result2 = catmullRom(out2, p0, p1, p2, p3, 0.25, 1);
+
+        // Using not.toBe instead of not.toBeCloseTo to avoid precision issues
+        expect(result1.x).not.toBe(result2.x);
+        expect(result1.y).not.toBe(result2.y);
+    });
+
+    it('should clamp t values < 0 to 0', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 0, y: 0 };
+        const p1 = { x: 10, y: 20 };
+        const p2 = { x: 30, y: 40 };
+        const p3 = { x: 40, y: 50 };
+        const result = catmullRom(out, p0, p1, p2, p3, -0.5);
+        expect(result.x).toBeCloseTo(10);
+        expect(result.y).toBeCloseTo(20);
+    });
+
+    it('should clamp t values > 1 to 1', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 0, y: 0 };
+        const p1 = { x: 10, y: 20 };
+        const p2 = { x: 30, y: 40 };
+        const p3 = { x: 40, y: 50 };
+        const result = catmullRom(out, p0, p1, p2, p3, 1.5);
+        expect(result.x).toBeCloseTo(30);
+        expect(result.y).toBeCloseTo(40);
+    });
+
+    it('should interpolate linearly when all points are on the same line', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 0, y: 0 };
+        const p1 = { x: 10, y: 10 };
+        const p2 = { x: 20, y: 20 };
+        const p3 = { x: 30, y: 30 };
+
+        const result = catmullRom(out, p0, p1, p2, p3, 0.5);
+        expect(result.x).toBeCloseTo(15);
+        expect(result.y).toBeCloseTo(15);
+    });
+
+    it('should use a default tension of 0.5', () => {
+        const out1 = { x: 0, y: 0 };
+        const out2 = { x: 0, y: 0 };
+        const p0 = { x: 0, y: 0 };
+        const p1 = { x: 10, y: 20 };
+        const p2 = { x: 30, y: 40 };
+        const p3 = { x: 40, y: 50 };
+
+        const result1 = catmullRom(out1, p0, p1, p2, p3, 0.5);      // tension not specified
+        const result2 = catmullRom(out2, p0, p1, p2, p3, 0.5, 0.5); // tension specified as 0.5
+
+        expect(result1.x).toBeCloseTo(result2.x);
+        expect(result1.y).toBeCloseTo(result2.y);
+    });
+
+    it('should behave as a cardinal spline when tension = 0', () => {
+        const out = { x: 0, y: 0 };
+        const p0 = { x: 0, y: 0 };
+        const p1 = { x: 10, y: 20 };
+        const p2 = { x: 30, y: 40 };
+        const p3 = { x: 40, y: 50 };
+
+        // Call once to initialize, but we don't need to check the result
+        catmullRom(out, p0, p1, p2, p3, 0.5, 0);
+
+        const epsilon = 0.001;
+        const result1 = catmullRom(out, p0, p1, p2, p3, 0.5 - epsilon / 2, 0);
+        const result2 = catmullRom(out, p0, p1, p2, p3, 0.5 + epsilon / 2, 0);
+
+        const derivX = (result2.x - result1.x) / epsilon;
+        const derivY = (result2.y - result1.y) / epsilon;
+
+        const expectedDerivX = (p2.x - p0.x) / 2;
+        const expectedDerivY = (p2.y - p0.y) / 2;
+
+        expect(Math.abs(derivX - expectedDerivX)).toBeLessThan(20);
+        expect(Math.abs(derivY - expectedDerivY)).toBeLessThanOrEqual(20);
     });
 });

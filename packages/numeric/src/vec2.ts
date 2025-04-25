@@ -569,17 +569,36 @@ export const catmullRom = <T extends Vec2>(
     tension = 0.5
 ): T => {
     const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+    
+    if (t1 === 0) {
+        out.x = _x(p1);
+        out.y = _y(p1);
+        return out;
+    } 
+    
+    if (t1 === 1) {
+        out.x = _x(p2);
+        out.y = _y(p2);
+        return out;
+    }
+    
     const t2 = t1 * t1;
     const t3 = t2 * t1;
-
-    const s = (1 - tension) / 2;
-
-    const b0 = s * ((-t3 + 2 * t2 - t1) * 2);
-    const b1 = s * ((-t3 + t2) * 3) + (-2 * t3 + 3 * t2);
-    const b2 = s * ((t3 - 2 * t2 + t1) * 3) + (2 * t3 - 3 * t2 + 1);
-    const b3 = s * ((t3 - t2) * 2);
-
-    out.x = b0 * _x(p0) + b1 * _x(p1) + b2 * _x(p2) + b3 * _x(p3);
-    out.y = b0 * _y(p0) + b1 * _y(p1) + b2 * _y(p2) + b3 * _y(p3);
+    
+    const h00 = 2*t3 - 3*t2 + 1;
+    const h10 = t3 - 2*t2 + t1;
+    const h01 = -2*t3 + 3*t2;
+    const h11 = t3 - t2;
+    
+    const alpha = (1 - tension) / 2;
+    
+    const m0x = alpha * (_x(p2) - _x(p0));
+    const m0y = alpha * (_y(p2) - _y(p0));
+    const m1x = alpha * (_x(p3) - _x(p1));
+    const m1y = alpha * (_y(p3) - _y(p1));
+    
+    out.x = h00 * _x(p1) + h10 * m0x + h01 * _x(p2) + h11 * m1x;
+    out.y = h00 * _y(p1) + h10 * m0y + h01 * _y(p2) + h11 * m1y;
+    
     return out;
 };
