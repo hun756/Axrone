@@ -357,5 +357,24 @@ describe('FpCompare Class - Test Suite', () => {
             expect(comparer.compare(-0, 0)).toBe(1);
         });
     });
+
+    describe('Getter Methods', () => {
+        test('getEpsilon returns the correct value', () => {
+            const defaultComparer = new FpCompare();
+            const customComparer = new FpCompare(CUSTOM_EPSILON);
+
+            expect(defaultComparer.getEpsilon()).toBe(DEFAULT_EPSILON);
+            expect(customComparer.getEpsilon()).toBe(CUSTOM_EPSILON);
+        });
+
+        test('getAbsThreshold returns the correct value', () => {
+            const defaultComparer = new FpCompare();
+            const customComparer = new FpCompare(DEFAULT_EPSILON, CUSTOM_ABS_THRESHOLD);
+
+            expect(defaultComparer.getAbsThreshold()).toBe(DEFAULT_ABS_THRESHOLD);
+            expect(customComparer.getAbsThreshold()).toBe(CUSTOM_ABS_THRESHOLD);
+        });
+    });
+
     // ...
 });
