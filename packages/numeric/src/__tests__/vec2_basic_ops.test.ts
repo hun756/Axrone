@@ -365,4 +365,108 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
             });
         });
     });
+
+    describe('Vector Operations', () => {
+        describe('add()', () => {
+            test('adds two vectors correctly', () => {
+                const testCases = [
+                    { a: { x: 1, y: 2 }, b: { x: 3, y: 4 }, expected: { x: 4, y: 6 } },
+                    { a: { x: -5, y: 10 }, b: { x: 5, y: -10 }, expected: { x: 0, y: 0 } },
+                    { a: { x: 0, y: 0 }, b: { x: 3, y: 4 }, expected: { x: 3, y: 4 } },
+                ];
+
+                testCases.forEach(({ a, b, expected }) => {
+                    const result = Vec2.add(a, b);
+                    expect(result).toBeVectorCloseTo(expected);
+                });
+            });
+
+            test('supports output parameter', () => {
+                const a = { x: 3, y: 4 };
+                const b = { x: 5, y: 6 };
+                const out = { x: 0, y: 0 };
+
+                const result = Vec2.add(a, b, out);
+
+                expect(result).toBe(out);
+                expect(out).toBeVectorCloseTo({ x: 8, y: 10 });
+            });
+
+            test('supports reusing input as output', () => {
+                const a = { x: 3, y: 4 };
+                const b = { x: 5, y: 6 };
+
+                const result1 = Vec2.add(a, b, a);
+
+                expect(result1).toBe(a);
+                expect(a).toBeVectorCloseTo({ x: 8, y: 10 });
+
+                const c = { x: 1, y: 2 };
+                const result2 = Vec2.add(b, c, b);
+
+                expect(result2).toBe(b);
+                expect(b).toBeVectorCloseTo({ x: 6, y: 8 });
+            });
+
+            test('is commutative (a + b = b + a)', () => {
+                for (let i = 0; i < ITERATIONS; i++) {
+                    const a = new Vec2(Math.random() * 100, Math.random() * 100);
+                    const b = new Vec2(Math.random() * 100, Math.random() * 100);
+
+                    const result1 = Vec2.add(a, b);
+                    const result2 = Vec2.add(b, a);
+
+                    expect(result1).toBeVectorCloseTo(result2);
+                }
+            });
+
+            test('is associative (a + (b + c) = (a + b) + c)', () => {
+                for (let i = 0; i < ITERATIONS; i++) {
+                    const a = new Vec2(Math.random() * 100, Math.random() * 100);
+                    const b = new Vec2(Math.random() * 100, Math.random() * 100);
+                    const c = new Vec2(Math.random() * 100, Math.random() * 100);
+
+                    const temp1 = Vec2.add(b, c);
+                    const result1 = Vec2.add(a, temp1);
+
+                    const temp2 = Vec2.add(a, b);
+                    const result2 = Vec2.add(temp2, c);
+
+                    expect(result1).toBeVectorCloseTo(result2);
+                }
+            });
+
+            test('has identity property (v + 0 = v)', () => {
+                const vectors = generateRandomVectors(ITERATIONS);
+
+                vectors.forEach((v) => {
+                    const result = Vec2.add(v, Vec2.ZERO);
+                    expect(result).toBeVectorCloseTo(v);
+                });
+            });
+
+            test('maintains numerical stability with extreme values', () => {
+                const large = { x: 1e15, y: 1e15 };
+                const small = { x: 1e-15, y: 1e-15 };
+
+                const result = Vec2.add(large, small);
+
+                expect(result).toBeVectorCloseTo(large);
+            });
+
+            test('handles special values correctly', () => {
+                const withNaN = Vec2.add({ x: NaN, y: 5 }, { x: 3, y: 4 });
+                expect(Number.isNaN(withNaN.x)).toBe(true);
+                expect(withNaN.y).toBe(9);
+
+                const withInf = Vec2.add({ x: Infinity, y: 10 }, { x: Infinity, y: 5 });
+                expect(withInf.x).toBe(Infinity);
+                expect(withInf.y).toBe(15);
+
+                const infPlusMinusInf = Vec2.add({ x: Infinity, y: 10 }, { x: -Infinity, y: 5 });
+                expect(Number.isNaN(infPlusMinusInf.x)).toBe(true);
+                expect(infPlusMinusInf.y).toBe(15);
+            });
+        });
+    });
 });
