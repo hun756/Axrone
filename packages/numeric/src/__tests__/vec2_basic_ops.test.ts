@@ -182,4 +182,55 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
             expect(result).toBeVectorCloseTo(testVec);
         });
     });
+
+    describe('Static Factory Methods', () => {
+        describe('from()', () => {
+            test('creates vector from IVec2Like object', () => {
+                const obj = { x: 7.5, y: -3.2 };
+                const v = Vec2.from(obj);
+
+                expect(v).toBeInstanceOf(Vec2);
+                expect(v).toBeVectorCloseTo(obj);
+            });
+
+            test('creates new instance when given a Vec2', () => {
+                const original = new Vec2(3, 4);
+                const copy = Vec2.from(original);
+
+                expect(copy).toBeInstanceOf(Vec2);
+                expect(copy).not.toBe(original);
+                expect(copy).toBeVectorCloseTo(original);
+            });
+
+            test('handles objects with additional properties', () => {
+                const obj = { x: 5, y: 10, z: 15, name: 'test' };
+                const v = Vec2.from(obj);
+
+                expect(v.x).toBe(5);
+                expect(v.y).toBe(10);
+                // @ts-ignore - Intentionally testing property doesn't exist
+                expect(v.z).toBeUndefined();
+                // @ts-ignore - Intentionally testing property doesn't exist
+                expect(v.name).toBeUndefined();
+            });
+
+            test('handles object with getter functions', () => {
+                const obj = {
+                    get x() {
+                        return 7;
+                    },
+                    get y() {
+                        return 14;
+                    },
+                };
+
+                const v = Vec2.from(obj);
+
+                expect(v.x).toBe(7);
+                expect(v.y).toBe(14);
+            });
+        });
+
+        
+    });
 });
