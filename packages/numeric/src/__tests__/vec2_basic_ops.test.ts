@@ -468,5 +468,50 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
                 expect(infPlusMinusInf.y).toBe(15);
             });
         });
+
+        describe('addScalar()', () => {
+            test('adds scalar to both components', () => {
+                const testCases = [
+                    { a: { x: 3, y: 4 }, b: 5, expected: { x: 8, y: 9 } },
+                    { a: { x: -10, y: 20 }, b: 10, expected: { x: 0, y: 30 } },
+                    { a: { x: 0, y: 0 }, b: 0, expected: { x: 0, y: 0 } },
+                ];
+
+                testCases.forEach(({ a, b, expected }) => {
+                    const result = Vec2.addScalar(a, b);
+                    expect(result).toBeVectorCloseTo(expected);
+                });
+            });
+
+            test('supports output parameter', () => {
+                const a = { x: 3, y: 4 };
+                const scalar = 5;
+                const out = { x: 0, y: 0 };
+
+                const result = Vec2.addScalar(a, scalar, out);
+
+                expect(result).toBe(out);
+                expect(out).toBeVectorCloseTo({ x: 8, y: 9 });
+            });
+
+            test('handles special values correctly', () => {
+                const nanPlusScalar = Vec2.addScalar({ x: NaN, y: 5 }, 10);
+                expect(Number.isNaN(nanPlusScalar.x)).toBe(true);
+                expect(nanPlusScalar.y).toBe(15);
+
+                const infPlusScalar = Vec2.addScalar({ x: Infinity, y: 10 }, 5);
+                expect(infPlusScalar.x).toBe(Infinity);
+                expect(infPlusScalar.y).toBe(15);
+            });
+
+            test('has identity property (v + 0 = v)', () => {
+                const vectors = generateRandomVectors(ITERATIONS);
+
+                vectors.forEach((v) => {
+                    const result = Vec2.addScalar(v, 0);
+                    expect(result).toBeVectorCloseTo(v);
+                });
+            });
+        });
     });
 });
