@@ -1,5 +1,5 @@
 import { ICloneable } from '@axrone/utility';
-import { EPSILON } from './vec2_legacy';
+import { EPSILON } from './common';
 
 export interface IVec2Like {
     x: number;
@@ -87,7 +87,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2> {
             return { x: a.x - b, y: a.y - b } as T;
         }
     }
-    
+
     static multiply<T extends IVec2Like>(a: T, b: T, out?: T): T {
         if (out) {
             out.x = a.x * b.x;
