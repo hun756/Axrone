@@ -303,5 +303,31 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
                 }
             });
         });
+
+        describe('create()', () => {
+            test('is functionally equivalent to constructor', () => {
+                const values = [
+                    [0, 0],
+                    [3, 4],
+                    [-5.5, 7.7],
+                    [Number.MAX_VALUE, Number.MIN_VALUE],
+                ];
+
+                values.forEach(([x, y]) => {
+                    const created = Vec2.create(x, y);
+                    const constructed = new Vec2(x, y);
+
+                    expect(created).toBeVectorCloseTo(constructed);
+                    expect(created).not.toBe(constructed);
+                });
+            });
+
+            test('with no parameters creates zero vector', () => {
+                const v = Vec2.create();
+
+                expect(v).toBeVectorCloseTo(Vec2.ZERO);
+                expect(v).not.toBe(Vec2.ZERO);
+            });
+        });
     });
 });
