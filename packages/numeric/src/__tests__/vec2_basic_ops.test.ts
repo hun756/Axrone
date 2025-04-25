@@ -77,3 +77,48 @@ function measurePerformance(name: string, fn: () => void): number {
     return end - start;
 }
 
+describe('Vec2 Class - Basic Operations Test Suite', () => {
+    describe('Constructor and Initialization', () => {
+        test('constructor without parameters creates a zero vector', () => {
+            const v = new Vec2();
+            expect(v).toBeVectorCloseTo({ x: 0, y: 0 });
+        });
+
+        test('constructor with parameters correctly initializes components', () => {
+            const v = new Vec2(3.14, -2.718);
+            expect(v.x).toBe(3.14);
+            expect(v.y).toBe(-2.718);
+        });
+
+        test('constructor coerces parameters to numbers', () => {
+            // @ts-ignore - Intentionally testing type coercion
+            const v = new Vec2('5', '10');
+            
+            // Vec2 constructor does not perform string conversion, 
+            // it takes the value given as parameter as it is.
+            expect(v.x).toBe('5');
+            expect(v.y).toBe('10');
+        });
+
+        test.each([
+            ['Infinity', Infinity, Infinity],
+            ['NaN', NaN, NaN],
+            ['MAX_VALUE', Number.MAX_VALUE, Number.MAX_VALUE],
+            ['MIN_VALUE', Number.MIN_VALUE, Number.MIN_VALUE],
+        ])('constructor correctly handles %s', (_, x, y) => {
+            const v = new Vec2(x, y);
+
+            if (Number.isNaN(x)) {
+                expect(Number.isNaN(v.x)).toBe(true);
+            } else {
+                expect(v.x).toBe(x);
+            }
+
+            if (Number.isNaN(y)) {
+                expect(Number.isNaN(v.y)).toBe(true);
+            } else {
+                expect(v.y).toBe(y);
+            }
+        });
+    });
+});
