@@ -70,5 +70,22 @@ describe('FpCompare Class - Test Suite', () => {
         });
     });
 
-    // ... 
+    describe('nearlyEqual Method', () => {
+        test('returns true for identical values', () => {
+            const comparer = new FpCompare();
+            expect(comparer.nearlyEqual(0, 0)).toBe(true);
+            expect(comparer.nearlyEqual(1, 1)).toBe(true);
+            expect(comparer.nearlyEqual(-1, -1)).toBe(true);
+            expect(comparer.nearlyEqual(123.456, 123.456)).toBe(true);
+        });
+
+        test('returns true for nearly equal values within epsilon', () => {
+            const comparer = new FpCompare(1e-5);
+            expect(comparer.nearlyEqual(1.0, 1.0 + 0.5e-5)).toBe(true);
+            expect(comparer.nearlyEqual(1000.0, 1000.0 + 1e-5 * 1000.0 * 0.9)).toBe(true);
+            expect(comparer.nearlyEqual(-1.0, -1.0 - 0.5e-5)).toBe(true);
+        });
+    });
+
+    // ...
 });
