@@ -513,5 +513,76 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
                 });
             });
         });
+
+        describe('subtract()', () => {
+            test('subtracts vectors correctly', () => {
+                const testCases = [
+                    { a: { x: 5, y: 8 }, b: { x: 2, y: 3 }, expected: { x: 3, y: 5 } },
+                    { a: { x: 10, y: 10 }, b: { x: 10, y: 10 }, expected: { x: 0, y: 0 } },
+                    { a: { x: -5, y: -8 }, b: { x: 2, y: 3 }, expected: { x: -7, y: -11 } },
+                ];
+
+                testCases.forEach(({ a, b, expected }) => {
+                    const result = Vec2.subtract(a, b);
+                    expect(result).toBeVectorCloseTo(expected);
+                });
+            });
+
+            test('supports output parameter', () => {
+                const a = { x: 10, y: 20 };
+                const b = { x: 3, y: 7 };
+                const out = { x: 0, y: 0 };
+
+                const result = Vec2.subtract(a, b, out);
+
+                expect(result).toBe(out);
+                expect(out).toBeVectorCloseTo({ x: 7, y: 13 });
+            });
+
+            test('is anti-commutative (a - b = -(b - a))', () => {
+                for (let i = 0; i < ITERATIONS; i++) {
+                    const a = new Vec2(Math.random() * 100, Math.random() * 100);
+                    const b = new Vec2(Math.random() * 100, Math.random() * 100);
+
+                    const result1 = Vec2.subtract(a, b);
+                    const result2 = Vec2.subtract(b, a);
+
+                    expect(result1.x).toBeCloseTo(-result2.x, 10);
+                    expect(result1.y).toBeCloseTo(-result2.y, 10);
+                }
+            });
+
+            test('has identity property (v - 0 = v)', () => {
+                const vectors = generateRandomVectors(ITERATIONS);
+
+                vectors.forEach((v) => {
+                    const result = Vec2.subtract(v, Vec2.ZERO);
+                    expect(result).toBeVectorCloseTo(v);
+                });
+            });
+
+            test('has self-inverse property (v - v = 0)', () => {
+                const vectors = generateRandomVectors(ITERATIONS);
+
+                vectors.forEach((v) => {
+                    const result = Vec2.subtract(v, v);
+                    expect(result).toBeVectorCloseTo(Vec2.ZERO);
+                });
+            });
+
+            test('handles special values correctly', () => {
+                const withNaN = Vec2.subtract({ x: NaN, y: 5 }, { x: 3, y: 4 });
+                expect(Number.isNaN(withNaN.x)).toBe(true);
+                expect(withNaN.y).toBe(1);
+
+                const infMinusInf = Vec2.subtract({ x: Infinity, y: 10 }, { x: Infinity, y: 5 });
+                expect(Number.isNaN(infMinusInf.x)).toBe(true);
+                expect(infMinusInf.y).toBe(5);
+
+                const infMinusFinite = Vec2.subtract({ x: Infinity, y: 10 }, { x: 100, y: 5 });
+                expect(infMinusFinite.x).toBe(Infinity);
+                expect(infMinusFinite.y).toBe(5);
+            });
+        });
     });
 });
