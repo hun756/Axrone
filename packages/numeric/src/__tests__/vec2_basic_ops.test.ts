@@ -720,5 +720,80 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
                 }
             });
         });
+
+        describe('multiplyScalar()', () => {
+            test('multiplies both components by scalar', () => {
+                const testCases = [
+                    { a: { x: 2, y: 3 }, b: 4, expected: { x: 8, y: 12 } },
+                    { a: { x: -2, y: 3 }, b: -4, expected: { x: 8, y: -12 } },
+                    { a: { x: 0, y: 0 }, b: 10, expected: { x: 0, y: 0 } },
+                ];
+
+                testCases.forEach(({ a, b, expected }) => {
+                    const result = Vec2.multiplyScalar(a, b);
+                    expect(result).toBeVectorCloseTo(expected);
+                });
+            });
+
+            test('supports output parameter', () => {
+                const a = { x: 2, y: 3 };
+                const scalar = 4;
+                const out = { x: 0, y: 0 };
+
+                const result = Vec2.multiplyScalar(a, scalar, out);
+
+                expect(result).toBe(out);
+                expect(out).toBeVectorCloseTo({ x: 8, y: 12 });
+            });
+
+            test('has identity property (v * 1 = v)', () => {
+                const vectors = generateRandomVectors(ITERATIONS);
+
+                vectors.forEach((v) => {
+                    const result = Vec2.multiplyScalar(v, 1);
+                    expect(result).toBeVectorCloseTo(v);
+                });
+            });
+
+            test('has zero property (v * 0 = 0)', () => {
+                const vectors = generateRandomVectors(ITERATIONS);
+
+                vectors.forEach((v) => {
+                    const result = Vec2.multiplyScalar(v, 0);
+                    expect(result).toBeVectorCloseTo(Vec2.ZERO);
+                });
+            });
+
+            test('is distributive over vector addition (s * (a + b) = s * a + s * b)', () => {
+                for (let i = 0; i < ITERATIONS / 10; i++) {
+                    const scalar = Math.random() * 10;
+                    const a = new Vec2(Math.random() * 10, Math.random() * 10);
+                    const b = new Vec2(Math.random() * 10, Math.random() * 10);
+
+                    const aPlusB = Vec2.add(a, b);
+                    const left = Vec2.multiplyScalar(aPlusB, scalar);
+
+                    const sTimesA = Vec2.multiplyScalar(a, scalar);
+                    const sTimesB = Vec2.multiplyScalar(b, scalar);
+                    const right = Vec2.add(sTimesA, sTimesB);
+
+                    expect(left).toBeVectorCloseTo(right, PRECISION);
+                }
+            });
+
+            test('handles special values correctly', () => {
+                const nanTimesScalar = Vec2.multiplyScalar({ x: NaN, y: 5 }, 3);
+                expect(Number.isNaN(nanTimesScalar.x)).toBe(true);
+                expect(nanTimesScalar.y).toBe(15);
+
+                const infTimesScalar = Vec2.multiplyScalar({ x: Infinity, y: 5 }, 3);
+                expect(infTimesScalar.x).toBe(Infinity);
+                expect(infTimesScalar.y).toBe(15);
+
+                const infTimesZero = Vec2.multiplyScalar({ x: Infinity, y: 5 }, 0);
+                expect(Number.isNaN(infTimesZero.x)).toBe(true);
+                expect(infTimesZero.y).toBe(0);
+            });
+        });
     });
 });
