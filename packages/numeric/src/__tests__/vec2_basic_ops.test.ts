@@ -584,5 +584,50 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
                 expect(infMinusFinite.y).toBe(5);
             });
         });
+
+        describe('subtractScalar()', () => {
+            test('subtracts scalar from both components', () => {
+                const testCases = [
+                    { a: { x: 10, y: 15 }, b: 5, expected: { x: 5, y: 10 } },
+                    { a: { x: 0, y: 0 }, b: 5, expected: { x: -5, y: -5 } },
+                    { a: { x: -10, y: -15 }, b: -5, expected: { x: -5, y: -10 } },
+                ];
+
+                testCases.forEach(({ a, b, expected }) => {
+                    const result = Vec2.subtractScalar(a, b);
+                    expect(result).toBeVectorCloseTo(expected);
+                });
+            });
+
+            test('supports output parameter', () => {
+                const a = { x: 10, y: 20 };
+                const scalar = 7;
+                const out = { x: 0, y: 0 };
+
+                const result = Vec2.subtractScalar(a, scalar, out);
+
+                expect(result).toBe(out);
+                expect(out).toBeVectorCloseTo({ x: 3, y: 13 });
+            });
+
+            test('has identity property (v - 0 = v)', () => {
+                const vectors = generateRandomVectors(ITERATIONS);
+
+                vectors.forEach((v) => {
+                    const result = Vec2.subtractScalar(v, 0);
+                    expect(result).toBeVectorCloseTo(v);
+                });
+            });
+
+            test('handles special values correctly', () => {
+                const nanMinusScalar = Vec2.subtractScalar({ x: NaN, y: 5 }, 3);
+                expect(Number.isNaN(nanMinusScalar.x)).toBe(true);
+                expect(nanMinusScalar.y).toBe(2);
+
+                const infMinusScalar = Vec2.subtractScalar({ x: Infinity, y: 10 }, 5);
+                expect(infMinusScalar.x).toBe(Infinity);
+                expect(infMinusScalar.y).toBe(5);
+            });
+        });
     });
 });
