@@ -954,4 +954,66 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
             });
         });
     });
+
+    describe('Cross-Method Validation', () => {
+        test('multiplyScalar by -1 is equivalent to vector negation', () => {
+            const vectors = generateRandomVectors(ITERATIONS);
+
+            vectors.forEach((v) => {
+                const negated = Vec2.multiplyScalar(v, -1);
+                expect(negated.x).toBeCloseTo(-v.x, 10);
+                expect(negated.y).toBeCloseTo(-v.y, 10);
+            });
+        });
+
+        test('add and subtract are inverse operations', () => {
+            for (let i = 0; i < ITERATIONS; i++) {
+                const a = new Vec2(Math.random() * 100, Math.random() * 100);
+                const b = new Vec2(Math.random() * 100, Math.random() * 100);
+
+                const sum = Vec2.add(a, b);
+                const difference = Vec2.subtract(sum, b);
+
+                expect(difference).toBeVectorCloseTo(a);
+            }
+        });
+
+        test('multiply and divide are inverse operations', () => {
+            for (let i = 0; i < ITERATIONS; i++) {
+                const a = new Vec2(Math.random() * 100 + 1, Math.random() * 100 + 1);
+                const b = new Vec2(Math.random() * 100 + 1, Math.random() * 100 + 1);
+
+                const product = Vec2.multiply(a, b);
+                const quotient = Vec2.divide(product, b);
+
+                expect(quotient).toBeVectorCloseTo(a);
+            }
+        });
+
+        test('scalar operations are equivalent to vector operations with uniform vectors', () => {
+            for (let i = 0; i < ITERATIONS; i++) {
+                const v = new Vec2(Math.random() * 100, Math.random() * 100);
+                const scalar = Math.random() * 100;
+                const scalarVec = new Vec2(scalar, scalar);
+
+                const addScalar = Vec2.addScalar(v, scalar);
+                const addVector = Vec2.add(v, scalarVec);
+                expect(addScalar).toBeVectorCloseTo(addVector);
+
+                const subScalar = Vec2.subtractScalar(v, scalar);
+                const subVector = Vec2.subtract(v, scalarVec);
+                expect(subScalar).toBeVectorCloseTo(subVector);
+
+                const mulScalar = Vec2.multiplyScalar(v, scalar);
+                const mulVector = Vec2.multiply(v, scalarVec);
+                expect(mulScalar).toBeVectorCloseTo(mulVector);
+
+                if (Math.abs(scalar) > EPSILON) {
+                    const divScalar = Vec2.divideScalar(v, scalar);
+                    const divVector = Vec2.divide(v, scalarVec);
+                    expect(divScalar).toBeVectorCloseTo(divVector);
+                }
+            }
+        });
+    });
 });
