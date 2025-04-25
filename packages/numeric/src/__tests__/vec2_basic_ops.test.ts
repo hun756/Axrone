@@ -629,5 +629,96 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
                 expect(infMinusScalar.y).toBe(5);
             });
         });
+
+        describe('multiply()', () => {
+            test('multiplies vectors component-wise', () => {
+                const testCases = [
+                    { a: { x: 2, y: 3 }, b: { x: 4, y: 5 }, expected: { x: 8, y: 15 } },
+                    { a: { x: -2, y: 3 }, b: { x: 4, y: -5 }, expected: { x: -8, y: -15 } },
+                    { a: { x: 0, y: 0 }, b: { x: 4, y: 5 }, expected: { x: 0, y: 0 } },
+                ];
+
+                testCases.forEach(({ a, b, expected }) => {
+                    const result = Vec2.multiply(a, b);
+                    expect(result).toBeVectorCloseTo(expected);
+                });
+            });
+
+            test('supports output parameter', () => {
+                const a = { x: 2, y: 3 };
+                const b = { x: 4, y: 5 };
+                const out = { x: 0, y: 0 };
+
+                const result = Vec2.multiply(a, b, out);
+
+                expect(result).toBe(out);
+                expect(out).toBeVectorCloseTo({ x: 8, y: 15 });
+            });
+
+            test('is commutative (a * b = b * a)', () => {
+                for (let i = 0; i < ITERATIONS; i++) {
+                    const a = new Vec2(Math.random() * 100, Math.random() * 100);
+                    const b = new Vec2(Math.random() * 100, Math.random() * 100);
+
+                    const result1 = Vec2.multiply(a, b);
+                    const result2 = Vec2.multiply(b, a);
+
+                    expect(result1).toBeVectorCloseTo(result2);
+                }
+            });
+
+            test('has identity property (v * 1 = v)', () => {
+                const vectors = generateRandomVectors(ITERATIONS);
+
+                vectors.forEach((v) => {
+                    const result = Vec2.multiply(v, Vec2.ONE);
+                    expect(result).toBeVectorCloseTo(v);
+                });
+            });
+
+            test('has zero property (v * 0 = 0)', () => {
+                const vectors = generateRandomVectors(ITERATIONS);
+
+                vectors.forEach((v) => {
+                    const result = Vec2.multiply(v, Vec2.ZERO);
+                    expect(result).toBeVectorCloseTo(Vec2.ZERO);
+                });
+            });
+
+            test('handles special values correctly', () => {
+                const withNaN = Vec2.multiply({ x: NaN, y: 5 }, { x: 3, y: 4 });
+                expect(Number.isNaN(withNaN.x)).toBe(true);
+                expect(withNaN.y).toBe(20);
+
+                const infTimesPositive = Vec2.multiply({ x: Infinity, y: 10 }, { x: 5, y: 2 });
+                expect(infTimesPositive.x).toBe(Infinity);
+                expect(infTimesPositive.y).toBe(20);
+
+                const infTimesNegative = Vec2.multiply({ x: Infinity, y: 10 }, { x: -5, y: 2 });
+                expect(infTimesNegative.x).toBe(-Infinity);
+                expect(infTimesNegative.y).toBe(20);
+
+                const infTimesZero = Vec2.multiply({ x: Infinity, y: 10 }, { x: 0, y: 2 });
+                expect(Number.isNaN(infTimesZero.x)).toBe(true);
+                expect(infTimesZero.y).toBe(20);
+            });
+
+            test('satisfies distributive property with vector addition', () => {
+                for (let i = 0; i < ITERATIONS / 10; i++) {
+                    const a = new Vec2(Math.random() * 10, Math.random() * 10);
+                    const b = new Vec2(Math.random() * 10, Math.random() * 10);
+                    const c = new Vec2(Math.random() * 10, Math.random() * 10);
+
+                    const bPlusC = Vec2.add(b, c);
+                    const left = Vec2.multiply(a, bPlusC);
+
+                    const aTimesB = Vec2.multiply(a, b);
+                    const aTimesC = Vec2.multiply(a, c);
+                    const right = Vec2.add(aTimesB, aTimesC);
+
+                    expect(left).toBeVectorCloseTo(right, PRECISION);
+                }
+            });
+        });
     });
 });
