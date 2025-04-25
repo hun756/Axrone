@@ -170,6 +170,42 @@ describe('FpCompare Class - Test Suite', () => {
             expect(comparer.nearlyEqual(Infinity, -Infinity)).toBe(false);
             expect(comparer.nearlyEqual(Infinity, Number.MAX_VALUE)).toBe(false);
         });
+
+        // Numerical stability tests
+        test('maintains numerical stability with standard operations', () => {
+            const comparer = new FpCompare(1e-10);
+
+            const a = 1.0;
+            const b = (1.0 / 3.0) * 3.0; // Should be close to 1 but with roundoff
+
+            expect(comparer.nearlyEqual(a, b)).toBe(true);
+
+            let sum1 = 0;
+            let sum2 = 0;
+
+            for (let i = 0; i < 1000; i++) {
+                sum1 += 0.1;
+            }
+
+            sum2 = 0.1 * 1000;
+
+            expect(comparer.nearlyEqual(sum1, sum2)).toBe(true);
+        });
+
+        test('performs efficiently for numerous comparisons', () => {
+            const comparer = new FpCompare();
+            const a = 1.0;
+            const b = 1.0 + 1e-12;
+
+            const avgTime = benchmark(() => {
+                comparer.nearlyEqual(a, b);
+            });
+
+            console.log(`Average time for nearlyEqual: ${avgTime.toFixed(6)}ms`);
+
+            // No explicit assertion, just logging for benchmark info
+            // Could add assertion if specific performance targets are required
+        });
     });
 
     // ...
