@@ -93,8 +93,8 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
         test('constructor coerces parameters to numbers', () => {
             // @ts-ignore - Intentionally testing type coercion
             const v = new Vec2('5', '10');
-            
-            // Vec2 constructor does not perform string conversion, 
+
+            // Vec2 constructor does not perform string conversion,
             // it takes the value given as parameter as it is.
             expect(v.x).toBe('5');
             expect(v.y).toBe('10');
@@ -119,6 +119,67 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
             } else {
                 expect(v.y).toBe(y);
             }
+        });
+    });
+
+    describe('Static Constants', () => {
+        const constants = [
+            { name: 'ZERO', expected: { x: 0, y: 0 } },
+            { name: 'ONE', expected: { x: 1, y: 1 } },
+            { name: 'NEG_ONE', expected: { x: -1, y: -1 } },
+            { name: 'UNIT_X', expected: { x: 1, y: 0 } },
+            { name: 'UNIT_Y', expected: { x: 0, y: 1 } },
+            { name: 'UP', expected: { x: 0, y: 1 } },
+            { name: 'DOWN', expected: { x: 0, y: -1 } },
+            { name: 'LEFT', expected: { x: -1, y: 0 } },
+            { name: 'RIGHT', expected: { x: 1, y: 0 } },
+        ];
+
+        test.each(constants)('$name has correct values and is immutable', ({ name, expected }) => {
+            const constant = Vec2[name as keyof typeof Vec2] as Vec2;
+
+            expect(constant.x).toBe(expected.x);
+            expect(constant.y).toBe(expected.y);
+
+            const originalX = constant.x;
+            const originalY = constant.y;
+
+            expect(() => {
+                constant.x = 999;
+                constant.y = 999;
+            }).toThrow();
+
+            expect(constant.x).toBe(originalX);
+            expect(constant.y).toBe(originalY);
+        });
+
+        test('directional constants are mathematically consistent', () => {
+            // When Object.is() is used to compare 0 and -0 in JavaScript, it is not equal
+            // But the vector should be mathematically consistent,
+            // so let's compare absolute values
+            expect(Math.abs(Vec2.UP.x)).toEqual(Math.abs(Vec2.DOWN.x));
+            expect(Math.abs(Vec2.UP.y)).toEqual(Math.abs(Vec2.DOWN.y));
+
+            expect(Math.abs(Vec2.LEFT.x)).toEqual(Math.abs(Vec2.RIGHT.x));
+            expect(Math.abs(Vec2.LEFT.y)).toEqual(Math.abs(Vec2.RIGHT.y));
+
+            // Up and right vectors must be perpendicular
+            expect(Vec2.UP).toBeOrthogonalTo(Vec2.RIGHT);
+
+            expect(Vec2.UP).toBeVectorCloseTo(Vec2.UNIT_Y);
+            expect(Vec2.RIGHT).toBeVectorCloseTo(Vec2.UNIT_X);
+        });
+
+        test('ZERO behaves as additive identity', () => {
+            const testVec = new Vec2(3.14, 2.718);
+            const result = Vec2.add(testVec, Vec2.ZERO);
+            expect(result).toBeVectorCloseTo(testVec);
+        });
+
+        test('ONE behaves as multiplicative identity for component-wise multiplication', () => {
+            const testVec = new Vec2(3.14, 2.718);
+            const result = Vec2.multiply(testVec, Vec2.ONE);
+            expect(result).toBeVectorCloseTo(testVec);
         });
     });
 });
