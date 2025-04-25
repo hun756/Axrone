@@ -3,8 +3,6 @@ import { BoxMullerFactory } from './box_muller';
 export type Scalar = number;
 export type Vec2 = { x: Scalar; y: Scalar };
 export type ReadonlyVec2 = Readonly<Vec2>;
-export type Vec2Tuple = readonly [Scalar, Scalar];
-export type Vec2Like = ReadonlyVec2 | Vec2Tuple;
 
 export const EPSILON = 1e-10;
 export const PI_2 = Math.PI * 2;
@@ -23,9 +21,6 @@ export const DOWN = Object.freeze<ReadonlyVec2>({ x: 0, y: -1 });
 export const LEFT = Object.freeze<ReadonlyVec2>({ x: -1, y: 0 });
 export const RIGHT = UNIT_X;
 
-const _x = (v: Vec2Like): Scalar => (Array.isArray(v) ? v[0] : (v as ReadonlyVec2).x);
-const _y = (v: Vec2Like): Scalar => (Array.isArray(v) ? v[1] : (v as ReadonlyVec2).y);
-
 export const isVec2 = (v: unknown): v is ReadonlyVec2 =>
     v !== null &&
     typeof v === 'object' &&
@@ -34,17 +29,21 @@ export const isVec2 = (v: unknown): v is ReadonlyVec2 =>
     typeof (v as any).x === 'number' &&
     typeof (v as any).y === 'number';
 
-export const isVec2Tuple = (v: unknown): v is Vec2Tuple =>
-    Array.isArray(v) && v.length === 2 && typeof v[0] === 'number' && typeof v[1] === 'number';
-
-export const isVec2Like = (v: unknown): v is Vec2Like => isVec2(v) || isVec2Tuple(v);
 
 export const create = (x = 0, y = 0): Vec2 => ({ x, y });
-export const clone = <T extends Vec2Like>(v: T): Vec2 => ({ x: _x(v), y: _y(v) });
+export const clone = <T extends ReadonlyVec2>(v: T): Vec2 => ({ x: v.x, y: v.y });
 
 export const fromValues = (x: Scalar, y: Scalar): Vec2 => ({ x, y });
 
-export const fromArray = (arr: Vec2Tuple): Vec2 => ({ x: arr[0], y: arr[1] });
+export const fromArray = (arr: ArrayLike<Scalar>, offset = 0): Vec2 => {
+    if (offset < 0) {
+        throw new RangeError('Offset cannot be negative');
+    }
+    if (arr.length < offset + 2) {
+        throw new RangeError(`Array must have at least ${offset + 2} elements when using offset ${offset}`);
+    }
+    return { x: arr[offset], y: arr[offset + 1] };
+}
 
 export const fromAngle = (angleRad: Scalar, magnitude = 1): Vec2 => ({
     x: Math.cos(angleRad) * magnitude,
@@ -119,81 +118,81 @@ export const set = <T extends Vec2>(v: T, x: Scalar, y: Scalar): T => {
     return v;
 };
 
-export const copy = <T extends Vec2>(out: T, v: Vec2Like): T => {
-    out.x = _x(v);
-    out.y = _y(v);
+export const copy = <T extends Vec2>(out: T, v: ReadonlyVec2): T => {
+    out.x = v.x;
+    out.y = v.y;
     return out;
 };
 
-export const add = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like): T => {
-    out.x = _x(a) + _x(b);
-    out.y = _y(a) + _y(b);
+export const add = <T extends Vec2>(out: T, a: ReadonlyVec2, b: ReadonlyVec2): T => {
+    out.x = a.x + b.x;
+    out.y = a.y + b.y;
     return out;
 };
 
-export const addScalar = <T extends Vec2>(out: T, v: Vec2Like, s: Scalar): T => {
-    out.x = _x(v) + s;
-    out.y = _y(v) + s;
+export const addScalar = <T extends Vec2>(out: T, v: ReadonlyVec2, s: Scalar): T => {
+    out.x = v.x + s;
+    out.y = v.y + s;
     return out;
 };
 
-export const subtract = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like): T => {
-    out.x = _x(a) - _x(b);
-    out.y = _y(a) - _y(b);
+export const subtract = <T extends Vec2>(out: T, a: ReadonlyVec2, b: ReadonlyVec2): T => {
+    out.x = a.x - b.x;
+    out.y = a.y - b.y;
     return out;
 };
 
-export const subtractScalar = <T extends Vec2>(out: T, v: Vec2Like, s: Scalar): T => {
-    out.x = _x(v) - s;
-    out.y = _y(v) - s;
+export const subtractScalar = <T extends Vec2>(out: T, v: ReadonlyVec2, s: Scalar): T => {
+    out.x = v.x - s;
+    out.y = v.y - s;
     return out;
 };
 
-export const multiply = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like): T => {
-    out.x = _x(a) * _x(b);
-    out.y = _y(a) * _y(b);
+export const multiply = <T extends Vec2>(out: T, a: ReadonlyVec2, b: ReadonlyVec2): T => {
+    out.x = a.x * b.x;
+    out.y = a.y * b.y;
     return out;
 };
 
-export const multiplyScalar = <T extends Vec2>(out: T, v: Vec2Like, s: Scalar): T => {
-    out.x = _x(v) * s;
-    out.y = _y(v) * s;
+export const multiplyScalar = <T extends Vec2>(out: T, v: ReadonlyVec2, s: Scalar): T => {
+    out.x = v.x * s;
+    out.y = v.y * s;
     return out;
 };
 
-export const divide = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like): T => {
-    const bx = _x(b);
-    const by = _y(b);
+export const divide = <T extends Vec2>(out: T, a: ReadonlyVec2, b: ReadonlyVec2): T => {
+    const bx = b.x;
+    const by = b.y;
 
     if (Math.abs(bx) < EPSILON || Math.abs(by) < EPSILON) {
         throw new Error('Division by zero or near-zero value');
     }
 
-    out.x = _x(a) / bx;
-    out.y = _y(a) / by;
+    out.x = a.x / bx;
+    out.y = a.y / by;
     return out;
 };
 
-export const divideScalar = <T extends Vec2>(out: T, v: Vec2Like, s: Scalar): T => {
+export const divideScalar = <T extends Vec2>(out: T, v: ReadonlyVec2, s: Scalar): T => {
     if (Math.abs(s) < EPSILON) {
         throw new Error('Division by zero or near-zero value');
     }
 
     const invS = 1 / s;
-    out.x = _x(v) * invS;
-    out.y = _y(v) * invS;
+    out.x = v.x * invS;
+    out.y = v.y * invS;
     return out;
 };
 
-export const negate = <T extends Vec2>(out: T, v: Vec2Like): T => {
-    out.x = -_x(v);
-    out.y = -_y(v);
+export const negate = <T extends Vec2>(out: T, v: ReadonlyVec2): T => {
+    out.x = -v.x;
+    out.y = -v.y;
     return out;
 };
 
-export const inverse = <T extends Vec2>(out: T, v: Vec2Like): T => {
-    const vx = _x(v);
-    const vy = _y(v);
+export const inverse = <T extends Vec2>(out: T, v: ReadonlyVec2): T => {
+    const vx = v.x;
+    const vy = v.y;
 
     if (Math.abs(vx) < EPSILON || Math.abs(vy) < EPSILON) {
         throw new Error('Inversion of zero or near-zero value');
@@ -204,35 +203,35 @@ export const inverse = <T extends Vec2>(out: T, v: Vec2Like): T => {
     return out;
 };
 
-export const inverseSafe = <T extends Vec2>(out: T, v: Vec2Like, defaultValue = 0): T => {
-    const vx = _x(v);
-    const vy = _y(v);
+export const inverseSafe = <T extends Vec2>(out: T, v: ReadonlyVec2, defaultValue = 0): T => {
+    const vx = v.x;
+    const vy = v.y;
 
     out.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
     out.y = Math.abs(vy) < EPSILON ? defaultValue : 1 / vy;
     return out;
 };
 
-export const lengthSq = (v: Vec2Like): Scalar => {
-    const x = _x(v);
-    const y = _y(v);
+export const lengthSq = (v: ReadonlyVec2): Scalar => {
+    const x = v.x;
+    const y = v.y;
     return x * x + y * y;
 };
 
-export const length = (v: Vec2Like): Scalar => Math.sqrt(lengthSq(v));
+export const length = (v: ReadonlyVec2): Scalar => Math.sqrt(lengthSq(v));
 
-export const fastLength = (v: Vec2Like): Scalar => {
+export const fastLength = (v: ReadonlyVec2): Scalar => {
     // Fast approximation of vector length (~3.4% error max)
-    const x = Math.abs(_x(v));
-    const y = Math.abs(_y(v));
+    const x = Math.abs(v.x);
+    const y = Math.abs(v.y);
     const min = Math.min(x, y);
     const max = Math.max(x, y);
     return max + 0.3 * min;
 };
 
-export const normalize = <T extends Vec2>(out: T, v: Vec2Like): T => {
-    const x = _x(v);
-    const y = _y(v);
+export const normalize = <T extends Vec2>(out: T, v: ReadonlyVec2): T => {
+    const x = v.x;
+    const y = v.y;
     let lenSq = x * x + y * y;
 
     if (lenSq > EPSILON) {
@@ -247,9 +246,9 @@ export const normalize = <T extends Vec2>(out: T, v: Vec2Like): T => {
     return out;
 };
 
-export const normalizeFast = <T extends Vec2>(out: T, v: Vec2Like): T => {
-    const x = _x(v);
-    const y = _y(v);
+export const normalizeFast = <T extends Vec2>(out: T, v: ReadonlyVec2): T => {
+    const x = v.x;
+    const y = v.y;
     const lenSq = x * x + y * y;
 
     if (lenSq > EPSILON) {
@@ -276,9 +275,9 @@ export const normalizeFast = <T extends Vec2>(out: T, v: Vec2Like): T => {
     return out;
 };
 
-export const perpendicular = <T extends Vec2>(out: T, v: Vec2Like): T => {
-    const x = _x(v);
-    const y = _y(v);
+export const perpendicular = <T extends Vec2>(out: T, v: ReadonlyVec2): T => {
+    const x = v.x;
+    const y = v.y;
 
     if (x === 0 && y === 0) {
         out.x = 0;
@@ -291,9 +290,9 @@ export const perpendicular = <T extends Vec2>(out: T, v: Vec2Like): T => {
     return out;
 };
 
-export const perpendicularCCW = <T extends Vec2>(out: T, v: Vec2Like): T => {
-    const x = _x(v);
-    const y = _y(v);
+export const perpendicularCCW = <T extends Vec2>(out: T, v: ReadonlyVec2): T => {
+    const x = v.x;
+    const y = v.y;
 
     if (x === 0 && y === 0) {
         out.x = 0;
@@ -306,31 +305,31 @@ export const perpendicularCCW = <T extends Vec2>(out: T, v: Vec2Like): T => {
     return out;
 };
 
-export const dot = (a: Vec2Like, b: Vec2Like): Scalar => _x(a) * _x(b) + _y(a) * _y(b);
+export const dot = (a: ReadonlyVec2, b: ReadonlyVec2): Scalar => a.x * b.x + a.y * b.y;
 
-export const cross = (a: Vec2Like, b: Vec2Like): Scalar => _x(a) * _y(b) - _y(a) * _x(b);
+export const cross = (a: ReadonlyVec2, b: ReadonlyVec2): Scalar => a.x * b.y - a.y * b.x;
 
-export const distanceSq = (a: Vec2Like, b: Vec2Like): Scalar => {
-    const dx = _x(a) - _x(b);
-    const dy = _y(a) - _y(b);
+export const distanceSq = (a: ReadonlyVec2, b: ReadonlyVec2): Scalar => {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
     return dx * dx + dy * dy;
 };
 
-export const distance = (a: Vec2Like, b: Vec2Like): Scalar => Math.sqrt(distanceSq(a, b));
+export const distance = (a: ReadonlyVec2, b: ReadonlyVec2): Scalar => Math.sqrt(distanceSq(a, b));
 
-export const fastDistance = (a: Vec2Like, b: Vec2Like): Scalar => {
-    const dx = Math.abs(_x(a) - _x(b));
-    const dy = Math.abs(_y(a) - _y(b));
+export const fastDistance = (a: ReadonlyVec2, b: ReadonlyVec2): Scalar => {
+    const dx = Math.abs(a.x - b.x);
+    const dy = Math.abs(a.y - b.y);
     const min = Math.min(dx, dy);
     const max = Math.max(dx, dy);
     return max + 0.3 * min;
 };
 
-export const angle = (v: Vec2Like): Scalar => Math.atan2(_y(v), _x(v));
+export const angle = (v: ReadonlyVec2): Scalar => Math.atan2(v.y, v.x);
 
-export const fastAngle = (v: Vec2Like): Scalar => {
-    const x = _x(v);
-    const y = _y(v);
+export const fastAngle = (v: ReadonlyVec2): Scalar => {
+    const x = v.x;
+    const y = v.y;
 
     if (x === 0 && y === 0) return 0;
     if (x === 0) return y > 0 ? HALF_PI : -HALF_PI;
@@ -348,9 +347,9 @@ export const fastAngle = (v: Vec2Like): Scalar => {
     return r;
 };
 
-export const angleDeg = (v: Vec2Like): Scalar => angle(v) * RAD_TO_DEG;
+export const angleDeg = (v: ReadonlyVec2): Scalar => angle(v) * RAD_TO_DEG;
 
-export const angleBetween = (a: Vec2Like, b: Vec2Like): Scalar => {
+export const angleBetween = (a: ReadonlyVec2, b: ReadonlyVec2): Scalar => {
     const lenSqA = lengthSq(a);
     const lenSqB = lengthSq(b);
 
@@ -362,7 +361,7 @@ export const angleBetween = (a: Vec2Like, b: Vec2Like): Scalar => {
     return Math.acos(Math.min(Math.max(dotProduct / lenProduct, -1), 1));
 };
 
-export const fastAngleBetween = (a: Vec2Like, b: Vec2Like): Scalar => {
+export const fastAngleBetween = (a: ReadonlyVec2, b: ReadonlyVec2): Scalar => {
     // Faster approximation using cross product
     const lenSqA = lengthSq(a);
     const lenSqB = lengthSq(b);
@@ -375,12 +374,12 @@ export const fastAngleBetween = (a: Vec2Like, b: Vec2Like): Scalar => {
     return Math.asin(Math.min(Math.max(crossProduct / lenProduct, -1), 1));
 };
 
-export const angleBetweenSigned = (a: Vec2Like, b: Vec2Like): Scalar =>
+export const angleBetweenSigned = (a: ReadonlyVec2, b: ReadonlyVec2): Scalar =>
     Math.atan2(cross(a, b), dot(a, b));
 
-export const rotate = <T extends Vec2>(out: T, v: Vec2Like, angle: Scalar): T => {
-    const x = _x(v);
-    const y = _y(v);
+export const rotate = <T extends Vec2>(out: T, v: ReadonlyVec2, angle: Scalar): T => {
+    const x = v.x;
+    const y = v.y;
     const c = Math.cos(angle);
     const s = Math.sin(angle);
 
@@ -389,9 +388,9 @@ export const rotate = <T extends Vec2>(out: T, v: Vec2Like, angle: Scalar): T =>
     return out;
 };
 
-export const fastRotate = <T extends Vec2>(out: T, v: Vec2Like, angle: Scalar): T => {
-    const x = _x(v);
-    const y = _y(v);
+export const fastRotate = <T extends Vec2>(out: T, v: ReadonlyVec2, angle: Scalar): T => {
+    const x = v.x;
+    const y = v.y;
 
     // lookup tables or approximations for very common angles
     if (angle === Math.PI) {
@@ -433,40 +432,40 @@ export const fastRotate = <T extends Vec2>(out: T, v: Vec2Like, angle: Scalar): 
 
 export const rotateAround = <T extends Vec2>(
     out: T,
-    v: Vec2Like,
-    origin: Vec2Like,
+    v: ReadonlyVec2,
+    origin: ReadonlyVec2,
     angle: Scalar
 ): T => {
-    const x = _x(v) - _x(origin);
-    const y = _y(v) - _y(origin);
+    const x = v.x - origin.x;
+    const y = v.y - origin.y;
     const c = Math.cos(angle);
     const s = Math.sin(angle);
 
-    out.x = x * c - y * s + _x(origin);
-    out.y = x * s + y * c + _y(origin);
+    out.x = x * c - y * s + origin.x;
+    out.y = x * s + y * c + origin.y;
     return out;
 };
 
-export const lerp = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like, t: Scalar): T => {
-    const ax = _x(a);
-    const ay = _y(a);
+export const lerp = <T extends Vec2>(out: T, a: ReadonlyVec2, b: ReadonlyVec2, t: Scalar): T => {
+    const ax = a.x;
+    const ay = a.y;
     const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
 
-    out.x = ax + t1 * (_x(b) - ax);
-    out.y = ay + t1 * (_y(b) - ay);
+    out.x = ax + t1 * (b.x - ax);
+    out.y = ay + t1 * (b.y - ay);
     return out;
 };
 
-export const lerpUnclamped = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like, t: Scalar): T => {
-    const ax = _x(a);
-    const ay = _y(a);
+export const lerpUnclamped = <T extends Vec2>(out: T, a: ReadonlyVec2, b: ReadonlyVec2, t: Scalar): T => {
+    const ax = a.x;
+    const ay = a.y;
 
-    out.x = ax + t * (_x(b) - ax);
-    out.y = ay + t * (_y(b) - ay);
+    out.x = ax + t * (b.x - ax);
+    out.y = ay + t * (b.y - ay);
     return out;
 };
 
-export const slerp = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like, t: Scalar): T => {
+export const slerp = <T extends Vec2>(out: T, a: ReadonlyVec2, b: ReadonlyVec2, t: Scalar): T => {
     const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
     const angleA = angle(a);
     const angleB = angle(b);
@@ -488,38 +487,38 @@ export const slerp = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like, t: Scala
     return out;
 };
 
-export const smoothStep = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like, t: Scalar): T => {
+export const smoothStep = <T extends Vec2>(out: T, a: ReadonlyVec2, b: ReadonlyVec2, t: Scalar): T => {
     const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
     // 3t² - 2t³
     const t2 = t1 * t1 * (3 - 2 * t1);
 
-    const ax = _x(a);
-    const ay = _y(a);
+    const ax = a.x;
+    const ay = a.y;
 
-    out.x = ax + t2 * (_x(b) - ax);
-    out.y = ay + t2 * (_y(b) - ay);
+    out.x = ax + t2 * (b.x - ax);
+    out.y = ay + t2 * (b.y - ay);
     return out;
 };
 
-export const smootherStep = <T extends Vec2>(out: T, a: Vec2Like, b: Vec2Like, t: Scalar): T => {
+export const smootherStep = <T extends Vec2>(out: T, a: ReadonlyVec2, b: ReadonlyVec2, t: Scalar): T => {
     const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
     // 6t⁵ - 15t⁴ + 10t³
     const t2 = t1 * t1 * t1 * (t1 * (t1 * 6 - 15) + 10);
 
-    const ax = _x(a);
-    const ay = _y(a);
+    const ax = a.x;
+    const ay = a.y;
 
-    out.x = ax + t2 * (_x(b) - ax);
-    out.y = ay + t2 * (_y(b) - ay);
+    out.x = ax + t2 * (b.x - ax);
+    out.y = ay + t2 * (b.y - ay);
     return out;
 };
 
 export const cubicBezier = <T extends Vec2>(
     out: T,
-    a: Vec2Like,
-    c1: Vec2Like,
-    c2: Vec2Like,
-    b: Vec2Like,
+    a: ReadonlyVec2,
+    c1: ReadonlyVec2,
+    c2: ReadonlyVec2,
+    b: ReadonlyVec2,
     t: Scalar
 ): T => {
     const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
@@ -532,17 +531,17 @@ export const cubicBezier = <T extends Vec2>(
     const oneMinusT2_3t = oneMinusT2 * 3 * t1;
     const oneMinusT_3t2 = oneMinusT * 3 * t2;
 
-    out.x = oneMinusT3 * _x(a) + oneMinusT2_3t * _x(c1) + oneMinusT_3t2 * _x(c2) + t3 * _x(b);
-    out.y = oneMinusT3 * _y(a) + oneMinusT2_3t * _y(c1) + oneMinusT_3t2 * _y(c2) + t3 * _y(b);
+    out.x = oneMinusT3 * a.x + oneMinusT2_3t * c1.x + oneMinusT_3t2 * c2.x + t3 * b.x;
+    out.y = oneMinusT3 * a.y + oneMinusT2_3t * c1.y + oneMinusT_3t2 * c2.y + t3 * b.y;
     return out;
 };
 
 export const hermite = <T extends Vec2>(
     out: T,
-    p0: Vec2Like,
-    m0: Vec2Like,
-    p1: Vec2Like,
-    m1: Vec2Like,
+    p0: ReadonlyVec2,
+    m0: ReadonlyVec2,
+    p1: ReadonlyVec2,
+    m1: ReadonlyVec2,
     t: Scalar
 ): T => {
     const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
@@ -554,31 +553,31 @@ export const hermite = <T extends Vec2>(
     const h01 = -2 * t3 + 3 * t2;
     const h11 = t3 - t2;
 
-    out.x = h00 * _x(p0) + h10 * _x(m0) + h01 * _x(p1) + h11 * _x(m1);
-    out.y = h00 * _y(p0) + h10 * _y(m0) + h01 * _y(p1) + h11 * _y(m1);
+    out.x = h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x;
+    out.y = h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y;
     return out;
 };
 
 export const catmullRom = <T extends Vec2>(
     out: T,
-    p0: Vec2Like,
-    p1: Vec2Like,
-    p2: Vec2Like,
-    p3: Vec2Like,
+    p0: ReadonlyVec2,
+    p1: ReadonlyVec2,
+    p2: ReadonlyVec2,
+    p3: ReadonlyVec2,
     t: Scalar,
     tension = 0.5
 ): T => {
     const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
     
     if (t1 === 0) {
-        out.x = _x(p1);
-        out.y = _y(p1);
+        out.x = p1.x;
+        out.y = p1.y;
         return out;
     } 
     
     if (t1 === 1) {
-        out.x = _x(p2);
-        out.y = _y(p2);
+        out.x = p2.x;
+        out.y = p2.y;
         return out;
     }
     
@@ -592,22 +591,22 @@ export const catmullRom = <T extends Vec2>(
     
     const alpha = (1 - tension) / 2;
     
-    const m0x = alpha * (_x(p2) - _x(p0));
-    const m0y = alpha * (_y(p2) - _y(p0));
-    const m1x = alpha * (_x(p3) - _x(p1));
-    const m1y = alpha * (_y(p3) - _y(p1));
+    const m0x = alpha * (p2.x - p0.x);
+    const m0y = alpha * (p2.y - p0.y);
+    const m1x = alpha * (p3.x - p1.x);
+    const m1y = alpha * (p3.y - p1.y);
     
-    out.x = h00 * _x(p1) + h10 * m0x + h01 * _x(p2) + h11 * m1x;
-    out.y = h00 * _y(p1) + h10 * m0y + h01 * _y(p2) + h11 * m1y;
+    out.x = h00 * p1.x + h10 * m0x + h01 * p2.x + h11 * m1x;
+    out.y = h00 * p1.y + h10 * m0y + h01 * p2.y + h11 * m1y;
     
     return out;
 };
 
-export const reflect = <T extends Vec2>(out: T, v: Vec2Like, normal: Vec2Like): T => {
-    const vx = _x(v);
-    const vy = _y(v);
-    const nx = _x(normal);
-    const ny = _y(normal);
+export const reflect = <T extends Vec2>(out: T, v: ReadonlyVec2, normal: ReadonlyVec2): T => {
+    const vx = v.x;
+    const vy = v.y;
+    const nx = normal.x;
+    const ny = normal.y;
     const dot2 = 2 * (vx * nx + vy * ny);
 
     out.x = vx - dot2 * nx;
@@ -615,11 +614,11 @@ export const reflect = <T extends Vec2>(out: T, v: Vec2Like, normal: Vec2Like): 
     return out;
 };
 
-export const project = <T extends Vec2>(out: T, v: Vec2Like, onto: Vec2Like): T => {
-    const vx = _x(v);
-    const vy = _y(v);
-    const ontoX = _x(onto);
-    const ontoY = _y(onto);
+export const project = <T extends Vec2>(out: T, v: ReadonlyVec2, onto: ReadonlyVec2): T => {
+    const vx = v.x;
+    const vy = v.y;
+    const ontoX = onto.x;
+    const ontoY = onto.y;
 
     const ontoLenSq = ontoX * ontoX + ontoY * ontoY;
 
@@ -637,11 +636,11 @@ export const project = <T extends Vec2>(out: T, v: Vec2Like, onto: Vec2Like): T 
     return out;
 };
 
-export const projectN = <T extends Vec2>(out: T, v: Vec2Like, normalizedOnto: Vec2Like): T => {
-    const vx = _x(v);
-    const vy = _y(v);
-    const ontoX = _x(normalizedOnto);
-    const ontoY = _y(normalizedOnto);
+export const projectN = <T extends Vec2>(out: T, v: ReadonlyVec2, normalizedOnto: ReadonlyVec2): T => {
+    const vx = v.x;
+    const vy = v.y;
+    const ontoX = normalizedOnto.x;
+    const ontoY = normalizedOnto.y;
 
     const dotProduct = vx * ontoX + vy * ontoY;
 
@@ -650,11 +649,11 @@ export const projectN = <T extends Vec2>(out: T, v: Vec2Like, normalizedOnto: Ve
     return out;
 };
 
-export const reject = <T extends Vec2>(out: T, v: Vec2Like, from: Vec2Like): T => {
-    const vx = _x(v);
-    const vy = _y(v);
-    const fromX = _x(from);
-    const fromY = _y(from);
+export const reject = <T extends Vec2>(out: T, v: ReadonlyVec2, from: ReadonlyVec2): T => {
+    const vx = v.x;
+    const vy = v.y;
+    const fromX = from.x;
+    const fromY = from.y;
 
     const fromLenSq = fromX * fromX + fromY * fromY;
 
@@ -672,11 +671,11 @@ export const reject = <T extends Vec2>(out: T, v: Vec2Like, from: Vec2Like): T =
     return out;
 };
 
-export const rejectN = <T extends Vec2>(out: T, v: Vec2Like, normalizedFrom: Vec2Like): T => {
-    const vx = _x(v);
-    const vy = _y(v);
-    const fromX = _x(normalizedFrom);
-    const fromY = _y(normalizedFrom);
+export const rejectN = <T extends Vec2>(out: T, v: ReadonlyVec2, normalizedFrom: ReadonlyVec2): T => {
+    const vx = v.x;
+    const vy = v.y;
+    const fromX = normalizedFrom.x;
+    const fromY = normalizedFrom.y;
 
     const dotProduct = vx * fromX + vy * fromY;
 
