@@ -888,5 +888,70 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
                 expect(result.y).toBeCloseTo(0.01, 10);
             });
         });
+
+        describe('divideScalar()', () => {
+            test('divides both components by scalar', () => {
+                const testCases = [
+                    { a: { x: 10, y: 15 }, b: 5, expected: { x: 2, y: 3 } },
+                    { a: { x: -10, y: 15 }, b: -5, expected: { x: 2, y: -3 } },
+                    { a: { x: 0, y: 0 }, b: 5, expected: { x: 0, y: 0 } },
+                ];
+
+                testCases.forEach(({ a, b, expected }) => {
+                    const result = Vec2.divideScalar(a, b);
+                    expect(result).toBeVectorCloseTo(expected);
+                });
+            });
+
+            test('supports output parameter', () => {
+                const a = { x: 10, y: 15 };
+                const scalar = 5;
+                const out = { x: 0, y: 0 };
+
+                const result = Vec2.divideScalar(a, scalar, out);
+
+                expect(result).toBe(out);
+                expect(out).toBeVectorCloseTo({ x: 2, y: 3 });
+            });
+
+            test('throws for division by zero', () => {
+                const a = { x: 10, y: 15 };
+
+                expect(() => {
+                    Vec2.divideScalar(a, 0);
+                }).toThrow('Division by zero or near-zero value is not allowed');
+            });
+
+            test('throws for division by near-zero', () => {
+                const a = { x: 10, y: 15 };
+
+                expect(() => {
+                    Vec2.divideScalar(a, EPSILON / 2);
+                }).toThrow('Division by zero or near-zero value is not allowed');
+            });
+
+            test('has identity property (v / 1 = v)', () => {
+                const vectors = generateRandomVectors(ITERATIONS);
+
+                vectors.forEach((v) => {
+                    const result = Vec2.divideScalar(v, 1);
+                    expect(result).toBeVectorCloseTo(v);
+                });
+            });
+
+            test('handles special values correctly', () => {
+                const nanDividedByScalar = Vec2.divideScalar({ x: NaN, y: 15 }, 5);
+                expect(Number.isNaN(nanDividedByScalar.x)).toBe(true);
+                expect(nanDividedByScalar.y).toBe(3);
+
+                const infDividedByScalar = Vec2.divideScalar({ x: Infinity, y: 15 }, 5);
+                expect(infDividedByScalar.x).toBe(Infinity);
+                expect(infDividedByScalar.y).toBe(3);
+
+                const infDividedByInf = Vec2.divideScalar({ x: Infinity, y: 15 }, Infinity);
+                expect(Number.isNaN(infDividedByInf.x)).toBe(true);
+                expect(infDividedByInf.y).toBe(0);
+            });
+        });
     });
 });
