@@ -1,5 +1,5 @@
 {
-  "name": "@axrone/numeric",
+  "name": "@axrone/utility",
   "version": "0.0.1",
   "main": "index.js",
   "scripts": {
@@ -8,8 +8,5 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "@axrone/utility": "*"
-  }
+  "description": ""
 }
