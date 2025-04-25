@@ -235,6 +235,52 @@ describe('FpCompare Class - Test Suite', () => {
             expect(comparer.absolutelyEqual(1e-16, 2e-16)).toBe(true);
             expect(comparer.absolutelyEqual(1e-16, 2e-15)).toBe(false);
         });
+
+        test('correctly handles very large values with small absolute differences', () => {
+            const comparer = new FpCompare(DEFAULT_EPSILON, 1e-10);
+            const largeValue = 1e100;
+            
+            // Understanding floating-point precision issues with very large numbers
+            
+            // 1. Small differences are considered equal
+            expect(comparer.absolutelyEqual(largeValue, largeValue + 0.5e-10)).toBe(true);
+            expect(comparer.absolutelyEqual(largeValue, largeValue + 2e-10)).toBe(true);
+            
+            // 2. In the IEEE 754 floating-point standard, when a relatively small number
+            // is added to a very large number, the added value may be completely lost
+            // due to the precision of the number
+            
+            // 3. 1e100 + 1e-8 ≈ 1e100 (in floating-point arithmetic)
+            // Therefore this test doesn't fail, because the compared values
+            // are nearly identical at computer precision
+            
+            // 4. To create an actual difference between two numbers,
+            // we need to use a much larger difference value
+            
+            // Let's add a value large enough to create an actual difference
+            expect(comparer.absolutelyEqual(largeValue, largeValue + 1e90)).toBe(false);
+        });
+
+        test('correctly handles NaN values', () => {
+            const comparer = new FpCompare();
+            expect(comparer.absolutelyEqual(NaN, NaN)).toBe(false);
+            expect(comparer.absolutelyEqual(NaN, 0)).toBe(false);
+            expect(comparer.absolutelyEqual(0, NaN)).toBe(false);
+        });
+
+        test('correctly handles Infinity values', () => {
+            const comparer = new FpCompare();
+            
+            expect(comparer.absolutelyEqual(Infinity, Infinity)).toBe(false);
+            expect(comparer.absolutelyEqual(-Infinity, -Infinity)).toBe(false);
+            expect(comparer.absolutelyEqual(Infinity, -Infinity)).toBe(false);
+        });
+
+        test('correctly handles positive and negative zeros', () => {
+            const comparer = new FpCompare();
+            expect(comparer.absolutelyEqual(0, -0)).toBe(true);
+            expect(comparer.absolutelyEqual(-0, 0)).toBe(true);
+        });
     });
 
     // ...
