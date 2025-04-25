@@ -602,3 +602,85 @@ export const catmullRom = <T extends Vec2>(
     
     return out;
 };
+
+export const reflect = <T extends Vec2>(out: T, v: Vec2Like, normal: Vec2Like): T => {
+    const vx = _x(v);
+    const vy = _y(v);
+    const nx = _x(normal);
+    const ny = _y(normal);
+    const dot2 = 2 * (vx * nx + vy * ny);
+
+    out.x = vx - dot2 * nx;
+    out.y = vy - dot2 * ny;
+    return out;
+};
+
+export const project = <T extends Vec2>(out: T, v: Vec2Like, onto: Vec2Like): T => {
+    const vx = _x(v);
+    const vy = _y(v);
+    const ontoX = _x(onto);
+    const ontoY = _y(onto);
+
+    const ontoLenSq = ontoX * ontoX + ontoY * ontoY;
+
+    if (ontoLenSq < EPSILON) {
+        out.x = 0;
+        out.y = 0;
+        return out;
+    }
+
+    const dotProduct = vx * ontoX + vy * ontoY;
+    const scale = dotProduct / ontoLenSq;
+
+    out.x = ontoX * scale;
+    out.y = ontoY * scale;
+    return out;
+};
+
+export const projectN = <T extends Vec2>(out: T, v: Vec2Like, normalizedOnto: Vec2Like): T => {
+    const vx = _x(v);
+    const vy = _y(v);
+    const ontoX = _x(normalizedOnto);
+    const ontoY = _y(normalizedOnto);
+
+    const dotProduct = vx * ontoX + vy * ontoY;
+
+    out.x = ontoX * dotProduct;
+    out.y = ontoY * dotProduct;
+    return out;
+};
+
+export const reject = <T extends Vec2>(out: T, v: Vec2Like, from: Vec2Like): T => {
+    const vx = _x(v);
+    const vy = _y(v);
+    const fromX = _x(from);
+    const fromY = _y(from);
+
+    const fromLenSq = fromX * fromX + fromY * fromY;
+
+    if (fromLenSq < EPSILON) {
+        out.x = vx;
+        out.y = vy;
+        return out;
+    }
+
+    const dotProduct = vx * fromX + vy * fromY;
+    const scale = dotProduct / fromLenSq;
+
+    out.x = vx - fromX * scale;
+    out.y = vy - fromY * scale;
+    return out;
+};
+
+export const rejectN = <T extends Vec2>(out: T, v: Vec2Like, normalizedFrom: Vec2Like): T => {
+    const vx = _x(v);
+    const vy = _y(v);
+    const fromX = _x(normalizedFrom);
+    const fromY = _y(normalizedFrom);
+
+    const dotProduct = vx * fromX + vy * fromY;
+
+    out.x = vx - fromX * dotProduct;
+    out.y = vy - fromY * dotProduct;
+    return out;
+};
