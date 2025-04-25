@@ -231,6 +231,77 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
             });
         });
 
-        
+        describe('fromArray()', () => {
+            test('creates vector from array elements with default offset', () => {
+                const arr = [1.1, 2.2, 3.3, 4.4];
+                const v = Vec2.fromArray(arr);
+
+                expect(v.x).toBe(1.1);
+                expect(v.y).toBe(2.2);
+            });
+
+            test('respects the offset parameter', () => {
+                const arr = [10, 20, 30, 40, 50];
+                const v = Vec2.fromArray(arr, 2);
+
+                expect(v.x).toBe(30);
+                expect(v.y).toBe(40);
+            });
+
+            test('works with array-like objects', () => {
+                // @ts-ignore - Intentionally testing with string as array-like
+                const v = Vec2.fromArray('12345', 1);
+
+                expect(v.x).toBe(2);
+                expect(v.y).toBe(3);
+            });
+
+            test('works with typed arrays', () => {
+                const int32Arr = new Int32Array([1, 2, 3, 4]);
+                const float32Arr = new Float32Array([1.5, 2.5, 3.5, 4.5]);
+                const float64Arr = new Float64Array([1.5, 2.5, 3.5, 4.5]);
+
+                expect(Vec2.fromArray(int32Arr)).toBeVectorCloseTo({ x: 1, y: 2 });
+                expect(Vec2.fromArray(float32Arr)).toBeVectorCloseTo({ x: 1.5, y: 2.5 });
+                expect(Vec2.fromArray(float64Arr)).toBeVectorCloseTo({ x: 1.5, y: 2.5 });
+            });
+
+            test('throws for negative offset', () => {
+                const arr = [1, 2, 3];
+
+                expect(() => {
+                    Vec2.fromArray(arr, -1);
+                }).toThrow(RangeError);
+
+                expect(() => {
+                    Vec2.fromArray(arr, -1);
+                }).toThrow('Offset cannot be negative');
+            });
+
+            test('throws if array is too short for offset', () => {
+                const arr = [1, 2];
+
+                expect(() => {
+                    Vec2.fromArray(arr, 1);
+                }).toThrow(RangeError);
+
+                expect(() => {
+                    Vec2.fromArray(arr, 1);
+                }).toThrow('Array must have at least 3 elements when using offset 1');
+            });
+
+            test('generates vectors equivalent to manual construction', () => {
+                for (let i = 0; i < ITERATIONS; i++) {
+                    const x = Math.random() * 100;
+                    const y = Math.random() * 100;
+                    const arr = [x, y];
+
+                    const fromArray = Vec2.fromArray(arr);
+                    const constructed = new Vec2(x, y);
+
+                    expect(fromArray).toBeVectorCloseTo(constructed);
+                }
+            });
+        });
     });
 });
