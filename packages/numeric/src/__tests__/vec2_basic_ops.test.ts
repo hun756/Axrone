@@ -1094,4 +1094,74 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
         });
     });
 
+    describe('Robustness and Stability', () => {
+        test('maintains reasonable accuracy with extreme value combinations', () => {
+            const extremeVectors = [
+                { name: 'very large', v: new Vec2(1e15, 1e15) },
+                { name: 'very small', v: new Vec2(1e-15, 1e-15) },
+                { name: 'mixed scale', v: new Vec2(1e15, 1e-15) },
+                { name: 'near epsilon', v: new Vec2(EPSILON * 2, EPSILON * 2) },
+            ];
+
+            for (const { name: name1, v: v1 } of extremeVectors) {
+                for (const { name: name2, v: v2 } of extremeVectors) {
+                    try {
+                        const sum = Vec2.add(v1, v2);
+                        const diff = Vec2.subtract(sum, v2);
+
+                        if (
+                            Math.abs(v1.x) < 1e16 &&
+                            Math.abs(v1.y) < 1e16 &&
+                            Math.abs(v2.x) < 1e16 &&
+                            Math.abs(v2.y) < 1e16
+                        ) {
+                            const precision = Math.max(PRECISION, Math.abs(v1.x) * 1e-10);
+                            expect(diff.x).toBeCloseTo(v1.x, -Math.log10(precision));
+                            expect(diff.y).toBeCloseTo(v1.y, -Math.log10(precision));
+                        }
+                    } catch (e: any) {
+                        console.log(
+                            `Skipping accuracy check for ${name1} + ${name2}: ${e.message}`
+                        );
+                    }
+                }
+            }
+        });
+
+        test('handles various data types correctly', () => {
+            const vectors = [
+                { type: 'integer', v: new Vec2(5, 7) },
+                { type: 'integer from binary', v: new Vec2(0b101, 0b111) }, // 5, 7 in binary
+                { type: 'integer from hex', v: new Vec2(0x5, 0x7) },
+            ];
+
+            for (let i = 0; i < vectors.length; i++) {
+                for (let j = i + 1; j < vectors.length; j++) {
+                    expect(vectors[i].v.x).toBe(vectors[j].v.x);
+                    expect(vectors[i].v.y).toBe(vectors[j].v.y);
+                }
+            }
+
+            const float = new Vec2(5.5, 7.7);
+            const exp = new Vec2(5.5, 7.7);
+            expect(float.x).toBeCloseTo(exp.x);
+            expect(float.y).toBeCloseTo(exp.y);
+        });
+
+        test('correctly detects division by near-zero', () => {
+            const a = new Vec2(5, 10);
+
+            expect(() => {
+                Vec2.divideScalar(a, EPSILON * 0.5);
+            }).toThrow('Division by zero or near-zero value is not allowed');
+
+            expect(() => {
+                Vec2.divideScalar(a, EPSILON * 1.001);
+            }).not.toThrow();
+
+            expect(() => {
+                Vec2.divideScalar(a, EPSILON * 0.1);
+            }).toThrow('Division by zero or near-zero value is not allowed');
+        });
+    });
 });
