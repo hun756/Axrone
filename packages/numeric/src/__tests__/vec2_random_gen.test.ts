@@ -7,7 +7,7 @@ import {
     randomBoxNormal,
     EPSILON,
     length,
-} from '../vec2';
+} from '../vec2_legacy';
 
 describe('Random Vector Generation', () => {
     const SAMPLES = 100;

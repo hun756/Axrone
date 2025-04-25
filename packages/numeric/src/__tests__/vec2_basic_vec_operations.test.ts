@@ -1,5 +1,5 @@
-import * as vec2 from '../vec2';
-import { Vec2, ReadonlyVec2, Vec2Tuple } from '../vec2';
+import * as vec2 from '../vec2_legacy';
+import { Vec2, ReadonlyVec2, Vec2Tuple } from '../vec2_legacy';
 
 describe('Basic Vector Operations (inplace)', () => {
     let out: Vec2;

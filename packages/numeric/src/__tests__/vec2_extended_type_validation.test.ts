@@ -1,4 +1,4 @@
-import { isVec2, isVec2Tuple, isVec2Like } from '../vec2';
+import { isVec2, isVec2Tuple, isVec2Like } from '../vec2_legacy';
 
 describe('Extended Vec2 Type Validator Tests', () => {
     describe('isVec2 extended tests', () => {

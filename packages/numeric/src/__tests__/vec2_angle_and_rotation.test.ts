@@ -1,5 +1,5 @@
-import * as vec2 from '../vec2';
-import { Vec2, ReadonlyVec2, HALF_PI } from '../vec2';
+import * as vec2 from '../vec2_legacy';
+import { Vec2, ReadonlyVec2, HALF_PI } from '../vec2_legacy';
 
 describe('Vector Angle and Rotation Functions', () => {
     const vX: ReadonlyVec2 = Object.freeze({ x: 1, y: 0 });

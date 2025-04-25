@@ -8,7 +8,7 @@ import {
     smootherStep,
     smoothStep,
     Vec2Tuple,
-} from '../vec2';
+} from '../vec2_legacy';
 
 describe('lerp function', () => {
     it('should return the starting point when t = 0', () => {
