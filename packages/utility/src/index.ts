@@ -1,1 +1,1 @@
-export { TypedArray } from "./clone/types";
+export { TypedArray } from "./types";

@@ -13,7 +13,7 @@ import {
     Vec2,
     Vec2Tuple,
     ZERO,
-} from '../vec2_legacy';
+} from '../../vec2_legacy';
 
 describe('Vector Length, Normalization, and Distance', () => {
     const v34: ReadonlyVec2 = Object.freeze({ x: 3, y: 4 }); // length 5

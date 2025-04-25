@@ -10,7 +10,7 @@ import {
     ReadonlyVec2,
     SQRT2,
     Vec2Tuple,
-} from '../vec2_legacy';
+} from '../../vec2_legacy';
 
 describe('Vector Factory Functions', () => {
     test('create should create vectors with default or given values', () => {

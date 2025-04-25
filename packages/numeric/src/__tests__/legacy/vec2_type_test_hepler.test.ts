@@ -1,10 +1,10 @@
-import { isVec2, isVec2Tuple, isVec2Like } from '../vec2_legacy';
+import { isVec2, isVec2Tuple, isVec2Like } from '../../vec2_legacy';
 import {
     createValidVec2Objects,
     createInvalidVec2Objects,
     createValidVec2Tuples,
     createInvalidVec2Tuples,
-} from './type_test_helper';
+} from '../type_test_helper';
 
 describe('Vec2 Type Validators with Test Generators', () => {
     describe('isVec2', () => {
