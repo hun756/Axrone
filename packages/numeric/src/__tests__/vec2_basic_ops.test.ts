@@ -330,4 +330,39 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
             });
         });
     });
+
+    describe('Instance Methods', () => {
+        describe('clone()', () => {
+            test('creates a new instance with same values', () => {
+                const vectors = [
+                    new Vec2(),
+                    new Vec2(3, 4),
+                    new Vec2(-5.7, 10.2),
+                    new Vec2(LARGE_VALUE, SMALL_VALUE),
+                ];
+
+                vectors.forEach((original) => {
+                    const cloned = original.clone();
+
+                    expect(cloned).toBeInstanceOf(Vec2);
+                    expect(cloned).not.toBe(original);
+                    expect(cloned).toBeVectorCloseTo(original);
+                });
+            });
+
+            test('preserves NaN and Infinity values', () => {
+                const vNaN = new Vec2(NaN, NaN);
+                const vInf = new Vec2(Infinity, -Infinity);
+
+                const clonedNaN = vNaN.clone();
+                const clonedInf = vInf.clone();
+
+                expect(Number.isNaN(clonedNaN.x)).toBe(true);
+                expect(Number.isNaN(clonedNaN.y)).toBe(true);
+
+                expect(clonedInf.x).toBe(Infinity);
+                expect(clonedInf.y).toBe(-Infinity);
+            });
+        });
+    });
 });
