@@ -19,10 +19,12 @@
         "forceConsistentCasingInFileNames": true,
         "baseUrl": ".",
         "paths": {
-            "@webgl-engine/*": [
+            "@axrone/*": [
                 "packages/*/src"
             ]
-        }
+        },
+        "composite": true,
+        "declarationMap": true
     },
     "exclude": [
         "node_modules",
