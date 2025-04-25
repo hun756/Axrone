@@ -208,5 +208,34 @@ describe('FpCompare Class - Test Suite', () => {
         });
     });
 
+    describe('absolutelyEqual Method', () => {
+        test('returns true for identical values', () => {
+            const comparer = new FpCompare(DEFAULT_EPSILON, 1e-10);
+            expect(comparer.absolutelyEqual(0, 0)).toBe(true);
+            expect(comparer.absolutelyEqual(1, 1)).toBe(true);
+            expect(comparer.absolutelyEqual(-1, -1)).toBe(true);
+        });
+
+        test('returns true for values within absThreshold', () => {
+            const comparer = new FpCompare(DEFAULT_EPSILON, 1e-10);
+            expect(comparer.absolutelyEqual(0, 0.5e-10)).toBe(true);
+            expect(comparer.absolutelyEqual(1, 1 + 0.5e-10)).toBe(true);
+            expect(comparer.absolutelyEqual(-1, -1 - 0.5e-10)).toBe(true);
+        });
+
+        test('returns false for values beyond absThreshold', () => {
+            const comparer = new FpCompare(DEFAULT_EPSILON, 1e-10);
+            expect(comparer.absolutelyEqual(0, 2e-10)).toBe(false);
+            expect(comparer.absolutelyEqual(1, 1 + 2e-10)).toBe(false);
+            expect(comparer.absolutelyEqual(-1, -1 - 2e-10)).toBe(false);
+        });
+
+        test('correctly handles very small values', () => {
+            const comparer = new FpCompare(DEFAULT_EPSILON, 1e-15);
+            expect(comparer.absolutelyEqual(1e-16, 2e-16)).toBe(true);
+            expect(comparer.absolutelyEqual(1e-16, 2e-15)).toBe(false);
+        });
+    });
+
     // ...
 });
