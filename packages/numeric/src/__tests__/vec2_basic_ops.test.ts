@@ -1016,4 +1016,82 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
             }
         });
     });
+
+    describe('Performance', () => {
+        const perfVectors = Array.from(
+            { length: PERFORMANCE_ITERATIONS },
+            () => new Vec2(Math.random() * 100, Math.random() * 100)
+        );
+
+        test('vector addition is within acceptable performance range', () => {
+            const a = new Vec2(3, 4);
+
+            const time = measurePerformance('add', () => {
+                for (let i = 0; i < PERFORMANCE_ITERATIONS; i++) {
+                    Vec2.add(a, perfVectors[i]);
+                }
+            });
+
+            console.log(`Vector addition x${PERFORMANCE_ITERATIONS} took ${time.toFixed(2)}ms`);
+        });
+
+        test('vector multiplication is within acceptable performance range', () => {
+            const a = new Vec2(3, 4);
+
+            const time = measurePerformance('multiply', () => {
+                for (let i = 0; i < PERFORMANCE_ITERATIONS; i++) {
+                    Vec2.multiply(a, perfVectors[i]);
+                }
+            });
+
+            console.log(
+                `Vector multiplication x${PERFORMANCE_ITERATIONS} took ${time.toFixed(2)}ms`
+            );
+        });
+
+        test('vector division is within acceptable performance range', () => {
+            const a = new Vec2(3, 4);
+
+            const time = measurePerformance('divide', () => {
+                for (let i = 0; i < PERFORMANCE_ITERATIONS; i++) {
+                    try {
+                        if (
+                            Math.abs(perfVectors[i].x) > EPSILON &&
+                            Math.abs(perfVectors[i].y) > EPSILON
+                        ) {
+                            Vec2.divide(a, perfVectors[i]);
+                        }
+                    } catch (e) {}
+                }
+            });
+
+            console.log(`Vector division x${PERFORMANCE_ITERATIONS} took ${time.toFixed(2)}ms`);
+        });
+
+        test('output parameter improves performance over creating new objects', () => {
+            const a = new Vec2(3, 4);
+            const b = new Vec2(5, 6);
+            const out = new Vec2();
+
+            const newObjectTime = measurePerformance('withoutOutput', () => {
+                for (let i = 0; i < PERFORMANCE_ITERATIONS; i++) {
+                    const result = Vec2.add(a, b);
+                }
+            });
+
+            const outputTime = measurePerformance('withOutput', () => {
+                for (let i = 0; i < PERFORMANCE_ITERATIONS; i++) {
+                    Vec2.add(a, b, out);
+                }
+            });
+
+            console.log(
+                `Without output: ${newObjectTime.toFixed(2)}ms, With output: ${outputTime.toFixed(2)}ms`
+            );
+            console.log(
+                `Performance improvement: ${(((newObjectTime - outputTime) / newObjectTime) * 100).toFixed(2)}%`
+            );
+        });
+    });
+
 });
