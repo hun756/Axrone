@@ -795,5 +795,98 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
                 expect(infTimesZero.y).toBe(0);
             });
         });
+
+        describe('divide()', () => {
+            test('divides vectors component-wise', () => {
+                const testCases = [
+                    { a: { x: 8, y: 15 }, b: { x: 4, y: 5 }, expected: { x: 2, y: 3 } },
+                    { a: { x: -8, y: 15 }, b: { x: 4, y: -5 }, expected: { x: -2, y: -3 } },
+                    { a: { x: 0, y: 0 }, b: { x: 4, y: 5 }, expected: { x: 0, y: 0 } },
+                ];
+
+                testCases.forEach(({ a, b, expected }) => {
+                    const result = Vec2.divide(a, b);
+                    expect(result).toBeVectorCloseTo(expected);
+                });
+            });
+
+            test('supports output parameter', () => {
+                const a = { x: 10, y: 15 };
+                const b = { x: 2, y: 3 };
+                const out = { x: 0, y: 0 };
+
+                const result = Vec2.divide(a, b, out);
+
+                expect(result).toBe(out);
+                expect(out).toBeVectorCloseTo({ x: 5, y: 5 });
+            });
+
+            test('throws for division by zero', () => {
+                const a = { x: 10, y: 15 };
+                const b = { x: 0, y: 3 };
+
+                expect(() => {
+                    Vec2.divide(a, b);
+                }).toThrow('Division by zero or near-zero value is not allowed');
+            });
+
+            test('throws for division by near-zero', () => {
+                const a = { x: 10, y: 15 };
+                const b = { x: EPSILON / 2, y: 3 };
+
+                expect(() => {
+                    Vec2.divide(a, b);
+                }).toThrow('Division by zero or near-zero value is not allowed');
+            });
+
+            test('has identity property (v / 1 = v)', () => {
+                const vectors = generateRandomVectors(ITERATIONS);
+
+                vectors.forEach((v) => {
+                    const result = Vec2.divide(v, Vec2.ONE);
+                    expect(result).toBeVectorCloseTo(v);
+                });
+            });
+
+            test('has self-division property (v / v = 1 for non-zero v)', () => {
+                for (let i = 0; i < ITERATIONS; i++) {
+                    const v = randomNonZeroVec2();
+                    const result = Vec2.divide(v, v);
+
+                    expect(result).toBeVectorCloseTo(Vec2.ONE);
+                }
+            });
+
+            test('handles special values correctly', () => {
+                const nanDivided = Vec2.divide({ x: NaN, y: 15 }, { x: 3, y: 3 });
+                expect(Number.isNaN(nanDivided.x)).toBe(true);
+                expect(nanDivided.y).toBe(5);
+
+                const infDividedByFinite = Vec2.divide({ x: Infinity, y: 15 }, { x: 3, y: 3 });
+                expect(infDividedByFinite.x).toBe(Infinity);
+                expect(infDividedByFinite.y).toBe(5);
+
+                const finiteDividedByInf = Vec2.divide({ x: 10, y: 15 }, { x: Infinity, y: 3 });
+                expect(finiteDividedByInf.x).toBe(0);
+                expect(finiteDividedByInf.y).toBe(5);
+
+                const infDividedByInf = Vec2.divide({ x: Infinity, y: 15 }, { x: Infinity, y: 3 });
+                expect(Number.isNaN(infDividedByInf.x)).toBe(true);
+                expect(infDividedByInf.y).toBe(5);
+            });
+
+            test('maintains reasonable precision with challenging values', () => {
+                // We can't divide very small values ​​by EPSILON
+                // That's why we use larger values
+                const small = new Vec2(1e-6, 1e-6);
+                const slightlyLarger = new Vec2(1e-4, 1e-4);
+
+                const result = Vec2.divide(small, slightlyLarger);
+
+                // result should be 0.01 (1e-6 / 1e-4 = 1e-2 = 0.01)
+                expect(result.x).toBeCloseTo(0.01, 10);
+                expect(result.y).toBeCloseTo(0.01, 10);
+            });
+        });
     });
 });
