@@ -269,7 +269,6 @@ describe('Comparer Interface Implementation Tests', () => {
 
             expect(defaultComparer.compare(date1, date2)).toBe(0);
             expect(utcComparer.compare(date1, date2)).toBe(0);
-
         });
 
         test('invalid date handling', () => {
@@ -283,6 +282,75 @@ describe('Comparer Interface Implementation Tests', () => {
 
             const nullFirstComparer = new DateComparer({ nullFirst: true });
             expect(nullFirstComparer.compare(invalidDate, validDate)).toBe(-1);
+        });
+    });
+
+    describe('GenericComparer', () => {
+        interface TestItem {
+            id: number;
+            name: string;
+            date: Date;
+        }
+
+        const items: TestItem[] = [
+            {
+                id: 2,
+                name: 'Beta',
+                date: new Date(2021, 0, 1),
+            },
+            {
+                id: 1,
+                name: 'Alpha',
+                date: new Date(2020, 0, 1),
+            },
+            {
+                id: 3,
+                name: 'Gamma',
+                date: new Date(2022, 0, 1),
+            },
+        ];
+
+        test('sorting by numeric property', () => {
+            const comparer = new GenericComparer<TestItem>((item) => item.id);
+
+            expect(comparer.compare(items[0], items[1])).toBe(1);
+            expect(comparer.compare(items[1], items[0])).toBe(-1);
+            expect(comparer.compare(items[0], items[0])).toBe(0);
+
+            const sorted = [...items].sort((a, b) => comparer.compare(a, b));
+            expect(sorted[0].id).toBe(1);
+            expect(sorted[1].id).toBe(2);
+            expect(sorted[2].id).toBe(3);
+        });
+
+        test('sorting by string property', () => {
+            const comparer = new GenericComparer<TestItem>((item) => item.name);
+
+            expect(comparer.compare(items[0], items[1])).toBe(1); // 'Beta' > 'Alpha'
+
+            const sorted = [...items].sort((a, b) => comparer.compare(a, b));
+            expect(sorted[0].name).toBe('Alpha');
+            expect(sorted[1].name).toBe('Beta');
+            expect(sorted[2].name).toBe('Gamma');
+        });
+
+        test('sorting by date property', () => {
+            const comparer = new GenericComparer<TestItem>((item) => item.date);
+
+            expect(comparer.compare(items[0], items[1])).toBe(1);
+
+            const sorted = [...items].sort((a, b) => comparer.compare(a, b));
+            expect(sorted[0].date.getFullYear()).toBe(2020);
+            expect(sorted[1].date.getFullYear()).toBe(2021);
+            expect(sorted[2].date.getFullYear()).toBe(2022);
+        });
+
+        test('should throw for unsupported types', () => {
+            const symbolComparer = new GenericComparer<{ sym: symbol }>((item) => item.sym as any);
+
+            expect(() => {
+                symbolComparer.compare({ sym: Symbol('a') }, { sym: Symbol('b') });
+            }).toThrow(CompareError);
         });
     });
 });
