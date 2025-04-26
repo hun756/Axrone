@@ -241,3 +241,50 @@ export class DefaultEqualityComparer<T> implements EqualityComparer<T> {
     }
 }
 
+export class ReverseComparer<T> implements Comparer<T> {
+    private readonly baseComparer: Comparer<T>;
+
+    constructor(baseComparer: Comparer<T>) {
+        this.baseComparer = baseComparer;
+    }
+
+    compare(a: T, b: T): CompareResult {
+        const result = this.baseComparer.compare(a, b);
+        return (result === 0 ? 0 : -result) as CompareResult;
+    }
+}
+
+export class CompositeComparer<T> implements Comparer<T> {
+    private readonly comparers: ReadonlyArray<Comparer<T>>;
+
+    constructor(comparers: ReadonlyArray<Comparer<T>>) {
+        if (!comparers.length) {
+            throw new InvalidOperationError('At least one comparer must be provided');
+        }
+        this.comparers = [...comparers];
+    }
+
+    compare(a: T, b: T): CompareResult {
+        for (const comparer of this.comparers) {
+            const result = comparer.compare(a, b);
+            if (result !== 0) return result;
+        }
+        return 0;
+    }
+}
+
+export class KeyComparer<T, K> implements Comparer<T> {
+    private readonly keySelector: KeySelector<T, K>;
+    private readonly comparer: Comparer<K>;
+
+    constructor(keySelector: KeySelector<T, K>, comparer?: Comparer<K>) {
+        this.keySelector = keySelector;
+        this.comparer = comparer || new DefaultComparer<K>();
+    }
+
+    compare(a: T, b: T): CompareResult {
+        const keyA = this.keySelector(a);
+        const keyB = this.keySelector(b);
+        return this.comparer.compare(keyA, keyB);
+    }
+}
