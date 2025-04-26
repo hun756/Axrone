@@ -185,3 +185,59 @@ export class DefaultComparer<T> implements Comparer<T> {
         return aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
     }
 }
+
+export class DefaultEqualityComparer<T> implements EqualityComparer<T> {
+    private static readonly HASH_CACHE = new WeakMap<object, number>();
+
+    equals(a: T, b: T): boolean {
+        if (a === b) return true;
+        if (a === null || a === undefined || b === null || b === undefined) return false;
+
+        if (isEquatable(a)) {
+            return a.equals(b);
+        }
+
+        if (a instanceof Date && b instanceof Date) {
+            return a.getTime() === b.getTime();
+        }
+
+        if (Array.isArray(a) && Array.isArray(b)) {
+            if (a.length !== b.length) return false;
+            for (let i = 0; i < a.length; i++) {
+                if (!this.equals(a[i] as unknown as T, b[i] as unknown as T)) return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    hash(obj: T): number {
+        if (obj === null || obj === undefined) return 0;
+
+        if (typeof obj !== 'object') {
+            if (typeof obj === 'number') return obj | 0;
+            if (typeof obj === 'boolean') return obj ? 1 : 0;
+            if (typeof obj === 'string') return hashString(obj);
+            return 0;
+        }
+
+        if (DefaultEqualityComparer.HASH_CACHE.has(obj as object)) {
+            return DefaultEqualityComparer.HASH_CACHE.get(obj as object)!;
+        }
+
+        let hash: number;
+
+        if (isEquatable(obj)) {
+            hash = obj.getHashCode();
+        } else if (obj instanceof Date) {
+            hash = obj.getTime() | 0;
+        } else {
+            hash = hashObject(obj);
+        }
+
+        DefaultEqualityComparer.HASH_CACHE.set(obj as object, hash);
+        return hash;
+    }
+}
+
