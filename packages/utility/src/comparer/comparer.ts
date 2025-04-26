@@ -1,6 +1,7 @@
 export type CompareResult = -1 | 0 | 1;
 
-export type Compreable<T extends string> = number & { readonly _brand: T };
+export type Comparable<T extends string> = number & { readonly __brand: T };
+export type OrderKey = Comparable<'OrderKey'>;
 
 export interface Comparer<T> {
     compare(a: T, b: T): CompareResult;
@@ -553,4 +554,85 @@ export class DeepEqualityComparer<T> implements EqualityComparer<T> {
             return hash ^ (hashString(key) + this.deepHash(value, visited));
         }, FNV_OFFSET_BASIS);
     }
+}
+
+export const comparer = Object.freeze({
+    default<T>(): Comparer<T> {
+        return new DefaultComparer<T>();
+    },
+
+    reverse<T>(comparer: Comparer<T>): Comparer<T> {
+        return new ReverseComparer<T>(comparer);
+    },
+
+    forKey<T, K>(keySelector: KeySelector<T, K>, comparer?: Comparer<K>): Comparer<T> {
+        return new KeyComparer<T, K>(keySelector, comparer);
+    },
+
+    forPath<T, P extends PropertyPath<T>>(
+        path: P,
+        valueComparer?: Comparer<ExtractPropertyType<T, P>>
+    ): Comparer<T> {
+        return new KeyComparer<T, ExtractPropertyType<T, P>>(
+            createPropertyAccessor(path),
+            valueComparer
+        );
+    },
+
+    composite<T>(...comparers: Comparer<T>[]): Comparer<T> {
+        return new CompositeComparer<T>(comparers);
+    },
+
+    string(options?: Pick<ComparerOptions, 'ignoreCase' | 'locale'>): Comparer<string> {
+        if (!options) return StringComparer.default;
+        if (options.ignoreCase && !options.locale) return StringComparer.ignoreCase;
+        return new StringComparer(options);
+    },
+
+    number(options?: Pick<ComparerOptions, 'precision'>): Comparer<number> {
+        if (!options) return NumberComparer.default;
+        return new NumberComparer(options);
+    },
+
+    date(options?: Pick<ComparerOptions, 'timezone'>): Comparer<Date> {
+        if (!options) return DateComparer.default;
+        return new DateComparer(options);
+    },
+});
+
+export const equality = Object.freeze({
+    default<T>(): EqualityComparer<T> {
+        return new DefaultEqualityComparer<T>();
+    },
+
+    deep<T>(options?: EqualityComparerOptions): EqualityComparer<T> {
+        if (!options) return DeepEqualityComparer.default;
+        return new DeepEqualityComparer<T>(options);
+    },
+});
+
+export function createOrderKey<T>(
+    value: T,
+    comparer: Comparer<T> = new DefaultComparer<T>()
+): OrderKey {
+    return hashObject(value) as OrderKey;
+}
+
+export function createPropertyAccessor<T, P extends PropertyPath<T>>(
+    path: P
+): KeySelector<T, ExtractPropertyType<T, P>> {
+    if (typeof path === 'string') {
+        return (obj: T) => obj[path as keyof T] as ExtractPropertyType<T, P>;
+    }
+
+    return (obj: T) => {
+        let current: any = obj;
+
+        for (const key of path) {
+            if (current == null) return undefined as any;
+            current = current[key];
+        }
+
+        return current as ExtractPropertyType<T, P>;
+    };
 }
