@@ -6,7 +6,7 @@ import {
     isEquatable,
     isComparer,
     isEqualityComparer,
-    CompareError,
+    ComparerError,
     InvalidOperationError,
 } from '@axrone/utility';
 
@@ -88,17 +88,17 @@ describe('Error Classes', () => {
     describe('CompareError', () => {
         test('should create an instance with the correct name and message', () => {
             const errorMessage = 'Cannot compare these values';
-            const error = new CompareError(errorMessage);
+            const error = new ComparerError(errorMessage);
 
             expect(error).toBeInstanceOf(Error);
-            expect(error).toBeInstanceOf(CompareError);
+            expect(error).toBeInstanceOf(ComparerError);
             expect(error.name).toBe('CompareError');
             expect(error.message).toBe(errorMessage);
         });
 
         test('should maintain prototype chain', () => {
-            const error = new CompareError('Test error');
-            expect(Object.getPrototypeOf(error)).toBe(CompareError.prototype);
+            const error = new ComparerError('Test error');
+            expect(Object.getPrototypeOf(error)).toBe(ComparerError.prototype);
         });
     });
 

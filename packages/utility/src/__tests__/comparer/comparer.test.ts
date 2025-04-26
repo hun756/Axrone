@@ -2,7 +2,7 @@ import {
     CompareResult,
     Comparer,
     ComparerOptions,
-    CompareError,
+    ComparerError,
     InvalidOperationError,
     isComparer,
 } from '@axrone/utility';
@@ -133,7 +133,7 @@ class GenericComparer<T> implements Comparer<T> {
             return new DateComparer().compare(keyA, keyB);
         }
 
-        throw new CompareError('Unsupported key type for comparison');
+        throw new ComparerError('Unsupported key type for comparison');
     }
 }
 
@@ -350,7 +350,7 @@ describe('Comparer Interface Implementation Tests', () => {
 
             expect(() => {
                 symbolComparer.compare({ sym: Symbol('a') }, { sym: Symbol('b') });
-            }).toThrow(CompareError);
+            }).toThrow(ComparerError);
         });
     });
 

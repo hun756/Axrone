@@ -57,11 +57,11 @@ export type EqualityComparerOptions = Readonly<{
     customize?: (objValue: unknown, otherValue: unknown) => boolean;
 }>;
 
-export class CompareError extends Error {
+export class ComparerError extends Error {
     constructor(message: string) {
         super(message);
         this.name = 'CompareError';
-        Object.setPrototypeOf(this, CompareError.prototype);
+        Object.setPrototypeOf(this, ComparerError.prototype);
     }
 }
 
@@ -358,3 +358,27 @@ export class NumberComparer implements Comparer<number> {
         return a < b ? -1 : 1;
     }
 }
+
+export class DateComparer implements Comparer<Date> {
+    private static readonly DEFAULT_INSTANCE = new DateComparer();
+
+    private readonly timezone: string | undefined;
+
+    static readonly default = DateComparer.DEFAULT_INSTANCE;
+
+    constructor(options?: Readonly<Pick<ComparerOptions, 'timezone'>>) {
+        this.timezone = options?.timezone;
+    }
+
+    compare(a: Date, b: Date): CompareResult {
+        if (!(a instanceof Date)) throw new ComparerError('First argument must be a Date');
+        if (!(b instanceof Date)) throw new ComparerError('Second argument must be a Date');
+
+        const aTime = a.getTime();
+        const bTime = b.getTime();
+
+        if (aTime === bTime) return 0;
+        return aTime < bTime ? -1 : 1;
+    }
+}
+
