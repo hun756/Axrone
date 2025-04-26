@@ -148,3 +148,40 @@ function hashObject(obj: unknown): number {
         return hash ^ ((keyHash + ((hash << 6) + (hash >> 2))) ^ valueHash);
     }, FNV_OFFSET_BASIS);
 }
+
+export class DefaultComparer<T> implements Comparer<T> {
+    compare(a: T, b: T): CompareResult {
+        if (a === b) return 0;
+        if (a === null || a === undefined) return -1;
+        if (b === null || b === undefined) return 1;
+
+        if (typeof a === 'string' && typeof b === 'string') {
+            return a < b ? -1 : 1;
+        }
+
+        if (typeof a === 'number' && typeof b === 'number') {
+            if (Number.isNaN(a) && Number.isNaN(b)) return 0;
+            if (Number.isNaN(a)) return -1;
+            if (Number.isNaN(b)) return 1;
+            return a < b ? -1 : 1;
+        }
+
+        if (typeof a === 'boolean' && typeof b === 'boolean') {
+            return a === b ? 0 : a ? 1 : -1;
+        }
+
+        if (a instanceof Date && b instanceof Date) {
+            const aTime = a.getTime();
+            const bTime = b.getTime();
+            return aTime === bTime ? 0 : aTime < bTime ? -1 : 1;
+        }
+
+        if (isEquatable(a) && isEquatable(b)) {
+            return a.equals(b) ? 0 : -1;
+        }
+
+        const aStr = String(a);
+        const bStr = String(b);
+        return aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+    }
+}
