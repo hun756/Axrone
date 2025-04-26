@@ -128,18 +128,44 @@ describe('Equatable Interface Implementation Tests', () => {
             const obj1 = new TestEquatable(1, 'test');
             const obj2 = new TestEquatable(1, 'test');
             const obj3 = new TestEquatable(2, 'test');
-            
+
             expect(obj1.getHashCode()).toBe(obj2.getHashCode());
             expect(obj1.getHashCode()).not.toBe(obj3.getHashCode());
-          });
-      
-          test('hash consistency property should hold across multiple calls', () => {
+        });
+
+        test('hash consistency property should hold across multiple calls', () => {
             const obj = new TestEquatable(42, 'consistent');
             const firstHash = obj.getHashCode();
-            
+
             for (let i = 0; i < 100; i++) {
-              expect(obj.getHashCode()).toBe(firstHash);
+                expect(obj.getHashCode()).toBe(firstHash);
             }
-          });
+        });
+    });
+
+    describe('Complex Equatable Implementation', () => {
+        test('should correctly compare nested Equatable objects', () => {
+            const base1 = new TestEquatable(1, 'base');
+            const base2 = new TestEquatable(1, 'base');
+            const base3 = new TestEquatable(2, 'different');
+
+            const nested1 = new TestEquatable(3, 'nested');
+            const nested2 = new TestEquatable(3, 'nested');
+
+            const complex1 = new ComplexEquatable(base1, { data: nested1 });
+            const complex2 = new ComplexEquatable(base2, { data: nested2 });
+            const complex3 = new ComplexEquatable(base3, { data: nested1 });
+
+            expect(complex1.equals(complex2)).toBe(true);
+            expect(complex1.equals(complex3)).toBe(false);
+
+            expect(complex1.getHashCode()).toBe(complex2.getHashCode());
+            expect(complex1.getHashCode()).not.toBe(complex3.getHashCode());
+        });
+
+        test('equals should handle null correctly in complex objects', () => {
+            const validObj = new TestEquatable(1, 'test');
+            expect(validObj.equals(null)).toBe(false);
+        });
     });
 });
