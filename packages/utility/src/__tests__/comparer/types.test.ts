@@ -72,8 +72,7 @@ describe('TypeScript Type Definitions', () => {
 
                 const partial3: PartialDeepObject = {
                     nested: {
-                        deeplyNested: {
-                        },
+                        deeplyNested: {},
                     },
                 };
 
@@ -104,6 +103,117 @@ describe('TypeScript Type Definitions', () => {
 
                 expect(true).toBe(true);
             });
+        });
+    });
+
+    describe('KeysOfType Type', () => {
+        interface MixedProps {
+            id: number;
+            name: string;
+            active: boolean;
+            count: number;
+            tags: string[];
+            createdAt: Date;
+            details: { [key: string]: any };
+            update: () => void;
+        }
+
+        test('KeysOfType should extract keys of specific type', () => {
+            type StringProps = KeysOfType<MixedProps, string>;
+            type NumberProps = KeysOfType<MixedProps, number>;
+            type BooleanProps = KeysOfType<MixedProps, boolean>;
+            type FunctionProps = KeysOfType<MixedProps, Function>;
+            type DateProps = KeysOfType<MixedProps, Date>;
+            type ArrayProps = KeysOfType<MixedProps, any[]>;
+
+            const strProp: StringProps = 'name';
+
+            // @ts-expect-error
+            const invalidStrProp: StringProps = 'id';
+
+            const numProp1: NumberProps = 'id';
+            const numProp2: NumberProps = 'count';
+
+            // @ts-expect-error
+            const invalidNumProp: NumberProps = 'name';
+
+            const boolProp: BooleanProps = 'active';
+
+            // @ts-expect-error
+            const invalidBoolProp: BooleanProps = 'id';
+
+            const fnProp: FunctionProps = 'update';
+
+            // @ts-expect-error
+            const invalidFnProp: FunctionProps = 'id';
+
+            const dateProp: DateProps = 'createdAt';
+
+            // @ts-expect-error
+            const invalidDateProp: DateProps = 'id';
+
+            const arrayProp: ArrayProps = 'tags';
+
+            // @ts-expect-error
+            const invalidArrayProp: ArrayProps = 'id';
+
+            expect(true).toBe(true);
+        });
+    });
+
+    describe('Option Types', () => {
+        test('ComparerOptions should have correct structure', () => {
+            const options1: ComparerOptions = {
+                nullFirst: true,
+                descending: false,
+            };
+
+            const options2: ComparerOptions = {
+                ignoreCase: true,
+                locale: 'tr-TR',
+            };
+
+            const options3: ComparerOptions = {
+                precision: 2,
+                timezone: 'UTC',
+            };
+
+            const allOptions: ComparerOptions = {
+                nullFirst: true,
+                descending: true,
+                ignoreCase: true,
+                locale: 'en-US',
+                precision: 3,
+                timezone: 'Europe/London',
+            };
+
+            expect(true).toBe(true);
+        });
+
+        test('EqualityComparerOptions should have correct structure', () => {
+            const options1: EqualityComparerOptions = {
+                ignoreCase: true,
+            };
+
+            const options2: EqualityComparerOptions = {
+                deep: true,
+                strict: false,
+            };
+
+            const options3: EqualityComparerOptions = {
+                customize: (a, b) => a === b,
+            };
+
+            const allOptions: EqualityComparerOptions = {
+                ignoreCase: true,
+                deep: true,
+                strict: true,
+                customize: (a, b) => {
+                    return String(a) === String(b);
+                },
+            };
+
+            expect(true).toBe(true);
         });
     });
 });
