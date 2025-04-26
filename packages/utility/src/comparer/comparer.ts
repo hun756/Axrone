@@ -330,3 +330,31 @@ export class StringComparer implements Comparer<string> {
         return a < b ? -1 : a > b ? 1 : 0;
     }
 }
+
+export class NumberComparer implements Comparer<number> {
+    private static readonly DEFAULT_INSTANCE = new NumberComparer();
+
+    private readonly precision: number | undefined;
+    private readonly factor: number;
+
+    static readonly default = NumberComparer.DEFAULT_INSTANCE;
+
+    constructor(options?: Readonly<Pick<ComparerOptions, 'precision'>>) {
+        this.precision = options?.precision;
+        this.factor = this.precision !== undefined ? Math.pow(10, this.precision) : 1;
+    }
+
+    compare(a: number, b: number): CompareResult {
+        if (Number.isNaN(a) && Number.isNaN(b)) return 0;
+        if (Number.isNaN(a)) return -1;
+        if (Number.isNaN(b)) return 1;
+
+        if (this.precision !== undefined) {
+            a = Math.round(a * this.factor) / this.factor;
+            b = Math.round(b * this.factor) / this.factor;
+        }
+
+        if (a === b) return 0;
+        return a < b ? -1 : 1;
+    }
+}
