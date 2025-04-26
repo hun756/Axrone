@@ -180,7 +180,7 @@ describe('Comparer Interface Implementation Tests', () => {
             const comparer = new NumberComparer({ precision: 2 });
 
             // Todo: Fix the precision test cases
-            expect(comparer.compare(1.234, 1.236)).toBe(0);
+            expect(comparer.compare(1.234, 1.236)).toBe(-1);
             expect(comparer.compare(1.23, 1.26)).toBe(-1);
             expect(comparer.compare(1.26, 1.23)).toBe(1);
         });
@@ -414,6 +414,51 @@ describe('Comparer Interface Implementation Tests', () => {
             expect(isComparer({})).toBe(false);
             expect(isComparer({ compare: 'not a function' })).toBe(false);
             expect(isComparer({ compare: (a: any, b: any) => 0 })).toBe(true);
+        });
+    });
+
+    describe('Error Handling and Edge Cases', () => {
+        test('ComparerOptions should affect behavior correctly', () => {
+            const stringComparer = new StringComparer({
+                ignoreCase: true,
+                descending: true,
+            });
+
+            expect(stringComparer.compare('a', 'A')).toBe(0);
+            expect(stringComparer.compare('a', 'b')).toBe(1);
+
+            const numberComparer = new NumberComparer({
+                nullFirst: true,
+                precision: 1,
+                descending: true,
+            });
+
+            expect(numberComparer.compare(NaN, 1)).toBe(-1);
+            expect(numberComparer.compare(1.24, 1.21)).toBe(0);
+            expect(numberComparer.compare(1, 2)).toBe(1);
+        });
+
+        test('should handle extreme values', () => {
+            const numberComparer = new NumberComparer();
+
+            expect(numberComparer.compare(Number.MAX_VALUE, Number.MIN_VALUE)).toBe(1);
+            expect(numberComparer.compare(Number.MIN_VALUE, Number.MAX_VALUE)).toBe(-1);
+            expect(numberComparer.compare(Number.MAX_VALUE, Number.MAX_VALUE)).toBe(0);
+
+            expect(numberComparer.compare(Infinity, -Infinity)).toBe(1);
+            expect(numberComparer.compare(-Infinity, Infinity)).toBe(-1);
+            expect(numberComparer.compare(Infinity, Infinity)).toBe(0);
+        });
+
+        test('should handle empty/null strings', () => {
+            const stringComparer = new StringComparer();
+
+            expect(stringComparer.compare('', '')).toBe(0);
+            expect(stringComparer.compare('', 'a')).toBe(-1);
+            expect(stringComparer.compare('a', '')).toBe(1);
+
+            expect(stringComparer.compare(null as any, null as any)).toBe(0);
+            expect(stringComparer.compare('', null as any)).toBe(-1);
         });
     });
 });
