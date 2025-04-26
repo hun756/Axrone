@@ -216,4 +216,33 @@ describe('TypeScript Type Definitions', () => {
             expect(true).toBe(true);
         });
     });
+
+    describe('Runtime Type Tests', () => {
+        test('Type utilities should behave as expected at runtime', () => {
+            interface TestObject {
+                name: string;
+                value: number;
+            }
+
+            const obj: TestObject = { name: 'test', value: 42 };
+
+            function getProperty<T, P extends PropertyPath<T>>(
+                obj: T,
+                path: P
+            ): ExtractPropertyType<T, P> {
+                if (typeof path === 'string') {
+                    return obj[path as keyof T] as ExtractPropertyType<T, P>;
+                } else if (Array.isArray(path)) {
+                    return path.reduce((acc, key) => acc[key], obj as any);
+                }
+                throw new Error('Invalid path');
+            }
+
+            expect(getProperty(obj, 'name')).toBe('test');
+            expect(getProperty(obj, 'value')).toBe(42);
+
+            const partial: DeepPartial<TestObject> = { name: 'partial' };
+            expect(partial.name).toBe('partial');
+        });
+    });
 });
