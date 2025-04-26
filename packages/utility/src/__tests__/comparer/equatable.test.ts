@@ -168,4 +168,66 @@ describe('Equatable Interface Implementation Tests', () => {
             expect(validObj.equals(null)).toBe(false);
         });
     });
+
+    describe('Custom EqualityComparer Implementation', () => {
+        test('string comparison with ignoreCase option', () => {
+            const comparer = new CustomEqualityComparer<string>({ ignoreCase: true });
+
+            expect(comparer.equals('TEST', 'test')).toBe(true);
+            expect(comparer.equals('Hello', 'HELLO')).toBe(true);
+            expect(comparer.equals('Hello', 'World')).toBe(false);
+
+            expect(comparer.hash('TEST')).toBe(comparer.hash('test'));
+            expect(comparer.hash('Hello')).toBe(comparer.hash('HELLO'));
+        });
+
+        test('deep equality comparison with deep option', () => {
+            const comparer = new CustomEqualityComparer<Record<string, unknown>>({ deep: true });
+
+            const obj1 = { a: 1, b: { c: 3 } };
+            const obj2 = { a: 1, b: { c: 3 } };
+            const obj3 = { a: 1, b: { c: 4 } };
+
+            expect(comparer.equals(obj1, obj2)).toBe(true);
+            expect(comparer.equals(obj1, obj3)).toBe(false);
+        });
+
+        test('strict equality comparison with strict option', () => {
+            const strictComparer = new CustomEqualityComparer<unknown>({ strict: true });
+            const looseComparer = new CustomEqualityComparer<unknown>({ strict: false });
+
+            expect(strictComparer.equals(1, '1')).toBe(false);
+
+            expect(looseComparer.equals(1, '1')).toBe(true);
+        });
+
+        test('custom comparison with customize option', () => {
+            const comparer = new CustomEqualityComparer<string>({
+                customize: (a, b) => {
+                    if (typeof a === 'string' && typeof b === 'string') {
+                        return a.trim() === b.trim();
+                    }
+                    return false;
+                },
+            });
+
+            expect(comparer.equals('test  ', '  test')).toBe(true);
+            expect(comparer.equals('test', 'other')).toBe(false);
+        });
+
+        test('should handle Equatable objects correctly', () => {
+            const comparer = new CustomEqualityComparer<Equatable>();
+
+            const obj1 = new TestEquatable(1, 'test');
+            const obj2 = new TestEquatable(1, 'test');
+            const obj3 = new TestEquatable(2, 'test');
+
+            expect(comparer.equals(obj1, obj2)).toBe(true);
+            expect(comparer.equals(obj1, obj3)).toBe(false);
+
+            expect(comparer.hash(obj1)).toBe(obj1.getHashCode());
+            expect(comparer.hash(obj1)).toBe(comparer.hash(obj2));
+            expect(comparer.hash(obj1)).not.toBe(comparer.hash(obj3));
+        });
+    });
 });
