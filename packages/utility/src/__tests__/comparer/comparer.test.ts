@@ -196,4 +196,47 @@ describe('Comparer Interface Implementation Tests', () => {
             expect(nullFirstComparer.compare(1, NaN)).toBe(1);
         });
     });
+
+    describe('StringComparer', () => {
+        test('basic string comparison', () => {
+            const comparer = new StringComparer();
+
+            expect(comparer.compare('a', 'b')).toBe(-1);
+            expect(comparer.compare('b', 'a')).toBe(1);
+            expect(comparer.compare('a', 'a')).toBe(0);
+        });
+
+        test('ignoreCase option', () => {
+            const caseSensitiveComparer = new StringComparer();
+            const caseInsensitiveComparer = new StringComparer({ ignoreCase: true });
+
+            expect(caseSensitiveComparer.compare('a', 'A')).toBe(1);
+            expect(caseInsensitiveComparer.compare('a', 'A')).toBe(0);
+
+            expect(caseSensitiveComparer.compare('A', 'a')).toBe(-1);
+            expect(caseInsensitiveComparer.compare('A', 'a')).toBe(0);
+        });
+
+        test('locale option', () => {
+            const defaultComparer = new StringComparer();
+            const localeComparer = new StringComparer({ locale: 'tr' });
+
+            expect(defaultComparer.compare('i', 'İ')).not.toBe(0);
+
+            expect(localeComparer.compare('i', 'İ')).not.toBe(0);
+
+            const turkishCaseInsensitiveComparer = new StringComparer({
+                locale: 'tr',
+                ignoreCase: true,
+            });
+        });
+
+        test('descending option', () => {
+            const comparer = new StringComparer({ descending: true });
+
+            expect(comparer.compare('a', 'b')).toBe(1);
+            expect(comparer.compare('b', 'a')).toBe(-1);
+            expect(comparer.compare('a', 'a')).toBe(0);
+        });
+    });
 });
