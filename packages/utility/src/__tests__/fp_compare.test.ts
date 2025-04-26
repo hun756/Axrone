@@ -446,5 +446,53 @@ describe('FpCompare Class - Test Suite', () => {
             }
         });
     });
+
+    describe('Real-World Scenarios', () => {
+        test('financial calculation rounding errors', () => {
+            const comparer = new FpCompare(1e-10);
+            
+            // Example: interest rate calculation
+            const principal = 1000.00;
+            const rate = 0.05; // 5%
+            const periods = 12;
+            
+            // Different way
+            const method1 = principal * Math.pow(1 + rate, periods);
+            let method2 = principal;
+            for (let i = 0; i < periods; i++) {
+                method2 *= (1 + rate);
+            }
+            
+            expect(comparer.nearlyEqual(method1, method2)).toBe(true);
+        });
+
+        test('trigonometric identity validation', () => {
+            const comparer = new FpCompare(1e-10);
+            
+            // Test sin²θ + cos²θ = 1 identity for various angles
+            for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 12) {
+                const sinSquared = Math.pow(Math.sin(angle), 2);
+                const cosSquared = Math.pow(Math.cos(angle), 2);
+                const sum = sinSquared + cosSquared;
+                
+                expect(comparer.nearlyEqual(sum, 1)).toBe(true);
+            }
+        });
+
+        test('iterative approximation convergence', () => {
+            const comparer = new FpCompare(1e-10);
+            
+            // Approximating square root using Newton's method
+            const target = 2;
+            let approximation = 1.0;
+            const iterations = 10;
+            
+            for (let i = 0; i < iterations; i++) {
+                approximation = 0.5 * (approximation + target / approximation);
+            }
+            
+            expect(comparer.nearlyEqual(approximation, Math.sqrt(2))).toBe(true);
+        });
+    });
     // ...
 });
