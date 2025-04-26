@@ -230,4 +230,31 @@ describe('Equatable Interface Implementation Tests', () => {
             expect(comparer.hash(obj1)).not.toBe(comparer.hash(obj3));
         });
     });
+
+    describe('Edge Cases and Error Handling', () => {
+        test('should handle null and undefined values in equals and hash methods', () => {
+            const comparer = new CustomEqualityComparer<unknown>();
+
+            expect(comparer.equals(null, null)).toBe(true);
+            expect(comparer.equals(undefined, undefined)).toBe(true);
+            expect(comparer.equals(null, undefined)).toBe(false);
+
+            expect(comparer.hash(null)).toBe(0);
+            expect(comparer.hash(undefined)).toBe(0);
+        });
+
+        test('should handle arrays correctly', () => {
+            const comparer = new CustomEqualityComparer<unknown[]>({ deep: true });
+
+            expect(comparer.equals([1, 2, 3], [1, 2, 3])).toBe(true);
+            expect(comparer.equals([1, 2, 3], [1, 2, 4])).toBe(false);
+
+            const obj1 = new TestEquatable(1, 'test');
+            const obj2 = new TestEquatable(1, 'test');
+            const obj3 = new TestEquatable(2, 'test');
+
+            expect(comparer.equals([obj1], [obj2])).toBe(true);
+            expect(comparer.equals([obj1], [obj3])).toBe(false);
+        });
+    });
 });
