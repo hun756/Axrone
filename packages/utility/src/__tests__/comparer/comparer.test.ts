@@ -403,4 +403,17 @@ describe('Comparer Interface Implementation Tests', () => {
             }).toThrow(InvalidOperationError);
         });
     });
+
+    describe('Type Guard Tests', () => {
+        test('isComparer should correctly identify Comparer implementations', () => {
+            const validComparer = new NumberComparer();
+
+            expect(isComparer(validComparer)).toBe(true);
+            expect(isComparer(null)).toBe(false);
+            expect(isComparer(undefined)).toBe(false);
+            expect(isComparer({})).toBe(false);
+            expect(isComparer({ compare: 'not a function' })).toBe(false);
+            expect(isComparer({ compare: (a: any, b: any) => 0 })).toBe(true);
+        });
+    });
 });
