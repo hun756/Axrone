@@ -239,4 +239,50 @@ describe('Comparer Interface Implementation Tests', () => {
             expect(comparer.compare('a', 'a')).toBe(0);
         });
     });
+
+    describe('DateComparer', () => {
+        test('basic date comparison', () => {
+            const comparer = new DateComparer();
+            const earlier = new Date(2020, 0, 1);
+            const later = new Date(2021, 0, 1);
+
+            expect(comparer.compare(earlier, later)).toBe(-1);
+            expect(comparer.compare(later, earlier)).toBe(1);
+            expect(comparer.compare(earlier, new Date(2020, 0, 1))).toBe(0);
+        });
+
+        test('descending option', () => {
+            const comparer = new DateComparer({ descending: true });
+            const earlier = new Date(2020, 0, 1);
+            const later = new Date(2021, 0, 1);
+
+            expect(comparer.compare(earlier, later)).toBe(1);
+            expect(comparer.compare(later, earlier)).toBe(-1);
+        });
+
+        test('timezone option', () => {
+            const defaultComparer = new DateComparer();
+            const utcComparer = new DateComparer({ timezone: 'UTC' });
+
+            const date1 = new Date(Date.UTC(2020, 0, 1, 0, 0, 0));
+            const date2 = new Date(Date.UTC(2020, 0, 1, 0, 0, 0));
+
+            expect(defaultComparer.compare(date1, date2)).toBe(0);
+            expect(utcComparer.compare(date1, date2)).toBe(0);
+
+        });
+
+        test('invalid date handling', () => {
+            const comparer = new DateComparer();
+            const validDate = new Date(2020, 0, 1);
+            const invalidDate = new Date('invalid date');
+
+            expect(comparer.compare(invalidDate, invalidDate)).toBe(0);
+            expect(comparer.compare(invalidDate, validDate)).toBe(1);
+            expect(comparer.compare(validDate, invalidDate)).toBe(-1);
+
+            const nullFirstComparer = new DateComparer({ nullFirst: true });
+            expect(nullFirstComparer.compare(invalidDate, validDate)).toBe(-1);
+        });
+    });
 });
