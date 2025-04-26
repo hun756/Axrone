@@ -13,7 +13,7 @@ export interface EqualityComparer<T> {
 
 export interface Equatable {
     equals(other: unknown): boolean;
-    hash(): number;
+    getHashCode(): number;
 }
 
 export type KeySelector<T, K> = (item: T) => K;
@@ -117,4 +117,34 @@ export function isEqualityComparer<T>(value: unknown): value is EqualityComparer
         'hash' in value &&
         typeof (value as any).hash === 'function'
     );
+}
+
+function hashString(str: string): number {
+    return fnvHash(str);
+}
+
+function hashObject(obj: unknown): number {
+    if (obj === null || obj === undefined) return 0;
+
+    if (isEquatable(obj)) {
+        return obj.getHashCode();
+    }
+
+    if (typeof obj === 'number') return obj | 0;
+    if (typeof obj === 'boolean') return obj ? 1 : 0;
+    if (typeof obj === 'string') return hashString(obj);
+    if (obj instanceof Date) return obj.getTime() | 0;
+
+    if (Array.isArray(obj)) {
+        return obj.reduce((hash, item, index) => {
+            return hash ^ (hashObject(item) + ((hash << 6) + (hash >> 2) + index));
+        }, FNV_OFFSET_BASIS);
+    }
+
+    const entries = Object.entries(obj as Record<string, unknown>);
+    return entries.reduce((hash, [key, value]) => {
+        const keyHash = hashString(key);
+        const valueHash = hashObject(value);
+        return hash ^ ((keyHash + ((hash << 6) + (hash >> 2))) ^ valueHash);
+    }, FNV_OFFSET_BASIS);
 }
