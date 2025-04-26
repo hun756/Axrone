@@ -1,9 +1,9 @@
-export type CompreResult = -1 | 0 | 1;
+export type CompareResult = -1 | 0 | 1;
 
 export type Compreable<T extends string> = number & { readonly _brand: T };
 
 export interface Comparer<T> {
-    compare(a: T, b: T): CompreResult;
+    compare(a: T, b: T): CompareResult;
 }
 
 export interface EqualityComparer<T> {

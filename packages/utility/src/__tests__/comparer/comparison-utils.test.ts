@@ -1,5 +1,5 @@
 import {
-    CompreResult,
+    CompareResult,
     Comparer,
     EqualityComparer,
     Equatable,
@@ -45,7 +45,7 @@ describe('Type Guards', () => {
     describe('isComparer', () => {
         test('should return true for objects implementing Comparer interface', () => {
             const comparer: Comparer<string> = {
-                compare: (a: string, b: string): CompreResult => 0,
+                compare: (a: string, b: string): CompareResult => 0,
             };
             expect(isComparer(comparer)).toBe(true);
         });
@@ -137,7 +137,7 @@ class Person implements Equatable {
 }
 
 class PersonAgeComparer implements Comparer<Person> {
-    compare(a: Person, b: Person): CompreResult {
+    compare(a: Person, b: Person): CompareResult {
         if (a.age < b.age) return -1;
         if (a.age > b.age) return 1;
         return 0;
