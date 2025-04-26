@@ -55,3 +55,40 @@ export class StringComparer implements Comparer<string> {
         }
     }
 }
+
+/**
+ * Compares two values using a custom comparison function.
+ * @template T - The type of the values to be compared.
+ */
+export class CustomComparer<T> implements Comparer<T> {
+    /**
+     * @param compareFunction - The custom comparison function.
+     */
+    constructor(private compareFunction: (a: T, b: T) => number) { }
+
+    /**
+     * Compares two values using the custom comparison function.
+     * @param a - The first value.
+     * @param b - The second value.
+     * @returns The result of the custom comparison function.
+     */
+    compare(a: T, b: T): number {
+        return this.compareFunction(a, b);
+    }
+}
+
+/**
+ * Compares two Date objects.
+ */
+export class DateComparer implements Comparer<Date> {
+    /**
+     * Compares two dates.
+     * @param a - The first date.
+     * @param b - The second date.
+     * @returns The difference in time between the two dates.
+     */
+    compare(a: Date, b: Date): number {
+        return a.getTime() - b.getTime();
+    }
+}
+
