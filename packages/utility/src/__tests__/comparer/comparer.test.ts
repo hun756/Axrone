@@ -353,4 +353,54 @@ describe('Comparer Interface Implementation Tests', () => {
             }).toThrow(CompareError);
         });
     });
+
+    describe('CompositeComparer', () => {
+        interface Person {
+            lastName: string;
+            firstName: string;
+            age: number;
+        }
+
+        const people: Person[] = [
+            { lastName: 'Smith', firstName: 'John', age: 30 },
+            { lastName: 'Smith', firstName: 'Jane', age: 25 },
+            { lastName: 'Doe', firstName: 'John', age: 40 },
+        ];
+
+        const lastNameComparer = new GenericComparer<Person>((p) => p.lastName);
+        const firstNameComparer = new GenericComparer<Person>((p) => p.firstName);
+        const ageComparer = new GenericComparer<Person>((p) => p.age);
+
+        test('should compare using multiple criteria in order', () => {
+            const nameComparer = new CompositeComparer(lastNameComparer, firstNameComparer);
+
+            expect(nameComparer.compare(people[0], people[1])).toBe(1);
+            expect(nameComparer.compare(people[0], people[2])).toBe(1);
+
+            const sorted = [...people].sort((a, b) => nameComparer.compare(a, b));
+            expect(sorted[0].lastName).toBe('Doe');
+            expect(sorted[1].lastName).toBe('Smith');
+            expect(sorted[1].firstName).toBe('Jane');
+            expect(sorted[2].firstName).toBe('John');
+        });
+
+        test('should return 0 when all comparers return 0', () => {
+            const composite = new CompositeComparer(
+                lastNameComparer,
+                firstNameComparer,
+                ageComparer
+            );
+
+            const person1 = { lastName: 'Smith', firstName: 'John', age: 30 };
+            const person2 = { lastName: 'Smith', firstName: 'John', age: 30 };
+
+            expect(composite.compare(person1, person2)).toBe(0);
+        });
+
+        test('should throw when constructed with no comparers', () => {
+            expect(() => {
+                new CompositeComparer();
+            }).toThrow(InvalidOperationError);
+        });
+    });
 });
