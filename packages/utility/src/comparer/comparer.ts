@@ -92,3 +92,37 @@ export class DateComparer implements Comparer<Date> {
     }
 }
 
+/**
+ * Compares two objects based on a specified property.
+ * @template T - The type of the objects to be compared.
+ */
+export class ObjectPropertyComparer<T> implements Comparer<T> {
+    /**
+     * @param property - The property of the objects to compare.
+     */
+    constructor(private property: keyof T) { }
+
+    /**
+     * Compares two objects based on the specified property.
+     * @param a - The first object.
+     * @param b - The second object.
+     * @returns A negative number if a[property] < b[property], zero if a[property] = b[property], 
+     * a positive number if a[property] > b[property].
+     */
+    compare(a: T, b: T): number {
+        if (a[this.property] < b[this.property]) {
+            return -1;
+        } else if (a[this.property] > b[this.property]) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+}
+
+/**
+ * Type definition for a constructor of a Comparer.
+ * @template T - The type of the values to be compared.
+ */
+type ComparerConstructor<T> = new () => Comparer<T>;
+
