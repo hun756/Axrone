@@ -288,3 +288,45 @@ export class KeyComparer<T, K> implements Comparer<T> {
         return this.comparer.compare(keyA, keyB);
     }
 }
+
+export class StringComparer implements Comparer<string> {
+    private static readonly DEFAULT_INSTANCE = new StringComparer();
+    private static readonly IGNORE_CASE_INSTANCE = new StringComparer({ ignoreCase: true });
+
+    private readonly ignoreCase: boolean;
+    private readonly locale: string | undefined;
+    private readonly collator: Intl.Collator | undefined;
+
+    static readonly default = StringComparer.DEFAULT_INSTANCE;
+    static readonly ignoreCase = StringComparer.IGNORE_CASE_INSTANCE;
+
+    constructor(options?: Readonly<Pick<ComparerOptions, 'ignoreCase' | 'locale'>>) {
+        this.ignoreCase = options?.ignoreCase ?? false;
+        this.locale = options?.locale;
+
+        if (this.locale) {
+            this.collator = new Intl.Collator(this.locale, {
+                sensitivity: this.ignoreCase ? 'accent' : 'variant',
+                usage: 'sort',
+            });
+        }
+    }
+
+    compare(a: string, b: string): CompareResult {
+        if (a === b) return 0;
+        if (a === null || a === undefined) return -1;
+        if (b === null || b === undefined) return 1;
+
+        if (this.collator) {
+            const result = this.collator.compare(a, b);
+            return result < 0 ? -1 : result > 0 ? 1 : 0;
+        }
+
+        if (this.ignoreCase) {
+            a = a.toLowerCase();
+            b = b.toLowerCase();
+        }
+
+        return a < b ? -1 : a > b ? 1 : 0;
+    }
+}
