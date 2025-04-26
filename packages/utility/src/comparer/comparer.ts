@@ -88,3 +88,33 @@ function fnvHash(data: string): number {
     return hash >>> 0;
 }
 
+export function isEquatable(obj: unknown): obj is Equatable {
+    return (
+        obj !== null &&
+        typeof obj === 'object' &&
+        'equals' in obj &&
+        typeof (obj as any).equals === 'function' &&
+        'getHashCode' in obj &&
+        typeof (obj as any).getHashCode === 'function'
+    );
+}
+
+export function isComparer<T>(value: unknown): value is Comparer<T> {
+    return (
+        value !== null &&
+        typeof value === 'object' &&
+        'compare' in value &&
+        typeof (value as any).compare === 'function'
+    );
+}
+
+export function isEqualityComparer<T>(value: unknown): value is EqualityComparer<T> {
+    return (
+        value !== null &&
+        typeof value === 'object' &&
+        'equals' in value &&
+        typeof (value as any).equals === 'function' &&
+        'hash' in value &&
+        typeof (value as any).hash === 'function'
+    );
+}
