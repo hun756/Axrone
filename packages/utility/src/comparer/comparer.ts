@@ -41,3 +41,50 @@ export type KeysOfType<T, V> = {
     [K in keyof T]-?: T[K] extends V ? K : never;
 }[keyof T];
 
+export type ComparerOptions = Readonly<{
+    nullFirst?: boolean;
+    descending?: boolean;
+    ignoreCase?: boolean;
+    locale?: string;
+    precision?: number;
+    timezone?: string;
+}>;
+
+export type EqualityComparerOptions = Readonly<{
+    ignoreCase?: boolean;
+    deep?: boolean;
+    strict?: boolean;
+    customize?: (objValue: unknown, otherValue: unknown) => boolean;
+}>;
+
+export class CompareError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'CompareError';
+        Object.setPrototypeOf(this, CompareError.prototype);
+    }
+}
+
+export class InvalidOperationError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'InvalidOperationError';
+        Object.setPrototypeOf(this, InvalidOperationError.prototype);
+    }
+}
+
+// Hash Calculation
+const FNV_PRIME = 16777619;
+const FNV_OFFSET_BASIS = 2166136261;
+
+function fnvHash(data: string): number {
+    let hash = FNV_OFFSET_BASIS;
+
+    for (let i = 0; i < data.length; i++) {
+        hash ^= data.charCodeAt(i);
+        hash = Math.imul(hash, FNV_PRIME);
+    }
+
+    return hash >>> 0;
+}
+
