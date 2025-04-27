@@ -1,5 +1,5 @@
 import { Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON } from './common';
+import { EPSILON, HALF_PI } from './common';
 import { inverse } from './vec2_legacy';
 
 export interface IVec2Like {
@@ -215,6 +215,10 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return a.x * b.y - a.y * b.x;
     }
 
+    static len<T extends IVec2Like>(v: T): number {
+        return Math.sqrt(v.x * v.x + v.y * v.y);
+    }
+
     static lengthSquared<T extends IVec2Like>(v: T): number {
         return v.x * v.x + v.y * v.y;
     }
@@ -295,6 +299,43 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
 
     static chebyshevDistance<T extends IVec2Like>(a: T, b: T): number {
         return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+    }
+
+    static angle<T extends IVec2Like>(a: T, b: T): number {
+        const dotProduct = Vec2.dot(a, b);
+        const lengthA = Vec2.len(a);
+        const lengthB = Vec2.len(b);
+
+        if (lengthA < EPSILON || lengthB < EPSILON) {
+            throw new Error('Cannot calculate angle with zero-length vector');
+        }
+
+        const cosTheta = dotProduct / (lengthA * lengthB);
+        return Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+    }
+
+    static fastAngle<T extends IVec2Like>(a: T, b: T): number {
+        const x = b.x - a.x;
+        const y = b.y - a.y;
+
+        if (x === 0) return y > 0 ? HALF_PI : -HALF_PI;
+
+        const abs_y = Math.abs(y);
+        const abs_x = Math.abs(x);
+        const a_val = abs_x > abs_y ? abs_y / abs_x : abs_x / abs_y;
+        const s = a_val * a_val;
+        let r = ((-0.0464964749 * s + 0.15931422) * s - 0.327622764) * s * a_val + a_val;
+
+        if (abs_y > abs_x) r = HALF_PI - r;
+        if (x < 0) r = Math.PI - r;
+        if (y < 0) r = -r;
+
+        return r;
+    }
+
+    static angle2Deg<T extends IVec2Like>(a: T, b: T): number {
+        const angle = Vec2.angle(a, b);
+        return (angle * 180) / Math.PI;
     }
 
     add<T extends IVec2Like>(other: T): Vec2 {
@@ -435,5 +476,42 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
 
     chebyshevDistance<T extends IVec2Like>(other: T): number {
         return Math.max(Math.abs(this.x - other.x), Math.abs(this.y - other.y));
+    }
+
+    angle<T extends IVec2Like>(other: T): number {
+        const dotProduct = this.dot(other);
+        const lengthA = this.length();
+        const lengthB = Vec2.len(other);
+
+        if (lengthA < EPSILON || lengthB < EPSILON) {
+            throw new Error('Cannot calculate angle with zero-length vector');
+        }
+
+        const cosTheta = dotProduct / (lengthA * lengthB);
+        return Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+    }
+
+    fastAngle<T extends IVec2Like>(other: T): number {
+        const x = other.x - this.x;
+        const y = other.y - this.y;
+
+        if (x === 0) return y > 0 ? HALF_PI : -HALF_PI;
+
+        const abs_y = Math.abs(y);
+        const abs_x = Math.abs(x);
+        const a_val = abs_x > abs_y ? abs_y / abs_x : abs_x / abs_y;
+        const s = a_val * a_val;
+        let r = ((-0.0464964749 * s + 0.15931422) * s - 0.327622764) * s * a_val + a_val;
+
+        if (abs_y > abs_x) r = HALF_PI - r;
+        if (x < 0) r = Math.PI - r;
+        if (y < 0) r = -r;
+
+        return r;
+    }
+
+    angle2Deg<T extends IVec2Like>(other: T): number {
+        const angle = this.angle(other);
+        return (angle * 180) / Math.PI;
     }
 }
