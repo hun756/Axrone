@@ -490,6 +490,32 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
+    static cubicBezier<T extends IVec2Like>(a: T, c1: T, c2: T, b: T, t: number, out?: T): T {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const oneMinusT = 1 - t1;
+        const oneMinusT2 = oneMinusT * oneMinusT;
+        const t2 = t1 * t1;
+
+        // Optimized cubic Bézier computation using expanded form
+        const oneMinusT3 = oneMinusT2 * oneMinusT;
+        const t3 = t2 * t1;
+        const oneMinusT2_3t = oneMinusT2 * 3 * t1;
+        const oneMinusT_3t2 = oneMinusT * 3 * t2;
+
+        if (out) {
+            out.x = oneMinusT3 * a.x + oneMinusT2_3t * c1.x + oneMinusT_3t2 * c2.x + t3 * b.x;
+            out.y = oneMinusT3 * a.y + oneMinusT2_3t * c1.y + oneMinusT_3t2 * c2.y + t3 * b.y;
+            return out;
+        } else {
+            return {
+                x: oneMinusT3 * a.x + oneMinusT2_3t * c1.x + oneMinusT_3t2 * c2.x + t3 * b.x,
+                y: oneMinusT3 * a.y + oneMinusT2_3t * c1.y + oneMinusT_3t2 * c2.y + t3 * b.y,
+            } as T;
+        }
+    }
+
+    
+
     add<T extends IVec2Like>(other: T): Vec2 {
         this.x += other.x;
         this.y += other.y;
