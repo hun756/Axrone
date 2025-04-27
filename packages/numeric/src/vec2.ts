@@ -1,4 +1,4 @@
-import { ICloneable } from '@axrone/utility';
+import { Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON } from './common';
 
 export interface IVec2Like {
@@ -6,7 +6,7 @@ export interface IVec2Like {
     y: number;
 }
 
-export class Vec2 implements IVec2Like, ICloneable<Vec2> {
+export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     constructor(
         public x: number = 0,
         public y: number = 0
@@ -46,6 +46,19 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2> {
 
     clone(): Vec2 {
         return new Vec2(this.x, this.y);
+    }
+
+    equals(other: unknown): boolean {
+        if (!(other instanceof Vec2)) return false;
+
+        return Math.abs(this.x - other.x) < EPSILON && Math.abs(this.y - other.y) < EPSILON;
+    }
+
+    getHashCode(): number {
+        let h1 = 2166136261;
+        h1 = Math.imul(h1 ^ Math.floor(this.x * 1000), 16777619);
+        h1 = Math.imul(h1 ^ Math.floor(this.y * 1000), 16777619);
+        return h1 >>> 0;
     }
 
     static add<T extends IVec2Like>(a: T, b: T, out?: T): T {
