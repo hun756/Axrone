@@ -465,6 +465,31 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
+    static smoothStep<T extends IVec2Like>(a: T, b: T, t: number, out?: T): T {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t2 = t1 * t1 * (3 - 2 * t1); // Smooth step function: 3t² - 2t³
+        if (out) {
+            out.x = a.x + (b.x - a.x) * t2;
+            out.y = a.y + (b.y - a.y) * t2;
+            return out;
+        } else {
+            return { x: a.x + (b.x - a.x) * t2, y: a.y + (b.y - a.y) * t2 } as T;
+        }
+    }
+
+    static smootherStep<T extends IVec2Like>(a: T, b: T, t: number, out?: T): T {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        // Smoother step: 6t⁵ - 15t⁴ + 10t³
+        const t2 = t1 * t1 * t1 * (10 - 15 * t1 + 6 * t1 * t1);
+        if (out) {
+            out.x = a.x + (b.x - a.x) * t2;
+            out.y = a.y + (b.y - a.y) * t2;
+            return out;
+        } else {
+            return { x: a.x + (b.x - a.x) * t2, y: a.y + (b.y - a.y) * t2 } as T;
+        }
+    }
+
     add<T extends IVec2Like>(other: T): Vec2 {
         this.x += other.x;
         this.y += other.y;
