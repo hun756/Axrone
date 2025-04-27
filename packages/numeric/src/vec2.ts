@@ -1,6 +1,6 @@
 import { Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON, HALF_PI } from './common';
-import { inverse } from './vec2_legacy';
+import { inverse, inverseSafe } from './vec2_legacy';
 
 export interface IVec2Like {
     x: number;
@@ -170,7 +170,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static inverseSafe<T extends IVec2Like>(v: T, out?: T): T {
+    static inverseSafe<T extends IVec2Like>(v: T, out?: T, defaultValue = 0): T {
         const vx = v.x;
         const vy = v.y;
 
@@ -179,11 +179,14 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
 
         if (out) {
-            out.x = 1 / vx;
-            out.y = 1 / vy;
+            out.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
+            out.y = Math.abs(vy) < EPSILON ? defaultValue : 1 / vy;
             return out;
         } else {
-            return { x: 1 / vx, y: 1 / vy } as T;
+            return {
+                x: Math.abs(vx) < EPSILON ? defaultValue : 1 / vx,
+                y: Math.abs(vy) < EPSILON ? defaultValue : 1 / vy,
+            } as T;
         }
     }
 
@@ -415,6 +418,25 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         const min = Math.min(this.x, this.y);
         const max = Math.max(this.x, this.y);
         return max + 0.3 * min;
+    }
+
+    inverse(): Vec2 {
+        if (Math.abs(this.x) < EPSILON || Math.abs(this.y) < EPSILON) {
+            throw new Error('Inversion of zero or near-zero value');
+        }
+
+        this.x = 1 / this.x;
+        this.y = 1 / this.y;
+        return this;
+    }
+
+    inverseSafe(defaultValue: number = 0): Vec2 {
+        const vx = this.x;
+        const vy = this.y;
+
+        this.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
+        this.y = Math.abs(vy) < EPSILON ? defaultValue : 1 / vy;
+        return this;
     }
 
     normalize(): Vec2 {
