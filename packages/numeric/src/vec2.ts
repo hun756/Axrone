@@ -1,11 +1,24 @@
 import { Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON, HALF_PI } from './common';
+import { EPSILON, HALF_PI, PI_2, standardNormalDist } from './common';
 import { inverse, inverseSafe } from './vec2_legacy';
 
 export interface IVec2Like {
     x: number;
     y: number;
 }
+
+const _boundedNormalRandom = (): number => {
+    const MAX_ATTEMPTS = 10;
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        const value = standardNormalDist.sample();
+        if (value >= -1 && value <= 1) {
+            return value;
+        }
+    }
+    return Math.max(-1, Math.min(1, standardNormalDist.sample()));
+};
+
+const _normalRandom = (): number => _boundedNormalRandom();
 
 export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     constructor(
@@ -534,6 +547,48 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
                 y: h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y,
             } as T;
         }
+    }
+
+    static random(scale: number = 1): IVec2Like {
+        const u = 1 - Math.random(); // [0, 1)
+        const v = Math.random();
+        const r = scale * Math.sqrt(-2 * Math.log(u));
+        const theta = PI_2 * v;
+        return {
+            x: r * Math.cos(theta),
+            y: r * Math.sin(theta),
+        };
+    }
+
+    static fastRandom(scale: number = 1): IVec2Like {
+        const angle = Math.random() * PI_2;
+        return {
+            x: Math.cos(angle) * scale,
+            y: Math.sin(angle) * scale,
+        };
+    }
+
+    static randomNormal(scale: number = 1): IVec2Like {
+        const u = 1 - Math.random();
+        const v = Math.random();
+        return {
+            x: Math.sqrt(-2 * Math.log(u)) * Math.cos(PI_2 * v),
+            y: Math.sqrt(-2 * Math.log(u)) * Math.sin(PI_2 * v),
+        };
+    }
+
+    randomBox(minX: number, maxX: number, minY: number, maxY: number): IVec2Like {
+        return {
+            x: minX + Math.random() * (maxX - minX),
+            y: minY + Math.random() * (maxY - minY),
+        };
+    }
+
+    randomBoxNormal(minX: number, maxX: number, minY: number, maxY: number): IVec2Like {
+        return {
+            x: minX + (_normalRandom() + 1) * 0.5 * (maxX - minX),
+            y: minY + (_normalRandom() + 1) * 0.5 * (maxY - minY),
+        };
     }
 
     add<T extends IVec2Like>(other: T): Vec2 {
