@@ -226,6 +226,48 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return max + 0.3 * min;
     }
 
+    static normalize<T extends IVec2Like>(v: T, out?: T): T {
+        const length = Math.sqrt(v.x * v.x + v.y * v.y);
+        if (length < EPSILON) {
+            throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        if (out) {
+            out.x = v.x / length;
+            out.y = v.y / length;
+            return out;
+        } else {
+            return { x: v.x / length, y: v.y / length } as T;
+        }
+    }
+
+    static normalizeFast<T extends IVec2Like>(v: T, out?: T): T {
+        const vx = v.x;
+        const vy = v.y;
+        const lenSq = vx * vx + vy * vy;
+        if (lenSq < EPSILON) {
+            throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        let i = 0;
+        const buf = new ArrayBuffer(4);
+        const view = new DataView(buf);
+        view.setFloat32(0, lenSq);
+        i = view.getInt32(0);
+        i = 0x5f3759df - (i >> 1);
+        view.setInt32(0, i);
+        let invLen = view.getFloat32(0);
+        invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
+
+        if (out) {
+            out.x = vx * invLen;
+            out.y = vy * invLen;
+            return out;
+        } else {
+            return { x: vx * invLen, y: vy * invLen } as T;
+        }
+    }
+
     add<T extends IVec2Like>(other: T): Vec2 {
         this.x += other.x;
         this.y += other.y;
@@ -303,5 +345,37 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         const min = Math.min(this.x, this.y);
         const max = Math.max(this.x, this.y);
         return max + 0.3 * min;
+    }
+
+    normalize(): Vec2 {
+        const length = this.length();
+        if (length < EPSILON) {
+            throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        this.x /= length;
+        this.y /= length;
+        return this;
+    }
+
+    normalizeFast(): Vec2 {
+        const lenSq = this.x * this.x + this.y * this.y;
+        if (lenSq < EPSILON) {
+            throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        let i = 0;
+        const buf = new ArrayBuffer(4);
+        const view = new DataView(buf);
+        view.setFloat32(0, lenSq);
+        i = view.getInt32(0);
+        i = 0x5f3759df - (i >> 1);
+        view.setInt32(0, i);
+        let invLen = view.getFloat32(0);
+        invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
+
+        this.x *= invLen;
+        this.y *= invLen;
+        return this;
     }
 }
