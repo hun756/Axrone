@@ -341,6 +341,79 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return (angle * 180) / Math.PI;
     }
 
+    static rotate<T extends IVec2Like>(v: T, angle: number, out?: T): T {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        if (out) {
+            out.x = v.x * cos - v.y * sin;
+            out.y = v.x * sin + v.y * cos;
+            return out;
+        } else {
+            return { x: v.x * cos - v.y * sin, y: v.x * sin + v.y * cos } as T;
+        }
+    }
+
+        static fastRotate<T extends IVec2Like>(v: T, angle: number, out?: T): T {
+        const x = v.x;
+        const y = v.y;
+        
+        if (!out) {
+            out = { x: 0, y: 0 } as T;
+        }
+        
+        if (angle === Math.PI) {
+            out.x = -x;
+            out.y = -y;
+            return out;
+        }
+    
+        if (angle === HALF_PI) {
+            out.x = -y;
+            out.y = x;
+            return out;
+        }
+    
+        if (angle === -HALF_PI) {
+            out.x = y;
+            out.y = -x;
+            return out;
+        }
+    
+        if (Math.abs(angle) < 0.1) {
+            const θ2_2 = angle * angle / 2;
+            const s = angle;
+            const c = 1 - θ2_2;
+    
+            out.x = x * c - y * s;
+            out.y = x * s + y * c;
+            return out;
+        }
+    
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+    
+        out.x = x * c - y * s;
+        out.y = x * s + y * c;
+        return out;
+    }
+
+    static rotateAround<T extends IVec2Like>(v: T, angle: number, pivot: T, out?: T): T {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        if (out) {
+            out.x = (v.x - pivot.x) * cos - (v.y - pivot.y) * sin + pivot.x;
+            out.y = (v.x - pivot.x) * sin + (v.y - pivot.y) * cos + pivot.y;
+            return out;
+        } else {
+            return {
+                x: (v.x - pivot.x) * cos - (v.y - pivot.y) * sin + pivot.x,
+                y: (v.x - pivot.x) * sin + (v.y - pivot.y) * cos + pivot.y,
+            } as T;
+        }
+    }
+
     add<T extends IVec2Like>(other: T): Vec2 {
         this.x += other.x;
         this.y += other.y;
@@ -535,5 +608,34 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     angle2Deg<T extends IVec2Like>(other: T): number {
         const angle = this.angle(other);
         return (angle * 180) / Math.PI;
+    }
+
+    rotate(angle: number): Vec2 {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        const x = this.x * cos - this.y * sin;
+        const y = this.x * sin + this.y * cos;
+
+        this.x = x;
+        this.y = y;
+        return this;
+    }
+
+    fastRotate(angle: number): Vec2 {
+        Vec2.fastRotate(this, angle, this);
+        return this;
+    }
+
+    rotateAround<T extends IVec2Like>(pivot: T, angle: number): Vec2 {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        const x = (this.x - pivot.x) * cos - (this.y - pivot.y) * sin + pivot.x;
+        const y = (this.x - pivot.x) * sin + (this.y - pivot.y) * cos + pivot.y;
+
+        this.x = x;
+        this.y = y;
+        return this;
     }
 }
