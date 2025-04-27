@@ -148,4 +148,60 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             return { x: a.x / b, y: a.y / b } as T;
         }
     }
+
+    add<T extends IVec2Like>(other: T): Vec2 {
+        this.x += other.x;
+        this.y += other.y;
+        return this;
+    }
+
+    addScalar(num: number): Vec2 {
+        this.x += num;
+        this.y += num;
+        return this;
+    }
+
+    subtract<T extends IVec2Like>(other: T): Vec2 {
+        this.x -= other.x;
+        this.y -= other.y;
+        return this;
+    }
+
+    subtractScalar(num: number): Vec2 {
+        this.x -= num;
+        this.y -= num;
+        return this;
+    }
+
+    multiply<T extends IVec2Like>(other: T): Vec2 {
+        this.x *= other.x;
+        this.y *= other.y;
+        return this;
+    }
+
+    multiplyScalar(num: number): Vec2 {
+        this.x *= num;
+        this.y *= num;
+        return this;
+    }
+
+    divide<T extends IVec2Like>(other: T): Vec2 {
+        if (Math.abs(other.x) < EPSILON || Math.abs(other.y) < EPSILON) {
+            throw new Error('Division by zero or near-zero value is not allowed');
+        }
+
+        this.x /= other.x;
+        this.y /= other.y;
+        return this;
+    }
+
+    divideScalar(num: number): Vec2 {
+        if (Math.abs(num) < EPSILON) {
+            throw new Error('Division by zero or near-zero value is not allowed');
+        }
+
+        this.x /= num;
+        this.y /= num;
+        return this;
+    }
 }
