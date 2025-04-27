@@ -636,3 +636,44 @@ export function createPropertyAccessor<T, P extends PropertyPath<T>>(
         return current as ExtractPropertyType<T, P>;
     };
 }
+
+export function sorted<T>(items: readonly T[], compareFn?: (a: T, b: T) => number): readonly T[] {
+    if (!compareFn) {
+        const defaultComparer = new DefaultComparer<T>();
+        compareFn = (a, b) => defaultComparer.compare(a, b);
+    }
+
+    return [...items].sort(compareFn);
+}
+
+export function min<T>(items: readonly T[], comparer?: Comparer<T>): T | undefined {
+    if (items.length === 0) return undefined;
+    if (items.length === 1) return items[0];
+
+    const cmp = comparer || new DefaultComparer<T>();
+    let minItem = items[0];
+
+    for (let i = 1; i < items.length; i++) {
+        if (cmp.compare(items[i], minItem) < 0) {
+            minItem = items[i];
+        }
+    }
+
+    return minItem;
+}
+
+export function max<T>(items: readonly T[], comparer?: Comparer<T>): T | undefined {
+    if (items.length === 0) return undefined;
+    if (items.length === 1) return items[0];
+
+    const cmp = comparer || new DefaultComparer<T>();
+    let maxItem = items[0];
+
+    for (let i = 1; i < items.length; i++) {
+        if (cmp.compare(items[i], maxItem) > 0) {
+            maxItem = items[i];
+        }
+    }
+
+    return maxItem;
+}
