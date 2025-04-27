@@ -514,7 +514,27 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    
+    static hermite<T extends IVec2Like>(p0: T, m0: T, p1: T, m1: T, t: number, out?: T): T {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t2 = t1 * t1;
+        const t3 = t2 * t1;
+
+        const h00 = 2 * t3 - 3 * t2 + 1;
+        const h10 = t3 - 2 * t2 + t1;
+        const h01 = -2 * t3 + 3 * t2;
+        const h11 = t3 - t2;
+
+        if (out) {
+            out.x = h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x;
+            out.y = h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y;
+            return out;
+        } else {
+            return {
+                x: h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x,
+                y: h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y,
+            } as T;
+        }
+    }
 
     add<T extends IVec2Like>(other: T): Vec2 {
         this.x += other.x;
