@@ -204,4 +204,34 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         this.y /= num;
         return this;
     }
+
+    dot<T extends IVec2Like>(other: T): number {
+        return this.x * other.x + this.y * other.y;
+    }
+
+    cross<T extends IVec2Like>(other: T): number {
+        return this.x * other.y - this.y * other.x;
+    }
+
+    lengthSquared(): number {
+        return this.x * this.x + this.y * this.y;
+    }
+
+    length(): number {
+        return Math.sqrt(this.lengthSquared());
+    }
+
+    fastLength(): number {
+        // Fast approximation of vector length (~3.4% error max)
+        const min = Math.min(this.x, this.y);
+        const max = Math.max(this.x, this.y);
+        return max + 0.3 * min;
+    }
+
+    static fastLength<T extends IVec2Like>(v: T): number {
+        // Fast approximation of vector length (~3.4% error max)
+        const min = Math.min(v.x, v.y);
+        const max = Math.max(v.x, v.y);
+        return max + 0.3 * min;
+    }
 }
