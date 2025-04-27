@@ -354,45 +354,45 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-        static fastRotate<T extends IVec2Like>(v: T, angle: number, out?: T): T {
+    static fastRotate<T extends IVec2Like>(v: T, angle: number, out?: T): T {
         const x = v.x;
         const y = v.y;
-        
+
         if (!out) {
             out = { x: 0, y: 0 } as T;
         }
-        
+
         if (angle === Math.PI) {
             out.x = -x;
             out.y = -y;
             return out;
         }
-    
+
         if (angle === HALF_PI) {
             out.x = -y;
             out.y = x;
             return out;
         }
-    
+
         if (angle === -HALF_PI) {
             out.x = y;
             out.y = -x;
             return out;
         }
-    
+
         if (Math.abs(angle) < 0.1) {
-            const θ2_2 = angle * angle / 2;
+            const θ2_2 = (angle * angle) / 2;
             const s = angle;
             const c = 1 - θ2_2;
-    
+
             out.x = x * c - y * s;
             out.y = x * s + y * c;
             return out;
         }
-    
+
         const c = Math.cos(angle);
         const s = Math.sin(angle);
-    
+
         out.x = x * c - y * s;
         out.y = x * s + y * c;
         return out;
@@ -411,6 +411,57 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
                 x: (v.x - pivot.x) * cos - (v.y - pivot.y) * sin + pivot.x,
                 y: (v.x - pivot.x) * sin + (v.y - pivot.y) * cos + pivot.y,
             } as T;
+        }
+    }
+
+    static lerp<T extends IVec2Like>(a: T, b: T, t: number, out?: T): T {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        if (out) {
+            out.x = a.x + (b.x - a.x) * t1;
+            out.y = a.y + (b.y - a.y) * t1;
+            return out;
+        } else {
+            return { x: a.x + (b.x - a.x) * t1, y: a.y + (b.y - a.y) * t1 } as T;
+        }
+    }
+
+    static lerpUnClamped<T extends IVec2Like>(a: T, b: T, t: number, out?: T): T {
+        if (out) {
+            out.x = a.x + (b.x - a.x) * t;
+            out.y = a.y + (b.y - a.y) * t;
+            return out;
+        } else {
+            return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t } as T;
+        }
+    }
+
+    static slerp<T extends IVec2Like>(a: T, b: T, t: number, out?: T): T {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const angleA = Vec2.angle(a, b);
+        const angleB = Vec2.angle(b, a);
+        let angleDiff = angleA - angleB;
+
+        if (angleDiff < 0) angleDiff += Math.PI * 2;
+        if (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+
+        const resultAngle = angleA + angleDiff * t1;
+        const lenA = Vec2.len(a);
+        const lenB = Vec2.len(b);
+
+        const resultLength = lenA + (lenB - lenA) * t1;
+
+        const cos = Math.cos(resultAngle);
+        const sin = Math.sin(resultAngle);
+
+        const x = resultLength * cos;
+        const y = resultLength * sin;
+
+        if (out) {
+            out.x = x;
+            out.y = y;
+            return out;
+        } else {
+            return { x, y } as T;
         }
     }
 
