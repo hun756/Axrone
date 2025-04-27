@@ -1,6 +1,5 @@
 import { Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON, HALF_PI, PI_2, standardNormalDist } from './common';
-import { inverse, inverseSafe } from './vec2_legacy';
 
 export interface IVec2Like {
     x: number;
