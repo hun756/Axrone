@@ -1,5 +1,6 @@
 import { Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON } from './common';
+import { inverse } from './vec2_legacy';
 
 export interface IVec2Like {
     x: number;
@@ -146,6 +147,43 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             return out;
         } else {
             return { x: a.x / b, y: a.y / b } as T;
+        }
+    }
+
+    static negate<T extends IVec2Like>(a: T, out?: T): T {
+        if (out) {
+            out.x = -a.x;
+            out.y = -a.y;
+            return out;
+        } else {
+            return { x: -a.x, y: -a.y } as T;
+        }
+    }
+
+    static inverse<T extends IVec2Like>(a: T, out?: T): T {
+        if (out) {
+            out.x = 1 / a.x;
+            out.y = 1 / a.y;
+            return out;
+        } else {
+            return { x: 1 / a.x, y: 1 / a.y } as T;
+        }
+    }
+
+    static inverseSafe<T extends IVec2Like>(v: T, out?: T): T {
+        const vx = v.x;
+        const vy = v.y;
+
+        if (Math.abs(vx) < EPSILON || Math.abs(vy) < EPSILON) {
+            throw new Error('Inversion of zero or near-zero value');
+        }
+
+        if (out) {
+            out.x = 1 / vx;
+            out.y = 1 / vy;
+            return out;
+        } else {
+            return { x: 1 / vx, y: 1 / vy } as T;
         }
     }
 
