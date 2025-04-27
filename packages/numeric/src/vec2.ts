@@ -549,6 +549,54 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
+    static catmullRom<T extends IVec2Like>(
+        p0: T,
+        p1: T,
+        p2: T,
+        p3: T,
+        t: number,
+        tension: number = 0.5,
+        out?: T
+    ): T {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+
+        if (!out) {
+            out = { x: 0, y: 0 } as T;
+        }
+
+        if (t1 === 0) {
+            out.x = p1.x;
+            out.y = p1.y;
+            return out;
+        }
+
+        if (t1 === 1) {
+            out.x = p2.x;
+            out.y = p2.y;
+            return out;
+        }
+
+        const t2 = t1 * t1;
+        const t3 = t2 * t1;
+
+        const h00 = 2 * t3 - 3 * t2 + 1;
+        const h10 = t3 - 2 * t2 + t1;
+        const h01 = -2 * t3 + 3 * t2;
+        const h11 = t3 - t2;
+
+        const alpha = (1 - tension) / 2;
+
+        const m0x = alpha * (p2.x - p0.x);
+        const m0y = alpha * (p2.y - p0.y);
+        const m1x = alpha * (p3.x - p1.x);
+        const m1y = alpha * (p3.y - p1.y);
+
+        out.x = h00 * p1.x + h10 * m0x + h01 * p2.x + h11 * m1x;
+        out.y = h00 * p1.y + h10 * m0y + h01 * p2.y + h11 * m1y;
+
+        return out;
+    }
+
     static random(scale: number = 1): IVec2Like {
         const u = 1 - Math.random(); // [0, 1)
         const v = Math.random();
