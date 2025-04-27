@@ -187,6 +187,26 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
+    static prependicular<T extends IVec2Like>(v: T, out?: T): T {
+        if (out) {
+            out.x = -v.y;
+            out.y = v.x;
+            return out;
+        } else {
+            return { x: -v.y, y: v.x } as T;
+        }
+    }
+
+    static prependicularCCW<T extends IVec2Like>(v: T, out?: T): T {
+        if (out) {
+            out.x = v.y;
+            out.y = -v.x;
+            return out;
+        } else {
+            return { x: v.y, y: -v.x } as T;
+        }
+    }
+
     add<T extends IVec2Like>(other: T): Vec2 {
         this.x += other.x;
         this.y += other.y;
