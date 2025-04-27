@@ -47,8 +47,8 @@ class CustomEqualityComparer<T> implements EqualityComparer<T> {
             return a.equals(b);
         }
 
-        if (this.options?.customize) {
-            return this.options.customize(a, b);
+        if (this.options?.customizer) {
+            return this.options.customizer(a, b);
         }
 
         if (this.options?.deep && typeof a === 'object' && typeof b === 'object') {
@@ -203,7 +203,7 @@ describe('Equatable Interface Implementation Tests', () => {
 
         test('custom comparison with customize option', () => {
             const comparer = new CustomEqualityComparer<string>({
-                customize: (a, b) => {
+                customizer: (a, b) => {
                     if (typeof a === 'string' && typeof b === 'string') {
                         return a.trim() === b.trim();
                     }

@@ -201,14 +201,14 @@ describe('TypeScript Type Definitions', () => {
             };
 
             const options3: EqualityComparerOptions = {
-                customize: (a, b) => a === b,
+                customizer: (a, b) => a === b,
             };
 
             const allOptions: EqualityComparerOptions = {
                 ignoreCase: true,
                 deep: true,
                 strict: true,
-                customize: (a, b) => {
+                customizer: (a, b) => {
                     return String(a) === String(b);
                 },
             };

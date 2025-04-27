@@ -106,8 +106,8 @@ class GenericEqualityComparer<T> implements EqualityComparer<T> {
             return a.toLowerCase() === b.toLowerCase();
         }
 
-        if (this.options?.customize) {
-            return this.options.customize(a, b);
+        if (this.options?.customizer) {
+            return this.options.customizer(a, b);
         }
 
         if (this.options?.strict) {
