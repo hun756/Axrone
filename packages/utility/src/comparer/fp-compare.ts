@@ -47,3 +47,21 @@ const enum FloatBitShifts {
     SIGN_SHIFT = 31,
     EXPONENT_SHIFT = 20,
 }
+
+export class ComparisonError extends Error {
+    readonly #code: string;
+
+    constructor(message: string, code: string) {
+        super(message);
+        this.name = 'ComparisonError';
+        this.#code = code;
+
+        if (Error.captureStackTrace) {
+            Error.captureStackTrace(this, ComparisonError);
+        }
+    }
+
+    get code(): string {
+        return this.#code;
+    }
+}
