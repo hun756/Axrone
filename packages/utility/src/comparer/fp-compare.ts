@@ -36,6 +36,7 @@ const DEFAULT_ULPS_TOLERANCE = 1;
 const DEFAULT_STRATEGY: ComparisonStrategy = 'combined';
 const DEFAULT_INFINITY_HANDLING: InfinityHandlingMode = 'signed';
 const MAX_ULPS_DISTANCE = Number.MAX_SAFE_INTEGER;
+const MIN_NORMAL = 2.2250738585072014e-308; // Smallest positive normal number in IEEE 754
 
 const enum FloatBitMasks {
     SIGN_MASK = 0x80000000,
@@ -329,4 +330,33 @@ export const createOperators = <T extends Numeric = number>(
         gte: predicates.greaterThanOrEqual,
     });
 };
+
+export interface FloatingPointUtils {
+    readonly isNaN: (value: number) => boolean;
+    readonly isFinite: (value: number) => boolean;
+    readonly isInfinite: (value: number) => boolean;
+    readonly isNegativeZero: (value: number) => boolean;
+    readonly isPositiveZero: (value: number) => boolean;
+    readonly isZero: (value: number) => boolean;
+    readonly isNormal: (value: number) => boolean;
+    readonly isSubnormal: (value: number) => boolean;
+}
+
+export const floatUtils: FloatingPointUtils = Object.freeze({
+    isNaN: Number.isNaN,
+    isFinite: Number.isFinite,
+    isInfinite: (value: number): boolean => !Number.isFinite(value) && !Number.isNaN(value),
+    isNegativeZero: (value: number): boolean => Object.is(value, -0),
+    isPositiveZero: (value: number): boolean => Object.is(value, 0) && !Object.is(value, -0),
+    isZero: (value: number): boolean => value === 0,
+    isNormal: (value: number): boolean => {
+        if (!Number.isFinite(value) || value === 0) return false;
+        return Math.abs(value) >= MIN_NORMAL;
+    },
+    isSubnormal: (value: number): boolean => {
+        if (!Number.isFinite(value) || value
+         === 0) return false;
+        return Math.abs(value) < MIN_NORMAL;
+    },
+});
 
