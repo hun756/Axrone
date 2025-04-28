@@ -8,11 +8,5 @@
     "build": "rollup -c",
     "clean": "rimraf dist",
     "test": "jest"
-  },
-  "devDependencies": {
-    "@rollup/plugin-commonjs": "^28.0.3",
-    "@rollup/plugin-node-resolve": "^16.0.1",
-    "rollup": "^4.40.0",
-    "rollup-plugin-typescript2": "^0.36.0"
   }
 }
