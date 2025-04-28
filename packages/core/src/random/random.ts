@@ -1086,3 +1086,35 @@ export class IntegerDistribution implements IDistribution<number> {
         return [value, engine.getState()];
     };
 }
+
+export class NormalDistribution implements IDistribution<number> {
+    constructor(
+        private readonly mean: number = 0,
+        private readonly stdDev: number = 1
+    ) {
+        if (!Number.isFinite(mean) || !Number.isFinite(stdDev)) {
+            throw new RangeError('Parameters must be finite numbers');
+        }
+
+        if (stdDev <= 0) {
+            throw new RangeError('Standard deviation must be positive');
+        }
+    }
+
+    public sample = (state: IRandomState): RandomResult<number> => {
+        const engine = createEngineFactory(state.engine)();
+        engine.setState(state);
+
+        // Box-Muller transform
+        // TODO: apply our box muller library here
+        const u1 = engine.next01();
+        const u2 = engine.next01();
+
+        const r = Math.sqrt(-2.0 * Math.log(Math.max(u1, Number.EPSILON)));
+        const theta = TWO_PI * u2;
+
+        const standardNormal = r * Math.cos(theta);
+
+        return [this.mean + this.stdDev * standardNormal, engine.getState()];
+    };
+}
