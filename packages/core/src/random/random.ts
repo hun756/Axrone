@@ -49,3 +49,26 @@ const LN2 = Math.LN2;
 const E = Math.E;
 const SQRT_2PI = Math.sqrt(TWO_PI);
 
+const validateProbability = (p: Float64, name = 'probability'): void => {
+    if (p < 0 || p > 1 || !Number.isFinite(p)) {
+        throw new RangeError(`${name} must be between 0 and 1`);
+    }
+};
+
+const validatePositive = (value: Float64, name = 'value'): void => {
+    if (value <= 0 || !Number.isFinite(value)) {
+        throw new RangeError(`${name} must be positive`);
+    }
+};
+
+const validateNonNegative = (value: number, name = 'value'): void => {
+    if (value < 0 || !Number.isFinite(value)) {
+        throw new RangeError(`${name} must be non-negative`);
+    }
+};
+
+const validateInteger = (value: number, name = 'value'): void => {
+    if (!Number.isInteger(value) || !Number.isFinite(value)) {
+        throw new TypeError(`${name} must be an integer`);
+    }
+};
