@@ -1238,6 +1238,27 @@ export class BinomialDistribution implements IDistribution<number> {
     };
 }
 
+export class GeometricDistribution implements IDistribution<number> {
+    constructor(private readonly p: number) {
+        validateProbability(p, 'p');
+
+        if (p === 0) {
+            throw new RangeError('p must be greater than 0');
+        }
+    }
+
+    public sample = (state: IRandomState): RandomResult<number> => {
+        const engine = createEngineFactory(state.engine)();
+        engine.setState(state);
+
+        const u = engine.next01();
+
+        const value = Math.floor(Math.log1p(-u) / Math.log1p(-this.p));
+
+        return [value, engine.getState()];
+    };
+}
+
 // utility functions
 const factorial = (() => {
     const cache = new Map<number, number>();
