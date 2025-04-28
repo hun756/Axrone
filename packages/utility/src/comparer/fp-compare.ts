@@ -263,3 +263,45 @@ const internalCreateComparer = <T extends Numeric = number>(
         compare: compareWithContext,
     });
 };
+
+export const createComparer = <T extends Numeric = number>(
+    options: ComparerOptions = {}
+): ((a: T, b: T) => ComparisonResult) => {
+    const context = internalCreateComparer<T>(options);
+    return (a: T, b: T): ComparisonResult => context.compare(a, b);
+};
+
+export interface ComparisonPredicates<T extends Numeric = number> {
+    readonly equals: (a: T, b: T) => boolean;
+    readonly notEquals: (a: T, b: T) => boolean;
+    readonly lessThan: (a: T, b: T) => boolean;
+    readonly greaterThan: (a: T, b: T) => boolean;
+    readonly lessThanOrEqual: (a: T, b: T) => boolean;
+    readonly greaterThanOrEqual: (a: T, b: T) => boolean;
+}
+
+export const createPredicates = <T extends Numeric = number>(
+    comparer: (a: T, b: T) => ComparisonResult
+): ComparisonPredicates<T> => {
+    const equals = (a: T, b: T): boolean => comparer(a, b) === 0;
+    const notEquals = (a: T, b: T): boolean => comparer(a, b) !== 0;
+    const lessThan = (a: T, b: T): boolean => comparer(a, b) === -1;
+    const greaterThan = (a: T, b: T): boolean => comparer(a, b) === 1;
+    const lessThanOrEqual = (a: T, b: T): boolean => {
+        const result = comparer(a, b);
+        return result === -1 || result === 0;
+    };
+    const greaterThanOrEqual = (a: T, b: T): boolean => {
+        const result = comparer(a, b);
+        return result === 1 || result === 0;
+    };
+
+    return Object.freeze({
+        equals,
+        notEquals,
+        lessThan,
+        greaterThan,
+        lessThanOrEqual,
+        greaterThanOrEqual,
+    });
+};
