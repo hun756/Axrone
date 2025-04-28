@@ -1118,3 +1118,19 @@ export class NormalDistribution implements IDistribution<number> {
         return [this.mean + this.stdDev * standardNormal, engine.getState()];
     };
 }
+
+export class ExponentialDistribution implements IDistribution<number> {
+    constructor(private readonly lambda: number = 1) {
+        validatePositive(lambda, 'lambda');
+    }
+
+    public sample = (state: IRandomState): RandomResult<number> => {
+        const engine = createEngineFactory(state.engine)();
+        engine.setState(state);
+        const u = engine.next01();
+        const value = -Math.log(1 - u) / this.lambda;
+
+        return [value, engine.getState()];
+    };
+}
+
