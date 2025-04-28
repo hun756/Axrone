@@ -918,3 +918,27 @@ export class Vec2Comparer implements Comparer<Vec2> {
         }
     }
 }
+
+export class Vec2EqualityComparer implements EqualityComparer<Vec2> {
+    private readonly epsilon: number;
+
+    constructor(epsilon: number = EPSILON) {
+        this.epsilon = epsilon;
+    }
+
+    equals(a: Vec2, b: Vec2): boolean {
+        if (a === b) return true;
+        if (!a || !b) return false;
+
+        return Math.abs(a.x - b.x) < this.epsilon && Math.abs(a.y - b.y) < this.epsilon;
+    }
+
+    hash(obj: Vec2): number {
+        if (!obj) return 0;
+
+        let h1 = 2166136261;
+        h1 = Math.imul(h1 ^ Math.floor(obj.x * 1000), 16777619);
+        h1 = Math.imul(h1 ^ Math.floor(obj.y * 1000), 16777619);
+        return h1 >>> 0;
+    }
+}
