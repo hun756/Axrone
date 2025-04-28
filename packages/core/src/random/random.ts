@@ -1000,3 +1000,24 @@ class ChaCha20Engine implements IRandomEngine {
         return ((x << n) | (x >>> (32 - n))) >>> 0;
     };
 }
+
+export const createEngineFactory = (
+    engineType: RandomEngineType
+): ((seed?: SeedSource) => IRandomEngine) => {
+    switch (engineType) {
+        case RandomEngineType.XOROSHIRO128_PLUS_PLUS:
+            return (seed?: SeedSource) => new Xoroshiro128PlusPlus(seed);
+        case RandomEngineType.PCG_XSH_RR:
+            return (seed?: SeedSource) => new PCGEngine(seed);
+        case RandomEngineType.XOSHIRO256_PLUS_PLUS:
+            return (seed?: SeedSource) => new Xoshiro256PlusPlus(seed);
+        case RandomEngineType.SPLITMIX64:
+            return (seed?: SeedSource) => new SplitMix64Engine(seed);
+        case RandomEngineType.CHACHA20:
+            return (seed?: SeedSource) => new ChaCha20Engine(seed);
+        case RandomEngineType.CRYPTO:
+            return () => new CryptoEngine();
+        default:
+            return (seed?: SeedSource) => new Xoroshiro128PlusPlus(seed);
+    }
+};
