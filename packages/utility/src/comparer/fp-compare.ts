@@ -354,9 +354,53 @@ export const floatUtils: FloatingPointUtils = Object.freeze({
         return Math.abs(value) >= MIN_NORMAL;
     },
     isSubnormal: (value: number): boolean => {
-        if (!Number.isFinite(value) || value
-         === 0) return false;
+        if (!Number.isFinite(value) || value === 0) return false;
         return Math.abs(value) < MIN_NORMAL;
     },
 });
 
+export const constants = Object.freeze({
+    EPSILON: Number.EPSILON,
+    MIN_VALUE: Number.MIN_VALUE,
+    MAX_VALUE: Number.MAX_VALUE,
+    MIN_NORMAL: 2.2250738585072014e-308,
+    POSITIVE_INFINITY: Number.POSITIVE_INFINITY,
+    NEGATIVE_INFINITY: Number.NEGATIVE_INFINITY,
+    NaN: Number.NaN,
+    MAX_SAFE_INTEGER: Number.MAX_SAFE_INTEGER,
+    MIN_SAFE_INTEGER: Number.MIN_SAFE_INTEGER,
+    ULP_64: 2.220446049250313e-16,
+});
+
+const DEFAULT_COMPARER = createComparer();
+const DEFAULT_PREDICATES = createPredicates(DEFAULT_COMPARER);
+const DEFAULT_OPERATORS = createOperators(DEFAULT_COMPARER);
+
+export const { equals, notEquals, lessThan, greaterThan, lessThanOrEqual, greaterThanOrEqual } =
+    DEFAULT_PREDICATES;
+export const { eq, neq, lt, gt, lte, gte } = DEFAULT_OPERATORS;
+export const compare = DEFAULT_COMPARER;
+
+export const FloatComparer = Object.freeze({
+    compare,
+    equals,
+    notEquals,
+    lessThan,
+    greaterThan,
+    lessThanOrEqual,
+    greaterThanOrEqual,
+    eq,
+    neq,
+    lt,
+    gt,
+    lte,
+    gte,
+    createComparer,
+    createPredicates,
+    createOperators,
+    constants,
+    utils: floatUtils,
+    ComparisonError,
+});
+
+export default FloatComparer;
