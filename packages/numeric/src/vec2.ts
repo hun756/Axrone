@@ -1,4 +1,4 @@
-import { Equatable, ICloneable } from '@axrone/utility';
+import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON, HALF_PI, PI_2, standardNormalDist } from './common';
 
 export interface IVec2Like {
@@ -316,7 +316,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
     }
 
-    static angle<T extends IVec2Like>(a: T, b: T): number {
+    static angleBetween<T extends IVec2Like>(a: T, b: T): number {
         const dotProduct = Vec2.dot(a, b);
         const lengthA = Vec2.len(a);
         const lengthB = Vec2.len(b);
@@ -349,7 +349,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     }
 
     static angle2Deg<T extends IVec2Like>(a: T, b: T): number {
-        const angle = Vec2.angle(a, b);
+        const angle = Vec2.angleBetween(a, b);
         return (angle * 180) / Math.PI;
     }
 
@@ -449,8 +449,8 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
 
     static slerp<T extends IVec2Like>(a: T, b: T, t: number, out?: T): T {
         const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
-        const angleA = Vec2.angle(a, b);
-        const angleB = Vec2.angle(b, a);
+        const angleA = Vec2.angleBetween(a, b);
+        const angleB = Vec2.angleBetween(b, a);
         let angleDiff = angleA - angleB;
 
         if (angleDiff < 0) angleDiff += Math.PI * 2;
@@ -797,7 +797,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return Math.max(Math.abs(this.x - other.x), Math.abs(this.y - other.y));
     }
 
-    angle<T extends IVec2Like>(other: T): number {
+    angleBetWeen<T extends IVec2Like>(other: T): number {
         const dotProduct = this.dot(other);
         const lengthA = this.length();
         const lengthB = Vec2.len(other);
@@ -808,6 +808,11 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
 
         const cosTheta = dotProduct / (lengthA * lengthB);
         return Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+    }
+
+    angle(): number {
+        const angle = Math.atan2(this.y, this.x);
+        return angle < 0 ? angle + Math.PI * 2 : angle;
     }
 
     fastAngle<T extends IVec2Like>(other: T): number {
@@ -830,7 +835,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     }
 
     angle2Deg<T extends IVec2Like>(other: T): number {
-        const angle = this.angle(other);
+        const angle = this.angleBetWeen(other);
         return (angle * 180) / Math.PI;
     }
 
@@ -861,5 +866,55 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         this.x = x;
         this.y = y;
         return this;
+    }
+}
+
+export enum Vec2ComparisonMode {
+    LEXICOGRAPHIC,
+    MAGNITUDE,
+    ANGLE,
+    MANHATTAN,
+}
+
+export class Vec2Comparer implements Comparer<Vec2> {
+    private readonly mode: Vec2ComparisonMode;
+
+    constructor(mode: Vec2ComparisonMode = Vec2ComparisonMode.LEXICOGRAPHIC) {
+        this.mode = mode;
+    }
+
+    compare(a: Vec2, b: Vec2): CompareResult {
+        switch (this.mode) {
+            case Vec2ComparisonMode.LEXICOGRAPHIC:
+                if (Math.abs(a.x - b.x) < EPSILON) {
+                    if (Math.abs(a.y - b.y) < EPSILON) return 0;
+                    return a.y < b.y ? -1 : 1;
+                }
+                return a.x < b.x ? -1 : 1;
+
+            case Vec2ComparisonMode.MAGNITUDE: {
+                const lenA = a.lengthSquared();
+                const lenB = b.lengthSquared();
+                if (Math.abs(lenA - lenB) < EPSILON) return 0;
+                return lenA < lenB ? -1 : 1;
+            }
+
+            case Vec2ComparisonMode.ANGLE: {
+                const angleA = a.angle();
+                const angleB = b.angle();
+                if (Math.abs(angleA - angleB) < EPSILON) return 0;
+                return angleA < angleB ? -1 : 1;
+            }
+
+            case Vec2ComparisonMode.MANHATTAN: {
+                const distA = Math.abs(a.x) + Math.abs(a.y);
+                const distB = Math.abs(b.x) + Math.abs(b.y);
+                if (Math.abs(distA - distB) < EPSILON) return 0;
+                return distA < distB ? -1 : 1;
+            }
+
+            default:
+                throw new Error(`Unsupported Vec2 comparison mode: ${this.mode}`);
+        }
     }
 }
