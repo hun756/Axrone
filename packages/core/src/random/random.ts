@@ -1134,3 +1134,79 @@ export class ExponentialDistribution implements IDistribution<number> {
     };
 }
 
+export class PoissonDistribution implements IDistribution<number> {
+    constructor(private readonly lambda: number) {
+        validatePositive(lambda, 'lambda');
+    }
+
+    public sample = (state: IRandomState): RandomResult<number> => {
+        const engine = createEngineFactory(state.engine)();
+        engine.setState(state);
+
+        if (this.lambda < 10) {
+            // For small lambda, use Knuth's algorithm
+            const L = Math.exp(-this.lambda);
+            let k = 0;
+            let p = 1;
+
+            do {
+                k++;
+                p *= engine.next01();
+            } while (p > L);
+
+            return [k - 1, engine.getState()];
+        } else {
+            // For larger lambda, use the "rejection method" algorithm
+            const c = 0.767 - 3.36 / this.lambda;
+            const beta = PI / Math.sqrt(3.0 * this.lambda);
+            const alpha = beta * this.lambda;
+            const k = Math.log(c) - this.lambda - Math.log(beta);
+
+            while (true) {
+                const u = engine.next01();
+                const x = (alpha - Math.log((1.0 - u) / u)) / beta;
+                const n = Math.floor(x + 0.5);
+
+                if (n < 0) continue;
+
+                const v = engine.next01();
+                const y = alpha - beta * x;
+                const lhs = y + Math.log(v / Math.pow(1.0 + Math.exp(y), 2));
+                const rhs = k + n * Math.log(this.lambda) - Math.log(factorial(n));
+
+                if (lhs <= rhs) {
+                    return [n, engine.getState()];
+                }
+            }
+        }
+    };
+}
+
+// utility functions
+const factorial = (() => {
+    const cache = new Map<number, number>();
+
+    return (n: number): number => {
+        if (n < 0) {
+            throw new RangeError('Factorial not defined for negative numbers');
+        }
+
+        if (n < 2) return 1;
+
+        if (cache.has(n)) {
+            return cache.get(n)!;
+        }
+
+        if (n > 170) {
+            return Infinity;
+        }
+
+        let result = n;
+        for (let i = n - 1; i > 1; i--) {
+            result *= i;
+        }
+
+        cache.set(n, result);
+        return result;
+    };
+})();
