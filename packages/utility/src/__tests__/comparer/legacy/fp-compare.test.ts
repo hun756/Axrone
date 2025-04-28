@@ -1,4 +1,4 @@
-import { FpCompare } from '../../../comparer/fp-compare';
+import { FpCompare } from '../../../comparer/fp-compare-legacy';
 
 describe('FpCompare Class - Test Suite', () => {
     const DEFAULT_EPSILON = Number.EPSILON;
