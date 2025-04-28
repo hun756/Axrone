@@ -1182,6 +1182,21 @@ export class PoissonDistribution implements IDistribution<number> {
     };
 }
 
+export class BernoulliDistribution implements IDistribution<boolean> {
+    constructor(private readonly p: number = 0.5) {
+        validateProbability(p, 'p');
+    }
+
+    public sample = (state: IRandomState): RandomResult<boolean> => {
+        const engine = createEngineFactory(state.engine)();
+        engine.setState(state);
+
+        const value = engine.next01() < this.p;
+
+        return [value, engine.getState()];
+    };
+}
+
 // utility functions
 const factorial = (() => {
     const cache = new Map<number, number>();
