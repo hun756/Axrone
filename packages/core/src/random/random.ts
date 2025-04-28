@@ -1287,3 +1287,90 @@ const factorial = (() => {
         return result;
     };
 })();
+
+// ---
+
+export interface IRandomSequence<T> {
+    readonly next: () => T;
+    readonly take: (count: number) => T[];
+    readonly skip: (count: number) => void;
+    readonly map: <U>(fn: (value: T) => U) => IRandomSequence<U>;
+    readonly filter: (predicate: (value: T) => boolean) => IRandomSequence<T>;
+}
+
+export interface IRandomAPI {
+    readonly float: () => number;
+    readonly floatBetween: (min: number, max: number) => number;
+    readonly int: (min: number, max: number) => number;
+    readonly boolean: (probability?: number) => boolean;
+    readonly pick: <T>(array: ReadonlyArray<T>) => T;
+    readonly weighted: <T>(items: ReadonlyArray<[T, number]>) => T;
+    readonly shuffle: <T>(array: ReadonlyArray<T>) => T[];
+    readonly sample: <T>(array: ReadonlyArray<T>, count: number) => T[];
+    readonly uuid: () => string;
+    readonly bytes: (length: number) => Uint8Array;
+    readonly string: (length: number, charset?: string) => string;
+    readonly sequence: <T>(generator: () => T) => IRandomSequence<T>;
+    readonly normal: (mean?: number, stdDev?: number) => number;
+    readonly exponential: (lambda?: number) => number;
+    readonly poisson: (lambda: number) => number;
+    readonly bernoulli: (p?: number) => boolean;
+    readonly binomial: (n: number, p: number) => number;
+    readonly geometric: (p: number) => number;
+    readonly distribution: <T>(distribution: IDistribution<T>) => T;
+    readonly setSeed: (seed: SeedSource) => void;
+    readonly getEngine: () => IRandomEngine;
+    readonly setEngine: (engineType: RandomEngineType) => void;
+    readonly getState: () => IRandomState;
+    readonly setState: (state: IRandomState) => void;
+    readonly fork: () => IRandomAPI;
+}
+
+class RandomSequence<T> implements IRandomSequence<T> {
+    constructor(
+        private readonly generator: () => T,
+        private readonly random: Random
+    ) {}
+
+    public next = (): T => {
+        return this.generator();
+    };
+
+    public take = (count: number): T[] => {
+        validateNonNegative(count, 'count');
+        validateInteger(count, 'count');
+
+        const result: T[] = [];
+        for (let i = 0; i < count; i++) {
+            result.push(this.generator());
+        }
+        return result;
+    };
+
+    public skip = (count: number): void => {
+        validateNonNegative(count, 'count');
+        validateInteger(count, 'count');
+
+        for (let i = 0; i < count; i++) {
+            this.generator();
+        }
+    };
+
+    public map = <U>(fn: (value: T) => U): IRandomSequence<U> => {
+        return new RandomSequence<U>(() => fn(this.generator()), this.random);
+    };
+
+    public filter = (predicate: (value: T) => boolean): IRandomSequence<T> => {
+        return new RandomSequence<T>(() => {
+            let value: T;
+            do {
+                value = this.generator();
+            } while (!predicate(value));
+            return value;
+        }, this.random);
+    };
+}
+
+class Random implements IRandomAPI {
+    // ...
+}
