@@ -1372,5 +1372,312 @@ class RandomSequence<T> implements IRandomSequence<T> {
 }
 
 class Random implements IRandomAPI {
-    // ...
+    private engine: IRandomEngine;
+    private static readonly DEFAULT_CHARSET =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    private static readonly HEX_DIGITS = '0123456789abcdef';
+
+    constructor(
+        seed: SeedSource = null,
+        engineType: RandomEngineType = RandomEngineType.XOROSHIRO128_PLUS_PLUS
+    ) {
+        this.engine = createEngineFactory(engineType)(seed);
+    }
+
+    public float = (): number => {
+        return this.engine.next01();
+    };
+
+    public floatBetween = (min: number, max: number): number => {
+        if (!Number.isFinite(min) || !Number.isFinite(max)) {
+            throw new RangeError('Bounds must be finite numbers');
+        }
+
+        if (min >= max) {
+            throw new RangeError('Min must be less than max');
+        }
+
+        return min + (max - min) * this.engine.next01();
+    };
+
+    public int = (min: number, max: number): number => {
+        validateInteger(min, 'min');
+        validateInteger(max, 'max');
+
+        if (min > max) {
+            throw new RangeError('Min must be less than or equal to max');
+        }
+
+        const range = max - min + 1;
+
+        if (range <= 0) {
+            throw new RangeError('Range is too large and would cause integer overflow');
+        }
+
+        if (range <= 0x100000000) {
+            return min + Math.floor(range * this.engine.next01());
+        }
+
+        const bigRange = BigInt(range);
+        const value = (this.engine.nextUint64() % bigRange) + BigInt(min);
+
+        return Number(value);
+    };
+
+    public boolean = (probability: number = 0.5): boolean => {
+        validateProbability(probability, 'probability');
+        return this.engine.next01() < probability;
+    };
+
+    public pick = <T>(array: ReadonlyArray<T>): T => {
+        if (array.length === 0) {
+            throw new Error('Cannot pick from an empty array');
+        }
+
+        const index = this.int(0, array.length - 1);
+        return array[index];
+    };
+
+    public weighted = <T>(items: ReadonlyArray<[T, number]>): T => {
+        if (items.length === 0) {
+            throw new Error('Cannot pick from an empty array');
+        }
+
+        let totalWeight = 0;
+        for (const [_, weight] of items) {
+            if (weight < 0) {
+                throw new RangeError('Weights must be non-negative');
+            }
+            totalWeight += weight;
+        }
+
+        if (totalWeight <= 0) {
+            throw new RangeError('Sum of weights must be positive');
+        }
+
+        const r = this.floatBetween(0, totalWeight);
+        let cumulativeWeight = 0;
+
+        for (const [item, weight] of items) {
+            cumulativeWeight += weight;
+            if (r < cumulativeWeight) {
+                return item;
+            }
+        }
+
+        return items[items.length - 1][0];
+    };
+
+    public shuffle = <T>(array: ReadonlyArray<T>): T[] => {
+        if (array.length <= 1) return [...array];
+
+        const result = [...array];
+
+        for (let i = result.length - 1; i > 0; i--) {
+            const j = this.int(0, i);
+            [result[i], result[j]] = [result[j], result[i]];
+        }
+
+        return result;
+    };
+
+    public sample = <T>(array: ReadonlyArray<T>, count: number): T[] => {
+        validateNonNegative(count, 'count');
+        validateInteger(count, 'count');
+
+        if (count === 0 || array.length === 0) {
+            return [];
+        }
+
+        if (count >= array.length) {
+            return this.shuffle(array);
+        }
+
+        if (count < 0.15 * array.length) {
+            const indices = new Set<number>();
+
+            while (indices.size < count) {
+                indices.add(this.int(0, array.length - 1));
+            }
+
+            return [...indices].map((i) => array[i]);
+        } else {
+            const result = [...array];
+
+            for (let i = 0; i < count; i++) {
+                const j = this.int(i, result.length - 1);
+                [result[i], result[j]] = [result[j], result[i]];
+            }
+
+            return result.slice(0, count);
+        }
+    };
+
+    public uuid = (): string => {
+        const bytes = new Uint8Array(16);
+
+        for (let i = 0; i < 16; i++) {
+            bytes[i] = this.int(0, 255);
+        }
+
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+        return (
+            hex[bytes[0]] +
+            hex[bytes[1]] +
+            hex[bytes[2]] +
+            hex[bytes[3]] +
+            '-' +
+            hex[bytes[4]] +
+            hex[bytes[5]] +
+            '-' +
+            hex[bytes[6]] +
+            hex[bytes[7]] +
+            '-' +
+            hex[bytes[8]] +
+            hex[bytes[9]] +
+            '-' +
+            hex[bytes[10]] +
+            hex[bytes[11]] +
+            hex[bytes[12]] +
+            hex[bytes[13]] +
+            hex[bytes[14]] +
+            hex[bytes[15]]
+        );
+    };
+
+    public bytes = (length: number): Uint8Array => {
+        validateNonNegative(length, 'length');
+        validateInteger(length, 'length');
+
+        const result = new Uint8Array(length);
+
+        for (let i = 0; i < length; i++) {
+            result[i] = this.int(0, 255);
+        }
+
+        return result;
+    };
+
+    public string = (length: number, charset: string = Random.DEFAULT_CHARSET): string => {
+        validateNonNegative(length, 'length');
+        validateInteger(length, 'length');
+
+        if (charset.length === 0) {
+            throw new Error('Charset must not be empty');
+        }
+
+        let result = '';
+
+        const isPowerOf2 = (charset.length & (charset.length - 1)) === 0;
+        const mask = isPowerOf2 ? charset.length - 1 : null;
+
+        if (isPowerOf2) {
+            for (let i = 0; i < length; i++) {
+                const index = this.engine.nextUint32() & mask!;
+                result += charset[index];
+            }
+        } else {
+            for (let i = 0; i < length; i++) {
+                const index = this.int(0, charset.length - 1);
+                result += charset[index];
+            }
+        }
+
+        return result;
+    };
+
+    public sequence = <T>(generator: () => T): IRandomSequence<T> => {
+        return new RandomSequence<T>(generator, this);
+    };
+
+    public normal = (mean: number = 0, stdDev: number = 1): number => {
+        return this.distribution(new NormalDistribution(mean, stdDev));
+    };
+
+    public exponential = (lambda: number = 1): number => {
+        return this.distribution(new ExponentialDistribution(lambda));
+    };
+
+    public poisson = (lambda: number): number => {
+        return this.distribution(new PoissonDistribution(lambda));
+    };
+
+    public bernoulli = (p: number = 0.5): boolean => {
+        return this.distribution(new BernoulliDistribution(p));
+    };
+
+    public binomial = (n: number, p: number): number => {
+        return this.distribution(new BinomialDistribution(n, p));
+    };
+
+    public geometric = (p: number): number => {
+        return this.distribution(new GeometricDistribution(p));
+    };
+
+    public distribution = <T>(distribution: IDistribution<T>): T => {
+        const [value, nextState] = distribution.sample(this.engine.getState());
+        this.engine.setState(nextState);
+        return value;
+    };
+
+    public setSeed = (seed: SeedSource): void => {
+        const state = hashSeedToState(seed);
+        this.engine.setState(state);
+    };
+
+    public getEngine = (): IRandomEngine => {
+        return this.engine;
+    };
+
+    public setEngine = (engineType: RandomEngineType): void => {
+        const currentState = this.engine.getState();
+        this.engine = createEngineFactory(engineType)();
+
+        try {
+            this.engine.setState(currentState);
+        } catch (e) {
+            const derivedSeed = [
+                currentState.vector[0] ^ currentState.vector[2],
+                currentState.vector[1] ^ currentState.vector[3],
+                currentState.counter,
+            ];
+            this.setSeed(new BigInt64Array(derivedSeed));
+        }
+    };
+
+    public getState = (): IRandomState => {
+        return this.engine.getState();
+    };
+
+    public setState = (state: IRandomState): void => {
+        if (this.engine.getState().engine !== state.engine) {
+            this.engine = createEngineFactory(state.engine)();
+        }
+
+        this.engine.setState(state);
+    };
+
+    public fork = (): IRandomAPI => {
+        const forked = new Random();
+
+        const currentState = this.engine.getState();
+
+        const forkedState: IRandomState = {
+            vector: [
+                currentState.vector[0] ^ currentState.counter,
+                currentState.vector[1] ^ (currentState.counter << 1n),
+                currentState.vector[2] ^ (currentState.counter << 2n),
+                currentState.vector[3] ^ (currentState.counter << 3n),
+            ],
+            counter: 0n,
+            engine: currentState.engine,
+        };
+
+        forked.setEngine(currentState.engine);
+        forked.setState(forkedState);
+
+        return forked;
+    };
 }
