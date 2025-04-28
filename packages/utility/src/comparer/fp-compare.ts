@@ -305,3 +305,28 @@ export const createPredicates = <T extends Numeric = number>(
         greaterThanOrEqual,
     });
 };
+
+export interface ComparisonOperators<T extends Numeric = number> {
+    readonly eq: (a: T, b: T) => boolean;
+    readonly neq: (a: T, b: T) => boolean;
+    readonly lt: (a: T, b: T) => boolean;
+    readonly gt: (a: T, b: T) => boolean;
+    readonly lte: (a: T, b: T) => boolean;
+    readonly gte: (a: T, b: T) => boolean;
+}
+
+export const createOperators = <T extends Numeric = number>(
+    comparer: (a: T, b: T) => ComparisonResult
+): ComparisonOperators<T> => {
+    const predicates = createPredicates(comparer);
+
+    return Object.freeze({
+        eq: predicates.equals,
+        neq: predicates.notEquals,
+        lt: predicates.lessThan,
+        gt: predicates.greaterThan,
+        lte: predicates.lessThanOrEqual,
+        gte: predicates.greaterThanOrEqual,
+    });
+};
+
