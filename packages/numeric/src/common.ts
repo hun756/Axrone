@@ -1,4 +1,4 @@
-import { BoxMullerFactory } from "./box_muller";
+import { BoxMullerFactory } from "./box-muller";
 
 export const EPSILON: number = 1e-6;
 export const PI_2 = Math.PI * 2;

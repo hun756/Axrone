@@ -1,4 +1,4 @@
-import { BoxMullerFactory } from './box_muller';
+import { BoxMullerFactory } from './box-muller';
 
 export type Scalar = number;
 export type Vec2 = { x: Scalar; y: Scalar };

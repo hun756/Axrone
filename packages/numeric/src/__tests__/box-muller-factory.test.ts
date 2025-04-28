@@ -4,7 +4,7 @@ import {
     NormalDistribution,
     RandomGenerator,
     isNormalDistribution,
-} from '../box_muller';
+} from '../box-muller';
 
 class MockRandomGenerator implements RandomGenerator {
     private mockFn: jest.Mock;

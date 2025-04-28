@@ -2,7 +2,7 @@ import {
     DefaultRandomGenerator,
     createDefaultRandomGenerator,
     type RandomGenerator,
-} from '../box_muller';
+} from '../box-muller';
 
 describe('DefaultRandomGenerator', () => {
     const originalMathRandom = Math.random;

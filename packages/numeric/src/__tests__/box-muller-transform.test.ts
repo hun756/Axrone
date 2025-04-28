@@ -4,7 +4,7 @@ import {
     BoxMullerOptions,
     NormalDistribution,
     DistributionSample,
-} from '../box_muller';
+} from '../box-muller';
 
 class MockRandomGenerator {
     private sequence: number[];

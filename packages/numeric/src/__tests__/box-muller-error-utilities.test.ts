@@ -6,7 +6,7 @@ import {
     validateInteger,
     validateInRange,
     BoxMullerError,
-} from '../box_muller';
+} from '../box-muller';
 
 describe('Error Utilities', () => {
     describe('createError', () => {

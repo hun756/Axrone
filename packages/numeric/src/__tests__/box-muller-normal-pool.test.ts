@@ -5,7 +5,7 @@ import {
     ErrorCodes,
     RandomGenerator,
     createError,
-} from '../box_muller';
+} from '../box-muller';
 
 class MockRandomGenerator implements RandomGenerator {
     private values: number[];

@@ -4,9 +4,9 @@ import {
     DistributionSample,
     validatePositive,
     validateInteger,
-} from '../box_muller';
+} from '../box-muller';
 
-import * as validationModule from '../box_muller';
+import * as validationModule from '../box-muller';
 
 const validatePositiveSpy = jest.spyOn(validationModule, 'validatePositive');
 const validateIntegerSpy = jest.spyOn(validationModule, 'validateInteger');

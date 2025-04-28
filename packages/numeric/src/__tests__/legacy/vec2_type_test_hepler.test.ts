@@ -4,7 +4,7 @@ import {
     createInvalidVec2Objects,
     createValidVec2Tuples,
     createInvalidVec2Tuples,
-} from '../type_test_helper';
+} from '../type-test-helper';
 
 describe('Vec2 Type Validators with Test Generators', () => {
     describe('isVec2', () => {
