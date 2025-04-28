@@ -1681,3 +1681,32 @@ class Random implements IRandomAPI {
         return forked;
     };
 }
+
+export class RandomBuilder {
+    private seed: SeedSource = null;
+    private engineType: RandomEngineType = RandomEngineType.XOROSHIRO128_PLUS_PLUS;
+
+    public withSeed = (seed: SeedSource): RandomBuilder => {
+        this.seed = seed;
+        return this;
+    };
+
+    public withEngine = (engineType: RandomEngineType): RandomBuilder => {
+        this.engineType = engineType;
+        return this;
+    };
+
+    public build = (): IRandomAPI => {
+        return new Random(this.seed, this.engineType);
+    };
+}
+
+export const createRandom = (
+    seed: SeedSource = null,
+    engineType: RandomEngineType = RandomEngineType.XOROSHIRO128_PLUS_PLUS
+): IRandomAPI => {
+    return new Random(seed, engineType);
+};
+
+export const rand: IRandomAPI = new Random();
+export default rand;
