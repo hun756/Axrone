@@ -1197,6 +1197,47 @@ export class BernoulliDistribution implements IDistribution<boolean> {
     };
 }
 
+export class BinomialDistribution implements IDistribution<number> {
+    constructor(
+        private readonly n: number,
+        private readonly p: number
+    ) {
+        validateNonNegative(n, 'n');
+        validateInteger(n, 'n');
+        validateProbability(p, 'p');
+    }
+
+    public sample = (state: IRandomState): RandomResult<number> => {
+        const engine = createEngineFactory(state.engine)();
+        engine.setState(state);
+
+        if (this.n === 0 || this.p === 0) return [0, engine.getState()];
+        if (this.p === 1) return [this.n, engine.getState()];
+
+        if (this.n < 100) {
+            let successes = 0;
+
+            for (let i = 0; i < this.n; i++) {
+                if (engine.next01() < this.p) {
+                    successes++;
+                }
+            }
+
+            return [successes, engine.getState()];
+        }
+
+        const mean = this.n * this.p;
+        const stdDev = Math.sqrt(this.n * this.p * (1 - this.p));
+
+        const normalSample = new NormalDistribution(mean, stdDev).sample(engine.getState());
+        engine.setState(normalSample[1]);
+
+        const value = Math.max(0, Math.min(this.n, Math.round(normalSample[0])));
+
+        return [value, engine.getState()];
+    };
+}
+
 // utility functions
 const factorial = (() => {
     const cache = new Map<number, number>();
