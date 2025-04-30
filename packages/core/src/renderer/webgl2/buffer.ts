@@ -136,3 +136,45 @@ export class GLError extends Error {
         Error.captureStackTrace?.(this, this.constructor);
     }
 }
+
+const createGLConstants = <T extends number>(
+    gl: WebGL2RenderingContext
+): Readonly<{
+    ARRAY_BUFFER: T;
+    ELEMENT_ARRAY_BUFFER: T;
+    COPY_READ_BUFFER: T;
+    COPY_WRITE_BUFFER: T;
+    TRANSFORM_FEEDBACK_BUFFER: T;
+    UNIFORM_BUFFER: T;
+    PIXEL_PACK_BUFFER: T;
+    PIXEL_UNPACK_BUFFER: T;
+    STATIC_DRAW: T;
+    DYNAMIC_DRAW: T;
+    STREAM_DRAW: T;
+    STATIC_READ: T;
+    DYNAMIC_READ: T;
+    STREAM_READ: T;
+    STATIC_COPY: T;
+    DYNAMIC_COPY: T;
+    STREAM_COPY: T;
+}> => {
+    return Object.freeze({
+        ARRAY_BUFFER: gl.ARRAY_BUFFER as T,
+        ELEMENT_ARRAY_BUFFER: gl.ELEMENT_ARRAY_BUFFER as T,
+        COPY_READ_BUFFER: gl.COPY_READ_BUFFER as T,
+        COPY_WRITE_BUFFER: gl.COPY_WRITE_BUFFER as T,
+        TRANSFORM_FEEDBACK_BUFFER: gl.TRANSFORM_FEEDBACK_BUFFER as T,
+        UNIFORM_BUFFER: gl.UNIFORM_BUFFER as T,
+        PIXEL_PACK_BUFFER: gl.PIXEL_PACK_BUFFER as T,
+        PIXEL_UNPACK_BUFFER: gl.PIXEL_UNPACK_BUFFER as T,
+        STATIC_DRAW: gl.STATIC_DRAW as T,
+        DYNAMIC_DRAW: gl.DYNAMIC_DRAW as T,
+        STREAM_DRAW: gl.STREAM_DRAW as T,
+        STATIC_READ: gl.STATIC_READ as T,
+        DYNAMIC_READ: gl.DYNAMIC_READ as T,
+        STREAM_READ: gl.STREAM_READ as T,
+        STATIC_COPY: gl.STATIC_COPY as T,
+        DYNAMIC_COPY: gl.DYNAMIC_COPY as T,
+        STREAM_COPY: gl.STREAM_COPY as T,
+    });
+};
