@@ -178,3 +178,446 @@ const createGLConstants = <T extends number>(
         STREAM_COPY: gl.STREAM_COPY as T,
     });
 };
+
+class Buffer implements IBuffer {
+    readonly #gl: WebGL2RenderingContext;
+    readonly #id: WebGLBuffer;
+    readonly #target: GLBufferTarget;
+    readonly #constants: ReturnType<typeof createGLConstants>;
+
+    #byteLength: number = 0;
+    #usage: GLBufferUsage;
+    #label: string | null = null;
+    #isDisposed: boolean = false;
+
+    public get id(): BufferId {
+        this.#throwIfDisposed();
+        return this.#id as BufferId;
+    }
+
+    public get target(): GLBufferTarget {
+        return this.#target;
+    }
+
+    public get byteLength(): number {
+        return this.#byteLength;
+    }
+
+    public get usage(): GLBufferUsage {
+        return this.#usage;
+    }
+
+    public get label(): string | null {
+        return this.#label;
+    }
+
+    public get isDisposed(): boolean {
+        return this.#isDisposed;
+    }
+
+    constructor(gl: WebGL2RenderingContext, target: GLBufferTarget, options: BufferOptions = {}) {
+        const { initialData = null, usage = gl.STATIC_DRAW, byteSize = 0, label = null } = options;
+
+        this.#gl = gl;
+        this.#target = target;
+        this.#usage = usage;
+        this.#label = label;
+        this.#constants = createGLConstants(gl);
+
+        const buffer = gl.createBuffer();
+        if (!buffer) {
+            throw new GLError('Failed to create WebGLBuffer', 'OUT_OF_MEMORY');
+        }
+        this.#id = buffer;
+
+        if (initialData) {
+            this.resize(initialData, usage);
+        } else if (byteSize > 0) {
+            this.resize(byteSize, usage);
+        }
+
+        const debugExt = this.#gl.getExtension('KHR_debug');
+        if (debugExt && typeof debugExt.labelObject === 'function' && label) {
+            debugExt.labelObject(debugExt.BUFFER, this.#id, label);
+        }
+    }
+
+    public bind = (): IBuffer => {
+        this.#throwIfDisposed();
+        this.#gl.bindBuffer(this.#target, this.#id);
+        return this;
+    };
+
+    public unbind = (): IBuffer => {
+        this.#throwIfDisposed();
+        this.#gl.bindBuffer(this.#target, null);
+        return this;
+    };
+
+    public update = <T extends BufferSource>(data: T, offset: number = 0): IBuffer => {
+        this.#throwIfDisposed();
+
+        if (
+            !(data instanceof ArrayBuffer) &&
+            !ArrayBuffer.isView(data) &&
+            !(data instanceof SharedArrayBuffer)
+        ) {
+            throw new GLError('Invalid data type for buffer update', 'INVALID_VALUE');
+        }
+
+        if (offset < 0) {
+            throw new GLError('Offset cannot be negative', 'INVALID_VALUE');
+        }
+
+        const dataSize =
+            data instanceof ArrayBuffer || data instanceof SharedArrayBuffer
+                ? data.byteLength
+                : data.byteLength;
+
+        if (offset + dataSize > this.#byteLength) {
+            throw new GLError(
+                `Update would exceed buffer bounds: offset (${offset}) + data size (${dataSize}) > buffer size (${this.#byteLength})`,
+                'INVALID_VALUE'
+            );
+        }
+
+        this.bind();
+        this.#gl.bufferSubData(this.#target, offset, data);
+
+        return this;
+    };
+
+    public updateRange = <T extends BufferSource>(
+        data: T,
+        dstByteOffset: number,
+        srcByteOffset: number = 0,
+        length?: number
+    ): IBuffer => {
+        this.#throwIfDisposed();
+
+        if (
+            !(data instanceof ArrayBuffer) &&
+            !ArrayBuffer.isView(data) &&
+            !(data instanceof SharedArrayBuffer)
+        ) {
+            throw new GLError('Invalid data type for buffer update', 'INVALID_VALUE');
+        }
+
+        if (dstByteOffset < 0 || srcByteOffset < 0) {
+            throw new GLError('Offsets cannot be negative', 'INVALID_VALUE');
+        }
+
+        const dataSize =
+            data instanceof ArrayBuffer || data instanceof SharedArrayBuffer
+                ? data.byteLength
+                : data.byteLength;
+
+        const updateLength = length ?? dataSize - srcByteOffset;
+
+        if (srcByteOffset + updateLength > dataSize) {
+            throw new GLError(
+                `Source range exceeds data bounds: srcOffset (${srcByteOffset}) + length (${updateLength}) > data size (${dataSize})`,
+                'INVALID_VALUE'
+            );
+        }
+
+        if (dstByteOffset + updateLength > this.#byteLength) {
+            throw new GLError(
+                `Destination range exceeds buffer bounds: dstOffset (${dstByteOffset}) + length (${updateLength}) > buffer size (${this.#byteLength})`,
+                'INVALID_VALUE'
+            );
+        }
+
+        this.bind();
+
+        if (data instanceof ArrayBuffer) {
+            const view = new Uint8Array(data, srcByteOffset, updateLength);
+            this.#gl.bufferSubData(this.#target, dstByteOffset, view);
+        } else if (data instanceof SharedArrayBuffer) {
+            const view = new Uint8Array(data, srcByteOffset, updateLength);
+            this.#gl.bufferSubData(this.#target, dstByteOffset, view);
+        } else {
+            const bytesPerElement =
+                'BYTES_PER_ELEMENT' in data ? (data as any).BYTES_PER_ELEMENT : 1;
+            const elementOffset = Math.floor(srcByteOffset / bytesPerElement);
+
+            if (srcByteOffset % bytesPerElement !== 0) {
+                const buffer = data.buffer;
+                const view = new Uint8Array(buffer, data.byteOffset + srcByteOffset, updateLength);
+                this.#gl.bufferSubData(this.#target, dstByteOffset, view);
+            } else {
+                const constructor = data.constructor as ArrayBufferViewConstructor;
+                const elementsLength = Math.floor(updateLength / bytesPerElement);
+                const typedView = new constructor(
+                    data.buffer,
+                    data.byteOffset + srcByteOffset,
+                    elementsLength
+                );
+
+                this.#gl.bufferSubData(this.#target, dstByteOffset, typedView);
+            }
+        }
+
+        return this;
+    };
+
+    public resize = <T extends BufferSource | number>(
+        dataOrByteSize: T,
+        usage?: GLBufferUsage
+    ): IBuffer => {
+        this.#throwIfDisposed();
+
+        const effectiveUsage = usage ?? this.#usage;
+
+        this.bind();
+
+        if (typeof dataOrByteSize === 'number') {
+            if (dataOrByteSize < 0) {
+                throw new GLError('Buffer size cannot be negative', 'INVALID_VALUE');
+            }
+
+            this.#gl.bufferData(this.#target, dataOrByteSize, effectiveUsage);
+            this.#byteLength = dataOrByteSize;
+        } else {
+            if (
+                !(dataOrByteSize instanceof ArrayBuffer) &&
+                !ArrayBuffer.isView(dataOrByteSize) &&
+                !(dataOrByteSize instanceof SharedArrayBuffer)
+            ) {
+                throw new GLError('Invalid data type for buffer resize', 'INVALID_VALUE');
+            }
+
+            this.#gl.bufferData(this.#target, dataOrByteSize, effectiveUsage);
+            this.#byteLength =
+                dataOrByteSize instanceof ArrayBuffer || dataOrByteSize instanceof SharedArrayBuffer
+                    ? dataOrByteSize.byteLength
+                    : dataOrByteSize.byteLength;
+        }
+
+        this.#usage = effectiveUsage;
+
+        return this;
+    };
+
+    public copyTo = (
+        dstBuffer: IBuffer,
+        srcOffset: number = 0,
+        dstOffset: number = 0,
+        size?: number
+    ): IBuffer => {
+        this.#throwIfDisposed();
+
+        if (dstBuffer.isDisposed) {
+            throw new GLError('Cannot copy to a disposed buffer', 'BUFFER_ALREADY_DISPOSED');
+        }
+
+        if (srcOffset < 0 || dstOffset < 0) {
+            throw new GLError('Offsets cannot be negative', 'INVALID_VALUE');
+        }
+
+        const copySize =
+            size ?? Math.min(this.#byteLength - srcOffset, dstBuffer.byteLength - dstOffset);
+
+        if (copySize <= 0) {
+            return this;
+        }
+
+        if (srcOffset + copySize > this.#byteLength) {
+            throw new GLError(
+                `Source range exceeds buffer bounds: srcOffset (${srcOffset}) + size (${copySize}) > buffer size (${this.#byteLength})`,
+                'INVALID_VALUE'
+            );
+        }
+
+        if (dstOffset + copySize > dstBuffer.byteLength) {
+            throw new GLError(
+                `Destination range exceeds buffer bounds: dstOffset (${dstOffset}) + size (${copySize}) > buffer size (${dstBuffer.byteLength})`,
+                'INVALID_VALUE'
+            );
+        }
+
+        this.#gl.bindBuffer(this.#constants.COPY_READ_BUFFER, this.#id);
+        this.#gl.bindBuffer(this.#constants.COPY_WRITE_BUFFER, dstBuffer.id as WebGLBuffer);
+
+        this.#gl.copyBufferSubData(
+            this.#constants.COPY_READ_BUFFER,
+            this.#constants.COPY_WRITE_BUFFER,
+            srcOffset,
+            dstOffset,
+            copySize
+        );
+
+        this.#gl.bindBuffer(this.#constants.COPY_READ_BUFFER, null);
+        this.#gl.bindBuffer(this.#constants.COPY_WRITE_BUFFER, null);
+
+        return this;
+    };
+
+    public getData = <T extends ArrayBufferView>(
+        output: T,
+        byteOffset: number = 0,
+        length?: number
+    ): T => {
+        this.#throwIfDisposed();
+
+        if (!(output instanceof Object && ArrayBuffer.isView(output))) {
+            throw new GLError('Output must be an ArrayBufferView', 'INVALID_VALUE');
+        }
+
+        if (byteOffset < 0) {
+            throw new GLError('Offset cannot be negative', 'INVALID_VALUE');
+        }
+
+        const bytesPerElement =
+            'BYTES_PER_ELEMENT' in output ? (output as any).BYTES_PER_ELEMENT : 1;
+        const maxLength = Math.min(this.#byteLength - byteOffset, output.byteLength);
+
+        const readLength = length !== undefined ? Math.min(length, maxLength) : maxLength;
+
+        if (readLength <= 0) {
+            return output;
+        }
+
+        this.#gl.bindBuffer(this.#constants.PIXEL_PACK_BUFFER, this.#id);
+
+        try {
+            const alignedLength = Math.floor(readLength / bytesPerElement) * bytesPerElement;
+
+            if (typeof this.#gl.getBufferSubData === 'function') {
+                this.#gl.getBufferSubData(
+                    this.#constants.PIXEL_PACK_BUFFER,
+                    byteOffset,
+                    output,
+                    0,
+                    alignedLength / bytesPerElement
+                );
+            } else {
+                throw new GLError(
+                    'getBufferSubData is not supported in this WebGL2 context',
+                    'UNSUPPORTED_OPERATION'
+                );
+            }
+        } finally {
+            this.#gl.bindBuffer(this.#constants.PIXEL_PACK_BUFFER, null);
+        }
+
+        return output;
+    };
+
+    public getSubData = <T extends ArrayBufferView>(
+        output: T,
+        srcByteOffset: number,
+        dstByteOffset: number = 0,
+        length?: number
+    ): T => {
+        this.#throwIfDisposed();
+
+        if (!(output instanceof Object && ArrayBuffer.isView(output))) {
+            throw new GLError('Output must be an ArrayBufferView', 'INVALID_VALUE');
+        }
+
+        if (srcByteOffset < 0 || dstByteOffset < 0) {
+            throw new GLError('Offsets cannot be negative', 'INVALID_VALUE');
+        }
+
+        const bytesPerElement =
+            'BYTES_PER_ELEMENT' in output ? (output as any).BYTES_PER_ELEMENT : 1;
+        const outputSize = output.byteLength;
+
+        if (dstByteOffset >= outputSize) {
+            throw new GLError('Destination offset exceeds output buffer size', 'INVALID_VALUE');
+        }
+
+        const maxLength = Math.min(this.#byteLength - srcByteOffset, outputSize - dstByteOffset);
+
+        const readLength = length !== undefined ? Math.min(length, maxLength) : maxLength;
+
+        if (readLength <= 0) {
+            return output;
+        }
+
+        this.#gl.bindBuffer(this.#constants.PIXEL_PACK_BUFFER, this.#id);
+
+        try {
+            if (typeof this.#gl.getBufferSubData === 'function') {
+                const dstElementOffset = Math.floor(dstByteOffset / bytesPerElement);
+                const alignedLength = Math.floor(readLength / bytesPerElement) * bytesPerElement;
+
+                if (dstByteOffset % bytesPerElement === 0) {
+                    this.#gl.getBufferSubData(
+                        this.#constants.PIXEL_PACK_BUFFER,
+                        srcByteOffset,
+                        output,
+                        dstElementOffset,
+                        alignedLength / bytesPerElement
+                    );
+                } else {
+                    const tempBuffer = new Uint8Array(readLength);
+                    this.#gl.getBufferSubData(
+                        this.#constants.PIXEL_PACK_BUFFER,
+                        srcByteOffset,
+                        tempBuffer
+                    );
+
+                    const outputBytes = new Uint8Array(
+                        output.buffer,
+                        output.byteOffset,
+                        output.byteLength
+                    );
+
+                    for (let i = 0; i < readLength; i++) {
+                        outputBytes[dstByteOffset + i] = tempBuffer[i];
+                    }
+                }
+            } else {
+                throw new GLError(
+                    'getBufferSubData is not supported in this WebGL2 context',
+                    'UNSUPPORTED_OPERATION'
+                );
+            }
+        } finally {
+            this.#gl.bindBuffer(this.#constants.PIXEL_PACK_BUFFER, null);
+        }
+
+        return output;
+    };
+
+    public dispose = (): void => {
+        if (this.#isDisposed) return;
+
+        try {
+            const possibleTargets = [
+                this.#constants.ARRAY_BUFFER,
+                this.#constants.ELEMENT_ARRAY_BUFFER,
+                this.#constants.COPY_READ_BUFFER,
+                this.#constants.COPY_WRITE_BUFFER,
+                this.#constants.PIXEL_PACK_BUFFER,
+                this.#constants.PIXEL_UNPACK_BUFFER,
+                this.#constants.TRANSFORM_FEEDBACK_BUFFER,
+                this.#constants.UNIFORM_BUFFER,
+            ];
+
+            for (const target of possibleTargets) {
+                const currentBinding = this.#gl.getParameter(target + 0x20) as WebGLBuffer | null;
+                if (currentBinding === this.#id) {
+                    this.#gl.bindBuffer(target, null);
+                }
+            }
+
+            this.#gl.deleteBuffer(this.#id);
+        } catch (e) {
+        } finally {
+            this.#isDisposed = true;
+        }
+    };
+
+    #throwIfDisposed = (): void => {
+        if (this.#isDisposed) {
+            throw new GLError('Buffer has been disposed', 'BUFFER_ALREADY_DISPOSED');
+        }
+    };
+}
+
+type ArrayBufferViewConstructor = {
+    new (buffer: ArrayBufferLike, byteOffset?: number, length?: number): ArrayBufferView;
+};
