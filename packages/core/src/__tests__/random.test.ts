@@ -194,3 +194,20 @@ describe('Distribution classes', () => {
         expect(gx).toBeGreaterThanOrEqual(0);
     });
 });
+
+describe('RandomBuilder and default rand', () => {
+    it('builder honors seed and engine', () => {
+        const r = new RandomBuilder().withSeed(77).withEngine(RandomEngineType.PCG_XSH_RR).build();
+        expect(r.getEngine().getState().engine).toBe(RandomEngineType.PCG_XSH_RR);
+
+        // deterministic
+        const a = r.int(0, 10);
+        const r2 = new RandomBuilder().withSeed(77).withEngine(RandomEngineType.PCG_XSH_RR).build();
+        expect(r2.int(0, 10)).toBe(a);
+    });
+
+    it('default rand is usable', () => {
+        expect(typeof rand.float()).toBe('number');
+        expect(typeof rand.boolean()).toBe('boolean');
+    });
+});
