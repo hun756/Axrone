@@ -70,3 +70,41 @@ describe('Random Core API', () => {
     });
 });
 
+describe('Collection methods: pick, weighted, shuffle, sample', () => {
+    const seed = 2021;
+    let r: IRandomAPI;
+    beforeEach(() => {
+        r = createRandom(seed);
+    });
+
+    it('pick chooses a valid element', () => {
+        const arr = ['a', 'b', 'c', 'd'];
+        const v = r.pick(arr);
+        expect(arr).toContain(v);
+    });
+
+    it('weighted picks according to weights', () => {
+        const items: [string, number][] = [
+            ['x', 0],
+            ['y', 1],
+            ['z', 0],
+        ];
+        // only 'y' has positive weight
+        expect(r.weighted(items)).toBe('y');
+    });
+
+    it('shuffle returns a permutation', () => {
+        const arr = [1, 2, 3, 4, 5];
+        const s = r.shuffle(arr);
+        expect(s.sort()).toEqual(arr);
+    });
+
+    it('sample returns correct number of distinct items or full shuffle', () => {
+        const arr = [1, 2, 3, 4];
+        const few = r.sample(arr, 2);
+        expect(few.length).toBe(2);
+        const all = r.sample(arr, 10);
+        expect(all.sort()).toEqual(arr);
+    });
+});
+
