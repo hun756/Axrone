@@ -310,7 +310,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         const r = this.r,
             g = this.g,
             b = this.b;
-            
+
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
         const diff = max - min;
@@ -338,5 +338,56 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         } else {
             return { h, s, v, a: this.a };
         }
+    }
+
+    toCMYK(out?: IColorCMYK): IColorCMYK {
+        const k = 1 - Math.max(this.r, this.g, this.b);
+        const c = k === 1 ? 0 : (1 - this.r - k) / (1 - k);
+        const m = k === 1 ? 0 : (1 - this.g - k) / (1 - k);
+        const y = k === 1 ? 0 : (1 - this.b - k) / (1 - k);
+
+        if (out) {
+            out.c = c;
+            out.m = m;
+            out.y = y;
+            out.k = k;
+            out.a = this.a;
+            return out;
+        } else {
+            return { c, m, y, k, a: this.a };
+        }
+    }
+
+    toHex(includeAlpha: boolean = false): string {
+        const r = Math.round(this.r * 255);
+        const g = Math.round(this.g * 255);
+        const b = Math.round(this.b * 255);
+        const a = Math.round(this.a * 255);
+
+        const hex = ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+
+        if (includeAlpha) {
+            const alphaHex = ((1 << 8) + a).toString(16).slice(1);
+            return `#${hex}${alphaHex}`;
+        }
+
+        return `#${hex}`;
+    }
+
+    toRGB(includeAlpha: boolean = false): string {
+        const r = Math.round(this.r * 255);
+        const g = Math.round(this.g * 255);
+        const b = Math.round(this.b * 255);
+
+        if (includeAlpha) {
+            return `rgba(${r}, ${g}, ${b}, ${this.a})`;
+        }
+
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    toHSLString(): string {
+        const hsl = this.toHSL();
+        return `hsla(${Math.round(hsl.h)}, ${Math.round(hsl.s * 100)}%, ${Math.round(hsl.l * 100)}%, ${hsl.a})`;
     }
 }
