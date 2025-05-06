@@ -1,4 +1,5 @@
 import { Equatable, ICloneable } from '@axrone/utility';
+import { EPSILON } from './common';
 
 interface IColorLike {
     r: number;
@@ -247,14 +248,24 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     }
 
     equals(other: unknown): boolean {
-        throw new Error('Method not implemented.');
+        if (!(other instanceof Color)) return false;
+
+        return Math.abs(this.r - other.r) < EPSILON &&
+               Math.abs(this.g - other.g) < EPSILON &&
+               Math.abs(this.b - other.b) < EPSILON &&
+               Math.abs(this.a - other.a) < EPSILON;
     }
 
     getHashCode(): number {
-        throw new Error('Method not implemented.');
+        let h1 = 2166136261;
+        h1 = Math.imul(h1 ^ (~~(this.r * 1000)), 16777619);
+        h1 = Math.imul(h1 ^ (~~(this.g * 1000)), 16777619);
+        h1 = Math.imul(h1 ^ (~~(this.b * 1000)), 16777619);
+        h1 = Math.imul(h1 ^ (~~(this.a * 1000)), 16777619);
+        return h1 >>> 0;
     }
 
     clone(): Color {
-        throw new Error('Method not implemented.');
+        return new Color(this.r, this.g, this.b, this.a);
     }
 }
