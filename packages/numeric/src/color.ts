@@ -305,4 +305,38 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             return { h, s, l, a: this.a };
         }
     }
+
+    toHSV(out?: IColorHSV): IColorHSV {
+        const r = this.r,
+            g = this.g,
+            b = this.b;
+            
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const diff = max - min;
+
+        let h = 0;
+        const s = max === 0 ? 0 : diff / max;
+        const v = max;
+
+        if (diff !== 0) {
+            if (max === r) {
+                h = 60 * (((g - b) / diff + 6) % 6);
+            } else if (max === g) {
+                h = 60 * ((b - r) / diff + 2);
+            } else {
+                h = 60 * ((r - g) / diff + 4);
+            }
+        }
+
+        if (out) {
+            out.h = h;
+            out.s = s;
+            out.v = v;
+            out.a = this.a;
+            return out;
+        } else {
+            return { h, s, v, a: this.a };
+        }
+    }
 }
