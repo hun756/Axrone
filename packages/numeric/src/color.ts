@@ -250,22 +250,59 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     equals(other: unknown): boolean {
         if (!(other instanceof Color)) return false;
 
-        return Math.abs(this.r - other.r) < EPSILON &&
-               Math.abs(this.g - other.g) < EPSILON &&
-               Math.abs(this.b - other.b) < EPSILON &&
-               Math.abs(this.a - other.a) < EPSILON;
+        return (
+            Math.abs(this.r - other.r) < EPSILON &&
+            Math.abs(this.g - other.g) < EPSILON &&
+            Math.abs(this.b - other.b) < EPSILON &&
+            Math.abs(this.a - other.a) < EPSILON
+        );
     }
 
     getHashCode(): number {
         let h1 = 2166136261;
-        h1 = Math.imul(h1 ^ (~~(this.r * 1000)), 16777619);
-        h1 = Math.imul(h1 ^ (~~(this.g * 1000)), 16777619);
-        h1 = Math.imul(h1 ^ (~~(this.b * 1000)), 16777619);
-        h1 = Math.imul(h1 ^ (~~(this.a * 1000)), 16777619);
+        h1 = Math.imul(h1 ^ ~~(this.r * 1000), 16777619);
+        h1 = Math.imul(h1 ^ ~~(this.g * 1000), 16777619);
+        h1 = Math.imul(h1 ^ ~~(this.b * 1000), 16777619);
+        h1 = Math.imul(h1 ^ ~~(this.a * 1000), 16777619);
         return h1 >>> 0;
     }
 
     clone(): Color {
         return new Color(this.r, this.g, this.b, this.a);
+    }
+
+    // Color space conversions
+    toHSL(out?: IColorHSL): IColorHSL {
+        const r = this.r,
+            g = this.g,
+            b = this.b;
+
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const diff = max - min;
+
+        let h = 0;
+        const l = (max + min) / 2;
+        const s = diff === 0 ? 0 : diff / (1 - Math.abs(2 * l - 1));
+
+        if (diff !== 0) {
+            if (max === r) {
+                h = 60 * (((g - b) / diff + 6) % 6);
+            } else if (max === g) {
+                h = 60 * ((b - r) / diff + 2);
+            } else {
+                h = 60 * ((r - g) / diff + 4);
+            }
+        }
+
+        if (out) {
+            out.h = h;
+            out.s = s;
+            out.l = l;
+            out.a = this.a;
+            return out;
+        } else {
+            return { h, s, l, a: this.a };
+        }
     }
 }
