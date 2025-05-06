@@ -7,6 +7,46 @@ interface IColorLike {
     a?: number;
 }
 
+export interface IColorHSL {
+    h: number; // [0, 360)
+    s: number; // [0, 1]
+    l: number; // [0, 1]
+    a: number; // [0, 1]
+}
+
+export interface IColorHSV {
+    h: number; // [0, 360)
+    s: number; // [0, 1]
+    v: number; // [0, 1]
+    a: number; // [0, 1]
+}
+
+export interface IColorCMYK {
+    c: number; // [0, 1]
+    m: number; // [0, 1]
+    y: number; // [0, 1]
+    k: number; // [0, 1]
+    a: number; // [0, 1]
+}
+
+const _sRGBToLinear = (c: number): number => {
+    if (c <= 0.04045) {
+        return c / 12.92;
+    }
+    return Math.pow((c + 0.055) / 1.055, 2.4);
+};
+
+const _linearToSRGB = (c: number): number => {
+    if (c <= 0.0031308) {
+        return 12.92 * c;
+    }
+    return 1.055 * Math.pow(c, 1.0 / 2.4) - 0.055;
+};
+
+const _clamp = (value: number, min: number = 0, max: number = 1): number => {
+    return Math.max(min, Math.min(max, value));
+};
+
 const _clampColor = (value: number): number => {
     return Math.max(0, Math.min(1, value));
 };
@@ -22,6 +62,38 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         this.g = _clampColor(g);
         this.b = _clampColor(b);
         this.a = _clampColor(a);
+    }
+
+    static readonly TRANSPARENT: Readonly<Color> = Object.freeze(new Color(0, 0, 0, 0));
+    static readonly BLACK: Readonly<Color> = Object.freeze(new Color(0, 0, 0, 1));
+    static readonly WHITE: Readonly<Color> = Object.freeze(new Color(1, 1, 1, 1));
+    static readonly RED: Readonly<Color> = Object.freeze(new Color(1, 0, 0, 1));
+    static readonly GREEN: Readonly<Color> = Object.freeze(new Color(0, 1, 0, 1));
+    static readonly BLUE: Readonly<Color> = Object.freeze(new Color(0, 0, 1, 1));
+    static readonly YELLOW: Readonly<Color> = Object.freeze(new Color(1, 1, 0, 1));
+    static readonly CYAN: Readonly<Color> = Object.freeze(new Color(0, 1, 1, 1));
+    static readonly MAGENTA: Readonly<Color> = Object.freeze(new Color(1, 0, 1, 1));
+    static readonly GRAY: Readonly<Color> = Object.freeze(new Color(0.5, 0.5, 0.5, 1));
+    static readonly LIGHT_GRAY: Readonly<Color> = Object.freeze(new Color(0.75, 0.75, 0.75, 1));
+    static readonly DARK_GRAY: Readonly<Color> = Object.freeze(new Color(0.25, 0.25, 0.25, 1));
+
+    static from<T extends IColorLike>(c: T): Color {
+        return new Color(c.r, c.g, c.b, c.a);
+    }
+
+    static fromArray(arr: ArrayLike<number>, offset: number = 0): Color {
+        if (offset < 0) {
+            throw new RangeError('Offset cannot be negative');
+        }
+
+        if (arr.length < offset + 3) {
+            throw new RangeError(
+                `Array must have at least ${offset + 3} elements when using offset ${offset} for RGB`
+            );
+        }
+
+        const a = arr.length >= offset + 4 ? Number(arr[offset + 3]) : 1;
+        return new Color(Number(arr[offset]), Number(arr[offset + 1]), Number(arr[offset + 2]), a);
     }
 
     equals(other: unknown): boolean {
