@@ -458,4 +458,53 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             } as T;
         }
     }
+
+    static lerp<T extends IColorLike>(a: T, b: T, t: number, out?: T): T {
+        const t1 = _clamp(t, 0, 1);
+        const aAlpha = a.a ?? 1;
+        const bAlpha = b.a ?? 1;
+
+        if (out) {
+            out.r = a.r + (b.r - a.r) * t1;
+            out.g = a.g + (b.g - a.g) * t1;
+            out.b = a.b + (b.b - a.b) * t1;
+            out.a = aAlpha + (bAlpha - aAlpha) * t1;
+            return out;
+        } else {
+            return {
+                r: a.r + (b.r - a.r) * t1,
+                g: a.g + (b.g - a.g) * t1,
+                b: a.b + (b.b - a.b) * t1,
+                a: aAlpha + (bAlpha - aAlpha) * t1,
+            } as T;
+        }
+    }
+
+    static lerpHSL<T extends IColorLike>(a: T, b: T, t: number, out?: T): T {
+        const t1 = _clamp(t, 0, 1);
+
+        const hslA = a instanceof Color ? a.toHSL() : Color.from(a).toHSL();
+        const hslB = b instanceof Color ? b.toHSL() : Color.from(b).toHSL();
+
+        let dh = hslB.h - hslA.h;
+        if (dh > 180) dh -= 360;
+        if (dh < -180) dh += 360;
+
+        const h = (hslA.h + dh * t1 + 360) % 360;
+        const s = hslA.s + (hslB.s - hslA.s) * t1;
+        const l = hslA.l + (hslB.l - hslA.l) * t1;
+        const alpha = hslA.a + (hslB.a - hslA.a) * t1;
+
+        const result = Color.fromHSL(h, s, l, alpha);
+
+        if (out) {
+            out.r = result.r;
+            out.g = result.g;
+            out.b = result.b;
+            out.a = result.a;
+            return out;
+        } else {
+            return result as unknown as T;
+        }
+    }
 }
