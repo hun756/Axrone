@@ -232,6 +232,20 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return new Color(r, g, b, a);
     }
 
+    static fromCMYK(c: number, m: number, y: number, k: number, a: number = 1): Color {
+        c = _clampColor(c);
+        m = _clampColor(m);
+        y = _clampColor(y);
+        k = _clampColor(k);
+        a = _clampColor(a);
+
+        const r = 1 - Math.min(1, c * (1 - k) + k);
+        const g = 1 - Math.min(1, m * (1 - k) + k);
+        const b = 1 - Math.min(1, y * (1 - k) + k);
+
+        return new Color(r, g, b, a);
+    }
+
     equals(other: unknown): boolean {
         throw new Error('Method not implemented.');
     }
