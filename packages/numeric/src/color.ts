@@ -390,4 +390,72 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         const hsl = this.toHSL();
         return `hsla(${Math.round(hsl.h)}, ${Math.round(hsl.s * 100)}%, ${Math.round(hsl.l * 100)}%, ${hsl.a})`;
     }
+
+    static add<T extends IColorLike>(a: T, b: T, out?: T): T {
+        if (out) {
+            out.r = _clampColor(a.r + b.r);
+            out.g = _clampColor(a.g + b.g);
+            out.b = _clampColor(a.b + b.b);
+            out.a = _clampColor((a.a ?? 1) + (b.a ?? 1));
+            return out;
+        } else {
+            return {
+                r: _clampColor(a.r + b.r),
+                g: _clampColor(a.g + b.g),
+                b: _clampColor(a.b + b.b),
+                a: _clampColor((a.a ?? 1) + (b.a ?? 1)),
+            } as T;
+        }
+    }
+
+    static subtract<T extends IColorLike>(a: T, b: T, out?: T): T {
+        if (out) {
+            out.r = _clampColor(a.r - b.r);
+            out.g = _clampColor(a.g - b.g);
+            out.b = _clampColor(a.b - b.b);
+            out.a = _clampColor((a.a ?? 1) - (b.a ?? 1));
+            return out;
+        } else {
+            return {
+                r: _clampColor(a.r - b.r),
+                g: _clampColor(a.g - b.g),
+                b: _clampColor(a.b - b.b),
+                a: _clampColor((a.a ?? 1) - (b.a ?? 1)),
+            } as T;
+        }
+    }
+
+    static multiply<T extends IColorLike>(a: T, b: T, out?: T): T {
+        if (out) {
+            out.r = a.r * b.r;
+            out.g = a.g * b.g;
+            out.b = a.b * b.b;
+            out.a = (a.a ?? 1) * (b.a ?? 1);
+            return out;
+        } else {
+            return {
+                r: a.r * b.r,
+                g: a.g * b.g,
+                b: a.b * b.b,
+                a: (a.a ?? 1) * (b.a ?? 1),
+            } as T;
+        }
+    }
+
+    static multiplyScalar<T extends IColorLike>(a: T, scalar: number, out?: T): T {
+        if (out) {
+            out.r = _clampColor(a.r * scalar);
+            out.g = _clampColor(a.g * scalar);
+            out.b = _clampColor(a.b * scalar);
+            out.a = a.a ?? 1;
+            return out;
+        } else {
+            return {
+                r: _clampColor(a.r * scalar),
+                g: _clampColor(a.g * scalar),
+                b: _clampColor(a.b * scalar),
+                a: a.a ?? 1,
+            } as T;
+        }
+    }
 }
