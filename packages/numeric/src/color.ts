@@ -96,6 +96,43 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return new Color(Number(arr[offset]), Number(arr[offset + 1]), Number(arr[offset + 2]), a);
     }
 
+    static fromHex(hex: string): Color {
+        hex = hex.replace(/^#/, '');
+
+        if (hex.length === 3) {
+            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+        } else if (hex.length === 4) {
+            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+        }
+
+        const parsed = parseInt(hex, 16);
+
+        if (hex.length === 6) {
+            return new Color(
+                ((parsed >> 16) & 0xff) / 255,
+                ((parsed >> 8) & 0xff) / 255,
+                (parsed & 0xff) / 255,
+                1
+            );
+        } else if (hex.length === 8) {
+            return new Color(
+                ((parsed >> 24) & 0xff) / 255,
+                ((parsed >> 16) & 0xff) / 255,
+                ((parsed >> 8) & 0xff) / 255,
+                (parsed & 0xff) / 255
+            );
+        }
+
+        throw new Error('Invalid hex color format');
+    }
+
+    static fromRGB(r: number, g: number, b: number, a: number = 1): Color {
+        if (r > 1 || g > 1 || b > 1) {
+            return new Color(r / 255, g / 255, b / 255, a);
+        }
+        return new Color(r, g, b, a);
+    }
+
     equals(other: unknown): boolean {
         throw new Error('Method not implemented.');
     }
