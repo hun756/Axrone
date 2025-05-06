@@ -133,6 +133,105 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return new Color(r, g, b, a);
     }
 
+    static fromHSL(h: number, s: number, l: number, a: number = 1): Color {
+        h = ((h % 360) + 360) % 360;
+        s = _clampColor(s);
+        l = _clampColor(l);
+        a = _clampColor(a);
+
+        if (s === 0) {
+            return new Color(l, l, l, a);
+        }
+
+        const c = (1 - Math.abs(2 * l - 1)) * s;
+        const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+        const m = l - c / 2;
+
+        let r = 0,
+            g = 0,
+            b = 0;
+
+        if (h < 60) {
+            r = c;
+            g = x;
+            b = 0;
+        } else if (h < 120) {
+            r = x;
+            g = c;
+            b = 0;
+        } else if (h < 180) {
+            r = 0;
+            g = c;
+            b = x;
+        } else if (h < 240) {
+            r = 0;
+            g = x;
+            b = c;
+        } else if (h < 300) {
+            r = x;
+            g = 0;
+            b = c;
+        } else {
+            r = c;
+            g = 0;
+            b = x;
+        }
+
+        return new Color(r + m, g + m, b + m, a);
+    }
+
+    static fromHSV(h: number, s: number, v: number, a: number = 1): Color {
+        h = ((h % 360) + 360) % 360;
+        s = _clampColor(s);
+        v = _clampColor(v);
+        a = _clampColor(a);
+
+        const f = h / 60;
+        const i = Math.floor(f);
+        const p = v * (1 - s);
+        const q = v * (1 - s * (f - i));
+        const t = v * (1 - s * (1 - (f - i)));
+
+        let r = 0,
+            g = 0,
+            b = 0;
+
+        switch (i % 6) {
+            case 0:
+                r = v;
+                g = t;
+                b = p;
+                break;
+            case 1:
+                r = q;
+                g = v;
+                b = p;
+                break;
+            case 2:
+                r = p;
+                g = v;
+                b = t;
+                break;
+            case 3:
+                r = p;
+                g = q;
+                b = v;
+                break;
+            case 4:
+                r = t;
+                g = p;
+                b = v;
+                break;
+            case 5:
+                r = v;
+                g = p;
+                b = q;
+                break;
+        }
+
+        return new Color(r, g, b, a);
+    }
+
     equals(other: unknown): boolean {
         throw new Error('Method not implemented.');
     }
