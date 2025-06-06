@@ -507,4 +507,23 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             return result as unknown as T;
         }
     }
+
+    static darken<T extends IColorLike>(color: T, amount: number, out?: T): T {
+        const factor = Math.max(0, 1 - amount);
+        
+        if (out) {
+            out.r = color.r * factor;
+            out.g = color.g * factor;
+            out.b = color.b * factor;
+            out.a = color.a;
+            return out;
+        } else {
+            return {
+                r: color.r * factor,
+                g: color.g * factor,
+                b: color.b * factor,
+                a: color.a
+            } as T;
+        }
+    }
 }
