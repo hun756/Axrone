@@ -29,4 +29,23 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
     clone(): Quat {
         return new Quat(this.x, this.y, this.z, this.w);
     }
+
+    static fromAxisAngle<T extends IQuatLike>(axis: IQuatLike, angle: number, out?: T): IQuatLike {
+        const halfAngle = angle * 0.5;
+        const sinHalfAngle = Math.sin(halfAngle);
+        const x = axis.x * sinHalfAngle;
+        const y = axis.y * sinHalfAngle;
+        const z = axis.z * sinHalfAngle;
+        const w = Math.cos(halfAngle);
+        if (out) {
+            out.x = x;
+            out.y = y;
+            out.z = z;
+            out.w = w;
+            return out as T;
+        }
+        return new Quat(x, y, z, w);
+    }
+
+    
 }
