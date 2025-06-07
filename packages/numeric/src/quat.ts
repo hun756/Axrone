@@ -47,5 +47,30 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         return new Quat(x, y, z, w);
     }
 
-    
+    static fromEuler<T extends IQuatLike>(x: number, y: number, z: number, out?: T): IQuatLike {
+        const halfX = x * 0.5;
+        const halfY = y * 0.5;
+        const halfZ = z * 0.5;
+
+        const sinX = Math.sin(halfX);
+        const cosX = Math.cos(halfX);
+        const sinY = Math.sin(halfY);
+        const cosY = Math.cos(halfY);
+        const sinZ = Math.sin(halfZ);
+        const cosZ = Math.cos(halfZ);
+
+        const w = cosX * cosY * cosZ + sinX * sinY * sinZ;
+        const xOut = sinX * cosY * cosZ - cosX * sinY * sinZ;
+        const yOut = cosX * sinY * cosZ + sinX * cosY * sinZ;
+        const zOut = cosX * cosY * sinZ - sinX * sinY * cosZ;
+
+        if (out) {
+            out.x = xOut;
+            out.y = yOut;
+            out.z = zOut;
+            out.w = w;
+            return out as T;
+        }
+        return new Quat(xOut, yOut, zOut, w);
+    }
 }
