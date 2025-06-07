@@ -15,6 +15,17 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         public w: number = 1
     ) {}
 
+    static readonly ZERO: Readonly<Quat> = Object.freeze(new Quat(0, 0, 0, 0));
+    static readonly IDENTITY: Readonly<Quat> = Object.freeze(new Quat(0, 0, 0, 1));
+    static readonly UNIT_X: Readonly<Quat> = Object.freeze(new Quat(1, 0, 0, 0));
+    static readonly UNIT_Y: Readonly<Quat> = Object.freeze(new Quat(0, 1, 0, 0));
+    static readonly UNIT_Z: Readonly<Quat> = Object.freeze(new Quat(0, 0, 1, 0));
+    static readonly UNIT_W: Readonly<Quat> = Object.freeze(new Quat(0, 0, 0, 1));
+
+    static from<T extends IQuatLike>(q: T): Quat {
+        return new Quat(q.x, q.y, q.z, q.w);
+    }
+
     equals(other: unknown): boolean {
         if (!(other instanceof Quat)) return false;
         return this.x === other.x && this.y === other.y && this.z === other.z && this.w === other.w;
