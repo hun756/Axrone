@@ -1,4 +1,5 @@
 import { Equatable, ICloneable } from '@axrone/utility';
+import { EPSILON } from './common';
 
 export interface IQuatLike {
     x: number;
@@ -83,5 +84,118 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
             return out as T;
         }
         return new Quat(xOut, yOut, zOut, w);
+    }
+
+    static add<T extends IQuatLike>(a: T, b: T, out?: T): T {
+        if (out) {
+            out.x = a.x + b.x;
+            out.y = a.y + b.y;
+            out.z = a.z + b.z;
+            out.w = a.w + b.w;
+            return out;
+        } else {
+            return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z, w: a.w + b.w } as T;
+        }
+    }
+
+    static addScalar<T extends IQuatLike>(a: T, b: number, out?: T): T {
+        if (out) {
+            out.x = a.x + b;
+            out.y = a.y + b;
+            out.z = a.z + b;
+            out.w = a.w + b;
+            return out;
+        } else {
+            return { x: a.x + b, y: a.y + b, z: a.z + b, w: a.w + b } as T;
+        }
+    }
+
+    static subtract<T extends IQuatLike>(a: T, b: T, out?: T): T {
+        if (out) {
+            out.x = a.x - b.x;
+            out.y = a.y - b.y;
+            out.z = a.z - b.z;
+            out.w = a.w - b.w;
+            return out;
+        } else {
+            return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z, w: a.w - b.w } as T;
+        }
+    }
+
+    static subtractScalar<T extends IQuatLike>(a: T, b: number, out?: T): T {
+        if (out) {
+            out.x = a.x - b;
+            out.y = a.y - b;
+            out.z = a.z - b;
+            out.w = a.w - b;
+            return out;
+        } else {
+            return { x: a.x - b, y: a.y - b, z: a.z - b, w: a.w - b } as T;
+        }
+    }
+
+    static multiply<T extends IQuatLike>(a: T, b: T, out?: T): T {
+        const ax = a.x, ay = a.y, az = a.z, aw = a.w;
+        const bx = b.x, by = b.y, bz = b.z, bw = b.w;
+
+        if (out) {
+            out.x = ax * bw + aw * bx + ay * bz - az * by;
+            out.y = ay * bw + aw * by + az * bx - ax * bz;
+            out.z = az * bw + aw * bz + ax * by - ay * bx;
+            out.w = aw * bw - ax * bx - ay * by - az * bz;
+            return out;
+        } else {
+            return {
+                x: ax * bw + aw * bx + ay * bz - az * by,
+                y: ay * bw + aw * by + az * bx - ax * bz,
+                z: az * bw + aw * bz + ax * by - ay * bx,
+                w: aw * bw - ax * bx - ay * by - az * bz
+            } as T;
+        }
+    }
+
+    static multiplyScalar<T extends IQuatLike>(a: T, b: number, out?: T): T {
+        if (out) {
+            out.x = a.x * b;
+            out.y = a.y * b;
+            out.z = a.z * b;
+            out.w = a.w * b;
+            return out;
+        } else {
+            return { x: a.x * b, y: a.y * b, z: a.z * b, w: a.w * b } as T;
+        }
+    }
+
+    static divide<T extends IQuatLike>(a: T, b: T, out?: T): T {
+        if (Math.abs(b.x) < EPSILON || Math.abs(b.y) < EPSILON || 
+            Math.abs(b.z) < EPSILON || Math.abs(b.w) < EPSILON) {
+            throw new Error('Division by zero or near-zero value is not allowed');
+        }
+
+        if (out) {
+            out.x = a.x / b.x;
+            out.y = a.y / b.y;
+            out.z = a.z / b.z;
+            out.w = a.w / b.w;
+            return out;
+        } else {
+            return { x: a.x / b.x, y: a.y / b.y, z: a.z / b.z, w: a.w / b.w } as T;
+        }
+    }
+
+    static divideScalar<T extends IQuatLike>(a: T, b: number, out?: T): T {
+        if (Math.abs(b) < EPSILON) {
+            throw new Error('Division by zero or near-zero value is not allowed');
+        }
+
+        if (out) {
+            out.x = a.x / b;
+            out.y = a.y / b;
+            out.z = a.z / b;
+            out.w = a.w / b;
+            return out;
+        } else {
+            return { x: a.x / b, y: a.y / b, z: a.z / b, w: a.w / b } as T;
+        }
     }
 }
