@@ -331,4 +331,31 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
 
         return { x: this.x / b, y: this.y / b, z: this.z / b, w: this.w / b } as T;
     }
+
+    toEuler<T extends IQuatLike>(out?: T): T {
+        const x = this.x,
+            y = this.y,
+            z = this.z,
+            w = this.w;
+
+        const sinr_cosp = 2 * (w * x + y * z);
+        const cosr_cosp = 1 - 2 * (x * x + y * y);
+        const roll = Math.atan2(sinr_cosp, cosr_cosp);
+
+        const sinp = 2 * (w * y - z * x);
+        const pitch = Math.abs(sinp) >= 1 ? Math.sign(sinp) * (Math.PI / 2) : Math.asin(sinp);
+
+        const siny_cosp = 2 * (w * z + x * y);
+        const cosy_cosp = 1 - 2 * (y * y + z * z);
+        const yaw = Math.atan2(siny_cosp, cosy_cosp);
+
+        if (out) {
+            out.x = roll;
+            out.y = pitch;
+            out.z = yaw;
+            return out;
+        }
+
+        return { x: roll, y: pitch, z: yaw } as T;
+    }
 }
