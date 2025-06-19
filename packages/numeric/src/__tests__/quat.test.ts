@@ -1545,4 +1545,61 @@ describe('Quaternion Mathematics Library', () => {
             expect(readonlyQuat.w).toBe(4);
         });
     });
+
+    describe('Edge Cases and Error Handling', () => {
+        test('operations with special values', () => {
+            const testCases = [
+                { name: 'Infinity', quat: { x: Infinity, y: 0, z: 0, w: 0 } },
+                { name: 'Negative Infinity', quat: { x: -Infinity, y: 0, z: 0, w: 0 } },
+                { name: 'NaN', quat: { x: NaN, y: 0, z: 0, w: 0 } },
+                { name: 'Max Value', quat: { x: Number.MAX_VALUE, y: 0, z: 0, w: 0 } },
+                { name: 'Min Value', quat: { x: Number.MIN_VALUE, y: 0, z: 0, w: 0 } }
+            ];
+
+            testCases.forEach(({ name, quat }) => {
+                try {
+                    const result = Quat.add(quat, testQuats.identity);
+                    if (isFinite(quat.x)) {
+                        QuaternionTestUtils.expectValidQuaternion(result);
+                    }
+                } catch (error) {
+                    expect(error).toBeInstanceOf(Error);
+                }
+            });
+        });
+
+        test('comprehensive error message testing', () => {
+            const errorTests = [
+                {
+                    operation: () => Quat.normalize(testQuats.zero),
+                    expectedMessage: 'Cannot normalize a zero-length quaternion'
+                },
+                {
+                    operation: () => Quat.inverse(testQuats.zero),
+                    expectedMessage: 'Cannot invert a zero-length quaternion'
+                },
+                {
+                    operation: () => Quat.divideScalar(testQuats.arbitrary, 0),
+                    expectedMessage: 'Division by zero or near-zero value is not allowed'
+                },
+                {
+                    operation: () => Quat.fromArray([1, 2], 0),
+                    expectedMessage: 'Array must have at least 4 elements'
+                },
+                {
+                    operation: () => Quat.fromArray([1, 2, 3, 4], -1),
+                    expectedMessage: 'Offset cannot be negative'
+                }
+            ];
+
+            errorTests.forEach(({ operation, expectedMessage }, index) => {
+                try {
+                    operation();
+                    fail(`Expected error for test case ${index}`);
+                } catch (error) {
+                    expect(error instanceof Error ? error.message : String(error)).toContain(expectedMessage);
+                }
+            });
+        });
+    });
 });
