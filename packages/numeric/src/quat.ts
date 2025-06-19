@@ -335,6 +335,13 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         }
     }
 
+    static fromEulerVec<T extends IVec3Like, V extends IQuatLike>(
+        euler: Readonly<T>,
+        out?: V
+    ): V {
+        return Quat.fromEuler(euler.x, euler.y, euler.z, out);
+    }
+
     static toEuler<T extends IQuatLike, V extends IVec3Like>(q: Readonly<T>, out?: V): V {
         const x = q.x,
             y = q.y,
@@ -690,6 +697,10 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         this.z = -this.z * invLenSq;
         this.w = this.w * invLenSq;
         return this;
+    }
+
+    fromEuler<T extends IVec3Like>(euler: Readonly<T>): Quat {
+        return Quat.fromEulerVec(euler, this);
     }
 
     fastInverse(): Quat {
