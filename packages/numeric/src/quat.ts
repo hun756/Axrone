@@ -335,10 +335,7 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         }
     }
 
-    static fromEulerVec<T extends IVec3Like, V extends IQuatLike>(
-        euler: Readonly<T>,
-        out?: V
-    ): V {
+    static fromEulerVec<T extends IVec3Like, V extends IQuatLike>(euler: Readonly<T>, out?: V): V {
         return Quat.fromEuler(euler.x, euler.y, euler.z, out);
     }
 
@@ -384,54 +381,73 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
             throw new Error('Eye and target positions are too close');
         }
 
-        const fnx = fx / flen;
-        const fny = fy / flen;
-        const fnz = fz / flen;
+        const forward = { x: fx / flen, y: fy / flen, z: fz / flen };
 
-        const rx = fny * up.z - fnz * up.y;
-        const ry = fnz * up.x - fnx * up.z;
-        const rz = fnx * up.y - fny * up.x;
+        const rx = forward.y * up.z - forward.z * up.y;
+        const ry = forward.z * up.x - forward.x * up.z;
+        const rz = forward.x * up.y - forward.y * up.x;
 
         const rlen = Math.sqrt(rx * rx + ry * ry + rz * rz);
         if (rlen < EPSILON) {
             throw new Error('Forward and up vectors are parallel');
         }
 
-        const rnx = rx / rlen;
-        const rny = ry / rlen;
-        const rnz = rz / rlen;
+        const right = { x: rx / rlen, y: ry / rlen, z: rz / rlen };
 
-        const ux = rny * fnz - rnz * fny;
-        const uy = rnz * fnx - rnx * fnz;
-        const uz = rnx * fny - rny * fnx;
+        const upx = right.y * forward.z - right.z * forward.y;
+        const upy = right.z * forward.x - right.x * forward.z;
+        const upz = right.x * forward.y - right.y * forward.x;
 
-        const trace = rnx + uy + fnz;
+        const m00 = right.x,
+            m01 = upx,
+            m02 = forward.x;
+        const m10 = right.y,
+            m11 = upy,
+            m12 = forward.y;
+        const m20 = right.z,
+            m21 = upz,
+            m22 = forward.z;
+
+        const trace = m00 + m11 + m22;
         let qw, qx, qy, qz;
 
         if (trace > 0) {
-            const s = Math.sqrt(trace + 1) * 2;
+            const s = Math.sqrt(trace + 1.0) * 2; // s = 4 * qw
             qw = 0.25 * s;
-            qx = (uy - uz) / s;
-            qy = (fnz - rnz) / s;
-            qz = (rny - fny) / s;
-        } else if (rnx > uy && rnx > fnz) {
-            const s = Math.sqrt(1 + rnx - uy - fnz) * 2;
-            qw = (uy - uz) / s;
+            qx = (m21 - m12) / s;
+            qy = (m02 - m20) / s;
+            qz = (m10 - m01) / s;
+        } else if (m00 > m11 && m00 > m22) {
+            const s = Math.sqrt(1.0 + m00 - m11 - m22) * 2; // s = 4 * qx
+            qw = (m21 - m12) / s;
             qx = 0.25 * s;
-            qy = (fny + rny) / s;
-            qz = (fnz + rnz) / s;
-        } else if (uy > fnz) {
-            const s = Math.sqrt(1 + uy - rnx - fnz) * 2;
-            qw = (fnz - rnz) / s;
-            qx = (fny + rny) / s;
+            qy = (m01 + m10) / s;
+            qz = (m02 + m20) / s;
+        } else if (m11 > m22) {
+            const s = Math.sqrt(1.0 + m11 - m00 - m22) * 2; // s = 4 * qy
+            qw = (m02 - m20) / s;
+            qx = (m01 + m10) / s;
             qy = 0.25 * s;
-            qz = (uz + uy) / s;
+            qz = (m12 + m21) / s;
         } else {
-            const s = Math.sqrt(1 + fnz - rnx - uy) * 2;
-            qw = (rny - fny) / s;
-            qx = (fnz + rnz) / s;
-            qy = (uz + uy) / s;
+            const s = Math.sqrt(1.0 + m22 - m00 - m11) * 2; // s = 4 * qz
+            qw = (m10 - m01) / s;
+            qx = (m02 + m20) / s;
+            qy = (m12 + m21) / s;
             qz = 0.25 * s;
+        }
+
+        const qlen = Math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw);
+        if (qlen < EPSILON) {
+            qx = 0;
+            qy = 0;
+            qz = 0;
+            qw = 1;
+        } else {
+            qx /= qlen;
+            qy /= qlen;
+            qz /= qlen;
+            qw /= qlen;
         }
 
         if (out) {

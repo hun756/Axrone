@@ -1,3 +1,4 @@
+import { EPSILON } from '../common';
 import { Quat, QuatComparer, QuatEqualityComparer, QuatComparisonMode, IQuatLike } from '../quat';
 import { IVec3Like } from '../vec3';
 
@@ -1090,6 +1091,230 @@ describe('Quaternion Mathematics Library', () => {
                     QuaternionTestUtils.expectNormalized(result, TEST_PRECISION.STANDARD);
                 });
             });
+        });
+    });
+
+    // Rotation and Vector Operations
+    describe('Vector Rotation', () => {
+        test('rotateVector with known rotations', () => {
+            const rotZ90 = Quat.fromAxisAngle({ x: 0, y: 0, z: 1 }, Math.PI / 2);
+            const vectorX = { x: 1, y: 0, z: 0 };
+
+            const rotated = Quat.rotateVector(rotZ90, vectorX);
+
+            QuaternionTestUtils.expectVector3Equals(
+                rotated,
+                { x: 0, y: 1, z: 0 },
+                TEST_PRECISION.HIGH
+            );
+        });
+
+        test('rotateVector preserves vector length', () => {
+            const rotation = Quat.normalize(testQuats.arbitrary);
+            const vectors = [
+                { x: 1, y: 0, z: 0 },
+                { x: 1, y: 1, z: 1 },
+                { x: 3, y: 4, z: 5 },
+                { x: -2, y: 3, z: -1 },
+            ];
+
+            vectors.forEach((vector, index) => {
+                const originalLength = Math.sqrt(vector.x ** 2 + vector.y ** 2 + vector.z ** 2);
+                const rotated = Quat.rotateVector(rotation, vector);
+                const rotatedLength = Math.sqrt(rotated.x ** 2 + rotated.y ** 2 + rotated.z ** 2);
+
+                expect(rotatedLength).toBeCloseTo(originalLength, TEST_PRECISION.HIGH);
+            });
+        });
+
+        test('rotateVector with identity rotation', () => {
+            const vector = { x: 1, y: 2, z: 3 };
+            const rotated = Quat.rotateVector(testQuats.identity, vector);
+
+            QuaternionTestUtils.expectVector3Equals(rotated, vector, TEST_PRECISION.HIGH);
+        });
+
+        test('rotateVector composition property', () => {
+            const q1 = Quat.fromAxisAngle({ x: 1, y: 0, z: 0 }, Math.PI / 4);
+            const q2 = Quat.fromAxisAngle({ x: 0, y: 1, z: 0 }, Math.PI / 4);
+            const combined = Quat.multiply(q2, q1);
+
+            const vector = { x: 1, y: 2, z: 3 };
+
+            const step1 = Quat.rotateVector(q1, vector);
+            const step2 = Quat.rotateVector(q2, step1);
+
+            const combined_result = Quat.rotateVector(combined, vector);
+
+            QuaternionTestUtils.expectVector3Equals(
+                step2,
+                combined_result,
+                TEST_PRECISION.STANDARD
+            );
+        });
+
+        test('instance rotateVector method', () => {
+            const q = new Quat().normalize();
+            const vector = { x: 1, y: 2, z: 3 };
+
+            const staticResult = Quat.rotateVector(q, vector);
+            const instanceResult = q.rotateVector(vector);
+
+            QuaternionTestUtils.expectVector3Equals(
+                staticResult,
+                instanceResult,
+                TEST_PRECISION.HIGH
+            );
+        });
+    });
+
+    describe('Look-At Rotation', () => {
+        test('fromLookAt creates normalized quaternion', () => {
+            const eye = { x: 0, y: 0, z: 0 };
+            const target = { x: 1, y: 0, z: 0 };
+            const up = { x: 0, y: 1, z: 0 };
+
+            const lookAt = Quat.fromLookAt(eye, target, up);
+            QuaternionTestUtils.expectNormalized(lookAt, TEST_PRECISION.HIGH);
+            QuaternionTestUtils.expectValidQuaternion(lookAt);
+        });
+
+        test('fromLookAt with various directions', () => {
+            const testCases = [
+                {
+                    name: 'Look along +X axis',
+                    eye: { x: 0, y: 0, z: 0 },
+                    target: { x: 1, y: 0, z: 0 },
+                    up: { x: 0, y: 1, z: 0 },
+                },
+                {
+                    name: 'Look along +Y axis',
+                    eye: { x: 0, y: 0, z: 0 },
+                    target: { x: 0, y: 1, z: 0 },
+                    up: { x: 0, y: 0, z: 1 },
+                },
+                {
+                    name: 'Look along +Z axis',
+                    eye: { x: 0, y: 0, z: 0 },
+                    target: { x: 0, y: 0, z: 1 },
+                    up: { x: 0, y: 1, z: 0 },
+                },
+                {
+                    name: 'Look diagonally',
+                    eye: { x: 1, y: 1, z: 1 },
+                    target: { x: 2, y: 2, z: 2 },
+                    up: { x: 0, y: 1, z: 0 },
+                },
+            ];
+
+            testCases.forEach(({ name, eye, target, up }) => {
+                const lookAt = Quat.fromLookAt(eye, target, up);
+                QuaternionTestUtils.expectNormalized(lookAt, TEST_PRECISION.HIGH);
+                QuaternionTestUtils.expectValidQuaternion(lookAt);
+            });
+        });
+
+        test('fromLookAt with output parameter', () => {
+            const eye = { x: 0, y: 0, z: 0 };
+            const target = { x: 1, y: 1, z: 1 };
+            const up = { x: 0, y: 1, z: 0 };
+            const output = new Quat(999, 999, 999, 999);
+
+            const result = Quat.fromLookAt(eye, target, up, output);
+
+            expect(result).toBe(output);
+            QuaternionTestUtils.expectNormalized(output, TEST_PRECISION.HIGH);
+        });
+
+        test('fromLookAt error conditions', () => {
+            const eye = { x: 0, y: 0, z: 0 };
+            const up = { x: 0, y: 1, z: 0 };
+
+            expect(() => Quat.fromLookAt(eye, eye, up)).toThrow(
+                'Eye and target positions are too close'
+            );
+
+            expect(() => Quat.fromLookAt(eye, { x: EPSILON / 2, y: 0, z: 0 }, up)).toThrow(
+                'Eye and target positions are too close'
+            );
+
+            const target = { x: 0, y: 1, z: 0 };
+            expect(() => Quat.fromLookAt(eye, target, up)).toThrow(
+                'Forward and up vectors are parallel'
+            );
+
+            const downTarget = { x: 0, y: -1, z: 0 };
+            expect(() => Quat.fromLookAt(eye, downTarget, up)).toThrow(
+                'Forward and up vectors are parallel'
+            );
+        });
+
+        test('fromLookAt consistency with matrix conventions', () => {
+            const eye = { x: 0, y: 0, z: 0 };
+            const target = { x: 1, y: 0, z: 0 };
+            const up = { x: 0, y: 1, z: 0 };
+
+            const lookAt = Quat.fromLookAt(eye, target, up);
+
+            const testVector = { x: 0, y: 0, z: 1 };
+            const rotated = Quat.rotateVector(lookAt, testVector);
+
+            expect(Number.isFinite(rotated.x)).toBe(true);
+            expect(Number.isFinite(rotated.y)).toBe(true);
+            expect(Number.isFinite(rotated.z)).toBe(true);
+            expect(Number.isNaN(rotated.x)).toBe(false);
+            expect(Number.isNaN(rotated.y)).toBe(false);
+            expect(Number.isNaN(rotated.z)).toBe(false);
+
+            const originalLength = Math.sqrt(
+                testVector.x ** 2 + testVector.y ** 2 + testVector.z ** 2
+            );
+            const rotatedLength = Math.sqrt(rotated.x ** 2 + rotated.y ** 2 + rotated.z ** 2);
+            expect(rotatedLength).toBeCloseTo(originalLength, TEST_PRECISION.HIGH);
+        });
+    });
+
+    describe('Angle Between Quaternions', () => {
+        test('angleBetween properties', () => {
+            const q1 = testQuats.identity;
+            const q2 = testQuats.identity;
+
+            expect(Quat.angleBetween(q1, q2)).toBeCloseTo(0, TEST_PRECISION.HIGH);
+
+            const a = Quat.normalize(testQuats.arbitrary);
+            const b = Quat.normalize(testQuats.normalized);
+
+            expect(Quat.angleBetween(a, b)).toBeCloseTo(
+                Quat.angleBetween(b, a),
+                TEST_PRECISION.HIGH
+            );
+
+            const angle = Quat.angleBetween(a, b);
+            expect(angle).toBeGreaterThanOrEqual(0);
+            expect(angle).toBeLessThanOrEqual(Math.PI + NUMERICAL_LIMITS.EPSILON);
+        });
+
+        test('angleBetween for opposite quaternions', () => {
+            const q = Quat.normalize(testQuats.arbitrary);
+            const opposite = Quat.negate(q);
+
+            const angle = Quat.angleBetween(q, opposite);
+            expect(angle).toBeCloseTo(0, TEST_PRECISION.LOW);
+        });
+
+        test('instance angleBetween method', () => {
+            const q1 = new Quat(
+                testQuats.arbitrary.x,
+                testQuats.arbitrary.y,
+                testQuats.arbitrary.z,
+                testQuats.arbitrary.w
+            ).normalize();
+            const q2 = testQuats.normalized;
+
+            const staticResult = Quat.angleBetween(q1, q2);
+            const instanceResult = q1.angleBetween(q2);
+
+            expect(instanceResult).toBeCloseTo(staticResult, TEST_PRECISION.HIGH);
         });
     });
 });
