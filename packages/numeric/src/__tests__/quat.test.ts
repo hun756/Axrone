@@ -1470,4 +1470,79 @@ describe('Quaternion Mathematics Library', () => {
             }
         });
     });
+
+    describe('Memory Management and Type Safety', () => {
+        test('output parameter reuse', () => {
+            const q1 = testQuats.arbitrary;
+            const q2 = testQuats.normalized;
+            const reusableOutput = new Quat(999, 999, 999, 999);
+
+            Quat.add(q1, q2, reusableOutput);
+            const addResult = Quat.from(reusableOutput);
+
+            Quat.multiply(q1, q2, reusableOutput);
+            const multiplyResult = Quat.from(reusableOutput);
+
+            Quat.slerp(q1, q2, 0.5, reusableOutput);
+            const slerpResult = Quat.from(reusableOutput);
+
+            QuaternionTestUtils.expectQuaternionEquals(
+                addResult,
+                Quat.add(q1, q2),
+                TEST_PRECISION.HIGH
+            );
+            QuaternionTestUtils.expectQuaternionEquals(
+                multiplyResult,
+                Quat.multiply(q1, q2),
+                TEST_PRECISION.HIGH
+            );
+            QuaternionTestUtils.expectQuaternionEquals(
+                slerpResult,
+                Quat.slerp(q1, q2, 0.5),
+                TEST_PRECISION.HIGH
+            );
+        });
+
+        test('type flexibility with IQuatLike implementations', () => {
+            const plainQuat = { x: 1, y: 2, z: 3, w: 4 };
+            const result1 = Quat.normalize(plainQuat);
+            QuaternionTestUtils.expectValidQuaternion(result1);
+
+            class CustomQuat implements IQuatLike {
+                constructor(
+                    public x: number,
+                    public y: number,
+                    public z: number,
+                    public w: number
+                ) {}
+            }
+
+            const customQuat = new CustomQuat(1, 2, 3, 4);
+            const result2 = Quat.normalize(customQuat);
+            QuaternionTestUtils.expectValidQuaternion(result2);
+
+            const comparer = new QuatEqualityComparer();
+            const quatInstance = new Quat(1, 2, 3, 4);
+
+            expect(comparer.equals(plainQuat, quatInstance)).toBe(true);
+            expect(comparer.equals(customQuat, quatInstance)).toBe(true);
+            expect(comparer.equals(plainQuat, customQuat)).toBe(true);
+
+            QuaternionTestUtils.expectQuaternionEquals(result1, result2, TEST_PRECISION.HIGH);
+        });
+
+        test('readonly parameter respect', () => {
+            const readonlyQuat: Readonly<IQuatLike> = Object.freeze({ x: 1, y: 2, z: 3, w: 4 });
+
+            expect(() => {
+                const result = Quat.normalize(readonlyQuat);
+                QuaternionTestUtils.expectValidQuaternion(result);
+            }).not.toThrow();
+
+            expect(readonlyQuat.x).toBe(1);
+            expect(readonlyQuat.y).toBe(2);
+            expect(readonlyQuat.z).toBe(3);
+            expect(readonlyQuat.w).toBe(4);
+        });
+    });
 });
