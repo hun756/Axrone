@@ -154,7 +154,6 @@ class QuaternionTestUtils {
     }
 }
 
-
 // Main Test Suite
 describe('Quaternion Mathematics Library', () => {
     let testQuats: ReturnType<typeof QuaternionTestUtils.createTestQuaternions>;
@@ -168,7 +167,11 @@ describe('Quaternion Mathematics Library', () => {
         describe('Constructor Behavior', () => {
             test('default constructor creates identity quaternion', () => {
                 const q = new Quat();
-                QuaternionTestUtils.expectQuaternionEquals(q, testQuats.identity, TEST_PRECISION.HIGH);
+                QuaternionTestUtils.expectQuaternionEquals(
+                    q,
+                    testQuats.identity,
+                    TEST_PRECISION.HIGH
+                );
             });
 
             test('parameterized constructor sets values correctly', () => {
@@ -182,7 +185,7 @@ describe('Quaternion Mathematics Library', () => {
                     [Infinity, 0, 0, 0],
                     [-Infinity, 0, 0, 0],
                     [Number.MAX_VALUE, 0, 0, 0],
-                    [Number.MIN_VALUE, 0, 0, 0]
+                    [Number.MIN_VALUE, 0, 0, 0],
                 ];
 
                 cases.forEach(([x, y, z, w]) => {
@@ -209,16 +212,22 @@ describe('Quaternion Mathematics Library', () => {
             });
 
             test('constants are immutable', () => {
-                const constants = [Quat.ZERO, Quat.IDENTITY, Quat.UNIT_X, Quat.UNIT_Y, Quat.UNIT_Z, Quat.UNIT_W];
-                
-                constants.forEach(constant => {
+                const constants = [
+                    Quat.ZERO,
+                    Quat.IDENTITY,
+                    Quat.UNIT_X,
+                    Quat.UNIT_Y,
+                    Quat.UNIT_Z,
+                    Quat.UNIT_W,
+                ];
+
+                constants.forEach((constant) => {
                     expect(Object.isFrozen(constant)).toBe(true);
-                    
+
                     const originalX = constant.x;
                     try {
                         (constant as any).x = 999;
-                    } catch (e) {
-                    }
+                    } catch (e) {}
                     expect(constant.x).toBe(originalX);
                 });
             });
@@ -228,10 +237,10 @@ describe('Quaternion Mathematics Library', () => {
             test('from() creates independent copy', () => {
                 const source = testQuats.arbitrary;
                 const copy = Quat.from(source);
-                
+
                 QuaternionTestUtils.expectQuaternionEquals(copy, source);
                 expect(copy).not.toBe(source);
-                
+
                 source.x = 999;
                 expect(copy.x).not.toBe(999);
             });
@@ -240,32 +249,42 @@ describe('Quaternion Mathematics Library', () => {
                 const testCases = [
                     { array: [1, 2, 3, 4], offset: 0, expected: { x: 1, y: 2, z: 3, w: 4 } },
                     { array: [0, 1, 2, 3, 4, 5], offset: 1, expected: { x: 1, y: 2, z: 3, w: 4 } },
-                    { array: [1.5, 2.7, 3.9, 4.1], offset: 0, expected: { x: 1.5, y: 2.7, z: 3.9, w: 4.1 } }
+                    {
+                        array: [1.5, 2.7, 3.9, 4.1],
+                        offset: 0,
+                        expected: { x: 1.5, y: 2.7, z: 3.9, w: 4.1 },
+                    },
                 ];
 
                 testCases.forEach(({ array, offset, expected }, index) => {
                     const result = Quat.fromArray(array, offset);
-                    QuaternionTestUtils.expectQuaternionEquals(result, expected, TEST_PRECISION.HIGH, `case ${index}`);
+                    QuaternionTestUtils.expectQuaternionEquals(
+                        result,
+                        expected,
+                        TEST_PRECISION.HIGH,
+                        `case ${index}`
+                    );
                 });
             });
 
             test('fromArray() error handling', () => {
                 const validArray = [1, 2, 3, 4];
-                
-                expect(() => Quat.fromArray(validArray, -1))
-                    .toThrow('Offset cannot be negative');
-                
-                expect(() => Quat.fromArray([1, 2], 0))
-                    .toThrow('Array must have at least 4 elements');
-                
-                expect(() => Quat.fromArray([1, 2, 3, 4, 5], 2))
-                    .toThrow('Array must have at least 6 elements when using offset 2');
+
+                expect(() => Quat.fromArray(validArray, -1)).toThrow('Offset cannot be negative');
+
+                expect(() => Quat.fromArray([1, 2], 0)).toThrow(
+                    'Array must have at least 4 elements'
+                );
+
+                expect(() => Quat.fromArray([1, 2, 3, 4, 5], 2)).toThrow(
+                    'Array must have at least 6 elements when using offset 2'
+                );
             });
 
             test('create() factory method', () => {
                 const q1 = Quat.create();
                 const q2 = Quat.create(1, 2, 3, 4);
-                
+
                 QuaternionTestUtils.expectQuaternionEquals(q1, testQuats.identity);
                 QuaternionTestUtils.expectQuaternionEquals(q2, { x: 1, y: 2, z: 3, w: 4 });
             });
@@ -274,32 +293,32 @@ describe('Quaternion Mathematics Library', () => {
         describe('Equality and Hashing', () => {
             test('equals() with epsilon tolerance', () => {
                 const q1 = new Quat(1, 2, 3, 4);
-                const q2 = new Quat(1 + NUMERICAL_LIMITS.EPSILON/2, 2, 3, 4);
+                const q2 = new Quat(1 + NUMERICAL_LIMITS.EPSILON / 2, 2, 3, 4);
                 const q3 = new Quat(1 + 0.1, 2, 3, 4);
-                
+
                 expect(q1.equals(q2)).toBe(true);
                 expect(q1.equals(q3)).toBe(false);
             });
 
             test('equals() type safety', () => {
                 const q = new Quat(1, 2, 3, 4);
-                
+
                 expect(q.equals(null)).toBe(false);
                 expect(q.equals(undefined)).toBe(false);
-                expect(q.equals("quaternion")).toBe(false);
-                expect(q.equals({ x: 1, y: 2, z: 3, w: 4 })).toBe(false); // Not a Quat instance
+                expect(q.equals('quaternion')).toBe(false);
+                expect(q.equals({ x: 1, y: 2, z: 3, w: 4 })).toBe(false);
             });
 
             test('getHashCode() consistency and distribution', () => {
                 const q1 = new Quat(1, 2, 3, 4);
                 const q2 = new Quat(1, 2, 3, 4);
                 const q3 = new Quat(4, 3, 2, 1);
-                
+
                 expect(q1.getHashCode()).toBe(q1.getHashCode());
                 expect(q1.getHashCode()).toBe(q2.getHashCode());
-                
+
                 expect(q1.getHashCode()).not.toBe(q3.getHashCode());
-                
+
                 expect(Number.isInteger(q1.getHashCode())).toBe(true);
                 expect(q1.getHashCode()).toBeGreaterThanOrEqual(0);
             });
@@ -309,14 +328,214 @@ describe('Quaternion Mathematics Library', () => {
             test('clone() creates exact independent copy', () => {
                 const original = new Quat(1.123456789, 2.987654321, 3.555555555, 4.777777777);
                 const cloned = original.clone();
-                
+
                 QuaternionTestUtils.expectQuaternionEquals(cloned, original, TEST_PRECISION.HIGH);
                 expect(cloned).not.toBe(original);
-                
+
                 original.x = 999;
                 expect(cloned.x).toBeCloseTo(1.123456789, TEST_PRECISION.HIGH);
             });
         });
     });
 
+    // Arithmetic Operations
+    describe('Arithmetic Operations', () => {
+        describe('Addition', () => {
+            test('mathematical properties', () => {
+                const { arbitrary: a, normalized: b, unitX: c } = testQuats;
+
+                const ab = Quat.add(a, b);
+                const ba = Quat.add(b, a);
+                QuaternionTestUtils.expectQuaternionEquals(
+                    ab,
+                    ba,
+                    TEST_PRECISION.HIGH,
+                    'commutativity'
+                );
+
+                const abc1 = Quat.add(Quat.add(a, b), c);
+                const abc2 = Quat.add(a, Quat.add(b, c));
+                QuaternionTestUtils.expectQuaternionEquals(
+                    abc1,
+                    abc2,
+                    TEST_PRECISION.HIGH,
+                    'associativity'
+                );
+
+                const a_plus_zero = Quat.add(a, testQuats.zero);
+                QuaternionTestUtils.expectQuaternionEquals(
+                    a_plus_zero,
+                    a,
+                    TEST_PRECISION.HIGH,
+                    'additive identity'
+                );
+            });
+
+            test('static vs instance method consistency', () => {
+                const a = testQuats.arbitrary;
+                const b = testQuats.normalized;
+
+                const staticResult = Quat.add(a, b);
+
+                const instanceA = Quat.from(a);
+                const instanceResult = instanceA.add(b);
+
+                QuaternionTestUtils.expectQuaternionEquals(
+                    staticResult,
+                    instanceResult,
+                    TEST_PRECISION.HIGH
+                );
+                QuaternionTestUtils.expectQuaternionEquals(
+                    instanceA,
+                    instanceResult,
+                    TEST_PRECISION.HIGH
+                );
+            });
+
+            test('output parameter functionality', () => {
+                const a = testQuats.arbitrary;
+                const b = testQuats.normalized;
+                const output = new Quat(999, 999, 999, 999);
+
+                const result = Quat.add(a, b, output);
+
+                expect(result).toBe(output);
+                QuaternionTestUtils.expectQuaternionEquals(
+                    output,
+                    Quat.add(a, b),
+                    TEST_PRECISION.HIGH
+                );
+            });
+
+            test('scalar addition properties', () => {
+                const q = testQuats.arbitrary;
+                const scalar = 5.5;
+
+                const result = Quat.addScalar(q, scalar);
+
+                expect(result.x).toBeCloseTo(q.x + scalar, TEST_PRECISION.HIGH);
+                expect(result.y).toBeCloseTo(q.y + scalar, TEST_PRECISION.HIGH);
+                expect(result.z).toBeCloseTo(q.z + scalar, TEST_PRECISION.HIGH);
+                expect(result.w).toBeCloseTo(q.w + scalar, TEST_PRECISION.HIGH);
+
+                const zeroResult = Quat.addScalar(q, 0);
+                QuaternionTestUtils.expectQuaternionEquals(zeroResult, q, TEST_PRECISION.HIGH);
+            });
+        });
+
+        describe('Subtraction', () => {
+            test('mathematical properties', () => {
+                const { arbitrary: a, normalized: b } = testQuats;
+
+                const self_subtract = Quat.subtract(a, a);
+                QuaternionTestUtils.expectQuaternionEquals(
+                    self_subtract,
+                    testQuats.zero,
+                    TEST_PRECISION.HIGH
+                );
+
+                const subtract_zero = Quat.subtract(a, testQuats.zero);
+                QuaternionTestUtils.expectQuaternionEquals(subtract_zero, a, TEST_PRECISION.HIGH);
+
+                const add_then_subtract = Quat.subtract(Quat.add(a, b), b);
+                QuaternionTestUtils.expectQuaternionEquals(
+                    add_then_subtract,
+                    a,
+                    TEST_PRECISION.HIGH
+                );
+            });
+
+            test('static vs instance consistency', () => {
+                const a = testQuats.arbitrary;
+                const b = testQuats.normalized;
+
+                const staticResult = Quat.subtract(a, b);
+
+                const instanceA = Quat.from(a);
+                const instanceResult = instanceA.subtract(b);
+
+                QuaternionTestUtils.expectQuaternionEquals(
+                    staticResult,
+                    instanceResult,
+                    TEST_PRECISION.HIGH
+                );
+            });
+        });
+
+        describe('Scalar Multiplication and Division', () => {
+            test('scalar multiplication properties', () => {
+                const q = testQuats.arbitrary;
+
+                const times_one = Quat.multiplyScalar(q, 1);
+                QuaternionTestUtils.expectQuaternionEquals(times_one, q, TEST_PRECISION.HIGH);
+
+                const times_zero = Quat.multiplyScalar(q, 0);
+                QuaternionTestUtils.expectQuaternionEquals(
+                    times_zero,
+                    testQuats.zero,
+                    TEST_PRECISION.HIGH
+                );
+
+                const s = 2.5;
+                const a = testQuats.arbitrary;
+                const b = testQuats.normalized;
+
+                const left = Quat.multiplyScalar(Quat.add(a, b), s);
+                const right = Quat.add(Quat.multiplyScalar(a, s), Quat.multiplyScalar(b, s));
+                QuaternionTestUtils.expectQuaternionEquals(left, right, TEST_PRECISION.HIGH);
+            });
+
+            test('scalar division properties', () => {
+                const q = testQuats.arbitrary;
+
+                const div_one = Quat.divideScalar(q, 1);
+                QuaternionTestUtils.expectQuaternionEquals(div_one, q, TEST_PRECISION.HIGH);
+
+                const s = 3.7;
+                const multiply_then_divide = Quat.divideScalar(Quat.multiplyScalar(q, s), s);
+                QuaternionTestUtils.expectQuaternionEquals(
+                    multiply_then_divide,
+                    q,
+                    TEST_PRECISION.HIGH
+                );
+            });
+
+            test('division by zero error handling', () => {
+                const q = testQuats.arbitrary;
+
+                expect(() => Quat.divideScalar(q, 0)).toThrow(
+                    'Division by zero or near-zero value is not allowed'
+                );
+
+                expect(() => Quat.divideScalar(q, NUMERICAL_LIMITS.EPSILON / 2)).toThrow(
+                    'Division by zero or near-zero value is not allowed'
+                );
+
+                expect(() => Quat.divideScalar(q, NUMERICAL_LIMITS.EPSILON * 2)).not.toThrow();
+            });
+        });
+
+        describe('Negation', () => {
+            test('negation properties', () => {
+                const q = testQuats.arbitrary;
+
+                const double_neg = Quat.negate(Quat.negate(q));
+                QuaternionTestUtils.expectQuaternionEquals(double_neg, q, TEST_PRECISION.HIGH);
+
+                const additive_inverse = Quat.add(q, Quat.negate(q));
+                QuaternionTestUtils.expectQuaternionEquals(
+                    additive_inverse,
+                    testQuats.zero,
+                    TEST_PRECISION.HIGH
+                );
+
+                const a = testQuats.arbitrary;
+                const b = testQuats.normalized;
+
+                const left = Quat.negate(Quat.add(a, b));
+                const right = Quat.add(Quat.negate(a), Quat.negate(b));
+                QuaternionTestUtils.expectQuaternionEquals(left, right, TEST_PRECISION.HIGH);
+            });
+        });
+    });
 });
