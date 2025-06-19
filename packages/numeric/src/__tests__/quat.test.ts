@@ -153,3 +153,170 @@ class QuaternionTestUtils {
         return result!;
     }
 }
+
+
+// Main Test Suite
+describe('Quaternion Mathematics Library', () => {
+    let testQuats: ReturnType<typeof QuaternionTestUtils.createTestQuaternions>;
+
+    beforeEach(() => {
+        testQuats = QuaternionTestUtils.createTestQuaternions();
+    });
+
+    // Core Construction & Properties
+    describe('Construction and Basic Properties', () => {
+        describe('Constructor Behavior', () => {
+            test('default constructor creates identity quaternion', () => {
+                const q = new Quat();
+                QuaternionTestUtils.expectQuaternionEquals(q, testQuats.identity, TEST_PRECISION.HIGH);
+            });
+
+            test('parameterized constructor sets values correctly', () => {
+                const q = new Quat(1, 2, 3, 4);
+                QuaternionTestUtils.expectQuaternionEquals(q, { x: 1, y: 2, z: 3, w: 4 });
+            });
+
+            test('constructor handles edge values', () => {
+                const cases = [
+                    [0, 0, 0, 0],
+                    [Infinity, 0, 0, 0],
+                    [-Infinity, 0, 0, 0],
+                    [Number.MAX_VALUE, 0, 0, 0],
+                    [Number.MIN_VALUE, 0, 0, 0]
+                ];
+
+                cases.forEach(([x, y, z, w]) => {
+                    const q = new Quat(x, y, z, w);
+                    expect(q.x).toBe(x);
+                    expect(q.y).toBe(y);
+                    expect(q.z).toBe(z);
+                    expect(q.w).toBe(w);
+                });
+            });
+        });
+
+        describe('Static Constants', () => {
+            test('constants have correct mathematical properties', () => {
+                QuaternionTestUtils.expectNormalized(Quat.IDENTITY);
+                expect(Quat.len(Quat.IDENTITY)).toBeCloseTo(1.0, TEST_PRECISION.HIGH);
+
+                QuaternionTestUtils.expectNormalized(Quat.UNIT_X);
+                QuaternionTestUtils.expectNormalized(Quat.UNIT_Y);
+                QuaternionTestUtils.expectNormalized(Quat.UNIT_Z);
+                QuaternionTestUtils.expectNormalized(Quat.UNIT_W);
+
+                expect(Quat.len(Quat.ZERO)).toBe(0);
+            });
+
+            test('constants are immutable', () => {
+                const constants = [Quat.ZERO, Quat.IDENTITY, Quat.UNIT_X, Quat.UNIT_Y, Quat.UNIT_Z, Quat.UNIT_W];
+                
+                constants.forEach(constant => {
+                    expect(Object.isFrozen(constant)).toBe(true);
+                    
+                    const originalX = constant.x;
+                    try {
+                        (constant as any).x = 999;
+                    } catch (e) {
+                    }
+                    expect(constant.x).toBe(originalX);
+                });
+            });
+        });
+
+        describe('Factory Methods', () => {
+            test('from() creates independent copy', () => {
+                const source = testQuats.arbitrary;
+                const copy = Quat.from(source);
+                
+                QuaternionTestUtils.expectQuaternionEquals(copy, source);
+                expect(copy).not.toBe(source);
+                
+                source.x = 999;
+                expect(copy.x).not.toBe(999);
+            });
+
+            test('fromArray() with various configurations', () => {
+                const testCases = [
+                    { array: [1, 2, 3, 4], offset: 0, expected: { x: 1, y: 2, z: 3, w: 4 } },
+                    { array: [0, 1, 2, 3, 4, 5], offset: 1, expected: { x: 1, y: 2, z: 3, w: 4 } },
+                    { array: [1.5, 2.7, 3.9, 4.1], offset: 0, expected: { x: 1.5, y: 2.7, z: 3.9, w: 4.1 } }
+                ];
+
+                testCases.forEach(({ array, offset, expected }, index) => {
+                    const result = Quat.fromArray(array, offset);
+                    QuaternionTestUtils.expectQuaternionEquals(result, expected, TEST_PRECISION.HIGH, `case ${index}`);
+                });
+            });
+
+            test('fromArray() error handling', () => {
+                const validArray = [1, 2, 3, 4];
+                
+                expect(() => Quat.fromArray(validArray, -1))
+                    .toThrow('Offset cannot be negative');
+                
+                expect(() => Quat.fromArray([1, 2], 0))
+                    .toThrow('Array must have at least 4 elements');
+                
+                expect(() => Quat.fromArray([1, 2, 3, 4, 5], 2))
+                    .toThrow('Array must have at least 6 elements when using offset 2');
+            });
+
+            test('create() factory method', () => {
+                const q1 = Quat.create();
+                const q2 = Quat.create(1, 2, 3, 4);
+                
+                QuaternionTestUtils.expectQuaternionEquals(q1, testQuats.identity);
+                QuaternionTestUtils.expectQuaternionEquals(q2, { x: 1, y: 2, z: 3, w: 4 });
+            });
+        });
+
+        describe('Equality and Hashing', () => {
+            test('equals() with epsilon tolerance', () => {
+                const q1 = new Quat(1, 2, 3, 4);
+                const q2 = new Quat(1 + NUMERICAL_LIMITS.EPSILON/2, 2, 3, 4);
+                const q3 = new Quat(1 + 0.1, 2, 3, 4);
+                
+                expect(q1.equals(q2)).toBe(true);
+                expect(q1.equals(q3)).toBe(false);
+            });
+
+            test('equals() type safety', () => {
+                const q = new Quat(1, 2, 3, 4);
+                
+                expect(q.equals(null)).toBe(false);
+                expect(q.equals(undefined)).toBe(false);
+                expect(q.equals("quaternion")).toBe(false);
+                expect(q.equals({ x: 1, y: 2, z: 3, w: 4 })).toBe(false); // Not a Quat instance
+            });
+
+            test('getHashCode() consistency and distribution', () => {
+                const q1 = new Quat(1, 2, 3, 4);
+                const q2 = new Quat(1, 2, 3, 4);
+                const q3 = new Quat(4, 3, 2, 1);
+                
+                expect(q1.getHashCode()).toBe(q1.getHashCode());
+                expect(q1.getHashCode()).toBe(q2.getHashCode());
+                
+                expect(q1.getHashCode()).not.toBe(q3.getHashCode());
+                
+                expect(Number.isInteger(q1.getHashCode())).toBe(true);
+                expect(q1.getHashCode()).toBeGreaterThanOrEqual(0);
+            });
+        });
+
+        describe('Cloning', () => {
+            test('clone() creates exact independent copy', () => {
+                const original = new Quat(1.123456789, 2.987654321, 3.555555555, 4.777777777);
+                const cloned = original.clone();
+                
+                QuaternionTestUtils.expectQuaternionEquals(cloned, original, TEST_PRECISION.HIGH);
+                expect(cloned).not.toBe(original);
+                
+                original.x = 999;
+                expect(cloned.x).toBeCloseTo(1.123456789, TEST_PRECISION.HIGH);
+            });
+        });
+    });
+
+});
