@@ -1406,4 +1406,68 @@ describe('Quaternion Mathematics Library', () => {
             });
         });
     });
+
+    describe('Performance and Stress Testing', () => {
+        test('basic operation performance benchmarks', () => {
+            const q1 = Quat.normalize(testQuats.arbitrary);
+            const q2 = Quat.normalize(testQuats.normalized);
+
+            console.log('\n=== Quaternion Performance Benchmarks ===');
+
+            QuaternionTestUtils.benchmark('Multiplication', () => Quat.multiply(q1, q2), 100000);
+            QuaternionTestUtils.benchmark('Addition', () => Quat.add(q1, q2), 100000);
+            QuaternionTestUtils.benchmark('Normalization', () => Quat.normalize(q1), 100000);
+            QuaternionTestUtils.benchmark('SLERP', () => Quat.slerp(q1, q2, 0.5), 50000);
+            QuaternionTestUtils.benchmark(
+                'Vector Rotation',
+                () => Quat.rotateVector(q1, { x: 1, y: 2, z: 3 }),
+                50000
+            );
+
+            console.log('=== End Performance Benchmarks ===\n');
+
+            expect(true).toBe(true);
+        });
+
+        test('numerical stability with large numbers', () => {
+            const large = NUMERICAL_LIMITS.LARGE_NUMBER;
+            const q = new Quat(large, large, large, large);
+
+            const normalized = Quat.normalize(q);
+            QuaternionTestUtils.expectValidQuaternion(normalized);
+            QuaternionTestUtils.expectNormalized(normalized, TEST_PRECISION.LOW);
+        });
+
+        test('numerical stability with small numbers', () => {
+            const small = NUMERICAL_LIMITS.SMALL_NUMBER;
+            const q = new Quat(small, small, small, 1);
+
+            const normalized = Quat.normalize(q);
+            QuaternionTestUtils.expectValidQuaternion(normalized);
+            QuaternionTestUtils.expectNormalized(normalized, TEST_PRECISION.STANDARD);
+        });
+
+        test('property-based testing with random quaternions', () => {
+            const iterations = 1000;
+
+            for (let i = 0; i < iterations; i++) {
+                const q1 = QuaternionTestUtils.generateRandomQuaternion(true);
+                const q2 = QuaternionTestUtils.generateRandomQuaternion(true);
+
+                const product = Quat.multiply(q1, q2);
+                QuaternionTestUtils.expectNormalized(product, TEST_PRECISION.STANDARD);
+
+                const inverse = Quat.inverse(q1);
+                const identity_check = Quat.multiply(q1, inverse);
+                QuaternionTestUtils.expectQuaternionEquals(
+                    identity_check,
+                    testQuats.identity,
+                    TEST_PRECISION.STANDARD
+                );
+
+                const slerp_result = Quat.slerp(q1, q2, Math.random());
+                QuaternionTestUtils.expectNormalized(slerp_result, TEST_PRECISION.STANDARD);
+            }
+        });
+    });
 });
