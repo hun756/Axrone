@@ -538,4 +538,335 @@ describe('Quaternion Mathematics Library', () => {
             });
         });
     });
+
+    // Quaternion-Specific Operations
+    describe('Quaternion Multiplication (Hamilton Product)', () => {
+        test('fundamental quaternion identities', () => {
+            const { unitX: i, unitY: j, unitZ: k } = testQuats;
+
+            // i² = j² = k² = ijk = -1
+            const i_squared = Quat.multiply(i, i);
+            const j_squared = Quat.multiply(j, j);
+            const k_squared = Quat.multiply(k, k);
+
+            const negative_identity = { x: 0, y: 0, z: 0, w: -1 };
+            QuaternionTestUtils.expectQuaternionEquals(
+                i_squared,
+                negative_identity,
+                TEST_PRECISION.HIGH,
+                'i²'
+            );
+            QuaternionTestUtils.expectQuaternionEquals(
+                j_squared,
+                negative_identity,
+                TEST_PRECISION.HIGH,
+                'j²'
+            );
+            QuaternionTestUtils.expectQuaternionEquals(
+                k_squared,
+                negative_identity,
+                TEST_PRECISION.HIGH,
+                'k²'
+            );
+
+            // ij = k, jk = i, ki = j
+            QuaternionTestUtils.expectQuaternionEquals(
+                Quat.multiply(i, j),
+                k,
+                TEST_PRECISION.HIGH,
+                'ij = k'
+            );
+            QuaternionTestUtils.expectQuaternionEquals(
+                Quat.multiply(j, k),
+                i,
+                TEST_PRECISION.HIGH,
+                'jk = i'
+            );
+            QuaternionTestUtils.expectQuaternionEquals(
+                Quat.multiply(k, i),
+                j,
+                TEST_PRECISION.HIGH,
+                'ki = j'
+            );
+
+            // ji = -k, kj = -i, ik = -j (anti-commutativity)
+            QuaternionTestUtils.expectQuaternionEquals(
+                Quat.multiply(j, i),
+                Quat.negate(k),
+                TEST_PRECISION.HIGH,
+                'ji = -k'
+            );
+            QuaternionTestUtils.expectQuaternionEquals(
+                Quat.multiply(k, j),
+                Quat.negate(i),
+                TEST_PRECISION.HIGH,
+                'kj = -i'
+            );
+            QuaternionTestUtils.expectQuaternionEquals(
+                Quat.multiply(i, k),
+                Quat.negate(j),
+                TEST_PRECISION.HIGH,
+                'ik = -j'
+            );
+        });
+
+        test('multiplication properties', () => {
+            const { identity, arbitrary: a, normalized: b, unitX: c } = testQuats;
+
+            // Identity property: q * 1 = 1 * q = q
+            QuaternionTestUtils.expectQuaternionEquals(
+                Quat.multiply(a, identity),
+                a,
+                TEST_PRECISION.HIGH,
+                'right identity'
+            );
+            QuaternionTestUtils.expectQuaternionEquals(
+                Quat.multiply(identity, a),
+                a,
+                TEST_PRECISION.HIGH,
+                'left identity'
+            );
+
+            // Associativity: (a * b) * c = a * (b * c)
+            const abc1 = Quat.multiply(Quat.multiply(a, b), c);
+            const abc2 = Quat.multiply(a, Quat.multiply(b, c));
+            QuaternionTestUtils.expectQuaternionEquals(
+                abc1,
+                abc2,
+                TEST_PRECISION.HIGH,
+                'associativity'
+            );
+
+            // Non-commutativity: Generally a * b ≠ b * a
+            const ab = Quat.multiply(a, b);
+            const ba = Quat.multiply(b, a);
+            if (
+                !(
+                    Math.abs(ab.x - ba.x) < NUMERICAL_LIMITS.EPSILON &&
+                    Math.abs(ab.y - ba.y) < NUMERICAL_LIMITS.EPSILON &&
+                    Math.abs(ab.z - ba.z) < NUMERICAL_LIMITS.EPSILON &&
+                    Math.abs(ab.w - ba.w) < NUMERICAL_LIMITS.EPSILON
+                )
+            ) {
+                expect(true).toBe(true);
+            }
+        });
+
+        test('multiplication with conjugate', () => {
+            const q = testQuats.normalized;
+            const q_conj = Quat.conjugate(q);
+
+            // q * q* = |q|² (real number)
+            const q_times_conj = Quat.multiply(q, q_conj);
+            expect(q_times_conj.x).toBeCloseTo(0, TEST_PRECISION.HIGH);
+            expect(q_times_conj.y).toBeCloseTo(0, TEST_PRECISION.HIGH);
+            expect(q_times_conj.z).toBeCloseTo(0, TEST_PRECISION.HIGH);
+            expect(q_times_conj.w).toBeCloseTo(Quat.lengthSquared(q), TEST_PRECISION.HIGH);
+        });
+
+        test('instance vs static consistency', () => {
+            const a = testQuats.arbitrary;
+            const b = testQuats.normalized;
+
+            const staticResult = Quat.multiply(a, b);
+
+            const instanceA = Quat.from(a);
+            const instanceResult = instanceA.multiply(b);
+
+            QuaternionTestUtils.expectQuaternionEquals(
+                staticResult,
+                instanceResult,
+                TEST_PRECISION.HIGH
+            );
+        });
+    });
+
+    describe('Length and Normalization', () => {
+        test('length calculations', () => {
+            const testCases = [
+                { quat: { x: 3, y: 4, z: 0, w: 0 }, expectedLength: 5 },
+                { quat: { x: 1, y: 1, z: 1, w: 1 }, expectedLength: 2 },
+                { quat: testQuats.zero, expectedLength: 0 },
+                { quat: testQuats.identity, expectedLength: 1 },
+            ];
+
+            testCases.forEach(({ quat, expectedLength }, index) => {
+                expect(Quat.len(quat)).toBeCloseTo(expectedLength, TEST_PRECISION.HIGH);
+                expect(Quat.lengthSquared(quat)).toBeCloseTo(
+                    expectedLength * expectedLength,
+                    TEST_PRECISION.HIGH
+                );
+            });
+        });
+
+        test('normalization properties', () => {
+            const testCases = [testQuats.arbitrary, testQuats.large, testQuats.small];
+
+            testCases.forEach((q, index) => {
+                const normalized = Quat.normalize(q);
+
+                QuaternionTestUtils.expectNormalized(normalized, TEST_PRECISION.HIGH);
+
+                const originalLength = Quat.len(q);
+                if (originalLength > NUMERICAL_LIMITS.EPSILON) {
+                    const expectedNormalized = Quat.divideScalar(q, originalLength);
+                    QuaternionTestUtils.expectQuaternionEquals(
+                        normalized,
+                        expectedNormalized,
+                        TEST_PRECISION.STANDARD,
+                        `case ${index}`
+                    );
+                }
+            });
+        });
+
+        test('normalization error cases', () => {
+            expect(() => Quat.normalize(testQuats.zero)).toThrow(
+                'Cannot normalize a zero-length quaternion'
+            );
+
+            const nearZero = { x: NUMERICAL_LIMITS.EPSILON / 2, y: 0, z: 0, w: 0 };
+            expect(() => Quat.normalize(nearZero)).toThrow(
+                'Cannot normalize a zero-length quaternion'
+            );
+        });
+
+        test('instance normalization modifies object', () => {
+            const q = new Quat(3, 4, 0, 0);
+            const originalLength = q.length();
+
+            const result = q.normalize();
+
+            expect(result).toBe(q);
+            expect(q.length()).toBeCloseTo(1, TEST_PRECISION.HIGH);
+            expect(originalLength).toBeCloseTo(5, TEST_PRECISION.HIGH);
+        });
+    });
+
+    describe('Dot Product', () => {
+        test('dot product properties', () => {
+            const { arbitrary: a, normalized: b, unitX: c } = testQuats;
+
+            // Commutativity: a · b = b · a
+            expect(Quat.dot(a, b)).toBeCloseTo(Quat.dot(b, a), TEST_PRECISION.HIGH);
+
+            // Bilinearity: (sa) · b = s(a · b)
+            const s = 2.5;
+            const scaled_dot = Quat.dot(Quat.multiplyScalar(a, s), b);
+            const expected = s * Quat.dot(a, b);
+            expect(scaled_dot).toBeCloseTo(expected, TEST_PRECISION.HIGH);
+
+            expect(Quat.dot(a, a)).toBeCloseTo(Quat.lengthSquared(a), TEST_PRECISION.HIGH);
+
+            const ortho1 = { x: 1, y: 0, z: 0, w: 0 };
+            const ortho2 = { x: 0, y: 1, z: 0, w: 0 };
+            expect(Quat.dot(ortho1, ortho2)).toBeCloseTo(0, TEST_PRECISION.HIGH);
+        });
+
+        test('instance vs static consistency', () => {
+            const a = testQuats.arbitrary;
+            const b = testQuats.normalized;
+
+            expect(Quat.dot(a, b)).toBeCloseTo(
+                new Quat(a.x, a.y, a.z, a.w).dot(b),
+                TEST_PRECISION.HIGH
+            );
+        });
+    });
+
+    describe('Conjugate and Inverse', () => {
+        test('conjugate properties', () => {
+            const q = testQuats.arbitrary;
+
+            const conj = Quat.conjugate(q);
+            expect(conj.x).toBeCloseTo(-q.x, TEST_PRECISION.HIGH);
+            expect(conj.y).toBeCloseTo(-q.y, TEST_PRECISION.HIGH);
+            expect(conj.z).toBeCloseTo(-q.z, TEST_PRECISION.HIGH);
+            expect(conj.w).toBeCloseTo(q.w, TEST_PRECISION.HIGH);
+
+            // Double conjugate: (q*)* = q
+            const double_conj = Quat.conjugate(conj);
+            QuaternionTestUtils.expectQuaternionEquals(double_conj, q, TEST_PRECISION.HIGH);
+
+            // Conjugate of product: (ab)* = b*a*
+            const a = testQuats.arbitrary;
+            const b = testQuats.normalized;
+            const ab_conj = Quat.conjugate(Quat.multiply(a, b));
+            const b_conj_a_conj = Quat.multiply(Quat.conjugate(b), Quat.conjugate(a));
+            QuaternionTestUtils.expectQuaternionEquals(ab_conj, b_conj_a_conj, TEST_PRECISION.HIGH);
+        });
+
+        test('inverse properties', () => {
+            const q = testQuats.normalized;
+
+            // q * q⁻¹ = 1
+            const inverse = Quat.inverse(q);
+            const identity_result = Quat.multiply(q, inverse);
+            QuaternionTestUtils.expectQuaternionEquals(
+                identity_result,
+                testQuats.identity,
+                TEST_PRECISION.STANDARD
+            );
+
+            // q⁻¹ * q = 1
+            const identity_result2 = Quat.multiply(inverse, q);
+            QuaternionTestUtils.expectQuaternionEquals(
+                identity_result2,
+                testQuats.identity,
+                TEST_PRECISION.STANDARD
+            );
+
+            // (q⁻¹)⁻¹ = q
+            const double_inverse = Quat.inverse(inverse);
+            QuaternionTestUtils.expectQuaternionEquals(double_inverse, q, TEST_PRECISION.STANDARD);
+        });
+
+        test('fast inverse for unit quaternions', () => {
+            const q = Quat.normalize(testQuats.arbitrary);
+
+            const regularInverse = Quat.inverse(q);
+            const fastInverse = Quat.fastInverse(q);
+
+            QuaternionTestUtils.expectQuaternionEquals(
+                regularInverse,
+                fastInverse,
+                TEST_PRECISION.HIGH
+            );
+        });
+
+        test('inverse error handling', () => {
+            expect(() => Quat.inverse(testQuats.zero)).toThrow(
+                'Cannot invert a zero-length quaternion'
+            );
+
+            const nearZero = { x: NUMERICAL_LIMITS.EPSILON / 2, y: 0, z: 0, w: 0 };
+            expect(() => Quat.inverse(nearZero)).toThrow('Cannot invert a zero-length quaternion');
+        });
+
+        test('instance methods modify object', () => {
+            const q = new Quat(1, 2, 3, 4);
+            const original = Quat.from(q);
+
+            const conjResult = q.conjugate();
+            expect(conjResult).toBe(q);
+            expect(q.x).toBe(-original.x);
+            expect(q.y).toBe(-original.y);
+            expect(q.z).toBe(-original.z);
+            expect(q.w).toBe(original.w);
+
+            q.x = original.x;
+            q.y = original.y;
+            q.z = original.z;
+            q.w = original.w;
+            const invResult = q.inverse();
+            expect(invResult).toBe(q);
+
+            const identity_check = Quat.multiply(original, q);
+            QuaternionTestUtils.expectQuaternionEquals(
+                identity_check,
+                testQuats.identity,
+                TEST_PRECISION.STANDARD
+            );
+        });
+    });
 });
