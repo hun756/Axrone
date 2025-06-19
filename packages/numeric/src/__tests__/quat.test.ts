@@ -1317,4 +1317,93 @@ describe('Quaternion Mathematics Library', () => {
             expect(instanceResult).toBeCloseTo(staticResult, TEST_PRECISION.HIGH);
         });
     });
+
+    describe('Comparison Systems', () => {
+        describe('QuatComparer', () => {
+            test('lexicographic comparison', () => {
+                const comparer = new QuatComparer(QuatComparisonMode.LEXICOGRAPHIC);
+
+                const q1 = new Quat(1, 2, 3, 4);
+                const q2 = new Quat(1, 2, 3, 4);
+                const q3 = new Quat(1, 2, 3, 5);
+                const q4 = new Quat(0, 2, 3, 4);
+
+                expect(comparer.compare(q1, q2)).toBe(0);
+                expect(comparer.compare(q1, q3)).toBe(-1);
+                expect(comparer.compare(q3, q1)).toBe(1);
+                expect(comparer.compare(q4, q1)).toBe(-1);
+            });
+
+            test('magnitude comparison', () => {
+                const comparer = new QuatComparer(QuatComparisonMode.MAGNITUDE);
+
+                const q1 = new Quat(1, 0, 0, 0); // length = 1
+                const q2 = new Quat(1, 1, 0, 0); // length = √2
+                const q3 = new Quat(1, 1, 1, 1); // length = 2
+
+                expect(comparer.compare(q1, q2)).toBe(-1);
+                expect(comparer.compare(q2, q1)).toBe(1);
+                expect(comparer.compare(q1, q1)).toBe(0);
+                expect(comparer.compare(q2, q3)).toBe(-1);
+            });
+
+            test('angle comparison', () => {
+                const comparer = new QuatComparer(QuatComparisonMode.ANGLE);
+
+                const q1 = testQuats.identity; // angle = 0
+                const q2 = Quat.fromAxisAngle({ x: 1, y: 0, z: 0 }, Math.PI / 4);
+                const q3 = Quat.fromAxisAngle({ x: 0, y: 1, z: 0 }, Math.PI / 2);
+
+                expect(comparer.compare(q1, q2)).toBe(-1);
+                expect(comparer.compare(q2, q3)).toBe(-1);
+                expect(comparer.compare(q1, q1)).toBe(0);
+            });
+        });
+
+        describe('QuatEqualityComparer', () => {
+            test('default epsilon equality', () => {
+                const comparer = new QuatEqualityComparer();
+
+                const q1 = new Quat(1, 2, 3, 4);
+                const q2 = new Quat(1 + NUMERICAL_LIMITS.EPSILON / 2, 2, 3, 4);
+                const q3 = new Quat(1 + 0.1, 2, 3, 4);
+
+                expect(comparer.equals(q1, q2)).toBe(true);
+                expect(comparer.equals(q1, q3)).toBe(false);
+                expect(comparer.equals(q1, q1)).toBe(true);
+            });
+
+            test('custom epsilon equality', () => {
+                const comparer = new QuatEqualityComparer(0.01);
+
+                const q1 = new Quat(1, 2, 3, 4);
+                const q2 = new Quat(1.005, 2, 3, 4);
+                const q3 = new Quat(1.02, 2, 3, 4);
+
+                expect(comparer.equals(q1, q2)).toBe(true);
+                expect(comparer.equals(q1, q3)).toBe(false);
+            });
+
+            test('hash consistency', () => {
+                const comparer = new QuatEqualityComparer();
+
+                const q1 = new Quat(1, 2, 3, 4);
+                const q2 = new Quat(1, 2, 3, 4);
+                const q3 = new Quat(4, 3, 2, 1);
+
+                expect(comparer.hash(q1)).toBe(comparer.hash(q2));
+                expect(comparer.hash(q1)).not.toBe(comparer.hash(q3));
+            });
+
+            test('null handling', () => {
+                const comparer = new QuatEqualityComparer();
+                const q = new Quat(1, 2, 3, 4);
+
+                expect(comparer.equals(null as any, null as any)).toBe(true);
+                expect(comparer.equals(q, null as any)).toBe(false);
+                expect(comparer.equals(null as any, q)).toBe(false);
+                expect(comparer.hash(null as any)).toBe(0);
+            });
+        });
+    });
 });

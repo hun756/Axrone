@@ -750,7 +750,7 @@ export class QuatComparer implements Comparer<Quat> {
         this.mode = mode;
     }
 
-    compare(a: Readonly<Quat>, b: Readonly<Quat>): CompareResult {
+    compare(a: Readonly<IQuatLike>, b: Readonly<IQuatLike>): CompareResult {
         switch (this.mode) {
             case QuatComparisonMode.LEXICOGRAPHIC:
                 if (Math.abs(a.x - b.x) < EPSILON) {
@@ -766,8 +766,8 @@ export class QuatComparer implements Comparer<Quat> {
                 return a.x < b.x ? -1 : 1;
 
             case QuatComparisonMode.MAGNITUDE: {
-                const lenA = a.lengthSquared();
-                const lenB = b.lengthSquared();
+                const lenA = Quat.from(a).lengthSquared();
+                const lenB = Quat.from(b).lengthSquared();
                 if (Math.abs(lenA - lenB) < EPSILON) return 0;
                 return lenA < lenB ? -1 : 1;
             }
@@ -792,7 +792,7 @@ export class QuatEqualityComparer implements EqualityComparer<Quat> {
         this.epsilon = epsilon;
     }
 
-    equals(a: Readonly<Quat>, b: Readonly<Quat>): boolean {
+    equals(a: Readonly<IQuatLike>, b: Readonly<IQuatLike>): boolean {
         if (a === b) return true;
         if (!a || !b) return false;
 
