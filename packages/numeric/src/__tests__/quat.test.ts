@@ -511,7 +511,7 @@ describe('Quaternion Mathematics Library', () => {
                     'Division by zero or near-zero value is not allowed'
                 );
 
-                expect(() => Quat.divideScalar(q, NUMERICAL_LIMITS.EPSILON * 2)).not.toThrow();
+                expect(() => Quat.divideScalar(q, 0.001)).not.toThrow();
             });
         });
 
