@@ -869,4 +869,107 @@ describe('Quaternion Mathematics Library', () => {
             );
         });
     });
+
+    // Conversion and Creation Methods
+    describe('Axis-Angle Conversion', () => {
+        test('fromAxisAngle basic functionality', () => {
+            const axis = { x: 0, y: 1, z: 0 };
+            const angle = Math.PI / 2;
+            
+            const q = Quat.fromAxisAngle(axis, angle);
+            
+            QuaternionTestUtils.expectNormalized(q, TEST_PRECISION.HIGH);
+            expect(q.x).toBeCloseTo(0, TEST_PRECISION.HIGH);
+            expect(q.y).toBeCloseTo(Math.sin(Math.PI / 4), TEST_PRECISION.HIGH);
+            expect(q.z).toBeCloseTo(0, TEST_PRECISION.HIGH);
+            expect(q.w).toBeCloseTo(Math.cos(Math.PI / 4), TEST_PRECISION.HIGH);
+        });
+
+        test('fromAxisAngle with various axes and angles', () => {
+            const testCases = [
+                { axis: { x: 1, y: 0, z: 0 }, angle: 0, expectedW: 1 },
+                { axis: { x: 1, y: 0, z: 0 }, angle: Math.PI, expectedW: 0 },
+                { axis: { x: 0, y: 0, z: 1 }, angle: Math.PI / 2, expectedZ: Math.sin(Math.PI / 4) }
+            ];
+
+            testCases.forEach(({ axis, angle, expectedW, expectedZ }, index) => {
+                const q = Quat.fromAxisAngle(axis, angle);
+                QuaternionTestUtils.expectNormalized(q, TEST_PRECISION.HIGH);
+                
+                if (expectedW !== undefined) {
+                    expect(q.w).toBeCloseTo(expectedW, TEST_PRECISION.HIGH);
+                }
+                if (expectedZ !== undefined) {
+                    expect(q.z).toBeCloseTo(expectedZ, TEST_PRECISION.HIGH);
+                }
+            });
+        });
+
+        test('fromAxisAngle with output parameter', () => {
+            const axis = { x: 0, y: 1, z: 0 };
+            const angle = Math.PI / 2;
+            const output = new Quat(999, 999, 999, 999);
+            
+            const result = Quat.fromAxisAngle(axis, angle, output);
+            
+            expect(result).toBe(output);
+            QuaternionTestUtils.expectNormalized(output, TEST_PRECISION.HIGH);
+        });
+    });
+
+    describe('Euler Angle Conversion', () => {
+        test('fromEuler and toEuler round-trip', () => {
+            const testAngles = [
+                { x: 0, y: 0, z: 0 },
+                { x: Math.PI / 4, y: 0, z: 0 },
+                { x: 0, y: Math.PI / 4, z: 0 },
+                { x: 0, y: 0, z: Math.PI / 4 },
+                { x: Math.PI / 6, y: Math.PI / 4, z: Math.PI / 3 }
+            ];
+
+            testAngles.forEach((angles, index) => {
+                const q = Quat.fromEuler(angles.x, angles.y, angles.z);
+                QuaternionTestUtils.expectNormalized(q, TEST_PRECISION.HIGH);
+                
+                const recovered = Quat.toEuler(q);
+                
+                const q2 = Quat.fromEuler(recovered.x, recovered.y, recovered.z);
+                
+                const dot = Math.abs(Quat.dot(q, q2));
+                expect(dot).toBeCloseTo(1, TEST_PRECISION.STANDARD);
+            });
+        });
+
+        test('fromEuler special cases', () => {
+            const identity = Quat.fromEuler(0, 0, 0);
+            QuaternionTestUtils.expectQuaternionEquals(identity, testQuats.identity, TEST_PRECISION.HIGH);
+            
+            const rot180Y = Quat.fromEuler(0, Math.PI, 0);
+            expect(rot180Y.y).toBeCloseTo(1, TEST_PRECISION.HIGH);
+            expect(rot180Y.w).toBeCloseTo(0, TEST_PRECISION.HIGH);
+        });
+
+        test('toEuler with output parameter', () => {
+            const q = testQuats.rotationY90;
+            const output = { x: 999, y: 999, z: 999 };
+            
+            const result = Quat.toEuler(q, output);
+            
+            expect(result).toBe(output);
+            expect(Number.isFinite(output.x)).toBe(true);
+            expect(Number.isFinite(output.y)).toBe(true);
+            expect(Number.isFinite(output.z)).toBe(true);
+            expect(Number.isNaN(output.x)).toBe(false);
+            expect(Number.isNaN(output.y)).toBe(false);
+            expect(Number.isNaN(output.z)).toBe(false);
+        });
+
+        test('instance toEuler method', () => {
+            const q = new Quat().fromEuler({ x: Math.PI / 4, y: Math.PI / 6, z: Math.PI / 3 });
+            const staticResult = Quat.toEuler(q);
+            const instanceResult = q.toEuler();
+            
+            QuaternionTestUtils.expectVector3Equals(staticResult, instanceResult, TEST_PRECISION.HIGH);
+        });
+    });
 });
