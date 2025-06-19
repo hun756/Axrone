@@ -875,9 +875,9 @@ describe('Quaternion Mathematics Library', () => {
         test('fromAxisAngle basic functionality', () => {
             const axis = { x: 0, y: 1, z: 0 };
             const angle = Math.PI / 2;
-            
+
             const q = Quat.fromAxisAngle(axis, angle);
-            
+
             QuaternionTestUtils.expectNormalized(q, TEST_PRECISION.HIGH);
             expect(q.x).toBeCloseTo(0, TEST_PRECISION.HIGH);
             expect(q.y).toBeCloseTo(Math.sin(Math.PI / 4), TEST_PRECISION.HIGH);
@@ -889,13 +889,17 @@ describe('Quaternion Mathematics Library', () => {
             const testCases = [
                 { axis: { x: 1, y: 0, z: 0 }, angle: 0, expectedW: 1 },
                 { axis: { x: 1, y: 0, z: 0 }, angle: Math.PI, expectedW: 0 },
-                { axis: { x: 0, y: 0, z: 1 }, angle: Math.PI / 2, expectedZ: Math.sin(Math.PI / 4) }
+                {
+                    axis: { x: 0, y: 0, z: 1 },
+                    angle: Math.PI / 2,
+                    expectedZ: Math.sin(Math.PI / 4),
+                },
             ];
 
             testCases.forEach(({ axis, angle, expectedW, expectedZ }, index) => {
                 const q = Quat.fromAxisAngle(axis, angle);
                 QuaternionTestUtils.expectNormalized(q, TEST_PRECISION.HIGH);
-                
+
                 if (expectedW !== undefined) {
                     expect(q.w).toBeCloseTo(expectedW, TEST_PRECISION.HIGH);
                 }
@@ -909,9 +913,9 @@ describe('Quaternion Mathematics Library', () => {
             const axis = { x: 0, y: 1, z: 0 };
             const angle = Math.PI / 2;
             const output = new Quat(999, 999, 999, 999);
-            
+
             const result = Quat.fromAxisAngle(axis, angle, output);
-            
+
             expect(result).toBe(output);
             QuaternionTestUtils.expectNormalized(output, TEST_PRECISION.HIGH);
         });
@@ -924,17 +928,17 @@ describe('Quaternion Mathematics Library', () => {
                 { x: Math.PI / 4, y: 0, z: 0 },
                 { x: 0, y: Math.PI / 4, z: 0 },
                 { x: 0, y: 0, z: Math.PI / 4 },
-                { x: Math.PI / 6, y: Math.PI / 4, z: Math.PI / 3 }
+                { x: Math.PI / 6, y: Math.PI / 4, z: Math.PI / 3 },
             ];
 
             testAngles.forEach((angles, index) => {
                 const q = Quat.fromEuler(angles.x, angles.y, angles.z);
                 QuaternionTestUtils.expectNormalized(q, TEST_PRECISION.HIGH);
-                
+
                 const recovered = Quat.toEuler(q);
-                
+
                 const q2 = Quat.fromEuler(recovered.x, recovered.y, recovered.z);
-                
+
                 const dot = Math.abs(Quat.dot(q, q2));
                 expect(dot).toBeCloseTo(1, TEST_PRECISION.STANDARD);
             });
@@ -942,8 +946,12 @@ describe('Quaternion Mathematics Library', () => {
 
         test('fromEuler special cases', () => {
             const identity = Quat.fromEuler(0, 0, 0);
-            QuaternionTestUtils.expectQuaternionEquals(identity, testQuats.identity, TEST_PRECISION.HIGH);
-            
+            QuaternionTestUtils.expectQuaternionEquals(
+                identity,
+                testQuats.identity,
+                TEST_PRECISION.HIGH
+            );
+
             const rot180Y = Quat.fromEuler(0, Math.PI, 0);
             expect(rot180Y.y).toBeCloseTo(1, TEST_PRECISION.HIGH);
             expect(rot180Y.w).toBeCloseTo(0, TEST_PRECISION.HIGH);
@@ -952,9 +960,9 @@ describe('Quaternion Mathematics Library', () => {
         test('toEuler with output parameter', () => {
             const q = testQuats.rotationY90;
             const output = { x: 999, y: 999, z: 999 };
-            
+
             const result = Quat.toEuler(q, output);
-            
+
             expect(result).toBe(output);
             expect(Number.isFinite(output.x)).toBe(true);
             expect(Number.isFinite(output.y)).toBe(true);
@@ -968,8 +976,120 @@ describe('Quaternion Mathematics Library', () => {
             const q = new Quat().fromEuler({ x: Math.PI / 4, y: Math.PI / 6, z: Math.PI / 3 });
             const staticResult = Quat.toEuler(q);
             const instanceResult = q.toEuler();
-            
-            QuaternionTestUtils.expectVector3Equals(staticResult, instanceResult, TEST_PRECISION.HIGH);
+
+            QuaternionTestUtils.expectVector3Equals(
+                staticResult,
+                instanceResult,
+                TEST_PRECISION.HIGH
+            );
+        });
+    });
+
+    // Interpolation Methods
+    describe('Interpolation', () => {
+        describe('Linear Interpolation (LERP)', () => {
+            test('lerp boundary conditions', () => {
+                const a = testQuats.arbitrary;
+                const b = testQuats.normalized;
+
+                const lerp0 = Quat.lerp(a, b, 0);
+                QuaternionTestUtils.expectQuaternionEquals(lerp0, a, TEST_PRECISION.HIGH);
+
+                const lerp1 = Quat.lerp(a, b, 1);
+                QuaternionTestUtils.expectQuaternionEquals(lerp1, b, TEST_PRECISION.HIGH);
+
+                const lerp_half = Quat.lerp(a, b, 0.5);
+                const expected_midpoint = Quat.multiplyScalar(Quat.add(a, b), 0.5);
+                QuaternionTestUtils.expectQuaternionEquals(
+                    lerp_half,
+                    expected_midpoint,
+                    TEST_PRECISION.HIGH
+                );
+            });
+
+            test('lerp clamping behavior', () => {
+                const a = testQuats.arbitrary;
+                const b = testQuats.normalized;
+
+                const lerp_negative = Quat.lerp(a, b, -0.5);
+                QuaternionTestUtils.expectQuaternionEquals(lerp_negative, a, TEST_PRECISION.HIGH);
+
+                const lerp_over = Quat.lerp(a, b, 1.5);
+                QuaternionTestUtils.expectQuaternionEquals(lerp_over, b, TEST_PRECISION.HIGH);
+            });
+        });
+
+        describe('Spherical Linear Interpolation (SLERP)', () => {
+            test('slerp boundary conditions', () => {
+                const a = Quat.normalize(testQuats.arbitrary);
+                const b = Quat.normalize(testQuats.normalized);
+
+                const slerp0 = Quat.slerp(a, b, 0);
+                QuaternionTestUtils.expectQuaternionEquals(slerp0, a, TEST_PRECISION.HIGH);
+
+                const slerp1 = Quat.slerp(a, b, 1);
+                QuaternionTestUtils.expectQuaternionEquals(slerp1, b, TEST_PRECISION.HIGH);
+            });
+
+            test('slerp maintains unit length', () => {
+                const a = Quat.normalize(testQuats.arbitrary);
+                const b = Quat.normalize(testQuats.normalized);
+
+                const testValues = [0.1, 0.25, 0.5, 0.75, 0.9];
+
+                testValues.forEach((t) => {
+                    const result = Quat.slerp(a, b, t);
+                    QuaternionTestUtils.expectNormalized(result, TEST_PRECISION.STANDARD);
+                });
+            });
+
+            test('slerp handles opposite quaternions', () => {
+                const q = Quat.normalize(testQuats.arbitrary);
+                const opposite = Quat.negate(q);
+
+                const result = Quat.slerp(q, opposite, 0.5);
+                QuaternionTestUtils.expectNormalized(result, TEST_PRECISION.STANDARD);
+            });
+
+            test('slerp vs lerp for close quaternions', () => {
+                const a = testQuats.identity;
+                const b = Quat.fromAxisAngle({ x: 0, y: 1, z: 0 }, 0.1);
+
+                const slerp_result = Quat.slerp(a, b, 0.5);
+                const lerp_result = Quat.normalize(Quat.lerp(a, b, 0.5));
+
+                const dot = Math.abs(Quat.dot(slerp_result, lerp_result));
+                expect(dot).toBeCloseTo(1, TEST_PRECISION.STANDARD);
+            });
+        });
+
+        describe('Spherical Quadrangle Interpolation (SQUAD)', () => {
+            test('squad boundary conditions', () => {
+                const q1 = Quat.normalize(testQuats.arbitrary);
+                const q2 = Quat.normalize(testQuats.normalized);
+                const s1 = Quat.normalize(testQuats.unitX);
+                const s2 = Quat.normalize(testQuats.unitY);
+
+                const squad0 = Quat.squad(q1, q2, s1, s2, 0);
+                QuaternionTestUtils.expectQuaternionEquals(squad0, q1, TEST_PRECISION.HIGH);
+
+                const squad1 = Quat.squad(q1, q2, s1, s2, 1);
+                QuaternionTestUtils.expectQuaternionEquals(squad1, q2, TEST_PRECISION.HIGH);
+            });
+
+            test('squad maintains unit length', () => {
+                const q1 = Quat.normalize(testQuats.arbitrary);
+                const q2 = Quat.normalize(testQuats.normalized);
+                const s1 = Quat.normalize(testQuats.unitX);
+                const s2 = Quat.normalize(testQuats.unitY);
+
+                const testValues = [0.1, 0.25, 0.5, 0.75, 0.9];
+
+                testValues.forEach((t) => {
+                    const result = Quat.squad(q1, q2, s1, s2, t);
+                    QuaternionTestUtils.expectNormalized(result, TEST_PRECISION.STANDARD);
+                });
+            });
         });
     });
 });
