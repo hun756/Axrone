@@ -35,7 +35,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     static readonly LEFT: Readonly<Vec2> = Object.freeze(new Vec2(-1, 0));
     static readonly RIGHT: Readonly<Vec2> = Object.freeze(new Vec2(1, 0));
 
-    static from<T extends IVec2Like>(v: T): Vec2 {
+    static from<T extends IVec2Like>(v: Readonly<T>): Vec2 {
         return new Vec2(v.x, v.y);
     }
 
@@ -74,67 +74,95 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return h1 >>> 0;
     }
 
-    static add<T extends IVec2Like>(a: T, b: T, out?: T): T {
+    static add<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V
+    ): V {
         if (out) {
             out.x = a.x + b.x;
             out.y = a.y + b.y;
             return out;
         } else {
-            return { x: a.x + b.x, y: a.y + b.y } as T;
+            return { x: a.x + b.x, y: a.y + b.y } as V;
         }
     }
 
-    static addScalar<T extends IVec2Like>(a: T, b: number, out?: T): T {
+    static addScalar<T extends IVec2Like, V extends IVec2Like>(
+        a: Readonly<T>,
+        b: number,
+        out?: V
+    ): V {
         if (out) {
             out.x = a.x + b;
             out.y = a.y + b;
             return out;
         } else {
-            return { x: a.x + b, y: a.y + b } as T;
+            return { x: a.x + b, y: a.y + b } as V;
         }
     }
 
-    static subtract<T extends IVec2Like>(a: T, b: T, out?: T): T {
+    static subtract<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V
+    ): V {
         if (out) {
             out.x = a.x - b.x;
             out.y = a.y - b.y;
             return out;
         } else {
-            return { x: a.x - b.x, y: a.y - b.y } as T;
+            return { x: a.x - b.x, y: a.y - b.y } as V;
         }
     }
 
-    static subtractScalar<T extends IVec2Like>(a: T, b: number, out?: T): T {
+    static subtractScalar<T extends IVec2Like, V extends IVec2Like>(
+        a: Readonly<T>,
+        b: number,
+        out?: V
+    ): V {
         if (out) {
             out.x = a.x - b;
             out.y = a.y - b;
             return out;
         } else {
-            return { x: a.x - b, y: a.y - b } as T;
+            return { x: a.x - b, y: a.y - b } as V;
         }
     }
 
-    static multiply<T extends IVec2Like>(a: T, b: T, out?: T): T {
+    static multiply<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V
+    ): V {
         if (out) {
             out.x = a.x * b.x;
             out.y = a.y * b.y;
             return out;
         } else {
-            return { x: a.x * b.x, y: a.y * b.y } as T;
+            return { x: a.x * b.x, y: a.y * b.y } as V;
         }
     }
 
-    static multiplyScalar<T extends IVec2Like>(a: T, b: number, out?: T): T {
+    static multiplyScalar<T extends IVec2Like, V extends IVec2Like>(
+        a: Readonly<T>,
+        b: number,
+        out?: V
+    ): V {
         if (out) {
             out.x = a.x * b;
             out.y = a.y * b;
             return out;
         } else {
-            return { x: a.x * b, y: a.y * b } as T;
+            return { x: a.x * b, y: a.y * b } as V;
         }
     }
 
-    static divide<T extends IVec2Like>(a: T, b: T, out?: T): T {
+    static divide<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V
+    ): V {
         if (Math.abs(b.x) < EPSILON || Math.abs(b.y) < EPSILON) {
             throw new Error('Division by zero or near-zero value is not allowed');
         }
@@ -144,11 +172,15 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             out.y = a.y / b.y;
             return out;
         } else {
-            return { x: a.x / b.x, y: a.y / b.y } as T;
+            return { x: a.x / b.x, y: a.y / b.y } as V;
         }
     }
 
-    static divideScalar<T extends IVec2Like>(a: T, b: number, out?: T): T {
+    static divideScalar<T extends IVec2Like, V extends IVec2Like>(
+        a: Readonly<T>,
+        b: number,
+        out?: V
+    ): V {
         if (Math.abs(b) < EPSILON) {
             throw new Error('Division by zero or near-zero value is not allowed');
         }
@@ -158,31 +190,35 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             out.y = a.y / b;
             return out;
         } else {
-            return { x: a.x / b, y: a.y / b } as T;
+            return { x: a.x / b, y: a.y / b } as V;
         }
     }
 
-    static negate<T extends IVec2Like>(a: T, out?: T): T {
+    static negate<T extends IVec2Like, V extends IVec2Like>(a: Readonly<T>, out?: V): V {
         if (out) {
             out.x = -a.x;
             out.y = -a.y;
             return out;
         } else {
-            return { x: -a.x, y: -a.y } as T;
+            return { x: -a.x, y: -a.y } as V;
         }
     }
 
-    static inverse<T extends IVec2Like>(a: T, out?: T): T {
+    static inverse<T extends IVec2Like, V extends IVec2Like>(a: Readonly<T>, out?: V): V {
         if (out) {
             out.x = 1 / a.x;
             out.y = 1 / a.y;
             return out;
         } else {
-            return { x: 1 / a.x, y: 1 / a.y } as T;
+            return { x: 1 / a.x, y: 1 / a.y } as V;
         }
     }
 
-    static inverseSafe<T extends IVec2Like>(v: T, out?: T, defaultValue = 0): T {
+    static inverseSafe<T extends IVec2Like, V extends IVec2Like>(
+        v: Readonly<T>,
+        out?: V,
+        defaultValue = 0
+    ): V {
         const vx = v.x;
         const vy = v.y;
 
@@ -198,54 +234,54 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             return {
                 x: Math.abs(vx) < EPSILON ? defaultValue : 1 / vx,
                 y: Math.abs(vy) < EPSILON ? defaultValue : 1 / vy,
-            } as T;
+            } as V;
         }
     }
 
-    static prependicular<T extends IVec2Like>(v: T, out?: T): T {
+    static perpendicular<T extends IVec2Like, V extends IVec2Like>(v: Readonly<T>, out?: V): V {
         if (out) {
             out.x = -v.y;
             out.y = v.x;
             return out;
         } else {
-            return { x: -v.y, y: v.x } as T;
+            return { x: -v.y, y: v.x } as V;
         }
     }
 
-    static prependicularCCW<T extends IVec2Like>(v: T, out?: T): T {
+    static perpendicularCCW<T extends IVec2Like, V extends IVec2Like>(v: Readonly<T>, out?: V): V {
         if (out) {
             out.x = v.y;
             out.y = -v.x;
             return out;
         } else {
-            return { x: v.y, y: -v.x } as T;
+            return { x: v.y, y: -v.x } as V;
         }
     }
 
-    static dot<T extends IVec2Like>(a: T, b: T): number {
+    static dot<T extends IVec2Like, U extends IVec2Like>(a: Readonly<T>, b: Readonly<U>): number {
         return a.x * b.x + a.y * b.y;
     }
 
-    static cross<T extends IVec2Like>(a: T, b: T): number {
+    static cross<T extends IVec2Like, U extends IVec2Like>(a: Readonly<T>, b: Readonly<U>): number {
         return a.x * b.y - a.y * b.x;
     }
 
-    static len<T extends IVec2Like>(v: T): number {
+    static len<T extends IVec2Like>(v: Readonly<T>): number {
         return Math.sqrt(v.x * v.x + v.y * v.y);
     }
 
-    static lengthSquared<T extends IVec2Like>(v: T): number {
+    static lengthSquared<T extends IVec2Like>(v: Readonly<T>): number {
         return v.x * v.x + v.y * v.y;
     }
 
-    static fastLength<T extends IVec2Like>(v: T): number {
+    static fastLength<T extends IVec2Like>(v: Readonly<T>): number {
         // Fast approximation of vector length (~3.4% error max)
-        const min = Math.min(v.x, v.y);
-        const max = Math.max(v.x, v.y);
+        const min = Math.min(Math.abs(v.x), Math.abs(v.y));
+        const max = Math.max(Math.abs(v.x), Math.abs(v.y));
         return max + 0.3 * min;
     }
 
-    static normalize<T extends IVec2Like>(v: T, out?: T): T {
+    static normalize<T extends IVec2Like>(v: Readonly<T>, out?: T): T {
         const length = Math.sqrt(v.x * v.x + v.y * v.y);
         if (length < EPSILON) {
             throw new Error('Cannot normalize a zero-length vector');
@@ -260,7 +296,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static normalizeFast<T extends IVec2Like>(v: T, out?: T): T {
+    static normalizeFast<T extends IVec2Like>(v: Readonly<T>, out?: T): T {
         const vx = v.x;
         const vy = v.y;
         const lenSq = vx * vx + vy * vy;
@@ -287,36 +323,54 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static distanceSquared<T extends IVec2Like>(a: T, b: T): number {
+    static distanceSquared<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
         const dx = a.x - b.x;
         const dy = a.y - b.y;
         return dx * dx + dy * dy;
     }
 
-    static distance<T extends IVec2Like>(a: T, b: T): number {
+    static distance<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
         const dx = a.x - b.x;
         const dy = a.y - b.y;
         return Math.sqrt(dx * dx + dy * dy);
     }
 
-    static distanceFast<T extends IVec2Like>(a: T, b: T): number {
+    static distanceFast<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
         // Fast approximation of vector distance (~3.4% error max)
-        const dx = a.x - b.x;
-        const dy = a.y - b.y;
+        const dx = Math.abs(a.x - b.x);
+        const dy = Math.abs(a.y - b.y);
         const min = Math.min(dx, dy);
         const max = Math.max(dx, dy);
         return max + 0.3 * min;
     }
 
-    static manhattanDistance<T extends IVec2Like>(a: T, b: T): number {
+    static manhattanDistance<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
         return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
     }
 
-    static chebyshevDistance<T extends IVec2Like>(a: T, b: T): number {
+    static chebyshevDistance<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
         return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
     }
 
-    static angleBetween<T extends IVec2Like>(a: T, b: T): number {
+    static angleBetween<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
         const dotProduct = Vec2.dot(a, b);
         const lengthA = Vec2.len(a);
         const lengthB = Vec2.len(b);
@@ -329,7 +383,10 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return Math.acos(Math.max(-1, Math.min(1, cosTheta)));
     }
 
-    static fastAngle<T extends IVec2Like>(a: T, b: T): number {
+    static fastAngle<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
         const x = b.x - a.x;
         const y = b.y - a.y;
 
@@ -348,12 +405,15 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return r;
     }
 
-    static angle2Deg<T extends IVec2Like>(a: T, b: T): number {
+    static angle2Deg<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
         const angle = Vec2.angleBetween(a, b);
         return (angle * 180) / Math.PI;
     }
 
-    static rotate<T extends IVec2Like>(v: T, angle: number, out?: T): T {
+    static rotate<T extends IVec2Like>(v: Readonly<T>, angle: number, out?: T): T {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -366,7 +426,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static fastRotate<T extends IVec2Like>(v: T, angle: number, out?: T): T {
+    static fastRotate<T extends IVec2Like>(v: Readonly<T>, angle: number, out?: T): T {
         const x = v.x;
         const y = v.y;
 
@@ -410,7 +470,12 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return out;
     }
 
-    static rotateAround<T extends IVec2Like>(v: T, angle: number, pivot: T, out?: T): T {
+    static rotateAround<T extends IVec2Like, U extends IVec2Like>(
+        v: Readonly<T>,
+        angle: number,
+        pivot: Readonly<U>,
+        out?: T
+    ): T {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -426,7 +491,12 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static lerp<T extends IVec2Like>(a: T, b: T, t: number, out?: T): T {
+    static lerp<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: T
+    ): T {
         const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
         if (out) {
             out.x = a.x + (b.x - a.x) * t1;
@@ -437,7 +507,12 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static lerpUnClamped<T extends IVec2Like>(a: T, b: T, t: number, out?: T): T {
+    static lerpUnClamped<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: T
+    ): T {
         if (out) {
             out.x = a.x + (b.x - a.x) * t;
             out.y = a.y + (b.y - a.y) * t;
@@ -447,7 +522,12 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static slerp<T extends IVec2Like>(a: T, b: T, t: number, out?: T): T {
+    static slerp<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: T
+    ): T {
         const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
         const angleA = Vec2.angleBetween(a, b);
         const angleB = Vec2.angleBetween(b, a);
@@ -477,7 +557,12 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static smoothStep<T extends IVec2Like>(a: T, b: T, t: number, out?: T): T {
+    static smoothStep<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: T
+    ): T {
         const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
         const t2 = t1 * t1 * (3 - 2 * t1); // Smooth step function: 3t² - 2t³
         if (out) {
@@ -489,7 +574,12 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static smootherStep<T extends IVec2Like>(a: T, b: T, t: number, out?: T): T {
+    static smootherStep<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: T
+    ): T {
         const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
         // Smoother step: 6t⁵ - 15t⁴ + 10t³
         const t2 = t1 * t1 * t1 * (10 - 15 * t1 + 6 * t1 * t1);
@@ -502,7 +592,13 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static cubicBezier<T extends IVec2Like>(a: T, c1: T, c2: T, b: T, t: number, out?: T): T {
+    static cubicBezier<
+        T extends IVec2Like,
+        U extends IVec2Like,
+        V extends IVec2Like,
+        W extends IVec2Like,
+        O extends IVec2Like,
+    >(a: Readonly<T>, c1: Readonly<U>, c2: Readonly<V>, b: Readonly<W>, t: number, out?: O): O {
         const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
         const oneMinusT = 1 - t1;
         const oneMinusT2 = oneMinusT * oneMinusT;
@@ -522,11 +618,17 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             return {
                 x: oneMinusT3 * a.x + oneMinusT2_3t * c1.x + oneMinusT_3t2 * c2.x + t3 * b.x,
                 y: oneMinusT3 * a.y + oneMinusT2_3t * c1.y + oneMinusT_3t2 * c2.y + t3 * b.y,
-            } as T;
+            } as O;
         }
     }
 
-    static hermite<T extends IVec2Like>(p0: T, m0: T, p1: T, m1: T, t: number, out?: T): T {
+    static hermite<
+        T extends IVec2Like,
+        U extends IVec2Like,
+        V extends IVec2Like,
+        W extends IVec2Like,
+        O extends IVec2Like,
+    >(p0: Readonly<T>, m0: Readonly<U>, p1: Readonly<V>, m1: Readonly<W>, t: number, out?: O): O {
         const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
         const t2 = t1 * t1;
         const t3 = t2 * t1;
@@ -544,23 +646,29 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             return {
                 x: h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x,
                 y: h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y,
-            } as T;
+            } as O;
         }
     }
 
-    static catmullRom<T extends IVec2Like>(
-        p0: T,
-        p1: T,
-        p2: T,
-        p3: T,
+    static catmullRom<
+        T extends IVec2Like,
+        U extends IVec2Like,
+        V extends IVec2Like,
+        W extends IVec2Like,
+        O extends IVec2Like,
+    >(
+        p0: Readonly<T>,
+        p1: Readonly<U>,
+        p2: Readonly<V>,
+        p3: Readonly<W>,
         t: number,
         tension: number = 0.5,
-        out?: T
-    ): T {
+        out?: O
+    ): O {
         const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
 
         if (!out) {
-            out = { x: 0, y: 0 } as T;
+            out = { x: 0, y: 0 } as O;
         }
 
         if (t1 === 0) {
@@ -638,7 +746,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         };
     }
 
-    add<T extends IVec2Like>(other: T): Vec2 {
+    add<T extends IVec2Like>(other: Readonly<T>): Vec2 {
         this.x += other.x;
         this.y += other.y;
         return this;
@@ -650,7 +758,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return this;
     }
 
-    subtract<T extends IVec2Like>(other: T): Vec2 {
+    subtract<T extends IVec2Like>(other: Readonly<T>): Vec2 {
         this.x -= other.x;
         this.y -= other.y;
         return this;
@@ -662,7 +770,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return this;
     }
 
-    multiply<T extends IVec2Like>(other: T): Vec2 {
+    multiply<T extends IVec2Like>(other: Readonly<T>): Vec2 {
         this.x *= other.x;
         this.y *= other.y;
         return this;
@@ -674,7 +782,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return this;
     }
 
-    divide<T extends IVec2Like>(other: T): Vec2 {
+    divide<T extends IVec2Like>(other: Readonly<T>): Vec2 {
         if (Math.abs(other.x) < EPSILON || Math.abs(other.y) < EPSILON) {
             throw new Error('Division by zero or near-zero value is not allowed');
         }
@@ -694,11 +802,11 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return this;
     }
 
-    dot<T extends IVec2Like>(other: T): number {
+    dot<T extends IVec2Like>(other: Readonly<T>): number {
         return this.x * other.x + this.y * other.y;
     }
 
-    cross<T extends IVec2Like>(other: T): number {
+    cross<T extends IVec2Like>(other: Readonly<T>): number {
         return this.x * other.y - this.y * other.x;
     }
 
@@ -712,8 +820,8 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
 
     fastLength(): number {
         // Fast approximation of vector length (~3.4% error max)
-        const min = Math.min(this.x, this.y);
-        const max = Math.max(this.x, this.y);
+        const min = Math.min(Math.abs(this.x), Math.abs(this.y));
+        const max = Math.max(Math.abs(this.x), Math.abs(this.y));
         return max + 0.3 * min;
     }
 
@@ -768,36 +876,36 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return this;
     }
 
-    distanceSquared<T extends IVec2Like>(other: T): number {
+    distanceSquared<T extends IVec2Like>(other: Readonly<T>): number {
         const dx = this.x - other.x;
         const dy = this.y - other.y;
         return dx * dx + dy * dy;
     }
 
-    distance<T extends IVec2Like>(other: T): number {
+    distance<T extends IVec2Like>(other: Readonly<T>): number {
         const dx = this.x - other.x;
         const dy = this.y - other.y;
         return Math.sqrt(dx * dx + dy * dy);
     }
 
-    distanceFast<T extends IVec2Like>(other: T): number {
+    distanceFast<T extends IVec2Like>(other: Readonly<T>): number {
         // Fast approximation of vector distance (~3.4% error max)
-        const dx = this.x - other.x;
-        const dy = this.y - other.y;
+        const dx = Math.abs(this.x - other.x);
+        const dy = Math.abs(this.y - other.y);
         const min = Math.min(dx, dy);
         const max = Math.max(dx, dy);
         return max + 0.3 * min;
     }
 
-    manhattanDistance<T extends IVec2Like>(other: T): number {
+    manhattanDistance<T extends IVec2Like>(other: Readonly<T>): number {
         return Math.abs(this.x - other.x) + Math.abs(this.y - other.y);
     }
 
-    chebyshevDistance<T extends IVec2Like>(other: T): number {
+    chebyshevDistance<T extends IVec2Like>(other: Readonly<T>): number {
         return Math.max(Math.abs(this.x - other.x), Math.abs(this.y - other.y));
     }
 
-    angleBetWeen<T extends IVec2Like>(other: T): number {
+    angleBetween<T extends IVec2Like>(other: Readonly<T>): number {
         const dotProduct = this.dot(other);
         const lengthA = this.length();
         const lengthB = Vec2.len(other);
@@ -815,7 +923,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return angle < 0 ? angle + Math.PI * 2 : angle;
     }
 
-    fastAngle<T extends IVec2Like>(other: T): number {
+    fastAngle<T extends IVec2Like>(other: Readonly<T>): number {
         const x = other.x - this.x;
         const y = other.y - this.y;
 
@@ -834,8 +942,8 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return r;
     }
 
-    angle2Deg<T extends IVec2Like>(other: T): number {
-        const angle = this.angleBetWeen(other);
+    angle2Deg<T extends IVec2Like>(other: Readonly<T>): number {
+        const angle = this.angleBetween(other);
         return (angle * 180) / Math.PI;
     }
 
@@ -856,7 +964,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return this;
     }
 
-    rotateAround<T extends IVec2Like>(pivot: T, angle: number): Vec2 {
+    rotateAround<T extends IVec2Like>(pivot: Readonly<T>, angle: number): Vec2 {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -883,7 +991,7 @@ export class Vec2Comparer implements Comparer<Vec2> {
         this.mode = mode;
     }
 
-    compare(a: Vec2, b: Vec2): CompareResult {
+    compare(a: Readonly<Vec2>, b: Readonly<Vec2>): CompareResult {
         switch (this.mode) {
             case Vec2ComparisonMode.LEXICOGRAPHIC:
                 if (Math.abs(a.x - b.x) < EPSILON) {
@@ -926,14 +1034,14 @@ export class Vec2EqualityComparer implements EqualityComparer<Vec2> {
         this.epsilon = epsilon;
     }
 
-    equals(a: Vec2, b: Vec2): boolean {
+    equals(a: Readonly<Vec2>, b: Readonly<Vec2>): boolean {
         if (a === b) return true;
         if (!a || !b) return false;
 
         return Math.abs(a.x - b.x) < this.epsilon && Math.abs(a.y - b.y) < this.epsilon;
     }
 
-    hash(obj: Vec2): number {
+    hash(obj: Readonly<Vec2>): number {
         if (!obj) return 0;
 
         let h1 = 2166136261;
