@@ -1143,4 +1143,41 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             } as T;
         }
     }
+
+    static reflect<T extends IVec3Like, U extends IVec3Like>(
+        v: Readonly<T>,
+        normal: Readonly<U>,
+        out?: T
+    ): T {
+        const dotProduct = Vec3.dot(v, normal);
+        const factor = 2 * dotProduct;
+
+        if (out) {
+            out.x = v.x - factor * normal.x;
+            out.y = v.y - factor * normal.y;
+            out.z = v.z - factor * normal.z;
+            return out;
+        } else {
+            return {
+                x: v.x - factor * normal.x,
+                y: v.y - factor * normal.y,
+                z: v.z - factor * normal.z,
+            } as T;
+        }
+    }
+
+    project<T extends IVec3Like>(onto: Readonly<T>): Vec3 {
+        Vec3.project(this, onto, this);
+        return this;
+    }
+
+    reject<T extends IVec3Like>(onto: Readonly<T>): Vec3 {
+        Vec3.reject(this, onto, this);
+        return this;
+    }
+
+    reflect<T extends IVec3Like>(normal: Readonly<T>): Vec3 {
+        Vec3.reflect(this, normal, this);
+        return this;
+    }
 }
