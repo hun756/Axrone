@@ -284,5 +284,117 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         }
     }
 
-    
+    static len<T extends IVec3Like>(v: Readonly<T>): number {
+        return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    }
+
+    static lengthSquared<T extends IVec3Like>(v: Readonly<T>): number {
+        return v.x * v.x + v.y * v.y + v.z * v.z;
+    }
+
+    static fastLength<T extends IVec3Like>(v: Readonly<T>): number {
+        const ax = Math.abs(v.x);
+        const ay = Math.abs(v.y);
+        const az = Math.abs(v.z);
+
+        const max = Math.max(ax, ay, az);
+        const mid = ax + ay + az - max - Math.min(ax, ay, az);
+        const min = Math.min(ax, ay, az);
+
+        return max + 0.4 * mid + 0.2 * min;
+    }
+
+    static normalize<T extends IVec3Like>(v: Readonly<T>, out?: T): T {
+        const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+        if (length < EPSILON) {
+            throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        if (out) {
+            out.x = v.x / length;
+            out.y = v.y / length;
+            out.z = v.z / length;
+            return out;
+        } else {
+            return { x: v.x / length, y: v.y / length, z: v.z / length } as T;
+        }
+    }
+
+    static normalizeFast<T extends IVec3Like>(v: Readonly<T>, out?: T): T {
+        const vx = v.x;
+        const vy = v.y;
+        const vz = v.z;
+        const lenSq = vx * vx + vy * vy + vz * vz;
+        if (lenSq < EPSILON) {
+            throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        let i = 0;
+        const buf = new ArrayBuffer(4);
+        const view = new DataView(buf);
+        view.setFloat32(0, lenSq);
+        i = view.getInt32(0);
+        i = 0x5f3759df - (i >> 1);
+        view.setInt32(0, i);
+        let invLen = view.getFloat32(0);
+        invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
+
+        if (out) {
+            out.x = vx * invLen;
+            out.y = vy * invLen;
+            out.z = vz * invLen;
+            return out;
+        } else {
+            return { x: vx * invLen, y: vy * invLen, z: vz * invLen } as T;
+        }
+    }
+
+    static distanceSquared<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        const dz = a.z - b.z;
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    static distance<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        const dz = a.z - b.z;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    static distanceFast<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
+        const dx = Math.abs(a.x - b.x);
+        const dy = Math.abs(a.y - b.y);
+        const dz = Math.abs(a.z - b.z);
+
+        const max = Math.max(dx, dy, dz);
+        const mid = dx + dy + dz - max - Math.min(dx, dy, dz);
+        const min = Math.min(dx, dy, dz);
+
+        return max + 0.4 * mid + 0.2 * min;
+    }
+
+    static manhattanDistance<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
+        return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) + Math.abs(a.z - b.z);
+    }
+
+    static chebyshevDistance<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
+        return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.z - b.z));
+    }
 }
