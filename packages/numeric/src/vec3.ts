@@ -1181,3 +1181,77 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return this;
     }
 }
+
+export enum Vec3ComparisonMode {
+    LEXICOGRAPHIC,
+    MAGNITUDE,
+    MANHATTAN,
+}
+
+export class Vec3Comparer implements Comparer<Vec3> {
+    private readonly mode: Vec3ComparisonMode;
+
+    constructor(mode: Vec3ComparisonMode = Vec3ComparisonMode.LEXICOGRAPHIC) {
+        this.mode = mode;
+    }
+
+    compare(a: Readonly<Vec3>, b: Readonly<Vec3>): CompareResult {
+        switch (this.mode) {
+            case Vec3ComparisonMode.LEXICOGRAPHIC:
+                if (Math.abs(a.x - b.x) < EPSILON) {
+                    if (Math.abs(a.y - b.y) < EPSILON) {
+                        if (Math.abs(a.z - b.z) < EPSILON) return 0;
+                        return a.z < b.z ? -1 : 1;
+                    }
+                    return a.y < b.y ? -1 : 1;
+                }
+                return a.x < b.x ? -1 : 1;
+
+            case Vec3ComparisonMode.MAGNITUDE: {
+                const lenA = a.lengthSquared();
+                const lenB = b.lengthSquared();
+                if (Math.abs(lenA - lenB) < EPSILON) return 0;
+                return lenA < lenB ? -1 : 1;
+            }
+
+            case Vec3ComparisonMode.MANHATTAN: {
+                const distA = Math.abs(a.x) + Math.abs(a.y) + Math.abs(a.z);
+                const distB = Math.abs(b.x) + Math.abs(b.y) + Math.abs(b.z);
+                if (Math.abs(distA - distB) < EPSILON) return 0;
+                return distA < distB ? -1 : 1;
+            }
+
+            default:
+                throw new Error(`Unsupported Vec3 comparison mode: ${this.mode}`);
+        }
+    }
+}
+
+export class Vec3EqualityComparer implements EqualityComparer<Vec3> {
+    private readonly epsilon: number;
+
+    constructor(epsilon: number = EPSILON) {
+        this.epsilon = epsilon;
+    }
+
+    equals(a: Readonly<Vec3>, b: Readonly<Vec3>): boolean {
+        if (a === b) return true;
+        if (!a || !b) return false;
+
+        return (
+            Math.abs(a.x - b.x) < this.epsilon &&
+            Math.abs(a.y - b.y) < this.epsilon &&
+            Math.abs(a.z - b.z) < this.epsilon
+        );
+    }
+
+    hash(obj: Readonly<Vec3>): number {
+        if (!obj) return 0;
+
+        let h1 = 2166136261;
+        h1 = Math.imul(h1 ^ Math.floor(obj.x * 1000), 16777619);
+        h1 = Math.imul(h1 ^ Math.floor(obj.y * 1000), 16777619);
+        h1 = Math.imul(h1 ^ Math.floor(obj.z * 1000), 16777619);
+        return h1 >>> 0;
+    }
+}
