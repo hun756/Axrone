@@ -1400,4 +1400,52 @@ describe('Vec3 Test Suite', () => {
             expect(v).toBeCloseToVec3(original);
         });
     });
+
+    // PERFORMANCE TESTS
+    describe('Performance Tests', () => {
+        test('static methods should be efficient for large datasets', () => {
+            const vectors = Vec3TestDataBuilder.createBatch(PERFORMANCE_ITERATIONS);
+            
+            const start = performance.now();
+            
+            for (let i = 0; i < vectors.length - 1; i++) {
+                Vec3.add(vectors[i], vectors[i + 1]);
+                Vec3.dot(vectors[i], vectors[i + 1]);
+                Vec3.cross(vectors[i], vectors[i + 1]);
+            }
+            
+            const end = performance.now();
+            const timePerOperation = (end - start) / (vectors.length * 3);
+            
+            expect(timePerOperation).toBeLessThan(0.01); // 0.01ms per operation
+        });
+
+        test('fast methods should be faster than regular methods', () => {
+            const vectors = Vec3TestDataBuilder.createBatch(1000);
+            
+            const startRegular = performance.now();
+            vectors.forEach(v => Vec3.len(v));
+            const endRegular = performance.now();
+            const regularTime = endRegular - startRegular;
+            
+            const startFast = performance.now();
+            vectors.forEach(v => Vec3.fastLength(v));
+            const endFast = performance.now();
+            const fastTime = endFast - startFast;
+            
+            expect(fastTime).toBeLessThan(1);
+            expect(regularTime).toBeLessThan(1);
+        });
+
+        test('normalizeFast should complete within reasonable time', () => {
+            const vectors = Vec3TestDataBuilder.createBatch(1000).filter(v => v.length() > EPSILON);
+            
+            const startFast = performance.now();
+            vectors.forEach(v => Vec3.normalizeFast(v));
+            const endFast = performance.now();
+            const fastTime = endFast - startFast;
+            
+            expect(fastTime).toBeLessThan(1);
+        });
+    });
 });
