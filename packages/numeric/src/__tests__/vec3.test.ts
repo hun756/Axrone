@@ -87,7 +87,7 @@ expect.extend({
     },
 
     toBePerpendicularTo(received: Vec3, other: Vec3, precision = FLOAT_PRECISION) {
-        const dotProduct = received.dot(other);
+        const dotProduct = Vec3.dot(received, other);
         const pass = Math.abs(dotProduct) < precision;
 
         return {
@@ -945,10 +945,10 @@ describe('Vec3 Test Suite', () => {
                 const p1 = new Vec3(1, 0, 0);
                 const p2 = new Vec3(2, 1, 0);
                 const p3 = new Vec3(3, 1, 0);
-                
+
                 const result0 = Vec3.catmullRom(p0, p1, p2, p3, 0);
                 const result1 = Vec3.catmullRom(p0, p1, p2, p3, 1);
-                
+
                 expect(result0).toEqual(p1);
                 expect(result1).toEqual(p2);
             });
@@ -958,16 +958,99 @@ describe('Vec3 Test Suite', () => {
                 const p1 = new Vec3(1, 0, 0);
                 const p2 = new Vec3(2, 0, 0);
                 const p3 = new Vec3(3, 1, 0);
-                
-                const result1 = Vec3.catmullRom(p0, p1, p2, p3, 0.25, 0);   // Normal tension
+
+                const result1 = Vec3.catmullRom(p0, p1, p2, p3, 0.25, 0); // Normal tension
                 const result2 = Vec3.catmullRom(p0, p1, p2, p3, 0.25, 0.5); // Medium
-                const result3 = Vec3.catmullRom(p0, p1, p2, p3, 0.25, 1);   // Max
-                
+                const result3 = Vec3.catmullRom(p0, p1, p2, p3, 0.25, 1); // Max
+
                 const diff1 = Vec3.distance(result1, result2);
                 const diff2 = Vec3.distance(result2, result3);
                 const diff3 = Vec3.distance(result1, result3);
-                
+
                 expect(Math.max(diff1, diff2, diff3)).toBeGreaterThan(0.001);
+            });
+        });
+    });
+
+    // 3D SPECIFIC OPERATIONS
+    describe('3D Specific Operations', () => {
+        describe('static project', () => {
+            test('should project vector onto another', () => {
+                const v = new Vec3(3, 4, 0);
+                const onto = new Vec3(1, 0, 0);
+                const result = Vec3.project(v, onto);
+                expect(result).toEqual(new Vec3(3, 0, 0));
+            });
+
+            test('should handle projection onto diagonal vector', () => {
+                const v = new Vec3(1, 2, 3);
+                const onto = new Vec3(1, 1, 1);
+                const result = Vec3.project(v, onto);
+
+                const normalized = Vec3.normalize(onto);
+                const scalar = Vec3.dot(v, normalized);
+                const expected = Vec3.multiplyScalar(normalized, scalar);
+                expect(result).toBeCloseToVec3(Vec3.from(expected));
+            });
+
+            test('should throw error for zero vector projection', () => {
+                const v = new Vec3(1, 2, 3);
+                const onto = new Vec3(0, 0, 0);
+                expect(() => Vec3.project(v, onto)).toThrow(
+                    'Cannot project onto zero-length vector'
+                );
+            });
+        });
+
+        describe('static reject', () => {
+            test('should calculate rejection (perpendicular component)', () => {
+                const v = new Vec3(3, 4, 0);
+                const onto = new Vec3(1, 0, 0);
+                const result = Vec3.reject(v, onto);
+                expect(result).toBeCloseToVec3(new Vec3(0, 4, 0));
+            });
+
+            test('should be perpendicular to projection base', () => {
+                const v = new Vec3(1, 2, 3);
+                const onto = new Vec3(1, 1, 1);
+                const rejection = Vec3.reject(v, onto);
+                const normalized = Vec3.normalize(onto);
+
+                expect(rejection).toBePerpendicularTo(normalized);
+            });
+
+            test('should satisfy v = project + reject', () => {
+                const v = new Vec3(1, 2, 3);
+                const onto = new Vec3(2, 1, 1);
+
+                const projection = Vec3.project(v, onto);
+                const rejection = Vec3.reject(v, onto);
+                const sum = Vec3.add(projection, rejection);
+
+                expect(sum).toBeCloseToVec3(v);
+            });
+        });
+
+        describe('static reflect', () => {
+            test('should reflect vector across normal', () => {
+                const v = new Vec3(1, -1, 0);
+                const normal = new Vec3(0, 1, 0);
+                const result = Vec3.reflect(v, normal);
+                expect(result).toBeCloseToVec3(new Vec3(1, 1, 0));
+            });
+
+            test('should preserve magnitude', () => {
+                const v = new Vec3(3, 4, 5);
+                const normal = Vec3.normalize(new Vec3(1, 1, 1));
+                const result = Vec3.reflect(v, normal, new Vec3());
+                expect(result.length()).toBeCloseTo(v.length(), 6);
+            });
+
+            test('should handle reflection across plane', () => {
+                const v = new Vec3(1, 0, 0);
+                const normal = new Vec3(-1, 0, 0); // Mirror across YZ plane
+                const result = Vec3.reflect(v, normal);
+                expect(result).toBeCloseToVec3(new Vec3(-1, 0, 0));
             });
         });
     });
