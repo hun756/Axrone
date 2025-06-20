@@ -736,4 +736,73 @@ describe('Vec3 Test Suite', () => {
             });
         });
     });
+
+    // ROTATION OPERATIONS
+    describe('Rotation Operations', () => {
+        describe('static rotateX', () => {
+            test('should rotate around X axis', () => {
+                const v = new Vec3(0, 1, 0);
+                const result = Vec3.rotateX(v, Math.PI / 2);
+                expect(result).toBeCloseToVec3(new Vec3(0, 0, 1));
+            });
+
+            test('should not affect X component', () => {
+                const v = new Vec3(5, 1, 0);
+                const result = Vec3.rotateX(v, Math.PI / 4);
+                expect(result.x).toBeCloseTo(5, 6);
+            });
+        });
+
+        describe('static rotateY', () => {
+            test('should rotate around Y axis', () => {
+                const v = new Vec3(1, 0, 0);
+                const result = Vec3.rotateY(v, Math.PI / 2);
+                expect(result).toBeCloseToVec3(new Vec3(0, 0, -1));
+            });
+
+            test('should not affect Y component', () => {
+                const v = new Vec3(1, 5, 0);
+                const result = Vec3.rotateY(v, Math.PI / 4);
+                expect(result.y).toBeCloseTo(5, 6);
+            });
+        });
+
+        describe('static rotateZ', () => {
+            test('should rotate around Z axis', () => {
+                const v = new Vec3(1, 0, 0);
+                const result = Vec3.rotateZ(v, Math.PI / 2);
+                expect(result).toBeCloseToVec3(new Vec3(0, 1, 0));
+            });
+
+            test('should not affect Z component', () => {
+                const v = new Vec3(1, 0, 5);
+                const result = Vec3.rotateZ(v, Math.PI / 4);
+                expect(result.z).toBeCloseTo(5, 6);
+            });
+        });
+
+        describe('static rotateAxis', () => {
+            test('should rotate around arbitrary axis', () => {
+                const v = new Vec3(1, 0, 0);
+                const axis = new Vec3(0, 0, 1);
+                const result = Vec3.rotateAxis(v, axis, Math.PI / 2);
+                expect(result).toBeCloseToVec3(new Vec3(0, 1, 0));
+            });
+
+            test('should preserve vector length', () => {
+                const v = new Vec3(3, 4, 5);
+                const axis = Vec3.normalize(new Vec3(1, 1, 1));
+                const originalLength = v.length();
+                const result = Vec3.rotateAxis(v, axis, Math.PI / 3);
+                expect(Vec3.len(result)).toBeCloseTo(originalLength, 6);
+            });
+
+            test('should not change vector when rotating around itself', () => {
+                const v = new Vec3(1, 2, 3);
+                const axis = Vec3.normalize(v);
+                const result = Vec3.rotateAxis(v, axis, Math.PI / 2);
+                expect(result).toBeCloseToVec3(v);
+            });
+        });
+    });
 });
