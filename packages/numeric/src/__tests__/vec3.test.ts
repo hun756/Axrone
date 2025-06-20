@@ -1,5 +1,15 @@
 import { Vec3, Vec3ComparisonMode, Vec3Comparer, Vec3EqualityComparer, IVec3Like } from '../vec3';
 
+declare global {
+    namespace jest {
+        interface Matchers<R> {
+            toBeCloseToVec3(expected: Vec3, precision?: number): R;
+            toBeNormalizedVec3(precision?: number): R;
+            toBePerpendicularTo(other: Vec3, precision?: number): R;
+        }
+    }
+}
+
 const EPSILON = 1e-10;
 const FLOAT_PRECISION = 1e-6;
 const PERFORMANCE_ITERATIONS = 100000;
@@ -45,18 +55,19 @@ class Vec3TestDataBuilder {
 
 expect.extend({
     toBeCloseToVec3(received: Vec3, expected: Vec3, precision = FLOAT_PRECISION) {
-        const normalizeZero = (val: number) => val === 0 ? 0 : val;
-        
+        const normalizeZero = (val: number) => (val === 0 ? 0 : val);
+
         const rxNorm = normalizeZero(received.x);
         const ryNorm = normalizeZero(received.y);
         const rzNorm = normalizeZero(received.z);
         const exNorm = normalizeZero(expected.x);
         const eyNorm = normalizeZero(expected.y);
         const ezNorm = normalizeZero(expected.z);
-        
-        const pass = Math.abs(rxNorm - exNorm) < precision &&
-                    Math.abs(ryNorm - eyNorm) < precision &&
-                    Math.abs(rzNorm - ezNorm) < precision;
+
+        const pass =
+            Math.abs(rxNorm - exNorm) < precision &&
+            Math.abs(ryNorm - eyNorm) < precision &&
+            Math.abs(rzNorm - ezNorm) < precision;
 
         return {
             message: () =>
@@ -471,6 +482,156 @@ describe('Vec3 Test Suite', () => {
                 const result = a.add(b);
                 expect(result).toBe(a);
                 expect(a).toEqual(new Vec3(5, 7, 9));
+            });
+        });
+    });
+
+    // VECTOR OPERATIONS
+    describe('Vector Operations', () => {
+        describe('static dot', () => {
+            test('should calculate dot product correctly', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(4, 5, 6);
+                const result = Vec3.dot(a, b);
+                expect(result).toBe(32);
+            });
+
+            test('should return zero for perpendicular vectors', () => {
+                const a = new Vec3(1, 0, 0);
+                const b = new Vec3(0, 1, 0);
+                const result = Vec3.dot(a, b);
+                expect(result).toBe(0);
+            });
+
+            test('should return negative for obtuse angle', () => {
+                const a = new Vec3(1, 0, 0);
+                const b = new Vec3(-1, 0, 0);
+                const result = Vec3.dot(a, b);
+                expect(result).toBe(-1);
+            });
+        });
+
+        describe('static cross', () => {
+            test('should calculate cross product correctly', () => {
+                const a = new Vec3(1, 0, 0);
+                const b = new Vec3(0, 1, 0);
+                const result = Vec3.cross(a, b);
+                expect(result).toEqual(new Vec3(0, 0, 1));
+            });
+
+            test('should be anti-commutative', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(4, 5, 6);
+                const ab = Vec3.cross(a, b);
+                const ba = Vec3.cross(b, a);
+                expect(ab).toEqual(Vec3.negate(ba));
+            });
+
+            test('should return zero for parallel vectors', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(2, 4, 6);
+                const result = Vec3.cross(a, b, new Vec3());
+                expect(result.length()).toBeCloseTo(0, 6);
+            });
+
+            test('should use output parameter when provided', () => {
+                const a = new Vec3(1, 0, 0);
+                const b = new Vec3(0, 1, 0);
+                const out = new Vec3();
+                const result = Vec3.cross(a, b, out);
+                expect(result).toBe(out);
+                expect(out).toEqual(new Vec3(0, 0, 1));
+            });
+        });
+
+        describe('static len', () => {
+            test('should calculate length correctly', () => {
+                const v = new Vec3(3, 4, 0);
+                const result = Vec3.len(v);
+                expect(result).toBe(5);
+            });
+
+            test('should return zero for zero vector', () => {
+                const v = new Vec3(0, 0, 0);
+                const result = Vec3.len(v);
+                expect(result).toBe(0);
+            });
+
+            test('should handle 3D Pythagorean triple', () => {
+                const v = new Vec3(2, 3, 6);
+                const result = Vec3.len(v);
+                expect(result).toBe(7);
+            });
+        });
+
+        describe('static lengthSquared', () => {
+            test('should calculate squared length correctly', () => {
+                const v = new Vec3(3, 4, 0);
+                const result = Vec3.lengthSquared(v);
+                expect(result).toBe(25);
+            });
+
+            test('should be more efficient than length calculation', () => {
+                const v = new Vec3(1, 2, 3);
+                const lengthSq = Vec3.lengthSquared(v);
+                const length = Vec3.len(v);
+                expect(lengthSq).toBe(length * length);
+            });
+        });
+
+        describe('static fastLength', () => {
+            test('should approximate length', () => {
+                const testCases = [
+                    new Vec3(3, 4, 0),
+                    new Vec3(1, 1, 1),
+                    new Vec3(5, 12, 0),
+                    new Vec3(1, 2, 3),
+                ];
+
+                testCases.forEach((v) => {
+                    const exactLength = Vec3.len(v);
+                    const fastLength = Vec3.fastLength(v);
+                    const error = Math.abs(exactLength - fastLength) / exactLength;
+                    expect(error).toBeLessThan(0.15);
+                });
+            });
+        });
+
+        describe('static normalize', () => {
+            test('should create unit vector', () => {
+                const v = new Vec3(3, 4, 0);
+                const result = Vec3.normalize(v, new Vec3());
+                expect(result.length()).toBeCloseTo(1, 6);
+            });
+
+            test('should preserve direction', () => {
+                const v = new Vec3(3, 4, 5);
+                const normalized = Vec3.normalize(v);
+                const original = Vec3.multiplyScalar(normalized, Vec3.len(v));
+                expect(original).toBeCloseToVec3(v);
+            });
+
+            test('should throw error for zero vector', () => {
+                const v = new Vec3(0, 0, 0);
+                expect(() => Vec3.normalize(v)).toThrow('Cannot normalize a zero-length vector');
+            });
+
+            test('should throw error for near-zero vector', () => {
+                const v = new Vec3(EPSILON / 2, EPSILON / 2, EPSILON / 2);
+                expect(() => Vec3.normalize(v)).toThrow('Cannot normalize a zero-length vector');
+            });
+        });
+
+        describe('static normalizeFast', () => {
+            test('should approximate normalization', () => {
+                const testCases = [new Vec3(3, 4, 0), new Vec3(1, 2, 3), new Vec3(5, 12, 13)];
+
+                testCases.forEach((v) => {
+                    const exactNorm = Vec3.normalize(v);
+                    const fastNorm = Vec3.normalizeFast(v, new Vec3());
+                    const lengthDiff = Math.abs(fastNorm.length() - 1);
+                    expect(lengthDiff).toBeLessThan(0.1);
+                });
             });
         });
     });
