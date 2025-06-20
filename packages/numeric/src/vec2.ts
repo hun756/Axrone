@@ -704,46 +704,87 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return out;
     }
 
-    static random(scale: number = 1): IVec2Like {
+    static random<T extends IVec2Like>(scale: number = 1, out?: T): T {
         const u = 1 - Math.random(); // [0, 1)
         const v = Math.random();
         const r = scale * Math.sqrt(-2 * Math.log(u));
         const theta = PI_2 * v;
-        return {
-            x: r * Math.cos(theta),
-            y: r * Math.sin(theta),
-        };
+
+        if (out) {
+            out.x = r * Math.cos(theta);
+            out.y = r * Math.sin(theta);
+            return out;
+        } else {
+            return { x: r * Math.cos(theta), y: r * Math.sin(theta) } as T;
+        }
     }
 
-    static fastRandom(scale: number = 1): IVec2Like {
+    static fastRandom<T extends IVec2Like>(scale: number = 1, out?: T): T {
         const angle = Math.random() * PI_2;
-        return {
-            x: Math.cos(angle) * scale,
-            y: Math.sin(angle) * scale,
-        };
+
+        if (out) {
+            out.x = Math.cos(angle) * scale;
+            out.y = Math.sin(angle) * scale;
+            return out;
+        } else {
+            return {
+                x: Math.cos(angle) * scale,
+                y: Math.sin(angle) * scale,
+            } as T;
+        }
     }
 
-    static randomNormal(scale: number = 1): IVec2Like {
+    static randomNormal<T extends IVec2Like>(scale: number = 1, out?: T): T {
         const u = 1 - Math.random();
         const v = Math.random();
-        return {
-            x: Math.sqrt(-2 * Math.log(u)) * Math.cos(PI_2 * v),
-            y: Math.sqrt(-2 * Math.log(u)) * Math.sin(PI_2 * v),
-        };
+        const x = Math.sqrt(-2 * Math.log(u)) * Math.cos(PI_2 * v) * scale;
+        const y = Math.sqrt(-2 * Math.log(u)) * Math.sin(PI_2 * v) * scale;
+
+        if (out) {
+            out.x = x;
+            out.y = y;
+            return out;
+        } else {
+            return { x, y } as T;
+        }
     }
 
-    randomBox(minX: number, maxX: number, minY: number, maxY: number): IVec2Like {
-        return {
-            x: minX + Math.random() * (maxX - minX),
-            y: minY + Math.random() * (maxY - minY),
-        };
+    randomBox<T extends IVec2Like>(
+        minX: number,
+        maxX: number,
+        minY: number,
+        maxY: number,
+        out?: T
+    ): T {
+        const x = minX + Math.random() * (maxX - minX);
+        const y = minY + Math.random() * (maxY - minY);
+
+        if (out) {
+            out.x = x;
+            out.y = y;
+            return out;
+        } else {
+            return { x, y } as T;
+        }
     }
 
-    randomBoxNormal(minX: number, maxX: number, minY: number, maxY: number): IVec2Like {
-        return {
-            x: minX + (_normalRandom() + 1) * 0.5 * (maxX - minX),
-            y: minY + (_normalRandom() + 1) * 0.5 * (maxY - minY),
-        };
+    randomBoxNormal<T extends IVec2Like>(
+        minX: number,
+        maxX: number,
+        minY: number,
+        maxY: number,
+        out?: T
+    ): T {
+        const x = minX + (_normalRandom() + 1) * 0.5 * (maxX - minX);
+        const y = minY + (_normalRandom() + 1) * 0.5 * (maxY - minY);
+
+        if (out) {
+            out.x = x;
+            out.y = y;
+            return out;
+        } else {
+            return { x, y } as T;
+        }
     }
 
     add<T extends IVec2Like>(other: Readonly<T>): Vec2 {
