@@ -805,4 +805,170 @@ describe('Vec3 Test Suite', () => {
             });
         });
     });
+
+    // INTERPOLATION OPERATIONS
+    describe('Interpolation Operations', () => {
+        describe('static lerp', () => {
+            test('should interpolate linearly', () => {
+                const a = new Vec3(0, 0, 0);
+                const b = new Vec3(10, 20, 30);
+                const result = Vec3.lerp(a, b, 0.5);
+                expect(result).toEqual(new Vec3(5, 10, 15));
+            });
+
+            test('should clamp t to [0,1]', () => {
+                const a = new Vec3(0, 0, 0);
+                const b = new Vec3(10, 20, 30);
+
+                const resultNegative = Vec3.lerp(a, b, -0.5);
+                expect(resultNegative).toEqual(new Vec3(0, 0, 0));
+
+                const resultOver = Vec3.lerp(a, b, 1.5);
+                expect(resultOver).toEqual(new Vec3(10, 20, 30));
+            });
+
+            test('should return start point when t=0', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(10, 20, 30);
+                const result = Vec3.lerp(a, b, 0);
+                expect(result).toEqual(a);
+            });
+
+            test('should return end point when t=1', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(10, 20, 30);
+                const result = Vec3.lerp(a, b, 1);
+                expect(result).toEqual(b);
+            });
+        });
+
+        describe('static lerpUnClamped', () => {
+            test('should not clamp t values', () => {
+                const a = new Vec3(0, 0, 0);
+                const b = new Vec3(10, 20, 30);
+                const result = Vec3.lerpUnClamped(a, b, 2);
+                expect(result).toEqual(new Vec3(20, 40, 60));
+            });
+        });
+
+        describe('static slerp', () => {
+            test('should spherically interpolate', () => {
+                const a = new Vec3(1, 0, 0);
+                const b = new Vec3(0, 1, 0);
+                const result = Vec3.slerp(a, b, 0.5);
+
+                const expectedLength = (a.length() + b.length()) / 2;
+                expect(Vec3.len(result)).toBeCloseTo(expectedLength, 4);
+            });
+
+            test('should fallback to lerp for zero vectors', () => {
+                const a = new Vec3(0, 0, 0);
+                const b = new Vec3(1, 1, 1);
+                const result = Vec3.slerp(a, b, 0.5);
+                const expectedLerp = Vec3.lerp(a, b, 0.5);
+                expect(result).toBeCloseToVec3(expectedLerp);
+            });
+        });
+
+        describe('static smoothStep', () => {
+            test('should apply smooth step interpolation', () => {
+                const a = new Vec3(0, 0, 0);
+                const b = new Vec3(10, 20, 30);
+                const result = Vec3.smoothStep(a, b, 0.5);
+
+                expect(result).toEqual(new Vec3(5, 10, 15));
+            });
+
+            test('should have zero derivative at endpoints', () => {
+                const a = new Vec3(0, 0, 0);
+                const b = new Vec3(10, 20, 30);
+
+                const result1 = Vec3.smoothStep(a, b, 0.01);
+                const result2 = Vec3.smoothStep(a, b, 0.02);
+                const result99 = Vec3.smoothStep(a, b, 0.99);
+                const result98 = Vec3.smoothStep(a, b, 0.98);
+
+                const diffStart = Vec3.distance(result2, result1);
+                const diffEnd = Vec3.distance(result99, result98);
+                const diffMiddle = Vec3.distance(
+                    Vec3.smoothStep(a, b, 0.51),
+                    Vec3.smoothStep(a, b, 0.5)
+                );
+
+                expect(diffStart).toBeLessThan(diffMiddle);
+                expect(diffEnd).toBeLessThan(diffMiddle);
+            });
+        });
+
+        describe('static smootherStep', () => {
+            test('should apply smoother step interpolation', () => {
+                const a = new Vec3(0, 0, 0);
+                const b = new Vec3(10, 20, 30);
+                const result = Vec3.smootherStep(a, b, 0.5);
+                expect(result).toEqual(new Vec3(5, 10, 15));
+            });
+        });
+
+        describe('static cubicBezier', () => {
+            test('should interpolate along cubic Bezier curve', () => {
+                const p0 = new Vec3(0, 0, 0);
+                const c1 = new Vec3(1, 2, 3);
+                const c2 = new Vec3(3, 2, 1);
+                const p1 = new Vec3(4, 4, 4);
+
+                const result0 = Vec3.cubicBezier(p0, c1, c2, p1, 0);
+                const result1 = Vec3.cubicBezier(p0, c1, c2, p1, 1);
+
+                expect(result0).toEqual(p0);
+                expect(result1).toEqual(p1);
+            });
+        });
+
+        describe('static hermite', () => {
+            test('should interpolate using Hermite spline', () => {
+                const p0 = new Vec3(0, 0, 0);
+                const m0 = new Vec3(1, 0, 0);
+                const p1 = new Vec3(1, 1, 1);
+                const m1 = new Vec3(0, 1, 0);
+
+                const result0 = Vec3.hermite(p0, m0, p1, m1, 0);
+                const result1 = Vec3.hermite(p0, m0, p1, m1, 1);
+
+                expect(result0).toEqual(p0);
+                expect(result1).toEqual(p1);
+            });
+        });
+
+        describe('static catmullRom', () => {
+            test('should interpolate using Catmull-Rom spline', () => {
+                const p0 = new Vec3(0, 0, 0);
+                const p1 = new Vec3(1, 0, 0);
+                const p2 = new Vec3(2, 1, 0);
+                const p3 = new Vec3(3, 1, 0);
+                
+                const result0 = Vec3.catmullRom(p0, p1, p2, p3, 0);
+                const result1 = Vec3.catmullRom(p0, p1, p2, p3, 1);
+                
+                expect(result0).toEqual(p1);
+                expect(result1).toEqual(p2);
+            });
+
+            test('should handle custom tension', () => {
+                const p0 = new Vec3(0, 0, 0);
+                const p1 = new Vec3(1, 0, 0);
+                const p2 = new Vec3(2, 0, 0);
+                const p3 = new Vec3(3, 1, 0);
+                
+                const result1 = Vec3.catmullRom(p0, p1, p2, p3, 0.25, 0);   // Normal tension
+                const result2 = Vec3.catmullRom(p0, p1, p2, p3, 0.25, 0.5); // Medium
+                const result3 = Vec3.catmullRom(p0, p1, p2, p3, 0.25, 1);   // Max
+                
+                const diff1 = Vec3.distance(result1, result2);
+                const diff2 = Vec3.distance(result2, result3);
+                const diff3 = Vec3.distance(result1, result3);
+                
+                expect(Math.max(diff1, diff2, diff3)).toBeGreaterThan(0.001);
+            });
+        });
+    });
 });
