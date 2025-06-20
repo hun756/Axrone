@@ -1035,4 +1035,63 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             Math.abs(this.z - other.z)
         );
     }
+
+    angleBetween<T extends IVec3Like>(other: Readonly<T>): number {
+        const dotProduct = this.dot(other);
+        const lengthA = this.length();
+        const lengthB = Vec3.len(other);
+
+        if (lengthA < EPSILON || lengthB < EPSILON) {
+            throw new Error('Cannot calculate angle with zero-length vector');
+        }
+
+        const cosTheta = dotProduct / (lengthA * lengthB);
+        return Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+    }
+
+    angle2Deg<T extends IVec3Like>(other: Readonly<T>): number {
+        const angle = this.angleBetween(other);
+        return (angle * 180) / Math.PI;
+    }
+
+    rotateX(angle: number): Vec3 {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        const y = this.y * cos - this.z * sin;
+        const z = this.y * sin + this.z * cos;
+
+        this.y = y;
+        this.z = z;
+        return this;
+    }
+
+    rotateY(angle: number): Vec3 {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        const x = this.x * cos + this.z * sin;
+        const z = -this.x * sin + this.z * cos;
+
+        this.x = x;
+        this.z = z;
+        return this;
+    }
+
+    rotateZ(angle: number): Vec3 {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        const x = this.x * cos - this.y * sin;
+        const y = this.x * sin + this.y * cos;
+
+        this.x = x;
+        this.y = y;
+        return this;
+    }
+
+    rotateAxis<T extends IVec3Like>(axis: Readonly<T>, angle: number): Vec3 {
+        Vec3.rotateAxis(this, axis, angle, this);
+        return this;
+    }
 }
