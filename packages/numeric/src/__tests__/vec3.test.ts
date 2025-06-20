@@ -1448,4 +1448,114 @@ describe('Vec3 Test Suite', () => {
             expect(fastTime).toBeLessThan(1);
         });
     });
+
+    // PROPERTY-BASED TESTS
+    describe('Property-Based Tests', () => {
+        test('addition should be commutative', () => {
+            for (let i = 0; i < 100; i++) {
+                const a = Vec3TestDataBuilder.createRandom();
+                const b = Vec3TestDataBuilder.createRandom();
+                
+                const ab = Vec3.add(a, b, new Vec3());
+                const ba = Vec3.add(b, a, new Vec3());
+                
+                expect(ab).toBeCloseToVec3(ba);
+            }
+        });
+
+        test('addition should be associative', () => {
+            for (let i = 0; i < 100; i++) {
+                const a = Vec3TestDataBuilder.createRandom();
+                const b = Vec3TestDataBuilder.createRandom();
+                const c = Vec3TestDataBuilder.createRandom();
+                
+                const abc = Vec3.add(Vec3.add(a, b), c, new Vec3());
+                const bca = Vec3.add(a, Vec3.add(b, c), new Vec3());
+                
+                expect(abc).toBeCloseToVec3(bca);
+            }
+        });
+
+        test('dot product should be commutative', () => {
+            for (let i = 0; i < 100; i++) {
+                const a = Vec3TestDataBuilder.createRandom();
+                const b = Vec3TestDataBuilder.createRandom();
+                
+                const ab = Vec3.dot(a, b);
+                const ba = Vec3.dot(b, a);
+                
+                expect(ab).toBeCloseTo(ba, 6);
+            }
+        });
+
+        test('cross product should be anti-commutative', () => {
+            for (let i = 0; i < 100; i++) {
+                const a = Vec3TestDataBuilder.createRandom();
+                const b = Vec3TestDataBuilder.createRandom();
+                
+                const ab = Vec3.cross(a, b);
+                const ba = Vec3.cross(b, a);
+                const negBa = Vec3.negate(ba, new Vec3());
+                
+                expect(ab).toBeCloseToVec3(negBa);
+            }
+        });
+
+        test('cross product should be perpendicular to both inputs', () => {
+            for (let i = 0; i < 100; i++) {
+                const a = Vec3TestDataBuilder.createRandom();
+                const b = Vec3TestDataBuilder.createRandom();
+                
+                if (Vec3.cross(a, b, new Vec3()).length() > EPSILON) { // Skip parallel vectors
+                    const cross = Vec3.cross(a, b);
+                    
+                    expect(cross).toBePerpendicularTo(a);
+                    expect(cross).toBePerpendicularTo(b);
+                }
+            }
+        });
+
+        test('normalization should preserve direction', () => {
+            for (let i = 0; i < 100; i++) {
+                const v = Vec3TestDataBuilder.createRandom();
+                
+                if (v.length() > EPSILON) {
+                    const normalized = Vec3.normalize(v);
+                    const scaled = Vec3.multiplyScalar(normalized, v.length());
+                    
+                    expect(scaled).toBeCloseToVec3(v);
+                }
+            }
+        });
+
+        test('distance should satisfy triangle inequality', () => {
+            for (let i = 0; i < 100; i++) {
+                const a = Vec3TestDataBuilder.createRandom();
+                const b = Vec3TestDataBuilder.createRandom();
+                const c = Vec3TestDataBuilder.createRandom();
+                
+                const ab = Vec3.distance(a, b);
+                const bc = Vec3.distance(b, c);
+                const ac = Vec3.distance(a, c);
+                
+                expect(ac).toBeLessThanOrEqual(ab + bc + FLOAT_PRECISION);
+            }
+        });
+
+        test('lerp should be on line between points', () => {
+            for (let i = 0; i < 100; i++) {
+                const a = Vec3TestDataBuilder.createRandom();
+                const b = Vec3TestDataBuilder.createRandom();
+                const t = Math.random();
+                
+                const lerped = Vec3.lerp(a, b, t);
+                const distanceA = Vec3.distance(lerped, a);
+                const distanceB = Vec3.distance(lerped, b);
+                const totalDistance = Vec3.distance(a, b);
+                
+                expect(distanceA + distanceB).toBeCloseTo(totalDistance, 4);
+            }
+        });
+    });
+    
 });
