@@ -702,4 +702,63 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             } as O;
         }
     }
+
+    static catmullRom<
+        T extends IVec3Like,
+        U extends IVec3Like,
+        V extends IVec3Like,
+        W extends IVec3Like,
+        O extends IVec3Like,
+    >(
+        p0: Readonly<T>,
+        p1: Readonly<U>,
+        p2: Readonly<V>,
+        p3: Readonly<W>,
+        t: number,
+        tension: number = 0.5,
+        out?: O
+    ): O {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+
+        if (!out) {
+            out = { x: 0, y: 0, z: 0 } as O;
+        }
+
+        if (t1 === 0) {
+            out.x = p1.x;
+            out.y = p1.y;
+            out.z = p1.z;
+            return out;
+        }
+
+        if (t1 === 1) {
+            out.x = p2.x;
+            out.y = p2.y;
+            out.z = p2.z;
+            return out;
+        }
+
+        const t2 = t1 * t1;
+        const t3 = t2 * t1;
+
+        const h00 = 2 * t3 - 3 * t2 + 1;
+        const h10 = t3 - 2 * t2 + t1;
+        const h01 = -2 * t3 + 3 * t2;
+        const h11 = t3 - t2;
+
+        const alpha = (1 - tension) / 2;
+
+        const m0x = alpha * (p2.x - p0.x);
+        const m0y = alpha * (p2.y - p0.y);
+        const m0z = alpha * (p2.z - p0.z);
+        const m1x = alpha * (p3.x - p1.x);
+        const m1y = alpha * (p3.y - p1.y);
+        const m1z = alpha * (p3.z - p1.z);
+
+        out.x = h00 * p1.x + h10 * m0x + h01 * p2.x + h11 * m1x;
+        out.y = h00 * p1.y + h10 * m0y + h01 * p2.y + h11 * m1y;
+        out.z = h00 * p1.z + h10 * m0z + h01 * p2.z + h11 * m1z;
+
+        return out;
+    }
 }
