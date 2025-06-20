@@ -211,4 +211,78 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             return { x: a.x / b, y: a.y / b, z: a.z / b } as V;
         }
     }
+
+    static negate<T extends IVec3Like, V extends IVec3Like>(a: Readonly<T>, out?: V): V {
+        if (out) {
+            out.x = -a.x;
+            out.y = -a.y;
+            out.z = -a.z;
+            return out;
+        } else {
+            return { x: -a.x, y: -a.y, z: -a.z } as V;
+        }
+    }
+
+    static inverse<T extends IVec3Like, V extends IVec3Like>(a: Readonly<T>, out?: V): V {
+        if (out) {
+            out.x = 1 / a.x;
+            out.y = 1 / a.y;
+            out.z = 1 / a.z;
+            return out;
+        } else {
+            return { x: 1 / a.x, y: 1 / a.y, z: 1 / a.z } as V;
+        }
+    }
+
+    static inverseSafe<T extends IVec3Like, V extends IVec3Like>(
+        v: Readonly<T>,
+        out?: V,
+        defaultValue = 0
+    ): V {
+        const vx = v.x;
+        const vy = v.y;
+        const vz = v.z;
+
+        if (Math.abs(vx) < EPSILON || Math.abs(vy) < EPSILON || Math.abs(vz) < EPSILON) {
+            throw new Error('Inversion of zero or near-zero value');
+        }
+
+        if (out) {
+            out.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
+            out.y = Math.abs(vy) < EPSILON ? defaultValue : 1 / vy;
+            out.z = Math.abs(vz) < EPSILON ? defaultValue : 1 / vz;
+            return out;
+        } else {
+            return {
+                x: Math.abs(vx) < EPSILON ? defaultValue : 1 / vx,
+                y: Math.abs(vy) < EPSILON ? defaultValue : 1 / vy,
+                z: Math.abs(vz) < EPSILON ? defaultValue : 1 / vz,
+            } as V;
+        }
+    }
+
+    static dot<T extends IVec3Like, U extends IVec3Like>(a: Readonly<T>, b: Readonly<U>): number {
+        return a.x * b.x + a.y * b.y + a.z * b.z;
+    }
+
+    static cross<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V
+    ): V {
+        const x = a.y * b.z - a.z * b.y;
+        const y = a.z * b.x - a.x * b.z;
+        const z = a.x * b.y - a.y * b.x;
+
+        if (out) {
+            out.x = x;
+            out.y = y;
+            out.z = z;
+            return out;
+        } else {
+            return { x, y, z } as V;
+        }
+    }
+
+    
 }
