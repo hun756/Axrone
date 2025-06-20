@@ -397,4 +397,122 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     ): number {
         return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.z - b.z));
     }
+
+    static angleBetween<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
+        const dotProduct = Vec3.dot(a, b);
+        const lengthA = Vec3.len(a);
+        const lengthB = Vec3.len(b);
+
+        if (lengthA < EPSILON || lengthB < EPSILON) {
+            throw new Error('Cannot calculate angle with zero-length vector');
+        }
+
+        const cosTheta = dotProduct / (lengthA * lengthB);
+        return Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+    }
+
+    static angle2Deg<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
+        const angle = Vec3.angleBetween(a, b);
+        return (angle * 180) / Math.PI;
+    }
+
+    static rotateX<T extends IVec3Like>(v: Readonly<T>, angle: number, out?: T): T {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        if (out) {
+            out.x = v.x;
+            out.y = v.y * cos - v.z * sin;
+            out.z = v.y * sin + v.z * cos;
+            return out;
+        } else {
+            return {
+                x: v.x,
+                y: v.y * cos - v.z * sin,
+                z: v.y * sin + v.z * cos,
+            } as T;
+        }
+    }
+
+    static rotateY<T extends IVec3Like>(v: Readonly<T>, angle: number, out?: T): T {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        if (out) {
+            out.x = v.x * cos + v.z * sin;
+            out.y = v.y;
+            out.z = -v.x * sin + v.z * cos;
+            return out;
+        } else {
+            return {
+                x: v.x * cos + v.z * sin,
+                y: v.y,
+                z: -v.x * sin + v.z * cos,
+            } as T;
+        }
+    }
+
+    static rotateZ<T extends IVec3Like>(v: Readonly<T>, angle: number, out?: T): T {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        if (out) {
+            out.x = v.x * cos - v.y * sin;
+            out.y = v.x * sin + v.y * cos;
+            out.z = v.z;
+            return out;
+        } else {
+            return {
+                x: v.x * cos - v.y * sin,
+                y: v.x * sin + v.y * cos,
+                z: v.z,
+            } as T;
+        }
+    }
+
+    static rotateAxis<T extends IVec3Like, U extends IVec3Like>(
+        v: Readonly<T>,
+        axis: Readonly<U>,
+        angle: number,
+        out?: T
+    ): T {
+        const cosTheta = Math.cos(angle);
+        const sinTheta = Math.sin(angle);
+        const oneMinusCos = 1 - cosTheta;
+
+        const axisNorm = Vec3.normalize(axis);
+        const dotProduct = Vec3.dot(v, axisNorm);
+        const crossProduct = Vec3.cross(axisNorm, v);
+
+        if (out) {
+            out.x =
+                v.x * cosTheta + crossProduct.x * sinTheta + axisNorm.x * dotProduct * oneMinusCos;
+            out.y =
+                v.y * cosTheta + crossProduct.y * sinTheta + axisNorm.y * dotProduct * oneMinusCos;
+            out.z =
+                v.z * cosTheta + crossProduct.z * sinTheta + axisNorm.z * dotProduct * oneMinusCos;
+            return out;
+        } else {
+            return {
+                x:
+                    v.x * cosTheta +
+                    crossProduct.x * sinTheta +
+                    axisNorm.x * dotProduct * oneMinusCos,
+                y:
+                    v.y * cosTheta +
+                    crossProduct.y * sinTheta +
+                    axisNorm.y * dotProduct * oneMinusCos,
+                z:
+                    v.z * cosTheta +
+                    crossProduct.z * sinTheta +
+                    axisNorm.z * dotProduct * oneMinusCos,
+            } as T;
+        }
+    }
 }
