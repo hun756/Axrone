@@ -766,77 +766,111 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return out;
     }
 
-    static random<T extends IVec3Like>(out?: T): T {
-        const x = _normalRandom();
-        const y = _normalRandom();
-        const z = _normalRandom();
+    static random<T extends IVec3Like>(scale: number = 1, out?: T): T {
+        let x, y, z, lengthSq;
+        do {
+            x = (Math.random() - 0.5) * 2;
+            y = (Math.random() - 0.5) * 2;
+            z = (Math.random() - 0.5) * 2;
+            lengthSq = x * x + y * y + z * z;
+        } while (lengthSq > 1 || lengthSq < 0.0001);
+
+        const invLength = scale / Math.sqrt(lengthSq);
 
         if (out) {
-            out.x = x;
-            out.y = y;
-            out.z = z;
+            out.x = x * invLength;
+            out.y = y * invLength;
+            out.z = z * invLength;
             return out;
         } else {
-            return { x, y, z } as T;
+            return { x: x * invLength, y: y * invLength, z: z * invLength } as T;
         }
     }
 
-    static fastRandom(scale: number = 1): IVec3Like {
+    static fastRandom<T extends IVec3Like>(scale: number = 1, out?: T): T {
         const theta = Math.random() * PI_2;
         const phi = Math.acos(2 * Math.random() - 1);
         const sinPhi = Math.sin(phi);
 
-        return {
-            x: Math.cos(theta) * sinPhi * scale,
-            y: Math.sin(theta) * sinPhi * scale,
-            z: Math.cos(phi) * scale,
-        };
+        if (out) {
+            out.x = Math.cos(theta) * sinPhi * scale;
+            out.y = Math.sin(theta) * sinPhi * scale;
+            out.z = Math.cos(phi) * scale;
+            return out;
+        } else {
+            return {
+                x: Math.cos(theta) * sinPhi * scale,
+                y: Math.sin(theta) * sinPhi * scale,
+                z: Math.cos(phi) * scale,
+            } as T;
+        }
     }
 
-    static randomNormal(scale: number = 1): IVec3Like {
-        const u1 = 1 - Math.random();
+    static randomNormal<T extends IVec3Like>(scale: number = 1, out?: T): T {
+        const u1 = Math.random();
         const u2 = Math.random();
         const u3 = Math.random();
+        const u4 = Math.random();
 
         const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(PI_2 * u2);
         const z1 = Math.sqrt(-2 * Math.log(u1)) * Math.sin(PI_2 * u2);
-        const z2 = Math.sqrt(-2 * Math.log(u3)) * Math.cos(PI_2 * Math.random());
 
-        return {
-            x: z0 * scale,
-            y: z1 * scale,
-            z: z2 * scale,
-        };
+        const z2 = Math.sqrt(-2 * Math.log(u3)) * Math.cos(PI_2 * u4);
+
+        if (out) {
+            out.x = z0 * scale;
+            out.y = z1 * scale;
+            out.z = z2 * scale;
+            return out;
+        } else {
+            return { x: z0 * scale, y: z1 * scale, z: z2 * scale } as T;
+        }
     }
 
-    randomBox(
+    randomBox<T extends IVec3Like>(
         minX: number,
         maxX: number,
         minY: number,
         maxY: number,
         minZ: number,
-        maxZ: number
-    ): IVec3Like {
-        return {
-            x: minX + Math.random() * (maxX - minX),
-            y: minY + Math.random() * (maxY - minY),
-            z: minZ + Math.random() * (maxZ - minZ),
-        };
+        maxZ: number,
+        out?: T
+    ): T {
+        if (out) {
+            out.x = minX + Math.random() * (maxX - minX);
+            out.y = minY + Math.random() * (maxY - minY);
+            out.z = minZ + Math.random() * (maxZ - minZ);
+            return out;
+        } else {
+            return {
+                x: minX + Math.random() * (maxX - minX),
+                y: minY + Math.random() * (maxY - minY),
+                z: minZ + Math.random() * (maxZ - minZ),
+            } as T;
+        }
     }
 
-    randomBoxNormal(
+    randomBoxNormal<T extends IVec3Like>(
         minX: number,
         maxX: number,
         minY: number,
         maxY: number,
         minZ: number,
-        maxZ: number
-    ): IVec3Like {
-        return {
-            x: minX + (_normalRandom() + 1) * 0.5 * (maxX - minX),
-            y: minY + (_normalRandom() + 1) * 0.5 * (maxY - minY),
-            z: minZ + (_normalRandom() + 1) * 0.5 * (maxZ - minZ),
-        };
+        maxZ: number,
+        out?: T
+    ): T {
+        if (out) {
+            out.x = minX + (_normalRandom() + 1) * 0.5 * (maxX - minX);
+            out.y = minY + (_normalRandom() + 1) * 0.5 * (maxY - minY); 
+            out.z = minZ + (_normalRandom() + 1) * 0.5 * (maxZ - minZ);
+            return out;
+        } else {
+            return {
+                x: minX + (_normalRandom() + 1) * 0.5 * (maxX - minX),
+                y: minY + (_normalRandom() + 1) * 0.5 * (maxY - minY),
+                z: minZ + (_normalRandom() + 1) * 0.5 * (maxZ - minZ),
+            } as T;
+        }
     }
 
     add<T extends IVec3Like>(other: Readonly<T>): Vec3 {
