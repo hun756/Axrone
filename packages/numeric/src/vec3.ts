@@ -515,4 +515,130 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             } as T;
         }
     }
+
+    static lerp<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: T
+    ): T {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        if (out) {
+            out.x = a.x + (b.x - a.x) * t1;
+            out.y = a.y + (b.y - a.y) * t1;
+            out.z = a.z + (b.z - a.z) * t1;
+            return out;
+        } else {
+            return {
+                x: a.x + (b.x - a.x) * t1,
+                y: a.y + (b.y - a.y) * t1,
+                z: a.z + (b.z - a.z) * t1,
+            } as T;
+        }
+    }
+
+    static lerpUnClamped<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: T
+    ): T {
+        if (out) {
+            out.x = a.x + (b.x - a.x) * t;
+            out.y = a.y + (b.y - a.y) * t;
+            out.z = a.z + (b.z - a.z) * t;
+            return out;
+        } else {
+            return {
+                x: a.x + (b.x - a.x) * t,
+                y: a.y + (b.y - a.y) * t,
+                z: a.z + (b.z - a.z) * t,
+            } as T;
+        }
+    }
+
+    static slerp<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: T
+    ): T {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+
+        const dotProduct = Vec3.dot(a, b);
+        const lenA = Vec3.len(a);
+        const lenB = Vec3.len(b);
+
+        if (lenA < EPSILON || lenB < EPSILON) {
+            return Vec3.lerp(a, b, t1, out);
+        }
+
+        const cosTheta = dotProduct / (lenA * lenB);
+        const theta = Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+
+        if (Math.abs(theta) < EPSILON) {
+            return Vec3.lerp(a, b, t1, out);
+        }
+
+        const sinTheta = Math.sin(theta);
+        const ratioA = Math.sin((1 - t1) * theta) / sinTheta;
+        const ratioB = Math.sin(t1 * theta) / sinTheta;
+
+        if (out) {
+            out.x = ratioA * a.x + ratioB * b.x;
+            out.y = ratioA * a.y + ratioB * b.y;
+            out.z = ratioA * a.z + ratioB * b.z;
+            return out;
+        } else {
+            return {
+                x: ratioA * a.x + ratioB * b.x,
+                y: ratioA * a.y + ratioB * b.y,
+                z: ratioA * a.z + ratioB * b.z,
+            } as T;
+        }
+    }
+
+    static smoothStep<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: T
+    ): T {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t2 = t1 * t1 * (3 - 2 * t1);
+        if (out) {
+            out.x = a.x + (b.x - a.x) * t2;
+            out.y = a.y + (b.y - a.y) * t2;
+            out.z = a.z + (b.z - a.z) * t2;
+            return out;
+        } else {
+            return {
+                x: a.x + (b.x - a.x) * t2,
+                y: a.y + (b.y - a.y) * t2,
+                z: a.z + (b.z - a.z) * t2,
+            } as T;
+        }
+    }
+
+    static smootherStep<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: T
+    ): T {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t2 = t1 * t1 * t1 * (10 - 15 * t1 + 6 * t1 * t1);
+        if (out) {
+            out.x = a.x + (b.x - a.x) * t2;
+            out.y = a.y + (b.y - a.y) * t2;
+            out.z = a.z + (b.z - a.z) * t2;
+            return out;
+        } else {
+            return {
+                x: a.x + (b.x - a.x) * t2,
+                y: a.y + (b.y - a.y) * t2,
+                z: a.z + (b.z - a.z) * t2,
+            } as T;
+        }
+    }
 }
