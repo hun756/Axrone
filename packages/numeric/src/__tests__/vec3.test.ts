@@ -1054,4 +1054,244 @@ describe('Vec3 Test Suite', () => {
             });
         });
     });
+
+    // RANDOM GENERATION
+    describe('Random Generation', () => {
+        describe('static random', () => {
+            test('should generate random vectors on unit sphere', () => {
+                const samples = Array.from({ length: 100 }, () => Vec3.random());
+
+                samples.forEach((v) => {
+                    const length = Vec3.len(v);
+                    expect(length).toBeCloseTo(1, 3);
+                });
+            });
+
+            test('should generate vectors with custom scale', () => {
+                const scale = 5;
+                const samples = Array.from({ length: 100 }, () => Vec3.fastRandom(scale));
+
+                samples.forEach((v) => {
+                    const length = Vec3.len(v);
+                    expect(length).toBeCloseTo(scale, 3);
+                });
+            });
+
+            test('should generate reasonably distributed samples', () => {
+                const samples = Array.from({ length: 1000 }, () => Vec3.random());
+
+                const octants = [0, 0, 0, 0, 0, 0, 0, 0];
+                samples.forEach((v) => {
+                    const index = (v.x > 0 ? 1 : 0) + (v.y > 0 ? 2 : 0) + (v.z > 0 ? 4 : 0);
+                    octants[index]++;
+                });
+
+                octants.forEach((count) => {
+                    expect(count).toBeGreaterThan(50); // Should be ~125 ± some variance
+                });
+            });
+
+            test('should generate different vectors on subsequent calls', () => {
+                const samples = Array.from({ length: 10 }, () => Vec3.random());
+
+                const uniqueVectors = new Set(samples.map((v) => `${v.x},${v.y},${v.z}`));
+                expect(uniqueVectors.size).toBeGreaterThan(5);
+            });
+        });
+
+        describe('static fastRandom', () => {
+            test('should generate normalized vectors', () => {
+                const samples = Array.from({ length: 100 }, () => Vec3.fastRandom());
+
+                samples.forEach((v) => {
+                    const length = Vec3.len(v);
+                    expect(length).toBeCloseTo(1, 3);
+                });
+            });
+
+            test('should generate vectors with custom scale', () => {
+                const scale = 3;
+                const samples = Array.from({ length: 50 }, () => Vec3.fastRandom(scale));
+
+                samples.forEach((v) => {
+                    const length = Vec3.len(v);
+                    expect(length).toBeCloseTo(scale, 3);
+                });
+            });
+
+            test('should be reasonably fast compared to regular random', () => {
+                const iterations = 1000;
+
+                const startRegular = performance.now();
+                for (let i = 0; i < iterations; i++) {
+                    Vec3.random();
+                }
+                const endRegular = performance.now();
+                const regularTime = endRegular - startRegular;
+
+                const startFast = performance.now();
+                for (let i = 0; i < iterations; i++) {
+                    Vec3.fastRandom();
+                }
+                const endFast = performance.now();
+                const fastTime = endFast - startFast;
+
+                expect(fastTime).toBeLessThanOrEqual(regularTime * 1.5);
+            });
+        });
+
+        describe('static randomNormal', () => {
+            test('should generate normally distributed components', () => {
+                const samples = Array.from({ length: 1000 }, () => Vec3.randomNormal());
+
+                const meanX = samples.reduce((sum, v) => sum + v.x, 0) / samples.length;
+                const meanY = samples.reduce((sum, v) => sum + v.y, 0) / samples.length;
+                const meanZ = samples.reduce((sum, v) => sum + v.z, 0) / samples.length;
+
+                expect(Math.abs(meanX)).toBeLessThan(0.15);
+                expect(Math.abs(meanY)).toBeLessThan(0.15);
+                expect(Math.abs(meanZ)).toBeLessThan(0.15);
+            });
+
+            test('should generate vectors with custom scale', () => {
+                const scale = 2;
+                const samples = Array.from({ length: 1000 }, () => Vec3.randomNormal(scale));
+
+                const lengths = samples.map((v) => Vec3.len(v));
+                const avgLength = lengths.reduce((sum, len) => sum + len, 0) / lengths.length;
+
+                // expected length is scale * sqrt(pi/2) * (3/2)!
+                const expectedAvgLength = scale * 1.596;
+                expect(avgLength).toBeCloseTo(expectedAvgLength, 0.3);
+            });
+
+            test('should produce bell curve distribution', () => {
+                const samples = Array.from({ length: 2000 }, () => Vec3.randomNormal());
+
+                const xValues = samples.map((v) => v.x);
+                const yValues = samples.map((v) => v.y);
+                const zValues = samples.map((v) => v.z);
+
+                const countInRange = (values: number[], min: number, max: number) =>
+                    values.filter((v) => v >= min && v <= max).length;
+
+                const withinOneStdX = countInRange(xValues, -1, 1);
+                const withinOneStdY = countInRange(yValues, -1, 1);
+                const withinOneStdZ = countInRange(zValues, -1, 1);
+
+                expect(withinOneStdX / samples.length).toBeCloseTo(0.68, 0.1);
+                expect(withinOneStdY / samples.length).toBeCloseTo(0.68, 0.1);
+                expect(withinOneStdZ / samples.length).toBeCloseTo(0.68, 0.1);
+            });
+        });
+
+        describe('randomBox instance method', () => {
+            test('should generate vectors within box bounds', () => {
+                const v = new Vec3();
+                const samples = Array.from({ length: 100 }, () =>
+                    v.randomBox(-5, 5, -10, 10, -1, 1)
+                );
+
+                samples.forEach((sample) => {
+                    expect(sample.x).toBeGreaterThanOrEqual(-5);
+                    expect(sample.x).toBeLessThanOrEqual(5);
+                    expect(sample.y).toBeGreaterThanOrEqual(-10);
+                    expect(sample.y).toBeLessThanOrEqual(10);
+                    expect(sample.z).toBeGreaterThanOrEqual(-1);
+                    expect(sample.z).toBeLessThanOrEqual(1);
+                });
+            });
+
+            test('should generate uniform distribution within bounds', () => {
+                const v = new Vec3();
+                const samples = Array.from({ length: 1000 }, () =>
+                    v.randomBox(0, 10, 0, 10, 0, 10)
+                );
+
+                const meanX = samples.reduce((sum, s) => sum + s.x, 0) / samples.length;
+                const meanY = samples.reduce((sum, s) => sum + s.y, 0) / samples.length;
+                const meanZ = samples.reduce((sum, s) => sum + s.z, 0) / samples.length;
+
+                expect(meanX).toBeCloseTo(5, 0.3);
+                expect(meanY).toBeCloseTo(5, 0.3);
+                expect(meanZ).toBeCloseTo(5, 0.3);
+            });
+
+            test('should handle negative bounds correctly', () => {
+                const v = new Vec3();
+                const samples = Array.from({ length: 100 }, () =>
+                    v.randomBox(-10, -5, -20, -10, -1, 0)
+                );
+
+                samples.forEach((sample) => {
+                    expect(sample.x).toBeGreaterThanOrEqual(-10);
+                    expect(sample.x).toBeLessThanOrEqual(-5);
+                    expect(sample.y).toBeGreaterThanOrEqual(-20);
+                    expect(sample.y).toBeLessThanOrEqual(-10);
+                    expect(sample.z).toBeGreaterThanOrEqual(-1);
+                    expect(sample.z).toBeLessThanOrEqual(0);
+                });
+            });
+        });
+
+        describe('randomBoxNormal instance method', () => {
+            test('should generate vectors within box bounds using normal distribution', () => {
+                const v = new Vec3();
+                const samples = Array.from({ length: 200 }, () =>
+                    v.randomBoxNormal(-5, 5, -5, 5, -5, 5)
+                );
+
+                samples.forEach((sample) => {
+                    expect(sample.x).toBeGreaterThanOrEqual(-5);
+                    expect(sample.x).toBeLessThanOrEqual(5);
+                    expect(sample.y).toBeGreaterThanOrEqual(-5);
+                    expect(sample.y).toBeLessThanOrEqual(5);
+                    expect(sample.z).toBeGreaterThanOrEqual(-5);
+                    expect(sample.z).toBeLessThanOrEqual(5);
+                });
+            });
+
+            test('should show normal distribution characteristics', () => {
+                const v = new Vec3();
+                const samples = Array.from({ length: 1000 }, () =>
+                    v.randomBoxNormal(0, 10, 0, 10, 0, 10)
+                );
+
+                let centerCount = 0;
+                let edgeCount = 0;
+
+                samples.forEach((sample) => {
+                    const distanceFromCenter =
+                        Math.abs(sample.x - 5) + Math.abs(sample.y - 5) + Math.abs(sample.z - 5);
+                    if (distanceFromCenter < 5) centerCount++;
+                    else if (distanceFromCenter > 10) edgeCount++;
+                });
+
+                expect(centerCount).toBeGreaterThan(edgeCount);
+            });
+        });
+
+        describe('random method performance comparison', () => {
+            test('all random methods should complete within reasonable time', () => {
+                const iterations = 1000;
+
+                const testMethods = [
+                    () => Vec3.random(),
+                    () => Vec3.fastRandom(),
+                    () => Vec3.randomNormal(),
+                ];
+
+                testMethods.forEach((method, index) => {
+                    const start = performance.now();
+                    for (let i = 0; i < iterations; i++) {
+                        method();
+                    }
+                    const end = performance.now();
+                    const timePerOperation = (end - start) / iterations;
+
+                    expect(timePerOperation).toBeLessThan(0.01);
+                });
+            });
+        });
+    });
 });
