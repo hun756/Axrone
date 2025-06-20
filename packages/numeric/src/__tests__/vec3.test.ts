@@ -693,4 +693,47 @@ describe('Vec3 Test Suite', () => {
             });
         });
     });
+
+    // ANGULAR OPERATIONS
+    describe('Angular Operations', () => {
+        describe('static angleBetween', () => {
+            test('should calculate angle between parallel vectors', () => {
+                const a = new Vec3(1, 0, 0);
+                const b = new Vec3(2, 0, 0);
+                const result = Vec3.angleBetween(a, b);
+                expect(result).toBeCloseTo(0, 6);
+            });
+
+            test('should calculate angle between perpendicular vectors', () => {
+                const a = new Vec3(1, 0, 0);
+                const b = new Vec3(0, 1, 0);
+                const result = Vec3.angleBetween(a, b);
+                expect(result).toBeCloseTo(Math.PI / 2, 6);
+            });
+
+            test('should calculate angle between opposite vectors', () => {
+                const a = new Vec3(1, 0, 0);
+                const b = new Vec3(-1, 0, 0);
+                const result = Vec3.angleBetween(a, b);
+                expect(result).toBeCloseTo(Math.PI, 6);
+            });
+
+            test('should throw error for zero vector', () => {
+                const a = new Vec3(0, 0, 0);
+                const b = new Vec3(1, 0, 0);
+                expect(() => Vec3.angleBetween(a, b)).toThrow(
+                    'Cannot calculate angle with zero-length vector'
+                );
+            });
+        });
+
+        describe('static angle2Deg', () => {
+            test('should convert angle to degrees', () => {
+                const a = new Vec3(1, 0, 0);
+                const b = new Vec3(0, 1, 0);
+                const result = Vec3.angle2Deg(a, b);
+                expect(result).toBeCloseTo(90, 6);
+            });
+        });
+    });
 });
