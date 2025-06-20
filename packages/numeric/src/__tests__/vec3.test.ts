@@ -233,4 +233,69 @@ describe('Vec3 Test Suite', () => {
             });
         });
     });
+
+    // BASIC OBJECT METHODS
+    describe('Basic Object Methods', () => {
+        describe('clone', () => {
+            test('should create identical copy', () => {
+                const original = new Vec3(1, 2, 3);
+                const clone = original.clone();
+                expect(clone).toEqual(original);
+                expect(clone).not.toBe(original);
+            });
+
+            test('should maintain independence after cloning', () => {
+                const original = new Vec3(1, 2, 3);
+                const clone = original.clone();
+                clone.x = 999;
+                expect(original.x).toBe(1);
+            });
+        });
+
+        describe('equals', () => {
+            test('should return true for identical vectors', () => {
+                const v1 = new Vec3(1, 2, 3);
+                const v2 = new Vec3(1, 2, 3);
+                expect(v1.equals(v2)).toBe(true);
+            });
+
+            test('should return false for different vectors', () => {
+                const v1 = new Vec3(1, 2, 3);
+                const v2 = new Vec3(1, 2, 4);
+                expect(v1.equals(v2)).toBe(false);
+            });
+
+            test('should handle epsilon tolerance', () => {
+                const v1 = new Vec3(1, 2, 3);
+                const v2 = new Vec3(1 + EPSILON / 2, 2 + EPSILON / 2, 3 + EPSILON / 2);
+                expect(v1.equals(v2)).toBe(true);
+            });
+
+            test('should return false for non-Vec3 objects', () => {
+                const v1 = new Vec3(1, 2, 3);
+                expect(v1.equals({ x: 1, y: 2, z: 3 })).toBe(false);
+                expect(v1.equals(null)).toBe(false);
+                expect(v1.equals(undefined)).toBe(false);
+            });
+        });
+
+        describe('getHashCode', () => {
+            test('should return same hash for equal vectors', () => {
+                const v1 = new Vec3(1, 2, 3);
+                const v2 = new Vec3(1, 2, 3);
+                expect(v1.getHashCode()).toBe(v2.getHashCode());
+            });
+
+            test('should return different hash for different vectors', () => {
+                const v1 = new Vec3(1, 2, 3);
+                const v2 = new Vec3(1, 2, 4);
+                expect(v1.getHashCode()).not.toBe(v2.getHashCode());
+            });
+
+            test('should return number type', () => {
+                const v = new Vec3(1, 2, 3);
+                expect(typeof v.getHashCode()).toBe('number');
+            });
+        });
+    });
 });
