@@ -1094,4 +1094,53 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         Vec3.rotateAxis(this, axis, angle, this);
         return this;
     }
+
+    static project<T extends IVec3Like, U extends IVec3Like>(
+        v: Readonly<T>,
+        onto: Readonly<U>,
+        out?: T
+    ): T {
+        const dotProduct = Vec3.dot(v, onto);
+        const ontoLengthSq = Vec3.lengthSquared(onto);
+
+        if (ontoLengthSq < EPSILON) {
+            throw new Error('Cannot project onto zero-length vector');
+        }
+
+        const scalar = dotProduct / ontoLengthSq;
+
+        if (out) {
+            out.x = onto.x * scalar;
+            out.y = onto.y * scalar;
+            out.z = onto.z * scalar;
+            return out;
+        } else {
+            return {
+                x: onto.x * scalar,
+                y: onto.y * scalar,
+                z: onto.z * scalar,
+            } as T;
+        }
+    }
+
+    static reject<T extends IVec3Like, U extends IVec3Like>(
+        v: Readonly<T>,
+        onto: Readonly<U>,
+        out?: T
+    ): T {
+        const projection = Vec3.project(v, onto);
+
+        if (out) {
+            out.x = v.x - projection.x;
+            out.y = v.y - projection.y;
+            out.z = v.z - projection.z;
+            return out;
+        } else {
+            return {
+                x: v.x - projection.x,
+                y: v.y - projection.y,
+                z: v.z - projection.z,
+            } as T;
+        }
+    }
 }
