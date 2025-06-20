@@ -997,4 +997,42 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         this.z *= invLen;
         return this;
     }
+
+    distanceSquared<T extends IVec3Like>(other: Readonly<T>): number {
+        const dx = this.x - other.x;
+        const dy = this.y - other.y;
+        const dz = this.z - other.z;
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    distance<T extends IVec3Like>(other: Readonly<T>): number {
+        const dx = this.x - other.x;
+        const dy = this.y - other.y;
+        const dz = this.z - other.z;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    distanceFast<T extends IVec3Like>(other: Readonly<T>): number {
+        const dx = Math.abs(this.x - other.x);
+        const dy = Math.abs(this.y - other.y);
+        const dz = Math.abs(this.z - other.z);
+
+        const max = Math.max(dx, dy, dz);
+        const mid = dx + dy + dz - max - Math.min(dx, dy, dz);
+        const min = Math.min(dx, dy, dz);
+
+        return max + 0.4 * mid + 0.2 * min;
+    }
+
+    manhattanDistance<T extends IVec3Like>(other: Readonly<T>): number {
+        return Math.abs(this.x - other.x) + Math.abs(this.y - other.y) + Math.abs(this.z - other.z);
+    }
+
+    chebyshevDistance<T extends IVec3Like>(other: Readonly<T>): number {
+        return Math.max(
+            Math.abs(this.x - other.x),
+            Math.abs(this.y - other.y),
+            Math.abs(this.z - other.z)
+        );
+    }
 }
