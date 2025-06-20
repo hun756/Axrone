@@ -834,4 +834,72 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             z: minZ + (_normalRandom() + 1) * 0.5 * (maxZ - minZ),
         };
     }
+
+    add<T extends IVec3Like>(other: Readonly<T>): Vec3 {
+        this.x += other.x;
+        this.y += other.y;
+        this.z += other.z;
+        return this;
+    }
+
+    addScalar(num: number): Vec3 {
+        this.x += num;
+        this.y += num;
+        this.z += num;
+        return this;
+    }
+
+    subtract<T extends IVec3Like>(other: Readonly<T>): Vec3 {
+        this.x -= other.x;
+        this.y -= other.y;
+        this.z -= other.z;
+        return this;
+    }
+
+    subtractScalar(num: number): Vec3 {
+        this.x -= num;
+        this.y -= num;
+        this.z -= num;
+        return this;
+    }
+
+    multiply<T extends IVec3Like>(other: Readonly<T>): Vec3 {
+        this.x *= other.x;
+        this.y *= other.y;
+        this.z *= other.z;
+        return this;
+    }
+
+    multiplyScalar(num: number): Vec3 {
+        this.x *= num;
+        this.y *= num;
+        this.z *= num;
+        return this;
+    }
+
+    divide<T extends IVec3Like>(other: Readonly<T>): Vec3 {
+        if (
+            Math.abs(other.x) < EPSILON ||
+            Math.abs(other.y) < EPSILON ||
+            Math.abs(other.z) < EPSILON
+        ) {
+            throw new Error('Division by zero or near-zero value is not allowed');
+        }
+
+        this.x /= other.x;
+        this.y /= other.y;
+        this.z /= other.z;
+        return this;
+    }
+
+    divideScalar(num: number): Vec3 {
+        if (Math.abs(num) < EPSILON) {
+            throw new Error('Division by zero or near-zero value is not allowed');
+        }
+
+        this.x /= num;
+        this.y /= num;
+        this.z /= num;
+        return this;
+    }
 }
