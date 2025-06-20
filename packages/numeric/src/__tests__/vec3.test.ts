@@ -1294,4 +1294,110 @@ describe('Vec3 Test Suite', () => {
             });
         });
     });
+
+    // COMPARISON AND EQUALITY
+    describe('Comparison and Equality', () => {
+        describe('Vec3Comparer', () => {
+            test('LEXICOGRAPHIC mode should compare x, then y, then z', () => {
+                const comparer = new Vec3Comparer(Vec3ComparisonMode.LEXICOGRAPHIC);
+
+                expect(comparer.compare(new Vec3(1, 2, 3), new Vec3(2, 1, 1))).toBe(-1);
+                expect(comparer.compare(new Vec3(1, 2, 3), new Vec3(1, 3, 1))).toBe(-1);
+                expect(comparer.compare(new Vec3(1, 2, 3), new Vec3(1, 2, 4))).toBe(-1);
+                expect(comparer.compare(new Vec3(1, 2, 3), new Vec3(1, 2, 3))).toBe(0);
+            });
+
+            test('MAGNITUDE mode should compare by length', () => {
+                const comparer = new Vec3Comparer(Vec3ComparisonMode.MAGNITUDE);
+
+                const short = new Vec3(1, 0, 0);
+                const long = new Vec3(2, 0, 0);
+
+                expect(comparer.compare(short, long)).toBe(-1);
+                expect(comparer.compare(long, short)).toBe(1);
+                expect(comparer.compare(short, new Vec3(0, 1, 0))).toBe(0);
+            });
+
+            test('MANHATTAN mode should compare by Manhattan distance', () => {
+                const comparer = new Vec3Comparer(Vec3ComparisonMode.MANHATTAN);
+
+                const a = new Vec3(1, 1, 1); // Manhattan distance = 3
+                const b = new Vec3(2, 1, 0); //                    = 3
+                const c = new Vec3(2, 2, 0); //                    = 4
+
+                expect(comparer.compare(a, b)).toBe(0);
+                expect(comparer.compare(a, c)).toBe(-1);
+            });
+        });
+
+        describe('Vec3EqualityComparer', () => {
+            test('should use custom epsilon', () => {
+                const comparer = new Vec3EqualityComparer(0.1);
+
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(1.05, 2.05, 3.05);
+
+                expect(comparer.equals(a, b)).toBe(true);
+            });
+
+            test('should generate consistent hash codes', () => {
+                const comparer = new Vec3EqualityComparer();
+
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(1, 2, 3);
+
+                expect(comparer.hash(a)).toBe(comparer.hash(b));
+            });
+
+            test('should handle null/undefined vectors', () => {
+                const comparer = new Vec3EqualityComparer();
+
+                expect(comparer.equals(null as any, null as any)).toBe(true);
+                expect(comparer.equals(new Vec3(), null as any)).toBe(false);
+                expect(comparer.hash(null as any)).toBe(0);
+            });
+        });
+    });
+
+    // ERROR HANDLING AND EDGE CASES
+    describe('Error Handling and Edge Cases', () => {
+        test('should handle very large numbers', () => {
+            const large = new Vec3(1e20, 1e20, 1e20);
+            const result = Vec3.multiplyScalar(large, 2);
+            expect(result.x).toBe(2e20);
+        });
+
+        test('should handle very small numbers', () => {
+            const small = new Vec3(1e-20, 1e-20, 1e-20);
+            const result = Vec3.multiplyScalar(small, 2);
+            expect(result.x).toBe(2e-20);
+        });
+
+        test('should handle infinity values', () => {
+            const inf = new Vec3(Infinity, -Infinity, 0);
+            expect(inf.x).toBe(Infinity);
+            expect(inf.y).toBe(-Infinity);
+            expect(inf.z).toBe(0);
+        });
+
+        test('should handle NaN values appropriately', () => {
+            const nan = new Vec3(NaN, 1, 2);
+            expect(isNaN(nan.x)).toBe(true);
+            expect(nan.y).toBe(1);
+            expect(nan.z).toBe(2);
+        });
+
+        test('should maintain precision in chained operations', () => {
+            let v = new Vec3(1, 2, 3);
+            const original = v.clone();
+
+            v = v
+                .add(new Vec3(5, 5, 5))
+                .subtract(new Vec3(5, 5, 5))
+                .multiplyScalar(2)
+                .divideScalar(2);
+
+            expect(v).toBeCloseToVec3(original);
+        });
+    });
 });
