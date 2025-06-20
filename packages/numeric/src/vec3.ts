@@ -641,4 +641,35 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             } as T;
         }
     }
+
+    static cubicBezier<
+        T extends IVec3Like,
+        U extends IVec3Like,
+        V extends IVec3Like,
+        W extends IVec3Like,
+        O extends IVec3Like,
+    >(a: Readonly<T>, c1: Readonly<U>, c2: Readonly<V>, b: Readonly<W>, t: number, out?: O): O {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const oneMinusT = 1 - t1;
+        const oneMinusT2 = oneMinusT * oneMinusT;
+        const t2 = t1 * t1;
+
+        const oneMinusT3 = oneMinusT2 * oneMinusT;
+        const t3 = t2 * t1;
+        const oneMinusT2_3t = oneMinusT2 * 3 * t1;
+        const oneMinusT_3t2 = oneMinusT * 3 * t2;
+
+        if (out) {
+            out.x = oneMinusT3 * a.x + oneMinusT2_3t * c1.x + oneMinusT_3t2 * c2.x + t3 * b.x;
+            out.y = oneMinusT3 * a.y + oneMinusT2_3t * c1.y + oneMinusT_3t2 * c2.y + t3 * b.y;
+            out.z = oneMinusT3 * a.z + oneMinusT2_3t * c1.z + oneMinusT_3t2 * c2.z + t3 * b.z;
+            return out;
+        } else {
+            return {
+                x: oneMinusT3 * a.x + oneMinusT2_3t * c1.x + oneMinusT_3t2 * c2.x + t3 * b.x,
+                y: oneMinusT3 * a.y + oneMinusT2_3t * c1.y + oneMinusT_3t2 * c2.y + t3 * b.y,
+                z: oneMinusT3 * a.z + oneMinusT2_3t * c1.z + oneMinusT_3t2 * c2.z + t3 * b.z,
+            } as O;
+        }
+    }
 }
