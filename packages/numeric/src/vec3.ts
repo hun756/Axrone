@@ -83,4 +83,132 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         h1 = Math.imul(h1 ^ Math.floor(this.z * 1000), 16777619);
         return h1 >>> 0;
     }
+
+    static add<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V
+    ): V {
+        if (out) {
+            out.x = a.x + b.x;
+            out.y = a.y + b.y;
+            out.z = a.z + b.z;
+            return out;
+        } else {
+            return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z } as V;
+        }
+    }
+
+    static addScalar<T extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: number,
+        out?: V
+    ): V {
+        if (out) {
+            out.x = a.x + b;
+            out.y = a.y + b;
+            out.z = a.z + b;
+            return out;
+        } else {
+            return { x: a.x + b, y: a.y + b, z: a.z + b } as V;
+        }
+    }
+
+    static subtract<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V
+    ): V {
+        if (out) {
+            out.x = a.x - b.x;
+            out.y = a.y - b.y;
+            out.z = a.z - b.z;
+            return out;
+        } else {
+            return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z } as V;
+        }
+    }
+
+    static subtractScalar<T extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: number,
+        out?: V
+    ): V {
+        if (out) {
+            out.x = a.x - b;
+            out.y = a.y - b;
+            out.z = a.z - b;
+            return out;
+        } else {
+            return { x: a.x - b, y: a.y - b, z: a.z - b } as V;
+        }
+    }
+
+    static multiply<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V
+    ): V {
+        if (out) {
+            out.x = a.x * b.x;
+            out.y = a.y * b.y;
+            out.z = a.z * b.z;
+            return out;
+        } else {
+            return { x: a.x * b.x, y: a.y * b.y, z: a.z * b.z } as V;
+        }
+    }
+
+    static multiplyScalar<T extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: number,
+        out?: V
+    ): V {
+        if (out) {
+            out.x = a.x * b;
+            out.y = a.y * b;
+            out.z = a.z * b;
+            return out;
+        } else {
+            return { x: a.x * b, y: a.y * b, z: a.z * b } as V;
+        }
+    }
+
+    static divide<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V
+    ): V {
+        if (Math.abs(b.x) < EPSILON || Math.abs(b.y) < EPSILON || Math.abs(b.z) < EPSILON) {
+            throw new Error('Division by zero or near-zero value is not allowed');
+        }
+
+        if (out) {
+            out.x = a.x / b.x;
+            out.y = a.y / b.y;
+            out.z = a.z / b.z;
+            return out;
+        } else {
+            return { x: a.x / b.x, y: a.y / b.y, z: a.z / b.z } as V;
+        }
+    }
+
+    static divideScalar<T extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: number,
+        out?: V
+    ): V {
+        if (Math.abs(b) < EPSILON) {
+            throw new Error('Division by zero or near-zero value is not allowed');
+        }
+
+        if (out) {
+            out.x = a.x / b;
+            out.y = a.y / b;
+            out.z = a.z / b;
+            return out;
+        } else {
+            return { x: a.x / b, y: a.y / b, z: a.z / b } as V;
+        }
+    }
 }
