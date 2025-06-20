@@ -902,4 +902,99 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         this.z /= num;
         return this;
     }
+
+    dot<T extends IVec3Like>(other: Readonly<T>): number {
+        return this.x * other.x + this.y * other.y + this.z * other.z;
+    }
+
+    cross<T extends IVec3Like>(other: Readonly<T>): Vec3 {
+        const x = this.y * other.z - this.z * other.y;
+        const y = this.z * other.x - this.x * other.z;
+        const z = this.x * other.y - this.y * other.x;
+
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        return this;
+    }
+
+    lengthSquared(): number {
+        return this.x * this.x + this.y * this.y + this.z * this.z;
+    }
+
+    length(): number {
+        return Math.sqrt(this.lengthSquared());
+    }
+
+    fastLength(): number {
+        const ax = Math.abs(this.x);
+        const ay = Math.abs(this.y);
+        const az = Math.abs(this.z);
+
+        const max = Math.max(ax, ay, az);
+        const mid = ax + ay + az - max - Math.min(ax, ay, az);
+        const min = Math.min(ax, ay, az);
+
+        return max + 0.4 * mid + 0.2 * min;
+    }
+
+    inverse(): Vec3 {
+        if (
+            Math.abs(this.x) < EPSILON ||
+            Math.abs(this.y) < EPSILON ||
+            Math.abs(this.z) < EPSILON
+        ) {
+            throw new Error('Inversion of zero or near-zero value');
+        }
+
+        this.x = 1 / this.x;
+        this.y = 1 / this.y;
+        this.z = 1 / this.z;
+        return this;
+    }
+
+    inverseSafe(defaultValue: number = 0): Vec3 {
+        const vx = this.x;
+        const vy = this.y;
+        const vz = this.z;
+
+        this.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
+        this.y = Math.abs(vy) < EPSILON ? defaultValue : 1 / vy;
+        this.z = Math.abs(vz) < EPSILON ? defaultValue : 1 / vz;
+        return this;
+    }
+
+    normalize(): Vec3 {
+        const length = this.length();
+        if (length < EPSILON) {
+            throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        this.x /= length;
+        this.y /= length;
+        this.z /= length;
+        return this;
+    }
+
+    normalizeFast(): Vec3 {
+        const lenSq = this.x * this.x + this.y * this.y + this.z * this.z;
+        if (lenSq < EPSILON) {
+            throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        let i = 0;
+        const buf = new ArrayBuffer(4);
+        const view = new DataView(buf);
+        view.setFloat32(0, lenSq);
+        i = view.getInt32(0);
+        i = 0x5f3759df - (i >> 1);
+        view.setInt32(0, i);
+        let invLen = view.getFloat32(0);
+        invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
+
+        this.x *= invLen;
+        this.y *= invLen;
+        this.z *= invLen;
+        return this;
+    }
 }
