@@ -672,4 +672,34 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             } as O;
         }
     }
+
+    static hermite<
+        T extends IVec3Like,
+        U extends IVec3Like,
+        V extends IVec3Like,
+        W extends IVec3Like,
+        O extends IVec3Like,
+    >(p0: Readonly<T>, m0: Readonly<U>, p1: Readonly<V>, m1: Readonly<W>, t: number, out?: O): O {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t2 = t1 * t1;
+        const t3 = t2 * t1;
+
+        const h00 = 2 * t3 - 3 * t2 + 1;
+        const h10 = t3 - 2 * t2 + t1;
+        const h01 = -2 * t3 + 3 * t2;
+        const h11 = t3 - t2;
+
+        if (out) {
+            out.x = h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x;
+            out.y = h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y;
+            out.z = h00 * p0.z + h10 * m0.z + h01 * p1.z + h11 * m1.z;
+            return out;
+        } else {
+            return {
+                x: h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x,
+                y: h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y,
+                z: h00 * p0.z + h10 * m0.z + h01 * p1.z + h11 * m1.z,
+            } as O;
+        }
+    }
 }
