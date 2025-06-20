@@ -635,4 +635,62 @@ describe('Vec3 Test Suite', () => {
             });
         });
     });
+
+    // DISTANCE OPERATIONS
+    describe('Distance Operations', () => {
+        describe('static distance', () => {
+            test('should calculate Euclidean distance', () => {
+                const a = new Vec3(0, 0, 0);
+                const b = new Vec3(3, 4, 0);
+                const result = Vec3.distance(a, b);
+                expect(result).toBe(5);
+            });
+
+            test('should be symmetric', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(4, 5, 6);
+                expect(Vec3.distance(a, b)).toBe(Vec3.distance(b, a));
+            });
+
+            test('should return zero for identical points', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(1, 2, 3);
+                expect(Vec3.distance(a, b)).toBe(0);
+            });
+        });
+
+        describe('static distanceSquared', () => {
+            test('should calculate squared distance', () => {
+                const a = new Vec3(0, 0, 0);
+                const b = new Vec3(3, 4, 0);
+                const result = Vec3.distanceSquared(a, b);
+                expect(result).toBe(25);
+            });
+        });
+
+        describe('static manhattanDistance', () => {
+            test('should calculate Manhattan distance', () => {
+                const a = new Vec3(0, 0, 0);
+                const b = new Vec3(3, 4, 5);
+                const result = Vec3.manhattanDistance(a, b);
+                expect(result).toBe(12); // |3| + |4| + |5|
+            });
+
+            test('should handle negative differences', () => {
+                const a = new Vec3(5, 5, 5);
+                const b = new Vec3(2, 3, 1);
+                const result = Vec3.manhattanDistance(a, b);
+                expect(result).toBe(9); // |5-2| + |5-3| + |5-1| = 3 + 2 + 4
+            });
+        });
+
+        describe('static chebyshevDistance', () => {
+            test('should calculate Chebyshev distance', () => {
+                const a = new Vec3(0, 0, 0);
+                const b = new Vec3(3, 4, 2);
+                const result = Vec3.chebyshevDistance(a, b);
+                expect(result).toBe(4); // max(|3|, |4|, |2|)
+            });
+        });
+    });
 });
