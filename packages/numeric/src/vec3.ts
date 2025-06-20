@@ -214,12 +214,16 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
 
     static negate<T extends IVec3Like, V extends IVec3Like>(a: Readonly<T>, out?: V): V {
         if (out) {
-            out.x = -a.x;
-            out.y = -a.y;
-            out.z = -a.z;
+            out.x = a.x === 0 ? 0 : -a.x;
+            out.y = a.y === 0 ? 0 : -a.y;
+            out.z = a.z === 0 ? 0 : -a.z;
             return out;
         } else {
-            return { x: -a.x, y: -a.y, z: -a.z } as V;
+            return {
+                x: a.x === 0 ? 0 : -a.x,
+                y: a.y === 0 ? 0 : -a.y,
+                z: a.z === 0 ? 0 : -a.z,
+            } as V;
         }
     }
 

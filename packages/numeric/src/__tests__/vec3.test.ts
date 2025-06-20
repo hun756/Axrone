@@ -45,10 +45,18 @@ class Vec3TestDataBuilder {
 
 expect.extend({
     toBeCloseToVec3(received: Vec3, expected: Vec3, precision = FLOAT_PRECISION) {
-        const pass =
-            Math.abs(received.x - expected.x) < precision &&
-            Math.abs(received.y - expected.y) < precision &&
-            Math.abs(received.z - expected.z) < precision;
+        const normalizeZero = (val: number) => val === 0 ? 0 : val;
+        
+        const rxNorm = normalizeZero(received.x);
+        const ryNorm = normalizeZero(received.y);
+        const rzNorm = normalizeZero(received.z);
+        const exNorm = normalizeZero(expected.x);
+        const eyNorm = normalizeZero(expected.y);
+        const ezNorm = normalizeZero(expected.z);
+        
+        const pass = Math.abs(rxNorm - exNorm) < precision &&
+                    Math.abs(ryNorm - eyNorm) < precision &&
+                    Math.abs(rzNorm - ezNorm) < precision;
 
         return {
             message: () =>
@@ -295,6 +303,174 @@ describe('Vec3 Test Suite', () => {
             test('should return number type', () => {
                 const v = new Vec3(1, 2, 3);
                 expect(typeof v.getHashCode()).toBe('number');
+            });
+        });
+    });
+
+    // ARITHMETIC OPERATIONS
+    describe('Arithmetic Operations', () => {
+        describe('static add', () => {
+            test('should add two vectors correctly', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(4, 5, 6);
+                const result = Vec3.add(a, b);
+                expect(result).toEqual(new Vec3(5, 7, 9));
+            });
+
+            test('should not mutate input vectors', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(4, 5, 6);
+                Vec3.add(a, b);
+                expect(a).toEqual(new Vec3(1, 2, 3));
+                expect(b).toEqual(new Vec3(4, 5, 6));
+            });
+
+            test('should use output parameter when provided', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(4, 5, 6);
+                const out = new Vec3();
+                const result = Vec3.add(a, b, out);
+                expect(result).toBe(out);
+                expect(out).toEqual(new Vec3(5, 7, 9));
+            });
+
+            test('should handle negative values', () => {
+                const a = new Vec3(-1, -2, -3);
+                const b = new Vec3(1, 2, 3);
+                const result = Vec3.add(a, b);
+                expect(result).toEqual(new Vec3(0, 0, 0));
+            });
+        });
+
+        describe('static addScalar', () => {
+            test('should add scalar to all components', () => {
+                const a = new Vec3(1, 2, 3);
+                const result = Vec3.addScalar(a, 5);
+                expect(result).toEqual(new Vec3(6, 7, 8));
+            });
+
+            test('should handle negative scalar', () => {
+                const a = new Vec3(1, 2, 3);
+                const result = Vec3.addScalar(a, -1);
+                expect(result).toEqual(new Vec3(0, 1, 2));
+            });
+        });
+
+        describe('static subtract', () => {
+            test('should subtract vectors correctly', () => {
+                const a = new Vec3(5, 7, 9);
+                const b = new Vec3(1, 2, 3);
+                const result = Vec3.subtract(a, b);
+                expect(result).toEqual(new Vec3(4, 5, 6));
+            });
+
+            test('should handle zero result', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(1, 2, 3);
+                const result = Vec3.subtract(a, b);
+                expect(result).toEqual(new Vec3(0, 0, 0));
+            });
+        });
+
+        describe('static multiply', () => {
+            test('should multiply vectors component-wise', () => {
+                const a = new Vec3(2, 3, 4);
+                const b = new Vec3(3, 4, 5);
+                const result = Vec3.multiply(a, b);
+                expect(result).toEqual(new Vec3(6, 12, 20));
+            });
+
+            test('should handle zero multiplication', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(0, 0, 0);
+                const result = Vec3.multiply(a, b);
+                expect(result).toEqual(new Vec3(0, 0, 0));
+            });
+        });
+
+        describe('static multiplyScalar', () => {
+            test('should multiply by scalar correctly', () => {
+                const a = new Vec3(1, 2, 3);
+                const result = Vec3.multiplyScalar(a, 3);
+                expect(result).toEqual(new Vec3(3, 6, 9));
+            });
+
+            test('should handle zero scalar', () => {
+                const a = new Vec3(1, 2, 3);
+                const result = Vec3.multiplyScalar(a, 0);
+                expect(result).toEqual(new Vec3(0, 0, 0));
+            });
+
+            test('should handle negative scalar', () => {
+                const a = new Vec3(1, 2, 3);
+                const result = Vec3.multiplyScalar(a, -2);
+                expect(result).toEqual(new Vec3(-2, -4, -6));
+            });
+        });
+
+        describe('static divide', () => {
+            test('should divide vectors component-wise', () => {
+                const a = new Vec3(6, 8, 10);
+                const b = new Vec3(2, 4, 5);
+                const result = Vec3.divide(a, b);
+                expect(result).toEqual(new Vec3(3, 2, 2));
+            });
+
+            test('should throw error for division by zero', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(0, 1, 1);
+                expect(() => Vec3.divide(a, b)).toThrow(
+                    'Division by zero or near-zero value is not allowed'
+                );
+            });
+
+            test('should throw error for division by near-zero', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(EPSILON / 2, 1, 1);
+                expect(() => Vec3.divide(a, b)).toThrow(
+                    'Division by zero or near-zero value is not allowed'
+                );
+            });
+        });
+
+        describe('static divideScalar', () => {
+            test('should divide by scalar correctly', () => {
+                const a = new Vec3(6, 9, 12);
+                const result = Vec3.divideScalar(a, 3);
+                expect(result).toEqual(new Vec3(2, 3, 4));
+            });
+
+            test('should throw error for division by zero', () => {
+                const a = new Vec3(1, 2, 3);
+                expect(() => Vec3.divideScalar(a, 0)).toThrow(
+                    'Division by zero or near-zero value is not allowed'
+                );
+            });
+        });
+
+        describe('static negate', () => {
+            test('should negate all components', () => {
+                const a = new Vec3(1, -2, 3);
+                const result = Vec3.negate(a);
+                expect(result).toEqual(new Vec3(-1, 2, -3));
+            });
+
+            test('should handle zero vector', () => {
+                const a = new Vec3(0, 0, 0);
+                const result = Vec3.negate(a);
+                expect(result.x).toBe(0);
+                expect(result.y).toBe(0);
+                expect(result.z).toBe(0);
+            });
+        });
+
+        describe('instance add', () => {
+            test('should modify vector in place', () => {
+                const a = new Vec3(1, 2, 3);
+                const b = new Vec3(4, 5, 6);
+                const result = a.add(b);
+                expect(result).toBe(a);
+                expect(a).toEqual(new Vec3(5, 7, 9));
             });
         });
     });
