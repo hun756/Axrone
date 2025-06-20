@@ -761,4 +761,77 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
 
         return out;
     }
+
+    static random<T extends IVec3Like>(out?: T): T {
+        const x = _normalRandom();
+        const y = _normalRandom();
+        const z = _normalRandom();
+
+        if (out) {
+            out.x = x;
+            out.y = y;
+            out.z = z;
+            return out;
+        } else {
+            return { x, y, z } as T;
+        }
+    }
+
+    static fastRandom(scale: number = 1): IVec3Like {
+        const theta = Math.random() * PI_2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const sinPhi = Math.sin(phi);
+
+        return {
+            x: Math.cos(theta) * sinPhi * scale,
+            y: Math.sin(theta) * sinPhi * scale,
+            z: Math.cos(phi) * scale,
+        };
+    }
+
+    static randomNormal(scale: number = 1): IVec3Like {
+        const u1 = 1 - Math.random();
+        const u2 = Math.random();
+        const u3 = Math.random();
+
+        const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(PI_2 * u2);
+        const z1 = Math.sqrt(-2 * Math.log(u1)) * Math.sin(PI_2 * u2);
+        const z2 = Math.sqrt(-2 * Math.log(u3)) * Math.cos(PI_2 * Math.random());
+
+        return {
+            x: z0 * scale,
+            y: z1 * scale,
+            z: z2 * scale,
+        };
+    }
+
+    randomBox(
+        minX: number,
+        maxX: number,
+        minY: number,
+        maxY: number,
+        minZ: number,
+        maxZ: number
+    ): IVec3Like {
+        return {
+            x: minX + Math.random() * (maxX - minX),
+            y: minY + Math.random() * (maxY - minY),
+            z: minZ + Math.random() * (maxZ - minZ),
+        };
+    }
+
+    randomBoxNormal(
+        minX: number,
+        maxX: number,
+        minY: number,
+        maxY: number,
+        minZ: number,
+        maxZ: number
+    ): IVec3Like {
+        return {
+            x: minX + (_normalRandom() + 1) * 0.5 * (maxX - minX),
+            y: minY + (_normalRandom() + 1) * 0.5 * (maxY - minY),
+            z: minZ + (_normalRandom() + 1) * 0.5 * (maxZ - minZ),
+        };
+    }
 }
