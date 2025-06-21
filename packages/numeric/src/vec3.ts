@@ -308,7 +308,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return max + 0.4 * mid + 0.2 * min;
     }
 
-    static normalize<T extends IVec3Like>(v: Readonly<T>, out?: T): T {
+    static normalize<T extends IVec3Like, U extends IVec3Like>(v: Readonly<T>, out?: U): U {
         const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
         if (length < EPSILON) {
             throw new Error('Cannot normalize a zero-length vector');
@@ -320,7 +320,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             out.z = v.z / length;
             return out;
         } else {
-            return { x: v.x / length, y: v.y / length, z: v.z / length } as T;
+            return { x: v.x / length, y: v.y / length, z: v.z / length } as U;
         }
     }
 
