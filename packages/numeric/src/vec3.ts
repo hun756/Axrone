@@ -324,7 +324,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         }
     }
 
-    static normalizeFast<T extends IVec3Like>(v: Readonly<T>, out?: T): T {
+    static normalizeQuake<T extends IVec3Like>(v: Readonly<T>, out?: T): T {
         const vx = v.x;
         const vy = v.y;
         const vz = v.z;
@@ -861,7 +861,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     ): T {
         if (out) {
             out.x = minX + (_normalRandom() + 1) * 0.5 * (maxX - minX);
-            out.y = minY + (_normalRandom() + 1) * 0.5 * (maxY - minY); 
+            out.y = minY + (_normalRandom() + 1) * 0.5 * (maxY - minY);
             out.z = minZ + (_normalRandom() + 1) * 0.5 * (maxZ - minZ);
             return out;
         } else {

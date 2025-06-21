@@ -622,13 +622,13 @@ describe('Vec3 Test Suite', () => {
             });
         });
 
-        describe('static normalizeFast', () => {
+        describe('static normalizeQuake', () => {
             test('should approximate normalization', () => {
                 const testCases = [new Vec3(3, 4, 0), new Vec3(1, 2, 3), new Vec3(5, 12, 13)];
 
                 testCases.forEach((v) => {
                     const exactNorm = Vec3.normalize(v);
-                    const fastNorm = Vec3.normalizeFast(v, new Vec3());
+                    const fastNorm = Vec3.normalizeQuake(v, new Vec3());
                     const lengthDiff = Math.abs(fastNorm.length() - 1);
                     expect(lengthDiff).toBeLessThan(0.1);
                 });
@@ -1437,11 +1437,11 @@ describe('Vec3 Test Suite', () => {
             expect(regularTime).toBeLessThan(1);
         });
 
-        test('normalizeFast should complete within reasonable time', () => {
+        test('normalizeQuake should complete within reasonable time', () => {
             const vectors = Vec3TestDataBuilder.createBatch(1000).filter(v => v.length() > EPSILON);
             
             const startFast = performance.now();
-            vectors.forEach(v => Vec3.normalizeFast(v));
+            vectors.forEach(v => Vec3.normalizeQuake(v));
             const endFast = performance.now();
             const fastTime = endFast - startFast;
             
