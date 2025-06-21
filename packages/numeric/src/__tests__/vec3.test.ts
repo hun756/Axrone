@@ -4,7 +4,7 @@ declare global {
     namespace jest {
         interface Matchers<R> {
             toBeCloseToVec3(expected: Vec3, precision?: number): R;
-            toBeNormalizedVec3(received: Vec3, precision?: number): R;
+            toBeNormalizedVec3(precision?: number): R;
             toBePerpendicularTo(other: Vec3, precision?: number): R;
         }
     }
@@ -1405,46 +1405,48 @@ describe('Vec3 Test Suite', () => {
     describe('Performance Tests', () => {
         test('static methods should be efficient for large datasets', () => {
             const vectors = Vec3TestDataBuilder.createBatch(PERFORMANCE_ITERATIONS);
-            
+
             const start = performance.now();
-            
+
             for (let i = 0; i < vectors.length - 1; i++) {
                 Vec3.add(vectors[i], vectors[i + 1]);
                 Vec3.dot(vectors[i], vectors[i + 1]);
                 Vec3.cross(vectors[i], vectors[i + 1]);
             }
-            
+
             const end = performance.now();
             const timePerOperation = (end - start) / (vectors.length * 3);
-            
+
             expect(timePerOperation).toBeLessThan(0.01); // 0.01ms per operation
         });
 
         test('fast methods should be faster than regular methods', () => {
             const vectors = Vec3TestDataBuilder.createBatch(1000);
-            
+
             const startRegular = performance.now();
-            vectors.forEach(v => Vec3.len(v));
+            vectors.forEach((v) => Vec3.len(v));
             const endRegular = performance.now();
             const regularTime = endRegular - startRegular;
-            
+
             const startFast = performance.now();
-            vectors.forEach(v => Vec3.fastLength(v));
+            vectors.forEach((v) => Vec3.fastLength(v));
             const endFast = performance.now();
             const fastTime = endFast - startFast;
-            
+
             expect(fastTime).toBeLessThan(1);
             expect(regularTime).toBeLessThan(1);
         });
 
         test('normalizeQuake should complete within reasonable time', () => {
-            const vectors = Vec3TestDataBuilder.createBatch(1000).filter(v => v.length() > EPSILON);
-            
+            const vectors = Vec3TestDataBuilder.createBatch(1000).filter(
+                (v) => v.length() > EPSILON
+            );
+
             const startFast = performance.now();
-            vectors.forEach(v => Vec3.normalizeQuake(v));
+            vectors.forEach((v) => Vec3.normalizeQuake(v));
             const endFast = performance.now();
             const fastTime = endFast - startFast;
-            
+
             expect(fastTime).toBeLessThan(10);
         });
     });
@@ -1455,10 +1457,10 @@ describe('Vec3 Test Suite', () => {
             for (let i = 0; i < 100; i++) {
                 const a = Vec3TestDataBuilder.createRandom();
                 const b = Vec3TestDataBuilder.createRandom();
-                
+
                 const ab = Vec3.add(a, b, new Vec3());
                 const ba = Vec3.add(b, a, new Vec3());
-                
+
                 expect(ab).toBeCloseToVec3(ba);
             }
         });
@@ -1468,10 +1470,10 @@ describe('Vec3 Test Suite', () => {
                 const a = Vec3TestDataBuilder.createRandom();
                 const b = Vec3TestDataBuilder.createRandom();
                 const c = Vec3TestDataBuilder.createRandom();
-                
+
                 const abc = Vec3.add(Vec3.add(a, b), c, new Vec3());
                 const bca = Vec3.add(a, Vec3.add(b, c), new Vec3());
-                
+
                 expect(abc).toBeCloseToVec3(bca);
             }
         });
@@ -1480,10 +1482,10 @@ describe('Vec3 Test Suite', () => {
             for (let i = 0; i < 100; i++) {
                 const a = Vec3TestDataBuilder.createRandom();
                 const b = Vec3TestDataBuilder.createRandom();
-                
+
                 const ab = Vec3.dot(a, b);
                 const ba = Vec3.dot(b, a);
-                
+
                 expect(ab).toBeCloseTo(ba, 6);
             }
         });
@@ -1492,11 +1494,11 @@ describe('Vec3 Test Suite', () => {
             for (let i = 0; i < 100; i++) {
                 const a = Vec3TestDataBuilder.createRandom();
                 const b = Vec3TestDataBuilder.createRandom();
-                
+
                 const ab = Vec3.cross(a, b);
                 const ba = Vec3.cross(b, a);
                 const negBa = Vec3.negate(ba, new Vec3());
-                
+
                 expect(ab).toBeCloseToVec3(negBa);
             }
         });
@@ -1505,10 +1507,11 @@ describe('Vec3 Test Suite', () => {
             for (let i = 0; i < 100; i++) {
                 const a = Vec3TestDataBuilder.createRandom();
                 const b = Vec3TestDataBuilder.createRandom();
-                
-                if (Vec3.cross(a, b, new Vec3()).length() > EPSILON) { // Skip parallel vectors
+
+                if (Vec3.cross(a, b, new Vec3()).length() > EPSILON) {
+                    // Skip parallel vectors
                     const cross = Vec3.cross(a, b);
-                    
+
                     expect(cross).toBePerpendicularTo(a);
                     expect(cross).toBePerpendicularTo(b);
                 }
@@ -1518,11 +1521,11 @@ describe('Vec3 Test Suite', () => {
         test('normalization should preserve direction', () => {
             for (let i = 0; i < 100; i++) {
                 const v = Vec3TestDataBuilder.createRandom();
-                
+
                 if (v.length() > EPSILON) {
                     const normalized = Vec3.normalize(v);
                     const scaled = Vec3.multiplyScalar(normalized, v.length());
-                    
+
                     expect(scaled).toBeCloseToVec3(v);
                 }
             }
@@ -1533,11 +1536,11 @@ describe('Vec3 Test Suite', () => {
                 const a = Vec3TestDataBuilder.createRandom();
                 const b = Vec3TestDataBuilder.createRandom();
                 const c = Vec3TestDataBuilder.createRandom();
-                
+
                 const ab = Vec3.distance(a, b);
                 const bc = Vec3.distance(b, c);
                 const ac = Vec3.distance(a, c);
-                
+
                 expect(ac).toBeLessThanOrEqual(ab + bc + FLOAT_PRECISION);
             }
         });
@@ -1547,12 +1550,12 @@ describe('Vec3 Test Suite', () => {
                 const a = Vec3TestDataBuilder.createRandom();
                 const b = Vec3TestDataBuilder.createRandom();
                 const t = Math.random();
-                
+
                 const lerped = Vec3.lerp(a, b, t);
                 const distanceA = Vec3.distance(lerped, a);
                 const distanceB = Vec3.distance(lerped, b);
                 const totalDistance = Vec3.distance(a, b);
-                
+
                 expect(distanceA + distanceB).toBeCloseTo(totalDistance, 4);
             }
         });
@@ -1562,26 +1565,27 @@ describe('Vec3 Test Suite', () => {
     describe('Integration Tests', () => {
         test('complete 3D transformation pipeline', () => {
             const vertices = [
-                new Vec3(-1, -1, -1), new Vec3(1, -1, -1),
-                new Vec3(1, 1, -1), new Vec3(-1, 1, -1),
-                new Vec3(-1, -1, 1), new Vec3(1, -1, 1),
-                new Vec3(1, 1, 1), new Vec3(-1, 1, 1)
+                new Vec3(-1, -1, -1),
+                new Vec3(1, -1, -1),
+                new Vec3(1, 1, -1),
+                new Vec3(-1, 1, -1),
+                new Vec3(-1, -1, 1),
+                new Vec3(1, -1, 1),
+                new Vec3(1, 1, 1),
+                new Vec3(-1, 1, 1),
             ];
-            
-            const transformed = vertices.map(v => {
+
+            const transformed = vertices.map((v) => {
                 return Vec3.add(
-                    Vec3.rotateY(
-                        Vec3.multiplyScalar(v, 2),
-                        Math.PI / 4
-                    ),
+                    Vec3.rotateY(Vec3.multiplyScalar(v, 2), Math.PI / 4),
                     new Vec3(10, 5, 0)
                 );
             });
-            
-            transformed.forEach(v => {
+
+            transformed.forEach((v) => {
                 expect(v.x).toBeGreaterThan(5);
                 expect(v.y).toBeGreaterThan(0);
-                
+
                 const distanceFromOrigin = Vec3.distance(v, new Vec3(10, 5, 0));
                 expect(distanceFromOrigin).toBeCloseTo(2 * Math.sqrt(3), 4);
             });
@@ -1592,21 +1596,21 @@ describe('Vec3 Test Suite', () => {
             let velocity = new Vec3(10, 10, 0);
             const gravity = new Vec3(0, -9.81, 0);
             const dt = 0.016;
-            
+
             const positions: Vec3[] = [];
-            
+
             for (let time = 0; time < 2.5; time += dt) {
                 positions.push(Vec3.from(position));
-                
+
                 velocity = Vec3.add(velocity, Vec3.multiplyScalar(gravity, dt));
-                
+
                 position = Vec3.add(position, Vec3.multiplyScalar(velocity, dt));
             }
-            
+
             expect(positions[0].y).toBeCloseTo(0, 4);
             expect(positions[positions.length - 1].y).toBeLessThan(0);
-            
-            const maxHeight = Math.max(...positions.map(p => p.y));
+
+            const maxHeight = Math.max(...positions.map((p) => p.y));
             expect(maxHeight).toBeGreaterThan(0);
             expect(maxHeight).toBeCloseTo(5.017, 2);
         });
@@ -1615,24 +1619,27 @@ describe('Vec3 Test Suite', () => {
             const p1 = new Vec3(0, 0, 0);
             const p2 = new Vec3(1, 0, 0);
             const p3 = new Vec3(0, 1, 0);
-            
+
             const edge1 = Vec3.subtract(p2, p1, new Vec3());
             const edge2 = Vec3.subtract(p3, p1, new Vec3());
             const normal = Vec3.normalize(Vec3.cross(edge1, edge2), new Vec3());
-            
+
             expect(normal).toBePerpendicularTo(edge1);
             expect(normal).toBePerpendicularTo(edge2);
-            // TODO : Uncomment when Vec3 has a toBeNormalizedVec3 matcher 
+            // TODO : Uncomment when Vec3 has a toBeNormalizedVec3 matcher
             // expect(normal).toBeNormalizedVec3();
-            
+
             const area = Vec3.cross(edge1, edge2, new Vec3()).length() / 2;
             expect(area).toBeCloseTo(0.5, 6);
-            
+
             const testPoint = new Vec3(0.5, 0.5, 1);
             const toPoint = Vec3.subtract(testPoint, p1);
             const distanceToPlane = Vec3.dot(toPoint, normal);
-            const projectedPoint = Vec3.subtract(testPoint, Vec3.multiplyScalar(normal, distanceToPlane));
-            
+            const projectedPoint = Vec3.subtract(
+                testPoint,
+                Vec3.multiplyScalar(normal, distanceToPlane)
+            );
+
             const verifyDistance = Vec3.dot(Vec3.subtract(projectedPoint, p1), normal);
             expect(Math.abs(verifyDistance)).toBeLessThan(EPSILON);
         });
