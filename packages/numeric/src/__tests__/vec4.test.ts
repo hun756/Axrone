@@ -1,4 +1,5 @@
 // src/vec4.spec.ts
+import { EPSILON } from '../common';
 import { IVec4Like, Vec4 } from '../vec4';
 
 describe('Vec4 Class', () => {
@@ -76,6 +77,78 @@ describe('Vec4 Class', () => {
                 expect(() => Vec4.fromArray([1, 2, 3], 0)).toThrow(
                     'Array must have at least 4 elements when using offset 0'
                 );
+            });
+        });
+    });
+
+    describe('Instance Methods: clone, equals, getHashCode', () => {
+        describe('clone()', () => {
+            it('should create a new instance with the same values', () => {
+                const v1 = new Vec4(1, 2, 3, 4);
+                const v2 = v1.clone();
+                expect(v2).toBeInstanceOf(Vec4);
+                expect(v2.x).toBe(v1.x);
+                expect(v2.y).toBe(v1.y);
+                expect(v2.z).toBe(v1.z);
+                expect(v2.w).toBe(v1.w);
+            });
+
+            it('should not be the same instance as the original', () => {
+                const v1 = new Vec4(1, 2, 3, 4);
+                const v2 = v1.clone();
+                expect(v2).not.toBe(v1);
+            });
+        });
+
+        describe('equals()', () => {
+            const v = new Vec4(1, 2, 3, 4);
+
+            it('should return true for an identical vector', () => {
+                const identical = new Vec4(1, 2, 3, 4);
+                expect(v.equals(identical)).toBe(true);
+            });
+
+            it('should return true for vectors with nearly identical floating point values', () => {
+                const nearlyIdentical = new Vec4(1 + EPSILON / 2, 2 - EPSILON / 2, 3, 4);
+                expect(v.equals(nearlyIdentical)).toBe(true);
+            });
+
+            it('should return false for different vectors', () => {
+                const different = new Vec4(4, 3, 2, 1);
+                expect(v.equals(different)).toBe(false);
+            });
+
+            it('should return false when a component is outside the EPSILON tolerance', () => {
+                const outsideTolerance = new Vec4(1 + EPSILON * 2, 2, 3, 4);
+                expect(v.equals(outsideTolerance)).toBe(false);
+            });
+
+            it('should return false for non-Vec4 objects', () => {
+                expect(v.equals(null)).toBe(false);
+                expect(v.equals(undefined)).toBe(false);
+                expect(v.equals({ x: 1, y: 2, z: 3, w: 4 })).toBe(false);
+                expect(v.equals('a vector')).toBe(false);
+            });
+        });
+
+        describe('getHashCode()', () => {
+            it('should return the same hash code for identical vectors', () => {
+                const v1 = new Vec4(1.23, 4.56, 7.89, 0.12);
+                const v2 = new Vec4(1.23, 4.56, 7.89, 0.12);
+                expect(v1.getHashCode()).toBe(v2.getHashCode());
+            });
+
+            it('should return a different hash code for different vectors', () => {
+                const v1 = new Vec4(1, 2, 3, 4);
+                const v2 = new Vec4(4, 3, 2, 1);
+                expect(v1.getHashCode()).not.toBe(v2.getHashCode());
+            });
+
+            it('should return an unsigned 32-bit integer', () => {
+                const v = new Vec4(-10, 50.555, -1000.1, 99);
+                const hash = v.getHashCode();
+                expect(hash).toBeGreaterThanOrEqual(0);
+                expect(hash).toBeLessThanOrEqual(4294967295); // 2^32 - 1
             });
         });
     });
