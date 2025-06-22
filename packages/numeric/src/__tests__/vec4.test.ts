@@ -152,4 +152,75 @@ describe('Vec4 Class', () => {
             });
         });
     });
+
+     describe('Static Arithmetic Methods', () => {
+        const v1 = new Vec4(1, 2, 3, 4);
+        const v2 = new Vec4(5, 6, 7, 8);
+        const out = new Vec4();
+
+        beforeEach(() => {
+            out.x = 0; out.y = 0; out.z = 0; out.w = 0;
+        });
+
+        it('add should return a new vector with the sum of two vectors', () => {
+            const result = Vec4.add(v1, v2);
+            expect(result).toEqual({ x: 6, y: 8, z: 10, w: 12 });
+            expect(result).not.toBeInstanceOf(Vec4);
+        });
+
+        it('add should write the result to the out parameter if provided', () => {
+            const result = Vec4.add(v1, v2, out);
+            expect(result).toBe(out);
+            expect(out).toEqual({ x: 6, y: 8, z: 10, w: 12 });
+        });
+
+        it('subtract should return the difference of two vectors', () => {
+            const result = Vec4.subtract(v1, v2);
+            expect(result).toEqual({ x: -4, y: -4, z: -4, w: -4 });
+        });
+
+        it('multiply should return the component-wise product of two vectors', () => {
+            const result = Vec4.multiply(v1, v2);
+            expect(result).toEqual({ x: 5, y: 12, z: 21, w: 32 });
+        });
+        
+        it('divide should return the component-wise division of two vectors', () => {
+            const vA = new Vec4(10, 20, 30, 40);
+            const vB = new Vec4(2, 4, 5, 8);
+            const result = Vec4.divide(vA, vB);
+            expect(result.x).toBeCloseTo(5);
+            expect(result.y).toBeCloseTo(5);
+            expect(result.z).toBeCloseTo(6);
+            expect(result.w).toBeCloseTo(5);
+        });
+
+        it('divide should throw an error when dividing by zero', () => {
+            const zeroVec = new Vec4(1, 0, 1, 1);
+            expect(() => Vec4.divide(v1, zeroVec)).toThrow('Division by zero or near-zero value is not allowed');
+        });
+
+        it('addScalar should add a number to each component', () => {
+            const result = Vec4.addScalar(v1, 10, out);
+            expect(result).toEqual({ x: 11, y: 12, z: 13, w: 14 });
+        });
+
+        it('subtractScalar should subtract a number from each component', () => {
+            const result = Vec4.subtractScalar(v1, 1);
+            expect(result).toEqual({ x: 0, y: 1, z: 2, w: 3 });
+        });
+
+        it('multiplyScalar should multiply each component by a number', () => {
+            const result = Vec4.multiplyScalar(v1, 3);
+            expect(result).toEqual({ x: 3, y: 6, z: 9, w: 12 });
+        });
+
+        it('divideScalar should divide each component by a number', () => {
+            const result = Vec4.divideScalar(v1, 2);
+            expect(result).toEqual({ x: 0.5, y: 1, z: 1.5, w: 2 });
+        });
+
+        it('divideScalar should throw an error when dividing by zero', () => {
+            expect(() => Vec4.divideScalar(v1, 0)).toThrow('Division by zero or near-zero value is not allowed');
+        });
+    });
 });
