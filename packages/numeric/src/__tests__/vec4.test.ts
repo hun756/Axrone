@@ -438,4 +438,101 @@ describe('Vec4 Professional Unit Tests', () => {
             });
         });
     });
+
+    // DISTANCE CALCULATIONS TESTS
+    describe('Distance Calculations', () => {
+        
+        test('should calculate Euclidean distance correctly', () => {
+            const a = new Vec4(1, 2, 3, 4);
+            const b = new Vec4(4, 6, 7, 8);
+            
+            const expected = Math.sqrt(57);
+            
+            expectNumberClose(Vec4.distance(a, b), expected);
+            expectNumberClose(a.distance(b), expected);
+        });
+
+        test('should calculate distance squared correctly', () => {
+            const a = new Vec4(1, 2, 3, 4);
+            const b = new Vec4(4, 6, 7, 8);
+            
+            expect(Vec4.distanceSquared(a, b)).toBe(57);
+            expect(a.distanceSquared(b)).toBe(57);
+        });
+
+        test('should calculate Manhattan distance correctly', () => {
+            const a = new Vec4(1, 2, 3, 4);
+            const b = new Vec4(4, 6, 7, 8);
+            
+            expect(Vec4.manhattanDistance(a, b)).toBe(15);
+            expect(a.manhattanDistance(b)).toBe(15);
+        });
+
+        test('should calculate Chebyshev distance correctly', () => {
+            const a = new Vec4(1, 2, 3, 4);
+            const b = new Vec4(4, 6, 7, 8);
+            
+            expect(Vec4.chebyshevDistance(a, b)).toBe(4);
+            expect(a.chebyshevDistance(b)).toBe(4);
+        });
+
+        test('should calculate fast distance approximation', () => {
+            const a = new Vec4(1, 2, 3, 4);
+            const b = new Vec4(4, 6, 7, 8);
+            
+            const fastDist = Vec4.distanceFast(a, b);
+            const realDist = Vec4.distance(a, b);
+            
+            expect(Math.abs(fastDist - realDist) / realDist).toBeLessThan(0.3);
+        });
+
+        test('should return zero distance for same point', () => {
+            const a = new Vec4(1, 2, 3, 4);
+            
+            expect(Vec4.distance(a, a)).toBe(0);
+            expect(Vec4.manhattanDistance(a, a)).toBe(0);
+            expect(Vec4.chebyshevDistance(a, a)).toBe(0);
+        });
+    });
+
+    // ANGLE CALCULATIONS TESTS
+    describe('Angle Calculations', () => {
+        
+        test('should calculate angle between vectors correctly', () => {
+            const a = new Vec4(1, 0, 0, 0);
+            const b = new Vec4(0, 1, 0, 0);
+            
+            expectNumberClose(Vec4.angleBetween(a, b), Math.PI / 2);
+            expectNumberClose(a.angleBetween(b), Math.PI / 2);
+        });
+
+        test('should return zero angle for same direction', () => {
+            const a = new Vec4(1, 2, 3, 4);
+            const b = new Vec4(2, 4, 6, 8);
+            
+            expectNumberClose(Vec4.angleBetween(a, b), 0);
+        });
+
+        test('should return PI for opposite direction', () => {
+            const a = new Vec4(1, 2, 3, 4);
+            const b = new Vec4(-1, -2, -3, -4);
+            
+            expectNumberClose(Vec4.angleBetween(a, b), Math.PI);
+        });
+
+        test('should convert angle to degrees correctly', () => {
+            const a = new Vec4(1, 0, 0, 0);
+            const b = new Vec4(0, 1, 0, 0);
+            
+            expectNumberClose(Vec4.angle2Deg(a, b), 90);
+            expectNumberClose(a.angle2Deg(b), 90);
+        });
+
+        test('should throw error for zero vector angle calculation', () => {
+            const a = new Vec4(1, 2, 3, 4);
+            const zero = new Vec4(0, 0, 0, 0);
+            
+            expect(() => Vec4.angleBetween(a, zero)).toThrow('Cannot calculate angle with zero-length vector');
+        });
+    });
 });
