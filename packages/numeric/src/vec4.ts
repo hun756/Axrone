@@ -417,4 +417,102 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
             } as V;
         }
     }
+
+    static cubicBezier<
+        T extends IVec4Like,
+        U extends IVec4Like,
+        V extends IVec4Like,
+        W extends IVec4Like,
+        O extends IVec4Like,
+    >(a: Readonly<T>, c1: Readonly<U>, c2: Readonly<V>, b: Readonly<W>, t: number, out?: O): O {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const oneMinusT = 1 - t1;
+
+        const oneMinusT2 = oneMinusT * oneMinusT;
+        const t2 = t1 * t1;
+
+        // Bernstein polinomials
+        const B0 = oneMinusT * oneMinusT2; // (1-t)^3
+        const B1 = 3 * t1 * oneMinusT2; // 3t(1-t)^2
+        const B2 = 3 * t2 * oneMinusT; // 3t^2(1-t)
+        const B3 = t1 * t2; // t^3
+
+        if (out) {
+            out.x = B0 * a.x + B1 * c1.x + B2 * c2.x + B3 * b.x;
+            out.y = B0 * a.y + B1 * c1.y + B2 * c2.y + B3 * b.y;
+            out.z = B0 * a.z + B1 * c1.z + B2 * c2.z + B3 * b.z;
+            out.w = B0 * a.w + B1 * c1.w + B2 * c2.w + B3 * b.w;
+            return out;
+        } else {
+            return {
+                x: B0 * a.x + B1 * c1.x + B2 * c2.x + B3 * b.x,
+                y: B0 * a.y + B1 * c1.y + B2 * c2.y + B3 * b.y,
+                z: B0 * a.z + B1 * c1.z + B2 * c2.z + B3 * b.z,
+                w: B0 * a.w + B1 * c1.w + B2 * c2.w + B3 * b.w,
+            } as O;
+        }
+    }
+
+    static hermite<
+        T extends IVec4Like,
+        U extends IVec4Like,
+        V extends IVec4Like,
+        W extends IVec4Like,
+        O extends IVec4Like,
+    >(p0: Readonly<T>, m0: Readonly<U>, p1: Readonly<V>, m1: Readonly<W>, t: number, out?: O): O {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t2 = t1 * t1;
+        const t3 = t2 * t1;
+
+        const h00 = 2 * t3 - 3 * t2 + 1;
+        const h10 = t3 - 2 * t2 + t1;
+        const h01 = -2 * t3 + 3 * t2;
+        const h11 = t3 - t2;
+
+        if (out) {
+            out.x = h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x;
+            out.y = h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y;
+            out.z = h00 * p0.z + h10 * m0.z + h01 * p1.z + h11 * m1.z;
+            out.w = h00 * p0.w + h10 * m0.w + h01 * p1.w + h11 * m1.w;
+            return out;
+        } else {
+            return {
+                x: h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x,
+                y: h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y,
+                z: h00 * p0.z + h10 * m0.z + h01 * p1.z + h11 * m1.z,
+                w: h00 * p0.w + h10 * m0.w + h01 * p1.w + h11 * m1.w,
+            } as O;
+        }
+    }
+
+    static catmullRom<
+        T extends IVec4Like,
+        U extends IVec4Like,
+        V extends IVec4Like,
+        W extends IVec4Like,
+        O extends IVec4Like,
+    >(
+        p0: Readonly<T>,
+        p1: Readonly<U>,
+        p2: Readonly<V>,
+        p3: Readonly<W>,
+        t: number,
+        tension: number = 0.5,
+        out?: O
+    ): O {
+        const m0x = (1 - tension) * 0.5 * (p2.x - p0.x);
+        const m0y = (1 - tension) * 0.5 * (p2.y - p0.y);
+        const m0z = (1 - tension) * 0.5 * (p2.z - p0.z);
+        const m0w = (1 - tension) * 0.5 * (p2.w - p0.w);
+
+        const m1x = (1 - tension) * 0.5 * (p3.x - p1.x);
+        const m1y = (1 - tension) * 0.5 * (p3.y - p1.y);
+        const m1z = (1 - tension) * 0.5 * (p3.z - p1.z);
+        const m1w = (1 - tension) * 0.5 * (p3.w - p1.w);
+
+        const tempM0 = { x: m0x, y: m0y, z: m0z, w: m0w };
+        const tempM1 = { x: m1x, y: m1y, z: m1z, w: m1w };
+
+        return Vec4.hermite(p1, tempM0, p2, tempM1, t, out);
+    }
 }
