@@ -541,12 +541,12 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         }
     }
 
-    static lerpUnClamped<T extends IVec3Like, U extends IVec3Like>(
+    static lerpUnClamped<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         if (out) {
             out.x = a.x + (b.x - a.x) * t;
             out.y = a.y + (b.y - a.y) * t;
@@ -557,16 +557,16 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: a.x + (b.x - a.x) * t,
                 y: a.y + (b.y - a.y) * t,
                 z: a.z + (b.z - a.z) * t,
-            } as T;
+            } as V;
         }
     }
 
-    static slerp<T extends IVec3Like, U extends IVec3Like>(
+    static slerp<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
 
         const dotProduct = Vec3.dot(a, b);
@@ -598,16 +598,16 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: ratioA * a.x + ratioB * b.x,
                 y: ratioA * a.y + ratioB * b.y,
                 z: ratioA * a.z + ratioB * b.z,
-            } as T;
+            } as V;
         }
     }
 
-    static smoothStep<T extends IVec3Like, U extends IVec3Like>(
+    static smoothStep<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
         const t2 = t1 * t1 * (3 - 2 * t1);
         if (out) {
@@ -620,16 +620,16 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: a.x + (b.x - a.x) * t2,
                 y: a.y + (b.y - a.y) * t2,
                 z: a.z + (b.z - a.z) * t2,
-            } as T;
+            } as V;
         }
     }
 
-    static smootherStep<T extends IVec3Like, U extends IVec3Like>(
+    static smootherStep<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
         const t2 = t1 * t1 * t1 * (10 - 15 * t1 + 6 * t1 * t1);
         if (out) {
@@ -642,7 +642,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: a.x + (b.x - a.x) * t2,
                 y: a.y + (b.y - a.y) * t2,
                 z: a.z + (b.z - a.z) * t2,
-            } as T;
+            } as V;
         }
     }
 
