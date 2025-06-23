@@ -27,7 +27,6 @@ const createRandomVec4 = (scale = 100): Vec4 => {
 
 describe('Vec4 Professional Unit Tests', () => {
     describe('Constructor and Creation', () => {
-        
         test('should create zero vector by default', () => {
             const vec = new Vec4();
             expectVectorClose(vec, { x: 0, y: 0, z: 0, w: 0 });
@@ -75,12 +74,32 @@ describe('Vec4 Professional Unit Tests', () => {
         test('should throw error for insufficient array length', () => {
             const arr = [1, 2];
             expect(() => Vec4.fromArray(arr)).toThrow('Array must have at least 4 elements');
-            expect(() => Vec4.fromArray(arr, 1)).toThrow('Array must have at least 5 elements when using offset 1');
+            expect(() => Vec4.fromArray(arr, 1)).toThrow(
+                'Array must have at least 5 elements when using offset 1'
+            );
         });
 
         test('should create using static create method', () => {
             const vec = Vec4.create(1, 2, 3, 4);
             expectVectorClose(vec, { x: 1, y: 2, z: 3, w: 4 });
+        });
+    });
+
+    describe('Static Constants', () => {
+        test('should have correct static constant values', () => {
+            expectVectorClose(Vec4.ZERO, { x: 0, y: 0, z: 0, w: 0 });
+            expectVectorClose(Vec4.ONE, { x: 1, y: 1, z: 1, w: 1 });
+            expectVectorClose(Vec4.NEG_ONE, { x: -1, y: -1, z: -1, w: -1 });
+            expectVectorClose(Vec4.UNIT_X, { x: 1, y: 0, z: 0, w: 0 });
+            expectVectorClose(Vec4.UNIT_Y, { x: 0, y: 1, z: 0, w: 0 });
+            expectVectorClose(Vec4.UNIT_Z, { x: 0, y: 0, z: 1, w: 0 });
+            expectVectorClose(Vec4.UNIT_W, { x: 0, y: 0, z: 0, w: 1 });
+        });
+
+        test('should have immutable static constants', () => {
+            expect(Object.isFrozen(Vec4.ZERO)).toBe(true);
+            expect(Object.isFrozen(Vec4.ONE)).toBe(true);
+            expect(Object.isFrozen(Vec4.UNIT_X)).toBe(true);
         });
     });
 });
