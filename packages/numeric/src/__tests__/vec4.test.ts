@@ -330,4 +330,112 @@ describe('Vec4 Professional Unit Tests', () => {
             });
         });
     });
+
+    // VECTOR MATHEMATICS TESTS
+    describe('Vector Mathematics', () => {
+        describe('Dot Product', () => {
+            test('should calculate dot product correctly', () => {
+                const a = new Vec4(1, 2, 3, 4);
+                const b = new Vec4(5, 6, 7, 8);
+
+                expect(Vec4.dot(a, b)).toBe(70);
+                expect(a.dot(b)).toBe(70);
+            });
+
+            test('should calculate dot product with self (length squared)', () => {
+                const a = new Vec4(1, 2, 3, 4);
+
+                expect(Vec4.dot(a, a)).toBe(30);
+                expect(a.lengthSquared()).toBe(30);
+            });
+
+            test('should return zero for orthogonal vectors', () => {
+                const a = new Vec4(1, 0, 0, 0);
+                const b = new Vec4(0, 1, 0, 0);
+
+                expect(Vec4.dot(a, b)).toBe(0);
+            });
+        });
+
+        describe('Cross Product (3D)', () => {
+            test('should calculate 3D cross product correctly', () => {
+                const a = new Vec4(1, 0, 0, 5);
+                const b = new Vec4(0, 1, 0, 10);
+                const result = Vec4.cross3D(a, b);
+
+                expectVectorClose(result, { x: 0, y: 0, z: 1, w: 0 });
+            });
+
+            test('should calculate cross product with standard basis vectors', () => {
+                const x = new Vec4(1, 0, 0, 0);
+                const y = new Vec4(0, 1, 0, 0);
+                const z = new Vec4(0, 0, 1, 0);
+
+                expectVectorClose(Vec4.cross3D(x, y), { x: 0, y: 0, z: 1, w: 0 });
+                expectVectorClose(Vec4.cross3D(y, z), { x: 1, y: 0, z: 0, w: 0 });
+                expectVectorClose(Vec4.cross3D(z, x), { x: 0, y: 1, z: 0, w: 0 });
+            });
+
+            test('should return zero for parallel vectors', () => {
+                const a = new Vec4(1, 2, 3, 0);
+                const b = new Vec4(2, 4, 6, 0);
+                const result = Vec4.cross3D(a, b);
+
+                expectVectorClose(result, { x: 0, y: 0, z: 0, w: 0 });
+            });
+        });
+
+        describe('Length and Normalization', () => {
+            test('should calculate length correctly', () => {
+                const a = new Vec4(3, 4, 0, 0);
+                expect(Vec4.len(a)).toBe(5);
+                expect(a.length()).toBe(5);
+            });
+
+            test('should calculate length squared correctly', () => {
+                const a = new Vec4(1, 2, 3, 4);
+                expect(Vec4.lengthSquared(a)).toBe(30);
+                expect(a.lengthSquared()).toBe(30);
+            });
+
+            test('should calculate fast length approximation', () => {
+                const a = new Vec4(3, 4, 0, 0);
+                const fastLen = Vec4.fastLength(a);
+                const realLen = Vec4.len(a);
+
+                expect(Math.abs(fastLen - realLen) / realLen).toBeLessThan(0.3);
+            });
+
+            test('should normalize vector correctly', () => {
+                const a = new Vec4(3, 4, 0, 0);
+                const normalized = Vec4.normalize(a);
+
+                expectNumberClose(Vec4.len(normalized), 1);
+                expectVectorClose(normalized, { x: 0.6, y: 0.8, z: 0, w: 0 });
+            });
+
+            test('should normalize vector in place', () => {
+                const a = new Vec4(3, 4, 0, 0);
+                const result = a.normalize();
+
+                expect(result).toBe(a);
+                expectNumberClose(a.length(), 1);
+            });
+
+            test('should throw error when normalizing zero vector', () => {
+                const zero = new Vec4(0, 0, 0, 0);
+
+                expect(() => Vec4.normalize(zero)).toThrow('Cannot normalize a zero-length vector');
+                expect(() => zero.normalize()).toThrow('Cannot normalize a zero-length vector');
+            });
+
+            test('should use Quake fast inverse square root', () => {
+                const a = new Vec4(3, 4, 0, 0);
+                const normalized = Vec4.normalizeQuake(a);
+
+                // No 1e-3
+                expectNumberClose(Vec4.len(normalized), 1, 0.002);
+            });
+        });
+    });
 });
