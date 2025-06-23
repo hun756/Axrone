@@ -814,4 +814,57 @@ describe('Vec4 Professional Unit Tests', () => {
             }
         });
     });
+
+    // PROJECTION AND REFLECTION TESTS
+    describe('Projection and Reflection', () => {
+        test('should project vector correctly', () => {
+            const a = new Vec4(3, 4, 0, 0);
+            const b = new Vec4(1, 0, 0, 0);
+
+            const projected = Vec4.project(a, b);
+            expectVectorClose(projected, { x: 3, y: 0, z: 0, w: 0 });
+        });
+
+        test('should reject vector correctly', () => {
+            const a = new Vec4(3, 4, 0, 0);
+            const b = new Vec4(1, 0, 0, 0);
+
+            const rejected = Vec4.reject(a, b);
+            expectVectorClose(rejected, { x: 0, y: 4, z: 0, w: 0 });
+        });
+
+        test('should verify projection + rejection equals original', () => {
+            const a = new Vec4(3, 4, 5, 6);
+            const b = new Vec4(1, 1, 1, 1);
+
+            const projected = Vec4.project(a, b);
+            const rejected = Vec4.reject(a, b);
+            const sum = Vec4.add(projected, rejected);
+
+            expectVectorClose(sum, a);
+        });
+
+        test('should reflect vector correctly', () => {
+            const incident = new Vec4(1, 1, 0, 0);
+            const normal = new Vec4(0, 1, 0, 0);
+
+            const reflected = Vec4.reflect(incident, normal);
+            expectVectorClose(reflected, { x: 1, y: -1, z: 0, w: 0 });
+        });
+
+        test('should preserve vector length in reflection', () => {
+            const incident = new Vec4(3, 4, 5, 6);
+            const normal = Vec4.normalize(new Vec4(1, 1, 1, 1));
+
+            const reflected = Vec4.reflect(incident, normal);
+            expectNumberClose(Vec4.len(reflected), Vec4.len(incident));
+        });
+
+        test('should throw error for projection onto zero vector', () => {
+            const a = new Vec4(1, 2, 3, 4);
+            const zero = new Vec4(0, 0, 0, 0);
+
+            expect(() => Vec4.project(a, zero)).toThrow('Cannot project onto zero-length vector');
+        });
+    });
 });
