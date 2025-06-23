@@ -352,4 +352,77 @@ describe('Vec4 Class', () => {
             expect(result.y).toBeCloseTo(0);
         });
     });
+
+    describe('Static Random Methods', () => {
+        describe('random', () => {
+            it('should generate a vector with length close to 1 by default', () => {
+                const v = Vec4.random();
+                expect(Vec4.len(v)).toBeCloseTo(1.0);
+            });
+
+            it('should generate a vector with length close to the given scale', () => {
+                const scale = 50;
+                const v = Vec4.random(scale);
+                expect(Vec4.len(v)).toBeCloseTo(scale);
+            });
+
+            it('should write the result to the out parameter', () => {
+                const out = new Vec4();
+                Vec4.random(10, out);
+                expect(Vec4.len(out)).toBeCloseTo(10);
+            });
+        });
+
+        describe('fastRandom', () => {
+            it('should generate a vector with length close to 1 by default', () => {
+                const v = Vec4.fastRandom();
+                expect(Vec4.len(v)).toBeCloseTo(1.0);
+            });
+        });
+
+        describe('randomNormal', () => {
+            it('should generate different values each time', () => {
+                const v1 = Vec4.randomNormal();
+                const v2 = Vec4.randomNormal();
+                expect(v1.x).not.toEqual(v2.x);
+            });
+        });
+
+        describe('randomBox', () => {
+            const minX = -10,
+                maxX = 10;
+            const minY = 0,
+                maxY = 20;
+            const minZ = 100,
+                maxZ = 110;
+            const minW = -5,
+                maxW = -4;
+
+            it('should generate a vector with components within the specified ranges', () => {
+                for (let i = 0; i < 100; i++) {
+                    const v = Vec4.randomBox(minX, maxX, minY, maxY, minZ, maxZ, minW, maxW);
+                    expect(v.x).toBeGreaterThanOrEqual(minX);
+                    expect(v.x).toBeLessThanOrEqual(maxX);
+                    expect(v.y).toBeGreaterThanOrEqual(minY);
+                    expect(v.y).toBeLessThanOrEqual(maxY);
+                    expect(v.z).toBeGreaterThanOrEqual(minZ);
+                    expect(v.z).toBeLessThanOrEqual(maxZ);
+                    expect(v.w).toBeGreaterThanOrEqual(minW);
+                    expect(v.w).toBeLessThanOrEqual(maxW);
+                }
+            });
+        });
+
+        describe('randomBoxNormal', () => {
+            it('should generate a vector with components within the specified ranges', () => {
+                const minX = -100,
+                    maxX = 100;
+                for (let i = 0; i < 100; i++) {
+                    const v = Vec4.randomBoxNormal(minX, maxX, minX, maxX, minX, maxX, minX, maxX);
+                    expect(v.x).toBeGreaterThanOrEqual(minX);
+                    expect(v.x).toBeLessThanOrEqual(maxX);
+                }
+            });
+        });
+    });
 });
