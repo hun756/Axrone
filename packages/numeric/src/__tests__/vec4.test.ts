@@ -102,4 +102,47 @@ describe('Vec4 Professional Unit Tests', () => {
             expect(Object.isFrozen(Vec4.UNIT_X)).toBe(true);
         });
     });
+
+    // CLONE AND EQUALITY TESTS
+    describe('Clone and Equality', () => {
+        test('should clone vector correctly', () => {
+            const original = new Vec4(1, 2, 3, 4);
+            const cloned = original.clone();
+
+            expectVectorClose(cloned, original);
+            expect(cloned).not.toBe(original);
+        });
+
+        test('should check equality correctly', () => {
+            const vec1 = new Vec4(1, 2, 3, 4);
+            const vec2 = new Vec4(1, 2, 3, 4);
+            const vec3 = new Vec4(1, 2, 3, 4.1);
+
+            expect(vec1.equals(vec2)).toBe(true);
+            expect(vec1.equals(vec3)).toBe(false);
+            expect(vec1.equals(null)).toBe(false);
+            expect(vec1.equals('not a vector')).toBe(false);
+        });
+
+        test('should handle floating point precision in equality', () => {
+            const vec1 = new Vec4(1, 2, 3, 4);
+            const vec2 = new Vec4(
+                1 + EPSILON * 0.5,
+                2 + EPSILON * 0.5,
+                3 + EPSILON * 0.5,
+                4 + EPSILON * 0.5
+            );
+
+            expect(vec1.equals(vec2)).toBe(true);
+        });
+
+        test('should generate consistent hash codes', () => {
+            const vec1 = new Vec4(1, 2, 3, 4);
+            const vec2 = new Vec4(1, 2, 3, 4);
+            const vec3 = new Vec4(5, 6, 7, 8);
+
+            expect(vec1.getHashCode()).toBe(vec2.getHashCode());
+            expect(vec1.getHashCode()).not.toBe(vec3.getHashCode());
+        });
+    });
 });
