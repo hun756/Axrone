@@ -54,7 +54,7 @@ class Vec3TestDataBuilder {
 }
 
 expect.extend({
-    toBeCloseToVec3(received: Vec3, expected: Vec3, precision = FLOAT_PRECISION) {
+    toBeCloseToVec3(received: IVec3Like, expected: IVec3Like, precision = FLOAT_PRECISION) {
         const normalizeZero = (val: number) => (val === 0 ? 0 : val);
 
         const rxNorm = normalizeZero(received.x);
