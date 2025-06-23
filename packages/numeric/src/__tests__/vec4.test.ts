@@ -145,4 +145,189 @@ describe('Vec4 Professional Unit Tests', () => {
             expect(vec1.getHashCode()).not.toBe(vec3.getHashCode());
         });
     });
+
+    // BASIC ARITHMETIC OPERATIONS TESTS
+    describe('Basic Arithmetic Operations', () => {
+        describe('Addition', () => {
+            test('should add vectors correctly (static)', () => {
+                const a = new Vec4(1, 2, 3, 4);
+                const b = new Vec4(5, 6, 7, 8);
+                const result = Vec4.add(a, b);
+
+                expectVectorClose(result, { x: 6, y: 8, z: 10, w: 12 });
+            });
+
+            test('should add vectors with output parameter', () => {
+                const a = new Vec4(1, 2, 3, 4);
+                const b = new Vec4(5, 6, 7, 8);
+                const out = new Vec4();
+                const result = Vec4.add(a, b, out);
+
+                expect(result).toBe(out);
+                expectVectorClose(out, { x: 6, y: 8, z: 10, w: 12 });
+            });
+
+            test('should add scalar correctly', () => {
+                const a = new Vec4(1, 2, 3, 4);
+                const result = Vec4.addScalar(a, 5);
+
+                expectVectorClose(result, { x: 6, y: 7, z: 8, w: 9 });
+            });
+
+            test('should add vectors correctly (instance)', () => {
+                const a = new Vec4(1, 2, 3, 4);
+                const b = new Vec4(5, 6, 7, 8);
+                const result = a.add(b);
+
+                expect(result).toBe(a);
+                expectVectorClose(a, { x: 6, y: 8, z: 10, w: 12 });
+            });
+
+            test('should add scalar correctly (instance)', () => {
+                const a = new Vec4(1, 2, 3, 4);
+                const result = a.addScalar(5);
+
+                expect(result).toBe(a);
+                expectVectorClose(a, { x: 6, y: 7, z: 8, w: 9 });
+            });
+        });
+
+        describe('Subtraction', () => {
+            test('should subtract vectors correctly (static)', () => {
+                const a = new Vec4(5, 6, 7, 8);
+                const b = new Vec4(1, 2, 3, 4);
+                const result = Vec4.subtract(a, b);
+
+                expectVectorClose(result, { x: 4, y: 4, z: 4, w: 4 });
+            });
+
+            test('should subtract scalar correctly', () => {
+                const a = new Vec4(5, 6, 7, 8);
+                const result = Vec4.subtractScalar(a, 2);
+
+                expectVectorClose(result, { x: 3, y: 4, z: 5, w: 6 });
+            });
+
+            test('should subtract vectors correctly (instance)', () => {
+                const a = new Vec4(5, 6, 7, 8);
+                const b = new Vec4(1, 2, 3, 4);
+                const result = a.subtract(b);
+
+                expect(result).toBe(a);
+                expectVectorClose(a, { x: 4, y: 4, z: 4, w: 4 });
+            });
+        });
+
+        describe('Multiplication', () => {
+            test('should multiply vectors correctly (static)', () => {
+                const a = new Vec4(2, 3, 4, 5);
+                const b = new Vec4(1, 2, 3, 4);
+                const result = Vec4.multiply(a, b);
+
+                expectVectorClose(result, { x: 2, y: 6, z: 12, w: 20 });
+            });
+
+            test('should multiply by scalar correctly', () => {
+                const a = new Vec4(1, 2, 3, 4);
+                const result = Vec4.multiplyScalar(a, 3);
+
+                expectVectorClose(result, { x: 3, y: 6, z: 9, w: 12 });
+            });
+
+            test('should handle zero multiplication', () => {
+                const a = new Vec4(1, 2, 3, 4);
+                const result = Vec4.multiplyScalar(a, 0);
+
+                expectVectorClose(result, { x: 0, y: 0, z: 0, w: 0 });
+            });
+
+            test('should handle negative scalar multiplication', () => {
+                const a = new Vec4(1, 2, 3, 4);
+                const result = Vec4.multiplyScalar(a, -2);
+
+                expectVectorClose(result, { x: -2, y: -4, z: -6, w: -8 });
+            });
+        });
+
+        describe('Division', () => {
+            test('should divide vectors correctly (static)', () => {
+                const a = new Vec4(6, 8, 12, 16);
+                const b = new Vec4(2, 4, 3, 4);
+                const result = Vec4.divide(a, b);
+
+                expectVectorClose(result, { x: 3, y: 2, z: 4, w: 4 });
+            });
+
+            test('should divide by scalar correctly', () => {
+                const a = new Vec4(6, 8, 12, 16);
+                const result = Vec4.divideScalar(a, 2);
+
+                expectVectorClose(result, { x: 3, y: 4, z: 6, w: 8 });
+            });
+
+            test('should throw error for division by zero vector', () => {
+                const a = new Vec4(1, 2, 3, 4);
+                const b = new Vec4(0, 1, 2, 3);
+
+                expect(() => Vec4.divide(a, b)).toThrow(
+                    'Division by zero or near-zero value is not allowed'
+                );
+            });
+
+            test('should throw error for division by zero scalar', () => {
+                const a = new Vec4(1, 2, 3, 4);
+
+                expect(() => Vec4.divideScalar(a, 0)).toThrow(
+                    'Division by zero or near-zero value is not allowed'
+                );
+            });
+
+            test('should throw error for division by near-zero values', () => {
+                const a = new Vec4(1, 2, 3, 4);
+                const b = new Vec4(EPSILON * 0.5, 1, 2, 3);
+
+                expect(() => Vec4.divide(a, b)).toThrow(
+                    'Division by zero or near-zero value is not allowed'
+                );
+            });
+        });
+
+        describe('Negation', () => {
+            test('should negate vector correctly', () => {
+                const a = new Vec4(1, -2, 3, -4);
+                const result = Vec4.negate(a);
+
+                expectVectorClose(result, { x: -1, y: 2, z: -3, w: 4 });
+            });
+
+            test('should handle zero negation correctly', () => {
+                const a = new Vec4(0, 1, 0, -1);
+                const result = Vec4.negate(a);
+
+                expectVectorClose(result, { x: 0, y: -1, z: 0, w: 1 });
+            });
+        });
+
+        describe('Inverse', () => {
+            test('should calculate inverse correctly', () => {
+                const a = new Vec4(2, 4, 0.5, 0.25);
+                const result = Vec4.inverse(a);
+
+                expectVectorClose(result, { x: 0.5, y: 0.25, z: 2, w: 4 });
+            });
+
+            test('should calculate safe inverse correctly', () => {
+                const a = new Vec4(2, 1, 0.5, 0.25);
+                const result = Vec4.inverseSafe(a, undefined, 999);
+
+                expectVectorClose(result, { x: 0.5, y: 1, z: 2, w: 4 });
+            });
+
+            test('should throw error for inverse of zero', () => {
+                const a = new Vec4(2, 0, 0.5, 1);
+
+                expect(() => Vec4.inverseSafe(a)).toThrow('Inversion of zero or near-zero value');
+            });
+        });
+    });
 });
