@@ -153,13 +153,16 @@ describe('Vec4 Class', () => {
         });
     });
 
-     describe('Static Arithmetic Methods', () => {
+    describe('Static Arithmetic Methods', () => {
         const v1 = new Vec4(1, 2, 3, 4);
         const v2 = new Vec4(5, 6, 7, 8);
         const out = new Vec4();
 
         beforeEach(() => {
-            out.x = 0; out.y = 0; out.z = 0; out.w = 0;
+            out.x = 0;
+            out.y = 0;
+            out.z = 0;
+            out.w = 0;
         });
 
         it('add should return a new vector with the sum of two vectors', () => {
@@ -183,7 +186,7 @@ describe('Vec4 Class', () => {
             const result = Vec4.multiply(v1, v2);
             expect(result).toEqual({ x: 5, y: 12, z: 21, w: 32 });
         });
-        
+
         it('divide should return the component-wise division of two vectors', () => {
             const vA = new Vec4(10, 20, 30, 40);
             const vB = new Vec4(2, 4, 5, 8);
@@ -196,7 +199,9 @@ describe('Vec4 Class', () => {
 
         it('divide should throw an error when dividing by zero', () => {
             const zeroVec = new Vec4(1, 0, 1, 1);
-            expect(() => Vec4.divide(v1, zeroVec)).toThrow('Division by zero or near-zero value is not allowed');
+            expect(() => Vec4.divide(v1, zeroVec)).toThrow(
+                'Division by zero or near-zero value is not allowed'
+            );
         });
 
         it('addScalar should add a number to each component', () => {
@@ -220,7 +225,9 @@ describe('Vec4 Class', () => {
         });
 
         it('divideScalar should throw an error when dividing by zero', () => {
-            expect(() => Vec4.divideScalar(v1, 0)).toThrow('Division by zero or near-zero value is not allowed');
+            expect(() => Vec4.divideScalar(v1, 0)).toThrow(
+                'Division by zero or near-zero value is not allowed'
+            );
         });
     });
 
@@ -231,7 +238,10 @@ describe('Vec4 Class', () => {
         const out = new Vec4();
 
         beforeEach(() => {
-            out.x = 0; out.y = 0; out.z = 0; out.w = 0;
+            out.x = 0;
+            out.y = 0;
+            out.z = 0;
+            out.w = 0;
         });
 
         it('dot should calculate the dot product of two vectors', () => {
@@ -267,7 +277,7 @@ describe('Vec4 Class', () => {
                 Vec4.normalize(v, out);
                 expect(Vec4.len(out)).toBeCloseTo(1);
             });
-            
+
             it('should throw an error when normalizing a zero vector', () => {
                 expect(() => Vec4.normalize(zero)).toThrow('Cannot normalize a zero-length vector');
             });
@@ -283,6 +293,63 @@ describe('Vec4 Class', () => {
             const vA = new Vec4(1, 2, 0, 0);
             const vB = new Vec4(4, 6, 0, 0);
             expect(Vec4.distance(vA, vB)).toBe(5);
+        });
+    });
+
+    describe('Static Advanced Curve Methods', () => {
+        const p0 = new Vec4(0, 0, 0, 0);
+        const p1 = new Vec4(10, 10, 10, 10);
+        const p2 = new Vec4(20, 0, 0, 0);
+        const p3 = new Vec4(30, 10, -10, -10);
+
+        it('cubicBezier should be at start point when t=0', () => {
+            const result = Vec4.cubicBezier(p0, p1, p2, p3, 0);
+            expect(result).toEqual(p0);
+        });
+
+        it('cubicBezier should be at end point when t=1', () => {
+            const result = Vec4.cubicBezier(p0, p1, p2, p3, 1);
+            expect(result).toEqual(p3);
+        });
+
+        it('cubicBezier should calculate midpoint correctly', () => {
+            const expectedX = 0.125 * 0 + 0.375 * 10 + 0.375 * 20 + 0.125 * 30;
+            const result = Vec4.cubicBezier(p0, p1, p2, p3, 0.5);
+            expect(result.x).toBeCloseTo(expectedX);
+        });
+
+        it('hermite should be at start point when t=0', () => {
+            const m0 = new Vec4(1, 0, 0, 0);
+            const m1 = new Vec4(0, 1, 0, 0);
+            const result = Vec4.hermite(p0, m0, p1, m1, 0);
+            expect(result).toEqual(p0);
+        });
+
+        it('hermite should be at end point when t=1', () => {
+            const m0 = new Vec4(1, 0, 0, 0);
+            const m1 = new Vec4(0, 1, 0, 0);
+            const result = Vec4.hermite(p0, m0, p1, m1, 1);
+            expect(result).toEqual(p1);
+        });
+
+        it('catmullRom should be at the second point (p1) when t=0', () => {
+            const result = Vec4.catmullRom(p0, p1, p2, p3, 0);
+            expect(result).toEqual(p1);
+        });
+
+        it('catmullRom should be at the third point (p2) when t=1', () => {
+            const result = Vec4.catmullRom(p0, p1, p2, p3, 1);
+            expect(result).toEqual(p2);
+        });
+
+        it('catmullRom should calculate midpoint for a simple case', () => {
+            const cp0 = new Vec4(-10, 0, 0, 0);
+            const cp1 = new Vec4(0, 0, 0, 0);
+            const cp2 = new Vec4(10, 0, 0, 0);
+            const cp3 = new Vec4(20, 0, 0, 0);
+            const result = Vec4.catmullRom(cp0, cp1, cp2, cp3, 0.5, 0);
+            expect(result.x).toBeCloseTo(5);
+            expect(result.y).toBeCloseTo(0);
         });
     });
 });
