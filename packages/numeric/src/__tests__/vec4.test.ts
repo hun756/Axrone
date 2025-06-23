@@ -223,4 +223,66 @@ describe('Vec4 Class', () => {
             expect(() => Vec4.divideScalar(v1, 0)).toThrow('Division by zero or near-zero value is not allowed');
         });
     });
+
+    describe('Static Geometric Methods', () => {
+        const v1 = new Vec4(1, 2, 3, 4);
+        const v2 = new Vec4(4, -2, 1, 5);
+        const zero = Vec4.ZERO;
+        const out = new Vec4();
+
+        beforeEach(() => {
+            out.x = 0; out.y = 0; out.z = 0; out.w = 0;
+        });
+
+        it('dot should calculate the dot product of two vectors', () => {
+            const result = Vec4.dot(v1, v2);
+            expect(result).toBe(23);
+        });
+
+        it('dot with orthogonal vectors should be 0', () => {
+            const ortho1 = new Vec4(1, 0, 0, 0);
+            const ortho2 = new Vec4(0, 1, 0, 0);
+            expect(Vec4.dot(ortho1, ortho2)).toBe(0);
+        });
+
+        it('lengthSquared should calculate the squared magnitude of a vector', () => {
+            const v = new Vec4(2, 3, 4, 5);
+            expect(Vec4.lengthSquared(v)).toBe(54);
+        });
+
+        it('len should calculate the magnitude (length) of a vector', () => {
+            const v = new Vec4(3, 4, 0, 0);
+            expect(Vec4.len(v)).toBe(5);
+        });
+
+        describe('normalize', () => {
+            it('should return a vector with length 1', () => {
+                const v = new Vec4(5, 10, -5, 2);
+                const normalized = Vec4.normalize(v);
+                expect(Vec4.len(normalized)).toBeCloseTo(1);
+            });
+
+            it('should write the result to the out parameter', () => {
+                const v = new Vec4(10, 20, 30, 40);
+                Vec4.normalize(v, out);
+                expect(Vec4.len(out)).toBeCloseTo(1);
+            });
+            
+            it('should throw an error when normalizing a zero vector', () => {
+                expect(() => Vec4.normalize(zero)).toThrow('Cannot normalize a zero-length vector');
+            });
+        });
+
+        it('distanceSquared should calculate the squared distance between two vectors', () => {
+            const vA = new Vec4(1, 2, 3, 4);
+            const vB = new Vec4(4, 6, 8, 9);
+            expect(Vec4.distanceSquared(vA, vB)).toBe(75);
+        });
+
+        it('distance should calculate the distance between two vectors', () => {
+            const vA = new Vec4(1, 2, 0, 0);
+            const vB = new Vec4(4, 6, 0, 0);
+            expect(Vec4.distance(vA, vB)).toBe(5);
+        });
+    });
 });

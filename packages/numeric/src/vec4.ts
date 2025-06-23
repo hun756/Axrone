@@ -228,4 +228,56 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
             return { x: a.x / b, y: a.y / b, z: a.z / b, w: a.w / b } as V;
         }
     }
+
+    static dot<T extends IVec4Like, U extends IVec4Like>(a: Readonly<T>, b: Readonly<U>): number {
+        return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+    }
+
+    static len<T extends IVec4Like>(v: Readonly<T>): number {
+        return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
+    }
+
+    static lengthSquared<T extends IVec4Like>(v: Readonly<T>): number {
+        return v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w;
+    }
+
+    static normalize<T extends IVec4Like, U extends IVec4Like>(v: Readonly<T>, out?: U): U {
+        const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
+
+        if (length < EPSILON) {
+            throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        if (out) {
+            out.x = v.x / length;
+            out.y = v.y / length;
+            out.z = v.z / length;
+            out.w = v.w / length;
+            return out;
+        } else {
+            return { x: v.x / length, y: v.y / length, z: v.z / length, w: v.w / length } as U;
+        }
+    }
+
+    static distanceSquared<T extends IVec4Like, U extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        const dz = a.z - b.z;
+        const dw = a.w - b.w;
+        return dx * dx + dy * dy + dz * dz + dw * dw;
+    }
+
+    static distance<T extends IVec4Like, U extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        const dz = a.z - b.z;
+        const dw = a.w - b.w;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
+    }
 }
