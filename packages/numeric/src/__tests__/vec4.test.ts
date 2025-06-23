@@ -605,4 +605,140 @@ describe('Vec4 Professional Unit Tests', () => {
             expectVectorClose(vec, original, 1e-10);
         });
     });
+
+    // INTERPOLATION TESTS
+    describe('Interpolation', () => {
+        
+        describe('Linear Interpolation', () => {
+            test('should lerp between vectors correctly', () => {
+                const a = new Vec4(0, 0, 0, 0);
+                const b = new Vec4(4, 4, 4, 4);
+                
+                expectVectorClose(Vec4.lerp(a, b, 0), a);
+                expectVectorClose(Vec4.lerp(a, b, 1), b);
+                expectVectorClose(Vec4.lerp(a, b, 0.5), { x: 2, y: 2, z: 2, w: 2 });
+            });
+
+            test('should clamp t parameter in lerp', () => {
+                const a = new Vec4(0, 0, 0, 0);
+                const b = new Vec4(4, 4, 4, 4);
+                
+                expectVectorClose(Vec4.lerp(a, b, -0.5), a);
+                expectVectorClose(Vec4.lerp(a, b, 1.5), b);
+            });
+
+            test('should not clamp t parameter in lerpUnClamped', () => {
+                const a = new Vec4(0, 0, 0, 0);
+                const b = new Vec4(4, 4, 4, 4);
+                
+                expectVectorClose(Vec4.lerpUnClamped(a, b, -0.5), { x: -2, y: -2, z: -2, w: -2 });
+                expectVectorClose(Vec4.lerpUnClamped(a, b, 1.5), { x: 6, y: 6, z: 6, w: 6 });
+            });
+        });
+
+        describe('Spherical Linear Interpolation', () => {
+            test('should slerp between unit vectors correctly', () => {
+                const a = new Vec4(1, 0, 0, 0);
+                const b = new Vec4(0, 1, 0, 0);
+                
+                const result = Vec4.slerp(a, b, 0.5);
+                expectNumberClose(Vec4.len(result), 1, 1e-10);
+            });
+
+            test('should fallback to lerp for zero-length vectors', () => {
+                const a = new Vec4(0, 0, 0, 0);
+                const b = new Vec4(1, 1, 1, 1);
+                
+                const slerpResult = Vec4.slerp(a, b, 0.5);
+                const lerpResult = Vec4.lerp(a, b, 0.5);
+                
+                expectVectorClose(slerpResult, lerpResult);
+            });
+
+            test('should fallback to lerp for nearly parallel vectors', () => {
+                const a = new Vec4(1, 0, 0, 0);
+                const b = new Vec4(1 + EPSILON * 0.1, 0, 0, 0);
+                
+                const slerpResult = Vec4.slerp(a, b, 0.5);
+                const lerpResult = Vec4.lerp(a, b, 0.5);
+                
+                expectVectorClose(slerpResult, lerpResult, 1e-6);
+            });
+        });
+
+        describe('Smooth Interpolation', () => {
+            test('should smooth step between vectors', () => {
+                const a = new Vec4(0, 0, 0, 0);
+                const b = new Vec4(4, 4, 4, 4);
+                
+                const result = Vec4.smoothStep(a, b, 0.5);
+                expectVectorClose(result, { x: 2, y: 2, z: 2, w: 2 });
+                
+                expectVectorClose(Vec4.smoothStep(a, b, 0), a);
+                expectVectorClose(Vec4.smoothStep(a, b, 1), b);
+            });
+
+            test('should smoother step between vectors', () => {
+                const a = new Vec4(0, 0, 0, 0);
+                const b = new Vec4(4, 4, 4, 4);
+                
+                const result = Vec4.smootherStep(a, b, 0.5);
+                expectVectorClose(result, { x: 2, y: 2, z: 2, w: 2 });
+            });
+        });
+
+        describe('Cubic Bezier', () => {
+            test('should interpolate cubic bezier curve correctly', () => {
+                const p0 = new Vec4(0, 0, 0, 0);
+                const c1 = new Vec4(1, 1, 1, 1);
+                const c2 = new Vec4(2, 2, 2, 2);
+                const p1 = new Vec4(3, 3, 3, 3);
+                
+                expectVectorClose(Vec4.cubicBezier(p0, c1, c2, p1, 0), p0);
+                expectVectorClose(Vec4.cubicBezier(p0, c1, c2, p1, 1), p1);
+                
+                const mid = Vec4.cubicBezier(p0, c1, c2, p1, 0.5);
+                expect(mid.x).toBeCloseTo(1.5, 10);
+            });
+        });
+
+        describe('Hermite Interpolation', () => {
+            test('should interpolate hermite spline correctly', () => {
+                const p0 = new Vec4(0, 0, 0, 0);
+                const m0 = new Vec4(1, 1, 1, 1);
+                const p1 = new Vec4(2, 2, 2, 2);
+                const m1 = new Vec4(1, 1, 1, 1);
+                
+                expectVectorClose(Vec4.hermite(p0, m0, p1, m1, 0), p0);
+                expectVectorClose(Vec4.hermite(p0, m0, p1, m1, 1), p1);
+            });
+        });
+
+        describe('Catmull-Rom Spline', () => {
+            test('should interpolate catmull-rom spline correctly', () => {
+                const p0 = new Vec4(0, 0, 0, 0);
+                const p1 = new Vec4(1, 1, 1, 1);
+                const p2 = new Vec4(2, 2, 2, 2);
+                const p3 = new Vec4(3, 3, 3, 3);
+                
+                expectVectorClose(Vec4.catmullRom(p0, p1, p2, p3, 0), p1);
+                expectVectorClose(Vec4.catmullRom(p0, p1, p2, p3, 1), p2);
+                
+                const mid = Vec4.catmullRom(p0, p1, p2, p3, 0.5);
+                expectVectorClose(mid, { x: 1.5, y: 1.5, z: 1.5, w: 1.5 });
+            });
+
+            test('should handle different tension values', () => {
+                const p0 = new Vec4(0, 0, 2, 1);
+                const p1 = new Vec4(1, 2, 1, 2);
+                const p2 = new Vec4(3, 1, 3, 1);
+                const p3 = new Vec4(4, 3, 2, 3);
+                
+                const tightCurve = Vec4.catmullRom(p0, p1, p2, p3, 0.5, 0);
+                const looseCurve = Vec4.catmullRom(p0, p1, p2, p3, 0.5, 1);
+                
+                expect(Vec4.distance(tightCurve, looseCurve)).toBeGreaterThan(0);
+            });
+        });
+    });
 });
