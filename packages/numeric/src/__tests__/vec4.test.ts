@@ -425,4 +425,56 @@ describe('Vec4 Class', () => {
             });
         });
     });
+
+    describe('Instance Methods', () => {
+        let v: Vec4;
+        const other = new Vec4(10, 20, 30, 40);
+
+        beforeEach(() => {
+            v = new Vec4(1, 2, 3, 4);
+        });
+
+        it('add should modify the vector itself', () => {
+            v.add(other);
+            expect(v).toEqual({ x: 11, y: 22, z: 33, w: 44 });
+        });
+
+        it('subtractScalar should modify the vector itself', () => {
+            v.subtractScalar(1);
+            expect(v).toEqual({ x: 0, y: 1, z: 2, w: 3 });
+        });
+
+        it('normalize should modify the vector and return it', () => {
+            const vNonUnit = new Vec4(5, 0, 0, 0);
+            const result = vNonUnit.normalize();
+            expect(vNonUnit.x).toBeCloseTo(1);
+            expect(vNonUnit.y).toBeCloseTo(0);
+            expect(result).toBe(vNonUnit);
+        });
+
+        it('dot should return a value and not modify the vector', () => {
+            const originalV = v.clone();
+            const dotProduct = v.dot(other);
+            expect(dotProduct).toBe(300);
+            expect(v).toEqual(originalV);
+        });
+
+        it('should allow method chaining', () => {
+            v.add({ x: 1, y: 1, z: 1, w: 1 })
+                .multiplyScalar(2)
+                .subtract(new Vec4(1, 1, 1, 1));
+
+            expect(v).toEqual({ x: 3, y: 5, z: 7, w: 9 });
+        });
+
+        it("cloned vector should not be affected by original vector's instance methods", () => {
+            const vOriginal = new Vec4(1, 1, 1, 1);
+            const vCloned = vOriginal.clone();
+
+            vOriginal.addScalar(5);
+
+            expect(vOriginal).toEqual({ x: 6, y: 6, z: 6, w: 6 });
+            expect(vCloned).toEqual({ x: 1, y: 1, z: 1, w: 1 });
+        });
+    });
 });
