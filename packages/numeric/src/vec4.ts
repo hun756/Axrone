@@ -515,4 +515,132 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
 
         return Vec4.hermite(p1, tempM0, p2, tempM1, t, out);
     }
+
+    static random<T extends IVec4Like>(scale: number = 1, out?: T): T {
+        let x, y, z, w, lengthSq;
+        do {
+            x = Math.random() * 2 - 1;
+            y = Math.random() * 2 - 1;
+            z = Math.random() * 2 - 1;
+            w = Math.random() * 2 - 1;
+            lengthSq = x * x + y * y + z * z + w * w;
+        } while (lengthSq > 1 || lengthSq < 0.0001);
+
+        const invLength = scale / Math.sqrt(lengthSq);
+
+        if (out) {
+            out.x = x * invLength;
+            out.y = y * invLength;
+            out.z = z * invLength;
+            out.w = w * invLength;
+            return out;
+        } else {
+            return { x: x * invLength, y: y * invLength, z: z * invLength, w: w * invLength } as T;
+        }
+    }
+
+    static fastRandom<T extends IVec4Like>(scale: number = 1, out?: T): T {
+        const u1 = Math.random();
+        const u2 = Math.random();
+        const u3 = Math.random();
+
+        const phi = Math.PI * 2 * u1;
+        const theta = Math.acos(2 * u2 - 1);
+        const psi = Math.acos(2 * u3 - 1);
+
+        const sinTheta = Math.sin(theta);
+        const sinPsi = Math.sin(psi);
+
+        if (out) {
+            out.x = Math.cos(phi) * sinTheta * sinPsi * scale;
+            out.y = Math.sin(phi) * sinTheta * sinPsi * scale;
+            out.z = Math.cos(theta) * sinPsi * scale;
+            out.w = Math.cos(psi) * scale;
+            return out;
+        } else {
+            return {
+                x: Math.cos(phi) * sinTheta * sinPsi * scale,
+                y: Math.sin(phi) * sinTheta * sinPsi * scale,
+                z: Math.cos(theta) * sinPsi * scale,
+                w: Math.cos(psi) * scale,
+            } as T;
+        }
+    }
+
+    static randomNormal<T extends IVec4Like>(scale: number = 1, out?: T): T {
+        const u1 = Math.random();
+        const u2 = Math.random();
+        const u3 = Math.random();
+        const u4 = Math.random();
+
+        const PI_2 = Math.PI * 2;
+        const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(PI_2 * u2);
+        const z1 = Math.sqrt(-2 * Math.log(u1)) * Math.sin(PI_2 * u2);
+        const z2 = Math.sqrt(-2 * Math.log(u3)) * Math.cos(PI_2 * u4);
+        const z3 = Math.sqrt(-2 * Math.log(u3)) * Math.sin(PI_2 * u4);
+
+        if (out) {
+            out.x = z0 * scale;
+            out.y = z1 * scale;
+            out.z = z2 * scale;
+            out.w = z3 * scale;
+            return out;
+        } else {
+            return { x: z0 * scale, y: z1 * scale, z: z2 * scale, w: z3 * scale } as T;
+        }
+    }
+
+    static randomBox<T extends IVec4Like>(
+        minX: number,
+        maxX: number,
+        minY: number,
+        maxY: number,
+        minZ: number,
+        maxZ: number,
+        minW: number,
+        maxW: number,
+        out?: T
+    ): T {
+        if (out) {
+            out.x = minX + Math.random() * (maxX - minX);
+            out.y = minY + Math.random() * (maxY - minY);
+            out.z = minZ + Math.random() * (maxZ - minZ);
+            out.w = minW + Math.random() * (maxW - minW);
+            return out;
+        } else {
+            return {
+                x: minX + Math.random() * (maxX - minX),
+                y: minY + Math.random() * (maxY - minY),
+                z: minZ + Math.random() * (maxZ - minZ),
+                w: minW + Math.random() * (maxW - minW),
+            } as T;
+        }
+    }
+
+    static randomBoxNormal<T extends IVec4Like>(
+        minX: number,
+        maxX: number,
+        minY: number,
+        maxY: number,
+        minZ: number,
+        maxZ: number,
+        minW: number,
+        maxW: number,
+        out?: T
+    ): T {
+        if (out) {
+            out.x = minX + (_normalRandom() + 1) * 0.5 * (maxX - minX);
+            out.y = minY + (_normalRandom() + 1) * 0.5 * (maxY - minY);
+            out.z = minZ + (_normalRandom() + 1) * 0.5 * (maxZ - minZ);
+            out.w = minW + (_normalRandom() + 1) * 0.5 * (maxW - minW);
+            return out;
+        } else {
+            return {
+                x: minX + (_normalRandom() + 1) * 0.5 * (maxX - minX),
+                y: minY + (_normalRandom() + 1) * 0.5 * (maxY - minY),
+                z: minZ + (_normalRandom() + 1) * 0.5 * (maxZ - minZ),
+                w: minW + (_normalRandom() + 1) * 0.5 * (maxW - minW),
+            } as T;
+        }
+    }
 }
