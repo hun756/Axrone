@@ -441,13 +441,12 @@ describe('Vec4 Professional Unit Tests', () => {
 
     // DISTANCE CALCULATIONS TESTS
     describe('Distance Calculations', () => {
-        
         test('should calculate Euclidean distance correctly', () => {
             const a = new Vec4(1, 2, 3, 4);
             const b = new Vec4(4, 6, 7, 8);
-            
+
             const expected = Math.sqrt(57);
-            
+
             expectNumberClose(Vec4.distance(a, b), expected);
             expectNumberClose(a.distance(b), expected);
         });
@@ -455,7 +454,7 @@ describe('Vec4 Professional Unit Tests', () => {
         test('should calculate distance squared correctly', () => {
             const a = new Vec4(1, 2, 3, 4);
             const b = new Vec4(4, 6, 7, 8);
-            
+
             expect(Vec4.distanceSquared(a, b)).toBe(57);
             expect(a.distanceSquared(b)).toBe(57);
         });
@@ -463,7 +462,7 @@ describe('Vec4 Professional Unit Tests', () => {
         test('should calculate Manhattan distance correctly', () => {
             const a = new Vec4(1, 2, 3, 4);
             const b = new Vec4(4, 6, 7, 8);
-            
+
             expect(Vec4.manhattanDistance(a, b)).toBe(15);
             expect(a.manhattanDistance(b)).toBe(15);
         });
@@ -471,7 +470,7 @@ describe('Vec4 Professional Unit Tests', () => {
         test('should calculate Chebyshev distance correctly', () => {
             const a = new Vec4(1, 2, 3, 4);
             const b = new Vec4(4, 6, 7, 8);
-            
+
             expect(Vec4.chebyshevDistance(a, b)).toBe(4);
             expect(a.chebyshevDistance(b)).toBe(4);
         });
@@ -479,16 +478,16 @@ describe('Vec4 Professional Unit Tests', () => {
         test('should calculate fast distance approximation', () => {
             const a = new Vec4(1, 2, 3, 4);
             const b = new Vec4(4, 6, 7, 8);
-            
+
             const fastDist = Vec4.distanceFast(a, b);
             const realDist = Vec4.distance(a, b);
-            
+
             expect(Math.abs(fastDist - realDist) / realDist).toBeLessThan(0.3);
         });
 
         test('should return zero distance for same point', () => {
             const a = new Vec4(1, 2, 3, 4);
-            
+
             expect(Vec4.distance(a, a)).toBe(0);
             expect(Vec4.manhattanDistance(a, a)).toBe(0);
             expect(Vec4.chebyshevDistance(a, a)).toBe(0);
@@ -497,11 +496,10 @@ describe('Vec4 Professional Unit Tests', () => {
 
     // ANGLE CALCULATIONS TESTS
     describe('Angle Calculations', () => {
-        
         test('should calculate angle between vectors correctly', () => {
             const a = new Vec4(1, 0, 0, 0);
             const b = new Vec4(0, 1, 0, 0);
-            
+
             expectNumberClose(Vec4.angleBetween(a, b), Math.PI / 2);
             expectNumberClose(a.angleBetween(b), Math.PI / 2);
         });
@@ -509,21 +507,21 @@ describe('Vec4 Professional Unit Tests', () => {
         test('should return zero angle for same direction', () => {
             const a = new Vec4(1, 2, 3, 4);
             const b = new Vec4(2, 4, 6, 8);
-            
+
             expectNumberClose(Vec4.angleBetween(a, b), 0);
         });
 
         test('should return PI for opposite direction', () => {
             const a = new Vec4(1, 2, 3, 4);
             const b = new Vec4(-1, -2, -3, -4);
-            
+
             expectNumberClose(Vec4.angleBetween(a, b), Math.PI);
         });
 
         test('should convert angle to degrees correctly', () => {
             const a = new Vec4(1, 0, 0, 0);
             const b = new Vec4(0, 1, 0, 0);
-            
+
             expectNumberClose(Vec4.angle2Deg(a, b), 90);
             expectNumberClose(a.angle2Deg(b), 90);
         });
@@ -531,8 +529,80 @@ describe('Vec4 Professional Unit Tests', () => {
         test('should throw error for zero vector angle calculation', () => {
             const a = new Vec4(1, 2, 3, 4);
             const zero = new Vec4(0, 0, 0, 0);
-            
-            expect(() => Vec4.angleBetween(a, zero)).toThrow('Cannot calculate angle with zero-length vector');
+
+            expect(() => Vec4.angleBetween(a, zero)).toThrow(
+                'Cannot calculate angle with zero-length vector'
+            );
+        });
+    });
+
+    // 4D ROTATION TESTS
+    describe('4D Rotations', () => {
+        test('should rotate in XY plane correctly', () => {
+            const vec = new Vec4(1, 0, 5, 10);
+            const angle = Math.PI / 2;
+            const result = Vec4.rotateXY(vec, angle);
+
+            expectVectorClose(result, { x: 0, y: 1, z: 5, w: 10 }, 1e-10);
+        });
+
+        test('should rotate in XZ plane correctly', () => {
+            const vec = new Vec4(1, 5, 0, 10);
+            const angle = Math.PI / 2;
+            const result = Vec4.rotateXZ(vec, angle);
+
+            expectVectorClose(result, { x: 0, y: 5, z: -1, w: 10 }, 1e-10);
+        });
+
+        test('should rotate in XW plane correctly', () => {
+            const vec = new Vec4(1, 5, 10, 0);
+            const angle = Math.PI / 2;
+            const result = Vec4.rotateXW(vec, angle);
+
+            expectVectorClose(result, { x: 0, y: 5, z: 10, w: 1 }, 1e-10);
+        });
+
+        test('should rotate in YZ plane correctly', () => {
+            const vec = new Vec4(5, 1, 0, 10);
+            const angle = Math.PI / 2;
+            const result = Vec4.rotateYZ(vec, angle);
+
+            expectVectorClose(result, { x: 5, y: 0, z: 1, w: 10 }, 1e-10);
+        });
+
+        test('should rotate in YW plane correctly', () => {
+            const vec = new Vec4(5, 1, 10, 0);
+            const angle = Math.PI / 2;
+            const result = Vec4.rotateYW(vec, angle);
+
+            expectVectorClose(result, { x: 5, y: 0, z: 10, w: 1 }, 1e-10);
+        });
+
+        test('should rotate in ZW plane correctly', () => {
+            const vec = new Vec4(5, 10, 1, 0);
+            const angle = Math.PI / 2;
+            const result = Vec4.rotateZW(vec, angle);
+
+            expectVectorClose(result, { x: 5, y: 10, z: 0, w: 1 }, 1e-10);
+        });
+
+        test('should preserve vector length during rotation', () => {
+            const vec = new Vec4(3, 4, 5, 6);
+            const originalLength = vec.length();
+
+            vec.rotateXY(Math.PI / 3);
+            expectNumberClose(vec.length(), originalLength);
+
+            vec.rotateZW(Math.PI / 4);
+            expectNumberClose(vec.length(), originalLength);
+        });
+
+        test('should handle full rotation (2π)', () => {
+            const original = new Vec4(1, 2, 3, 4);
+            const vec = original.clone();
+
+            vec.rotateXY(2 * Math.PI);
+            expectVectorClose(vec, original, 1e-10);
         });
     });
 });
