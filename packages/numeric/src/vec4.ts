@@ -644,6 +644,83 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         }
     }
 
+    static project<T extends IVec4Like, U extends IVec4Like>(
+        v: Readonly<T>,
+        onto: Readonly<U>,
+        out?: T
+    ): T {
+        const dotProduct = Vec4.dot(v, onto);
+        const ontoLengthSq = Vec4.lengthSquared(onto);
+
+        if (ontoLengthSq < EPSILON) {
+            throw new Error('Cannot project onto zero-length vector');
+        }
+
+        const scalar = dotProduct / ontoLengthSq;
+
+        if (out) {
+            out.x = onto.x * scalar;
+            out.y = onto.y * scalar;
+            out.z = onto.z * scalar;
+            out.w = onto.w * scalar;
+            return out;
+        } else {
+            return {
+                x: onto.x * scalar,
+                y: onto.y * scalar,
+                z: onto.z * scalar,
+                w: onto.w * scalar,
+            } as T;
+        }
+    }
+
+    static reject<T extends IVec4Like, U extends IVec4Like>(
+        v: Readonly<T>,
+        onto: Readonly<U>,
+        out?: T
+    ): T {
+        const projection = Vec4.project(v, onto);
+
+        if (out) {
+            out.x = v.x - projection.x;
+            out.y = v.y - projection.y;
+            out.z = v.z - projection.z;
+            out.w = v.w - projection.w;
+            return out;
+        } else {
+            return {
+                x: v.x - projection.x,
+                y: v.y - projection.y,
+                z: v.z - projection.z,
+                w: v.w - projection.w,
+            } as T;
+        }
+    }
+
+    static reflect<T extends IVec4Like, U extends IVec4Like>(
+        v: Readonly<T>,
+        normal: Readonly<U>,
+        out?: T
+    ): T {
+        const dotProduct = Vec4.dot(v, normal);
+        const factor = 2 * dotProduct;
+
+        if (out) {
+            out.x = v.x - factor * normal.x;
+            out.y = v.y - factor * normal.y;
+            out.z = v.z - factor * normal.z;
+            out.w = v.w - factor * normal.w;
+            return out;
+        } else {
+            return {
+                x: v.x - factor * normal.x,
+                y: v.y - factor * normal.y,
+                z: v.z - factor * normal.z,
+                w: v.w - factor * normal.w,
+            } as T;
+        }
+    }
+
     add<T extends IVec4Like>(other: Readonly<T>): Vec4 {
         this.x += other.x;
         this.y += other.y;
@@ -756,5 +833,43 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         const dz = this.z - other.z;
         const dw = this.w - other.w;
         return dx * dx + dy * dy + dz * dz + dw * dw;
+    }
+
+    inverse(): Vec4 {
+        if (
+            Math.abs(this.x) < EPSILON ||
+            Math.abs(this.y) < EPSILON ||
+            Math.abs(this.z) < EPSILON ||
+            Math.abs(this.w) < EPSILON
+        ) {
+            throw new Error('Inversion of zero or near-zero value');
+        }
+        this.x = 1 / this.x;
+        this.y = 1 / this.y;
+        this.z = 1 / this.z;
+        this.w = 1 / this.w;
+        return this;
+    }
+
+    inverseSafe(defaultValue: number = 0): Vec4 {
+        const vx = this.x,
+            vy = this.y,
+            vz = this.z,
+            vw = this.w;
+        this.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
+        this.y = Math.abs(vy) < EPSILON ? defaultValue : 1 / vy;
+        this.z = Math.abs(vz) < EPSILON ? defaultValue : 1 / vz;
+        this.w = Math.abs(vw) < EPSILON ? defaultValue : 1 / vw;
+        return this;
+    }
+
+    reflect<T extends IVec4Like>(normal: Readonly<T>): Vec4 {
+        Vec4.reflect(this, normal, this);
+        return this;
+    }
+
+    project<T extends IVec4Like>(onto: Readonly<T>): Vec4 {
+        Vec4.project(this, onto, this);
+        return this;
     }
 }
