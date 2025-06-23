@@ -643,4 +643,118 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
             } as T;
         }
     }
+
+    add<T extends IVec4Like>(other: Readonly<T>): Vec4 {
+        this.x += other.x;
+        this.y += other.y;
+        this.z += other.z;
+        this.w += other.w;
+        return this;
+    }
+
+    addScalar(value: number): Vec4 {
+        this.x += value;
+        this.y += value;
+        this.z += value;
+        this.w += value;
+        return this;
+    }
+
+    subtract<T extends IVec4Like>(other: Readonly<T>): Vec4 {
+        this.x -= other.x;
+        this.y -= other.y;
+        this.z -= other.z;
+        this.w -= other.w;
+        return this;
+    }
+
+    subtractScalar(value: number): Vec4 {
+        this.x -= value;
+        this.y -= value;
+        this.z -= value;
+        this.w -= value;
+        return this;
+    }
+
+    multiply<T extends IVec4Like>(other: Readonly<T>): Vec4 {
+        this.x *= other.x;
+        this.y *= other.y;
+        this.z *= other.z;
+        this.w *= other.w;
+        return this;
+    }
+
+    multiplyScalar(value: number): Vec4 {
+        this.x *= value;
+        this.y *= value;
+        this.z *= value;
+        this.w *= value;
+        return this;
+    }
+
+    divide<T extends IVec4Like>(other: Readonly<T>): Vec4 {
+        if (
+            Math.abs(other.x) < EPSILON ||
+            Math.abs(other.y) < EPSILON ||
+            Math.abs(other.z) < EPSILON ||
+            Math.abs(other.w) < EPSILON
+        ) {
+            throw new Error('Division by zero or near-zero value is not allowed');
+        }
+
+        this.x /= other.x;
+        this.y /= other.y;
+        this.z /= other.z;
+        this.w /= other.w;
+        return this;
+    }
+
+    divideScalar(value: number): Vec4 {
+        if (Math.abs(value) < EPSILON) {
+            throw new Error('Division by zero or near-zero value is not allowed');
+        }
+
+        this.x /= value;
+        this.y /= value;
+        this.z /= value;
+        this.w /= value;
+        return this;
+    }
+
+    dot<T extends IVec4Like>(other: Readonly<T>): number {
+        return this.x * other.x + this.y * other.y + this.z * other.z + this.w * other.w;
+    }
+
+    lengthSquared(): number {
+        return this.x * this.x + this.y * this.y + this.z * this.z + this.w * this.w;
+    }
+
+    length(): number {
+        return Math.sqrt(this.lengthSquared());
+    }
+
+    normalize(): Vec4 {
+        const length = this.length();
+        if (length < EPSILON) {
+            throw new Error('Cannot normalize a zero-length vector');
+        }
+        this.divideScalar(length);
+        return this;
+    }
+
+    distance<T extends IVec4Like>(other: Readonly<T>): number {
+        const dx = this.x - other.x;
+        const dy = this.y - other.y;
+        const dz = this.z - other.z;
+        const dw = this.w - other.w;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
+    }
+
+    distanceSquared<T extends IVec4Like>(other: Readonly<T>): number {
+        const dx = this.x - other.x;
+        const dy = this.y - other.y;
+        const dz = this.z - other.z;
+        const dw = this.w - other.w;
+        return dx * dx + dy * dy + dz * dz + dw * dw;
+    }
 }
