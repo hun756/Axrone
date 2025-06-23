@@ -280,4 +280,141 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         const dw = a.w - b.w;
         return Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
     }
+
+    static lerp<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: V
+    ): V {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        if (out) {
+            out.x = a.x + (b.x - a.x) * t1;
+            out.y = a.y + (b.y - a.y) * t1;
+            out.z = a.z + (b.z - a.z) * t1;
+            out.w = a.w + (b.w - a.w) * t1;
+            return out;
+        } else {
+            return {
+                x: a.x + (b.x - a.x) * t1,
+                y: a.y + (b.y - a.y) * t1,
+                z: a.z + (b.z - a.z) * t1,
+                w: a.w + (b.w - a.w) * t1,
+            } as V;
+        }
+    }
+
+    static lerUnclamped<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: V
+    ): V {
+        if (out) {
+            out.x = a.x + (b.x - a.x) * t;
+            out.y = a.y + (b.y - a.y) * t;
+            out.z = a.z + (b.z - a.z) * t;
+            out.w = a.w + (b.w - a.w) * t;
+            return out;
+        } else {
+            return {
+                x: a.x + (b.x - a.x) * t,
+                y: a.y + (b.y - a.y) * t,
+                z: a.z + (b.z - a.z) * t,
+                w: a.w + (b.w - a.w) * t,
+            } as V;
+        }
+    }
+
+    static sleerp<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: V
+    ): V {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+
+        const dotProduct = Vec4.dot(a, b);
+        const lenA = Vec4.len(a);
+        const lenB = Vec4.len(b);
+
+        if (lenA < EPSILON || lenB < EPSILON) {
+            return Vec4.lerp(a, b, t1, out);
+        }
+
+        let cosTheta = dotProduct / (lenA * lenB);
+        cosTheta = Math.max(-1, Math.min(1, cosTheta));
+        const theta = Math.acos(cosTheta);
+
+        if (Math.abs(theta) < EPSILON) {
+            return Vec4.lerp(a, b, t1, out);
+        }
+
+        const sinTheta = Math.sin(theta);
+        const ratioA = Math.sin((1 - t1) * theta) / sinTheta;
+        const ratioB = Math.sin(t1 * theta) / sinTheta;
+
+        if (out) {
+            out.x = ratioA * a.x + ratioB * b.x;
+            out.y = ratioA * a.y + ratioB * b.y;
+            out.z = ratioA * a.z + ratioB * b.z;
+            out.w = ratioA * a.w + ratioB * b.w;
+            return out;
+        } else {
+            return {
+                x: ratioA * a.x + ratioB * b.x,
+                y: ratioA * a.y + ratioB * b.y,
+                z: ratioA * a.z + ratioB * b.z,
+                w: ratioA * a.w + ratioB * b.w,
+            } as V;
+        }
+    }
+
+    static smoothstep<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: V
+    ): V {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t2 = t1 * t1 * (3 - 2 * t1);
+        if (out) {
+            out.x = a.x + (b.x - a.x) * t2;
+            out.y = a.y + (b.y - a.y) * t2;
+            out.z = a.z + (b.z - a.z) * t2;
+            out.w = a.w + (b.w - a.w) * t2;
+            return out;
+        } else {
+            return {
+                x: a.x + (b.x - a.x) * t2,
+                y: a.y + (b.y - a.y) * t2,
+                z: a.z + (b.z - a.z) * t2,
+                w: a.w + (b.w - a.w) * t2,
+            } as V;
+        }
+    }
+
+    static smootherStep<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: V
+    ): V {
+        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t2 = t1 * t1 * t1 * (t1 * (t1 * 6 - 15) + 10);
+        if (out) {
+            out.x = a.x + (b.x - a.x) * t2;
+            out.y = a.y + (b.y - a.y) * t2;
+            out.z = a.z + (b.z - a.z) * t2;
+            out.w = a.w + (b.w - a.w) * t2;
+            return out;
+        } else {
+            return {
+                x: a.x + (b.x - a.x) * t2,
+                y: a.y + (b.y - a.y) * t2,
+                z: a.z + (b.z - a.z) * t2,
+                w: a.w + (b.w - a.w) * t2,
+            } as V;
+        }
+    }
 }

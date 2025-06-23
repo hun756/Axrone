@@ -864,7 +864,7 @@ describe('Vec3 Test Suite', () => {
             test('should fallback to lerp for zero vectors', () => {
                 const a = new Vec3(0, 0, 0);
                 const b = new Vec3(1, 1, 1);
-                const result = Vec3.slerp(a, b, 0.5);
+                const result = Vec3.slerp(a, b, 0.5, new Vec3());
                 const expectedLerp = Vec3.lerp(a, b, 0.5);
                 expect(result).toBeCloseToVec3(expectedLerp);
             });
