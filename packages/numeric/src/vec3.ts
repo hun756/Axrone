@@ -520,12 +520,12 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         }
     }
 
-    static lerp<T extends IVec3Like, U extends IVec3Like>(
+    static lerp<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
         if (out) {
             out.x = a.x + (b.x - a.x) * t1;
@@ -537,7 +537,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: a.x + (b.x - a.x) * t1,
                 y: a.y + (b.y - a.y) * t1,
                 z: a.z + (b.z - a.z) * t1,
-            } as T;
+            } as V;
         }
     }
 
