@@ -178,6 +178,223 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return new Color(Number(arr[offset]), Number(arr[offset + 1]), Number(arr[offset + 2]), a);
     }
 
+    static create(r: number = 0, g: number = 0, b: number = 0, a: number = 1): Color {
+        return new Color(r, g, b, a);
+    }
+
+    static fromHex(hex: string): Color {
+        hex = hex.replace(/^#/, '').trim();
+
+        if (!/^[0-9A-Fa-f]+$/.test(hex)) {
+            throw new Error('Invalid hex color format: contains non-hexadecimal characters');
+        }
+
+        if (hex.length === 3) {
+            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+        } else if (hex.length === 4) {
+            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+        }
+
+        if (hex.length !== 6 && hex.length !== 8) {
+            throw new Error('Invalid hex color format: must be 3, 4, 6, or 8 characters');
+        }
+
+        const parsed = parseInt(hex, 16);
+
+        if (hex.length === 6) {
+            return new Color(
+                ((parsed >> 16) & 0xff) / 255,
+                ((parsed >> 8) & 0xff) / 255,
+                (parsed & 0xff) / 255,
+                1
+            );
+        } else {
+            return new Color(
+                ((parsed >> 24) & 0xff) / 255,
+                ((parsed >> 16) & 0xff) / 255,
+                ((parsed >> 8) & 0xff) / 255,
+                (parsed & 0xff) / 255
+            );
+        }
+    }
+
+    static fromRGB(r: number, g: number, b: number, a: number = 1): Color {
+        if (r > 1 || g > 1 || b > 1) {
+            return new Color(r / 255, g / 255, b / 255, a > 1 ? a / 255 : a);
+        }
+        return new Color(r, g, b, a);
+    }
+
+    static fromHSL(h: number, s: number, l: number, a: number = 1): Color {
+        h = _mod(h, 360);
+        s = _clampColor(s);
+        l = _clampColor(l);
+        a = _clampColor(a);
+
+        if (s === 0) {
+            return new Color(l, l, l, a);
+        }
+
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        const hNorm = h / 360;
+
+        const r = _hueToRgb(p, q, hNorm + 1 / 3);
+        const g = _hueToRgb(p, q, hNorm);
+        const b = _hueToRgb(p, q, hNorm - 1 / 3);
+
+        return new Color(r, g, b, a);
+    }
+
+    static fromHSV(h: number, s: number, v: number, a: number = 1): Color {
+        h = _mod(h, 360);
+        s = _clampColor(s);
+        v = _clampColor(v);
+        a = _clampColor(a);
+
+        const c = v * s;
+        const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+        const m = v - c;
+
+        let r = 0,
+            g = 0,
+            b = 0;
+
+        if (h < 60) {
+            r = c;
+            g = x;
+            b = 0;
+        } else if (h < 120) {
+            r = x;
+            g = c;
+            b = 0;
+        } else if (h < 180) {
+            r = 0;
+            g = c;
+            b = x;
+        } else if (h < 240) {
+            r = 0;
+            g = x;
+            b = c;
+        } else if (h < 300) {
+            r = x;
+            g = 0;
+            b = c;
+        } else {
+            r = c;
+            g = 0;
+            b = x;
+        }
+
+        return new Color(r + m, g + m, b + m, a);
+    }
+
+    static fromCMYK(c: number, m: number, y: number, k: number, a: number = 1): Color {
+        c = _clampColor(c);
+        m = _clampColor(m);
+        y = _clampColor(y);
+        k = _clampColor(k);
+        a = _clampColor(a);
+
+        const invK = 1 - k;
+        const r = (1 - c) * invK;
+        const g = (1 - m) * invK;
+        const b = (1 - y) * invK;
+
+        return new Color(r, g, b, a);
+    }
+
+    static fromLab(l: number, a: number, b: number, alpha: number = 1): Color {
+        const fy = (l + 16) / 116;
+        const fx = a / 500 + fy;
+        const fz = fy - b / 200;
+
+        const xr = fx ** 3 > 0.008856 ? fx ** 3 : (116 * fx - 16) / 903.3;
+        const yr = l > 8 ? fy ** 3 : l / 903.3;
+        const zr = fz ** 3 > 0.008856 ? fz ** 3 : (116 * fz - 16) / 903.3;
+
+        const x = xr * D65_X;
+        const y = yr * D65_Y;
+        const z = zr * D65_Z;
+
+        return Color.fromXYZ(x, y, z, alpha);
+    }
+
+    static fromXYZ(x: number, y: number, z: number, alpha: number = 1): Color {
+        let r = x * 3.2406 + y * -1.5372 + z * -0.4986;
+        let g = x * -0.9689 + y * 1.8758 + z * 0.0415;
+        let b = x * 0.0557 + y * -0.204 + z * 1.057;
+
+        r = _linearToSRGB(r);
+        g = _linearToSRGB(g);
+        b = _linearToSRGB(b);
+
+        return new Color(_clampColor(r), _clampColor(g), _clampColor(b), _clampColor(alpha));
+    }
+
+    static fromTemperature(kelvin: number, alpha: number = 1): Color {
+        kelvin = _clamp(kelvin, 1000, 40000);
+        const temp = kelvin / 100;
+
+        let r, g, b;
+
+        if (temp <= 66) {
+            r = 255;
+            g = temp <= 19 ? 0 : 99.4708025861 * Math.log(temp - 10) - 161.1195681661;
+            b =
+                temp >= 66
+                    ? 255
+                    : temp <= 19
+                      ? 0
+                      : 138.5177312231 * Math.log(temp - 10) - 305.0447927307;
+        } else {
+            r = 329.698727446 * Math.pow(temp - 60, -0.1332047592);
+            g = 288.1221695283 * Math.pow(temp - 60, -0.0755148492);
+            b = 255;
+        }
+
+        return new Color(_clampColor(r / 255), _clampColor(g / 255), _clampColor(b / 255), alpha);
+    }
+
+    static fromNamedColor(name: string): Color {
+        const namedColors: Record<string, Color> = {
+            transparent: Color.TRANSPARENT,
+            black: Color.BLACK,
+            white: Color.WHITE,
+            red: Color.RED,
+            green: Color.GREEN,
+            blue: Color.BLUE,
+            yellow: Color.YELLOW,
+            cyan: Color.CYAN,
+            magenta: Color.MAGENTA,
+            orange: Color.ORANGE,
+            purple: Color.PURPLE,
+            brown: Color.BROWN,
+            pink: Color.PINK,
+            gray: Color.GRAY,
+            grey: Color.GRAY,
+            lightgray: Color.LIGHT_GRAY,
+            lightgrey: Color.LIGHT_GRAY,
+            darkgray: Color.DARK_GRAY,
+            darkgrey: Color.DARK_GRAY,
+            navy: Color.NAVY,
+            maroon: Color.MAROON,
+            olive: Color.OLIVE,
+            lime: Color.LIME,
+            aqua: Color.AQUA,
+            teal: Color.TEAL,
+            silver: Color.SILVER,
+            fuchsia: Color.FUCHSIA,
+        };
+
+        const normalized = name.toLowerCase().replace(/\s+/g, '');
+        if (!(normalized in namedColors)) {
+            throw new Error(`Unknown color name: ${name}`);
+        }
+
+        return namedColors[normalized].clone();
+    }
+
     clone(): Color {
         return new Color(this.r, this.g, this.b, this.a);
     }
