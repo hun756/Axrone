@@ -1018,4 +1018,49 @@ describe('Vec4 Professional Unit Tests', () => {
             expect(() => zero.normalize()).toThrow();
         });
     });
+
+    // PERFORMANCE AND STRESS TESTS
+    describe('Performance and Stress Tests', () => {
+        
+        test('should handle large number of operations efficiently', () => {
+            const vectors = Array.from({ length: 1000 }, () => createRandomVec4());
+            
+            const startTime = performance.now();
+            
+            for (let i = 0; i < vectors.length - 1; i++) {
+                Vec4.add(vectors[i], vectors[i + 1]);
+                Vec4.dot(vectors[i], vectors[i + 1]);
+                Vec4.distance(vectors[i], vectors[i + 1]);
+            }
+            
+            const endTime = performance.now();
+            const duration = endTime - startTime;
+            
+            expect(duration).toBeLessThan(10);
+        });
+
+        test('should maintain accuracy with batch operations', () => {
+            const vectors = Array.from({ length: 100 }, () => createRandomVec4(1));
+            
+            const normalized = vectors.map(v => Vec4.normalize(v.clone()));
+            
+            normalized.forEach(v => {
+                expectNumberClose(Vec4.len(v), 1, 1e-10);
+            });
+        });
+
+        test('should handle output parameter reuse efficiently', () => {
+            const a = createRandomVec4();
+            const b = createRandomVec4();
+            const output = new Vec4();
+            
+            for (let i = 0; i < 1000; i++) {
+                Vec4.add(a, b, output);
+                Vec4.multiply(output, Vec4.ONE, output);
+            }
+            
+            const expected = Vec4.add(a, b);
+            expectVectorClose(output, expected);
+        });
+    });
 });
