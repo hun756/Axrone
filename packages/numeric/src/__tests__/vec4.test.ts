@@ -958,4 +958,64 @@ describe('Vec4 Professional Unit Tests', () => {
             });
         });
     });
+
+    // EDGE CASES AND ERROR HANDLING TESTS
+    describe('Edge Cases and Error Handling', () => {
+        test('should handle very large numbers', () => {
+            const large = new Vec4(LARGE_NUMBER, LARGE_NUMBER, LARGE_NUMBER, LARGE_NUMBER);
+
+            expect(() => large.length()).not.toThrow();
+            expect(large.length()).toBeGreaterThan(0);
+            expect(isFinite(large.length())).toBe(true);
+        });
+
+        test('should handle very small numbers', () => {
+            const small = new Vec4(SMALL_NUMBER, SMALL_NUMBER, SMALL_NUMBER, SMALL_NUMBER);
+
+            expect(() => small.length()).not.toThrow();
+            expect(small.length()).toBeGreaterThan(0);
+            expect(isFinite(small.length())).toBe(true);
+        });
+
+        test('should handle mixed large and small numbers', () => {
+            const mixed = new Vec4(LARGE_NUMBER, SMALL_NUMBER, -LARGE_NUMBER, -SMALL_NUMBER);
+
+            expect(() => mixed.normalize()).not.toThrow();
+            expectNumberClose(mixed.length(), 1);
+        });
+
+        test('should handle NaN inputs gracefully', () => {
+            const withNaN = new Vec4(NaN, 1, 2, 3);
+
+            expect(isNaN(withNaN.length())).toBe(true);
+            expect(isNaN(Vec4.dot(withNaN, Vec4.ONE))).toBe(true);
+        });
+
+        test('should handle Infinity inputs', () => {
+            const withInfinity = new Vec4(Infinity, 1, 2, 3);
+
+            expect(withInfinity.length()).toBe(Infinity);
+            expect(() => withInfinity.normalize()).toThrow();
+        });
+
+        test('should maintain precision with repeated operations', () => {
+            let vec = new Vec4(1, 2, 3, 4);
+            const original = vec.clone();
+
+            for (let i = 0; i < 1000; i++) {
+                vec.multiplyScalar(1.001).divideScalar(1.001);
+            }
+
+            expectVectorClose(vec, original, 1e-10);
+        });
+
+        test('should handle zero vectors consistently', () => {
+            const zero = new Vec4(0, 0, 0, 0);
+
+            expect(zero.length()).toBe(0);
+            expect(zero.lengthSquared()).toBe(0);
+            expect(Vec4.dot(zero, Vec4.ONE)).toBe(0);
+            expect(() => zero.normalize()).toThrow();
+        });
+    });
 });

@@ -1153,6 +1153,10 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
             throw new Error('Cannot normalize a zero-length vector');
         }
 
+        if (!isFinite(length)) {
+            throw new Error('Cannot normalize a vector with infinite or NaN length');
+        }
+
         this.x /= length;
         this.y /= length;
         this.z /= length;
