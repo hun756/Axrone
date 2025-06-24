@@ -517,4 +517,86 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             return { c, m, y, k, a: this.a };
         }
     }
+
+    toXYZ(out?: IColorXYZ): IColorXYZ {
+        const r = _sRGBToLinear(this.r);
+        const g = _sRGBToLinear(this.g);
+        const b = _sRGBToLinear(this.b);
+
+        const x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375;
+        const y = r * 0.2126729 + g * 0.7151522 + b * 0.072175;
+        const z = r * 0.0193339 + g * 0.119192 + b * 0.9503041;
+
+        if (out) {
+            out.x = x;
+            out.y = y;
+            out.z = z;
+            out.alpha = this.a;
+            return out;
+        } else {
+            return { x, y, z, alpha: this.a };
+        }
+    }
+
+    toLab(out?: IColorLab): IColorLab {
+        const xyz = this.toXYZ();
+
+        const xr = xyz.x / D65_X;
+        const yr = xyz.y / D65_Y;
+        const zr = xyz.z / D65_Z;
+
+        const fx = xr > 0.008856 ? Math.pow(xr, 1 / 3) : (903.3 * xr + 16) / 116;
+        const fy = yr > 0.008856 ? Math.pow(yr, 1 / 3) : (903.3 * yr + 16) / 116;
+        const fz = zr > 0.008856 ? Math.pow(zr, 1 / 3) : (903.3 * zr + 16) / 116;
+
+        const l = 116 * fy - 16;
+        const a = 500 * (fx - fy);
+        const b = 200 * (fy - fz);
+
+        if (out) {
+            out.l = l;
+            out.a = a;
+            out.b = b;
+            out.alpha = this.a;
+            return out;
+        } else {
+            return { l, a, b, alpha: this.a };
+        }
+    }
+
+    toHex(includeAlpha: boolean = false): string {
+        const r = Math.round(this.r * 255);
+        const g = Math.round(this.g * 255);
+        const b = Math.round(this.b * 255);
+        const a = Math.round(this.a * 255);
+
+        const toHex = (n: number) => n.toString(16).padStart(2, '0');
+
+        if (includeAlpha) {
+            return `#${toHex(r)}${toHex(g)}${toHex(b)}${toHex(a)}`;
+        }
+
+        return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+    }
+
+    toRGB(includeAlpha: boolean = false): string {
+        const r = Math.round(this.r * 255);
+        const g = Math.round(this.g * 255);
+        const b = Math.round(this.b * 255);
+
+        if (includeAlpha) {
+            return `rgba(${r}, ${g}, ${b}, ${this.a})`;
+        }
+
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    toHSLString(): string {
+        const hsl = this.toHSL();
+        return `hsla(${Math.round(hsl.h)}, ${Math.round(hsl.s * 100)}%, ${Math.round(hsl.l * 100)}%, ${hsl.a})`;
+    }
+
+    toString(): string {
+        return this.toHex(true);
+    }
 }
