@@ -1,3 +1,6 @@
+import { Equatable, ICloneable } from '@axrone/utility';
+import { EPSILON } from './common';
+
 export interface IColorLike {
     r: number;
     g: number;
@@ -118,3 +121,59 @@ const D65_X = 0.95047;
 const D65_Y = 1.0;
 const D65_Z = 1.08883;
 
+export class Color implements IColorLike, ICloneable<Color>, Equatable {
+    constructor(
+        public r: number = 0,
+        public g: number = 0,
+        public b: number = 0,
+        public a: number = 1
+    ) {
+        this.r = _clampColor(r);
+        this.g = _clampColor(g);
+        this.b = _clampColor(b);
+        this.a = _clampColor(a);
+    }
+
+    static from<T extends IColorLike>(c: Readonly<T>): Color {
+        return new Color(c.r, c.g, c.b, c.a ?? 1);
+    }
+
+    static fromArray(arr: ArrayLike<number>, offset: number = 0): Color {
+        if (offset < 0) {
+            throw new RangeError('Offset cannot be negative');
+        }
+
+        if (arr.length < offset + 3) {
+            throw new RangeError(
+                `Array must have at least ${offset + 3} elements when using offset ${offset} for RGB`
+            );
+        }
+
+        const a = arr.length >= offset + 4 ? Number(arr[offset + 3]) : 1;
+        return new Color(Number(arr[offset]), Number(arr[offset + 1]), Number(arr[offset + 2]), a);
+    }
+
+    clone(): Color {
+        return new Color(this.r, this.g, this.b, this.a);
+    }
+
+    equals(other: unknown): boolean {
+        if (!(other instanceof Color)) return false;
+
+        return (
+            Math.abs(this.r - other.r) < EPSILON &&
+            Math.abs(this.g - other.g) < EPSILON &&
+            Math.abs(this.b - other.b) < EPSILON &&
+            Math.abs(this.a - other.a) < EPSILON
+        );
+    }
+
+    getHashCode(): number {
+        let h1 = 2166136261;
+        h1 = Math.imul(h1 ^ Math.floor(this.r * 1000), 16777619);
+        h1 = Math.imul(h1 ^ Math.floor(this.g * 1000), 16777619);
+        h1 = Math.imul(h1 ^ Math.floor(this.b * 1000), 16777619);
+        h1 = Math.imul(h1 ^ Math.floor(this.a * 1000), 16777619);
+        return h1 >>> 0;
+    }
+}
