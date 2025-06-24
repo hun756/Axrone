@@ -1021,30 +1021,29 @@ describe('Vec4 Professional Unit Tests', () => {
 
     // PERFORMANCE AND STRESS TESTS
     describe('Performance and Stress Tests', () => {
-        
         test('should handle large number of operations efficiently', () => {
             const vectors = Array.from({ length: 1000 }, () => createRandomVec4());
-            
+
             const startTime = performance.now();
-            
+
             for (let i = 0; i < vectors.length - 1; i++) {
                 Vec4.add(vectors[i], vectors[i + 1]);
                 Vec4.dot(vectors[i], vectors[i + 1]);
                 Vec4.distance(vectors[i], vectors[i + 1]);
             }
-            
+
             const endTime = performance.now();
             const duration = endTime - startTime;
-            
+
             expect(duration).toBeLessThan(10);
         });
 
         test('should maintain accuracy with batch operations', () => {
             const vectors = Array.from({ length: 100 }, () => createRandomVec4(1));
-            
-            const normalized = vectors.map(v => Vec4.normalize(v.clone()));
-            
-            normalized.forEach(v => {
+
+            const normalized = vectors.map((v) => Vec4.normalize(v.clone()));
+
+            normalized.forEach((v) => {
                 expectNumberClose(Vec4.len(v), 1, 1e-10);
             });
         });
@@ -1053,14 +1052,107 @@ describe('Vec4 Professional Unit Tests', () => {
             const a = createRandomVec4();
             const b = createRandomVec4();
             const output = new Vec4();
-            
+
             for (let i = 0; i < 1000; i++) {
                 Vec4.add(a, b, output);
                 Vec4.multiply(output, Vec4.ONE, output);
             }
-            
+
             const expected = Vec4.add(a, b);
             expectVectorClose(output, expected);
+        });
+    });
+
+    // INTEGRATION TESTS
+    describe('Integration Tests', () => {
+        test('should work correctly in complete transformation pipeline', () => {
+            let vertex = new Vec4(1, 2, 3, 1);
+
+            vertex.multiplyScalar(2);
+            expectVectorClose(vertex, { x: 2, y: 4, z: 6, w: 2 });
+
+            vertex.rotateXY(Math.PI / 4);
+
+            vertex.x += 5;
+            vertex.y += 10;
+            vertex.z += 15;
+
+            vertex.x /= vertex.w;
+            vertex.y /= vertex.w;
+            vertex.z /= vertex.w;
+            vertex.w = 1;
+
+            expect(vertex.w).toBe(1);
+            expect(isFinite(vertex.x)).toBe(true);
+            expect(isFinite(vertex.y)).toBe(true);
+            expect(isFinite(vertex.z)).toBe(true);
+        });
+
+        test('should work correctly with color operations', () => {
+            const color1 = new Vec4(1.0, 0.5, 0.25, 0.8);
+            const color2 = new Vec4(0.2, 0.8, 0.9, 0.6);
+
+            const blended = Vec4.lerp(color1, color2, 0.5);
+
+            blended.x = Math.max(0, Math.min(1, blended.x));
+            blended.y = Math.max(0, Math.min(1, blended.y));
+            blended.z = Math.max(0, Math.min(1, blended.z));
+            blended.w = Math.max(0, Math.min(1, blended.w));
+
+            expect(blended.x).toBeGreaterThanOrEqual(0);
+            expect(blended.x).toBeLessThanOrEqual(1);
+            expect(blended.y).toBeGreaterThanOrEqual(0);
+            expect(blended.y).toBeLessThanOrEqual(1);
+            expect(blended.z).toBeGreaterThanOrEqual(0);
+            expect(blended.z).toBeLessThanOrEqual(1);
+            expect(blended.w).toBeGreaterThanOrEqual(0);
+            expect(blended.w).toBeLessThanOrEqual(1);
+        });
+
+        test('should maintain mathematical properties in complex operations', () => {
+            const a = createRandomVec4();
+            const b = createRandomVec4();
+            const c = createRandomVec4();
+
+            const dotSum = Vec4.dot(a, Vec4.add(b, c));
+            const sumDots = Vec4.dot(a, b) + Vec4.dot(a, c);
+
+            expectNumberClose(dotSum, sumDots, 1e-10);
+
+            const addAB = Vec4.add(a, b);
+            const addBA = Vec4.add(b, a);
+
+            expectVectorClose(addAB, addBA);
+
+            const leftAssoc = Vec4.add(Vec4.add(a, b), c);
+            const rightAssoc = Vec4.add(a, Vec4.add(b, c));
+
+            expectVectorClose(leftAssoc, rightAssoc);
+        });
+    });
+
+    // ADDITIONAL HELPER TESTS
+    describe('Test Utilities Validation', () => {
+        test('should validate expectVectorClose helper', () => {
+            const a = new Vec4(1, 2, 3, 4);
+            const b = new Vec4(1.00001, 2.00001, 3.00001, 4.00001);
+
+            expect(() => expectVectorClose(a, b, 1e-4)).not.toThrow();
+            expect(() => expectVectorClose(a, b, 1e-6)).toThrow();
+        });
+
+        test('should validate expectNumberClose helper', () => {
+            expect(() => expectNumberClose(1.0, 1.00001, 1e-4)).not.toThrow();
+            expect(() => expectNumberClose(1.0, 1.00001, 1e-6)).toThrow();
+        });
+
+        test('should validate createRandomVec4 helper', () => {
+            const vec = createRandomVec4(10);
+
+            expect(Math.abs(vec.x)).toBeLessThanOrEqual(10);
+            expect(Math.abs(vec.y)).toBeLessThanOrEqual(10);
+            expect(Math.abs(vec.z)).toBeLessThanOrEqual(10);
+            expect(Math.abs(vec.w)).toBeLessThanOrEqual(10);
         });
     });
 });
