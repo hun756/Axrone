@@ -861,4 +861,93 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             return result as unknown as T;
         }
     }
+
+    static invert<T extends IColorLike>(color: Readonly<T>, out?: T): T {
+        if (out) {
+            out.r = 1 - color.r;
+            out.g = 1 - color.g;
+            out.b = 1 - color.b;
+            out.a = color.a ?? 1;
+            return out;
+        } else {
+            return {
+                r: 1 - color.r,
+                g: 1 - color.g,
+                b: 1 - color.b,
+                a: color.a ?? 1,
+            } as T;
+        }
+    }
+
+    static grayscale<T extends IColorLike>(color: Readonly<T>, out?: T): T {
+        const gray = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
+
+        if (out) {
+            out.r = gray;
+            out.g = gray;
+            out.b = gray;
+            out.a = color.a ?? 1;
+            return out;
+        } else {
+            return {
+                r: gray,
+                g: gray,
+                b: gray,
+                a: color.a ?? 1,
+            } as T;
+        }
+    }
+
+    static blend<T extends IColorLike, U extends IColorLike>(
+        base: Readonly<T>,
+        overlay: Readonly<U>,
+        mode: ColorBlendMode,
+        out?: T
+    ): T {
+        const blendFunctions = {
+            [ColorBlendMode.NORMAL]: (a: number, b: number) => b,
+            [ColorBlendMode.MULTIPLY]: (a: number, b: number) => a * b,
+            [ColorBlendMode.SCREEN]: (a: number, b: number) => 1 - (1 - a) * (1 - b),
+            [ColorBlendMode.OVERLAY]: (a: number, b: number) =>
+                a < 0.5 ? 2 * a * b : 1 - 2 * (1 - a) * (1 - b),
+            [ColorBlendMode.SOFT_LIGHT]: (a: number, b: number) =>
+                b < 0.5
+                    ? 2 * a * b + a * a * (1 - 2 * b)
+                    : 2 * a * (1 - b) + Math.sqrt(a) * (2 * b - 1),
+            [ColorBlendMode.HARD_LIGHT]: (a: number, b: number) =>
+                b < 0.5 ? 2 * a * b : 1 - 2 * (1 - a) * (1 - b),
+            [ColorBlendMode.COLOR_DODGE]: (a: number, b: number) =>
+                b === 1 ? 1 : Math.min(1, a / (1 - b)),
+            [ColorBlendMode.COLOR_BURN]: (a: number, b: number) =>
+                b === 0 ? 0 : Math.max(0, 1 - (1 - a) / b),
+            [ColorBlendMode.DARKEN]: (a: number, b: number) => Math.min(a, b),
+            [ColorBlendMode.LIGHTEN]: (a: number, b: number) => Math.max(a, b),
+            [ColorBlendMode.DIFFERENCE]: (a: number, b: number) => Math.abs(a - b),
+            [ColorBlendMode.EXCLUSION]: (a: number, b: number) => a + b - 2 * a * b,
+            [ColorBlendMode.HUE]: (a: number, b: number) => b,
+            [ColorBlendMode.SATURATION]: (a: number, b: number) => b,
+            [ColorBlendMode.COLOR]: (a: number, b: number) => b,
+            [ColorBlendMode.LUMINOSITY]: (a: number, b: number) => b,
+        };
+
+        const blendFunc = blendFunctions[mode];
+        if (!blendFunc) {
+            throw new Error(`Unsupported blend mode: ${mode}`);
+        }
+
+        const r = blendFunc(base.r, overlay.r);
+        const g = blendFunc(base.g, overlay.g);
+        const b = blendFunc(base.b, overlay.b);
+        const a = overlay.a ?? 1;
+
+        if (out) {
+            out.r = r;
+            out.g = g;
+            out.b = b;
+            out.a = a;
+            return out;
+        } else {
+            return { r, g, b, a } as T;
+        }
+    }
 }
