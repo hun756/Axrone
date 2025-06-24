@@ -683,4 +683,35 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             } as V;
         }
     }
+
+    add<T extends IColorLike>(other: Readonly<T>): Color {
+        this.r = _clampColor(this.r + other.r);
+        this.g = _clampColor(this.g + other.g);
+        this.b = _clampColor(this.b + other.b);
+        this.a = _clampColor(this.a + (other.a ?? 1));
+        return this;
+    }
+
+    subtract<T extends IColorLike>(other: Readonly<T>): Color {
+        this.r = _clampColor(this.r - other.r);
+        this.g = _clampColor(this.g - other.g);
+        this.b = _clampColor(this.b - other.b);
+        this.a = _clampColor(this.a - (other.a ?? 1));
+        return this;
+    }
+
+    multiply<T extends IColorLike>(other: Readonly<T>): Color {
+        this.r *= other.r;
+        this.g *= other.g;
+        this.b *= other.b;
+        this.a *= other.a ?? 1;
+        return this;
+    }
+
+    multiplyScalar(scalar: number): Color {
+        this.r = _clampColor(this.r * scalar);
+        this.g = _clampColor(this.g * scalar);
+        this.b = _clampColor(this.b * scalar);
+        return this;
+    }
 }
