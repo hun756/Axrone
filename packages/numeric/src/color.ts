@@ -714,4 +714,92 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         this.b = _clampColor(this.b * scalar);
         return this;
     }
+
+    static lerp<T extends IColorLike, U extends IColorLike, V extends IColorLike>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: V
+    ): V {
+        const t1 = _clamp(t, 0, 1);
+        const aAlpha = a.a ?? 1;
+        const bAlpha = b.a ?? 1;
+
+        if (out) {
+            out.r = a.r + (b.r - a.r) * t1;
+            out.g = a.g + (b.g - a.g) * t1;
+            out.b = a.b + (b.b - a.b) * t1;
+            out.a = aAlpha + (bAlpha - aAlpha) * t1;
+            return out;
+        } else {
+            return {
+                r: a.r + (b.r - a.r) * t1,
+                g: a.g + (b.g - a.g) * t1,
+                b: a.b + (b.b - a.b) * t1,
+                a: aAlpha + (bAlpha - aAlpha) * t1,
+            } as V;
+        }
+    }
+
+    static lerpHSL<T extends IColorLike, U extends IColorLike, V extends IColorLike>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: V
+    ): V {
+        const t1 = _clamp(t, 0, 1);
+
+        const hslA = a instanceof Color ? a.toHSL() : Color.from(a).toHSL();
+        const hslB = b instanceof Color ? b.toHSL() : Color.from(b).toHSL();
+
+        let dh = hslB.h - hslA.h;
+        if (dh > 180) dh -= 360;
+        if (dh < -180) dh += 360;
+
+        const h = _mod(hslA.h + dh * t1, 360);
+        const s = hslA.s + (hslB.s - hslA.s) * t1;
+        const l = hslA.l + (hslB.l - hslA.l) * t1;
+        const alpha = hslA.a + (hslB.a - hslA.a) * t1;
+
+        const result = Color.fromHSL(h, s, l, alpha);
+
+        if (out) {
+            out.r = result.r;
+            out.g = result.g;
+            out.b = result.b;
+            out.a = result.a;
+            return out;
+        } else {
+            return result as unknown as V;
+        }
+    }
+
+    static lerpLab<T extends IColorLike, U extends IColorLike, V extends IColorLike>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out?: V
+    ): V {
+        const t1 = _clamp(t, 0, 1);
+
+        const labA = a instanceof Color ? a.toLab() : Color.from(a).toLab();
+        const labB = b instanceof Color ? b.toLab() : Color.from(b).toLab();
+
+        const l = labA.l + (labB.l - labA.l) * t1;
+        const labAVal = labA.a + (labB.a - labA.a) * t1;
+        const labBVal = labA.b + (labB.b - labA.b) * t1;
+        const alpha = labA.alpha + (labB.alpha - labA.alpha) * t1;
+
+        const result = Color.fromLab(l, labAVal, labBVal, alpha);
+
+        if (out) {
+            out.r = result.r;
+            out.g = result.g;
+            out.b = result.b;
+            out.a = result.a;
+            return out;
+        } else {
+            return result as unknown as V;
+        }
+    }
 }
