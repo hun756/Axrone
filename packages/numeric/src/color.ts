@@ -950,4 +950,60 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             return { r, g, b, a } as T;
         }
     }
+
+    static luminance<T extends IColorLike>(color: Readonly<T>): number {
+        const r = _sRGBToLinear(color.r);
+        const g = _sRGBToLinear(color.g);
+        const b = _sRGBToLinear(color.b);
+
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+
+    static contrastRatio<T extends IColorLike, U extends IColorLike>(
+        color1: Readonly<T>,
+        color2: Readonly<U>
+    ): number {
+        const lum1 = Color.luminance(color1);
+        const lum2 = Color.luminance(color2);
+
+        const lighter = Math.max(lum1, lum2);
+        const darker = Math.min(lum1, lum2);
+
+        return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    static distance<T extends IColorLike, U extends IColorLike>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
+        const dr = a.r - b.r;
+        const dg = a.g - b.g;
+        const db = a.b - b.b;
+        const da = (a.a ?? 1) - (b.a ?? 1);
+
+        return Math.sqrt(dr * dr + dg * dg + db * db + da * da);
+    }
+
+    static distanceLab<T extends IColorLike, U extends IColorLike>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): number {
+        const labA = a instanceof Color ? a.toLab() : Color.from(a).toLab();
+        const labB = b instanceof Color ? b.toLab() : Color.from(b).toLab();
+
+        const dl = labA.l - labB.l;
+        const da = labA.a - labB.a;
+        const db = labA.b - labB.b;
+
+        return Math.sqrt(dl * dl + da * da + db * db);
+    }
+
+    static isAccessible<T extends IColorLike, U extends IColorLike>(
+        foreground: Readonly<T>,
+        background: Readonly<U>,
+        level: 'AA' | 'AAA' = 'AA'
+    ): boolean {
+        const ratio = Color.contrastRatio(foreground, background);
+        return level === 'AA' ? ratio >= 4.5 : ratio >= 7;
+    }
 }
