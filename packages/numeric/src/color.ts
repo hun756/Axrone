@@ -134,6 +134,31 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         this.a = _clampColor(a);
     }
 
+    static readonly TRANSPARENT: Readonly<Color> = Object.freeze(new Color(0, 0, 0, 0));
+    static readonly BLACK: Readonly<Color> = Object.freeze(new Color(0, 0, 0, 1));
+    static readonly WHITE: Readonly<Color> = Object.freeze(new Color(1, 1, 1, 1));
+    static readonly RED: Readonly<Color> = Object.freeze(new Color(1, 0, 0, 1));
+    static readonly GREEN: Readonly<Color> = Object.freeze(new Color(0, 1, 0, 1));
+    static readonly BLUE: Readonly<Color> = Object.freeze(new Color(0, 0, 1, 1));
+    static readonly YELLOW: Readonly<Color> = Object.freeze(new Color(1, 1, 0, 1));
+    static readonly CYAN: Readonly<Color> = Object.freeze(new Color(0, 1, 1, 1));
+    static readonly MAGENTA: Readonly<Color> = Object.freeze(new Color(1, 0, 1, 1));
+    static readonly ORANGE: Readonly<Color> = Object.freeze(new Color(1, 0.5, 0, 1));
+    static readonly PURPLE: Readonly<Color> = Object.freeze(new Color(0.5, 0, 0.5, 1));
+    static readonly BROWN: Readonly<Color> = Object.freeze(new Color(0.6, 0.4, 0.2, 1));
+    static readonly PINK: Readonly<Color> = Object.freeze(new Color(1, 0.75, 0.8, 1));
+    static readonly GRAY: Readonly<Color> = Object.freeze(new Color(0.5, 0.5, 0.5, 1));
+    static readonly LIGHT_GRAY: Readonly<Color> = Object.freeze(new Color(0.75, 0.75, 0.75, 1));
+    static readonly DARK_GRAY: Readonly<Color> = Object.freeze(new Color(0.25, 0.25, 0.25, 1));
+    static readonly NAVY: Readonly<Color> = Object.freeze(new Color(0, 0, 0.5, 1));
+    static readonly MAROON: Readonly<Color> = Object.freeze(new Color(0.5, 0, 0, 1));
+    static readonly OLIVE: Readonly<Color> = Object.freeze(new Color(0.5, 0.5, 0, 1));
+    static readonly LIME: Readonly<Color> = Object.freeze(new Color(0.5, 1, 0, 1));
+    static readonly AQUA: Readonly<Color> = Object.freeze(new Color(0, 1, 1, 1));
+    static readonly TEAL: Readonly<Color> = Object.freeze(new Color(0, 0.5, 0.5, 1));
+    static readonly SILVER: Readonly<Color> = Object.freeze(new Color(0.75, 0.75, 0.75, 1));
+    static readonly FUCHSIA: Readonly<Color> = Object.freeze(new Color(1, 0, 1, 1));
+
     static from<T extends IColorLike>(c: Readonly<T>): Color {
         return new Color(c.r, c.g, c.b, c.a ?? 1);
     }
