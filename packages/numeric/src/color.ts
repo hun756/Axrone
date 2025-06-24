@@ -802,4 +802,63 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             return result as unknown as V;
         }
     }
+
+    static lighten<T extends IColorLike>(color: Readonly<T>, amount: number, out?: T): T {
+        const hsl = color instanceof Color ? color.toHSL() : Color.from(color).toHSL();
+        hsl.l = _clamp(hsl.l + amount, 0, 1);
+
+        const result = Color.fromHSL(hsl.h, hsl.s, hsl.l, hsl.a);
+
+        if (out) {
+            out.r = result.r;
+            out.g = result.g;
+            out.b = result.b;
+            out.a = result.a;
+            return out;
+        } else {
+            return result as unknown as T;
+        }
+    }
+
+    static darken<T extends IColorLike>(color: Readonly<T>, amount: number, out?: T): T {
+        return Color.lighten(color, -amount, out);
+    }
+
+    static saturate<T extends IColorLike>(color: Readonly<T>, amount: number, out?: T): T {
+        const hsl = color instanceof Color ? color.toHSL() : Color.from(color).toHSL();
+        hsl.s = _clamp(hsl.s + amount, 0, 1);
+
+        const result = Color.fromHSL(hsl.h, hsl.s, hsl.l, hsl.a);
+
+        if (out) {
+            out.r = result.r;
+            out.g = result.g;
+            out.b = result.b;
+            out.a = result.a;
+            return out;
+        } else {
+            return result as unknown as T;
+        }
+    }
+
+    static desaturate<T extends IColorLike>(color: Readonly<T>, amount: number, out?: T): T {
+        return Color.saturate(color, -amount, out);
+    }
+
+    static adjustHue<T extends IColorLike>(color: Readonly<T>, degrees: number, out?: T): T {
+        const hsl = color instanceof Color ? color.toHSL() : Color.from(color).toHSL();
+        hsl.h = _mod(hsl.h + degrees, 360);
+
+        const result = Color.fromHSL(hsl.h, hsl.s, hsl.l, hsl.a);
+
+        if (out) {
+            out.r = result.r;
+            out.g = result.g;
+            out.b = result.b;
+            out.a = result.a;
+            return out;
+        } else {
+            return result as unknown as T;
+        }
+    }
 }
