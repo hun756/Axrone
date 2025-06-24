@@ -1465,7 +1465,8 @@ export class Vec4EqualityComparer implements EqualityComparer<Vec4> {
         this.epsilon = epsilon;
     }
 
-    equals(a: Readonly<Vec4>, b: Readonly<Vec4>): boolean {
+    equals(a: Readonly<IVec4Like>, b: Readonly<IVec4Like>): boolean {
+        if (a === null || b === null) return false;
         if (a === b) return true;
         if (!a || !b) return false;
 

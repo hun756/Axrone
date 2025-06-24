@@ -867,4 +867,95 @@ describe('Vec4 Professional Unit Tests', () => {
             expect(() => Vec4.project(a, zero)).toThrow('Cannot project onto zero-length vector');
         });
     });
+
+    // COMPARISON TESTS
+    describe('Comparison and Sorting', () => {
+        describe('Vec4Comparer', () => {
+            test('should compare lexicographically', () => {
+                const comparer = new Vec4Comparer(Vec4ComparisonMode.LEXICOGRAPHIC);
+
+                const a = new Vec4(1, 2, 3, 4);
+                const b = new Vec4(1, 2, 3, 5);
+                const c = new Vec4(1, 2, 4, 3);
+
+                expect(comparer.compare(a, b)).toBe(-1);
+                expect(comparer.compare(b, a)).toBe(1);
+                expect(comparer.compare(a, c)).toBe(-1);
+                expect(comparer.compare(a, a)).toBe(0);
+            });
+
+            test('should compare by magnitude', () => {
+                const comparer = new Vec4Comparer(Vec4ComparisonMode.MAGNITUDE);
+
+                const a = new Vec4(1, 0, 0, 0);
+                const b = new Vec4(2, 0, 0, 0);
+
+                expect(comparer.compare(a, b)).toBe(-1);
+                expect(comparer.compare(b, a)).toBe(1);
+                expect(comparer.compare(a, a)).toBe(0);
+            });
+
+            test('should compare by Manhattan distance', () => {
+                const comparer = new Vec4Comparer(Vec4ComparisonMode.MANHATTAN);
+
+                const a = new Vec4(1, 1, 1, 1);
+                const b = new Vec4(2, 2, 0, 0);
+                const c = new Vec4(3, 0, 0, 0);
+
+                expect(comparer.compare(a, b)).toBe(0);
+                expect(comparer.compare(c, a)).toBe(-1);
+            });
+
+            test('should throw error for unsupported comparison mode', () => {
+                const comparer = new Vec4Comparer(999 as Vec4ComparisonMode);
+                const a = new Vec4(1, 2, 3, 4);
+                const b = new Vec4(5, 6, 7, 8);
+
+                expect(() => comparer.compare(a, b)).toThrow('Unsupported Vec4 comparison mode');
+            });
+        });
+
+        describe('Vec4EqualityComparer', () => {
+            test('should compare equality with default epsilon', () => {
+                const comparer = new Vec4EqualityComparer();
+
+                const a = new Vec4(1, 2, 3, 4);
+                const b = new Vec4(1 + EPSILON * 0.5, 2, 3, 4);
+                const c = new Vec4(1 + EPSILON * 2, 2, 3, 4);
+
+                expect(comparer.equals(a, b)).toBe(true);
+                expect(comparer.equals(a, c)).toBe(false);
+            });
+
+            test('should compare equality with custom epsilon', () => {
+                const comparer = new Vec4EqualityComparer(1e-3);
+
+                const a = new Vec4(1, 2, 3, 4);
+                const b = new Vec4(1.0005, 2, 3, 4);
+                const c = new Vec4(1.002, 2, 3, 4);
+
+                expect(comparer.equals(a, b)).toBe(true);
+                expect(comparer.equals(a, c)).toBe(false);
+            });
+
+            test('should handle null/undefined in equality', () => {
+                const comparer = new Vec4EqualityComparer();
+                const a = new Vec4(1, 2, 3, 4);
+
+                expect(comparer.equals(a, null as any)).toBe(false);
+                expect(comparer.equals(null as any, a)).toBe(false);
+                expect(comparer.equals(null as any, null as any)).toBe(false);
+            });
+
+            test('should generate consistent hash codes', () => {
+                const comparer = new Vec4EqualityComparer();
+
+                const a = new Vec4(1, 2, 3, 4);
+                const b = new Vec4(1, 2, 3, 4);
+
+                expect(comparer.hash(a)).toBe(comparer.hash(b));
+                expect(comparer.hash(null as any)).toBe(0);
+            });
+        });
+    });
 });
