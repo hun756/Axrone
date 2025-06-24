@@ -418,4 +418,103 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         h1 = Math.imul(h1 ^ Math.floor(this.a * 1000), 16777619);
         return h1 >>> 0;
     }
+
+    toHSL(out?: IColorHSL): IColorHSL {
+        const r = this.r,
+            g = this.g,
+            b = this.b;
+
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const diff = max - min;
+
+        const l = (max + min) / 2;
+        let h = 0,
+            s = 0;
+
+        if (diff !== 0) {
+            s = l > 0.5 ? diff / (2 - max - min) : diff / (max + min);
+
+            switch (max) {
+                case r:
+                    h = (g - b) / diff + (g < b ? 6 : 0);
+                    break;
+                case g:
+                    h = (b - r) / diff + 2;
+                    break;
+                case b:
+                    h = (r - g) / diff + 4;
+                    break;
+            }
+            h *= 60;
+        }
+
+        if (out) {
+            out.h = h;
+            out.s = s;
+            out.l = l;
+            out.a = this.a;
+            return out;
+        } else {
+            return { h, s, l, a: this.a };
+        }
+    }
+
+    toHSV(out?: IColorHSV): IColorHSV {
+        const r = this.r,
+            g = this.g,
+            b = this.b;
+
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const diff = max - min;
+
+        const v = max;
+        const s = max === 0 ? 0 : diff / max;
+        let h = 0;
+
+        if (diff !== 0) {
+            switch (max) {
+                case r:
+                    h = (g - b) / diff + (g < b ? 6 : 0);
+                    break;
+                case g:
+                    h = (b - r) / diff + 2;
+                    break;
+                case b:
+                    h = (r - g) / diff + 4;
+                    break;
+            }
+            h *= 60;
+        }
+
+        if (out) {
+            out.h = h;
+            out.s = s;
+            out.v = v;
+            out.a = this.a;
+            return out;
+        } else {
+            return { h, s, v, a: this.a };
+        }
+    }
+
+    toCMYK(out?: IColorCMYK): IColorCMYK {
+        const k = 1 - Math.max(this.r, this.g, this.b);
+        const invK = 1 - k;
+        const c = k === 1 ? 0 : (1 - this.r - k) / invK;
+        const m = k === 1 ? 0 : (1 - this.g - k) / invK;
+        const y = k === 1 ? 0 : (1 - this.b - k) / invK;
+
+        if (out) {
+            out.c = c;
+            out.m = m;
+            out.y = y;
+            out.k = k;
+            out.a = this.a;
+            return out;
+        } else {
+            return { c, m, y, k, a: this.a };
+        }
+    }
 }
