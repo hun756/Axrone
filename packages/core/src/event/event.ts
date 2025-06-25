@@ -112,7 +112,7 @@ export class EventHandlerError extends EventError {
     }
 }
 
-export interface Subscription<T = unknown> {
+export interface Subscription<T = any> {
     readonly id: symbol;
     readonly event: string;
     readonly callback: EventCallback<T>;

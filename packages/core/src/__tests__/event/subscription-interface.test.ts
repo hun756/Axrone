@@ -270,4 +270,131 @@ describe('EventEmitter - Subscription Interfaces', () => {
             expect(aggregated.execution.timing.min).toBe(0.1);
         });
     });
+
+    describe('Interface Integration', () => {
+        it('should support complete subscription workflow', () => {
+            const options: SubscriptionOptions = { once: true, priority: 'high' };
+
+            let callbackExecuted = false;
+            const subscription: Subscription<string> = {
+                id: Symbol('workflow'),
+                event: 'test:workflow',
+                callback: (data) => {
+                    callbackExecuted = true;
+                },
+                once: options.once ?? false,
+                priority: options.priority ?? 'normal',
+                createdAt: Date.now(),
+                executionCount: 0,
+            };
+
+            const queuedEvent: QueuedEvent<string> = {
+                id: 1,
+                event: subscription.event,
+                data: 'test data',
+                timestamp: Date.now(),
+                priority: subscription.priority,
+            };
+
+            const startTime = performance.now();
+            subscription.callback(queuedEvent.data);
+            const executionTime = performance.now() - startTime;
+
+            subscription.executionCount++;
+            subscription.lastExecuted = Date.now();
+
+            expect(callbackExecuted).toBe(true);
+            expect(subscription.executionCount).toBe(1);
+            expect(subscription.priority).toBe('high');
+            expect(subscription.once).toBe(true);
+            expect(executionTime).toBeGreaterThanOrEqual(0);
+        });
+
+        it('should handle subscription cleanup for once subscriptions', () => {
+            const subscriptions = new Map<symbol, Subscription>();
+
+            const onceSubscription: Subscription = {
+                id: Symbol('cleanup-test'),
+                event: 'test:cleanup',
+                callback: () => {},
+                once: true,
+                priority: 'normal',
+                createdAt: Date.now(),
+                executionCount: 0,
+            };
+
+            subscriptions.set(onceSubscription.id, onceSubscription);
+            expect(subscriptions.size).toBe(1);
+
+            onceSubscription.callback('test data');
+            onceSubscription.executionCount++;
+
+            if (onceSubscription.once && onceSubscription.executionCount > 0) {
+                subscriptions.delete(onceSubscription.id);
+            }
+
+            expect(subscriptions.size).toBe(0);
+        });
+
+        it('should support metrics collection during subscription execution', () => {
+            const metricsCollector = {
+                emitCount: 0,
+                executionCount: 0,
+                errorCount: 0,
+                timings: [] as number[],
+            };
+
+            const subscriptions: Subscription[] = [
+                {
+                    id: Symbol('metric1'),
+                    event: 'test:metrics',
+                    callback: () => {},
+                    once: false,
+                    priority: 'normal',
+                    createdAt: Date.now(),
+                    executionCount: 0,
+                },
+                {
+                    id: Symbol('metric2'),
+                    event: 'test:metrics',
+                    callback: () => {
+                        throw new Error('Handler error');
+                    },
+                    once: false,
+                    priority: 'normal',
+                    createdAt: Date.now(),
+                    executionCount: 0,
+                },
+            ];
+
+            metricsCollector.emitCount++;
+
+            subscriptions.forEach((subscription) => {
+                const startTime = performance.now();
+
+                try {
+                    subscription.callback('test data');
+                    metricsCollector.executionCount++;
+                } catch (error) {
+                    metricsCollector.errorCount++;
+                }
+
+                const executionTime = performance.now() - startTime;
+                metricsCollector.timings.push(executionTime);
+
+                subscription.executionCount++;
+                subscription.lastExecuted = Date.now();
+            });
+
+            expect(metricsCollector.emitCount).toBe(1);
+            expect(metricsCollector.executionCount).toBe(1);
+            expect(metricsCollector.errorCount).toBe(1);
+            expect(metricsCollector.timings).toHaveLength(2);
+
+            subscriptions.forEach((sub) => {
+                expect(sub.executionCount).toBe(1);
+                expect(sub.lastExecuted).toBeDefined();
+            });
+        });
+    });
 });
