@@ -1,7 +1,7 @@
 export type EventCallback<T> = (data: T) => void | Promise<void>;
 export type UnsubscribeFn = () => boolean;
 export type EventKey<T> = string & keyof T;
-export type EventMap = Record<string, unknown>;
+export type EventMap = Record<string, any>;
 export type EventPriority = 'high' | 'normal' | 'low';
 
 export type ExtractEventData<
