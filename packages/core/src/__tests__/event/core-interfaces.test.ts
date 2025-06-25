@@ -289,4 +289,102 @@ describe('EventEmitter - Core Interfaces', () => {
             expect(cleared).toBe(5);
         });
     });
+
+    describe('IEventObserver Contract', () => {
+        let mockObserver: jest.Mocked<IEventObserver<TestEvents>>;
+
+        beforeEach(() => {
+            mockObserver = {
+                has: jest.fn(),
+                listenerCount: jest.fn(),
+                maxListeners: 10,
+                listenerCountAll: jest.fn(),
+                eventNames: jest.fn(),
+                getSubscriptions: jest.fn(),
+                hasSubscription: jest.fn(),
+                getMetrics: jest.fn(),
+                getMemoryUsage: jest.fn(),
+            };
+        });
+
+        it('should handle event existence checks', () => {
+            mockObserver.has.mockReturnValue(true);
+
+            const exists = mockObserver.has('test:event');
+            expect(mockObserver.has).toHaveBeenCalledWith('test:event');
+            expect(exists).toBe(true);
+        });
+
+        it('should handle listener counting operations', () => {
+            mockObserver.listenerCount.mockReturnValue(3);
+            mockObserver.listenerCountAll.mockReturnValue(10);
+
+            expect(mockObserver.listenerCount('test:event')).toBe(3);
+            expect(mockObserver.listenerCountAll()).toBe(10);
+        });
+
+        it('should handle event introspection', () => {
+            const eventNames = ['test:event', 'test:error', 'test:batch'];
+            mockObserver.eventNames.mockReturnValue(eventNames);
+
+            const names = mockObserver.eventNames();
+            expect(names).toEqual(eventNames);
+        });
+
+        it('should handle subscription inspection', () => {
+            const mockSubscriptions = [
+                {
+                    id: Symbol('sub1'),
+                    event: 'test:event',
+                    callback: jest.fn(),
+                    once: false,
+                    priority: 'normal' as const,
+                    createdAt: Date.now(),
+                    executionCount: 0,
+                },
+            ];
+
+            mockObserver.getSubscriptions.mockReturnValue(mockSubscriptions);
+            mockObserver.hasSubscription.mockReturnValue(true);
+
+            const subscriptions = mockObserver.getSubscriptions('test:event');
+            expect(subscriptions).toEqual(mockSubscriptions);
+
+            const hasSubscription = mockObserver.hasSubscription(Symbol('test'));
+            expect(hasSubscription).toBe(true);
+        });
+
+        it('should handle metrics and memory usage', () => {
+            const mockMetrics: EventMetrics = {
+                emit: {
+                    count: 10,
+                    timing: { avg: 2.5, max: 10.0, min: 0.5, total: 25.0 },
+                },
+                execution: {
+                    count: 10,
+                    errors: 1,
+                    timing: { avg: 5.0, max: 20.0, min: 0.1, total: 50.0 },
+                },
+            };
+
+            const mockMemoryUsage = {
+                subscriptions: 1024,
+                queue: 512,
+                total: 1536,
+            };
+
+            mockObserver.getMetrics.mockReturnValue(mockMetrics);
+            mockObserver.getMemoryUsage.mockReturnValue(mockMemoryUsage);
+
+            expect(mockObserver.getMetrics('test:event')).toEqual(mockMetrics);
+            expect(mockObserver.getMemoryUsage()).toEqual(mockMemoryUsage);
+        });
+
+        it('should handle maxListeners property correctly', () => {
+            expect(mockObserver.maxListeners).toBe(10);
+
+            mockObserver.maxListeners = 20;
+            expect(mockObserver.maxListeners).toBe(20);
+        });
+    });
 });
