@@ -139,10 +139,7 @@ describe('EventEmitter - Core Interfaces', () => {
             mockSubscriber.pipe.mockReturnValue(mockUnsubscribe);
 
             let unsubscribe = mockSubscriber.pipe('test:event', targetPublisher);
-            expect(mockSubscriber.pipe).toHaveBeenCalledWith(
-                'test:event',
-                targetPublisher,
-            );
+            expect(mockSubscriber.pipe).toHaveBeenCalledWith('test:event', targetPublisher);
 
             unsubscribe = mockSubscriber.pipe('test:event', targetPublisher, 'target:event');
             expect(mockSubscriber.pipe).toHaveBeenCalledWith(
@@ -150,6 +147,72 @@ describe('EventEmitter - Core Interfaces', () => {
                 targetPublisher,
                 'target:event'
             );
+        });
+    });
+
+    describe('IEventPublisher Contract', () => {
+        let mockPublisher: jest.Mocked<IEventPublisher<TestEvents>>;
+
+        beforeEach(() => {
+            mockPublisher = {
+                emit: jest.fn(),
+                emitSync: jest.fn(),
+                emitBatch: jest.fn(),
+            };
+        });
+
+        it('should handle async emit operations', async () => {
+            mockPublisher.emit.mockResolvedValue(true);
+
+            const data: TestEvents['test:event'] = { id: 'test', data: { value: 42 } };
+            const result = await mockPublisher.emit('test:event', data);
+
+            expect(mockPublisher.emit).toHaveBeenCalledWith('test:event', data);
+            expect(result).toBe(true);
+        });
+
+        it('should handle emit with priority options', async () => {
+            mockPublisher.emit.mockResolvedValue(true);
+
+            const data: TestEvents['test:event'] = { id: 'test', data: {} };
+            const options = { priority: 'high' as const };
+
+            await mockPublisher.emit('test:event', data, options);
+            expect(mockPublisher.emit).toHaveBeenCalledWith('test:event', data, options);
+        });
+
+        it('should handle sync emit operations', () => {
+            mockPublisher.emitSync.mockReturnValue(true);
+
+            const data: TestEvents['test:error'] = { error: new Error('Test error') };
+            const result = mockPublisher.emitSync('test:error', data);
+
+            expect(mockPublisher.emitSync).toHaveBeenCalledWith('test:error', data);
+            expect(result).toBe(true);
+        });
+
+        it('should handle batch emit operations', async () => {
+            mockPublisher.emitBatch.mockResolvedValue([true, false, true]);
+
+            const events = [
+                { event: 'test:batch' as const, data: { index: 1 } },
+                { event: 'test:batch' as const, data: { index: 2 }, priority: 'high' as const },
+                { event: 'test:batch' as const, data: { index: 3 }, priority: 'low' as const },
+            ];
+
+            const results = await mockPublisher.emitBatch(events);
+
+            expect(mockPublisher.emitBatch).toHaveBeenCalledWith(events);
+            expect(results).toEqual([true, false, true]);
+        });
+
+        it('should handle emit failures gracefully', async () => {
+            const error = new Error('Emit failed');
+            mockPublisher.emit.mockRejectedValue(error);
+
+            await expect(
+                mockPublisher.emit('test:event', { id: 'test', data: {} })
+            ).rejects.toThrow('Emit failed');
         });
     });
 });
