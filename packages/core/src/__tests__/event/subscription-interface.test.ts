@@ -170,4 +170,104 @@ describe('EventEmitter - Subscription Interfaces', () => {
             expect(sorted.map((e) => e.event)).toEqual(['order1', 'order2', 'order3']);
         });
     });
+
+    describe('EventMetrics Interface', () => {
+        it('should calculate performance indicators correctly', () => {
+            const metrics: EventMetrics = {
+                emit: {
+                    count: 100,
+                    timing: { avg: 2.0, max: 10.0, min: 0.5, total: 200.0 },
+                },
+                execution: {
+                    count: 95,
+                    errors: 2,
+                    timing: { avg: 8.0, max: 50.0, min: 0.1, total: 760.0 },
+                },
+            };
+
+            const successRate =
+                ((metrics.execution.count - metrics.execution.errors) / metrics.execution.count) *
+                100;
+            expect(successRate).toBeCloseTo(97.89, 2);
+
+            const totalLatency = metrics.emit.timing.avg + metrics.execution.timing.avg;
+            expect(totalLatency).toBe(10.0);
+
+            const coverage = (metrics.execution.count / metrics.emit.count) * 100;
+            expect(coverage).toBe(95);
+        });
+
+        it('should handle edge cases in metrics data', () => {
+            const emptyMetrics: EventMetrics = {
+                emit: {
+                    count: 0,
+                    timing: { avg: 0, max: 0, min: 0, total: 0 },
+                },
+                execution: {
+                    count: 0,
+                    errors: 0,
+                    timing: { avg: 0, max: 0, min: 0, total: 0 },
+                },
+            };
+
+            expect(() => {
+                const rate =
+                    emptyMetrics.execution.count > 0
+                        ? (emptyMetrics.execution.errors / emptyMetrics.execution.count) * 100
+                        : 0;
+                expect(rate).toBe(0);
+            }).not.toThrow();
+        });
+
+        it('should support metrics aggregation across time windows', () => {
+            const window1: EventMetrics = {
+                emit: { count: 50, timing: { avg: 2.0, max: 8.0, min: 0.5, total: 100.0 } },
+                execution: {
+                    count: 48,
+                    errors: 1,
+                    timing: { avg: 5.0, max: 20.0, min: 0.1, total: 240.0 },
+                },
+            };
+
+            const window2: EventMetrics = {
+                emit: { count: 75, timing: { avg: 3.0, max: 12.0, min: 0.8, total: 225.0 } },
+                execution: {
+                    count: 72,
+                    errors: 2,
+                    timing: { avg: 7.0, max: 35.0, min: 0.2, total: 504.0 },
+                },
+            };
+
+            const aggregated: EventMetrics = {
+                emit: {
+                    count: window1.emit.count + window2.emit.count,
+                    timing: {
+                        avg:
+                            (window1.emit.timing.total + window2.emit.timing.total) /
+                            (window1.emit.count + window2.emit.count),
+                        max: Math.max(window1.emit.timing.max, window2.emit.timing.max),
+                        min: Math.min(window1.emit.timing.min, window2.emit.timing.min),
+                        total: window1.emit.timing.total + window2.emit.timing.total,
+                    },
+                },
+                execution: {
+                    count: window1.execution.count + window2.execution.count,
+                    errors: window1.execution.errors + window2.execution.errors,
+                    timing: {
+                        avg:
+                            (window1.execution.timing.total + window2.execution.timing.total) /
+                            (window1.execution.count + window2.execution.count),
+                        max: Math.max(window1.execution.timing.max, window2.execution.timing.max),
+                        min: Math.min(window1.execution.timing.min, window2.execution.timing.min),
+                        total: window1.execution.timing.total + window2.execution.timing.total,
+                    },
+                },
+            };
+
+            expect(aggregated.emit.count).toBe(125);
+            expect(aggregated.execution.errors).toBe(3);
+            expect(aggregated.emit.timing.max).toBe(12.0);
+            expect(aggregated.execution.timing.min).toBe(0.1);
+        });
+    });
 });
