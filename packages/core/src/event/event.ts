@@ -111,3 +111,50 @@ export class EventHandlerError extends EventError {
         }
     }
 }
+
+export interface Subscription<T = unknown> {
+    readonly id: symbol;
+    readonly event: string;
+    readonly callback: EventCallback<T>;
+    readonly once: boolean;
+    readonly priority: EventPriority;
+    readonly createdAt: number;
+    lastExecuted?: number;
+    executionCount: number;
+}
+
+export interface SubscriptionOptions {
+    readonly once?: boolean;
+    readonly priority?: EventPriority;
+}
+
+export interface EventMetrics {
+    readonly emit: {
+        readonly count: number;
+        readonly timing: {
+            readonly avg: number;
+            readonly max: number;
+            readonly min: number;
+            readonly total: number;
+        };
+    };
+    readonly execution: {
+        readonly count: number;
+        readonly errors: number;
+        readonly timing: {
+            readonly avg: number;
+            readonly max: number;
+            readonly min: number;
+            readonly total: number;
+        };
+    };
+}
+
+export interface QueuedEvent<T = unknown> {
+    readonly id: number;
+    readonly event: string;
+    readonly data: T;
+    readonly timestamp: number;
+    readonly priority: EventPriority;
+}
+

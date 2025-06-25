@@ -1,0 +1,85 @@
+import {
+    Subscription,
+    SubscriptionOptions,
+    EventMetrics,
+    QueuedEvent,
+    EventCallback,
+    EventPriority,
+} from '../../event/event';
+
+describe('EventEmitter - Subscription Interfaces', () => {
+    it('should support proper subscription lifecycle', () => {
+        let executionCount = 0;
+        const callback: EventCallback<string> = () => {
+            executionCount++;
+        };
+
+        const subscription: Subscription<string> = {
+            id: Symbol('test'),
+            event: 'test:event',
+            callback,
+            once: false,
+            priority: 'normal',
+            createdAt: Date.now(),
+            executionCount: 0,
+        };
+
+        subscription.callback('test data');
+        subscription.executionCount++;
+        subscription.lastExecuted = Date.now();
+
+        expect(executionCount).toBe(1);
+        expect(subscription.executionCount).toBe(1);
+        expect(subscription.lastExecuted).toBeDefined();
+        expect(typeof subscription.lastExecuted).toBe('number');
+    });
+
+    it('should handle async callbacks correctly', async () => {
+        let resolved = false;
+        const asyncCallback: EventCallback<number> = async (data) => {
+            await new Promise((resolve) => setTimeout(resolve, 1));
+            resolved = true;
+            return;
+        };
+
+        const subscription: Subscription<number> = {
+            id: Symbol('async-test'),
+            event: 'async:event',
+            callback: asyncCallback,
+            once: true,
+            priority: 'high',
+            createdAt: Date.now(),
+            executionCount: 0,
+        };
+
+        const result = subscription.callback(42);
+        expect(result).toBeInstanceOf(Promise);
+
+        await result;
+        expect(resolved).toBe(true);
+    });
+
+    it('should maintain immutable properties', () => {
+        const subscription: Subscription = {
+            id: Symbol('immutable'),
+            event: 'test',
+            callback: () => {},
+            once: false,
+            priority: 'normal',
+            createdAt: Date.now(),
+            executionCount: 0,
+        };
+
+        // TypeScript should prevent these assignments:
+        // subscription.id = Symbol('new'); // ❌
+        // subscription.event = 'new'; // ❌
+        // subscription.callback = () => {}; // ❌
+
+        // But allow mutable properties:
+        subscription.executionCount = 5;
+        subscription.lastExecuted = Date.now();
+
+        expect(subscription.executionCount).toBe(5);
+        expect(subscription.lastExecuted).toBeDefined();
+    });
+});
