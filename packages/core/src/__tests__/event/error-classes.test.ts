@@ -120,3 +120,69 @@ describe('EventHandlerError', () => {
         expect(error.stack).not.toContain('Caused by:');
     });
 });
+
+describe('ErrorOptions Support', () => {
+    it('should support cause property in ErrorOptions', () => {
+        const cause = new Error('Root cause');
+        const error = new EventError('Test error', { cause });
+
+        expect((error as any).cause).toBe(cause);
+    });
+
+    it('should work without ErrorOptions', () => {
+        expect(() => new EventError('Test')).not.toThrow();
+        expect(() => new EventNotFoundError('test')).not.toThrow();
+    });
+});
+
+describe('Edge Cases', () => {
+    it('should handle empty strings gracefully', () => {
+        expect(() => new EventNotFoundError('')).not.toThrow();
+        expect(() => new EventQueueFullError('', 0)).not.toThrow();
+        expect(() => new EventHandlerError('', '')).not.toThrow();
+    });
+
+    it('should handle Unicode event names', () => {
+        const unicodeEvent = '用户:登录🎉';
+        const error = new EventNotFoundError(unicodeEvent);
+
+        expect(error.eventName).toBe(unicodeEvent);
+        expect(error.message).toContain(unicodeEvent);
+    });
+
+    it('should handle very long event names', () => {
+        const longEventName = 'a'.repeat(10000);
+        const error = new EventNotFoundError(longEventName);
+
+        expect(error.eventName).toBe(longEventName);
+        expect(error.message.length).toBeGreaterThan(10000);
+    });
+
+    it('should handle circular reference objects', () => {
+        const circularObj: any = { message: 'Circular' };
+        circularObj.self = circularObj;
+
+        expect(() => new EventHandlerError('test', circularObj)).not.toThrow();
+    });
+});
+
+describe('Serialization Support', () => {
+    it('should be JSON serializable (excluding circular references)', () => {
+        const error = new EventNotFoundError('test-event');
+
+        expect(() =>
+            JSON.stringify({
+                name: error.name,
+                message: error.message,
+                eventName: error.eventName,
+            })
+        ).not.toThrow();
+    });
+
+    it('should maintain debugging properties', () => {
+        const error = new EventHandlerError('test', new TypeError('Test'));
+
+        expect(error.toString()).toContain('EventError');
+        expect(error.toString()).toContain('Handler error for "test"');
+    });
+});
