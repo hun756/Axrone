@@ -1,4 +1,4 @@
-import { Comparer, CompareResult, Equatable, ICloneable } from '@axrone/utility';
+import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON } from './common';
 
 export interface IColorLike {
@@ -1203,5 +1203,30 @@ export class ColorComparer implements Comparer<Color> {
             default:
                 throw new Error(`Unsupported color comparison mode: ${this.mode}`);
         }
+    }
+}
+
+export class ColorEqualityComparer implements EqualityComparer<Color> {
+    private readonly epsilon: number;
+
+    constructor(epsilon: number = EPSILON) {
+        this.epsilon = epsilon;
+    }
+
+    equals(a: Readonly<Color>, b: Readonly<Color>): boolean {
+        if (a === b) return true;
+        if (!a || !b) return false;
+
+        return (
+            Math.abs(a.r - b.r) < this.epsilon &&
+            Math.abs(a.g - b.g) < this.epsilon &&
+            Math.abs(a.b - b.b) < this.epsilon &&
+            Math.abs(a.a - b.a) < this.epsilon
+        );
+    }
+
+    hash(obj: Readonly<Color>): number {
+        if (!obj) return 0;
+        return obj.getHashCode();
     }
 }
