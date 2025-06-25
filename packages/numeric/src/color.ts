@@ -419,7 +419,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return h1 >>> 0;
     }
 
-    toHSL(out?: IColorHSL): IColorHSL {
+    toHSL<T extends IColorHSL>(out?: T): T {
         const r = this.r,
             g = this.g,
             b = this.b;
@@ -456,11 +456,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             out.a = this.a;
             return out;
         } else {
-            return { h, s, l, a: this.a };
+            return { h, s, l, a: this.a } as T;
         }
     }
 
-    toHSV(out?: IColorHSV): IColorHSV {
+    toHSV<T extends IColorHSV>(out?: T): T {
         const r = this.r,
             g = this.g,
             b = this.b;
@@ -495,11 +495,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             out.a = this.a;
             return out;
         } else {
-            return { h, s, v, a: this.a };
+            return { h, s, v, a: this.a } as T;
         }
     }
 
-    toCMYK(out?: IColorCMYK): IColorCMYK {
+    toCMYK<T extends IColorCMYK>(out?: T): T {
         const k = 1 - Math.max(this.r, this.g, this.b);
         const invK = 1 - k;
         const c = k === 1 ? 0 : (1 - this.r - k) / invK;
@@ -514,11 +514,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             out.a = this.a;
             return out;
         } else {
-            return { c, m, y, k, a: this.a };
+            return { c, m, y, k, a: this.a } as T;
         }
     }
 
-    toXYZ(out?: IColorXYZ): IColorXYZ {
+    toXYZ<T extends IColorXYZ>(out?: T): T {
         const r = _sRGBToLinear(this.r);
         const g = _sRGBToLinear(this.g);
         const b = _sRGBToLinear(this.b);
@@ -534,11 +534,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             out.alpha = this.a;
             return out;
         } else {
-            return { x, y, z, alpha: this.a };
+            return { x, y, z, alpha: this.a } as T;
         }
     }
 
-    toLab(out?: IColorLab): IColorLab {
+    toLab<T extends IColorLab>(out?: T): T {
         const xyz = this.toXYZ();
 
         const xr = xyz.x / D65_X;
@@ -560,7 +560,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             out.alpha = this.a;
             return out;
         } else {
-            return { l, a, b, alpha: this.a };
+            return { l, a, b, alpha: this.a } as T;
         }
     }
 
