@@ -82,4 +82,76 @@ describe('EventEmitter: Type Definitions', () => {
             expect(isValidCallback(Math.max)).toBe(true);
         });
     });
+
+    describe('isValidPriority', () => {
+        it('must correctly recognize valid priority values', () => {
+            expect(isValidPriority('high')).toBe(true);
+            expect(isValidPriority('normal')).toBe(true);
+            expect(isValidPriority('low')).toBe(true);
+        });
+
+        it('reject invalid priority values', () => {
+            expect(isValidPriority('urgent')).toBe(false);
+            expect(isValidPriority('medium')).toBe(false);
+            expect(isValidPriority('highest')).toBe(false);
+            expect(isValidPriority('lowest')).toBe(false);
+            expect(isValidPriority('')).toBe(false);
+            expect(isValidPriority(null)).toBe(false);
+            expect(isValidPriority(undefined)).toBe(false);
+            expect(isValidPriority(1)).toBe(false);
+            expect(isValidPriority(['high'])).toBe(false);
+            expect(isValidPriority({ priority: 'high' })).toBe(false);
+        });
+
+        it('should test case sensitivity', () => {
+            expect(isValidPriority('HIGH')).toBe(false);
+            expect(isValidPriority('High')).toBe(false);
+            expect(isValidPriority('NORMAL')).toBe(false);
+            expect(isValidPriority('Low')).toBe(false);
+        });
+    });
+});
+
+// Constants Tests
+describe('Constants', () => {
+    describe('PRIORITY_VALUES', () => {
+        it('Must contain correct priority values', () => {
+            expect(PRIORITY_VALUES.high).toBe(0);
+            expect(PRIORITY_VALUES.normal).toBe(1);
+            expect(PRIORITY_VALUES.low).toBe(2);
+        });
+
+        it('Priority order must be correct', () => {
+            expect(PRIORITY_VALUES.high).toBeLessThan(PRIORITY_VALUES.normal);
+            expect(PRIORITY_VALUES.normal).toBeLessThan(PRIORITY_VALUES.low);
+        });
+
+        it('All priority values ​​must be unique', () => {
+            const values = Object.values(PRIORITY_VALUES);
+            const uniqueValues = [...new Set(values)];
+            expect(values.length).toBe(uniqueValues.length);
+        });
+
+        it('Must be numeric values', () => {
+            Object.values(PRIORITY_VALUES).forEach((value) => {
+                expect(typeof value).toBe('number');
+                expect(Number.isInteger(value)).toBe(true);
+                expect(value).toBeGreaterThanOrEqual(0);
+            });
+        });
+    });
+
+    describe('DEFAULT_PRIORITY', () => {
+        it('Must be normal priority', () => {
+            expect(DEFAULT_PRIORITY).toBe('normal');
+        });
+
+        it('Must be valid priority', () => {
+            expect(isValidPriority(DEFAULT_PRIORITY)).toBe(true);
+        });
+
+        it('Must be in PRIORITY_VALUES', () => {
+            expect(DEFAULT_PRIORITY in PRIORITY_VALUES).toBe(true);
+        });
+    });
 });
