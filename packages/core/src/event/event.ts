@@ -150,7 +150,7 @@ export interface EventMetrics {
     };
 }
 
-export interface QueuedEvent<T = unknown> {
+export interface QueuedEvent<T = any> {
     readonly id: number;
     readonly event: string;
     readonly data: T;
