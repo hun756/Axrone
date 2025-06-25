@@ -1,4 +1,4 @@
-import { Equatable, ICloneable } from '@axrone/utility';
+import { Comparer, CompareResult, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON } from './common';
 
 export interface IColorLike {
@@ -1146,5 +1146,62 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         level: 'AA' | 'AAA' = 'AA'
     ): boolean {
         return Color.isAccessible(this, background, level);
+    }
+}
+
+export class ColorComparer implements Comparer<Color> {
+    private readonly mode: ColorComparisonMode;
+
+    constructor(mode: ColorComparisonMode = ColorComparisonMode.LUMINANCE) {
+        this.mode = mode;
+    }
+
+    compare(a: Readonly<Color>, b: Readonly<Color>): CompareResult {
+        switch (this.mode) {
+            case ColorComparisonMode.LUMINANCE: {
+                const lumA = Color.luminance(a);
+                const lumB = Color.luminance(b);
+                if (Math.abs(lumA - lumB) < EPSILON) return 0;
+                return lumA < lumB ? -1 : 1;
+            }
+
+            case ColorComparisonMode.HUE: {
+                const hslA = a.toHSL();
+                const hslB = b.toHSL();
+                if (Math.abs(hslA.h - hslB.h) < EPSILON) return 0;
+                return hslA.h < hslB.h ? -1 : 1;
+            }
+
+            case ColorComparisonMode.SATURATION: {
+                const hslA = a.toHSL();
+                const hslB = b.toHSL();
+                if (Math.abs(hslA.s - hslB.s) < EPSILON) return 0;
+                return hslA.s < hslB.s ? -1 : 1;
+            }
+
+            case ColorComparisonMode.RGB_DISTANCE: {
+                const distA = Math.sqrt(a.r * a.r + a.g * a.g + a.b * a.b);
+                const distB = Math.sqrt(b.r * b.r + b.g * b.g + b.b * b.b);
+                if (Math.abs(distA - distB) < EPSILON) return 0;
+                return distA < distB ? -1 : 1;
+            }
+
+            case ColorComparisonMode.LAB_DISTANCE: {
+                const labA = a.toLab();
+                const labB = b.toLab();
+                const distA = Math.sqrt(labA.l * labA.l + labA.a * labA.a + labA.b * labA.b);
+                const distB = Math.sqrt(labB.l * labB.l + labB.a * labB.a + labB.b * labB.b);
+                if (Math.abs(distA - distB) < EPSILON) return 0;
+                return distA < distB ? -1 : 1;
+            }
+
+            case ColorComparisonMode.ALPHA: {
+                if (Math.abs(a.a - b.a) < EPSILON) return 0;
+                return a.a < b.a ? -1 : 1;
+            }
+
+            default:
+                throw new Error(`Unsupported color comparison mode: ${this.mode}`);
+        }
     }
 }
