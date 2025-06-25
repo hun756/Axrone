@@ -803,7 +803,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         }
     }
 
-    static lighten<T extends IColorLike>(color: Readonly<T>, amount: number, out?: T): T {
+    static lighten<T extends IColorLike, U extends IColorLike>(
+        color: Readonly<T>,
+        amount: number,
+        out?: U
+    ): U {
         const hsl = color instanceof Color ? color.toHSL() : Color.from(color).toHSL();
         hsl.l = _clamp(hsl.l + amount, 0, 1);
 
@@ -816,7 +820,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             out.a = result.a;
             return out;
         } else {
-            return result as unknown as T;
+            return result as unknown as U;
         }
     }
 
@@ -824,7 +828,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return Color.lighten(color, -amount, out);
     }
 
-    static saturate<T extends IColorLike>(color: Readonly<T>, amount: number, out?: T): T {
+    static saturate<T extends IColorLike, U extends IColorLike>(
+        color: Readonly<T>,
+        amount: number,
+        out?: U
+    ): U {
         const hsl = color instanceof Color ? color.toHSL() : Color.from(color).toHSL();
         hsl.s = _clamp(hsl.s + amount, 0, 1);
 
@@ -837,7 +845,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             out.a = result.a;
             return out;
         } else {
-            return result as unknown as T;
+            return result as unknown as U;
         }
     }
 
@@ -845,7 +853,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return Color.saturate(color, -amount, out);
     }
 
-    static adjustHue<T extends IColorLike>(color: Readonly<T>, degrees: number, out?: T): T {
+    static adjustHue<T extends IColorLike, U extends IColorLike>(
+        color: Readonly<T>,
+        degrees: number,
+        out?: U
+    ): U {
         const hsl = color instanceof Color ? color.toHSL() : Color.from(color).toHSL();
         hsl.h = _mod(hsl.h + degrees, 360);
 
@@ -858,11 +870,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             out.a = result.a;
             return out;
         } else {
-            return result as unknown as T;
+            return result as unknown as U;
         }
     }
 
-    static invert<T extends IColorLike>(color: Readonly<T>, out?: T): T {
+    static invert<T extends IColorLike, U extends IColorLike>(color: Readonly<T>, out?: U): U {
         if (out) {
             out.r = 1 - color.r;
             out.g = 1 - color.g;
@@ -875,11 +887,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
                 g: 1 - color.g,
                 b: 1 - color.b,
                 a: color.a ?? 1,
-            } as T;
+            } as U;
         }
     }
 
-    static grayscale<T extends IColorLike>(color: Readonly<T>, out?: T): T {
+    static grayscale<T extends IColorLike, U extends IColorLike>(color: Readonly<T>, out?: U): U {
         const gray = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
 
         if (out) {
@@ -894,7 +906,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
                 g: gray,
                 b: gray,
                 a: color.a ?? 1,
-            } as T;
+            } as U;
         }
     }
 
