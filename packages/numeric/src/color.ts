@@ -910,12 +910,12 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         }
     }
 
-    static blend<T extends IColorLike, U extends IColorLike>(
+    static blend<T extends IColorLike, U extends IColorLike, V extends IColorLike>(
         base: Readonly<T>,
         overlay: Readonly<U>,
         mode: ColorBlendMode,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const blendFunctions = {
             [ColorBlendMode.NORMAL]: (a: number, b: number) => b,
             [ColorBlendMode.MULTIPLY]: (a: number, b: number) => a * b,
@@ -959,7 +959,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             out.a = a;
             return out;
         } else {
-            return { r, g, b, a } as T;
+            return { r, g, b, a } as V;
         }
     }
 
