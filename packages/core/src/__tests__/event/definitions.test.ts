@@ -155,3 +155,111 @@ describe('Constants', () => {
         });
     });
 });
+
+// Function Type Tests
+describe('Function Types', () => {
+    describe('EventCallback', () => {
+        it('sync callback should work correctly', () => {
+            let executedData: string | null = null;
+
+            const syncCallback: EventCallback<string> = (data) => {
+                executedData = data;
+            };
+
+            const result = syncCallback('test data');
+            expect(result).toBeUndefined();
+            expect(executedData).toBe('test data');
+        });
+
+        it('async callback should work correctly', async () => {
+            let executedData: number | null = null;
+
+            const asyncCallback: EventCallback<number> = async (data) => {
+                await new Promise((resolve) => setTimeout(resolve, 1));
+                executedData = data;
+            };
+
+            const result = asyncCallback(123);
+            expect(result).toBeInstanceOf(Promise);
+
+            await result;
+            expect(executedData).toBe(123);
+        });
+
+        it('complex data types should be handled', () => {
+            interface ComplexData {
+                id: string;
+                metadata: Record<string, any>;
+                items: Array<{ name: string; value: number }>;
+            }
+
+            let receivedData: ComplexData | null = null;
+
+            const complexCallback: EventCallback<ComplexData> = (data) => {
+                receivedData = data;
+            };
+
+            const testData: ComplexData = {
+                id: 'test-123',
+                metadata: { source: 'test', timestamp: Date.now() },
+                items: [
+                    { name: 'item1', value: 100 },
+                    { name: 'item2', value: 200 },
+                ],
+            };
+
+            complexCallback(testData);
+            expect(receivedData).toEqual(testData);
+        });
+    });
+
+    describe('UnsubscribeFn', () => {
+        it('should return boolean', () => {
+            const unsubscribe: UnsubscribeFn = () => true;
+            const result = unsubscribe();
+
+            expect(typeof result).toBe('boolean');
+            expect(result).toBe(true);
+        });
+
+        it('be able to do state management', () => {
+            let isSubscribed = true;
+
+            const unsubscribe: UnsubscribeFn = () => {
+                if (isSubscribed) {
+                    isSubscribed = false;
+                    return true;
+                }
+                return false;
+            };
+
+            expect(unsubscribe()).toBe(true);
+            expect(unsubscribe()).toBe(false);
+            expect(unsubscribe()).toBe(false);
+        });
+
+        it('multiple unsubscribe functions can be composed', () => {
+            const results: boolean[] = [];
+
+            const unsub1: UnsubscribeFn = () => {
+                results.push(true);
+                return true;
+            };
+            const unsub2: UnsubscribeFn = () => {
+                results.push(false);
+                return false;
+            };
+            const unsub3: UnsubscribeFn = () => {
+                results.push(true);
+                return true;
+            };
+
+            const composedUnsub: UnsubscribeFn = () => {
+                return [unsub1(), unsub2(), unsub3()].every(Boolean);
+            };
+
+            expect(composedUnsub()).toBe(false);
+            expect(results).toEqual([true, false, true]);
+        });
+    });
+});
