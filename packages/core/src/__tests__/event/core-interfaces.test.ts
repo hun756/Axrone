@@ -387,4 +387,195 @@ describe('EventEmitter - Core Interfaces', () => {
             expect(mockObserver.maxListeners).toBe(20);
         });
     });
+
+    describe('IEventEmitter Integration', () => {
+        let mockEmitter: jest.Mocked<IEventEmitter<TestEvents>>;
+
+        beforeEach(() => {
+            mockEmitter = {
+                // IEventSubscriber
+                on: jest.fn(),
+                once: jest.fn(),
+                off: jest.fn(),
+                offById: jest.fn(),
+                pipe: jest.fn(),
+
+                // IEventPublisher
+                emit: jest.fn(),
+                emitSync: jest.fn(),
+                emitBatch: jest.fn(),
+
+                // IEventObserver
+                has: jest.fn(),
+                listenerCount: jest.fn(),
+                maxListeners: 10,
+                listenerCountAll: jest.fn(),
+                eventNames: jest.fn(),
+                getSubscriptions: jest.fn(),
+                hasSubscription: jest.fn(),
+                getMetrics: jest.fn(),
+                getMemoryUsage: jest.fn(),
+
+                // IEventBuffer
+                getQueuedEvents: jest.fn(),
+                getPendingCount: jest.fn(),
+                getBufferSize: jest.fn(),
+                clearBuffer: jest.fn(),
+                pause: jest.fn(),
+                resume: jest.fn(),
+                isPaused: jest.fn(),
+
+                // IEventEmitter specific
+                removeAllListeners: jest.fn(),
+                batchSubscribe: jest.fn(),
+                batchUnsubscribe: jest.fn(),
+                resetMaxListeners: jest.fn(),
+                drain: jest.fn(),
+                flush: jest.fn(),
+                resetMetrics: jest.fn(),
+            };
+        });
+
+        it('should support complete subscription and emission workflow', async () => {
+            const mockUnsubscribe = jest.fn().mockReturnValue(true);
+            mockEmitter.on.mockReturnValue(mockUnsubscribe);
+            mockEmitter.emit.mockResolvedValue(true);
+
+            const callback = jest.fn();
+            const unsubscribe = mockEmitter.on('test:event', callback);
+
+            const data = { id: 'test', data: { value: 42 } };
+            const result = await mockEmitter.emit('test:event', data);
+
+            expect(mockEmitter.on).toHaveBeenCalledWith('test:event', callback);
+            expect(mockEmitter.emit).toHaveBeenCalledWith('test:event', data);
+            expect(result).toBe(true);
+
+            const unsubscribed = unsubscribe();
+            expect(unsubscribed).toBe(true);
+        });
+
+        it('should handle batch operations correctly', async () => {
+            const callbacks = [jest.fn(), jest.fn(), jest.fn()];
+            const subscriptionIds = [Symbol('1'), Symbol('2'), Symbol('3')];
+
+            mockEmitter.batchSubscribe.mockReturnValue(subscriptionIds);
+            mockEmitter.batchUnsubscribe.mockReturnValue(3);
+
+            const ids = mockEmitter.batchSubscribe('test:event', callbacks, { priority: 'high' });
+            expect(mockEmitter.batchSubscribe).toHaveBeenCalledWith('test:event', callbacks, {
+                priority: 'high',
+            });
+            expect(ids).toEqual(subscriptionIds);
+
+            const unsubscribed = mockEmitter.batchUnsubscribe(ids);
+            expect(mockEmitter.batchUnsubscribe).toHaveBeenCalledWith(ids);
+            expect(unsubscribed).toBe(3);
+        });
+
+        it('should handle cleanup and maintenance operations', async () => {
+            mockEmitter.removeAllListeners.mockReturnValue(mockEmitter);
+            mockEmitter.drain.mockResolvedValue();
+            mockEmitter.flush.mockResolvedValue();
+
+            const result = mockEmitter.removeAllListeners('test:event');
+            expect(mockEmitter.removeAllListeners).toHaveBeenCalledWith('test:event');
+            expect(result).toBe(mockEmitter);
+
+            await mockEmitter.drain();
+            expect(mockEmitter.drain).toHaveBeenCalled();
+
+            await mockEmitter.flush('test:event');
+            expect(mockEmitter.flush).toHaveBeenCalledWith('test:event');
+
+            mockEmitter.resetMaxListeners();
+            mockEmitter.resetMetrics('test:event');
+            expect(mockEmitter.resetMaxListeners).toHaveBeenCalled();
+            expect(mockEmitter.resetMetrics).toHaveBeenCalledWith('test:event');
+        });
+
+        it('should maintain interface contract consistency', () => {
+            const requiredMethods = [
+                // IEventSubscriber
+                'on',
+                'once',
+                'off',
+                'offById',
+                'pipe',
+                // IEventPublisher
+                'emit',
+                'emitSync',
+                'emitBatch',
+                // IEventObserver
+                'has',
+                'listenerCount',
+                'listenerCountAll',
+                'eventNames',
+                'getSubscriptions',
+                'hasSubscription',
+                'getMetrics',
+                'getMemoryUsage',
+                // IEventBuffer
+                'getQueuedEvents',
+                'getPendingCount',
+                'getBufferSize',
+                'clearBuffer',
+                'pause',
+                'resume',
+                'isPaused',
+                // IEventEmitter
+                'removeAllListeners',
+                'batchSubscribe',
+                'batchUnsubscribe',
+                'resetMaxListeners',
+                'drain',
+                'flush',
+                'resetMetrics',
+            ];
+
+            requiredMethods.forEach((method) => {
+                expect(mockEmitter).toHaveProperty(method);
+                expect(typeof (mockEmitter as any)[method]).toBe('function');
+            });
+
+            expect(mockEmitter).toHaveProperty('maxListeners');
+            expect(typeof mockEmitter.maxListeners).toBe('number');
+        });
+    });
+
+    // ERROR HANDLING AND EDGE CASES
+    describe('Error Handling and Edge Cases', () => {
+        it('should handle interface method failures gracefully', async () => {
+            const mockEmitter: Partial<IEventEmitter<TestEvents>> = {
+                emit: jest.fn().mockRejectedValue(new Error('Emit failed')),
+                on: jest.fn().mockImplementation(() => {
+                    throw new Error('Subscribe failed');
+                }),
+            };
+
+            await expect(mockEmitter.emit!('test:event', { id: 'test', data: {} })).rejects.toThrow(
+                'Emit failed'
+            );
+
+            expect(() => {
+                mockEmitter.on!('test:event', jest.fn());
+            }).toThrow('Subscribe failed');
+        });
+
+        it('should handle resource cleanup in error scenarios', async () => {
+            const mockEmitter: Partial<IEventEmitter<TestEvents>> = {
+                drain: jest.fn().mockRejectedValue(new Error('Drain failed')),
+                removeAllListeners: jest.fn().mockReturnValue({} as any),
+            };
+
+            try {
+                await mockEmitter.drain!();
+            } catch (error) {
+                expect(error).toBeInstanceOf(Error);
+
+                mockEmitter.removeAllListeners!();
+                expect(mockEmitter.removeAllListeners).toHaveBeenCalled();
+            }
+        });
+    });
 });
