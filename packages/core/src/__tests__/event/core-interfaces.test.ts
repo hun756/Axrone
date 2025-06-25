@@ -74,4 +74,82 @@ describe('EventEmitter - Core Interfaces', () => {
             });
         });
     });
+
+    describe('IEventSubscriber Contract', () => {
+        let mockSubscriber: jest.Mocked<IEventSubscriber<TestEvents>>;
+
+        beforeEach(() => {
+            mockSubscriber = {
+                on: jest.fn(),
+                once: jest.fn(),
+                off: jest.fn(),
+                offById: jest.fn(),
+                pipe: jest.fn(),
+            };
+        });
+
+        it('should handle subscription lifecycle correctly', () => {
+            const mockUnsubscribe = jest.fn().mockReturnValue(true);
+            mockSubscriber.on.mockReturnValue(mockUnsubscribe);
+
+            const callback: EventCallback<TestEvents['test:event']> = jest.fn();
+            const unsubscribe = mockSubscriber.on('test:event', callback);
+
+            expect(mockSubscriber.on).toHaveBeenCalledWith('test:event', callback);
+            expect(typeof unsubscribe).toBe('function');
+
+            const result = unsubscribe();
+            expect(result).toBe(true);
+            expect(mockUnsubscribe).toHaveBeenCalled();
+        });
+
+        it('should support subscription options correctly', () => {
+            const callback: EventCallback<TestEvents['test:event']> = jest.fn();
+            const options: SubscriptionOptions = { priority: 'high' };
+
+            mockSubscriber.on('test:event', callback, options);
+            expect(mockSubscriber.on).toHaveBeenCalledWith('test:event', callback, options);
+
+            const onceOptions: Omit<SubscriptionOptions, 'once'> = { priority: 'low' };
+            mockSubscriber.once('test:event', callback, onceOptions);
+            expect(mockSubscriber.once).toHaveBeenCalledWith('test:event', callback, onceOptions);
+        });
+
+        it('should handle off operations with different signatures', () => {
+            const callback: EventCallback<TestEvents['test:event']> = jest.fn();
+
+            mockSubscriber.off.mockReturnValue(true);
+
+            let result = mockSubscriber.off('test:event', callback);
+            expect(mockSubscriber.off).toHaveBeenCalledWith('test:event', callback);
+            expect(result).toBe(true);
+
+            result = mockSubscriber.off('test:event');
+            expect(mockSubscriber.off).toHaveBeenCalledWith('test:event');
+        });
+
+        it('should handle piping operations', () => {
+            const targetPublisher: IEventPublisher<any> = {
+                emit: jest.fn(),
+                emitSync: jest.fn(),
+                emitBatch: jest.fn(),
+            };
+
+            const mockUnsubscribe = jest.fn().mockReturnValue(true);
+            mockSubscriber.pipe.mockReturnValue(mockUnsubscribe);
+
+            let unsubscribe = mockSubscriber.pipe('test:event', targetPublisher);
+            expect(mockSubscriber.pipe).toHaveBeenCalledWith(
+                'test:event',
+                targetPublisher,
+            );
+
+            unsubscribe = mockSubscriber.pipe('test:event', targetPublisher, 'target:event');
+            expect(mockSubscriber.pipe).toHaveBeenCalledWith(
+                'test:event',
+                targetPublisher,
+                'target:event'
+            );
+        });
+    });
 });
