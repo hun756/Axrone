@@ -14,13 +14,25 @@ import {
 } from '../../event/event';
 
 interface TestUserEvents {
-    'user:login': { userId: string; timestamp: number };
-    'user:logout': { userId: string; reason?: string };
+    'user:login': {
+        userId: string;
+        timestamp: number;
+    };
+    'user:logout': {
+        userId: string;
+        timestamp: number;
+    };
 }
 
 interface TestSystemEvents {
-    'system:error': { error: Error; context: string };
-    'system:startup': { version: string; environment: string };
+    'system:error': {
+        error: Error;
+        context: string;
+    };
+    'system:startup': {
+        version: string;
+        timestamp: number;
+    };
 }
 
 describe('EventEmitter: Type Definitions', () => {
@@ -261,5 +273,42 @@ describe('Function Types', () => {
             expect(composedUnsub()).toBe(false);
             expect(results).toEqual([true, false, true]);
         });
+    });
+});
+
+// Type utulity tests
+describe('Type Utilities', () => {
+    it('ExtractEventData should extract the correct data type', () => {
+        type LoginData = ExtractEventData<TestUserEvents, 'user:login'>;
+        type ErrorData = ExtractEventData<TestSystemEvents, 'system:error'>;
+
+        const loginData: LoginData = {
+            userId: 'user123',
+            timestamp: Date.now(),
+        };
+
+        const errorData: ErrorData = {
+            error: new Error('Test error'),
+            context: 'test context',
+        };
+
+        expect(loginData.userId).toBe('user123');
+        expect(typeof loginData.timestamp).toBe('number');
+        expect(errorData.error).toBeInstanceOf(Error);
+        expect(errorData.context).toBe('test context');
+    });
+
+    it('EventNames should output correct event names', () => {
+        type UserEventNames = EventNames<TestUserEvents>;
+        type SystemEventNames = EventNames<TestSystemEvents>;
+
+        const userEvents: UserEventNames[] = ['user:login', 'user:logout'];
+
+        const systemEvents: SystemEventNames[] = ['system:error', 'system:startup'];
+
+        expect(userEvents).toContain('user:login');
+        expect(userEvents).toContain('user:logout');
+        expect(systemEvents).toContain('system:error');
+        expect(systemEvents).toContain('system:startup');
     });
 });
