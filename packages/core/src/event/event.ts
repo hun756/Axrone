@@ -43,7 +43,7 @@ export interface EventOptions {
     readonly gcIntervalMs?: number;
 }
 
-const DEFAULT_OPTIONS: Required<EventOptions> = {
+export const DEFAULT_OPTIONS: Required<EventOptions> = {
     captureRejections: false,
     maxListeners: 10,
     weakReferences: false,
