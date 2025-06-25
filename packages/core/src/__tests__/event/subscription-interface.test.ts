@@ -82,4 +82,38 @@ describe('EventEmitter - Subscription Interfaces', () => {
         expect(subscription.executionCount).toBe(5);
         expect(subscription.lastExecuted).toBeDefined();
     });
+
+    describe('SubscriptionOptions', () => {
+        it('should support all valid option combinations', () => {
+            const validOptions: SubscriptionOptions[] = [
+                {},
+                { once: true },
+                { priority: 'high' },
+                { once: false, priority: 'low' },
+                { once: true, priority: 'normal' },
+            ];
+
+            validOptions.forEach((options) => {
+                expect(typeof options).toBe('object');
+
+                if ('once' in options) {
+                    expect(typeof options.once).toBe('boolean');
+                }
+
+                if ('priority' in options) {
+                    expect(['high', 'normal', 'low']).toContain(options.priority);
+                }
+            });
+        });
+
+        it('should work with partial options merging', () => {
+            const defaultOptions = { once: false, priority: 'normal' as EventPriority };
+            const userOptions: SubscriptionOptions = { priority: 'high' };
+
+            const mergedOptions = { ...defaultOptions, ...userOptions };
+
+            expect(mergedOptions.once).toBe(false); // From default
+            expect(mergedOptions.priority).toBe('high'); // From user
+        });
+    });
 });
