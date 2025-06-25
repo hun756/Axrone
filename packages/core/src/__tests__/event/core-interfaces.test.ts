@@ -215,4 +215,78 @@ describe('EventEmitter - Core Interfaces', () => {
             ).rejects.toThrow('Emit failed');
         });
     });
+
+    describe('IEventBuffer Contract', () => {
+        let mockBuffer: jest.Mocked<IEventBuffer<TestEvents>>;
+
+        beforeEach(() => {
+            mockBuffer = {
+                getQueuedEvents: jest.fn(),
+                getPendingCount: jest.fn(),
+                getBufferSize: jest.fn(),
+                clearBuffer: jest.fn(),
+                pause: jest.fn(),
+                resume: jest.fn(),
+                isPaused: jest.fn(),
+            };
+        });
+
+        it('should handle pause/resume state management', () => {
+            mockBuffer.isPaused.mockReturnValue(false);
+            expect(mockBuffer.isPaused()).toBe(false);
+
+            mockBuffer.pause();
+            expect(mockBuffer.pause).toHaveBeenCalled();
+
+            mockBuffer.isPaused.mockReturnValue(true);
+            expect(mockBuffer.isPaused()).toBe(true);
+
+            mockBuffer.resume();
+            expect(mockBuffer.resume).toHaveBeenCalled();
+        });
+
+        it('should handle queue inspection operations', () => {
+            const mockQueuedEvents: QueuedEvent[] = [
+                {
+                    id: 1,
+                    event: 'test:event',
+                    data: { id: 'test1', data: {} },
+                    timestamp: Date.now(),
+                    priority: 'normal',
+                },
+                {
+                    id: 2,
+                    event: 'test:batch',
+                    data: { index: 1 },
+                    timestamp: Date.now(),
+                    priority: 'high',
+                },
+            ];
+
+            mockBuffer.getQueuedEvents.mockReturnValue(mockQueuedEvents);
+            mockBuffer.getPendingCount.mockReturnValue(2);
+            mockBuffer.getBufferSize.mockReturnValue(1000);
+
+            const allEvents = mockBuffer.getQueuedEvents();
+            expect(allEvents).toEqual(mockQueuedEvents);
+
+            const specificEvents = mockBuffer.getQueuedEvents('test:event');
+            expect(mockBuffer.getQueuedEvents).toHaveBeenCalledWith('test:event');
+
+            expect(mockBuffer.getPendingCount()).toBe(2);
+            expect(mockBuffer.getBufferSize()).toBe(1000);
+        });
+
+        it('should handle buffer clearing operations', () => {
+            mockBuffer.clearBuffer.mockReturnValue(5);
+
+            let cleared = mockBuffer.clearBuffer('test:event');
+            expect(mockBuffer.clearBuffer).toHaveBeenCalledWith('test:event');
+            expect(cleared).toBe(5);
+
+            cleared = mockBuffer.clearBuffer();
+            expect(mockBuffer.clearBuffer).toHaveBeenCalledWith();
+            expect(cleared).toBe(5);
+        });
+    });
 });
