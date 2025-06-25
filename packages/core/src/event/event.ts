@@ -43,7 +43,7 @@ export interface EventOptions {
     readonly gcIntervalMs?: number;
 }
 
-export const DEFAULT_OPTIONS: Required<EventOptions> = {
+export const DEFAULT_OPTIONS: Required<EventOptions> = Object.freeze({
     captureRejections: false,
     maxListeners: 10,
     weakReferences: false,
@@ -51,14 +51,11 @@ export const DEFAULT_OPTIONS: Required<EventOptions> = {
     concurrencyLimit: Infinity,
     bufferSize: 1000,
     gcIntervalMs: 60000,
-} as const;
+} as const);
 
-Object.freeze(DEFAULT_OPTIONS);
-
-export const MEMORY_USAGE_SYMBOLS = {
+export const MEMORY_USAGE_SYMBOLS = Object.freeze({
     staticSubscriptions: Symbol('staticSubscriptions'),
     subscriptionMaps: Symbol('subscriptionMaps'),
     priorityQueues: Symbol('priorityQueues'),
     eventBuffer: Symbol('eventBuffer'),
-} as const;
-
+} as const);

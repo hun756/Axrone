@@ -193,3 +193,103 @@ describe('DEFAULT_OPTIONS Constant', () => {
         expect(merged.bufferSize).toBe(DEFAULT_OPTIONS.bufferSize);
     });
 });
+
+describe('MEMORY_USAGE_SYMBOLS Constant', () => {
+    it('should contain correct symbol keys', () => {
+        const expectedKeys = [
+            'staticSubscriptions',
+            'subscriptionMaps',
+            'priorityQueues',
+            'eventBuffer',
+        ];
+
+        expectedKeys.forEach((key) => {
+            expect(key in MEMORY_USAGE_SYMBOLS).toBe(true);
+            expect(typeof MEMORY_USAGE_SYMBOLS[key as keyof typeof MEMORY_USAGE_SYMBOLS]).toBe(
+                'symbol'
+            );
+        });
+    });
+
+    it('should have unique symbols', () => {
+        const symbols = Object.values(MEMORY_USAGE_SYMBOLS);
+        const symbolSet = new Set(symbols);
+
+        expect(symbols.length).toBe(symbolSet.size);
+        expect(symbols.length).toBe(4);
+    });
+
+    it('should have correct descriptions for each symbol', () => {
+        expect(MEMORY_USAGE_SYMBOLS.staticSubscriptions.description).toBe('staticSubscriptions');
+        expect(MEMORY_USAGE_SYMBOLS.subscriptionMaps.description).toBe('subscriptionMaps');
+        expect(MEMORY_USAGE_SYMBOLS.priorityQueues.description).toBe('priorityQueues');
+        expect(MEMORY_USAGE_SYMBOLS.eventBuffer.description).toBe('eventBuffer');
+    });
+
+    it('should be immutable (as const)', () => {
+        expect(() => {
+            (MEMORY_USAGE_SYMBOLS as any).newSymbol = Symbol('new');
+        }).toThrow();
+    });
+
+    it('should be usable as object keys', () => {
+        const memoryTracker = {
+            [MEMORY_USAGE_SYMBOLS.staticSubscriptions]: 1024,
+            [MEMORY_USAGE_SYMBOLS.subscriptionMaps]: 2048,
+            [MEMORY_USAGE_SYMBOLS.priorityQueues]: 512,
+            [MEMORY_USAGE_SYMBOLS.eventBuffer]: 4096,
+        };
+
+        expect(memoryTracker[MEMORY_USAGE_SYMBOLS.staticSubscriptions]).toBe(1024);
+        expect(memoryTracker[MEMORY_USAGE_SYMBOLS.subscriptionMaps]).toBe(2048);
+        expect(memoryTracker[MEMORY_USAGE_SYMBOLS.priorityQueues]).toBe(512);
+        expect(memoryTracker[MEMORY_USAGE_SYMBOLS.eventBuffer]).toBe(4096);
+    });
+
+    it('should provide collision-free property keys', () => {
+        const mixedObject = {
+            staticSubscriptions: 'string value',
+            [MEMORY_USAGE_SYMBOLS.staticSubscriptions]: 'symbol value',
+        };
+
+        expect(mixedObject.staticSubscriptions).toBe('string value');
+        expect(mixedObject[MEMORY_USAGE_SYMBOLS.staticSubscriptions]).toBe('symbol value');
+
+        expect(Object.keys(mixedObject)).toContain('staticSubscriptions');
+        expect(Object.getOwnPropertySymbols(mixedObject)).toContain(
+            MEMORY_USAGE_SYMBOLS.staticSubscriptions
+        );
+    });
+
+    it('should be usable for memory usage tracking', () => {
+        class MemoryTracker {
+            private usage: Record<symbol, number> = {};
+
+            track(component: symbol, bytes: number): void {
+                this.usage[component] = bytes;
+            }
+
+            getUsage(component: symbol): number {
+                return this.usage[component] || 0;
+            }
+
+            getTotalUsage(): number {
+                return Object.getOwnPropertySymbols(this.usage).reduce(
+                    (sum: number, symbol: symbol) => sum + (this.usage[symbol] || 0),
+                    0
+                );
+            }
+        }
+
+        const tracker = new MemoryTracker();
+
+        tracker.track(MEMORY_USAGE_SYMBOLS.staticSubscriptions, 2048);
+        tracker.track(MEMORY_USAGE_SYMBOLS.subscriptionMaps, 4096);
+        tracker.track(MEMORY_USAGE_SYMBOLS.priorityQueues, 1024);
+        tracker.track(MEMORY_USAGE_SYMBOLS.eventBuffer, 8192);
+
+        expect(tracker.getUsage(MEMORY_USAGE_SYMBOLS.staticSubscriptions)).toBe(2048);
+        expect(tracker.getUsage(MEMORY_USAGE_SYMBOLS.subscriptionMaps)).toBe(4096);
+        expect(tracker.getTotalUsage()).toBe(15360);
+    });
+});
