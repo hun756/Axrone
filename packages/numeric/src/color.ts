@@ -1006,4 +1006,65 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         const ratio = Color.contrastRatio(foreground, background);
         return level === 'AA' ? ratio >= 4.5 : ratio >= 7;
     }
+
+    static generateHarmony<T extends IColorLike>(
+        baseColor: Readonly<T>,
+        type: ColorHarmonyType,
+        count?: number
+    ): Color[] {
+        const hsl = baseColor instanceof Color ? baseColor.toHSL() : Color.from(baseColor).toHSL();
+        const colors: Color[] = [];
+
+        switch (type) {
+            case ColorHarmonyType.MONOCHROMATIC:
+                for (let i = 0; i < (count ?? 5); i++) {
+                    const lightness = _clamp(hsl.l + (i - 2) * 0.15, 0, 1);
+                    colors.push(Color.fromHSL(hsl.h, hsl.s, lightness, hsl.a));
+                }
+                break;
+
+            case ColorHarmonyType.COMPLEMENTARY:
+                colors.push(Color.from(baseColor));
+                colors.push(Color.fromHSL(_mod(hsl.h + 180, 360), hsl.s, hsl.l, hsl.a));
+                break;
+
+            case ColorHarmonyType.SPLIT_COMPLEMENTARY:
+                colors.push(Color.from(baseColor));
+                colors.push(Color.fromHSL(_mod(hsl.h + 150, 360), hsl.s, hsl.l, hsl.a));
+                colors.push(Color.fromHSL(_mod(hsl.h + 210, 360), hsl.s, hsl.l, hsl.a));
+                break;
+
+            case ColorHarmonyType.TRIADIC:
+                colors.push(Color.from(baseColor));
+                colors.push(Color.fromHSL(_mod(hsl.h + 120, 360), hsl.s, hsl.l, hsl.a));
+                colors.push(Color.fromHSL(_mod(hsl.h + 240, 360), hsl.s, hsl.l, hsl.a));
+                break;
+
+            case ColorHarmonyType.TETRADIC:
+                colors.push(Color.from(baseColor));
+                colors.push(Color.fromHSL(_mod(hsl.h + 90, 360), hsl.s, hsl.l, hsl.a));
+                colors.push(Color.fromHSL(_mod(hsl.h + 180, 360), hsl.s, hsl.l, hsl.a));
+                colors.push(Color.fromHSL(_mod(hsl.h + 270, 360), hsl.s, hsl.l, hsl.a));
+                break;
+
+            case ColorHarmonyType.ANALOGOUS:
+                for (let i = 0; i < (count ?? 5); i++) {
+                    const hue = _mod(hsl.h + (i - 2) * 30, 360);
+                    colors.push(Color.fromHSL(hue, hsl.s, hsl.l, hsl.a));
+                }
+                break;
+
+            case ColorHarmonyType.SQUARE:
+                colors.push(Color.from(baseColor));
+                colors.push(Color.fromHSL(_mod(hsl.h + 90, 360), hsl.s, hsl.l, hsl.a));
+                colors.push(Color.fromHSL(_mod(hsl.h + 180, 360), hsl.s, hsl.l, hsl.a));
+                colors.push(Color.fromHSL(_mod(hsl.h + 270, 360), hsl.s, hsl.l, hsl.a));
+                break;
+
+            default:
+                throw new Error(`Unsupported harmony type: ${type}`);
+        }
+
+        return colors;
+    }
 }
