@@ -312,3 +312,66 @@ describe('Type Utilities', () => {
         expect(systemEvents).toContain('system:startup');
     });
 });
+
+// integrations
+describe('Integration Tests', () => {
+    it('all type components should work together', () => {
+        const handler: EventCallback<TestUserEvents['user:login']> = (data) => {
+            expect(data.userId).toBeDefined();
+            expect(data.timestamp).toBeDefined();
+        };
+
+        const eventKey: EventKey<TestUserEvents> = 'user:login';
+
+        const priority: EventPriority = 'high';
+
+        expect(isValidEventName(eventKey)).toBe(true);
+        expect(isValidCallback(handler)).toBe(true);
+        expect(isValidPriority(priority)).toBe(true);
+
+        expect(PRIORITY_VALUES[priority]).toBe(0);
+
+        const testData: TestUserEvents['user:login'] = {
+            userId: 'test-user',
+            timestamp: Date.now(),
+        };
+
+        expect(() => handler(testData)).not.toThrow();
+    });
+
+    it('runtime validation and type safety should work together', () => {
+        function processEvent<T extends EventMap, K extends EventKey<T>>(
+            eventName: unknown,
+            callback: unknown,
+            priority: unknown
+        ) {
+            if (!isValidEventName(eventName)) {
+                throw new Error('Invalid event name');
+            }
+
+            if (!isValidCallback(callback)) {
+                throw new Error('Invalid callback');
+            }
+
+            const validPriority = isValidPriority(priority) ? priority : DEFAULT_PRIORITY;
+
+            return {
+                event: eventName,
+                callback: callback,
+                priority: validPriority,
+                priorityValue: PRIORITY_VALUES[validPriority],
+            };
+        }
+
+        const result = processEvent('user:login', () => {}, 'high');
+
+        expect(result.event).toBe('user:login');
+        expect(typeof result.callback).toBe('function');
+        expect(result.priority).toBe('high');
+        expect(result.priorityValue).toBe(0);
+
+        expect(() => processEvent('', () => {}, 'high')).toThrow('Invalid event name');
+        expect(() => processEvent('test', 'not-function', 'high')).toThrow('Invalid callback');
+        expect(() => processEvent('test', () => {}, 'invalid')).not.toThrow();
+    });
+});
