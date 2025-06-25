@@ -1067,4 +1067,84 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
 
         return colors;
     }
+
+    static random(alpha: number = 1): Color {
+        return new Color(Math.random(), Math.random(), Math.random(), alpha);
+    }
+
+    static randomHue(saturation: number = 1, lightness: number = 0.5, alpha: number = 1): Color {
+        return Color.fromHSL(Math.random() * 360, saturation, lightness, alpha);
+    }
+
+    static randomPastel(alpha: number = 1): Color {
+        return Color.fromHSL(
+            Math.random() * 360,
+            0.3 + Math.random() * 0.4,
+            0.7 + Math.random() * 0.3,
+            alpha
+        );
+    }
+
+    static randomVibrant(alpha: number = 1): Color {
+        return Color.fromHSL(
+            Math.random() * 360,
+            0.8 + Math.random() * 0.2,
+            0.4 + Math.random() * 0.3,
+            alpha
+        );
+    }
+
+    lighten(amount: number): Color {
+        Color.lighten(this, amount, this);
+        return this;
+    }
+
+    darken(amount: number): Color {
+        Color.darken(this, amount, this);
+        return this;
+    }
+
+    saturate(amount: number): Color {
+        Color.saturate(this, amount, this);
+        return this;
+    }
+
+    desaturate(amount: number): Color {
+        Color.desaturate(this, amount, this);
+        return this;
+    }
+
+    adjustHue(degrees: number): Color {
+        Color.adjustHue(this, degrees, this);
+        return this;
+    }
+
+    invert(): Color {
+        Color.invert(this, this);
+        return this;
+    }
+
+    grayscale(): Color {
+        Color.grayscale(this, this);
+        return this;
+    }
+
+    luminance(): number {
+        return Color.luminance(this);
+    }
+
+    contrastRatio<T extends IColorLike>(other: Readonly<T>): number {
+        return Color.contrastRatio(this, other);
+    }
+
+    distance<T extends IColorLike>(other: Readonly<T>): number {
+        return Color.distance(this, other);
+    }
+
+    isAccessible<T extends IColorLike>(
+        background: Readonly<T>,
+        level: 'AA' | 'AAA' = 'AA'
+    ): boolean {
+        return Color.isAccessible(this, background, level);
+    }
 }
