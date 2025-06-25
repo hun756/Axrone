@@ -108,3 +108,88 @@ describe('EventEmitter - Event Options', () => {
         });
     });
 });
+
+describe('DEFAULT_OPTIONS Constant', () => {
+    it('should have correct default values', () => {
+        expect(DEFAULT_OPTIONS.captureRejections).toBe(false);
+        expect(DEFAULT_OPTIONS.maxListeners).toBe(10);
+        expect(DEFAULT_OPTIONS.weakReferences).toBe(false);
+        expect(DEFAULT_OPTIONS.immediateDispatch).toBe(true);
+        expect(DEFAULT_OPTIONS.concurrencyLimit).toBe(Infinity);
+        expect(DEFAULT_OPTIONS.bufferSize).toBe(1000);
+        expect(DEFAULT_OPTIONS.gcIntervalMs).toBe(60000);
+    });
+
+    it('should be of type Required<EventOptions>', () => {
+        const requiredKeys: Array<keyof Required<EventOptions>> = [
+            'captureRejections',
+            'maxListeners',
+            'weakReferences',
+            'immediateDispatch',
+            'concurrencyLimit',
+            'bufferSize',
+            'gcIntervalMs',
+        ];
+
+        requiredKeys.forEach((key) => {
+            expect(key in DEFAULT_OPTIONS).toBe(true);
+            expect(DEFAULT_OPTIONS[key]).toBeDefined();
+        });
+    });
+
+    it('should be immutable (as const)', () => {
+        expect(() => {
+            (DEFAULT_OPTIONS as any).maxListeners = 20;
+        }).toThrow();
+    });
+
+    it('should contain reasonable default values', () => {
+        expect(DEFAULT_OPTIONS.captureRejections).toBe(false);
+        expect(DEFAULT_OPTIONS.weakReferences).toBe(false);
+
+        expect(DEFAULT_OPTIONS.immediateDispatch).toBe(true);
+        expect(DEFAULT_OPTIONS.concurrencyLimit).toBe(Infinity);
+
+        expect(DEFAULT_OPTIONS.maxListeners).toBeGreaterThan(0);
+        expect(DEFAULT_OPTIONS.bufferSize).toBeGreaterThan(0);
+        expect(DEFAULT_OPTIONS.gcIntervalMs).toBeGreaterThan(0);
+    });
+
+    it('should check type consistency', () => {
+        expect(typeof DEFAULT_OPTIONS.captureRejections).toBe('boolean');
+        expect(typeof DEFAULT_OPTIONS.maxListeners).toBe('number');
+        expect(typeof DEFAULT_OPTIONS.weakReferences).toBe('boolean');
+        expect(typeof DEFAULT_OPTIONS.immediateDispatch).toBe('boolean');
+        expect(typeof DEFAULT_OPTIONS.concurrencyLimit).toBe('number');
+        expect(typeof DEFAULT_OPTIONS.bufferSize).toBe('number');
+        expect(typeof DEFAULT_OPTIONS.gcIntervalMs).toBe('number');
+
+        expect(Number.isInteger(DEFAULT_OPTIONS.maxListeners)).toBe(true);
+        expect(Number.isInteger(DEFAULT_OPTIONS.bufferSize)).toBe(true);
+        expect(Number.isInteger(DEFAULT_OPTIONS.gcIntervalMs)).toBe(true);
+        expect(DEFAULT_OPTIONS.concurrencyLimit).toBe(Infinity);
+    });
+
+    it('should be usable for options merging', () => {
+        function mergeWithDefaults(userOptions: EventOptions): Required<EventOptions> {
+            return {
+                captureRejections:
+                    userOptions.captureRejections ?? DEFAULT_OPTIONS.captureRejections,
+                maxListeners: userOptions.maxListeners ?? DEFAULT_OPTIONS.maxListeners,
+                weakReferences: userOptions.weakReferences ?? DEFAULT_OPTIONS.weakReferences,
+                immediateDispatch:
+                    userOptions.immediateDispatch ?? DEFAULT_OPTIONS.immediateDispatch,
+                concurrencyLimit: userOptions.concurrencyLimit ?? DEFAULT_OPTIONS.concurrencyLimit,
+                bufferSize: userOptions.bufferSize ?? DEFAULT_OPTIONS.bufferSize,
+                gcIntervalMs: userOptions.gcIntervalMs ?? DEFAULT_OPTIONS.gcIntervalMs,
+            };
+        }
+
+        const userOptions: EventOptions = { maxListeners: 20 };
+        const merged = mergeWithDefaults(userOptions);
+
+        expect(merged.maxListeners).toBe(20);
+        expect(merged.captureRejections).toBe(DEFAULT_OPTIONS.captureRejections);
+        expect(merged.bufferSize).toBe(DEFAULT_OPTIONS.bufferSize);
+    });
+});

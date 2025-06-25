@@ -51,7 +51,9 @@ export const DEFAULT_OPTIONS: Required<EventOptions> = {
     concurrencyLimit: Infinity,
     bufferSize: 1000,
     gcIntervalMs: 60000,
-};
+} as const;
+
+Object.freeze(DEFAULT_OPTIONS);
 
 export const MEMORY_USAGE_SYMBOLS = {
     staticSubscriptions: Symbol('staticSubscriptions'),
