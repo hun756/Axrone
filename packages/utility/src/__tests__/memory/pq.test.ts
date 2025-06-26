@@ -488,4 +488,101 @@ describe('PriorityQueue', () => {
             expect(elements).toEqual(['first', 'second']);
         });
     });
+
+    describe('static factory methods', () => {
+        describe('from', () => {
+            it('should create queue from array', () => {
+                const items: ReadonlyQueueNode<string, number>[] = [
+                    { element: 'c', priority: 3 },
+                    { element: 'a', priority: 1 },
+                    { element: 'b', priority: 2 },
+                ];
+
+                const queue = PriorityQueue.from(items);
+
+                expect(queue.size).toBe(3);
+                expect(queue.dequeue()).toBe('a');
+            });
+
+            it('should create queue from iterable', () => {
+                const items = new Set([
+                    { element: 'b', priority: 2 },
+                    { element: 'a', priority: 1 },
+                ]);
+
+                const queue = PriorityQueue.from(items);
+
+                expect(queue.size).toBe(2);
+            });
+
+            it('should accept options', () => {
+                const items: ReadonlyQueueNode<string, number>[] = [
+                    { element: 'low', priority: 1 },
+                    { element: 'high', priority: 10 },
+                ];
+
+                const queue = PriorityQueue.from(items, {
+                    comparator: (a, b) => b - a,
+                });
+
+                expect(queue.dequeue()).toBe('high');
+            });
+        });
+        describe('withComparator', () => {
+            it('should create queue with custom comparator', () => {
+                const queue = PriorityQueue.withComparator<string, number>((a, b) => b - a);
+
+                queue.enqueue('low', 1);
+                queue.enqueue('high', 10);
+
+                expect(queue.dequeue()).toBe('high');
+            });
+
+            it('should accept initial capacity', () => {
+                const capacity = createCapacity(50);
+                const queue = PriorityQueue.withComparator<string, number>(
+                    (a, b) => a - b,
+                    capacity
+                );
+
+                expect(queue.capacity).toBe(capacity);
+            });
+        });
+
+        describe('minQueue', () => {
+            it('should create min priority queue', () => {
+                const queue = PriorityQueue.minQueue<string, number>();
+
+                queue.enqueue('high', 10);
+                queue.enqueue('low', 1);
+
+                expect(queue.dequeue()).toBe('low');
+            });
+
+            it('should accept initial capacity', () => {
+                const capacity = createCapacity(50);
+                const queue = PriorityQueue.minQueue<string, number>(capacity);
+
+                expect(queue.capacity).toBe(capacity);
+            });
+        });
+
+        describe('maxQueue', () => {
+            it('should create max priority queue', () => {
+                const queue = PriorityQueue.maxQueue<string, number>();
+
+                queue.enqueue('low', 1);
+                queue.enqueue('high', 10);
+
+                expect(queue.dequeue()).toBe('high');
+            });
+
+            it('should accept initial capacity', () => {
+                const capacity = createCapacity(50);
+                const queue = PriorityQueue.maxQueue<string, number>(capacity);
+
+                expect(queue.capacity).toBe(capacity);
+            });
+        });
+    });
 });
