@@ -151,4 +151,192 @@ describe('PriorityQueue', () => {
             expect(autoTrimQueue.capacity).toBeLessThanOrEqual(capacityBeforeTrim);
         });
     });
+
+    describe('peek', () => {
+        let queue: PriorityQueue<string, number>;
+
+        beforeEach(() => {
+            queue = new PriorityQueue<string, number>();
+        });
+
+        it('should throw EmptyQueueError when queue is empty', () => {
+            expect(() => queue.peek()).toThrow(EmptyQueueError);
+        });
+
+        it('should return highest priority element without removing it', () => {
+            queue.enqueue('low', 1);
+            queue.enqueue('high', 10);
+
+            expect(queue.peek()).toBe('low');
+            expect(queue.size).toBe(2);
+        });
+
+        it('should return same element on multiple calls', () => {
+            queue.enqueue('test', 1);
+
+            expect(queue.peek()).toBe('test');
+            expect(queue.peek()).toBe('test');
+        });
+    });
+
+    describe('tryDequeue', () => {
+        let queue: PriorityQueue<string, number>;
+
+        beforeEach(() => {
+            queue = new PriorityQueue<string, number>();
+        });
+
+        it('should return undefined when queue is empty', () => {
+            expect(queue.tryDequeue()).toBeUndefined();
+        });
+
+        it('should return element when queue is not empty', () => {
+            queue.enqueue('test', 1);
+
+            expect(queue.tryDequeue()).toBe('test');
+            expect(queue.isEmpty).toBe(true);
+        });
+    });
+
+    describe('tryPeek', () => {
+        let queue: PriorityQueue<string, number>;
+
+        beforeEach(() => {
+            queue = new PriorityQueue<string, number>();
+        });
+
+        it('should return undefined when queue is empty', () => {
+            expect(queue.tryPeek()).toBeUndefined();
+        });
+
+        it('should return element when queue is not empty', () => {
+            queue.enqueue('test', 1);
+
+            expect(queue.tryPeek()).toBe('test');
+            expect(queue.size).toBe(1);
+        });
+    });
+
+    describe('dequeueAll', () => {
+        let queue: PriorityQueue<string, number>;
+
+        beforeEach(() => {
+            queue = new PriorityQueue<string, number>();
+        });
+
+        it('should return empty array when queue is empty', () => {
+            expect(queue.dequeueAll()).toEqual([]);
+        });
+
+        it('should return all elements in priority order', () => {
+            queue.enqueue('c', 3);
+            queue.enqueue('a', 1);
+            queue.enqueue('b', 2);
+
+            const result = queue.dequeueAll();
+
+            expect(result).toEqual(['a', 'b', 'c']);
+            expect(queue.isEmpty).toBe(true);
+        });
+    });
+
+    describe('enqueueRange', () => {
+        let queue: PriorityQueue<string, number>;
+
+        beforeEach(() => {
+            queue = new PriorityQueue<string, number>();
+        });
+
+        it('should handle empty array', () => {
+            queue.enqueueRange([]);
+
+            expect(queue.isEmpty).toBe(true);
+        });
+
+        it('should add multiple items maintaining priority order', () => {
+            const items: ReadonlyQueueNode<string, number>[] = [
+                { element: 'c', priority: 3 },
+                { element: 'a', priority: 1 },
+                { element: 'b', priority: 2 },
+            ];
+
+            queue.enqueueRange(items);
+
+            expect(queue.size).toBe(3);
+            expect(queue.dequeue()).toBe('a');
+            expect(queue.dequeue()).toBe('b');
+            expect(queue.dequeue()).toBe('c');
+        });
+
+        it('should ensure capacity for large ranges', () => {
+            const items: ReadonlyQueueNode<string, number>[] = [];
+            for (let i = 0; i < 1000; i++) {
+                items.push({ element: `item-${i}`, priority: i });
+            }
+
+            queue.enqueueRange(items);
+
+            expect(queue.size).toBe(1000);
+        });
+    });
+
+    describe('contains', () => {
+        let queue: PriorityQueue<string, number>;
+
+        beforeEach(() => {
+            queue = new PriorityQueue<string, number>();
+        });
+
+        it('should return false for empty queue', () => {
+            expect(queue.contains('test')).toBe(false);
+        });
+
+        it('should return true for existing element', () => {
+            queue.enqueue('test', 1);
+
+            expect(queue.contains('test')).toBe(true);
+        });
+
+        it('should return false for non-existing element', () => {
+            queue.enqueue('test', 1);
+
+            expect(queue.contains('other')).toBe(false);
+        });
+
+        it('should work with object elements', () => {
+            const objectQueue = new PriorityQueue<{ id: number }, number>();
+            const obj1 = { id: 1 };
+            const obj2 = { id: 2 };
+
+            objectQueue.enqueue(obj1, 1);
+
+            expect(objectQueue.contains(obj1)).toBe(true);
+            expect(objectQueue.contains(obj2)).toBe(false);
+        });
+    });
+
+    describe('clear', () => {
+        let queue: PriorityQueue<string, number>;
+
+        beforeEach(() => {
+            queue = new PriorityQueue<string, number>();
+        });
+
+        it('should clear empty queue', () => {
+            queue.clear();
+
+            expect(queue.isEmpty).toBe(true);
+            expect(queue.size).toBe(0);
+        });
+
+        it('should clear non-empty queue', () => {
+            queue.enqueue('a', 1);
+            queue.enqueue('b', 2);
+
+            queue.clear();
+
+            expect(queue.isEmpty).toBe(true);
+            expect(queue.size).toBe(0);
+        });
+    });
 });
