@@ -259,3 +259,76 @@ export interface IEventEmitter<T extends EventMap = EventMap>
 
     resetMetrics<K extends EventKey<T>>(event?: K): void;
 }
+
+export class EventScheduler {
+    #concurrencyLimit: number;
+    #activeCount = 0;
+    #pendingPromises = new Set<Promise<void>>();
+
+    constructor(concurrencyLimit: number = Infinity) {
+        this.#concurrencyLimit = concurrencyLimit;
+    }
+
+    get activeCount(): number {
+        return this.#activeCount;
+    }
+
+    get pendingCount(): number {
+        return this.#pendingPromises.size;
+    }
+
+    schedule<T>(fn: () => Promise<T>): Promise<T> {
+        if (this.#concurrencyLimit === Infinity) {
+            const promise = fn();
+            this.#pendingPromises.add(promise as Promise<any>);
+            promise.finally(() => {
+                this.#pendingPromises.delete(promise as Promise<any>);
+            });
+            return promise;
+        }
+
+        return new Promise<T>((resolve, reject) => {
+            const execute = async (): Promise<void> => {
+                this.#activeCount++;
+                try {
+                    const result = await fn();
+                    resolve(result);
+                } catch (error) {
+                    reject(error);
+                } finally {
+                    this.#activeCount--;
+                    this.#checkQueue();
+                }
+            };
+
+            if (this.#activeCount < this.#concurrencyLimit) {
+                execute();
+            } else {
+                this.#pendingPromises.add(execute() as unknown as Promise<void>);
+            }
+        });
+    }
+
+    #checkQueue(): void {
+        if (this.#activeCount < this.#concurrencyLimit && this.#pendingPromises.size > 0) {
+            queueMicrotask(() => {
+                if (this.#activeCount >= this.#concurrencyLimit) return;
+
+                const next = this.#pendingPromises.values().next().value;
+                if (next) {
+                    this.#pendingPromises.delete(next);
+                    next.catch(() => {
+                        /* errors handled elsewhere */
+                    });
+                }
+            });
+        }
+    }
+
+    async drain(): Promise<void> {
+        if (this.#pendingPromises.size === 0) {
+            return Promise.resolve();
+        }
+        await Promise.all(Array.from(this.#pendingPromises));
+    }
+}
