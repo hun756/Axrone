@@ -64,3 +64,54 @@ interface CapacityOperations {
     trimExcess(): void;
     readonly capacity: Capacity;
 }
+
+abstract class QueueError extends Error {
+    abstract readonly code: string;
+
+    constructor(message: string) {
+        super(message);
+        this.name = this.constructor.name;
+        Error.captureStackTrace?.(this, this.constructor);
+    }
+}
+
+class EmptyQueueError extends QueueError {
+    readonly code = 'EMPTY_QUEUE' as const;
+
+    constructor() {
+        super('Queue is empty');
+    }
+}
+
+class InvalidCapacityError extends QueueError {
+    readonly code = 'INVALID_CAPACITY' as const;
+
+    constructor(capacity: number) {
+        super(`Invalid capacity: ${capacity}`);
+    }
+}
+
+const createHeapIndex = (value: number): HeapIndex => value as HeapIndex;
+
+const createQueueSize = (value: number): QueueSize => value as QueueSize;
+
+const createCapacity = (value: number): Capacity => value as Capacity;
+
+const getParentIndex = (index: HeapIndex): HeapIndex => createHeapIndex((index - 1) >>> 1);
+
+const getLeftChildIndex = (index: HeapIndex): HeapIndex => createHeapIndex((index << 1) | 1);
+
+const getRightChildIndex = (index: HeapIndex): HeapIndex => createHeapIndex((index + 1) << 1);
+
+const hasParent = (index: HeapIndex): boolean => index > 0;
+
+const hasLeftChild = (index: HeapIndex, size: QueueSize): boolean =>
+    getLeftChildIndex(index) < size;
+
+const hasRightChild = (index: HeapIndex, size: QueueSize): boolean =>
+    getRightChildIndex(index) < size;
+
+const defaultComparator = <T>(a: T, b: T): number => {
+    return a < b ? -1 : a > b ? 1 : 0;
+};
+
