@@ -419,4 +419,73 @@ describe('PriorityQueue', () => {
             expect(array).toContain('c');
         });
     });
+
+    describe('clone', () => {
+        let queue: PriorityQueue<string, number>;
+
+        beforeEach(() => {
+            queue = new PriorityQueue<string, number>();
+        });
+
+        it('should create independent copy', () => {
+            queue.enqueue('a', 1);
+            queue.enqueue('b', 2);
+
+            const clone = queue.clone();
+
+            expect(clone.size).toBe(queue.size);
+            expect(clone.dequeue()).toBe('a');
+            expect(queue.peek()).toBe('a');
+        });
+
+        it('should preserve comparator', () => {
+            const reverseQueue = new PriorityQueue<string, number>({
+                comparator: (a, b) => b - a,
+            });
+
+            reverseQueue.enqueue('low', 1);
+            reverseQueue.enqueue('high', 10);
+
+            const clone = reverseQueue.clone();
+
+            expect(clone.dequeue()).toBe('high');
+        });
+    });
+
+    describe('iterator', () => {
+        let queue: PriorityQueue<string, number>;
+
+        beforeEach(() => {
+            queue = new PriorityQueue<string, number>();
+        });
+
+        it('should iterate over empty queue', () => {
+            const elements = Array.from(queue);
+
+            expect(elements).toEqual([]);
+        });
+
+        it('should iterate in priority order', () => {
+            queue.enqueue('c', 3);
+            queue.enqueue('a', 1);
+            queue.enqueue('b', 2);
+
+            const elements = Array.from(queue);
+
+            expect(elements).toEqual(['a', 'b', 'c']);
+            expect(queue.size).toBe(3);
+        });
+
+        it('should work with for...of loop', () => {
+            queue.enqueue('second', 2);
+            queue.enqueue('first', 1);
+
+            const elements: string[] = [];
+            for (const element of queue) {
+                elements.push(element);
+            }
+
+            expect(elements).toEqual(['first', 'second']);
+        });
+    });
 });
