@@ -339,4 +339,84 @@ describe('PriorityQueue', () => {
             expect(queue.size).toBe(0);
         });
     });
+
+    describe('ensureCapacity', () => {
+        let queue: PriorityQueue<string, number>;
+
+        beforeEach(() => {
+            queue = new PriorityQueue<string, number>();
+        });
+
+        it('should increase capacity when needed', () => {
+            const newCapacity = createCapacity(100);
+            const oldCapacity = queue.capacity;
+
+            queue.ensureCapacity(newCapacity);
+
+            if (newCapacity > oldCapacity) {
+                expect(queue.capacity).toBeGreaterThanOrEqual(newCapacity);
+            }
+        });
+
+        it('should not decrease capacity', () => {
+            const oldCapacity = queue.capacity;
+            const smallerCapacity = createCapacity(1);
+
+            queue.ensureCapacity(smallerCapacity);
+
+            expect(queue.capacity).toBe(oldCapacity);
+        });
+    });
+
+    describe('trimExcess', () => {
+        let queue: PriorityQueue<string, number>;
+
+        beforeEach(() => {
+            queue = new PriorityQueue<string, number>();
+        });
+
+        it('should trim excess capacity', () => {
+            for (let i = 0; i < 50; i++) {
+                queue.enqueue(`item-${i}`, i);
+            }
+
+            for (let i = 0; i < 40; i++) {
+                queue.dequeue();
+            }
+
+            const capacityBeforeTrim = queue.capacity;
+            queue.trimExcess();
+
+            expect(queue.capacity).toBeLessThanOrEqual(capacityBeforeTrim);
+        });
+    });
+
+    describe('toArray', () => {
+        let queue: PriorityQueue<string, number>;
+
+        beforeEach(() => {
+            queue = new PriorityQueue<string, number>();
+        });
+
+        it('should return empty array for empty queue', () => {
+            const array = queue.toArray();
+
+            expect(array).toEqual([]);
+            expect(Object.isFrozen(array)).toBe(true);
+        });
+
+        it('should return frozen array of elements', () => {
+            queue.enqueue('a', 3);
+            queue.enqueue('b', 1);
+            queue.enqueue('c', 2);
+
+            const array = queue.toArray();
+
+            expect(array).toHaveLength(3);
+            expect(Object.isFrozen(array)).toBe(true);
+            expect(array).toContain('a');
+            expect(array).toContain('b');
+            expect(array).toContain('c');
+        });
+    });
 });
