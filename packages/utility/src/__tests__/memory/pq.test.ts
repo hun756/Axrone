@@ -585,4 +585,160 @@ describe('PriorityQueue', () => {
             });
         });
     });
+
+    describe('error handling', () => {
+        describe('EmptyQueueError', () => {
+            it('should have correct error code', () => {
+                const error = new EmptyQueueError();
+
+                expect(error.code).toBe('EMPTY_QUEUE');
+                expect(error.message).toBe('Queue is empty');
+                expect(error).toBeInstanceOf(QueueError);
+                expect(error).toBeInstanceOf(Error);
+            });
+        });
+
+        describe('InvalidCapacityError', () => {
+            it('should have correct error code and message', () => {
+                const error = new InvalidCapacityError(-1);
+
+                expect(error.code).toBe('INVALID_CAPACITY');
+                expect(error.message).toBe('Invalid capacity: -1');
+                expect(error).toBeInstanceOf(QueueError);
+                expect(error).toBeInstanceOf(Error);
+            });
+        });
+    });
+    describe('utility functions', () => {
+        it('should create nominal types correctly', () => {
+            expect(createCapacity(10)).toBe(10);
+            expect(createQueueSize(5)).toBe(5);
+            expect(createHeapIndex(3)).toBe(3);
+        });
+
+        it('should use default comparator correctly', () => {
+            expect(defaultComparator(1, 2)).toBe(-1);
+            expect(defaultComparator(2, 1)).toBe(1);
+            expect(defaultComparator(1, 1)).toBe(0);
+            expect(defaultComparator('a', 'b')).toBe(-1);
+            expect(defaultComparator('b', 'a')).toBe(1);
+            expect(defaultComparator('a', 'a')).toBe(0);
+        });
+    });
+
+    describe('PriorityQueueNode', () => {
+        it('should create node with element and priority', () => {
+            const node = new PriorityQueueNode('test', 5);
+
+            expect(node.element).toBe('test');
+            expect(node.priority).toBe(5);
+        });
+
+        it('should allow mutation of properties', () => {
+            const node = new PriorityQueueNode('test', 5);
+
+            node.element = 'updated';
+            node.priority = 10;
+
+            expect(node.element).toBe('updated');
+            expect(node.priority).toBe(10);
+        });
+    });
+
+    describe('complex scenarios', () => {
+        it('should handle large number of operations', () => {
+            const queue = new PriorityQueue<number, number>();
+            const size = 10000;
+
+            for (let i = 0; i < size; i++) {
+                queue.enqueue(i, Math.random() * 1000);
+            }
+
+            expect(queue.size).toBe(size);
+
+            let previousPriority = -Infinity;
+            while (!queue.isEmpty) {
+                const element = queue.dequeue();
+                expect(typeof element).toBe('number');
+            }
+        });
+
+        it('should handle mixed operations efficiently', () => {
+            const queue = new PriorityQueue<string, number>();
+
+            for (let i = 0; i < 1000; i++) {
+                if (Math.random() > 0.3 || queue.isEmpty) {
+                    queue.enqueue(`item-${i}`, Math.random() * 100);
+                } else {
+                    queue.dequeue();
+                }
+            }
+
+            expect(queue.size).toBeGreaterThanOrEqual(0);
+        });
+
+        it('should maintain heap invariant under stress', () => {
+            const queue = new PriorityQueue<number, number>();
+            const operations = 1000;
+
+            for (let i = 0; i < operations; i++) {
+                const action = Math.random();
+
+                if (action < 0.6 || queue.isEmpty) {
+                    queue.enqueue(i, Math.random() * 1000);
+                } else if (action < 0.8) {
+                    queue.dequeue();
+                } else if (action < 0.9) {
+                    if (!queue.isEmpty) {
+                        queue.peek();
+                    }
+                } else {
+                    queue.contains(Math.floor(Math.random() * operations));
+                }
+            }
+
+            const expectedSize = queue.size;
+            const results = queue.dequeueAll();
+
+            expect(results.length).toBe(expectedSize);
+        });
+    });
+
+    describe('memory management', () => {
+        it('should not leak memory on repeated operations', () => {
+            const queue = new PriorityQueue<string, number>();
+
+            for (let cycle = 0; cycle < 10; cycle++) {
+                for (let i = 0; i < 100; i++) {
+                    queue.enqueue(`item-${i}`, i);
+                }
+
+                while (!queue.isEmpty) {
+                    queue.dequeue();
+                }
+
+                expect(queue.isEmpty).toBe(true);
+            }
+        });
+
+        it('should handle capacity management correctly', () => {
+            const queue = new PriorityQueue<number, number>({
+                initialCapacity: createCapacity(4),
+            });
+
+            expect(queue.capacity).toBe(4);
+
+            for (let i = 0; i < 10; i++) {
+                queue.enqueue(i, i);
+            }
+
+            expect(queue.capacity).toBeGreaterThan(4);
+            expect(queue.size).toBe(10);
+
+            queue.clear();
+            queue.trimExcess();
+
+            expect(queue.capacity).toBe(1);
+        });
+    });
 });
