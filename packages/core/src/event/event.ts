@@ -264,6 +264,7 @@ export class EventScheduler {
     #concurrencyLimit: number;
     #activeCount = 0;
     #pendingPromises = new Set<Promise<void>>();
+    #queue: Array<() => void> = [];
 
     constructor(concurrencyLimit: number = Infinity) {
         this.#concurrencyLimit = concurrencyLimit;
@@ -274,7 +275,7 @@ export class EventScheduler {
     }
 
     get pendingCount(): number {
-        return this.#pendingPromises.size;
+        return this.#queue.length;
     }
 
     schedule<T>(fn: () => Promise<T>): Promise<T> {
@@ -297,38 +298,34 @@ export class EventScheduler {
                     reject(error);
                 } finally {
                     this.#activeCount--;
-                    this.#checkQueue();
+                    this.#processQueue();
                 }
             };
 
             if (this.#activeCount < this.#concurrencyLimit) {
                 execute();
             } else {
-                this.#pendingPromises.add(execute() as unknown as Promise<void>);
+                this.#queue.push(execute);
             }
         });
     }
 
-    #checkQueue(): void {
-        if (this.#activeCount < this.#concurrencyLimit && this.#pendingPromises.size > 0) {
-            queueMicrotask(() => {
-                if (this.#activeCount >= this.#concurrencyLimit) return;
-
-                const next = this.#pendingPromises.values().next().value;
-                if (next) {
-                    this.#pendingPromises.delete(next);
-                    next.catch(() => {
-                        /* errors handled elsewhere */
-                    });
-                }
-            });
+    #processQueue(): void {
+        if (this.#queue.length > 0 && this.#activeCount < this.#concurrencyLimit) {
+            const nextTask = this.#queue.shift();
+            if (nextTask) {
+                nextTask();
+            }
         }
     }
 
     async drain(): Promise<void> {
-        if (this.#pendingPromises.size === 0) {
-            return Promise.resolve();
+        while (this.#activeCount > 0 || this.#queue.length > 0) {
+            await new Promise(resolve => setTimeout(resolve, 1));
         }
-        await Promise.all(Array.from(this.#pendingPromises));
+        
+        if (this.#concurrencyLimit === Infinity && this.#pendingPromises.size > 0) {
+            await Promise.allSettled(Array.from(this.#pendingPromises));
+        }
     }
 }
