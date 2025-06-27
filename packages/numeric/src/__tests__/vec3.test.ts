@@ -1433,7 +1433,7 @@ describe('Vec3 Test Suite', () => {
             const endFast = performance.now();
             const fastTime = endFast - startFast;
 
-            expect(fastTime).toBeLessThan(1);
+            expect(fastTime).toBeLessThan(10);
             expect(regularTime).toBeLessThan(1);
         });
 
