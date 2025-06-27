@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../event/event';
+import { EventEmitter, EventHandlerError, EventMap } from '../../event/event';
 
 interface TestEvents extends EventMap {
     'test:event': { id: string; data: any };
@@ -8,7 +8,7 @@ interface TestEvents extends EventMap {
     'test:batch': { index: number };
 }
 
-describe('EventEmitter - Adım 7: Main Implementation', () => {
+describe('EventEmitter - Main Implementation', () => {
     describe('Core Event Operations', () => {
         let emitter: EventEmitter<TestEvents>;
 
@@ -94,6 +94,128 @@ describe('EventEmitter - Adım 7: Main Implementation', () => {
             const removedAll = emitter.off('test:event');
             expect(removedAll).toBe(true);
             expect(emitter.listenerCount('test:event')).toBe(0);
+        });
+    });
+
+    // PRIORITY SYSTEM TESTS
+    describe('Priority System', () => {
+        let emitter: EventEmitter<TestEvents>;
+
+        beforeEach(() => {
+            emitter = new EventEmitter<TestEvents>({ concurrencyLimit: 1 });
+        });
+
+        afterEach(() => {
+            emitter.dispose();
+        });
+
+        it('should execute handlers in priority order', async () => {
+            const executionOrder: string[] = [];
+
+            emitter.on(
+                'test:priority',
+                () => {
+                    executionOrder.push('low');
+                },
+                { priority: 'low' }
+            );
+
+            emitter.on(
+                'test:priority',
+                () => {
+                    executionOrder.push('high');
+                },
+                { priority: 'high' }
+            );
+
+            emitter.on(
+                'test:priority',
+                () => {
+                    executionOrder.push('normal');
+                },
+                { priority: 'normal' }
+            );
+
+            await emitter.emit('test:priority', { level: 'test' });
+
+            expect(executionOrder).toEqual(['high', 'normal', 'low']);
+        });
+
+        it('should handle priority-based emission options', async () => {
+            emitter.pause();
+
+            const events = [
+                emitter.emit('test:priority', { level: 'low' }, { priority: 'low' }),
+                emitter.emit('test:priority', { level: 'high' }, { priority: 'high' }),
+                emitter.emit('test:priority', { level: 'normal' }, { priority: 'normal' }),
+            ];
+
+            const queuedEvents = emitter.getQueuedEvents();
+            expect(queuedEvents).toHaveLength(3);
+
+            expect(queuedEvents[0].priority).toBe('high');
+            expect(queuedEvents[1].priority).toBe('normal');
+            expect(queuedEvents[2].priority).toBe('low');
+
+            emitter.resume();
+            await Promise.all(events);
+        });
+    });
+
+    // ERROR HANDLING TESTS
+    describe('Error Handling', () => {
+        it('should handle handler errors with captureRejections enabled', async () => {
+            const emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+            let errorCaught = false;
+
+            emitter.on('error' as any, (error: Error) => {
+                errorCaught = true;
+                expect(error).toBeInstanceOf(EventHandlerError);
+            });
+
+            emitter.on('test:error', (data) => {
+                if (data.shouldFail) {
+                    throw new Error('Handler intentionally failed');
+                }
+            });
+
+            await emitter.emit('test:error', { shouldFail: true });
+            expect(errorCaught).toBe(true);
+
+            emitter.dispose();
+        });
+
+        it('should propagate errors when captureRejections is disabled', async () => {
+            const emitter = new EventEmitter<TestEvents>({ captureRejections: false });
+
+            emitter.on('test:error', () => {
+                throw new Error('Handler error');
+            });
+
+            await expect(emitter.emit('test:error', { shouldFail: true })).rejects.toThrow(
+                EventHandlerError
+            );
+
+            emitter.dispose();
+        });
+
+        it('should handle async handler errors correctly', async () => {
+            const emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+            let errorHandled = false;
+
+            emitter.on('error' as any, () => {
+                errorHandled = true;
+            });
+
+            emitter.on('test:error', async () => {
+                await new Promise((resolve) => setTimeout(resolve, 10));
+                throw new Error('Async handler error');
+            });
+
+            await emitter.emit('test:error', { shouldFail: true });
+            expect(errorHandled).toBe(true);
+
+            emitter.dispose();
         });
     });
 });

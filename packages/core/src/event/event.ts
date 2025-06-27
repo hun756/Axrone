@@ -480,6 +480,34 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         return result;
     }
 
+    async #handleError(error: Error): Promise<void> {
+        const errorEvent = 'error' as EventKey<T>;
+
+        if (this.has(errorEvent)) {
+            try {
+                await this.emit(errorEvent, error as T[typeof errorEvent]);
+            } catch (innerError) {
+                console.error('Error in error handler:', innerError);
+            }
+        } else {
+            throw error;
+        }
+    }
+
+    #handleErrorSync(error: Error): void {
+        const errorEvent = 'error' as EventKey<T>;
+
+        if (this.has(errorEvent)) {
+            try {
+                this.emitSync(errorEvent, error as T[typeof errorEvent]);
+            } catch (innerError) {
+                console.error('Error in error handler:', innerError);
+            }
+        } else {
+            throw error;
+        }
+    }
+
     public async emit<K extends EventKey<T>>(
         event: K,
         data: T[K],
@@ -527,8 +555,17 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                             performance.now() - execStartTime,
                             true
                         );
-                        if (this.#options.captureRejections) {
-                            this.#handleError(new EventHandlerError(event, error));
+
+                        const shouldCaptureRejections = this.#options.captureRejections === true;
+
+                        if (shouldCaptureRejections) {
+                            try {
+                                await this.#handleError(new EventHandlerError(event, error));
+                                return;
+                            } catch (handlerError) {
+                                console.error('Failed to handle error:', handlerError);
+                                return;
+                            }
                         } else {
                             throw new EventHandlerError(event, error);
                         }
@@ -536,7 +573,12 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 })
             );
 
-            await Promise.all(executionPromises);
+            if (this.#options.captureRejections === true) {
+                await Promise.allSettled(executionPromises);
+            } else {
+                await Promise.all(executionPromises);
+            }
+
             this.#updateMetrics(event, 'emit', performance.now() - startTime);
             return true;
         } catch (error) {
@@ -594,8 +636,12 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                                     performance.now() - execStartTime,
                                     true
                                 );
-                                if (this.#options.captureRejections) {
-                                    this.#handleError(new EventHandlerError(event, error));
+
+                                const shouldCaptureRejections =
+                                    this.#options.captureRejections === true;
+
+                                if (shouldCaptureRejections) {
+                                    this.#handleErrorSync(new EventHandlerError(event, error));
                                 } else {
                                     queueMicrotask(() => {
                                         throw new EventHandlerError(event, error);
@@ -619,8 +665,11 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                         performance.now() - execStartTime,
                         true
                     );
-                    if (this.#options.captureRejections) {
-                        this.#handleError(new EventHandlerError(event, error));
+
+                    const shouldCaptureRejections = this.#options.captureRejections === true;
+
+                    if (shouldCaptureRejections) {
+                        this.#handleErrorSync(new EventHandlerError(event, error));
                     } else {
                         throw new EventHandlerError(event, error);
                     }
@@ -975,20 +1024,6 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         }
 
         return () => this.offById(id);
-    }
-
-    #handleError(error: Error): void {
-        const errorEvent = 'error' as EventKey<T>;
-
-        if (this.has(errorEvent)) {
-            try {
-                this.emitSync(errorEvent, error as T[typeof errorEvent]);
-            } catch (innerError) {
-                throw innerError;
-            }
-        } else {
-            throw error;
-        }
     }
 
     #addToQueue<K extends EventKey<T>>(event: K, data: T[K], priority: EventPriority): void {
