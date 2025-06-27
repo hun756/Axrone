@@ -340,12 +340,19 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     #metrics = new Map<
         string,
         {
-            emit: { count: number; timing: number[] };
-            execution: { count: number; errors: number; timing: number[] };
+            emit: {
+                count: number;
+                timing: number[];
+            };
+            execution: {
+                count: number;
+                errors: number;
+                timing: number[];
+            };
         }
     >();
     #scheduler: EventScheduler;
-    #eventQueues = new Map<string, PriorityQueue<QueuedEvent>>();
+    #eventQueues = new Map<string, PriorityQueue<QueuedEvent, number>>();
     #eventIdCounter = 0;
     #isPaused = false;
     #gcIntervalId?: ReturnType<typeof setInterval>;
@@ -365,7 +372,6 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         }
     }
 
-    // IEVENTOBSERVER IMPLEMENTATION
     get maxListeners(): number {
         return this.#options.maxListeners;
     }
@@ -384,17 +390,288 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         };
     }
 
-    has<K extends EventKey<T>>(event: K): boolean {
+    public on<K extends EventKey<T>>(
+        event: K,
+        callback: EventCallback<T[K]>,
+        options: SubscriptionOptions = {}
+    ): UnsubscribeFn {
+        return this.#addListener(event, callback, {
+            once: false,
+            priority: 'normal',
+            ...options,
+        });
+    }
+
+    public once<K extends EventKey<T>>(
+        event: K,
+        callback: EventCallback<T[K]>,
+        options: Omit<SubscriptionOptions, 'once'> = {}
+    ): UnsubscribeFn {
+        return this.#addListener(event, callback, {
+            once: true,
+            priority: 'normal',
+            ...options,
+        });
+    }
+
+    public pipe<K extends EventKey<T>>(
+        event: K,
+        emitter: IEventPublisher<any>,
+        targetEvent?: string
+    ): UnsubscribeFn {
+        const actualTargetEvent = targetEvent || event;
+        return this.on(event, (data) => {
+            void emitter.emit(actualTargetEvent as any, data);
+        });
+    }
+
+    public off<K extends EventKey<T>>(event: K, callback?: EventCallback<T[K]>): boolean {
+        if (!this.#subscriptions.has(event)) {
+            return false;
+        }
+
+        const subscriptionMap = this.#subscriptions.get(event)!;
+
+        if (!callback) {
+            for (const id of subscriptionMap.keys()) {
+                this.#staticSubscriptionStorage.delete(id);
+            }
+            this.#subscriptions.delete(event);
+            return subscriptionMap.size > 0;
+        }
+
+        let found = false;
+        for (const [id, subscription] of subscriptionMap.entries()) {
+            if (subscription.callback === callback) {
+                subscriptionMap.delete(id);
+                this.#staticSubscriptionStorage.delete(id);
+                found = true;
+            }
+        }
+
+        if (subscriptionMap.size === 0) {
+            this.#subscriptions.delete(event);
+        }
+
+        return found;
+    }
+
+    public offById(subscriptionId: symbol): boolean {
+        const subscription = this.#staticSubscriptionStorage.get(subscriptionId);
+        if (!subscription) {
+            return false;
+        }
+
+        const { event } = subscription;
+        const subscriptionMap = this.#subscriptions.get(event);
+
+        if (!subscriptionMap) {
+            this.#staticSubscriptionStorage.delete(subscriptionId);
+            return false;
+        }
+
+        const result = subscriptionMap.delete(subscriptionId);
+        this.#staticSubscriptionStorage.delete(subscriptionId);
+
+        if (subscriptionMap.size === 0) {
+            this.#subscriptions.delete(event);
+        }
+
+        return result;
+    }
+
+    public async emit<K extends EventKey<T>>(
+        event: K,
+        data: T[K],
+        options: { priority?: EventPriority } = {}
+    ): Promise<boolean> {
+        const priority = options.priority || 'normal';
+        const startTime = performance.now();
+
+        try {
+            if (this.#isPaused) {
+                this.#addToQueue(event, data, priority);
+                this.#updateMetrics(event, 'emit', 0);
+                return true;
+            }
+
+            const subscriptionMap = this.#subscriptions.get(event);
+            if (!subscriptionMap || subscriptionMap.size === 0) {
+                this.#updateMetrics(event, 'emit', performance.now() - startTime);
+                return false;
+            }
+
+            const subscriptions = [...subscriptionMap.values()].sort(
+                (a, b) => PRIORITY_VALUES[a.priority] - PRIORITY_VALUES[b.priority]
+            );
+
+            const onceSubscriptions = subscriptions.filter((s) => s.once);
+            for (const subscription of onceSubscriptions) {
+                this.offById(subscription.id);
+            }
+
+            const executionPromises = subscriptions.map((subscription) =>
+                this.#scheduler.schedule(async () => {
+                    const execStartTime = performance.now();
+                    subscription.executionCount++;
+                    subscription.lastExecuted = Date.now();
+                    const { callback } = subscription;
+
+                    try {
+                        await callback(data);
+                        this.#updateMetrics(event, 'execution', performance.now() - execStartTime);
+                    } catch (error) {
+                        this.#updateMetrics(
+                            event,
+                            'execution',
+                            performance.now() - execStartTime,
+                            true
+                        );
+                        if (this.#options.captureRejections) {
+                            this.#handleError(new EventHandlerError(event, error));
+                        } else {
+                            throw new EventHandlerError(event, error);
+                        }
+                    }
+                })
+            );
+
+            await Promise.all(executionPromises);
+            this.#updateMetrics(event, 'emit', performance.now() - startTime);
+            return true;
+        } catch (error) {
+            this.#updateMetrics(event, 'emit', performance.now() - startTime);
+            throw error;
+        }
+    }
+
+    public emitSync<K extends EventKey<T>>(
+        event: K,
+        data: T[K],
+        options: { priority?: EventPriority } = {}
+    ): boolean {
+        const startTime = performance.now();
+
+        try {
+            if (this.#isPaused) {
+                this.#addToQueue(event, data, options.priority || 'normal');
+                this.#updateMetrics(event, 'emit', 0);
+                return true;
+            }
+
+            const subscriptionMap = this.#subscriptions.get(event);
+            if (!subscriptionMap || subscriptionMap.size === 0) {
+                this.#updateMetrics(event, 'emit', performance.now() - startTime);
+                return false;
+            }
+
+            const subscriptions = [...subscriptionMap.values()].sort(
+                (a, b) => PRIORITY_VALUES[a.priority] - PRIORITY_VALUES[b.priority]
+            );
+
+            const onceSubscriptions = subscriptions.filter((s) => s.once);
+            for (const subscription of onceSubscriptions) {
+                this.offById(subscription.id);
+            }
+
+            let hadAsyncCallbacks = false;
+
+            for (const subscription of subscriptions) {
+                const execStartTime = performance.now();
+                subscription.executionCount++;
+                subscription.lastExecuted = Date.now();
+                const { callback } = subscription;
+
+                try {
+                    const result = callback(data);
+                    if (result instanceof Promise) {
+                        hadAsyncCallbacks = true;
+                        result
+                            .catch((error) => {
+                                this.#updateMetrics(
+                                    event,
+                                    'execution',
+                                    performance.now() - execStartTime,
+                                    true
+                                );
+                                if (this.#options.captureRejections) {
+                                    this.#handleError(new EventHandlerError(event, error));
+                                } else {
+                                    queueMicrotask(() => {
+                                        throw new EventHandlerError(event, error);
+                                    });
+                                }
+                            })
+                            .then(() => {
+                                this.#updateMetrics(
+                                    event,
+                                    'execution',
+                                    performance.now() - execStartTime
+                                );
+                            });
+                    } else {
+                        this.#updateMetrics(event, 'execution', performance.now() - execStartTime);
+                    }
+                } catch (error) {
+                    this.#updateMetrics(
+                        event,
+                        'execution',
+                        performance.now() - execStartTime,
+                        true
+                    );
+                    if (this.#options.captureRejections) {
+                        this.#handleError(new EventHandlerError(event, error));
+                    } else {
+                        throw new EventHandlerError(event, error);
+                    }
+                }
+            }
+
+            if (hadAsyncCallbacks) {
+                console.warn(
+                    `EventEmitter: Event "${String(
+                        event
+                    )}" was emitted synchronously but had async listeners. Consider using emit() instead.`
+                );
+            }
+
+            this.#updateMetrics(event, 'emit', performance.now() - startTime);
+            return true;
+        } catch (error) {
+            this.#updateMetrics(event, 'emit', performance.now() - startTime);
+            throw error;
+        }
+    }
+
+    public async emitBatch<K extends EventKey<T>>(
+        events: Array<{ event: K; data: T[K]; priority?: EventPriority }>
+    ): Promise<boolean[]> {
+        if (events.length === 0) return [];
+
+        const results: Promise<boolean>[] = [];
+
+        for (const { event, data, priority } of events) {
+            results.push(this.emit(event, data, { priority }));
+        }
+
+        return Promise.all(results);
+    }
+
+    public has<K extends EventKey<T>>(event: K): boolean {
         const subscriptionMap = this.#subscriptions.get(event);
         return !!subscriptionMap && subscriptionMap.size > 0;
     }
 
-    listenerCount<K extends EventKey<T>>(event: K): number {
+    public hasSubscription(subscriptionId: symbol): boolean {
+        return this.#staticSubscriptionStorage.has(subscriptionId);
+    }
+
+    public listenerCount<K extends EventKey<T>>(event: K): number {
         const subscriptionMap = this.#subscriptions.get(event);
         return subscriptionMap ? subscriptionMap.size : 0;
     }
 
-    listenerCountAll(): number {
+    public listenerCountAll(): number {
         let count = 0;
         for (const subscriptionMap of this.#subscriptions.values()) {
             count += subscriptionMap.size;
@@ -402,11 +679,11 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         return count;
     }
 
-    eventNames(): EventKey<T>[] {
+    public eventNames(): EventKey<T>[] {
         return Array.from(this.#subscriptions.keys()) as EventKey<T>[];
     }
 
-    getSubscriptions<K extends EventKey<T>>(event: K): ReadonlyArray<Subscription<T[K]>> {
+    public getSubscriptions<K extends EventKey<T>>(event: K): ReadonlyArray<Subscription<T[K]>> {
         const subscriptionMap = this.#subscriptions.get(event);
         if (!subscriptionMap) {
             return [];
@@ -414,11 +691,143 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         return Array.from(subscriptionMap.values()) as Subscription<T[K]>[];
     }
 
-    hasSubscription(subscriptionId: symbol): boolean {
-        return this.#staticSubscriptionStorage.has(subscriptionId);
+    public removeAllListeners<K extends EventKey<T>>(event?: K): this {
+        if (event) {
+            const subscriptionMap = this.#subscriptions.get(event);
+            if (subscriptionMap) {
+                for (const id of subscriptionMap.keys()) {
+                    this.#staticSubscriptionStorage.delete(id);
+                }
+                this.#subscriptions.delete(event);
+            }
+        } else {
+            this.#staticSubscriptionStorage.clear();
+            this.#subscriptions.clear();
+            if (this.#weakSubscriptionStorage) {
+                this.#weakSubscriptionStorage = new WeakMap();
+            }
+        }
+        return this;
     }
 
-    getMetrics<K extends EventKey<T>>(event: K): EventMetrics {
+    public batchSubscribe<K extends EventKey<T>>(
+        event: K,
+        callbacks: ReadonlyArray<EventCallback<T[K]>>,
+        options: SubscriptionOptions = {}
+    ): ReadonlyArray<symbol> {
+        const subscriptionIds: symbol[] = [];
+
+        for (const callback of callbacks) {
+            const unsubscribe = this.on(event, callback, options);
+            const subscription = this.getSubscriptions(event).find((s) => s.callback === callback);
+            if (subscription) {
+                subscriptionIds.push(subscription.id);
+            }
+        }
+
+        return subscriptionIds;
+    }
+
+    public batchUnsubscribe(subscriptionIds: ReadonlyArray<symbol>): number {
+        let count = 0;
+        for (const id of subscriptionIds) {
+            if (this.offById(id)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public getQueuedEvents<K extends EventKey<T>>(event?: K): ReadonlyArray<QueuedEvent> {
+        if (event) {
+            const queue = this.#eventQueues.get(event);
+            return queue ? queue.toArray() : [];
+        }
+
+        const allEvents: QueuedEvent[] = [];
+        for (const queue of this.#eventQueues.values()) {
+            allEvents.push(...queue.toArray());
+        }
+
+        return allEvents.sort((a, b) => {
+            const priorityDiff = PRIORITY_VALUES[a.priority] - PRIORITY_VALUES[b.priority];
+            if (priorityDiff !== 0) return priorityDiff;
+            return a.timestamp - b.timestamp;
+        });
+    }
+
+    public getPendingCount<K extends EventKey<T>>(event?: K): number {
+        if (event) {
+            const queue = this.#eventQueues.get(event);
+            return queue ? queue.size : 0;
+        }
+
+        let total = 0;
+        for (const queue of this.#eventQueues.values()) {
+            total += queue.size;
+        }
+        return total;
+    }
+
+    public getBufferSize(): number {
+        return this.#options.bufferSize;
+    }
+
+    public clearBuffer<K extends EventKey<T>>(event?: K): number {
+        if (event) {
+            const queue = this.#eventQueues.get(event);
+            if (!queue) return 0;
+            const size = queue.size;
+            queue.clear();
+            return size;
+        }
+
+        let total = 0;
+        for (const [eventName, queue] of this.#eventQueues.entries()) {
+            total += queue.size;
+            queue.clear();
+        }
+        this.#eventQueues.clear();
+        return total;
+    }
+
+    public pause(): void {
+        this.#isPaused = true;
+    }
+
+    public resume(): void {
+        if (!this.#isPaused) return;
+        this.#isPaused = false;
+        this.#processQueues();
+    }
+
+    public isPaused(): boolean {
+        return this.#isPaused;
+    }
+
+    public async drain(): Promise<void> {
+        await this.#scheduler.drain();
+
+        if (!this.#isPaused) {
+            await this.#processQueues();
+        }
+    }
+
+    public async flush<K extends EventKey<T>>(event: K): Promise<void> {
+        if (!this.#eventQueues.has(event)) return;
+
+        const queue = this.#eventQueues.get(event)!;
+        const queuedEvents = queue.toArray();
+        queue.clear();
+
+        for (const queuedEvent of queuedEvents) {
+            await this.emit(event, queuedEvent.data as T[K], {
+                priority: queuedEvent.priority,
+            });
+        }
+    }
+
+    public getMetrics<K extends EventKey<T>>(event: K): EventMetrics {
         const metrics = this.#metrics.get(event) || {
             emit: { count: 0, timing: [] },
             execution: { count: 0, errors: 0, timing: [] },
@@ -454,7 +863,15 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         };
     }
 
-    getMemoryUsage(): Record<string, number> {
+    public resetMetrics<K extends EventKey<T>>(event?: K): void {
+        if (event) {
+            this.#metrics.delete(event);
+        } else {
+            this.#metrics.clear();
+        }
+    }
+
+    public getMemoryUsage(): Record<string, number> {
         const calcSize = (obj: any): number => {
             if (obj === null || obj === undefined) return 0;
 
@@ -516,96 +933,6 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         };
     }
 
-    on<K extends EventKey<T>>(
-        event: K,
-        callback: EventCallback<T[K]>,
-        options: SubscriptionOptions = {}
-    ): UnsubscribeFn {
-        return this.#addListener(event, callback, {
-            once: false,
-            priority: 'normal',
-            ...options,
-        });
-    }
-
-    once<K extends EventKey<T>>(
-        event: K,
-        callback: EventCallback<T[K]>,
-        options: Omit<SubscriptionOptions, 'once'> = {}
-    ): UnsubscribeFn {
-        return this.#addListener(event, callback, {
-            once: true,
-            priority: 'normal',
-            ...options,
-        });
-    }
-
-    off<K extends EventKey<T>>(event: K, callback?: EventCallback<T[K]>): boolean {
-        if (!this.#subscriptions.has(event)) {
-            return false;
-        }
-
-        const subscriptionMap = this.#subscriptions.get(event)!;
-
-        if (!callback) {
-            for (const id of subscriptionMap.keys()) {
-                this.#staticSubscriptionStorage.delete(id);
-            }
-            this.#subscriptions.delete(event);
-            return subscriptionMap.size > 0;
-        }
-
-        let found = false;
-        for (const [id, subscription] of subscriptionMap.entries()) {
-            if (subscription.callback === callback) {
-                subscriptionMap.delete(id);
-                this.#staticSubscriptionStorage.delete(id);
-                found = true;
-            }
-        }
-
-        if (subscriptionMap.size === 0) {
-            this.#subscriptions.delete(event);
-        }
-
-        return found;
-    }
-
-    offById(subscriptionId: symbol): boolean {
-        const subscription = this.#staticSubscriptionStorage.get(subscriptionId);
-        if (!subscription) {
-            return false;
-        }
-
-        const { event } = subscription;
-        const subscriptionMap = this.#subscriptions.get(event);
-
-        if (!subscriptionMap) {
-            this.#staticSubscriptionStorage.delete(subscriptionId);
-            return false;
-        }
-
-        const result = subscriptionMap.delete(subscriptionId);
-        this.#staticSubscriptionStorage.delete(subscriptionId);
-
-        if (subscriptionMap.size === 0) {
-            this.#subscriptions.delete(event);
-        }
-
-        return result;
-    }
-
-    pipe<K extends EventKey<T>>(
-        event: K,
-        emitter: IEventPublisher<any>,
-        targetEvent?: string
-    ): UnsubscribeFn {
-        const actualTargetEvent = targetEvent || event;
-        return this.on(event, (data) => {
-            void emitter.emit(actualTargetEvent as any, data);
-        });
-    }
-
     #addListener<K extends EventKey<T>>(
         event: K,
         callback: EventCallback<T[K]>,
@@ -648,6 +975,61 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         }
 
         return () => this.offById(id);
+    }
+
+    #handleError(error: Error): void {
+        const errorEvent = 'error' as EventKey<T>;
+
+        if (this.has(errorEvent)) {
+            try {
+                this.emitSync(errorEvent, error as T[typeof errorEvent]);
+            } catch (innerError) {
+                throw innerError;
+            }
+        } else {
+            throw error;
+        }
+    }
+
+    #addToQueue<K extends EventKey<T>>(event: K, data: T[K], priority: EventPriority): void {
+        if (!this.#eventQueues.has(event)) {
+            this.#eventQueues.set(
+                event,
+                PriorityQueue.withComparator<QueuedEvent, number>((a, b) => a - b)
+            );
+        }
+
+        const queue = this.#eventQueues.get(event)!;
+
+        if (queue.size >= this.#options.bufferSize) {
+            throw new EventQueueFullError(event, this.#options.bufferSize);
+        }
+
+        const eventId = this.#eventIdCounter++;
+        const queuedEvent: QueuedEvent = {
+            id: eventId,
+            event,
+            data,
+            timestamp: Date.now(),
+            priority,
+        };
+
+        const priorityValue = PRIORITY_VALUES[priority] * 1000000000 + Date.now();
+        queue.enqueue(queuedEvent, priorityValue);
+    }
+
+    async #processQueues(): Promise<void> {
+        if (this.#isPaused) return;
+
+        const allEvents = this.getQueuedEvents();
+
+        this.clearBuffer();
+
+        for (const queuedEvent of allEvents) {
+            await this.emit(queuedEvent.event as EventKey<T>, queuedEvent.data as T[EventKey<T>], {
+                priority: queuedEvent.priority,
+            });
+        }
     }
 
     #updateMetrics<K extends EventKey<T>>(
@@ -732,127 +1114,5 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         this.removeAllListeners();
         this.clearBuffer();
         this.#metrics.clear();
-    }
-
-    async emit<K extends EventKey<T>>(
-        event: K,
-        data: T[K],
-        options?: { priority?: EventPriority }
-    ): Promise<boolean> {
-        // Todo - Implementiton will come here
-        throw new Error('Method not implemented.');
-    }
-
-    emitSync<K extends EventKey<T>>(
-        event: K,
-        data: T[K],
-        options?: { priority?: EventPriority }
-    ): boolean {
-        // Todo - Implementiton will come here
-        throw new Error('Method not implemented.');
-    }
-
-    async emitBatch<K extends EventKey<T>>(
-        events: Array<{ event: K; data: T[K]; priority?: EventPriority }>
-    ): Promise<boolean[]> {
-        // Todo - Implementiton will come here
-        throw new Error('Method not implemented.');
-    }
-
-    getQueuedEvents<K extends EventKey<T>>(event?: K): ReadonlyArray<QueuedEvent> {
-        // Todo - Implementiton will come here
-        throw new Error('Method not implemented.');
-    }
-
-    getPendingCount<K extends EventKey<T>>(event?: K): number {
-        // Todo - Implementiton will come here
-        throw new Error('Method not implemented.');
-    }
-
-    getBufferSize(): number {
-        return this.#options.bufferSize;
-    }
-
-    clearBuffer<K extends EventKey<T>>(event?: K): number {
-        // Todo - Implementiton will come here
-        throw new Error('Method not implemented.');
-    }
-
-    pause(): void {
-        this.#isPaused = true;
-    }
-
-    resume(): void {
-        // Todo - Implementiton will come here
-        throw new Error('Method not implemented.');
-    }
-
-    isPaused(): boolean {
-        return this.#isPaused;
-    }
-
-    removeAllListeners<K extends EventKey<T>>(event?: K): this {
-        if (event) {
-            const subscriptionMap = this.#subscriptions.get(event);
-            if (subscriptionMap) {
-                for (const id of subscriptionMap.keys()) {
-                    this.#staticSubscriptionStorage.delete(id);
-                }
-                this.#subscriptions.delete(event);
-            }
-        } else {
-            this.#staticSubscriptionStorage.clear();
-            this.#subscriptions.clear();
-            if (this.#weakSubscriptionStorage) {
-                this.#weakSubscriptionStorage = new WeakMap();
-            }
-        }
-        return this;
-    }
-
-    batchSubscribe<K extends EventKey<T>>(
-        event: K,
-        callbacks: ReadonlyArray<EventCallback<T[K]>>,
-        options: SubscriptionOptions = {}
-    ): ReadonlyArray<symbol> {
-        const subscriptionIds: symbol[] = [];
-
-        for (const callback of callbacks) {
-            const unsubscribe = this.on(event, callback, options);
-            const subscription = this.getSubscriptions(event).find((s) => s.callback === callback);
-            if (subscription) {
-                subscriptionIds.push(subscription.id);
-            }
-        }
-
-        return subscriptionIds;
-    }
-
-    batchUnsubscribe(subscriptionIds: ReadonlyArray<symbol>): number {
-        let count = 0;
-        for (const id of subscriptionIds) {
-            if (this.offById(id)) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    async drain(): Promise<void> {
-        // Todo - Implement drain logic
-        throw new Error('Method not implemented.');
-    }
-
-    async flush<K extends EventKey<T>>(event: K): Promise<void> {
-        // Todo - Implement flush logic
-        throw new Error('Method not implemented.');
-    }
-
-    resetMetrics<K extends EventKey<T>>(event?: K): void {
-        if (event) {
-            this.#metrics.delete(event);
-        } else {
-            this.#metrics.clear();
-        }
     }
 }
