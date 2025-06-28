@@ -490,4 +490,70 @@ describe('EventEmitter - Main Implementation', () => {
             expect(emitter.getPendingCount('test:event')).toBe(0);
         });
     });
+
+    // BATCH OPERATIONS TESTS
+    describe('Batch Operations', () => {
+        let emitter: EventEmitter<TestEvents>;
+
+        beforeEach(() => {
+            emitter = new EventEmitter<TestEvents>();
+        });
+
+        afterEach(() => {
+            emitter.dispose();
+        });
+
+        it('should handle batch subscription correctly', () => {
+            const callbacks = [jest.fn(), jest.fn(), jest.fn()];
+
+            const subscriptionIds = emitter.batchSubscribe('test:batch', callbacks);
+
+            expect(subscriptionIds).toHaveLength(3);
+            expect(emitter.listenerCount('test:batch')).toBe(3);
+
+            const uniqueIds = new Set(subscriptionIds);
+            expect(uniqueIds.size).toBe(3);
+        });
+
+        it('should handle batch unsubscription correctly', () => {
+            const callbacks = [jest.fn(), jest.fn(), jest.fn()];
+            const subscriptionIds = emitter.batchSubscribe('test:batch', callbacks);
+
+            expect(emitter.listenerCount('test:batch')).toBe(3);
+
+            const unsubscribed = emitter.batchUnsubscribe(subscriptionIds);
+            expect(unsubscribed).toBe(3);
+            expect(emitter.listenerCount('test:batch')).toBe(0);
+        });
+
+        it('should handle batch emission correctly', async () => {
+            let emissionCount = 0;
+
+            emitter.on('test:batch', () => {
+                emissionCount++;
+            });
+
+            const events = [
+                { event: 'test:batch' as const, data: { index: 1 } },
+                { event: 'test:batch' as const, data: { index: 2 } },
+                { event: 'test:batch' as const, data: { index: 3 } },
+            ];
+
+            const results = await emitter.emitBatch(events);
+
+            expect(results).toEqual([true, true, true]);
+            expect(emissionCount).toBe(3);
+        });
+
+        it('should handle empty batch operations', async () => {
+            const results = await emitter.emitBatch([]);
+            expect(results).toEqual([]);
+
+            const subscriptionIds = emitter.batchSubscribe('test:batch', []);
+            expect(subscriptionIds).toEqual([]);
+
+            const unsubscribed = emitter.batchUnsubscribe([]);
+            expect(unsubscribed).toBe(0);
+        });
+    });
 });
