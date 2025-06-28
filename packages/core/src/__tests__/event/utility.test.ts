@@ -1,6 +1,7 @@
 import {
     createEmitter,
     createEventProxy,
+    createHooks,
     createTypedEmitter,
     EventGroup,
     EventMap,
@@ -454,6 +455,39 @@ describe('EventEmitter - Features', () => {
             const unsubscribed = group.batchUnsubscribe(ids);
             expect(unsubscribed).toBe(3);
             expect(group.listenerCount('test:event')).toBe(0);
+        });
+    });
+
+    describe('Hooks API', () => {
+        it('should provide functional event API', async () => {
+            const { on, once, emit, emitSync, useEmitter } = createHooks<TestEvents>();
+
+            let onCount = 0;
+            let onceCount = 0;
+
+            const unsubscribe = on('test:event', () => {
+                onCount++;
+            });
+            const unsubscribeOnce = once('test:filtered', () => {
+                onceCount++;
+            });
+
+            await emit('test:event', { id: 'test', data: {} });
+            await emit('test:filtered', { value: 42 });
+            await emit('test:filtered', { value: 43 });
+
+            expect(onCount).toBe(1);
+            expect(onceCount).toBe(1);
+
+            emitSync('test:event', { id: 'sync', data: {} });
+            expect(onCount).toBe(2);
+
+            const emitter = useEmitter();
+            expect(emitter.listenerCountAll()).toBeGreaterThan(0);
+
+            unsubscribe();
+            unsubscribeOnce();
+            emitter.dispose();
         });
     });
 });

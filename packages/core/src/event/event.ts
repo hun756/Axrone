@@ -1866,3 +1866,56 @@ export class EventGroup<T extends EventMap> implements IEventEmitter<T> {
         this.#subscriptions.clear();
     }
 }
+
+export function createHooks<T extends EventMap>(): {
+    on: <K extends EventKey<T>>(
+        event: K,
+        callback: EventCallback<T[K]>,
+        options?: SubscriptionOptions
+    ) => UnsubscribeFn;
+    once: <K extends EventKey<T>>(
+        event: K,
+        callback: EventCallback<T[K]>,
+        options?: Omit<SubscriptionOptions, 'once'>
+    ) => UnsubscribeFn;
+    off: <K extends EventKey<T>>(event: K, callback?: EventCallback<T[K]>) => boolean;
+    emit: <K extends EventKey<T>>(
+        event: K,
+        data: T[K],
+        options?: { priority?: EventPriority }
+    ) => Promise<boolean>;
+    emitSync: <K extends EventKey<T>>(
+        event: K,
+        data: T[K],
+        options?: { priority?: EventPriority }
+    ) => boolean;
+    useEmitter: () => IEventEmitter<T>;
+} {
+    const emitter = new EventEmitter<T>();
+
+    return {
+        on: <K extends EventKey<T>>(
+            event: K,
+            callback: EventCallback<T[K]>,
+            options?: SubscriptionOptions
+        ) => emitter.on(event, callback, options),
+        once: <K extends EventKey<T>>(
+            event: K,
+            callback: EventCallback<T[K]>,
+            options?: Omit<SubscriptionOptions, 'once'>
+        ) => emitter.once(event, callback, options),
+        off: <K extends EventKey<T>>(event: K, callback?: EventCallback<T[K]>) =>
+            emitter.off(event, callback),
+        emit: <K extends EventKey<T>>(
+            event: K,
+            data: T[K],
+            options?: { priority?: EventPriority }
+        ) => emitter.emit(event, data, options),
+        emitSync: <K extends EventKey<T>>(
+            event: K,
+            data: T[K],
+            options?: { priority?: EventPriority }
+        ) => emitter.emitSync(event, data, options),
+        useEmitter: () => emitter,
+    };
+}
