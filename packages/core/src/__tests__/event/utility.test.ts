@@ -5,6 +5,7 @@ import {
     createTypedEmitter,
     EventGroup,
     EventMap,
+    EventUtils,
     excludeEvents,
     filterEvents,
     isEventEmitter,
@@ -488,6 +489,152 @@ describe('EventEmitter - Features', () => {
             unsubscribe();
             unsubscribeOnce();
             emitter.dispose();
+        });
+    });
+
+    describe('Event Utilities', () => {
+        describe('debounce', () => {
+            it('should debounce rapid calls', async () => {
+                let callCount = 0;
+                const debounced = EventUtils.debounce(() => {
+                    callCount++;
+                }, 50);
+
+                debounced({});
+                debounced({});
+                debounced({});
+
+                expect(callCount).toBe(0);
+
+                await new Promise((resolve) => setTimeout(resolve, 60));
+                expect(callCount).toBe(1);
+            });
+        });
+
+        describe('throttle', () => {
+            it('should throttle rapid calls', async () => {
+                let callCount = 0;
+                const throttled = EventUtils.throttle(() => {
+                    callCount++;
+                }, 50);
+
+                throttled({});
+                expect(callCount).toBe(1);
+
+                throttled({});
+                throttled({});
+                expect(callCount).toBe(1);
+
+                await new Promise((resolve) => setTimeout(resolve, 60));
+                throttled({});
+                expect(callCount).toBe(2);
+            });
+        });
+
+        describe('rateLimit', () => {
+            it('should limit calls within time window', () => {
+                let callCount = 0;
+                const rateLimited = EventUtils.rateLimit(
+                    () => {
+                        callCount++;
+                    },
+                    2,
+                    1000
+                );
+
+                rateLimited({});
+                rateLimited({});
+                expect(callCount).toBe(2);
+
+                rateLimited({});
+                expect(callCount).toBe(2);
+            });
+        });
+
+        describe('filter', () => {
+            it('should filter based on predicate', () => {
+                let callCount = 0;
+                const filtered = EventUtils.filter(
+                    (data: { value: number }) => data.value > 5,
+                    () => {
+                        callCount++;
+                    }
+                );
+
+                filtered({ value: 3 });
+                expect(callCount).toBe(0);
+
+                filtered({ value: 7 });
+                expect(callCount).toBe(1);
+            });
+        });
+
+        describe('compose', () => {
+            it('should compose multiple callbacks', async () => {
+                const results: string[] = [];
+                const composed = EventUtils.compose(
+                    () => {
+                        results.push('first');
+                    },
+                    () => {
+                        results.push('second');
+                    },
+                    () => {
+                        results.push('third');
+                    }
+                );
+
+                await composed({});
+                expect(results).toEqual(['first', 'second', 'third']);
+            });
+        });
+
+        describe('map', () => {
+            it('should transform data before callback', () => {
+                let receivedData: any = null;
+                const mapped = EventUtils.map(
+                    (data: { value: number }) => ({ doubled: data.value * 2 }),
+                    (transformed) => {
+                        receivedData = transformed;
+                    }
+                );
+
+                mapped({ value: 5 });
+                expect(receivedData).toEqual({ doubled: 10 });
+            });
+        });
+
+        describe('once', () => {
+            it('should execute callback only once', () => {
+                let callCount = 0;
+                const onceCallback = EventUtils.once(() => {
+                    callCount++;
+                });
+
+                onceCallback({});
+                onceCallback({});
+                onceCallback({});
+
+                expect(callCount).toBe(1);
+            });
+        });
+
+        describe('catchErrors', () => {
+            it('should catch and handle errors', async () => {
+                let errorCaught: any = null;
+                const errorCatcher = EventUtils.catchErrors(
+                    () => {
+                        throw new Error('Test error');
+                    },
+                    (error) => {
+                        errorCaught = error;
+                    }
+                );
+
+                await errorCatcher({});
+                expect(errorCaught).toBeInstanceOf(Error);
+                expect(errorCaught.message).toBe('Test error');
+            });
         });
     });
 });

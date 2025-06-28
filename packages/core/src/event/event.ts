@@ -1919,3 +1919,122 @@ export function createHooks<T extends EventMap>(): {
         useEmitter: () => emitter,
     };
 }
+
+export const EventUtils = {
+    createKey: <T>(name: string): EventKey<{ [key: string]: T }> => name as any,
+
+    toAsync: <T, R>(fn: (data: T) => R): ((data: T) => Promise<R>) => {
+        return async (data: T) => fn(data);
+    },
+
+    debounce: <T>(callback: EventCallback<T>, wait: number): EventCallback<T> => {
+        let timeout: ReturnType<typeof setTimeout> | null = null;
+
+        return (data: T) => {
+            if (timeout !== null) {
+                clearTimeout(timeout);
+            }
+
+            return new Promise<void>((resolve) => {
+                timeout = setTimeout(() => {
+                    const result = callback(data);
+                    if (result instanceof Promise) {
+                        result.then(resolve);
+                    } else {
+                        resolve();
+                    }
+                }, wait);
+            });
+        };
+    },
+
+    throttle: <T>(callback: EventCallback<T>, limit: number): EventCallback<T> => {
+        let inThrottle = false;
+        let lastResult: Promise<void> | void;
+
+        return (data: T) => {
+            if (!inThrottle) {
+                inThrottle = true;
+                lastResult = callback(data);
+
+                setTimeout(() => {
+                    inThrottle = false;
+                }, limit);
+            }
+
+            return lastResult instanceof Promise ? lastResult : Promise.resolve(lastResult);
+        };
+    },
+
+    rateLimit: <T>(
+        callback: EventCallback<T>,
+        maxCalls: number,
+        timeWindow: number
+    ): EventCallback<T> => {
+        const calls: number[] = [];
+
+        return (data: T) => {
+            const now = Date.now();
+
+            while (calls.length > 0 && calls[0] <= now - timeWindow) {
+                calls.shift();
+            }
+
+            if (calls.length < maxCalls) {
+                calls.push(now);
+                return callback(data);
+            }
+
+            return Promise.resolve();
+        };
+    },
+
+    once: <T>(callback: EventCallback<T>): EventCallback<T> => {
+        let called = false;
+        let result: any;
+
+        return (data: T) => {
+            if (!called) {
+                called = true;
+                result = callback(data);
+            }
+            return result;
+        };
+    },
+
+    compose: <T>(...callbacks: EventCallback<T>[]): EventCallback<T> => {
+        return async (data: T) => {
+            for (const callback of callbacks) {
+                await callback(data);
+            }
+        };
+    },
+
+    filter: <T>(predicate: (data: T) => boolean, callback: EventCallback<T>): EventCallback<T> => {
+        return (data: T) => {
+            if (predicate(data)) {
+                return callback(data);
+            }
+        };
+    },
+
+    map: <T, U>(transform: (data: T) => U, callback: EventCallback<U>): EventCallback<T> => {
+        return (data: T) => {
+            const transformed = transform(data);
+            return callback(transformed);
+        };
+    },
+
+    catchErrors: <T>(
+        callback: EventCallback<T>,
+        errorHandler: (error: unknown, data: T) => void
+    ): EventCallback<T> => {
+        return async (data: T) => {
+            try {
+                await callback(data);
+            } catch (error) {
+                errorHandler(error, data);
+            }
+        };
+    },
+};
