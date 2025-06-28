@@ -716,4 +716,58 @@ describe('EventEmitter - Main Implementation', () => {
             expect(metrics.emit.count).toBe(0);
         });
     });
+
+    // CONFIGURATION AND OPTIONS TESTS
+    describe('Configuration and Options', () => {
+        it('should respect maxListeners configuration', () => {
+            const emitter = new EventEmitter<TestEvents>({ maxListeners: 2 });
+
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+            emitter.on('test:event', () => {});
+            emitter.on('test:event', () => {});
+
+            expect(emitter.listenerCount('test:event')).toBe(2);
+            expect(consoleSpy).not.toHaveBeenCalled();
+
+            emitter.on('test:event', () => {});
+
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.stringContaining('MaxListenersExceededWarning')
+            );
+
+            consoleSpy.mockRestore();
+            emitter.dispose();
+        });
+
+        it('should handle maxListeners property changes', () => {
+            const emitter = new EventEmitter<TestEvents>({ maxListeners: 5 });
+
+            expect(emitter.maxListeners).toBe(5);
+
+            emitter.maxListeners = 10;
+            expect(emitter.maxListeners).toBe(10);
+
+            expect(() => {
+                emitter.maxListeners = -1;
+            }).toThrow(TypeError);
+
+            emitter.resetMaxListeners();
+            expect(emitter.maxListeners).toBe(10);
+
+            emitter.dispose();
+        });
+
+        it('should handle GC configuration correctly', (done) => {
+            const emitter = new EventEmitter<TestEvents>({ gcIntervalMs: 100 });
+
+            const unsubscribe = emitter.on('test:event', () => {});
+            unsubscribe();
+
+            setTimeout(() => {
+                emitter.dispose();
+                done();
+            }, 150);
+        });
+    });
 });
