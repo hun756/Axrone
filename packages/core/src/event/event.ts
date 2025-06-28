@@ -20,17 +20,17 @@ class PerformanceProvider {
 
     private static createTimer(): PerformanceTimer {
         if (typeof window !== 'undefined' && window.performance && 'now' in window.performance) {
-            return window.performance;
+            return window.performance as PerformanceTimer;
         }
 
         if (typeof global !== 'undefined' && global.performance && 'now' in global.performance) {
-            return global.performance;
+            return global.performance as PerformanceTimer;
         }
 
         try {
             const perfHooks = require('perf_hooks');
             if (perfHooks?.performance && 'now' in perfHooks.performance) {
-                return perfHooks.performance;
+                return perfHooks.performance as PerformanceTimer;
             }
         } catch {}
 
@@ -1469,21 +1469,15 @@ export function mergeEmitters<T extends ReadonlyArray<IEventEmitter<any>>>(
     const unsubscribers: UnsubscribeFn[] = [];
 
     for (const emitter of emitters) {
-        for (const event of emitter.eventNames()) {
-            unsubscribers.push(
-                emitter.on(event, (data: any) => {
-                    void merged.emit(event, data, { priority: 'normal' });
-                })
-            );
-        }
+        const originalEmit = emitter.emit.bind(emitter);
 
-        if (emitter.has('error' as any)) {
-            unsubscribers.push(
-                emitter.on('error' as any, (error) => {
-                    void merged.emit('error' as any, error);
-                })
-            );
-        }
+        (emitter as any).emit = async function (event: any, data: any, options?: any) {
+            const result = await originalEmit(event, data, options);
+            void merged.emit(event, data, options);
+            return result;
+        };
+
+        (emitter as any)._originalEmit = originalEmit;
     }
 
     const originalRemoveAllListeners = merged.removeAllListeners.bind(merged);
@@ -1496,6 +1490,13 @@ export function mergeEmitters<T extends ReadonlyArray<IEventEmitter<any>>>(
 
     (merged as any).dispose = () => {
         unsubscribers.forEach((unsub) => unsub());
+
+        for (const emitter of emitters) {
+            if ((emitter as any)._originalEmit) {
+                (emitter as any).emit = (emitter as any)._originalEmit;
+                delete (emitter as any)._originalEmit;
+            }
+        }
     };
 
     return merged as unknown as IEventEmitter<

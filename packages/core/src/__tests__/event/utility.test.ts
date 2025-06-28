@@ -6,6 +6,7 @@ import {
     excludeEvents,
     filterEvents,
     isEventEmitter,
+    mergeEmitters,
 } from '../../event/event';
 
 interface TestEvents extends EventMap {
@@ -250,6 +251,55 @@ describe('EventEmitter - Features', () => {
 
             unsubscribe();
             targetEmitter.dispose();
+        });
+    });
+
+    describe('Emitter Merging', () => {
+        it('should merge multiple emitters correctly', async () => {
+            const emitter1 = createTypedEmitter<TestEvents>();
+            const emitter2 = createTypedEmitter<TargetEvents>();
+            const merged = mergeEmitters(emitter1, emitter2);
+
+            let event1Count = 0;
+            let event2Count = 0;
+
+            merged.on('test:event' as any, () => {
+                event1Count++;
+            });
+            merged.on('target:mapped' as any, () => {
+                event2Count++;
+            });
+
+            await emitter1.emit('test:event', { id: 'test', data: {} });
+            await emitter2.emit('target:mapped', { transformed: true });
+
+            expect(event1Count).toBe(1);
+            expect(event2Count).toBe(1);
+
+            emitter1.dispose();
+            emitter2.dispose();
+            (merged as any).dispose();
+        });
+
+        it('should forward error events from source emitters', async () => {
+            const emitter1 = createTypedEmitter<TestEvents>();
+            const emitter2 = createTypedEmitter<TargetEvents>();
+            const merged = mergeEmitters(emitter1, emitter2);
+
+            let errorForwarded = false;
+
+            merged.on('error' as any, () => {
+                errorForwarded = true;
+            });
+
+            emitter1.on('error' as any, () => {});
+            await emitter1.emit('error' as any, new Error('test'));
+
+            expect(errorForwarded).toBe(true);
+
+            emitter1.dispose();
+            emitter2.dispose();
+            (merged as any).dispose();
         });
     });
 });
