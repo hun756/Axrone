@@ -1262,3 +1262,40 @@ export function filterEvents<T extends EventMap, K extends keyof T & string>(
 
     return target;
 }
+
+export function excludeEvents<T extends EventMap, K extends keyof T & string>(
+    source: IEventEmitter<T>,
+    excludedEvents: ReadonlyArray<K>
+): IEventEmitter<ExcludeEventsMap<T, K>> {
+    const target = new EventEmitter<ExcludeEventsMap<T, K>>();
+    const excludedEventsSet = new Set(excludedEvents);
+    const unsubscribers: UnsubscribeFn[] = [];
+    const forwardedEvents = new Set<string>();
+
+    const setupForwarding = (event: string) => {
+        if (!excludedEventsSet.has(event as any) && !forwardedEvents.has(event)) {
+            forwardedEvents.add(event);
+            unsubscribers.push(
+                source.on(event as any, (data) => void target.emit(event as any, data))
+            );
+        }
+    };
+
+    source.eventNames().forEach(setupForwarding);
+
+    const originalTargetOn = target.on.bind(target);
+    target.on = function <E extends keyof ExcludeEventsMap<T, K> & string>(
+        event: E,
+        callback: EventCallback<ExcludeEventsMap<T, K>[E]>,
+        options?: { priority?: EventPriority }
+    ): UnsubscribeFn {
+        setupForwarding(event);
+        return originalTargetOn(event, callback, options);
+    };
+
+    (target as any).dispose = () => {
+        unsubscribers.forEach((unsub) => unsub());
+    };
+
+    return target as IEventEmitter<ExcludeEventsMap<T, K>>;
+}

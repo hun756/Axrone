@@ -2,6 +2,7 @@ import {
     createEmitter,
     createTypedEmitter,
     EventMap,
+    excludeEvents,
     filterEvents,
     isEventEmitter,
 } from '../../event/event';
@@ -116,6 +117,27 @@ describe('EventEmitter - Adım 8: Advanced Features', () => {
             expect(errorPassed).toBe(true);
 
             (filtered as any).dispose();
+        });
+
+        it('should exclude specified events', async () => {
+            const excluded = excludeEvents(sourceEmitter, ['test:excluded']);
+            let includedCount = 0;
+            let excludedCount = 0;
+
+            excluded.on('test:event', () => {
+                includedCount++;
+            });
+            sourceEmitter.on('test:excluded', () => {
+                excludedCount++;
+            });
+
+            await sourceEmitter.emit('test:event', { id: 'test', data: {} });
+            await sourceEmitter.emit('test:excluded', { message: 'excluded' });
+
+            expect(includedCount).toBe(1);
+            expect(excludedCount).toBe(1);
+
+            (excluded as any).dispose();
         });
     });
 });
