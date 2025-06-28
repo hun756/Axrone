@@ -1461,3 +1461,44 @@ export function createEventProxy<SrcMap extends EventMap, DestMap extends EventM
         return result;
     };
 }
+
+export function mergeEmitters<T extends ReadonlyArray<IEventEmitter<any>>>(
+    ...emitters: T
+): IEventEmitter<MergedEventMap<[...{ [K in keyof T]: EventMapOf<T[K]> }]>> {
+    const merged = new EventEmitter<any>();
+    const unsubscribers: UnsubscribeFn[] = [];
+
+    for (const emitter of emitters) {
+        for (const event of emitter.eventNames()) {
+            unsubscribers.push(
+                emitter.on(event, (data: any) => {
+                    void merged.emit(event, data, { priority: 'normal' });
+                })
+            );
+        }
+
+        if (emitter.has('error' as any)) {
+            unsubscribers.push(
+                emitter.on('error' as any, (error) => {
+                    void merged.emit('error' as any, error);
+                })
+            );
+        }
+    }
+
+    const originalRemoveAllListeners = merged.removeAllListeners.bind(merged);
+    merged.removeAllListeners = function <E extends string>(event?: E) {
+        if (event === undefined) {
+            unsubscribers.forEach((unsub) => unsub());
+        }
+        return originalRemoveAllListeners(event);
+    };
+
+    (merged as any).dispose = () => {
+        unsubscribers.forEach((unsub) => unsub());
+    };
+
+    return merged as unknown as IEventEmitter<
+        MergedEventMap<[...{ [K in keyof T]: EventMapOf<T[K]> }]>
+    >;
+}
