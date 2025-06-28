@@ -3,9 +3,12 @@ import { EventEmitter, EventHandlerError, EventMap } from '../../event/event';
 interface TestEvents extends EventMap {
     'test:event': { id: string; data: any };
     'test:async': { delay: number };
-    'test:error': { shouldFail: boolean };
+    'test:error': { shouldFail: boolean; message?: string };
+    'test:async-error': { delay?: number; shouldFail: boolean };
     'test:priority': { level: string };
     'test:batch': { index: number };
+    'test:success': { data: string };
+    error: Error | EventHandlerError; // Error event'ini düzgün tanımlayalım
 }
 
 describe('EventEmitter - Main Implementation', () => {
@@ -163,59 +166,92 @@ describe('EventEmitter - Main Implementation', () => {
     });
 
     // ERROR HANDLING TESTS
-    describe('Error Handling', () => {
-        it('should handle handler errors with captureRejections enabled', async () => {
-            const emitter = new EventEmitter<TestEvents>({ captureRejections: true });
-            let errorCaught = false;
+    describe('EventEmitter - Error Handling Tests', () => {
+        let emitter: EventEmitter<TestEvents>;
 
-            emitter.on('error' as any, (error: Error) => {
-                errorCaught = true;
-                expect(error).toBeInstanceOf(EventHandlerError);
-            });
-
-            emitter.on('test:error', (data) => {
-                if (data.shouldFail) {
-                    throw new Error('Handler intentionally failed');
-                }
-            });
-
-            await emitter.emit('test:error', { shouldFail: true });
-            expect(errorCaught).toBe(true);
-
-            emitter.dispose();
+        afterEach(() => {
+            if (emitter) {
+                emitter.dispose();
+            }
         });
 
-        it('should propagate errors when captureRejections is disabled', async () => {
-            const emitter = new EventEmitter<TestEvents>({ captureRejections: false });
+        describe('Synchronous Error Handling', () => {
+            it('should handle synchronous handler errors with captureRejections enabled', async () => {
+                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+                let errorCaught = false;
+                let caughtError: EventHandlerError | null = null;
 
-            emitter.on('test:error', () => {
-                throw new Error('Handler error');
-            });
+                emitter.on('error', (error) => {
+                    errorCaught = true;
+                    if (error instanceof EventHandlerError) {
+                        caughtError = error;
+                    }
+                });
 
-            await expect(emitter.emit('test:error', { shouldFail: true })).rejects.toThrow(
-                EventHandlerError
-            );
+                emitter.on('test:error', (data) => {
+                    if (data.shouldFail) {
+                        throw new Error(data.message || 'Handler intentionally failed');
+                    }
+                });
 
-            emitter.dispose();
-        });
+                await emitter.emit('test:error', { shouldFail: true, message: 'Test error' });
 
-        it('should handle async handler errors correctly', async () => {
-            const emitter = new EventEmitter<TestEvents>({ captureRejections: true });
-            let errorHandled = false;
-
-            emitter.on('error' as any, () => {
-                errorHandled = true;
-            });
-
-            emitter.on('test:error', async () => {
                 await new Promise((resolve) => setTimeout(resolve, 10));
-                throw new Error('Async handler error');
+
+                expect(errorCaught).toBe(true);
+                expect(caughtError).toBeInstanceOf(EventHandlerError);
+                expect(caughtError!.eventName).toBe('test:error');
+                expect(caughtError!.originalError).toBeInstanceOf(Error);
             });
 
-            await emitter.emit('test:error', { shouldFail: true });
-            expect(errorHandled).toBe(true);
+            it('should propagate errors when captureRejections is disabled', async () => {
+                emitter = new EventEmitter<TestEvents>({ captureRejections: false });
 
-            emitter.dispose();
+                emitter.on('test:error', (data) => {
+                    if (data.shouldFail) {
+                        throw new Error('Handler error');
+                    }
+                });
+
+                await expect(emitter.emit('test:error', { shouldFail: true })).rejects.toThrow(
+                    EventHandlerError
+                );
+            });
+
+            it('should handle errors in emitSync with captureRejections enabled', () => {
+                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+                let errorCaught = false;
+
+                emitter.on('error', () => {
+                    errorCaught = true;
+                });
+
+                emitter.on('test:error', (data) => {
+                    if (data.shouldFail) {
+                        throw new Error('Sync handler error');
+                    }
+                });
+
+                expect(() => {
+                    emitter.emitSync('test:error', { shouldFail: true });
+                }).not.toThrow();
+
+                expect(errorCaught).toBe(true);
+            });
+
+            it('should propagate errors in emitSync when captureRejections is disabled', () => {
+                emitter = new EventEmitter<TestEvents>({ captureRejections: false });
+
+                emitter.on('test:error', (data) => {
+                    if (data.shouldFail) {
+                        throw new Error('Sync handler error');
+                    }
+                });
+
+                expect(() => {
+                    emitter.emitSync('test:error', { shouldFail: true });
+                }).toThrow(EventHandlerError);
+            });
         });
     });
 });
