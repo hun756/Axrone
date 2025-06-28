@@ -626,4 +626,88 @@ describe('EventEmitter - Main Implementation', () => {
         });
     });
 
+    // METRICS AND MONITORING TESTS
+    describe('Metrics and Monitoring', () => {
+        let emitter: EventEmitter<TestEvents>;
+
+        beforeEach(() => {
+            emitter = new EventEmitter<TestEvents>();
+        });
+
+        afterEach(() => {
+            emitter.dispose();
+        });
+
+        it('should collect emission and execution metrics', async () => {
+            emitter.on('test:event', async () => {
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            });
+
+            emitter.on('test:event', () => {
+                // Sync handler
+            });
+
+            await emitter.emit('test:event', { id: 'test', data: {} });
+            await emitter.emit('test:event', { id: 'test2', data: {} });
+
+            const metrics = emitter.getMetrics('test:event');
+
+            expect(metrics.emit.count).toBe(2);
+            expect(metrics.execution.count).toBe(4); // 2 emissions × 2 handlers
+            expect(metrics.execution.errors).toBe(0);
+            expect(metrics.emit.timing.avg).toBeGreaterThan(0);
+            expect(metrics.execution.timing.avg).toBeGreaterThan(0);
+        });
+
+        it('should track error metrics correctly', async () => {
+            const emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+
+            emitter.on('error' as any, () => {});
+
+            emitter.on('test:error', () => {
+                throw new Error('Test error');
+            });
+
+            emitter.on('test:error', () => {
+                // Successful handler
+            });
+
+            await emitter.emit('test:error', { shouldFail: true });
+
+            const metrics = emitter.getMetrics('test:error');
+
+            expect(metrics.execution.count).toBe(2);
+            expect(metrics.execution.errors).toBe(1);
+
+            emitter.dispose();
+        });
+
+        it('should provide memory usage information', () => {
+            for (let i = 0; i < 10; i++) {
+                emitter.on('test:event', () => {});
+            }
+
+            const memoryUsage = emitter.getMemoryUsage();
+
+            expect(memoryUsage).toHaveProperty('total');
+            expect(typeof memoryUsage.total).toBe('number');
+            expect(memoryUsage.total).toBeGreaterThan(0);
+
+            expect(Object.keys(memoryUsage).length).toBeGreaterThan(1);
+        });
+
+        it('should reset metrics correctly', async () => {
+            emitter.on('test:event', () => {});
+
+            await emitter.emit('test:event', { id: 'test', data: {} });
+
+            let metrics = emitter.getMetrics('test:event');
+            expect(metrics.emit.count).toBe(1);
+
+            emitter.resetMetrics('test:event');
+
+            metrics = emitter.getMetrics('test:event');
+            expect(metrics.emit.count).toBe(0);
+        });
+    });
 });
