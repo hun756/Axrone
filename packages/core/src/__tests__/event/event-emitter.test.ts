@@ -401,4 +401,93 @@ describe('EventEmitter - Main Implementation', () => {
     //         });
     //     });
     // });
+
+    // PAUSE/RESUME AND BUFFERING TESTS
+    describe('Pause/Resume and Buffering', () => {
+        let emitter: EventEmitter<TestEvents>;
+
+        beforeEach(() => {
+            emitter = new EventEmitter<TestEvents>({ bufferSize: 10 });
+        });
+
+        afterEach(() => {
+            emitter.dispose();
+        });
+
+        it('should queue events when paused', async () => {
+            let processedEvents = 0;
+
+            emitter.on('test:event', () => {
+                processedEvents++;
+            });
+
+            emitter.pause();
+            expect(emitter.isPaused()).toBe(true);
+
+            await emitter.emit('test:event', { id: 'queued1', data: {} });
+            await emitter.emit('test:event', { id: 'queued2', data: {} });
+
+            expect(processedEvents).toBe(0);
+            expect(emitter.getPendingCount()).toBe(2);
+
+            emitter.resume();
+            await emitter.drain();
+
+            expect(processedEvents).toBe(2);
+            expect(emitter.getPendingCount()).toBe(0);
+        });
+
+        it('should handle buffer overflow correctly', async () => {
+            const smallBufferEmitter = new EventEmitter<TestEvents>({ bufferSize: 2 });
+
+            smallBufferEmitter.pause();
+
+            await smallBufferEmitter.emit('test:event', { id: '1', data: {} });
+            await smallBufferEmitter.emit('test:event', { id: '2', data: {} });
+
+            await expect(
+                smallBufferEmitter.emit('test:event', { id: '3', data: {} })
+            ).rejects.toThrow(EventQueueFullError);
+
+            smallBufferEmitter.dispose();
+        });
+
+        it('should clear buffers correctly', async () => {
+            emitter.pause();
+
+            await emitter.emit('test:event', { id: '1', data: {} });
+            await emitter.emit('test:batch', { index: 1 });
+
+            expect(emitter.getPendingCount()).toBe(2);
+            expect(emitter.getPendingCount('test:event')).toBe(1);
+
+            const cleared = emitter.clearBuffer('test:event');
+            expect(cleared).toBe(1);
+            expect(emitter.getPendingCount()).toBe(1);
+
+            const clearedAll = emitter.clearBuffer();
+            expect(clearedAll).toBe(1);
+            expect(emitter.getPendingCount()).toBe(0);
+        });
+
+        it('should flush specific event queues', async () => {
+            let processedEvents = 0;
+
+            emitter.on('test:event', () => {
+                processedEvents++;
+            });
+
+            emitter.pause();
+
+            await emitter.emit('test:event', { id: '1', data: {} });
+            await emitter.emit('test:event', { id: '2', data: {} });
+
+            expect(processedEvents).toBe(0);
+
+            await emitter.flush('test:event');
+
+            expect(processedEvents).toBe(2);
+            expect(emitter.getPendingCount('test:event')).toBe(0);
+        });
+    });
 });
