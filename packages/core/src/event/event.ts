@@ -1929,22 +1929,19 @@ export const EventUtils = {
 
     debounce: <T>(callback: EventCallback<T>, wait: number): EventCallback<T> => {
         let timeout: ReturnType<typeof setTimeout> | null = null;
+        let lastData: T;
 
         return (data: T) => {
+            lastData = data;
+
             if (timeout !== null) {
                 clearTimeout(timeout);
             }
 
-            return new Promise<void>((resolve) => {
-                timeout = setTimeout(() => {
-                    const result = callback(data);
-                    if (result instanceof Promise) {
-                        result.then(resolve);
-                    } else {
-                        resolve();
-                    }
-                }, wait);
-            });
+            timeout = setTimeout(() => {
+                timeout = null;
+                callback(lastData);
+            }, wait);
         };
     },
 

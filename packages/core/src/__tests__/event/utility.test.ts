@@ -637,4 +637,86 @@ describe('EventEmitter - Features', () => {
             });
         });
     });
+
+    describe('Integration Tests', () => {
+        it('should work together in complex scenarios', async () => {
+            const source = createTypedEmitter<TestEvents>();
+            const registry = new TypedEventRegistry<TestEvents>();
+            const group = new EventGroup(source);
+
+            const eventSymbol = registry.register('test:event');
+
+            const filtered = filterEvents(source, ['test:event']);
+
+            const { on: hookOn, emit: hookEmit, useEmitter: useHookEmitter } = createHooks<TestEvents>();
+
+            let counts = {
+                source: 0,
+                group: 0,
+                filtered: 0,
+                hook: 0,
+            };
+
+            source.on('test:event', () => {
+                counts.source++;
+            });
+            group.on('test:event', () => {
+                counts.group++;
+            });
+            filtered.on('test:event', () => {
+                counts.filtered++;
+            });
+            hookOn('test:event', () => {
+                counts.hook++;
+            });
+
+            await source.emit('test:event', { id: 'integration', data: {} });
+            
+            await hookEmit('test:event', { id: 'integration', data: {} });
+
+            expect(counts.source).toBe(1);
+            expect(counts.group).toBe(1);
+            expect(counts.filtered).toBe(1);
+            expect(counts.hook).toBe(1);
+
+            expect(registry.getEvent(eventSymbol)).toBe('test:event');
+
+            source.dispose();
+            group.dispose();
+            (filtered as any).dispose();
+            useHookEmitter().dispose();
+        });
+
+        it('should handle complex event transformations', async () => {
+            const source = createTypedEmitter<TestEvents>();
+            const target = createTypedEmitter<TargetEvents>();
+
+            const debouncedHandler = EventUtils.debounce((data: TestEvents['test:event']) => {
+                target.emit('target:mapped', { transformed: true });
+            }, 50);
+
+            const filteredHandler = EventUtils.filter(
+                (data: TestEvents['test:event']) => data.id.startsWith('valid'),
+                debouncedHandler
+            );
+
+            source.on('test:event', filteredHandler);
+
+            let targetCount = 0;
+            target.on('target:mapped', () => {
+                targetCount++;
+            });
+
+            await source.emit('test:event', { id: 'invalid1', data: {} });
+            await source.emit('test:event', { id: 'valid1', data: {} });
+            await source.emit('test:event', { id: 'valid2', data: {} });
+
+            expect(targetCount).toBe(0);
+            await new Promise((resolve) => setTimeout(resolve, 60));
+            expect(targetCount).toBe(1);
+
+            source.dispose();
+            target.dispose();
+        });
+    });
 });
