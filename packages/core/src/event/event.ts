@@ -1158,3 +1158,45 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         this.#metrics.clear();
     }
 }
+
+export type EventMapOf<E> = E extends IEventEmitter<infer M> ? M : EventMap;
+
+export type FilteredEventMap<M extends EventMap, K extends keyof M> = Pick<M, K & string>;
+
+export type NamespacedEventMap<P extends string, M extends EventMap> = {
+    [K in keyof M as `${P}:${string & K}`]: M[K];
+};
+
+export type MergedEventMap<Maps extends EventMap[]> = Maps extends [infer First, ...infer Rest]
+    ? First extends EventMap
+        ? Rest extends EventMap[]
+            ? First & MergedEventMap<Rest>
+            : First
+        : {}
+    : {};
+
+export type EventTransformer<SrcMap extends EventMap, DestMap extends EventMap> = {
+    [K in keyof SrcMap]?: (data: SrcMap[K]) => DestMap[keyof DestMap];
+};
+
+export type ExcludeEventsMap<M extends EventMap, K extends keyof M> = Pick<M, Exclude<keyof M, K>>;
+
+export function createEmitter<T extends EventMap = EventMap>(
+    options?: EventOptions
+): IEventEmitter<T> {
+    return new EventEmitter<T>(options);
+}
+
+export function createTypedEmitter<T extends EventMap>(): IEventEmitter<T> {
+    return new EventEmitter<T>();
+}
+
+export function isEventEmitter(value: unknown): value is IEventEmitter {
+    return (
+        value !== null &&
+        typeof value === 'object' &&
+        typeof (value as any).on === 'function' &&
+        typeof (value as any).emit === 'function' &&
+        typeof (value as any).off === 'function'
+    );
+}
