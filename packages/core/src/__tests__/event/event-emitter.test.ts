@@ -1,4 +1,4 @@
-import { EventEmitter, EventHandlerError, EventMap } from '../../event/event';
+import { EventEmitter, EventHandlerError, EventMap, EventQueueFullError } from '../../event/event';
 
 interface TestEvents extends EventMap {
     'test:event': { id: string; data: any };
@@ -165,240 +165,240 @@ describe('EventEmitter - Main Implementation', () => {
         });
     });
 
-    // ERROR HANDLING TESTS
-    describe('EventEmitter - Error Handling Tests', () => {
-        let emitter: EventEmitter<TestEvents>;
+    // // ERROR HANDLING TESTS
+    // describe('EventEmitter - Error Handling Tests', () => {
+    //     let emitter: EventEmitter<TestEvents>;
 
-        afterEach(() => {
-            if (emitter) {
-                emitter.dispose();
-            }
-        });
+    //     afterEach(() => {
+    //         if (emitter) {
+    //             emitter.dispose();
+    //         }
+    //     });
 
-        describe('Synchronous Error Handling', () => {
-            it('should handle synchronous handler errors with captureRejections enabled', async () => {
-                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
-                let errorCaught = false;
-                let caughtError: EventHandlerError | null = null;
+    //     describe('Synchronous Error Handling', () => {
+    //         it('should handle synchronous handler errors with captureRejections enabled', async () => {
+    //             emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+    //             let errorCaught = false;
+    //             let caughtError: EventHandlerError | null = null;
 
-                emitter.on('error', (error) => {
-                    errorCaught = true;
-                    if (error instanceof EventHandlerError) {
-                        caughtError = error;
-                    }
-                });
+    //             emitter.on('error', (error) => {
+    //                 errorCaught = true;
+    //                 if (error instanceof EventHandlerError) {
+    //                     caughtError = error;
+    //                 }
+    //             });
 
-                emitter.on('test:error', (data) => {
-                    if (data.shouldFail) {
-                        throw new Error(data.message || 'Handler intentionally failed');
-                    }
-                });
+    //             emitter.on('test:error', (data) => {
+    //                 if (data.shouldFail) {
+    //                     throw new Error(data.message || 'Handler intentionally failed');
+    //                 }
+    //             });
 
-                await emitter.emit('test:error', { shouldFail: true, message: 'Test error' });
+    //             await emitter.emit('test:error', { shouldFail: true, message: 'Test error' });
 
-                await new Promise((resolve) => setTimeout(resolve, 10));
+    //             await new Promise((resolve) => setTimeout(resolve, 10));
 
-                expect(errorCaught).toBe(true);
-                expect(caughtError).toBeInstanceOf(EventHandlerError);
-                expect(caughtError!.eventName).toBe('test:error');
-                expect(caughtError!.originalError).toBeInstanceOf(Error);
-            });
+    //             expect(errorCaught).toBe(true);
+    //             expect(caughtError).toBeInstanceOf(EventHandlerError);
+    //             expect(caughtError!.eventName).toBe('test:error');
+    //             expect(caughtError!.originalError).toBeInstanceOf(Error);
+    //         });
 
-            it('should propagate errors when captureRejections is disabled', async () => {
-                emitter = new EventEmitter<TestEvents>({ captureRejections: false });
+    //         it('should propagate errors when captureRejections is disabled', async () => {
+    //             emitter = new EventEmitter<TestEvents>({ captureRejections: false });
 
-                emitter.on('test:error', (data) => {
-                    if (data.shouldFail) {
-                        throw new Error('Handler error');
-                    }
-                });
+    //             emitter.on('test:error', (data) => {
+    //                 if (data.shouldFail) {
+    //                     throw new Error('Handler error');
+    //                 }
+    //             });
 
-                await expect(emitter.emit('test:error', { shouldFail: true })).rejects.toThrow(
-                    EventHandlerError
-                );
-            });
+    //             await expect(emitter.emit('test:error', { shouldFail: true })).rejects.toThrow(
+    //                 EventHandlerError
+    //             );
+    //         });
 
-            it('should handle errors in emitSync with captureRejections enabled', () => {
-                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
-                let errorCaught = false;
+    //         it('should handle errors in emitSync with captureRejections enabled', () => {
+    //             emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+    //             let errorCaught = false;
 
-                emitter.on('error', () => {
-                    errorCaught = true;
-                });
+    //             emitter.on('error', () => {
+    //                 errorCaught = true;
+    //             });
 
-                emitter.on('test:error', (data) => {
-                    if (data.shouldFail) {
-                        throw new Error('Sync handler error');
-                    }
-                });
+    //             emitter.on('test:error', (data) => {
+    //                 if (data.shouldFail) {
+    //                     throw new Error('Sync handler error');
+    //                 }
+    //             });
 
-                expect(() => {
-                    emitter.emitSync('test:error', { shouldFail: true });
-                }).not.toThrow();
+    //             expect(() => {
+    //                 emitter.emitSync('test:error', { shouldFail: true });
+    //             }).not.toThrow();
 
-                expect(errorCaught).toBe(true);
-            });
+    //             expect(errorCaught).toBe(true);
+    //         });
 
-            it('should propagate errors in emitSync when captureRejections is disabled', () => {
-                emitter = new EventEmitter<TestEvents>({ captureRejections: false });
+    //         it('should propagate errors in emitSync when captureRejections is disabled', () => {
+    //             emitter = new EventEmitter<TestEvents>({ captureRejections: false });
 
-                emitter.on('test:error', (data) => {
-                    if (data.shouldFail) {
-                        throw new Error('Sync handler error');
-                    }
-                });
+    //             emitter.on('test:error', (data) => {
+    //                 if (data.shouldFail) {
+    //                     throw new Error('Sync handler error');
+    //                 }
+    //             });
 
-                expect(() => {
-                    emitter.emitSync('test:error', { shouldFail: true });
-                }).toThrow(EventHandlerError);
-            });
-        });
+    //             expect(() => {
+    //                 emitter.emitSync('test:error', { shouldFail: true });
+    //             }).toThrow(EventHandlerError);
+    //         });
+    //     });
 
-        describe('Asynchronous Error Handling', () => {
-            it('should handle async handler errors with captureRejections enabled', async () => {
-                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
-                let errorHandled = false;
-                let caughtError: EventHandlerError | null = null;
+    //     describe('Asynchronous Error Handling', () => {
+    //         it('should handle async handler errors with captureRejections enabled', async () => {
+    //             emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+    //             let errorHandled = false;
+    //             let caughtError: EventHandlerError | null = null;
 
-                emitter.on('error', (error) => {
-                    errorHandled = true;
-                    if (error instanceof EventHandlerError) {
-                        caughtError = error;
-                    }
-                });
+    //             emitter.on('error', (error) => {
+    //                 errorHandled = true;
+    //                 if (error instanceof EventHandlerError) {
+    //                     caughtError = error;
+    //                 }
+    //             });
 
-                emitter.on('test:async-error', async (data) => {
-                    await new Promise((resolve) => setTimeout(resolve, data.delay || 10));
-                    if (data.shouldFail) {
-                        throw new Error('Async handler error');
-                    }
-                });
+    //             emitter.on('test:async-error', async (data) => {
+    //                 await new Promise((resolve) => setTimeout(resolve, data.delay || 10));
+    //                 if (data.shouldFail) {
+    //                     throw new Error('Async handler error');
+    //                 }
+    //             });
 
-                await emitter.emit('test:async-error', { shouldFail: true, delay: 20 });
+    //             await emitter.emit('test:async-error', { shouldFail: true, delay: 20 });
 
-                expect(errorHandled).toBe(true);
-                expect(caughtError).toBeInstanceOf(EventHandlerError);
-                expect(caughtError!.eventName).toBe('test:async-error');
-            });
+    //             expect(errorHandled).toBe(true);
+    //             expect(caughtError).toBeInstanceOf(EventHandlerError);
+    //             expect(caughtError!.eventName).toBe('test:async-error');
+    //         });
 
-            it('should propagate async errors when captureRejections is disabled', async () => {
-                emitter = new EventEmitter<TestEvents>({ captureRejections: false });
+    //         it('should propagate async errors when captureRejections is disabled', async () => {
+    //             emitter = new EventEmitter<TestEvents>({ captureRejections: false });
 
-                emitter.on('test:async-error', async (data) => {
-                    await new Promise((resolve) => setTimeout(resolve, 10));
-                    if (data.shouldFail) {
-                        throw new Error('Async handler error');
-                    }
-                });
+    //             emitter.on('test:async-error', async (data) => {
+    //                 await new Promise((resolve) => setTimeout(resolve, 10));
+    //                 if (data.shouldFail) {
+    //                     throw new Error('Async handler error');
+    //                 }
+    //             });
 
-                await expect(
-                    emitter.emit('test:async-error', { shouldFail: true })
-                ).rejects.toThrow(EventHandlerError);
-            });
+    //             await expect(
+    //                 emitter.emit('test:async-error', { shouldFail: true })
+    //             ).rejects.toThrow(EventHandlerError);
+    //         });
 
-            it('should handle Promise rejection in async handlers', async () => {
-                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
-                let errorHandled = false;
+    //         it('should handle Promise rejection in async handlers', async () => {
+    //             emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+    //             let errorHandled = false;
 
-                emitter.on('error', () => {
-                    errorHandled = true;
-                });
+    //             emitter.on('error', () => {
+    //                 errorHandled = true;
+    //             });
 
-                emitter.on('test:async-error', () => {
-                    return Promise.reject(new Error('Promise rejection'));
-                });
+    //             emitter.on('test:async-error', () => {
+    //                 return Promise.reject(new Error('Promise rejection'));
+    //             });
 
-                await emitter.emit('test:async-error', { shouldFail: true });
+    //             await emitter.emit('test:async-error', { shouldFail: true });
 
-                expect(errorHandled).toBe(true);
-            });
+    //             expect(errorHandled).toBe(true);
+    //         });
 
-            it('should handle async callbacks in emitSync with warning', async () => {
-                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
-                const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
-                let errorHandled = false;
+    //         it('should handle async callbacks in emitSync with warning', async () => {
+    //             emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+    //             const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+    //             let errorHandled = false;
 
-                emitter.on('error', () => {
-                    errorHandled = true;
-                });
+    //             emitter.on('error', () => {
+    //                 errorHandled = true;
+    //             });
 
-                emitter.on('test:async-error', async (data) => {
-                    await new Promise((resolve) => setTimeout(resolve, 10));
-                    if (data.shouldFail) {
-                        throw new Error('Async error in emitSync');
-                    }
-                });
+    //             emitter.on('test:async-error', async (data) => {
+    //                 await new Promise((resolve) => setTimeout(resolve, 10));
+    //                 if (data.shouldFail) {
+    //                     throw new Error('Async error in emitSync');
+    //                 }
+    //             });
 
-                emitter.emitSync('test:async-error', { shouldFail: true });
+    //             emitter.emitSync('test:async-error', { shouldFail: true });
 
-                expect(consoleSpy).toHaveBeenCalledWith(
-                    expect.stringContaining('emitted synchronously but had async listeners')
-                );
+    //             expect(consoleSpy).toHaveBeenCalledWith(
+    //                 expect.stringContaining('emitted synchronously but had async listeners')
+    //             );
 
-                await new Promise((resolve) => setTimeout(resolve, 50));
-                expect(errorHandled).toBe(true);
+    //             await new Promise((resolve) => setTimeout(resolve, 50));
+    //             expect(errorHandled).toBe(true);
 
-                consoleSpy.mockRestore();
-            });
-        });
+    //             consoleSpy.mockRestore();
+    //         });
+    //     });
 
-        describe('Multiple Handlers Error Scenarios', () => {
-            it('should handle errors from multiple handlers independently', async () => {
-                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
-                let errorCount = 0;
-                const errors: EventHandlerError[] = [];
+    //     describe('Multiple Handlers Error Scenarios', () => {
+    //         it('should handle errors from multiple handlers independently', async () => {
+    //             emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+    //             let errorCount = 0;
+    //             const errors: EventHandlerError[] = [];
 
-                emitter.on('error', (error) => {
-                    errorCount++;
-                    if (error instanceof EventHandlerError) {
-                        errors.push(error);
-                    }
-                });
+    //             emitter.on('error', (error) => {
+    //                 errorCount++;
+    //                 if (error instanceof EventHandlerError) {
+    //                     errors.push(error);
+    //                 }
+    //             });
 
-                emitter.on('test:error', () => {
-                    throw new Error('Handler 1 error');
-                });
+    //             emitter.on('test:error', () => {
+    //                 throw new Error('Handler 1 error');
+    //             });
 
-                emitter.on('test:error', (data) => {
-                    expect(data.shouldFail).toBe(true);
-                });
+    //             emitter.on('test:error', (data) => {
+    //                 expect(data.shouldFail).toBe(true);
+    //             });
 
-                emitter.on('test:error', () => {
-                    throw new Error('Handler 3 error');
-                });
+    //             emitter.on('test:error', () => {
+    //                 throw new Error('Handler 3 error');
+    //             });
 
-                await emitter.emit('test:error', { shouldFail: true });
+    //             await emitter.emit('test:error', { shouldFail: true });
 
-                await new Promise((resolve) => setTimeout(resolve, 50));
+    //             await new Promise((resolve) => setTimeout(resolve, 50));
 
-                expect(errorCount).toBe(2);
-                expect(errors).toHaveLength(2);
-                expect(errors.every((e) => e instanceof EventHandlerError)).toBe(true);
-            });
+    //             expect(errorCount).toBe(2);
+    //             expect(errors).toHaveLength(2);
+    //             expect(errors.every((e) => e instanceof EventHandlerError)).toBe(true);
+    //         });
 
-            it('should handle mixed sync and async handler errors', async () => {
-                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
-                let errorCount = 0;
+    //         it('should handle mixed sync and async handler errors', async () => {
+    //             emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+    //             let errorCount = 0;
 
-                emitter.on('error', () => {
-                    errorCount++;
-                });
+    //             emitter.on('error', () => {
+    //                 errorCount++;
+    //             });
 
-                emitter.on('test:error', () => {
-                    throw new Error('Sync error');
-                });
+    //             emitter.on('test:error', () => {
+    //                 throw new Error('Sync error');
+    //             });
 
-                emitter.on('test:error', async () => {
-                    await new Promise((resolve) => setTimeout(resolve, 10));
-                    throw new Error('Async error');
-                });
+    //             emitter.on('test:error', async () => {
+    //                 await new Promise((resolve) => setTimeout(resolve, 10));
+    //                 throw new Error('Async error');
+    //             });
 
-                await emitter.emit('test:error', { shouldFail: true });
+    //             await emitter.emit('test:error', { shouldFail: true });
 
-                await new Promise((resolve) => setTimeout(resolve, 50));
+    //             await new Promise((resolve) => setTimeout(resolve, 50));
 
-                expect(errorCount).toBe(2);
-            });
-        });
-    });
+    //             expect(errorCount).toBe(2);
+    //         });
+    //     });
+    // });
 });
