@@ -869,10 +869,17 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         const queuedEvents = queue.toArray();
         queue.clear();
 
-        for (const queuedEvent of queuedEvents) {
-            await this.emit(event, queuedEvent.data as T[K], {
-                priority: queuedEvent.priority,
-            });
+        const wasPaused = this.#isPaused;
+        this.#isPaused = false;
+
+        try {
+            for (const queuedEvent of queuedEvents) {
+                await this.emit(event, queuedEvent.data as T[K], {
+                    priority: queuedEvent.priority,
+                });
+            }
+        } finally {
+            this.#isPaused = wasPaused;
         }
     }
 
