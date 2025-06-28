@@ -433,6 +433,8 @@ describe('EventEmitter - Core Interfaces', () => {
                 drain: jest.fn(),
                 flush: jest.fn(),
                 resetMetrics: jest.fn(),
+
+                dispose: jest.fn(),
             };
         });
 

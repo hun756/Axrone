@@ -260,6 +260,8 @@ export interface IEventEmitter<T extends EventMap = EventMap>
     flush<K extends EventKey<T>>(event: K): Promise<void>;
 
     resetMetrics<K extends EventKey<T>>(event?: K): void;
+
+    dispose(): void;
 }
 
 export class EventScheduler {
