@@ -556,4 +556,74 @@ describe('EventEmitter - Main Implementation', () => {
             expect(unsubscribed).toBe(0);
         });
     });
+
+    describe('Concurrency and Performance', () => {
+        it('should respect concurrency limits', async () => {
+            const emitter = new EventEmitter<TestEvents>({ concurrencyLimit: 2 });
+            let maxConcurrent = 0;
+            let currentConcurrent = 0;
+
+            emitter.on('test:async', async (data) => {
+                currentConcurrent++;
+                maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+
+                await new Promise((resolve) => setTimeout(resolve, data.delay));
+
+                currentConcurrent--;
+            });
+
+            const promises = Array.from({ length: 5 }, () =>
+                emitter.emit('test:async', { delay: 100 })
+            );
+
+            await Promise.all(promises);
+
+            expect(maxConcurrent).toBe(2);
+
+            emitter.dispose();
+        });
+
+        it('should handle unlimited concurrency correctly', async () => {
+            const emitter = new EventEmitter<TestEvents>({ concurrencyLimit: Infinity });
+            let maxConcurrent = 0;
+            let currentConcurrent = 0;
+
+            emitter.on('test:async', async (data) => {
+                currentConcurrent++;
+                maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+
+                await new Promise((resolve) => setTimeout(resolve, data.delay));
+
+                currentConcurrent--;
+            });
+
+            const promises = Array.from({ length: 10 }, () =>
+                emitter.emit('test:async', { delay: 50 })
+            );
+
+            await Promise.all(promises);
+
+            expect(maxConcurrent).toBe(10);
+            emitter.dispose();
+        });
+
+        it('should drain all pending operations', async () => {
+            const emitter = new EventEmitter<TestEvents>({ concurrencyLimit: 1 });
+            let completedTasks = 0;
+
+            emitter.on('test:async', async (data) => {
+                await new Promise((resolve) => setTimeout(resolve, data.delay));
+                completedTasks++;
+            });
+
+            const tasks = Array.from({ length: 5 }, () =>
+                emitter.emit('test:async', { delay: 50 })
+            );
+
+            await emitter.drain();
+            expect(completedTasks).toBe(5);
+            emitter.dispose();
+        });
+    });
+
 });
