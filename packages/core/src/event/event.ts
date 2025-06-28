@@ -1503,3 +1503,66 @@ export function mergeEmitters<T extends ReadonlyArray<IEventEmitter<any>>>(
         MergedEventMap<[...{ [K in keyof T]: EventMapOf<T[K]> }]>
     >;
 }
+
+export function namespaceEvents<Prefix extends string, T extends EventMap>(
+    prefix: Prefix,
+    source: IEventEmitter<T> = new EventEmitter<T>()
+): IEventEmitter<NamespacedEventMap<Prefix, T>> {
+    const namespaced = new EventEmitter<NamespacedEventMap<Prefix, T>>();
+    const unsubscribers: UnsubscribeFn[] = [];
+
+    const resolveSourceEvent = <K extends keyof NamespacedEventMap<Prefix, T> & string>(
+        event: K
+    ): keyof T & string => {
+        const prefixStr = `${prefix}:`;
+        if (!event.startsWith(prefixStr)) {
+            throw new EventError(`Event "${event}" must start with namespace "${prefixStr}"`);
+        }
+        return event.slice(prefixStr.length) as keyof T & string;
+    };
+
+    const createNamespacedEvent = <K extends keyof T & string>(
+        event: K
+    ): keyof NamespacedEventMap<Prefix, T> & string => {
+        return `${prefix}:${event}` as any;
+    };
+
+    const originalOn = namespaced.on.bind(namespaced);
+    namespaced.on = function <K extends keyof NamespacedEventMap<Prefix, T> & string>(
+        event: K,
+        callback: EventCallback<NamespacedEventMap<Prefix, T>[K]>,
+        options?: SubscriptionOptions
+    ): UnsubscribeFn {
+        const sourceEvent = resolveSourceEvent(event);
+        return source.on(sourceEvent, callback as any, options);
+    };
+
+    const originalEmit = namespaced.emit.bind(namespaced);
+    namespaced.emit = function <K extends keyof NamespacedEventMap<Prefix, T> & string>(
+        event: K,
+        data: NamespacedEventMap<Prefix, T>[K],
+        options?: { priority?: EventPriority }
+    ): Promise<boolean> {
+        const sourceEvent = resolveSourceEvent(event);
+        return source.emit(sourceEvent, data as any, options);
+    };
+
+    for (const event of source.eventNames()) {
+        const namespacedEvent = createNamespacedEvent(event) as keyof NamespacedEventMap<
+            Prefix,
+            T
+        > &
+            string;
+        unsubscribers.push(
+            source.on(event as any, (data: any) => {
+                void namespaced.emit(namespacedEvent, data);
+            })
+        );
+    }
+
+    (namespaced as any).dispose = () => {
+        unsubscribers.forEach((unsub) => unsub());
+    };
+
+    return namespaced;
+}

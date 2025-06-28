@@ -7,6 +7,7 @@ import {
     filterEvents,
     isEventEmitter,
     mergeEmitters,
+    namespaceEvents,
 } from '../../event/event';
 
 interface TestEvents extends EventMap {
@@ -300,6 +301,37 @@ describe('EventEmitter - Features', () => {
             emitter1.dispose();
             emitter2.dispose();
             (merged as any).dispose();
+        });
+    });
+
+    describe('Namespaced Events', () => {
+        it('should create namespaced events correctly', async () => {
+            const source = createTypedEmitter<TestEvents>();
+            const namespaced = namespaceEvents('ns', source);
+
+            let namespacedReceived = false;
+
+            namespaced.on('ns:test:event', () => {
+                namespacedReceived = true;
+            });
+
+            await source.emit('test:event', { id: 'test', data: {} });
+            expect(namespacedReceived).toBe(true);
+
+            source.dispose();
+            (namespaced as any).dispose();
+        });
+
+        it('should validate namespace prefix', async () => {
+            const source = createTypedEmitter<TestEvents>();
+            const namespaced = namespaceEvents('auth', source);
+
+            expect(() => {
+                namespaced.on('invalid:event' as any, () => {});
+            }).toThrow(/must start with namespace/);
+
+            source.dispose();
+            (namespaced as any).dispose();
         });
     });
 });
