@@ -1566,3 +1566,51 @@ export function namespaceEvents<Prefix extends string, T extends EventMap>(
 
     return namespaced;
 }
+
+export class TypedEventRegistry<T extends EventMap> {
+    readonly #registry = new Map<keyof T & string, symbol>();
+    readonly #symbolToEvent = new Map<symbol, keyof T & string>();
+
+    register<K extends keyof T & string>(event: K): symbol {
+        if (this.#registry.has(event)) {
+            return this.#registry.get(event)!;
+        }
+        const symbol = Symbol(event);
+        this.#registry.set(event, symbol);
+        this.#symbolToEvent.set(symbol, event);
+        return symbol;
+    }
+
+    getSymbol<K extends keyof T & string>(event: K): symbol | undefined {
+        return this.#registry.get(event);
+    }
+
+    getEvent(symbol: symbol): (keyof T & string) | undefined {
+        return this.#symbolToEvent.get(symbol);
+    }
+
+    has<K extends keyof T & string>(event: K): boolean {
+        return this.#registry.has(event);
+    }
+
+    hasSymbol(symbol: symbol): boolean {
+        return this.#symbolToEvent.has(symbol);
+    }
+
+    events(): Array<keyof T & string> {
+        return Array.from(this.#registry.keys());
+    }
+
+    symbols(): Array<symbol> {
+        return Array.from(this.#symbolToEvent.keys());
+    }
+
+    entries(): Array<[keyof T & string, symbol]> {
+        return Array.from(this.#registry.entries());
+    }
+
+    clear(): void {
+        this.#registry.clear();
+        this.#symbolToEvent.clear();
+    }
+}

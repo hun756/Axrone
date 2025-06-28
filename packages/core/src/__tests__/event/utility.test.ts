@@ -8,6 +8,7 @@ import {
     isEventEmitter,
     mergeEmitters,
     namespaceEvents,
+    TypedEventRegistry,
 } from '../../event/event';
 
 interface TestEvents extends EventMap {
@@ -332,6 +333,54 @@ describe('EventEmitter - Features', () => {
 
             source.dispose();
             (namespaced as any).dispose();
+        });
+    });
+
+    describe('TypedEventRegistry', () => {
+        let registry: TypedEventRegistry<TestEvents>;
+
+        beforeEach(() => {
+            registry = new TypedEventRegistry<TestEvents>();
+        });
+
+        it('should register and retrieve events correctly', () => {
+            const symbol1 = registry.register('test:event');
+            const symbol2 = registry.register('test:filtered');
+
+            expect(registry.getSymbol('test:event')).toBe(symbol1);
+            expect(registry.getEvent(symbol1)).toBe('test:event');
+            expect(registry.has('test:event')).toBe(true);
+            expect(registry.hasSymbol(symbol1)).toBe(true);
+        });
+
+        it('should return same symbol for duplicate registrations', () => {
+            const symbol1 = registry.register('test:event');
+            const symbol2 = registry.register('test:event');
+
+            expect(symbol1).toBe(symbol2);
+        });
+
+        it('should provide correct collections', () => {
+            registry.register('test:event');
+            registry.register('test:filtered');
+
+            const events = registry.events();
+            const symbols = registry.symbols();
+            const entries = registry.entries();
+
+            expect(events).toContain('test:event');
+            expect(events).toContain('test:filtered');
+            expect(symbols).toHaveLength(2);
+            expect(entries).toHaveLength(2);
+        });
+
+        it('should clear registry correctly', () => {
+            registry.register('test:event');
+            expect(registry.events()).toHaveLength(1);
+
+            registry.clear();
+            expect(registry.events()).toHaveLength(0);
+            expect(registry.symbols()).toHaveLength(0);
         });
     });
 });
