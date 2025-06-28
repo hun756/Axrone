@@ -341,5 +341,64 @@ describe('EventEmitter - Main Implementation', () => {
                 consoleSpy.mockRestore();
             });
         });
+
+        describe('Multiple Handlers Error Scenarios', () => {
+            it('should handle errors from multiple handlers independently', async () => {
+                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+                let errorCount = 0;
+                const errors: EventHandlerError[] = [];
+
+                emitter.on('error', (error) => {
+                    errorCount++;
+                    if (error instanceof EventHandlerError) {
+                        errors.push(error);
+                    }
+                });
+
+                emitter.on('test:error', () => {
+                    throw new Error('Handler 1 error');
+                });
+
+                emitter.on('test:error', (data) => {
+                    expect(data.shouldFail).toBe(true);
+                });
+
+                emitter.on('test:error', () => {
+                    throw new Error('Handler 3 error');
+                });
+
+                await emitter.emit('test:error', { shouldFail: true });
+
+                await new Promise((resolve) => setTimeout(resolve, 50));
+
+                expect(errorCount).toBe(2);
+                expect(errors).toHaveLength(2);
+                expect(errors.every((e) => e instanceof EventHandlerError)).toBe(true);
+            });
+
+            it('should handle mixed sync and async handler errors', async () => {
+                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+                let errorCount = 0;
+
+                emitter.on('error', () => {
+                    errorCount++;
+                });
+
+                emitter.on('test:error', () => {
+                    throw new Error('Sync error');
+                });
+
+                emitter.on('test:error', async () => {
+                    await new Promise((resolve) => setTimeout(resolve, 10));
+                    throw new Error('Async error');
+                });
+
+                await emitter.emit('test:error', { shouldFail: true });
+
+                await new Promise((resolve) => setTimeout(resolve, 50));
+
+                expect(errorCount).toBe(2);
+            });
+        });
     });
 });
