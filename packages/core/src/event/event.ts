@@ -1200,3 +1200,63 @@ export function isEventEmitter(value: unknown): value is IEventEmitter {
         typeof (value as any).off === 'function'
     );
 }
+
+export function filterEvents<T extends EventMap, K extends keyof T & string>(
+    source: IEventEmitter<T>,
+    allowedEvents: ReadonlyArray<K>,
+    options?: {
+        passthroughErrors?: boolean;
+    }
+): IEventEmitter<FilteredEventMap<T, K>> {
+    const target = new EventEmitter<FilteredEventMap<T, K>>();
+    const unsubscribers: UnsubscribeFn[] = [];
+    const allowedEventsSet = new Set(allowedEvents);
+
+    if (options?.passthroughErrors && !allowedEventsSet.has('error' as any)) {
+        allowedEventsSet.add('error' as any);
+    }
+
+    for (const event of allowedEventsSet) {
+        unsubscribers.push(source.on(event, (data) => void target.emit(event, data)));
+    }
+
+    const originalEmit = target.emit.bind(target);
+    target.emit = async function <E extends keyof FilteredEventMap<T, K> & string>(
+        event: E,
+        data: FilteredEventMap<T, K>[E],
+        options?: { priority?: EventPriority }
+    ): Promise<boolean> {
+        if (!allowedEventsSet.has(event as K)) {
+            return false;
+        }
+        return originalEmit(event, data, options);
+    };
+
+    const originalEmitSync = target.emitSync.bind(target);
+    target.emitSync = function <E extends keyof FilteredEventMap<T, K> & string>(
+        event: E,
+        data: FilteredEventMap<T, K>[E],
+        options?: { priority?: EventPriority }
+    ): boolean {
+        if (!allowedEventsSet.has(event as K)) {
+            return false;
+        }
+        return originalEmitSync(event, data, options);
+    };
+
+    const originalRemoveAllListeners = target.removeAllListeners.bind(target);
+    target.removeAllListeners = function <E extends keyof FilteredEventMap<T, K> & string>(
+        event?: E
+    ): EventEmitter<FilteredEventMap<T, K>> {
+        if (event === undefined) {
+            unsubscribers.forEach((unsub) => unsub());
+        }
+        return originalRemoveAllListeners(event) as EventEmitter<FilteredEventMap<T, K>>;
+    };
+
+    (target as any) = () => {
+        unsubscribers.forEach((unsub) => unsub());
+    };
+
+    return target;
+}
