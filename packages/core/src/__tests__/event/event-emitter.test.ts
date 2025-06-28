@@ -693,7 +693,13 @@ describe('EventEmitter - Main Implementation', () => {
             expect(typeof memoryUsage.total).toBe('number');
             expect(memoryUsage.total).toBeGreaterThan(0);
 
-            expect(Object.keys(memoryUsage).length).toBeGreaterThan(1);
+            const allKeys = [
+                ...Object.keys(memoryUsage),
+                ...Object.getOwnPropertySymbols(memoryUsage),
+            ];
+            expect(allKeys.length).toBeGreaterThan(1);
+
+            expect(Object.getOwnPropertySymbols(memoryUsage).length).toBe(4);
         });
 
         it('should reset metrics correctly', async () => {
