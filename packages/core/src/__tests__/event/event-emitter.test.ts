@@ -253,5 +253,93 @@ describe('EventEmitter - Main Implementation', () => {
                 }).toThrow(EventHandlerError);
             });
         });
+
+        describe('Asynchronous Error Handling', () => {
+            it('should handle async handler errors with captureRejections enabled', async () => {
+                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+                let errorHandled = false;
+                let caughtError: EventHandlerError | null = null;
+
+                emitter.on('error', (error) => {
+                    errorHandled = true;
+                    if (error instanceof EventHandlerError) {
+                        caughtError = error;
+                    }
+                });
+
+                emitter.on('test:async-error', async (data) => {
+                    await new Promise((resolve) => setTimeout(resolve, data.delay || 10));
+                    if (data.shouldFail) {
+                        throw new Error('Async handler error');
+                    }
+                });
+
+                await emitter.emit('test:async-error', { shouldFail: true, delay: 20 });
+
+                expect(errorHandled).toBe(true);
+                expect(caughtError).toBeInstanceOf(EventHandlerError);
+                expect(caughtError!.eventName).toBe('test:async-error');
+            });
+
+            it('should propagate async errors when captureRejections is disabled', async () => {
+                emitter = new EventEmitter<TestEvents>({ captureRejections: false });
+
+                emitter.on('test:async-error', async (data) => {
+                    await new Promise((resolve) => setTimeout(resolve, 10));
+                    if (data.shouldFail) {
+                        throw new Error('Async handler error');
+                    }
+                });
+
+                await expect(
+                    emitter.emit('test:async-error', { shouldFail: true })
+                ).rejects.toThrow(EventHandlerError);
+            });
+
+            it('should handle Promise rejection in async handlers', async () => {
+                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+                let errorHandled = false;
+
+                emitter.on('error', () => {
+                    errorHandled = true;
+                });
+
+                emitter.on('test:async-error', () => {
+                    return Promise.reject(new Error('Promise rejection'));
+                });
+
+                await emitter.emit('test:async-error', { shouldFail: true });
+
+                expect(errorHandled).toBe(true);
+            });
+
+            it('should handle async callbacks in emitSync with warning', async () => {
+                emitter = new EventEmitter<TestEvents>({ captureRejections: true });
+                const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+                let errorHandled = false;
+
+                emitter.on('error', () => {
+                    errorHandled = true;
+                });
+
+                emitter.on('test:async-error', async (data) => {
+                    await new Promise((resolve) => setTimeout(resolve, 10));
+                    if (data.shouldFail) {
+                        throw new Error('Async error in emitSync');
+                    }
+                });
+
+                emitter.emitSync('test:async-error', { shouldFail: true });
+
+                expect(consoleSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('emitted synchronously but had async listeners')
+                );
+
+                await new Promise((resolve) => setTimeout(resolve, 50));
+                expect(errorHandled).toBe(true);
+
+                consoleSpy.mockRestore();
+            });
+        });
     });
 });
