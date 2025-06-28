@@ -1256,7 +1256,7 @@ export function filterEvents<T extends EventMap, K extends keyof T & string>(
         return originalRemoveAllListeners(event) as EventEmitter<FilteredEventMap<T, K>>;
     };
 
-    (target as any) = () => {
+    (target as any).dispose = () => {
         unsubscribers.forEach((unsub) => unsub());
     };
 

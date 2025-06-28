@@ -1,4 +1,10 @@
-import { createEmitter, createTypedEmitter, EventMap, isEventEmitter } from '../../event/event';
+import {
+    createEmitter,
+    createTypedEmitter,
+    EventMap,
+    filterEvents,
+    isEventEmitter,
+} from '../../event/event';
 
 interface TestEvents extends EventMap {
     'test:event': { id: string; data: any };
@@ -52,6 +58,64 @@ describe('EventEmitter - Adım 8: Advanced Features', () => {
             edgeCases.forEach((testCase) => {
                 expect(isEventEmitter(testCase)).toBe(false);
             });
+        });
+    });
+
+    describe('Event Filtering', () => {
+        let sourceEmitter: ReturnType<typeof createTypedEmitter<TestEvents>>;
+
+        beforeEach(() => {
+            sourceEmitter = createTypedEmitter<TestEvents>();
+        });
+
+        afterEach(() => {
+            sourceEmitter.dispose();
+        });
+
+        it('should filter events correctly', async () => {
+            const filtered = filterEvents(sourceEmitter, ['test:event']);
+            let filteredCount = 0;
+            let sourceCount = 0;
+
+            filtered.on('test:event', () => {
+                filteredCount++;
+            });
+            sourceEmitter.on('test:filtered', () => {
+                sourceCount++;
+            });
+
+            await sourceEmitter.emit('test:event', { id: 'test', data: {} });
+            await sourceEmitter.emit('test:filtered', { value: 42 });
+
+            expect(filteredCount).toBe(1);
+            expect(sourceCount).toBe(1);
+
+            (filtered as any).dispose();
+        });
+
+        it('should reject non-allowed events in filtered emitter', async () => {
+            const filtered = filterEvents(sourceEmitter, ['test:event']);
+
+            const result = await filtered.emit('test:filtered' as any, { value: 42 });
+            expect(result).toBe(false);
+
+            (filtered as any).dispose();
+        });
+
+        it('should passthrough errors when configured', async () => {
+            const filtered = filterEvents(sourceEmitter, ['test:event'], {
+                passthroughErrors: true,
+            });
+            let errorPassed = false;
+
+            filtered.on('error' as any, () => {
+                errorPassed = true;
+            });
+            await sourceEmitter.emit('error' as any, new Error('test'));
+
+            expect(errorPassed).toBe(true);
+
+            (filtered as any).dispose();
         });
     });
 });
