@@ -2,6 +2,7 @@ import {
     createEmitter,
     createEventProxy,
     createTypedEmitter,
+    EventGroup,
     EventMap,
     excludeEvents,
     filterEvents,
@@ -381,6 +382,78 @@ describe('EventEmitter - Features', () => {
             registry.clear();
             expect(registry.events()).toHaveLength(0);
             expect(registry.symbols()).toHaveLength(0);
+        });
+    });
+
+    describe('EventGroup', () => {
+        let baseEmitter: ReturnType<typeof createTypedEmitter<TestEvents>>;
+        let group: EventGroup<TestEvents>;
+
+        beforeEach(() => {
+            baseEmitter = createTypedEmitter<TestEvents>();
+            group = new EventGroup(baseEmitter);
+        });
+
+        afterEach(() => {
+            baseEmitter.dispose();
+            group.dispose();
+        });
+
+        it('should manage scoped subscriptions', async () => {
+            let groupReceived = false;
+            let baseReceived = false;
+
+            group.on('test:event', () => {
+                groupReceived = true;
+            });
+            baseEmitter.on('test:event', () => {
+                baseReceived = true;
+            });
+
+            await group.emit('test:event', { id: 'test', data: {} });
+
+            expect(groupReceived).toBe(true);
+            expect(baseReceived).toBe(true);
+        });
+
+        it('should clean up subscriptions on dispose', async () => {
+            let received = false;
+
+            group.on('test:event', () => {
+                received = true;
+            });
+            expect(group.listenerCount('test:event')).toBe(1);
+
+            group.dispose();
+
+            await baseEmitter.emit('test:event', { id: 'test', data: {} });
+            expect(received).toBe(false);
+        });
+
+        it('should filter subscriptions in getSubscriptions', () => {
+            const callback1 = jest.fn();
+            const callback2 = jest.fn();
+
+            group.on('test:event', callback1);
+            baseEmitter.on('test:event', callback2);
+
+            const groupSubscriptions = group.getSubscriptions('test:event');
+            const baseSubscriptions = baseEmitter.getSubscriptions('test:event');
+
+            expect(groupSubscriptions).toHaveLength(1);
+            expect(baseSubscriptions).toHaveLength(2);
+        });
+
+        it('should handle batch operations correctly', () => {
+            const callbacks = [jest.fn(), jest.fn(), jest.fn()];
+            const ids = group.batchSubscribe('test:event', callbacks);
+
+            expect(ids).toHaveLength(3);
+            expect(group.listenerCount('test:event')).toBe(3);
+
+            const unsubscribed = group.batchUnsubscribe(ids);
+            expect(unsubscribed).toBe(3);
+            expect(group.listenerCount('test:event')).toBe(0);
         });
     });
 });
