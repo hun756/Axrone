@@ -1,5 +1,6 @@
 import {
     createEmitter,
+    createEventProxy,
     createTypedEmitter,
     EventMap,
     excludeEvents,
@@ -18,7 +19,7 @@ interface TargetEvents extends EventMap {
     'target:direct': { forwarded: boolean };
 }
 
-describe('EventEmitter - Adım 8: Advanced Features', () => {
+describe('EventEmitter - Features', () => {
     describe('Factory Functions', () => {
         it('should create emitters with correct configurations', () => {
             const emitter1 = createEmitter({ maxListeners: 15 });
@@ -138,6 +139,117 @@ describe('EventEmitter - Adım 8: Advanced Features', () => {
             expect(excludedCount).toBe(1);
 
             (excluded as any).dispose();
+        });
+    });
+
+    describe('Event Proxy', () => {
+        let sourceEmitter: ReturnType<typeof createTypedEmitter<TestEvents>>;
+        let targetEmitter: ReturnType<typeof createTypedEmitter<TargetEvents>>;
+
+        beforeEach(() => {
+            sourceEmitter = createTypedEmitter<TestEvents>();
+            targetEmitter = createTypedEmitter<TargetEvents>();
+        });
+
+        afterEach(() => {
+            sourceEmitter.dispose();
+            targetEmitter.dispose();
+        });
+
+        it('should proxy events with mapping', async () => {
+            let targetReceived = false;
+
+            targetEmitter.on('target:mapped', () => {
+                targetReceived = true;
+            });
+
+            const unsubscribe = createEventProxy(sourceEmitter, targetEmitter, {
+                'test:event': 'target:mapped',
+            });
+
+            await sourceEmitter.emit('test:event', { id: 'test', data: {} });
+            expect(targetReceived).toBe(true);
+
+            unsubscribe();
+        });
+
+        it('should transform data with transformers', async () => {
+            let transformedData: any = null;
+
+            targetEmitter.on('target:mapped', (data) => {
+                transformedData = data;
+            });
+
+            const unsubscribe = createEventProxy(
+                sourceEmitter,
+                targetEmitter,
+                { 'test:event': 'target:mapped' },
+                {
+                    'test:event': (data) => ({ transformed: true, original: data }),
+                }
+            );
+
+            await sourceEmitter.emit('test:event', { id: 'test', data: { value: 42 } });
+
+            expect(transformedData).toEqual({
+                transformed: true,
+                original: { id: 'test', data: { value: 42 } },
+            });
+
+            unsubscribe();
+        });
+
+        it('should handle bidirectional proxying', async () => {
+            let sourceReceived = false;
+            let targetReceived = false;
+
+            sourceEmitter.on('test:event', () => {
+                sourceReceived = true;
+            });
+            targetEmitter.on('target:mapped', () => {
+                targetReceived = true;
+            });
+
+            const unsubscribe = createEventProxy(
+                sourceEmitter,
+                targetEmitter,
+                { 'test:event': 'target:mapped' },
+                undefined,
+                { bidirectional: true }
+            );
+
+            await sourceEmitter.emit('test:event', { id: 'test', data: {} });
+            expect(targetReceived).toBe(true);
+
+            await targetEmitter.emit('target:mapped', { transformed: true });
+            expect(sourceReceived).toBe(true);
+
+            unsubscribe();
+        });
+
+        it('should preserve priority when configured', async () => {
+            const targetEmitter = createTypedEmitter<TargetEvents>();
+            let receivedPriority: any = null;
+
+            const originalEmit = targetEmitter.emit.bind(targetEmitter);
+            targetEmitter.emit = async function (event, data, options) {
+                receivedPriority = options?.priority;
+                return originalEmit(event, data, options);
+            };
+
+            const unsubscribe = createEventProxy(
+                sourceEmitter,
+                targetEmitter,
+                { 'test:event': 'target:mapped' },
+                undefined,
+                { preservePriority: true }
+            );
+
+            await sourceEmitter.emit('test:event', { id: 'test', data: {} }, { priority: 'high' });
+            expect(receivedPriority).toBe('high');
+
+            unsubscribe();
+            targetEmitter.dispose();
         });
     });
 });

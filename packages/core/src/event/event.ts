@@ -1,4 +1,5 @@
 import { PriorityQueue } from '@axrone/utility';
+import { performance } from 'perf_hooks';
 
 export type EventCallback<T> = (data: T) => void | Promise<void>;
 export type UnsubscribeFn = () => boolean;
@@ -1298,4 +1299,122 @@ export function excludeEvents<T extends EventMap, K extends keyof T & string>(
     };
 
     return target as IEventEmitter<ExcludeEventsMap<T, K>>;
+}
+
+export function createEventProxy<SrcMap extends EventMap, DestMap extends EventMap>(
+    source: IEventEmitter<SrcMap>,
+    target: IEventEmitter<DestMap>,
+    mapping: Readonly<Partial<Record<keyof SrcMap & string, keyof DestMap & string>>>,
+    transformers?: EventTransformer<SrcMap, DestMap>,
+    options?: {
+        preservePriority?: boolean;
+        bidirectional?: boolean;
+    }
+): UnsubscribeFn {
+    const unsubscribers: UnsubscribeFn[] = [];
+    const proxyingEvents = new Set<string>();
+
+    const currentPriorities = new Map<string, EventPriority>();
+
+    if (options?.preservePriority) {
+        const originalEmit = source.emit.bind(source);
+        source.emit = async function <K extends keyof SrcMap & string>(
+            event: K,
+            data: SrcMap[K],
+            emitOptions?: { priority?: EventPriority }
+        ): Promise<boolean> {
+            const priority = emitOptions?.priority || 'normal';
+            currentPriorities.set(event, priority);
+            try {
+                return await originalEmit(event, data, emitOptions);
+            } finally {
+                setTimeout(() => currentPriorities.delete(event), 0);
+            }
+        };
+    }
+
+    for (const sourceEvent of Object.keys(mapping) as Array<keyof SrcMap & string>) {
+        const targetEvent = mapping[sourceEvent]!;
+
+        unsubscribers.push(
+            source.on(sourceEvent, (data: SrcMap[typeof sourceEvent]) => {
+                const proxyKey = `src->${sourceEvent}->${targetEvent}`;
+                if (proxyingEvents.has(proxyKey)) {
+                    return;
+                }
+
+                proxyingEvents.add(proxyKey);
+                try {
+                    const priority: EventPriority | undefined = options?.preservePriority
+                        ? currentPriorities.get(sourceEvent) || 'normal'
+                        : undefined;
+
+                    if (transformers && sourceEvent in transformers) {
+                        const transform = transformers[sourceEvent]!;
+                        const transformedData = transform(data);
+                        void target.emit(targetEvent, transformedData as any, { priority });
+                        return;
+                    }
+
+                    void target.emit(targetEvent, data as any, { priority });
+                } finally {
+                    proxyingEvents.delete(proxyKey);
+                }
+            })
+        );
+    }
+
+    if (options?.bidirectional) {
+        const reverseMapping: Record<string, string> = {};
+        for (const [src, dest] of Object.entries(mapping)) {
+            if (dest) {
+                reverseMapping[dest] = src;
+            }
+        }
+
+        const reverseTransformers: EventTransformer<DestMap, SrcMap> = {};
+
+        for (const targetEvent of Object.keys(reverseMapping) as Array<keyof DestMap & string>) {
+            const sourceEvent = reverseMapping[targetEvent] as keyof SrcMap & string;
+
+            unsubscribers.push(
+                target.on(targetEvent, (data: DestMap[typeof targetEvent]) => {
+                    const proxyKey = `dest->${targetEvent}->${sourceEvent}`;
+                    if (proxyingEvents.has(proxyKey)) {
+                        return;
+                    }
+
+                    proxyingEvents.add(proxyKey);
+                    try {
+                        const priority: EventPriority | undefined = options?.preservePriority
+                            ? 'normal'
+                            : undefined;
+
+                        if (reverseTransformers && targetEvent in reverseTransformers) {
+                            const transform = reverseTransformers[targetEvent]!;
+                            const transformedData = transform(data);
+                            void source.emit(sourceEvent, transformedData as any, {
+                                priority,
+                            });
+                            return;
+                        }
+
+                        void source.emit(sourceEvent, data as any, { priority });
+                    } finally {
+                        proxyingEvents.delete(proxyKey);
+                    }
+                })
+            );
+        }
+    }
+
+    return () => {
+        let result = true;
+        for (const unsub of unsubscribers) {
+            if (!unsub()) {
+                result = false;
+            }
+        }
+        return result;
+    };
 }
