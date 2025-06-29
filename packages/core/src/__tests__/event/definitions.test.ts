@@ -11,7 +11,7 @@ import {
     DEFAULT_PRIORITY,
     ExtractEventData,
     EventNames,
-} from '../../event/event';
+} from '../../event/definition';
 
 interface TestUserEvents {
     'user:login': {

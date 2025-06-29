@@ -3,9 +3,8 @@ import {
     SubscriptionOptions,
     EventMetrics,
     QueuedEvent,
-    EventCallback,
-    EventPriority,
-} from '../../event/event';
+} from '../../event/interfaces';
+import { EventCallback, EventPriority } from '../../event/definition';
 
 describe('EventEmitter - Subscription Interfaces', () => {
     it('should support proper subscription lifecycle', () => {

@@ -4,7 +4,7 @@ import {
     EventNotFoundError,
     EventQueueFullError,
     EventHandlerError,
-} from '../../event/event';
+} from '../../event/errors';
 
 describe('EventEmitter - Error Classes', () => {
     describe('Error Inheritance', () => {
@@ -196,7 +196,7 @@ describe('EventEmitter - Error Classes', () => {
         //     }
 
         //     const end = performance.now();
-        //     // Expect the error creation to be fast, but not a specific time 
+        //     // Expect the error creation to be fast, but not a specific time
         //     // 179 ms
         //     expect(end - start).toBeLessThan(100);
         // });

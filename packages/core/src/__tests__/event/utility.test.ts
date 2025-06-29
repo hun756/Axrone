@@ -1,18 +1,17 @@
+import { createHooks, EventUtils } from '../../event/utility';
+import { EventGroup } from '../../event/event-group';
 import {
     createEmitter,
     createEventProxy,
-    createHooks,
     createTypedEmitter,
-    EventGroup,
-    EventMap,
-    EventUtils,
     excludeEvents,
     filterEvents,
     isEventEmitter,
     mergeEmitters,
     namespaceEvents,
     TypedEventRegistry,
-} from '../../event/event';
+} from '../../event/extras';
+import { EventMap } from '../../event/definition';
 
 interface TestEvents extends EventMap {
     'test:event': { id: string; data: any };
@@ -648,7 +647,11 @@ describe('EventEmitter - Features', () => {
 
             const filtered = filterEvents(source, ['test:event']);
 
-            const { on: hookOn, emit: hookEmit, useEmitter: useHookEmitter } = createHooks<TestEvents>();
+            const {
+                on: hookOn,
+                emit: hookEmit,
+                useEmitter: useHookEmitter,
+            } = createHooks<TestEvents>();
 
             let counts = {
                 source: 0,
@@ -671,7 +674,7 @@ describe('EventEmitter - Features', () => {
             });
 
             await source.emit('test:event', { id: 'integration', data: {} });
-            
+
             await hookEmit('test:event', { id: 'integration', data: {} });
 
             expect(counts.source).toBe(1);

@@ -1,4 +1,4 @@
-import { EventOptions, DEFAULT_OPTIONS, MEMORY_USAGE_SYMBOLS } from '../../event/event';
+import { EventOptions, DEFAULT_OPTIONS, MEMORY_USAGE_SYMBOLS } from '../../event/definition';
 
 describe('EventEmitter - Event Options', () => {
     describe('EventOptions Interface', () => {

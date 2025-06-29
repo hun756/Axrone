@@ -1,15 +1,14 @@
+import { IEventEmitter } from '../../event/event-emitter';
 import {
     IEventSubscriber,
     IEventPublisher,
     IEventBuffer,
     IEventObserver,
-    IEventEmitter,
-    EventMap,
-    EventCallback,
     SubscriptionOptions,
     EventMetrics,
     QueuedEvent,
-} from '../../event/event';
+} from '../../event/interfaces';
+import { EventMap, EventCallback } from '../../event/definition';
 
 interface TestEvents extends EventMap {
     'test:event': { id: string; data: any };

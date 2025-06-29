@@ -1,4 +1,6 @@
-import { EventEmitter, EventHandlerError, EventMap, EventQueueFullError } from '../../event/event';
+import { EventEmitter } from '../../event/event-emitter';
+import { EventHandlerError, EventQueueFullError } from '../../event/errors';
+import { EventMap } from '../../event/definition';
 
 interface TestEvents extends EventMap {
     'test:event': { id: string; data: any };

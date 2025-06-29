@@ -1,4 +1,4 @@
-import { EventScheduler } from '../../event/event';
+import { EventScheduler } from '../../event/event-scheduler';
 
 describe('EventScheduler', () => {
     describe('Concurrency Control', () => {
