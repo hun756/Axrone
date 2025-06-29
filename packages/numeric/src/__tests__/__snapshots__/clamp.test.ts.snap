@@ -1,0 +1,3 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Numeric Clamp Utility Error Objects NumericRangeError has correct structure 1`] = `[NumericRangeError: Value must be a finite number]`;
