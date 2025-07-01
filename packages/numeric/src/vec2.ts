@@ -1,5 +1,6 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON, HALF_PI, PI_2, standardNormalDist } from './common';
+import { EPSILON, HALF_PI, PI_2 } from './common';
+import { rand } from '@axrone/core';
 
 export interface IVec2Like {
     x: number;
@@ -9,15 +10,17 @@ export interface IVec2Like {
 const _boundedNormalRandom = (): number => {
     const MAX_ATTEMPTS = 10;
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
-        const value = standardNormalDist.sample();
+        const value = rand.normal();
         if (value >= -1 && value <= 1) {
             return value;
         }
     }
-    return Math.max(-1, Math.min(1, standardNormalDist.sample()));
+    return Math.max(-1, Math.min(1, rand.normal()));
 };
 
-const _normalRandom = (): number => _boundedNormalRandom();
+const _normalRandom = (): number => {
+    return rand.normal(0, 1);
+};
 
 export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     constructor(
@@ -775,8 +778,23 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         maxY: number,
         out?: T
     ): T {
-        const x = minX + (_normalRandom() + 1) * 0.5 * (maxX - minX);
-        const y = minY + (_normalRandom() + 1) * 0.5 * (maxY - minY);
+        const rangeX = maxX - minX;
+        const rangeY = maxY - minY;
+        const centerX = (minX + maxX) * 0.5;
+        const centerY = (minY + maxY) * 0.5;
+
+        const stdDevX = rangeX / 6;
+        const stdDevY = rangeY / 6;
+
+        let x: number, y: number;
+
+        do {
+            x = centerX + _normalRandom() * stdDevX;
+        } while (x < minX || x > maxX);
+
+        do {
+            y = centerY + _normalRandom() * stdDevY;
+        } while (y < minY || y > maxY);
 
         if (out) {
             out.x = x;

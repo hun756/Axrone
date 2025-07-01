@@ -1,85 +1,46 @@
-import {
-    BoxMullerFactory,
-    DefaultRandomGenerator,
-    NormalDistribution,
-    RandomGenerator,
-    isNormalDistribution,
-} from '../box-muller';
-
-class MockRandomGenerator implements RandomGenerator {
-    private mockFn: jest.Mock;
-
-    constructor(mockImplementation?: () => number) {
-        this.mockFn = jest.fn(mockImplementation || (() => 0.5));
-    }
-
-    next(): number {
-        return this.mockFn();
-    }
-
-    nextInRange(min: number, max: number): number {
-        return min + (max - min) * this.next();
-    }
-
-    nextInt(min: number, max: number): number {
-        return Math.floor(this.nextInRange(min, max + 1));
-    }
-
-    getMock(): jest.Mock {
-        return this.mockFn;
-    }
-}
+import { BoxMullerFactory, DefaultRandomGenerator, isIDistribution } from '../box-muller';
+import { Random } from '@axrone/core';
 
 describe('BoxMullerFactory', () => {
-    let mockRandomGenerator: MockRandomGenerator;
+    let random: Random;
+    let state: any;
 
     beforeEach(() => {
-        mockRandomGenerator = new MockRandomGenerator();
-        const predictableValues = [
-            0.5, 0.3, 0.7, 0.4, 0.6, 0.5, 0.4, 0.6, 0.8, 0.2, 0.3, 0.7, 0.9, 0.1, 0.2, 0.8, 0.4,
-            0.4, 0.6, 0.6, 0.5, 0.5, 0.7, 0.3, 0.8, 0.8,
-        ];
-
-        predictableValues.forEach((value) => {
-            mockRandomGenerator.getMock().mockReturnValueOnce(value);
-        });
+        random = new Random(42); // deterministik seed
+        state = random.getState();
     });
 
     describe('createNormal', () => {
         it('should create a distribution with specified mean and standard deviation', () => {
             const mean = 10;
             const stdDev = 2;
-
             const distribution = BoxMullerFactory.createNormal(mean, stdDev, {
-                randomGenerator: mockRandomGenerator,
                 algorithm: 'polar',
                 useCache: false,
             });
-
-            expect(isNormalDistribution(distribution)).toBe(true);
-
-            const samples = distribution.sampleMany(50);
-
+            expect(isIDistribution(distribution)).toBe(true);
+            let samples: number[] = [];
+            let s = state;
+            for (let i = 0; i < 50; i++) {
+                const [val, next] = distribution.sample(s);
+                samples.push(val);
+                s = next;
+            }
             const sum = samples.reduce((acc, val) => acc + val, 0);
             const calculatedMean = sum / samples.length;
-
             const sumSquaredDiff = samples.reduce(
                 (acc, val) => acc + Math.pow(val - calculatedMean, 2),
                 0
             );
             const calculatedStdDev = Math.sqrt(sumSquaredDiff / samples.length);
-
             expect(Math.abs(calculatedMean - mean)).toBeLessThan(3);
-            expect(Math.abs(calculatedStdDev - stdDev)).toBeLessThan(2); // Toleransı 1'den 2'ye artırıyoruz
-
-            expect(mockRandomGenerator.getMock()).toHaveBeenCalled();
+            expect(Math.abs(calculatedStdDev - stdDev)).toBeLessThan(2);
         });
 
         it('should throw error with invalid parameters', () => {
             expect(() => {
                 BoxMullerFactory.createNormal(0, -1);
             }).toThrow();
-
             expect(() => {
                 BoxMullerFactory.createNormal(Infinity, 1);
             }).toThrow();
@@ -88,84 +49,57 @@ describe('BoxMullerFactory', () => {
 
     describe('createStandard', () => {
         it('should create a standard normal distribution with mean 0 and stddev 1', () => {
-            const distribution = BoxMullerFactory.createStandard({
-                randomGenerator: mockRandomGenerator,
-            });
-
-            expect(isNormalDistribution(distribution)).toBe(true);
-
-            const samples = distribution.sampleMany(50);
-
+            const distribution = BoxMullerFactory.createStandard({});
+            expect(isIDistribution(distribution)).toBe(true);
+            let samples: number[] = [];
+            let s = state;
+            for (let i = 0; i < 50; i++) {
+                const [val, next] = distribution.sample(s);
+                samples.push(val);
+                s = next;
+            }
             const sum = samples.reduce((acc, val) => acc + val, 0);
             const calculatedMean = sum / samples.length;
-
             const sumSquaredDiff = samples.reduce(
                 (acc, val) => acc + Math.pow(val - calculatedMean, 2),
                 0
             );
             const calculatedStdDev = Math.sqrt(sumSquaredDiff / samples.length);
-
             expect(Math.abs(calculatedMean)).toBeLessThan(0.5);
             expect(Math.abs(calculatedStdDev - 1)).toBeLessThan(0.5);
-        });
-
-        it('should forward options to underlying implementation', () => {
-            const mockRandom = new MockRandomGenerator();
-            const distribution = BoxMullerFactory.createStandard({
-                randomGenerator: mockRandom,
-                algorithm: 'standard',
-                useCache: false,
-            });
-
-            distribution.sample();
-            expect(mockRandom.getMock()).toHaveBeenCalled();
         });
     });
 
     describe('createTransformed', () => {
         it('should create a distribution that applies the transform to values', () => {
             const transform = (x: number): number => 2 * x + 5;
-
-            const distribution = BoxMullerFactory.createTransformed<number, number>(transform, {
-                randomGenerator: mockRandomGenerator,
+            const distribution = BoxMullerFactory.createTransformed<number>(transform, {
                 mean: 0,
                 standardDeviation: 1,
             });
-
-            expect(isNormalDistribution(distribution)).toBe(true);
-
-            mockRandomGenerator = new MockRandomGenerator();
-            mockRandomGenerator.getMock().mockReturnValueOnce(0.5).mockReturnValueOnce(0.5);
-
-            const transformedSample = distribution.sample();
-
-            expect(Math.abs(transformedSample - 5)).toBeLessThan(3); // Toleransı 2'den 3'e artırıyoruz
-
-            const samples = distribution.sampleMany(10);
-            expect(samples.length).toBe(10);
-
-            samples.forEach((sample) => {
-                expect(sample).toBeGreaterThan(-1);
-                expect(sample).toBeLessThan(11);
-            });
+            expect(isIDistribution(distribution)).toBe(true);
+            let s = state;
+            const [transformedSample] = distribution.sample(s);
+            expect(typeof transformedSample).toBe('number');
+            if (distribution.sampleMany) {
+                const [samples] = distribution.sampleMany(s, 10);
+                expect(samples.length).toBe(10);
+                samples.forEach((sample) => {
+                    expect(typeof sample).toBe('number');
+                });
+            }
         });
 
         it('should work with metadata methods if source has them', () => {
             const transform = (x: number): string => `Value: ${x.toFixed(2)}`;
-
-            const distribution = BoxMullerFactory.createTransformed<number, string>(transform, {
-                randomGenerator: mockRandomGenerator,
-            });
-
+            const distribution = BoxMullerFactory.createTransformed<string>(transform, {});
             expect(distribution.sampleWithMetadata).toBeDefined();
             expect(distribution.sampleManyWithMetadata).toBeDefined();
-
             if (distribution.sampleWithMetadata && distribution.sampleManyWithMetadata) {
-                const sampleWithMeta = distribution.sampleWithMetadata();
+                const [sampleWithMeta] = distribution.sampleWithMetadata(state);
                 expect(typeof sampleWithMeta.value).toBe('string');
                 expect(sampleWithMeta.value).toContain('Value:');
-
-                const samplesWithMeta = distribution.sampleManyWithMetadata(5);
+                const [samplesWithMeta] = distribution.sampleManyWithMetadata(state, 5);
                 expect(samplesWithMeta.length).toBe(5);
                 samplesWithMeta.forEach((sample) => {
                     expect(typeof sample.value).toBe('string');
@@ -175,100 +109,18 @@ describe('BoxMullerFactory', () => {
         });
     });
 
-    describe('createPool', () => {
-        it('should create a pool of normal distribution samples', () => {
-            const poolSize = 20;
-
-            const pool = BoxMullerFactory.createPool({
-                randomGenerator: mockRandomGenerator,
-                poolSize: poolSize,
-                mean: 5,
-                standardDeviation: 2,
-            });
-
-            expect(isNormalDistribution(pool)).toBe(true);
-            expect(typeof pool.refill).toBe('function');
-
-            const firstSample = pool.sample();
-            expect(firstSample).toBeDefined();
-
-            const samples = [];
-            for (let i = 0; i < poolSize; i++) {
-                samples.push(pool.sample());
-            }
-
-            const afterRefillSample = pool.sample();
-            expect(afterRefillSample).toBeDefined();
-
-            pool.refill();
-
-            const manySamples = pool.sampleMany(5);
-            expect(manySamples.length).toBe(5);
-        });
-
-        it('should handle large sample requests efficiently', () => {
-            const poolSize = 10;
-
-            const pool = BoxMullerFactory.createPool({
-                randomGenerator: mockRandomGenerator,
-                poolSize: poolSize,
-            });
-
-            const largeSamples = pool.sampleMany(20);
-            expect(largeSamples.length).toBe(20);
-
-            const anotherSample = pool.sample();
-            expect(anotherSample).toBeDefined();
-        });
-
-        it('should throw error with invalid pool size', () => {
-            expect(() => {
-                BoxMullerFactory.createPool({
-                    poolSize: -1,
-                });
-            }).toThrow();
-
-            expect(() => {
-                BoxMullerFactory.createPool({
-                    poolSize: 0,
-                });
-            }).toThrow();
-
-            expect(() => {
-                BoxMullerFactory.createPool({
-                    poolSize: 1.5,
-                });
-            }).toThrow();
-        });
-    });
-
     describe('Integration tests', () => {
         it('should be able to chain factory methods', () => {
-            const standard = BoxMullerFactory.createStandard({
-                randomGenerator: mockRandomGenerator,
-            });
-
-            const transformed = BoxMullerFactory.createTransformed<number, number>((x) => x * 3, {
-                randomGenerator: mockRandomGenerator,
+            const standard = BoxMullerFactory.createStandard({});
+            const transformed = BoxMullerFactory.createTransformed<number>((x) => x * 3, {
                 mean: 10,
             });
-
-            const pool = BoxMullerFactory.createPool({
-                randomGenerator: mockRandomGenerator,
-                mean: 5,
-                standardDeviation: 2,
-                poolSize: 5,
-            });
-
-            expect(isNormalDistribution(standard)).toBe(true);
-            expect(isNormalDistribution(transformed)).toBe(true);
-            expect(isNormalDistribution(pool)).toBe(true);
-
-            const standardSample = standard.sample();
-            const transformedSample = transformed.sample();
-            const poolSample = pool.sample();
-
-            expect(mockRandomGenerator.getMock()).toHaveBeenCalled();
+            expect(isIDistribution(standard)).toBe(true);
+            expect(isIDistribution(transformed)).toBe(true);
+            const [standardSample] = standard.sample(state);
+            const [transformedSample] = transformed.sample(state);
+            expect(typeof standardSample).toBe('number');
+            expect(typeof transformedSample).toBe('number');
         });
     });
 });

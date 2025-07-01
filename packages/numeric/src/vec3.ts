@@ -1,5 +1,6 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON, HALF_PI, PI_2, standardNormalDist } from './common';
+import { EPSILON, HALF_PI, PI_2 } from './common';
+import { rand } from '@axrone/core';
 
 export interface IVec3Like {
     x: number;
@@ -10,15 +11,17 @@ export interface IVec3Like {
 const _boundedNormalRandom = (): number => {
     const MAX_ATTEMPTS = 10;
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
-        const value = standardNormalDist.sample();
+        const value = rand.normal();
         if (value >= -1 && value <= 1) {
             return value;
         }
     }
-    return Math.max(-1, Math.min(1, standardNormalDist.sample()));
+    return Math.max(-1, Math.min(1, rand.normal()));
 };
 
-const _normalRandom = (): number => _boundedNormalRandom();
+const _normalRandom = (): number => {
+    return rand.normal(0, 1);
+};
 
 export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     constructor(
@@ -859,16 +862,42 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         maxZ: number,
         out?: T
     ): T {
+        const rangeX = maxX - minX;
+        const rangeY = maxY - minY;
+        const rangeZ = maxZ - minZ;
+        const centerX = (minX + maxX) * 0.5;
+        const centerY = (minY + maxY) * 0.5;
+        const centerZ = (minZ + maxZ) * 0.5;
+
+        // normal distribution with std dev = range/6 (99.7% of values within bounds)
+        const stdDevX = rangeX / 6;
+        const stdDevY = rangeY / 6;
+        const stdDevZ = rangeZ / 6;
+
+        let x: number, y: number, z: number;
+
+        do {
+            x = centerX + _normalRandom() * stdDevX;
+        } while (x < minX || x > maxX);
+
+        do {
+            y = centerY + _normalRandom() * stdDevY;
+        } while (y < minY || y > maxY);
+
+        do {
+            z = centerZ + _normalRandom() * stdDevZ;
+        } while (z < minZ || z > maxZ);
+
         if (out) {
-            out.x = minX + (_normalRandom() + 1) * 0.5 * (maxX - minX);
-            out.y = minY + (_normalRandom() + 1) * 0.5 * (maxY - minY);
-            out.z = minZ + (_normalRandom() + 1) * 0.5 * (maxZ - minZ);
+            out.x = x;
+            out.y = y;
+            out.z = z;
             return out;
         } else {
             return {
-                x: minX + (_normalRandom() + 1) * 0.5 * (maxX - minX),
-                y: minY + (_normalRandom() + 1) * 0.5 * (maxY - minY),
-                z: minZ + (_normalRandom() + 1) * 0.5 * (maxZ - minZ),
+                x,
+                y,
+                z,
             } as T;
         }
     }
