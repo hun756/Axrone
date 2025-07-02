@@ -1,27 +1,17 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON, HALF_PI, PI_2 } from './common';
-import { rand } from '@axrone/core';
+import {
+    sampleStandardNormal,
+    sampleNormalInRange,
+    sampleUniform,
+    sampleUniformRange,
+} from './box-muller';
 
 export interface IVec3Like {
     x: number;
     y: number;
     z: number;
 }
-
-const _boundedNormalRandom = (): number => {
-    const MAX_ATTEMPTS = 10;
-    for (let i = 0; i < MAX_ATTEMPTS; i++) {
-        const value = rand.normal();
-        if (value >= -1 && value <= 1) {
-            return value;
-        }
-    }
-    return Math.max(-1, Math.min(1, rand.normal()));
-};
-
-const _normalRandom = (): number => {
-    return rand.normal(0, 1);
-};
 
 export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     constructor(
@@ -772,9 +762,9 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     static random<T extends IVec3Like>(scale: number = 1, out?: T): T {
         let x, y, z, lengthSq;
         do {
-            x = (Math.random() - 0.5) * 2;
-            y = (Math.random() - 0.5) * 2;
-            z = (Math.random() - 0.5) * 2;
+            x = (sampleUniform() - 0.5) * 2;
+            y = (sampleUniform() - 0.5) * 2;
+            z = (sampleUniform() - 0.5) * 2;
             lengthSq = x * x + y * y + z * z;
         } while (lengthSq > 1 || lengthSq < 0.0001);
 
@@ -791,8 +781,8 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     }
 
     static fastRandom<T extends IVec3Like>(scale: number = 1, out?: T): T {
-        const theta = Math.random() * PI_2;
-        const phi = Math.acos(2 * Math.random() - 1);
+        const theta = sampleUniform() * PI_2;
+        const phi = Math.acos(2 * sampleUniform() - 1);
         const sinPhi = Math.sin(phi);
 
         if (out) {
@@ -810,23 +800,17 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     }
 
     static randomNormal<T extends IVec3Like>(scale: number = 1, out?: T): T {
-        const u1 = Math.random();
-        const u2 = Math.random();
-        const u3 = Math.random();
-        const u4 = Math.random();
-
-        const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(PI_2 * u2);
-        const z1 = Math.sqrt(-2 * Math.log(u1)) * Math.sin(PI_2 * u2);
-
-        const z2 = Math.sqrt(-2 * Math.log(u3)) * Math.cos(PI_2 * u4);
+        const x = sampleStandardNormal() * scale;
+        const y = sampleStandardNormal() * scale;
+        const z = sampleStandardNormal() * scale;
 
         if (out) {
-            out.x = z0 * scale;
-            out.y = z1 * scale;
-            out.z = z2 * scale;
+            out.x = x;
+            out.y = y;
+            out.z = z;
             return out;
         } else {
-            return { x: z0 * scale, y: z1 * scale, z: z2 * scale } as T;
+            return { x, y, z } as T;
         }
     }
 
@@ -840,15 +824,15 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         out?: T
     ): T {
         if (out) {
-            out.x = minX + Math.random() * (maxX - minX);
-            out.y = minY + Math.random() * (maxY - minY);
-            out.z = minZ + Math.random() * (maxZ - minZ);
+            out.x = sampleUniformRange(minX, maxX);
+            out.y = sampleUniformRange(minY, maxY);
+            out.z = sampleUniformRange(minZ, maxZ);
             return out;
         } else {
             return {
-                x: minX + Math.random() * (maxX - minX),
-                y: minY + Math.random() * (maxY - minY),
-                z: minZ + Math.random() * (maxZ - minZ),
+                x: sampleUniformRange(minX, maxX),
+                y: sampleUniformRange(minY, maxY),
+                z: sampleUniformRange(minZ, maxZ),
             } as T;
         }
     }
@@ -862,31 +846,16 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         maxZ: number,
         out?: T
     ): T {
-        const rangeX = maxX - minX;
-        const rangeY = maxY - minY;
-        const rangeZ = maxZ - minZ;
         const centerX = (minX + maxX) * 0.5;
         const centerY = (minY + maxY) * 0.5;
         const centerZ = (minZ + maxZ) * 0.5;
+        const rangeX = maxX - minX;
+        const rangeY = maxY - minY;
+        const rangeZ = maxZ - minZ;
 
-        // normal distribution with std dev = range/6 (99.7% of values within bounds)
-        const stdDevX = rangeX / 6;
-        const stdDevY = rangeY / 6;
-        const stdDevZ = rangeZ / 6;
-
-        let x: number, y: number, z: number;
-
-        do {
-            x = centerX + _normalRandom() * stdDevX;
-        } while (x < minX || x > maxX);
-
-        do {
-            y = centerY + _normalRandom() * stdDevY;
-        } while (y < minY || y > maxY);
-
-        do {
-            z = centerZ + _normalRandom() * stdDevZ;
-        } while (z < minZ || z > maxZ);
+        const x = sampleNormalInRange(centerX, rangeX);
+        const y = sampleNormalInRange(centerY, rangeY);
+        const z = sampleNormalInRange(centerZ, rangeZ);
 
         if (out) {
             out.x = x;
@@ -894,11 +863,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             out.z = z;
             return out;
         } else {
-            return {
-                x,
-                y,
-                z,
-            } as T;
+            return { x, y, z } as T;
         }
     }
 

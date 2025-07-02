@@ -14,6 +14,7 @@ import type {
 
 import {
     Random,
+    rand,
     NormalDistribution as CoreNormalDistribution,
     createEngineFactory,
 } from '@axrone/core';
@@ -382,6 +383,47 @@ export const BoxMullerFactory = {
 
     createFromCoreDistribution: (coreDistribution: CoreNormalDistribution): IDistribution<number> =>
         coreDistribution,
+};
+
+// Shared Box-Muller distributions for efficient vector operations
+export const sharedStandardNormal = StandardNormal({ algorithm: 'polar', useCache: false });
+export const sharedBoxMullerRandom = BoxMullerFactory.createNormal(0, 1, { algorithm: 'polar', useCache: false });
+
+// Efficient sampling functions for vector operations
+export const sampleStandardNormal = (): number => {
+    // Directly use the shared random instance's normal method
+    return rand.normal(0, 1);
+};
+
+export const sampleBoundedNormal = (min: number = -1, max: number = 1): number => {
+    const MAX_ATTEMPTS = 10;
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        const value = rand.normal(0, 1);
+        if (value >= min && value <= max) {
+            return value;
+        }
+    }
+    // Fallback - clamp the value to bounds
+    return Math.max(min, Math.min(max, rand.normal(0, 1)));
+};
+
+export const sampleNormalInRange = (center: number, range: number): number => {
+    const stdDev = range / 6; // 99.7% of values within bounds
+    const value = center + rand.normal(0, 1) * stdDev;
+    const min = center - range / 2;
+    const max = center + range / 2;
+    
+    // Clamp to bounds for better performance
+    return Math.max(min, Math.min(max, value));
+};
+
+// Shared uniform random helpers
+export const sampleUniform = (): number => {
+    return rand.float();
+};
+
+export const sampleUniformRange = (min: number, max: number): number => {
+    return rand.floatBetween(min, max);
 };
 
 export default {

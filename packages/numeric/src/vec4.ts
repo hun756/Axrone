@@ -1,6 +1,11 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON, HALF_PI, PI_2 } from './common';
-import { rand } from '@axrone/core';
+import {
+    sampleStandardNormal,
+    sampleNormalInRange,
+    sampleUniform,
+    sampleUniformRange,
+} from './box-muller';
 
 export interface IVec4Like {
     x: number;
@@ -8,21 +13,6 @@ export interface IVec4Like {
     z: number;
     w: number;
 }
-
-const _boundedNormalRandom = (): number => {
-    const MAX_ATTEMPTS = 10;
-    for (let i = 0; i < MAX_ATTEMPTS; i++) {
-        const value = rand.normal();
-        if (value >= -1 && value <= 1) {
-            return value;
-        }
-    }
-    return Math.max(-1, Math.min(1, rand.normal()));
-};
-
-const _normalRandom = (): number => {
-    return rand.normal(0, 1);
-};
 
 export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
     constructor(
@@ -873,10 +863,10 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         // 4D sphere point picking using acceptance-rejection
         let x, y, z, w, lengthSq;
         do {
-            x = (Math.random() - 0.5) * 2;
-            y = (Math.random() - 0.5) * 2;
-            z = (Math.random() - 0.5) * 2;
-            w = (Math.random() - 0.5) * 2;
+            x = (sampleUniform() - 0.5) * 2;
+            y = (sampleUniform() - 0.5) * 2;
+            z = (sampleUniform() - 0.5) * 2;
+            w = (sampleUniform() - 0.5) * 2;
             lengthSq = x * x + y * y + z * z + w * w;
         } while (lengthSq > 1 || lengthSq < 0.0001);
 
@@ -900,9 +890,9 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
 
     static fastRandom<T extends IVec4Like>(scale: number = 1, out?: T): T {
         // Using hyperspherical coordinates for 4D
-        const u1 = Math.random();
-        const u2 = Math.random();
-        const u3 = Math.random();
+        const u1 = sampleUniform();
+        const u2 = sampleUniform();
+        const u3 = sampleUniform();
 
         const phi = 2 * Math.PI * u1;
         const theta = Math.acos(2 * u2 - 1);
@@ -928,29 +918,20 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
     }
 
     static randomNormal<T extends IVec4Like>(scale: number = 1, out?: T): T {
-        const u1 = Math.random();
-        const u2 = Math.random();
-        const u3 = Math.random();
-        const u4 = Math.random();
-
-        const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(PI_2 * u2);
-        const z1 = Math.sqrt(-2 * Math.log(u1)) * Math.sin(PI_2 * u2);
-        const z2 = Math.sqrt(-2 * Math.log(u3)) * Math.cos(PI_2 * u4);
-        const z3 = Math.sqrt(-2 * Math.log(u3)) * Math.sin(PI_2 * u4);
+        // Use optimized Box-Muller sampling for all four components
+        const x = sampleStandardNormal() * scale;
+        const y = sampleStandardNormal() * scale;
+        const z = sampleStandardNormal() * scale;
+        const w = sampleStandardNormal() * scale;
 
         if (out) {
-            out.x = z0 * scale;
-            out.y = z1 * scale;
-            out.z = z2 * scale;
-            out.w = z3 * scale;
+            out.x = x;
+            out.y = y;
+            out.z = z;
+            out.w = w;
             return out;
         } else {
-            return {
-                x: z0 * scale,
-                y: z1 * scale,
-                z: z2 * scale,
-                w: z3 * scale,
-            } as T;
+            return { x, y, z, w } as T;
         }
     }
 
@@ -966,17 +947,17 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         out?: T
     ): T {
         if (out) {
-            out.x = minX + Math.random() * (maxX - minX);
-            out.y = minY + Math.random() * (maxY - minY);
-            out.z = minZ + Math.random() * (maxZ - minZ);
-            out.w = minW + Math.random() * (maxW - minW);
+            out.x = sampleUniformRange(minX, maxX);
+            out.y = sampleUniformRange(minY, maxY);
+            out.z = sampleUniformRange(minZ, maxZ);
+            out.w = sampleUniformRange(minW, maxW);
             return out;
         } else {
             return {
-                x: minX + Math.random() * (maxX - minX),
-                y: minY + Math.random() * (maxY - minY),
-                z: minZ + Math.random() * (maxZ - minZ),
-                w: minW + Math.random() * (maxW - minW),
+                x: sampleUniformRange(minX, maxX),
+                y: sampleUniformRange(minY, maxY),
+                z: sampleUniformRange(minZ, maxZ),
+                w: sampleUniformRange(minW, maxW),
             } as T;
         }
     }
@@ -992,38 +973,20 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         maxW: number,
         out?: T
     ): T {
-        const rangeX = maxX - minX;
-        const rangeY = maxY - minY;
-        const rangeZ = maxZ - minZ;
-        const rangeW = maxW - minW;
         const centerX = (minX + maxX) * 0.5;
         const centerY = (minY + maxY) * 0.5;
         const centerZ = (minZ + maxZ) * 0.5;
         const centerW = (minW + maxW) * 0.5;
-        
-        // normal distribution with std dev = range/6 (99.7% of values within bounds)
-        const stdDevX = rangeX / 6;
-        const stdDevY = rangeY / 6; 
-        const stdDevZ = rangeZ / 6;
-        const stdDevW = rangeW / 6;
-        
-        let x: number, y: number, z: number, w: number;
-        
-        do {
-            x = centerX + _normalRandom() * stdDevX;
-        } while (x < minX || x > maxX);
-        
-        do {
-            y = centerY + _normalRandom() * stdDevY;
-        } while (y < minY || y > maxY);
-        
-        do {
-            z = centerZ + _normalRandom() * stdDevZ;
-        } while (z < minZ || z > maxZ);
-        
-        do {
-            w = centerW + _normalRandom() * stdDevW;
-        } while (w < minW || w > maxW);
+        const rangeX = maxX - minX;
+        const rangeY = maxY - minY;
+        const rangeZ = maxZ - minZ;
+        const rangeW = maxW - minW;
+
+        // Use optimized Box-Muller sampling
+        const x = sampleNormalInRange(centerX, rangeX);
+        const y = sampleNormalInRange(centerY, rangeY);
+        const z = sampleNormalInRange(centerZ, rangeZ);
+        const w = sampleNormalInRange(centerW, rangeW);
 
         if (out) {
             out.x = x;
