@@ -45,4 +45,29 @@ describe('Mat4', () => {
             expect(matrix.data).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
         });
     });
+
+    describe('Static Constants', () => {
+        test('IDENTITY should be a 4x4 identity matrix', () => {
+            expect(Mat4.IDENTITY.data).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+        });
+
+        test('ZERO should be a 4x4 zero matrix', () => {
+            expect(Mat4.ZERO.data).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        });
+
+        test('static constants should be frozen (immutable)', () => {
+            expect(Object.isFrozen(Mat4.IDENTITY)).toBe(true);
+            expect(Object.isFrozen(Mat4.ZERO)).toBe(true);
+        });
+
+        test('static constants should return same instance on multiple accesses', () => {
+            const identity1 = Mat4.IDENTITY;
+            const identity2 = Mat4.IDENTITY;
+            const zero1 = Mat4.ZERO;
+            const zero2 = Mat4.ZERO;
+
+            expect(identity1).toBe(identity2);
+            expect(zero1).toBe(zero2);
+        });
+    });
 });
