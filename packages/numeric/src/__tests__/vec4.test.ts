@@ -25,7 +25,7 @@ const createRandomVec4 = (scale = 100): Vec4 => {
     );
 };
 
-describe('Vec4 Professional Unit Tests', () => {
+describe('Vec4 Unit Tests', () => {
     describe('Constructor and Creation', () => {
         test('should create zero vector by default', () => {
             const vec = new Vec4();
