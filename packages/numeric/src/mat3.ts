@@ -313,5 +313,77 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
                 (a11 * a00 - a01 * a10) * det,
             ]) as MatrixOperationReturnType<V, T>;
         }
-    }   
+    }
+
+    static translate2D<T extends IVec2Like, V extends IMat3Like | undefined = undefined>(
+        v: Readonly<T>,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat3> {
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+
+            outData[0] = 1;
+            outData[1] = 0;
+            outData[2] = v.x;
+            outData[3] = 0;
+            outData[4] = 1;
+            outData[5] = v.y;
+            outData[6] = 0;
+            outData[7] = 0;
+            outData[8] = 1;
+
+            return out as MatrixOperationReturnType<V, Mat3>;
+        } else {
+            return new Mat3([1, 0, v.x, 0, 1, v.y, 0, 0, 1]) as MatrixOperationReturnType<V, Mat3>;
+        }
+    }
+
+    static scale2D<T extends IVec2Like, V extends IMat3Like | undefined = undefined>(
+        v: Readonly<T>,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat3> {
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+
+            outData[0] = v.x;
+            outData[1] = 0;
+            outData[2] = 0;
+            outData[3] = 0;
+            outData[4] = v.y;
+            outData[5] = 0;
+            outData[6] = 0;
+            outData[7] = 0;
+            outData[8] = 1;
+
+            return out as MatrixOperationReturnType<V, Mat3>;
+        } else {
+            return new Mat3([v.x, 0, 0, 0, v.y, 0, 0, 0, 1]) as MatrixOperationReturnType<V, Mat3>;
+        }
+    }
+
+    static scale3D<T extends IVec3Like, V extends IMat3Like | undefined = undefined>(
+        v: Readonly<T>,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat3> {
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+
+            outData[0] = v.x;
+            outData[1] = 0;
+            outData[2] = 0;
+            outData[3] = 0;
+            outData[4] = v.y;
+            outData[5] = 0;
+            outData[6] = 0;
+            outData[7] = 0;
+            outData[8] = v.z;
+
+            return out as MatrixOperationReturnType<V, Mat3>;
+        } else {
+            return new Mat3([v.x, 0, 0, 0, v.y, 0, 0, 0, v.z]) as MatrixOperationReturnType<
+                V,
+                Mat3
+            >;
+        }
+    }
 }
