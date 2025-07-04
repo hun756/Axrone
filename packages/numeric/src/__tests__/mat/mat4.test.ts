@@ -1,7 +1,6 @@
 import { EPSILON } from '../../common';
 import { Mat4 } from '../../mat4';
 
-
 describe('Mat4', () => {
     describe('Constructor', () => {
         it('should create identity matrix by default', () => {
@@ -171,6 +170,89 @@ describe('Mat4', () => {
         it('getHashCode should return a number', () => {
             const m = new Mat4();
             expect(typeof m.getHashCode()).toBe('number');
+        });
+    });
+
+    describe('multiply', () => {
+        it('should multiply two identity matrices and return identity', () => {
+            const a = Mat4.IDENTITY;
+            const b = Mat4.IDENTITY;
+            const result = Mat4.multiply(a, b) as Mat4;
+            expect(result.data).toEqual(Mat4.IDENTITY.data);
+        });
+
+        it('should multiply identity with arbitrary matrix and return the matrix', () => {
+            const arr = Array.from({ length: 16 }, (_, i) => i + 1);
+            const m = new Mat4(arr);
+            const result1 = Mat4.multiply(Mat4.IDENTITY, m) as Mat4;
+            const result2 = Mat4.multiply(m, Mat4.IDENTITY) as Mat4;
+            expect(result1.data).toEqual(m.data);
+            expect(result2.data).toEqual(m.data);
+        });
+
+        it('should multiply two arbitrary matrices correctly', () => {
+            const a = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+            const b = new Mat4([17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]);
+            const expected = [
+                250, 260, 270, 280, 618, 644, 670, 696, 986, 1028, 1070, 1112, 1354, 1412, 1470,
+                1528,
+            ];
+            const result = Mat4.multiply(a, b) as Mat4;
+            expect(result.data).toEqual(expected);
+        });
+
+        it('should write result into provided out parameter', () => {
+            const a = Mat4.IDENTITY;
+            const b = new Mat4([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+            const out = new Mat4();
+            const returned = Mat4.multiply(a, b, out);
+            expect(out.data).toEqual(b.data);
+            expect(returned).toBe(out);
+        });
+
+        it('should support IMat4Like objects as input and output', () => {
+            const a = { data: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] };
+            const b = { data: [2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1] };
+            const out = { data: Array(16).fill(0) };
+            const result = Mat4.multiply(a, b, out);
+            expect(result.data).toEqual([2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1]);
+            expect(result).toBe(out);
+        });
+
+        it('should not mutate input matrices', () => {
+            const aArr = Array.from({ length: 16 }, (_, i) => i + 1);
+            const bArr = Array.from({ length: 16 }, (_, i) => 16 - i);
+            const a = new Mat4(aArr);
+            const b = new Mat4(bArr);
+            const aBefore = [...a.data];
+            const bBefore = [...b.data];
+            Mat4.multiply(a, b);
+            expect(a.data).toEqual(aBefore);
+            expect(b.data).toEqual(bBefore);
+        });
+
+        it('should return a plain object with data if out is not provided', () => {
+            const a = Mat4.IDENTITY;
+            const b = Mat4.IDENTITY;
+            const result = Mat4.multiply(a, b);
+            expect(result).toHaveProperty('data');
+            expect(Array.isArray(result.data) || ArrayBuffer.isView(result.data)).toBe(true);
+        });
+
+        it('should handle multiply with zero matrix', () => {
+            const a = Mat4.ZERO;
+            const b = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+            const result = Mat4.multiply(a, b) as Mat4;
+            expect(result.data).toEqual(Array(16).fill(0));
+        });
+
+        it('should handle multiply where out is the same as one of the inputs', () => {
+            const a = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+            const b = Mat4.IDENTITY;
+            // out === a
+            const result = Mat4.multiply(a, b, a);
+            expect(result.data).toEqual(a.data);
+            expect(result).toBe(a);
         });
     });
 });
