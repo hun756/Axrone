@@ -152,4 +152,99 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
         }
         return h1 >>> 0;
     }
+
+    static multiply<
+        TMatA extends IMat3Like,
+        TMatB extends IMat3Like,
+        TOut extends IMat3Like | undefined = undefined,
+    >(
+        a: Readonly<TMatA>,
+        b: Readonly<TMatB>,
+        out?: TOut
+    ): MatrixOperationReturnType<TOut, TMatA, TMatB> {
+        const a00 = a.data[0],
+            a01 = a.data[1],
+            a02 = a.data[2];
+        const a10 = a.data[3],
+            a11 = a.data[4],
+            a12 = a.data[5];
+        const a20 = a.data[6],
+            a21 = a.data[7],
+            a22 = a.data[8];
+
+        const b00 = b.data[0],
+            b01 = b.data[1],
+            b02 = b.data[2];
+        const b10 = b.data[3],
+            b11 = b.data[4],
+            b12 = b.data[5];
+        const b20 = b.data[6],
+            b21 = b.data[7],
+            b22 = b.data[8];
+
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+
+            outData[0] = a00 * b00 + a01 * b10 + a02 * b20;
+            outData[1] = a00 * b01 + a01 * b11 + a02 * b21;
+            outData[2] = a00 * b02 + a01 * b12 + a02 * b22;
+
+            outData[3] = a10 * b00 + a11 * b10 + a12 * b20;
+            outData[4] = a10 * b01 + a11 * b11 + a12 * b21;
+            outData[5] = a10 * b02 + a11 * b12 + a12 * b22;
+
+            outData[6] = a20 * b00 + a21 * b10 + a22 * b20;
+            outData[7] = a20 * b01 + a21 * b11 + a22 * b21;
+            outData[8] = a20 * b02 + a21 * b12 + a22 * b22;
+
+            return out as MatrixOperationReturnType<TOut, TMatA, TMatB>;
+        } else {
+            return new Mat3([
+                a00 * b00 + a01 * b10 + a02 * b20,
+                a00 * b01 + a01 * b11 + a02 * b21,
+                a00 * b02 + a01 * b12 + a02 * b22,
+
+                a10 * b00 + a11 * b10 + a12 * b20,
+                a10 * b01 + a11 * b11 + a12 * b21,
+                a10 * b02 + a11 * b12 + a12 * b22,
+
+                a20 * b00 + a21 * b10 + a22 * b20,
+                a20 * b01 + a21 * b11 + a22 * b21,
+                a20 * b02 + a21 * b12 + a22 * b22,
+            ]) as MatrixOperationReturnType<TOut, TMatA, TMatB>;
+        }
+    }
+
+    static transpose<T extends IMat3Like, V extends IMat3Like | undefined = undefined>(
+        m: Readonly<T>,
+        out?: V
+    ): MatrixOperationReturnType<V, T> {
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+
+            outData[0] = m.data[0];
+            outData[1] = m.data[3];
+            outData[2] = m.data[6];
+            outData[3] = m.data[1];
+            outData[4] = m.data[4];
+            outData[5] = m.data[7];
+            outData[6] = m.data[2];
+            outData[7] = m.data[5];
+            outData[8] = m.data[8];
+
+            return out as MatrixOperationReturnType<V, T>;
+        } else {
+            return new Mat3([
+                m.data[0],
+                m.data[3],
+                m.data[6],
+                m.data[1],
+                m.data[4],
+                m.data[7],
+                m.data[2],
+                m.data[5],
+                m.data[8],
+            ]) as MatrixOperationReturnType<V, T>;
+        }
+    }
 }
