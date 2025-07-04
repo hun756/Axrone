@@ -1098,4 +1098,28 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             return new Mat4(result) as MatrixOperationReturnType<V, T>;
         }
     }
+
+    multiply<T extends IMat4Like>(other: Readonly<T>): Mat4 {
+        return Mat4.multiply(this, other, this);
+    }
+
+    transpose(): Mat4 {
+        return Mat4.transpose(this, this);
+    }
+
+    determinant(): number {
+        return Mat4.determinant(this);
+    }
+
+    invert(): Mat4 {
+        return Mat4.invert(this, this);
+    }
+
+    transformVec3<T extends IVec3Like>(v: Readonly<T>, out?: T): T {
+        return Mat4.transformVec3(v, this, out) as T;
+    }
+
+    transformVec4<T extends IVec4Like>(v: Readonly<T>, out?: T): T {
+        return Mat4.transformVec4(v, this, out) as T;
+    }
 }
