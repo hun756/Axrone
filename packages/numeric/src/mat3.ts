@@ -247,4 +247,71 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
             ]) as MatrixOperationReturnType<V, T>;
         }
     }
+
+    static determinant<T extends IMat3Like>(m: Readonly<T>): number {
+        const a = m.data;
+
+        return (
+            a[0] * (a[4] * a[8] - a[5] * a[7]) -
+            a[1] * (a[3] * a[8] - a[5] * a[6]) +
+            a[2] * (a[3] * a[7] - a[4] * a[6])
+        );
+    }
+
+    static invert<T extends IMat3Like, V extends IMat3Like | undefined = undefined>(
+        m: Readonly<T>,
+        out?: V
+    ): MatrixOperationReturnType<V, T> {
+        const a = m.data;
+
+        const a00 = a[0],
+            a01 = a[1],
+            a02 = a[2];
+        const a10 = a[3],
+            a11 = a[4],
+            a12 = a[5];
+        const a20 = a[6],
+            a21 = a[7],
+            a22 = a[8];
+
+        const b01 = a22 * a11 - a12 * a21;
+        const b11 = -a22 * a10 + a12 * a20;
+        const b21 = a21 * a10 - a11 * a20;
+
+        let det = a00 * b01 + a01 * b11 + a02 * b21;
+
+        if (Math.abs(det) < EPSILON) {
+            throw new Error('Matrix is not invertible (determinant is zero or near-zero)');
+        }
+
+        det = 1.0 / det;
+
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+
+            outData[0] = b01 * det;
+            outData[1] = (-a22 * a01 + a02 * a21) * det;
+            outData[2] = (a12 * a01 - a02 * a11) * det;
+            outData[3] = b11 * det;
+            outData[4] = (a22 * a00 - a02 * a20) * det;
+            outData[5] = (-a12 * a00 + a02 * a10) * det;
+            outData[6] = b21 * det;
+            outData[7] = (-a21 * a00 + a01 * a20) * det;
+            outData[8] = (a11 * a00 - a01 * a10) * det;
+
+            return out as MatrixOperationReturnType<V, T>;
+        } else {
+            return new Mat3([
+                b01 * det,
+                (-a22 * a01 + a02 * a21) * det,
+                (a12 * a01 - a02 * a11) * det,
+                b11 * det,
+                (a22 * a00 - a02 * a20) * det,
+                (-a12 * a00 + a02 * a10) * det,
+                b21 * det,
+                (-a21 * a00 + a01 * a20) * det,
+                (a11 * a00 - a01 * a10) * det,
+            ]) as MatrixOperationReturnType<V, T>;
+        }
+    }   
 }
