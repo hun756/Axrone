@@ -249,4 +249,51 @@ export class Mat4 implements IMat4Like, ICloneable<Mat4>, Equatable {
             } as unknown as V;
         }
     }
+
+    static transpose<T extends IMat4Like, V extends IMat4Like>(m: Readonly<T>, out?: V): V {
+        if (out) {
+            (out as any).data[0] = m.data[0];
+            (out as any).data[1] = m.data[4];
+            (out as any).data[2] = m.data[8];
+            (out as any).data[3] = m.data[12];
+
+            (out as any).data[4] = m.data[1];
+            (out as any).data[5] = m.data[5];
+            (out as any).data[6] = m.data[9];
+            (out as any).data[7] = m.data[13];
+
+            (out as any).data[8] = m.data[2];
+            (out as any).data[9] = m.data[6];
+            (out as any).data[10] = m.data[10];
+            (out as any).data[11] = m.data[14];
+
+            (out as any).data[12] = m.data[3];
+            (out as any).data[13] = m.data[7];
+            (out as any).data[14] = m.data[11];
+            (out as any).data[15] = m.data[15];
+
+            return out;
+        } else {
+            return {
+                data: [
+                    m.data[0],
+                    m.data[4],
+                    m.data[8],
+                    m.data[12],
+                    m.data[1],
+                    m.data[5],
+                    m.data[9],
+                    m.data[13],
+                    m.data[2],
+                    m.data[6],
+                    m.data[10],
+                    m.data[14],
+                    m.data[3],
+                    m.data[7],
+                    m.data[11],
+                    m.data[15],
+                ],
+            } as unknown as V;
+        }
+    }
 }
