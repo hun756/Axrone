@@ -761,4 +761,250 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             ]) as MatrixOperationReturnType<V, Mat4>;
         }
     }
+
+    static perspective<V extends IMat4Like | undefined = undefined>(
+        fovy: number,
+        aspect: number,
+        near: number,
+        far: number,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat4> {
+        if (Math.abs(near - far) < EPSILON) {
+            throw new Error('Near and far planes cannot be equal');
+        }
+
+        if (Math.abs(aspect) < EPSILON) {
+            throw new Error('Aspect ratio cannot be zero');
+        }
+
+        const f = 1.0 / Math.tan(fovy * 0.5);
+        const nf = 1.0 / (near - far);
+
+        if (out) {
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+
+            outData[0] = f / aspect;
+            outData[1] = 0;
+            outData[2] = 0;
+            outData[3] = 0;
+            outData[4] = 0;
+            outData[5] = f;
+            outData[6] = 0;
+            outData[7] = 0;
+            outData[8] = 0;
+            outData[9] = 0;
+            outData[10] = (far + near) * nf;
+            outData[11] = 2 * far * near * nf;
+            outData[12] = 0;
+            outData[13] = 0;
+            outData[14] = -1;
+            outData[15] = 0;
+
+            return out as MatrixOperationReturnType<V, Mat4>;
+        } else {
+            return new Mat4([
+                f / aspect,
+                0,
+                0,
+                0,
+                0,
+                f,
+                0,
+                0,
+                0,
+                0,
+                (far + near) * nf,
+                2 * far * near * nf,
+                0,
+                0,
+                -1,
+                0,
+            ]) as MatrixOperationReturnType<V, Mat4>;
+        }
+    }
+
+    static orthographic<V extends IMat4Like | undefined = undefined>(
+        left: number,
+        right: number,
+        bottom: number,
+        top: number,
+        near: number,
+        far: number,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat4> {
+        const lr = 1.0 / (left - right);
+        const bt = 1.0 / (bottom - top);
+        const nf = 1.0 / (near - far);
+
+        if (out) {
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+
+            outData[0] = -2 * lr;
+            outData[1] = 0;
+            outData[2] = 0;
+            outData[3] = (left + right) * lr;
+            outData[4] = 0;
+            outData[5] = -2 * bt;
+            outData[6] = 0;
+            outData[7] = (top + bottom) * bt;
+            outData[8] = 0;
+            outData[9] = 0;
+            outData[10] = 2 * nf;
+            outData[11] = (far + near) * nf;
+            outData[12] = 0;
+            outData[13] = 0;
+            outData[14] = 0;
+            outData[15] = 1;
+
+            return out as MatrixOperationReturnType<V, Mat4>;
+        } else {
+            return new Mat4([
+                -2 * lr,
+                0,
+                0,
+                (left + right) * lr,
+                0,
+                -2 * bt,
+                0,
+                (top + bottom) * bt,
+                0,
+                0,
+                2 * nf,
+                (far + near) * nf,
+                0,
+                0,
+                0,
+                1,
+            ]) as MatrixOperationReturnType<V, Mat4>;
+        }
+    }
+
+    static lookAt<
+        T extends IVec3Like,
+        U extends IVec3Like,
+        W extends IVec3Like,
+        V extends IMat4Like | undefined = undefined,
+    >(
+        eye: Readonly<T>,
+        center: Readonly<U>,
+        up: Readonly<W>,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat4> {
+        const eyeX = eye.x,
+            eyeY = eye.y,
+            eyeZ = eye.z;
+        const centerX = center.x,
+            centerY = center.y,
+            centerZ = center.z;
+        const upX = up.x,
+            upY = up.y,
+            upZ = up.z;
+
+        if (
+            Math.abs(eyeX - centerX) < EPSILON &&
+            Math.abs(eyeY - centerY) < EPSILON &&
+            Math.abs(eyeZ - centerZ) < EPSILON
+        ) {
+            if (out) {
+                const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+                outData[0] = 1;
+                outData[1] = 0;
+                outData[2] = 0;
+                outData[3] = 0;
+                outData[4] = 0;
+                outData[5] = 1;
+                outData[6] = 0;
+                outData[7] = 0;
+                outData[8] = 0;
+                outData[9] = 0;
+                outData[10] = 1;
+                outData[11] = 0;
+                outData[12] = 0;
+                outData[13] = 0;
+                outData[14] = 0;
+                outData[15] = 1;
+                return out as MatrixOperationReturnType<V, Mat4>;
+            } else {
+                return new Mat4() as MatrixOperationReturnType<V, Mat4>;
+            }
+        }
+
+        let z0 = eyeX - centerX,
+            z1 = eyeY - centerY,
+            z2 = eyeZ - centerZ;
+        let len = 1 / Math.sqrt(z0 * z0 + z1 * z1 + z2 * z2);
+        z0 *= len;
+        z1 *= len;
+        z2 *= len;
+
+        let x0 = upY * z2 - upZ * z1;
+        let x1 = upZ * z0 - upX * z2;
+        let x2 = upX * z1 - upY * z0;
+
+        len = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2);
+        if (len < EPSILON) {
+            x0 = x1 = x2 = 0;
+        } else {
+            len = 1 / len;
+            x0 *= len;
+            x1 *= len;
+            x2 *= len;
+        }
+
+        let y0 = z1 * x2 - z2 * x1;
+        let y1 = z2 * x0 - z0 * x2;
+        let y2 = z0 * x1 - z1 * x0;
+
+        len = Math.sqrt(y0 * y0 + y1 * y1 + y2 * y2);
+        if (len < EPSILON) {
+            y0 = y1 = y2 = 0;
+        } else {
+            len = 1 / len;
+            y0 *= len;
+            y1 *= len;
+            y2 *= len;
+        }
+
+        if (out) {
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+
+            outData[0] = x0;
+            outData[1] = y0;
+            outData[2] = z0;
+            outData[3] = 0;
+            outData[4] = x1;
+            outData[5] = y1;
+            outData[6] = z1;
+            outData[7] = 0;
+            outData[8] = x2;
+            outData[9] = y2;
+            outData[10] = z2;
+            outData[11] = 0;
+            outData[12] = -(x0 * eyeX + x1 * eyeY + x2 * eyeZ);
+            outData[13] = -(y0 * eyeX + y1 * eyeY + y2 * eyeZ);
+            outData[14] = -(z0 * eyeX + z1 * eyeY + z2 * eyeZ);
+            outData[15] = 1;
+
+            return out as MatrixOperationReturnType<V, Mat4>;
+        } else {
+            return new Mat4([
+                x0,
+                y0,
+                z0,
+                0,
+                x1,
+                y1,
+                z1,
+                0,
+                x2,
+                y2,
+                z2,
+                0,
+                -(x0 * eyeX + x1 * eyeY + x2 * eyeZ),
+                -(y0 * eyeX + y1 * eyeY + y2 * eyeZ),
+                -(z0 * eyeX + z1 * eyeY + z2 * eyeZ),
+                1,
+            ]) as MatrixOperationReturnType<V, Mat4>;
+        }
+    }
 }
