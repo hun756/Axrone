@@ -377,4 +377,88 @@ describe('Mat4', () => {
             expect(identity1.equals(identity2)).toBe(true);
         });
     });
+
+    describe('getHashCode method', () => {
+        test('should return same hash code for identical matrices', () => {
+            const matrix1 = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+            const matrix2 = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+
+            const hash1 = matrix1.getHashCode();
+            const hash2 = matrix2.getHashCode();
+
+            expect(hash1).toBe(hash2);
+        });
+
+        test('should return different hash codes for different matrices', () => {
+            const matrix1 = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+            const matrix2 = new Mat4([16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
+
+            const hash1 = matrix1.getHashCode();
+            const hash2 = matrix2.getHashCode();
+
+            expect(hash1).not.toBe(hash2);
+        });
+
+        test('should return unsigned 32-bit integer', () => {
+            const matrix = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+
+            const hash = matrix.getHashCode();
+
+            expect(hash).toBeGreaterThanOrEqual(0);
+            expect(hash).toBeLessThanOrEqual(0xffffffff);
+            expect(Number.isInteger(hash)).toBe(true);
+        });
+
+        test('should be consistent (same matrix returns same hash)', () => {
+            const matrix = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+
+            const hash1 = matrix.getHashCode();
+            const hash2 = matrix.getHashCode();
+            const hash3 = matrix.getHashCode();
+
+            expect(hash1).toBe(hash2);
+            expect(hash2).toBe(hash3);
+        });
+
+        test('should handle identity matrix', () => {
+            const identity = new Mat4();
+
+            const hash = identity.getHashCode();
+
+            expect(typeof hash).toBe('number');
+            expect(Number.isInteger(hash)).toBe(true);
+        });
+
+        test('should handle zero matrix', () => {
+            const zero = Mat4.ZERO;
+
+            const hash = zero.getHashCode();
+
+            expect(typeof hash).toBe('number');
+            expect(Number.isInteger(hash)).toBe(true);
+        });
+
+        test('should handle matrices with negative values', () => {
+            const matrix = new Mat4([
+                -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15, -16,
+            ]);
+
+            const hash = matrix.getHashCode();
+
+            expect(typeof hash).toBe('number');
+            expect(Number.isInteger(hash)).toBe(true);
+        });
+
+        test('should handle matrices with decimal values', () => {
+            const matrix = new Mat4([
+                1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 7.7, 8.8, 9.9, 10.1, 11.11, 12.12, 13.13, 14.14,
+                15.15, 16.16,
+            ]);
+
+            const hash = matrix.getHashCode();
+
+            expect(typeof hash).toBe('number');
+            expect(Number.isInteger(hash)).toBe(true);
+        });
+    });
 });
