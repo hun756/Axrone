@@ -1137,3 +1137,74 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
 )`;
     }
 }
+
+export enum Mat4ComparisonMode {
+    FROBENIUS_NORM,
+    DETERMINANT,
+    TRACE,
+    CONDITION_NUMBER,
+}
+
+export class Mat4Comparer implements Comparer<Mat4> {
+    private readonly mode: Mat4ComparisonMode;
+
+    constructor(mode: Mat4ComparisonMode = Mat4ComparisonMode.FROBENIUS_NORM) {
+        this.mode = mode;
+    }
+
+    compare(a: Readonly<Mat4>, b: Readonly<Mat4>): CompareResult {
+        switch (this.mode) {
+            case Mat4ComparisonMode.FROBENIUS_NORM: {
+                let normA = 0,
+                    normB = 0;
+                for (let i = 0; i < 16; i++) {
+                    normA += a.data[i] * a.data[i];
+                    normB += b.data[i] * b.data[i];
+                }
+                normA = Math.sqrt(normA);
+                normB = Math.sqrt(normB);
+                if (Math.abs(normA - normB) < EPSILON) return 0;
+                return normA < normB ? -1 : 1;
+            }
+
+            case Mat4ComparisonMode.DETERMINANT: {
+                const detA = Mat4.determinant(a);
+                const detB = Mat4.determinant(b);
+                if (Math.abs(detA - detB) < EPSILON) return 0;
+                return detA < detB ? -1 : 1;
+            }
+
+            case Mat4ComparisonMode.TRACE: {
+                const traceA = a.data[0] + a.data[5] + a.data[10] + a.data[15];
+                const traceB = b.data[0] + b.data[5] + b.data[10] + b.data[15];
+                if (Math.abs(traceA - traceB) < EPSILON) return 0;
+                return traceA < traceB ? -1 : 1;
+            }
+
+            case Mat4ComparisonMode.CONDITION_NUMBER: {
+                let maxA = 0,
+                    minA = Infinity,
+                    maxB = 0,
+                    minB = Infinity;
+
+                for (let i = 0; i < 16; i++) {
+                    const absA = Math.abs(a.data[i]);
+                    const absB = Math.abs(b.data[i]);
+                    maxA = Math.max(maxA, absA);
+                    minA = Math.min(minA, absA);
+                    maxB = Math.max(maxB, absB);
+                    minB = Math.min(minB, absB);
+                }
+
+                const condA = minA > EPSILON ? maxA / minA : Infinity;
+                const condB = minB > EPSILON ? maxB / minB : Infinity;
+
+                if (Math.abs(condA - condB) < EPSILON) return 0;
+                return condA < condB ? -1 : 1;
+            }
+
+            default:
+                throw new Error(`Unsupported Mat4 comparison mode: ${this.mode}`);
+        }
+    }
+}
