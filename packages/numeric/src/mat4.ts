@@ -3,18 +3,54 @@ import { EPSILON, HALF_PI, PI_2 } from './common';
 import { IVec3Like } from './vec3';
 import { IVec4Like } from './vec4';
 
-export interface IMat4Like {
-    readonly data: ArrayLike<number>;
+declare const __matrix4Brand: unique symbol;
+declare const __mutableBrand: unique symbol;
+declare const __vec3Brand: unique symbol;
+declare const __vec4Brand: unique symbol;
+
+type Matrix4Data = number[] & { readonly [__matrix4Brand]: true };
+type MutableMatrix4Data = number[] & {
+    readonly [__matrix4Brand]: true;
+    readonly [__mutableBrand]: true;
+};
+
+export interface IMat4Like<TData extends ArrayLike<number> = ArrayLike<number>> {
+    readonly data: TData;
 }
 
-export class Mat4 implements IMat4Like, ICloneable<Mat4>, Equatable {
-    public readonly data: number[];
+interface IMutableMat4<TData extends number[] = number[]> extends IMat4Like<TData> {
+    data: TData;
+}
+
+type InferMatrixData<T> = T extends { data: infer U } ? U : never;
+
+type IsMatrix4Compatible<T> = T extends { data: ArrayLike<number> } ? true : false;
+
+type IsMutableMatrix4<T> = T extends { data: number[] } ? true : false;
+
+type MatrixOperationReturnType<
+    TOut extends IMat4Like | undefined,
+    TDefault extends IMat4Like,
+    TSecond extends IMat4Like = TDefault,
+> = TOut extends IMutableMat4<infer U> ? TOut : TOut extends undefined ? Mat4 : never;
+
+const asMutableMatrix4Data = <T extends number[]>(data: T): T & MutableMatrix4Data => {
+    return data as T & MutableMatrix4Data;
+};
+
+const ensureMatrix4Data = <T extends ArrayLike<number>>(data: T): T & Matrix4Data => {
+    return data as T & Matrix4Data;
+};
+
+export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable {
+    public readonly data: Matrix4Data;
 
     constructor(values?: ArrayLike<number>) {
         if (values) {
             if (values.length < 16) {
                 throw new RangeError('Matrix values array must have at least 16 elements');
             }
+
             this.data = [
                 values[0],
                 values[1],
@@ -32,9 +68,9 @@ export class Mat4 implements IMat4Like, ICloneable<Mat4>, Equatable {
                 values[13],
                 values[14],
                 values[15],
-            ];
+            ] as Matrix4Data;
         } else {
-            this.data = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+            this.data = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] as Matrix4Data;
         }
     }
 
@@ -48,14 +84,15 @@ export class Mat4 implements IMat4Like, ICloneable<Mat4>, Equatable {
     }
 
     static fromArray(arr: ArrayLike<number>, offset: number = 0): Mat4 {
-        if (offset < 0) {
-            throw new RangeError('Offset cannot be negative');
-        }
-
-        if (arr.length < offset + 16) {
-            throw new RangeError(
-                `Array must have at least ${offset + 16} elements when using offset ${offset}`
-            );
+        if (process.env.NODE_ENV === 'development') {
+            if (offset < 0) {
+                throw new RangeError('Offset cannot be negative');
+            }
+            if (arr.length < offset + 16) {
+                throw new RangeError(
+                    `Array must have at least ${offset + 16} elements when using offset ${offset}`
+                );
+            }
         }
 
         const values = Array.isArray(arr)
@@ -148,10 +185,27 @@ export class Mat4 implements IMat4Like, ICloneable<Mat4>, Equatable {
     equals(other: unknown): boolean {
         if (!(other instanceof Mat4)) return false;
 
-        for (let i = 0; i < 16; i++) {
-            if (Math.abs(this.data[i] - other.data[i]) >= EPSILON) return false;
-        }
-        return true;
+        const a = this.data;
+        const b = other.data;
+
+        return (
+            Math.abs(a[0] - b[0]) < EPSILON &&
+            Math.abs(a[1] - b[1]) < EPSILON &&
+            Math.abs(a[2] - b[2]) < EPSILON &&
+            Math.abs(a[3] - b[3]) < EPSILON &&
+            Math.abs(a[4] - b[4]) < EPSILON &&
+            Math.abs(a[5] - b[5]) < EPSILON &&
+            Math.abs(a[6] - b[6]) < EPSILON &&
+            Math.abs(a[7] - b[7]) < EPSILON &&
+            Math.abs(a[8] - b[8]) < EPSILON &&
+            Math.abs(a[9] - b[9]) < EPSILON &&
+            Math.abs(a[10] - b[10]) < EPSILON &&
+            Math.abs(a[11] - b[11]) < EPSILON &&
+            Math.abs(a[12] - b[12]) < EPSILON &&
+            Math.abs(a[13] - b[13]) < EPSILON &&
+            Math.abs(a[14] - b[14]) < EPSILON &&
+            Math.abs(a[15] - b[15]) < EPSILON
+        );
     }
 
     getHashCode(): number {
@@ -162,11 +216,15 @@ export class Mat4 implements IMat4Like, ICloneable<Mat4>, Equatable {
         return h1 >>> 0;
     }
 
-    static multiply<T extends IMat4Like, U extends IMat4Like, V extends IMat4Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
-        out?: V
-    ): V {
+    static multiply<
+        TMatA extends IMat4Like,
+        TMatB extends IMat4Like,
+        TOut extends IMat4Like | undefined = undefined,
+    >(
+        a: Readonly<TMatA>,
+        b: Readonly<TMatB>,
+        out?: TOut
+    ): MatrixOperationReturnType<TOut, TMatA, TMatB> {
         const a00 = a.data[0],
             a01 = a.data[1],
             a02 = a.data[2],
@@ -202,98 +260,98 @@ export class Mat4 implements IMat4Like, ICloneable<Mat4>, Equatable {
             b33 = b.data[15];
 
         if (out) {
-            (out as any).data[0] = a00 * b00 + a01 * b10 + a02 * b20 + a03 * b30;
-            (out as any).data[1] = a00 * b01 + a01 * b11 + a02 * b21 + a03 * b31;
-            (out as any).data[2] = a00 * b02 + a01 * b12 + a02 * b22 + a03 * b32;
-            (out as any).data[3] = a00 * b03 + a01 * b13 + a02 * b23 + a03 * b33;
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
 
-            (out as any).data[4] = a10 * b00 + a11 * b10 + a12 * b20 + a13 * b30;
-            (out as any).data[5] = a10 * b01 + a11 * b11 + a12 * b21 + a13 * b31;
-            (out as any).data[6] = a10 * b02 + a11 * b12 + a12 * b22 + a13 * b32;
-            (out as any).data[7] = a10 * b03 + a11 * b13 + a12 * b23 + a13 * b33;
+            outData[0] = a00 * b00 + a01 * b10 + a02 * b20 + a03 * b30;
+            outData[1] = a00 * b01 + a01 * b11 + a02 * b21 + a03 * b31;
+            outData[2] = a00 * b02 + a01 * b12 + a02 * b22 + a03 * b32;
+            outData[3] = a00 * b03 + a01 * b13 + a02 * b23 + a03 * b33;
 
-            (out as any).data[8] = a20 * b00 + a21 * b10 + a22 * b20 + a23 * b30;
-            (out as any).data[9] = a20 * b01 + a21 * b11 + a22 * b21 + a23 * b31;
-            (out as any).data[10] = a20 * b02 + a21 * b12 + a22 * b22 + a23 * b32;
-            (out as any).data[11] = a20 * b03 + a21 * b13 + a22 * b23 + a23 * b33;
+            outData[4] = a10 * b00 + a11 * b10 + a12 * b20 + a13 * b30;
+            outData[5] = a10 * b01 + a11 * b11 + a12 * b21 + a13 * b31;
+            outData[6] = a10 * b02 + a11 * b12 + a12 * b22 + a13 * b32;
+            outData[7] = a10 * b03 + a11 * b13 + a12 * b23 + a13 * b33;
 
-            (out as any).data[12] = a30 * b00 + a31 * b10 + a32 * b20 + a33 * b30;
-            (out as any).data[13] = a30 * b01 + a31 * b11 + a32 * b21 + a33 * b31;
-            (out as any).data[14] = a30 * b02 + a31 * b12 + a32 * b22 + a33 * b32;
-            (out as any).data[15] = a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33;
+            outData[8] = a20 * b00 + a21 * b10 + a22 * b20 + a23 * b30;
+            outData[9] = a20 * b01 + a21 * b11 + a22 * b21 + a23 * b31;
+            outData[10] = a20 * b02 + a21 * b12 + a22 * b22 + a23 * b32;
+            outData[11] = a20 * b03 + a21 * b13 + a22 * b23 + a23 * b33;
 
-            return out;
+            outData[12] = a30 * b00 + a31 * b10 + a32 * b20 + a33 * b30;
+            outData[13] = a30 * b01 + a31 * b11 + a32 * b21 + a33 * b31;
+            outData[14] = a30 * b02 + a31 * b12 + a32 * b22 + a33 * b32;
+            outData[15] = a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33;
+
+            return out as MatrixOperationReturnType<TOut, TMatA, TMatB>;
         } else {
-            return {
-                data: [
-                    a00 * b00 + a01 * b10 + a02 * b20 + a03 * b30,
-                    a00 * b01 + a01 * b11 + a02 * b21 + a03 * b31,
-                    a00 * b02 + a01 * b12 + a02 * b22 + a03 * b32,
-                    a00 * b03 + a01 * b13 + a02 * b23 + a03 * b33,
+            return new Mat4([
+                a00 * b00 + a01 * b10 + a02 * b20 + a03 * b30,
+                a00 * b01 + a01 * b11 + a02 * b21 + a03 * b31,
+                a00 * b02 + a01 * b12 + a02 * b22 + a03 * b32,
+                a00 * b03 + a01 * b13 + a02 * b23 + a03 * b33,
 
-                    a10 * b00 + a11 * b10 + a12 * b20 + a13 * b30,
-                    a10 * b01 + a11 * b11 + a12 * b21 + a13 * b31,
-                    a10 * b02 + a11 * b12 + a12 * b22 + a13 * b32,
-                    a10 * b03 + a11 * b13 + a12 * b23 + a13 * b33,
+                a10 * b00 + a11 * b10 + a12 * b20 + a13 * b30,
+                a10 * b01 + a11 * b11 + a12 * b21 + a13 * b31,
+                a10 * b02 + a11 * b12 + a12 * b22 + a13 * b32,
+                a10 * b03 + a11 * b13 + a12 * b23 + a13 * b33,
 
-                    a20 * b00 + a21 * b10 + a22 * b20 + a23 * b30,
-                    a20 * b01 + a21 * b11 + a22 * b21 + a23 * b31,
-                    a20 * b02 + a21 * b12 + a22 * b22 + a23 * b32,
-                    a20 * b03 + a21 * b13 + a22 * b23 + a23 * b33,
+                a20 * b00 + a21 * b10 + a22 * b20 + a23 * b30,
+                a20 * b01 + a21 * b11 + a22 * b21 + a23 * b31,
+                a20 * b02 + a21 * b12 + a22 * b22 + a23 * b32,
+                a20 * b03 + a21 * b13 + a22 * b23 + a23 * b33,
 
-                    a30 * b00 + a31 * b10 + a32 * b20 + a33 * b30,
-                    a30 * b01 + a31 * b11 + a32 * b21 + a33 * b31,
-                    a30 * b02 + a31 * b12 + a32 * b22 + a33 * b32,
-                    a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33,
-                ],
-            } as unknown as V;
+                a30 * b00 + a31 * b10 + a32 * b20 + a33 * b30,
+                a30 * b01 + a31 * b11 + a32 * b21 + a33 * b31,
+                a30 * b02 + a31 * b12 + a32 * b22 + a33 * b32,
+                a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33,
+            ]) as MatrixOperationReturnType<TOut, TMatA, TMatB>;
         }
     }
 
-    static transpose<T extends IMat4Like, V extends IMat4Like>(m: Readonly<T>, out?: V): V {
+    static transpose<T extends IMat4Like, V extends IMat4Like | undefined = undefined>(
+        m: Readonly<T>,
+        out?: V
+    ): MatrixOperationReturnType<V, T> {
         if (out) {
-            (out as any).data[0] = m.data[0];
-            (out as any).data[1] = m.data[4];
-            (out as any).data[2] = m.data[8];
-            (out as any).data[3] = m.data[12];
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
 
-            (out as any).data[4] = m.data[1];
-            (out as any).data[5] = m.data[5];
-            (out as any).data[6] = m.data[9];
-            (out as any).data[7] = m.data[13];
+            outData[0] = m.data[0];
+            outData[1] = m.data[4];
+            outData[2] = m.data[8];
+            outData[3] = m.data[12];
+            outData[4] = m.data[1];
+            outData[5] = m.data[5];
+            outData[6] = m.data[9];
+            outData[7] = m.data[13];
+            outData[8] = m.data[2];
+            outData[9] = m.data[6];
+            outData[10] = m.data[10];
+            outData[11] = m.data[14];
+            outData[12] = m.data[3];
+            outData[13] = m.data[7];
+            outData[14] = m.data[11];
+            outData[15] = m.data[15];
 
-            (out as any).data[8] = m.data[2];
-            (out as any).data[9] = m.data[6];
-            (out as any).data[10] = m.data[10];
-            (out as any).data[11] = m.data[14];
-
-            (out as any).data[12] = m.data[3];
-            (out as any).data[13] = m.data[7];
-            (out as any).data[14] = m.data[11];
-            (out as any).data[15] = m.data[15];
-
-            return out;
+            return out as MatrixOperationReturnType<V, T>;
         } else {
-            return {
-                data: [
-                    m.data[0],
-                    m.data[4],
-                    m.data[8],
-                    m.data[12],
-                    m.data[1],
-                    m.data[5],
-                    m.data[9],
-                    m.data[13],
-                    m.data[2],
-                    m.data[6],
-                    m.data[10],
-                    m.data[14],
-                    m.data[3],
-                    m.data[7],
-                    m.data[11],
-                    m.data[15],
-                ],
-            } as unknown as V;
+            return new Mat4([
+                m.data[0],
+                m.data[4],
+                m.data[8],
+                m.data[12],
+                m.data[1],
+                m.data[5],
+                m.data[9],
+                m.data[13],
+                m.data[2],
+                m.data[6],
+                m.data[10],
+                m.data[14],
+                m.data[3],
+                m.data[7],
+                m.data[11],
+                m.data[15],
+            ]) as MatrixOperationReturnType<V, T>;
         }
     }
 }
