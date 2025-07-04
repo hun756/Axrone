@@ -249,4 +249,32 @@ describe('Mat4', () => {
             ]);
         });
     });
+
+    describe('clone method', () => {
+        test('should create exact copy of matrix', () => {
+            const original = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+
+            const cloned = original.clone();
+
+            expect(cloned.data).toEqual(original.data);
+            expect(cloned).toBeInstanceOf(Mat4);
+        });
+
+        test('should create independent copy', () => {
+            const original = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+
+            const cloned = original.clone();
+
+            expect(cloned).not.toBe(original);
+            expect(cloned.data).not.toBe(original.data);
+        });
+
+        test('should clone identity matrix correctly', () => {
+            const identity = new Mat4();
+
+            const cloned = identity.clone();
+
+            expect(cloned.data).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+        });
+    });
 });
