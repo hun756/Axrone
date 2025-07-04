@@ -461,4 +461,68 @@ describe('Mat4', () => {
             expect(Number.isInteger(hash)).toBe(true);
         });
     });
+
+    describe('Edge cases and error handling', () => {
+        test('should handle very large numbers', () => {
+            const largeValues = Array(16).fill(Number.MAX_SAFE_INTEGER);
+
+            const matrix = new Mat4(largeValues);
+
+            expect(matrix.data).toEqual(largeValues);
+        });
+
+        test('should handle very small numbers', () => {
+            const smallValues = Array(16).fill(Number.MIN_SAFE_INTEGER);
+
+            const matrix = new Mat4(smallValues);
+
+            expect(matrix.data).toEqual(smallValues);
+        });
+
+        test('should handle NaN values', () => {
+            const nanValues = Array(16).fill(NaN);
+
+            const matrix = new Mat4(nanValues);
+
+            expect(matrix.data.every((val) => isNaN(val))).toBe(true);
+        });
+
+        test('should handle Infinity values', () => {
+            const infinityValues = Array(16).fill(Infinity);
+
+            const matrix = new Mat4(infinityValues);
+
+            expect(matrix.data).toEqual(infinityValues);
+        });
+
+        test('should handle mixed special values', () => {
+            const mixedValues = [
+                0,
+                -0,
+                1,
+                -1,
+                Infinity,
+                -Infinity,
+                NaN,
+                Number.EPSILON,
+                Number.MAX_VALUE,
+                Number.MIN_VALUE,
+                Number.MAX_SAFE_INTEGER,
+                Number.MIN_SAFE_INTEGER,
+                Math.PI,
+                Math.E,
+                0.1 + 0.2,
+                42,
+            ];
+
+            const matrix = new Mat4(mixedValues);
+
+            expect(matrix.data.length).toBe(16);
+            expect(matrix.data[0]).toBe(0);
+            expect(matrix.data[1]).toBe(-0);
+            expect(matrix.data[4]).toBe(Infinity);
+            expect(matrix.data[5]).toBe(-Infinity);
+            expect(isNaN(matrix.data[6])).toBe(true);
+        });
+    });
 });
