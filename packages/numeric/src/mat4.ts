@@ -1056,4 +1056,46 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             } as V extends undefined ? T : V;
         }
     }
+
+    static lerp<
+        T extends IMat4Like,
+        U extends IMat4Like,
+        V extends IMat4Like | undefined = undefined,
+    >(a: Readonly<T>, b: Readonly<U>, t: number, out?: V): MatrixOperationReturnType<V, T> {
+        const t1 = Math.max(0, Math.min(1, t));
+
+        if (out) {
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            for (let i = 0; i < 16; i++) {
+                outData[i] = a.data[i] + (b.data[i] - a.data[i]) * t1;
+            }
+            return out as MatrixOperationReturnType<V, T>;
+        } else {
+            const result = new Array(16);
+            for (let i = 0; i < 16; i++) {
+                result[i] = a.data[i] + (b.data[i] - a.data[i]) * t1;
+            }
+            return new Mat4(result) as MatrixOperationReturnType<V, T>;
+        }
+    }
+
+    static lerpUnClamped<
+        T extends IMat4Like,
+        U extends IMat4Like,
+        V extends IMat4Like | undefined = undefined,
+    >(a: Readonly<T>, b: Readonly<U>, t: number, out?: V): MatrixOperationReturnType<V, T> {
+        if (out) {
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            for (let i = 0; i < 16; i++) {
+                outData[i] = a.data[i] + (b.data[i] - a.data[i]) * t;
+            }
+            return out as MatrixOperationReturnType<V, T>;
+        } else {
+            const result = new Array(16);
+            for (let i = 0; i < 16; i++) {
+                result[i] = a.data[i] + (b.data[i] - a.data[i]) * t;
+            }
+            return new Mat4(result) as MatrixOperationReturnType<V, T>;
+        }
+    }
 }
