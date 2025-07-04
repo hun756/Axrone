@@ -354,4 +354,94 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             ]) as MatrixOperationReturnType<V, T>;
         }
     }
+
+    static determinant<T extends IMat4Like>(m: Readonly<T>): number {
+        const a = m.data;
+
+        const a00 = a[0] * a[5] - a[1] * a[4];
+        const a01 = a[0] * a[6] - a[2] * a[4];
+        const a02 = a[0] * a[7] - a[3] * a[4];
+        const a03 = a[1] * a[6] - a[2] * a[5];
+        const a04 = a[1] * a[7] - a[3] * a[5];
+        const a05 = a[2] * a[7] - a[3] * a[6];
+        const b00 = a[8] * a[13] - a[9] * a[12];
+        const b01 = a[8] * a[14] - a[10] * a[12];
+        const b02 = a[8] * a[15] - a[11] * a[12];
+        const b03 = a[9] * a[14] - a[10] * a[13];
+        const b04 = a[9] * a[15] - a[11] * a[13];
+        const b05 = a[10] * a[15] - a[11] * a[14];
+
+        return a00 * b05 - a01 * b04 + a02 * b03 + a03 * b02 - a04 * b01 + a05 * b00;
+    }
+
+    static invert<T extends IMat4Like, V extends IMat4Like | undefined = undefined>(
+        m: Readonly<T>,
+        out?: V
+    ): MatrixOperationReturnType<V, T> {
+        const a = m.data;
+
+        const a00 = a[0] * a[5] - a[1] * a[4];
+        const a01 = a[0] * a[6] - a[2] * a[4];
+        const a02 = a[0] * a[7] - a[3] * a[4];
+        const a03 = a[1] * a[6] - a[2] * a[5];
+        const a04 = a[1] * a[7] - a[3] * a[5];
+        const a05 = a[2] * a[7] - a[3] * a[6];
+        const b00 = a[8] * a[13] - a[9] * a[12];
+        const b01 = a[8] * a[14] - a[10] * a[12];
+        const b02 = a[8] * a[15] - a[11] * a[12];
+        const b03 = a[9] * a[14] - a[10] * a[13];
+        const b04 = a[9] * a[15] - a[11] * a[13];
+        const b05 = a[10] * a[15] - a[11] * a[14];
+
+        let det = a00 * b05 - a01 * b04 + a02 * b03 + a03 * b02 - a04 * b01 + a05 * b00;
+
+        if (Math.abs(det) < EPSILON) {
+            throw new Error('Matrix is not invertible (determinant is zero or near-zero)');
+        }
+
+        det = 1.0 / det;
+
+        if (out) {
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+
+            outData[0] = (a[5] * b05 - a[6] * b04 + a[7] * b03) * det;
+            outData[1] = (-a[1] * b05 + a[2] * b04 - a[3] * b03) * det;
+            outData[2] = (a[13] * a05 - a[14] * a04 + a[15] * a03) * det;
+            outData[3] = (-a[9] * a05 + a[10] * a04 - a[11] * a03) * det;
+            outData[4] = (-a[4] * b05 + a[6] * b02 - a[7] * b01) * det;
+            outData[5] = (a[0] * b05 - a[2] * b02 + a[3] * b01) * det;
+            outData[6] = (-a[12] * a05 + a[14] * a02 - a[15] * a01) * det;
+            outData[7] = (a[8] * a05 - a[10] * a02 + a[11] * a01) * det;
+            outData[8] = (a[4] * b04 - a[5] * b02 + a[7] * b00) * det;
+            outData[9] = (-a[0] * b04 + a[1] * b02 - a[3] * b00) * det;
+            outData[10] = (a[12] * a04 - a[13] * a02 + a[15] * a00) * det;
+            outData[11] = (-a[8] * a04 + a[9] * a02 - a[11] * a00) * det;
+            outData[12] = (-a[4] * b03 + a[5] * b01 - a[6] * b00) * det;
+            outData[13] = (a[0] * b03 - a[1] * b01 + a[2] * b00) * det;
+            outData[14] = (-a[12] * a03 + a[13] * a01 - a[14] * a00) * det;
+            outData[15] = (a[8] * a03 - a[9] * a01 + a[10] * a00) * det;
+
+            return out as MatrixOperationReturnType<V, T>;
+        } else {
+            return new Mat4([
+                (a[5] * b05 - a[6] * b04 + a[7] * b03) * det,
+                (-a[1] * b05 + a[2] * b04 - a[3] * b03) * det,
+                (a[13] * a05 - a[14] * a04 + a[15] * a03) * det,
+                (-a[9] * a05 + a[10] * a04 - a[11] * a03) * det,
+                (-a[4] * b05 + a[6] * b02 - a[7] * b01) * det,
+                (a[0] * b05 - a[2] * b02 + a[3] * b01) * det,
+                (-a[12] * a05 + a[14] * a02 - a[15] * a01) * det,
+                (a[8] * a05 - a[10] * a02 + a[11] * a01) * det,
+                (a[4] * b04 - a[5] * b02 + a[7] * b00) * det,
+                (-a[0] * b04 + a[1] * b02 - a[3] * b00) * det,
+                (a[12] * a04 - a[13] * a02 + a[15] * a00) * det,
+                (-a[8] * a04 + a[9] * a02 - a[11] * a00) * det,
+                (-a[4] * b03 + a[5] * b01 - a[6] * b00) * det,
+                (a[0] * b03 - a[1] * b01 + a[2] * b00) * det,
+                (-a[12] * a03 + a[13] * a01 - a[14] * a00) * det,
+                (a[8] * a03 - a[9] * a01 + a[10] * a00) * det,
+            ]) as MatrixOperationReturnType<V, T>;
+        }
+    }
 }
+
