@@ -277,4 +277,104 @@ describe('Mat4', () => {
             expect(cloned.data).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
         });
     });
+
+    describe('equals method', () => {
+        test('should return true for identical matrices', () => {
+            const matrix1 = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+            const matrix2 = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+
+            expect(matrix1.equals(matrix2)).toBe(true);
+            expect(matrix2.equals(matrix1)).toBe(true);
+        });
+
+        test('should return true for matrices within epsilon tolerance', () => {
+            const matrix1 = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+            const matrix2 = new Mat4([
+                1 + EPSILON / 2,
+                2 + EPSILON / 2,
+                3 + EPSILON / 2,
+                4 + EPSILON / 2,
+                5 + EPSILON / 2,
+                6 + EPSILON / 2,
+                7 + EPSILON / 2,
+                8 + EPSILON / 2,
+                9 + EPSILON / 2,
+                10 + EPSILON / 2,
+                11 + EPSILON / 2,
+                12 + EPSILON / 2,
+                13 + EPSILON / 2,
+                14 + EPSILON / 2,
+                15 + EPSILON / 2,
+                16 + EPSILON / 2,
+            ]);
+
+            expect(matrix1.equals(matrix2)).toBe(true);
+        });
+
+        test('should return false for matrices outside epsilon tolerance', () => {
+            const matrix1 = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+            const matrix2 = new Mat4([
+                1 + EPSILON * 2,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+            ]);
+
+            expect(matrix1.equals(matrix2)).toBe(false);
+        });
+
+        test('should return false for different matrices', () => {
+            const matrix1 = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+            const matrix2 = new Mat4([16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
+
+            expect(matrix1.equals(matrix2)).toBe(false);
+        });
+
+        test('should return false for non-Mat4 objects', () => {
+            const matrix = new Mat4();
+            const notMatrix = { data: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] };
+
+            expect(matrix.equals(notMatrix)).toBe(false);
+        });
+
+        test('should return false for null and undefined', () => {
+            const matrix = new Mat4();
+
+            expect(matrix.equals(null)).toBe(false);
+            expect(matrix.equals(undefined)).toBe(false);
+        });
+
+        test('should return false for primitive values', () => {
+            const matrix = new Mat4();
+
+            expect(matrix.equals(42)).toBe(false);
+            expect(matrix.equals('matrix')).toBe(false);
+            expect(matrix.equals(true)).toBe(false);
+        });
+
+        test('should be reflexive (matrix equals itself)', () => {
+            const matrix = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+
+            expect(matrix.equals(matrix)).toBe(true);
+        });
+
+        test('should work with identity matrices', () => {
+            const identity1 = new Mat4();
+            const identity2 = Mat4.IDENTITY;
+
+            expect(identity1.equals(identity2)).toBe(true);
+        });
+    });
 });
