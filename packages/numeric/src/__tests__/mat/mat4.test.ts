@@ -70,4 +70,24 @@ describe('Mat4', () => {
             expect(zero1).toBe(zero2);
         });
     });
+
+    describe('Static from method', () => {
+        test('should create new Mat4 from existing matrix-like object', () => {
+            const sourceMatrix = { data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] };
+
+            const matrix = Mat4.from(sourceMatrix);
+
+            expect(matrix.data).toEqual(sourceMatrix.data);
+            expect(matrix).toBeInstanceOf(Mat4);
+        });
+
+        test('should create independent copy from source matrix', () => {
+            const sourceMatrix = new Mat4([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+
+            const matrix = Mat4.from(sourceMatrix);
+
+            expect(matrix).not.toBe(sourceMatrix);
+            expect(matrix.data).toEqual(sourceMatrix.data);
+        });
+    });
 });
