@@ -1122,4 +1122,18 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
     transformVec4<T extends IVec4Like>(v: Readonly<T>, out?: T): T {
         return Mat4.transformVec4(v, this, out) as T;
     }
+
+    toArray(): number[] {
+        return [...this.data];
+    }
+
+    toString(): string {
+        const d = this.data;
+        return `Mat4(
+  [${d[0].toFixed(3)}, ${d[1].toFixed(3)}, ${d[2].toFixed(3)}, ${d[3].toFixed(3)}]
+  [${d[4].toFixed(3)}, ${d[5].toFixed(3)}, ${d[6].toFixed(3)}, ${d[7].toFixed(3)}]
+  [${d[8].toFixed(3)}, ${d[9].toFixed(3)}, ${d[10].toFixed(3)}, ${d[11].toFixed(3)}]
+  [${d[12].toFixed(3)}, ${d[13].toFixed(3)}, ${d[14].toFixed(3)}, ${d[15].toFixed(3)}]
+)`;
+    }
 }
