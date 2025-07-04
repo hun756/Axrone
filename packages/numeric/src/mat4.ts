@@ -1007,4 +1007,53 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             ]) as MatrixOperationReturnType<V, Mat4>;
         }
     }
+
+    static transformVec3<
+        T extends IVec3Like,
+        U extends IMat4Like,
+        V extends IVec3Like | undefined = undefined,
+    >(v: Readonly<T>, m: Readonly<U>, out?: V): V extends undefined ? T : V {
+        const x = v.x,
+            y = v.y,
+            z = v.z;
+
+        if (out) {
+            out.x = m.data[0] * x + m.data[1] * y + m.data[2] * z + m.data[3];
+            out.y = m.data[4] * x + m.data[5] * y + m.data[6] * z + m.data[7];
+            out.z = m.data[8] * x + m.data[9] * y + m.data[10] * z + m.data[11];
+            return out as V extends undefined ? T : V;
+        } else {
+            return {
+                x: m.data[0] * x + m.data[1] * y + m.data[2] * z + m.data[3],
+                y: m.data[4] * x + m.data[5] * y + m.data[6] * z + m.data[7],
+                z: m.data[8] * x + m.data[9] * y + m.data[10] * z + m.data[11],
+            } as V extends undefined ? T : V;
+        }
+    }
+
+    static transformVec4<
+        T extends IVec4Like,
+        U extends IMat4Like,
+        V extends IVec4Like | undefined = undefined,
+    >(v: Readonly<T>, m: Readonly<U>, out?: V): V extends undefined ? T : V {
+        const x = v.x,
+            y = v.y,
+            z = v.z,
+            w = v.w;
+
+        if (out) {
+            out.x = m.data[0] * x + m.data[1] * y + m.data[2] * z + m.data[3] * w;
+            out.y = m.data[4] * x + m.data[5] * y + m.data[6] * z + m.data[7] * w;
+            out.z = m.data[8] * x + m.data[9] * y + m.data[10] * z + m.data[11] * w;
+            out.w = m.data[12] * x + m.data[13] * y + m.data[14] * z + m.data[15] * w;
+            return out as V extends undefined ? T : V;
+        } else {
+            return {
+                x: m.data[0] * x + m.data[1] * y + m.data[2] * z + m.data[3] * w,
+                y: m.data[4] * x + m.data[5] * y + m.data[6] * z + m.data[7] * w,
+                z: m.data[8] * x + m.data[9] * y + m.data[10] * z + m.data[11] * w,
+                w: m.data[12] * x + m.data[13] * y + m.data[14] * z + m.data[15] * w,
+            } as V extends undefined ? T : V;
+        }
+    }
 }
