@@ -443,5 +443,248 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             ]) as MatrixOperationReturnType<V, T>;
         }
     }
-}
 
+    static translate<T extends IVec3Like, V extends IMat4Like | undefined = undefined>(
+        v: Readonly<T>,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat4> {
+        if (out) {
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+
+            outData[0] = 1;
+            outData[1] = 0;
+            outData[2] = 0;
+            outData[3] = v.x;
+            outData[4] = 0;
+            outData[5] = 1;
+            outData[6] = 0;
+            outData[7] = v.y;
+            outData[8] = 0;
+            outData[9] = 0;
+            outData[10] = 1;
+            outData[11] = v.z;
+            outData[12] = 0;
+            outData[13] = 0;
+            outData[14] = 0;
+            outData[15] = 1;
+
+            return out as MatrixOperationReturnType<V, Mat4>;
+        } else {
+            return new Mat4([
+                1,
+                0,
+                0,
+                v.x,
+                0,
+                1,
+                0,
+                v.y,
+                0,
+                0,
+                1,
+                v.z,
+                0,
+                0,
+                0,
+                1,
+            ]) as MatrixOperationReturnType<V, Mat4>;
+        }
+    }
+
+    static scale<T extends IVec3Like, V extends IMat4Like | undefined = undefined>(
+        v: Readonly<T>,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat4> {
+        if (out) {
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+
+            outData[0] = v.x;
+            outData[1] = 0;
+            outData[2] = 0;
+            outData[3] = 0;
+            outData[4] = 0;
+            outData[5] = v.y;
+            outData[6] = 0;
+            outData[7] = 0;
+            outData[8] = 0;
+            outData[9] = 0;
+            outData[10] = v.z;
+            outData[11] = 0;
+            outData[12] = 0;
+            outData[13] = 0;
+            outData[14] = 0;
+            outData[15] = 1;
+
+            return out as MatrixOperationReturnType<V, Mat4>;
+        } else {
+            return new Mat4([
+                v.x,
+                0,
+                0,
+                0,
+                0,
+                v.y,
+                0,
+                0,
+                0,
+                0,
+                v.z,
+                0,
+                0,
+                0,
+                0,
+                1,
+            ]) as MatrixOperationReturnType<V, Mat4>;
+        }
+    }
+
+    static rotateX<V extends IMat4Like | undefined = undefined>(
+        angle: number,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat4> {
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+
+        if (out) {
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+
+            outData[0] = 1;
+            outData[1] = 0;
+            outData[2] = 0;
+            outData[3] = 0;
+            outData[4] = 0;
+            outData[5] = c;
+            outData[6] = -s;
+            outData[7] = 0;
+            outData[8] = 0;
+            outData[9] = s;
+            outData[10] = c;
+            outData[11] = 0;
+            outData[12] = 0;
+            outData[13] = 0;
+            outData[14] = 0;
+            outData[15] = 1;
+
+            return out as MatrixOperationReturnType<V, Mat4>;
+        } else {
+            return new Mat4([
+                1,
+                0,
+                0,
+                0,
+                0,
+                c,
+                -s,
+                0,
+                0,
+                s,
+                c,
+                0,
+                0,
+                0,
+                0,
+                1,
+            ]) as MatrixOperationReturnType<V, Mat4>;
+        }
+    }
+
+    static rotateY<V extends IMat4Like | undefined = undefined>(
+        angle: number,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat4> {
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+
+        if (out) {
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+
+            outData[0] = c;
+            outData[1] = 0;
+            outData[2] = s;
+            outData[3] = 0;
+            outData[4] = 0;
+            outData[5] = 1;
+            outData[6] = 0;
+            outData[7] = 0;
+            outData[8] = -s;
+            outData[9] = 0;
+            outData[10] = c;
+            outData[11] = 0;
+            outData[12] = 0;
+            outData[13] = 0;
+            outData[14] = 0;
+            outData[15] = 1;
+
+            return out as MatrixOperationReturnType<V, Mat4>;
+        } else {
+            return new Mat4([
+                c,
+                0,
+                s,
+                0,
+                0,
+                1,
+                0,
+                0,
+                -s,
+                0,
+                c,
+                0,
+                0,
+                0,
+                0,
+                1,
+            ]) as MatrixOperationReturnType<V, Mat4>;
+        }
+    }
+
+    static rotateZ<V extends IMat4Like | undefined = undefined>(
+        angle: number,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat4> {
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+
+        if (out) {
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+
+            outData[0] = c;
+            outData[1] = -s;
+            outData[2] = 0;
+            outData[3] = 0;
+            outData[4] = s;
+            outData[5] = c;
+            outData[6] = 0;
+            outData[7] = 0;
+            outData[8] = 0;
+            outData[9] = 0;
+            outData[10] = 1;
+            outData[11] = 0;
+            outData[12] = 0;
+            outData[13] = 0;
+            outData[14] = 0;
+            outData[15] = 1;
+
+            return out as MatrixOperationReturnType<V, Mat4>;
+        } else {
+            return new Mat4([
+                c,
+                -s,
+                0,
+                0,
+                s,
+                c,
+                0,
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                0,
+                1,
+            ]) as MatrixOperationReturnType<V, Mat4>;
+        }
+    }
+}
