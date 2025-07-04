@@ -687,4 +687,78 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             ]) as MatrixOperationReturnType<V, Mat4>;
         }
     }
+
+    static rotateAxis<T extends IVec3Like, V extends IMat4Like | undefined = undefined>(
+        axis: Readonly<T>,
+        angle: number,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat4> {
+        const len = Math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
+
+        if (len < EPSILON) {
+            throw new Error('Cannot rotate around zero-length axis');
+        }
+
+        const x = axis.x / len;
+        const y = axis.y / len;
+        const z = axis.z / len;
+
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+        const oneMinusC = 1 - c;
+
+        const m00 = x * x * oneMinusC + c;
+        const m01 = x * y * oneMinusC - z * s;
+        const m02 = x * z * oneMinusC + y * s;
+
+        const m10 = y * x * oneMinusC + z * s;
+        const m11 = y * y * oneMinusC + c;
+        const m12 = y * z * oneMinusC - x * s;
+
+        const m20 = z * x * oneMinusC - y * s;
+        const m21 = z * y * oneMinusC + x * s;
+        const m22 = z * z * oneMinusC + c;
+
+        if (out) {
+            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+
+            outData[0] = m00;
+            outData[1] = m01;
+            outData[2] = m02;
+            outData[3] = 0;
+            outData[4] = m10;
+            outData[5] = m11;
+            outData[6] = m12;
+            outData[7] = 0;
+            outData[8] = m20;
+            outData[9] = m21;
+            outData[10] = m22;
+            outData[11] = 0;
+            outData[12] = 0;
+            outData[13] = 0;
+            outData[14] = 0;
+            outData[15] = 1;
+
+            return out as MatrixOperationReturnType<V, Mat4>;
+        } else {
+            return new Mat4([
+                m00,
+                m01,
+                m02,
+                0,
+                m10,
+                m11,
+                m12,
+                0,
+                m20,
+                m21,
+                m22,
+                0,
+                0,
+                0,
+                0,
+                1,
+            ]) as MatrixOperationReturnType<V, Mat4>;
+        }
+    }
 }
