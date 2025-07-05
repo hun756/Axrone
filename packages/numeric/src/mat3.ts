@@ -386,4 +386,168 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
             >;
         }
     }
+
+    static rotate2D<V extends IMat3Like | undefined = undefined>(
+        angle: number,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat3> {
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+
+            outData[0] = c;
+            outData[1] = -s;
+            outData[2] = 0;
+            outData[3] = s;
+            outData[4] = c;
+            outData[5] = 0;
+            outData[6] = 0;
+            outData[7] = 0;
+            outData[8] = 1;
+
+            return out as MatrixOperationReturnType<V, Mat3>;
+        } else {
+            return new Mat3([c, -s, 0, s, c, 0, 0, 0, 1]) as MatrixOperationReturnType<V, Mat3>;
+        }
+    }
+
+    static rotateX<V extends IMat3Like | undefined = undefined>(
+        angle: number,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat3> {
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+
+            outData[0] = 1;
+            outData[1] = 0;
+            outData[2] = 0;
+            outData[3] = 0;
+            outData[4] = c;
+            outData[5] = -s;
+            outData[6] = 0;
+            outData[7] = s;
+            outData[8] = c;
+
+            return out as MatrixOperationReturnType<V, Mat3>;
+        } else {
+            return new Mat3([1, 0, 0, 0, c, -s, 0, s, c]) as MatrixOperationReturnType<V, Mat3>;
+        }
+    }
+
+    static rotateY<V extends IMat3Like | undefined = undefined>(
+        angle: number,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat3> {
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+
+            outData[0] = c;
+            outData[1] = 0;
+            outData[2] = s;
+            outData[3] = 0;
+            outData[4] = 1;
+            outData[5] = 0;
+            outData[6] = -s;
+            outData[7] = 0;
+            outData[8] = c;
+
+            return out as MatrixOperationReturnType<V, Mat3>;
+        } else {
+            return new Mat3([c, 0, s, 0, 1, 0, -s, 0, c]) as MatrixOperationReturnType<V, Mat3>;
+        }
+    }
+
+    static rotateZ<V extends IMat3Like | undefined = undefined>(
+        angle: number,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat3> {
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+
+            outData[0] = c;
+            outData[1] = -s;
+            outData[2] = 0;
+            outData[3] = s;
+            outData[4] = c;
+            outData[5] = 0;
+            outData[6] = 0;
+            outData[7] = 0;
+            outData[8] = 1;
+
+            return out as MatrixOperationReturnType<V, Mat3>;
+        } else {
+            return new Mat3([c, -s, 0, s, c, 0, 0, 0, 1]) as MatrixOperationReturnType<V, Mat3>;
+        }
+    }
+
+    static rotateAxis<T extends IVec3Like, V extends IMat3Like | undefined = undefined>(
+        axis: Readonly<T>,
+        angle: number,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat3> {
+        const len = Math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
+
+        if (len < EPSILON) {
+            throw new Error('Cannot rotate around zero-length axis');
+        }
+
+        const x = axis.x / len;
+        const y = axis.y / len;
+        const z = axis.z / len;
+
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+        const oneMinusC = 1 - c;
+
+        const m00 = x * x * oneMinusC + c;
+        const m01 = x * y * oneMinusC - z * s;
+        const m02 = x * z * oneMinusC + y * s;
+
+        const m10 = y * x * oneMinusC + z * s;
+        const m11 = y * y * oneMinusC + c;
+        const m12 = y * z * oneMinusC - x * s;
+
+        const m20 = z * x * oneMinusC - y * s;
+        const m21 = z * y * oneMinusC + x * s;
+        const m22 = z * z * oneMinusC + c;
+
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+
+            outData[0] = m00;
+            outData[1] = m01;
+            outData[2] = m02;
+            outData[3] = m10;
+            outData[4] = m11;
+            outData[5] = m12;
+            outData[6] = m20;
+            outData[7] = m21;
+            outData[8] = m22;
+
+            return out as MatrixOperationReturnType<V, Mat3>;
+        } else {
+            return new Mat3([
+                m00,
+                m01,
+                m02,
+                m10,
+                m11,
+                m12,
+                m20,
+                m21,
+                m22,
+            ]) as MatrixOperationReturnType<V, Mat3>;
+        }
+    }
 }
