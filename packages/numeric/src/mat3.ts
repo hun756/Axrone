@@ -550,4 +550,56 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
             ]) as MatrixOperationReturnType<V, Mat3>;
         }
     }
+
+    static transformVec2<
+        T extends IVec2Like,
+        U extends IMat3Like,
+        V extends IVec2Like | undefined = undefined,
+    >(v: Readonly<T>, m: Readonly<U>, out?: V): V extends undefined ? T : V {
+        const x = v.x,
+            y = v.y;
+
+        if (out) {
+            out.x = m.data[0] * x + m.data[1] * y + m.data[2];
+            out.y = m.data[3] * x + m.data[4] * y + m.data[5];
+            return out as V extends undefined ? T : V;
+        } else {
+            return {
+                x: m.data[0] * x + m.data[1] * y + m.data[2],
+                y: m.data[3] * x + m.data[4] * y + m.data[5],
+            } as V extends undefined ? T : V;
+        }
+    }
+
+    static transformVec3<
+        T extends IVec3Like,
+        U extends IMat3Like,
+        V extends IVec3Like | undefined = undefined,
+    >(v: Readonly<T>, m: Readonly<U>, out?: V): V extends undefined ? T : V {
+        const x = v.x,
+            y = v.y,
+            z = v.z;
+
+        if (out) {
+            out.x = m.data[0] * x + m.data[1] * y + m.data[2] * z;
+            out.y = m.data[3] * x + m.data[4] * y + m.data[5] * z;
+            out.z = m.data[6] * x + m.data[7] * y + m.data[8] * z;
+            return out as V extends undefined ? T : V;
+        } else {
+            return {
+                x: m.data[0] * x + m.data[1] * y + m.data[2] * z,
+                y: m.data[3] * x + m.data[4] * y + m.data[5] * z,
+                z: m.data[6] * x + m.data[7] * y + m.data[8] * z,
+            } as V extends undefined ? T : V;
+        }
+    }
+
+    static transformNormal<
+        T extends IVec3Like,
+        U extends IMat3Like,
+        V extends IVec3Like | undefined = undefined,
+    >(normal: Readonly<T>, m: Readonly<U>, out?: V): V extends undefined ? T : V {
+        const invTranspose = Mat3.transpose(Mat3.invert(m));
+        return Mat3.transformVec3(normal, invTranspose, out);
+    }
 }
