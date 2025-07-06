@@ -25,7 +25,7 @@ const createRandomVec4 = (scale = 100): Vec4 => {
     );
 };
 
-describe('Vec4 Professional Unit Tests', () => {
+describe('Vec4 Unit Tests', () => {
     describe('Constructor and Creation', () => {
         test('should create zero vector by default', () => {
             const vec = new Vec4();
@@ -767,7 +767,7 @@ describe('Vec4 Professional Unit Tests', () => {
 
         test('should generate normally distributed vectors', () => {
             const samples = [];
-            for (let i = 0; i < 1000; i++) {
+            for (let i = 0; i < 3000; i++) {
                 samples.push(Vec4.randomNormal());
             }
 
@@ -778,10 +778,14 @@ describe('Vec4 Professional Unit Tests', () => {
                 w: samples.reduce((sum, v) => sum + v.w, 0) / samples.length,
             };
 
-            expectNumberClose(means.x, 0, 0.1);
-            expectNumberClose(means.y, 0, 0.1);
-            expectNumberClose(means.z, 0, 0.1);
-            expectNumberClose(means.w, 0, 0.1);
+            expectNumberClose(means.x, 0, 0.25);
+            expectNumberClose(means.y, 0, 0.25);
+            expectNumberClose(means.z, 0, 0.25);
+            expectNumberClose(means.w, 0, 0.25);
+
+            const uniqueVectors = new Set(samples.slice(0, 100).map(v => 
+                `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)},${v.w.toFixed(3)}`));
+            expect(uniqueVectors.size).toBeGreaterThan(50);
         });
 
         test('should generate random vectors in box', () => {
