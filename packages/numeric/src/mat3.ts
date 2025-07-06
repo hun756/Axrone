@@ -602,4 +602,46 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
         const invTranspose = Mat3.transpose(Mat3.invert(m));
         return Mat3.transformVec3(normal, invTranspose, out);
     }
+
+    static lerp<
+        T extends IMat3Like,
+        U extends IMat3Like,
+        V extends IMat3Like | undefined = undefined,
+    >(a: Readonly<T>, b: Readonly<U>, t: number, out?: V): MatrixOperationReturnType<V, T> {
+        const t1 = Math.max(0, Math.min(1, t));
+
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+            for (let i = 0; i < 9; i++) {
+                outData[i] = a.data[i] + (b.data[i] - a.data[i]) * t1;
+            }
+            return out as MatrixOperationReturnType<V, T>;
+        } else {
+            const result = new Array(9);
+            for (let i = 0; i < 9; i++) {
+                result[i] = a.data[i] + (b.data[i] - a.data[i]) * t1;
+            }
+            return new Mat3(result) as MatrixOperationReturnType<V, T>;
+        }
+    }
+
+    static lerpUnClamped<
+        T extends IMat3Like,
+        U extends IMat3Like,
+        V extends IMat3Like | undefined = undefined,
+    >(a: Readonly<T>, b: Readonly<U>, t: number, out?: V): MatrixOperationReturnType<V, T> {
+        if (out) {
+            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
+            for (let i = 0; i < 9; i++) {
+                outData[i] = a.data[i] + (b.data[i] - a.data[i]) * t;
+            }
+            return out as MatrixOperationReturnType<V, T>;
+        } else {
+            const result = new Array(9);
+            for (let i = 0; i < 9; i++) {
+                result[i] = a.data[i] + (b.data[i] - a.data[i]) * t;
+            }
+            return new Mat3(result) as MatrixOperationReturnType<V, T>;
+        }
+    }
 }
