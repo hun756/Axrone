@@ -1,23 +1,16 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON, HALF_PI, PI_2, standardNormalDist } from './common';
+import { EPSILON, HALF_PI, PI_2 } from './common';
+import {
+    sampleStandardNormal,
+    sampleNormalInRange,
+    sampleUniform,
+    sampleUniformRange,
+} from './box-muller';
 
 export interface IVec2Like {
     x: number;
     y: number;
 }
-
-const _boundedNormalRandom = (): number => {
-    const MAX_ATTEMPTS = 10;
-    for (let i = 0; i < MAX_ATTEMPTS; i++) {
-        const value = standardNormalDist.sample();
-        if (value >= -1 && value <= 1) {
-            return value;
-        }
-    }
-    return Math.max(-1, Math.min(1, standardNormalDist.sample()));
-};
-
-const _normalRandom = (): number => _boundedNormalRandom();
 
 export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     constructor(
@@ -705,22 +698,20 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     }
 
     static random<T extends IVec2Like>(scale: number = 1, out?: T): T {
-        const u = 1 - Math.random(); // [0, 1)
-        const v = Math.random();
-        const r = scale * Math.sqrt(-2 * Math.log(u));
-        const theta = PI_2 * v;
+        const x = sampleStandardNormal() * scale;
+        const y = sampleStandardNormal() * scale;
 
         if (out) {
-            out.x = r * Math.cos(theta);
-            out.y = r * Math.sin(theta);
+            out.x = x;
+            out.y = y;
             return out;
         } else {
-            return { x: r * Math.cos(theta), y: r * Math.sin(theta) } as T;
+            return { x, y } as T;
         }
     }
 
     static fastRandom<T extends IVec2Like>(scale: number = 1, out?: T): T {
-        const angle = Math.random() * PI_2;
+        const angle = sampleUniform() * PI_2;
 
         if (out) {
             out.x = Math.cos(angle) * scale;
@@ -735,10 +726,8 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     }
 
     static randomNormal<T extends IVec2Like>(scale: number = 1, out?: T): T {
-        const u = 1 - Math.random();
-        const v = Math.random();
-        const x = Math.sqrt(-2 * Math.log(u)) * Math.cos(PI_2 * v) * scale;
-        const y = Math.sqrt(-2 * Math.log(u)) * Math.sin(PI_2 * v) * scale;
+        const x = sampleStandardNormal() * scale;
+        const y = sampleStandardNormal() * scale;
 
         if (out) {
             out.x = x;
@@ -756,8 +745,8 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         maxY: number,
         out?: T
     ): T {
-        const x = minX + Math.random() * (maxX - minX);
-        const y = minY + Math.random() * (maxY - minY);
+        const x = sampleUniformRange(minX, maxX);
+        const y = sampleUniformRange(minY, maxY);
 
         if (out) {
             out.x = x;
@@ -775,8 +764,13 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         maxY: number,
         out?: T
     ): T {
-        const x = minX + (_normalRandom() + 1) * 0.5 * (maxX - minX);
-        const y = minY + (_normalRandom() + 1) * 0.5 * (maxY - minY);
+        const centerX = (minX + maxX) * 0.5;
+        const centerY = (minY + maxY) * 0.5;
+        const rangeX = maxX - minX;
+        const rangeY = maxY - minY;
+
+        const x = sampleNormalInRange(centerX, rangeX);
+        const y = sampleNormalInRange(centerY, rangeY);
 
         if (out) {
             out.x = x;

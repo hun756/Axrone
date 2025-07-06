@@ -13,7 +13,7 @@ import {
     GeometricDistribution,
     IRandomAPI,
     IRandomState,
-} from '../random/random';
+} from '../random';
 
 describe('Random Core API', () => {
     it('is deterministic for same seed and engine', () => {
