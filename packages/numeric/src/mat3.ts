@@ -644,4 +644,45 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
             return new Mat3(result) as MatrixOperationReturnType<V, T>;
         }
     }
+
+    multiply<T extends IMat3Like>(other: Readonly<T>): Mat3 {
+        return Mat3.multiply(this, other, this);
+    }
+
+    transpose(): Mat3 {
+        return Mat3.transpose(this, this);
+    }
+
+    determinant(): number {
+        return Mat3.determinant(this);
+    }
+
+    invert(): Mat3 {
+        return Mat3.invert(this, this);
+    }
+
+    transformVec2<T extends IVec2Like>(v: Readonly<T>, out?: T): T {
+        return Mat3.transformVec2(v, this, out) as T;
+    }
+
+    transformVec3<T extends IVec3Like>(v: Readonly<T>, out?: T): T {
+        return Mat3.transformVec3(v, this, out) as T;
+    }
+
+    transformNormal<T extends IVec3Like>(normal: Readonly<T>, out?: T): T {
+        return Mat3.transformNormal(normal, this, out) as T;
+    }
+
+    toArray(): number[] {
+        return [...this.data];
+    }
+
+    toString(): string {
+        const d = this.data;
+        return `Mat3(
+  [${d[0].toFixed(3)}, ${d[1].toFixed(3)}, ${d[2].toFixed(3)}]
+  [${d[3].toFixed(3)}, ${d[4].toFixed(3)}, ${d[5].toFixed(3)}]
+  [${d[6].toFixed(3)}, ${d[7].toFixed(3)}, ${d[8].toFixed(3)}]
+)`;
+    }
 }
