@@ -686,3 +686,74 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
 )`;
     }
 }
+
+export enum Mat3ComparisonMode {
+    FROBENIUS_NORM,
+    DETERMINANT,
+    TRACE,
+    CONDITION_NUMBER,
+}
+
+export class Mat3Comparer implements Comparer<Mat3> {
+    private readonly mode: Mat3ComparisonMode;
+
+    constructor(mode: Mat3ComparisonMode = Mat3ComparisonMode.FROBENIUS_NORM) {
+        this.mode = mode;
+    }
+
+    compare(a: Readonly<Mat3>, b: Readonly<Mat3>): CompareResult {
+        switch (this.mode) {
+            case Mat3ComparisonMode.FROBENIUS_NORM: {
+                let normA = 0,
+                    normB = 0;
+                for (let i = 0; i < 9; i++) {
+                    normA += a.data[i] * a.data[i];
+                    normB += b.data[i] * b.data[i];
+                }
+                normA = Math.sqrt(normA);
+                normB = Math.sqrt(normB);
+                if (Math.abs(normA - normB) < EPSILON) return 0;
+                return normA < normB ? -1 : 1;
+            }
+
+            case Mat3ComparisonMode.DETERMINANT: {
+                const detA = Mat3.determinant(a);
+                const detB = Mat3.determinant(b);
+                if (Math.abs(detA - detB) < EPSILON) return 0;
+                return detA < detB ? -1 : 1;
+            }
+
+            case Mat3ComparisonMode.TRACE: {
+                const traceA = a.data[0] + a.data[4] + a.data[8];
+                const traceB = b.data[0] + b.data[4] + b.data[8];
+                if (Math.abs(traceA - traceB) < EPSILON) return 0;
+                return traceA < traceB ? -1 : 1;
+            }
+
+            case Mat3ComparisonMode.CONDITION_NUMBER: {
+                let maxA = 0,
+                    minA = Infinity,
+                    maxB = 0,
+                    minB = Infinity;
+
+                for (let i = 0; i < 9; i++) {
+                    const absA = Math.abs(a.data[i]);
+                    const absB = Math.abs(b.data[i]);
+                    maxA = Math.max(maxA, absA);
+                    minA = Math.min(minA, absA);
+                    maxB = Math.max(maxB, absB);
+                    minB = Math.min(minB, absB);
+                }
+
+                const condA = minA > EPSILON ? maxA / minA : Infinity;
+                const condB = minB > EPSILON ? maxB / minB : Infinity;
+
+                if (Math.abs(condA - condB) < EPSILON) return 0;
+                return condA < condB ? -1 : 1;
+            }
+
+            default:
+                throw new Error(`Unsupported Mat3 comparison mode: ${this.mode}`);
+        }
+    }
+}
