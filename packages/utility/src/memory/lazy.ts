@@ -174,3 +174,68 @@ export const tryForce = <T>(lazy: Lazy<T>): T | Error => {
         return error instanceof Error ? error : new Error(String(error));
     }
 };
+
+const lazy = Object.assign(
+    function lazy<T>(computation: () => T): Lazy<T> {
+        return createLazy(createThunkDescriptor(computation));
+    },
+    {
+        of: <T>(value: T): Lazy<T> => createLazy(createEvaluatedDescriptor(value)),
+        defer: <T>(computation: () => T): Lazy<T> => createLazy(createThunkDescriptor(computation)),
+        pure: <T>(value: T): Lazy<T> => createLazy(createEvaluatedDescriptor(value)),
+        fromPromise: <T>(promise: Promise<T>): Lazy<T> =>
+            createLazy(
+                createThunkDescriptor(() => {
+                    throw new Error('Use lazy.fromPromiseAsync for async');
+                })
+            ),
+        sequence: <T extends readonly Lazy<any>[]>(
+            ...lazies: T
+        ): Lazy<{ readonly [K in keyof T]: LazyValue<T[K]> }> =>
+            createLazy(
+                createThunkDescriptor(
+                    () => lazies.map(force) as { readonly [K in keyof T]: LazyValue<T[K]> }
+                )
+            ),
+        parallel: <T extends readonly Lazy<any>[]>(
+            ...lazies: T
+        ): Lazy<{ readonly [K in keyof T]: LazyValue<T[K]> }> =>
+            createLazy(
+                createThunkDescriptor(
+                    () => lazies.map(force) as { readonly [K in keyof T]: LazyValue<T[K]> }
+                )
+            ),
+        race: <T extends readonly Lazy<any>[]>(...lazies: T): Lazy<LazyValue<T[number]>> =>
+            createLazy(
+                createThunkDescriptor(() => {
+                    const errors: unknown[] = [];
+                    for (const lazyValue of lazies) {
+                        try {
+                            return force(lazyValue);
+                        } catch (error) {
+                            errors.push(error);
+                        }
+                    }
+                    throw new Error(
+                        'All lazy values failed: ' + errors.map((e) => String(e)).join(', ')
+                    );
+                })
+            ),
+        merge: <T extends Record<PropertyKey, Lazy<any>>>(
+            obj: T
+        ): Lazy<{ readonly [K in keyof T]: LazyValue<T[K]> }> =>
+            createLazy(
+                createThunkDescriptor(() => {
+                    const result = {} as { [K in keyof T]: LazyValue<T[K]> };
+                    for (const key in obj) {
+                        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                            result[key] = force(obj[key]);
+                        }
+                    }
+                    return result;
+                })
+            ),
+    }
+) as unknown as LazyConstructor;
+
+export { lazy };
