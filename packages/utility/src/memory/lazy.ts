@@ -344,3 +344,24 @@ export const zipWith = <T extends readonly [Lazy<any>, ...Lazy<any>[]], U>(
     fn: (...values: { readonly [K in keyof T]: LazyValue<T[K]> }) => U,
     ...lazies: T
 ): Lazy<U> => createLazy(createThunkDescriptor(() => fn(...force(lazy.sequence(...lazies)))));
+
+interface LazyCollection<T> {
+    readonly take: (n: number) => LazyCollection<T>;
+    readonly drop: (n: number) => LazyCollection<T>;
+    readonly map: <U>(fn: MapFn<T, U>) => LazyCollection<U>;
+    readonly filter: <U extends T>(fn: FilterFn<T, U>) => LazyCollection<U>;
+    readonly takeWhile: (fn: PredicateFn<T>) => LazyCollection<T>;
+    readonly dropWhile: (fn: PredicateFn<T>) => LazyCollection<T>;
+    readonly scan: <U>(initial: U, fn: ReducerFn<T, U>) => LazyCollection<U>;
+    readonly reduce: <U>(initial: U, fn: ReducerFn<T, U>) => Lazy<U>;
+    readonly fold: <U>(initial: U, fn: ReducerFn<T, U>) => Lazy<U>;
+    readonly toArray: () => Lazy<readonly T[]>;
+    readonly head: () => Lazy<T>;
+    readonly tail: () => LazyCollection<T>;
+    readonly isEmpty: () => Lazy<boolean>;
+    readonly length: () => Lazy<number>;
+    readonly concat: (other: LazyCollection<T>) => LazyCollection<T>;
+    readonly flatMap: <U>(fn: (value: T) => LazyCollection<U>) => LazyCollection<U>;
+    readonly zip: <U>(other: LazyCollection<U>) => LazyCollection<readonly [T, U]>;
+    readonly [Symbol.iterator]: () => Iterator<Lazy<T>>;
+}
