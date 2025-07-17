@@ -239,3 +239,108 @@ const lazy = Object.assign(
 ) as unknown as LazyConstructor;
 
 export { lazy };
+
+type MapFn<T, U> = (value: T) => U;
+type FilterFn<T, U extends T = T> = (value: T) => value is U;
+type PredicateFn<T> = (value: T) => boolean;
+type ReducerFn<T, U> = (acc: U, value: T) => U;
+type FlatMapFn<T, U> = (value: T) => Lazy<U>;
+
+export const map =
+    <T, U>(fn: MapFn<T, U>) =>
+    (lazy: Lazy<T>): Lazy<U> =>
+        createLazy(createThunkDescriptor(() => fn(force(lazy))));
+
+export const flatMap =
+    <T, U>(fn: FlatMapFn<T, U>) =>
+    (lazy: Lazy<T>): Lazy<U> =>
+        createLazy(createThunkDescriptor(() => force(fn(force(lazy)))));
+
+export const filter =
+    <T, U extends T>(fn: FilterFn<T, U>) =>
+    (lazy: Lazy<T>): Lazy<U> =>
+        createLazy(
+            createThunkDescriptor(() => {
+                const value = force(lazy);
+                if (fn(value)) return value;
+                throw new Error('Filter predicate failed');
+            })
+        );
+
+export const tap =
+    <T>(fn: (value: T) => void) =>
+    (lazy: Lazy<T>): Lazy<T> =>
+        createLazy(
+            createThunkDescriptor(() => {
+                const value = force(lazy);
+                fn(value);
+                return value;
+            })
+        );
+
+export const recover =
+    <T, U>(fn: (error: unknown) => U) =>
+    (lazy: Lazy<T>): Lazy<T | U> =>
+        createLazy(
+            createThunkDescriptor(() => {
+                try {
+                    return force(lazy);
+                } catch (error) {
+                    return fn(error);
+                }
+            })
+        );
+
+export const timeout =
+    <T>(ms: number) =>
+    (lazy: Lazy<T>): Lazy<T> =>
+        createLazy(
+            createThunkDescriptor(() => {
+                const start = performance.now();
+                const result = force(lazy);
+                const elapsed = performance.now() - start;
+
+                if (elapsed > ms) {
+                    throw new Error(`Timeout exceeded: ${elapsed}ms > ${ms}ms`);
+                }
+
+                return result;
+            })
+        );
+
+export const delay =
+    <T>(ms: number) =>
+    (lazy: Lazy<T>): Lazy<T> =>
+        createLazy(
+            createThunkDescriptor(() => {
+                const start = performance.now();
+                const result = force(lazy);
+                const elapsed = performance.now() - start;
+                const remaining = Math.max(0, ms - elapsed);
+
+                if (remaining > 0) {
+                    const end = performance.now() + remaining;
+                    while (performance.now() < end) {
+                        /* busy wait */
+                    }
+                }
+
+                return result;
+            })
+        );
+
+export const memoize = <T>(lazy: Lazy<T>): Lazy<T> => lazy;
+
+export const zip = <T extends readonly [Lazy<any>, ...Lazy<any>[]]>(
+    ...lazies: T
+): Lazy<{ readonly [K in keyof T]: LazyValue<T[K]> }> =>
+    createLazy(
+        createThunkDescriptor(
+            () => lazies.map(force) as { readonly [K in keyof T]: LazyValue<T[K]> }
+        )
+    );
+
+export const zipWith = <T extends readonly [Lazy<any>, ...Lazy<any>[]], U>(
+    fn: (...values: { readonly [K in keyof T]: LazyValue<T[K]> }) => U,
+    ...lazies: T
+): Lazy<U> => createLazy(createThunkDescriptor(() => fn(...force(lazy.sequence(...lazies)))));
