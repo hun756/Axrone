@@ -69,3 +69,108 @@ type LazyConstructor = {
 
 const EMPTY_OBJECT = Object.freeze({}) as Record<never, never>;
 const EMPTY_ARRAY = Object.freeze([]) as readonly never[];
+
+const createThunkState = <T>(): {
+    state: ThunkState<T>;
+    setState: (newState: ThunkState<T>) => void;
+} => {
+    let currentState: ThunkState<T> = { status: 'pending' };
+    return {
+        get state() {
+            return currentState;
+        },
+        setState: (newState: ThunkState<T>) => {
+            currentState = newState;
+        },
+    };
+};
+
+const createThunkDescriptor = <T>(computation: () => T): ThunkDescriptor<T> => {
+    const { state, setState } = createThunkState<T>();
+
+    return Object.freeze({
+        [__THUNK_BRAND]: __THUNK_BRAND,
+        computation,
+        get state() {
+            return state;
+        },
+        [Symbol.toStringTag]: 'ThunkDescriptor',
+    } as ThunkDescriptor<T>);
+};
+
+const createEvaluatedDescriptor = <T>(value: T): EvaluatedDescriptor<T> =>
+    Object.freeze({
+        [__EVALUATED_BRAND]: __EVALUATED_BRAND,
+        value,
+        [Symbol.toStringTag]: 'EvaluatedDescriptor',
+    });
+
+const createLazy = <T>(descriptor: ThunkDescriptor<T> | EvaluatedDescriptor<T>): Lazy<T> =>
+    Object.freeze({
+        [__LAZY_BRAND]: __LAZY_BRAND,
+        _descriptor: descriptor,
+        [Symbol.toStringTag]: 'Lazy',
+    }) as Lazy<T>;
+
+const isThunkDescriptor = <T>(
+    descriptor: ThunkDescriptor<T> | EvaluatedDescriptor<T>
+): descriptor is ThunkDescriptor<T> => __THUNK_BRAND in descriptor;
+
+const isEvaluatedDescriptor = <T>(
+    descriptor: ThunkDescriptor<T> | EvaluatedDescriptor<T>
+): descriptor is EvaluatedDescriptor<T> => __EVALUATED_BRAND in descriptor;
+
+const evaluateThunk = <T>(thunk: ThunkDescriptor<T>): T => {
+    const currentState = thunk.state;
+
+    if (currentState.status === 'resolved') {
+        return currentState.value;
+    }
+
+    if (currentState.status === 'rejected') {
+        throw currentState.error;
+    }
+
+    if (currentState.status === 'evaluating') {
+        throw new Error('Circular dependency detected');
+    }
+
+    if (typeof thunk.state === 'object' && 'setState' in thunk) {
+        (thunk as any).setState({ status: 'evaluating' });
+    }
+    try {
+        const result = thunk.computation();
+        if (typeof thunk.state === 'object' && 'setState' in thunk) {
+            (thunk as any).setState({ status: 'resolved', value: result });
+        }
+        return result;
+    } catch (error) {
+        if (typeof thunk.state === 'object' && 'setState' in thunk) {
+            (thunk as any).setState({ status: 'rejected', error });
+        }
+        throw error;
+    }
+};
+
+export const force = <T>(lazy: Lazy<T>): T => {
+    const descriptor = lazy._descriptor;
+
+    if (isEvaluatedDescriptor(descriptor)) {
+        return descriptor.value;
+    }
+
+    return evaluateThunk(descriptor);
+};
+
+export const isEvaluated = <T>(lazy: Lazy<T>): boolean => {
+    const descriptor = lazy._descriptor;
+    return isEvaluatedDescriptor(descriptor) || descriptor.state.status === 'resolved';
+};
+
+export const tryForce = <T>(lazy: Lazy<T>): T | Error => {
+    try {
+        return force(lazy);
+    } catch (error) {
+        return error instanceof Error ? error : new Error(String(error));
+    }
+};
