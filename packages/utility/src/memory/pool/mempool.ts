@@ -150,3 +150,52 @@ export class MemoryPoolError extends Error {
         Object.setPrototypeOf(this, MemoryPoolError.prototype);
     }
 }
+
+type PoolSlot<T extends PoolableObject> = {
+    obj: T | undefined;
+    status: PoolObjectStatus;
+    lastAccessed: number;
+    allocCount: number;
+    createdAt: number;
+};
+
+type PerformanceTimer = {
+    start(): void;
+    stop(): number;
+};
+
+type TimerMetric = {
+    count: number;
+    total: number;
+    min: number;
+    max: number;
+    last: number;
+};
+
+type InternalPoolMetrics = {
+    allocations: number;
+    releases: number;
+    creations: number;
+    evictions: number;
+    expansions: number;
+    contractions: number;
+    validationFailures: number;
+    compactions: number;
+
+    creationTimer: TimerMetric;
+    allocationTimer: TimerMetric;
+    releaseTimer: TimerMetric;
+    compactionTimer: TimerMetric;
+    resizeTimer: TimerMetric;
+
+    highWaterMark: number;
+    fastPath: number;
+    slowPath: number;
+    misses: number;
+    hits: number;
+
+    objectLifetime: TimerMetric;
+
+    startTime: number;
+    lastUpdateTime: number;
+};
