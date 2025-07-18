@@ -203,6 +203,56 @@ type InternalPoolMetrics = {
 export class MemoryPool<T extends PoolableObject>
     implements MemoryPoolOperations<T>, AsyncMemoryPoolOperations<T>, Iterable<T>
 {
+    private readonly _slots: PoolSlot<T>[] = [];
+    private readonly _freeList: Set<number> = new Set();
+    private readonly _lruHeap: number[] = [];
+    private readonly _waitQueue: Array<(obj: T | null) => void> = [];
+
+    private readonly _metrics: InternalPoolMetrics;
+
+    private readonly _options: Required<MemoryPoolOptions<T>>;
+
+    private _nextId: number = 0;
+    private _isDisposed: boolean = false;
+    private _lastRoundRobinIndex: number = 0;
+    private _asyncFactoryPromise: Promise<void> | null = null;
+    private _factoryAvgTime: number = 0;
+
+    constructor(options: MemoryPoolOptions<T>) {
+        this._options = {
+            initialCapacity: options.initialCapacity ?? 32,
+            maxCapacity: options.maxCapacity ?? 4096,
+            minFree: options.minFree ?? 0,
+            highWatermarkRatio: options.highWatermarkRatio ?? 0.8,
+            lowWatermarkRatio: options.lowWatermarkRatio ?? 0.2,
+            expansionStrategy: options.expansionStrategy ?? 'multiplicative',
+            expansionFactor: options.expansionFactor ?? 2,
+            expansionRate: options.expansionRate ?? 0,
+            allocationStrategy: options.allocationStrategy ?? 'first-available',
+            evictionPolicy: options.evictionPolicy ?? 'none',
+            ttl: options.ttl ?? 0,
+            factory: options.factory,
+            resetOnRecycle: options.resetOnRecycle ?? true,
+            validator: options.validator ?? (() => true),
+            preallocate: options.preallocate ?? false,
+            autoExpand: options.autoExpand ?? true,
+            compactionThreshold: options.compactionThreshold ?? 128,
+            compactionTriggerRatio: options.compactionTriggerRatio ?? 0.5,
+            onAcquire: options.onAcquire ?? (() => undefined),
+            onRelease: options.onRelease ?? (() => undefined),
+            onEvict: options.onEvict ?? (() => undefined),
+            onOutOfMemory: options.onOutOfMemory ?? (() => undefined),
+            enableMetrics: options.enableMetrics ?? true,
+            enableInstrumentation: options.enableInstrumentation ?? false,
+            name: options.name ?? `MemoryPool-${Math.floor(Math.random() * 1000000)}`,
+            maxObjectAge: options.maxObjectAge ?? 0,
+            threadSafe: options.threadSafe ?? false,
+            asyncFactory: options.asyncFactory ?? (async () => Promise.resolve(options.factory())),
+        };
+
+        // continue with validate options
+    }
+
     [Symbol.iterator](): Iterator<T, any, any> {
         throw new Error('Method not implemented.');
     }
