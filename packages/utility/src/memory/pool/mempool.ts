@@ -199,3 +199,91 @@ type InternalPoolMetrics = {
     startTime: number;
     lastUpdateTime: number;
 };
+
+export class MemoryPool<T extends PoolableObject>
+    implements MemoryPoolOperations<T>, AsyncMemoryPoolOperations<T>, Iterable<T>
+{
+    [Symbol.iterator](): Iterator<T, any, any> {
+        throw new Error('Method not implemented.');
+    }
+
+    acquireAsync(): Promise<T> {
+        throw new Error('Method not implemented.');
+    }
+
+    releaseAsync(obj: T): Promise<void> {
+        throw new Error('Method not implemented.');
+    }
+
+    tryAcquireAsync(timeoutMs?: number): Promise<T | null> {
+        throw new Error('Method not implemented.');
+    }
+
+    releaseAllAsync(): Promise<void> {
+        throw new Error('Method not implemented.');
+    }
+
+    clearAsync(): Promise<void> {
+        throw new Error('Method not implemented.');
+    }
+
+    drainAsync(): Promise<void> {
+        throw new Error('Method not implemented.');
+    }
+
+    [Symbol.dispose](): void {
+        throw new Error('Method not implemented.');
+    }
+
+    acquire(): T {
+        throw new Error('Method not implemented.');
+    }
+
+    release(obj: T): void {
+        throw new Error('Method not implemented.');
+    }
+
+    tryAcquire(): T | null {
+        throw new Error('Method not implemented.');
+    }
+
+    releaseAll(): void {
+        throw new Error('Method not implemented.');
+    }
+
+    clear(): void {
+        throw new Error('Method not implemented.');
+    }
+
+    drain(): void {
+        throw new Error('Method not implemented.');
+    }
+
+    resize(newCapacity: number): void {
+        throw new Error('Method not implemented.');
+    }
+
+    isFromPool(obj: T): boolean {
+        throw new Error('Method not implemented.');
+    }
+
+    getMetrics(): PoolPerformanceMetrics {
+        throw new Error('Method not implemented.');
+    }
+
+    getAvailableCount(): number {
+        throw new Error('Method not implemented.');
+    }
+
+    getAllocatedCount(): number {
+        throw new Error('Method not implemented.');
+    }
+
+    getTotalCount(): number {
+        throw new Error('Method not implemented.');
+    }
+
+    forceCompact(): void {
+        throw new Error('Method not implemented.');
+    }
+}
