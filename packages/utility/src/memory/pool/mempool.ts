@@ -1772,3 +1772,69 @@ export class MemoryPool<T extends PoolableObject>
         await Promise.all(asyncCreationPromises);
     }
 }
+
+class PoolableWrapper<T extends {}> implements PoolableObject {
+    public readonly value: T;
+    public __poolId?: number;
+    public __poolStatus?: PoolObjectStatus;
+    public __lastAccessed?: number;
+    public __allocCount?: number;
+
+    constructor(value: T) {
+        this.value = value;
+    }
+
+    public reset(): void {
+        const obj = this.value;
+
+        if (Array.isArray(obj)) {
+            (obj as unknown as Array<any>).length = 0;
+        } else if (obj instanceof Map) {
+            (obj as Map<any, any>).clear();
+        } else if (obj instanceof Set) {
+            (obj as Set<any>).clear();
+        } else if (obj instanceof Date) {
+            (obj as Date).setTime(0);
+        } else if (obj instanceof RegExp) {
+        } else if (obj instanceof Promise) {
+        } else if (obj instanceof Error) {
+            for (const key in obj) {
+                const value = (obj as any)[key];
+
+                if (value === null || value === undefined) {
+                    continue;
+                } else if (typeof value === 'number') {
+                    (obj as any)[key] = 0;
+                } else if (typeof value === 'string') {
+                    (obj as any)[key] = '';
+                } else if (typeof value === 'boolean') {
+                    (obj as any)[key] = false;
+                } else if (Array.isArray(value)) {
+                    value.length = 0;
+                } else if (value instanceof Map || value instanceof Set) {
+                    value.clear();
+                }
+            }
+
+            for (const key in obj) {
+                const value = (obj as any)[key];
+
+                if (
+                    typeof value === 'object' &&
+                    value !== null &&
+                    !(value instanceof Array) &&
+                    !(value instanceof Map) &&
+                    !(value instanceof Set) &&
+                    !(value instanceof Date) &&
+                    !(value instanceof RegExp) &&
+                    !(value instanceof Promise) &&
+                    !(value instanceof Error)
+                ) {
+                    for (const nestedKey in value) {
+                        delete value[nestedKey];
+                    }
+                }
+            }
+        }
+    }
+}
