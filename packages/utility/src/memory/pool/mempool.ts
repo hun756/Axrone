@@ -1,17 +1,3 @@
-// PoolableWrapper type for ObjectPool
-class PoolableWrapper<T> implements PoolableObject {
-    public readonly value: T;
-    public __poolId?: number;
-    public __poolStatus?: PoolObjectStatus;
-    public __lastAccessed?: number;
-    public __allocCount?: number;
-    constructor(value: T) {
-        this.value = value;
-    }
-    reset(): void {
-        // Optionally reset the wrapped value if needed
-    }
-}
 export type PoolObjectStatus = 'free' | 'allocated' | 'reserved';
 
 export interface PoolableObject {
