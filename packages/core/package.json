@@ -8,5 +8,9 @@
     "build": "rollup -c",
     "clean": "rimraf dist",
     "test": "jest"
+  },
+  "dependencies": {
+    "@axrone/utility": "^*",
+    "@axrone/numeric": "*"
   }
 }
