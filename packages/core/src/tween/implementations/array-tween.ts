@@ -115,6 +115,20 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
             this._reversed = !this._reversed;
         } else if (this._valuesStartRepeat) {
             this._valuesStart = this._cloneArray(this._valuesStartRepeat);
+            
+            const startArray = this._valuesStart as any;
+            const object = this._object as any;
+            
+            if (ArrayBuffer.isView(object)) {
+                const typedArray = object as any;
+                for (let i = 0; i < typedArray.length && i < startArray.length; i++) {
+                    typedArray[i] = startArray[i];
+                }
+            } else if (Array.isArray(object)) {
+                for (let i = 0; i < object.length && i < startArray.length; i++) {
+                    object[i] = startArray[i];
+                }
+            }
         }
     }
 
