@@ -58,7 +58,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
 
         this._isPlaying = true;
         this._isPaused = false;
-        this._lastUpdateTime = time ?? performance.now();
+        this._lastUpdateTime = time ?? 0;
 
         for (const item of this._timelineItems) {
             item.target.stop();
@@ -67,7 +67,10 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         this._currentTime = 0;
 
         this.emitSync('start', undefined);
-        this._update();
+
+        if (time === undefined) {
+            this._update();
+        }
 
         return this;
     }
@@ -142,14 +145,14 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         if (!this._isPlaying || this._isPaused) return this;
 
         const now = time ?? performance.now();
-        
+
         if (time !== undefined) {
             this._currentTime = now;
         } else {
             const delta = (now - this._lastUpdateTime) * this._timeScale;
             this._currentTime += delta;
         }
-        
+
         this._lastUpdateTime = now;
 
         this.emitSync('update', this._currentTime);
@@ -199,9 +202,8 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
 
             if (this._currentTime >= start && this._currentTime <= end) {
                 if (!target.isPlaying()) {
-                    const localTime = this._currentTime - start;
-                    const adjustedStartTime = now - localTime;
-                    target.start(adjustedStartTime);
+                    const tweenStartTime = now - (this._currentTime - start);
+                    target.start(tweenStartTime);
                 }
                 target.update(now);
             } else if (this._currentTime > end) {

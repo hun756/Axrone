@@ -1,8 +1,7 @@
-import { tween, to, from, fromTo, TWEEN, chain, group, timeline } from '../../tween';
+import { tween, to, fromTo, TWEEN, chain, group, timeline } from '../../tween';
 
 describe('Tween', () => {
     beforeEach(() => {
-        // Reset TWEEN system before each test
         if ((TWEEN as any)._animFrameId) {
             cancelAnimationFrame((TWEEN as any)._animFrameId);
             (TWEEN as any)._animFrameId = undefined;
@@ -88,16 +87,16 @@ describe('Tween', () => {
         const tw1 = to(obj1, { a: 1 }, 50);
         const tw2 = to(obj2, { b: 1 }, 50);
         const tl = timeline().add(tw1).add(tw2, { position: 25 });
-        
+
         tl.start(0);
         tl.update(25);
         expect(obj1.a).toBeCloseTo(0.5, 1);
         expect(obj2.b).toBeCloseTo(0, 1);
-        
+
         tl.update(50);
         expect(obj1.a).toBe(1);
         expect(obj2.b).toBeCloseTo(0.5, 1);
-        
+
         tl.update(75);
         expect(obj2.b).toBe(1);
     });
