@@ -65,9 +65,11 @@ export function from<T extends TweenableValue>(
     duration = 1000,
     easing: EasingFunction = Easing.Linear.None
 ): ITween<T> {
+    const targetState = JSON.parse(JSON.stringify(object));
+    
     return TweenFactory.create(object, {
         from: properties,
-        to: object as any,
+        to: targetState,
         duration,
         easing,
     });

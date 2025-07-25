@@ -60,6 +60,8 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
         const initialVelocity = config.velocity ?? 0;
 
         if (typeof initial === 'number') {
+            this._current = { value: initial } as any;
+            this._target = { value: initial } as any;
             this._velocity['value'] = initialVelocity;
             this._props.add('value');
         } else {
@@ -99,7 +101,11 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
     }
 
     setTarget(target: DeepPartial<T>): this {
-        this._updateTarget(this._target, target);
+        if (typeof target === 'number') {
+            this._target = { value: target } as any;
+        } else {
+            this._updateTarget(this._target, target);
+        }
 
         this._collectProps(target, '', this._props);
 
@@ -139,6 +145,9 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
     }
 
     getCurrent(): T {
+        if (typeof (this._current as any).value === 'number' && Object.keys(this._current as any).length === 1) {
+            return (this._current as any).value;
+        }
         return this._deepClone(this._current);
     }
 

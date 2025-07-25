@@ -144,20 +144,18 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
     update(time?: number): this {
         if (!this._isPlaying || this._isPaused) return this;
 
-        const now = time ?? performance.now();
-
         if (time !== undefined) {
-            this._currentTime = now;
+            this._currentTime = time * this._timeScale;
         } else {
+            const now = performance.now();
             const delta = (now - this._lastUpdateTime) * this._timeScale;
             this._currentTime += delta;
+            this._lastUpdateTime = now;
         }
-
-        this._lastUpdateTime = now;
 
         this.emitSync('update', this._currentTime);
 
-        this._updateItems(now);
+        this._updateItems(time ?? performance.now());
 
         if (this._currentTime >= this._duration) {
             this._isPlaying = false;

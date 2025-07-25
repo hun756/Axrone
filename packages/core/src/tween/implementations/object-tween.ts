@@ -95,20 +95,12 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
 
             if (start === undefined || end === undefined) continue;
 
-            if (Array.isArray(end)) {
+            if (Array.isArray(end) && Array.isArray(start)) {
                 const result: number[] = [];
-                const startArray = Array.isArray(start) ? start : [start];
-
-                if (end.length > 1) {
-                    result[0] = this._interpolationFunction(end, progress);
-                } else {
-                    for (let i = 0; i < end.length; i++) {
-                        const startVal =
-                            i < startArray.length
-                                ? startArray[i]
-                                : startArray[startArray.length - 1];
-                        result[i] = startVal + (end[i] - startVal) * progress;
-                    }
+                
+                for (let i = 0; i < end.length; i++) {
+                    const startVal = i < start.length ? start[i] : 0;
+                    result[i] = startVal + (end[i] - startVal) * progress;
                 }
 
                 this._setPropValue(this._object, prop, result);
@@ -128,6 +120,13 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
             this._reversed = !this._reversed;
         } else if (this._valuesStartRepeat) {
             this._valuesStart = this._deepClone(this._valuesStartRepeat);
+            
+            for (const prop of this._objectProps) {
+                const startValue = this._getPropValue(this._valuesStart, prop);
+                if (startValue !== undefined) {
+                    this._setPropValue(this._object, prop, startValue);
+                }
+            }
         }
     }
 
