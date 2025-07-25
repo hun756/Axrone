@@ -142,10 +142,15 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         if (!this._isPlaying || this._isPaused) return this;
 
         const now = time ?? performance.now();
-        const delta = (now - this._lastUpdateTime) * this._timeScale;
+        
+        if (time !== undefined) {
+            this._currentTime = now;
+        } else {
+            const delta = (now - this._lastUpdateTime) * this._timeScale;
+            this._currentTime += delta;
+        }
+        
         this._lastUpdateTime = now;
-
-        this._currentTime += delta;
 
         this.emitSync('update', this._currentTime);
 
@@ -194,16 +199,10 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
 
             if (this._currentTime >= start && this._currentTime <= end) {
                 if (!target.isPlaying()) {
-                    target.start(now);
+                    const localTime = this._currentTime - start;
+                    const adjustedStartTime = now - localTime;
+                    target.start(adjustedStartTime);
                 }
-
-                const localTime = this._currentTime - start;
-                const localProgress = Math.min(1, localTime / item.originalDuration);
-
-                if (target instanceof TweenCore) {
-                    target['_startTime'] = now - localProgress * target.getDuration();
-                }
-
                 target.update(now);
             } else if (this._currentTime > end) {
                 if (target.isPlaying()) {

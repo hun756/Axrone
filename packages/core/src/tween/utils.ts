@@ -52,14 +52,11 @@ export function to<T extends TweenableValue>(
     duration = 1000,
     easing: EasingFunction = Easing.Linear.None
 ): ITween<T> {
-    const tween = TweenFactory.create(object, {
+    return TweenFactory.create(object, {
         to: properties,
         duration,
         easing,
-        autoStart: true,
     });
-    TWEEN.add(tween);
-    return tween;
 }
 
 export function from<T extends TweenableValue>(
@@ -68,15 +65,12 @@ export function from<T extends TweenableValue>(
     duration = 1000,
     easing: EasingFunction = Easing.Linear.None
 ): ITween<T> {
-    const tween = TweenFactory.create(object, {
+    return TweenFactory.create(object, {
         from: properties,
         to: object as any,
         duration,
         easing,
     });
-
-    TWEEN.add(tween);
-    return tween.start();
 }
 
 export function fromTo<T extends TweenableValue>(
@@ -86,15 +80,12 @@ export function fromTo<T extends TweenableValue>(
     duration = 1000,
     easing: EasingFunction = Easing.Linear.None
 ): ITween<T> {
-    const tween = TweenFactory.create(object, {
+    return TweenFactory.create(object, {
         from: fromProperties,
         to: toProperties,
         duration,
         easing,
     });
-
-    TWEEN.add(tween);
-    return tween.start();
 }
 
 export async function waitFor(tween: ITween<any>): Promise<void> {
