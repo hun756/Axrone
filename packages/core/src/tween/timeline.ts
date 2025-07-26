@@ -200,13 +200,20 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
 
             if (this._currentTime >= start && this._currentTime <= end) {
                 if (!target.isPlaying()) {
-                    const tweenStartTime = now - (this._currentTime - start);
-                    target.start(tweenStartTime);
+                    target.start(0);
                 }
-                target.update(now);
+                
+                const relativeTime = this._currentTime - start;
+                target.update(relativeTime);
             } else if (this._currentTime > end) {
                 if (target.isPlaying()) {
-                    target.update(Infinity);
+                    const tweenDuration = item.originalDuration;
+                    target.update(tweenDuration);
+                    target.stop();
+                } else {
+                    target.start(0);
+                    const tweenDuration = item.originalDuration;
+                    target.update(tweenDuration);
                     target.stop();
                 }
             } else if (this._currentTime < start) {

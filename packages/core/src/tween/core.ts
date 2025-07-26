@@ -27,6 +27,8 @@ export abstract class TweenCore<T> implements ITween<T> {
     protected _remainingRepeat = 0;
     protected _events = new EventEmitter<TweenEventMap<T>>();
     protected _status: TweenStatus = 'idle';
+    protected _waitingForRepeatDelay = false;
+    protected _repeatDelayEndTime?: number;
 
     constructor(object: T, config?: TweenConfig<T>) {
         this._object = object;
@@ -200,13 +202,30 @@ export abstract class TweenCore<T> implements ITween<T> {
             return this;
         }
 
+        if (this._waitingForRepeatDelay) {
+            if (this._repeatDelayEndTime && now >= this._repeatDelayEndTime) {
+                this._waitingForRepeatDelay = false;
+                this._reset();
+                this._updateProperties(0);
+                
+                if (this._repeatDelayTime && this._repeatDelayTime > 0) {
+                    this._startTime = this._repeatDelayEndTime;
+                } else {
+                    const overtime = now - this._repeatDelayEndTime;
+                    this._startTime = now - overtime;
+                }
+                
+                return this;
+            } else {
+                return this;
+            }
+        }
+
         let elapsed = (now - this._startTime) / this._duration;
         elapsed = elapsed > 1 ? 1 : elapsed;
 
         const value = this._easingFunction(elapsed);
-
         this._updateProperties(value);
-
         this._emit('update', this, elapsed);
 
         if (elapsed === 1) {
@@ -215,24 +234,20 @@ export abstract class TweenCore<T> implements ITween<T> {
                     this._remainingRepeat--;
                 }
 
-                this._reset();
-
-                this._startTime = now;
-                if (this._repeatDelayTime !== undefined) {
-                    this._startTime += this._repeatDelayTime;
-                }
-
                 this._emit('repeat', this);
 
-                return this;
+                if (this._repeatDelayTime && this._repeatDelayTime > 0) {
+                    this._waitingForRepeatDelay = true;
+                    this._repeatDelayEndTime = now + this._repeatDelayTime;
+                } else {
+                    this._waitingForRepeatDelay = true;
+                    this._repeatDelayEndTime = now;
+                }
             } else {
                 this._status = 'completed';
                 this._isPlaying = false;
-
                 this._emit('complete', this);
-
                 this._startChainedTweens(now);
-                return this;
             }
         }
 

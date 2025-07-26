@@ -1,5 +1,6 @@
 import { TweenCore } from '../core';
 import { TweenConfig } from '../types';
+import { Interpolation } from '../interpolation';
 import { TypedArrayConstructor } from 'packages/utility/src/types';
 
 export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
@@ -97,9 +98,22 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
                 }
             }
         } else if (Array.isArray(object)) {
-            for (let i = 0; i < object.length; i++) {
-                if (i < start.length && i < end.length) {
-                    object[i] = start[i] + (end[i] - start[i]) * progress;
+            if (
+                this._interpolationFunction &&
+                this._interpolationFunction !== Interpolation.Linear &&
+                start.length > 1
+            ) {
+                for (let i = 0; i < object.length; i++) {
+                    if (i < start.length && i < end.length) {
+                        const values = [start[i], end[i]];
+                        object[i] = this._interpolationFunction(values, progress);
+                    }
+                }
+            } else {
+                for (let i = 0; i < object.length; i++) {
+                    if (i < start.length && i < end.length) {
+                        object[i] = start[i] + (end[i] - start[i]) * progress;
+                    }
                 }
             }
         } else if (this._interpolationFunction && start.length > 1) {
@@ -115,10 +129,10 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
             this._reversed = !this._reversed;
         } else if (this._valuesStartRepeat) {
             this._valuesStart = this._cloneArray(this._valuesStartRepeat);
-            
+
             const startArray = this._valuesStart as any;
             const object = this._object as any;
-            
+
             if (ArrayBuffer.isView(object)) {
                 const typedArray = object as any;
                 for (let i = 0; i < typedArray.length && i < startArray.length; i++) {

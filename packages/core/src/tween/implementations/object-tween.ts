@@ -1,6 +1,7 @@
 import { DeepPartial } from '@axrone/utility';
 import { TweenCore } from '../core';
 import { TweenConfig } from '../types';
+import { Interpolation } from '../interpolation';
 import { TypedArrayConstructor } from 'packages/utility/src/types';
 
 export class ObjectTween<T extends object> extends TweenCore<T> {
@@ -17,9 +18,12 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
 
         for (const prop of this._objectProps) {
             const propValue = this._getPropValue(this._object, prop);
+            const endValue = this._getPropValue(this._valuesEnd, prop);
 
             if (this._getPropValue(this._valuesStart, prop) === undefined) {
-                this._setPropValue(this._valuesStart, prop, propValue);
+                const startValue =
+                    propValue !== undefined ? propValue : this._getDefaultValue(endValue);
+                this._setPropValue(this._valuesStart, prop, startValue);
             }
 
             if (this._getPropValue(this._valuesEnd, prop) === undefined) {
@@ -27,11 +31,24 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
             }
 
             if (propValue === undefined) {
-                this._setPropValue(this._object, prop, this._getPropValue(this._valuesStart, prop));
+                const startValue = this._getPropValue(this._valuesStart, prop);
+                this._setPropValue(this._object, prop, startValue);
             }
         }
 
         this._valuesStartRepeat = this._deepClone(this._valuesStart);
+    }
+
+    protected _getDefaultValue(endValue: any): any {
+        if (typeof endValue === 'number') {
+            return 0;
+        } else if (Array.isArray(endValue)) {
+            return endValue.map(() => 0);
+        } else if (ArrayBuffer.isView(endValue)) {
+            const typedArray = endValue as any;
+            return new (typedArray.constructor as TypedArrayConstructor)(typedArray.length);
+        }
+        return 0;
     }
 
     protected _collectProps(obj: any, prefix: string, props: Set<string>): void {
@@ -95,15 +112,52 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
 
             if (start === undefined || end === undefined) continue;
 
-            if (Array.isArray(end) && Array.isArray(start)) {
-                const result: number[] = [];
-                
-                for (let i = 0; i < end.length; i++) {
-                    const startVal = i < start.length ? start[i] : 0;
-                    result[i] = startVal + (end[i] - startVal) * progress;
-                }
+            if (
+                (Array.isArray(end) && Array.isArray(start)) ||
+                (ArrayBuffer.isView(end) && ArrayBuffer.isView(start))
+            ) {
+                if (
+                    this._interpolationFunction &&
+                    this._interpolationFunction !== Interpolation.Linear &&
+                    (end as ArrayLike<number>).length > 1
+                ) {
+                    const result: number[] = [];
+                    for (let i = 0; i < (end as ArrayLike<number>).length; i++) {
+                        const startVal =
+                            i < (start as ArrayLike<number>).length
+                                ? (start as ArrayLike<number>)[i]
+                                : 0;
+                        const values = [startVal, (end as ArrayLike<number>)[i]];
+                        const interpolatedValue = this._interpolationFunction(values, progress);
+                        result[i] = interpolatedValue;
+                    }
 
-                this._setPropValue(this._object, prop, result);
+                    if (ArrayBuffer.isView(end)) {
+                        const constructor = (end as any).constructor as TypedArrayConstructor;
+                        const typedResult = new constructor(result as any);
+                        this._setPropValue(this._object, prop, typedResult);
+                    } else {
+                        this._setPropValue(this._object, prop, result);
+                    }
+                } else {
+                    const result: number[] = [];
+                    for (let i = 0; i < (end as ArrayLike<number>).length; i++) {
+                        const startVal =
+                            i < (start as ArrayLike<number>).length
+                                ? (start as ArrayLike<number>)[i]
+                                : 0;
+                        result[i] =
+                            startVal + ((end as ArrayLike<number>)[i] - startVal) * progress;
+                    }
+
+                    if (ArrayBuffer.isView(end)) {
+                        const constructor = (end as any).constructor as TypedArrayConstructor;
+                        const typedResult = new constructor(result as any);
+                        this._setPropValue(this._object, prop, typedResult);
+                    } else {
+                        this._setPropValue(this._object, prop, result);
+                    }
+                }
             } else if (typeof end === 'number') {
                 const startVal = typeof start === 'number' ? start : 0;
                 const value = startVal + (end - startVal) * progress;
@@ -120,7 +174,7 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
             this._reversed = !this._reversed;
         } else if (this._valuesStartRepeat) {
             this._valuesStart = this._deepClone(this._valuesStartRepeat);
-            
+
             for (const prop of this._objectProps) {
                 const startValue = this._getPropValue(this._valuesStart, prop);
                 if (startValue !== undefined) {
