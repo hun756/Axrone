@@ -55,13 +55,22 @@ class RandomSequence<T> implements IRandomSequence<T> {
         return new RandomSequence<U>(() => fn(this.generator()), this.random);
     };
 
-    public filter = (predicate: (value: T) => boolean): IRandomSequence<T> => {
+    public filter = (
+        predicate: (value: T) => boolean,
+        maxAttempts: number = 100
+    ): IRandomSequence<T> => {
         return new RandomSequence<T>(() => {
-            let value: T;
-            do {
-                value = this.generator();
-            } while (!predicate(value));
-            return value;
+            let attempts = 0;
+            while (attempts < maxAttempts) {
+                const value = this.generator();
+                if (predicate(value)) {
+                    return value;
+                }
+                attempts++;
+            }
+            throw new Error(
+                `RandomSequence.filter: No value matched the predicate after ${maxAttempts} attempts.`
+            );
         }, this.random);
     };
 }
