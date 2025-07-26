@@ -66,3 +66,16 @@ export type BuiltinObject =
     | WebAssembly.CompileError
     | WebAssembly.LinkError
     | WebAssembly.RuntimeError;
+
+type DeepReadonly<T> = T extends Primitive
+    ? T
+    : T extends (infer U)[]
+      ? readonly DeepReadonly<U>[]
+      : T extends Map<infer K, infer V>
+        ? ReadonlyMap<DeepReadonly<K>, DeepReadonly<V>>
+        : T extends Set<infer U>
+          ? ReadonlySet<DeepReadonly<U>>
+          : T extends Record<string | number | symbol, any>
+            ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+            : T;
+

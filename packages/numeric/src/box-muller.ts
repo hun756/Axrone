@@ -385,13 +385,13 @@ export const BoxMullerFactory = {
         coreDistribution,
 };
 
-// Shared Box-Muller distributions for efficient vector operations
 export const sharedStandardNormal = StandardNormal({ algorithm: 'polar', useCache: false });
-export const sharedBoxMullerRandom = BoxMullerFactory.createNormal(0, 1, { algorithm: 'polar', useCache: false });
+export const sharedBoxMullerRandom = BoxMullerFactory.createNormal(0, 1, {
+    algorithm: 'polar',
+    useCache: false,
+});
 
-// Efficient sampling functions for vector operations
 export const sampleStandardNormal = (): number => {
-    // Directly use the shared random instance's normal method
     return rand.normal(0, 1);
 };
 
@@ -403,7 +403,6 @@ export const sampleBoundedNormal = (min: number = -1, max: number = 1): number =
             return value;
         }
     }
-    // Fallback - clamp the value to bounds
     return Math.max(min, Math.min(max, rand.normal(0, 1)));
 };
 
@@ -412,12 +411,10 @@ export const sampleNormalInRange = (center: number, range: number): number => {
     const value = center + rand.normal(0, 1) * stdDev;
     const min = center - range / 2;
     const max = center + range / 2;
-    
-    // Clamp to bounds for better performance
+
     return Math.max(min, Math.min(max, value));
 };
 
-// Shared uniform random helpers
 export const sampleUniform = (): number => {
     return rand.float();
 };
