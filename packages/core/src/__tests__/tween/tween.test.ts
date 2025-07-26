@@ -488,11 +488,8 @@ describe('Tween System', () => {
 
             tw.start(0);
             tw.update(100);
-            // Bezier interpolation may overshoot slightly at the end
-            expect(obj.curve[0]).toBeGreaterThanOrEqual(95);
-            expect(obj.curve[0]).toBeLessThanOrEqual(105);
-            expect(obj.curve[3]).toBeGreaterThanOrEqual(195);
-            expect(obj.curve[3]).toBeLessThanOrEqual(205);
+            expect(obj.curve[0]).toBeCloseTo(100, 1);
+            expect(obj.curve[3]).toBeCloseTo(200, 1);
         });
 
         test('step interpolation', () => {
