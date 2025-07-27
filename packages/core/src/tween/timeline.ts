@@ -20,9 +20,23 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
     private _timeScale = 1;
     private _lastUpdateTime = 0;
     private _animFrameId?: number;
+    private _autoUpdate = false;
 
     constructor() {
         super();
+    }
+
+    setAutoUpdate(enabled: boolean): void {
+        this._autoUpdate = enabled;
+        
+        if (!enabled && this._animFrameId !== undefined) {
+            cancelAnimationFrame(this._animFrameId);
+            this._animFrameId = undefined;
+        }
+    }
+
+    getAutoUpdate(): boolean {
+        return this._autoUpdate;
     }
 
     isPlaying(): boolean {
@@ -68,8 +82,8 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
 
         this.emitSync('start', undefined);
 
-        if (time === undefined) {
-            this._update();
+        if (time === undefined && this._autoUpdate) {
+            this._startInternalLoop();
         }
 
         return this;
@@ -134,7 +148,9 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
             }
         }
 
-        this._animFrameId = requestAnimationFrame(() => this._update());
+        if (this._autoUpdate) {
+            this._startInternalLoop();
+        }
 
         this.emitSync('resume', undefined);
 
@@ -185,10 +201,15 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         return this;
     }
 
-    private _update(): void {
-        if (!this._isPlaying || this._isPaused) return;
+    private _startInternalLoop(): void {
+        if (this._animFrameId !== undefined) return;
+        this._internalUpdate();
+    }
 
-        this._animFrameId = requestAnimationFrame(() => this._update());
+    private _internalUpdate(): void {
+        if (!this._isPlaying || this._isPaused || !this._autoUpdate) return;
+
+        this._animFrameId = requestAnimationFrame(() => this._internalUpdate());
 
         const now = performance.now();
         this.update(now);
@@ -202,7 +223,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
                 if (!target.isPlaying()) {
                     target.start(0);
                 }
-                
+
                 const relativeTime = this._currentTime - start;
                 target.update(relativeTime);
             } else if (this._currentTime > end) {
