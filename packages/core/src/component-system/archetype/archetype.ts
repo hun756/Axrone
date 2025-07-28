@@ -30,7 +30,7 @@ export class OptimizedArchetype<R extends ComponentRegistry> implements Archetyp
     ) {
         this.signature = signature;
         this.mask = mask;
-        this.id = signature.join('|') as ArchetypeId;
+        this.id = (signature.length === 0 ? 'EMPTY' : signature.join('|')) as ArchetypeId;
 
         for (const componentName of signature) {
             const Constructor = registry[componentName];

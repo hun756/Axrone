@@ -803,7 +803,14 @@ export class World<R extends ComponentRegistry> {
 
             for (const entity of entitiesToDestroy) {
                 try {
-                    this.destroyEntity(entity);
+                    const archetypeId = this._entityArchetypes.get(entity);
+                    if (archetypeId) {
+                        const archetype = this._archetypes.get(archetypeId);
+                        if (archetype) {
+                            archetype.removeEntity(entity);
+                        }
+                        this._entityArchetypes.delete(entity);
+                    }
                 } catch (error) {
                     console.error(`Failed to destroy entity ${entity} during clear:`, error);
                 }
@@ -924,7 +931,7 @@ export class World<R extends ComponentRegistry> {
     private _getOrCreateArchetype(signature: readonly string[]): OptimizedArchetype<R> {
         try {
             const sortedSignature = signature.slice().sort();
-            const id = sortedSignature.join('|') as ArchetypeId;
+            const id = (sortedSignature.length === 0 ? 'EMPTY' : sortedSignature.join('|')) as ArchetypeId;
 
             let archetype = this._archetypes.get(id);
             if (!archetype) {

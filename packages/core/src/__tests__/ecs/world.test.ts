@@ -30,9 +30,6 @@ describe('World', () => {
             TestComponent: TestComponent,
             AnotherComponent: AnotherComponent
         };
-        if (world && !world.isDisposed) {
-            world.clear();
-        }
         world = new World(registry);
     });
 
