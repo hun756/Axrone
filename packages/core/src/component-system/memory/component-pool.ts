@@ -33,7 +33,7 @@ export class OptimizedComponentPool<T extends {}> implements ComponentPool<T> {
             maxCapacity: config.maxCapacity ?? 2048,
             minFree: config.minFree ?? 8,
             enableMetrics: config.enableMetrics ?? true,
-            enableValidation: config.enableValidation ?? false,
+            enableValidation: config.enableValidation ?? true,
             ttl: config.ttl ?? 300000, 
             resetHandler: config.resetHandler ?? this.defaultResetHandler.bind(this),
             name: config.name ?? `ComponentPool<${constructor.name}>`,
@@ -215,24 +215,31 @@ export class OptimizedComponentPool<T extends {}> implements ComponentPool<T> {
 
     private defaultResetHandler(component: T): void {
         if (typeof component === 'object' && component !== null) {
-
-            const keys = Object.keys(component);
-            for (const key of keys) {
-                const descriptor = Object.getOwnPropertyDescriptor(component, key);
-                if (descriptor && descriptor.writable && !key.startsWith('_')) {
-                    try {
-                        (component as any)[key] = undefined;
-                    } catch (error) {
-
-                    }
-                }
-            }
-
             if (typeof (component as any).reset === 'function') {
                 try {
                     (component as any).reset();
                 } catch (error) {
                     console.warn(`Component reset method failed:`, error);
+                }
+            } else {
+                const keys = Object.keys(component);
+                for (const key of keys) {
+                    const descriptor = Object.getOwnPropertyDescriptor(component, key);
+                    if (descriptor && descriptor.writable && !key.startsWith('_')) {
+                        try {
+                            if (typeof (component as any)[key] === 'number') {
+                                (component as any)[key] = 0;
+                            } else if (typeof (component as any)[key] === 'string') {
+                                (component as any)[key] = '';
+                            } else if (typeof (component as any)[key] === 'boolean') {
+                                (component as any)[key] = false;
+                            } else {
+                                (component as any)[key] = undefined;
+                            }
+                        } catch (error) {
+                            // Ignore read-only properties
+                        }
+                    }
                 }
             }
         }
@@ -243,16 +250,24 @@ export class OptimizedComponentPool<T extends {}> implements ComponentPool<T> {
             return false;
         }
 
+        if (!(component instanceof this.componentConstructor)) {
+            return false;
+        }
+
         if (typeof (component as any).validate === 'function') {
             try {
-                return (component as any).validate();
+                const result = (component as any).validate();
+                if (result === false && (component as any)._state === 'destroyed') {
+                    return false;
+                }
+                return true;
             } catch (error) {
                 console.warn(`Component validation failed:`, error);
                 return false;
             }
         }
 
-        return component instanceof this.componentConstructor;
+        return true;
     }
 
     private onComponentAcquired(component: T): void {

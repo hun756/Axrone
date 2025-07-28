@@ -12,6 +12,11 @@ class TestComponent extends Component {
     validate(): boolean {
         return this.value >= 0;
     }
+    
+    reset(): void {
+        super.reset();
+        this.value = 0;
+    }
 }
 
 class InvalidComponent extends Component {

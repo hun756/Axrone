@@ -911,6 +911,30 @@ export abstract class Component<
         }
     }
 
+    reset(): void {
+        if (this._state === 'destroyed') {
+            return;
+        }
+
+        this._enabled = true;
+        this._lastUpdateTime = 0;
+        this._updateCallCount = 0;
+        this._totalUpdateTime = 0;
+        
+        this._clearCache();
+        
+        this._eventSubscriptions.clear();
+        this._cleanupTasks.clear();
+        this._dependencies.clear();
+        this._dependents.clear();
+        
+        this.entity = undefined;
+        this.actor = undefined;
+        this.world = undefined;
+        
+        this._state = 'uninitialized';
+    }
+
     addCleanupTask(cleanup: () => void): void {
         if (typeof cleanup === 'function') {
             this._cleanupTasks.add(cleanup);
