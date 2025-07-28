@@ -1,0 +1,1 @@
+export { OptimizedComponentPool } from './component-pool';
