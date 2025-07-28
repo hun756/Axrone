@@ -1,7 +1,5 @@
 import { Component, script } from '../core/component';
-import { Mat4 } from '@axrone/numeric/src/mat4';
-import { Vec3 } from '@axrone/numeric/src/vec3';
-import { Quat } from '@axrone/numeric/src/quat';
+import { Mat4, Vec3, Quat } from '@axrone/numeric';
 import type { Entity } from '../types/core';
 import type { Actor } from '../core/actor';
 
