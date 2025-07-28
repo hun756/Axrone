@@ -615,14 +615,6 @@ export abstract class Component<
             return false;
         }
 
-        if (!this.entity || !this.actor || !this.world) {
-            return false;
-        }
-
-        if (typeof (this as any).validate === 'function') {
-            return (this as any).validate();
-        }
-
         return true;
     }
 

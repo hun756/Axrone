@@ -33,7 +33,7 @@ export class OptimizedComponentPool<T extends {}> implements ComponentPool<T> {
             maxCapacity: config.maxCapacity ?? 2048,
             minFree: config.minFree ?? 8,
             enableMetrics: config.enableMetrics ?? true,
-            enableValidation: config.enableValidation ?? true,
+            enableValidation: config.enableValidation ?? false,
             ttl: config.ttl ?? 300000, 
             resetHandler: config.resetHandler ?? this.defaultResetHandler.bind(this),
             name: config.name ?? `ComponentPool<${constructor.name}>`,
@@ -252,7 +252,7 @@ export class OptimizedComponentPool<T extends {}> implements ComponentPool<T> {
             }
         }
 
-        return true;
+        return component instanceof this.componentConstructor;
     }
 
     private onComponentAcquired(component: T): void {
