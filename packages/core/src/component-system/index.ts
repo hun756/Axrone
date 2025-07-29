@@ -1,5 +1,6 @@
 export * from './core';
 export * from './types';
+export * from './decorators';
 
 export * from './systems';
 

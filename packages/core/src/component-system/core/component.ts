@@ -1011,39 +1011,10 @@ export abstract class Component<
     }
 }
 
-const componentMetadataMap = new WeakMap<ComponentType, ComponentMetadata>();
-
-export function script<T extends ComponentType>(metadata?: Partial<ComponentMetadata>) {
-    return function (target: T): T {
-        const finalMetadata: ComponentMetadata = {
-            scriptName: target.name,
-            dependencies: metadata?.dependencies ?? [],
-            singleton: metadata?.singleton ?? false,
-            executeInEditMode: metadata?.executeInEditMode ?? false,
-            priority: metadata?.priority ?? 0,
-        };
-
-        componentMetadataMap.set(target, finalMetadata);
-
-        if (typeof (target as any).setComponentMetadata === 'function') {
-            (target as any).setComponentMetadata(target, finalMetadata);
-        }
-
-        return target;
-    };
-}
-
-export function getComponentMetadata<T extends Component>(
-    componentType: ComponentType<T>
-): ComponentMetadata | undefined {
-    return componentMetadataMap.get(componentType);
-}
-
-export function setComponentMetadata<T extends Component>(
-    componentType: ComponentType<T>,
-    metadata: ComponentMetadata
-): void {
-    componentMetadataMap.set(componentType, metadata);
-}
+export {
+    script,
+    getComponentMetadata,
+    setComponentMetadata
+} from '../decorators/script';
 
 export type { ComponentMetrics, ComponentCache };
