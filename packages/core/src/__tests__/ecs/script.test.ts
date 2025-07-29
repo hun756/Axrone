@@ -236,7 +236,9 @@ describe('Script Decorator System', () => {
             expect(deprecatedScripts).toHaveLength(1);
             expect(deprecatedScripts[0].metadata.scriptName).toBe('DeprecatedComponent');
             expect(deprecatedScripts[0].metadata.deprecated).toBe(true);
-            expect(deprecatedScripts[0].metadata.deprecationMessage).toBe('Use NewComponent instead');
+            expect(deprecatedScripts[0].metadata.deprecationMessage).toBe(
+                'Use NewComponent instead'
+            );
         });
 
         test('should filter experimental scripts', () => {
