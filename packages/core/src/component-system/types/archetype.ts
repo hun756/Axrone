@@ -1,7 +1,7 @@
 import type { ComponentRegistry, ArchetypeId, ArchetypeSignature, BitMask, Entity } from './core';
 import type { ComponentPool } from './component';
 
-export interface Archetype<R extends ComponentRegistry> {
+export interface IArchetype<R extends ComponentRegistry> {
     readonly id: ArchetypeId;
     readonly signature: ArchetypeSignature;
     readonly mask: BitMask;

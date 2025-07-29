@@ -14,7 +14,7 @@ export * from './components';
 export * from './utils';
 
 export { OptimizedComponentPool } from './memory';
-export { OptimizedArchetype } from './archetype';
+export { Archetype } from './archetype';
 export { OptimizedQueryCache } from './archetype';
 
 export {

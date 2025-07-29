@@ -6,11 +6,11 @@ import type {
     Entity,
     ComponentMask,
 } from '../types/core';
-import type { Archetype } from '../types/archetype';
+import type { IArchetype } from '../types/archetype';
 import type { ComponentPool } from '../types/component';
 import { OptimizedComponentPool } from '../memory/component-pool';
 
-export class OptimizedArchetype<R extends ComponentRegistry> implements Archetype<R> {
+export class Archetype<R extends ComponentRegistry> implements IArchetype<R> {
     readonly id: ArchetypeId;
     readonly signature: ArchetypeSignature;
     readonly mask: BitMask;

@@ -1,4 +1,4 @@
-import { OptimizedArchetype } from '../../component-system/archetype/archetype';
+import { Archetype } from '../../component-system/archetype/archetype';
 import { Component } from '../../component-system/core/component';
 import type {
     ComponentRegistry,
@@ -38,10 +38,10 @@ class VelocityComponent extends Component {
     }
 }
 
-describe('OptimizedArchetype', () => {
+describe('Archetype', () => {
     let registry: ComponentRegistry;
     let componentMask: ComponentMask;
-    let archetype: OptimizedArchetype<any>;
+    let archetype: Archetype<any>;
 
     beforeEach(() => {
         registry = {
@@ -62,7 +62,7 @@ describe('OptimizedArchetype', () => {
             const signature: ArchetypeSignature = [];
             const mask: BitMask = 0n;
 
-            archetype = new OptimizedArchetype(signature, mask, registry, componentMask);
+            archetype = new Archetype(signature, mask, registry, componentMask);
 
             expect(archetype.id).toBe('EMPTY');
             expect(archetype.signature).toEqual([]);
@@ -76,7 +76,7 @@ describe('OptimizedArchetype', () => {
             const signature: ArchetypeSignature = ['TestComponent'];
             const mask: BitMask = 1n;
 
-            archetype = new OptimizedArchetype(signature, mask, registry, componentMask);
+            archetype = new Archetype(signature, mask, registry, componentMask);
 
             expect(archetype.id).toBe('TestComponent');
             expect(archetype.signature).toEqual(['TestComponent']);
@@ -90,7 +90,7 @@ describe('OptimizedArchetype', () => {
             const signature: ArchetypeSignature = ['PositionComponent', 'VelocityComponent'];
             const mask: BitMask = 6n;
 
-            archetype = new OptimizedArchetype(signature, mask, registry, componentMask);
+            archetype = new Archetype(signature, mask, registry, componentMask);
 
             expect(archetype.id).toBe('PositionComponent|VelocityComponent');
             expect(archetype.signature).toEqual(['PositionComponent', 'VelocityComponent']);
@@ -105,7 +105,7 @@ describe('OptimizedArchetype', () => {
         beforeEach(() => {
             const signature: ArchetypeSignature = ['TestComponent', 'PositionComponent'];
             const mask: BitMask = 3n;
-            archetype = new OptimizedArchetype(signature, mask, registry, componentMask);
+            archetype = new Archetype(signature, mask, registry, componentMask);
         });
 
         it('should add entity correctly', () => {
@@ -216,7 +216,7 @@ describe('OptimizedArchetype', () => {
         beforeEach(() => {
             const signature: ArchetypeSignature = ['TestComponent', 'PositionComponent'];
             const mask: BitMask = 3n;
-            archetype = new OptimizedArchetype(signature, mask, registry, componentMask);
+            archetype = new Archetype(signature, mask, registry, componentMask);
         });
 
         it('should get component correctly', () => {
@@ -273,7 +273,7 @@ describe('OptimizedArchetype', () => {
         beforeEach(() => {
             const signature: ArchetypeSignature = ['TestComponent'];
             const mask: BitMask = 1n;
-            archetype = new OptimizedArchetype(signature, mask, registry, componentMask);
+            archetype = new Archetype(signature, mask, registry, componentMask);
         });
 
         it('should manage archetype edges correctly', () => {
@@ -299,7 +299,7 @@ describe('OptimizedArchetype', () => {
         beforeEach(() => {
             const signature: ArchetypeSignature = ['TestComponent', 'PositionComponent'];
             const mask: BitMask = 3n;
-            archetype = new OptimizedArchetype(signature, mask, registry, componentMask);
+            archetype = new Archetype(signature, mask, registry, componentMask);
         });
 
         it('should handle many entities efficiently', () => {
@@ -378,7 +378,7 @@ describe('OptimizedArchetype', () => {
         it('should handle archetype with no components', () => {
             const signature: ArchetypeSignature = [];
             const mask: BitMask = 0n;
-            archetype = new OptimizedArchetype(signature, mask, registry, componentMask);
+            archetype = new Archetype(signature, mask, registry, componentMask);
 
             const entity = 1 as any;
             archetype.addEntity(entity, {});
@@ -394,7 +394,7 @@ describe('OptimizedArchetype', () => {
         it('should handle component pool edge cases', () => {
             const signature: ArchetypeSignature = ['TestComponent'];
             const mask: BitMask = 1n;
-            archetype = new OptimizedArchetype(signature, mask, registry, componentMask);
+            archetype = new Archetype(signature, mask, registry, componentMask);
 
             const entity = 1 as any;
 
@@ -408,7 +408,7 @@ describe('OptimizedArchetype', () => {
         it('should handle invalid component names gracefully', () => {
             const signature: ArchetypeSignature = ['TestComponent'];
             const mask: BitMask = 1n;
-            archetype = new OptimizedArchetype(signature, mask, registry, componentMask);
+            archetype = new Archetype(signature, mask, registry, componentMask);
 
             const entity = 1 as any;
             archetype.addEntity(entity, {
@@ -428,7 +428,7 @@ describe('OptimizedArchetype', () => {
                 'VelocityComponent',
             ];
             const mask: BitMask = 7n;
-            archetype = new OptimizedArchetype(signature, mask, registry, componentMask);
+            archetype = new Archetype(signature, mask, registry, componentMask);
 
             expect(archetype.id).toBe('TestComponent|PositionComponent|VelocityComponent');
             expect(archetype.signature).toEqual([
@@ -444,8 +444,8 @@ describe('OptimizedArchetype', () => {
             const signature2: ArchetypeSignature = ['PositionComponent', 'TestComponent'];
             const mask: BitMask = 3n;
 
-            const archetype1 = new OptimizedArchetype(signature1, mask, registry, componentMask);
-            const archetype2 = new OptimizedArchetype(signature2, mask, registry, componentMask);
+            const archetype1 = new Archetype(signature1, mask, registry, componentMask);
+            const archetype2 = new Archetype(signature2, mask, registry, componentMask);
 
             expect(archetype1.id).toBe('TestComponent|PositionComponent');
             expect(archetype2.id).toBe('PositionComponent|TestComponent');

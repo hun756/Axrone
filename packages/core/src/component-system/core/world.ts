@@ -8,7 +8,7 @@ import type {
 } from '../types/core';
 import type { QueryResult } from '../types/system';
 import type { EventKey } from '../../event';
-import { OptimizedArchetype } from '../archetype/archetype';
+import { Archetype } from '../archetype/archetype';
 import { OptimizedQueryCache } from '../archetype/query-cache';
 import { createTypedEmitter, IEventEmitter } from '../../event';
 import type { ECSEventMap } from '../types/events';
@@ -78,7 +78,7 @@ export class World<R extends ComponentRegistry> {
 
     private readonly _registry: R;
     private readonly _componentMask: ComponentMask;
-    private readonly _archetypes = new Map<ArchetypeId, OptimizedArchetype<R>>();
+    private readonly _archetypes = new Map<ArchetypeId, Archetype<R>>();
     private readonly _entityArchetypes = new Map<Entity, ArchetypeId>();
     private readonly _queryCache: OptimizedQueryCache;
     private readonly _eventBus: IEventEmitter<ECSEventMap<R>>;
@@ -928,7 +928,7 @@ export class World<R extends ComponentRegistry> {
         }
     }
 
-    private _getOrCreateArchetype(signature: readonly string[]): OptimizedArchetype<R> {
+    private _getOrCreateArchetype(signature: readonly string[]): Archetype<R> {
         try {
             const sortedSignature = signature.slice().sort();
             const id = (sortedSignature.length === 0 ? 'EMPTY' : sortedSignature.join('|')) as ArchetypeId;
@@ -936,7 +936,7 @@ export class World<R extends ComponentRegistry> {
             let archetype = this._archetypes.get(id);
             if (!archetype) {
                 const mask = this._createBitMask(sortedSignature);
-                archetype = new OptimizedArchetype(
+                archetype = new Archetype(
                     sortedSignature,
                     mask,
                     this._registry,
