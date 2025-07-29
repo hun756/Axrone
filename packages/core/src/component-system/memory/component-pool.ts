@@ -1,5 +1,5 @@
 import type { ComponentConstructor, Entity } from '../types/core';
-import type { ComponentPool } from '../types/component';
+import type { IComponentPool } from '../types/component';
 import { ObjectPool, type ObjectPoolOptions } from '@axrone/utility';
 
 export interface ComponentPoolConfig<T = any> {
@@ -13,7 +13,7 @@ export interface ComponentPoolConfig<T = any> {
     name?: string;
 }
 
-export class OptimizedComponentPool<T extends {}> implements ComponentPool<T> {
+export class ComponentPool<T extends {}> implements IComponentPool<T> {
     readonly dense: T[] = [];
     readonly sparse: (number | undefined)[] = [];
     readonly entities: Entity[] = [];

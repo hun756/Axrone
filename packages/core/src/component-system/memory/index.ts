@@ -1,1 +1,1 @@
-export { OptimizedComponentPool } from './component-pool';
+export { ComponentPool } from './component-pool';

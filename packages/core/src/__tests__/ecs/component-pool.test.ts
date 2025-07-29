@@ -1,4 +1,4 @@
-import { OptimizedComponentPool } from '../../component-system/memory/component-pool';
+import { ComponentPool } from '../../component-system/memory/component-pool';
 import { Component } from '../../component-system/core/component';
 
 class TestComponent extends Component {
@@ -25,11 +25,11 @@ class InvalidComponent extends Component {
     }
 }
 
-describe('OptimizedComponentPool', () => {
-    let pool: OptimizedComponentPool<TestComponent>;
+describe('ComponentPool', () => {
+    let pool: ComponentPool<TestComponent>;
 
     beforeEach(() => {
-        pool = new OptimizedComponentPool(TestComponent, {
+        pool = new ComponentPool(TestComponent, {
             initialCapacity: 4,
             maxCapacity: 16,
             enableValidation: true,
@@ -100,7 +100,7 @@ describe('OptimizedComponentPool', () => {
         });
 
         it('should handle validation disabled', () => {
-            const noValidationPool = new OptimizedComponentPool(TestComponent, {
+            const noValidationPool = new ComponentPool(TestComponent, {
                 enableValidation: false
             });
             
@@ -175,7 +175,7 @@ describe('OptimizedComponentPool', () => {
         });
 
         it('should return null metrics when disabled', () => {
-            const noMetricsPool = new OptimizedComponentPool(TestComponent, {
+            const noMetricsPool = new ComponentPool(TestComponent, {
                 enableMetrics: false
             });
             

@@ -7,15 +7,15 @@ import type {
     ComponentMask,
 } from '../types/core';
 import type { IArchetype } from '../types/archetype';
-import type { ComponentPool } from '../types/component';
-import { OptimizedComponentPool } from '../memory/component-pool';
+import type { IComponentPool } from '../types/component';
+import { ComponentPool } from '../memory/component-pool';
 
 export class Archetype<R extends ComponentRegistry> implements IArchetype<R> {
     readonly id: ArchetypeId;
     readonly signature: ArchetypeSignature;
     readonly mask: BitMask;
     readonly entities: Entity[] = [];
-    readonly components = new Map<string, ComponentPool<any>>();
+    readonly components = new Map<string, IComponentPool<any>>();
     readonly edges = new Map<string, ArchetypeId>();
 
     entityCount = 0;
@@ -35,7 +35,7 @@ export class Archetype<R extends ComponentRegistry> implements IArchetype<R> {
         for (const componentName of signature) {
             const Constructor = registry[componentName];
             if (Constructor) {
-                this.components.set(componentName, new OptimizedComponentPool(Constructor));
+                this.components.set(componentName, new ComponentPool(Constructor));
             }
         }
     }

@@ -10,7 +10,7 @@ export type ComponentMetadata = {
     readonly priority?: number;
 };
 
-export interface ComponentPool<T> {
+export interface IComponentPool<T> {
     readonly dense: T[];
     readonly sparse: (number | undefined)[];
     readonly entities: import('./core').Entity[];

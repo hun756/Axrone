@@ -13,7 +13,7 @@ export * from './components';
 
 export * from './utils';
 
-export { OptimizedComponentPool } from './memory';
+export { ComponentPool } from './memory';
 export { Archetype } from './archetype';
 export { OptimizedQueryCache } from './archetype';
 
