@@ -1,9 +1,22 @@
-import { Component, script } from '../core/component';
+import { Component } from '../core/component';
+import { script } from '../decorators/script';
 import { Mat4, Vec3, Quat } from '@axrone/numeric';
 import type { Entity } from '../types/core';
 import type { Actor } from '../core/actor';
 
-@script({ scriptName: 'Transform', priority: 1000 })
+@script({
+    scriptName: 'Transform',
+    priority: 1000,
+    description: 'Core transform component for position, rotation, and scale',
+    version: '1.0.0',
+    author: 'Component System Team',
+    tags: ['core', 'transform', 'hierarchy'],
+    singleton: false,
+    executeInEditMode: true,
+    validateDependencies: true,
+    enableMetrics: true,
+    enableCaching: true
+})
 export class Transform extends Component {
 
     private _position: Vec3 = Vec3.ZERO.clone();
