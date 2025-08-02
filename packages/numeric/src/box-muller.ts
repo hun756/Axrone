@@ -1,5 +1,3 @@
-// https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform
-
 import type {
     IRandomEngine,
     IRandomAPI,
@@ -10,14 +8,14 @@ import type {
     SeedSource,
     IRandomState,
     RandomResult,
-} from '@axrone/core';
+} from '../../core/src/random/';
 
 import {
     Random,
     rand,
     NormalDistribution as CoreNormalDistribution,
     createEngineFactory,
-} from '@axrone/core';
+} from '../../core/src/random/';
 
 export type BoxMullerOptions = {
     readonly mean?: number;

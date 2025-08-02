@@ -8,7 +8,6 @@ import {
 
 import { rand, RandomEngineType } from '@axrone/core';
 
-// Helper to get a valid random state for tests
 const getTestState = () => rand.getState();
 
 const calculateMean = (values: number[]): number => {
