@@ -560,6 +560,9 @@ describe('Tween System', () => {
             spr.onStart(() => started = true);
             spr.onComplete(() => completed = true);
 
+            // Enable auto-update for this test to match legacy behavior
+            spr.setAutoUpdate(true);
+            
             spr.setTarget({ value: 100 } as any);
             expect(started).toBe(true);
 

@@ -44,7 +44,7 @@ export abstract class TweenCore<T> implements ITween<T> {
             if (config.interpolation) this.interpolation(config.interpolation);
 
             if (config.autoStart) {
-                requestAnimationFrame(() => this.start());
+                setTimeout(() => this.start(), 0);
             }
         }
     }

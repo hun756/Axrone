@@ -49,6 +49,7 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
     private _animFrameId?: number;
     private _lastTime?: number;
     private _props = new Set<string>();
+    private _autoUpdate = false;
 
     constructor(initial: T, config: SpringConfig = {}) {
         super();
@@ -71,6 +72,19 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
                 this._velocity[prop] = initialVelocity;
             }
         }
+    }
+
+    setAutoUpdate(enabled: boolean): void {
+        this._autoUpdate = enabled;
+        
+        if (!enabled && this._animFrameId !== undefined) {
+            cancelAnimationFrame(this._animFrameId);
+            this._animFrameId = undefined;
+        }
+    }
+
+    getAutoUpdate(): boolean {
+        return this._autoUpdate;
     }
 
     private _collectProps(obj: any, prefix: string, props: Set<string>): void {
@@ -115,7 +129,7 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
             }
         }
 
-        if (!this._isRunning) {
+        if (!this._isRunning && this._autoUpdate) {
             this.start();
         }
 
@@ -158,11 +172,21 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
 
         this._isRunning = true;
         this._lastTime = performance.now();
-        this._tick();
+        
+        if (this._autoUpdate) {
+            this._startInternalLoop();
+        }
 
         this.emitSync('start', undefined);
 
         return this;
+    }
+
+    updateManual(deltaTime: number): boolean {
+        if (!this._isRunning) return false;
+
+        const dt = Math.min(deltaTime / 1000, 0.064);
+        return this._simulateStep(dt);
     }
 
     stop(): this {
@@ -197,15 +221,12 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
         return this;
     }
 
-    private _tick = (): void => {
-        if (!this._isRunning || this._lastTime === undefined) {
-            return;
-        }
+    private _startInternalLoop(): void {
+        if (this._animFrameId !== undefined) return;
+        this._tick();
+    }
 
-        const now = performance.now();
-        const dt = Math.min((now - this._lastTime) / 1000, 0.064);
-        this._lastTime = now;
-
+    private _simulateStep(dt: number): boolean {
         let allAtRest = true;
 
         if (typeof this._current === 'number' && typeof this._target === 'number') {
@@ -254,8 +275,27 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
             this._isRunning = false;
             this.emitSync('update', this._deepClone(this._current));
             this.emitSync('complete', undefined);
-        } else {
+            return false;
+        }
+
+        return true;
+    }
+
+    private _tick = (): void => {
+        if (!this._isRunning || this._lastTime === undefined || !this._autoUpdate) {
+            return;
+        }
+
+        const now = performance.now();
+        const dt = Math.min((now - this._lastTime) / 1000, 0.064);
+        this._lastTime = now;
+
+        const isStillRunning = this._simulateStep(dt);
+
+        if (isStillRunning) {
             this._animFrameId = requestAnimationFrame(this._tick);
+        } else {
+            this._animFrameId = undefined;
         }
     };
 
