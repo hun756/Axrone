@@ -505,3 +505,163 @@ export class AABB3D implements IAABB<IVec3Like> {
     }
 }
 
+export function createAABB<T extends IVec2Like>(params: AABBCreateParams<T>): IAABB<T>;
+export function createAABB<T extends IVec3Like>(params: AABBCreateParams<T>): IAABB<T>;
+export function createAABB<T extends IVec2Like | IVec3Like>(params: AABBCreateParams<T>): IAABB<T> {
+    if (params.min && params.max) {
+        const isVec3 = 'z' in params.min;
+        return isVec3
+            ? (new AABB3D(params.min as IVec3Like, params.max as IVec3Like) as unknown as IAABB<T>)
+            : (new AABB2D(params.min as IVec2Like, params.max as IVec2Like) as unknown as IAABB<T>);
+    }
+
+    if (params.center && params.extents) {
+        const isVec3 = 'z' in params.center;
+        const result = isVec3 ? new AABB3D() : new AABB2D();
+
+        if (isVec3) {
+            const result3D = result as AABB3D;
+            const center3D = params.center as IVec3Like;
+            const extents3D = params.extents as IVec3Like;
+
+            result3D._min.x = center3D.x - extents3D.x;
+            result3D._min.y = center3D.y - extents3D.y;
+            result3D._min.z = center3D.z - extents3D.z;
+            result3D._max.x = center3D.x + extents3D.x;
+            result3D._max.y = center3D.y + extents3D.y;
+            result3D._max.z = center3D.z + extents3D.z;
+            result3D.updateDerivedData();
+        } else {
+            const result2D = result as AABB2D;
+            const center2D = params.center as IVec2Like;
+            const extents2D = params.extents as IVec2Like;
+
+            result2D._min.x = center2D.x - extents2D.x;
+            result2D._min.y = center2D.y - extents2D.y;
+            result2D._max.x = center2D.x + extents2D.x;
+            result2D._max.y = center2D.y + extents2D.y;
+            result2D.updateDerivedData();
+        }
+
+        return result as unknown as IAABB<T>;
+    }
+
+    if (params.points && params.points.length > 0) {
+        return createFromPoints(params.points);
+    }
+
+    throw new AABBError('Invalid parameters for creating AABB');
+}
+
+export function createFromPoints<T extends IVec2Like>(points: readonly T[]): IAABB<T>;
+export function createFromPoints<T extends IVec3Like>(points: readonly T[]): IAABB<T>;
+export function createFromPoints<T extends IVec2Like | IVec3Like>(points: readonly T[]): IAABB<T> {
+    if (!points.length) throw new AABBError('Cannot create AABB from empty points array');
+
+    const firstPoint = points[0];
+    const isVec3 = 'z' in firstPoint;
+    const result = isVec3 ? new AABB3D() : new AABB2D();
+
+    if (isVec3) {
+        const result3D = result as AABB3D;
+        const firstPoint3D = firstPoint as IVec3Like;
+
+        result3D._min.x = result3D._max.x = firstPoint3D.x;
+        result3D._min.y = result3D._max.y = firstPoint3D.y;
+        result3D._min.z = result3D._max.z = firstPoint3D.z;
+
+        for (let i = 1; i < points.length; i++) {
+            const point = points[i] as IVec3Like;
+            result3D._min.x = Math.min(result3D._min.x, point.x);
+            result3D._min.y = Math.min(result3D._min.y, point.y);
+            result3D._min.z = Math.min(result3D._min.z, point.z);
+            result3D._max.x = Math.max(result3D._max.x, point.x);
+            result3D._max.y = Math.max(result3D._max.y, point.y);
+            result3D._max.z = Math.max(result3D._max.z, point.z);
+        }
+        result3D.updateDerivedData();
+    } else {
+        const result2D = result as AABB2D;
+        const firstPoint2D = firstPoint as IVec2Like;
+
+        result2D._min.x = result2D._max.x = firstPoint2D.x;
+        result2D._min.y = result2D._max.y = firstPoint2D.y;
+
+        for (let i = 1; i < points.length; i++) {
+            const point = points[i] as IVec2Like;
+            result2D._min.x = Math.min(result2D._min.x, point.x);
+            result2D._min.y = Math.min(result2D._min.y, point.y);
+            result2D._max.x = Math.max(result2D._max.x, point.x);
+            result2D._max.y = Math.max(result2D._max.y, point.y);
+        }
+        result2D.updateDerivedData();
+    }
+
+    return result as unknown as IAABB<T>;
+}
+
+export function createFromCenterAndSize<T extends IVec2Like>(center: T, size: T): IAABB<T>;
+export function createFromCenterAndSize<T extends IVec3Like>(center: T, size: T): IAABB<T>;
+export function createFromCenterAndSize<T extends IVec2Like | IVec3Like>(
+    center: T,
+    size: T
+): IAABB<T> {
+    const isVec3 = 'z' in center;
+    const result = isVec3 ? new AABB3D() : new AABB2D();
+
+    if (isVec3) {
+        const result3D = result as AABB3D;
+        const center3D = center as IVec3Like;
+        const size3D = size as IVec3Like;
+
+        const halfSizeX = size3D.x * 0.5;
+        const halfSizeY = size3D.y * 0.5;
+        const halfSizeZ = size3D.z * 0.5;
+
+        result3D._min.x = center3D.x - halfSizeX;
+        result3D._min.y = center3D.y - halfSizeY;
+        result3D._min.z = center3D.z - halfSizeZ;
+        result3D._max.x = center3D.x + halfSizeX;
+        result3D._max.y = center3D.y + halfSizeY;
+        result3D._max.z = center3D.z + halfSizeZ;
+        result3D.updateDerivedData();
+    } else {
+        const result2D = result as AABB2D;
+        const center2D = center as IVec2Like;
+        const size2D = size as IVec2Like;
+
+        const halfSizeX = size2D.x * 0.5;
+        const halfSizeY = size2D.y * 0.5;
+
+        result2D._min.x = center2D.x - halfSizeX;
+        result2D._min.y = center2D.y - halfSizeY;
+        result2D._max.x = center2D.x + halfSizeX;
+        result2D._max.y = center2D.y + halfSizeY;
+        result2D.updateDerivedData();
+    }
+
+    return result as unknown as IAABB<T>;
+}
+
+export function createEmpty<T extends IVec2Like | IVec3Like>(dimensions: 2 | 3): IAABB<T> {
+    if (dimensions === 2) {
+        const result = new AABB2D();
+        result._min.x = result._min.y = Infinity;
+        result._max.x = result._max.y = -Infinity;
+        result.updateDerivedData();
+        return result as unknown as IAABB<T>;
+    } else {
+        const result = new AABB3D();
+        result._min.x = result._min.y = result._min.z = Infinity;
+        result._max.x = result._max.y = result._max.z = -Infinity;
+        result.updateDerivedData();
+        return result as unknown as IAABB<T>;
+    }
+}
+
+export class AABBError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'AABBError';
+    }
+}
