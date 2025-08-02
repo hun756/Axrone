@@ -5,9 +5,22 @@ export class TweenSystem {
     private _tweensToAdd = new Set<IGroupable>();
     private _tweensToRemove = new Set<IGroupable>();
     private _isUpdating = false;
-    private _running = false;
+    private _autoUpdate = false;
     private _lastTime = 0;
     private _animFrameId?: number;
+
+    setAutoUpdate(enabled: boolean): void {
+        this._autoUpdate = enabled;
+        
+        if (!enabled && this._animFrameId !== undefined) {
+            cancelAnimationFrame(this._animFrameId);
+            this._animFrameId = undefined;
+        }
+    }
+
+    getAutoUpdate(): boolean {
+        return this._autoUpdate;
+    }
 
     add(tween: IGroupable): void {
         if (this._isUpdating) {
@@ -16,8 +29,8 @@ export class TweenSystem {
             this._tweens.add(tween);
         }
 
-        if (!this._running && this._tweens.size > 0) {
-            this._start();
+        if (this._autoUpdate && !this._isInternalLoopRunning() && this._tweens.size > 0) {
+            this._startInternalLoop();
         }
     }
 
@@ -31,7 +44,6 @@ export class TweenSystem {
 
     update(time?: number): boolean {
         if (this._tweens.size === 0 && this._tweensToAdd.size === 0) {
-            this._running = false;
             return false;
         }
 
@@ -62,16 +74,37 @@ export class TweenSystem {
         return this._tweens.size > 0;
     }
 
-    private _start(): void {
-        if (this._running) return;
+    getActiveTweenCount(): number {
+        return this._tweens.size;
+    }
 
-        this._running = true;
+    clear(): void {
+        for (const tween of this._tweens) {
+            tween.stop();
+        }
+        this._tweens.clear();
+        this._tweensToAdd.clear();
+        this._tweensToRemove.clear();
+        
+        if (this._animFrameId !== undefined) {
+            cancelAnimationFrame(this._animFrameId);
+            this._animFrameId = undefined;
+        }
+    }
+
+    private _isInternalLoopRunning(): boolean {
+        return this._animFrameId !== undefined;
+    }
+
+    private _startInternalLoop(): void {
+        if (this._isInternalLoopRunning()) return;
+
         this._lastTime = performance.now();
         this._tick();
     }
 
     private _tick = (): void => {
-        if (!this._running) return;
+        if (!this._autoUpdate) return;
 
         this._animFrameId = requestAnimationFrame(this._tick);
 
@@ -79,7 +112,6 @@ export class TweenSystem {
         const hasActiveTweens = this.update(now);
 
         if (!hasActiveTweens) {
-            this._running = false;
             cancelAnimationFrame(this._animFrameId!);
             this._animFrameId = undefined;
         }

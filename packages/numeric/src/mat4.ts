@@ -2,6 +2,7 @@ import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from
 import { EPSILON, HALF_PI, PI_2 } from './common';
 import { IVec3Like } from './vec3';
 import { IVec4Like } from './vec4';
+import { IQuatLike } from './quat';
 
 declare const __matrix4Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
@@ -1135,6 +1136,82 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
   [${d[8].toFixed(3)}, ${d[9].toFixed(3)}, ${d[10].toFixed(3)}, ${d[11].toFixed(3)}]
   [${d[12].toFixed(3)}, ${d[13].toFixed(3)}, ${d[14].toFixed(3)}, ${d[15].toFixed(3)}]
 )`;
+    }
+
+    static fromQuaternion<T extends IQuatLike, V extends IMat4Like | undefined = undefined>(
+        quat: Readonly<T>,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat4> {
+        const { x, y, z, w } = quat;
+
+        const length = Math.sqrt(x * x + y * y + z * z + w * w);
+        if (length < EPSILON) {
+            throw new Error('Cannot create rotation matrix from zero-length quaternion');
+        }
+
+        const invLength = 1.0 / length;
+        const nx = x * invLength;
+        const ny = y * invLength;
+        const nz = z * invLength;
+        const nw = w * invLength;
+
+        const x2 = nx + nx;
+        const y2 = ny + ny;
+        const z2 = nz + nz;
+        const xx = nx * x2;
+        const xy = nx * y2;
+        const xz = nx * z2;
+        const yy = ny * y2;
+        const yz = ny * z2;
+        const zz = nz * z2;
+        const wx = nw * x2;
+        const wy = nw * y2;
+        const wz = nw * z2;
+
+        const result = out || new Mat4();
+        const data = asMutableMatrix4Data((result as IMutableMat4).data);
+
+        data[0] = 1 - (yy + zz);
+        data[1] = xy - wz;
+        data[2] = xz + wy;
+        data[3] = 0;
+        data[4] = xy + wz;
+        data[5] = 1 - (xx + zz);
+        data[6] = yz - wx;
+        data[7] = 0;
+        data[8] = xz - wy;
+        data[9] = yz + wx;
+        data[10] = 1 - (xx + yy);
+        data[11] = 0;
+        data[12] = 0;
+        data[13] = 0;
+        data[14] = 0;
+        data[15] = 1;
+
+        return result as MatrixOperationReturnType<V, Mat4>;
+    }
+
+    static fromTRS<
+        T extends IVec3Like,
+        R extends IQuatLike,
+        S extends IVec3Like,
+        V extends IMat4Like | undefined = undefined,
+    >(
+        translation: Readonly<T>,
+        rotation: Readonly<R>,
+        scale: Readonly<S>,
+        out?: V
+    ): MatrixOperationReturnType<V, Mat4> {
+        const rotationMatrix = Mat4.fromQuaternion(rotation);
+
+        const translationMatrix = Mat4.translate(translation);
+
+        const scaleMatrix = Mat4.scale(scale);
+
+        const temp = Mat4.multiply(translationMatrix, rotationMatrix);
+        const result = Mat4.multiply(temp, scaleMatrix, out);
+
+        return result as MatrixOperationReturnType<V, Mat4>;
     }
 }
 

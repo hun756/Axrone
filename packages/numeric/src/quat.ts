@@ -735,6 +735,77 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
     rotateVector<T extends IVec3Like, V extends IVec3Like>(v: Readonly<T>, out?: V): V {
         return Quat.rotateVector(this, v, out);
     }
+
+    static lookRotation<
+        F extends IVec3Like,
+        U extends IVec3Like,
+        V extends IQuatLike | undefined = undefined,
+    >(forward: Readonly<F>, up: Readonly<U>, out?: V): V extends IQuatLike ? V : Quat {
+        const forwardLength = Math.sqrt(
+            forward.x * forward.x + forward.y * forward.y + forward.z * forward.z
+        );
+        if (forwardLength < EPSILON) {
+            throw new Error('Forward direction cannot be zero vector');
+        }
+
+        const f = {
+            x: forward.x / forwardLength,
+            y: forward.y / forwardLength,
+            z: forward.z / forwardLength,
+        };
+
+        const right = {
+            x: up.y * f.z - up.z * f.y,
+            y: up.z * f.x - up.x * f.z,
+            z: up.x * f.y - up.y * f.x,
+        };
+
+        const rightLength = Math.sqrt(right.x * right.x + right.y * right.y + right.z * right.z);
+        if (rightLength < EPSILON) {
+            throw new Error('Forward and up vectors cannot be parallel');
+        }
+
+        right.x /= rightLength;
+        right.y /= rightLength;
+        right.z /= rightLength;
+
+        const newUp = {
+            x: f.y * right.z - f.z * right.y,
+            y: f.z * right.x - f.x * right.z,
+            z: f.x * right.y - f.y * right.x,
+        };
+
+        const trace = right.x + newUp.y + f.z;
+        const result = out || new Quat();
+
+        if (trace > 0) {
+            const s = Math.sqrt(trace + 1.0) * 2; // s = 4 * qw
+            result.w = 0.25 * s;
+            result.x = (newUp.z - f.y) / s;
+            result.y = (f.x - right.z) / s;
+            result.z = (right.y - newUp.x) / s;
+        } else if (right.x > newUp.y && right.x > f.z) {
+            const s = Math.sqrt(1.0 + right.x - newUp.y - f.z) * 2; // s = 4 * qx
+            result.w = (newUp.z - f.y) / s;
+            result.x = 0.25 * s;
+            result.y = (newUp.x + right.y) / s;
+            result.z = (f.x + right.z) / s;
+        } else if (newUp.y > f.z) {
+            const s = Math.sqrt(1.0 + newUp.y - right.x - f.z) * 2; // s = 4 * qy
+            result.w = (f.x - right.z) / s;
+            result.x = (newUp.x + right.y) / s;
+            result.y = 0.25 * s;
+            result.z = (f.y + newUp.z) / s;
+        } else {
+            const s = Math.sqrt(1.0 + f.z - right.x - newUp.y) * 2; // s = 4 * qz
+            result.w = (right.y - newUp.x) / s;
+            result.x = (f.x + right.z) / s;
+            result.y = (f.y + newUp.z) / s;
+            result.z = 0.25 * s;
+        }
+
+        return result as V extends IQuatLike ? V : Quat;
+    }
 }
 
 export enum QuatComparisonMode {
