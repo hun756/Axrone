@@ -258,3 +258,250 @@ export class AABB2D implements IAABB<IVec2Like> {
     }
 }
 
+export class AABB3D implements IAABB<IVec3Like> {
+    public _min: Vec3;
+    public _max: Vec3;
+    public _center: Vec3;
+    public _extents: Vec3;
+
+    constructor(min?: IVec3Like, max?: IVec3Like) {
+        this._min = min ? Vec3.from(min) : Vec3.ZERO.clone();
+        this._max = max ? Vec3.from(max) : Vec3.ZERO.clone();
+        this._center = Vec3.ZERO.clone();
+        this._extents = Vec3.ZERO.clone();
+        this.updateDerivedData();
+    }
+
+    get min(): IVec3Like {
+        return this._min;
+    }
+    get max(): IVec3Like {
+        return this._max;
+    }
+    get center(): IVec3Like {
+        return this._center;
+    }
+    get extents(): IVec3Like {
+        return this._extents;
+    }
+
+    get size(): IVec3Like {
+        return Vec3.subtract(this._max, this._min);
+    }
+
+    get volume(): number {
+        if (this.isEmpty) return 0;
+        const size = this.size;
+        return size.x * size.y * size.z;
+    }
+
+    get surfaceArea(): number {
+        if (this.isEmpty) return 0;
+        const size = this.size;
+        return 2 * (size.x * size.y + size.y * size.z + size.z * size.x);
+    }
+
+    get isEmpty(): boolean {
+        return this._min.x > this._max.x || this._min.y > this._max.y || this._min.z > this._max.z;
+    }
+
+    get dimensions(): number {
+        return 3;
+    }
+
+    public updateDerivedData(): void {
+        this._center = Vec3.add(this._min, this._max, this._center);
+        this._center = Vec3.multiplyScalar(this._center, 0.5, this._center);
+
+        this._extents = Vec3.subtract(this._max, this._min, this._extents);
+        this._extents = Vec3.multiplyScalar(this._extents, 0.5, this._extents);
+    }
+
+    containsPoint(point: IVec3Like): boolean {
+        return (
+            point.x >= this._min.x &&
+            point.x <= this._max.x &&
+            point.y >= this._min.y &&
+            point.y <= this._max.y &&
+            point.z >= this._min.z &&
+            point.z <= this._max.z
+        );
+    }
+
+    containsAABB(other: IAABB<IVec3Like>): boolean {
+        return (
+            this._min.x <= other.min.x &&
+            this._max.x >= other.max.x &&
+            this._min.y <= other.min.y &&
+            this._max.y >= other.max.y &&
+            this._min.z <= other.min.z &&
+            this._max.z >= other.max.z
+        );
+    }
+
+    intersectsAABB(other: IAABB<IVec3Like>): boolean {
+        return (
+            this._min.x <= other.max.x &&
+            this._max.x >= other.min.x &&
+            this._min.y <= other.max.y &&
+            this._max.y >= other.min.y &&
+            this._min.z <= other.max.z &&
+            this._max.z >= other.min.z
+        );
+    }
+
+    getIntersection(other: IAABB<IVec3Like>, result?: IAABB<IVec3Like>): IAABB<IVec3Like> | null {
+        if (!this.intersectsAABB(other)) return null;
+
+        const out = result || new AABB3D();
+        const outAABB = out as AABB3D;
+
+        outAABB._min.x = Math.max(this._min.x, other.min.x);
+        outAABB._min.y = Math.max(this._min.y, other.min.y);
+        outAABB._min.z = Math.max(this._min.z, other.min.z);
+        outAABB._max.x = Math.min(this._max.x, other.max.x);
+        outAABB._max.y = Math.min(this._max.y, other.max.y);
+        outAABB._max.z = Math.min(this._max.z, other.max.z);
+        outAABB.updateDerivedData();
+
+        return out;
+    }
+
+    getUnion(other: IAABB<IVec3Like>, result?: IAABB<IVec3Like>): IAABB<IVec3Like> {
+        const out = result || new AABB3D();
+        const outAABB = out as AABB3D;
+
+        outAABB._min.x = Math.min(this._min.x, other.min.x);
+        outAABB._min.y = Math.min(this._min.y, other.min.y);
+        outAABB._min.z = Math.min(this._min.z, other.min.z);
+        outAABB._max.x = Math.max(this._max.x, other.max.x);
+        outAABB._max.y = Math.max(this._max.y, other.max.y);
+        outAABB._max.z = Math.max(this._max.z, other.max.z);
+        outAABB.updateDerivedData();
+
+        return out;
+    }
+
+    expand(amount: number | IVec3Like): IAABB<IVec3Like> {
+        const result = this.clone() as AABB3D;
+
+        if (typeof amount === 'number') {
+            result._min.x -= amount;
+            result._min.y -= amount;
+            result._min.z -= amount;
+            result._max.x += amount;
+            result._max.y += amount;
+            result._max.z += amount;
+        } else {
+            result._min.x -= amount.x;
+            result._min.y -= amount.y;
+            result._min.z -= amount.z;
+            result._max.x += amount.x;
+            result._max.y += amount.y;
+            result._max.z += amount.z;
+        }
+
+        result.updateDerivedData();
+        return result;
+    }
+
+    transform(matrix: IMat4Like): IAABB<IVec3Like> {
+        const result = new AABB3D();
+        result._min.x = Infinity;
+        result._min.y = Infinity;
+        result._min.z = Infinity;
+        result._max.x = -Infinity;
+        result._max.y = -Infinity;
+        result._max.z = -Infinity;
+
+        const corners: IVec3Like[] = [
+            { x: this._min.x, y: this._min.y, z: this._min.z },
+            { x: this._max.x, y: this._min.y, z: this._min.z },
+            { x: this._min.x, y: this._max.y, z: this._min.z },
+            { x: this._max.x, y: this._max.y, z: this._min.z },
+            { x: this._min.x, y: this._min.y, z: this._max.z },
+            { x: this._max.x, y: this._min.y, z: this._max.z },
+            { x: this._min.x, y: this._max.y, z: this._max.z },
+            { x: this._max.x, y: this._max.y, z: this._max.z },
+        ];
+
+        for (const corner of corners) {
+            const transformed = Mat4.transformVec3(corner, matrix);
+
+            result._min.x = Math.min(result._min.x, transformed.x);
+            result._min.y = Math.min(result._min.y, transformed.y);
+            result._min.z = Math.min(result._min.z, transformed.z);
+            result._max.x = Math.max(result._max.x, transformed.x);
+            result._max.y = Math.max(result._max.y, transformed.y);
+            result._max.z = Math.max(result._max.z, transformed.z);
+        }
+
+        result.updateDerivedData();
+        return result;
+    }
+
+    closestPoint(point: IVec3Like, out: IVec3Like): void {
+        if ('x' in out && 'y' in out && 'z' in out) {
+            out.x = Math.max(this._min.x, Math.min(this._max.x, point.x));
+            out.y = Math.max(this._min.y, Math.min(this._max.y, point.y));
+            out.z = Math.max(this._min.z, Math.min(this._max.z, point.z));
+        }
+    }
+
+    distanceToPoint(point: IVec3Like): number {
+        return Math.sqrt(this.squaredDistanceToPoint(point));
+    }
+
+    squaredDistanceToPoint(point: IVec3Like): number {
+        let sqDist = 0;
+
+        if (point.x < this._min.x) sqDist += (this._min.x - point.x) ** 2;
+        if (point.x > this._max.x) sqDist += (point.x - this._max.x) ** 2;
+        if (point.y < this._min.y) sqDist += (this._min.y - point.y) ** 2;
+        if (point.y > this._max.y) sqDist += (point.y - this._max.y) ** 2;
+        if (point.z < this._min.z) sqDist += (this._min.z - point.z) ** 2;
+        if (point.z > this._max.z) sqDist += (point.z - this._max.z) ** 2;
+
+        return sqDist;
+    }
+
+    clone(): IAABB<IVec3Like> {
+        const result = new AABB3D();
+        result._min = this._min.clone();
+        result._max = this._max.clone();
+        result.updateDerivedData();
+        return result;
+    }
+
+    equals(other: IAABB<IVec3Like>, epsilon = EPSILON): boolean {
+        return (
+            Math.abs(this._min.x - other.min.x) <= epsilon &&
+            Math.abs(this._min.y - other.min.y) <= epsilon &&
+            Math.abs(this._min.z - other.min.z) <= epsilon &&
+            Math.abs(this._max.x - other.max.x) <= epsilon &&
+            Math.abs(this._max.y - other.max.y) <= epsilon &&
+            Math.abs(this._max.z - other.max.z) <= epsilon
+        );
+    }
+
+    copy(other: IAABB<IVec3Like>): void {
+        this._min.x = other.min.x;
+        this._min.y = other.min.y;
+        this._min.z = other.min.z;
+        this._max.x = other.max.x;
+        this._max.y = other.max.y;
+        this._max.z = other.max.z;
+        this.updateDerivedData();
+    }
+
+    clear(): void {
+        this._min.x = this._min.y = this._min.z = Infinity;
+        this._max.x = this._max.y = this._max.z = -Infinity;
+        this.updateDerivedData();
+    }
+
+    toString(): string {
+        return `AABB3D(min: [${this._min.x}, ${this._min.y}, ${this._min.z}], max: [${this._max.x}, ${this._max.y}, ${this._max.z}])`;
+    }
+}
+
