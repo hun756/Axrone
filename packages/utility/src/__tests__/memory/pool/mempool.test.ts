@@ -1,4 +1,4 @@
-import { MemoryPool, PoolableObject, MemoryPoolError, MemoryPoolErrorCode } from '../../../index';
+import { MemoryPool, MemoryPoolError, PoolableObject } from './../../../memory/pool/mempool';
 
 describe('MemoryPool', () => {
     class TestObject implements PoolableObject {
