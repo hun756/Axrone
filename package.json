@@ -14,7 +14,7 @@
     "lint": "lerna run lint --parallel --stream",
     "lint:fix": "lerna run lint:fix --parallel --stream",
     "test": "jest",
-    "docs": "typedoc",
+    "docs": "typedoc"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.0",
