@@ -1,7 +1,4 @@
 import type {
-    IRandomEngine,
-    IRandomAPI,
-    IRandomGenerator,
     IDistribution,
     DistributionSample,
     RandomEngineType,
@@ -14,7 +11,6 @@ import {
     Random,
     rand,
     NormalDistribution as CoreNormalDistribution,
-    createEngineFactory,
 } from '../../core/src/random/';
 
 export type BoxMullerOptions = {
@@ -26,9 +22,6 @@ export type BoxMullerOptions = {
     readonly engineType?: RandomEngineType;
     readonly seed?: SeedSource;
 };
-
-// Re-export core types for better compatibility
-export type { IDistribution, DistributionSample, IRandomState, RandomResult };
 
 export class BoxMullerNormalDistribution implements IDistribution<number> {
     constructor(
