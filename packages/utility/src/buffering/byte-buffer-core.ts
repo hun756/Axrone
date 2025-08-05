@@ -7,11 +7,9 @@ import {
 } from './types';
 import { IByteBuffer, IReadableBuffer, IWritableBuffer } from './interfaces';
 import {
-    INITIAL_CAPACITY,
-    MAX_CAPACITY,
-    EXPANSION_FACTOR,
-    MIN_EXPANSION,
-    MAX_STRING_WRITE_LENGTH,
+    BUFFER_DEFAULTS,
+    STRING_DEFAULTS,
+    PERFORMANCE_DEFAULTS,
 } from './constants';
 import {
     BufferOverflowError,
@@ -27,7 +25,7 @@ import { BufferUtils } from './utils';
 
 export class ByteBuffer implements IByteBuffer {
     private static readonly DEFAULT_ORDER = ByteOrder.Big;
-    private static readonly CACHE_SIZE = 64;
+    private static readonly CACHE_SIZE = PERFORMANCE_DEFAULTS.CACHE_SIZE;
     private static readonly cache: WeakMap<ArrayBuffer, ByteBuffer> = new WeakMap();
     private static readonly pool = BufferPool.getInstance();
     private static readonly viewCache = new Map<string, WeakMap<ByteBuffer, BufferView<any>>>();
@@ -44,15 +42,15 @@ export class ByteBuffer implements IByteBuffer {
     private state: BufferState;
 
     static alloc(
-        capacity: number = INITIAL_CAPACITY,
+        capacity: number = BUFFER_DEFAULTS.INITIAL_CAPACITY,
         order = ByteOrder.Big,
         usePool = true
     ): ByteBuffer {
         if (capacity <= 0) throw new RangeError('Capacity must be positive');
-        if (capacity > MAX_CAPACITY) throw new RangeError('Capacity exceeds maximum allowed');
+        if (capacity > BUFFER_DEFAULTS.MAX_CAPACITY) throw new RangeError('Capacity exceeds maximum allowed');
 
         const powerOf2 = Math.ceil(Math.log2(capacity));
-        const actualCapacity = Math.min(1 << powerOf2, MAX_CAPACITY);
+        const actualCapacity = Math.min(1 << powerOf2, BUFFER_DEFAULTS.MAX_CAPACITY);
 
         let buffer: ArrayBuffer;
         if (usePool) {
@@ -76,7 +74,7 @@ export class ByteBuffer implements IByteBuffer {
         return cached;
     }
 
-    static directBuffer(capacity: number = INITIAL_CAPACITY, order = ByteOrder.Big): ByteBuffer {
+    static directBuffer(capacity: number = BUFFER_DEFAULTS.INITIAL_CAPACITY, order = ByteOrder.Big): ByteBuffer {
         return ByteBuffer.alloc(capacity, order, false);
     }
 
@@ -173,13 +171,13 @@ export class ByteBuffer implements IByteBuffer {
         const newCapacity = Math.min(
             Math.max(
                 this.capacity +
-                    Math.max(MIN_EXPANSION, Math.floor(this.capacity * EXPANSION_FACTOR)),
+                    Math.max(BUFFER_DEFAULTS.MIN_EXPANSION, Math.floor(this.capacity * BUFFER_DEFAULTS.EXPANSION_FACTOR)),
                 required
             ),
-            MAX_CAPACITY
+            BUFFER_DEFAULTS.MAX_CAPACITY
         );
 
-        if (newCapacity > MAX_CAPACITY) {
+        if (newCapacity > BUFFER_DEFAULTS.MAX_CAPACITY) {
             throw new BufferOverflowError('Required capacity exceeds maximum allowed');
         }
 
@@ -464,9 +462,9 @@ export class ByteBuffer implements IByteBuffer {
 
         const bytes = BufferUtils.encodeString(str);
 
-        if (bytes.length > MAX_STRING_WRITE_LENGTH) {
+        if (bytes.length > STRING_DEFAULTS.MAX_WRITE_LENGTH) {
             throw new BufferOverflowError(
-                `String exceeds maximum allowed length: ${bytes.length} > ${MAX_STRING_WRITE_LENGTH}`
+                `String exceeds maximum allowed length: ${bytes.length} > ${STRING_DEFAULTS.MAX_WRITE_LENGTH}`
             );
         }
 
@@ -478,7 +476,7 @@ export class ByteBuffer implements IByteBuffer {
         this.checkState();
 
         const length = this.getInt32();
-        if (length < 0 || length > MAX_STRING_WRITE_LENGTH) {
+        if (length < 0 || length > STRING_DEFAULTS.MAX_WRITE_LENGTH) {
             throw new BufferUnderflowError(`Invalid string length: ${length}`);
         }
 

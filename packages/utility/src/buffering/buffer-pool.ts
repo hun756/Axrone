@@ -1,6 +1,6 @@
 import { PoolableObject, PoolPerformanceMetrics } from '../memory/pool/mempool';
 import { ObjectPool, ObjectPoolOptions } from '../memory/pool/object-pool';
-import { POOL_BUCKET_COUNT, MAX_CAPACITY } from './constants';
+import { POOL_DEFAULTS, BUFFER_DEFAULTS } from './constants';
 
 class PoolableArrayBuffer implements PoolableObject {
     __poolId?: number;
@@ -8,16 +8,17 @@ class PoolableArrayBuffer implements PoolableObject {
     __lastAccessed?: number;
     __allocCount?: number;
 
-    constructor(public readonly buffer: ArrayBuffer, public readonly size: number) {}
+    constructor(
+        public readonly buffer: ArrayBuffer,
+        public readonly size: number
+    ) {}
 
     reset(): void {
-
         new Uint8Array(this.buffer).fill(0);
     }
 }
 
 export interface BufferPoolOptions {
-
     readonly initialCapacityPerBucket?: number;
 
     readonly maxCapacityPerBucket?: number;
@@ -80,7 +81,9 @@ export class BufferPool {
             onOutOfMemory: options.onOutOfMemory ?? (() => {}),
         };
 
-        this.bucketSizes = Array.from({ length: POOL_BUCKET_COUNT }, (_, i) => Math.pow(2, 5 + i)); 
+        this.bucketSizes = Array.from({ length: POOL_DEFAULTS.BUCKET_COUNT }, (_, i) =>
+            Math.pow(2, 5 + i)
+        );
         this.pools = new Map();
 
         this.initializePools();
@@ -104,8 +107,8 @@ export class BufferPool {
         for (let i = 0; i < this.bucketSizes.length; i++) {
             const bucketSize = this.bucketSizes[i];
 
-            if (bucketSize > MAX_CAPACITY) {
-                break; 
+            if (bucketSize > BUFFER_DEFAULTS.MAX_CAPACITY) {
+                break;
             }
 
             const poolOptions: ObjectPoolOptions<PoolableArrayBuffer> = {
@@ -130,8 +133,10 @@ export class BufferPool {
                 resetHandler: (buffer: PoolableArrayBuffer) => buffer.reset(),
 
                 validateHandler: (buffer: PoolableArrayBuffer) => {
-                    return buffer.buffer.byteLength === bucketSize && 
-                           this.options.validator(buffer.buffer);
+                    return (
+                        buffer.buffer.byteLength === bucketSize &&
+                        this.options.validator(buffer.buffer)
+                    );
                 },
 
                 onAcquireHandler: (buffer: PoolableArrayBuffer) => {
@@ -160,8 +165,10 @@ export class BufferPool {
             throw new Error('Requested size must be positive');
         }
 
-        if (requestedSize > MAX_CAPACITY) {
-            throw new Error(`Requested size ${requestedSize} exceeds maximum capacity ${MAX_CAPACITY}`);
+        if (requestedSize > BUFFER_DEFAULTS.MAX_CAPACITY) {
+            throw new Error(
+                `Requested size ${requestedSize} exceeds maximum capacity ${BUFFER_DEFAULTS.MAX_CAPACITY}`
+            );
         }
 
         const bucketIndex = this.getBucketIndex(requestedSize);
@@ -171,15 +178,16 @@ export class BufferPool {
         let buffer: ArrayBuffer;
 
         if (!pool) {
-
             buffer = new ArrayBuffer(actualSize);
         } else {
             try {
                 const poolableBuffer = pool.acquire();
                 buffer = poolableBuffer.buffer;
             } catch (error) {
-
-                console.warn(`Pool exhausted for bucket ${bucketIndex}, falling back to direct allocation:`, error);
+                console.warn(
+                    `Pool exhausted for bucket ${bucketIndex}, falling back to direct allocation:`,
+                    error
+                );
                 this.options.onOutOfMemory(requestedSize, bucketIndex);
                 buffer = new ArrayBuffer(actualSize);
             }
@@ -191,7 +199,7 @@ export class BufferPool {
     }
 
     tryAllocate(requestedSize: number): ArrayBuffer | null {
-        if (requestedSize <= 0 || requestedSize > MAX_CAPACITY) {
+        if (requestedSize <= 0 || requestedSize > BUFFER_DEFAULTS.MAX_CAPACITY) {
             return null;
         }
 
@@ -230,12 +238,10 @@ export class BufferPool {
         const pool = this.pools.get(bucketIndex);
 
         if (!pool) {
-
             return;
         }
 
         try {
-
             const poolableBuffer = new PoolableArrayBuffer(buffer, buffer.byteLength);
             pool.release(poolableBuffer);
         } catch (error) {
@@ -327,28 +333,28 @@ export class BufferPool {
     }
 
     private getBucketIndex(requestedSize: number): number {
-
-        const minBits = Math.max(5, Math.ceil(Math.log2(requestedSize))); 
-        const bucketIndex = minBits - 5; 
-        return Math.min(bucketIndex, POOL_BUCKET_COUNT - 1);
+        const minBits = Math.max(5, Math.ceil(Math.log2(requestedSize)));
+        const bucketIndex = minBits - 5;
+        return Math.min(bucketIndex, POOL_DEFAULTS.BUCKET_COUNT - 1);
     }
 
     private getBucketIndexForExactSize(exactSize: number): number {
         const log2Size = Math.log2(exactSize);
-        if (log2Size % 1 === 0 && log2Size >= 5) { 
-            const bucketIndex = log2Size - 5; 
-            if (bucketIndex >= 0 && bucketIndex < POOL_BUCKET_COUNT) {
+        if (log2Size % 1 === 0 && log2Size >= 5) {
+            const bucketIndex = log2Size - 5;
+            if (bucketIndex >= 0 && bucketIndex < POOL_DEFAULTS.BUCKET_COUNT) {
                 return bucketIndex;
             }
         }
-        return -1; 
+        return -1;
     }
 
-    private findPoolableBuffer(pool: ObjectPool<PoolableArrayBuffer>, buffer: ArrayBuffer): PoolableArrayBuffer | null {
-
+    private findPoolableBuffer(
+        pool: ObjectPool<PoolableArrayBuffer>,
+        buffer: ArrayBuffer
+    ): PoolableArrayBuffer | null {
         try {
-
-            return null; 
+            return null;
         } catch {
             return null;
         }
