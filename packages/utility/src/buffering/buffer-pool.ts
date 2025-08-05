@@ -1,4 +1,4 @@
-import { MemoryPool, PoolableObject, PoolPerformanceMetrics } from '../memory/pool/mempool';
+import { PoolableObject, PoolPerformanceMetrics } from '../memory/pool/mempool';
 import { ObjectPool, ObjectPoolOptions } from '../memory/pool/object-pool';
 import { POOL_BUCKET_COUNT, MAX_CAPACITY } from './constants';
 
