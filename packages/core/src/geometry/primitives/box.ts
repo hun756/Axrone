@@ -14,7 +14,7 @@ const DEFAULT_BOX_CONFIG: Required<IBoxConfig> = {
     generateTangents: false,
     flipWindingOrder: false,
     useIndexBuffer: true,
-    indexType: 0x1403, 
+    indexType: 0x1403,
 } as const;
 
 export const createBox = (config: Partial<IBoxConfig> = {}): IGeometryBuffers => {
@@ -23,18 +23,20 @@ export const createBox = (config: Partial<IBoxConfig> = {}): IGeometryBuffers =>
     return generateBoxGeometry(builder, finalConfig);
 };
 
-export const createCube = (config: Omit<Partial<IBoxConfig>, 'width' | 'height' | 'depth'> = {}): IGeometryBuffers => {
+export const createCube = (
+    config: Omit<Partial<IBoxConfig>, 'width' | 'height' | 'depth'> = {}
+): IGeometryBuffers => {
     return createBox({ ...config, width: 1, height: 1, depth: 1 });
 };
 
 export const createRoundedBox = (
     config: Partial<IBoxConfig & { radius?: number; smoothness?: number }> = {}
 ): IGeometryBuffers => {
-    const finalConfig = { 
-        ...DEFAULT_BOX_CONFIG, 
-        radius: 0.1, 
+    const finalConfig = {
+        ...DEFAULT_BOX_CONFIG,
+        radius: 0.1,
         smoothness: 8,
-        ...config 
+        ...config,
     };
     const builder = GeometryBuilder.create(finalConfig);
     return generateRoundedBoxGeometry(builder, finalConfig);
@@ -52,17 +54,89 @@ const generateBoxGeometry = (
 
     let groupStart = 0;
 
-    groupStart = buildPlane('z', 'y', 'x', -1, -1, depth, height, halfWidth, depthSegments, heightSegments, groupStart);
+    groupStart = buildPlane(
+        'z',
+        'y',
+        'x',
+        -1,
+        -1,
+        depth,
+        height,
+        halfWidth,
+        depthSegments,
+        heightSegments,
+        groupStart
+    );
 
-    groupStart = buildPlane('z', 'y', 'x', 1, -1, depth, height, -halfWidth, depthSegments, heightSegments, groupStart);
+    groupStart = buildPlane(
+        'z',
+        'y',
+        'x',
+        1,
+        -1,
+        depth,
+        height,
+        -halfWidth,
+        depthSegments,
+        heightSegments,
+        groupStart
+    );
 
-    groupStart = buildPlane('x', 'z', 'y', 1, 1, width, depth, halfHeight, widthSegments, depthSegments, groupStart);
+    groupStart = buildPlane(
+        'x',
+        'z',
+        'y',
+        1,
+        1,
+        width,
+        depth,
+        halfHeight,
+        widthSegments,
+        depthSegments,
+        groupStart
+    );
 
-    groupStart = buildPlane('x', 'z', 'y', 1, -1, width, depth, -halfHeight, widthSegments, depthSegments, groupStart);
+    groupStart = buildPlane(
+        'x',
+        'z',
+        'y',
+        1,
+        -1,
+        width,
+        depth,
+        -halfHeight,
+        widthSegments,
+        depthSegments,
+        groupStart
+    );
 
-    groupStart = buildPlane('x', 'y', 'z', 1, -1, width, height, halfDepth, widthSegments, heightSegments, groupStart);
+    groupStart = buildPlane(
+        'x',
+        'y',
+        'z',
+        1,
+        -1,
+        width,
+        height,
+        halfDepth,
+        widthSegments,
+        heightSegments,
+        groupStart
+    );
 
-    buildPlane('x', 'y', 'z', -1, -1, width, height, -halfDepth, widthSegments, heightSegments, groupStart);
+    buildPlane(
+        'x',
+        'y',
+        'z',
+        -1,
+        -1,
+        width,
+        height,
+        -halfDepth,
+        widthSegments,
+        heightSegments,
+        groupStart
+    );
 
     function buildPlane(
         u: 'x' | 'y' | 'z',
@@ -103,10 +177,12 @@ const generateBoxGeometry = (
                 normal[v] = 0;
                 normal[w] = depth > 0 ? 1 : -1;
 
-                const texCoord = config.generateTexCoords ? {
-                    u: ix / gridX,
-                    v: 1 - (iy / gridY),
-                } : undefined;
+                const texCoord = config.generateTexCoords
+                    ? {
+                          u: ix / gridX,
+                          v: 1 - iy / gridY,
+                      }
+                    : undefined;
 
                 builder.addVertex(
                     position.clone(),
@@ -145,14 +221,14 @@ const generateRoundedBoxGeometry = (
     const halfDepth = depth * 0.5 - radius;
 
     const corners: Vec3[] = [
-        Vec3.create(-halfWidth, -halfHeight, -halfDepth), 
-        Vec3.create(halfWidth, -halfHeight, -halfDepth),  
-        Vec3.create(halfWidth, halfHeight, -halfDepth),   
-        Vec3.create(-halfWidth, halfHeight, -halfDepth),  
-        Vec3.create(-halfWidth, -halfHeight, halfDepth),  
-        Vec3.create(halfWidth, -halfHeight, halfDepth),   
-        Vec3.create(halfWidth, halfHeight, halfDepth),    
-        Vec3.create(-halfWidth, halfHeight, halfDepth),   
+        Vec3.create(-halfWidth, -halfHeight, -halfDepth),
+        Vec3.create(halfWidth, -halfHeight, -halfDepth),
+        Vec3.create(halfWidth, halfHeight, -halfDepth),
+        Vec3.create(-halfWidth, halfHeight, -halfDepth),
+        Vec3.create(-halfWidth, -halfHeight, halfDepth),
+        Vec3.create(halfWidth, -halfHeight, halfDepth),
+        Vec3.create(halfWidth, halfHeight, halfDepth),
+        Vec3.create(-halfWidth, halfHeight, halfDepth),
     ];
 
     for (let i = 0; i < corners.length; i++) {
@@ -185,10 +261,10 @@ const generateRoundedBoxGeometry = (
                 const z = center.z + radius * sinTheta * sinPhi * zSign;
 
                 const position = Vec3.create(x, y, z);
-                const normal = config.generateNormals 
+                const normal = config.generateNormals
                     ? Vec3.normalize(Vec3.subtract(position, center))
                     : undefined;
-                const texCoord = config.generateTexCoords 
+                const texCoord = config.generateTexCoords
                     ? { u: j / segments, v: i / segments }
                     : undefined;
 
@@ -209,11 +285,19 @@ const generateRoundedBoxGeometry = (
     }
 
     function generateEdgeCylinders(corners: Vec3[], radius: number, segments: number): void {
-
         const edges = [
-            [0, 1], [1, 2], [2, 3], [3, 0], 
-            [4, 5], [5, 6], [6, 7], [7, 4], 
-            [0, 4], [1, 5], [2, 6], [3, 7], 
+            [0, 1],
+            [1, 2],
+            [2, 3],
+            [3, 0],
+            [4, 5],
+            [5, 6],
+            [6, 7],
+            [7, 4],
+            [0, 4],
+            [1, 5],
+            [2, 6],
+            [3, 7],
         ];
 
         for (const [startIdx, endIdx] of edges) {
@@ -227,8 +311,13 @@ const generateRoundedBoxGeometry = (
         }
     }
 
-    function generateEdgeCylinder(start: Vec3, direction: Vec3, length: number, radius: number, segments: number): void {
-
+    function generateEdgeCylinder(
+        start: Vec3,
+        direction: Vec3,
+        length: number,
+        radius: number,
+        segments: number
+    ): void {
         const startVertex = builder.vertexCount;
 
         for (let i = 0; i <= 1; i++) {
@@ -241,12 +330,10 @@ const generateRoundedBoxGeometry = (
                 const z = center.z + radius * Math.sin(angle);
 
                 const position = Vec3.create(x, center.y, z);
-                const normal = config.generateNormals 
+                const normal = config.generateNormals
                     ? Vec3.normalize(Vec3.subtract(position, center))
                     : undefined;
-                const texCoord = config.generateTexCoords 
-                    ? { u: j / segments, v: t }
-                    : undefined;
+                const texCoord = config.generateTexCoords ? { u: j / segments, v: t } : undefined;
 
                 builder.addVertex(position, normal, texCoord);
             }
@@ -263,43 +350,41 @@ const generateRoundedBoxGeometry = (
     }
 
     function generateFacePlanes(corners: Vec3[], radius: number): void {
-
         const faces = [
-
-            { 
-                corners: [corners[4], corners[5], corners[6], corners[7]], 
+            {
+                corners: [corners[4], corners[5], corners[6], corners[7]],
                 normal: Vec3.create(0, 0, 1),
-                offset: halfDepth + radius 
+                offset: halfDepth + radius,
             },
 
-            { 
-                corners: [corners[1], corners[0], corners[3], corners[2]], 
+            {
+                corners: [corners[1], corners[0], corners[3], corners[2]],
                 normal: Vec3.create(0, 0, -1),
-                offset: -halfDepth - radius 
+                offset: -halfDepth - radius,
             },
 
-            { 
-                corners: [corners[1], corners[5], corners[6], corners[2]], 
+            {
+                corners: [corners[1], corners[5], corners[6], corners[2]],
                 normal: Vec3.create(1, 0, 0),
-                offset: halfWidth + radius 
+                offset: halfWidth + radius,
             },
 
-            { 
-                corners: [corners[0], corners[4], corners[7], corners[3]], 
+            {
+                corners: [corners[0], corners[4], corners[7], corners[3]],
                 normal: Vec3.create(-1, 0, 0),
-                offset: -halfWidth - radius 
+                offset: -halfWidth - radius,
             },
 
-            { 
-                corners: [corners[3], corners[2], corners[6], corners[7]], 
+            {
+                corners: [corners[3], corners[2], corners[6], corners[7]],
                 normal: Vec3.create(0, 1, 0),
-                offset: halfHeight + radius 
+                offset: halfHeight + radius,
             },
 
-            { 
-                corners: [corners[0], corners[1], corners[5], corners[4]], 
+            {
+                corners: [corners[0], corners[1], corners[5], corners[4]],
                 normal: Vec3.create(0, -1, 0),
-                offset: -halfHeight - radius 
+                offset: -halfHeight - radius,
             },
         ];
 
@@ -311,10 +396,12 @@ const generateRoundedBoxGeometry = (
                 const position = Vec3.add(corner, Vec3.multiplyScalar(face.normal, radius));
 
                 const normal = config.generateNormals ? face.normal.clone() : undefined;
-                const texCoord = config.generateTexCoords ? {
-                    u: i % 2,
-                    v: Math.floor(i / 2)
-                } : undefined;
+                const texCoord = config.generateTexCoords
+                    ? {
+                          u: i % 2,
+                          v: Math.floor(i / 2),
+                      }
+                    : undefined;
 
                 builder.addVertex(position, normal, texCoord);
             }

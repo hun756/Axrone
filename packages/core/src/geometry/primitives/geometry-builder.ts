@@ -204,7 +204,11 @@ export class GeometryBuilder<TConfig extends IPrimitiveConfig = IPrimitiveConfig
 
     private _createBuffers(): IGeometryBuffers {
         const attributes = this._createVertexAttributes();
-        const layout = createGeometryLayout(attributes, this._vertices.length, this._indices.length);
+        const layout = createGeometryLayout(
+            attributes,
+            this._vertices.length,
+            this._indices.length
+        );
 
         const vertexBuffer = this._createVertexBuffer(layout);
         const indexBuffer = this._createIndexBuffer();
@@ -220,21 +224,53 @@ export class GeometryBuilder<TConfig extends IPrimitiveConfig = IPrimitiveConfig
         const attributes: IVertexAttribute[] = [];
         let offset = 0;
 
-        attributes.push(createVertexAttribute(VERTEX_ATTRIBUTES.POSITION, 3, GLAttributeType.FLOAT, false, offset));
-        offset += 12; 
+        attributes.push(
+            createVertexAttribute(
+                VERTEX_ATTRIBUTES.POSITION,
+                3,
+                GLAttributeType.FLOAT,
+                false,
+                offset
+            )
+        );
+        offset += 12;
 
         if (this._config.generateNormals) {
-            attributes.push(createVertexAttribute(VERTEX_ATTRIBUTES.NORMAL, 3, GLAttributeType.FLOAT, false, offset));
+            attributes.push(
+                createVertexAttribute(
+                    VERTEX_ATTRIBUTES.NORMAL,
+                    3,
+                    GLAttributeType.FLOAT,
+                    false,
+                    offset
+                )
+            );
             offset += 12;
         }
 
         if (this._config.generateTexCoords) {
-            attributes.push(createVertexAttribute(VERTEX_ATTRIBUTES.TEXCOORD, 2, GLAttributeType.FLOAT, false, offset));
-            offset += 8; 
+            attributes.push(
+                createVertexAttribute(
+                    VERTEX_ATTRIBUTES.TEXCOORD,
+                    2,
+                    GLAttributeType.FLOAT,
+                    false,
+                    offset
+                )
+            );
+            offset += 8;
         }
 
         if (this._config.generateTangents) {
-            attributes.push(createVertexAttribute(VERTEX_ATTRIBUTES.TANGENT, 3, GLAttributeType.FLOAT, false, offset));
+            attributes.push(
+                createVertexAttribute(
+                    VERTEX_ATTRIBUTES.TANGENT,
+                    3,
+                    GLAttributeType.FLOAT,
+                    false,
+                    offset
+                )
+            );
             offset += 12;
         }
 
@@ -245,7 +281,6 @@ export class GeometryBuilder<TConfig extends IPrimitiveConfig = IPrimitiveConfig
         const buffer = ByteBuffer.alloc(this._vertices.length * layout.stride);
 
         for (const vertex of this._vertices) {
-
             buffer.putFloat32(vertex.position.x);
             buffer.putFloat32(vertex.position.y);
             buffer.putFloat32(vertex.position.z);
@@ -277,7 +312,9 @@ export class GeometryBuilder<TConfig extends IPrimitiveConfig = IPrimitiveConfig
             return ByteBuffer.alloc(0);
         }
 
-        const use32BitIndices = this._config.indexType === GLAttributeType.UNSIGNED_INT || this._vertices.length > 65535;
+        const use32BitIndices =
+            this._config.indexType === GLAttributeType.UNSIGNED_INT ||
+            this._vertices.length > 65535;
         const bytesPerIndex = use32BitIndices ? 4 : 2;
         const buffer = ByteBuffer.alloc(this._indices.length * bytesPerIndex);
 
@@ -292,5 +329,4 @@ export class GeometryBuilder<TConfig extends IPrimitiveConfig = IPrimitiveConfig
         buffer.flip();
         return buffer;
     }
-
 }

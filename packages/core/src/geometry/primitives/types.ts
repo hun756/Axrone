@@ -27,7 +27,9 @@ export interface IVertexAttribute<TName extends string = string> {
     readonly offset: number;
 }
 
-export interface IGeometryLayout<TAttributes extends readonly IVertexAttribute[] = readonly IVertexAttribute[]> {
+export interface IGeometryLayout<
+    TAttributes extends readonly IVertexAttribute[] = readonly IVertexAttribute[],
+> {
     readonly id: GeometryLayoutId;
     readonly attributes: TAttributes;
     readonly stride: number;
@@ -155,10 +157,11 @@ export const createGeometryLayout = <TAttributes extends readonly IVertexAttribu
 ): IGeometryLayout<TAttributes> => {
     const stride = attributes.reduce((sum, attr) => {
         const typeSize = getAttributeTypeSize(attr.type);
-        return sum + (attr.size * typeSize);
+        return sum + attr.size * typeSize;
     }, 0);
 
-    const id = `layout_${attributes.map(a => a.name).join('_')}_${Date.now()}` as GeometryLayoutId;
+    const id =
+        `layout_${attributes.map((a) => a.name).join('_')}_${Date.now()}` as GeometryLayoutId;
 
     return {
         id,
