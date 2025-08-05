@@ -21,7 +21,7 @@ import {
     BufferAlignmentError,
     BufferReleasedError,
 } from './errors';
-import { BufferPool } from './pool';
+import { BufferPool } from './buffer-pool';
 import { BufferView } from './buffer-view';
 import { BufferUtils } from './utils';
 
