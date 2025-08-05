@@ -1,7 +1,5 @@
 export type { Primitive, TypedArray, TypedArrayConstructor, Builtin, BuiltinObject } from './types';
 
-export { ByteBuffer, ByteOrder, SeekOrigin } from './buffering/byte-buffer';
-
 export type {
     CompareResult,
     Comparable,
