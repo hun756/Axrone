@@ -1,5 +1,5 @@
-import { PoolableObject, PoolPerformanceMetrics } from '../memory/pool/mempool';
-import { ObjectPool, ObjectPoolOptions } from '../memory/pool/object-pool';
+import { PoolableObject, PoolPerformanceMetrics } from '../pool/mempool';
+import { ObjectPool, ObjectPoolOptions } from '../pool/object-pool';
 import { POOL_DEFAULTS, BUFFER_DEFAULTS } from './constants';
 
 class PoolableArrayBuffer implements PoolableObject {
