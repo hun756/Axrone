@@ -105,22 +105,6 @@ export interface ILazyAsync<T> {
     force(): Promise<T>;
     reset(): ILazyAsync<T>;
     toLazy(): ILazy<Promise<T>>;
-    
-    Map<U>(selector: (value: T) => U): ILazyAsync<U>;
-    MapAsync<U>(selector: (value: T) => Promise<U>): ILazyAsync<U>;
-    FlatMap<U>(selector: (value: T) => ILazyAsync<U>): ILazyAsync<U>;
-    Filter<U extends T>(predicate: (value: T) => value is U): ILazyAsync<U>;
-    Filter(predicate: (value: T) => boolean): ILazyAsync<T>;
-    OrElse(fallback: () => Promise<T>): ILazyAsync<T>;
-    Catch<U = T>(handler: (error: Error) => U): ILazyAsync<T | U>;
-    CatchAsync<U = T>(handler: (error: Error) => Promise<U>): ILazyAsync<T | U>;
-    Tap(effect: (value: T) => void): ILazyAsync<T>;
-    TapAsync(effect: (value: T) => Promise<void>): ILazyAsync<T>;
-    Timeout(milliseconds: number): ILazyAsync<T>;
-    Retry(maxAttempts: number, delay?: number): ILazyAsync<T>;
-    Force(): Promise<T>;
-    Reset(): ILazyAsync<T>;
-    ToLazy(): ILazy<Promise<T>>;
 }
 
 export interface ILazyFactory<TArgs extends readonly unknown[], TResult>
