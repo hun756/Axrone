@@ -60,17 +60,6 @@ export interface ILazy<T> extends LazyCore<T> {
     force(): T;
     reset(): ILazy<T>;
     toAsync(): ILazyAsync<T>;
-    
-    Map<U>(selector: (value: T) => U): ILazy<U>;
-    FlatMap<U>(selector: (value: T) => ILazy<U>): ILazy<U>;
-    Filter<U extends T>(predicate: (value: T) => value is U): ILazy<U>;
-    Filter(predicate: (value: T) => boolean): ILazy<T>;
-    OrElse(fallback: () => T): ILazy<T>;
-    Catch<U = T>(handler: (error: Error) => U): ILazy<T | U>;
-    Tap(effect: (value: T) => void): ILazy<T>;
-    Force(): T;
-    Reset(): ILazy<T>;
-    ToAsync(): ILazyAsync<T>;
 }
 
 export interface ILazyAsync<T> {

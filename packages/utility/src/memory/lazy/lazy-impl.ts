@@ -136,44 +136,6 @@ export class LazyImpl<T> implements ILazy<T> {
     toAsync(): ILazyAsync<T> {
         return new LazyAsyncImpl(() => Promise.resolve(this.getValue()));
     }
-
-    Map<U>(selector: (value: T) => U): ILazy<U> {
-        return this.map(selector);
-    }
-
-    FlatMap<U>(selector: (value: T) => ILazy<U>): ILazy<U> {
-        return this.flatMap(selector);
-    }
-
-    Filter<U extends T>(predicate: (value: T) => value is U): ILazy<U>;
-    Filter(predicate: (value: T) => boolean): ILazy<T>;
-    Filter(predicate: (value: T) => boolean): ILazy<T> {
-        return this.filter(predicate);
-    }
-
-    OrElse(fallback: () => T): ILazy<T> {
-        return this.orElse(fallback);
-    }
-
-    Catch<U = T>(handler: (error: Error) => U): ILazy<T | U> {
-        return this.catch(handler);
-    }
-
-    Tap(effect: (value: T) => void): ILazy<T> {
-        return this.tap(effect);
-    }
-
-    Force(): T {
-        return this.force();
-    }
-
-    Reset(): ILazy<T> {
-        return this.reset();
-    }
-
-    ToAsync(): ILazyAsync<T> {
-        return this.toAsync();
-    }
 }
 
 export class LazyAsyncImpl<T> implements ILazyAsync<T> {
