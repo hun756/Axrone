@@ -170,18 +170,23 @@ export class EventScheduler {
     private gcIntervalId?: ReturnType<typeof setInterval>;
     private isDisposed = false;
 
-    constructor(options: ISchedulerOptions = {}) {
+    constructor(options: ISchedulerOptions | number = {}) {
+        // Handle backward compatibility: if a number is passed, treat it as concurrency limit
+        const schedulerOptions: ISchedulerOptions = typeof options === 'number' 
+            ? { concurrencyLimit: options } 
+            : options;
+
         this.id =
             `scheduler_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` as SchedulerId;
-        this.concurrencyLimit = Math.max(1, options.concurrencyLimit ?? Infinity);
-        this.maxQueueSize = Math.max(1, options.maxQueueSize ?? 10000);
-        this.enableMetrics = options.enableMetrics ?? true;
-        this.enableRetries = options.enableRetries ?? false;
-        this.maxRetries = Math.max(0, options.maxRetries ?? 3);
-        this.retryDelay = Math.max(0, options.retryDelay ?? 1000);
-        this.taskTimeout = Math.max(0, options.taskTimeout ?? 30000);
-        this.gcIntervalMs = Math.max(1000, options.gcIntervalMs ?? 60000);
-        this.name = options.name ?? `EventScheduler-${this.id}`;
+        this.concurrencyLimit = Math.max(1, schedulerOptions.concurrencyLimit ?? Infinity);
+        this.maxQueueSize = Math.max(1, schedulerOptions.maxQueueSize ?? 10000);
+        this.enableMetrics = schedulerOptions.enableMetrics ?? true;
+        this.enableRetries = schedulerOptions.enableRetries ?? false;
+        this.maxRetries = Math.max(0, schedulerOptions.maxRetries ?? 3);
+        this.retryDelay = Math.max(0, schedulerOptions.retryDelay ?? 1000);
+        this.taskTimeout = Math.max(0, schedulerOptions.taskTimeout ?? 30000);
+        this.gcIntervalMs = Math.max(1000, schedulerOptions.gcIntervalMs ?? 60000);
+        this.name = schedulerOptions.name ?? `EventScheduler-${this.id}`;
 
         if (this.gcIntervalMs > 0) {
             this.startGarbageCollection();
@@ -193,6 +198,10 @@ export class EventScheduler {
     }
 
     get queuedCount(): number {
+        return this.taskQueue.size;
+    }
+
+    get pendingCount(): number {
         return this.taskQueue.size;
     }
 

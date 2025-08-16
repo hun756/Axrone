@@ -83,7 +83,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             this.#weakSubscriptionStorage = new WeakMap();
         }
 
-        this.#scheduler = new EventScheduler(this.#options.concurrencyLimit);
+        this.#scheduler = new EventScheduler({ concurrencyLimit: this.#options.concurrencyLimit });
 
         if (this.#options.gcIntervalMs > 0) {
             this.#startGc();
