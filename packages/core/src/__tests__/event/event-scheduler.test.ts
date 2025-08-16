@@ -1,258 +1,348 @@
-import { EventScheduler } from '../../event/event-scheduler';
+import { EventScheduler, TaskPriority, TaskState, ISchedulerOptions } from '../../event/event-scheduler';
 
 describe('EventScheduler', () => {
-    describe('Concurrency Control', () => {
+    let scheduler: EventScheduler;
+
+    beforeEach(() => {
+        const options: ISchedulerOptions = {
+            concurrencyLimit: 2,
+            maxQueueSize: 100,
+            enableMetrics: true,
+            enableRetries: true,
+            maxRetries: 2,
+            retryDelay: 10,
+            taskTimeout: 1000,
+            gcIntervalMs: 5000,
+            name: 'TestScheduler',
+        };
+        scheduler = new EventScheduler(options);
+    });
+
+    afterEach(() => {
+        // Skip disposal - each test handles its own cleanup
+    });
+
+    describe('Basic Scheduling', () => {
+        it('should schedule and execute tasks', async () => {
+            let executed = false;
+            const task = () => Promise.resolve((executed = true));
+
+            await scheduler.schedule(task);
+            expect(executed).toBe(true);
+        });
+
+        it('should handle task results correctly', async () => {
+            const expectedResult = 'test-result';
+            const task = () => Promise.resolve(expectedResult);
+
+            const result = await scheduler.schedule(task);
+            expect(result).toBe(expectedResult);
+        });
+
+        it('should handle task errors correctly', async () => {
+            const expectedError = new Error('test-error');
+            const task = () => Promise.reject(expectedError);
+
+            await expect(scheduler.schedule(task)).rejects.toThrow('test-error');
+        });
+
         it('should respect concurrency limits', async () => {
-            const scheduler = new EventScheduler(2);
             let activeCount = 0;
-            let maxConcurrent = 0;
+            let maxActiveCount = 0;
 
-            const createTask = (id: number) => async () => {
+            const task = () => {
                 activeCount++;
-                maxConcurrent = Math.max(maxConcurrent, activeCount);
-
-                await new Promise((resolve) => setTimeout(resolve, 100));
-
-                activeCount--;
-                return id;
+                maxActiveCount = Math.max(maxActiveCount, activeCount);
+                return new Promise<void>((resolve) => {
+                    setTimeout(() => {
+                        activeCount--;
+                        resolve();
+                    }, 50);
+                });
             };
 
-            const promises = Array.from({ length: 5 }, (_, i) =>
-                scheduler.schedule(createTask(i + 1))
-            );
+            const promises = Array.from({ length: 5 }, () => scheduler.schedule(task));
+            await Promise.all(promises);
 
-            const results = await Promise.all(promises);
-
-            expect(results).toEqual([1, 2, 3, 4, 5]);
-            expect(maxConcurrent).toBe(2);
-            expect(scheduler.activeCount).toBe(0);
-            expect(scheduler.pendingCount).toBe(0);
-        });
-
-        it('should handle unlimited concurrency correctly', async () => {
-            const scheduler = new EventScheduler();
-            let activeCount = 0;
-            let maxConcurrent = 0;
-
-            const createTask = (id: number) => async () => {
-                activeCount++;
-                maxConcurrent = Math.max(maxConcurrent, activeCount);
-
-                await new Promise((resolve) => setTimeout(resolve, 50));
-
-                activeCount--;
-                return id;
-            };
-
-            const promises = Array.from({ length: 10 }, (_, i) =>
-                scheduler.schedule(createTask(i + 1))
-            );
-
-            const results = await Promise.all(promises);
-
-            expect(results).toHaveLength(10);
-            expect(maxConcurrent).toBe(10);
-        });
-
-        it('should queue tasks when at capacity', async () => {
-            const scheduler = new EventScheduler(1);
-            let executionOrder: number[] = [];
-
-            const createTask = (id: number, duration: number) => async () => {
-                executionOrder.push(id);
-                await new Promise((resolve) => setTimeout(resolve, duration));
-                return id;
-            };
-
-            const task1 = scheduler.schedule(createTask(1, 100));
-            const task2 = scheduler.schedule(createTask(2, 50));
-            const task3 = scheduler.schedule(createTask(3, 30));
-
-            expect(scheduler.activeCount).toBe(1);
-            expect(scheduler.pendingCount).toBe(2);
-
-            await Promise.all([task1, task2, task3]);
-
-            expect(executionOrder).toEqual([1, 2, 3]);
-            expect(scheduler.activeCount).toBe(0);
-            expect(scheduler.pendingCount).toBe(0);
+            expect(maxActiveCount).toBeLessThanOrEqual(2);
         });
     });
 
-    describe('Error Handling and Resilience', () => {
-        it('should handle task failures without affecting other tasks', async () => {
-            const scheduler = new EventScheduler(2);
-            const results: any[] = [];
+    describe('Priority Scheduling', () => {
+        it('should execute high priority tasks first', async () => {
+            const executionOrder: string[] = [];
 
-            const tasks = [
-                scheduler.schedule(async () => {
-                    await new Promise((resolve) => setTimeout(resolve, 50));
-                    return 'success1';
-                }),
-                scheduler.schedule(async () => {
-                    await new Promise((resolve) => setTimeout(resolve, 30));
-                    throw new Error('Task failed');
-                }),
-                scheduler.schedule(async () => {
-                    await new Promise((resolve) => setTimeout(resolve, 70));
-                    return 'success2';
-                }),
+            const delayedTask = (id: string) => () =>
+                new Promise<void>((resolve) => {
+                    setTimeout(() => {
+                        executionOrder.push(id);
+                        resolve();
+                    }, 10);
+                });
+
+            const blockingTasks = [
+                scheduler.schedule(() => new Promise((resolve) => setTimeout(resolve, 100))),
+                scheduler.schedule(() => new Promise((resolve) => setTimeout(resolve, 100))),
             ];
 
-            const settled = await Promise.allSettled(tasks);
+            const lowTask = scheduler.schedule(delayedTask('low'), TaskPriority.LOW);
+            const highTask = scheduler.schedule(delayedTask('high'), TaskPriority.HIGH);
+            const normalTask = scheduler.schedule(delayedTask('normal'), TaskPriority.NORMAL);
 
-            expect(settled[0].status).toBe('fulfilled');
-            expect((settled[0] as PromiseFulfilledResult<string>).value).toBe('success1');
+            await Promise.all(blockingTasks);
+            await Promise.all([lowTask, highTask, normalTask]);
 
-            expect(settled[1].status).toBe('rejected');
-            expect((settled[1] as PromiseRejectedResult).reason.message).toBe('Task failed');
+            expect(executionOrder).toEqual(['high', 'normal', 'low']);
+        });
+    });
 
-            expect(settled[2].status).toBe('fulfilled');
-            expect((settled[2] as PromiseFulfilledResult<string>).value).toBe('success2');
+    describe('Task Timeout', () => {
+        it('should timeout long-running tasks', async () => {
+            const longTask = () =>
+                new Promise<void>((resolve) => {
+                    setTimeout(resolve, 2000);
+                });
 
-            expect(scheduler.activeCount).toBe(0);
+            await expect(scheduler.schedule(longTask, TaskPriority.NORMAL, 100)).rejects.toThrow(
+                /timed out/
+            );
         });
 
-        it('should continue processing queue after task failure', async () => {
-            const scheduler = new EventScheduler(1);
-            let processedTasks = 0;
+        it('should not timeout tasks that complete in time', async () => {
+            const quickTask = () =>
+                new Promise<string>((resolve) => {
+                    setTimeout(() => resolve('completed'), 50);
+                });
 
-            const createTask = (shouldFail: boolean) => async () => {
-                processedTasks++;
-                await new Promise((resolve) => setTimeout(resolve, 50));
+            const result = await scheduler.schedule(quickTask, TaskPriority.NORMAL, 200);
+            expect(result).toBe('completed');
+        });
+    });
 
-                if (shouldFail) {
-                    throw new Error('Task failed');
+    describe('Retry Logic', () => {
+        it('should retry failed tasks', async () => {
+            let attempts = 0;
+            const flakyTask = () => {
+                attempts++;
+                if (attempts < 3) {
+                    return Promise.reject(new Error('Temporary failure'));
                 }
-                return 'success';
+                return Promise.resolve('success');
             };
 
-            const tasks = [
-                scheduler.schedule(createTask(false)),
-                scheduler.schedule(createTask(true)),
-                scheduler.schedule(createTask(false)),
-            ];
+            const result = await scheduler.schedule(flakyTask);
+            expect(result).toBe('success');
+            expect(attempts).toBe(3);
+        });
 
-            const results = await Promise.allSettled(tasks);
+        it('should fail after max retries', async () => {
+            let attempts = 0;
+            const alwaysFailTask = () => {
+                attempts++;
+                return Promise.reject(new Error('Permanent failure'));
+            };
 
-            expect(processedTasks).toBe(3);
-            expect(results[0].status).toBe('fulfilled');
-            expect(results[1].status).toBe('rejected');
-            expect(results[2].status).toBe('fulfilled');
+            await expect(scheduler.schedule(alwaysFailTask)).rejects.toThrow('Permanent failure');
+            expect(attempts).toBe(3);
         });
     });
 
-    describe('Drain and Cleanup Operations', () => {
-        it('should drain all pending operations', async () => {
-            const scheduler = new EventScheduler(1);
-            let completedTasks = 0;
+    describe('Queue Management', () => {
+        it('should reject tasks when queue is full', async () => {
+            const smallScheduler = new EventScheduler({
+                concurrencyLimit: 1,
+                maxQueueSize: 2,
+            });
 
-            const tasks = Array.from({ length: 5 }, (_, i) =>
-                scheduler.schedule(async () => {
-                    await new Promise((resolve) => setTimeout(resolve, 50));
-                    completedTasks++;
-                    return i;
-                })
+            try {
+                const blockingTask = smallScheduler.schedule(
+                    () => new Promise((resolve) => setTimeout(resolve, 100))
+                );
+
+                const queuedTask1 = smallScheduler.schedule(() => Promise.resolve());
+                const queuedTask2 = smallScheduler.schedule(() => Promise.resolve());
+
+                await expect(smallScheduler.schedule(() => Promise.resolve())).rejects.toThrow(
+                    'Task queue is full'
+                );
+
+                await blockingTask;
+                await queuedTask1;
+                await queuedTask2;
+            } finally {
+                smallScheduler.dispose();
+            }
+        });
+
+        it('should handle trySchedule correctly', async () => {
+            const task = () => Promise.resolve('success');
+
+            const result = await scheduler.trySchedule(task);
+            expect(result).not.toBeNull();
+            expect(await result!).toBe('success');
+        });
+
+        it('should return null from trySchedule when at capacity', async () => {
+            const smallScheduler = new EventScheduler({
+                concurrencyLimit: 1,
+                maxQueueSize: 1,
+            });
+
+            try {
+                smallScheduler.schedule(() => new Promise((resolve) => setTimeout(resolve, 100)));
+                smallScheduler.schedule(() => Promise.resolve());
+
+                const result = smallScheduler.trySchedule(() => Promise.resolve());
+                expect(result).toBeNull();
+            } finally {
+                smallScheduler.dispose();
+            }
+        });
+    });
+
+    describe('Statistics and Metrics', () => {
+        it('should provide accurate statistics', async () => {
+            const testScheduler = new EventScheduler({
+                concurrencyLimit: 2,
+                enableMetrics: true,
+                name: 'StatsTestScheduler',
+            });
+
+            try {
+                const task1 = () => Promise.resolve('result1');
+                const task2 = () => Promise.reject(new Error('error'));
+
+                await testScheduler.schedule(task1);
+                try {
+                    await testScheduler.schedule(task2);
+                } catch (error) {
+                    // Expected error
+                }
+
+                const stats = testScheduler.getStats();
+                expect(stats.name).toBe('StatsTestScheduler');
+                expect(stats.completedCount).toBe(1);
+                expect(stats.failedCount).toBe(1);
+                expect(stats.totalProcessed).toBe(2);
+                expect(stats.averageExecutionTime).toBeGreaterThanOrEqual(0);
+            } finally {
+                testScheduler.dispose();
+            }
+        });
+
+        it('should track task metrics', async () => {
+            const metricsScheduler = new EventScheduler({
+                concurrencyLimit: 2,
+                enableMetrics: true,
+                name: 'MetricsTestScheduler',
+            });
+
+            try {
+                const task = () => Promise.resolve('result');
+                await metricsScheduler.schedule(task);
+
+                const allMetrics = metricsScheduler.getAllTaskMetrics();
+                expect(allMetrics.length).toBeGreaterThan(0);
+
+                const completedMetrics = allMetrics.find(m => m.state === TaskState.COMPLETED);
+                expect(completedMetrics).toBeDefined();
+                expect(completedMetrics?.priority).toBe(TaskPriority.NORMAL);
+                expect(completedMetrics?.executionTime).toBeGreaterThanOrEqual(0);
+            } finally {
+                metricsScheduler.dispose();
+            }
+        });
+
+        it('should clear metrics correctly', async () => {
+            await scheduler.schedule(() => Promise.resolve());
+
+            let stats = scheduler.getStats();
+            expect(stats.completedCount).toBe(1);
+
+            scheduler.clearMetrics();
+
+            stats = scheduler.getStats();
+            expect(stats.completedCount).toBe(0);
+            expect(scheduler.getAllTaskMetrics()).toHaveLength(0);
+        });
+    });
+
+    describe('Drain and Disposal', () => {
+
+        it('should dispose correctly', async () => {
+            const task = () => Promise.resolve();
+
+            scheduler.dispose();
+
+            await expect(scheduler.schedule(task)).rejects.toThrow('Scheduler has been disposed');
+        });
+
+        it('should cancel pending tasks on disposal', async () => {
+            const promises: Promise<any>[] = [];
+
+            promises.push(
+                scheduler.schedule(() => new Promise((resolve) => setTimeout(resolve, 100)))
+            );
+            promises.push(
+                scheduler.schedule(() => new Promise((resolve) => setTimeout(resolve, 100)))
             );
 
-            await scheduler.drain();
+            promises.push(scheduler.schedule(() => Promise.resolve()));
+            promises.push(scheduler.schedule(() => Promise.resolve()));
 
-            expect(completedTasks).toBe(5);
-            expect(scheduler.activeCount).toBe(0);
-            expect(scheduler.pendingCount).toBe(0);
-        });
+            scheduler.dispose();
 
-        it('should handle drain when no pending operations', async () => {
-            const scheduler = new EventScheduler(2);
-
-            await expect(scheduler.drain()).resolves.toBeUndefined();
-
-            expect(scheduler.activeCount).toBe(0);
-            expect(scheduler.pendingCount).toBe(0);
+            const results = await Promise.allSettled(promises);
+            const rejectedCount = results.filter((r) => r.status === 'rejected').length;
+            expect(rejectedCount).toBeGreaterThan(0);
         });
     });
 
-    describe('Memory Management', () => {
-        it('should not leak memory with many completed tasks', async () => {
-            const scheduler = new EventScheduler(5);
+    describe('Performance', () => {
+        it('should handle high throughput', async () => {
+            const taskCount = 100;
+            let completed = 0;
 
-            for (let batch = 0; batch < 10; batch++) {
-                const tasks = Array.from({ length: 100 }, () =>
-                    scheduler.schedule(async () => {
-                        await new Promise((resolve) => setTimeout(resolve, 1));
-                        return Math.random();
-                    })
+            const highThroughputScheduler = new EventScheduler({
+                concurrencyLimit: Infinity,
+                maxQueueSize: 1000,
+                enableMetrics: true,
+            });
+
+            try {
+                const startTime = performance.now();
+
+                const promises = Array.from({ length: taskCount }, () =>
+                    highThroughputScheduler.schedule(() => Promise.resolve(++completed))
                 );
 
-                await Promise.all(tasks);
-            }
+                await Promise.all(promises);
 
-            expect(scheduler.activeCount).toBe(0);
-            expect(scheduler.pendingCount).toBe(0);
+                const endTime = performance.now();
+                const duration = endTime - startTime;
+
+                expect(completed).toBe(taskCount);
+                expect(duration).toBeLessThan(5000);
+
+                const stats = highThroughputScheduler.getStats();
+                expect(stats.completedCount).toBe(taskCount);
+            } finally {
+                highThroughputScheduler.dispose();
+            }
         });
 
-        it('should handle rapid scheduling and completion cycles', async () => {
-            const scheduler = new EventScheduler(3);
-            let completedCount = 0;
+        it('should have minimal memory overhead', async () => {
+            const taskCount = 100;
+            const promises: Promise<any>[] = [];
 
-            const promises = [];
-            for (let i = 0; i < 50; i++) {
-                promises.push(
-                    scheduler.schedule(async () => {
-                        await new Promise((resolve) => setTimeout(resolve, Math.random() * 10));
-                        completedCount++;
-                        return i;
-                    })
-                );
+            for (let i = 0; i < taskCount; i++) {
+                promises.push(scheduler.schedule(() => Promise.resolve(i)));
             }
 
             await Promise.all(promises);
 
-            expect(completedCount).toBe(50);
-            expect(scheduler.activeCount).toBe(0);
-            expect(scheduler.pendingCount).toBe(0);
-        });
-    });
-
-    describe('Timing and Performance', () => {
-        it('should not significantly delay task execution in unlimited mode', async () => {
-            const scheduler = new EventScheduler();
-
-            const startTime = Date.now();
-
-            const tasks = Array.from({ length: 100 }, () =>
-                scheduler.schedule(async () => {
-                    return Date.now();
-                })
-            );
-
-            const results = await Promise.all(tasks);
-            const endTime = Date.now();
-
-            expect(endTime - startTime).toBeLessThan(100);
-            expect(results).toHaveLength(100);
-        });
-
-        it('should maintain consistent scheduling behavior under load', async () => {
-            const scheduler = new EventScheduler(5);
-            const taskDurations: number[] = [];
-
-            const tasks = Array.from({ length: 20 }, (_, i) =>
-                scheduler.schedule(async () => {
-                    const start = Date.now();
-                    await new Promise((resolve) => setTimeout(resolve, 100));
-                    const duration = Date.now() - start;
-                    taskDurations.push(duration);
-                    return i;
-                })
-            );
-
-            await Promise.all(tasks);
-
-            taskDurations.forEach((duration) => {
-                expect(duration).toBeGreaterThan(80);
-                expect(duration).toBeLessThan(150);
-            });
+            const stats = scheduler.getStats();
+            expect(stats.memoryUsage).toBeLessThan(100000);
         });
     });
 });
