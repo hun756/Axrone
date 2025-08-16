@@ -67,6 +67,7 @@ interface ITask<T = unknown> {
     readonly maxRetries: number;
     startedAt?: number;
     timeoutId?: ReturnType<typeof setTimeout>;
+    promise?: Promise<T>;
 }
 
 interface IPriorityBucket<T> {
@@ -217,39 +218,51 @@ export class EventScheduler {
             return Promise.reject(new Error(`Task queue is full (${this.maxQueueSize})`));
         }
 
-        return new Promise<T>((resolve, reject) => {
-            const taskId = this.generateTaskId();
-            const now = performance.now();
+        let _resolve!: (value: T) => void;
+        let _reject!: (error: Error) => void;
 
-            const task: ITask<T> = {
-                id: taskId,
-                fn,
-                priority,
-                resolve,
-                reject,
-                queuedAt: now,
-                timeout: timeout ?? this.taskTimeout,
-                retryCount: 0,
-                maxRetries: this.enableRetries ? this.maxRetries : 0,
-            };
-
-            if (this.enableMetrics) {
-                this.taskMetrics.set(taskId, {
-                    id: taskId,
-                    priority,
-                    state: TaskState.PENDING,
-                    queuedAt: now,
-                    retryCount: 0,
-                });
-            }
-
-            if (!this.taskQueue.enqueue(task, priority)) {
-                reject(new Error('Failed to enqueue task'));
-                return;
-            }
-
-            this.processQueue();
+        const promise: Promise<T> = new Promise<T>((res, rej) => {
+            _resolve = res;
+            _reject = rej;
         });
+
+        const taskId = this.generateTaskId();
+        const now = performance.now();
+
+        const task: ITask<T> = {
+            id: taskId,
+            fn,
+            priority,
+            resolve: _resolve,
+            reject: _reject,
+            queuedAt: now,
+            timeout: timeout ?? this.taskTimeout,
+            retryCount: 0,
+            maxRetries: this.enableRetries ? this.maxRetries : 0,
+        };
+
+        (task as any).promise = promise;
+
+        promise.catch(() => {});
+
+        if (this.enableMetrics) {
+            this.taskMetrics.set(taskId, {
+                id: taskId,
+                priority,
+                state: TaskState.PENDING,
+                queuedAt: now,
+                retryCount: 0,
+            });
+        }
+
+        if (!this.taskQueue.enqueue(task, priority)) {
+            _reject(new Error('Failed to enqueue task'));
+            return promise;
+        }
+
+        this.processQueue();
+
+        return promise;
     }
 
     trySchedule<T>(
