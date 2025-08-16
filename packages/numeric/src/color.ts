@@ -82,12 +82,14 @@ export enum ColorComparisonMode {
     ALPHA,
 }
 
+import { clamp, clamp01 } from './clamp';
+
 const _clamp = (value: number, min: number = 0, max: number = 1): number => {
-    return Math.max(min, Math.min(max, value));
+    return clamp(value, min, max);
 };
 
 const _clampColor = (value: number): number => {
-    return Math.max(0, Math.min(1, value));
+    return clamp01(value);
 };
 
 const _mod = (n: number, m: number): number => {

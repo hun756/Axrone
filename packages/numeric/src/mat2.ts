@@ -1,6 +1,7 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON, HALF_PI, PI_2 } from './common';
 import { IVec2Like } from './vec2';
+import { clamp01 } from './clamp';
 
 declare const __matrix2Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
@@ -339,7 +340,7 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         U extends IMat2Like,
         V extends IMat2Like | undefined = undefined,
     >(a: Readonly<T>, b: Readonly<U>, t: number, out?: V): MatrixOperationReturnType<V, T> {
-        const t1 = Math.max(0, Math.min(1, t));
+        const t1 = clamp01(t);
 
         if (out) {
             const outData = asMutableMatrix2Data((out as IMutableMat2).data);

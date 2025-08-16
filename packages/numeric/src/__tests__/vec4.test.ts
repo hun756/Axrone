@@ -1,5 +1,6 @@
 import { Vec4, Vec4ComparisonMode, Vec4Comparer, Vec4EqualityComparer, IVec4Like } from '../vec4';
 import { EPSILON } from '../common';
+import { clamp01 } from '../clamp';
 
 const CUSTOM_EPSILON = 1e-10;
 const LARGE_NUMBER = 1e6;
@@ -783,8 +784,14 @@ describe('Vec4 Unit Tests', () => {
             expectNumberClose(means.z, 0, 0.25);
             expectNumberClose(means.w, 0, 0.25);
 
-            const uniqueVectors = new Set(samples.slice(0, 100).map(v => 
-                `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)},${v.w.toFixed(3)}`));
+            const uniqueVectors = new Set(
+                samples
+                    .slice(0, 100)
+                    .map(
+                        (v) =>
+                            `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)},${v.w.toFixed(3)}`
+                    )
+            );
             expect(uniqueVectors.size).toBeGreaterThan(50);
         });
 
@@ -1098,10 +1105,10 @@ describe('Vec4 Unit Tests', () => {
 
             const blended = Vec4.lerp(color1, color2, 0.5);
 
-            blended.x = Math.max(0, Math.min(1, blended.x));
-            blended.y = Math.max(0, Math.min(1, blended.y));
-            blended.z = Math.max(0, Math.min(1, blended.z));
-            blended.w = Math.max(0, Math.min(1, blended.w));
+            blended.x = clamp01(blended.x);
+            blended.y = clamp01(blended.y);
+            blended.z = clamp01(blended.z);
+            blended.w = clamp01(blended.w);
 
             expect(blended.x).toBeGreaterThanOrEqual(0);
             expect(blended.x).toBeLessThanOrEqual(1);
