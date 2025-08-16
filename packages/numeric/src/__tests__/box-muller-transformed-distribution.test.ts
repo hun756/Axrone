@@ -1,7 +1,7 @@
+import { DistributionSample } from 'packages/core/src/random';
 import {
     TransformedDistribution,
     BoxMullerNormalDistribution,
-    DistributionSample,
     validatePositive,
     validateInteger,
 } from '../box-muller';
