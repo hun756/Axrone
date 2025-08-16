@@ -385,6 +385,11 @@ export class ByteBuffer implements IByteBuffer {
         return this.asReadOnlyBuffer();
     }
 
+    toUint8Array(): Uint8Array {
+        this.checkState();
+        return new Uint8Array(this.buffer, this.pos, this.limitPos - this.pos);
+    }
+
     align(alignment: number): this {
         this.checkState();
         if (alignment <= 0 || (alignment & (alignment - 1)) !== 0) {
