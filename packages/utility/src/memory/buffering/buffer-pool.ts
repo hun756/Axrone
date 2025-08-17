@@ -59,6 +59,7 @@ export class BufferPool {
     private readonly pools: Map<number, ObjectPool<PoolableArrayBuffer>>;
     private readonly options: Required<BufferPoolOptions>;
     private readonly bucketSizes: number[];
+    private readonly bufferToPoolMap: WeakMap<ArrayBuffer, PoolableArrayBuffer>;
 
     private constructor(options: BufferPoolOptions = {}) {
         this.options = {
@@ -85,6 +86,7 @@ export class BufferPool {
             Math.pow(2, 5 + i)
         );
         this.pools = new Map();
+        this.bufferToPoolMap = new WeakMap();
 
         this.initializePools();
     }
@@ -140,14 +142,17 @@ export class BufferPool {
                 },
 
                 onAcquireHandler: (buffer: PoolableArrayBuffer) => {
+                    this.bufferToPoolMap.set(buffer.buffer, buffer);
                     this.options.onAcquire(buffer.buffer);
                 },
 
                 onReleaseHandler: (buffer: PoolableArrayBuffer) => {
+                    this.bufferToPoolMap.delete(buffer.buffer);
                     this.options.onRelease(buffer.buffer);
                 },
 
                 onEvictHandler: (buffer: PoolableArrayBuffer) => {
+                    this.bufferToPoolMap.delete(buffer.buffer);
                     this.options.onEvict(buffer.buffer);
                 },
 
@@ -193,8 +198,6 @@ export class BufferPool {
             }
         }
 
-        this.options.onAcquire(buffer);
-
         return buffer;
     }
 
@@ -209,7 +212,6 @@ export class BufferPool {
 
         if (!pool) {
             const buffer = new ArrayBuffer(actualSize);
-            this.options.onAcquire(buffer);
             return buffer;
         }
 
@@ -217,7 +219,6 @@ export class BufferPool {
             const poolableBuffer = pool.tryAcquire();
             if (poolableBuffer) {
                 const buffer = poolableBuffer.buffer;
-                this.options.onAcquire(buffer);
                 return buffer;
             } else {
                 return null;
@@ -232,7 +233,11 @@ export class BufferPool {
             return;
         }
 
-        this.options.onRelease(buffer);
+        const poolableBuffer = this.bufferToPoolMap.get(buffer);
+        if (!poolableBuffer) {
+            // Buffer wasn't from pool, just ignore
+            return;
+        }
 
         const bucketIndex = this.getBucketIndexForExactSize(buffer.byteLength);
         const pool = this.pools.get(bucketIndex);
@@ -242,7 +247,6 @@ export class BufferPool {
         }
 
         try {
-            const poolableBuffer = new PoolableArrayBuffer(buffer, buffer.byteLength);
             pool.release(poolableBuffer);
         } catch (error) {
             console.warn(`Failed to release buffer to pool:`, error);
