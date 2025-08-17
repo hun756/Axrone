@@ -76,7 +76,7 @@ describe('Validation Utilities', () => {
         test('should not throw for positive numbers', () => {
             expect(() => validatePositive(10, 'testValue')).not.toThrow();
             expect(() => validatePositive(0.0001, 'testValue')).not.toThrow();
-            expect(() => validatePositive(Infinity, 'testValue')).not.toThrow(); // Pozitif sonsuz geçerli kabul ediliyor
+            expect(() => validatePositive(Infinity, 'testValue')).not.toThrow();
         });
 
         test('should throw INVALID_PARAMETER error for zero or negative numbers', () => {

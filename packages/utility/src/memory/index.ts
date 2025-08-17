@@ -1,2 +1,2 @@
 export * from "./pool";
-export * from "./priority-queue";
+export * from "./containers/queue/priority-queue";

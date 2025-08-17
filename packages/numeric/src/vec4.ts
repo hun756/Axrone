@@ -1,5 +1,6 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON, HALF_PI, PI_2 } from './common';
+import { clampNegOneOne, clamp01 } from './clamp';
 import {
     sampleStandardNormal,
     sampleNormalInRange,
@@ -457,7 +458,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         }
 
         const cosTheta = dotProduct / (lengthA * lengthB);
-        return Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+        return Math.acos(clampNegOneOne(cosTheta));
     }
 
     static angle2Deg<T extends IVec4Like, U extends IVec4Like>(
@@ -600,7 +601,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         t: number,
         out?: V
     ): V {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         if (out) {
             out.x = a.x + (b.x - a.x) * t1;
             out.y = a.y + (b.y - a.y) * t1;
@@ -645,7 +646,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         t: number,
         out?: V
     ): V {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
 
         const dotProduct = Vec4.dot(a, b);
         const lenA = Vec4.len(a);
@@ -656,7 +657,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         }
 
         const cosTheta = dotProduct / (lenA * lenB);
-        const theta = Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+        const theta = Math.acos(clampNegOneOne(cosTheta));
 
         if (Math.abs(theta) < EPSILON) {
             return Vec4.lerp(a, b, t1, out);
@@ -688,7 +689,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         t: number,
         out?: V
     ): V {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         const t2 = t1 * t1 * (3 - 2 * t1);
         if (out) {
             out.x = a.x + (b.x - a.x) * t2;
@@ -712,7 +713,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         t: number,
         out?: V
     ): V {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         const t2 = t1 * t1 * t1 * (10 - 15 * t1 + 6 * t1 * t1);
         if (out) {
             out.x = a.x + (b.x - a.x) * t2;
@@ -737,7 +738,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         W extends IVec4Like,
         O extends IVec4Like,
     >(a: Readonly<T>, c1: Readonly<U>, c2: Readonly<V>, b: Readonly<W>, t: number, out?: O): O {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         const oneMinusT = 1 - t1;
         const oneMinusT2 = oneMinusT * oneMinusT;
         const t2 = t1 * t1;
@@ -770,7 +771,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         W extends IVec4Like,
         O extends IVec4Like,
     >(p0: Readonly<T>, m0: Readonly<U>, p1: Readonly<V>, m1: Readonly<W>, t: number, out?: O): O {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         const t2 = t1 * t1;
         const t3 = t2 * t1;
 
@@ -810,7 +811,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         tension: number = 0.5,
         out?: O
     ): O {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
 
         if (!out) {
             out = { x: 0, y: 0, z: 0, w: 0 } as O;
@@ -1235,7 +1236,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         }
 
         const cosTheta = dotProduct / (lengthA * lengthB);
-        return Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+        return Math.acos(clampNegOneOne(cosTheta));
     }
 
     angle2Deg<T extends IVec4Like>(other: Readonly<T>): number {

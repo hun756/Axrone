@@ -1,23 +1,17 @@
-// https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform
-
 import type {
-    IRandomEngine,
-    IRandomAPI,
-    IRandomGenerator,
     IDistribution,
     DistributionSample,
     RandomEngineType,
     SeedSource,
     IRandomState,
     RandomResult,
-} from '@axrone/core';
+} from '../../core/src/random/';
 
 import {
     Random,
     rand,
     NormalDistribution as CoreNormalDistribution,
-    createEngineFactory,
-} from '@axrone/core';
+} from '../../core/src/random/';
 
 export type BoxMullerOptions = {
     readonly mean?: number;
@@ -28,9 +22,6 @@ export type BoxMullerOptions = {
     readonly engineType?: RandomEngineType;
     readonly seed?: SeedSource;
 };
-
-// Re-export core types for better compatibility
-export type { IDistribution, DistributionSample, IRandomState, RandomResult };
 
 export class BoxMullerNormalDistribution implements IDistribution<number> {
     constructor(

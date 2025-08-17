@@ -5,6 +5,7 @@ import { TypedArrayConstructor } from 'packages/utility/src/types';
 
 export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
     protected _valuesStartRepeat: T | null = null;
+    protected _twoValueBuffer: [number, number] = [0, 0];
 
     constructor(object: T, config?: TweenConfig<T>) {
         super(object, config);
@@ -103,10 +104,12 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
                 this._interpolationFunction !== Interpolation.Linear &&
                 start.length > 1
             ) {
+                const buf = this._twoValueBuffer;
                 for (let i = 0; i < object.length; i++) {
                     if (i < start.length && i < end.length) {
-                        const values = [start[i], end[i]];
-                        object[i] = this._interpolationFunction(values, progress);
+                        buf[0] = start[i];
+                        buf[1] = end[i];
+                        object[i] = this._interpolationFunction(buf, progress);
                     }
                 }
             } else {

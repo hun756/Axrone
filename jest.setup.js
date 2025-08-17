@@ -1,5 +1,11 @@
 require('jest-canvas-mock');
 
+// TextEncoder/TextDecoder polyfills for Node.js environment
+const { TextEncoder, TextDecoder } = require('util');
+
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
+
 const mockWebGLRenderingContext = {
     canvas: document.createElement('canvas'),
     drawingBufferWidth: 800,

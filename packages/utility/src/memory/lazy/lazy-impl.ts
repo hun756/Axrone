@@ -136,44 +136,6 @@ export class LazyImpl<T> implements ILazy<T> {
     toAsync(): ILazyAsync<T> {
         return new LazyAsyncImpl(() => Promise.resolve(this.getValue()));
     }
-
-    Map<U>(selector: (value: T) => U): ILazy<U> {
-        return this.map(selector);
-    }
-
-    FlatMap<U>(selector: (value: T) => ILazy<U>): ILazy<U> {
-        return this.flatMap(selector);
-    }
-
-    Filter<U extends T>(predicate: (value: T) => value is U): ILazy<U>;
-    Filter(predicate: (value: T) => boolean): ILazy<T>;
-    Filter(predicate: (value: T) => boolean): ILazy<T> {
-        return this.filter(predicate);
-    }
-
-    OrElse(fallback: () => T): ILazy<T> {
-        return this.orElse(fallback);
-    }
-
-    Catch<U = T>(handler: (error: Error) => U): ILazy<T | U> {
-        return this.catch(handler);
-    }
-
-    Tap(effect: (value: T) => void): ILazy<T> {
-        return this.tap(effect);
-    }
-
-    Force(): T {
-        return this.force();
-    }
-
-    Reset(): ILazy<T> {
-        return this.reset();
-    }
-
-    ToAsync(): ILazyAsync<T> {
-        return this.toAsync();
-    }
 }
 
 export class LazyAsyncImpl<T> implements ILazyAsync<T> {
@@ -341,63 +303,5 @@ export class LazyAsyncImpl<T> implements ILazyAsync<T> {
 
     toLazy(): ILazy<Promise<T>> {
         return new LazyImpl(() => this.getValue());
-    }
-
-    Map<U>(selector: (value: T) => U): ILazyAsync<U> {
-        return this.map(selector);
-    }
-
-    MapAsync<U>(selector: (value: T) => Promise<U>): ILazyAsync<U> {
-        return this.mapAsync(selector);
-    }
-
-    FlatMap<U>(selector: (value: T) => ILazyAsync<U>): ILazyAsync<U> {
-        return this.flatMap(selector);
-    }
-
-    Filter<U extends T>(predicate: (value: T) => value is U): ILazyAsync<U>;
-    Filter(predicate: (value: T) => boolean): ILazyAsync<T>;
-    Filter(predicate: (value: T) => boolean): ILazyAsync<T> {
-        return this.filter(predicate);
-    }
-
-    OrElse(fallback: () => Promise<T>): ILazyAsync<T> {
-        return this.orElse(fallback);
-    }
-
-    Catch<U = T>(handler: (error: Error) => U): ILazyAsync<T | U> {
-        return this.catch(handler);
-    }
-
-    CatchAsync<U = T>(handler: (error: Error) => Promise<U>): ILazyAsync<T | U> {
-        return this.catchAsync(handler);
-    }
-
-    Tap(effect: (value: T) => void): ILazyAsync<T> {
-        return this.tap(effect);
-    }
-
-    TapAsync(effect: (value: T) => Promise<void>): ILazyAsync<T> {
-        return this.tapAsync(effect);
-    }
-
-    Timeout(milliseconds: number): ILazyAsync<T> {
-        return this.timeout(milliseconds);
-    }
-
-    Retry(maxAttempts: number, delay?: number): ILazyAsync<T> {
-        return this.retry(maxAttempts, delay);
-    }
-
-    Force(): Promise<T> {
-        return this.force();
-    }
-
-    Reset(): ILazyAsync<T> {
-        return this.reset();
-    }
-
-    ToLazy(): ILazy<Promise<T>> {
-        return this.toLazy();
     }
 }

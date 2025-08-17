@@ -7,6 +7,7 @@ import { TypedArrayConstructor } from 'packages/utility/src/types';
 export class ObjectTween<T extends object> extends TweenCore<T> {
     protected _valuesStartRepeat: DeepPartial<T> | null = null;
     protected _objectProps = new Set<string>();
+    protected _propPathCache: Map<string, string[]> = new Map();
 
     constructor(object: T, config?: TweenConfig<T>) {
         super(object, config);
@@ -67,17 +68,20 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
                 this._collectProps(value, propPath, props);
             } else {
                 props.add(propPath);
+                if (!this._propPathCache.has(propPath)) {
+                    this._propPathCache.set(propPath, propPath.split('.'));
+                }
             }
         }
     }
 
     protected _getPropValue(obj: any, path: string): any {
         if (!obj) return undefined;
-
-        const parts = path.split('.');
+        const parts = this._propPathCache.get(path) ?? path.split('.');
         let current = obj;
 
-        for (const part of parts) {
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
             if (current === undefined || current === null) return undefined;
             current = current[part];
         }
@@ -88,7 +92,7 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
     protected _setPropValue(obj: any, path: string, value: any): void {
         if (!obj) return;
 
-        const parts = path.split('.');
+        const parts = this._propPathCache.get(path) ?? path.split('.');
         let current = obj;
 
         for (let i = 0; i < parts.length - 1; i++) {
@@ -102,7 +106,16 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
         }
 
         const lastPart = parts[parts.length - 1];
-        current[lastPart] = value;
+        const existing = current[lastPart];
+        if (
+            ArrayBuffer.isView(existing) &&
+            ArrayBuffer.isView(value) &&
+            (existing as any).length === (value as any).length
+        ) {
+            (existing as any).set(value as any);
+        } else {
+            current[lastPart] = value;
+        }
     }
 
     protected _updateProperties(progress: number): void {
@@ -116,46 +129,77 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
                 (Array.isArray(end) && Array.isArray(start)) ||
                 (ArrayBuffer.isView(end) && ArrayBuffer.isView(start))
             ) {
+                const len = (end as any).length as number;
+
+                const existing = this._getPropValue(this._object, prop);
+
                 if (
                     this._interpolationFunction &&
                     this._interpolationFunction !== Interpolation.Linear &&
-                    (end as ArrayLike<number>).length > 1
+                    len > 1
                 ) {
-                    const result: number[] = [];
-                    for (let i = 0; i < (end as ArrayLike<number>).length; i++) {
-                        const startVal =
-                            i < (start as ArrayLike<number>).length
-                                ? (start as ArrayLike<number>)[i]
-                                : 0;
-                        const values = [startVal, (end as ArrayLike<number>)[i]];
-                        const interpolatedValue = this._interpolationFunction(values, progress);
-                        result[i] = interpolatedValue;
-                    }
+                    const buf: [number, number] = [0, 0];
 
-                    if (ArrayBuffer.isView(end)) {
-                        const constructor = (end as any).constructor as TypedArrayConstructor;
-                        const typedResult = new constructor(result as any);
-                        this._setPropValue(this._object, prop, typedResult);
+                    if (
+                        ArrayBuffer.isView(end) &&
+                        ArrayBuffer.isView(start) &&
+                        ArrayBuffer.isView(existing) &&
+                        (existing as any).length === len
+                    ) {
+                        const typedExisting = existing as any;
+                        for (let i = 0; i < len; i++) {
+                            const s = i < (start as any).length ? (start as any)[i] : 0;
+                            buf[0] = s;
+                            buf[1] = (end as any)[i];
+                            typedExisting[i] = this._interpolationFunction(buf as any, progress);
+                        }
+                        this._setPropValue(this._object, prop, typedExisting);
                     } else {
-                        this._setPropValue(this._object, prop, result);
+                        const result: number[] = new Array(len);
+                        for (let i = 0; i < len; i++) {
+                            const s = i < (start as any).length ? (start as any)[i] : 0;
+                            buf[0] = s;
+                            buf[1] = (end as any)[i];
+                            result[i] = this._interpolationFunction(buf as any, progress);
+                        }
+
+                        if (ArrayBuffer.isView(end)) {
+                            const constructor = (end as any).constructor as TypedArrayConstructor;
+                            const typedResult = new constructor(result as any);
+                            this._setPropValue(this._object, prop, typedResult);
+                        } else {
+                            this._setPropValue(this._object, prop, result);
+                        }
                     }
                 } else {
-                    const result: number[] = [];
-                    for (let i = 0; i < (end as ArrayLike<number>).length; i++) {
-                        const startVal =
-                            i < (start as ArrayLike<number>).length
-                                ? (start as ArrayLike<number>)[i]
-                                : 0;
-                        result[i] =
-                            startVal + ((end as ArrayLike<number>)[i] - startVal) * progress;
-                    }
-
-                    if (ArrayBuffer.isView(end)) {
-                        const constructor = (end as any).constructor as TypedArrayConstructor;
-                        const typedResult = new constructor(result as any);
-                        this._setPropValue(this._object, prop, typedResult);
+                    if (
+                        ArrayBuffer.isView(end) &&
+                        ArrayBuffer.isView(start) &&
+                        ArrayBuffer.isView(existing) &&
+                        (existing as any).length === len
+                    ) {
+                        const typedExisting = existing as any;
+                        for (let i = 0; i < len; i++) {
+                            const s = i < (start as any).length ? (start as any)[i] : 0;
+                            const e = (end as any)[i];
+                            typedExisting[i] = s + (e - s) * progress;
+                        }
+                        this._setPropValue(this._object, prop, typedExisting);
                     } else {
-                        this._setPropValue(this._object, prop, result);
+                        const result: number[] = new Array(len);
+                        for (let i = 0; i < len; i++) {
+                            const s = i < (start as any).length ? (start as any)[i] : 0;
+                            const e = (end as any)[i];
+                            result[i] = s + (e - s) * progress;
+                        }
+
+                        if (ArrayBuffer.isView(end)) {
+                            const constructor = (end as any).constructor as TypedArrayConstructor;
+                            const typedResult = new constructor(result as any);
+                            this._setPropValue(this._object, prop, typedResult);
+                        } else {
+                            this._setPropValue(this._object, prop, result);
+                        }
                     }
                 }
             } else if (typeof end === 'number') {
@@ -178,7 +222,16 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
             for (const prop of this._objectProps) {
                 const startValue = this._getPropValue(this._valuesStart, prop);
                 if (startValue !== undefined) {
-                    this._setPropValue(this._object, prop, startValue);
+                    const existing = this._getPropValue(this._object, prop);
+                    if (
+                        ArrayBuffer.isView(existing) &&
+                        ArrayBuffer.isView(startValue) &&
+                        (existing as any).length === (startValue as any).length
+                    ) {
+                        (existing as any).set(startValue as any);
+                    } else {
+                        this._setPropValue(this._object, prop, startValue);
+                    }
                 }
             }
         }
