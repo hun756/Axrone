@@ -1,59 +1,87 @@
 import { BinaryHeapOperations, HeapIndex, QueueSize, Capacity, Comparator } from './types';
 import { DynamicArray } from './dynamic-array';
-import { getParentIndex, getLeftChildIndex, getRightChildIndex, hasParent, hasLeftChild, hasRightChild } from './utils';
 import { EmptyQueueError } from './errors';
 
 export class BinaryMinHeap<T> implements BinaryHeapOperations<T> {
     private storage: DynamicArray<T>;
     private compare: Comparator<T>;
+    private _size: number;
 
     constructor(comparator: Comparator<T>, initialCapacity?: Capacity) {
         this.compare = comparator;
-        this.storage = new DynamicArray<T>(initialCapacity ?? undefined as any);
+        this.storage = new DynamicArray<T>(initialCapacity);
+        this._size = 0;
     }
 
     get size(): QueueSize {
-        return this.storage.length as QueueSize;
+        return this._size as QueueSize;
     }
 
     get isEmpty(): boolean {
-        return (this.size as unknown as number) === 0;
+        return this._size === 0;
     }
 
     get capacity(): Capacity {
-        return this.storage.capacity as Capacity;
+        return this.storage.capacity;
     }
 
     insert(item: T): void {
         this.storage.push(item);
-        this.heapifyUp(createHeapIndex(this.size as unknown as number - 1));
+        this._size++;
+
+        let currentIndex = this._size - 1;
+
+        if (currentIndex > 0) {
+            let parentIndex = (currentIndex - 1) >>> 1;
+
+            while (
+                currentIndex > 0 &&
+                this.compare(item, this.storage.get(parentIndex as HeapIndex)) < 0
+            ) {
+                this.storage.set(
+                    currentIndex as HeapIndex,
+                    this.storage.get(parentIndex as HeapIndex)
+                );
+                currentIndex = parentIndex;
+                parentIndex = (currentIndex - 1) >>> 1;
+            }
+
+            this.storage.set(currentIndex as HeapIndex, item);
+        }
     }
 
     extract(): T {
-        if (this.isEmpty) {
+        if (this._size === 0) {
             throw new EmptyQueueError();
         }
 
-        const root = this.storage.get(createHeapIndex(0));
-        const lastItem = this.storage.pop();
+        const root = this.storage.get(0 as HeapIndex);
 
-        if (!this.isEmpty) {
-            this.storage.set(createHeapIndex(0), lastItem);
-            this.heapifyDown(createHeapIndex(0));
+        if (this._size === 1) {
+            this._size = 0;
+            this.storage.clear();
+            return root;
         }
+
+        const lastItem = this.storage.pop();
+        this._size--;
+        this.storage.set(0 as HeapIndex, lastItem);
+
+        this.siftDown(0, lastItem);
 
         return root;
     }
 
     peek(): T {
-        if (this.isEmpty) {
+        if (this._size === 0) {
             throw new EmptyQueueError();
         }
-        return this.storage.get(createHeapIndex(0));
+        return this.storage.get(0 as HeapIndex);
     }
 
     clear(): void {
         this.storage.clear();
+        this._size = 0;
     }
 
     ensureCapacity(capacity: Capacity): void {
@@ -65,8 +93,8 @@ export class BinaryMinHeap<T> implements BinaryHeapOperations<T> {
     }
 
     contains(item: T): boolean {
-        for (let i = 0; i < (this.size as unknown as number); i++) {
-            if (this.storage.get(createHeapIndex(i)) === item) {
+        for (let i = 0; i < this._size; i++) {
+            if (this.storage.get(i as HeapIndex) === item) {
                 return true;
             }
         }
@@ -77,49 +105,33 @@ export class BinaryMinHeap<T> implements BinaryHeapOperations<T> {
         return this.storage.slice();
     }
 
-    private heapifyUp(index: HeapIndex): void {
-        while (hasParent(index)) {
-            const parentIndex = getParentIndex(index);
+    private siftDown(startIndex: number, item: T): void {
+        let holeIndex = startIndex;
+        const halfSize = this._size >>> 1;
 
-            if (this.shouldSwap(index, parentIndex)) {
-                this.storage.swap(index, parentIndex);
-                index = parentIndex;
-            } else {
+        while (holeIndex < halfSize) {
+            let childIndex = (holeIndex << 1) + 1;
+            const rightChildIndex = childIndex + 1;
+
+            if (rightChildIndex < this._size) {
+                const leftChild = this.storage.get(childIndex as HeapIndex);
+                const rightChild = this.storage.get(rightChildIndex as HeapIndex);
+
+                if (this.compare(rightChild, leftChild) < 0) {
+                    childIndex = rightChildIndex;
+                }
+            }
+
+            const child = this.storage.get(childIndex as HeapIndex);
+
+            if (this.compare(item, child) <= 0) {
                 break;
             }
-        }
-    }
 
-    private heapifyDown(index: HeapIndex): void {
-        while (hasLeftChild(index, this.size as QueueSize)) {
-            const smallestChildIndex = this.getSmallestChildIndex(index);
-
-            if (this.shouldSwap(smallestChildIndex, index)) {
-                this.storage.swap(index, smallestChildIndex);
-                index = smallestChildIndex;
-            } else {
-                break;
-            }
-        }
-    }
-
-    private getSmallestChildIndex(index: HeapIndex): HeapIndex {
-        const leftChildIndex = getLeftChildIndex(index);
-
-        if (!hasRightChild(index, this.size as QueueSize)) {
-            return leftChildIndex;
+            this.storage.set(holeIndex as HeapIndex, child);
+            holeIndex = childIndex;
         }
 
-        const rightChildIndex = getRightChildIndex(index);
-
-        return this.shouldSwap(leftChildIndex, rightChildIndex) ? leftChildIndex : rightChildIndex;
+        this.storage.set(holeIndex as HeapIndex, item);
     }
-
-    private shouldSwap(childIndex: HeapIndex, parentIndex: HeapIndex): boolean {
-        return this.compare(this.storage.get(childIndex), this.storage.get(parentIndex)) < 0;
-    }
-}
-
-function createHeapIndex(value: number): HeapIndex {
-    return value as HeapIndex;
 }
