@@ -179,7 +179,7 @@ const createGLConstants = <T extends number>(
     });
 };
 
-class Buffer implements IBuffer {
+export class Buffer implements IBuffer {
     readonly #gl: WebGL2RenderingContext;
     readonly #id: WebGLBuffer;
     readonly #target: GLBufferTarget;
