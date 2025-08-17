@@ -82,13 +82,7 @@ export enum ColorComparisonMode {
     ALPHA,
 }
 
-const _clamp = (value: number, min: number = 0, max: number = 1): number => {
-    return Math.max(min, Math.min(max, value));
-};
-
-const _clampColor = (value: number): number => {
-    return Math.max(0, Math.min(1, value));
-};
+import { clamp, clamp01 } from './clamp';
 
 const _mod = (n: number, m: number): number => {
     return ((n % m) + m) % m;
@@ -128,10 +122,10 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         public b: number = 0,
         public a: number = 1
     ) {
-        this.r = _clampColor(r);
-        this.g = _clampColor(g);
-        this.b = _clampColor(b);
-        this.a = _clampColor(a);
+        this.r = clamp01(r);
+        this.g = clamp01(g);
+        this.b = clamp01(b);
+        this.a = clamp01(a);
     }
 
     static readonly TRANSPARENT: Readonly<Color> = Object.freeze(new Color(0, 0, 0, 0));
@@ -227,9 +221,9 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
 
     static fromHSL(h: number, s: number, l: number, a: number = 1): Color {
         h = _mod(h, 360);
-        s = _clampColor(s);
-        l = _clampColor(l);
-        a = _clampColor(a);
+        s = clamp01(s);
+        l = clamp01(l);
+        a = clamp01(a);
 
         if (s === 0) {
             return new Color(l, l, l, a);
@@ -248,9 +242,9 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
 
     static fromHSV(h: number, s: number, v: number, a: number = 1): Color {
         h = _mod(h, 360);
-        s = _clampColor(s);
-        v = _clampColor(v);
-        a = _clampColor(a);
+        s = clamp01(s);
+        v = clamp01(v);
+        a = clamp01(a);
 
         const c = v * s;
         const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
@@ -290,11 +284,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     }
 
     static fromCMYK(c: number, m: number, y: number, k: number, a: number = 1): Color {
-        c = _clampColor(c);
-        m = _clampColor(m);
-        y = _clampColor(y);
-        k = _clampColor(k);
-        a = _clampColor(a);
+        c = clamp01(c);
+        m = clamp01(m);
+        y = clamp01(y);
+        k = clamp01(k);
+        a = clamp01(a);
 
         const invK = 1 - k;
         const r = (1 - c) * invK;
@@ -329,11 +323,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         g = _linearToSRGB(g);
         b = _linearToSRGB(b);
 
-        return new Color(_clampColor(r), _clampColor(g), _clampColor(b), _clampColor(alpha));
+        return new Color(clamp01(r), clamp01(g), clamp01(b), clamp01(alpha));
     }
 
     static fromTemperature(kelvin: number, alpha: number = 1): Color {
-        kelvin = _clamp(kelvin, 1000, 40000);
+        kelvin = clamp(kelvin, 1000, 40000);
         const temp = kelvin / 100;
 
         let r, g, b;
@@ -353,7 +347,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
             b = 255;
         }
 
-        return new Color(_clampColor(r / 255), _clampColor(g / 255), _clampColor(b / 255), alpha);
+        return new Color(clamp01(r / 255), clamp01(g / 255), clamp01(b / 255), alpha);
     }
 
     static fromNamedColor(name: string): Color {
@@ -606,17 +600,17 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         out?: V
     ): V {
         if (out) {
-            out.r = _clampColor(a.r + b.r);
-            out.g = _clampColor(a.g + b.g);
-            out.b = _clampColor(a.b + b.b);
-            out.a = _clampColor((a.a ?? 1) + (b.a ?? 1));
+            out.r = clamp01(a.r + b.r);
+            out.g = clamp01(a.g + b.g);
+            out.b = clamp01(a.b + b.b);
+            out.a = clamp01((a.a ?? 1) + (b.a ?? 1));
             return out;
         } else {
             return {
-                r: _clampColor(a.r + b.r),
-                g: _clampColor(a.g + b.g),
-                b: _clampColor(a.b + b.b),
-                a: _clampColor((a.a ?? 1) + (b.a ?? 1)),
+                r: clamp01(a.r + b.r),
+                g: clamp01(a.g + b.g),
+                b: clamp01(a.b + b.b),
+                a: clamp01((a.a ?? 1) + (b.a ?? 1)),
             } as V;
         }
     }
@@ -627,17 +621,17 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         out?: V
     ): V {
         if (out) {
-            out.r = _clampColor(a.r - b.r);
-            out.g = _clampColor(a.g - b.g);
-            out.b = _clampColor(a.b - b.b);
-            out.a = _clampColor((a.a ?? 1) - (b.a ?? 1));
+            out.r = clamp01(a.r - b.r);
+            out.g = clamp01(a.g - b.g);
+            out.b = clamp01(a.b - b.b);
+            out.a = clamp01((a.a ?? 1) - (b.a ?? 1));
             return out;
         } else {
             return {
-                r: _clampColor(a.r - b.r),
-                g: _clampColor(a.g - b.g),
-                b: _clampColor(a.b - b.b),
-                a: _clampColor((a.a ?? 1) - (b.a ?? 1)),
+                r: clamp01(a.r - b.r),
+                g: clamp01(a.g - b.g),
+                b: clamp01(a.b - b.b),
+                a: clamp01((a.a ?? 1) - (b.a ?? 1)),
             } as V;
         }
     }
@@ -669,34 +663,34 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         out?: V
     ): V {
         if (out) {
-            out.r = _clampColor(a.r * scalar);
-            out.g = _clampColor(a.g * scalar);
-            out.b = _clampColor(a.b * scalar);
+            out.r = clamp01(a.r * scalar);
+            out.g = clamp01(a.g * scalar);
+            out.b = clamp01(a.b * scalar);
             out.a = a.a ?? 1;
             return out;
         } else {
             return {
-                r: _clampColor(a.r * scalar),
-                g: _clampColor(a.g * scalar),
-                b: _clampColor(a.b * scalar),
+                r: clamp01(a.r * scalar),
+                g: clamp01(a.g * scalar),
+                b: clamp01(a.b * scalar),
                 a: a.a ?? 1,
             } as V;
         }
     }
 
     add<T extends IColorLike>(other: Readonly<T>): Color {
-        this.r = _clampColor(this.r + other.r);
-        this.g = _clampColor(this.g + other.g);
-        this.b = _clampColor(this.b + other.b);
-        this.a = _clampColor(this.a + (other.a ?? 1));
+        this.r = clamp01(this.r + other.r);
+        this.g = clamp01(this.g + other.g);
+        this.b = clamp01(this.b + other.b);
+        this.a = clamp01(this.a + (other.a ?? 1));
         return this;
     }
 
     subtract<T extends IColorLike>(other: Readonly<T>): Color {
-        this.r = _clampColor(this.r - other.r);
-        this.g = _clampColor(this.g - other.g);
-        this.b = _clampColor(this.b - other.b);
-        this.a = _clampColor(this.a - (other.a ?? 1));
+        this.r = clamp01(this.r - other.r);
+        this.g = clamp01(this.g - other.g);
+        this.b = clamp01(this.b - other.b);
+        this.a = clamp01(this.a - (other.a ?? 1));
         return this;
     }
 
@@ -709,9 +703,9 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     }
 
     multiplyScalar(scalar: number): Color {
-        this.r = _clampColor(this.r * scalar);
-        this.g = _clampColor(this.g * scalar);
-        this.b = _clampColor(this.b * scalar);
+        this.r = clamp01(this.r * scalar);
+        this.g = clamp01(this.g * scalar);
+        this.b = clamp01(this.b * scalar);
         return this;
     }
 
@@ -721,7 +715,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         t: number,
         out?: V
     ): V {
-        const t1 = _clamp(t, 0, 1);
+        const t1 = clamp(t, 0, 1);
         const aAlpha = a.a ?? 1;
         const bAlpha = b.a ?? 1;
 
@@ -747,7 +741,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         t: number,
         out?: V
     ): V {
-        const t1 = _clamp(t, 0, 1);
+        const t1 = clamp(t, 0, 1);
 
         const hslA = a instanceof Color ? a.toHSL() : Color.from(a).toHSL();
         const hslB = b instanceof Color ? b.toHSL() : Color.from(b).toHSL();
@@ -780,7 +774,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         t: number,
         out?: V
     ): V {
-        const t1 = _clamp(t, 0, 1);
+        const t1 = clamp(t, 0, 1);
 
         const labA = a instanceof Color ? a.toLab() : Color.from(a).toLab();
         const labB = b instanceof Color ? b.toLab() : Color.from(b).toLab();
@@ -809,7 +803,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         out?: U
     ): U {
         const hsl = color instanceof Color ? color.toHSL() : Color.from(color).toHSL();
-        hsl.l = _clamp(hsl.l + amount, 0, 1);
+        hsl.l = clamp(hsl.l + amount, 0, 1);
 
         const result = Color.fromHSL(hsl.h, hsl.s, hsl.l, hsl.a);
 
@@ -834,7 +828,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         out?: U
     ): U {
         const hsl = color instanceof Color ? color.toHSL() : Color.from(color).toHSL();
-        hsl.s = _clamp(hsl.s + amount, 0, 1);
+        hsl.s = clamp(hsl.s + amount, 0, 1);
 
         const result = Color.fromHSL(hsl.h, hsl.s, hsl.l, hsl.a);
 
@@ -1030,7 +1024,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         switch (type) {
             case ColorHarmonyType.MONOCHROMATIC:
                 for (let i = 0; i < (count ?? 5); i++) {
-                    const lightness = _clamp(hsl.l + (i - 2) * 0.15, 0, 1);
+                    const lightness = clamp(hsl.l + (i - 2) * 0.15, 0, 1);
                     colors.push(Color.fromHSL(hsl.h, hsl.s, lightness, hsl.a));
                 }
                 break;

@@ -1,5 +1,6 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON } from './common';
+import { clamp01 } from './clamp';
 import { IVec3Like } from './vec3';
 
 export interface IQuatLike {
@@ -506,7 +507,7 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         b: Readonly<U>
     ): number {
         const dotProduct = Math.abs(Quat.dot(a, b));
-        return 2 * Math.acos(Math.min(1, dotProduct));
+        return 2 * Math.acos(clamp01(dotProduct));
     }
 
     static slerp<T extends IQuatLike, U extends IQuatLike, V extends IQuatLike>(
@@ -515,7 +516,7 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         t: number,
         out?: V
     ): V {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         let dot = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 
         let bx = b.x,
@@ -563,7 +564,7 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         t: number,
         out?: V
     ): V {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         if (out) {
             out.x = a.x + (b.x - a.x) * t1;
             out.y = a.y + (b.y - a.y) * t1;
@@ -587,7 +588,7 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         W extends IQuatLike,
         O extends IQuatLike,
     >(q1: Readonly<T>, q2: Readonly<U>, s1: Readonly<V>, s2: Readonly<W>, t: number, out?: O): O {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
 
         const temp1 = {} as IQuatLike;
         Quat.slerp(q1, q2, t1, temp1);

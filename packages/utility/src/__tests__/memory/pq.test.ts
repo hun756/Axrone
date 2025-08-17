@@ -11,7 +11,7 @@ import {
     type Comparator,
     type ReadonlyQueueNode,
     type PriorityQueueOptions,
-} from '../../memory/priority-queue';
+} from '../../memory/containers/queue/priority-queue';
 
 describe('PriorityQueue', () => {
     describe('constructor', () => {

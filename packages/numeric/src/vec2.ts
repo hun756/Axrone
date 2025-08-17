@@ -1,5 +1,6 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON, HALF_PI, PI_2 } from './common';
+import { clamp01, clampNegOneOne } from './clamp';
 import {
     sampleStandardNormal,
     sampleNormalInRange,
@@ -373,7 +374,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
 
         const cosTheta = dotProduct / (lengthA * lengthB);
-        return Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+        return Math.acos(clampNegOneOne(cosTheta));
     }
 
     static fastAngle<T extends IVec2Like, U extends IVec2Like>(
@@ -490,7 +491,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         t: number,
         out?: T
     ): T {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         if (out) {
             out.x = a.x + (b.x - a.x) * t1;
             out.y = a.y + (b.y - a.y) * t1;
@@ -521,7 +522,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         t: number,
         out?: T
     ): T {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         const angleA = Vec2.angleBetween(a, b);
         const angleB = Vec2.angleBetween(b, a);
         let angleDiff = angleA - angleB;
@@ -556,7 +557,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         t: number,
         out?: T
     ): T {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         const t2 = t1 * t1 * (3 - 2 * t1); // Smooth step function: 3t² - 2t³
         if (out) {
             out.x = a.x + (b.x - a.x) * t2;
@@ -573,7 +574,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         t: number,
         out?: T
     ): T {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         // Smoother step: 6t⁵ - 15t⁴ + 10t³
         const t2 = t1 * t1 * t1 * (10 - 15 * t1 + 6 * t1 * t1);
         if (out) {
@@ -592,7 +593,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         W extends IVec2Like,
         O extends IVec2Like,
     >(a: Readonly<T>, c1: Readonly<U>, c2: Readonly<V>, b: Readonly<W>, t: number, out?: O): O {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         const oneMinusT = 1 - t1;
         const oneMinusT2 = oneMinusT * oneMinusT;
         const t2 = t1 * t1;
@@ -622,7 +623,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         W extends IVec2Like,
         O extends IVec2Like,
     >(p0: Readonly<T>, m0: Readonly<U>, p1: Readonly<V>, m1: Readonly<W>, t: number, out?: O): O {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
         const t2 = t1 * t1;
         const t3 = t2 * t1;
 
@@ -658,7 +659,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         tension: number = 0.5,
         out?: O
     ): O {
-        const t1 = t < 0 ? 0 : t > 1 ? 1 : t;
+        const t1 = clamp01(t);
 
         if (!out) {
             out = { x: 0, y: 0 } as O;

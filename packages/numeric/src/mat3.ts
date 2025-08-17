@@ -2,6 +2,7 @@ import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from
 import { EPSILON, HALF_PI, PI_2 } from './common';
 import { IVec2Like } from './vec2';
 import { IVec3Like } from './vec3';
+import { clamp01 } from './clamp';
 
 declare const __matrix3Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
@@ -608,7 +609,7 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
         U extends IMat3Like,
         V extends IMat3Like | undefined = undefined,
     >(a: Readonly<T>, b: Readonly<U>, t: number, out?: V): MatrixOperationReturnType<V, T> {
-        const t1 = Math.max(0, Math.min(1, t));
+        const t1 = clamp01(t);
 
         if (out) {
             const outData = asMutableMatrix3Data((out as IMutableMat3).data);

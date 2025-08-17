@@ -3,6 +3,7 @@ import { EPSILON, HALF_PI, PI_2 } from './common';
 import { IVec3Like } from './vec3';
 import { IVec4Like } from './vec4';
 import { IQuatLike } from './quat';
+import { clamp01 } from './clamp';
 
 declare const __matrix4Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
@@ -1063,7 +1064,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         U extends IMat4Like,
         V extends IMat4Like | undefined = undefined,
     >(a: Readonly<T>, b: Readonly<U>, t: number, out?: V): MatrixOperationReturnType<V, T> {
-        const t1 = Math.max(0, Math.min(1, t));
+        const t1 = clamp01(t);
 
         if (out) {
             const outData = asMutableMatrix4Data((out as IMutableMat4).data);

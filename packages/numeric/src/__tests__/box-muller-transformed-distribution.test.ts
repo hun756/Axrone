@@ -1,8 +1,7 @@
-// Güncelleme: Artık core tabanlı BoxMullerNormalDistribution ve Random kullanılacak
+import { DistributionSample } from 'packages/core/src/random';
 import {
     TransformedDistribution,
     BoxMullerNormalDistribution,
-    DistributionSample,
     validatePositive,
     validateInteger,
 } from '../box-muller';
@@ -12,7 +11,6 @@ import * as validationModule from '../box-muller';
 const validatePositiveSpy = jest.spyOn(validationModule, 'validatePositive');
 const validateIntegerSpy = jest.spyOn(validationModule, 'validateInteger');
 
-// Testlerde kullanılacak dummy IRandomState
 const dummyState = {} as any;
 
 describe('TransformedDistribution', () => {
@@ -22,7 +20,6 @@ describe('TransformedDistribution', () => {
         validateIntegerSpy.mockClear();
     });
 
-    // createMockDistribution artık sadece number için kullanılacak, generic kaldırıldı
     const createMockDistribution = (
         sampleValues: number[],
         hasMetadataMethods: boolean = true
@@ -199,7 +196,7 @@ describe('TransformedDistribution', () => {
                 id: number;
                 name: string;
             }
-            // User için özel bir mock distribution fonksiyonu
+
             const userSource = {
                 sample: jest.fn((state: any) => [1, state]),
                 sampleMany: jest.fn((state: any, count: number) => [[1, 2], state]),
@@ -225,7 +222,7 @@ describe('TransformedDistribution', () => {
                 x: number;
                 y: number;
             }
-            // Point için özel bir mock distribution fonksiyonu
+
             const pointSource = {
                 sample: jest.fn((state: any) => [{ x: 1, y: 2 }, state]),
                 sampleMany: jest.fn((state: any, count: number) => [
@@ -259,7 +256,6 @@ describe('TransformedDistribution', () => {
             const transform = (x: number) => x * 2;
 
             expect(() => TransformedDistribution(source, transform)).not.toThrow();
-            // Not: Boş array ile sampleMany çağrısı yapılmaz, bu nedenle test kaldırıldı veya dummyState ile çağrılacaksa try/catch ile kontrol edilir.
         });
 
         test('should handle identity transformation', () => {

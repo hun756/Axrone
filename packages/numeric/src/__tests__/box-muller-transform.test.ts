@@ -1,14 +1,9 @@
 import {
-    BoxMullerTransform,
-    createDefaultRandomGenerator,
-    BoxMullerOptions,
-    BoxMullerNormalDistribution,
-    DistributionSample,
+    BoxMullerTransform
 } from '../box-muller';
 
 import { rand, RandomEngineType } from '@axrone/core';
 
-// Helper to get a valid random state for tests
 const getTestState = () => rand.getState();
 
 const calculateMean = (values: number[]): number => {
