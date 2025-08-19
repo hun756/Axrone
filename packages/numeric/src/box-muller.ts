@@ -378,10 +378,6 @@ export const sharedBoxMullerRandom = BoxMullerFactory.createNormal(0, 1, {
     useCache: false,
 });
 
-// Efficient, allocation-free Box-Muller polar sampler using the global
-// `rand` instance. The NormalDistribution API creates temporary engine
-// wrappers per-sample which is expensive in tight loops. Using `rand.float()`
-// avoids those allocations and is much faster for repeated sampling.
 let _boxMullerSpare: number | null = null;
 
 export const sampleStandardNormal = (): number => {
@@ -391,7 +387,6 @@ export const sampleStandardNormal = (): number => {
         return val;
     }
 
-    // Polar form of Box-Muller
     let u: number, v: number, s: number;
     do {
         u = 2 * rand.float() - 1;
