@@ -1,5 +1,8 @@
 export class SpatialError extends Error {
-    constructor(message: string, public readonly context?: Record<string, unknown>) {
+    constructor(
+        message: string,
+        public readonly context?: Record<string, unknown>
+    ) {
         super(message);
         this.name = 'SpatialError';
         Object.setPrototypeOf(this, SpatialError.prototype);
