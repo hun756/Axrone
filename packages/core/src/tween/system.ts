@@ -11,7 +11,7 @@ export class TweenSystem {
 
     setAutoUpdate(enabled: boolean): void {
         this._autoUpdate = enabled;
-        
+
         if (!enabled && this._animFrameId !== undefined) {
             cancelAnimationFrame(this._animFrameId);
             this._animFrameId = undefined;
@@ -85,7 +85,7 @@ export class TweenSystem {
         this._tweens.clear();
         this._tweensToAdd.clear();
         this._tweensToRemove.clear();
-        
+
         if (this._animFrameId !== undefined) {
             cancelAnimationFrame(this._animFrameId);
             this._animFrameId = undefined;
