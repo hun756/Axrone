@@ -1,5 +1,5 @@
 import { StackIntegrityError } from './errors';
-import { StackMemoryPool as MemoryPool } from './poolAdapter';
+import { StackMemoryPool as MemoryPool } from './pool-adapter';
 import { StackIterator } from './stack-iterator';
 import { createStackSize, __variance, createStackCapacity } from './stack';
 import { ReadonlyStackInterface, StackConfiguration } from './interfaces';
@@ -294,7 +294,7 @@ export abstract class AbstractStack<T> implements ReadonlyStackInterface<T> {
     private defaultSerializeFn(value: T): ArrayBuffer {
         const str = JSON.stringify(value);
         const encoder = new TextEncoder();
-        return encoder.encode(str).buffer;
+        return encoder.encode(str).buffer as ArrayBuffer;
     }
 
     private defaultDeserializeFn(data: ArrayBuffer): T {

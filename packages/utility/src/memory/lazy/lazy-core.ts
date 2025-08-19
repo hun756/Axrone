@@ -45,11 +45,11 @@ export interface ILazy<T> extends LazyCore<T> {
     readonly value: T;
     readonly isValueCreated: boolean;
     readonly isValueFaulted: boolean;
-    
+
     readonly Value: T;
     readonly IsValueCreated: boolean;
     readonly IsValueFaulted: boolean;
-    
+
     map<U>(selector: (value: T) => U): ILazy<U>;
     flatMap<U>(selector: (value: T) => ILazy<U>): ILazy<U>;
     filter<U extends T>(predicate: (value: T) => value is U): ILazy<U>;
@@ -71,14 +71,14 @@ export interface ILazyAsync<T> {
     value: T;
     factory: (() => Promise<T>) | null;
     promise: Promise<T> | null;
-    
+
     readonly isValueCreated: boolean;
     readonly isValueFaulted: boolean;
-    
+
     readonly Value: Promise<T>;
     readonly IsValueCreated: boolean;
     readonly IsValueFaulted: boolean;
-    
+
     map<U>(selector: (value: T) => U): ILazyAsync<U>;
     mapAsync<U>(selector: (value: T) => Promise<U>): ILazyAsync<U>;
     flatMap<U>(selector: (value: T) => ILazyAsync<U>): ILazyAsync<U>;
@@ -100,7 +100,7 @@ export interface ILazyFactory<TArgs extends readonly unknown[], TResult>
     extends LazyFactoryCore<TArgs, TResult> {
     readonly [__factory_brand]: true;
     readonly cacheSize: number;
-    
+
     create(...args: TArgs): ILazy<TResult>;
     createAsync(...args: TArgs): ILazyAsync<TResult>;
     getOrAdd(...args: TArgs): TResult;
@@ -112,11 +112,26 @@ export interface ILazyFactory<TArgs extends readonly unknown[], TResult>
 export type ExtractLazyType<T> = T extends ILazy<infer U> ? U : never;
 export type ExtractLazyAsyncType<T> = T extends ILazyAsync<infer U> ? U : never;
 export type LazyMap<T> = T extends ILazy<infer U> ? U : T extends ILazyAsync<infer V> ? V : T;
-export type UnwrapLazyDeep<T> = T extends ILazy<infer U> ? UnwrapLazyDeep<U> : T extends ILazyAsync<infer V> ? UnwrapLazyDeep<V> : T;
-export type LazyAll<T extends readonly unknown[]> = { readonly [K in keyof T]: ILazy<LazyMap<T[K]>> };
-export type AsyncAll<T extends readonly unknown[]> = { readonly [K in keyof T]: ILazyAsync<LazyMap<T[K]>> };
+export type UnwrapLazyDeep<T> =
+    T extends ILazy<infer U>
+        ? UnwrapLazyDeep<U>
+        : T extends ILazyAsync<infer V>
+          ? UnwrapLazyDeep<V>
+          : T;
+export type LazyAll<T extends readonly unknown[]> = {
+    readonly [K in keyof T]: ILazy<LazyMap<T[K]>>;
+};
+export type AsyncAll<T extends readonly unknown[]> = {
+    readonly [K in keyof T]: ILazyAsync<LazyMap<T[K]>>;
+};
 export type UnwrapAll<T extends readonly unknown[]> = { readonly [K in keyof T]: LazyMap<T[K]> };
 export type IsLazyType<T> = T extends ILazy<unknown> ? true : false;
 export type IsAsyncType<T> = T extends ILazyAsync<unknown> ? true : false;
-export type FilterLazyTypes<T extends readonly unknown[]> = { [K in keyof T]: T[K] extends ILazy<unknown> ? T[K] : never }[number];
-export type LazyComputation<T, F> = F extends (...args: any[]) => infer R ? T extends ILazy<infer U> ? ILazy<R> : never : never;
+export type FilterLazyTypes<T extends readonly unknown[]> = {
+    [K in keyof T]: T[K] extends ILazy<unknown> ? T[K] : never;
+}[number];
+export type LazyComputation<T, F> = F extends (...args: any[]) => infer R
+    ? T extends ILazy<infer U>
+        ? ILazy<R>
+        : never
+    : never;

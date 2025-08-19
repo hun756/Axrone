@@ -46,7 +46,7 @@ export class StackMemoryPool {
 
     allocate<T>(value: T, next: StackNode<T> | null, generation: number): StackNode<T> {
         const node = this.pool.acquire() as PoolNode<T>;
-        node.id = (this.idCounter++ as any);
+        node.id = this.idCounter++ as any;
         node.value = value;
         node.next = next as PoolNode<T> | null;
         node.refs = 1;

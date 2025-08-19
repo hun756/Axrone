@@ -1,34 +1,36 @@
-import { 
-    ILazy, 
-    ILazyAsync, 
-    ILazyFactory, 
-    ExtractLazyAsyncType, 
+import {
+    ILazy,
+    ILazyAsync,
+    ILazyFactory,
+    ExtractLazyAsyncType,
     UnwrapAll,
     __lazy_brand,
     __async_brand,
-    __factory_brand
+    __factory_brand,
 } from './lazy-core';
 import { LazyImpl, LazyAsyncImpl } from './lazy-impl';
 import { LazyFactoryImpl } from './lazy-factory';
 
-export const create = <T>(valueFactory: () => T): ILazy<T> => 
+export const create = <T>(valueFactory: () => T): ILazy<T> =>
     new LazyImpl(valueFactory, valueFactory);
 
 export const createAsync = <T>(promiseFactory: () => Promise<T>): ILazyAsync<T> =>
     new LazyAsyncImpl(promiseFactory);
 
-export const fromValue = <T>(value: T): ILazy<T> => 
-    new LazyImpl(() => value, () => value);
+export const fromValue = <T>(value: T): ILazy<T> =>
+    new LazyImpl(
+        () => value,
+        () => value
+    );
 
-export const fromPromise = <T>(promise: Promise<T>): ILazyAsync<T> => 
+export const fromPromise = <T>(promise: Promise<T>): ILazyAsync<T> =>
     new LazyAsyncImpl(() => promise);
 
 export const createFactory = <TArgs extends readonly unknown[], TResult>(
     factory: (...args: TArgs) => TResult,
     keySelector?: (...args: TArgs) => string,
     maxCacheSize?: number
-): ILazyFactory<TArgs, TResult> => 
-    new LazyFactoryImpl(factory, keySelector, maxCacheSize);
+): ILazyFactory<TArgs, TResult> => new LazyFactoryImpl(factory, keySelector, maxCacheSize);
 
 export const isLazy = <T>(value: unknown): value is ILazy<T> =>
     typeof value === 'object' && value !== null && __lazy_brand in value;
@@ -49,15 +51,16 @@ export const combine = <T extends readonly ILazy<unknown>[]>(...lazies: T): ILaz
 export const combineAsync = <T extends readonly ILazyAsync<unknown>[]>(
     ...lazies: T
 ): ILazyAsync<UnwrapAll<T>> =>
-    new LazyAsyncImpl(() => Promise.all(lazies.map((lazy) => lazy.force())) as Promise<UnwrapAll<T>>);
+    new LazyAsyncImpl(
+        () => Promise.all(lazies.map((lazy) => lazy.force())) as Promise<UnwrapAll<T>>
+    );
 
 export const sequence = <T extends readonly ILazy<unknown>[]>(lazies: T): ILazy<UnwrapAll<T>> =>
     combine(...lazies) as ILazy<UnwrapAll<T>>;
 
 export const sequenceAsync = <T extends readonly ILazyAsync<unknown>[]>(
     lazies: T
-): ILazyAsync<UnwrapAll<T>> => 
-    combineAsync(...lazies) as ILazyAsync<UnwrapAll<T>>;
+): ILazyAsync<UnwrapAll<T>> => combineAsync(...lazies) as ILazyAsync<UnwrapAll<T>>;
 
 export const traverseSync = <T, U>(
     items: readonly T[],
@@ -78,14 +81,14 @@ export const race = <T extends readonly ILazyAsync<unknown>[]>(
 ): ILazyAsync<ExtractLazyAsyncType<T[number]>> =>
     new LazyAsyncImpl(() => Promise.race(lazies.map((lazy) => lazy.force()))) as any;
 
-export const all = <T extends readonly ILazyAsync<unknown>[]>(lazies: T): ILazyAsync<UnwrapAll<T>> =>
-    sequenceAsync(lazies);
+export const all = <T extends readonly ILazyAsync<unknown>[]>(
+    lazies: T
+): ILazyAsync<UnwrapAll<T>> => sequenceAsync(lazies);
 
 export const allSettled = <T extends readonly ILazyAsync<unknown>[]>(
     lazies: T
 ): ILazyAsync<PromiseSettledResult<ExtractLazyAsyncType<T[number]>>[]> =>
     new LazyAsyncImpl(() => Promise.allSettled(lazies.map((lazy) => lazy.force()))) as any;
-
 
 export const when = <T>(condition: boolean, lazyValue: ILazy<T>): ILazy<T | undefined> => {
     const factory = () => (condition ? lazyValue.force() : undefined);
@@ -94,7 +97,6 @@ export const when = <T>(condition: boolean, lazyValue: ILazy<T>): ILazy<T | unde
 
 export const unless = <T>(condition: boolean, lazyValue: ILazy<T>): ILazy<T | undefined> =>
     when(!condition, lazyValue);
-
 
 export const tryLazy = <T>(valueFactory: () => T): ILazy<T | Error> => {
     const factory = () => {
@@ -115,7 +117,6 @@ export const tryAsync = <T>(promiseFactory: () => Promise<T>): ILazyAsync<T | Er
             return error instanceof Error ? error : new Error(String(error));
         }
     });
-
 
 export const memoize = <TArgs extends readonly unknown[], TResult>(
     fn: (...args: TArgs) => TResult,
@@ -188,12 +189,11 @@ export const withRetry = <T>(
     lazyAsync: ILazyAsync<T>,
     maxAttempts: number,
     delay?: number
-): ILazyAsync<T> => 
-    lazyAsync.retry(maxAttempts, delay);
+): ILazyAsync<T> => lazyAsync.retry(maxAttempts, delay);
 
 export const empty = <T = never>(): ILazy<T[]> => fromValue([]);
 
 export const emptyAsync = <T = never>(): ILazyAsync<T[]> => fromPromise(Promise.resolve([]));
 
-export const never = <T = never>(): ILazyAsync<T> => 
+export const never = <T = never>(): ILazyAsync<T> =>
     new LazyAsyncImpl(() => new Promise<T>(() => {}));
