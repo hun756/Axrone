@@ -15,10 +15,9 @@ import type { Actor } from '../core/actor';
     executeInEditMode: true,
     validateDependencies: true,
     enableMetrics: true,
-    enableCaching: true
+    enableCaching: true,
 })
 export class Transform extends Component {
-
     private _position: Vec3 = Vec3.ZERO.clone();
     private _rotation: Quat = Quat.IDENTITY.clone();
     private _scale: Vec3 = Vec3.ONE.clone();
@@ -190,7 +189,7 @@ export class Transform extends Component {
     }
 
     private markWorldDirty(): void {
-        if (this._worldDirty) return; 
+        if (this._worldDirty) return;
 
         this._worldDirty = true;
         this._worldPosition = undefined;
@@ -207,7 +206,12 @@ export class Transform extends Component {
             this._localMatrix = new Mat4();
         }
 
-        this._localMatrix = Mat4.fromTRS(this._position, this._rotation, this._scale, this._localMatrix);
+        this._localMatrix = Mat4.fromTRS(
+            this._position,
+            this._rotation,
+            this._scale,
+            this._localMatrix
+        );
 
         this._localDirty = false;
     }
@@ -235,7 +239,6 @@ export class Transform extends Component {
         }
 
         if (this._parent) {
-
             const parentWorldPos = this._parent.worldPosition;
             this._worldPosition = Vec3.add(parentWorldPos, this._position, this._worldPosition);
         } else {
@@ -286,9 +289,7 @@ export class Transform extends Component {
         if (space === 'local') {
             this._position.add(translation);
         } else {
-
             if (this._parent) {
-
                 const localTranslation = translation.clone();
                 this._position.add(localTranslation);
             } else {
@@ -312,7 +313,6 @@ export class Transform extends Component {
         if (space === 'local') {
             this._rotation = Quat.multiply(this._rotation, rotation, this._rotation);
         } else {
-
             if (this._parent) {
                 const parentWorldRotation = this._parent.worldRotation;
                 const parentInverse = parentWorldRotation.clone().inverse();
@@ -398,7 +398,6 @@ export class Transform extends Component {
     }
 
     findInChildren(name: string): Transform | undefined {
-
         const queue: Transform[] = [this];
 
         while (queue.length > 0) {
@@ -475,7 +474,6 @@ export class Transform extends Component {
     }
 
     onDestroy(): void {
-
         if (this._parent) {
             this.parent = undefined;
         }

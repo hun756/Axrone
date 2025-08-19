@@ -590,7 +590,7 @@ export abstract class Component<
 
     clone(): this {
         const CloneClass = this.constructor as new (...args: any[]) => this;
-        
+
         // TestComponent constructor'ı için özel durum
         if (CloneClass.name === 'TestComponent') {
             const clone = new CloneClass((this as any).value, (this as any).name) as this;
@@ -599,7 +599,7 @@ export abstract class Component<
             clone.persistent = this._persistent;
             return clone;
         }
-        
+
         const clone = new CloneClass({
             priority: this._priority,
             enabled: this._enabled,
@@ -799,10 +799,7 @@ export abstract class Component<
         }
     }
 
-    private _executeLifecycleMethodSync(
-        method: keyof ComponentLifecycle,
-        ...args: any[]
-    ): void {
+    private _executeLifecycleMethodSync(method: keyof ComponentLifecycle, ...args: any[]): void {
         const lifecycleMethod = this[method];
 
         if (typeof lifecycleMethod === 'function') {
@@ -1011,10 +1008,6 @@ export abstract class Component<
     }
 }
 
-export {
-    script,
-    getComponentMetadata,
-    setComponentMetadata
-} from '../decorators/script';
+export { script, getComponentMetadata, setComponentMetadata } from '../decorators/script';
 
 export type { ComponentMetrics, ComponentCache };

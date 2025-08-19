@@ -75,7 +75,6 @@ interface WorldConfig {
 }
 
 export class World<R extends ComponentRegistry> {
-
     private readonly _registry: R;
     private readonly _componentMask: ComponentMask;
     private readonly _archetypes = new Map<ArchetypeId, Archetype<R>>();
@@ -102,7 +101,6 @@ export class World<R extends ComponentRegistry> {
     private readonly _disposables = new Set<() => void>();
 
     constructor(registry: R, config: WorldConfig = {}) {
-
         if (!registry || typeof registry !== 'object') {
             throw new WorldError('Invalid component registry provided', 'constructor');
         }
@@ -121,7 +119,6 @@ export class World<R extends ComponentRegistry> {
         this._creationTime = performance.now();
 
         try {
-
             this._componentMask = this._createComponentMask();
             this._queryCache = new OptimizedQueryCache();
             this._eventBus = createTypedEmitter<ECSEventMap<R>>();
@@ -215,7 +212,7 @@ export class World<R extends ComponentRegistry> {
         try {
             const archetypeId = this._entityArchetypes.get(entity);
             if (!archetypeId) {
-                return; 
+                return;
             }
 
             const archetype = this._archetypes.get(archetypeId);
@@ -356,7 +353,7 @@ export class World<R extends ComponentRegistry> {
         try {
             const currentArchetypeId = this._entityArchetypes.get(entity);
             if (!currentArchetypeId) {
-                return; 
+                return;
             }
 
             const currentArchetype = this._archetypes.get(currentArchetypeId);
@@ -364,7 +361,7 @@ export class World<R extends ComponentRegistry> {
                 !currentArchetype ||
                 !currentArchetype.signature.includes(componentName as string)
             ) {
-                return; 
+                return;
             }
 
             const newSignature = currentArchetype.signature.filter(
@@ -457,7 +454,6 @@ export class World<R extends ComponentRegistry> {
         }
 
         try {
-
             if (this._enableMetrics) {
                 this._queryCount++;
                 this._lastUpdateTime = performance.now();
@@ -484,7 +480,7 @@ export class World<R extends ComponentRegistry> {
             for (const archetypeId of matchingArchetypes) {
                 const archetype = this._archetypes.get(archetypeId);
                 if (!archetype) {
-                    continue; 
+                    continue;
                 }
 
                 for (let i = 0; i < archetype.entityCount; i++) {
@@ -689,7 +685,7 @@ export class World<R extends ComponentRegistry> {
         try {
             const allMetrics: Record<string, any> = {};
             const eventNames = this._eventBus.eventNames();
-            
+
             for (const eventName of eventNames) {
                 try {
                     allMetrics[eventName] = this._eventBus.getMetrics(eventName);
@@ -697,7 +693,7 @@ export class World<R extends ComponentRegistry> {
                     console.warn(`Failed to get metrics for event ${eventName}:`, error);
                 }
             }
-            
+
             return allMetrics;
         } catch (error) {
             console.error('Failed to get all event metrics:', error);
@@ -879,7 +875,6 @@ export class World<R extends ComponentRegistry> {
 
     private _setupEventObserverBridge(): void {
         try {
-
             this._eventBus.on('EntityCreated', (data) => {
                 try {
                     this._observables.entityCreated.notify(data);
@@ -931,7 +926,9 @@ export class World<R extends ComponentRegistry> {
     private _getOrCreateArchetype(signature: readonly string[]): Archetype<R> {
         try {
             const sortedSignature = signature.slice().sort();
-            const id = (sortedSignature.length === 0 ? 'EMPTY' : sortedSignature.join('|')) as ArchetypeId;
+            const id = (
+                sortedSignature.length === 0 ? 'EMPTY' : sortedSignature.join('|')
+            ) as ArchetypeId;
 
             let archetype = this._archetypes.get(id);
             if (!archetype) {
@@ -1026,9 +1023,9 @@ export class World<R extends ComponentRegistry> {
 
             totalSize += this._componentMask.size * 20;
 
-            totalSize += 200; 
+            totalSize += 200;
 
-            totalSize += 300; 
+            totalSize += 300;
 
             return totalSize;
         } catch (error) {
