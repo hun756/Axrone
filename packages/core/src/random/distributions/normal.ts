@@ -1,6 +1,32 @@
 import { IDistribution, IRandomState, RandomResult, DistributionSample } from '../types';
 import { createEngineFactory } from '../engines';
 
+const ZIGGURAT_N = 128;
+const ZIG_X: Float64Array = new Float64Array(ZIGGURAT_N + 1);
+const ZIG_Y: Float64Array = new Float64Array(ZIGGURAT_N);
+const ZIG_K: Uint32Array = new Uint32Array(ZIGGURAT_N);
+
+(() => {
+    const R = 3.442619855899;
+    const V = 9.91256303526217e-3;
+
+    ZIG_X[0] = R;
+    ZIG_X[ZIGGURAT_N] = 0;
+
+    for (let i = 1; i < ZIGGURAT_N; i++) {
+        const xi = Math.sqrt(
+            -2.0 * Math.log(V / ZIG_X[i - 1] + Math.exp(-0.5 * ZIG_X[i - 1] * ZIG_X[i - 1]))
+        );
+        ZIG_X[i] = xi;
+    }
+
+    for (let i = 0; i < ZIGGURAT_N; i++) {
+        ZIG_Y[i] = Math.exp(-0.5 * ZIG_X[i] * ZIG_X[i]);
+
+        ZIG_K[i] = Math.floor((ZIG_X[i + 1] / ZIG_X[i]) * 0xffffffff) >>> 0;
+    }
+})();
+
 export class NormalDistribution implements IDistribution<number> {
     private cachedValue: number | null = null;
 
@@ -28,8 +54,52 @@ export class NormalDistribution implements IDistribution<number> {
             throw new RangeError('Count must be a positive integer');
         }
 
-        if (this.algorithm === 'polar' && this.useCache && count > 1) {
-            return this.sampleManyOptimized(state, count);
+        if (count > 1) {
+            if (this.algorithm === 'standard') {
+                const engine = createEngineFactory(state.engine)();
+                engine.setState(state);
+
+                const result: number[] = new Array(count);
+                let idx = 0;
+
+                if (this.useCache && this.cachedValue !== null) {
+                    result[idx++] = this.cachedValue;
+                    this.cachedValue = null;
+                }
+
+                while (idx < count) {
+                    let u1 = engine.next01();
+                    if (u1 <= 1e-10) u1 = 1e-10;
+                    const u2 = engine.next01();
+
+                    const r = Math.sqrt(-2.0 * Math.log(u1));
+                    const theta = 2.0 * Math.PI * u2;
+
+                    const z0 = r * Math.cos(theta);
+                    const z1 = r * Math.sin(theta);
+
+                    result[idx++] = this._mean + this._stdDev * z0;
+                    if (idx < count) {
+                        if (this.useCache && idx === count - 1) {
+                            this.cachedValue = this._mean + this._stdDev * z1;
+                            idx++;
+                            break;
+                        } else {
+                            result[idx++] = this._mean + this._stdDev * z1;
+                        }
+                    }
+                }
+
+                return [result, engine.getState()];
+            }
+
+            if (this.algorithm === 'polar') {
+                return this.sampleManyOptimized(state, count);
+            }
+
+            if (this.algorithm === 'ziggurat') {
+                return this.sampleManyZiggurat(state, count);
+            }
         }
 
         const result: number[] = [];
@@ -258,6 +328,36 @@ export class NormalDistribution implements IDistribution<number> {
         for (let i = count - (count % 2); i < count; i++) {
             const [value, _] = this.sample(engine.getState());
             result[i] = value;
+        }
+
+        return [result, engine.getState()];
+    }
+
+    private sampleManyZiggurat(
+        state: IRandomState,
+        count: number
+    ): RandomResult<readonly number[]> {
+        const engine = createEngineFactory(state.engine)();
+        engine.setState(state);
+
+        const result: number[] = new Array(count);
+
+        for (let i = 0; i < count; ) {
+            const u32 = engine.nextUint32();
+            const j = u32 & (ZIGGURAT_N - 1);
+            const sign = u32 & 0x80000000 ? -1 : 1;
+
+            const x = (u32 >>> 8) * (1.0 / 0x01000000) * ZIG_X[j];
+
+            if (u32 >>> 0 < ZIG_K[j]) {
+                result[i++] = this._mean + this._stdDev * sign * x;
+                continue;
+            }
+
+            const y = engine.next01() * (ZIG_Y[j] - ZIG_Y[j + 1]) + ZIG_Y[j + 1];
+            if (Math.exp(-0.5 * x * x) > y) {
+                result[i++] = this._mean + this._stdDev * sign * x;
+            }
         }
 
         return [result, engine.getState()];
