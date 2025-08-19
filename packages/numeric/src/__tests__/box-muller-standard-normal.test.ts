@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import {
     StandardNormal,
     BoxMullerTransform,
@@ -7,7 +8,7 @@ import {
     isIDistribution,
 } from '../box-muller';
 
-import { rand, RandomEngineType } from '@axrone/core';
+import { rand, RandomEngineType } from '../../../core/src/random';
 
 // Helper to get a valid random state for tests
 const getTestState = () => rand.getState();
