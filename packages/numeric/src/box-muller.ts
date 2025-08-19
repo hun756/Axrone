@@ -378,24 +378,46 @@ export const sharedBoxMullerRandom = BoxMullerFactory.createNormal(0, 1, {
     useCache: false,
 });
 
+// Efficient, allocation-free Box-Muller polar sampler using the global
+// `rand` instance. The NormalDistribution API creates temporary engine
+// wrappers per-sample which is expensive in tight loops. Using `rand.float()`
+// avoids those allocations and is much faster for repeated sampling.
+let _boxMullerSpare: number | null = null;
+
 export const sampleStandardNormal = (): number => {
-    return rand.normal(0, 1);
+    if (_boxMullerSpare !== null) {
+        const val = _boxMullerSpare;
+        _boxMullerSpare = null;
+        return val;
+    }
+
+    // Polar form of Box-Muller
+    let u: number, v: number, s: number;
+    do {
+        u = 2 * rand.float() - 1;
+        v = 2 * rand.float() - 1;
+        s = u * u + v * v;
+    } while (s === 0 || s >= 1);
+
+    const mul = Math.sqrt((-2.0 * Math.log(s)) / s);
+    _boxMullerSpare = v * mul;
+    return u * mul;
 };
 
 export const sampleBoundedNormal = (min: number = -1, max: number = 1): number => {
     const MAX_ATTEMPTS = 10;
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
-        const value = rand.normal(0, 1);
+        const value = sampleStandardNormal();
         if (value >= min && value <= max) {
             return value;
         }
     }
-    return Math.max(min, Math.min(max, rand.normal(0, 1)));
+    return Math.max(min, Math.min(max, sampleStandardNormal()));
 };
 
 export const sampleNormalInRange = (center: number, range: number): number => {
     const stdDev = range / 6; // 99.7% of values within bounds
-    const value = center + rand.normal(0, 1) * stdDev;
+    const value = center + sampleStandardNormal() * stdDev;
     const min = center - range / 2;
     const max = center + range / 2;
 
