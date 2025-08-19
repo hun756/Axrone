@@ -761,13 +761,14 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     }
 
     static random<T extends IVec3Like>(scale: number = 1, out?: T): T {
-        let x, y, z, lengthSq;
-        do {
-            x = (sampleUniform() - 0.5) * 2;
-            y = (sampleUniform() - 0.5) * 2;
-            z = (sampleUniform() - 0.5) * 2;
-            lengthSq = x * x + y * y + z * z;
-        } while (lengthSq > 1 || lengthSq < 0.0001);
+        const x = sampleStandardNormal();
+        const y = sampleStandardNormal();
+        const z = sampleStandardNormal();
+
+        const lengthSq = x * x + y * y + z * z;
+        if (!(lengthSq > 0)) {
+            return Vec3.fastRandom(scale, out);
+        }
 
         const invLength = scale / Math.sqrt(lengthSq);
 

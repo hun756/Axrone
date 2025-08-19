@@ -387,16 +387,19 @@ export const sampleStandardNormal = (): number => {
         return val;
     }
 
-    let u: number, v: number, s: number;
-    do {
-        u = 2 * rand.float() - 1;
-        v = 2 * rand.float() - 1;
-        s = u * u + v * v;
-    } while (s === 0 || s >= 1);
+    // u1 must be in (0,1] to avoid log(0). rand.float() yields [0,1).
+    let u1 = rand.float();
+    if (u1 <= 0) u1 = Number.MIN_VALUE;
+    const u2 = rand.float();
 
-    const mul = Math.sqrt((-2.0 * Math.log(s)) / s);
-    _boxMullerSpare = v * mul;
-    return u * mul;
+    const mag = Math.sqrt(-2.0 * Math.log(u1));
+    const theta = TWO_PI * u2;
+
+    const z0 = mag * Math.cos(theta);
+    const z1 = mag * Math.sin(theta);
+
+    _boxMullerSpare = z1;
+    return z0;
 };
 
 export const sampleBoundedNormal = (min: number = -1, max: number = 1): number => {
