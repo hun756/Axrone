@@ -28,30 +28,31 @@ export interface IObserverRegistry {
         observer: ObserverCallback<T>,
         options?: ObserverOptions
     ): ObserverId;
-    
+
     unregister(observerId: ObserverId): boolean;
-    
-    unregisterByCallback<T>(
-        subject: IObservableSubject<T>,
-        observer: ObserverCallback<T>
-    ): boolean;
-    
+
+    unregisterByCallback<T>(subject: IObservableSubject<T>, observer: ObserverCallback<T>): boolean;
+
     getObserver(observerId: ObserverId): IObserverSubscription | undefined;
-    
+
     getObserversForSubject(subjectId: SubjectId): ReadonlyArray<IObserverSubscription>;
-    
+
     getActiveObserverCount(): number;
-    
+
     getSubjectCount(): number;
-    
+
     clear(): void;
-    
+
     dispose(): void;
 }
 
 export interface ISubjectLifecycle {
     onBeforeNotify?: (data: any, subject: IObservableSubject<any>) => boolean | Promise<boolean>;
-    onAfterNotify?: (data: any, subject: IObservableSubject<any>, success: boolean) => void | Promise<void>;
+    onAfterNotify?: (
+        data: any,
+        subject: IObservableSubject<any>,
+        success: boolean
+    ) => void | Promise<void>;
     onObserverAdded?: (observer: IObserverSubscription, subject: IObservableSubject<any>) => void;
     onObserverRemoved?: (observerId: ObserverId, subject: IObservableSubject<any>) => void;
     onComplete?: (subject: IObservableSubject<any>) => void | Promise<void>;
@@ -109,13 +110,9 @@ export interface IObserverScheduler {
         subject: IObservableSubject<T>,
         priority: number
     ): Promise<void>;
-    
-    scheduleSync<T>(
-        callback: ObserverCallback<T>,
-        data: T,
-        subject: IObservableSubject<T>
-    ): void;
-    
+
+    scheduleSync<T>(callback: ObserverCallback<T>, data: T, subject: IObservableSubject<T>): void;
+
     pause(): void;
     resume(): void;
     isPaused(): boolean;
@@ -131,7 +128,7 @@ export interface IObserverDebouncer<T = any> {
         subject: IObservableSubject<T>,
         delayMs: number
     ): void;
-    
+
     cancel(observerId: ObserverId): boolean;
     dispose(): void;
 }
@@ -144,7 +141,7 @@ export interface IObserverThrottler<T = any> {
         intervalMs: number,
         observerId: ObserverId
     ): boolean;
-    
+
     reset(observerId: ObserverId): void;
     dispose(): void;
 }
@@ -155,7 +152,7 @@ export interface IObserverFilterEngine {
         subject: IObservableSubject<T>,
         filter: (data: T, subject: IObservableSubject<T>) => boolean
     ): boolean;
-    
+
     applyTransform<TInput, TOutput>(
         data: TInput,
         subject: IObservableSubject<TInput>,
@@ -192,10 +189,7 @@ export interface IObserverValidator {
 
 export interface IObservableFactory {
     createSubject<T>(options?: SubjectOptions): IObservableSubject<T>;
-    createObserver<T>(
-        callback: ObserverCallback<T>,
-        options?: ObserverOptions
-    ): IObserver<T>;
+    createObserver<T>(callback: ObserverCallback<T>, options?: ObserverOptions): IObserver<T>;
     createRegistry(options?: {
         maxSubjects?: number;
         enableMetrics?: boolean;

@@ -19,13 +19,20 @@ type SystemEvent = { type: string; message: string; timestamp: number };
 type SensorData = { sensor: string; value: number; timestamp: number };
 type ProcessedData = { sensor: string; processedValue: number; alert?: boolean; timestamp: number };
 type AlertData = { level: 'warning' | 'critical'; message: string; timestamp: number };
-type MetricData = { metric: string; value: number; timestamp: number; tags?: Record<string, string> };
+type MetricData = {
+    metric: string;
+    value: number;
+    timestamp: number;
+    tags?: Record<string, string>;
+};
 type ActionData = { type: string; payload?: any };
 
 export class ChatEventSystem {
     private userEvents = new Subject<UserEvent>();
     private messageEvents = new Subject<MessageEvent>();
-    private systemEvents = new ReplaySubject<SystemEvent>({ replay: { enabled: true, bufferSize: 10 } });
+    private systemEvents = new ReplaySubject<SystemEvent>({
+        replay: { enabled: true, bufferSize: 10 },
+    });
 
     private onlineUsers = new BehaviorSubject<string[]>([]);
 
@@ -35,7 +42,9 @@ export class ChatEventSystem {
 
     private setupEventHandlers(): void {
         this.userEvents.addObserver((event: UserEvent) => {
-            console.log(`User Event: ${event.userId} ${event.action} at ${new Date(event.timestamp).toISOString()}`);
+            console.log(
+                `User Event: ${event.userId} ${event.action} at ${new Date(event.timestamp).toISOString()}`
+            );
         });
 
         this.userEvents.addObserver((event: UserEvent) => {
@@ -135,10 +144,13 @@ export class DataProcessingPipeline {
 
         validatedData
             .debounce(100)
-            .map((data: SensorData) => ({
-                ...data,
-                processedValue: this.calculateMovingAverage(data.sensor, data.value),
-            } as ProcessedData))
+            .map(
+                (data: SensorData) =>
+                    ({
+                        ...data,
+                        processedValue: this.calculateMovingAverage(data.sensor, data.value),
+                    }) as ProcessedData
+            )
             .subscribe((data: ProcessedData) => {
                 this.processedData.notify(data);
             });
@@ -153,11 +165,9 @@ export class DataProcessingPipeline {
                 });
             });
 
-        validatedData
-            .buffer(100, 5000)
-            .subscribe((batch: SensorData[]) => {
-                this.processBatch(batch);
-            });
+        validatedData.buffer(100, 5000).subscribe((batch: SensorData[]) => {
+            this.processBatch(batch);
+        });
     }
 
     private movingAverages = new Map<string, number[]>();
@@ -169,7 +179,7 @@ export class DataProcessingPipeline {
 
         const values = this.movingAverages.get(sensor)!;
         values.push(value);
-        
+
         if (values.length > 10) {
             values.shift();
         }
@@ -181,7 +191,7 @@ export class DataProcessingPipeline {
         const analytics = {
             count: batch.length,
             avgValue: batch.reduce((sum, item) => sum + item.value, 0) / batch.length,
-            sensors: [...new Set(batch.map(item => item.sensor))],
+            sensors: [...new Set(batch.map((item) => item.sensor))],
             timestamp: Date.now(),
         };
 
@@ -243,7 +253,7 @@ export class StateManager {
     private setupReducers(): void {
         this.userActions.addObserver((action: ActionData) => {
             const currentUser = this.userState.value;
-            
+
             switch (action.type) {
                 case 'LOGIN':
                     this.userState.notify(action.payload);
@@ -261,7 +271,7 @@ export class StateManager {
 
         this.notificationActions.addObserver((action: ActionData) => {
             const currentNotifications = this.notificationsState.value;
-            
+
             switch (action.type) {
                 case 'ADD_NOTIFICATION':
                     this.notificationsState.notify([...currentNotifications, action.payload]);
@@ -279,7 +289,7 @@ export class StateManager {
 
         this.settingActions.addObserver((action: ActionData) => {
             const currentSettings = this.settingsState.value;
-            
+
             switch (action.type) {
                 case 'UPDATE_SETTINGS':
                     this.settingsState.notify({ ...currentSettings, ...action.payload });
@@ -297,7 +307,7 @@ export class StateManager {
 
     private createCombinedState(): IObservableSubject<AppState> {
         const combinedState = new Subject<AppState>();
-        
+
         const updateCombinedState = () => {
             const state: AppState = {
                 user: this.userState.value,
@@ -320,7 +330,7 @@ export class StateManager {
         const logAction = (action: ActionData) => {
             console.log('Action dispatched:', action);
         };
-        
+
         this.userActions.addObserver(logAction);
         this.notificationActions.addObserver(logAction);
         this.settingActions.addObserver(logAction);
@@ -365,7 +375,9 @@ export class StateManager {
         return this.userState.addObserver(callback);
     }
 
-    public subscribeToNotifications(callback: ObserverCallback<AppState['notifications']>): () => boolean {
+    public subscribeToNotifications(
+        callback: ObserverCallback<AppState['notifications']>
+    ): () => boolean {
         return this.notificationsState.addObserver(callback);
     }
 
@@ -421,7 +433,9 @@ export class StateManager {
 
 export class PerformanceMonitor {
     private metricsSubject = new Subject<MetricData>();
-    private aggregatedMetrics = new BehaviorSubject<Record<string, { avg: number; min: number; max: number; count: number }>>({});
+    private aggregatedMetrics = new BehaviorSubject<
+        Record<string, { avg: number; min: number; max: number; count: number }>
+    >({});
 
     constructor() {
         this.setupMetricsAggregation();
@@ -430,12 +444,10 @@ export class PerformanceMonitor {
 
     private setupMetricsAggregation(): void {
         const metricsChain = chain(this.metricsSubject);
-        metricsChain
-            .buffer(100, 10000)
-            .subscribe((metrics: MetricData[]) => {
-                const aggregated = this.aggregateMetrics(metrics);
-                this.aggregatedMetrics.notify(aggregated);
-            });
+        metricsChain.buffer(100, 10000).subscribe((metrics: MetricData[]) => {
+            const aggregated = this.aggregateMetrics(metrics);
+            this.aggregatedMetrics.notify(aggregated);
+        });
 
         this.metricsSubject.addObserver((metric: MetricData) => {
             if (metric.metric === 'response_time' && metric.value > 1000) {
@@ -446,7 +458,11 @@ export class PerformanceMonitor {
 
     private setupAutomaticCollection(): void {
         setInterval(() => {
-            if (typeof window !== 'undefined' && 'performance' in window && 'memory' in window.performance) {
+            if (
+                typeof window !== 'undefined' &&
+                'performance' in window &&
+                'memory' in window.performance
+            ) {
                 const memory = (window.performance as any).memory;
                 this.recordMetric('memory_used', memory.usedJSHeapSize);
                 this.recordMetric('memory_total', memory.totalJSHeapSize);
@@ -460,7 +476,10 @@ export class PerformanceMonitor {
                     if (entry.entryType === 'navigation') {
                         const nav = entry as PerformanceNavigationTiming;
                         this.recordMetric('page_load_time', nav.loadEventEnd - nav.fetchStart);
-                        this.recordMetric('dom_content_loaded', nav.domContentLoadedEventEnd - nav.fetchStart);
+                        this.recordMetric(
+                            'dom_content_loaded',
+                            nav.domContentLoadedEventEnd - nav.fetchStart
+                        );
                         this.recordMetric('first_paint', nav.responseStart - nav.fetchStart);
                     }
                 }
@@ -469,16 +488,22 @@ export class PerformanceMonitor {
         }
     }
 
-    private aggregateMetrics(metrics: MetricData[]): Record<string, { avg: number; min: number; max: number; count: number }> {
-        const grouped = metrics.reduce((acc, metric) => {
-            if (!acc[metric.metric]) {
-                acc[metric.metric] = [];
-            }
-            acc[metric.metric].push(metric.value);
-            return acc;
-        }, {} as Record<string, number[]>);
+    private aggregateMetrics(
+        metrics: MetricData[]
+    ): Record<string, { avg: number; min: number; max: number; count: number }> {
+        const grouped = metrics.reduce(
+            (acc, metric) => {
+                if (!acc[metric.metric]) {
+                    acc[metric.metric] = [];
+                }
+                acc[metric.metric].push(metric.value);
+                return acc;
+            },
+            {} as Record<string, number[]>
+        );
 
-        const aggregated: Record<string, { avg: number; min: number; max: number; count: number }> = {};
+        const aggregated: Record<string, { avg: number; min: number; max: number; count: number }> =
+            {};
 
         for (const [metricName, values] of Object.entries(grouped)) {
             aggregated[metricName] = {
@@ -505,11 +530,18 @@ export class PerformanceMonitor {
         return this.metricsSubject.addObserver(callback);
     }
 
-    public subscribeToAggregatedMetrics(callback: ObserverCallback<Record<string, { avg: number; min: number; max: number; count: number }>>): () => boolean {
+    public subscribeToAggregatedMetrics(
+        callback: ObserverCallback<
+            Record<string, { avg: number; min: number; max: number; count: number }>
+        >
+    ): () => boolean {
         return this.aggregatedMetrics.addObserver(callback);
     }
 
-    public getLatestMetrics(): Record<string, { avg: number; min: number; max: number; count: number }> {
+    public getLatestMetrics(): Record<
+        string,
+        { avg: number; min: number; max: number; count: number }
+    > {
         return this.aggregatedMetrics.value;
     }
 
@@ -524,7 +556,7 @@ export function runExamples(): void {
 
     console.log('1. Chat Event System:');
     const chatSystem = new ChatEventSystem();
-    
+
     chatSystem.subscribeToOnlineUsers((users) => {
         console.log('Online users updated:', users);
     });
@@ -538,7 +570,7 @@ export function runExamples(): void {
 
     console.log('\n2. Data Processing Pipeline:');
     const pipeline = new DataProcessingPipeline();
-    
+
     pipeline.subscribeToAlerts((alert) => {
         console.log(`ALERT [${alert.level}]: ${alert.message}`);
     });
@@ -554,7 +586,7 @@ export function runExamples(): void {
 
     console.log('\n3. State Management:');
     const stateManager = new StateManager();
-    
+
     stateManager.subscribe((state) => {
         console.log('State updated:', state);
     });
@@ -567,7 +599,7 @@ export function runExamples(): void {
 
     console.log('\n4. Performance Monitoring:');
     const perfMonitor = new PerformanceMonitor();
-    
+
     perfMonitor.subscribeToAggregatedMetrics((metrics) => {
         console.log('Performance metrics:', metrics);
     });
