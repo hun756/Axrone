@@ -1,3 +1,4 @@
+import { describe, test, it, expect } from 'vitest';
 import {
     CompareResult,
     Comparer,
@@ -8,7 +9,7 @@ import {
     isEqualityComparer,
     ComparerError,
     InvalidOperationError,
-} from '@axrone/utility';
+} from '../../';
 
 describe('Type Guards', () => {
     describe('isEquatable', () => {

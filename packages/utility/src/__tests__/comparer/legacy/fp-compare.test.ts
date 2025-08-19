@@ -381,7 +381,7 @@ describe('FpCompare Class - Test Suite', () => {
             const comparer = new FpCompare(1e-5);
             const a = 1.0;
             const b = 1.0 + 0.5e-5;
-            
+
             expect(comparer.nearlyEqual(a, b)).toBe(true);
             expect(comparer.compare(a, b)).toBe(0);
         });
@@ -390,7 +390,7 @@ describe('FpCompare Class - Test Suite', () => {
             const comparer = new FpCompare(1e-5);
             const a = 1.0;
             const b = 1.0 + 5e-5;
-            
+
             expect(comparer.nearlyEqual(a, b)).toBe(false);
             expect(comparer.compare(a, b)).not.toBe(0);
         });
@@ -398,12 +398,12 @@ describe('FpCompare Class - Test Suite', () => {
         test('nearlyEqual is commutative', () => {
             const comparer = new FpCompare();
             const testPairs = [
-                [0, 0], 
-                [1, 1 + 1e-10], 
+                [0, 0],
+                [1, 1 + 1e-10],
                 [1e100, 1e100 * (1 + 1e-10)],
-                [1e-15, 2e-15]
+                [1e-15, 2e-15],
             ];
-            
+
             for (const [a, b] of testPairs) {
                 expect(comparer.nearlyEqual(a, b)).toBe(comparer.nearlyEqual(b, a));
             }
@@ -412,12 +412,12 @@ describe('FpCompare Class - Test Suite', () => {
         test('absolutelyEqual is commutative', () => {
             const comparer = new FpCompare();
             const testPairs = [
-                [0, 0], 
-                [1, 1 + 1e-15], 
+                [0, 0],
+                [1, 1 + 1e-15],
                 [1e100, 1e100 + 1e-15],
-                [1e-15, 2e-15]
+                [1e-15, 2e-15],
             ];
-            
+
             for (const [a, b] of testPairs) {
                 expect(comparer.absolutelyEqual(a, b)).toBe(comparer.absolutelyEqual(b, a));
             }
@@ -426,21 +426,21 @@ describe('FpCompare Class - Test Suite', () => {
         test('compare is anti-commutative', () => {
             const comparer = new FpCompare();
             const testPairs = [
-                [0, 1], 
-                [1, 2], 
+                [0, 1],
+                [1, 2],
                 [1e100, 2e100],
-                [1e-15, 2e-15]
+                [1e-15, 2e-15],
             ];
-            
+
             for (const [a, b] of testPairs) {
                 if (a === b || comparer.nearlyEqual(a, b)) {
                     // Skip equal values
                     continue;
                 }
-                
+
                 const result1 = comparer.compare(a, b);
                 const result2 = comparer.compare(b, a);
-                
+
                 // For non-equal values, compare(a,b) should be the opposite of compare(b,a)
                 expect(result1 * result2).toBe(-1);
             }
@@ -450,47 +450,47 @@ describe('FpCompare Class - Test Suite', () => {
     describe('Real-World Scenarios', () => {
         test('financial calculation rounding errors', () => {
             const comparer = new FpCompare(1e-10);
-            
+
             // Example: interest rate calculation
-            const principal = 1000.00;
+            const principal = 1000.0;
             const rate = 0.05; // 5%
             const periods = 12;
-            
+
             // Different way
             const method1 = principal * Math.pow(1 + rate, periods);
             let method2 = principal;
             for (let i = 0; i < periods; i++) {
-                method2 *= (1 + rate);
+                method2 *= 1 + rate;
             }
-            
+
             expect(comparer.nearlyEqual(method1, method2)).toBe(true);
         });
 
         test('trigonometric identity validation', () => {
             const comparer = new FpCompare(1e-10);
-            
+
             // Test sin²θ + cos²θ = 1 identity for various angles
             for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 12) {
                 const sinSquared = Math.pow(Math.sin(angle), 2);
                 const cosSquared = Math.pow(Math.cos(angle), 2);
                 const sum = sinSquared + cosSquared;
-                
+
                 expect(comparer.nearlyEqual(sum, 1)).toBe(true);
             }
         });
 
         test('iterative approximation convergence', () => {
             const comparer = new FpCompare(1e-10);
-            
+
             // Approximating square root using Newton's method
             const target = 2;
             let approximation = 1.0;
             const iterations = 10;
-            
+
             for (let i = 0; i < iterations; i++) {
                 approximation = 0.5 * (approximation + target / approximation);
             }
-            
+
             expect(comparer.nearlyEqual(approximation, Math.sqrt(2))).toBe(true);
         });
     });

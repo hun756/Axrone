@@ -1,3 +1,4 @@
+import { describe, it, expect, test, beforeEach } from 'vitest';
 import {
     CompareResult,
     Comparer,
@@ -7,7 +8,7 @@ import {
     ComparerOptions,
     EqualityComparerOptions,
     KeySelector,
-} from '@axrone/utility';
+} from '../../';
 
 class Person implements Equatable {
     constructor(
