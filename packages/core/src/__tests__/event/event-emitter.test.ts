@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from '../../event/event-emitter';
 import { EventHandlerError, EventQueueFullError } from '../../event/errors';
 import { EventMap } from '../../event/definition';
@@ -84,8 +85,8 @@ describe('EventEmitter - Main Implementation', () => {
         });
 
         it('should handle subscription removal correctly', () => {
-            const callback1 = jest.fn();
-            const callback2 = jest.fn();
+            const callback1 = vi.fn();
+            const callback2 = vi.fn();
 
             emitter.on('test:event', callback1);
             emitter.on('test:event', callback2);
@@ -317,7 +318,7 @@ describe('EventEmitter - Main Implementation', () => {
 
     //         it('should handle async callbacks in emitSync with warning', async () => {
     //             emitter = new EventEmitter<TestEvents>({ captureRejections: true });
-    //             const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+    //             const consoleSpy = vi.(console, 'warn').mockImplementation();
     //             let errorHandled = false;
 
     //             emitter.on('error', () => {
@@ -506,7 +507,7 @@ describe('EventEmitter - Main Implementation', () => {
         });
 
         it('should handle batch subscription correctly', () => {
-            const callbacks = [jest.fn(), jest.fn(), jest.fn()];
+            const callbacks = [vi.fn(), vi.fn(), vi.fn()];
 
             const subscriptionIds = emitter.batchSubscribe('test:batch', callbacks);
 
@@ -518,7 +519,7 @@ describe('EventEmitter - Main Implementation', () => {
         });
 
         it('should handle batch unsubscription correctly', () => {
-            const callbacks = [jest.fn(), jest.fn(), jest.fn()];
+            const callbacks = [vi.fn(), vi.fn(), vi.fn()];
             const subscriptionIds = emitter.batchSubscribe('test:batch', callbacks);
 
             expect(emitter.listenerCount('test:batch')).toBe(3);
@@ -724,7 +725,7 @@ describe('EventEmitter - Main Implementation', () => {
         it('should respect maxListeners configuration', () => {
             const emitter = new EventEmitter<TestEvents>({ maxListeners: 2 });
 
-            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
             emitter.on('test:event', () => {});
             emitter.on('test:event', () => {});
@@ -760,16 +761,14 @@ describe('EventEmitter - Main Implementation', () => {
             emitter.dispose();
         });
 
-        it('should handle GC configuration correctly', (done) => {
+        it('should handle GC configuration correctly', async () => {
             const emitter = new EventEmitter<TestEvents>({ gcIntervalMs: 100 });
 
             const unsubscribe = emitter.on('test:event', () => {});
             unsubscribe();
 
-            setTimeout(() => {
-                emitter.dispose();
-                done();
-            }, 150);
+            await new Promise((r) => setTimeout(r, 150));
+            emitter.dispose();
         });
     });
 });

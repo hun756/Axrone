@@ -1,6 +1,12 @@
-import { Component, script, getComponentMetadata, setComponentMetadata } from '../../component-system/core/component';
+import {
+    Component,
+    script,
+    getComponentMetadata,
+    setComponentMetadata,
+} from '../../component-system/core/component';
 import { Transform } from '../../component-system/components/transform';
 import type { ComponentMetadata } from '../../component-system/types/component';
+import { afterEach, describe, expect, test } from 'vitest';
 
 class TestDependencyComponent extends Component {
     value: number = 42;
@@ -31,7 +37,7 @@ class DefaultScriptComponent extends Component {
     dependencies: [Transform, TestDependencyComponent],
     singleton: true,
     executeInEditMode: true,
-    priority: 100
+    priority: 100,
 })
 class AdvancedScriptComponent extends Component {
     name: string = 'advanced';
@@ -39,7 +45,7 @@ class AdvancedScriptComponent extends Component {
 
 @script({
     singleton: false,
-    priority: -50
+    priority: -50,
 })
 class NegativePriorityComponent extends Component {
     data: string = '';
@@ -51,7 +57,7 @@ class UnDecoratedComponent extends Component {
 
 @script({
     dependencies: [CustomDepComponent],
-    singleton: true
+    singleton: true,
 })
 class CustomMetadataComponent extends Component {
     static customMetadata: ComponentMetadata | null = null;
@@ -67,12 +73,11 @@ class CustomMetadataComponent extends Component {
 
 describe('Component Script Decorator', () => {
     afterEach(() => {
-
-        DefaultScriptComponent.getAllInstances().forEach(c => c._internalDestroy());
-        AdvancedScriptComponent.getAllInstances().forEach(c => c._internalDestroy());
-        NegativePriorityComponent.getAllInstances().forEach(c => c._internalDestroy());
-        UnDecoratedComponent.getAllInstances().forEach(c => c._internalDestroy());
-        CustomMetadataComponent.getAllInstances().forEach(c => c._internalDestroy());
+        DefaultScriptComponent.getAllInstances().forEach((c) => c._internalDestroy());
+        AdvancedScriptComponent.getAllInstances().forEach((c) => c._internalDestroy());
+        NegativePriorityComponent.getAllInstances().forEach((c) => c._internalDestroy());
+        UnDecoratedComponent.getAllInstances().forEach((c) => c._internalDestroy());
+        CustomMetadataComponent.getAllInstances().forEach((c) => c._internalDestroy());
     });
 
     describe('Default Configuration', () => {
@@ -123,7 +128,7 @@ describe('Component Script Decorator', () => {
 
             expect(component.name).toBe('advanced');
             expect(component.state).toBe('uninitialized');
-            expect(component.priority).toBe(0); 
+            expect(component.priority).toBe(0);
 
             component._internalDestroy();
         });
@@ -152,7 +157,9 @@ describe('Component Script Decorator', () => {
 
             expect(metadata).toBeDefined();
             expect(CustomMetadataComponent.customMetadata).toBeDefined();
-            expect(CustomMetadataComponent.customMetadata!.dependencies).toEqual([CustomDepComponent]);
+            expect(CustomMetadataComponent.customMetadata!.dependencies).toEqual([
+                CustomDepComponent,
+            ]);
             expect(CustomMetadataComponent.customMetadata!.singleton).toBe(true);
         });
 
@@ -170,12 +177,11 @@ describe('Component Script Decorator', () => {
             const metadata1 = getComponentMetadata(AdvancedScriptComponent);
             const metadata2 = getComponentMetadata(AdvancedScriptComponent);
 
-            expect(metadata1).toBe(metadata2); 
-            expect(metadata1).toEqual(metadata2); 
+            expect(metadata1).toBe(metadata2);
+            expect(metadata1).toEqual(metadata2);
         });
 
         test('should maintain metadata for multiple component types', () => {
-
             const defaultMeta = getComponentMetadata(DefaultScriptComponent);
             const advancedMeta = getComponentMetadata(AdvancedScriptComponent);
             const negativeMeta = getComponentMetadata(NegativePriorityComponent);
@@ -196,7 +202,7 @@ describe('Component Script Decorator', () => {
                 dependencies: [Manual1Component, Manual2Component],
                 singleton: true,
                 executeInEditMode: false,
-                priority: 200
+                priority: 200,
             };
 
             setComponentMetadata(UnDecoratedComponent, customMetadata);
@@ -214,7 +220,7 @@ describe('Component Script Decorator', () => {
                 dependencies: [OverrideComponent],
                 singleton: true,
                 executeInEditMode: true,
-                priority: 999
+                priority: 999,
             };
 
             setComponentMetadata(DefaultScriptComponent, newMetadata);
@@ -230,25 +236,24 @@ describe('Component Script Decorator', () => {
             class PartialDepComponent extends Component {}
 
             @script({
-                dependencies: [PartialDepComponent]
-
+                dependencies: [PartialDepComponent],
             })
             class PartialConfigComponent extends Component {}
 
             const metadata = getComponentMetadata(PartialConfigComponent);
 
             expect(metadata!.dependencies).toEqual([PartialDepComponent]);
-            expect(metadata!.singleton).toBe(false); 
-            expect(metadata!.executeInEditMode).toBe(false); 
-            expect(metadata!.priority).toBe(0); 
+            expect(metadata!.singleton).toBe(false);
+            expect(metadata!.executeInEditMode).toBe(false);
+            expect(metadata!.priority).toBe(0);
 
-            PartialConfigComponent.getAllInstances().forEach(c => c._internalDestroy());
+            PartialConfigComponent.getAllInstances().forEach((c) => c._internalDestroy());
         });
 
         test('should handle empty dependencies array', () => {
             @script({
                 dependencies: [],
-                singleton: true
+                singleton: true,
             })
             class EmptyDepsComponent extends Component {}
 
@@ -257,11 +262,10 @@ describe('Component Script Decorator', () => {
             expect(metadata!.dependencies).toEqual([]);
             expect(metadata!.singleton).toBe(true);
 
-            EmptyDepsComponent.getAllInstances().forEach(c => c._internalDestroy());
+            EmptyDepsComponent.getAllInstances().forEach((c) => c._internalDestroy());
         });
 
         test('should handle multiple decorators on same component class', () => {
-
             const TestClass = class extends Component {};
 
             const decorator1 = script({ priority: 1 });
@@ -271,7 +275,7 @@ describe('Component Script Decorator', () => {
             const DecoratedClass2 = decorator2(DecoratedClass1);
 
             const metadata = getComponentMetadata(DecoratedClass2);
-            expect(metadata!.priority).toBe(2); 
+            expect(metadata!.priority).toBe(2);
         });
 
         test('should handle components with inheritance', () => {
@@ -279,7 +283,7 @@ describe('Component Script Decorator', () => {
 
             @script({
                 priority: 50,
-                singleton: true
+                singleton: true,
             })
             class BaseScriptComponent extends Component {
                 baseValue: number = 10;
@@ -287,7 +291,7 @@ describe('Component Script Decorator', () => {
 
             @script({
                 priority: 75,
-                dependencies: [InheritedComponent]
+                dependencies: [InheritedComponent],
             })
             class DerivedScriptComponent extends BaseScriptComponent {
                 derivedValue: string = 'derived';
@@ -301,15 +305,15 @@ describe('Component Script Decorator', () => {
 
             expect(derivedMeta!.priority).toBe(75);
             expect(derivedMeta!.dependencies).toEqual([InheritedComponent]);
-            expect(derivedMeta!.singleton).toBe(false); 
+            expect(derivedMeta!.singleton).toBe(false);
 
             const derived = new DerivedScriptComponent();
             expect(derived.baseValue).toBe(10);
             expect(derived.derivedValue).toBe('derived');
 
             derived._internalDestroy();
-            BaseScriptComponent.getAllInstances().forEach(c => c._internalDestroy());
-            DerivedScriptComponent.getAllInstances().forEach(c => c._internalDestroy());
+            BaseScriptComponent.getAllInstances().forEach((c) => c._internalDestroy());
+            DerivedScriptComponent.getAllInstances().forEach((c) => c._internalDestroy());
         });
     });
 
@@ -320,7 +324,7 @@ describe('Component Script Decorator', () => {
 
             @script({
                 priority: 10,
-                executeInEditMode: true
+                executeInEditMode: true,
             })
             class LifecycleScriptComponent extends Component {
                 awake(): void {
@@ -344,7 +348,7 @@ describe('Component Script Decorator', () => {
             expect(metadata!.executeInEditMode).toBe(true);
 
             component._internalDestroy();
-            LifecycleScriptComponent.getAllInstances().forEach(c => c._internalDestroy());
+            LifecycleScriptComponent.getAllInstances().forEach((c) => c._internalDestroy());
         });
 
         test('should maintain metadata through component operations', () => {
@@ -355,7 +359,7 @@ describe('Component Script Decorator', () => {
             component.enabled = true;
 
             const metadata = getComponentMetadata(AdvancedScriptComponent);
-            expect(metadata!.priority).toBe(100); 
+            expect(metadata!.priority).toBe(100);
             expect(metadata!.singleton).toBe(true);
 
             component._internalDestroy();

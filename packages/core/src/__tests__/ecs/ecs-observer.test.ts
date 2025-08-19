@@ -4,6 +4,9 @@ import { Actor } from '../../component-system/core/actor';
 import { World } from '../../component-system/core/world';
 import { Component } from '../../component-system/core/component';
 import { Transform } from '../../component-system/components/transform';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 class TestComponent extends Component {
     value: number = 0;
@@ -33,7 +36,7 @@ describe('ECSObservables', () => {
         const registry = {
             TestComponent,
             PositionComponent,
-            Transform
+            Transform,
         };
 
         world = new World(registry);
@@ -80,9 +83,15 @@ describe('ECSObservables', () => {
             let createdCount = 0;
             let destroyedCount = 0;
 
-            observables.entityCreated.addObserver(() => { createdCount++; });
-            observables.entityCreated.addObserver(() => { createdCount++; });
-            observables.entityDestroyed.addObserver(() => { destroyedCount++; });
+            observables.entityCreated.addObserver(() => {
+                createdCount++;
+            });
+            observables.entityCreated.addObserver(() => {
+                createdCount++;
+            });
+            observables.entityDestroyed.addObserver(() => {
+                destroyedCount++;
+            });
 
             observables.entityCreated.notify({ entity: mockEntity, actor: mockActor });
             observables.entityDestroyed.notify({ entity: mockEntity, actor: mockActor });
@@ -185,7 +194,11 @@ describe('ECSObservables', () => {
             });
 
             observables.systemExecutionStart.notify({ systemId: 'System1', deltaTime: 16.67 });
-            observables.systemExecutionEnd.notify({ systemId: 'System1', deltaTime: 16.67, duration: 1.2 });
+            observables.systemExecutionEnd.notify({
+                systemId: 'System1',
+                deltaTime: 16.67,
+                duration: 1.2,
+            });
 
             expect(startTimes).toEqual([16.67]);
             expect(endTimes).toEqual([16.67]);
@@ -226,12 +239,20 @@ describe('ECSObservables', () => {
             let frameCount = 0;
             let totalDuration = 0;
 
-            observables.frameStart.addObserver(() => { frameCount++; });
-            observables.frameEnd.addObserver(({ duration }) => { totalDuration += duration; });
+            observables.frameStart.addObserver(() => {
+                frameCount++;
+            });
+            observables.frameEnd.addObserver(({ duration }) => {
+                totalDuration += duration;
+            });
 
             for (let i = 0; i < 5; i++) {
                 observables.frameStart.notify({ frameId: i, timestamp: performance.now() });
-                observables.frameEnd.notify({ frameId: i, timestamp: performance.now(), duration: 16.67 });
+                observables.frameEnd.notify({
+                    frameId: i,
+                    timestamp: performance.now(),
+                    duration: 16.67,
+                });
             }
 
             expect(frameCount).toBe(5);
@@ -240,16 +261,17 @@ describe('ECSObservables', () => {
     });
 
     describe('query observables', () => {
-        it('should create query observable with initial value', (done) => {
+        it('should create query observable with initial value', async () => {
             const initialValue = [{ entity: mockEntity, components: {} }];
             const queryObs = observables.getQueryObservable('TestQuery', initialValue);
 
             let receivedValue: any = null;
             queryObs.addObserver((data) => {
                 receivedValue = data;
-                expect(receivedValue).toEqual(initialValue);
-                done();
             });
+
+            await sleep(0);
+            expect(receivedValue).toEqual(initialValue);
         });
 
         it('should return same observable for same query key', () => {
@@ -259,26 +281,26 @@ describe('ECSObservables', () => {
             expect(obs1).toBe(obs2);
         });
 
-        it('should update query observable', (done) => {
+        it('should update query observable', async () => {
             const queryObs = observables.getQueryObservable<any>('TestQuery', []);
             const updates: any[][] = [];
 
             queryObs.addObserver((data) => {
                 updates.push(data);
-
-                if (updates.length === 2) {
-                    expect(updates).toHaveLength(2);
-                    expect(updates[0]).toEqual([]);
-                    expect(updates[1]).toEqual(newData);
-                    done();
-                }
             });
 
-            const newData = [{ entity: mockEntity, components: { TestComponent: new TestComponent() } }];
+            const newData = [
+                { entity: mockEntity, components: { TestComponent: new TestComponent() } },
+            ];
 
             setTimeout(() => {
                 queryObs.notify(newData);
             }, 10);
+
+            await sleep(30);
+            expect(updates).toHaveLength(2);
+            expect(updates[0]).toEqual([]);
+            expect(updates[1]).toEqual(newData);
         });
     });
 
@@ -286,7 +308,9 @@ describe('ECSObservables', () => {
         it('should filter entities by predicate', () => {
             const filteredEntities: Array<{ entity: Entity; actor: Actor }> = [];
 
-            const filtered = observables.createEntityFilter(({ actor }) => actor.name === 'SpecialActor');
+            const filtered = observables.createEntityFilter(
+                ({ actor }) => actor.name === 'SpecialActor'
+            );
             filtered.addObserver((data) => {
                 filteredEntities.push(data);
             });
@@ -304,8 +328,8 @@ describe('ECSObservables', () => {
         it('should handle complex filtering predicates', () => {
             const filteredEntities: Array<{ entity: Entity; actor: Actor }> = [];
 
-            const filtered = observables.createEntityFilter(({ actor, entity }) => 
-                actor.name.startsWith('Test') && entity > 5
+            const filtered = observables.createEntityFilter(
+                ({ actor, entity }) => actor.name.startsWith('Test') && entity > 5
             );
             filtered.addObserver((data) => {
                 filteredEntities.push(data);
@@ -349,8 +373,12 @@ describe('ECSObservables', () => {
             const addedEvents: any[] = [];
             const removedEvents: any[] = [];
 
-            stream.added.addObserver((data) => { addedEvents.push(data); });
-            stream.removed.addObserver((data) => { removedEvents.push(data); });
+            stream.added.addObserver((data) => {
+                addedEvents.push(data);
+            });
+            stream.removed.addObserver((data) => {
+                removedEvents.push(data);
+            });
 
             const testComponent = new TestComponent(42);
             const testData = { entity: mockEntity, component: testComponent, actor: mockActor };
@@ -365,7 +393,7 @@ describe('ECSObservables', () => {
     });
 
     describe('debounced queries', () => {
-        it('should debounce query updates', (done) => {
+        it('should debounce query updates', async () => {
             const queryObs = observables.getQueryObservable<number>('TestQuery', []);
             const debounced = observables.createDebouncedQuery<number>('TestQuery', 50);
             const updates: any[][] = [];
@@ -378,33 +406,31 @@ describe('ECSObservables', () => {
             queryObs.notify([1, 2]);
             queryObs.notify([1, 2, 3]);
 
-            setTimeout(() => {
-                expect(updates).toHaveLength(1);
-                expect(updates[0]).toEqual([1, 2, 3]);
-                done();
-            }, 100);
+            await sleep(100);
+            expect(updates).toHaveLength(1);
+            expect(updates[0]).toEqual([1, 2, 3]);
         });
 
-        it('should handle rapid debounced updates', (done) => {
+        it('should handle rapid debounced updates', async () => {
             const queryObs = observables.getQueryObservable<number>('TestQuery', []);
             const debounced = observables.createDebouncedQuery<number>('TestQuery', 25);
             let updateCount = 0;
 
-            debounced.addObserver(() => { updateCount++; });
+            debounced.addObserver(() => {
+                updateCount++;
+            });
 
             for (let i = 0; i < 10; i++) {
                 setTimeout(() => queryObs.notify([i]), i * 5);
             }
 
-            setTimeout(() => {
-                expect(updateCount).toBe(1);
-                done();
-            }, 100);
+            await sleep(120);
+            expect(updateCount).toBe(1);
         });
     });
 
     describe('throttled queries', () => {
-        it('should throttle query updates', (done) => {
+        it('should throttle query updates', async () => {
             const queryObs = observables.getQueryObservable<number>('TestQuery', []);
             const throttled = observables.createThrottledQuery<number>('TestQuery', 50);
             const updates: any[][] = [];
@@ -417,14 +443,12 @@ describe('ECSObservables', () => {
             queryObs.notify([1, 2]);
             queryObs.notify([1, 2, 3]);
 
-            setTimeout(() => {
-                expect(updates).toHaveLength(1);
-                expect(updates[0]).toEqual([1]);
-                done();
-            }, 25);
+            await sleep(30);
+            expect(updates).toHaveLength(1);
+            expect(updates[0]).toEqual([1]);
         });
 
-        it('should allow updates after throttle period', (done) => {
+        it('should allow updates after throttle period', async () => {
             const queryObs = observables.getQueryObservable<number>('TestQuery', []);
             const throttled = observables.createThrottledQuery<number>('TestQuery', 30);
             const updates: any[][] = [];
@@ -439,12 +463,10 @@ describe('ECSObservables', () => {
                 queryObs.notify([2]);
             }, 50);
 
-            setTimeout(() => {
-                expect(updates).toHaveLength(2);
-                expect(updates[0]).toEqual([1]);
-                expect(updates[1]).toEqual([2]);
-                done();
-            }, 100);
+            await sleep(120);
+            expect(updates).toHaveLength(2);
+            expect(updates[0]).toEqual([1]);
+            expect(updates[1]).toEqual([2]);
         });
     });
 
@@ -461,8 +483,16 @@ describe('ECSObservables', () => {
             observables.entityDestroyed.notify({ entity: mockEntity, actor: mockActor });
 
             expect(allEvents).toHaveLength(2);
-            expect(allEvents[0]).toEqual({ entity: mockEntity, actor: mockActor, action: 'created' });
-            expect(allEvents[1]).toEqual({ entity: mockEntity, actor: mockActor, action: 'destroyed' });
+            expect(allEvents[0]).toEqual({
+                entity: mockEntity,
+                actor: mockActor,
+                action: 'created',
+            });
+            expect(allEvents[1]).toEqual({
+                entity: mockEntity,
+                actor: mockActor,
+                action: 'destroyed',
+            });
         });
 
         it('should filter by actor name', () => {
@@ -557,7 +587,7 @@ describe('ECSObservables', () => {
 
     describe('performance and memory', () => {
         it('should handle many observers efficiently', () => {
-            const observerCount = 5; 
+            const observerCount = 5;
             const startTime = performance.now();
 
             for (let i = 0; i < observerCount; i++) {
@@ -577,7 +607,7 @@ describe('ECSObservables', () => {
             });
 
             const startTime = performance.now();
-            const notifications = 5; 
+            const notifications = 5;
 
             for (let i = 0; i < notifications; i++) {
                 observables.entityCreated.notify({ entity: i as Entity, actor: mockActor });

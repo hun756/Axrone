@@ -1,5 +1,6 @@
+import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { Transform } from '../../component-system/components/transform';
-import { Vec3, Quat, Mat4 } from '@axrone/numeric';
+import { Vec3, Quat, Mat4 } from '../../../../numeric/src';
 
 describe('Transform', () => {
     let transform: Transform;

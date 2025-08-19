@@ -1,4 +1,10 @@
-import { EventScheduler, TaskPriority, TaskState, ISchedulerOptions } from '../../event/event-scheduler';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+    EventScheduler,
+    TaskPriority,
+    TaskState,
+    ISchedulerOptions,
+} from '../../event/event-scheduler';
 
 describe('EventScheduler', () => {
     let scheduler: EventScheduler;
@@ -244,7 +250,7 @@ describe('EventScheduler', () => {
                 const allMetrics = metricsScheduler.getAllTaskMetrics();
                 expect(allMetrics.length).toBeGreaterThan(0);
 
-                const completedMetrics = allMetrics.find(m => m.state === TaskState.COMPLETED);
+                const completedMetrics = allMetrics.find((m) => m.state === TaskState.COMPLETED);
                 expect(completedMetrics).toBeDefined();
                 expect(completedMetrics?.priority).toBe(TaskPriority.NORMAL);
                 expect(completedMetrics?.executionTime).toBeGreaterThanOrEqual(0);
@@ -268,7 +274,6 @@ describe('EventScheduler', () => {
     });
 
     describe('Drain and Disposal', () => {
-
         it('should dispose correctly', async () => {
             const task = () => Promise.resolve();
 

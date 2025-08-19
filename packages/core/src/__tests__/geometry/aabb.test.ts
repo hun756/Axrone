@@ -1,10 +1,6 @@
-import { Vec2, Vec3 } from '@axrone/numeric';
-import {
-    AABB2D,
-    AABB3D,
-    AABB,
-    AABBError
-} from '../../geometry/aabb';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { Vec2, Vec3 } from '../../../../numeric/src';
+import { AABB2D, AABB3D, AABB, AABBError } from '../../geometry/aabb';
 
 describe('AABB Core Functionality', () => {
     describe('AABB2D Basic Operations', () => {
@@ -58,7 +54,7 @@ describe('AABB Core Functionality', () => {
 
             it('should calculate surface area correctly', () => {
                 const aabb = new AABB2D(Vec2.create(0, 0), Vec2.create(3, 4));
-                expect(aabb.surfaceArea).toBe(14); 
+                expect(aabb.surfaceArea).toBe(14);
             });
 
             it('should have correct dimensions', () => {
@@ -134,7 +130,7 @@ describe('AABB Core Functionality', () => {
                 expect(aabb.max.x).toBe(0);
                 expect(aabb.max.y).toBe(0);
                 expect(aabb.max.z).toBe(0);
-                expect(aabb.isEmpty).toBe(false); 
+                expect(aabb.isEmpty).toBe(false);
             });
 
             it('should create an AABB3D with specified min and max', () => {
@@ -197,9 +193,9 @@ describe('AABB Core Functionality', () => {
                 const max = Vec2.create(1, 2);
                 const aabb = AABB.create2D(min, max);
 
-                expect(aabb.min.x).toBe(3); 
-                expect(aabb.max.x).toBe(1); 
-                expect(aabb.isEmpty).toBe(true); 
+                expect(aabb.min.x).toBe(3);
+                expect(aabb.max.x).toBe(1);
+                expect(aabb.isEmpty).toBe(true);
             });
         });
 

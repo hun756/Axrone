@@ -1,15 +1,15 @@
-import { 
-    tween, 
-    to, 
+import {
+    tween,
+    to,
     from,
-    fromTo, 
-    TWEEN, 
-    chain, 
-    group, 
+    fromTo,
+    TWEEN,
+    chain,
+    group,
     timeline,
     spring,
     delay,
-    waitFor
+    waitFor,
 } from '../../tween';
 import { Easing } from '../../tween/easing-functions';
 import { Interpolation } from '../../tween/interpolation';
@@ -90,14 +90,18 @@ describe('Tween System', () => {
         });
 
         test('nested object tweening', () => {
-            let obj = { 
+            let obj = {
                 position: { x: 0, y: 0 },
-                scale: { x: 1, y: 1 }
+                scale: { x: 1, y: 1 },
             };
-            const tw = to(obj, { 
-                position: { x: 100, y: 50 },
-                scale: { x: 2, y: 1.5 }
-            }, 100);
+            const tw = to(
+                obj,
+                {
+                    position: { x: 100, y: 50 },
+                    scale: { x: 2, y: 1.5 },
+                },
+                100
+            );
 
             tw.start(0);
             tw.update(50);
@@ -240,9 +244,7 @@ describe('Tween System', () => {
 
         test('yoyo functionality', () => {
             let obj = { x: 0 };
-            const tw = to(obj, { x: 100 }, 100)
-                .repeat(1)
-                .yoyo(true);
+            const tw = to(obj, { x: 100 }, 100).repeat(1).yoyo(true);
 
             tw.start(0);
 
@@ -259,9 +261,7 @@ describe('Tween System', () => {
 
         test('repeat with delay', () => {
             let obj = { x: 0 };
-            const tw = to(obj, { x: 100 }, 100)
-                .repeat(1)
-                .repeatDelay(50);
+            const tw = to(obj, { x: 100 }, 100).repeat(1).repeatDelay(50);
 
             tw.start(0);
             tw.update(100);
@@ -279,8 +279,7 @@ describe('Tween System', () => {
         test('start event', () => {
             let obj = { x: 0 };
             let startCalled = false;
-            const tw = to(obj, { x: 100 }, 100)
-                .on('start', () => startCalled = true);
+            const tw = to(obj, { x: 100 }, 100).on('start', () => (startCalled = true));
 
             tw.start(0);
             expect(startCalled).toBe(true);
@@ -289,8 +288,7 @@ describe('Tween System', () => {
         test('update event', () => {
             let obj = { x: 0 };
             let updateCount = 0;
-            const tw = to(obj, { x: 100 }, 100)
-                .on('update', () => updateCount++);
+            const tw = to(obj, { x: 100 }, 100).on('update', () => updateCount++);
 
             tw.start(0);
             tw.update(25);
@@ -302,8 +300,7 @@ describe('Tween System', () => {
         test('complete event', () => {
             let obj = { x: 0 };
             let completeCalled = false;
-            const tw = to(obj, { x: 100 }, 100)
-                .on('complete', () => completeCalled = true);
+            const tw = to(obj, { x: 100 }, 100).on('complete', () => (completeCalled = true));
 
             tw.start(0);
             tw.update(100);
@@ -314,8 +311,7 @@ describe('Tween System', () => {
             let obj = { x: 0 };
             let callCount = 0;
             const callback = () => callCount++;
-            const tw = to(obj, { x: 100 }, 100)
-                .on('update', callback);
+            const tw = to(obj, { x: 100 }, 100).on('update', callback);
 
             tw.start(0);
             tw.update(25);
@@ -323,7 +319,7 @@ describe('Tween System', () => {
 
             tw.off('update', callback);
             tw.update(50);
-            expect(callCount).toBe(1); 
+            expect(callCount).toBe(1);
         });
     });
 
@@ -433,13 +429,13 @@ describe('Tween System', () => {
             const tl = timeline().add(tw1).add(tw2, { offset: 10 });
 
             tl.start(0);
-            expect(tl.getDuration()).toBe(110); 
+            expect(tl.getDuration()).toBe(110);
 
-            tl.update(60); 
+            tl.update(60);
             expect(obj1.a).toBe(1);
             expect(obj2.b).toBeCloseTo(0, 1);
 
-            tl.update(85); 
+            tl.update(85);
             expect(obj2.b).toBeCloseTo(0.5, 1);
         });
 
@@ -449,7 +445,7 @@ describe('Tween System', () => {
             const tl = timeline().add(tw).setTimeScale(2);
 
             tl.start(0);
-            tl.update(25); 
+            tl.update(25);
             expect(obj.x).toBeCloseTo(50, 1);
         });
 
@@ -459,7 +455,7 @@ describe('Tween System', () => {
             const tl = timeline().add(tw);
 
             let completed = false;
-            tl.onComplete(() => completed = true);
+            tl.onComplete(() => (completed = true));
 
             tl.start(0);
             tl.update(100);
@@ -470,8 +466,7 @@ describe('Tween System', () => {
     describe('Interpolation', () => {
         test('linear interpolation', () => {
             let obj = { path: [0, 50, 100] };
-            const tw = to(obj, { path: [100, 150, 200] }, 100)
-                .interpolation(Interpolation.Linear);
+            const tw = to(obj, { path: [100, 150, 200] }, 100).interpolation(Interpolation.Linear);
 
             tw.start(0);
             tw.update(50);
@@ -483,8 +478,9 @@ describe('Tween System', () => {
 
         test('bezier interpolation', () => {
             let obj = { curve: [0, 25, 75, 100] };
-            const tw = to(obj, { curve: [100, 125, 175, 200] }, 100)
-                .interpolation(Interpolation.Bezier);
+            const tw = to(obj, { curve: [100, 125, 175, 200] }, 100).interpolation(
+                Interpolation.Bezier
+            );
 
             tw.start(0);
             tw.update(100);
@@ -494,8 +490,7 @@ describe('Tween System', () => {
 
         test('step interpolation', () => {
             let obj = { steps: [0, 1, 2, 3] };
-            const tw = to(obj, { steps: [4, 5, 6, 7] }, 100)
-                .interpolation(Interpolation.Step);
+            const tw = to(obj, { steps: [4, 5, 6, 7] }, 100).interpolation(Interpolation.Step);
 
             tw.start(0);
             tw.update(25);
@@ -509,7 +504,7 @@ describe('Tween System', () => {
             const start = Date.now();
             await delay(50);
             const elapsed = Date.now() - start;
-            expect(elapsed).toBeGreaterThanOrEqual(45); 
+            expect(elapsed).toBeGreaterThanOrEqual(45);
         });
 
         test('waitFor utility', async () => {
@@ -536,7 +531,6 @@ describe('Tween System', () => {
 
             spr.setTarget({ value: 100 } as any);
             expect(spr.getCurrent()).toBeCloseTo(0, 3);
-
         });
 
         test('spring with object', () => {
@@ -557,12 +551,12 @@ describe('Tween System', () => {
             let started = false;
             let completed = false;
 
-            spr.onStart(() => started = true);
-            spr.onComplete(() => completed = true);
+            spr.onStart(() => (started = true));
+            spr.onComplete(() => (completed = true));
 
             // Enable auto-update for this test to match legacy behavior
             spr.setAutoUpdate(true);
-            
+
             spr.setTarget({ value: 100 } as any);
             expect(started).toBe(true);
 
@@ -589,16 +583,20 @@ describe('Tween System', () => {
                 rotation: { x: 0, y: 0, z: 0 },
                 scale: { x: 1, y: 1, z: 1 },
                 color: { r: 0, g: 0, b: 0 },
-                opacity: 0
+                opacity: 0,
             };
 
-            const tw = to(obj, {
-                position: { x: 100, y: 50, z: 25 },
-                rotation: { x: 90, y: 45, z: 180 },
-                scale: { x: 2, y: 2, z: 2 },
-                color: { r: 255, g: 128, b: 64 },
-                opacity: 1
-            }, 100);
+            const tw = to(
+                obj,
+                {
+                    position: { x: 100, y: 50, z: 25 },
+                    rotation: { x: 90, y: 45, z: 180 },
+                    scale: { x: 2, y: 2, z: 2 },
+                    color: { r: 255, g: 128, b: 64 },
+                    opacity: 1,
+                },
+                100
+            );
 
             tw.start(0);
             tw.update(50);
@@ -643,7 +641,7 @@ describe('Tween System', () => {
             expect(tw.isPlaying()).toBe(false);
 
             tw.update(50);
-            expect(obj.x).toBe(0); 
+            expect(obj.x).toBe(0);
         });
     });
 
@@ -657,7 +655,7 @@ describe('Tween System', () => {
 
         test('invalid duration', () => {
             let obj = { x: 0 };
-            const tw = to(obj, { x: 100 }, -100); 
+            const tw = to(obj, { x: 100 }, -100);
             tw.start(0);
             tw.update(50);
 
@@ -678,18 +676,18 @@ describe('Tween System', () => {
     describe('Performance', () => {
         test('many simultaneous tweens', () => {
             const objects = Array.from({ length: 100 }, () => ({ x: 0, y: 0 }));
-            const tweens = objects.map(obj => to(obj, { x: 100, y: 100 }, 100));
+            const tweens = objects.map((obj) => to(obj, { x: 100, y: 100 }, 100));
 
             const start = performance.now();
 
-            tweens.forEach(tw => tw.start(0));
-            tweens.forEach(tw => tw.update(50));
+            tweens.forEach((tw) => tw.start(0));
+            tweens.forEach((tw) => tw.update(50));
 
             const elapsed = performance.now() - start;
 
             expect(elapsed).toBeLessThan(100);
 
-            objects.forEach(obj => {
+            objects.forEach((obj) => {
                 expect(obj.x).toBeCloseTo(50, 1);
                 expect(obj.y).toBeCloseTo(50, 1);
             });
