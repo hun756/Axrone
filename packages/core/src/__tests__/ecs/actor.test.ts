@@ -3,6 +3,7 @@ import { Component } from '../../component-system/core/component';
 import { World } from '../../component-system/core/world';
 import { Transform } from '../../component-system/components/transform';
 import { createActor } from '../../component-system/utils/factory';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 class TestComponent extends Component {
     value: number = 0;
@@ -431,13 +432,13 @@ describe('Actor', () => {
     describe('event handling', () => {
         it('should handle event bus correctly', () => {
             const mockEventBus = {
-                emit: jest.fn(),
-                on: jest.fn().mockReturnValue(() => {}),
+                emit: vi.fn(),
+                on: vi.fn().mockReturnValue(() => {}),
             };
 
             (actor as any)._eventBus = mockEventBus;
 
-            const handler = jest.fn();
+            const handler = vi.fn();
             const unsubscribe = actor.on('test-event', handler);
 
             expect(mockEventBus.on).toHaveBeenCalledWith('test-event', handler);
@@ -445,12 +446,12 @@ describe('Actor', () => {
         });
 
         it('should subscribe to events correctly', () => {
-            const handler = jest.fn();
-            const mockUnsubscribe = jest.fn();
+            const handler = vi.fn();
+            const mockUnsubscribe = vi.fn();
 
             const mockEventBus = {
-                emit: jest.fn(),
-                on: jest.fn().mockReturnValue(mockUnsubscribe),
+                emit: vi.fn(),
+                on: vi.fn().mockReturnValue(mockUnsubscribe),
             };
 
             (actor as any)._eventBus = mockEventBus;
@@ -464,7 +465,7 @@ describe('Actor', () => {
 
     describe('cleanup and memory management', () => {
         it('should add and execute cleanup tasks', async () => {
-            const cleanupTask = jest.fn();
+            const cleanupTask = vi.fn();
 
             actor.addCleanupTask(cleanupTask);
             await actor.destroy();
@@ -473,7 +474,7 @@ describe('Actor', () => {
         });
 
         it('should execute cleanup tasks on destroy', () => {
-            const cleanupTask = jest.fn();
+            const cleanupTask = vi.fn();
 
             actor.addCleanupTask(cleanupTask);
             actor.destroy();

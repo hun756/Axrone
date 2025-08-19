@@ -1,4 +1,4 @@
-import { PriorityQueue } from '@axrone/utility';
+import { PriorityQueue } from '../../../utility/src/memory/containers/queue';
 import { performance } from './performance';
 import {
     EventCallback,

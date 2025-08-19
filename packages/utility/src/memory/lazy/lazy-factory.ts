@@ -1,14 +1,9 @@
-import {
-    ILazy,
-    ILazyAsync,
-    ILazyFactory,
-    __factory_brand,
-    __state_brand,
-} from './lazy-core';
+import { ILazy, ILazyAsync, ILazyFactory, __factory_brand, __state_brand } from './lazy-core';
 import { LazyImpl, LazyAsyncImpl } from './lazy-impl';
 
 export class LazyFactoryImpl<TArgs extends readonly unknown[], TResult>
-    implements ILazyFactory<TArgs, TResult> {
+    implements ILazyFactory<TArgs, TResult>
+{
     readonly [__factory_brand] = true as const;
     readonly [__state_brand]!: 'LazyFactoryCore';
 

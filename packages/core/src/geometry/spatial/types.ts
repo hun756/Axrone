@@ -43,5 +43,5 @@ export const DEFAULT_SPATIAL_CONFIG: Readonly<ISpatialConfig> = {
     maxDepth: 10,
     maxItemsPerNode: 16,
     minNodeSize: 1.0,
-    splitThreshold: 0.8
+    splitThreshold: 0.8,
 } as const;

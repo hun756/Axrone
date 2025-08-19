@@ -6,11 +6,7 @@ import {
     TypedArrayConstructorMap,
 } from './types';
 import { IByteBuffer, IReadableBuffer, IWritableBuffer } from './interfaces';
-import {
-    BUFFER_DEFAULTS,
-    STRING_DEFAULTS,
-    PERFORMANCE_DEFAULTS,
-} from './constants';
+import { BUFFER_DEFAULTS, STRING_DEFAULTS, PERFORMANCE_DEFAULTS } from './constants';
 import {
     BufferOverflowError,
     BufferUnderflowError,
@@ -47,7 +43,8 @@ export class ByteBuffer implements IByteBuffer {
         usePool = true
     ): ByteBuffer {
         if (capacity <= 0) throw new RangeError('Capacity must be positive');
-        if (capacity > BUFFER_DEFAULTS.MAX_CAPACITY) throw new RangeError('Capacity exceeds maximum allowed');
+        if (capacity > BUFFER_DEFAULTS.MAX_CAPACITY)
+            throw new RangeError('Capacity exceeds maximum allowed');
 
         const powerOf2 = Math.ceil(Math.log2(capacity));
         const actualCapacity = Math.min(1 << powerOf2, BUFFER_DEFAULTS.MAX_CAPACITY);
@@ -74,7 +71,10 @@ export class ByteBuffer implements IByteBuffer {
         return cached;
     }
 
-    static directBuffer(capacity: number = BUFFER_DEFAULTS.INITIAL_CAPACITY, order = ByteOrder.Big): ByteBuffer {
+    static directBuffer(
+        capacity: number = BUFFER_DEFAULTS.INITIAL_CAPACITY,
+        order = ByteOrder.Big
+    ): ByteBuffer {
         return ByteBuffer.alloc(capacity, order, false);
     }
 
@@ -171,7 +171,10 @@ export class ByteBuffer implements IByteBuffer {
         const newCapacity = Math.min(
             Math.max(
                 this.capacity +
-                    Math.max(BUFFER_DEFAULTS.MIN_EXPANSION, Math.floor(this.capacity * BUFFER_DEFAULTS.EXPANSION_FACTOR)),
+                    Math.max(
+                        BUFFER_DEFAULTS.MIN_EXPANSION,
+                        Math.floor(this.capacity * BUFFER_DEFAULTS.EXPANSION_FACTOR)
+                    ),
                 required
             ),
             BUFFER_DEFAULTS.MAX_CAPACITY

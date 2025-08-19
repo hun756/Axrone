@@ -96,7 +96,14 @@ export {
     throttle,
 } from './operators';
 
-import type { IObservableSubject, IObserver, ObserverCallback, UnobserveFn, ObserverOptions, SubjectOptions } from './definition';
+import type {
+    IObservableSubject,
+    IObserver,
+    ObserverCallback,
+    UnobserveFn,
+    ObserverOptions,
+    SubjectOptions,
+} from './definition';
 import { createSubject } from './factory';
 import { DEFAULT_OBSERVER_OPTIONS, DEFAULT_SUBJECT_OPTIONS } from './definition';
 
@@ -123,7 +130,7 @@ export function isObserver(value: unknown): value is IObserver {
 
 export class ObserverUtils {
     static createTypedSubject<T extends Record<string, any>>(): {
-        [K in keyof T]: IObservableSubject<T[K]>
+        [K in keyof T]: IObservableSubject<T[K]>;
     } {
         return new Proxy({} as any, {
             get(target, prop) {
@@ -131,18 +138,18 @@ export class ObserverUtils {
                     target[prop] = createSubject();
                 }
                 return target[prop];
-            }
+            },
         });
     }
 
     static fromPromise<T>(promise: Promise<T>): IObservableSubject<T> {
         const subject = createSubject<T>();
         promise
-            .then(value => {
+            .then((value) => {
                 subject.notify(value);
                 subject.complete();
             })
-            .catch(error => {
+            .catch((error) => {
                 subject.error(error);
             });
         return subject;
@@ -150,9 +157,9 @@ export class ObserverUtils {
 
     static fromArray<T>(array: T[], intervalMs: number = 0): IObservableSubject<T> {
         const subject = createSubject<T>();
-        
+
         if (intervalMs === 0) {
-            array.forEach(item => subject.notifySync(item));
+            array.forEach((item) => subject.notifySync(item));
             subject.complete();
         } else {
             let index = 0;
@@ -165,7 +172,7 @@ export class ObserverUtils {
                 }
             }, intervalMs);
         }
-        
+
         return subject;
     }
 
@@ -175,51 +182,51 @@ export class ObserverUtils {
         options?: AddEventListenerOptions
     ): IObservableSubject<T> {
         const subject = createSubject<T>();
-        
+
         const handler = (event: Event) => {
             subject.notify(event as T);
         };
-        
+
         target.addEventListener(eventName, handler, options);
-        
+
         const originalDispose = subject.dispose.bind(subject);
         subject.dispose = () => {
             target.removeEventListener(eventName, handler, options);
             originalDispose();
         };
-        
+
         return subject;
     }
 
     static interval(intervalMs: number): IObservableSubject<number> {
         const subject = createSubject<number>();
         let count = 0;
-        
+
         const intervalId = setInterval(() => {
             subject.notify(count++);
         }, intervalMs);
-        
+
         const originalDispose = subject.dispose.bind(subject);
         subject.dispose = () => {
             clearInterval(intervalId);
             originalDispose();
         };
-        
+
         return subject;
     }
 
     static timer(delayMs: number, intervalMs?: number): IObservableSubject<number> {
         const subject = createSubject<number>();
         let count = 0;
-        
+
         const timeoutId = setTimeout(() => {
             subject.notify(count++);
-            
+
             if (intervalMs !== undefined) {
                 const intervalId = setInterval(() => {
                     subject.notify(count++);
                 }, intervalMs);
-                
+
                 const originalDispose = subject.dispose.bind(subject);
                 subject.dispose = () => {
                     clearInterval(intervalId);
@@ -229,13 +236,13 @@ export class ObserverUtils {
                 subject.complete();
             }
         }, delayMs);
-        
+
         const originalDispose = subject.dispose.bind(subject);
         subject.dispose = () => {
             clearTimeout(timeoutId);
             originalDispose();
         };
-        
+
         return subject;
     }
 
@@ -243,7 +250,7 @@ export class ObserverUtils {
         const subject = createSubject<T>();
         let source: IObservableSubject<T> | undefined;
         let unsubscribe: UnobserveFn | undefined;
-        
+
         const originalAddObserver = subject.addObserver.bind(subject);
         subject.addObserver = (callback, options) => {
             if (!source) {
@@ -254,7 +261,7 @@ export class ObserverUtils {
             }
             return originalAddObserver(callback, options);
         };
-        
+
         const originalDispose = subject.dispose.bind(subject);
         subject.dispose = () => {
             if (unsubscribe) {
@@ -265,7 +272,7 @@ export class ObserverUtils {
             }
             originalDispose();
         };
-        
+
         return subject;
     }
 }

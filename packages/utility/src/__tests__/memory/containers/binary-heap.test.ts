@@ -6,6 +6,7 @@ import {
     numericComparator,
 } from '../../../memory/containers/queue/utils';
 import { EmptyQueueError } from '../../../memory/containers/queue/errors';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 describe('BinaryMinHeap', () => {
     describe('Constructor', () => {

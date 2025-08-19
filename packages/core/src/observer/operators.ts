@@ -6,11 +6,7 @@ import {
     ObserverOptions,
     IObservableSubject,
 } from './definition';
-import {
-    IObserverChain,
-    ISubjectGroup,
-    IObserverConnection,
-} from './interfaces';
+import { IObserverChain, ISubjectGroup, IObserverConnection } from './interfaces';
 import { Subject } from './subject';
 import { createSubject } from './factory';
 
@@ -113,14 +109,14 @@ export class ObserverChain<T = any> implements IObserverChain<T> {
         if (takeCount > 0 || takeUntilFn) {
             wrappedCallback = (data: T, subject: IObservableSubject<T>) => {
                 callCount++;
-                
+
                 if (takeUntilFn && takeUntilFn(data, subject)) {
                     unsubscribe?.();
                     return;
                 }
-                
+
                 callback(data, subject);
-                
+
                 if (takeCount > 0 && callCount >= takeCount) {
                     unsubscribe?.();
                 }
@@ -166,22 +162,16 @@ export class SubjectGroup<T = any> implements ISubjectGroup<T> {
     }
 
     async notifyAll(data: T): Promise<boolean[]> {
-        const promises = Array.from(this.#subjects.values()).map(subject => 
-            subject.notify(data)
-        );
+        const promises = Array.from(this.#subjects.values()).map((subject) => subject.notify(data));
         return Promise.all(promises);
     }
 
     notifyAllSync(data: T): boolean[] {
-        return Array.from(this.#subjects.values()).map(subject => 
-            subject.notifySync(data)
-        );
+        return Array.from(this.#subjects.values()).map((subject) => subject.notifySync(data));
     }
 
     async completeAll(): Promise<void> {
-        const promises = Array.from(this.#subjects.values()).map(subject => 
-            subject.complete()
-        );
+        const promises = Array.from(this.#subjects.values()).map((subject) => subject.complete());
         await Promise.all(promises);
     }
 
@@ -193,7 +183,7 @@ export class SubjectGroup<T = any> implements ISubjectGroup<T> {
     }
 
     addObserver(observer: ObserverCallback<T>, options?: ObserverOptions): UnobserveFn[] {
-        const unsubscribers = Array.from(this.#subjects.values()).map(subject =>
+        const unsubscribers = Array.from(this.#subjects.values()).map((subject) =>
             subject.addObserver(observer, options)
         );
 
@@ -213,7 +203,7 @@ export class SubjectGroup<T = any> implements ISubjectGroup<T> {
 
         const originalDispose = mergedSubject.dispose.bind(mergedSubject);
         mergedSubject.dispose = () => {
-            unsubscribers.forEach(unsub => unsub());
+            unsubscribers.forEach((unsub) => unsub());
             originalDispose();
         };
 
@@ -231,8 +221,8 @@ export class SubjectGroup<T = any> implements ISubjectGroup<T> {
                 hasEmitted.add(subject.id);
 
                 if (hasEmitted.size === this.#subjects.size) {
-                    const values = Array.from(this.#subjects.values()).map(s => 
-                        latestValues.get(s.id)!
+                    const values = Array.from(this.#subjects.values()).map(
+                        (s) => latestValues.get(s.id)!
                     );
                     combinedSubject.notify(values);
                 }
@@ -243,7 +233,9 @@ export class SubjectGroup<T = any> implements ISubjectGroup<T> {
     }
 }
 
-export class ObserverConnection<TSource = any, TTarget = any> implements IObserverConnection<TSource, TTarget> {
+export class ObserverConnection<TSource = any, TTarget = any>
+    implements IObserverConnection<TSource, TTarget>
+{
     readonly source: IObservableSubject<TSource>;
     readonly target: IObservableSubject<TTarget>;
     readonly transform?: (data: TSource) => TTarget | Promise<TTarget>;
@@ -271,9 +263,7 @@ export class ObserverConnection<TSource = any, TTarget = any> implements IObserv
 
         this.#unsubscribe = this.source.addObserver(async (data) => {
             try {
-                const transformedData = this.transform 
-                    ? await this.transform(data)
-                    : (data as any);
+                const transformedData = this.transform ? await this.transform(data) : (data as any);
                 await this.target.notify(transformedData);
             } catch (error) {
                 await this.target.error(error as Error);
@@ -340,7 +330,7 @@ export function filter<T>(
     source: IObservableSubject<T>,
     predicate: (data: T) => boolean
 ): IObservableSubject<T> {
-    return pipe(source, (data) => predicate(data) ? data : undefined as any);
+    return pipe(source, (data) => (predicate(data) ? data : (undefined as any)));
 }
 
 export function map<T, U>(
@@ -350,10 +340,7 @@ export function map<T, U>(
     return pipe(source, transform);
 }
 
-export function debounce<T>(
-    source: IObservableSubject<T>,
-    ms: number
-): IObservableSubject<T> {
+export function debounce<T>(source: IObservableSubject<T>, ms: number): IObservableSubject<T> {
     const target = createSubject<T>();
     let timeoutId: ReturnType<typeof setTimeout>;
 
@@ -367,10 +354,7 @@ export function debounce<T>(
     return target;
 }
 
-export function throttle<T>(
-    source: IObservableSubject<T>,
-    ms: number
-): IObservableSubject<T> {
+export function throttle<T>(source: IObservableSubject<T>, ms: number): IObservableSubject<T> {
     const target = createSubject<T>();
     let lastEmission = 0;
 

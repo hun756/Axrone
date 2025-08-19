@@ -1,6 +1,6 @@
 export {
     script,
-    Script, 
+    Script,
     getComponentMetadata,
     setComponentMetadata,
     getAllScripts,
@@ -8,12 +8,7 @@ export {
     validateAllScripts,
     getScriptMetrics,
     clearScriptCaches,
-    __debugScriptSystem
+    __debugScriptSystem,
 } from './script';
 
-export type {
-    ScriptMetadata,
-    ScriptDecoratorOptions,
-    ValidationResult
-} from './script';
-
+export type { ScriptMetadata, ScriptDecoratorOptions, ValidationResult } from './script';

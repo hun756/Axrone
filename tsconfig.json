@@ -23,6 +23,7 @@
                 "packages/*/src"
             ]
         },
+    "types": ["vitest/globals"],
         "composite": true,
         "declarationMap": true
     },

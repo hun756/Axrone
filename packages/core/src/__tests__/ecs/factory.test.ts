@@ -5,11 +5,18 @@ import {
     createEntity,
     createSystemId,
     createComponentId,
-    createActorId
+    createActorId,
 } from '../../component-system/utils/factory';
 import { Component } from '../../component-system/core/component';
 import { Transform } from '../../component-system/components/transform';
-import type { ComponentRegistry, Entity, SystemId, ComponentId, ActorId } from '../../component-system/types/core';
+import type {
+    ComponentRegistry,
+    Entity,
+    SystemId,
+    ComponentId,
+    ActorId,
+} from '../../component-system/types/core';
+import { describe, expect, it, vi } from 'vitest';
 
 class TestComponent extends Component {
     value: number = 0;
@@ -33,7 +40,7 @@ describe('Factory Utilities', () => {
     const registry = {
         TestComponent,
         PositionComponent,
-        Transform
+        Transform,
     };
 
     describe('createWorld', () => {
@@ -58,7 +65,7 @@ describe('Factory Utilities', () => {
         it('should create a system with correct properties', () => {
             const systemId = 'TestSystem' as SystemId;
             const query = ['TestComponent'] as const;
-            const execute = jest.fn();
+            const execute = vi.fn();
             const priority = 100;
             const enabled = true;
 
@@ -74,7 +81,7 @@ describe('Factory Utilities', () => {
         it('should create system with default values', () => {
             const systemId = 'TestSystem' as SystemId;
             const query = ['TestComponent'] as const;
-            const execute = jest.fn();
+            const execute = vi.fn();
 
             const system = createSystem(systemId, query, execute);
 
@@ -88,7 +95,7 @@ describe('Factory Utilities', () => {
         it('should create system with partial options', () => {
             const systemId = 'TestSystem' as SystemId;
             const query = ['TestComponent'] as const;
-            const execute = jest.fn();
+            const execute = vi.fn();
             const priority = 50;
 
             const system = createSystem(systemId, query, execute, priority);
@@ -212,7 +219,6 @@ describe('Factory Utilities', () => {
 
     describe('integration tests', () => {
         it('should work together to create a complete ECS setup', () => {
-
             const world = createWorld(registry);
 
             const actor = createActor(world, 'TestActor');
@@ -220,7 +226,7 @@ describe('Factory Utilities', () => {
             const entity = createEntity(1);
 
             const systemId = createSystemId('TestSystem');
-            const execute = jest.fn();
+            const execute = vi.fn();
             const system = createSystem(systemId, ['TestComponent'], execute);
 
             expect(world).toBeDefined();
@@ -232,21 +238,17 @@ describe('Factory Utilities', () => {
         it('should handle multiple entities and systems', () => {
             const world = createWorld(registry);
 
-            const entities = [
-                createEntity(1),
-                createEntity(2),
-                createEntity(3)
-            ];
+            const entities = [createEntity(1), createEntity(2), createEntity(3)];
 
             const systems = [
-                createSystem(createSystemId('System1'), ['TestComponent'], jest.fn()),
-                createSystem(createSystemId('System2'), ['PositionComponent'], jest.fn()),
-                createSystem(createSystemId('System3'), ['Transform'], jest.fn())
+                createSystem(createSystemId('System1'), ['TestComponent'], vi.fn()),
+                createSystem(createSystemId('System2'), ['PositionComponent'], vi.fn()),
+                createSystem(createSystemId('System3'), ['Transform'], vi.fn()),
             ];
 
             expect(entities).toHaveLength(3);
             expect(systems).toHaveLength(3);
-            expect(systems.map(s => s.id)).toEqual(['System1', 'System2', 'System3']);
+            expect(systems.map((s) => s.id)).toEqual(['System1', 'System2', 'System3']);
         });
     });
 });

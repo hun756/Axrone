@@ -5,6 +5,7 @@ import { Component } from '../../component-system/core/component';
 import { Transform } from '../../component-system/components/transform';
 import type { SystemId } from '../../component-system/types/core';
 import type { System } from '../../component-system/types/system';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 class TestComponent extends Component {
     value: number = 0;
@@ -39,7 +40,7 @@ describe('SystemManager', () => {
         TestComponent,
         PositionComponent,
         VelocityComponent,
-        Transform
+        Transform,
     };
 
     let world: World<typeof registry>;
@@ -61,7 +62,7 @@ describe('SystemManager', () => {
         });
 
         it('should initialize all system phases', () => {
-            Object.values(SystemPhase).forEach(phase => {
+            Object.values(SystemPhase).forEach((phase) => {
                 expect(systemManager.getSystemsInPhase(phase)).toHaveLength(0);
             });
         });
@@ -73,13 +74,13 @@ describe('SystemManager', () => {
 
     describe('system registration', () => {
         it('should add system successfully', () => {
-            const mockExecute = jest.fn();
+            const mockExecute = vi.fn();
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'TestSystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system);
@@ -90,13 +91,13 @@ describe('SystemManager', () => {
         });
 
         it('should add system to specific phase', () => {
-            const mockExecute = jest.fn();
+            const mockExecute = vi.fn();
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'RenderSystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system, SystemPhase.Render);
@@ -106,13 +107,13 @@ describe('SystemManager', () => {
         });
 
         it('should default to Update phase when no phase specified', () => {
-            const mockExecute = jest.fn();
+            const mockExecute = vi.fn();
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'DefaultSystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system);
@@ -121,15 +122,15 @@ describe('SystemManager', () => {
         });
 
         it('should call onEnable when system is added', () => {
-            const mockExecute = jest.fn();
-            const mockOnEnable = jest.fn();
+            const mockExecute = vi.fn();
+            const mockOnEnable = vi.fn();
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'EnableSystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
                 enabled: true,
-                onEnable: mockOnEnable
+                onEnable: mockOnEnable,
             };
 
             systemManager.addSystem(system);
@@ -138,28 +139,30 @@ describe('SystemManager', () => {
         });
 
         it('should replace existing system with warning', () => {
-            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
             const system1: System<typeof registry, ['TestComponent']> = {
                 id: 'DuplicateSystem' as SystemId,
                 query: ['TestComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             const system2: System<typeof registry, ['PositionComponent']> = {
                 id: 'DuplicateSystem' as SystemId,
                 query: ['PositionComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 200,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system1);
             systemManager.addSystem(system2);
 
-            expect(consoleSpy).toHaveBeenCalledWith('System DuplicateSystem already exists, replacing...');
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'System DuplicateSystem already exists, replacing...'
+            );
             expect(systemManager.systemCount).toBe(1);
             expect(systemManager.getSystem('DuplicateSystem' as SystemId)).toBe(system2);
 
@@ -169,13 +172,13 @@ describe('SystemManager', () => {
 
     describe('system removal', () => {
         it('should remove system successfully', () => {
-            const mockExecute = jest.fn();
+            const mockExecute = vi.fn();
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'RemoveSystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system);
@@ -187,15 +190,15 @@ describe('SystemManager', () => {
         });
 
         it('should call onDisable when system is removed', () => {
-            const mockExecute = jest.fn();
-            const mockOnDisable = jest.fn();
+            const mockExecute = vi.fn();
+            const mockOnDisable = vi.fn();
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'DisableSystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
                 enabled: true,
-                onDisable: mockOnDisable
+                onDisable: mockOnDisable,
             };
 
             systemManager.addSystem(system);
@@ -210,19 +213,19 @@ describe('SystemManager', () => {
         });
 
         it('should remove system from all phases', () => {
-            const mockExecute = jest.fn();
+            const mockExecute = vi.fn();
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'PhaseSystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system, SystemPhase.Render);
             systemManager.removeSystem(system.id);
 
-            Object.values(SystemPhase).forEach(phase => {
+            Object.values(SystemPhase).forEach((phase) => {
                 expect(systemManager.getSystemsInPhase(phase)).not.toContain(system);
             });
         });
@@ -233,25 +236,25 @@ describe('SystemManager', () => {
             const lowPrioritySystem: System<typeof registry, ['TestComponent']> = {
                 id: 'LowPriority' as SystemId,
                 query: ['TestComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 10,
-                enabled: true
+                enabled: true,
             };
 
             const highPrioritySystem: System<typeof registry, ['TestComponent']> = {
                 id: 'HighPriority' as SystemId,
                 query: ['TestComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             const mediumPrioritySystem: System<typeof registry, ['TestComponent']> = {
                 id: 'MediumPriority' as SystemId,
                 query: ['TestComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 50,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(lowPrioritySystem);
@@ -268,17 +271,17 @@ describe('SystemManager', () => {
             const system1: System<typeof registry, ['TestComponent']> = {
                 id: 'PreUpdateHigh' as SystemId,
                 query: ['TestComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             const system2: System<typeof registry, ['PositionComponent']> = {
                 id: 'PreUpdateLow' as SystemId,
                 query: ['PositionComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 10,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system2, SystemPhase.PreUpdate);
@@ -292,15 +295,15 @@ describe('SystemManager', () => {
 
     describe('system execution', () => {
         it('should execute all enabled systems', () => {
-            const mockExecute1 = jest.fn();
-            const mockExecute2 = jest.fn();
+            const mockExecute1 = vi.fn();
+            const mockExecute2 = vi.fn();
 
             const system1: System<typeof registry, ['TestComponent']> = {
                 id: 'System1' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute1,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             const system2: System<typeof registry, ['PositionComponent']> = {
@@ -308,7 +311,7 @@ describe('SystemManager', () => {
                 query: ['PositionComponent'],
                 execute: mockExecute2,
                 priority: 50,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system1);
@@ -321,13 +324,13 @@ describe('SystemManager', () => {
         });
 
         it('should not execute disabled systems', () => {
-            const mockExecute = jest.fn();
+            const mockExecute = vi.fn();
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'DisabledSystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
-                enabled: false
+                enabled: false,
             };
 
             systemManager.addSystem(system);
@@ -344,7 +347,7 @@ describe('SystemManager', () => {
                 query: ['TestComponent'],
                 execute: () => executionOrder.push('pre-update'),
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             const updateSystem: System<typeof registry, ['TestComponent']> = {
@@ -352,7 +355,7 @@ describe('SystemManager', () => {
                 query: ['TestComponent'],
                 execute: () => executionOrder.push('update'),
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             const postUpdateSystem: System<typeof registry, ['TestComponent']> = {
@@ -360,7 +363,7 @@ describe('SystemManager', () => {
                 query: ['TestComponent'],
                 execute: () => executionOrder.push('post-update'),
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             const renderSystem: System<typeof registry, ['TestComponent']> = {
@@ -368,7 +371,7 @@ describe('SystemManager', () => {
                 query: ['TestComponent'],
                 execute: () => executionOrder.push('render'),
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(renderSystem, SystemPhase.Render);
@@ -382,15 +385,15 @@ describe('SystemManager', () => {
         });
 
         it('should execute specific phase only', () => {
-            const mockUpdate = jest.fn();
-            const mockRender = jest.fn();
+            const mockUpdate = vi.fn();
+            const mockRender = vi.fn();
 
             const updateSystem: System<typeof registry, ['TestComponent']> = {
                 id: 'UpdateSystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockUpdate,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             const renderSystem: System<typeof registry, ['PositionComponent']> = {
@@ -398,7 +401,7 @@ describe('SystemManager', () => {
                 query: ['PositionComponent'],
                 execute: mockRender,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(updateSystem, SystemPhase.Update);
@@ -411,13 +414,13 @@ describe('SystemManager', () => {
         });
 
         it('should pass query results to system execute function', () => {
-            const mockExecute = jest.fn();
+            const mockExecute = vi.fn();
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'QuerySystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             const entity = world.createEntity();
@@ -433,21 +436,23 @@ describe('SystemManager', () => {
         });
 
         it('should handle system execution errors gracefully', () => {
-            const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+            const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
             const errorSystem: System<typeof registry, ['TestComponent']> = {
                 id: 'ErrorSystem' as SystemId,
                 query: ['TestComponent'],
-                execute: () => { throw new Error('System error'); },
+                execute: () => {
+                    throw new Error('System error');
+                },
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             const normalSystem: System<typeof registry, ['PositionComponent']> = {
                 id: 'NormalSystem' as SystemId,
                 query: ['PositionComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(errorSystem);
@@ -475,13 +480,13 @@ describe('SystemManager', () => {
         });
 
         it('should not execute systems when manager is disabled', () => {
-            const mockExecute = jest.fn();
+            const mockExecute = vi.fn();
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'TestSystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system);
@@ -492,13 +497,13 @@ describe('SystemManager', () => {
         });
 
         it('should not execute specific phase when manager is disabled', () => {
-            const mockExecute = jest.fn();
+            const mockExecute = vi.fn();
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'TestSystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system);
@@ -512,15 +517,12 @@ describe('SystemManager', () => {
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'ChainSystem' as SystemId,
                 query: ['TestComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
-            const result = systemManager
-                .addSystem(system)
-                .setEnabled(false)
-                .setEnabled(true);
+            const result = systemManager.addSystem(system).setEnabled(false).setEnabled(true);
 
             expect(result).toBe(systemManager);
         });
@@ -531,17 +533,17 @@ describe('SystemManager', () => {
             const system1: System<typeof registry, ['TestComponent']> = {
                 id: 'System1' as SystemId,
                 query: ['TestComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             const system2: System<typeof registry, ['PositionComponent']> = {
                 id: 'System2' as SystemId,
                 query: ['PositionComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 50,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system1);
@@ -557,17 +559,17 @@ describe('SystemManager', () => {
             const updateSystem: System<typeof registry, ['TestComponent']> = {
                 id: 'UpdateSystem' as SystemId,
                 query: ['TestComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             const renderSystem: System<typeof registry, ['PositionComponent']> = {
                 id: 'RenderSystem' as SystemId,
                 query: ['PositionComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 50,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(updateSystem, SystemPhase.Update);
@@ -593,9 +595,9 @@ describe('SystemManager', () => {
             const system1: System<typeof registry, ['TestComponent']> = {
                 id: 'System1' as SystemId,
                 query: ['TestComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system1);
@@ -604,9 +606,9 @@ describe('SystemManager', () => {
             const system2: System<typeof registry, ['PositionComponent']> = {
                 id: 'System2' as SystemId,
                 query: ['PositionComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 50,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system2);
@@ -622,13 +624,13 @@ describe('SystemManager', () => {
 
     describe('edge cases and error handling', () => {
         it('should handle systems with complex queries', () => {
-            const mockExecute = jest.fn();
+            const mockExecute = vi.fn();
             const complexSystem: System<typeof registry, ['TestComponent', 'PositionComponent']> = {
                 id: 'ComplexSystem' as SystemId,
                 query: ['TestComponent', 'PositionComponent'],
                 execute: mockExecute,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(complexSystem);
@@ -644,28 +646,28 @@ describe('SystemManager', () => {
                     expect.objectContaining({
                         components: expect.objectContaining({
                             TestComponent: expect.any(TestComponent),
-                            PositionComponent: expect.any(PositionComponent)
-                        })
-                    })
+                            PositionComponent: expect.any(PositionComponent),
+                        }),
+                    }),
                 ]),
                 16.67
             );
         });
 
         it('should handle systems with minimal queries', () => {
-            const mockExecute = jest.fn();
+            const mockExecute = vi.fn();
             const minimalQuerySystem: System<typeof registry, ['TestComponent']> = {
                 id: 'MinimalQuerySystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(minimalQuerySystem);
 
             const entity = world.createEntity();
-            world.addComponent(entity, 'PositionComponent'); 
+            world.addComponent(entity, 'PositionComponent');
 
             systemManager.executeAll(16.67);
 
@@ -678,9 +680,9 @@ describe('SystemManager', () => {
             const zeroPrioritySystem: System<typeof registry, ['TestComponent']> = {
                 id: 'ZeroPriority' as SystemId,
                 query: ['TestComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: 0,
-                enabled: true
+                enabled: true,
             };
 
             expect(() => systemManager.addSystem(zeroPrioritySystem)).not.toThrow();
@@ -691,9 +693,9 @@ describe('SystemManager', () => {
             const negativePrioritySystem: System<typeof registry, ['TestComponent']> = {
                 id: 'NegativePriority' as SystemId,
                 query: ['TestComponent'],
-                execute: jest.fn(),
+                execute: vi.fn(),
                 priority: -10,
-                enabled: true
+                enabled: true,
             };
 
             expect(() => systemManager.addSystem(negativePrioritySystem)).not.toThrow();
@@ -701,13 +703,13 @@ describe('SystemManager', () => {
         });
 
         it('should handle execution with no deltaTime', () => {
-            const mockExecute = jest.fn();
+            const mockExecute = vi.fn();
             const system: System<typeof registry, ['TestComponent']> = {
                 id: 'NoDeltaSystem' as SystemId,
                 query: ['TestComponent'],
                 execute: mockExecute,
                 priority: 100,
-                enabled: true
+                enabled: true,
             };
 
             systemManager.addSystem(system);
@@ -726,9 +728,9 @@ describe('SystemManager', () => {
                 const system: System<typeof registry, ['TestComponent']> = {
                     id: `System${i}` as SystemId,
                     query: ['TestComponent'],
-                    execute: jest.fn(),
+                    execute: vi.fn(),
                     priority: i,
-                    enabled: true
+                    enabled: true,
                 };
                 systems.push(system);
                 systemManager.addSystem(system);
@@ -740,7 +742,7 @@ describe('SystemManager', () => {
             systemManager.executeAll(16.67);
             const endTime = performance.now();
 
-            expect(endTime - startTime).toBeLessThan(100); 
+            expect(endTime - startTime).toBeLessThan(100);
         });
 
         it('should cleanup properly when systems are removed', () => {
@@ -750,20 +752,20 @@ describe('SystemManager', () => {
                 const system: System<typeof registry, ['TestComponent']> = {
                     id: `CleanupSystem${i}` as SystemId,
                     query: ['TestComponent'],
-                    execute: jest.fn(),
+                    execute: vi.fn(),
                     priority: i,
-                    enabled: true
+                    enabled: true,
                 };
                 systems.push(system);
                 systemManager.addSystem(system);
             }
 
-            systems.forEach(system => {
+            systems.forEach((system) => {
                 systemManager.removeSystem(system.id);
             });
 
             expect(systemManager.systemCount).toBe(0);
-            Object.values(SystemPhase).forEach(phase => {
+            Object.values(SystemPhase).forEach((phase) => {
                 expect(systemManager.getSystemsInPhase(phase)).toHaveLength(0);
             });
         });

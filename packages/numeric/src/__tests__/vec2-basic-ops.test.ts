@@ -1,5 +1,6 @@
 import { Vec2, IVec2Like } from '../vec2';
 import { EPSILON } from '../common';
+import { describe, expect, test } from 'vitest';
 
 declare global {
     namespace jest {

@@ -1,6 +1,12 @@
 import { DeepPartial } from '@axrone/utility';
 import { EventEmitter } from '../event/event-emitter';
-import { SpringConfig, SpringEventMap, TweenableValue, UpdateCallback, VoidCallback } from './types';
+import {
+    SpringConfig,
+    SpringEventMap,
+    TweenableValue,
+    UpdateCallback,
+    VoidCallback,
+} from './types';
 
 export class SpringSimulation {
     private _mass: number;
@@ -76,7 +82,7 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
 
     setAutoUpdate(enabled: boolean): void {
         this._autoUpdate = enabled;
-        
+
         if (!enabled && this._animFrameId !== undefined) {
             cancelAnimationFrame(this._animFrameId);
             this._animFrameId = undefined;
@@ -159,7 +165,10 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
     }
 
     getCurrent(): T {
-        if (typeof (this._current as any).value === 'number' && Object.keys(this._current as any).length === 1) {
+        if (
+            typeof (this._current as any).value === 'number' &&
+            Object.keys(this._current as any).length === 1
+        ) {
             return (this._current as any).value;
         }
         return this._deepClone(this._current);
@@ -172,7 +181,7 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
 
         this._isRunning = true;
         this._lastTime = performance.now();
-        
+
         if (this._autoUpdate) {
             this._startInternalLoop();
         }

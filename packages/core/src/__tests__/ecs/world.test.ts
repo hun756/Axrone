@@ -1,10 +1,11 @@
 import { World, WorldError, EntityError, ComponentError } from '../../component-system/core/world';
 import { Transform } from '../../component-system/components/transform';
 import { Component } from '../../component-system/core/component';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 class TestComponent extends Component {
     value: number = 0;
-    
+
     constructor(value: number = 0) {
         super();
         this.value = value;
@@ -13,7 +14,7 @@ class TestComponent extends Component {
 
 class AnotherComponent extends Component {
     name: string = '';
-    
+
     constructor(name: string = '') {
         super();
         this.name = name;
@@ -28,7 +29,7 @@ describe('World', () => {
         registry = {
             Transform: Transform,
             TestComponent: TestComponent,
-            AnotherComponent: AnotherComponent
+            AnotherComponent: AnotherComponent,
         };
         world = new World(registry);
     });
@@ -56,7 +57,7 @@ describe('World', () => {
             const config = {
                 maxEntities: 500,
                 enableMetrics: true,
-                enableValidation: false
+                enableValidation: false,
             };
             const configuredWorld = new World(registry, config);
             expect(configuredWorld.state).toBe('ready');
@@ -76,7 +77,7 @@ describe('World', () => {
             const entity1 = world.createEntity();
             const entity2 = world.createEntity();
             const entity3 = world.createEntity();
-            
+
             expect(entity1).not.toBe(entity2);
             expect(entity2).not.toBe(entity3);
             expect(world.getEntityCount()).toBe(3);
@@ -85,7 +86,7 @@ describe('World', () => {
         it('should destroy entity', () => {
             const entity = world.createEntity();
             expect(world.getEntityCount()).toBe(1);
-            
+
             world.destroyEntity(entity);
             expect(world.getEntityCount()).toBe(0);
         });
@@ -97,17 +98,17 @@ describe('World', () => {
         it('should reuse destroyed entity ids', () => {
             const entity1 = world.createEntity();
             world.destroyEntity(entity1);
-            
+
             const entity2 = world.createEntity();
             expect(entity2).toBe(entity1);
         });
 
         it('should throw error when max entities reached', () => {
             const smallWorld = new World(registry, { maxEntities: 2 });
-            
+
             smallWorld.createEntity();
             smallWorld.createEntity();
-            
+
             expect(() => smallWorld.createEntity()).toThrow(WorldError);
             smallWorld.clear();
         });
@@ -122,7 +123,7 @@ describe('World', () => {
 
         it('should add component to entity', () => {
             const component = world.addComponent(entity, 'TestComponent');
-            
+
             expect(component).toBeDefined();
             expect(component).toBeInstanceOf(TestComponent);
             expect(world.hasComponent(entity, 'TestComponent')).toBe(true);
@@ -130,15 +131,19 @@ describe('World', () => {
 
         it('should add component with initial data', () => {
             const testComponent = new TestComponent(42);
-            const component = world.addComponent(entity, 'TestComponent', testComponent) as TestComponent;
-            
+            const component = world.addComponent(
+                entity,
+                'TestComponent',
+                testComponent
+            ) as TestComponent;
+
             expect(component.value).toBe(42);
         });
 
         it('should get component from entity', () => {
             world.addComponent(entity, 'TestComponent');
             const component = world.getComponent(entity, 'TestComponent') as TestComponent;
-            
+
             expect(component).toBeDefined();
             expect(component).toBeInstanceOf(TestComponent);
         });
@@ -150,7 +155,7 @@ describe('World', () => {
 
         it('should check if entity has component', () => {
             expect(world.hasComponent(entity, 'TestComponent')).toBe(false);
-            
+
             world.addComponent(entity, 'TestComponent');
             expect(world.hasComponent(entity, 'TestComponent')).toBe(true);
         });
@@ -158,7 +163,7 @@ describe('World', () => {
         it('should remove component from entity', () => {
             world.addComponent(entity, 'TestComponent');
             expect(world.hasComponent(entity, 'TestComponent')).toBe(true);
-            
+
             world.removeComponent(entity, 'TestComponent');
             expect(world.hasComponent(entity, 'TestComponent')).toBe(false);
         });
@@ -170,13 +175,15 @@ describe('World', () => {
         it('should add multiple components to entity', () => {
             world.addComponent(entity, 'TestComponent');
             world.addComponent(entity, 'AnotherComponent');
-            
+
             expect(world.hasComponent(entity, 'TestComponent')).toBe(true);
             expect(world.hasComponent(entity, 'AnotherComponent')).toBe(true);
         });
 
         it('should throw error for invalid component name', () => {
-            expect(() => world.addComponent(entity, 'NonExistentComponent' as any)).toThrow(WorldError);
+            expect(() => world.addComponent(entity, 'NonExistentComponent' as any)).toThrow(
+                WorldError
+            );
         });
 
         it('should throw error for invalid entity', () => {
@@ -196,24 +203,24 @@ describe('World', () => {
         it('should query entities with single component', () => {
             world.addComponent(entity1, 'TestComponent');
             world.addComponent(entity2, 'TestComponent');
-            
+
             const results = world.query('TestComponent');
-            
+
             expect(results).toHaveLength(2);
-            expect(results.map(r => r.entity)).toContain(entity1);
-            expect(results.map(r => r.entity)).toContain(entity2);
+            expect(results.map((r) => r.entity)).toContain(entity1);
+            expect(results.map((r) => r.entity)).toContain(entity2);
         });
 
         it('should query entities with multiple components', () => {
             world.addComponent(entity1, 'TestComponent');
             world.addComponent(entity1, 'AnotherComponent');
-            
+
             world.addComponent(entity2, 'TestComponent');
-            
+
             world.addComponent(entity3, 'AnotherComponent');
-            
+
             const results = world.query('TestComponent', 'AnotherComponent');
-            
+
             expect(results).toHaveLength(1);
             expect(results[0].entity).toBe(entity1);
             expect(results[0].components.TestComponent).toBeInstanceOf(TestComponent);
@@ -239,7 +246,7 @@ describe('World', () => {
     describe('state management', () => {
         it('should validate world state for operations', () => {
             world.clear();
-            
+
             expect(() => world.createEntity()).toThrow(WorldError);
             expect(() => world.query('TestComponent')).toThrow(WorldError);
         });
@@ -247,7 +254,7 @@ describe('World', () => {
         it('should get all entities', () => {
             const entity1 = world.createEntity();
             const entity2 = world.createEntity();
-            
+
             const allEntities = world.getAllEntities();
             expect(allEntities).toHaveLength(2);
             expect(allEntities).toContain(entity1);
@@ -256,20 +263,20 @@ describe('World', () => {
 
         it('should get entity count', () => {
             expect(world.getEntityCount()).toBe(0);
-            
+
             world.createEntity();
             expect(world.getEntityCount()).toBe(1);
-            
+
             world.createEntity();
             expect(world.getEntityCount()).toBe(2);
         });
 
         it('should get archetype count', () => {
             const initialCount = world.getArchetypeCount();
-            
+
             const entity = world.createEntity();
             world.addComponent(entity, 'TestComponent');
-            
+
             expect(world.getArchetypeCount()).toBeGreaterThan(initialCount);
         });
     });
@@ -282,12 +289,12 @@ describe('World', () => {
         it('should return metrics when enabled', () => {
             const metricsWorld = new World(registry, { enableMetrics: true });
             const metrics = metricsWorld.metrics;
-            
+
             expect(metrics).toBeDefined();
             expect(metrics).toHaveProperty('entityCount');
             expect(metrics).toHaveProperty('archetypeCount');
             expect(metrics).toHaveProperty('queryCount');
-            
+
             metricsWorld.clear();
         });
     });
@@ -296,14 +303,14 @@ describe('World', () => {
         it('should clear all entities and components', () => {
             const entity1 = world.createEntity();
             const entity2 = world.createEntity();
-            
+
             world.addComponent(entity1, 'TestComponent');
             world.addComponent(entity2, 'AnotherComponent');
-            
+
             expect(world.getEntityCount()).toBe(2);
-            
+
             world.clear();
-            
+
             expect(world.isDisposed).toBe(true);
             expect(world.getEntityCount()).toBe(0);
         });

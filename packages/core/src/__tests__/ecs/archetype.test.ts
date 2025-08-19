@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { Archetype } from '../../component-system/archetype/archetype';
 import { Component } from '../../component-system/core/component';
 import type {

@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     Subject,
     BehaviorSubject,
@@ -7,23 +8,25 @@ import {
     ObserverOptions,
     SubjectOptions,
     IObservableSubject,
-} from '../index';
+} from '../../observer/index';
 
 describe('Observer Library - Core Functionality', () => {
-    let consoleErrorSpy: jest.SpyInstance;
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
-        consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     });
 
     afterEach(() => {
         consoleErrorSpy.mockRestore();
     });
 
+    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
     describe('Subject', () => {
         it('should create a subject and notify observers', async () => {
             const subject = new Subject<string>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver(observer);
             await subject.notify('test data');
@@ -33,7 +36,7 @@ describe('Observer Library - Core Functionality', () => {
 
         it('should support synchronous notification', () => {
             const subject = new Subject<number>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver(observer);
             const result = subject.notifySync(42);
@@ -44,7 +47,7 @@ describe('Observer Library - Core Functionality', () => {
 
         it('should handle observer removal', () => {
             const subject = new Subject<string>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             const unsubscribe = subject.addObserver(observer);
             unsubscribe();
@@ -86,7 +89,7 @@ describe('Observer Library - Core Functionality', () => {
 
         it('should support once observers', async () => {
             const subject = new Subject<string>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver(observer, { once: true });
             await subject.notify('first');
@@ -98,7 +101,7 @@ describe('Observer Library - Core Functionality', () => {
 
         it('should handle completion', async () => {
             const subject = new Subject<string>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver(observer);
             await subject.complete();
@@ -110,7 +113,7 @@ describe('Observer Library - Core Functionality', () => {
 
         it('should handle errors', async () => {
             const subject = new Subject<string>();
-            const errorHandler = jest.fn();
+            const errorHandler = vi.fn();
             const testError = new Error('Test error');
 
             subject.addObserver(() => {}, {
@@ -125,9 +128,9 @@ describe('Observer Library - Core Functionality', () => {
             expect(subject.getLastError()).toBe(testError);
         });
 
-        it('should support debounced observers', (done) => {
+        it('should support debounced observers', async () => {
             const subject = new Subject<string>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver(observer, { debounceMs: 50 });
 
@@ -135,36 +138,33 @@ describe('Observer Library - Core Functionality', () => {
             subject.notifySync('second');
             subject.notifySync('third');
 
-            setTimeout(() => {
-                expect(observer).toHaveBeenCalledTimes(1);
-                expect(observer).toHaveBeenCalledWith('third', subject);
-                done();
-            }, 100);
+            await sleep(100);
+
+            expect(observer).toHaveBeenCalledTimes(1);
+            expect(observer).toHaveBeenCalledWith('third', subject);
         });
 
-        it('should support throttled observers', (done) => {
+        it('should support throttled observers', async () => {
             const subject = new Subject<string>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver(observer, { throttleMs: 50 });
 
             subject.notifySync('first');
             subject.notifySync('second'); // should be ignored due to throttling
 
-            setTimeout(() => {
-                subject.notifySync('third'); // should be allowed after throttle period
-                setTimeout(() => {
-                    // throttling behavior may vary, let's just check that observer was called
-                    expect(observer).toHaveBeenCalled();
-                    expect(observer).toHaveBeenCalledWith('first', subject);
-                    done();
-                }, 10);
-            }, 60);
+            await sleep(60);
+            subject.notifySync('third'); // should be allowed after throttle period
+            await sleep(20);
+
+            // throttling behavior may vary, let's just check that observer was called
+            expect(observer).toHaveBeenCalled();
+            expect(observer).toHaveBeenCalledWith('first', subject);
         });
 
         it('should support filtered observers', async () => {
             const subject = new Subject<number>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver(observer, {
                 filter: (data) => data > 5,
@@ -182,7 +182,7 @@ describe('Observer Library - Core Functionality', () => {
 
         it('should support data transformation', async () => {
             const subject = new Subject<number>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver(observer, {
                 transform: (data) => data * 2,
@@ -195,7 +195,7 @@ describe('Observer Library - Core Functionality', () => {
 
         it('should track metrics', async () => {
             const subject = new Subject<string>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver(observer);
             await subject.notify('test1');
@@ -224,7 +224,7 @@ describe('Observer Library - Core Functionality', () => {
 
         it('should dispose properly', () => {
             const subject = new Subject<string>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver(observer);
             subject.dispose();
@@ -234,16 +234,13 @@ describe('Observer Library - Core Functionality', () => {
     });
 
     describe('BehaviorSubject', () => {
-        it('should emit current value to new observers', (done) => {
+        it('should emit current value to new observers', async () => {
             const subject = new BehaviorSubject<string>('initial');
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver(observer);
-
-            setTimeout(() => {
-                expect(observer).toHaveBeenCalledWith('initial', subject);
-                done();
-            }, 10);
+            await sleep(10);
+            expect(observer).toHaveBeenCalledWith('initial', subject);
         });
 
         it('should update current value on notification', async () => {
@@ -262,23 +259,19 @@ describe('Observer Library - Core Functionality', () => {
     });
 
     describe('ReplaySubject', () => {
-        it('should replay buffered values to new observers', (done) => {
+        it('should replay buffered values to new observers', async () => {
             const subject = new ReplaySubject<number>({ replay: { enabled: true, bufferSize: 3 } });
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.notify(1);
             subject.notify(2);
             subject.notify(3);
             subject.notify(4);
 
-            setTimeout(() => {
-                subject.addObserver(observer);
-
-                setTimeout(() => {
-                    expect(observer).toHaveBeenCalledTimes(3);
-                    done();
-                }, 20);
-            }, 10);
+            await sleep(10);
+            subject.addObserver(observer);
+            await sleep(20);
+            expect(observer).toHaveBeenCalledTimes(3);
         });
 
         it('should respect buffer size', () => {
@@ -296,7 +289,7 @@ describe('Observer Library - Core Functionality', () => {
     describe('AsyncSubject', () => {
         it('should only emit last value on completion', async () => {
             const subject = new AsyncSubject<number>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver(observer);
             await subject.notify(1);
@@ -313,9 +306,9 @@ describe('Observer Library - Core Functionality', () => {
     });
 
     describe('Observer Chains', () => {
-        it('should support basic filtering', (done) => {
+        it('should support basic filtering', async () => {
             const subject = new Subject<number>();
-            const observer = jest.fn();
+            const observer = vi.fn();
 
             subject.addObserver((data) => {
                 if (data > 5) {
@@ -326,10 +319,8 @@ describe('Observer Library - Core Functionality', () => {
             subject.notifySync(3);
             subject.notifySync(7);
 
-            setTimeout(() => {
-                expect(observer).toHaveBeenCalledWith(14);
-                done();
-            }, 10);
+            await sleep(10);
+            expect(observer).toHaveBeenCalledWith(14);
         });
     });
 
@@ -337,8 +328,8 @@ describe('Observer Library - Core Functionality', () => {
         it('should support basic subject operations', () => {
             const subject1 = new Subject<string>();
             const subject2 = new Subject<string>();
-            const observer1 = jest.fn();
-            const observer2 = jest.fn();
+            const observer1 = vi.fn();
+            const observer2 = vi.fn();
 
             subject1.addObserver(observer1);
             subject2.addObserver(observer2);
@@ -358,7 +349,7 @@ describe('Observer Library - Core Functionality', () => {
     describe('Error Handling', () => {
         it('should handle observer execution errors', async () => {
             const subject = new Subject<string>();
-            const errorHandler = jest.fn();
+            const errorHandler = vi.fn();
 
             subject.addObserver(
                 () => {
@@ -408,7 +399,7 @@ describe('Observer Library - Core Functionality', () => {
                 },
             });
 
-            let observer: ObserverCallback<string> | undefined = jest.fn();
+            let observer: ObserverCallback<string> | undefined = vi.fn();
             subject.addObserver(observer, { weakReference: true });
 
             observer = undefined;
@@ -428,10 +419,10 @@ describe('Observer Library - Core Functionality', () => {
             const subject = new Subject<number>({
                 maxObservers: 200,
             });
-            const observers: jest.Mock[] = [];
+            const observers: any[] = [];
 
             for (let i = 0; i < 100; i++) {
-                const observer = jest.fn();
+                const observer = vi.fn();
                 observers.push(observer);
                 subject.addObserver(observer);
             }
@@ -454,7 +445,7 @@ describe('Observer Library - Core Functionality', () => {
                     maxConcurrent: Infinity,
                 },
             });
-            const observer = jest.fn();
+            const observer = vi.fn();
             subject.addObserver(observer);
 
             const start = performance.now();

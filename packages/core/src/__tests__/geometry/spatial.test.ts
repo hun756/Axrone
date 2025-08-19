@@ -1,4 +1,5 @@
-import { Vec2, Vec3 } from '@axrone/numeric';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { Vec2, Vec3 } from '../../../../numeric/src';
 import { QuadTree, Octree } from '../../geometry/spatial';
 
 describe('Spatial Data Structures', () => {

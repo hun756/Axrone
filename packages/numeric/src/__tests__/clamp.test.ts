@@ -1,3 +1,4 @@
+import { describe, expect, test } from 'vitest';
 import {
     clamp,
     createBoundedClamp,
@@ -139,15 +140,13 @@ describe('Numeric Clamp Utility', () => {
         test('NumericRangeError has correct structure', () => {
             try {
                 clamp(NaN, 0, 10);
-                fail('Expected error was not thrown');
+                throw new Error('Expected error was not thrown');
             } catch (error) {
+                expect(error).toBeInstanceOf(NumericRangeError);
                 if (error instanceof NumericRangeError) {
-                    expect(error).toBeInstanceOf(NumericRangeError);
                     expect(error.name).toBe('NumericRangeError');
                     expect(error.message).toBe('Value must be a finite number');
                     expect(error).toMatchSnapshot();
-                } else {
-                    fail('Error is not an instance of NumericRangeError');
                 }
             }
         });

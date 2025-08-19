@@ -2,7 +2,14 @@ import { DeepPartial } from '@axrone/utility';
 import { EventEmitter } from '../event/event-emitter';
 import { Easing, EasingFunction } from './easing-functions';
 import { Interpolation } from './interpolation';
-import { ITween, TweenConfig, TweenEventMap, TweenEventType, TweenEventCallback, TweenStatus } from './types';
+import {
+    ITween,
+    TweenConfig,
+    TweenEventMap,
+    TweenEventType,
+    TweenEventCallback,
+    TweenStatus,
+} from './types';
 
 let _nextId = 0;
 
@@ -21,7 +28,8 @@ export abstract class TweenCore<T> implements ITween<T> {
     protected _delayTime = 0;
     protected _startTime?: number;
     protected _easingFunction: EasingFunction = Easing.Linear.None;
-    protected _interpolationFunction: (v: ArrayLike<number>, k: number) => number = Interpolation.Linear;
+    protected _interpolationFunction: (v: ArrayLike<number>, k: number) => number =
+        Interpolation.Linear;
     protected _chainedTweens: ITween<any>[] = [];
     protected _onStartCallbackFired = false;
     protected _remainingRepeat = 0;
@@ -207,14 +215,14 @@ export abstract class TweenCore<T> implements ITween<T> {
                 this._waitingForRepeatDelay = false;
                 this._reset();
                 this._updateProperties(0);
-                
+
                 if (this._repeatDelayTime && this._repeatDelayTime > 0) {
                     this._startTime = this._repeatDelayEndTime;
                 } else {
                     const overtime = now - this._repeatDelayEndTime;
                     this._startTime = now - overtime;
                 }
-                
+
                 return this;
             } else {
                 return this;

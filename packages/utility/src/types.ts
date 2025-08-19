@@ -78,4 +78,3 @@ type DeepReadonly<T> = T extends Primitive
           : T extends Record<string | number | symbol, any>
             ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
             : T;
-

@@ -1,3 +1,4 @@
+import { describe, expect, test, it, beforeEach } from 'vitest';
 import {
     CompareResult,
     Comparer,
@@ -5,7 +6,7 @@ import {
     ComparerError,
     InvalidOperationError,
     isComparer,
-} from '@axrone/utility';
+} from '../../';
 
 class NumberComparer implements Comparer<number> {
     constructor(private options?: ComparerOptions) {}

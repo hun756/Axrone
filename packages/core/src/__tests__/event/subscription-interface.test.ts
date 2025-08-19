@@ -5,6 +5,7 @@ import {
     QueuedEvent,
 } from '../../event/interfaces';
 import { EventCallback, EventPriority } from '../../event/definition';
+import { describe, expect, it } from 'vitest';
 
 describe('EventEmitter - Subscription Interfaces', () => {
     it('should support proper subscription lifecycle', () => {

@@ -1,6 +1,7 @@
 import { Vec4, Vec4ComparisonMode, Vec4Comparer, Vec4EqualityComparer, IVec4Like } from '../vec4';
 import { EPSILON } from '../common';
 import { clamp01 } from '../clamp';
+import { describe, expect, test } from 'vitest';
 
 const CUSTOM_EPSILON = 1e-10;
 const LARGE_NUMBER = 1e6;

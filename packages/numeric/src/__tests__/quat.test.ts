@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, test } from 'vitest';
 import { EPSILON } from '../common';
 import { Quat, QuatComparer, QuatEqualityComparer, QuatComparisonMode, IQuatLike } from '../quat';
 import { IVec3Like } from '../vec3';
@@ -1553,7 +1554,7 @@ describe('Quaternion Mathematics Library', () => {
                 { name: 'Negative Infinity', quat: { x: -Infinity, y: 0, z: 0, w: 0 } },
                 { name: 'NaN', quat: { x: NaN, y: 0, z: 0, w: 0 } },
                 { name: 'Max Value', quat: { x: Number.MAX_VALUE, y: 0, z: 0, w: 0 } },
-                { name: 'Min Value', quat: { x: Number.MIN_VALUE, y: 0, z: 0, w: 0 } }
+                { name: 'Min Value', quat: { x: Number.MIN_VALUE, y: 0, z: 0, w: 0 } },
             ];
 
             testCases.forEach(({ name, quat }) => {
@@ -1572,32 +1573,34 @@ describe('Quaternion Mathematics Library', () => {
             const errorTests = [
                 {
                     operation: () => Quat.normalize(testQuats.zero),
-                    expectedMessage: 'Cannot normalize a zero-length quaternion'
+                    expectedMessage: 'Cannot normalize a zero-length quaternion',
                 },
                 {
                     operation: () => Quat.inverse(testQuats.zero),
-                    expectedMessage: 'Cannot invert a zero-length quaternion'
+                    expectedMessage: 'Cannot invert a zero-length quaternion',
                 },
                 {
                     operation: () => Quat.divideScalar(testQuats.arbitrary, 0),
-                    expectedMessage: 'Division by zero or near-zero value is not allowed'
+                    expectedMessage: 'Division by zero or near-zero value is not allowed',
                 },
                 {
                     operation: () => Quat.fromArray([1, 2], 0),
-                    expectedMessage: 'Array must have at least 4 elements'
+                    expectedMessage: 'Array must have at least 4 elements',
                 },
                 {
                     operation: () => Quat.fromArray([1, 2, 3, 4], -1),
-                    expectedMessage: 'Offset cannot be negative'
-                }
+                    expectedMessage: 'Offset cannot be negative',
+                },
             ];
 
             errorTests.forEach(({ operation, expectedMessage }, index) => {
                 try {
                     operation();
-                    fail(`Expected error for test case ${index}`);
+                    throw new Error(`Expected error for test case ${index}`);
                 } catch (error) {
-                    expect(error instanceof Error ? error.message : String(error)).toContain(expectedMessage);
+                    expect(error instanceof Error ? error.message : String(error)).toContain(
+                        expectedMessage
+                    );
                 }
             });
         });

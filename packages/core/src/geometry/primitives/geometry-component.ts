@@ -119,11 +119,15 @@ export class GeometryComponent extends Component {
 
         const vertexArray = geometry.vertices.getInt8Array(geometry.vertices.remaining);
 
-        this._vertexBuffer = this._bufferFactory.createArrayBufferFromData(vertexArray.buffer as ArrayBuffer);
+        this._vertexBuffer = this._bufferFactory.createArrayBufferFromData(
+            vertexArray.buffer as ArrayBuffer
+        );
 
         const indexArray = geometry.indices.getInt8Array(geometry.indices.remaining);
 
-        this._indexBuffer = this._bufferFactory.createElementArrayBufferFromData(indexArray.buffer as ArrayBuffer);
+        this._indexBuffer = this._bufferFactory.createElementArrayBufferFromData(
+            indexArray.buffer as ArrayBuffer
+        );
 
         this._vertexArray = gl.createVertexArray()!;
         gl.bindVertexArray(this._vertexArray);

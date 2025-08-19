@@ -1,23 +1,26 @@
-import { 
-    createSubject, 
-    createBehaviorSubject
-} from '../../observer';
+import { createSubject, createBehaviorSubject } from '../../observer';
 import type { IObservableSubject } from '../../observer';
 import type { Entity, ComponentRegistry } from '../types/core';
 import type { Actor } from '../core/actor';
 
 export class ECSObservables<R extends ComponentRegistry> {
-
     readonly entityCreated: IObservableSubject<{ entity: Entity; actor: Actor }>;
     readonly entityDestroyed: IObservableSubject<{ entity: Entity; actor: Actor }>;
 
-    private readonly componentObservables = new Map<string, {
-        added: IObservableSubject<{ entity: Entity; component: any; actor: Actor }>;
-        removed: IObservableSubject<{ entity: Entity; component: any; actor: Actor }>;
-    }>();
+    private readonly componentObservables = new Map<
+        string,
+        {
+            added: IObservableSubject<{ entity: Entity; component: any; actor: Actor }>;
+            removed: IObservableSubject<{ entity: Entity; component: any; actor: Actor }>;
+        }
+    >();
 
     readonly systemExecutionStart: IObservableSubject<{ systemId: string; deltaTime: number }>;
-    readonly systemExecutionEnd: IObservableSubject<{ systemId: string; deltaTime: number; duration: number }>;
+    readonly systemExecutionEnd: IObservableSubject<{
+        systemId: string;
+        deltaTime: number;
+        duration: number;
+    }>;
 
     readonly frameStart: IObservableSubject<{ frameId: number; timestamp: number }>;
     readonly frameEnd: IObservableSubject<{ frameId: number; timestamp: number; duration: number }>;
@@ -39,7 +42,7 @@ export class ECSObservables<R extends ComponentRegistry> {
         if (!this.componentObservables.has(key)) {
             this.componentObservables.set(key, {
                 added: createSubject(),
-                removed: createSubject()
+                removed: createSubject(),
             });
         }
 
@@ -71,25 +74,30 @@ export class ECSObservables<R extends ComponentRegistry> {
     createComponentStream<K extends keyof R>(componentName: K) {
         const observables = this.getComponentObservables(componentName);
 
-        const changes = createSubject<{ entity: Entity; component: any; actor: Actor; action: 'added' | 'removed' }>();
+        const changes = createSubject<{
+            entity: Entity;
+            component: any;
+            actor: Actor;
+            action: 'added' | 'removed';
+        }>();
 
-        observables.added.addObserver(data => {
+        observables.added.addObserver((data) => {
             changes.notify({ ...data, action: 'added' });
         });
 
-        observables.removed.addObserver(data => {
+        observables.removed.addObserver((data) => {
             changes.notify({ ...data, action: 'removed' });
         });
 
         return {
             added: observables.added,
             removed: observables.removed,
-            changes
+            changes,
         };
     }
 
     createDebouncedQuery<T>(
-        queryKey: string, 
+        queryKey: string,
         debounceMs: number = 100,
         initialValue: T[] = []
     ): IObservableSubject<T[]> {
@@ -109,7 +117,7 @@ export class ECSObservables<R extends ComponentRegistry> {
     }
 
     createThrottledQuery<T>(
-        queryKey: string, 
+        queryKey: string,
         throttleMs: number = 100,
         initialValue: T[] = []
     ): IObservableSubject<T[]> {
@@ -130,35 +138,37 @@ export class ECSObservables<R extends ComponentRegistry> {
     }
 
     createEntityLifecycle() {
+        const all = createSubject<{
+            entity: Entity;
+            actor: Actor;
+            action: 'created' | 'destroyed';
+        }>();
 
-        const all = createSubject<{ entity: Entity; actor: Actor; action: 'created' | 'destroyed' }>();
-
-        this.entityCreated.addObserver(data => {
+        this.entityCreated.addObserver((data) => {
             all.notify({ ...data, action: 'created' });
         });
 
-        this.entityDestroyed.addObserver(data => {
+        this.entityDestroyed.addObserver((data) => {
             all.notify({ ...data, action: 'destroyed' });
         });
 
         return {
-
             all,
 
             byName: (name: string) => ({
                 created: this.createEntityFilter(({ actor }) => actor.name === name),
-                destroyed: this.createEntityFilter(({ actor }) => actor.name === name)
+                destroyed: this.createEntityFilter(({ actor }) => actor.name === name),
             }),
 
             byTag: (tag: string) => ({
                 created: this.createEntityFilter(({ actor }) => actor.tag === tag),
-                destroyed: this.createEntityFilter(({ actor }) => actor.tag === tag)
+                destroyed: this.createEntityFilter(({ actor }) => actor.tag === tag),
             }),
 
             byLayer: (layer: number) => ({
                 created: this.createEntityFilter(({ actor }) => actor.layer === layer),
-                destroyed: this.createEntityFilter(({ actor }) => actor.layer === layer)
-            })
+                destroyed: this.createEntityFilter(({ actor }) => actor.layer === layer),
+            }),
         };
     }
 
@@ -175,7 +185,7 @@ export class ECSObservables<R extends ComponentRegistry> {
             removed.dispose();
         });
 
-        this.queryObservables.forEach(observable => {
+        this.queryObservables.forEach((observable) => {
             observable.dispose();
         });
 

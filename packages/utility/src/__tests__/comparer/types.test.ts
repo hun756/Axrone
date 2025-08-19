@@ -1,3 +1,4 @@
+import { describe, it, expect, test } from 'vitest';
 import {
     PropertyPath,
     ExtractPropertyType,
@@ -5,7 +6,7 @@ import {
     KeysOfType,
     ComparerOptions,
     EqualityComparerOptions,
-} from '@axrone/utility';
+} from '../../';
 
 describe('TypeScript Type Definitions', () => {
     describe('PropertyPath Type', () => {

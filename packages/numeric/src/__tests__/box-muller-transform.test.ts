@@ -1,8 +1,7 @@
-import {
-    BoxMullerTransform
-} from '../box-muller';
+import { describe, expect, test, vi } from 'vitest';
+import { BoxMullerTransform } from '../box-muller';
 
-import { rand, RandomEngineType } from '@axrone/core';
+import { rand, RandomEngineType } from '../../../core/src/random';
 
 const getTestState = () => rand.getState();
 
@@ -166,7 +165,7 @@ describe('BoxMullerTransform', () => {
         });
 
         test('should not use cache when disabled', () => {
-            const mathLogSpy = jest.spyOn(Math, 'log');
+            const mathLogSpy = vi.spyOn(Math, 'log');
 
             const withoutCache = BoxMullerTransform({ useCache: false, algorithm: 'standard' });
             const initialCallCount = mathLogSpy.mock.calls.length;
@@ -190,7 +189,7 @@ describe('BoxMullerTransform', () => {
                 algorithm: 'standard',
             });
 
-            const mathLogSpy = jest.spyOn(Math, 'log');
+            const mathLogSpy = vi.spyOn(Math, 'log');
             const initialCallCount = mathLogSpy.mock.calls.length;
 
             const [samples] = speedOptimized.sampleMany!(getTestState(), 100);
