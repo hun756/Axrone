@@ -1,3 +1,4 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { Component } from '../../component-system/core/component';
 import {
     script,
@@ -83,8 +84,8 @@ describe('Script Decorator System', () => {
     beforeAll(() => {
         originalConsoleError = console.error;
         originalConsoleWarn = console.warn;
-        console.error = jest.fn();
-        console.warn = jest.fn();
+        console.error = vi.fn();
+        console.warn = vi.fn();
     });
 
     afterAll(() => {
@@ -95,8 +96,8 @@ describe('Script Decorator System', () => {
     beforeEach(() => {
         clearScriptCaches();
         // Clear mock calls between tests
-        (console.error as jest.Mock).mockClear();
-        (console.warn as jest.Mock).mockClear();
+        (console.error as any).mockClear();
+        (console.warn as any).mockClear();
     });
 
     describe('Basic Functionality', () => {

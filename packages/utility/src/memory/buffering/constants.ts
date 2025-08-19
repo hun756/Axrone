@@ -1,6 +1,6 @@
 export const BUFFER_DEFAULTS = {
     INITIAL_CAPACITY: 32,
-    MAX_CAPACITY: 0x7FFFFFFF, // 2^31 - 1
+    MAX_CAPACITY: 0x7fffffff, // 2^31 - 1
     EXPANSION_FACTOR: 1.5,
     MIN_EXPANSION: 128,
     WORD_SIZE: 4,

@@ -31,7 +31,7 @@ export interface ComparerOptions {
 }
 
 const FLOAT64_BYTE_SIZE = 8;
-const DEFAULT_EPSILON = 1e-10;
+const DEFAULT_EPSILON = Number.EPSILON;
 const DEFAULT_ULPS_TOLERANCE = 1;
 const DEFAULT_STRATEGY: ComparisonStrategy = 'combined';
 const DEFAULT_INFINITY_HANDLING: InfinityHandlingMode = 'signed';
@@ -98,10 +98,6 @@ const internalCreateComparer = <T extends Numeric = number>(
             );
         }
 
-        if (a === b) {
-            return 0;
-        }
-
         if (typeof a === 'number' && typeof b === 'number') {
             const specialCaseResult = handleSpecialFloatCases(a, b);
             if (specialCaseResult !== null) {
@@ -109,6 +105,10 @@ const internalCreateComparer = <T extends Numeric = number>(
             }
 
             return compareFloats(a, b);
+        }
+
+        if (a === b) {
+            return 0;
         }
 
         return a < b ? -1 : 1;
@@ -167,7 +167,13 @@ const internalCreateComparer = <T extends Numeric = number>(
 
     const compareAbsolute = (a: number, b: number): ComparisonResult => {
         const diff = Math.abs(a - b);
-        if (diff <= absoluteEpsilon) return 0;
+        const maxMagnitude = Math.max(Math.abs(a), Math.abs(b));
+
+        if (maxMagnitude < MIN_NORMAL) {
+            return a < b ? -1 : 1;
+        }
+
+        if (diff < absoluteEpsilon) return 0;
         return a < b ? -1 : 1;
     };
 
@@ -175,19 +181,16 @@ const internalCreateComparer = <T extends Numeric = number>(
         const absA = Math.abs(a);
         const absB = Math.abs(b);
         const maxMagnitude = Math.max(absA, absB);
-
-        if (maxMagnitude <= Number.MIN_VALUE) {
-            return 0;
-        }
+        if (maxMagnitude === 0) return 0;
 
         const relDiff = Math.abs(a - b) / maxMagnitude;
-        if (relDiff <= relativeEpsilon) return 0;
+        if (relDiff < relativeEpsilon) return 0;
         return a < b ? -1 : 1;
     };
 
     const compareUlps = (a: number, b: number): ComparisonResult => {
         const ulpsDistance = computeUlpsDistance(a, b);
-        if (ulpsDistance <= ulpsTolerance) return 0;
+        if (ulpsDistance < Number(ulpsTolerance)) return 0;
         return a < b ? -1 : 1;
     };
 
@@ -224,32 +227,43 @@ const internalCreateComparer = <T extends Numeric = number>(
     };
 
     const computeUlpsDistance = (a: number, b: number): number => {
-        if (a === b) return 0;
+        if (Object.is(a, b)) return 0;
 
         if (!Number.isFinite(a) || !Number.isFinite(b)) {
             return MAX_ULPS_DISTANCE;
         }
 
-        const bitsA = getFloatBits(a);
-        const bitsB = getFloatBits(b);
+        const buffer = new ArrayBuffer(8);
+        const f64 = new Float64Array(buffer);
+        const u8 = new Uint8Array(buffer);
 
-        if (bitsA.sign !== bitsB.sign) {
-            if (a === 0 && b === 0) return 0;
-            return MAX_ULPS_DISTANCE;
-        }
+        const floatToOrderedInt = (v: number): bigint => {
+            f64[0] = v;
+            let lo = 0n;
+            let hi = 0n;
+            // lower 4 bytes
+            lo |= BigInt(u8[0]);
+            lo |= BigInt(u8[1]) << 8n;
+            lo |= BigInt(u8[2]) << 16n;
+            lo |= BigInt(u8[3]) << 24n;
+            // upper 4 bytes
+            hi |= BigInt(u8[4]);
+            hi |= BigInt(u8[5]) << 8n;
+            hi |= BigInt(u8[6]) << 16n;
+            hi |= BigInt(u8[7]) << 24n;
 
-        let uintA = bitsA.mantissaHigh * 0x100000000 + bitsA.mantissaLow;
-        let uintB = bitsB.mantissaHigh * 0x100000000 + bitsB.mantissaLow;
+            const uint64 = (hi << 32n) | lo;
 
-        if (bitsA.sign) {
-            uintA = ~uintA + 1;
-        }
+            // map to signed ordering that preserves numeric order when compared as integers
+            const signBit = uint64 >> 63n;
+            return signBit === 0n ? uint64 | (1n << 63n) : ~uint64 & ((1n << 64n) - 1n);
+        };
 
-        if (bitsB.sign) {
-            uintB = ~uintB + 1;
-        }
-
-        return Math.abs(uintA - uintB);
+        const intA = floatToOrderedInt(a);
+        const intB = floatToOrderedInt(b);
+        const diff = intA >= intB ? intA - intB : intB - intA;
+        if (diff > BigInt(Number.MAX_SAFE_INTEGER)) return MAX_ULPS_DISTANCE;
+        return Number(diff);
     };
 
     return Object.freeze({

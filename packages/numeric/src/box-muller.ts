@@ -7,11 +7,7 @@ import type {
     RandomResult,
 } from '../../core/src/random/';
 
-import {
-    Random,
-    rand,
-    NormalDistribution as CoreNormalDistribution,
-} from '../../core/src/random/';
+import { Random, rand, NormalDistribution as CoreNormalDistribution } from '../../core/src/random/';
 
 export type BoxMullerOptions = {
     readonly mean?: number;

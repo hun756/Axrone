@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createHooks, EventUtils } from '../../event/utility';
 import { EventGroup } from '../../event/event-group';
 import {
@@ -432,8 +433,8 @@ describe('EventEmitter - Features', () => {
         });
 
         it('should filter subscriptions in getSubscriptions', () => {
-            const callback1 = jest.fn();
-            const callback2 = jest.fn();
+            const callback1 = vi.fn();
+            const callback2 = vi.fn();
 
             group.on('test:event', callback1);
             baseEmitter.on('test:event', callback2);
@@ -446,7 +447,7 @@ describe('EventEmitter - Features', () => {
         });
 
         it('should handle batch operations correctly', () => {
-            const callbacks = [jest.fn(), jest.fn(), jest.fn()];
+            const callbacks = [vi.fn(), vi.fn(), vi.fn()];
             const ids = group.batchSubscribe('test:event', callbacks);
 
             expect(ids).toHaveLength(3);

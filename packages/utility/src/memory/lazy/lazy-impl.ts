@@ -1,10 +1,10 @@
-import { 
-    ILazy, 
-    ILazyAsync, 
-    __lazy_brand, 
-    __async_brand, 
-    __state_brand, 
-    LazyState 
+import {
+    ILazy,
+    ILazyAsync,
+    __lazy_brand,
+    __async_brand,
+    __state_brand,
+    LazyState,
 } from './lazy-core';
 
 const UNINITIALIZED = 'uninitialized' as const;
@@ -21,9 +21,9 @@ export class LazyImpl<T> implements ILazy<T> {
     exception: Error | null = null;
     value!: T;
     factory: (() => T) | null;
-    private readonly originalFactory: (() => T);
+    private readonly originalFactory: () => T;
 
-    constructor(valueFactory: () => T, originalFactory?: (() => T)) {
+    constructor(valueFactory: () => T, originalFactory?: () => T) {
         this.factory = valueFactory;
         this.originalFactory = originalFactory ?? valueFactory;
     }
@@ -148,9 +148,9 @@ export class LazyAsyncImpl<T> implements ILazyAsync<T> {
     value!: T;
     factory: (() => Promise<T>) | null;
     promise: Promise<T> | null = null;
-    private readonly originalFactory: (() => Promise<T>);
+    private readonly originalFactory: () => Promise<T>;
 
-    constructor(promiseFactory: () => Promise<T>, originalFactory?: (() => Promise<T>)) {
+    constructor(promiseFactory: () => Promise<T>, originalFactory?: () => Promise<T>) {
         this.factory = promiseFactory;
         this.originalFactory = originalFactory ?? promiseFactory;
     }

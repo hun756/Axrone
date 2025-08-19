@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { Mocked } from 'vitest';
 import { IEventEmitter } from '../../event/event-emitter';
 import {
     IEventSubscriber,
@@ -75,23 +77,23 @@ describe('EventEmitter - Core Interfaces', () => {
     });
 
     describe('IEventSubscriber Contract', () => {
-        let mockSubscriber: jest.Mocked<IEventSubscriber<TestEvents>>;
+        let mockSubscriber: Mocked<IEventSubscriber<TestEvents>>;
 
         beforeEach(() => {
             mockSubscriber = {
-                on: jest.fn(),
-                once: jest.fn(),
-                off: jest.fn(),
-                offById: jest.fn(),
-                pipe: jest.fn(),
+                on: vi.fn(),
+                once: vi.fn(),
+                off: vi.fn(),
+                offById: vi.fn(),
+                pipe: vi.fn(),
             };
         });
 
         it('should handle subscription lifecycle correctly', () => {
-            const mockUnsubscribe = jest.fn().mockReturnValue(true);
+            const mockUnsubscribe = vi.fn().mockReturnValue(true);
             mockSubscriber.on.mockReturnValue(mockUnsubscribe);
 
-            const callback: EventCallback<TestEvents['test:event']> = jest.fn();
+            const callback: EventCallback<TestEvents['test:event']> = vi.fn();
             const unsubscribe = mockSubscriber.on('test:event', callback);
 
             expect(mockSubscriber.on).toHaveBeenCalledWith('test:event', callback);
@@ -103,7 +105,7 @@ describe('EventEmitter - Core Interfaces', () => {
         });
 
         it('should support subscription options correctly', () => {
-            const callback: EventCallback<TestEvents['test:event']> = jest.fn();
+            const callback: EventCallback<TestEvents['test:event']> = vi.fn();
             const options: SubscriptionOptions = { priority: 'high' };
 
             mockSubscriber.on('test:event', callback, options);
@@ -115,7 +117,7 @@ describe('EventEmitter - Core Interfaces', () => {
         });
 
         it('should handle off operations with different signatures', () => {
-            const callback: EventCallback<TestEvents['test:event']> = jest.fn();
+            const callback: EventCallback<TestEvents['test:event']> = vi.fn();
 
             mockSubscriber.off.mockReturnValue(true);
 
@@ -129,12 +131,12 @@ describe('EventEmitter - Core Interfaces', () => {
 
         it('should handle piping operations', () => {
             const targetPublisher: IEventPublisher<any> = {
-                emit: jest.fn(),
-                emitSync: jest.fn(),
-                emitBatch: jest.fn(),
+                emit: vi.fn(),
+                emitSync: vi.fn(),
+                emitBatch: vi.fn(),
             };
 
-            const mockUnsubscribe = jest.fn().mockReturnValue(true);
+            const mockUnsubscribe = vi.fn().mockReturnValue(true);
             mockSubscriber.pipe.mockReturnValue(mockUnsubscribe);
 
             let unsubscribe = mockSubscriber.pipe('test:event', targetPublisher);
@@ -150,13 +152,13 @@ describe('EventEmitter - Core Interfaces', () => {
     });
 
     describe('IEventPublisher Contract', () => {
-        let mockPublisher: jest.Mocked<IEventPublisher<TestEvents>>;
+        let mockPublisher: Mocked<IEventPublisher<TestEvents>>;
 
         beforeEach(() => {
             mockPublisher = {
-                emit: jest.fn(),
-                emitSync: jest.fn(),
-                emitBatch: jest.fn(),
+                emit: vi.fn(),
+                emitSync: vi.fn(),
+                emitBatch: vi.fn(),
             };
         });
 
@@ -216,17 +218,17 @@ describe('EventEmitter - Core Interfaces', () => {
     });
 
     describe('IEventBuffer Contract', () => {
-        let mockBuffer: jest.Mocked<IEventBuffer<TestEvents>>;
+        let mockBuffer: Mocked<IEventBuffer<TestEvents>>;
 
         beforeEach(() => {
             mockBuffer = {
-                getQueuedEvents: jest.fn(),
-                getPendingCount: jest.fn(),
-                getBufferSize: jest.fn(),
-                clearBuffer: jest.fn(),
-                pause: jest.fn(),
-                resume: jest.fn(),
-                isPaused: jest.fn(),
+                getQueuedEvents: vi.fn(),
+                getPendingCount: vi.fn(),
+                getBufferSize: vi.fn(),
+                clearBuffer: vi.fn(),
+                pause: vi.fn(),
+                resume: vi.fn(),
+                isPaused: vi.fn(),
             };
         });
 
@@ -290,19 +292,19 @@ describe('EventEmitter - Core Interfaces', () => {
     });
 
     describe('IEventObserver Contract', () => {
-        let mockObserver: jest.Mocked<IEventObserver<TestEvents>>;
+        let mockObserver: Mocked<IEventObserver<TestEvents>>;
 
         beforeEach(() => {
             mockObserver = {
-                has: jest.fn(),
-                listenerCount: jest.fn(),
+                has: vi.fn(),
+                listenerCount: vi.fn(),
                 maxListeners: 10,
-                listenerCountAll: jest.fn(),
-                eventNames: jest.fn(),
-                getSubscriptions: jest.fn(),
-                hasSubscription: jest.fn(),
-                getMetrics: jest.fn(),
-                getMemoryUsage: jest.fn(),
+                listenerCountAll: vi.fn(),
+                eventNames: vi.fn(),
+                getSubscriptions: vi.fn(),
+                hasSubscription: vi.fn(),
+                getMetrics: vi.fn(),
+                getMemoryUsage: vi.fn(),
             };
         });
 
@@ -335,7 +337,7 @@ describe('EventEmitter - Core Interfaces', () => {
                 {
                     id: Symbol('sub1'),
                     event: 'test:event',
-                    callback: jest.fn(),
+                    callback: vi.fn(),
                     once: false,
                     priority: 'normal' as const,
                     createdAt: Date.now(),
@@ -388,61 +390,61 @@ describe('EventEmitter - Core Interfaces', () => {
     });
 
     describe('IEventEmitter Integration', () => {
-        let mockEmitter: jest.Mocked<IEventEmitter<TestEvents>>;
+        let mockEmitter: Mocked<IEventEmitter<TestEvents>>;
 
         beforeEach(() => {
             mockEmitter = {
                 // IEventSubscriber
-                on: jest.fn(),
-                once: jest.fn(),
-                off: jest.fn(),
-                offById: jest.fn(),
-                pipe: jest.fn(),
+                on: vi.fn(),
+                once: vi.fn(),
+                off: vi.fn(),
+                offById: vi.fn(),
+                pipe: vi.fn(),
 
                 // IEventPublisher
-                emit: jest.fn(),
-                emitSync: jest.fn(),
-                emitBatch: jest.fn(),
+                emit: vi.fn(),
+                emitSync: vi.fn(),
+                emitBatch: vi.fn(),
 
                 // IEventObserver
-                has: jest.fn(),
-                listenerCount: jest.fn(),
+                has: vi.fn(),
+                listenerCount: vi.fn(),
                 maxListeners: 10,
-                listenerCountAll: jest.fn(),
-                eventNames: jest.fn(),
-                getSubscriptions: jest.fn(),
-                hasSubscription: jest.fn(),
-                getMetrics: jest.fn(),
-                getMemoryUsage: jest.fn(),
+                listenerCountAll: vi.fn(),
+                eventNames: vi.fn(),
+                getSubscriptions: vi.fn(),
+                hasSubscription: vi.fn(),
+                getMetrics: vi.fn(),
+                getMemoryUsage: vi.fn(),
 
                 // IEventBuffer
-                getQueuedEvents: jest.fn(),
-                getPendingCount: jest.fn(),
-                getBufferSize: jest.fn(),
-                clearBuffer: jest.fn(),
-                pause: jest.fn(),
-                resume: jest.fn(),
-                isPaused: jest.fn(),
+                getQueuedEvents: vi.fn(),
+                getPendingCount: vi.fn(),
+                getBufferSize: vi.fn(),
+                clearBuffer: vi.fn(),
+                pause: vi.fn(),
+                resume: vi.fn(),
+                isPaused: vi.fn(),
 
                 // IEventEmitter specific
-                removeAllListeners: jest.fn(),
-                batchSubscribe: jest.fn(),
-                batchUnsubscribe: jest.fn(),
-                resetMaxListeners: jest.fn(),
-                drain: jest.fn(),
-                flush: jest.fn(),
-                resetMetrics: jest.fn(),
+                removeAllListeners: vi.fn().mockReturnThis(),
+                batchSubscribe: vi.fn(),
+                batchUnsubscribe: vi.fn(),
+                resetMaxListeners: vi.fn(),
+                drain: vi.fn(),
+                flush: vi.fn(),
+                resetMetrics: vi.fn(),
 
-                dispose: jest.fn(),
+                dispose: vi.fn(),
             };
         });
 
         it('should support complete subscription and emission workflow', async () => {
-            const mockUnsubscribe = jest.fn().mockReturnValue(true);
+            const mockUnsubscribe = vi.fn().mockReturnValue(true);
             mockEmitter.on.mockReturnValue(mockUnsubscribe);
             mockEmitter.emit.mockResolvedValue(true);
 
-            const callback = jest.fn();
+            const callback = vi.fn();
             const unsubscribe = mockEmitter.on('test:event', callback);
 
             const data = { id: 'test', data: { value: 42 } };
@@ -457,7 +459,7 @@ describe('EventEmitter - Core Interfaces', () => {
         });
 
         it('should handle batch operations correctly', async () => {
-            const callbacks = [jest.fn(), jest.fn(), jest.fn()];
+            const callbacks = [vi.fn(), vi.fn(), vi.fn()];
             const subscriptionIds = [Symbol('1'), Symbol('2'), Symbol('3')];
 
             mockEmitter.batchSubscribe.mockReturnValue(subscriptionIds);
@@ -548,8 +550,8 @@ describe('EventEmitter - Core Interfaces', () => {
     describe('Error Handling and Edge Cases', () => {
         it('should handle interface method failures gracefully', async () => {
             const mockEmitter: Partial<IEventEmitter<TestEvents>> = {
-                emit: jest.fn().mockRejectedValue(new Error('Emit failed')),
-                on: jest.fn().mockImplementation(() => {
+                emit: vi.fn().mockRejectedValue(new Error('Emit failed')),
+                on: vi.fn().mockImplementation(() => {
                     throw new Error('Subscribe failed');
                 }),
             };
@@ -559,14 +561,14 @@ describe('EventEmitter - Core Interfaces', () => {
             );
 
             expect(() => {
-                mockEmitter.on!('test:event', jest.fn());
+                mockEmitter.on!('test:event', vi.fn());
             }).toThrow('Subscribe failed');
         });
 
         it('should handle resource cleanup in error scenarios', async () => {
             const mockEmitter: Partial<IEventEmitter<TestEvents>> = {
-                drain: jest.fn().mockRejectedValue(new Error('Drain failed')),
-                removeAllListeners: jest.fn().mockReturnValue({} as any),
+                drain: vi.fn().mockRejectedValue(new Error('Drain failed')),
+                removeAllListeners: vi.fn().mockReturnValue({} as any),
             };
 
             try {

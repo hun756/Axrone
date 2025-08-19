@@ -2,7 +2,6 @@ import { IVec2Like, IVec3Like } from '@axrone/numeric';
 import { ISpatialQueryResult, IRaycastHit, ISpatialConfig, INodeStats } from './types';
 
 export interface ISpatialPartitioning<TPoint extends IVec2Like | IVec3Like, TItem> {
-
     insert(bounds: readonly [TPoint, TPoint], item: TItem): void;
 
     remove(item: TItem): boolean;
@@ -18,11 +17,9 @@ export interface ISpatialPartitioning<TPoint extends IVec2Like | IVec3Like, TIte
     readonly stats: INodeStats;
 }
 
-export interface ISpatialPartitioning2D<TItem> extends ISpatialPartitioning<IVec2Like, TItem> {
-}
+export interface ISpatialPartitioning2D<TItem> extends ISpatialPartitioning<IVec2Like, TItem> {}
 
-export interface ISpatialPartitioning3D<TItem> extends ISpatialPartitioning<IVec3Like, TItem> {
-}
+export interface ISpatialPartitioning3D<TItem> extends ISpatialPartitioning<IVec3Like, TItem> {}
 
 export interface ISpatialNode<TPoint extends IVec2Like | IVec3Like, TItem> {
     readonly bounds: readonly [TPoint, TPoint];

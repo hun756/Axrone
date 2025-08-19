@@ -1,4 +1,5 @@
-import { Equatable, isEquatable, EqualityComparer, EqualityComparerOptions } from '@axrone/utility';
+import { describe, test, expect } from 'vitest';
+import { Equatable, isEquatable, EqualityComparer, EqualityComparerOptions } from '../../index';
 
 class TestEquatable implements Equatable {
     constructor(

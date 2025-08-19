@@ -1,3 +1,4 @@
+import { describe, expect, test } from 'vitest';
 import { Vec3, Vec3ComparisonMode, Vec3Comparer, Vec3EqualityComparer, IVec3Like } from '../vec3';
 
 declare global {

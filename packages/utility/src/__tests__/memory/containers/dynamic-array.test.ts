@@ -5,6 +5,7 @@ import {
     createHeapIndex,
 } from '../../../memory/containers/queue/utils';
 import { EmptyQueueError, InvalidCapacityError } from '../../../memory/containers/queue/errors';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 describe('DynamicArray', () => {
     describe('Constructor', () => {

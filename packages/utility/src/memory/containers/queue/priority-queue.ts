@@ -199,7 +199,10 @@ export class PriorityQueue<TElement, TPriority = number>
     }
 
     private shouldAutoTrim(): boolean {
-        return (this.capacity as unknown as number) > 32 && (this.size as unknown as number) < (this.capacity as unknown as number) / 4;
+        return (
+            (this.capacity as unknown as number) > 32 &&
+            (this.size as unknown as number) < (this.capacity as unknown as number) / 4
+        );
     }
 }
 

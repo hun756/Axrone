@@ -34,7 +34,7 @@ export class ComponentPool<T extends {}> implements IComponentPool<T> {
             minFree: config.minFree ?? 8,
             enableMetrics: config.enableMetrics ?? true,
             enableValidation: config.enableValidation ?? true,
-            ttl: config.ttl ?? 300000, 
+            ttl: config.ttl ?? 300000,
             resetHandler: config.resetHandler ?? this.defaultResetHandler.bind(this),
             name: config.name ?? `ComponentPool<${constructor.name}>`,
         };
@@ -117,7 +117,6 @@ export class ComponentPool<T extends {}> implements IComponentPool<T> {
                 this.objectPool.release(item);
                 this.size = Math.max(0, this.size - 1);
             } else {
-
                 this.config.resetHandler(item);
             }
         } catch (error) {
@@ -271,7 +270,6 @@ export class ComponentPool<T extends {}> implements IComponentPool<T> {
     }
 
     private onComponentAcquired(component: T): void {
-
         if (typeof (component as any).onPoolAcquire === 'function') {
             try {
                 (component as any).onPoolAcquire();
@@ -282,7 +280,6 @@ export class ComponentPool<T extends {}> implements IComponentPool<T> {
     }
 
     private onComponentReleased(component: T): void {
-
         if (typeof (component as any).onPoolRelease === 'function') {
             try {
                 (component as any).onPoolRelease();
@@ -293,7 +290,6 @@ export class ComponentPool<T extends {}> implements IComponentPool<T> {
     }
 
     private onComponentEvicted(component: T): void {
-
         if (typeof (component as any).onPoolEvict === 'function') {
             try {
                 (component as any).onPoolEvict();

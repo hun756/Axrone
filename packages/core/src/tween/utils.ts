@@ -6,13 +6,7 @@ import { TweenChain } from './chain';
 import { Spring } from './spring';
 import { TweenSystem } from './system';
 import { Easing, EasingFunction } from './easing-functions';
-import { 
-    ITween, 
-    ITimeline, 
-    TweenableValue, 
-    TweenConfig,
-    SpringConfig
-} from './types';
+import { ITween, ITimeline, TweenableValue, TweenConfig, SpringConfig } from './types';
 
 export const TWEEN = new TweenSystem();
 
@@ -66,7 +60,7 @@ export function from<T extends TweenableValue>(
     easing: EasingFunction = Easing.Linear.None
 ): ITween<T> {
     const targetState = JSON.parse(JSON.stringify(object));
-    
+
     return TweenFactory.create(object, {
         from: properties,
         to: targetState,

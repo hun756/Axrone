@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Component } from '../../component-system/core/component';
 import { World } from '../../component-system/core/world';
 
@@ -263,7 +264,7 @@ describe('Component', () => {
             await errorComponent._internalAwake();
             await errorComponent._internalStart();
 
-            const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
             errorComponent._internalUpdate(0.016);
 
@@ -432,7 +433,7 @@ describe('Component', () => {
             await component._internalAwake();
             await component._internalStart();
 
-            const cleanupSpy = jest.fn();
+            const cleanupSpy = vi.fn();
             component.addCleanupTask(cleanupSpy);
 
             await component._internalDestroy();
@@ -443,8 +444,8 @@ describe('Component', () => {
         });
 
         it('should handle cleanup task management', async () => {
-            const task1 = jest.fn();
-            const task2 = jest.fn();
+            const task1 = vi.fn();
+            const task2 = vi.fn();
 
             component.addCleanupTask(task1);
             component.addCleanupTask(task2);

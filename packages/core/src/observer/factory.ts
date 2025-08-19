@@ -9,11 +9,7 @@ import {
     UnobserveFn,
     DEFAULT_OBSERVER_OPTIONS,
 } from './definition';
-import {
-    IObservableFactory,
-    IObserverRegistry,
-    IMemoryManager,
-} from './interfaces';
+import { IObservableFactory, IObserverRegistry, IMemoryManager } from './interfaces';
 import { Subject } from './subject';
 import { ObserverRegistry } from './registry';
 import { MemoryManager } from './memory-manager';
@@ -27,10 +23,7 @@ class ObserverImpl<T = any> implements IObserver<T> {
     readonly lastExecuted?: number;
     readonly isActive: boolean;
 
-    constructor(
-        callback: ObserverCallback<T>,
-        options: ObserverOptions = {}
-    ) {
+    constructor(callback: ObserverCallback<T>, options: ObserverOptions = {}) {
         this.id = Symbol('Observer');
         this.callback = callback;
         this.options = { ...DEFAULT_OBSERVER_OPTIONS, ...options } as Required<ObserverOptions>;
@@ -45,42 +38,45 @@ export class ObservableFactory implements IObservableFactory {
     readonly #defaultSubjectOptions: SubjectOptions;
     readonly #defaultObserverOptions: ObserverOptions;
 
-    constructor(options: {
-        defaultSubjectOptions?: SubjectOptions;
-        defaultObserverOptions?: ObserverOptions;
-        enableMemoryTracking?: boolean;
-        memoryManager?: IMemoryManager;
-    } = {}) {
+    constructor(
+        options: {
+            defaultSubjectOptions?: SubjectOptions;
+            defaultObserverOptions?: ObserverOptions;
+            enableMemoryTracking?: boolean;
+            memoryManager?: IMemoryManager;
+        } = {}
+    ) {
         this.#defaultSubjectOptions = options.defaultSubjectOptions ?? {};
         this.#defaultObserverOptions = options.defaultObserverOptions ?? {};
-        
-        this.#memoryManager = options.memoryManager ?? new MemoryManager({
-            enableTracking: options.enableMemoryTracking ?? true,
-        });
+
+        this.#memoryManager =
+            options.memoryManager ??
+            new MemoryManager({
+                enableTracking: options.enableMemoryTracking ?? true,
+            });
     }
 
     createSubject<T>(options: SubjectOptions = {}): IObservableSubject<T> {
         const mergedOptions = { ...this.#defaultSubjectOptions, ...options };
         const subject = new Subject<T>(mergedOptions);
-        
+
         this.#memoryManager.trackSubject(subject);
-        
+
         return subject;
     }
 
-    createObserver<T>(
-        callback: ObserverCallback<T>,
-        options: ObserverOptions = {}
-    ): IObserver<T> {
+    createObserver<T>(callback: ObserverCallback<T>, options: ObserverOptions = {}): IObserver<T> {
         const mergedOptions = { ...this.#defaultObserverOptions, ...options };
         return new ObserverImpl<T>(callback, mergedOptions);
     }
 
-    createRegistry(options: {
-        maxSubjects?: number;
-        enableMetrics?: boolean;
-        enableMemoryTracking?: boolean;
-    } = {}): IObserverRegistry {
+    createRegistry(
+        options: {
+            maxSubjects?: number;
+            enableMetrics?: boolean;
+            enableMemoryTracking?: boolean;
+        } = {}
+    ): IObserverRegistry {
         return new ObserverRegistry({
             enableMemoryTracking: options.enableMemoryTracking ?? true,
             memoryManager: this.#memoryManager,
@@ -91,7 +87,10 @@ export class ObservableFactory implements IObservableFactory {
         return new BehaviorSubject<T>(initialValue, options);
     }
 
-    createReplaySubject<T>(bufferSize: number = 10, options: SubjectOptions = {}): ReplaySubject<T> {
+    createReplaySubject<T>(
+        bufferSize: number = 10,
+        options: SubjectOptions = {}
+    ): ReplaySubject<T> {
         const replayOptions: SubjectOptions = {
             ...options,
             replay: {
@@ -119,7 +118,6 @@ export class ObservableFactory implements IObservableFactory {
         return this.#memoryManager.runGarbageCollection();
     }
 }
-
 
 export class BehaviorSubject<T> extends Subject<T> {
     #currentValue: T;
@@ -151,13 +149,13 @@ export class BehaviorSubject<T> extends Subject<T> {
 
     addObserver(callback: ObserverCallback<T>, options: ObserverOptions = {}) {
         const unsubscribe = super.addObserver(callback, options);
-        
+
         if (this.#hasValue) {
             setTimeout(() => {
                 callback(this.#currentValue, this);
             }, 0);
         }
-        
+
         return unsubscribe;
     }
 }
@@ -175,10 +173,7 @@ export class ReplaySubject<T> extends Subject<T> {
         super(replayOptions);
     }
 
-    addObserver(
-        callback: ObserverCallback<T>,
-        options: ObserverOptions = {}
-    ): UnobserveFn {
+    addObserver(callback: ObserverCallback<T>, options: ObserverOptions = {}): UnobserveFn {
         const replayOptions: ObserverOptions = {
             ...options,
             replay: {
@@ -211,7 +206,7 @@ export class AsyncSubject<T> extends Subject<T> {
         if (this.#hasValue && this.#lastValue !== undefined) {
             await super.notify(this.#lastValue);
         }
-        
+
         (this as any).isCompleted = true;
         (this as any).metrics.completedAt = Date.now();
     }
@@ -219,7 +214,7 @@ export class AsyncSubject<T> extends Subject<T> {
 
 export const observableFactory = new ObservableFactory();
 
-export const createSubject = <T>(options?: SubjectOptions) => 
+export const createSubject = <T>(options?: SubjectOptions) =>
     observableFactory.createSubject<T>(options);
 
 export const createBehaviorSubject = <T>(initialValue: T, options?: SubjectOptions) =>

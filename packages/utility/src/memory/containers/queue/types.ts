@@ -36,7 +36,6 @@ export interface HeapStorage<T> {
 }
 
 export interface BinaryHeapOperations<T> {
-
     insert(item: T): void;
     extract(): T;
 
@@ -48,7 +47,6 @@ export interface BinaryHeapOperations<T> {
 }
 
 export interface PriorityQueueCore<TElement, TPriority> {
-
     enqueue(element: TElement, priority: TPriority): void;
     dequeue(): TElement;
     peek(): TElement;
@@ -59,7 +57,6 @@ export interface PriorityQueueCore<TElement, TPriority> {
 }
 
 export interface OptionalOperations<TElement, TPriority> {
-
     tryDequeue(): TElement | undefined;
     tryPeek(): TElement | undefined;
 
@@ -93,18 +90,17 @@ export type PriorityQueueOptions<TPriority> = {
     readonly comparator?: Comparator<TPriority>;
     readonly initialCapacity?: Capacity;
     readonly autoTrim?: boolean;
-    readonly growthFactor?: number; 
-    readonly shrinkThreshold?: number; 
+    readonly growthFactor?: number;
+    readonly shrinkThreshold?: number;
 };
 
 export type AdvancedQueueOptions<TElement, TPriority> = PriorityQueueOptions<TPriority> & {
     readonly customAllocator?: HeapStorage<QueueNode<TElement, TPriority>>;
     readonly maxSize?: QueueSize;
-    readonly strictCapacity?: boolean; 
+    readonly strictCapacity?: boolean;
 };
 
 export interface QueueIterator<TElement, TPriority> {
-
     [Symbol.iterator](): Iterator<TElement>;
 
     entries(): Iterator<[TElement, TPriority]>;

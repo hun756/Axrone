@@ -1,5 +1,6 @@
 import { ObjectPool, ObjectPoolOptions, PoolableWrapper } from '../../../memory/pool/object-pool';
 import { MemoryPoolErrorCode } from '../../../memory/pool/mempool';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 describe('ObjectPool', () => {
     class TestUser {
@@ -56,7 +57,7 @@ describe('ObjectPool', () => {
     };
 
     afterEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
     });
 
     describe('Basic Operations', () => {
@@ -214,7 +215,7 @@ describe('ObjectPool', () => {
         });
 
         it('should handle reset handler errors gracefully', () => {
-            const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
             const pool = createBasicPool(() => new TestUser(), {
                 resetHandler: () => {
@@ -232,7 +233,7 @@ describe('ObjectPool', () => {
 
     describe('Custom Handlers', () => {
         it('should call custom reset handler', () => {
-            const resetSpy = jest.fn();
+            const resetSpy = vi.fn();
             const pool = createBasicPool(() => new TestUser(), {
                 resetHandler: resetSpy,
             });
@@ -246,7 +247,7 @@ describe('ObjectPool', () => {
         });
 
         it('should call validation handler', () => {
-            const validateSpy = jest.fn().mockReturnValue(true);
+            const validateSpy = vi.fn().mockReturnValue(true);
             const pool = createBasicPool(() => new TestUser(), {
                 validateHandler: validateSpy,
             });
@@ -257,8 +258,8 @@ describe('ObjectPool', () => {
         });
 
         it('should call acquire/release handlers', () => {
-            const acquireSpy = jest.fn();
-            const releaseSpy = jest.fn();
+            const acquireSpy = vi.fn();
+            const releaseSpy = vi.fn();
 
             const pool = createBasicPool(() => new TestUser(), {
                 onAcquireHandler: acquireSpy,
@@ -273,7 +274,7 @@ describe('ObjectPool', () => {
         });
 
         it('should call evict handler when objects are evicted', () => {
-            const evictSpy = jest.fn();
+            const evictSpy = vi.fn();
 
             const pool = createBasicPool(() => new TestUser(), {
                 initialCapacity: 2,

@@ -23,7 +23,7 @@ export {
     createEmitter,
     createTypedEmitter,
     EventGroup,
-    EventScheduler
+    EventScheduler,
 } from '../event';
 
 export {
@@ -33,5 +33,5 @@ export {
     createSubject,
     createBehaviorSubject,
     createReplaySubject,
-    ObserverUtils
+    ObserverUtils,
 } from '../observer';

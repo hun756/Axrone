@@ -28,7 +28,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
 
     setAutoUpdate(enabled: boolean): void {
         this._autoUpdate = enabled;
-        
+
         if (!enabled && this._animFrameId !== undefined) {
             cancelAnimationFrame(this._animFrameId);
             this._animFrameId = undefined;

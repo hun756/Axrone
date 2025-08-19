@@ -1,3 +1,4 @@
+import { vi, describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { createDefaultRandomGenerator, DefaultRandomGenerator } from '../box-muller';
 
 describe('DefaultRandomGenerator', () => {
@@ -13,7 +14,7 @@ describe('DefaultRandomGenerator', () => {
 
     test('float() should call Math.random and return its value', () => {
         const originalMathRandom = Math.random;
-        const mockRandom = jest.fn();
+        const mockRandom = vi.fn();
         Math.random = mockRandom;
 
         try {
@@ -31,7 +32,7 @@ describe('DefaultRandomGenerator', () => {
 
     test('floatBetween(min, max) should return a value within the range [min, max)', () => {
         const originalMathRandom = Math.random;
-        const mockRandom = jest.fn();
+        const mockRandom = vi.fn();
         Math.random = mockRandom;
 
         try {
@@ -57,7 +58,7 @@ describe('DefaultRandomGenerator', () => {
 
     test('int(min, max) should return an integer within the range [min, max]', () => {
         const originalMathRandom = Math.random;
-        const mockRandom = jest.fn();
+        const mockRandom = vi.fn();
         Math.random = mockRandom;
 
         try {

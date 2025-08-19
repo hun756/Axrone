@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { MemoryPool, MemoryPoolError, PoolableObject } from './../../../memory/pool/mempool';
 
 describe('MemoryPool', () => {

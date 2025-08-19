@@ -18,13 +18,22 @@ import {
     ExtractError,
 } from './types';
 
-
 export declare const __variance: unique symbol;
 
-import { StackCapacityError, StackIntegrityError, StackMemoryError, StackErrorUnion } from './errors';
+import {
+    StackCapacityError,
+    StackIntegrityError,
+    StackMemoryError,
+    StackErrorUnion,
+} from './errors';
 
 import { AbstractStack } from './abstract-stack';
-import { MutableStackInterface, ImmutableStackInterface, StackConfiguration, ReadonlyStackInterface } from './interfaces';
+import {
+    MutableStackInterface,
+    ImmutableStackInterface,
+    StackConfiguration,
+    ReadonlyStackInterface,
+} from './interfaces';
 
 const CAPACITY_MASK = 0x7fffffff;
 const SIZE_MASK = 0x7fffffff;

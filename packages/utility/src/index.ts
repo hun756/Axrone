@@ -70,4 +70,4 @@ export type {
 export type { ICloneable } from './clone/cloner';
 
 export * from './memory/buffering';
-export * from './memory/pool/index'
+export * from './memory/pool/index';

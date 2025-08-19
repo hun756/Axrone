@@ -200,8 +200,8 @@ class BufferAllocator {
     private readonly indexPool = new ResourcePoolAdapter<IBuffer>();
 
     constructor(gl: GLContext) {
-    this.gl = gl;
-    this.factory = createBufferFactory(gl);
+        this.gl = gl;
+        this.factory = createBufferFactory(gl);
     }
 
     createVertexBuffer<T extends readonly Attribute[]>(
@@ -211,7 +211,10 @@ class BufferAllocator {
         const bb = this.packVertices(layout, vertices);
         const view = bb.toUint8Array();
 
-    const ib = this.factory.createArrayBufferFromData(view as unknown as BufferSource, layout.usage);
+        const ib = this.factory.createArrayBufferFromData(
+            view as unknown as BufferSource,
+            layout.usage
+        );
 
         try {
             bb.release();
@@ -226,7 +229,10 @@ class BufferAllocator {
         data: Uint8Array | Uint16Array | Uint32Array,
         usage: GLUsage = 0x88e4
     ): ResourceID {
-    const ib = this.factory.createElementArrayBufferFromData(data as unknown as BufferSource, usage);
+        const ib = this.factory.createElementArrayBufferFromData(
+            data as unknown as BufferSource,
+            usage
+        );
         return this.indexPool.allocate(ib);
     }
 
