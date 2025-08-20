@@ -3,7 +3,8 @@ import { createEngineFactory } from '../engines';
 
 const ZIGGURAT_N = 128;
 const ZIG_X: Float64Array = new Float64Array(ZIGGURAT_N + 1);
-const ZIG_Y: Float64Array = new Float64Array(ZIGGURAT_N);
+// ZIG_Y needs an extra slot for the tail value accessed as ZIG_Y[j+1]
+const ZIG_Y: Float64Array = new Float64Array(ZIGGURAT_N + 1);
 const ZIG_K: Uint32Array = new Uint32Array(ZIGGURAT_N);
 
 (() => {
@@ -25,6 +26,8 @@ const ZIG_K: Uint32Array = new Uint32Array(ZIGGURAT_N);
 
         ZIG_K[i] = Math.floor((ZIG_X[i + 1] / ZIG_X[i]) * 0xffffffff) >>> 0;
     }
+
+    ZIG_Y[ZIGGURAT_N] = 0;
 })();
 
 export class NormalDistribution implements IDistribution<number> {
@@ -275,25 +278,39 @@ export class NormalDistribution implements IDistribution<number> {
         const engine = createEngineFactory(state.engine)();
         engine.setState(state);
 
-        let u: number, v: number, x: number, y: number, q: number;
         let attempts = 0;
         const MAX_ATTEMPTS = 50;
 
-        do {
-            u = 2.0 * engine.next01() - 1.0;
-            v = 1.7156 * (2.0 * engine.next01() - 1.0);
+        while (attempts < MAX_ATTEMPTS) {
+            const u32 = engine.nextUint32();
+            const j = u32 & (ZIGGURAT_N - 1);
+            const sign = u32 & 0x80000000 ? -1 : 1;
 
-            x = u - 0.449871;
-            y = Math.abs(v) + 0.386595;
-            q = x * x + y * (0.196 * y - 0.25472 * x);
+            const u_norm = engine.next01();
+            const x = u_norm * ZIG_X[j];
+
+            if (u32 >>> 0 < ZIG_K[j]) {
+                return [sign * x, engine.getState()];
+            }
+
+            if (j === 0) {
+                let xx: number, yy: number;
+                do {
+                    xx = -Math.log(engine.next01()) / ZIG_X[0];
+                    yy = -Math.log(engine.next01());
+                } while (yy + yy < xx * xx);
+                return [sign * (ZIG_X[0] + xx), engine.getState()];
+            }
+
+            const y = engine.next01() * (ZIG_Y[j] - ZIG_Y[j + 1]) + ZIG_Y[j + 1];
+            if (Math.exp(-0.5 * x * x) > y) {
+                return [sign * x, engine.getState()];
+            }
 
             attempts++;
-            if (attempts > MAX_ATTEMPTS) {
-                return [0, engine.getState()];
-            }
-        } while (q > 0.27597 && (q > 0.27846 || v * v > -4.0 * Math.log(u) * u * u));
+        }
 
-        return [v / u, engine.getState()];
+        return [0, engine.getState()];
     }
 
     private sampleManyOptimized(
@@ -347,10 +364,20 @@ export class NormalDistribution implements IDistribution<number> {
             const j = u32 & (ZIGGURAT_N - 1);
             const sign = u32 & 0x80000000 ? -1 : 1;
 
-            const x = (u32 >>> 8) * (1.0 / 0x01000000) * ZIG_X[j];
+            const u_norm = engine.next01();
+            const x = u_norm * ZIG_X[j];
 
             if (u32 >>> 0 < ZIG_K[j]) {
                 result[i++] = this._mean + this._stdDev * sign * x;
+                continue;
+            }
+            if (j === 0) {
+                let xx: number, yy: number;
+                do {
+                    xx = -Math.log(engine.next01()) / ZIG_X[0];
+                    yy = -Math.log(engine.next01());
+                } while (yy + yy < xx * xx);
+                result[i++] = this._mean + this._stdDev * sign * (ZIG_X[0] + xx);
                 continue;
             }
 
