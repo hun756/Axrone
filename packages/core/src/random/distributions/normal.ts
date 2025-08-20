@@ -3,7 +3,7 @@ import { createEngineFactory } from '../engines';
 
 const ZIGGURAT_N = 128;
 const ZIG_X: Float64Array = new Float64Array(ZIGGURAT_N + 1);
-// ZIG_Y needs an extra slot for the tail value accessed as ZIG_Y[j+1]
+
 const ZIG_Y: Float64Array = new Float64Array(ZIGGURAT_N + 1);
 const ZIG_K: Uint32Array = new Uint32Array(ZIGGURAT_N);
 
@@ -278,39 +278,52 @@ export class NormalDistribution implements IDistribution<number> {
         const engine = createEngineFactory(state.engine)();
         engine.setState(state);
 
-        let attempts = 0;
-        const MAX_ATTEMPTS = 50;
+        const ZIG_X_0 = ZIG_X[0];
+        const inv_ZIG_X_0 = 1.0 / ZIG_X_0;
 
-        while (attempts < MAX_ATTEMPTS) {
+        while (true) {
             const u32 = engine.nextUint32();
             const j = u32 & (ZIGGURAT_N - 1);
-            const sign = u32 & 0x80000000 ? -1 : 1;
 
-            const u_norm = engine.next01();
-            const x = u_norm * ZIG_X[j];
-
-            if (u32 >>> 0 < ZIG_K[j]) {
+            if (u32 < ZIG_K[j]) {
+                const sign = u32 & 0x80000000 ? -1 : 1;
+                const u_norm = engine.next01();
+                const x = u_norm * ZIG_X[j];
                 return [sign * x, engine.getState()];
             }
+
+            const sign = u32 & 0x80000000 ? -1 : 1;
+            const u_norm = engine.next01();
+            const x = u_norm * ZIG_X[j];
 
             if (j === 0) {
                 let xx: number, yy: number;
                 do {
-                    xx = -Math.log(engine.next01()) / ZIG_X[0];
+                    xx = -Math.log(engine.next01()) * inv_ZIG_X_0;
                     yy = -Math.log(engine.next01());
                 } while (yy + yy < xx * xx);
-                return [sign * (ZIG_X[0] + xx), engine.getState()];
+                return [sign * (ZIG_X_0 + xx), engine.getState()];
             }
 
-            const y = engine.next01() * (ZIG_Y[j] - ZIG_Y[j + 1]) + ZIG_Y[j + 1];
-            if (Math.exp(-0.5 * x * x) > y) {
+            const x_sq = x * x;
+            const y_range = ZIG_Y[j] - ZIG_Y[j + 1];
+            const y = engine.next01() * y_range + ZIG_Y[j + 1];
+
+            let exp_val: number;
+            if (x_sq < 0.25) {
+                const x_sq_half = x_sq * 0.5;
+                const x_4th = x_sq * x_sq;
+                exp_val = 1.0 - x_sq_half + x_4th * 0.125 - x_4th * x_sq * (1.0 / 48.0);
+            } else if (x_sq < 4.0) {
+                exp_val = 1.0 - 0.5 * x_sq + 0.125 * x_sq * x_sq;
+            } else {
+                exp_val = Math.exp(-0.5 * x_sq);
+            }
+
+            if (exp_val > y) {
                 return [sign * x, engine.getState()];
             }
-
-            attempts++;
         }
-
-        return [0, engine.getState()];
     }
 
     private sampleManyOptimized(
@@ -358,32 +371,74 @@ export class NormalDistribution implements IDistribution<number> {
         engine.setState(state);
 
         const result: number[] = new Array(count);
+        const mean = this._mean;
+        const stdDev = this._stdDev;
+
+        const ZIG_X_0 = ZIG_X[0];
+        const inv_ZIG_X_0 = 1.0 / ZIG_X_0;
 
         for (let i = 0; i < count; ) {
             const u32 = engine.nextUint32();
-            const j = u32 & (ZIGGURAT_N - 1);
-            const sign = u32 & 0x80000000 ? -1 : 1;
+            const u32_2 = engine.nextUint32();
 
-            const u_norm = engine.next01();
-            const x = u_norm * ZIG_X[j];
+            const j1 = u32 & (ZIGGURAT_N - 1);
+            if (u32 < ZIG_K[j1]) {
+                const sign1 = u32 & 0x80000000 ? -stdDev : stdDev;
 
-            if (u32 >>> 0 < ZIG_K[j]) {
-                result[i++] = this._mean + this._stdDev * sign * x;
+                const u_norm1 = (u32_2 >>> 0) * (1.0 / 0x100000000);
+                const x1 = u_norm1 * ZIG_X[j1];
+                result[i++] = mean + sign1 * x1;
+
+                if (i < count) {
+                    const j2 = u32_2 & (ZIGGURAT_N - 1);
+                    if (u32_2 < ZIG_K[j2]) {
+                        const sign2 = u32_2 & 0x80000000 ? -stdDev : stdDev;
+                        const u_norm2 = engine.next01();
+                        const x2 = u_norm2 * ZIG_X[j2];
+                        result[i++] = mean + sign2 * x2;
+                        continue;
+                    }
+                }
                 continue;
             }
-            if (j === 0) {
+
+            const sign = u32 & 0x80000000 ? -1 : 1;
+            const u_norm = engine.next01();
+            const x = u_norm * ZIG_X[j1];
+
+            if (j1 === 0) {
                 let xx: number, yy: number;
                 do {
-                    xx = -Math.log(engine.next01()) / ZIG_X[0];
+                    xx = -Math.log(engine.next01()) * inv_ZIG_X_0;
                     yy = -Math.log(engine.next01());
                 } while (yy + yy < xx * xx);
-                result[i++] = this._mean + this._stdDev * sign * (ZIG_X[0] + xx);
+                result[i++] = mean + stdDev * sign * (ZIG_X_0 + xx);
                 continue;
             }
 
-            const y = engine.next01() * (ZIG_Y[j] - ZIG_Y[j + 1]) + ZIG_Y[j + 1];
-            if (Math.exp(-0.5 * x * x) > y) {
-                result[i++] = this._mean + this._stdDev * sign * x;
+            const x_sq = x * x;
+            const y_range = ZIG_Y[j1] - ZIG_Y[j1 + 1];
+            const y = engine.next01() * y_range + ZIG_Y[j1 + 1];
+
+            let exp_val: number;
+            if (x_sq < 0.0625) {
+                const x_sq_half = x_sq * 0.5;
+                const x_4th = x_sq * x_sq;
+                const x_6th = x_4th * x_sq;
+                exp_val =
+                    1.0 -
+                    x_sq_half +
+                    x_4th * 0.125 -
+                    x_6th * (1.0 / 48.0) +
+                    x_6th * x_sq * (1.0 / 384.0);
+            } else if (x_sq < 1.0) {
+                exp_val = 1.0 - 0.5 * x_sq + 0.125 * x_sq * x_sq;
+            } else {
+                exp_val = Math.exp(-0.5 * x_sq);
+            }
+
+            if (exp_val > y) {
+                result[i++] = mean + stdDev * sign * x;
             }
         }
 
