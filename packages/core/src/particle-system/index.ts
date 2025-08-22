@@ -531,3 +531,72 @@ interface ICollisionEvent {
     readonly otherCollider: any;
 }
 
+interface ICurve {
+    readonly mode: CurveMode;
+    readonly constant: number;
+    readonly constantMin: number;
+    readonly constantMax: number;
+    readonly curve?: Float32Array;
+    readonly curveMin?: Float32Array;
+    readonly curveMax?: Float32Array;
+    readonly curveLength: number;
+    readonly preWrapMode: number;
+    readonly postWrapMode: number;
+}
+
+interface IGradient {
+    readonly mode: GradientMode;
+    readonly colorKeys: Float32Array;
+    readonly alphaKeys: Float32Array;
+    readonly keyCount: number;
+    readonly blendMode: number;
+}
+
+interface IBurst {
+    readonly time: number;
+    readonly count: ICurve;
+    readonly cycles: number;
+    readonly interval: number;
+    readonly probability: number;
+    readonly repeatInterval: number;
+}
+
+interface IEmissionConfig {
+    readonly enabled: boolean;
+    readonly rateOverTime: ICurve;
+    readonly rateOverDistance: ICurve;
+    readonly bursts: readonly IBurst[];
+    readonly type: number;
+}
+
+interface IShapeConfig {
+    readonly enabled: boolean;
+    readonly shape: EmitterShape;
+    readonly radius: number;
+    readonly radiusThickness: number;
+    readonly radiusSpeed: ICurve;
+    readonly radiusSpread: number;
+    readonly angle: number;
+    readonly length: number;
+    readonly box: Vec3;
+    readonly donutRadius: number;
+    readonly position: Vec3;
+    readonly rotation: Vec3;
+    readonly scale: Vec3;
+    readonly alignToDirection: boolean;
+    readonly randomDirectionAmount: number;
+    readonly sphericalDirectionAmount: number;
+    readonly randomPositionAmount: number;
+    readonly normalOffset: number;
+    readonly meshSpawnSpeed: ICurve;
+    readonly meshSpawnSpread: number;
+    readonly useMeshMaterialIndex: boolean;
+    readonly meshMaterialIndex: number;
+    readonly useMeshColors: boolean;
+    readonly texture: any;
+    readonly textureClipChannel: number;
+    readonly textureClipThreshold: number;
+    readonly textureColorAffectsParticles: boolean;
+    readonly textureAlphaAffectsParticles: boolean;
+    readonly textureBilinearFiltering: boolean;
+}
