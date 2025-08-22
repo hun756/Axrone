@@ -600,3 +600,65 @@ interface IShapeConfig {
     readonly textureAlphaAffectsParticles: boolean;
     readonly textureBilinearFiltering: boolean;
 }
+
+interface IVelocityOverLifetimeConfig {
+    readonly enabled: boolean;
+    readonly linear: Vec3;
+    readonly linearCurve: readonly [ICurve, ICurve, ICurve];
+    readonly orbital: Vec3;
+    readonly orbitalCurve: readonly [ICurve, ICurve, ICurve];
+    readonly offset: Vec3;
+    readonly offsetCurve: readonly [ICurve, ICurve, ICurve];
+    readonly radial: ICurve;
+    readonly speedModifier: ICurve;
+    readonly space: SimulationSpace;
+}
+
+interface IForceOverLifetimeConfig {
+    readonly enabled: boolean;
+    readonly force: Vec3;
+    readonly forceCurve: readonly [ICurve, ICurve, ICurve];
+    readonly space: SimulationSpace;
+    readonly randomized: boolean;
+}
+
+interface IColorOverLifetimeConfig {
+    readonly enabled: boolean;
+    readonly color: IGradient;
+}
+
+interface IColorBySpeedConfig {
+    readonly enabled: boolean;
+    readonly color: IGradient;
+    readonly speedRange: Vec3;
+}
+
+interface ISizeOverLifetimeConfig {
+    readonly enabled: boolean;
+    readonly size: ICurve;
+    readonly sizeCurve: readonly [ICurve, ICurve, ICurve];
+    readonly separateAxes: boolean;
+}
+
+interface ISizeBySpeedConfig {
+    readonly enabled: boolean;
+    readonly size: ICurve;
+    readonly sizeCurve: readonly [ICurve, ICurve, ICurve];
+    readonly speedRange: Vec3;
+    readonly separateAxes: boolean;
+}
+
+interface IRotationOverLifetimeConfig {
+    readonly enabled: boolean;
+    readonly angularVelocity: Vec3;
+    readonly angularVelocityCurve: readonly [ICurve, ICurve, ICurve];
+    readonly separateAxes: boolean;
+}
+
+interface IRotationBySpeedConfig {
+    readonly enabled: boolean;
+    readonly angularVelocity: Vec3;
+    readonly angularVelocityCurve: readonly [ICurve, ICurve, ICurve];
+    readonly speedRange: Vec3;
+    readonly separateAxes: boolean;
+}
