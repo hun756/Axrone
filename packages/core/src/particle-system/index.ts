@@ -1,5 +1,5 @@
 import { Mat4, Vec3 } from '@axrone/numeric';
-import { AABB3D } from '../geometry';
+import { AABB3D, IGeometryBuffers } from '../geometry';
 
 declare const ParticleIdBrand: unique symbol;
 export type ParticleId = number & { readonly [ParticleIdBrand]: never };
@@ -661,4 +661,51 @@ interface IRotationBySpeedConfig {
     readonly angularVelocityCurve: readonly [ICurve, ICurve, ICurve];
     readonly speedRange: Vec3;
     readonly separateAxes: boolean;
+}
+
+interface INoiseConfig {
+    readonly enabled: boolean;
+    readonly strength: Vec3;
+    readonly strengthCurve: readonly [ICurve, ICurve, ICurve];
+    readonly frequency: number;
+    readonly octaves: number;
+    readonly octaveMultiplier: number;
+    readonly octaveScale: number;
+    readonly damping: boolean;
+    readonly scrollSpeed: Vec3;
+    readonly scrollSpeedCurve: readonly [ICurve, ICurve, ICurve];
+    readonly separateAxes: boolean;
+    readonly positionAmount: ICurve;
+    readonly rotationAmount: ICurve;
+    readonly sizeAmount: ICurve;
+    readonly quality: QualityLevel;
+    readonly remapEnabled: boolean;
+    readonly remap: Vec3;
+    readonly remapCurve: readonly [ICurve, ICurve, ICurve];
+}
+
+interface ICollisionConfig {
+    readonly enabled: boolean;
+    readonly type: CollisionMode;
+    readonly mode: number;
+    readonly dampen: ICurve;
+    readonly bounce: ICurve;
+    readonly lifetimeLoss: ICurve;
+    readonly minKillSpeed: number;
+    readonly maxKillSpeed: number;
+    readonly radiusScale: number;
+    // TODO: Inspect it!
+    // readonly planes: readonly Plane[];
+    readonly planes: readonly IGeometryBuffers[];
+    readonly enableDynamicColliders: boolean;
+    readonly quality: QualityLevel;
+    readonly voxelSize: number;
+    readonly collidesWith: number;
+    readonly collidesWithDynamic: boolean;
+    readonly interiorCollisions: boolean;
+    readonly maxCollisionShapes: number;
+    readonly sendCollisionMessages: boolean;
+    readonly multiplyColliderForceByCollisionAngle: boolean;
+    readonly multiplyColliderForceByParticleSpeed: boolean;
+    readonly multiplyColliderForceByParticleSize: boolean;
 }
