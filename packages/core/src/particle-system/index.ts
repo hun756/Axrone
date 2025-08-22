@@ -109,3 +109,41 @@ export const enum UVChannelFlags {
     UV2 = 4,
     UV3 = 8,
 }
+
+interface ICurve {
+    readonly mode: CurveMode;
+    readonly constant: number;
+    readonly constantMin: number;
+    readonly constantMax: number;
+    readonly curve?: Float32Array;
+    readonly curveMin?: Float32Array;
+    readonly curveMax?: Float32Array;
+    readonly curveLength: number;
+    readonly preWrapMode: number;
+    readonly postWrapMode: number;
+}
+
+interface IGradient {
+    readonly mode: GradientMode;
+    readonly colorKeys: Float32Array;
+    readonly alphaKeys: Float32Array;
+    readonly keyCount: number;
+    readonly blendMode: number;
+}
+
+interface IBurst {
+    readonly time: number;
+    readonly count: ICurve;
+    readonly cycles: number;
+    readonly interval: number;
+    readonly probability: number;
+    readonly repeatInterval: number;
+}
+
+interface IEmissionConfig {
+    readonly enabled: boolean;
+    readonly rateOverTime: ICurve;
+    readonly rateOverDistance: ICurve;
+    readonly bursts: readonly IBurst[];
+    readonly type: number;
+}
