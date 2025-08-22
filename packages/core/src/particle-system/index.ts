@@ -318,3 +318,63 @@ interface ITextureSheetConfig {
     readonly spriteCount: number;
 }
 
+interface ITrailConfig {
+    readonly enabled: boolean;
+    readonly mode: number;
+    readonly ratio: number;
+    readonly lifetime: ICurve;
+    readonly lifetimeMultiplier: number;
+    readonly minVertexDistance: number;
+    readonly textureMode: number;
+    readonly worldSpace: boolean;
+    readonly dieWithParticles: boolean;
+    readonly sizeAffectsWidth: boolean;
+    readonly sizeAffectsLifetime: boolean;
+    readonly inheritParticleColor: boolean;
+    readonly colorOverLifetime: IGradient;
+    readonly widthOverTrail: ICurve;
+    readonly colorOverTrail: IGradient;
+    readonly generateLightingData: boolean;
+    readonly shadowBias: number;
+    readonly splitSubEmitterRibbons: boolean;
+    readonly attachRibbonsToTransform: boolean;
+    readonly ribbonCount: number;
+}
+
+interface ISubEmitterConfig {
+    readonly enabled: boolean;
+    readonly birth: readonly SystemId[];
+    readonly collision: readonly SystemId[];
+    readonly death: readonly SystemId[];
+    readonly trigger: readonly SystemId[];
+    readonly manualEmission: readonly SystemId[];
+    readonly inherit: number;
+    readonly emitProbability: number;
+}
+
+interface ILightsConfig {
+    readonly enabled: boolean;
+    readonly ratio: number;
+    readonly useRandomDistribution: boolean;
+    readonly light: any;
+    readonly useParticleColor: boolean;
+    readonly sizeAffectsRange: boolean;
+    readonly alphaAffectsIntensity: boolean;
+    readonly range: ICurve;
+    readonly rangeMultiplier: number;
+    readonly intensity: ICurve;
+    readonly intensityMultiplier: number;
+    readonly maxLights: number;
+}
+
+interface ICustomDataConfig {
+    readonly enabled: boolean;
+    readonly mode0: number;
+    readonly vectorComponentCount0: number;
+    readonly color0: IGradient;
+    readonly vector0: readonly [ICurve, ICurve, ICurve, ICurve];
+    readonly mode1: number;
+    readonly vectorComponentCount1: number;
+    readonly color1: IGradient;
+    readonly vector1: readonly [ICurve, ICurve, ICurve, ICurve];
+}
