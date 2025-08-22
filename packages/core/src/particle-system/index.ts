@@ -773,3 +773,69 @@ interface ISubEmitterConfig {
     readonly emitProbability: number;
 }
 
+interface ILightsConfig {
+    readonly enabled: boolean;
+    readonly ratio: number;
+    readonly useRandomDistribution: boolean;
+    readonly light: any;
+    readonly useParticleColor: boolean;
+    readonly sizeAffectsRange: boolean;
+    readonly alphaAffectsIntensity: boolean;
+    readonly range: ICurve;
+    readonly rangeMultiplier: number;
+    readonly intensity: ICurve;
+    readonly intensityMultiplier: number;
+    readonly maxLights: number;
+}
+
+interface ICustomDataConfig {
+    readonly enabled: boolean;
+    readonly mode0: number;
+    readonly vectorComponentCount0: number;
+    readonly color0: IGradient;
+    readonly vector0: readonly [ICurve, ICurve, ICurve, ICurve];
+    readonly mode1: number;
+    readonly vectorComponentCount1: number;
+    readonly color1: IGradient;
+    readonly vector1: readonly [ICurve, ICurve, ICurve, ICurve];
+}
+
+interface IMainConfig {
+    readonly duration: number;
+    readonly loop: boolean;
+    readonly prewarm: boolean;
+    readonly prewarmCycles: number;
+    readonly startDelay: ICurve;
+    readonly startLifetime: ICurve;
+    readonly startSpeed: ICurve;
+    readonly startSize: ICurve;
+    readonly startSizeX: ICurve;
+    readonly startSizeY: ICurve;
+    readonly startSizeZ: ICurve;
+    readonly startRotation: ICurve;
+    readonly startRotationX: ICurve;
+    readonly startRotationY: ICurve;
+    readonly startRotationZ: ICurve;
+    readonly startColor: IGradient;
+    readonly gravityModifier: ICurve;
+    readonly simulationSpace: SimulationSpace;
+    readonly simulationSpeed: number;
+    readonly deltaTimeScale: number;
+    readonly maxParticles: number;
+    readonly scalingMode: number;
+    readonly playOnAwake: boolean;
+    readonly startSize3D: boolean;
+    readonly startRotation3D: boolean;
+    readonly flipRotation: number;
+    readonly stopAction: StopAction;
+    readonly cullingMode: CullingMode;
+    readonly customSimulationSpace?: Mat4;
+    readonly emitterVelocityMode: number;
+    readonly inheritVelocity: ICurve;
+    readonly ringBufferMode: RingBufferMode;
+    readonly ringBufferLoopRange: Vec3;
+    readonly useUnscaledTime: boolean;
+    readonly autoRandomSeed: boolean;
+    readonly randomSeed: number;
+}
+
