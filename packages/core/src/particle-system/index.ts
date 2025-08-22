@@ -1,3 +1,5 @@
+import { Vec3 } from "@axrone/numeric";
+
 declare const ParticleIdBrand: unique symbol;
 export type ParticleId = number & { readonly [ParticleIdBrand]: never };
 
@@ -146,4 +148,98 @@ interface IEmissionConfig {
     readonly rateOverDistance: ICurve;
     readonly bursts: readonly IBurst[];
     readonly type: number;
+}
+
+interface IShapeConfig {
+    readonly enabled: boolean;
+    readonly shape: EmitterShape;
+    readonly radius: number;
+    readonly radiusThickness: number;
+    readonly radiusSpeed: ICurve;
+    readonly radiusSpread: number;
+    readonly angle: number;
+    readonly length: number;
+    readonly box: Vec3;
+    readonly donutRadius: number;
+    readonly position: Vec3;
+    readonly rotation: Vec3;
+    readonly scale: Vec3;
+    readonly alignToDirection: boolean;
+    readonly randomDirectionAmount: number;
+    readonly sphericalDirectionAmount: number;
+    readonly randomPositionAmount: number;
+    readonly normalOffset: number;
+    readonly meshSpawnSpeed: ICurve;
+    readonly meshSpawnSpread: number;
+    readonly useMeshMaterialIndex: boolean;
+    readonly meshMaterialIndex: number;
+    readonly useMeshColors: boolean;
+    readonly texture: any;
+    readonly textureClipChannel: number;
+    readonly textureClipThreshold: number;
+    readonly textureColorAffectsParticles: boolean;
+    readonly textureAlphaAffectsParticles: boolean;
+    readonly textureBilinearFiltering: boolean;
+}
+
+interface IVelocityOverLifetimeConfig {
+    readonly enabled: boolean;
+    readonly linear: Vec3;
+    readonly linearCurve: readonly [ICurve, ICurve, ICurve];
+    readonly orbital: Vec3;
+    readonly orbitalCurve: readonly [ICurve, ICurve, ICurve];
+    readonly offset: Vec3;
+    readonly offsetCurve: readonly [ICurve, ICurve, ICurve];
+    readonly radial: ICurve;
+    readonly speedModifier: ICurve;
+    readonly space: SimulationSpace;
+}
+
+interface IForceOverLifetimeConfig {
+    readonly enabled: boolean;
+    readonly force: Vec3;
+    readonly forceCurve: readonly [ICurve, ICurve, ICurve];
+    readonly space: SimulationSpace;
+    readonly randomized: boolean;
+}
+
+interface IColorOverLifetimeConfig {
+    readonly enabled: boolean;
+    readonly color: IGradient;
+}
+
+interface IColorBySpeedConfig {
+    readonly enabled: boolean;
+    readonly color: IGradient;
+    readonly speedRange: Vec3;
+}
+
+interface ISizeOverLifetimeConfig {
+    readonly enabled: boolean;
+    readonly size: ICurve;
+    readonly sizeCurve: readonly [ICurve, ICurve, ICurve];
+    readonly separateAxes: boolean;
+}
+
+interface ISizeBySpeedConfig {
+    readonly enabled: boolean;
+    readonly size: ICurve;
+    readonly sizeCurve: readonly [ICurve, ICurve, ICurve];
+    readonly speedRange: Vec3;
+    readonly separateAxes: boolean;
+}
+
+interface IRotationOverLifetimeConfig {
+    readonly enabled: boolean;
+    readonly angularVelocity: Vec3;
+    readonly angularVelocityCurve: readonly [ICurve, ICurve, ICurve];
+    readonly separateAxes: boolean;
+}
+
+interface IRotationBySpeedConfig {
+    readonly enabled: boolean;
+    readonly angularVelocity: Vec3;
+    readonly angularVelocityCurve: readonly [ICurve, ICurve, ICurve];
+    readonly speedRange: Vec3;
+    readonly separateAxes: boolean;
 }
