@@ -1,4 +1,5 @@
-import { Vec3 } from '@axrone/numeric';
+import { Mat4, Vec3 } from '@axrone/numeric';
+import { AABB3D } from '../geometry';
 
 declare const ParticleIdBrand: unique symbol;
 export type ParticleId = number & { readonly [ParticleIdBrand]: never };
@@ -110,6 +111,26 @@ export const enum UVChannelFlags {
     UV1 = 2,
     UV2 = 4,
     UV3 = 8,
+}
+
+interface IAlignedArray {
+    readonly buffer: ArrayBuffer;
+    readonly byteOffset: number;
+    readonly byteLength: number;
+}
+
+interface ISimdVec3 extends IAlignedArray {
+    readonly x: Float32Array;
+    readonly y: Float32Array;
+    readonly z: Float32Array;
+    readonly w?: Float32Array;
+}
+
+interface ISimdVec4 extends IAlignedArray {
+    readonly x: Float32Array;
+    readonly y: Float32Array;
+    readonly z: Float32Array;
+    readonly w: Float32Array;
 }
 
 interface ICurve {
@@ -378,3 +399,135 @@ interface ICustomDataConfig {
     readonly color1: IGradient;
     readonly vector1: readonly [ICurve, ICurve, ICurve, ICurve];
 }
+
+interface IMainConfig {
+    readonly duration: number;
+    readonly loop: boolean;
+    readonly prewarm: boolean;
+    readonly prewarmCycles: number;
+    readonly startDelay: ICurve;
+    readonly startLifetime: ICurve;
+    readonly startSpeed: ICurve;
+    readonly startSize: ICurve;
+    readonly startSizeX: ICurve;
+    readonly startSizeY: ICurve;
+    readonly startSizeZ: ICurve;
+    readonly startRotation: ICurve;
+    readonly startRotationX: ICurve;
+    readonly startRotationY: ICurve;
+    readonly startRotationZ: ICurve;
+    readonly startColor: IGradient;
+    readonly gravityModifier: ICurve;
+    readonly simulationSpace: SimulationSpace;
+    readonly simulationSpeed: number;
+    readonly deltaTimeScale: number;
+    readonly maxParticles: number;
+    readonly scalingMode: number;
+    readonly playOnAwake: boolean;
+    readonly startSize3D: boolean;
+    readonly startRotation3D: boolean;
+    readonly flipRotation: number;
+    readonly stopAction: StopAction;
+    readonly cullingMode: CullingMode;
+    readonly customSimulationSpace?: Mat4;
+    readonly emitterVelocityMode: number;
+    readonly inheritVelocity: ICurve;
+    readonly ringBufferMode: RingBufferMode;
+    readonly ringBufferLoopRange: Vec3;
+    readonly useUnscaledTime: boolean;
+    readonly autoRandomSeed: boolean;
+    readonly randomSeed: number;
+}
+
+export interface IParticleSystemConfig {
+    readonly main: IMainConfig;
+    readonly emission: IEmissionConfig;
+    readonly shape: IShapeConfig;
+    readonly velocityOverLifetime: IVelocityOverLifetimeConfig;
+    readonly forceOverLifetime: IForceOverLifetimeConfig;
+    readonly colorOverLifetime: IColorOverLifetimeConfig;
+    readonly colorBySpeed: IColorBySpeedConfig;
+    readonly sizeOverLifetime: ISizeOverLifetimeConfig;
+    readonly sizeBySpeed: ISizeBySpeedConfig;
+    readonly rotationOverLifetime: IRotationOverLifetimeConfig;
+    readonly rotationBySpeed: IRotationBySpeedConfig;
+    readonly noise: INoiseConfig;
+    readonly collision: ICollisionConfig;
+    readonly limitVelocity: ILimitVelocityConfig;
+    readonly textureSheet: ITextureSheetConfig;
+    readonly trails: ITrailConfig;
+    readonly subEmitters: ISubEmitterConfig;
+    readonly lights: ILightsConfig;
+    readonly customData: ICustomDataConfig;
+}
+
+interface ParticleSOA {
+    readonly positions: ISimdVec3;
+    readonly velocities: ISimdVec3;
+    readonly accelerations: ISimdVec3;
+    readonly forces: ISimdVec3;
+    readonly colors: ISimdVec4;
+    readonly sizes: ISimdVec3;
+    readonly rotations: ISimdVec3;
+    readonly angularVelocities: ISimdVec3;
+    readonly lifetimes: Float32Array;
+    readonly normalizedLifetimes: Float32Array;
+    readonly startLifetimes: Float32Array;
+    readonly startSizes: ISimdVec3;
+    readonly startColors: ISimdVec4;
+    readonly startRotations: ISimdVec3;
+    readonly startVelocities: ISimdVec3;
+    readonly randomSeeds: Uint32Array;
+    readonly customData1: ISimdVec4;
+    readonly customData2: ISimdVec4;
+    readonly textureData: ISimdVec4;
+    readonly trailData: ISimdVec4;
+    readonly userData: Float32Array;
+    readonly active: Uint8Array;
+    readonly sortKeys: Float32Array;
+    readonly indices: Uint32Array;
+    readonly birthTime: Float32Array;
+    readonly emitterIndex: Uint16Array;
+    readonly collisionFlags: Uint8Array;
+    count: number;
+    readonly capacity: number;
+}
+
+interface ISpatialCell {
+    readonly particles: Uint32Array;
+    count: number;
+    readonly bounds: AABB3D;
+    readonly centerMass: Vec3;
+    density: number;
+}
+
+interface ISpatialGrid {
+    readonly cells: Map<bigint, ISpatialCell>;
+    readonly cellSize: number;
+    readonly invCellSize: number;
+    readonly dimensions: Vec3;
+    readonly bounds: AABB3D;
+    readonly maxParticlesPerCell: number;
+}
+
+interface IForceField {
+    readonly type: number;
+    readonly position: Vec3;
+    readonly rotation: Vec3;
+    readonly strength: number;
+    readonly range: number;
+    readonly falloff: ICurve;
+    readonly enabled: boolean;
+    readonly affectLifetime: boolean;
+    readonly affectSize: boolean;
+    readonly affectColor: boolean;
+}
+
+interface ICollisionEvent {
+    readonly particleIndex: number;
+    readonly position: Vec3;
+    readonly velocity: Vec3;
+    readonly normal: Vec3;
+    readonly otherCollider: any;
+}
+
