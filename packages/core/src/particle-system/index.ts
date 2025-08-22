@@ -839,3 +839,56 @@ interface IMainConfig {
     readonly randomSeed: number;
 }
 
+interface ISpatialCell {
+    readonly particles: Uint32Array;
+    count: number;
+    readonly bounds: AABB3D;
+    readonly centerMass: Vec3;
+    density: number;
+}
+
+interface ISpatialGrid {
+    readonly cells: Map<bigint, ISpatialCell>;
+    readonly cellSize: number;
+    readonly invCellSize: number;
+    readonly dimensions: Vec3;
+    readonly bounds: AABB3D;
+    readonly maxParticlesPerCell: number;
+}
+
+interface IForceField {
+    readonly type: number;
+    readonly position: Vec3;
+    readonly rotation: Vec3;
+    readonly strength: number;
+    readonly range: number;
+    readonly falloff: ICurve;
+    readonly enabled: boolean;
+    readonly affectLifetime: boolean;
+    readonly affectSize: boolean;
+    readonly affectColor: boolean;
+}
+
+interface ICollisionEvent {
+    readonly particleIndex: number;
+    readonly position: Vec3;
+    readonly velocity: Vec3;
+    readonly normal: Vec3;
+    readonly otherCollider: any;
+}
+
+interface IParticleEvent {
+    readonly type: string;
+    readonly particleIndex: number;
+    readonly data: any;
+}
+
+interface IRenderBatch {
+    readonly startIndex: number;
+    readonly count: number;
+    readonly material: any;
+    readonly texture: any;
+    readonly blendMode: number;
+    readonly sortMode: SortMode;
+}
+
