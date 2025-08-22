@@ -709,3 +709,67 @@ interface ICollisionConfig {
     readonly multiplyColliderForceByParticleSpeed: boolean;
     readonly multiplyColliderForceByParticleSize: boolean;
 }
+
+interface ILimitVelocityConfig {
+    readonly enabled: boolean;
+    readonly limit: Vec3;
+    readonly limitCurve: readonly [ICurve, ICurve, ICurve];
+    readonly dampen: number;
+    readonly separateAxes: boolean;
+    readonly space: SimulationSpace;
+    readonly drag: ICurve;
+    readonly multiplyDragBySize: boolean;
+    readonly multiplyDragByVelocity: boolean;
+}
+
+interface ITextureSheetConfig {
+    readonly enabled: boolean;
+    readonly mode: TextureSheetAnimation;
+    readonly tiles: Vec3;
+    readonly animation: number;
+    readonly frameOverTime: ICurve;
+    readonly startFrame: ICurve;
+    readonly cycleCount: number;
+    readonly flipU: number;
+    readonly flipV: number;
+    readonly uvChannelMask: UVChannelFlags;
+    readonly fps: number;
+    readonly timeMode: number;
+    readonly sprites: readonly any[];
+    readonly spriteCount: number;
+}
+
+interface ITrailConfig {
+    readonly enabled: boolean;
+    readonly mode: number;
+    readonly ratio: number;
+    readonly lifetime: ICurve;
+    readonly lifetimeMultiplier: number;
+    readonly minVertexDistance: number;
+    readonly textureMode: number;
+    readonly worldSpace: boolean;
+    readonly dieWithParticles: boolean;
+    readonly sizeAffectsWidth: boolean;
+    readonly sizeAffectsLifetime: boolean;
+    readonly inheritParticleColor: boolean;
+    readonly colorOverLifetime: IGradient;
+    readonly widthOverTrail: ICurve;
+    readonly colorOverTrail: IGradient;
+    readonly generateLightingData: boolean;
+    readonly shadowBias: number;
+    readonly splitSubEmitterRibbons: boolean;
+    readonly attachRibbonsToTransform: boolean;
+    readonly ribbonCount: number;
+}
+
+interface ISubEmitterConfig {
+    readonly enabled: boolean;
+    readonly birth: readonly SystemId[];
+    readonly collision: readonly SystemId[];
+    readonly death: readonly SystemId[];
+    readonly trigger: readonly SystemId[];
+    readonly manualEmission: readonly SystemId[];
+    readonly inherit: number;
+    readonly emitProbability: number;
+}
+
