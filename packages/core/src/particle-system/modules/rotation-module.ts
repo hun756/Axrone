@@ -27,6 +27,11 @@ export class RotationModule extends BaseModule implements IRotationModule {
         this.x = config.x ?? { ...defaultCurve };
         this.y = config.y ?? { ...defaultCurve };
         this.z = config.z ?? { ...defaultCurve };
+
+        Object.assign(this, config);
+        if ((config as any).angularVelocityCurve) {
+            (this as any).angularVelocityCurve = (config as any).angularVelocityCurve;
+        }
     }
 
     protected onInitialize(): void {}
