@@ -153,6 +153,37 @@ export interface MinMaxGradient extends Gradient {
     scalar: number;
 }
 
+export interface ParticleEventBase {
+    particleId: ParticleId;
+    position: Vec3;
+    velocity: Vec3;
+    data?: any;
+}
+
+export interface CollisionEventData extends ParticleEventBase {
+    collider: any;
+    normal: Vec3;
+    surfaceVelocity: Vec3;
+}
+
+export interface DeathEventData extends ParticleEventBase {
+    lifetime: number;
+    age: number;
+}
+
+export interface SubEmitterEventData extends ParticleEventBase {
+    subSystem: any;
+    trigger: string;
+}
+
+// Event map for the particle system
+export interface ParticleSystemEventMap {
+    collision: CollisionEventData;
+    death: DeathEventData;
+    subemitter: SubEmitterEventData;
+}
+
+// Legacy types for backward compatibility
 export interface ParticleEvent {
     type: string;
     particleId: ParticleId;
