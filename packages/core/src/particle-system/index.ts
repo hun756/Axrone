@@ -4,6 +4,7 @@ export * from './interfaces';
 export * from './particle-soa';
 export * from './spatial-grid';
 export * from './particle-system';
+export * from './aligned-arrays';
 
 // Module exports
 export * from './modules';
