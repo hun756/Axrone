@@ -1,9 +1,18 @@
 import { Vec3, IVec3Like } from '@axrone/numeric';
 import { AABB3D } from '../geometry';
-import { ParticleId, SystemId, ParticleEvent } from './types';
+import {
+    ParticleId,
+    SystemId,
+    ParticleEvent,
+    ParticleSystemEventMap,
+    CollisionEventData,
+    DeathEventData,
+    SubEmitterEventData,
+} from './types';
 import { IParticleSystem, IParticleSOA, ISpatialGrid, IParticleSystemModule } from './interfaces';
 import { ParticleSOA } from './particle-soa';
 import { SpatialGrid } from './spatial-grid';
+import { EventEmitter } from '../event';
 import {
     EmissionModule,
     ShapeModule,
@@ -13,6 +22,7 @@ import {
     SizeModule,
     RotationModule,
 } from './modules';
+import { TrailModule, LightsModule, CustomDataModule } from './modules';
 
 export class ParticleSystem implements IParticleSystem {
     private static _nextSystemId: number = 1;
@@ -21,14 +31,15 @@ export class ParticleSystem implements IParticleSystem {
     private readonly _particles: IParticleSOA;
     private readonly _spatialGrid: ISpatialGrid;
     private readonly _modules: Map<string, IParticleSystemModule>;
-    private readonly _eventListeners: Map<string, ((event: ParticleEvent) => void)[]>;
+    private readonly _eventEmitter: EventEmitter<ParticleSystemEventMap>;
+    private readonly _subSystems: Map<SystemId, ParticleSystem>;
+    private _subEmittersConfig: any | null = null;
 
     private _isPlaying: boolean = false;
     private _isPaused: boolean = false;
     private _time: number = 0;
     private _lastUpdateTime: number = 0;
 
-    // Core modules
     private _emissionModule: EmissionModule;
     private _shapeModule: ShapeModule;
     private _velocityModule: VelocityModule;
@@ -36,6 +47,9 @@ export class ParticleSystem implements IParticleSystem {
     private _colorModule: ColorModule;
     private _sizeModule: SizeModule;
     private _rotationModule: RotationModule;
+    private _trailModule: TrailModule;
+    private _lightsModule: LightsModule;
+    private _customDataModule: CustomDataModule;
 
     constructor(
         options: {
@@ -52,11 +66,16 @@ export class ParticleSystem implements IParticleSystem {
         const cellSize = options.cellSize ?? new Vec3(10, 10, 10);
 
         this._particles = new ParticleSOA(maxParticles);
-        this._spatialGrid = new SpatialGrid(bounds, cellSize);
+        this._spatialGrid = new SpatialGrid(
+            bounds,
+            cellSize.x,
+            64,
+            Math.max(100, Math.floor(maxParticles / 10))
+        );
         this._modules = new Map();
-        this._eventListeners = new Map();
+        this._eventEmitter = new EventEmitter<ParticleSystemEventMap>();
+        this._subSystems = new Map();
 
-        // Initialize core modules
         this._emissionModule = new EmissionModule({ enabled: true });
         this._shapeModule = new ShapeModule({ enabled: false });
         this._velocityModule = new VelocityModule({ enabled: false });
@@ -64,6 +83,9 @@ export class ParticleSystem implements IParticleSystem {
         this._colorModule = new ColorModule({ enabled: false });
         this._sizeModule = new SizeModule({ enabled: false });
         this._rotationModule = new RotationModule({ enabled: false });
+        this._trailModule = new TrailModule({ enabled: false });
+        this._lightsModule = new LightsModule({ enabled: false });
+        this._customDataModule = new CustomDataModule({ enabled: false });
 
         this.addModule(this._emissionModule);
         this.addModule(this._shapeModule);
@@ -72,6 +94,7 @@ export class ParticleSystem implements IParticleSystem {
         this.addModule(this._colorModule);
         this.addModule(this._sizeModule);
         this.addModule(this._rotationModule);
+        this.addModule(this._trailModule);
     }
 
     get id(): SystemId {
@@ -113,6 +136,17 @@ export class ParticleSystem implements IParticleSystem {
     }
     get rotationModule(): RotationModule {
         return this._rotationModule;
+    }
+
+    get trailModule(): TrailModule {
+        return this._trailModule;
+    }
+    get lightsModule(): LightsModule {
+        return this._lightsModule;
+    }
+
+    get customDataModule(): CustomDataModule {
+        return this._customDataModule;
     }
 
     play(): void {
@@ -165,6 +199,7 @@ export class ParticleSystem implements IParticleSystem {
                 position: pos,
                 velocity: vel,
             });
+            this.triggerSubEmitters('birth', particleId);
         }
     }
 
@@ -186,6 +221,7 @@ export class ParticleSystem implements IParticleSystem {
                 position,
                 velocity,
             });
+            this.triggerSubEmitters('birth', particleId);
         }
     }
 
@@ -239,8 +275,6 @@ export class ParticleSystem implements IParticleSystem {
     }
 
     private updateSpatialGrid(): void {
-        // For simplicity, we'll clear and repopulate the spatial grid
-        // In a production system, we'd want to track position changes and update incrementally
         this._spatialGrid.clear();
 
         const positions = this._particles.positions;
@@ -280,6 +314,40 @@ export class ParticleSystem implements IParticleSystem {
                     lifetime: lifetimes[index],
                     age: ages[index],
                 } as any);
+                this.triggerSubEmitters('death', particleId);
+            }
+        }
+    }
+
+    public registerSubSystem(id: SystemId, system: ParticleSystem): void {
+        this._subSystems.set(id, system);
+    }
+
+    public setSubEmittersConfig(config: any): void {
+        this._subEmittersConfig = config;
+    }
+
+    private triggerSubEmitters(trigger: string, particleId: SystemId | ParticleId): void {
+        if (!this._subEmittersConfig || !this._subEmittersConfig.enabled) return;
+
+        const list = (this._subEmittersConfig as any)[trigger] as SystemId[] | undefined;
+        if (!list || list.length === 0) return;
+
+        const ids = this._particles.ids;
+        let index = -1;
+        for (let i = 0; i < ids.length; i++) {
+            if (ids[i] === (particleId as number)) {
+                index = i;
+                break;
+            }
+        }
+        if (index === -1) return;
+
+        for (const subId of list) {
+            const subSystem = this._subSystems.get(subId as SystemId);
+            if (subSystem && Math.random() <= (this._subEmittersConfig.emitProbability ?? 1)) {
+                const particlePos = this._particles.getParticlePosition(index);
+                subSystem.emitFromPosition(particlePos);
             }
         }
     }
@@ -306,28 +374,104 @@ export class ParticleSystem implements IParticleSystem {
     }
 
     addEventListener(type: string, listener: (event: ParticleEvent) => void): void {
-        if (!this._eventListeners.has(type)) {
-            this._eventListeners.set(type, []);
+        if (type === 'collision') {
+            this._eventEmitter.on('collision', (data) => {
+                listener({
+                    type: 'collision',
+                    particleId: data.particleId,
+                    position: data.position,
+                    velocity: data.velocity,
+                    data: data.data,
+                    collider: data.collider,
+                    normal: data.normal,
+                    surfaceVelocity: data.surfaceVelocity,
+                } as any);
+            });
+        } else if (type === 'death') {
+            this._eventEmitter.on('death', (data) => {
+                listener({
+                    type: 'death',
+                    particleId: data.particleId,
+                    position: data.position,
+                    velocity: data.velocity,
+                    data: data.data,
+                    lifetime: data.lifetime,
+                    age: data.age,
+                } as any);
+            });
+        } else if (type === 'subemitter') {
+            this._eventEmitter.on('subemitter', (data) => {
+                listener({
+                    type: 'subemitter',
+                    particleId: data.particleId,
+                    position: data.position,
+                    velocity: data.velocity,
+                    data: data.data,
+                    subSystem: data.subSystem,
+                    trigger: data.trigger,
+                } as any);
+            });
         }
-        this._eventListeners.get(type)!.push(listener);
     }
 
     removeEventListener(type: string, listener: (event: ParticleEvent) => void): void {
-        const listeners = this._eventListeners.get(type);
-        if (listeners) {
-            const index = listeners.indexOf(listener);
-            if (index !== -1) {
-                listeners.splice(index, 1);
-            }
+        if (type === 'collision') {
+            this._eventEmitter.removeAllListeners('collision');
+        } else if (type === 'death') {
+            this._eventEmitter.removeAllListeners('death');
+        } else if (type === 'subemitter') {
+            this._eventEmitter.removeAllListeners('subemitter');
         }
     }
 
+    onCollision(callback: (event: CollisionEventData) => void): () => void {
+        return this._eventEmitter.on('collision', callback);
+    }
+
+    onDeath(callback: (event: DeathEventData) => void): () => void {
+        return this._eventEmitter.on('death', callback);
+    }
+
+    onSubEmitter(callback: (event: SubEmitterEventData) => void): () => void {
+        return this._eventEmitter.on('subemitter', callback);
+    }
+
+    getEventEmitter(): EventEmitter<ParticleSystemEventMap> {
+        return this._eventEmitter;
+    }
+
     private dispatchEvent(event: ParticleEvent): void {
-        const listeners = this._eventListeners.get(event.type);
-        if (listeners) {
-            for (const listener of listeners) {
-                listener(event);
-            }
+        if (event.type === 'collision') {
+            const collisionEvent = event as any;
+            this._eventEmitter.emit('collision', {
+                particleId: collisionEvent.particleId,
+                position: collisionEvent.position,
+                velocity: collisionEvent.velocity,
+                data: collisionEvent.data,
+                collider: collisionEvent.collider,
+                normal: collisionEvent.normal,
+                surfaceVelocity: collisionEvent.surfaceVelocity,
+            });
+        } else if (event.type === 'death') {
+            const deathEvent = event as any;
+            this._eventEmitter.emit('death', {
+                particleId: deathEvent.particleId,
+                position: deathEvent.position,
+                velocity: deathEvent.velocity,
+                data: deathEvent.data,
+                lifetime: deathEvent.lifetime,
+                age: deathEvent.age,
+            });
+        } else if (event.type === 'subemitter') {
+            const subEmitterEvent = event as any;
+            this._eventEmitter.emit('subemitter', {
+                particleId: subEmitterEvent.particleId,
+                position: subEmitterEvent.position,
+                velocity: subEmitterEvent.velocity,
+                data: subEmitterEvent.data,
+                subSystem: subEmitterEvent.subSystem,
+                trigger: subEmitterEvent.trigger,
+            });
         }
     }
 
@@ -339,10 +483,41 @@ export class ParticleSystem implements IParticleSystem {
         return this._spatialGrid.query(bounds);
     }
 
+    public getLightData(maxLights?: number): Float32Array {
+        if (!this._lightsModule || !this._lightsModule.enabled) return new Float32Array(0);
+        const cfg: any = (this._lightsModule as any).config || {};
+        const configuredMax = typeof cfg.maxLights === 'number' ? cfg.maxLights : Infinity;
+        const ratio = typeof cfg.ratio === 'number' ? cfg.ratio : 0;
+        const desired = Math.min(maxLights ?? configuredMax, configuredMax);
+
+        const active = this._particles.getActiveIndices();
+        const candidates: { idx: number; pos: any }[] = [];
+        for (const i of active) {
+            const p = this._particles.getParticlePosition(i);
+            candidates.push({ idx: i, pos: p });
+        }
+
+        const keepBase = ratio > 0 ? Math.ceil(candidates.length * ratio) : candidates.length;
+        const keepCount = Math.min(desired, keepBase);
+
+        const outCount = Math.min(keepCount, candidates.length);
+        const out = new Float32Array(outCount * 4);
+        for (let i = 0; i < outCount; i++) {
+            const pos = candidates[i].pos;
+            const dst = i * 4;
+            out[dst] = pos.x;
+            out[dst + 1] = pos.y;
+            out[dst + 2] = pos.z;
+            out[dst + 3] = (cfg.intensity && (cfg.intensity.constant ?? cfg.intensity)) ?? 1.0;
+        }
+
+        return out;
+    }
+
     dispose(): void {
         this.stop();
         this._spatialGrid.clear();
         this._modules.clear();
-        this._eventListeners.clear();
+        this._eventEmitter.dispose();
     }
 }
