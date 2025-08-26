@@ -64,6 +64,15 @@ export class NoiseModule extends BaseModule implements INoiseModule {
     constructor(config: Partial<INoiseModule> = {}) {
         super('NoiseModule', config.enabled ?? false);
         Object.assign(this, config);
+        if ((config as any).strengthCurve) {
+            (this as any).strengthCurve = (config as any).strengthCurve;
+        }
+        if ((config as any).scrollSpeedCurve) {
+            (this as any).scrollSpeedCurve = (config as any).scrollSpeedCurve;
+        }
+        if ((config as any).remapCurve) {
+            (this as any).remapCurve = (config as any).remapCurve;
+        }
     }
 
     protected onInitialize(): void {
