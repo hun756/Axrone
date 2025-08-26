@@ -25,6 +25,11 @@ export class SizeModule extends BaseModule implements ISizeModule {
         this.x = config.x ?? { ...this.size };
         this.y = config.y ?? { ...this.size };
         this.z = config.z ?? { ...this.size };
+
+        Object.assign(this, config);
+        if ((config as any).sizeCurve) {
+            (this as any).sizeCurve = (config as any).sizeCurve;
+        }
     }
 
     protected onInitialize(): void {}
