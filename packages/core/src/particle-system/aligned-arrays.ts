@@ -1,3 +1,5 @@
+import { IDisposable } from "../types";
+
 declare const __brand: unique symbol;
 export type Brand<T, K> = T & { [__brand]: K };
 
@@ -54,11 +56,6 @@ export class ValidationError extends AlignedArrayError {
         super(message, 'VALIDATION_ERROR', context);
         this.name = 'ValidationError';
     }
-}
-
-export interface IDisposable {
-    dispose(): void;
-    readonly isDisposed: boolean;
 }
 
 export interface ICloneable<T> {
