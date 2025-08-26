@@ -1,4 +1,4 @@
-import { FastRandom } from './fast-random';
+import { Random } from '../random';
 
 export class PerlinNoise3D {
     private readonly permutation: Uint8Array;
@@ -8,13 +8,13 @@ export class PerlinNoise3D {
         this.permutation = new Uint8Array(512);
         this.gradients = new Float32Array(256 * 3);
 
-        const random = new FastRandom(seed);
+    const random = new Random(seed);
 
         for (let i = 0; i < 256; i++) {
             this.permutation[i] = i;
 
-            const angle1 = random.next() * Math.PI * 2;
-            const angle2 = random.next() * Math.PI;
+            const angle1 = random.float() * Math.PI * 2;
+            const angle2 = random.float() * Math.PI;
 
             this.gradients[i * 3] = Math.sin(angle2) * Math.cos(angle1);
             this.gradients[i * 3 + 1] = Math.sin(angle2) * Math.sin(angle1);
@@ -22,7 +22,7 @@ export class PerlinNoise3D {
         }
 
         for (let i = 255; i > 0; i--) {
-            const j = Math.floor(random.next() * (i + 1));
+            const j = Math.floor(random.float() * (i + 1));
             [this.permutation[i], this.permutation[j]] = [this.permutation[j], this.permutation[i]];
         }
 
