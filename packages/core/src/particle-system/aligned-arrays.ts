@@ -1,4 +1,5 @@
-import { IDisposable } from "../types";
+import { ICloneable } from '@axrone/utility';
+import { IDisposable } from '../types';
 
 declare const __brand: unique symbol;
 export type Brand<T, K> = T & { [__brand]: K };
@@ -12,8 +13,8 @@ export type VectorIndex = Brand<number, 'VectorIndex'>;
 export type ComponentIndex = Brand<number, 'ComponentIndex'>;
 
 export interface TypedArrayConstructor {
-    new(buffer: ArrayBufferLike, byteOffset?: number, length?: number): TypedArray;
-    new(length: number): TypedArray;
+    new (buffer: ArrayBufferLike, byteOffset?: number, length?: number): TypedArray;
+    new (length: number): TypedArray;
     readonly BYTES_PER_ELEMENT: number;
 }
 
@@ -28,7 +29,7 @@ export interface TypedArray extends ArrayBufferView {
 export class AlignedArrayError extends Error {
     readonly code: string;
     readonly context?: Record<string, unknown>;
-    
+
     constructor(message: string, code: string, context?: Record<string, unknown>) {
         super(message);
         this.name = 'AlignedArrayError';
@@ -58,25 +59,25 @@ export class ValidationError extends AlignedArrayError {
     }
 }
 
-export interface ICloneable<T> {
-    clone(): T;
-}
-
 export interface ISerializable<T> {
     serialize(): T;
     deserialize(data: T): void;
 }
 
-type VectorComponentKeys<T extends ComponentCount> = 
-    T extends 2 ? 'x' | 'y' :
-    T extends 3 ? 'x' | 'y' | 'z' :
-    T extends 4 ? 'x' | 'y' | 'z' | 'w' :
-    never;
+type VectorComponentKeys<T extends ComponentCount> = T extends 2
+    ? 'x' | 'y'
+    : T extends 3
+      ? 'x' | 'y' | 'z'
+      : T extends 4
+        ? 'x' | 'y' | 'z' | 'w'
+        : never;
 
 export interface IAlignedVectorArray<
     TComponents extends ComponentCount,
-    TArray extends TypedArray = Float32Array
-> extends IDisposable, ICloneable<IAlignedVectorArray<TComponents, TArray>>, ISerializable<ArrayBuffer> {
+    TArray extends TypedArray = Float32Array,
+> extends IDisposable,
+        ICloneable<IAlignedVectorArray<TComponents, TArray>>,
+        ISerializable<ArrayBuffer> {
     readonly buffer: AlignedArrayBuffer;
     readonly byteOffset: number;
     readonly byteLength: number;
@@ -89,7 +90,7 @@ export interface IAlignedVectorArray<
     readonly y: TArray;
     readonly z: TComponents extends 3 | 4 ? TArray : undefined;
     readonly w: TComponents extends 4 ? TArray : undefined;
-    
+
     set(index: VectorIndex, x: number, y: number, z?: number, w?: number): this;
     get(index: VectorIndex): number[];
     setVector(index: VectorIndex, vector: ArrayLike<number>): this;
@@ -99,12 +100,29 @@ export interface IAlignedVectorArray<
     clear(): this;
     resize(newCapacity: number): this;
     slice(start?: VectorIndex, end?: VectorIndex): IAlignedVectorArray<TComponents, TArray>;
-    forEach(callback: (x: number, y: number, z: number | undefined, w: number | undefined, index: VectorIndex) => void): void;
-    map<U>(callback: (x: number, y: number, z: number | undefined, w: number | undefined, index: VectorIndex) => U): U[];
+    forEach(
+        callback: (
+            x: number,
+            y: number,
+            z: number | undefined,
+            w: number | undefined,
+            index: VectorIndex
+        ) => void
+    ): void;
+    map<U>(
+        callback: (
+            x: number,
+            y: number,
+            z: number | undefined,
+            w: number | undefined,
+            index: VectorIndex
+        ) => U
+    ): U[];
     validate(): boolean;
 }
 
-export interface IVec2Array<TArray extends TypedArray = Float32Array> extends IAlignedVectorArray<2, TArray> {
+export interface IVec2Array<TArray extends TypedArray = Float32Array>
+    extends IAlignedVectorArray<2, TArray> {
     set(index: VectorIndex, x: number, y: number): this;
     setXY(index: VectorIndex, x: number, y: number): this;
     getX(index: VectorIndex): number;
@@ -113,7 +131,8 @@ export interface IVec2Array<TArray extends TypedArray = Float32Array> extends IA
     setY(index: VectorIndex, value: number): this;
 }
 
-export interface IVec3Array<TArray extends TypedArray = Float32Array> extends IAlignedVectorArray<3, TArray> {
+export interface IVec3Array<TArray extends TypedArray = Float32Array>
+    extends IAlignedVectorArray<3, TArray> {
     set(index: VectorIndex, x: number, y: number, z: number): this;
     setXYZ(index: VectorIndex, x: number, y: number, z: number): this;
     getX(index: VectorIndex): number;
@@ -124,7 +143,8 @@ export interface IVec3Array<TArray extends TypedArray = Float32Array> extends IA
     setZ(index: VectorIndex, value: number): this;
 }
 
-export interface IVec4Array<TArray extends TypedArray = Float32Array> extends IAlignedVectorArray<4, TArray> {
+export interface IVec4Array<TArray extends TypedArray = Float32Array>
+    extends IAlignedVectorArray<4, TArray> {
     set(index: VectorIndex, x: number, y: number, z: number, w: number): this;
     setXYZW(index: VectorIndex, x: number, y: number, z: number, w: number): this;
     getX(index: VectorIndex): number;
@@ -143,13 +163,13 @@ export interface IAlignedArrayFactory {
         ArrayConstructor?: TypedArrayConstructor,
         alignment?: Alignment
     ): IVec2Array<TArray>;
-    
+
     createVec3<TArray extends TypedArray = Float32Array>(
         capacity: number,
         ArrayConstructor?: TypedArrayConstructor,
         alignment?: Alignment
     ): IVec3Array<TArray>;
-    
+
     createVec4<TArray extends TypedArray = Float32Array>(
         capacity: number,
         ArrayConstructor?: TypedArrayConstructor,
@@ -174,7 +194,7 @@ export interface IVectorOperations<T extends IAlignedVectorArray<ComponentCount,
     clamp(a: T, min: T, max: T, result?: T): T;
 }
 
-const isVectorIndex = (value: number): value is VectorIndex => 
+const isVectorIndex = (value: number): value is VectorIndex =>
     Number.isInteger(value) && value >= 0;
 
 const asVectorIndex = (value: number): VectorIndex => {
@@ -188,7 +208,7 @@ const validateCapacity = (capacity: number): void => {
     if (!Number.isInteger(capacity) || capacity <= 0) {
         throw new ValidationError('Capacity must be a positive integer', { capacity });
     }
-    if (capacity > 0x7FFFFFFF / 16) {
+    if (capacity > 0x7fffffff / 16) {
         throw new MemoryError('Capacity too large', { capacity });
     }
 };
@@ -207,10 +227,9 @@ const createAlignedBuffer = (size: number, alignment: Alignment): AlignedArrayBu
     return buffer as AlignedArrayBuffer;
 };
 
-abstract class BaseAlignedVectorArray<
-    TComponents extends ComponentCount,
-    TArray extends TypedArray
-> implements IAlignedVectorArray<TComponents, TArray> {
+abstract class BaseAlignedVectorArray<TComponents extends ComponentCount, TArray extends TypedArray>
+    implements IAlignedVectorArray<TComponents, TArray>
+{
     protected _buffer: AlignedArrayBuffer;
     protected _byteOffset: number;
     protected _byteLength: number;
@@ -228,7 +247,7 @@ abstract class BaseAlignedVectorArray<
         alignment: Alignment = 16
     ) {
         validateCapacity(capacity);
-        
+
         if (!validateAlignment(alignment)) {
             throw new ValidationError('Invalid alignment', { alignment });
         }
@@ -255,9 +274,12 @@ abstract class BaseAlignedVectorArray<
         const alignedComponentSize = calculateAlignedSize(componentSize, this._alignment);
 
         const components = {} as Record<VectorComponentKeys<TComponents>, TArray>;
-        const keys: VectorComponentKeys<TComponents>[] = this._componentCount === 2 ? ['x', 'y'] as any :
-            this._componentCount === 3 ? ['x', 'y', 'z'] as any :
-            ['x', 'y', 'z', 'w'] as any;
+        const keys: VectorComponentKeys<TComponents>[] =
+            this._componentCount === 2
+                ? (['x', 'y'] as any)
+                : this._componentCount === 3
+                  ? (['x', 'y', 'z'] as any)
+                  : (['x', 'y', 'z', 'w'] as any);
 
         keys.forEach((key, index) => {
             const offset = index * alignedComponentSize;
@@ -286,23 +308,45 @@ abstract class BaseAlignedVectorArray<
         }
     }
 
-    get buffer(): AlignedArrayBuffer { return this._buffer; }
-    get byteOffset(): number { return this._byteOffset; }
-    get byteLength(): number { return this._byteLength; }
-    get capacity(): number { return this._capacity; }
-    get componentCount(): TComponents { return this._componentCount; }
-    get alignment(): Alignment { return this._alignment; }
-    get ArrayConstructor(): TypedArrayConstructor { return this._ArrayConstructor; }
-    get components(): Record<VectorComponentKeys<TComponents>, TArray> { return this._components; }
-    get isDisposed(): boolean { return this._isDisposed; }
-    
-    get x(): TArray { return (this._components as any).x; }
-    get y(): TArray { return (this._components as any).y; }
-    get z(): TComponents extends 3 | 4 ? TArray : undefined { 
-        return (this._components as any).z; 
+    get buffer(): AlignedArrayBuffer {
+        return this._buffer;
     }
-    get w(): TComponents extends 4 ? TArray : undefined { 
-        return (this._components as any).w; 
+    get byteOffset(): number {
+        return this._byteOffset;
+    }
+    get byteLength(): number {
+        return this._byteLength;
+    }
+    get capacity(): number {
+        return this._capacity;
+    }
+    get componentCount(): TComponents {
+        return this._componentCount;
+    }
+    get alignment(): Alignment {
+        return this._alignment;
+    }
+    get ArrayConstructor(): TypedArrayConstructor {
+        return this._ArrayConstructor;
+    }
+    get components(): Record<VectorComponentKeys<TComponents>, TArray> {
+        return this._components;
+    }
+    get isDisposed(): boolean {
+        return this._isDisposed;
+    }
+
+    get x(): TArray {
+        return (this._components as any).x;
+    }
+    get y(): TArray {
+        return (this._components as any).y;
+    }
+    get z(): TComponents extends 3 | 4 ? TArray : undefined {
+        return (this._components as any).z;
+    }
+    get w(): TComponents extends 4 ? TArray : undefined {
+        return (this._components as any).w;
     }
 
     abstract set(index: VectorIndex, x: number, y: number, z?: number, w?: number): this;
@@ -317,11 +361,11 @@ abstract class BaseAlignedVectorArray<
 
     setVector(index: VectorIndex, vector: ArrayLike<number>): this {
         this._validateIndex(index);
-        
+
         if (vector.length < this._componentCount) {
-            throw new ValidationError('Vector length insufficient', { 
-                expected: this._componentCount, 
-                actual: vector.length 
+            throw new ValidationError('Vector length insufficient', {
+                expected: this._componentCount,
+                actual: vector.length,
             });
         }
 
@@ -329,45 +373,45 @@ abstract class BaseAlignedVectorArray<
         this.y[index] = vector[1];
         if (this._componentCount >= 3) this.z![index] = vector[2];
         if (this._componentCount >= 4) this.w![index] = vector[3];
-        
+
         return this;
     }
 
     getVector(index: VectorIndex, out?: number[]): number[] {
         this._validateIndex(index);
-        
+
         const result = out || new Array(this._componentCount);
         result[0] = this.x[index];
         result[1] = this.y[index];
         if (this._componentCount >= 3) result[2] = this.z![index];
         if (this._componentCount >= 4) result[3] = this.w![index];
-        
+
         return result;
     }
 
     copy(srcIndex: VectorIndex, destIndex: VectorIndex): this {
         this._validateIndex(srcIndex);
         this._validateIndex(destIndex);
-        
+
         this.x[destIndex] = this.x[srcIndex];
         this.y[destIndex] = this.y[srcIndex];
         if (this._componentCount >= 3) this.z![destIndex] = this.z![srcIndex];
         if (this._componentCount >= 4) this.w![destIndex] = this.w![srcIndex];
-        
+
         return this;
     }
 
     fill(value: number, start?: VectorIndex, end?: VectorIndex): this {
         this._ensureNotDisposed();
-        
+
         const s = start ?? (0 as VectorIndex);
         const e = end ?? (this._capacity as VectorIndex);
-        
+
         this.x.fill(value, s, e);
         this.y.fill(value, s, e);
         if (this._componentCount >= 3) this.z!.fill(value, s, e);
         if (this._componentCount >= 4) this.w!.fill(value, s, e);
-        
+
         return this;
     }
 
@@ -377,63 +421,73 @@ abstract class BaseAlignedVectorArray<
 
     resize(newCapacity: number): this {
         validateCapacity(newCapacity);
-        
+
         if (newCapacity === this._capacity) return this;
-        
+
         const oldComponents = this._components;
         const oldCapacity = this._capacity;
-        
+
         this._capacity = newCapacity;
-        
+
         const bytesPerElement = this._ArrayConstructor.BYTES_PER_ELEMENT;
         const totalSize = newCapacity * this._componentCount * bytesPerElement;
         const paddedSize = calculateAlignedSize(totalSize, this._alignment);
-        
+
         this._buffer = createAlignedBuffer(paddedSize, this._alignment);
         this._byteLength = this._buffer.byteLength;
         this._components = this._createComponentViews();
-        
+
         const copyCount = Math.min(oldCapacity, newCapacity);
         const keys = Object.keys(oldComponents) as VectorComponentKeys<TComponents>[];
-        
-        keys.forEach(key => {
-            this._components[key].set(oldComponents[key].subarray(0, copyCount) as ArrayLike<number>);
+
+        keys.forEach((key) => {
+            this._components[key].set(
+                oldComponents[key].subarray(0, copyCount) as ArrayLike<number>
+            );
         });
-        
+
         return this;
     }
 
     slice(start?: VectorIndex, end?: VectorIndex): IAlignedVectorArray<TComponents, TArray> {
         this._ensureNotDisposed();
-        
+
         const s = start ?? (0 as VectorIndex);
         const e = end ?? (this._capacity as VectorIndex);
         const length = e - s;
-        
+
         if (length <= 0) {
             throw new ValidationError('Invalid slice range', { start: s, end: e });
         }
-        
+
         const sliced = new (this.constructor as any)(
-            length, 
-            this._componentCount, 
-            this._ArrayConstructor, 
+            length,
+            this._componentCount,
+            this._ArrayConstructor,
             this._alignment
         ) as IAlignedVectorArray<TComponents, TArray>;
-        
+
         const keys = Object.keys(this._components) as VectorComponentKeys<TComponents>[];
-        keys.forEach(key => {
+        keys.forEach((key) => {
             (sliced.components[key] as TypedArray).set(
                 this._components[key].subarray(s, e) as ArrayLike<number>
             );
         });
-        
+
         return sliced;
     }
 
-    forEach(callback: (x: number, y: number, z: number | undefined, w: number | undefined, index: VectorIndex) => void): void {
+    forEach(
+        callback: (
+            x: number,
+            y: number,
+            z: number | undefined,
+            w: number | undefined,
+            index: VectorIndex
+        ) => void
+    ): void {
         this._ensureNotDisposed();
-        
+
         for (let i = 0; i < this._capacity; i++) {
             const idx = i as VectorIndex;
             callback(
@@ -446,9 +500,17 @@ abstract class BaseAlignedVectorArray<
         }
     }
 
-    map<U>(callback: (x: number, y: number, z: number | undefined, w: number | undefined, index: VectorIndex) => U): U[] {
+    map<U>(
+        callback: (
+            x: number,
+            y: number,
+            z: number | undefined,
+            w: number | undefined,
+            index: VectorIndex
+        ) => U
+    ): U[] {
         this._ensureNotDisposed();
-        
+
         const results: U[] = new Array(this._capacity);
         for (let i = 0; i < this._capacity; i++) {
             const idx = i as VectorIndex;
@@ -466,17 +528,17 @@ abstract class BaseAlignedVectorArray<
     validate(): boolean {
         try {
             this._ensureNotDisposed();
-            
+
             if (!this._buffer || this._buffer.byteLength === 0) return false;
             if (this._capacity <= 0) return false;
-            
+
             const keys = Object.keys(this._components) as VectorComponentKeys<TComponents>[];
             for (const key of keys) {
                 const component = this._components[key];
                 if (!component || component.length !== this._capacity) return false;
                 if (component.buffer !== this._buffer) return false;
             }
-            
+
             return true;
         } catch {
             return false;
@@ -490,14 +552,14 @@ abstract class BaseAlignedVectorArray<
 
     deserialize(data: ArrayBuffer): void {
         this._ensureNotDisposed();
-        
+
         if (data.byteLength !== this._byteLength) {
             throw new ValidationError('Buffer size mismatch', {
                 expected: this._byteLength,
-                actual: data.byteLength
+                actual: data.byteLength,
             });
         }
-        
+
         new Uint8Array(this._buffer).set(new Uint8Array(data));
     }
 
@@ -505,17 +567,17 @@ abstract class BaseAlignedVectorArray<
 
     dispose(): void {
         if (this._isDisposed) return;
-        
+
         this._isDisposed = true;
         this._components = {} as any;
         this._buffer = null as any;
     }
 }
 
-export class Vec2Array<TArray extends TypedArray = Float32Array> 
-    extends BaseAlignedVectorArray<2, TArray> 
-    implements IVec2Array<TArray> {
-    
+export class Vec2Array<TArray extends TypedArray = Float32Array>
+    extends BaseAlignedVectorArray<2, TArray>
+    implements IVec2Array<TArray>
+{
     constructor(
         capacity: number,
         ArrayConstructor: TypedArrayConstructor = Float32Array as any,
@@ -558,17 +620,21 @@ export class Vec2Array<TArray extends TypedArray = Float32Array>
     }
 
     clone(): IVec2Array<TArray> {
-        const cloned = new Vec2Array<TArray>(this._capacity, this._ArrayConstructor, this._alignment);
+        const cloned = new Vec2Array<TArray>(
+            this._capacity,
+            this._ArrayConstructor,
+            this._alignment
+        );
         cloned.x.set(this.x as ArrayLike<number>);
         cloned.y.set(this.y as ArrayLike<number>);
         return cloned;
     }
 }
 
-export class Vec3Array<TArray extends TypedArray = Float32Array> 
-    extends BaseAlignedVectorArray<3, TArray> 
-    implements IVec3Array<TArray> {
-    
+export class Vec3Array<TArray extends TypedArray = Float32Array>
+    extends BaseAlignedVectorArray<3, TArray>
+    implements IVec3Array<TArray>
+{
     constructor(
         capacity: number,
         ArrayConstructor: TypedArrayConstructor = Float32Array as any,
@@ -623,7 +689,11 @@ export class Vec3Array<TArray extends TypedArray = Float32Array>
     }
 
     clone(): IVec3Array<TArray> {
-        const cloned = new Vec3Array<TArray>(this._capacity, this._ArrayConstructor, this._alignment);
+        const cloned = new Vec3Array<TArray>(
+            this._capacity,
+            this._ArrayConstructor,
+            this._alignment
+        );
         cloned.x.set(this.x as ArrayLike<number>);
         cloned.y.set(this.y as ArrayLike<number>);
         cloned.z!.set(this.z! as ArrayLike<number>);
@@ -631,10 +701,10 @@ export class Vec3Array<TArray extends TypedArray = Float32Array>
     }
 }
 
-export class Vec4Array<TArray extends TypedArray = Float32Array> 
-    extends BaseAlignedVectorArray<4, TArray> 
-    implements IVec4Array<TArray> {
-    
+export class Vec4Array<TArray extends TypedArray = Float32Array>
+    extends BaseAlignedVectorArray<4, TArray>
+    implements IVec4Array<TArray>
+{
     constructor(
         capacity: number,
         ArrayConstructor: TypedArrayConstructor = Float32Array as any,
@@ -701,7 +771,11 @@ export class Vec4Array<TArray extends TypedArray = Float32Array>
     }
 
     clone(): IVec4Array<TArray> {
-        const cloned = new Vec4Array<TArray>(this._capacity, this._ArrayConstructor, this._alignment);
+        const cloned = new Vec4Array<TArray>(
+            this._capacity,
+            this._ArrayConstructor,
+            this._alignment
+        );
         cloned.x.set(this.x as ArrayLike<number>);
         cloned.y.set(this.y as ArrayLike<number>);
         cloned.z!.set(this.z! as ArrayLike<number>);
@@ -740,16 +814,16 @@ export class AlignedArrayFactory implements IAlignedArrayFactory {
     }
 }
 
-export class VectorOperations<T extends IAlignedVectorArray<ComponentCount, TypedArray>> 
-    implements IVectorOperations<T> {
-
+export class VectorOperations<T extends IAlignedVectorArray<ComponentCount, TypedArray>>
+    implements IVectorOperations<T>
+{
     private _validateSameStructure(a: T, b: T): void {
         if (a.capacity !== b.capacity || a.componentCount !== b.componentCount) {
             throw new ValidationError('Arrays must have same structure', {
                 aCapacity: a.capacity,
                 bCapacity: b.capacity,
                 aComponents: a.componentCount,
-                bComponents: b.componentCount
+                bComponents: b.componentCount,
             });
         }
     }
@@ -1039,7 +1113,7 @@ interface IMemoryPool {
         ArrayConstructor?: TypedArrayConstructor,
         alignment?: Alignment
     ): T;
-    
+
     release<T extends IAlignedVectorArray<ComponentCount, TypedArray>>(array: T): void;
     clear(): void;
     readonly size: number;
@@ -1091,7 +1165,7 @@ export class MemoryPool implements IMemoryPool {
         );
 
         const pool = this._pools.get(key) || [];
-        
+
         if (pool.length < this._maxPoolSize) {
             pool.push(array);
             this._pools.set(key, pool);
@@ -1102,7 +1176,7 @@ export class MemoryPool implements IMemoryPool {
 
     clear(): void {
         for (const pool of this._pools.values()) {
-            pool.forEach(array => array.dispose());
+            pool.forEach((array) => array.dispose());
             pool.length = 0;
         }
         this._pools.clear();
@@ -1140,7 +1214,7 @@ export {
     validateCapacity,
     validateAlignment,
     calculateAlignedSize,
-    createAlignedBuffer
+    createAlignedBuffer,
 };
 
 export default AlignedArrayFactory;
