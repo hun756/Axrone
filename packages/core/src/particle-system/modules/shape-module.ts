@@ -60,6 +60,11 @@ export class ShapeModule extends BaseModule implements IShapeModule {
     public textureAlphaAffectsParticles: boolean;
     public textureBilinearFiltering: boolean;
     public textureUVChannel: number;
+    public radiusThickness: number;
+    public radiusSpeed: any;
+    public radiusSpread: number;
+    public meshSpawnSpeed: any;
+    public meshSpawnSpread: number;
 
     constructor(config: Partial<IShapeModule> = {}) {
         super('ShapeModule', config.enabled ?? false);
@@ -152,6 +157,26 @@ export class ShapeModule extends BaseModule implements IShapeModule {
         this.textureAlphaAffectsParticles = config.textureAlphaAffectsParticles ?? false;
         this.textureBilinearFiltering = config.textureBilinearFiltering ?? true;
         this.textureUVChannel = config.textureUVChannel ?? 0;
+
+        this.radiusThickness = (config as any).radiusThickness ?? 1;
+        this.radiusSpeed = (config as any).radiusSpeed ?? {
+            mode: 0,
+            constant: 0,
+            constantMin: 0,
+            constantMax: 0,
+            curveMultiplier: 1,
+        };
+        this.radiusSpread = (config as any).radiusSpread ?? 0;
+        this.meshSpawnSpeed = (config as any).meshSpawnSpeed ?? {
+            mode: 0,
+            constant: 0,
+            constantMin: 0,
+            constantMax: 0,
+            curveMultiplier: 1,
+        };
+        this.meshSpawnSpread = (config as any).meshSpawnSpread ?? 0;
+
+        Object.assign(this, config);
     }
 
     protected onInitialize(): void {}
