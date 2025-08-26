@@ -6,20 +6,14 @@ export class EmissionModule extends BaseModule implements IEmissionModule {
     public rateOverTime: Curve;
     public rateOverDistance: Curve;
     public burstList: Burst[];
+    public type: number = 0;
 
     private _time: number = 0;
     private _lastPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
     private _accumulatedEmission: number = 0;
     private _burstIndex: number = 0;
 
-    constructor(
-        config: {
-            enabled?: boolean;
-            rateOverTime?: Curve;
-            rateOverDistance?: Curve;
-            burstList?: Burst[];
-        } = {}
-    ) {
+    constructor(config: Partial<IEmissionModule & { bursts?: Burst[] }> = {}) {
         super('EmissionModule', config.enabled ?? true);
 
         this.rateOverTime = config.rateOverTime ?? {
@@ -38,7 +32,9 @@ export class EmissionModule extends BaseModule implements IEmissionModule {
             curveMultiplier: 1,
         };
 
-        this.burstList = config.burstList ?? [];
+        this.burstList = (config as any).burstList ?? (config as any).bursts ?? [];
+
+        this.type = (config as any).type ?? this.type;
     }
 
     protected onInitialize(): void {
