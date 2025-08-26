@@ -14,6 +14,10 @@ export class ColorModule extends BaseModule implements IColorModule {
             colorMin: { r: 1, g: 1, b: 1, a: 1 },
             colorMax: { r: 1, g: 1, b: 1, a: 1 },
         };
+        Object.assign(this, config);
+        if ((config as any).speedRange) {
+            (this as any).speedRange = (config as any).speedRange;
+        }
     }
 
     protected onInitialize(): void {}
