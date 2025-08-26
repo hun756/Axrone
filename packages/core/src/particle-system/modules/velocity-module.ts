@@ -11,26 +11,38 @@ export class VelocityModule extends BaseModule implements IVelocityModule {
     public speedModifier: any; // Curve
     public space: SimulationSpace;
 
-    constructor(config: Partial<IVelocityModule> = {}) {
+    constructor(
+        config: Partial<
+            IVelocityModule & { linearCurve?: any[]; orbitalCurve?: any[]; offsetCurve?: any[] }
+        > = {}
+    ) {
         super('VelocityModule', config.enabled ?? false);
 
         this.linear = config.linear ?? new Vec3(0, 0, 0);
         this.orbital = config.orbital ?? new Vec3(0, 0, 0);
         this.offset = config.offset ?? new Vec3(0, 0, 0);
-        this.radial = config.radial ?? {
+
+        const defaultCurve = {
             mode: 0,
             constant: 0,
             constantMin: 0,
             constantMax: 0,
             curveMultiplier: 1,
         };
-        this.speedModifier = config.speedModifier ?? {
-            mode: 0,
-            constant: 1,
-            constantMin: 0,
-            constantMax: 0,
-            curveMultiplier: 1,
-        };
+
+        this.radial = config.radial ?? defaultCurve;
+        this.speedModifier = config.speedModifier ?? { ...defaultCurve, constant: 1 };
+
+        if ((config as any).linearCurve) {
+            (this as any).linearCurve = (config as any).linearCurve;
+        }
+        if ((config as any).orbitalCurve) {
+            (this as any).orbitalCurve = (config as any).orbitalCurve;
+        }
+        if ((config as any).offsetCurve) {
+            (this as any).offsetCurve = (config as any).offsetCurve;
+        }
+
         this.space = config.space ?? SimulationSpace.Local;
     }
 
@@ -49,18 +61,15 @@ export class VelocityModule extends BaseModule implements IVelocityModule {
             const velOffset = index * 3;
             const posOffset = index * 3;
 
-            // apply linear velocity
             velocities[velOffset] += this.linear.x * deltaTime;
             velocities[velOffset + 1] += this.linear.y * deltaTime;
             velocities[velOffset + 2] += this.linear.z * deltaTime;
 
-            // apply orbital velocity (simplified)
             if (this.orbital.lengthSquared() > 0) {
                 const px = positions[posOffset];
                 const py = positions[posOffset + 1];
                 const pz = positions[posOffset + 2];
 
-                // simple orbital rotation around Y-axis
                 const orbitalForceX = -py * this.orbital.y * deltaTime;
                 const orbitalForceZ = px * this.orbital.y * deltaTime;
 
@@ -68,7 +77,6 @@ export class VelocityModule extends BaseModule implements IVelocityModule {
                 velocities[velOffset + 2] += orbitalForceZ;
             }
 
-            // apply offset (constant force)
             velocities[velOffset] += this.offset.x * deltaTime;
             velocities[velOffset + 1] += this.offset.y * deltaTime;
             velocities[velOffset + 2] += this.offset.z * deltaTime;
