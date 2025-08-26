@@ -32,9 +32,18 @@ export class LimitVelocityModule extends BaseModule implements ILimitVelocityMod
     public multiplyDragByParticleSize: boolean = false;
     public multiplyDragByParticleVelocity: boolean = false;
 
-    constructor(config: Partial<ILimitVelocityModule> = {}) {
+    constructor(config: Partial<ILimitVelocityModule & { limitCurve?: any[]; multiplyDragBySize?: boolean; multiplyDragByVelocity?: boolean }> = {}) {
         super('LimitVelocityModule', config.enabled ?? false);
+
         Object.assign(this, config);
+
+        // accept backup aliases
+        this.multiplyDragByParticleSize = (config as any).multiplyDragBySize ?? this.multiplyDragByParticleSize;
+        this.multiplyDragByParticleVelocity = (config as any).multiplyDragByVelocity ?? this.multiplyDragByParticleVelocity;
+
+        if ((config as any).limitCurve) {
+            (this as any).limitCurve = (config as any).limitCurve;
+        }
     }
 
     protected onInitialize(): void {}
