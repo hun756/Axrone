@@ -19,6 +19,9 @@ export class TextureSheetModule extends BaseModule implements ITextureSheetModul
     public rowMode: number = 0;
     public sprites: any[] = [];
     public speedRange: Vec3 = new Vec3(0, 1, 0);
+    public fps: number = 0;
+    public timeMode: number = 0;
+    public spriteCount: number = 0;
 
     constructor(config: Partial<ITextureSheetModule> = {}) {
         super('TextureSheetModule', config.enabled ?? false);
@@ -32,6 +35,12 @@ export class TextureSheetModule extends BaseModule implements ITextureSheetModul
         this.frameOverTime = config.frameOverTime ?? defaultCurve;
         this.startFrame = config.startFrame ?? defaultCurve;
         Object.assign(this, config);
+
+        this.fps = (config as any).fps ?? this.fps;
+        this.timeMode = (config as any).timeMode ?? this.timeMode;
+        this.spriteCount = (config as any).spriteCount ?? this.spriteCount;
+        this.uvChannelMask = (config as any).uvChannelMask ?? this.uvChannelMask;
+        this.animationType = (config as any).mode ?? this.animationType;
     }
 
     protected onInitialize(): void {}
