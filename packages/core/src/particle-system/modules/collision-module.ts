@@ -22,6 +22,10 @@ export class CollisionModule extends BaseModule implements ICollisionModule {
     public collidesWith: number = 0xffffffff;
     public collidesWithDynamic: boolean = false;
     public interiorCollisions: boolean = false;
+    public sendCollisionMessages: boolean = false;
+    public multiplyColliderForceByCollisionAngle: boolean = false;
+    public multiplyColliderForceByParticleSpeed: boolean = false;
+    public multiplyColliderForceByParticleSize: boolean = false;
 
     constructor(config: Partial<ICollisionModule> = {}) {
         super('CollisionModule', config.enabled ?? false);
@@ -38,6 +42,7 @@ export class CollisionModule extends BaseModule implements ICollisionModule {
         this.planes = config.planes ?? [];
         this.minKillSpeed = config.minKillSpeed ?? 0;
         this.maxKillSpeed = config.maxKillSpeed ?? Number.POSITIVE_INFINITY;
+        Object.assign(this, config);
     }
 
     protected onInitialize(): void {
