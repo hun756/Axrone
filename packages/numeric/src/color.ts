@@ -1,5 +1,6 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON } from './common';
+import { clamp, clamp01 } from './clamp';
 
 export interface IColorLike {
     r: number;
@@ -82,7 +83,6 @@ export enum ColorComparisonMode {
     ALPHA,
 }
 
-import { clamp, clamp01 } from './clamp';
 
 const _mod = (n: number, m: number): number => {
     return ((n % m) + m) % m;
