@@ -10,12 +10,15 @@ export class ForceModule extends BaseModule implements IForceModule {
 
     private _randomForce: Vec3 = new Vec3(0, 0, 0);
 
-    constructor(config: Partial<IForceModule> = {}) {
+    constructor(config: Partial<IForceModule & { randomized?: boolean }> = {}) {
         super('ForceModule', config.enabled ?? false);
+
+        // accept backup alias 'randomized'
+        const randomized = (config as any).randomized ?? config.randomizePerFrame ?? false;
 
         this.force = config.force ?? new Vec3(0, 0, 0);
         this.relativeTo = config.relativeTo ?? SimulationSpace.World;
-        this.randomizePerFrame = config.randomizePerFrame ?? false;
+        this.randomizePerFrame = randomized;
     }
 
     protected onInitialize(): void {
