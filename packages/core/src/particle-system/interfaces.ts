@@ -62,6 +62,8 @@ export interface ISpatialCell extends PoolableObject {
     bounds: AABB3D;
     particles: ParticleId[];
     neighborCells: ISpatialCell[];
+    centerMass?: Vec3;
+    density?: number;
 }
 
 export interface ISpatialGrid {
