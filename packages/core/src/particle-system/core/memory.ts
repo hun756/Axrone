@@ -1,9 +1,9 @@
 import type { IMemoryManager } from './interfaces';
 import { ParticleSystemException } from './error';
-import { 
-    TypedArrayPool as UtilityTypedArrayPool, 
-    TypedArrayPools, 
-    PoolableTypedArray 
+import {
+    TypedArrayPool as UtilityTypedArrayPool,
+    TypedArrayPools,
+    PoolableTypedArray,
 } from '@axrone/utility';
 
 export class ParticleMemoryManager implements IMemoryManager {
@@ -11,7 +11,7 @@ export class ParticleMemoryManager implements IMemoryManager {
     private readonly _pooledManager: PooledMemoryManager;
     private readonly _typedArrayPools: Map<string, any>;
     private readonly _activeTypedArrays = new WeakSet<PoolableTypedArray<any>>();
-    
+
     private _stats = {
         totalTypedArrayAllocations: 0,
         totalTypedArrayReleases: 0,
@@ -23,7 +23,7 @@ export class ParticleMemoryManager implements IMemoryManager {
         this._alignedManager = new AlignedMemoryManager();
         this._pooledManager = new PooledMemoryManager();
         this._typedArrayPools = new Map();
-        
+
         this._typedArrayPools.set('Float32Array', TypedArrayPools.Float32);
         this._typedArrayPools.set('Float64Array', TypedArrayPools.Float64);
         this._typedArrayPools.set('Uint32Array', TypedArrayPools.Uint32);
@@ -31,10 +31,9 @@ export class ParticleMemoryManager implements IMemoryManager {
         this._typedArrayPools.set('Uint8Array', TypedArrayPools.Uint8);
     }
 
-    allocateTypedArray<T extends Float32Array | Float64Array | Uint32Array | Uint16Array | Uint8Array>(
-        constructor: new (length: number) => T,
-        length: number
-    ): PoolableTypedArray<T> {
+    allocateTypedArray<
+        T extends Float32Array | Float64Array | Uint32Array | Uint16Array | Uint8Array,
+    >(constructor: new (length: number) => T, length: number): PoolableTypedArray<T> {
         const pool = this._typedArrayPools.get(constructor.name);
         if (!pool) {
             throw new Error(`No pool available for ${constructor.name}`);
@@ -48,9 +47,9 @@ export class ParticleMemoryManager implements IMemoryManager {
         return pooled;
     }
 
-    releaseTypedArray<T extends Float32Array | Float64Array | Uint32Array | Uint16Array | Uint8Array>(
-        pooled: PoolableTypedArray<T>
-    ): void {
+    releaseTypedArray<
+        T extends Float32Array | Float64Array | Uint32Array | Uint16Array | Uint8Array,
+    >(pooled: PoolableTypedArray<T>): void {
         if (!this._activeTypedArrays.has(pooled)) {
             console.warn('Attempting to release TypedArray that was not allocated by this manager');
             return;
@@ -58,7 +57,7 @@ export class ParticleMemoryManager implements IMemoryManager {
 
         const constructorName = pooled.array.constructor.name;
         const pool = this._typedArrayPools.get(constructorName);
-        
+
         if (pool) {
             pool.release(pooled);
             this._activeTypedArrays.delete(pooled);
@@ -67,10 +66,9 @@ export class ParticleMemoryManager implements IMemoryManager {
         }
     }
 
-    createTypedArrayWithData<T extends Float32Array | Float64Array | Uint32Array | Uint16Array | Uint8Array>(
-        constructor: new (length: number) => T,
-        data: ArrayLike<number>
-    ): PoolableTypedArray<T> {
+    createTypedArrayWithData<
+        T extends Float32Array | Float64Array | Uint32Array | Uint16Array | Uint8Array,
+    >(constructor: new (length: number) => T, data: ArrayLike<number>): PoolableTypedArray<T> {
         const pool = this._typedArrayPools.get(constructor.name);
         if (!pool) {
             throw new Error(`No pool available for ${constructor.name}`);
@@ -87,11 +85,13 @@ export class ParticleMemoryManager implements IMemoryManager {
     getExtendedStats() {
         const alignedStats = this._alignedManager.getStats();
         const pooledStats = this._pooledManager.getStats();
-        
-        const typedArrayStats = Array.from(this._typedArrayPools.entries()).map(([typeName, pool]) => ({
-            type: typeName,
-            stats: pool.getStats(),
-        }));
+
+        const typedArrayStats = Array.from(this._typedArrayPools.entries()).map(
+            ([typeName, pool]) => ({
+                type: typeName,
+                stats: pool.getStats(),
+            })
+        );
 
         return {
             aligned: alignedStats,
@@ -99,15 +99,20 @@ export class ParticleMemoryManager implements IMemoryManager {
             typedArrays: typedArrayStats,
             manager: {
                 ...this._stats,
-                poolHitRate: this._stats.totalTypedArrayReleases > 0 
-                    ? this._stats.totalTypedArrayReleases / this._stats.totalTypedArrayAllocations 
-                    : 0,
+                poolHitRate:
+                    this._stats.totalTypedArrayReleases > 0
+                        ? this._stats.totalTypedArrayReleases /
+                          this._stats.totalTypedArrayAllocations
+                        : 0,
             },
         };
     }
 
     allocate(size: number, alignment: number = 16): ArrayBuffer | null {
-        return this._pooledManager.allocate(size, alignment) ?? this._alignedManager.allocate(size, alignment);
+        return (
+            this._pooledManager.allocate(size, alignment) ??
+            this._alignedManager.allocate(size, alignment)
+        );
     }
 
     deallocate(buffer: ArrayBuffer): void {
@@ -116,18 +121,22 @@ export class ParticleMemoryManager implements IMemoryManager {
     }
 
     reallocate(buffer: ArrayBuffer, newSize: number): ArrayBuffer | null {
-        return this._pooledManager.reallocate(buffer, newSize) ?? this._alignedManager.reallocate(buffer, newSize);
+        return (
+            this._pooledManager.reallocate(buffer, newSize) ??
+            this._alignedManager.reallocate(buffer, newSize)
+        );
     }
 
     getStats() {
         const pooledStats = this._pooledManager.getStats();
         const alignedStats = this._alignedManager.getStats();
-        
+
         return {
             totalAllocated: pooledStats.totalAllocated + alignedStats.totalAllocated,
             totalUsed: pooledStats.totalUsed + alignedStats.totalUsed,
             allocationCount: pooledStats.allocationCount + alignedStats.allocationCount,
-            fragmentationRatio: (pooledStats.fragmentationRatio + alignedStats.fragmentationRatio) / 2,
+            fragmentationRatio:
+                (pooledStats.fragmentationRatio + alignedStats.fragmentationRatio) / 2,
         } as const;
     }
 
@@ -135,7 +144,7 @@ export class ParticleMemoryManager implements IMemoryManager {
         for (const pool of this._typedArrayPools.values()) {
             pool.clear();
         }
-        
+
         this._stats.totalTypedArrayAllocations = 0;
         this._stats.totalTypedArrayReleases = 0;
         this._stats.activeTypedArrays = 0;
@@ -144,11 +153,11 @@ export class ParticleMemoryManager implements IMemoryManager {
 
     dispose(): void {
         this.clear();
-        
+
         for (const pool of this._typedArrayPools.values()) {
             pool.dispose();
         }
-        
+
         this._typedArrayPools.clear();
     }
 }
