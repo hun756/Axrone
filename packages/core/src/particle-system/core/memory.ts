@@ -1,5 +1,157 @@
 import type { IMemoryManager } from './interfaces';
 import { ParticleSystemException } from './error';
+import { 
+    TypedArrayPool as UtilityTypedArrayPool, 
+    TypedArrayPools, 
+    PoolableTypedArray 
+} from '@axrone/utility';
+
+export class ParticleMemoryManager implements IMemoryManager {
+    private readonly _alignedManager: AlignedMemoryManager;
+    private readonly _pooledManager: PooledMemoryManager;
+    private readonly _typedArrayPools: Map<string, any>;
+    private readonly _activeTypedArrays = new WeakSet<PoolableTypedArray<any>>();
+    
+    private _stats = {
+        totalTypedArrayAllocations: 0,
+        totalTypedArrayReleases: 0,
+        activeTypedArrays: 0,
+        poolHitRate: 0,
+    };
+
+    constructor() {
+        this._alignedManager = new AlignedMemoryManager();
+        this._pooledManager = new PooledMemoryManager();
+        this._typedArrayPools = new Map();
+        
+        this._typedArrayPools.set('Float32Array', TypedArrayPools.Float32);
+        this._typedArrayPools.set('Float64Array', TypedArrayPools.Float64);
+        this._typedArrayPools.set('Uint32Array', TypedArrayPools.Uint32);
+        this._typedArrayPools.set('Uint16Array', TypedArrayPools.Uint16);
+        this._typedArrayPools.set('Uint8Array', TypedArrayPools.Uint8);
+    }
+
+    allocateTypedArray<T extends Float32Array | Float64Array | Uint32Array | Uint16Array | Uint8Array>(
+        constructor: new (length: number) => T,
+        length: number
+    ): PoolableTypedArray<T> {
+        const pool = this._typedArrayPools.get(constructor.name);
+        if (!pool) {
+            throw new Error(`No pool available for ${constructor.name}`);
+        }
+
+        const pooled = pool.acquire(length);
+        this._activeTypedArrays.add(pooled);
+        this._stats.totalTypedArrayAllocations++;
+        this._stats.activeTypedArrays++;
+
+        return pooled;
+    }
+
+    releaseTypedArray<T extends Float32Array | Float64Array | Uint32Array | Uint16Array | Uint8Array>(
+        pooled: PoolableTypedArray<T>
+    ): void {
+        if (!this._activeTypedArrays.has(pooled)) {
+            console.warn('Attempting to release TypedArray that was not allocated by this manager');
+            return;
+        }
+
+        const constructorName = pooled.array.constructor.name;
+        const pool = this._typedArrayPools.get(constructorName);
+        
+        if (pool) {
+            pool.release(pooled);
+            this._activeTypedArrays.delete(pooled);
+            this._stats.totalTypedArrayReleases++;
+            this._stats.activeTypedArrays--;
+        }
+    }
+
+    createTypedArrayWithData<T extends Float32Array | Float64Array | Uint32Array | Uint16Array | Uint8Array>(
+        constructor: new (length: number) => T,
+        data: ArrayLike<number>
+    ): PoolableTypedArray<T> {
+        const pool = this._typedArrayPools.get(constructor.name);
+        if (!pool) {
+            throw new Error(`No pool available for ${constructor.name}`);
+        }
+
+        const pooled = pool.acquireWithData(data);
+        this._activeTypedArrays.add(pooled);
+        this._stats.totalTypedArrayAllocations++;
+        this._stats.activeTypedArrays++;
+
+        return pooled;
+    }
+
+    getExtendedStats() {
+        const alignedStats = this._alignedManager.getStats();
+        const pooledStats = this._pooledManager.getStats();
+        
+        const typedArrayStats = Array.from(this._typedArrayPools.entries()).map(([typeName, pool]) => ({
+            type: typeName,
+            stats: pool.getStats(),
+        }));
+
+        return {
+            aligned: alignedStats,
+            pooled: pooledStats,
+            typedArrays: typedArrayStats,
+            manager: {
+                ...this._stats,
+                poolHitRate: this._stats.totalTypedArrayReleases > 0 
+                    ? this._stats.totalTypedArrayReleases / this._stats.totalTypedArrayAllocations 
+                    : 0,
+            },
+        };
+    }
+
+    allocate(size: number, alignment: number = 16): ArrayBuffer | null {
+        return this._pooledManager.allocate(size, alignment) ?? this._alignedManager.allocate(size, alignment);
+    }
+
+    deallocate(buffer: ArrayBuffer): void {
+        this._pooledManager.deallocate(buffer);
+        this._alignedManager.deallocate(buffer);
+    }
+
+    reallocate(buffer: ArrayBuffer, newSize: number): ArrayBuffer | null {
+        return this._pooledManager.reallocate(buffer, newSize) ?? this._alignedManager.reallocate(buffer, newSize);
+    }
+
+    getStats() {
+        const pooledStats = this._pooledManager.getStats();
+        const alignedStats = this._alignedManager.getStats();
+        
+        return {
+            totalAllocated: pooledStats.totalAllocated + alignedStats.totalAllocated,
+            totalUsed: pooledStats.totalUsed + alignedStats.totalUsed,
+            allocationCount: pooledStats.allocationCount + alignedStats.allocationCount,
+            fragmentationRatio: (pooledStats.fragmentationRatio + alignedStats.fragmentationRatio) / 2,
+        } as const;
+    }
+
+    clear(): void {
+        for (const pool of this._typedArrayPools.values()) {
+            pool.clear();
+        }
+        
+        this._stats.totalTypedArrayAllocations = 0;
+        this._stats.totalTypedArrayReleases = 0;
+        this._stats.activeTypedArrays = 0;
+        this._stats.poolHitRate = 0;
+    }
+
+    dispose(): void {
+        this.clear();
+        
+        for (const pool of this._typedArrayPools.values()) {
+            pool.dispose();
+        }
+        
+        this._typedArrayPools.clear();
+    }
+}
 
 export class AlignedMemoryManager implements IMemoryManager {
     private readonly _allocations = new Map<ArrayBuffer, { size: number; alignment: number }>();
@@ -166,89 +318,8 @@ export class PooledMemoryManager implements IMemoryManager {
     }
 }
 
-export class TypedArrayPool<
-    T extends
-        | Float32Array
-        | Float64Array
-        | Int8Array
-        | Int16Array
-        | Int32Array
-        | Uint8Array
-        | Uint16Array
-        | Uint32Array,
-> {
-    private readonly _available: T[] = [];
-    private readonly _inUse = new Set<T>();
-    private readonly _constructor: new (length: number) => T;
-    private readonly _defaultSize: number;
-
-    constructor(
-        arrayConstructor: new (length: number) => T,
-        defaultSize: number = 1024,
-        initialPoolSize: number = 8
-    ) {
-        this._constructor = arrayConstructor;
-        this._defaultSize = defaultSize;
-
-        for (let i = 0; i < initialPoolSize; i++) {
-            this._available.push(new arrayConstructor(defaultSize));
-        }
-    }
-
-    acquire(size?: number): T {
-        const actualSize = size ?? this._defaultSize;
-        let array = this._available.find((arr) => arr.length >= actualSize);
-
-        if (!array) {
-            array = new this._constructor(actualSize);
-        } else {
-            const index = this._available.indexOf(array);
-            this._available.splice(index, 1);
-        }
-
-        this._inUse.add(array);
-        return array;
-    }
-
-    release(array: T): void {
-        if (!this._inUse.has(array)) return;
-
-        this._inUse.delete(array);
-
-        if (this._available.length < 32) {
-            try {
-                (array as any).fill(0);
-            } catch {
-                // Some typed arrays might not support fill
-            }
-            this._available.push(array);
-        }
-    }
-
-    clear(): void {
-        this._available.length = 0;
-        this._inUse.clear();
-    }
-
-    get size(): number {
-        return this._available.length;
-    }
-
-    get inUse(): number {
-        return this._inUse.size;
-    }
-}
-
 export const MemoryManager = {
     aligned: new AlignedMemoryManager(),
     pooled: new PooledMemoryManager(),
-
-    float32Pool: new TypedArrayPool(Float32Array),
-    float64Pool: new TypedArrayPool(Float64Array),
-    uint32Pool: new TypedArrayPool(Uint32Array),
-    uint16Pool: new TypedArrayPool(Uint16Array),
-    uint8Pool: new TypedArrayPool(Uint8Array),
-    int32Pool: new TypedArrayPool(Int32Array),
-    int16Pool: new TypedArrayPool(Int16Array),
-    int8Pool: new TypedArrayPool(Int8Array),
+    particle: new ParticleMemoryManager(),
 } as const;
