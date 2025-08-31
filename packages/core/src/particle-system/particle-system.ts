@@ -1,100 +1,50 @@
-import { Vec3, IVec3Like } from '@axrone/numeric';
-import { AABB3D } from '../geometry';
-import {
-    ParticleId,
-    SystemId,
-    ParticleEvent,
+import type { IVec3Like } from '@axrone/numeric';
+import type { ParticleId, SystemId, ModuleId, EmitterId } from './types';
+import type {
+    IParticleSystem,
+    IParticleEmitter,
+    IModule,
+    IParticleData,
+    ISpatialIndex,
     ParticleSystemEventMap,
-    CollisionEventData,
-    DeathEventData,
-    SubEmitterEventData,
-} from './types';
-import { IParticleSystem, IParticleSOA, ISpatialGrid, IParticleSystemModule } from './interfaces';
-import { ParticleSOA } from './particle-soa';
-import { SpatialGrid } from './spatial-grid';
+    ParticleBirthEvent,
+    ParticleDeathEvent,
+    ParticleCollisionEvent,
+} from './core/interfaces';
+import type { ParticleSystemConfiguration, ModuleType } from './core/configuration';
+import { ParticleSystemException } from './core/error';
+import { SOAParticleBuffer } from './core/particle-buffer';
+import { UniformSpatialGrid } from './core/spatial-index';
 import { EventEmitter } from '../event';
-import {
-    EmissionModule,
-    ShapeModule,
-    VelocityModule,
-    ForceModule,
-    ColorModule,
-    SizeModule,
-    RotationModule,
-} from './modules';
-import { TrailModule, LightsModule, CustomDataModule } from './modules';
 
 export class ParticleSystem implements IParticleSystem {
-    private static _nextSystemId: number = 1;
+    private static _nextSystemId = 1;
 
     private readonly _id: SystemId;
-    private readonly _particles: IParticleSOA;
-    private readonly _spatialGrid: ISpatialGrid;
-    private readonly _modules: Map<string, IParticleSystemModule>;
-    private readonly _eventEmitter: EventEmitter<ParticleSystemEventMap>;
-    private readonly _subSystems: Map<SystemId, ParticleSystem>;
-    private _subEmittersConfig: any | null = null;
+    private readonly _particles: SOAParticleBuffer;
+    private readonly _spatialIndex: ISpatialIndex;
+    private readonly _modules = new Map<ModuleId, IModule>();
+    private readonly _modulesByType = new Map<ModuleType, IModule[]>();
+    private readonly _emitters = new Map<EmitterId, IParticleEmitter>();
+    private readonly _eventEmitter = new EventEmitter<ParticleSystemEventMap>();
 
-    private _isPlaying: boolean = false;
-    private _isPaused: boolean = false;
-    private _time: number = 0;
-    private _lastUpdateTime: number = 0;
+    private _configuration: ParticleSystemConfiguration;
+    private _isPlaying = false;
+    private _isPaused = false;
+    private _time = 0;
+    private _lastUpdateTime = 0;
+    private _initialized = false;
 
-    private _emissionModule: EmissionModule;
-    private _shapeModule: ShapeModule;
-    private _velocityModule: VelocityModule;
-    private _forceModule: ForceModule;
-    private _colorModule: ColorModule;
-    private _sizeModule: SizeModule;
-    private _rotationModule: RotationModule;
-    private _trailModule: TrailModule;
-    private _lightsModule: LightsModule;
-    private _customDataModule: CustomDataModule;
-
-    constructor(
-        options: {
-            maxParticles?: number;
-            bounds?: AABB3D;
-            cellSize?: Vec3;
-        } = {}
-    ) {
+    constructor(config?: Partial<ParticleSystemConfiguration>) {
         this._id = ParticleSystem._nextSystemId++ as SystemId;
 
-        const maxParticles = options.maxParticles ?? 1000;
-        const bounds =
-            options.bounds ?? new AABB3D(new Vec3(-100, -100, -100), new Vec3(100, 100, 100));
-        const cellSize = options.cellSize ?? new Vec3(10, 10, 10);
+        this._configuration = this._createDefaultConfiguration(config);
 
-        this._particles = new ParticleSOA(maxParticles);
-        this._spatialGrid = new SpatialGrid(
-            bounds,
-            cellSize.x,
-            64,
-            Math.max(100, Math.floor(maxParticles / 10))
+        this._particles = new SOAParticleBuffer();
+        this._spatialIndex = new UniformSpatialGrid(
+            this._configuration.bounds,
+            this._configuration.cellSize
         );
-        this._modules = new Map();
-        this._eventEmitter = new EventEmitter<ParticleSystemEventMap>();
-        this._subSystems = new Map();
-
-        this._emissionModule = new EmissionModule({ enabled: true });
-        this._shapeModule = new ShapeModule({ enabled: false });
-        this._velocityModule = new VelocityModule({ enabled: false });
-        this._forceModule = new ForceModule({ enabled: false });
-        this._colorModule = new ColorModule({ enabled: false });
-        this._sizeModule = new SizeModule({ enabled: false });
-        this._rotationModule = new RotationModule({ enabled: false });
-        this._trailModule = new TrailModule({ enabled: false });
-        this._lightsModule = new LightsModule({ enabled: false });
-        this._customDataModule = new CustomDataModule({ enabled: false });
-
-        this.addModule(this._emissionModule);
-        this.addModule(this._shapeModule);
-        this.addModule(this._velocityModule);
-        this.addModule(this._forceModule);
-        this.addModule(this._colorModule);
-        this.addModule(this._sizeModule);
-        this.addModule(this._rotationModule);
-        this.addModule(this._trailModule);
     }
 
     get id(): SystemId {
@@ -106,50 +56,91 @@ export class ParticleSystem implements IParticleSystem {
     get isPaused(): boolean {
         return this._isPaused;
     }
-    get isStopped(): boolean {
-        return !this._isPlaying && !this._isPaused;
-    }
     get particleCount(): number {
         return this._particles.count;
     }
     get time(): number {
         return this._time;
     }
-
-    get emissionModule(): EmissionModule {
-        return this._emissionModule;
+    get emitters(): readonly IParticleEmitter[] {
+        return Array.from(this._emitters.values());
     }
-    get shapeModule(): ShapeModule {
-        return this._shapeModule;
-    }
-    get velocityModule(): VelocityModule {
-        return this._velocityModule;
-    }
-    get forceModule(): ForceModule {
-        return this._forceModule;
-    }
-    get colorModule(): ColorModule {
-        return this._colorModule;
-    }
-    get sizeModule(): SizeModule {
-        return this._sizeModule;
-    }
-    get rotationModule(): RotationModule {
-        return this._rotationModule;
+    get modules(): readonly IModule[] {
+        return Array.from(this._modules.values());
     }
 
-    get trailModule(): TrailModule {
-        return this._trailModule;
-    }
-    get lightsModule(): LightsModule {
-        return this._lightsModule;
+    initialize(): void {
+        if (this._initialized) return;
+
+        try {
+            if (!this._particles.allocate(this._configuration.maxParticles)) {
+                throw ParticleSystemException.memoryAllocationFailed(
+                    this._configuration.maxParticles
+                );
+            }
+
+            for (const module of this._modules.values()) {
+                module.initialize();
+            }
+
+            for (const emitter of this._emitters.values()) {
+                emitter.initialize();
+            }
+
+            this._initialized = true;
+        } catch (error) {
+            this.destroy();
+            throw error;
+        }
     }
 
-    get customDataModule(): CustomDataModule {
-        return this._customDataModule;
+    destroy(): void {
+        if (!this._initialized) return;
+
+        try {
+            this.stop();
+
+            for (const emitter of this._emitters.values()) {
+                emitter.destroy();
+            }
+
+            for (const module of this._modules.values()) {
+                module.destroy();
+            }
+
+            this._particles.deallocate();
+            this._spatialIndex.clear();
+
+            this._emitters.clear();
+            this._modules.clear();
+            this._modulesByType.clear();
+
+            this._initialized = false;
+        } catch (error) {
+            console.warn('Error during particle system destruction:', error);
+        }
+    }
+
+    reset(): void {
+        this._throwIfNotInitialized();
+
+        this._time = 0;
+        this._lastUpdateTime = 0;
+        this._particles.clear();
+        this._spatialIndex.clear();
+
+        for (const module of this._modules.values()) {
+            module.reset();
+        }
+
+        for (const emitter of this._emitters.values()) {
+            emitter.reset();
+        }
     }
 
     play(): void {
+        this._throwIfNotInitialized();
+
         this._isPlaying = true;
         this._isPaused = false;
         this._lastUpdateTime = performance.now() / 1000;
@@ -162,362 +153,340 @@ export class ParticleSystem implements IParticleSystem {
     stop(): void {
         this._isPlaying = false;
         this._isPaused = false;
-        this.clear();
+
+        for (const emitter of this._emitters.values()) {
+            emitter.stop();
+        }
+    }
+
+    restart(): void {
+        this.stop();
         this.reset();
+        this.play();
     }
 
-    clear(): void {
-        this._particles.clear();
-        this._spatialGrid.clear();
-        this._time = 0;
+    update(deltaTime: number): void {
+        this._throwIfNotInitialized();
+
+        if (!this._isPlaying || this._isPaused) return;
+
+        this._time += deltaTime;
+
+        this._updateParticleLifetime(deltaTime);
+        this._updateModules(deltaTime);
+        this._updateEmitters(deltaTime);
+        this._updateSpatialIndex();
+
+        this._lastUpdateTime = this._time;
     }
 
-    private reset(): void {
-        for (const module of this._modules.values()) {
-            module.reset();
+    addEmitter(emitter: IParticleEmitter): void {
+        this._emitters.set(emitter.id, emitter);
+
+        if (this._initialized) {
+            emitter.initialize();
         }
     }
 
-    emit(count: number): void {
-        for (let i = 0; i < count; i++) {
-            this.emitSingleParticle();
+    removeEmitter(emitterId: EmitterId): boolean {
+        const emitter = this._emitters.get(emitterId);
+        if (!emitter) return false;
+
+        emitter.destroy();
+        return this._emitters.delete(emitterId);
+    }
+
+    getEmitter(emitterId: EmitterId): IParticleEmitter | null {
+        return this._emitters.get(emitterId) ?? null;
+    }
+
+    addModule<T extends ModuleType>(module: IModule<T>): void {
+        this._modules.set(module.id, module);
+
+        let typeModules = this._modulesByType.get(module.type);
+        if (!typeModules) {
+            typeModules = [];
+            this._modulesByType.set(module.type, typeModules);
+        }
+        typeModules.push(module);
+        typeModules.sort((a, b) => b.priority - a.priority);
+
+        if (this._initialized) {
+            module.initialize();
         }
     }
 
-    emitFromPosition(position: IVec3Like): void {
-        const pos = Vec3.from(position);
-        const vel = this._shapeModule.enabled
-            ? this._shapeModule.getEmissionDirection()
-            : new Vec3(0, 1, 0);
+    removeModule(moduleId: ModuleId): boolean {
+        const module = this._modules.get(moduleId);
+        if (!module) return false;
 
-        const particleId = this._particles.addParticle(pos, vel, 5.0, 1.0, 0xffffffff);
-        if (particleId !== null) {
-            this._spatialGrid.insert(particleId, pos);
-            this.dispatchEvent({
-                type: 'birth',
-                particleId,
-                position: pos,
-                velocity: vel,
-            });
-            this.triggerSubEmitters('birth', particleId);
-        }
-    }
+        module.destroy();
+        this._modules.delete(moduleId);
 
-    private emitSingleParticle(): void {
-        const position = this._shapeModule.enabled
-            ? this._shapeModule.getEmissionPosition()
-            : new Vec3(0, 0, 0);
-
-        const velocity = this._shapeModule.enabled
-            ? this._shapeModule.getEmissionDirection().multiplyScalar(5.0)
-            : new Vec3(0, 1, 0);
-
-        const particleId = this._particles.addParticle(position, velocity, 5.0, 1.0, 0xffffffff);
-        if (particleId !== null) {
-            this._spatialGrid.insert(particleId, position);
-            this.dispatchEvent({
-                type: 'birth',
-                particleId,
-                position,
-                velocity,
-            });
-            this.triggerSubEmitters('birth', particleId);
-        }
-    }
-
-    update(deltaTime?: number): void {
-        if (!this._isPlaying || this._isPaused) {
-            return;
-        }
-
-        const currentTime = performance.now() / 1000;
-        const dt = deltaTime ?? currentTime - this._lastUpdateTime;
-        this._lastUpdateTime = currentTime;
-        this._time += dt;
-
-        for (const module of this._modules.values()) {
-            module.update(dt, this._particles);
-        }
-
-        this.updateParticlePhysics(dt);
-        this.updateSpatialGrid();
-        this.removeDeadParticles();
-    }
-
-    private updateParticlePhysics(deltaTime: number): void {
-        const positions = this._particles.positions;
-        const velocities = this._particles.velocities;
-        const accelerations = this._particles.accelerations;
-        const ages = this._particles.ages;
-        const lifetimes = this._particles.lifetimes;
-
-        const activeIndices = this._particles.getActiveIndices();
-
-        for (const index of activeIndices) {
-            const posOffset = index * 3;
-
-            ages[index] += deltaTime;
-
-            accelerations[posOffset + 1] -= 9.81 * deltaTime; // Gravity
-
-            velocities[posOffset] += accelerations[posOffset] * deltaTime;
-            velocities[posOffset + 1] += accelerations[posOffset + 1] * deltaTime;
-            velocities[posOffset + 2] += accelerations[posOffset + 2] * deltaTime;
-
-            positions[posOffset] += velocities[posOffset] * deltaTime;
-            positions[posOffset + 1] += velocities[posOffset + 1] * deltaTime;
-            positions[posOffset + 2] += velocities[posOffset + 2] * deltaTime;
-
-            accelerations[posOffset] = 0;
-            accelerations[posOffset + 1] = 0;
-            accelerations[posOffset + 2] = 0;
-        }
-    }
-
-    private updateSpatialGrid(): void {
-        this._spatialGrid.clear();
-
-        const positions = this._particles.positions;
-        const ids = this._particles.ids;
-        const activeIndices = this._particles.getActiveIndices();
-
-        for (const index of activeIndices) {
-            const posOffset = index * 3;
-            const position = new Vec3(
-                positions[posOffset],
-                positions[posOffset + 1],
-                positions[posOffset + 2]
-            );
-            this._spatialGrid.insert(ids[index] as ParticleId, position);
-        }
-    }
-
-    private removeDeadParticles(): void {
-        const ages = this._particles.ages;
-        const lifetimes = this._particles.lifetimes;
-        const ids = this._particles.ids;
-        const activeIndices = this._particles.getActiveIndices();
-
-        for (const index of activeIndices) {
-            if (ages[index] >= lifetimes[index]) {
-                const particleId = ids[index] as ParticleId;
-                const position = this._particles.getParticlePosition(index);
-
-                this._spatialGrid.remove(particleId);
-                this._particles.removeParticle(index);
-
-                this.dispatchEvent({
-                    type: 'death',
-                    particleId,
-                    position,
-                    velocity: new Vec3(0, 0, 0),
-                    lifetime: lifetimes[index],
-                    age: ages[index],
-                } as any);
-                this.triggerSubEmitters('death', particleId);
+        const typeModules = this._modulesByType.get(module.type);
+        if (typeModules) {
+            const index = typeModules.indexOf(module);
+            if (index !== -1) {
+                typeModules.splice(index, 1);
             }
         }
+
+        return true;
     }
 
-    public registerSubSystem(id: SystemId, system: ParticleSystem): void {
-        this._subSystems.set(id, system);
+    getModule<T extends ModuleType>(moduleId: ModuleId): IModule<T> | null {
+        return (this._modules.get(moduleId) as IModule<T>) ?? null;
     }
 
-    public setSubEmittersConfig(config: any): void {
-        this._subEmittersConfig = config;
+    getModulesByType<T extends ModuleType>(type: T): readonly IModule<T>[] {
+        return (this._modulesByType.get(type) as IModule<T>[]) ?? [];
     }
 
-    private triggerSubEmitters(trigger: string, particleId: SystemId | ParticleId): void {
-        if (!this._subEmittersConfig || !this._subEmittersConfig.enabled) return;
-
-        const list = (this._subEmittersConfig as any)[trigger] as SystemId[] | undefined;
-        if (!list || list.length === 0) return;
-
-        const ids = this._particles.ids;
-        let index = -1;
-        for (let i = 0; i < ids.length; i++) {
-            if (ids[i] === (particleId as number)) {
-                index = i;
-                break;
-            }
-        }
-        if (index === -1) return;
-
-        for (const subId of list) {
-            const subSystem = this._subSystems.get(subId as SystemId);
-            if (subSystem && Math.random() <= (this._subEmittersConfig.emitProbability ?? 1)) {
-                const particlePos = this._particles.getParticlePosition(index);
-                subSystem.emitFromPosition(particlePos);
-            }
-        }
-    }
-
-    addModule(module: IParticleSystemModule): void {
-        module.initialize(this);
-        this._modules.set(module.name, module);
-    }
-
-    removeModule(name: string): boolean {
-        return this._modules.delete(name);
-    }
-
-    getModule<T extends IParticleSystemModule>(name: string): T | undefined {
-        return this._modules.get(name) as T;
-    }
-
-    getParticles(): IParticleSOA {
+    getParticles(): IParticleData {
         return this._particles;
     }
 
-    getSpatialGrid(): ISpatialGrid {
-        return this._spatialGrid;
+    getSpatialIndex(): ISpatialIndex {
+        return this._spatialIndex;
     }
 
-    addEventListener(type: string, listener: (event: ParticleEvent) => void): void {
-        if (type === 'collision') {
-            this._eventEmitter.on('collision', (data) => {
-                listener({
-                    type: 'collision',
-                    particleId: data.particleId,
-                    position: data.position,
-                    velocity: data.velocity,
-                    data: data.data,
-                    collider: data.collider,
-                    normal: data.normal,
-                    surfaceVelocity: data.surfaceVelocity,
-                } as any);
-            });
-        } else if (type === 'death') {
-            this._eventEmitter.on('death', (data) => {
-                listener({
-                    type: 'death',
-                    particleId: data.particleId,
-                    position: data.position,
-                    velocity: data.velocity,
-                    data: data.data,
-                    lifetime: data.lifetime,
-                    age: data.age,
-                } as any);
-            });
-        } else if (type === 'subemitter') {
-            this._eventEmitter.on('subemitter', (data) => {
-                listener({
-                    type: 'subemitter',
-                    particleId: data.particleId,
-                    position: data.position,
-                    velocity: data.velocity,
-                    data: data.data,
-                    subSystem: data.subSystem,
-                    trigger: data.trigger,
-                } as any);
-            });
+    emit(count: number, emitterId?: EmitterId): readonly ParticleId[] {
+        this._throwIfNotInitialized();
+
+        if (emitterId) {
+            const emitter = this._emitters.get(emitterId);
+            if (emitter) {
+                return emitter.emit(count);
+            }
+            return [];
+        }
+
+        const result: ParticleId[] = [];
+        for (let i = 0; i < count; i++) {
+            const particleId = this._particles.addParticle(
+                { x: 0, y: 0, z: 0 },
+                { x: 0, y: 1, z: 0 },
+                5.0,
+                1.0,
+                0xffffffff
+            );
+
+            if (particleId) {
+                result.push(particleId);
+                this._emitBirthEvent(particleId, emitterId);
+            }
+        }
+
+        return result;
+    }
+
+    killParticle(particleId: ParticleId): boolean {
+        const index = this._particles.getParticleIndex(particleId);
+        if (index === -1) return false;
+
+        const position = this._particles.getPosition(index);
+        const velocity = this._particles.getVelocity(index);
+        const age = this._particles.getAge(index);
+        const lifetime = this._particles.getLifetime(index);
+
+        this._spatialIndex.remove(particleId);
+        const removed = this._particles.removeParticle(index);
+
+        if (removed) {
+            this._emitDeathEvent(particleId, 'killed', position, velocity, age, lifetime);
+        }
+
+        return removed;
+    }
+
+    killAllParticles(): void {
+        for (let i = 0; i < this._particles.capacity; i++) {
+            if (this._particles.alive[i]) {
+                const particleId = this._particles.getParticleId(i);
+                this.killParticle(particleId);
+            }
         }
     }
 
-    removeEventListener(type: string, listener: (event: ParticleEvent) => void): void {
-        if (type === 'collision') {
-            this._eventEmitter.removeAllListeners('collision');
-        } else if (type === 'death') {
-            this._eventEmitter.removeAllListeners('death');
-        } else if (type === 'subemitter') {
-            this._eventEmitter.removeAllListeners('subemitter');
+    addEventListener<K extends keyof ParticleSystemEventMap>(
+        type: K,
+        listener: (event: ParticleSystemEventMap[K]) => void
+    ): void {
+        this._eventEmitter.on(type, listener);
+    }
+
+    removeEventListener<K extends keyof ParticleSystemEventMap>(
+        type: K,
+        listener: (event: ParticleSystemEventMap[K]) => void
+    ): void {
+        this._eventEmitter.off(type, listener);
+    }
+
+    configure(config: Partial<ParticleSystemConfiguration>): void {
+        this._configuration = { ...this._configuration, ...config };
+
+        if (
+            this._initialized &&
+            config.maxParticles &&
+            config.maxParticles !== this._particles.capacity
+        ) {
+            this._particles.resize(config.maxParticles);
         }
     }
 
-    onCollision(callback: (event: CollisionEventData) => void): () => void {
-        return this._eventEmitter.on('collision', callback);
+    getConfiguration(): Readonly<ParticleSystemConfiguration> {
+        return { ...this._configuration };
     }
 
-    onDeath(callback: (event: DeathEventData) => void): () => void {
-        return this._eventEmitter.on('death', callback);
+    private _createDefaultConfiguration(
+        config?: Partial<ParticleSystemConfiguration>
+    ): ParticleSystemConfiguration {
+        return {
+            maxParticles: 1000,
+            bounds: {
+                min: { x: -100, y: -100, z: -100 },
+                max: { x: 100, y: 100, z: 100 },
+            },
+            cellSize: { x: 10, y: 10, z: 10 },
+            simulationSpace: 1,
+            enableSpatialOptimization: true,
+            enableMultithreading: false,
+            preallocateMemory: true,
+            autoOptimizeMemory: true,
+            ...config,
+        };
     }
 
-    onSubEmitter(callback: (event: SubEmitterEventData) => void): () => void {
-        return this._eventEmitter.on('subemitter', callback);
-    }
+    private _updateParticleLifetime(deltaTime: number): void {
+        const particlesToKill: ParticleId[] = [];
 
-    getEventEmitter(): EventEmitter<ParticleSystemEventMap> {
-        return this._eventEmitter;
-    }
+        for (let i = 0; i < this._particles.capacity; i++) {
+            if (!this._particles.alive[i]) continue;
 
-    private dispatchEvent(event: ParticleEvent): void {
-        if (event.type === 'collision') {
-            const collisionEvent = event as any;
-            this._eventEmitter.emit('collision', {
-                particleId: collisionEvent.particleId,
-                position: collisionEvent.position,
-                velocity: collisionEvent.velocity,
-                data: collisionEvent.data,
-                collider: collisionEvent.collider,
-                normal: collisionEvent.normal,
-                surfaceVelocity: collisionEvent.surfaceVelocity,
-            });
-        } else if (event.type === 'death') {
-            const deathEvent = event as any;
-            this._eventEmitter.emit('death', {
-                particleId: deathEvent.particleId,
-                position: deathEvent.position,
-                velocity: deathEvent.velocity,
-                data: deathEvent.data,
-                lifetime: deathEvent.lifetime,
-                age: deathEvent.age,
-            });
-        } else if (event.type === 'subemitter') {
-            const subEmitterEvent = event as any;
-            this._eventEmitter.emit('subemitter', {
-                particleId: subEmitterEvent.particleId,
-                position: subEmitterEvent.position,
-                velocity: subEmitterEvent.velocity,
-                data: subEmitterEvent.data,
-                subSystem: subEmitterEvent.subSystem,
-                trigger: subEmitterEvent.trigger,
-            });
+            const age = this._particles.ages[i] + deltaTime;
+            const lifetime = this._particles.lifetimes[i];
+
+            this._particles.setAge(i, age);
+
+            if (age >= lifetime) {
+                const particleId = this._particles.getParticleId(i);
+                particlesToKill.push(particleId);
+            }
+        }
+
+        for (const particleId of particlesToKill) {
+            this.killParticle(particleId);
         }
     }
 
-    getParticlesInRadius(center: Vec3, radius: number): ParticleId[] {
-        return this._spatialGrid.queryRadius(center, radius);
-    }
+    private _updateModules(deltaTime: number): void {
+        const sortedModules = Array.from(this._modules.values())
+            .filter((m) => m.enabled)
+            .sort((a, b) => b.priority - a.priority);
 
-    getParticlesInBounds(bounds: AABB3D): ParticleId[] {
-        return this._spatialGrid.query(bounds);
-    }
+        for (const module of sortedModules) {
+            module.update(deltaTime);
 
-    public getLightData(maxLights?: number): Float32Array {
-        if (!this._lightsModule || !this._lightsModule.enabled) return new Float32Array(0);
-        const cfg: any = (this._lightsModule as any).config || {};
-        const configuredMax = typeof cfg.maxLights === 'number' ? cfg.maxLights : Infinity;
-        const ratio = typeof cfg.ratio === 'number' ? cfg.ratio : 0;
-        const desired = Math.min(maxLights ?? configuredMax, configuredMax);
-
-        const active = this._particles.getActiveIndices();
-        const candidates: { idx: number; pos: any }[] = [];
-        for (const i of active) {
-            const p = this._particles.getParticlePosition(i);
-            candidates.push({ idx: i, pos: p });
+            if (module.canProcess(this._particles)) {
+                module.process(this._particles, deltaTime);
+            }
         }
-
-        const keepBase = ratio > 0 ? Math.ceil(candidates.length * ratio) : candidates.length;
-        const keepCount = Math.min(desired, keepBase);
-
-        const outCount = Math.min(keepCount, candidates.length);
-        const out = new Float32Array(outCount * 4);
-        for (let i = 0; i < outCount; i++) {
-            const pos = candidates[i].pos;
-            const dst = i * 4;
-            out[dst] = pos.x;
-            out[dst + 1] = pos.y;
-            out[dst + 2] = pos.z;
-            out[dst + 3] = (cfg.intensity && (cfg.intensity.constant ?? cfg.intensity)) ?? 1.0;
-        }
-
-        return out;
     }
 
-    dispose(): void {
-        this.stop();
-        this._spatialGrid.clear();
-        this._modules.clear();
-        this._eventEmitter.dispose();
+    private _updateEmitters(deltaTime: number): void {
+        for (const emitter of this._emitters.values()) {
+            emitter.update(deltaTime);
+        }
+    }
+
+    private _updateSpatialIndex(): void {
+        if (!this._configuration.enableSpatialOptimization) return;
+
+        for (let i = 0; i < this._particles.capacity; i++) {
+            if (!this._particles.alive[i]) continue;
+
+            const particleId = this._particles.getParticleId(i);
+            const position = this._particles.getPosition(i);
+
+            this._spatialIndex.insert(particleId, position);
+        }
+    }
+
+    private _emitBirthEvent(particleId: ParticleId, emitterId?: EmitterId): void {
+        const index = this._particles.getParticleIndex(particleId);
+        if (index === -1) return;
+
+        const position = this._particles.getPosition(index);
+        const velocity = this._particles.getVelocity(index);
+        const lifetime = this._particles.getLifetime(index);
+
+        const event: ParticleBirthEvent = {
+            type: 'birth',
+            particleId,
+            systemId: this._id,
+            timestamp: this._time,
+            position,
+            velocity,
+            emitterId: emitterId ?? (0 as EmitterId),
+            initialLifetime: lifetime,
+        };
+
+        this._eventEmitter.emit('birth', event);
+    }
+
+    private _emitDeathEvent(
+        particleId: ParticleId,
+        reason: 'expired' | 'killed' | 'collision' | 'bounds',
+        position: IVec3Like,
+        velocity: IVec3Like,
+        age: number,
+        lifetime: number
+    ): void {
+        const event: ParticleDeathEvent = {
+            type: 'death',
+            particleId,
+            systemId: this._id,
+            timestamp: this._time,
+            position: { x: position.x, y: position.y, z: position.z },
+            velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
+            reason,
+            age,
+            lifetime,
+        };
+
+        this._eventEmitter.emit('death', event);
+    }
+
+    private _emitCollisionEvent(
+        particleId: ParticleId,
+        collider: unknown,
+        normal: IVec3Like,
+        impulse: number
+    ): void {
+        const index = this._particles.getParticleIndex(particleId);
+        if (index === -1) return;
+
+        const position = this._particles.getPosition(index);
+        const velocity = this._particles.getVelocity(index);
+
+        const event: ParticleCollisionEvent = {
+            type: 'collision',
+            particleId,
+            systemId: this._id,
+            timestamp: this._time,
+            position,
+            velocity,
+            collider,
+            normal: { x: normal.x, y: normal.y, z: normal.z },
+            impulse,
+        };
+
+        this._eventEmitter.emit('collision', event);
+    }
+
+    private _throwIfNotInitialized(): void {
+        if (!this._initialized) {
+            throw ParticleSystemException.systemNotInitialized(this._id);
+        }
     }
 }
