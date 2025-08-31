@@ -83,7 +83,6 @@ export enum ColorComparisonMode {
     ALPHA,
 }
 
-
 const _mod = (n: number, m: number): number => {
     return ((n % m) + m) % m;
 };

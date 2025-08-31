@@ -1,93 +1,91 @@
-import { Vec3 } from '@axrone/numeric';
+import type { Vec3 } from '@axrone/numeric';
 
-declare const ParticleIdBrand: unique symbol;
-export type ParticleId = number & { readonly [ParticleIdBrand]: never };
+declare const __ParticleIdBrand: unique symbol;
+declare const __SystemIdBrand: unique symbol;
+declare const __EmitterIdBrand: unique symbol;
+declare const __ModuleIdBrand: unique symbol;
+declare const __TextureIdBrand: unique symbol;
 
-declare const SystemIdBrand: unique symbol;
-export type SystemId = number & { readonly [SystemIdBrand]: never };
-
-declare const EmitterIdBrand: unique symbol;
-export type EmitterId = number & { readonly [EmitterIdBrand]: never };
+export type ParticleId = number & { readonly [__ParticleIdBrand]: never };
+export type SystemId = number & { readonly [__SystemIdBrand]: never };
+export type EmitterId = number & { readonly [__EmitterIdBrand]: never };
+export type ModuleId = number & { readonly [__ModuleIdBrand]: never };
+export type TextureId = number & { readonly [__TextureIdBrand]: never };
 
 export const enum EmitterShape {
-    Box,
-    Sphere,
-    Circle,
-    Cone,
-    Mesh,
-    Edge,
-    Rectangle,
-    Hemisphere,
-    Donut,
-    Line,
-    Point,
+    Point = 0,
+    Sphere = 1,
+    Hemisphere = 2,
+    Cone = 3,
+    Circle = 4,
+    Box = 5,
+    Rectangle = 6,
+    Line = 7,
+    Mesh = 8,
+    Edge = 9,
+    Donut = 10,
 }
 
 export const enum SimulationSpace {
-    Local,
-    World,
-    Custom,
+    Local = 0,
+    World = 1,
+    Custom = 2,
 }
 
 export const enum SortMode {
-    None,
-    Distance,
-    OldestFirst,
-    YoungestFirst,
-    Custom,
+    None = 0,
+    Distance = 1,
+    OldestFirst = 2,
+    YoungestFirst = 3,
+    Custom = 4,
 }
 
 export const enum RenderMode {
-    Billboard,
-    Stretch,
-    HorizontalBillboard,
-    VerticalBillboard,
-    Mesh,
-    Trail,
-    Ribbon,
+    Billboard = 0,
+    Stretch = 1,
+    HorizontalBillboard = 2,
+    VerticalBillboard = 3,
+    Mesh = 4,
+    Trail = 5,
+    Ribbon = 6,
 }
 
 export const enum StopAction {
-    None,
-    Disable,
-    Destroy,
-    Callback,
+    None = 0,
+    Disable = 1,
+    Destroy = 2,
+    Callback = 3,
 }
 
 export const enum CullingMode {
-    Automatic,
-    Pause,
-    PauseAndCatchup,
-    AlwaysSimulate,
+    Automatic = 0,
+    Pause = 1,
+    PauseAndCatchup = 2,
+    AlwaysSimulate = 3,
 }
 
 export const enum RingBufferMode {
-    Disabled,
-    PauseUntilReplaced,
-    LoopUntilReplaced,
+    Disabled = 0,
+    PauseUntilReplaced = 1,
+    LoopUntilReplaced = 2,
 }
 
-export const enum CustomDataType {
-    Vector,
-    Color,
+export const enum CurveMode {
+    Constant = 0,
+    Curve = 1,
+    TwoCurves = 2,
+    TwoConstants = 3,
 }
 
-export const enum ParticleSystemCurveMode {
-    Constant,
-    Curve,
-    TwoCurves,
-    TwoConstants,
+export const enum GradientMode {
+    Color = 0,
+    Gradient = 1,
+    TwoColors = 2,
+    TwoGradients = 3,
+    RandomColor = 4,
 }
 
-export const enum ParticleSystemGradientMode {
-    Color,
-    Gradient,
-    TwoColors,
-    TwoGradients,
-    RandomColor,
-}
-
-export const enum MainModuleFlag {
+export const enum ModuleFlags {
     StartLifetime = 1 << 0,
     StartSpeed = 1 << 1,
     StartSize = 1 << 2,
@@ -103,7 +101,7 @@ export const enum MainModuleFlag {
 }
 
 export interface Curve {
-    mode: ParticleSystemCurveMode;
+    mode: CurveMode;
     constant: number;
     constantMin: number;
     constantMax: number;
@@ -114,7 +112,7 @@ export interface Curve {
 }
 
 export interface Gradient {
-    mode: ParticleSystemGradientMode;
+    mode: GradientMode;
     color: { r: number; g: number; b: number; a: number };
     colorMin: { r: number; g: number; b: number; a: number };
     colorMax: { r: number; g: number; b: number; a: number };
@@ -131,82 +129,25 @@ export interface Burst {
     probability: number;
 }
 
-export interface AnimationCurve {
-    keys: {
-        time: number;
-        value: number;
-        inTangent: number;
-        outTangent: number;
-        weightedMode: number;
-        inWeight: number;
-        outWeight: number;
-    }[];
-    preWrapMode: number;
-    postWrapMode: number;
-}
-
-export interface MinMaxCurve extends Curve {
-    scalar: number;
-}
-
-export interface MinMaxGradient extends Gradient {
-    scalar: number;
-}
-
-export interface ParticleEventBase {
-    particleId: ParticleId;
-    position: Vec3;
-    velocity: Vec3;
-    data?: any;
-}
-
-export interface CollisionEventData extends ParticleEventBase {
-    collider: any;
-    normal: Vec3;
-    surfaceVelocity: Vec3;
-}
-
-export interface DeathEventData extends ParticleEventBase {
-    lifetime: number;
-    age: number;
-}
-
-export interface SubEmitterEventData extends ParticleEventBase {
-    subSystem: any;
-    trigger: string;
-}
-
-// Event map for the particle system
-export interface ParticleSystemEventMap {
-    collision: CollisionEventData;
-    death: DeathEventData;
-    subemitter: SubEmitterEventData;
-}
-
-// Legacy types for backward compatibility
 export interface ParticleEvent {
-    type: string;
-    particleId: ParticleId;
-    position: Vec3;
-    velocity: Vec3;
-    data?: any;
+    readonly type: string;
+    readonly particleId: ParticleId;
+    readonly systemId: SystemId;
+    readonly timestamp: number;
+    readonly position: { readonly x: number; readonly y: number; readonly z: number };
+    readonly velocity: { readonly x: number; readonly y: number; readonly z: number };
 }
 
-export interface CollisionEvent extends ParticleEvent {
-    type: 'collision';
-    collider: any;
-    normal: Vec3;
-    surfaceVelocity: Vec3;
+export const enum LightingMode {
+    None = 0,
+    Simple = 1,
+    Advanced = 2,
+    Volumetric = 3,
 }
 
-export interface DeathEvent extends ParticleEvent {
-    type: 'death';
-    lifetime: number;
-    age: number;
-}
-
-export interface SubEmitterEvent extends ParticleEvent {
-    type: 'subemitter';
-    subSystem: any;
-    trigger: string;
+export const enum LightAttenuationMode {
+    Linear = 0,
+    InverseSquare = 1,
+    Exponential = 2,
+    Smooth = 3,
 }

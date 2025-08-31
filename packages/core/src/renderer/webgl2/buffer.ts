@@ -1,4 +1,4 @@
-import { IDisposable } from "../../types";
+import { IDisposable } from '../../types';
 
 type Nominal<T, K extends string> = T & { readonly __brand: K };
 
