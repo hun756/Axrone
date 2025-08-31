@@ -368,8 +368,7 @@ export class TypedArrayPool<T extends TypedArrayType> {
                 return array.subarray(start, end) as T;
             },
 
-            reset(): void {
-            },
+            reset(): void {},
         };
 
         return poolable;

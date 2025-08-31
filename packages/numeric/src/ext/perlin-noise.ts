@@ -99,7 +99,6 @@ const fade = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10);
 const lerp = (a: number, b: number, t: number): number => a + t * (b - a);
 const fastFloor = (x: number): number => (x > 0 ? Math.floor(x) : Math.floor(x) - 1);
 
-
 class PermutationGenerator {
     private readonly permutation: PermutationTable;
     private readonly doublePermutation: PermutationTable;
