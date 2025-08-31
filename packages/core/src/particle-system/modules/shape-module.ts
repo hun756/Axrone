@@ -1,331 +1,220 @@
-import { Vec3, IVec3Like } from '@axrone/numeric';
-import { BaseModule } from './base-module';
-import { IShapeModule, IParticleSOA } from '../interfaces';
+import type { IVec3Like, Vec3 } from '@axrone/numeric';
+import type { ShapeConfiguration } from '../core/configuration';
+import type { IParticleBuffer } from '../core/interfaces';
 import { EmitterShape } from '../types';
+import { BaseModule } from './base-module';
 
-export class ShapeModule extends BaseModule implements IShapeModule {
-    public shape: EmitterShape;
-    public angle: number;
-    public radius: number;
-    public donutRadius: number;
-    public length: number;
-    public box: Vec3;
-    public circle: {
-        radius: number;
-        arc: number;
-        arcMode: number;
-        arcSpread: number;
-        thickness: number;
-    };
-    public hemisphere: { radius: number; emitFromShell: boolean };
-    public cone: {
-        angle: number;
-        radius: number;
-        length: number;
-        emitFrom: number;
-        randomizeDirection: number;
-    };
-    public donut: { radius: number; donutRadius: number; arc: number; arcMode: number };
-    public mesh: {
-        mesh: any;
-        useMeshMaterialIndex: boolean;
-        materialIndex: number;
-        useMeshColors: boolean;
-        normalOffset: number;
-    };
-    public sprite: { sprite: any; normalOffset: number };
-    public spriteRenderer: { sprite: any; normalOffset: number };
-    public skinnedMeshRenderer: {
-        mesh: any;
-        useMeshMaterialIndex: boolean;
-        materialIndex: number;
-        useMeshColors: boolean;
-        normalOffset: number;
-    };
-    public rectangle: { x: number; y: number; z: number };
-    public edge: { radius: number; radiusMode: number; arc: number; arcMode: number };
-    public position: Vec3;
-    public rotation: Vec3;
-    public scale: Vec3;
-    public alignToDirection: boolean;
-    public randomDirectionAmount: number;
-    public sphericalDirectionAmount: number;
-    public randomPositionAmount: number;
-    public biasType: number;
-    public bias: number;
-    public texture: any;
-    public textureClipChannel: number;
-    public textureClipThreshold: number;
-    public textureColorAffectsParticles: boolean;
-    public textureAlphaAffectsParticles: boolean;
-    public textureBilinearFiltering: boolean;
-    public textureUVChannel: number;
-    public radiusThickness: number;
-    public radiusSpeed: any;
-    public radiusSpread: number;
-    public meshSpawnSpeed: any;
-    public meshSpawnSpread: number;
+export class ShapeModule extends BaseModule<'shape'> {
+    private _cachedDirection = { x: 0, y: 1, z: 0 };
 
-    constructor(config: Partial<IShapeModule> = {}) {
-        super('ShapeModule', config.enabled ?? false);
-
-        this.shape = config.shape ?? EmitterShape.Box;
-        this.angle = config.angle ?? 25;
-        this.radius = config.radius ?? 1;
-        this.donutRadius = config.donutRadius ?? 0.2;
-        this.length = config.length ?? 5;
-        this.box = config.box ?? new Vec3(1, 1, 1);
-
-        this.circle = config.circle ?? {
-            radius: 1,
-            arc: 360,
-            arcMode: 0,
-            arcSpread: 0,
-            thickness: 1,
-        };
-
-        this.hemisphere = config.hemisphere ?? {
-            radius: 1,
-            emitFromShell: false,
-        };
-
-        this.cone = config.cone ?? {
-            angle: 25,
-            radius: 1,
-            length: 5,
-            emitFrom: 0,
-            randomizeDirection: 0,
-        };
-
-        this.donut = config.donut ?? {
-            radius: 1,
-            donutRadius: 0.2,
-            arc: 360,
-            arcMode: 0,
-        };
-
-        this.mesh = config.mesh ?? {
-            mesh: null,
-            useMeshMaterialIndex: false,
-            materialIndex: 0,
-            useMeshColors: false,
-            normalOffset: 0,
-        };
-
-        this.sprite = config.sprite ?? {
-            sprite: null,
-            normalOffset: 0,
-        };
-
-        this.spriteRenderer = config.spriteRenderer ?? {
-            sprite: null,
-            normalOffset: 0,
-        };
-
-        this.skinnedMeshRenderer = config.skinnedMeshRenderer ?? {
-            mesh: null,
-            useMeshMaterialIndex: false,
-            materialIndex: 0,
-            useMeshColors: false,
-            normalOffset: 0,
-        };
-
-        this.rectangle = config.rectangle ?? { x: 1, y: 1, z: 0 };
-
-        this.edge = config.edge ?? {
-            radius: 1,
-            radiusMode: 0,
-            arc: 360,
-            arcMode: 0,
-        };
-
-        this.position = config.position ?? new Vec3(0, 0, 0);
-        this.rotation = config.rotation ?? new Vec3(0, 0, 0);
-        this.scale = config.scale ?? new Vec3(1, 1, 1);
-
-        this.alignToDirection = config.alignToDirection ?? false;
-        this.randomDirectionAmount = config.randomDirectionAmount ?? 0;
-        this.sphericalDirectionAmount = config.sphericalDirectionAmount ?? 0;
-        this.randomPositionAmount = config.randomPositionAmount ?? 0;
-        this.biasType = config.biasType ?? 0;
-        this.bias = config.bias ?? 0;
-
-        this.texture = config.texture ?? null;
-        this.textureClipChannel = config.textureClipChannel ?? 0;
-        this.textureClipThreshold = config.textureClipThreshold ?? 0;
-        this.textureColorAffectsParticles = config.textureColorAffectsParticles ?? false;
-        this.textureAlphaAffectsParticles = config.textureAlphaAffectsParticles ?? false;
-        this.textureBilinearFiltering = config.textureBilinearFiltering ?? true;
-        this.textureUVChannel = config.textureUVChannel ?? 0;
-
-        this.radiusThickness = (config as any).radiusThickness ?? 1;
-        this.radiusSpeed = (config as any).radiusSpeed ?? {
-            mode: 0,
-            constant: 0,
-            constantMin: 0,
-            constantMax: 0,
-            curveMultiplier: 1,
-        };
-        this.radiusSpread = (config as any).radiusSpread ?? 0;
-        this.meshSpawnSpeed = (config as any).meshSpawnSpeed ?? {
-            mode: 0,
-            constant: 0,
-            constantMin: 0,
-            constantMax: 0,
-            curveMultiplier: 1,
-        };
-        this.meshSpawnSpread = (config as any).meshSpawnSpread ?? 0;
-
-        Object.assign(this, config);
+    constructor(configuration: ShapeConfiguration) {
+        super('shape', configuration, 50);
     }
 
-    protected onInitialize(): void {}
-
-    protected onUpdate(deltaTime: number, particles: IParticleSOA): void {
-        // Shape module doesn't need per-frame updates
-        // Particle emission positioning is handled during emission
+    protected onInitialize(): void {
+        this._updateCachedDirection();
     }
 
-    protected onReset(): void {}
+    protected onDestroy(): void {}
 
-    public getEmissionPosition(): Vec3 {
-        switch (this.shape) {
+    protected onReset(): void {
+        this._updateCachedDirection();
+    }
+
+    protected onUpdate(deltaTime: number): void {}
+
+    protected onProcess(particles: IParticleBuffer, deltaTime: number): void {}
+
+    protected onConfigure(newConfig: ShapeConfiguration, oldConfig: ShapeConfiguration): void {
+        if (newConfig.shape !== oldConfig.shape || newConfig.rotation !== oldConfig.rotation) {
+            this._updateCachedDirection();
+        }
+    }
+
+    getEmissionPosition(): IVec3Like {
+        const config = this.config;
+        const position = { ...config.position };
+
+        switch (config.shape) {
             case EmitterShape.Point:
-                return this.position.clone();
-
-            case EmitterShape.Box:
-                return this.position.add(
-                    new Vec3(
-                        (Math.random() - 0.5) * this.box.x * this.scale.x,
-                        (Math.random() - 0.5) * this.box.y * this.scale.y,
-                        (Math.random() - 0.5) * this.box.z * this.scale.z
-                    )
-                );
+                break;
 
             case EmitterShape.Sphere:
-                return this.getRandomSpherePosition();
+                this._applySpherePosition(position, config.radius, config.radiusThickness);
+                break;
+
+            case EmitterShape.Hemisphere:
+                this._applyHemispherePosition(position, config.radius, config.radiusThickness);
+                break;
 
             case EmitterShape.Circle:
-                return this.getRandomCirclePosition();
+                this._applyCirclePosition(position, config.radius, config.radiusThickness);
+                break;
+
+            case EmitterShape.Box:
+                this._applyBoxPosition(position, config.boxSize);
+                break;
 
             case EmitterShape.Cone:
-                return this.getRandomConePosition();
+                this._applyConePosition(position, config.radius, config.angle, config.length);
+                break;
 
-            case EmitterShape.Hemisphere:
-                return this.getRandomHemispherePosition();
-
-            case EmitterShape.Donut:
-                return this.getRandomDonutPosition();
-
-            default:
-                return this.position.clone();
-        }
-    }
-
-    public getEmissionDirection(): Vec3 {
-        switch (this.shape) {
-            case EmitterShape.Cone:
-                return this.getRandomConeDirection();
-
-            case EmitterShape.Sphere:
-            case EmitterShape.Hemisphere:
-                return this.getRandomSphericalDirection();
+            case EmitterShape.Line:
+                this._applyLinePosition(position, config.length);
+                break;
 
             default:
-                const direction = new Vec3(0, 0, 1);
-                if (this.randomDirectionAmount > 0) {
-                    direction.x += (Math.random() - 0.5) * this.randomDirectionAmount;
-                    direction.y += (Math.random() - 0.5) * this.randomDirectionAmount;
-                    direction.z += (Math.random() - 0.5) * this.randomDirectionAmount;
-                }
-                return direction.normalize();
+                break;
         }
+
+        if (config.randomizePosition) {
+            const noise = 0.1;
+            position.x += (Math.random() - 0.5) * noise;
+            position.y += (Math.random() - 0.5) * noise;
+            position.z += (Math.random() - 0.5) * noise;
+        }
+
+        return position;
     }
 
-    private getRandomSpherePosition(): Vec3 {
+    getEmissionDirection(): IVec3Like {
+        const config = this.config;
+        let direction = { ...this._cachedDirection };
+
+        if (config.alignToDirection) {
+            switch (config.shape) {
+                case EmitterShape.Sphere:
+                case EmitterShape.Hemisphere:
+                    direction = this._getRadialDirection();
+                    break;
+
+                case EmitterShape.Cone:
+                    direction = this._getConeDirection(config.angle);
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        if (config.randomizeDirection) {
+            const randomAngle = Math.random() * Math.PI * 2;
+            const randomPitch = (Math.random() - 0.5) * Math.PI * 0.5;
+
+            direction.x += Math.cos(randomAngle) * Math.cos(randomPitch) * 0.5;
+            direction.y += Math.sin(randomPitch) * 0.5;
+            direction.z += Math.sin(randomAngle) * Math.cos(randomPitch) * 0.5;
+        }
+
+        if (config.spherizeDirection) {
+            const length = Math.sqrt(direction.x ** 2 + direction.y ** 2 + direction.z ** 2);
+            if (length > 0) {
+                direction.x /= length;
+                direction.y /= length;
+                direction.z /= length;
+            }
+        }
+
+        return direction;
+    }
+
+    private _updateCachedDirection(): void {
+        const config = this.config;
+        const { x, y, z } = config.rotation;
+
+        const cosY = Math.cos(y);
+        const sinY = Math.sin(y);
+
+        this._cachedDirection = {
+            x: sinY,
+            y: 0,
+            z: cosY,
+        };
+    }
+
+    private _applySpherePosition(position: IVec3Like, radius: number, thickness: number): void {
         const phi = Math.random() * Math.PI * 2;
         const cosTheta = Math.random() * 2 - 1;
         const sinTheta = Math.sqrt(1 - cosTheta * cosTheta);
-        const r = this.radius * Math.cbrt(Math.random());
 
-        return this.position.add(
-            new Vec3(
-                r * sinTheta * Math.cos(phi) * this.scale.x,
-                r * sinTheta * Math.sin(phi) * this.scale.y,
-                r * cosTheta * this.scale.z
-            )
-        );
+        const r = radius * (thickness + (1 - thickness) * Math.random());
+
+        position.x += r * sinTheta * Math.cos(phi);
+        position.y += r * cosTheta;
+        position.z += r * sinTheta * Math.sin(phi);
     }
 
-    private getRandomCirclePosition(): Vec3 {
-        const angle = Math.random() * Math.PI * 2;
-        const r = Math.sqrt(Math.random()) * this.circle.radius;
-
-        return this.position.add(
-            new Vec3(r * Math.cos(angle) * this.scale.x, r * Math.sin(angle) * this.scale.y, 0)
-        );
-    }
-
-    private getRandomConePosition(): Vec3 {
-        const height = Math.random() * this.cone.length;
-        const radiusAtHeight = (this.cone.radius * (this.cone.length - height)) / this.cone.length;
-        const angle = Math.random() * Math.PI * 2;
-        const r = Math.sqrt(Math.random()) * radiusAtHeight;
-
-        return this.position.add(
-            new Vec3(
-                r * Math.cos(angle) * this.scale.x,
-                r * Math.sin(angle) * this.scale.y,
-                height * this.scale.z
-            )
-        );
-    }
-
-    private getRandomHemispherePosition(): Vec3 {
+    private _applyHemispherePosition(position: IVec3Like, radius: number, thickness: number): void {
         const phi = Math.random() * Math.PI * 2;
         const cosTheta = Math.random();
         const sinTheta = Math.sqrt(1 - cosTheta * cosTheta);
-        const r = this.hemisphere.emitFromShell
-            ? this.radius
-            : this.radius * Math.cbrt(Math.random());
 
-        return this.position.add(
-            new Vec3(
-                r * sinTheta * Math.cos(phi) * this.scale.x,
-                r * sinTheta * Math.sin(phi) * this.scale.y,
-                r * cosTheta * this.scale.z
-            )
-        );
+        const r = radius * (thickness + (1 - thickness) * Math.random());
+
+        position.x += r * sinTheta * Math.cos(phi);
+        position.y += r * cosTheta;
+        position.z += r * sinTheta * Math.sin(phi);
     }
 
-    private getRandomDonutPosition(): Vec3 {
+    private _applyCirclePosition(position: IVec3Like, radius: number, thickness: number): void {
         const angle = Math.random() * Math.PI * 2;
-        const torusAngle = Math.random() * Math.PI * 2;
-        const majorRadius = this.donut.radius;
-        const minorRadius = this.donut.donutRadius * Math.sqrt(Math.random());
+        const r = radius * (thickness + (1 - thickness) * Math.random());
 
-        const x = (majorRadius + minorRadius * Math.cos(torusAngle)) * Math.cos(angle);
-        const y = (majorRadius + minorRadius * Math.cos(torusAngle)) * Math.sin(angle);
-        const z = minorRadius * Math.sin(torusAngle);
-
-        return this.position.add(new Vec3(x * this.scale.x, y * this.scale.y, z * this.scale.z));
+        position.x += r * Math.cos(angle);
+        position.z += r * Math.sin(angle);
     }
 
-    private getRandomConeDirection(): Vec3 {
-        const halfAngle = (this.cone.angle * Math.PI) / 360;
-        const cosAngle = Math.cos(halfAngle);
-        const z = cosAngle + Math.random() * (1 - cosAngle);
-        const sinTheta = Math.sqrt(1 - z * z);
+    private _applyBoxPosition(position: IVec3Like, size: IVec3Like): void {
+        position.x += (Math.random() - 0.5) * size.x;
+        position.y += (Math.random() - 0.5) * size.y;
+        position.z += (Math.random() - 0.5) * size.z;
+    }
+
+    private _applyConePosition(
+        position: IVec3Like,
+        radius: number,
+        angle: number,
+        length: number
+    ): void {
+        const height = Math.random() * length;
+        const coneRadius = radius * (height / length) * Math.tan(angle * 0.5);
+
         const phi = Math.random() * Math.PI * 2;
+        const r = coneRadius * Math.random();
 
-        return new Vec3(sinTheta * Math.cos(phi), sinTheta * Math.sin(phi), z).normalize();
+        position.x += r * Math.cos(phi);
+        position.y += height;
+        position.z += r * Math.sin(phi);
     }
 
-    private getRandomSphericalDirection(): Vec3 {
+    private _applyLinePosition(position: IVec3Like, length: number): void {
+        position.y += (Math.random() - 0.5) * length;
+    }
+
+    private _getRadialDirection(): IVec3Like {
         const phi = Math.random() * Math.PI * 2;
         const cosTheta = Math.random() * 2 - 1;
         const sinTheta = Math.sqrt(1 - cosTheta * cosTheta);
 
-        return new Vec3(sinTheta * Math.cos(phi), sinTheta * Math.sin(phi), cosTheta).normalize();
+        return {
+            x: sinTheta * Math.cos(phi),
+            y: cosTheta,
+            z: sinTheta * Math.sin(phi),
+        };
+    }
+
+    private _getConeDirection(angle: number): IVec3Like {
+        const maxAngle = angle * 0.5;
+        const theta = Math.random() * maxAngle;
+        const phi = Math.random() * Math.PI * 2;
+
+        const sinTheta = Math.sin(theta);
+        const cosTheta = Math.cos(theta);
+
+        return {
+            x: sinTheta * Math.cos(phi),
+            y: cosTheta,
+            z: sinTheta * Math.sin(phi),
+        };
     }
 }
