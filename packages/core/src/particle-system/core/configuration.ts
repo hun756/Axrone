@@ -149,6 +149,17 @@ export interface SizeConfiguration extends ModuleConfiguration {
     readonly sizeY: CurveConfiguration;
     readonly sizeZ: CurveConfiguration;
     readonly separateAxes: boolean;
+    
+    readonly minSize: number;
+    readonly maxSize: number;
+    readonly speedInfluence: number;
+    readonly sizeDamping: number;
+    readonly sizeAcceleration: number;
+    readonly randomVariation: number;
+    readonly animationMode: 'constant' | 'overLifetime' | 'bySpeed' | 'byDistance' | 'custom';
+    readonly inheritFromParent: boolean;
+    readonly scaleWithDistance: boolean;
+    readonly distanceScaleFactor: number;
 }
 
 export interface RotationConfiguration extends ModuleConfiguration {

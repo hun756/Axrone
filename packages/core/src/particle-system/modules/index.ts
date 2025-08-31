@@ -8,9 +8,8 @@ export * from './size-module';
 export * from './rotation-module';
 export * from './collision-module';
 export * from './noise-module';
-export * from './limit-velocity-module';
-export * from './texture-sheet-module';
 export * from './trail-module';
-
 export * from './lights-module';
 export * from './custom-data-module';
+export * from './texture-sheet-module';
+export * from './limit-velocity-module';

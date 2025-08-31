@@ -1,13 +1,35 @@
-// Core exports
-export * from './types';
-export * from './interfaces';
-export * from './particle-soa';
-export * from './spatial-grid';
-export * from './particle-system';
-export * from './aligned-arrays';
+export {
+    ParticleId,
+    SystemId,
+    EmitterId,
+    ModuleId,
+    TextureId,
+    EmitterShape,
+    SimulationSpace,
+    SortMode,
+    RenderMode,
+    StopAction,
+    CullingMode,
+    RingBufferMode,
+    CurveMode,
+    GradientMode,
+    ModuleFlags,
+    Curve,
+    Gradient,
+    Burst,
+} from './types';
 
-// Module exports
-export * from './modules';
+export * from './core';
+export { BaseModule } from './modules/base-module';
+export { EmissionModule } from './modules/emission-module';
+export { VelocityModule } from './modules/velocity-module';
+export { ShapeModule } from './modules/shape-module';
+export { ForceModule } from './modules/force-module';
+export { ColorModule } from './modules/color-module';
+export { SizeModule } from './modules/size-module';
+export { RotationModule } from './modules/rotation-module';
+export { NoiseModule } from './modules/noise-module';
+export { CollisionModule } from './modules/collision-module';
+export { TrailModule } from './modules/trail-module';
 
-// Re-export main class for convenience
 export { ParticleSystem } from './particle-system';
