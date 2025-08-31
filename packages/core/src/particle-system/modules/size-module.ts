@@ -1,109 +1,66 @@
+import type { SizeConfiguration } from '../core/configuration';
+import type { IParticleBuffer } from '../core/interfaces';
 import { BaseModule } from './base-module';
-import { ISizeModule, IParticleSOA } from '../interfaces';
-import { Curve } from '../types';
 
-export class SizeModule extends BaseModule implements ISizeModule {
-    public size: Curve;
-    public separateAxes: boolean;
-    public x: Curve;
-    public y: Curve;
-    public z: Curve;
-
-    constructor(config: Partial<ISizeModule> = {}) {
-        super('SizeModule', config.enabled ?? false);
-
-        this.size = config.size ?? {
-            mode: 0,
-            constant: 1,
-            constantMin: 0,
-            constantMax: 0,
-            curveMultiplier: 1,
-        };
-
-        this.separateAxes = config.separateAxes ?? false;
-
-        this.x = config.x ?? { ...this.size };
-        this.y = config.y ?? { ...this.size };
-        this.z = config.z ?? { ...this.size };
-
-        Object.assign(this, config);
-        if ((config as any).sizeCurve) {
-            (this as any).sizeCurve = (config as any).sizeCurve;
-        }
+export class SizeModule extends BaseModule<'size'> {
+    constructor(configuration: SizeConfiguration) {
+        super('size', configuration, 400);
     }
 
     protected onInitialize(): void {}
 
-    protected onUpdate(deltaTime: number, particles: IParticleSOA): void {
-        if (!this.enabled) return;
+    protected onDestroy(): void {}
 
-        const sizes = particles.sizes;
-        const ages = particles.ages;
-        const lifetimes = particles.lifetimes;
-        const activeIndices = particles.getActiveIndices();
+    protected onReset(): void {}
 
-        for (const index of activeIndices) {
-            const sizeOffset = index * 3;
-            const normalizedAge = Math.min(ages[index] / lifetimes[index], 1.0);
+    protected onUpdate(deltaTime: number): void {}
 
-            if (this.separateAxes) {
-                sizes[sizeOffset] = this.evaluateCurve(this.x, normalizedAge);
-                sizes[sizeOffset + 1] = this.evaluateCurve(this.y, normalizedAge);
-                sizes[sizeOffset + 2] = this.evaluateCurve(this.z, normalizedAge);
+    protected onProcess(particles: IParticleBuffer, deltaTime: number): void {
+        const config = this.config;
+        if (!config.enabled) return;
+
+        const sizes = particles.sizes as Float32Array;
+        const ages = particles.ages as Float32Array;
+        const lifetimes = particles.lifetimes as Float32Array;
+        const count = particles.count;
+
+        for (let i = 0; i < count; i++) {
+            if (!(particles.alive as Uint32Array)[i]) continue;
+
+            const age = ages[i];
+            const lifetime = lifetimes[i];
+            const normalizedAge = lifetime > 0 ? age / lifetime : 0;
+            const i3 = i * 3;
+
+            if (config.separateAxes) {
+                const sizeX = this._evaluateSize(config.sizeX, normalizedAge);
+                const sizeY = this._evaluateSize(config.sizeY, normalizedAge);
+                const sizeZ = this._evaluateSize(config.sizeZ, normalizedAge);
+
+                sizes[i3] = sizeX;
+                sizes[i3 + 1] = sizeY;
+                sizes[i3 + 2] = sizeZ;
             } else {
-                const uniformSize = this.evaluateCurve(this.size, normalizedAge);
-                sizes[sizeOffset] = uniformSize;
-                sizes[sizeOffset + 1] = uniformSize;
-                sizes[sizeOffset + 2] = uniformSize;
+                const size = this._evaluateSize(config.size, normalizedAge);
+                sizes[i3] = size;
+                sizes[i3 + 1] = size;
+                sizes[i3 + 2] = size;
             }
         }
     }
 
-    protected onReset(): void {}
+    protected onConfigure(newConfig: SizeConfiguration, oldConfig: SizeConfiguration): void {}
 
-    private evaluateCurve(curve: Curve, t: number): number {
+    private _evaluateSize(curve: SizeConfiguration['size'], t: number): number {
         switch (curve.mode) {
             case 0:
                 return curve.constant;
 
-            case 3:
-                return this.lerp(curve.constantMin, curve.constantMax, t);
-
-            case 1:
-                return curve.constant * (1 - t) + curve.constant * curve.curveMultiplier * t;
+            case 2:
+                return curve.constantMin + (curve.constantMax - curve.constantMin) * t;
 
             default:
                 return curve.constant;
         }
-    }
-
-    private lerp(a: number, b: number, t: number): number {
-        return a + (b - a) * t;
-    }
-
-    public setSize(size: number): void {
-        this.size.constant = size;
-        this.separateAxes = false;
-    }
-
-    public setSizeRange(min: number, max: number): void {
-        this.size.mode = 3;
-        this.size.constantMin = min;
-        this.size.constantMax = max;
-        this.separateAxes = false;
-    }
-
-    public setSizeOverLifetime(startSize: number, endSize: number): void {
-        this.size.mode = 1;
-        this.size.constant = startSize;
-        this.size.curveMultiplier = endSize / startSize;
-        this.separateAxes = false;
-    }
-
-    public setSeparateAxes(x: number, y: number, z: number): void {
-        this.separateAxes = true;
-        this.x.constant = x;
-        this.y.constant = y;
-        this.z.constant = z;
     }
 }
