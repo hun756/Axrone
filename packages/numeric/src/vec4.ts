@@ -861,15 +861,15 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
     }
 
     static random<T extends IVec4Like>(scale: number = 1, out?: T): T {
-        // 4D sphere point picking using acceptance-rejection
-        let x, y, z, w, lengthSq;
-        do {
-            x = (sampleUniform() - 0.5) * 2;
-            y = (sampleUniform() - 0.5) * 2;
-            z = (sampleUniform() - 0.5) * 2;
-            w = (sampleUniform() - 0.5) * 2;
-            lengthSq = x * x + y * y + z * z + w * w;
-        } while (lengthSq > 1 || lengthSq < 0.0001);
+        const x = sampleStandardNormal();
+        const y = sampleStandardNormal();
+        const z = sampleStandardNormal();
+        const w = sampleStandardNormal();
+
+        const lengthSq = x * x + y * y + z * z + w * w;
+        if (!(lengthSq > 0)) {
+            return Vec4.fastRandom(scale, out);
+        }
 
         const invLength = scale / Math.sqrt(lengthSq);
 
@@ -890,7 +890,6 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
     }
 
     static fastRandom<T extends IVec4Like>(scale: number = 1, out?: T): T {
-        // Using hyperspherical coordinates for 4D
         const u1 = sampleUniform();
         const u2 = sampleUniform();
         const u3 = sampleUniform();
@@ -919,7 +918,6 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
     }
 
     static randomNormal<T extends IVec4Like>(scale: number = 1, out?: T): T {
-        // Use optimized Box-Muller sampling for all four components
         const x = sampleStandardNormal() * scale;
         const y = sampleStandardNormal() * scale;
         const z = sampleStandardNormal() * scale;
