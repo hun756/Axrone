@@ -11,12 +11,8 @@ import {
     createPlane,
     createTorus,
 } from './index';
-import {
-    createBufferFactory,
-    IBufferFactory,
-    IBuffer,
-    IDisposable,
-} from '../../renderer/webgl2/buffer';
+import { createBufferFactory, IBufferFactory, IBuffer } from '../../renderer/webgl2/buffer';
+import { IDisposable } from '../../types';
 
 @script({
     scriptName: 'GeometryComponent',

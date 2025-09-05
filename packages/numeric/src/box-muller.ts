@@ -378,24 +378,44 @@ export const sharedBoxMullerRandom = BoxMullerFactory.createNormal(0, 1, {
     useCache: false,
 });
 
+let _boxMullerSpare: number | null = null;
+
 export const sampleStandardNormal = (): number => {
-    return rand.normal(0, 1);
+    if (_boxMullerSpare !== null) {
+        const val = _boxMullerSpare;
+        _boxMullerSpare = null;
+        return val;
+    }
+
+    // u1 must be in (0,1] to avoid log(0). rand.float() yields [0,1).
+    let u1 = rand.float();
+    if (u1 <= 0) u1 = Number.MIN_VALUE;
+    const u2 = rand.float();
+
+    const mag = Math.sqrt(-2.0 * Math.log(u1));
+    const theta = TWO_PI * u2;
+
+    const z0 = mag * Math.cos(theta);
+    const z1 = mag * Math.sin(theta);
+
+    _boxMullerSpare = z1;
+    return z0;
 };
 
 export const sampleBoundedNormal = (min: number = -1, max: number = 1): number => {
     const MAX_ATTEMPTS = 10;
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
-        const value = rand.normal(0, 1);
+        const value = sampleStandardNormal();
         if (value >= min && value <= max) {
             return value;
         }
     }
-    return Math.max(min, Math.min(max, rand.normal(0, 1)));
+    return Math.max(min, Math.min(max, sampleStandardNormal()));
 };
 
 export const sampleNormalInRange = (center: number, range: number): number => {
     const stdDev = range / 6; // 99.7% of values within bounds
-    const value = center + rand.normal(0, 1) * stdDev;
+    const value = center + sampleStandardNormal() * stdDev;
     const min = center - range / 2;
     const max = center + range / 2;
 

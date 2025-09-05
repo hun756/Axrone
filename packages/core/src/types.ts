@@ -75,3 +75,8 @@ export interface ArrayLike<T> {
 export type ReadonlyRecord<K extends string | number | symbol, T> = {
     readonly [P in K]: T;
 };
+
+export interface IDisposable {
+    dispose(): void;
+    readonly isDisposed: boolean;
+}
