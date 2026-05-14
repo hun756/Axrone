@@ -13,6 +13,41 @@
             "types": "./dist/index.d.ts",
             "import": "./dist/index.mjs",
             "require": "./dist/index.js"
+        },
+        "./types": {
+            "types": "./dist/types.d.ts",
+            "import": "./dist/types.mjs",
+            "require": "./dist/types.js"
+        },
+        "./errors": {
+            "types": "./dist/errors.d.ts",
+            "import": "./dist/errors.mjs",
+            "require": "./dist/errors.js"
+        },
+        "./memory": {
+            "types": "./dist/memory.d.ts",
+            "import": "./dist/memory.mjs",
+            "require": "./dist/memory.js"
+        },
+        "./graph": {
+            "types": "./dist/graph.d.ts",
+            "import": "./dist/graph.mjs",
+            "require": "./dist/graph.js"
+        },
+        "./post-process": {
+            "types": "./dist/post-process.d.ts",
+            "import": "./dist/post-process.mjs",
+            "require": "./dist/post-process.js"
+        },
+        "./pipeline": {
+            "types": "./dist/pipeline.d.ts",
+            "import": "./dist/pipeline.mjs",
+            "require": "./dist/pipeline.js"
+        },
+        "./shader-effect": {
+            "types": "./dist/shader-effect.d.ts",
+            "import": "./dist/shader-effect.mjs",
+            "require": "./dist/shader-effect.js"
         }
     },
     "scripts": {

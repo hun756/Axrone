@@ -3,7 +3,7 @@ import type {
     SceneShaderDefinition,
     SceneShaderHandle,
 } from './types';
-import { cloneRenderShaderEffectDefinition } from '@axrone/render-core';
+import { cloneRenderShaderEffectDefinition } from '@axrone/render-core/shader-effect';
 
 export interface SceneShaderResource {
     readonly id: string;

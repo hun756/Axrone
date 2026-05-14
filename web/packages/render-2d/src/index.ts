@@ -72,10 +72,12 @@ export type {
     RenderTextureDescriptor,
     RenderTextureFormat,
     RenderViewport,
-} from '@axrone/render-core';
+} from '@axrone/render-core/types';
 export {
     RenderExecutionError,
     RenderPipelineError,
     RenderValidationError,
+} from '@axrone/render-core/errors';
+export {
     createRenderPassGraph,
-} from '@axrone/render-core';
+} from '@axrone/render-core/graph';

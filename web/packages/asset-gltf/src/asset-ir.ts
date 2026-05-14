@@ -1,5 +1,5 @@
 import type { Mat4, Quat, Vec2, Vec3, Vec4 } from '@axrone/numeric';
-import type { RenderShaderEffectDefinition } from '@axrone/render-core';
+import type { RenderShaderEffectDefinition } from '@axrone/render-core/shader-effect';
 import type { ColorSpace, FilterMode, TextureFormat, WrapMode } from '@axrone/render-webgl2';
 
 export type GltfMeshSemantic =

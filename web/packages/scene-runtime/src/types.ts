@@ -5,7 +5,7 @@ import type { World } from '@axrone/ecs-runtime';
 import type { ComponentConstructor, ComponentRegistry } from '@axrone/ecs-runtime';
 import type { System, SystemQuery } from '@axrone/ecs-runtime';
 import type { GameLoopScheduler, GameLoopStatus } from '@axrone/game-loop';
-import type { RenderShaderEffectDefinition } from '@axrone/render-core';
+import type { RenderShaderEffectDefinition } from '@axrone/render-core/shader-effect';
 import type { Camera } from './components/camera';
 import type { Animator } from './components/animator';
 import type { DirectionalLight } from './components/directional-light';

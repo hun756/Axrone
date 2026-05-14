@@ -2,7 +2,7 @@ import type {
     RenderShaderInspectorOptionDefinition,
     RenderShaderPropertyDefinition,
     RenderShaderSerializableValue,
-} from '@axrone/render-core';
+} from '@axrone/render-core/shader-effect';
 import type {
     SceneMaterialDefinition,
     SceneShaderDefinition,

@@ -20,7 +20,7 @@ import {
     type RenderShaderStageDefinition,
     type RenderShaderStageName,
     type RenderShaderValueType,
-} from '@axrone/render-core';
+} from '@axrone/render-core/shader-effect';
 
 export type AssetShaderImportKind = 'shaderEffect';
 

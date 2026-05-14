@@ -4,16 +4,16 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
     RUNTIME_PROFILE_CORE_CAPABILITY_PACKAGES,
-} from '@axrone/runtime-profile-core';
+} from '@axrone/runtime-profile-core/capabilities';
 import {
     RUNTIME_PROFILE_2D_CAPABILITY_PACKAGES,
-} from '@axrone/runtime-profile-2d';
+} from '@axrone/runtime-profile-2d/capabilities';
 import {
     RUNTIME_PROFILE_3D_CAPABILITY_PACKAGES,
-} from '@axrone/runtime-profile-3d';
+} from '@axrone/runtime-profile-3d/capabilities';
 import {
     RUNTIME_PROFILE_FULL_CAPABILITY_PACKAGES,
-} from '@axrone/runtime-profile-full';
+} from '@axrone/runtime-profile-full/capabilities';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const packagesDir = path.resolve(testDir, '../../../packages');

@@ -39,10 +39,10 @@ export type {
     RenderShaderStageDefinition,
     RenderShaderStageName,
     RenderShaderValueType,
-} from '@axrone/render-core';
+} from '@axrone/render-core/shader-effect';
 export {
     cloneRenderShaderEffectDefinition,
     compileRenderShaderEffect,
-} from '@axrone/render-core';
+} from '@axrone/render-core/shader-effect';
 
 export * from '@axrone/asset-core';

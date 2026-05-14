@@ -1,4 +1,4 @@
-import { compileRenderShaderEffect } from '@axrone/render-core';
+import { compileRenderShaderEffect } from '@axrone/render-core/shader-effect';
 import type { SceneMeshSemantic, SceneShaderDefinition } from './types';
 import { SceneShaderError } from './errors';
 import type { SceneShaderResource } from './shader-registry';
