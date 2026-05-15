@@ -4,7 +4,7 @@ import type {
     RenderPipelineBackend,
     ResolvedRenderPass,
 } from '@axrone/render-core/types';
-import { renderUIFrame } from '@axrone/ui';
+import { renderUIFrame } from '@axrone/ui/render';
 import { WebGL2UIRenderer } from './renderer';
 import type {
     ManagedUIOverlayRenderPipelineBackend,

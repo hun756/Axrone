@@ -5,9 +5,8 @@ import type {
     SizeLike,
     UIImageSource,
     UIFrame,
-    UIFrameProducer,
-    UIFrameSink,
-} from '@axrone/ui';
+} from '@axrone/ui/types';
+import type { UIFrameProducer, UIFrameSink } from '@axrone/ui/render';
 import type {
     RenderPipelineBackend,
 } from '@axrone/render-core/types';
