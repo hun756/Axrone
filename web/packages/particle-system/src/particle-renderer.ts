@@ -140,13 +140,14 @@ export interface RenderSettings {
 }
 
 type FrustumSource = Float32Array | Readonly<CameraFrustum> | Readonly<Camera3D>;
+type GeometryFrustumSource = Exclude<FrustumSource, Float32Array>;
 
 const isFloat32Array = (value: FrustumSource): value is Float32Array => value instanceof Float32Array;
 
-const isCameraFrustum = (value: FrustumSource): value is Readonly<CameraFrustum> =>
+const isCameraFrustum = (value: GeometryFrustumSource): value is Readonly<CameraFrustum> =>
     typeof value === 'object' && value !== null && 'copyPlane' in value;
 
-const resolveCameraFrustum = (value: FrustumSource): Readonly<CameraFrustum> =>
+const resolveCameraFrustum = (value: GeometryFrustumSource): Readonly<CameraFrustum> =>
     (isCameraFrustum(value) ? value : value.frustum) as Readonly<CameraFrustum>;
 
 const FRUSTUM_PLANE_NAMES = ['left', 'right', 'bottom', 'top', 'near', 'far'] as const;
