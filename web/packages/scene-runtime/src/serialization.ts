@@ -1,3 +1,4 @@
+import type { BoundingSphere } from '@axrone/geometry';
 import { Mat4, Quat, Vec2, Vec3, Vec4 } from '@axrone/numeric';
 import { cloneSceneMeshBounds } from './scene-mesh-bounds';
 import type {
@@ -6,6 +7,25 @@ import type {
     SceneSerializedValue,
     SceneTextureBindingDefinition,
 } from './types';
+
+type BoundingSphereCenter = Readonly<BoundingSphere>['center'];
+type SerializedSphereBounds = {
+    readonly kind: 'sphere';
+    readonly center: readonly SceneSerializedValue[];
+    readonly radius: SceneSerializedValue;
+};
+
+const isBoundingSphereCenterTuple = (center: BoundingSphereCenter): center is readonly [number, number, number] =>
+    Array.isArray(center);
+
+const isSerializedSphereBounds = (value: SceneSerializedValue | undefined): value is SerializedSphereBounds => {
+    if (value === null || value === undefined || Array.isArray(value) || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Record<string, SceneSerializedValue>;
+    return candidate.kind === 'sphere' && Array.isArray(candidate.center);
+};
 
 const cloneMorphTargets = (
     morphTargets: readonly SceneMorphTargetDefinition[] | undefined
@@ -208,7 +228,7 @@ export const serializeMeshDefinition = (definition: SceneMeshDefinition): SceneS
         bounds: definition.bounds
             ? {
                   kind: 'sphere',
-                  center: Array.isArray(definition.bounds.center)
+                  center: isBoundingSphereCenterTuple(definition.bounds.center)
                       ? [...definition.bounds.center]
                       : [
                             definition.bounds.center.x,
@@ -264,22 +284,17 @@ export const deserializeMeshDefinition = (value: SceneSerializedValue): SceneMes
         id: String(objectValue.id),
         vertices,
         indices,
-        bounds:
-            objectValue.bounds !== null &&
-            !Array.isArray(objectValue.bounds) &&
-            typeof objectValue.bounds === 'object' &&
-            objectValue.bounds.kind === 'sphere' &&
-            Array.isArray(objectValue.bounds.center)
-                ? {
-                      kind: 'sphere' as const,
-                      center: [
-                          Number(objectValue.bounds.center[0]),
-                          Number(objectValue.bounds.center[1]),
-                          Number(objectValue.bounds.center[2]),
-                      ] as const,
-                      radius: Number(objectValue.bounds.radius),
-                  }
-                : undefined,
+        bounds: isSerializedSphereBounds(objectValue.bounds)
+            ? {
+                  kind: 'sphere' as const,
+                  center: [
+                      Number(objectValue.bounds.center[0]),
+                      Number(objectValue.bounds.center[1]),
+                      Number(objectValue.bounds.center[2]),
+                  ] as const,
+                  radius: Number(objectValue.bounds.radius),
+              }
+            : undefined,
         morphTargets: Array.isArray(objectValue.morphTargets)
             ? Object.freeze(
                   objectValue.morphTargets.map((target: SceneSerializedValue) => {

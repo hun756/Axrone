@@ -20,14 +20,25 @@ export interface SceneRenderItemSortOptions {
     readonly isBlended?: (renderer: MeshRenderer) => boolean;
 }
 
+type BoundingSphereCenter = Readonly<BoundingSphere>['center'];
+
+type MutableBoundingSphere = {
+    readonly kind: 'sphere';
+    center: Vec3;
+    radius: number;
+};
+
+const isBoundingSphereCenterTuple = (center: BoundingSphereCenter): center is readonly [number, number, number] =>
+    Array.isArray(center);
+
 const readCenterX = (bounds: Readonly<BoundingSphere>): number =>
-    Array.isArray(bounds.center) ? bounds.center[0] : bounds.center.x;
+    isBoundingSphereCenterTuple(bounds.center) ? bounds.center[0] : bounds.center.x;
 
 const readCenterY = (bounds: Readonly<BoundingSphere>): number =>
-    Array.isArray(bounds.center) ? bounds.center[1] : bounds.center.y;
+    isBoundingSphereCenterTuple(bounds.center) ? bounds.center[1] : bounds.center.y;
 
 const readCenterZ = (bounds: Readonly<BoundingSphere>): number =>
-    Array.isArray(bounds.center) ? bounds.center[2] : bounds.center.z;
+    isBoundingSphereCenterTuple(bounds.center) ? bounds.center[2] : bounds.center.z;
 
 const distanceSquaredToCamera = (
     transform: Transform,
@@ -44,7 +55,7 @@ export class SceneRenderItemCollector {
     private readonly _items: SceneRenderItem[] = [];
     private readonly _cullingSphereCenter = new Vec3();
     private readonly _cullingSphereOffset = new Vec3();
-    private readonly _cullingSphere: BoundingSphere = {
+    private readonly _cullingSphere: MutableBoundingSphere = {
         kind: 'sphere',
         center: this._cullingSphereCenter,
         radius: 0,
