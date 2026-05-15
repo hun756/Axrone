@@ -68,8 +68,6 @@ export const resolveCameraCullingMessage = (
 };
 
 export class CameraCullingError extends Error {
-    readonly name = 'CameraCullingError';
-
     constructor(
         public readonly code: CameraCullingErrorCode,
         public readonly locale: CameraLocale = 'en',
@@ -77,12 +75,12 @@ export class CameraCullingError extends Error {
         public override readonly cause?: unknown
     ) {
         super(resolveCameraCullingMessage(code, locale));
+        this.name = 'CameraCullingError';
+        Object.setPrototypeOf(this, CameraCullingError.prototype);
     }
 }
 
 export class CameraValidationError extends CameraCullingError {
-    readonly name = 'CameraValidationError';
-
     constructor(
         code: Extract<
             CameraCullingErrorCode,
@@ -105,17 +103,19 @@ export class CameraValidationError extends CameraCullingError {
         cause?: unknown
     ) {
         super(code, locale, context, cause);
+        this.name = 'CameraValidationError';
+        Object.setPrototypeOf(this, CameraValidationError.prototype);
     }
 }
 
 export class CameraSerializationError extends CameraCullingError {
-    readonly name = 'CameraSerializationError';
-
     constructor(
         locale: CameraLocale = 'en',
         context: CameraCullingErrorContext = {},
         cause?: unknown
     ) {
         super('INVALID_SERIALIZED_CAMERA', locale, context, cause);
+        this.name = 'CameraSerializationError';
+        Object.setPrototypeOf(this, CameraSerializationError.prototype);
     }
 }
