@@ -19,18 +19,14 @@ import {
     type SceneRenderableActorInstance,
 } from './scene-3d-actor-runtime';
 
-type SceneAssetFacadeOptions = ConstructorParameters<typeof SceneAssetFacade>[0];
-
 export class Scene<R extends ComponentRegistry = Record<string, never>> extends SceneAssetFacade<R> {
     private readonly _actors3d: Scene3DActorRuntime<R>;
 
     constructor(options: SceneOptions<R> = {}) {
-        super(
-            {
-                ...options,
-                profile: options.profile ?? getDefaultSceneRuntimeProfile<R>(),
-            } as SceneAssetFacadeOptions
-        );
+        super({
+            ...options,
+            profile: options.profile ?? getDefaultSceneRuntimeProfile<R>(),
+        } as any);
         this._actors3d = new Scene3DActorRuntime({
             actors: this._kernel.actors as unknown as Scene3DActorRuntimeOptions<R>['actors'],
         });
