@@ -10,6 +10,16 @@ export default [
     }),
     ...createPackageConfig({
         packageDir,
+        inputRelativePath: 'src/types.ts',
+        outputBasename: 'types',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/errors.ts',
+        outputBasename: 'errors',
+    }),
+    ...createPackageConfig({
+        packageDir,
         inputRelativePath: 'src/scene-registry.ts',
         outputBasename: 'scene-registry',
     }),
