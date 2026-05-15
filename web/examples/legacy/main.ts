@@ -1,6 +1,6 @@
 import './styles.css';
 import type { ExampleHandle, SceneExample } from './example-types';
-import type { LiveEditorController } from './playground/live-editor';
+import type { LiveEditorController } from './playground/tooling-entry';
 
 type ExampleModule = {
     readonly default: SceneExample;
@@ -12,8 +12,7 @@ type ExampleDescriptor = {
     readonly source: string;
 };
 
-type EditorModule = typeof import('./playground/live-editor');
-type CompilerModule = typeof import('./playground/live-example-runtime');
+type PlaygroundToolingModule = typeof import('./playground/tooling-entry');
 
 const moduleLoaders = import.meta.glob('./*.ts') as Record<string, () => Promise<ExampleModule>>;
 const sourceLoaders = import.meta.glob('./*.ts', {
@@ -160,18 +159,16 @@ const refreshDescriptorSource = async (
     };
 };
 
-let editorModulePromise: Promise<EditorModule> | undefined;
-let compilerModulePromise: Promise<CompilerModule> | undefined;
+let playgroundToolingPromise: Promise<PlaygroundToolingModule> | undefined;
 
-const getEditorModule = (): Promise<EditorModule> => {
-    editorModulePromise ??= import('./playground/live-editor');
-    return editorModulePromise;
+const getPlaygroundTooling = (): Promise<PlaygroundToolingModule> => {
+    playgroundToolingPromise ??= import('./playground/tooling-entry');
+    return playgroundToolingPromise;
 };
 
-const getCompilerModule = (): Promise<CompilerModule> => {
-    compilerModulePromise ??= import('./playground/live-example-runtime');
-    return compilerModulePromise;
-};
+const getEditorModule = (): Promise<PlaygroundToolingModule> => getPlaygroundTooling();
+
+const getCompilerModule = (): Promise<PlaygroundToolingModule> => getPlaygroundTooling();
 
 const app = document.querySelector<HTMLDivElement>('#app');
 

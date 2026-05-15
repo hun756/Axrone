@@ -26,15 +26,13 @@ const resolveManualChunk = (id: string): string | undefined => {
         return 'vendor-draco';
     }
 
-    if (normalizedId.includes('/examples/playground/live-editor')) {
-        return 'playground-editor';
-    }
-
     if (
+        normalizedId.includes('/examples/playground/tooling-entry') ||
+        normalizedId.includes('/examples/playground/live-editor') ||
         normalizedId.includes('/examples/playground/live-example-runtime') ||
         normalizedId.includes('/examples/playground/source-compat')
     ) {
-        return 'playground-compiler';
+        return 'playground-tooling';
     }
 
     if (
