@@ -1,26 +1,30 @@
+import { AnimationController } from '@axrone/animation/controller';
+import type { AnimationFrame } from '@axrone/animation/pose';
 import {
-    AnimationController,
+    AnimationClipStreamingScheduler,
+    type AnimationClipStreamingRequest,
+    type AnimationStreamingSnapshot,
+} from '@axrone/animation/streaming';
+import {
     applyAnimationClipStreamingChunkDefinition,
     decodeAnimationClipStreamingChunkPayload,
-    type AnimationClipDefinition,
-    type AnimationControllerEvent,
     type AnimationClipStreamingChunkApplicationOptions,
     type AnimationClipStreamingChunkPayload,
-    type AnimationStreamingSnapshot,
-    type AnimationClipEventDefinition,
-    type AnimationClipStreamingDefinition,
-    type AnimationClipStreamingRequest,
-    type AnimationFrame,
-    type AnimationFootContactDefinition,
-    type AnimationLayerDefinition,
-    type AnimationMotionFeatureDefinition,
-    type AnimationParameterDefinition,
-    type AnimationClipCompressionDefinition,
-    AnimationClipStreamingScheduler,
-    type AnimationRootMotionDefinition,
-    type AnimationRootMotionDelta,
-    type AnimationTrackDefinition,
-} from '@axrone/animation';
+} from '@axrone/animation/streaming-chunk';
+import type {
+    AnimationClipCompressionDefinition,
+    AnimationClipDefinition,
+    AnimationClipEventDefinition,
+    AnimationClipStreamingDefinition,
+    AnimationControllerEvent,
+    AnimationFootContactDefinition,
+    AnimationLayerDefinition,
+    AnimationMotionFeatureDefinition,
+    AnimationParameterDefinition,
+    AnimationRootMotionDefinition,
+    AnimationRootMotionDelta,
+    AnimationTrackDefinition,
+} from '@axrone/animation/types';
 import { Quat, Vec3 } from '@axrone/numeric';
 import { cloneSerializable, isRecord } from '@axrone/utility';
 import { Transform } from '@axrone/ecs-runtime';

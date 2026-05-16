@@ -1,4 +1,4 @@
-import { computeSkinningPalette } from '@axrone/animation';
+import { computeSkinningPalette } from '@axrone/animation/skinning';
 import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';

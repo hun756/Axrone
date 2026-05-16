@@ -1,4 +1,4 @@
-import type { AnimationClipStreamingRequest } from '@axrone/animation';
+import type { AnimationClipStreamingRequest } from '@axrone/animation/streaming';
 import type { Actor, Entity } from '@axrone/ecs-runtime';
 import { isRecord } from '@axrone/utility';
 import { Animator } from './components/animator';
