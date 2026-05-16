@@ -7,7 +7,7 @@ import type {
     AnimationMotionFeatureDefinition,
     AnimationParameterDefinition,
     AnimationRootMotionDefinition,
-} from '@axrone/animation';
+} from '@axrone/animation/types';
 import type { FilterMode, TextureFormat, WrapMode } from '@axrone/render-webgl2';
 import type {
     AssetCustomSource,

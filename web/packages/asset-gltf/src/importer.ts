@@ -9,7 +9,7 @@ import type {
     AnimationMotionFeatureDefinition,
     AnimationParameterDefinition,
     AnimationRootMotionDefinition,
-} from '@axrone/animation';
+} from '@axrone/animation/types';
 import type {
     AssetImportDiagnostic,
     AssetImportResult,
