@@ -17,166 +17,171 @@
     "experimentalDecorators": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "baseUrl": ".",
     "paths": {
       "@axrone/asset-core": [
-        "packages/asset-core/src/index.ts"
+        "./packages/asset-core/src/index.ts"
       ],
       "@axrone/asset-core/*": [
-        "packages/asset-core/src/*"
+        "./packages/asset-core/src/*"
+      ],
+      "@axrone/animation": [
+        "./packages/animation/src/index.ts"
+      ],
+      "@axrone/animation/*": [
+        "./packages/animation/src/*"
       ],
       "@axrone/asset-shader": [
-        "packages/asset-shader/src/index.ts"
+        "./packages/asset-shader/src/index.ts"
       ],
       "@axrone/asset-shader/*": [
-        "packages/asset-shader/src/*"
+        "./packages/asset-shader/src/*"
       ],
       "@axrone/event": [
-        "packages/event/src/index.ts"
+        "./packages/event/src/index.ts"
       ],
       "@axrone/event/*": [
-        "packages/event/src/*"
+        "./packages/event/src/*"
       ],
       "@axrone/geometry": [
-        "packages/geometry/src/index.ts"
+        "./packages/geometry/src/index.ts"
       ],
       "@axrone/geometry/*": [
-        "packages/geometry/src/*"
+        "./packages/geometry/src/*"
       ],
       "@axrone/input": [
-        "packages/input/src/index.ts"
+        "./packages/input/src/index.ts"
       ],
       "@axrone/input/*": [
-        "packages/input/src/*"
+        "./packages/input/src/*"
       ],
       "@axrone/memory": [
-        "packages/memory/src/index.ts"
+        "./packages/memory/src/index.ts"
       ],
       "@axrone/memory/*": [
-        "packages/memory/src/*"
+        "./packages/memory/src/*"
       ],
       "@axrone/observer": [
-        "packages/observer/src/index.ts"
+        "./packages/observer/src/index.ts"
       ],
       "@axrone/observer/*": [
-        "packages/observer/src/*"
+        "./packages/observer/src/*"
       ],
       "@axrone/physics": [
-        "packages/physics/src/index.ts"
+        "./packages/physics/src/index.ts"
       ],
       "@axrone/physics/*": [
-        "packages/physics/src/*"
+        "./packages/physics/src/*"
       ],
       "@axrone/physics-core": [
-        "packages/physics-core/src/index.ts"
+        "./packages/physics-core/src/index.ts"
       ],
       "@axrone/physics-core/*": [
-        "packages/physics-core/src/*"
+        "./packages/physics-core/src/*"
       ],
       "@axrone/physics-2d": [
-        "packages/physics-2d/src/index.ts"
+        "./packages/physics-2d/src/index.ts"
       ],
       "@axrone/physics-2d/*": [
-        "packages/physics-2d/src/*"
+        "./packages/physics-2d/src/*"
       ],
       "@axrone/physics-3d": [
-        "packages/physics-3d/src/index.ts"
+        "./packages/physics-3d/src/index.ts"
       ],
       "@axrone/physics-3d/*": [
-        "packages/physics-3d/src/*"
+        "./packages/physics-3d/src/*"
       ],
       "@axrone/render-core": [
-        "packages/render-core/src/index.ts"
+        "./packages/render-core/src/index.ts"
       ],
       "@axrone/render-core/*": [
-        "packages/render-core/src/*"
+        "./packages/render-core/src/*"
       ],
       "@axrone/runtime-profile-core": [
-        "packages/runtime-profile-core/src/index.ts"
+        "./packages/runtime-profile-core/src/index.ts"
       ],
       "@axrone/runtime-profile-core/*": [
-        "packages/runtime-profile-core/src/*"
+        "./packages/runtime-profile-core/src/*"
       ],
       "@axrone/runtime-profile-2d": [
-        "packages/runtime-profile-2d/src/index.ts"
+        "./packages/runtime-profile-2d/src/index.ts"
       ],
       "@axrone/runtime-profile-2d/*": [
-        "packages/runtime-profile-2d/src/*"
+        "./packages/runtime-profile-2d/src/*"
       ],
       "@axrone/runtime-profile-3d": [
-        "packages/runtime-profile-3d/src/index.ts"
+        "./packages/runtime-profile-3d/src/index.ts"
       ],
       "@axrone/runtime-profile-3d/*": [
-        "packages/runtime-profile-3d/src/*"
+        "./packages/runtime-profile-3d/src/*"
       ],
       "@axrone/runtime-profile-full": [
-        "packages/runtime-profile-full/src/index.ts"
+        "./packages/runtime-profile-full/src/index.ts"
       ],
       "@axrone/runtime-profile-full/*": [
-        "packages/runtime-profile-full/src/*"
+        "./packages/runtime-profile-full/src/*"
       ],
       "@axrone/scene-runtime-gltf": [
-        "packages/scene-runtime-gltf/src/index.ts"
+        "./packages/scene-runtime-gltf/src/index.ts"
       ],
       "@axrone/scene-runtime-gltf/*": [
-        "packages/scene-runtime-gltf/src/*"
+        "./packages/scene-runtime-gltf/src/*"
       ],
       "@axrone/scene-runtime": [
-        "packages/scene-runtime/src"
+        "./packages/scene-runtime/src"
       ],
       "@axrone/scene-runtime/*": [
-        "packages/scene-runtime/src/*"
+        "./packages/scene-runtime/src/*"
       ],
       "@axrone/shapes-2d": [
-        "packages/shapes-2d/src/index.ts"
+        "./packages/shapes-2d/src/index.ts"
       ],
       "@axrone/shapes-2d/*": [
-        "packages/shapes-2d/src/*"
+        "./packages/shapes-2d/src/*"
       ],
       "@axrone/ecs-runtime": [
-        "packages/ecs-runtime/src/index.ts"
+        "./packages/ecs-runtime/src/index.ts"
       ],
       "@axrone/ecs-runtime/*": [
-        "packages/ecs-runtime/src/*"
+        "./packages/ecs-runtime/src/*"
       ],
       "@axrone/ecs-query/*": [
-        "packages/ecs-query/src/*"
+        "./packages/ecs-query/src/*"
       ],
       "@axrone/ecs-storage/*": [
-        "packages/ecs-storage/src/*"
+        "./packages/ecs-storage/src/*"
       ],
       "@axrone/ecs-world-support": [
-        "packages/ecs-world-support/src/index.ts"
+        "./packages/ecs-world-support/src/index.ts"
       ],
       "@axrone/ecs-world-support/*": [
-        "packages/ecs-world-support/src/*"
+        "./packages/ecs-world-support/src/*"
       ],
       "@axrone/tween": [
-        "packages/tween/src/index.ts"
+        "./packages/tween/src/index.ts"
       ],
       "@axrone/tween/*": [
-        "packages/tween/src/*"
+        "./packages/tween/src/*"
       ],
       "@axrone/ui": [
-        "packages/ui/src/index.ts"
+        "./packages/ui/src/index.ts"
       ],
       "@axrone/ui/*": [
-        "packages/ui/src/*"
+        "./packages/ui/src/*"
       ],
       "@axrone/ui-webgl2": [
-        "packages/ui-webgl2/src/index.ts"
+        "./packages/ui-webgl2/src/index.ts"
       ],
       "@axrone/ui-webgl2/*": [
-        "packages/ui-webgl2/src/*"
+        "./packages/ui-webgl2/src/*"
       ],
       "@axrone/*": [
-        "packages/*/src"
+        "./packages/*/src"
       ],
       "@axrone/lighting": [
-        "packages/lighting/src/index.ts"
+        "./packages/lighting/src/index.ts"
       ],
       "@axrone/lighting/*": [
-        "packages/lighting/src/*"
+        "./packages/lighting/src/*"
       ]
     },
     "types": [
