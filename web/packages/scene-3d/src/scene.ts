@@ -3,7 +3,6 @@ import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import type { World } from '@axrone/ecs-runtime';
 import type { TextureFormat } from '@axrone/render-webgl2';
 import {
-    getDefaultSceneRuntimeProfile,
     type SceneOptions,
     type SceneRegistry,
 } from '@axrone/scene-runtime';
@@ -12,6 +11,7 @@ import {
     type CameraConfig,
 } from '@axrone/scene-runtime/scene-facade';
 import { type MeshRendererConfig } from '@axrone/scene-runtime/scene-3d-support';
+import { getDefaultSceneRuntimeProfile } from './profile';
 import {
     Scene3DActorRuntime,
     type Scene3DActorRuntimeOptions,
