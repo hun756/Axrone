@@ -24,6 +24,10 @@ describe('scene-2d subpath entries', () => {
 
         expect(scene2DProfile.get2DSceneRuntimeProfile).toBeDefined();
         expect(scene2DProfile.getCoreSceneRuntimeProfile).toBeDefined();
+        expect(scene2DProfile.resolveSceneRegistryFromProfile).toBeDefined();
+        const registry = scene2DProfile.resolveSceneRegistryFromProfile(undefined, {});
+        expect(registry.SpriteRenderer).toBeDefined();
+        expect('MeshRenderer' in registry).toBe(false);
         expect('Scene2D' in scene2DProfile).toBe(false);
 
         expect(scene2DErrors.SceneCapabilityError).toBeDefined();

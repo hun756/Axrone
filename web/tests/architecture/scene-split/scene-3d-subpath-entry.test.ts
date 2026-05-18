@@ -25,6 +25,10 @@ describe('scene-3d subpath entries', () => {
 
         expect(scene3DProfile.get3DSceneRuntimeProfile).toBeDefined();
         expect(scene3DProfile.getDefaultSceneRuntimeProfile).toBeDefined();
+        expect(scene3DProfile.resolveSceneRegistryFromProfile).toBeDefined();
+        const registry = scene3DProfile.resolveSceneRegistryFromProfile(undefined, {});
+        expect(registry.MeshRenderer).toBeDefined();
+        expect(registry.Camera).toBeDefined();
         expect('Scene' in scene3DProfile).toBe(false);
 
         expect(scene3DErrors.SceneCapabilityError).toBeDefined();
