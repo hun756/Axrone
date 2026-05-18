@@ -749,6 +749,10 @@ export interface SceneRenderPlanningStats {
     readonly passCount: number;
     readonly opaqueCount: number;
     readonly transparentCount: number;
+    readonly meshTransparentCount: number;
+    readonly spriteTransparentCount: number;
+    readonly spriteBatchCount: number;
+    readonly skippedSpriteCount: number;
     readonly warnings: readonly string[];
 }
 

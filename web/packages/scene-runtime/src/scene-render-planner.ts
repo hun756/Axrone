@@ -23,6 +23,7 @@ export interface SceneRenderPlannerParams {
     readonly deltaSeconds: number;
     readonly viewportWidth: number;
     readonly viewportHeight: number;
+    readonly maxTransparentPrimitives?: number;
     readonly cameraFrame: SceneCameraFrameState;
     readonly lighting: SceneLightingState;
     readonly renderItems: readonly SceneRenderItem[];
@@ -44,6 +45,10 @@ const DEFAULT_SCENE_RENDER_PLANNING_STATS: SceneRenderPlanningStats = Object.fre
     passCount: 0,
     opaqueCount: 0,
     transparentCount: 0,
+    meshTransparentCount: 0,
+    spriteTransparentCount: 0,
+    spriteBatchCount: 0,
+    skippedSpriteCount: 0,
     warnings: Object.freeze([]) as readonly string[],
 });
 
@@ -186,22 +191,21 @@ const createMaterialSnapshot = (
 
 export class SceneRenderPlanner {
     private readonly _graph = new RenderTextureRegistry();
-    private readonly _classifier: RenderFrameClassifier;
+    private readonly _defaultMaxTransparentPrimitives: number;
+    private _classifier: RenderFrameClassifier;
     private readonly _planner: RenderPassPlanner;
     private readonly _warnings = new ReusableList<string>(16);
     private readonly _primitiveLookup = new Map<string, SceneRenderItem>();
     private readonly _orderedItems: SceneRenderItem[] = [];
+    private _activeMaxTransparentPrimitives: number;
 
     constructor(options: SceneRenderPlanningOptions = {}) {
-        this._classifier = new RenderFrameClassifier({
-            maxTransparentPrimitives: Math.max(
-                0,
-                Math.floor(options.maxTransparentPrimitives ?? Number.MAX_SAFE_INTEGER)
-            ),
-            maxActiveLocalLights: 4,
-            maxActiveReflectionProbes: 0,
-            maxShadowedLights: 0,
-        });
+        this._defaultMaxTransparentPrimitives = Math.max(
+            0,
+            Math.floor(options.maxTransparentPrimitives ?? Number.MAX_SAFE_INTEGER)
+        );
+        this._activeMaxTransparentPrimitives = this._defaultMaxTransparentPrimitives;
+        this._classifier = this._createClassifier(this._activeMaxTransparentPrimitives);
         this._planner = new RenderPassPlanner(this._graph, {
             shadows: {
                 atlasSize: 1024,
@@ -220,6 +224,25 @@ export class SceneRenderPlanner {
         });
     }
 
+    private _createClassifier(maxTransparentPrimitives: number): RenderFrameClassifier {
+        return new RenderFrameClassifier({
+            maxTransparentPrimitives,
+            maxActiveLocalLights: 4,
+            maxActiveReflectionProbes: 0,
+            maxShadowedLights: 0,
+        });
+    }
+
+    private _ensureClassifier(maxTransparentPrimitives: number): void {
+        if (maxTransparentPrimitives === this._activeMaxTransparentPrimitives) {
+            return;
+        }
+
+        this._classifier.clear();
+        this._classifier = this._createClassifier(maxTransparentPrimitives);
+        this._activeMaxTransparentPrimitives = maxTransparentPrimitives;
+    }
+
     plan(params: SceneRenderPlannerParams): SceneRenderPlannerResult {
         if (params.renderItems.length === 0) {
             return {
@@ -227,6 +250,12 @@ export class SceneRenderPlanner {
                 stats: DEFAULT_SCENE_RENDER_PLANNING_STATS,
             };
         }
+
+        const maxTransparentPrimitives = Math.max(
+            0,
+            Math.floor(params.maxTransparentPrimitives ?? this._defaultMaxTransparentPrimitives)
+        );
+        this._ensureClassifier(maxTransparentPrimitives);
 
         this._primitiveLookup.clear();
         this._orderedItems.length = 0;
@@ -332,6 +361,10 @@ export class SceneRenderPlanner {
                     passCount: plannedPasses.length,
                     opaqueCount: this._classifier.opaque.length,
                     transparentCount: this._classifier.transparent.length,
+                    meshTransparentCount: this._classifier.transparent.length,
+                    spriteTransparentCount: 0,
+                    spriteBatchCount: 0,
+                    skippedSpriteCount: 0,
                     warnings: Object.freeze(this._warnings.toArray()),
                 }),
             };

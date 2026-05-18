@@ -137,13 +137,34 @@ export interface SceneSpriteBatchRuntimeRenderParams {
     readonly frameState: SceneRenderFrameState;
     readonly viewportWidth: number;
     readonly viewportHeight: number;
+    readonly transparentBudget?: SceneSpriteBatchRuntimeTransparentBudget;
+}
+
+export interface SceneSpriteBatchRuntimeTransparentBudget {
+    readonly total: number;
+    readonly remaining: number;
+}
+
+export interface SceneSpriteBatchRuntimeRenderStats {
+    readonly drawnSpriteCount: number;
+    readonly spriteBatchCount: number;
+    readonly skippedSpriteCount: number;
+    readonly warnings: readonly string[];
 }
 
 export class SceneSpriteBatchRuntime {
+    private static readonly _EMPTY_STATS: SceneSpriteBatchRuntimeRenderStats = Object.freeze({
+        drawnSpriteCount: 0,
+        spriteBatchCount: 0,
+        skippedSpriteCount: 0,
+        warnings: Object.freeze([]) as readonly string[],
+    });
+
     private readonly _collector = new SceneSpriteRenderItemCollector();
     private readonly _builder = new Render2DSpriteBatchBuilder();
     private readonly _shaderFactory: SceneShaderFactory;
     private readonly _submissions: Render2DSpriteSubmission[] = [];
+    private readonly _submissionRendererIds: string[] = [];
     private readonly _worldPointScratch = new Float32Array(3);
     private readonly _screenPointScratch = new Float32Array(2);
     private _defaultShader: SceneShaderResource | null = null;
@@ -158,17 +179,16 @@ export class SceneSpriteBatchRuntime {
         this._shaderFactory = new SceneShaderFactory({ gl: _options.gl });
     }
 
-    render(params: SceneSpriteBatchRuntimeRenderParams): void {
+    render(params: SceneSpriteBatchRuntimeRenderParams): SceneSpriteBatchRuntimeRenderStats {
         const items = this._collector.collect(params.actors, params.renderPass.rendererPassId, {
             cameraFrustum: params.cameraFrame.camera3D.frustum,
         });
         if (items.length === 0) {
-            return;
+            return SceneSpriteBatchRuntime._EMPTY_STATS;
         }
 
-        this._ensureResources();
-
         this._submissions.length = 0;
+        this._submissionRendererIds.length = 0;
         for (const item of items) {
             const source = this._resolveSource(item.renderer);
             if (!source) {
@@ -211,15 +231,55 @@ export class SceneSpriteBatchRuntime {
                 flipX: item.renderer.flipX,
                 flipY: item.renderer.flipY,
             });
+            this._submissionRendererIds.push(item.renderer.id);
         }
 
         if (this._submissions.length === 0) {
-            return;
+            return SceneSpriteBatchRuntime._EMPTY_STATS;
         }
 
-        const buildResult = this._builder.build(this._submissions);
+        let allowedSpriteCount = this._submissions.length;
+        let skippedSpriteCount = 0;
+        const warnings: string[] = [];
+
+        if (params.transparentBudget && allowedSpriteCount > params.transparentBudget.remaining) {
+            allowedSpriteCount = Math.max(0, Math.floor(params.transparentBudget.remaining));
+            skippedSpriteCount = this._submissions.length - allowedSpriteCount;
+            if (skippedSpriteCount > 0) {
+                warnings.push(
+                    `transparent primitive budget exceeded at ${params.transparentBudget.total}; skipped ${skippedSpriteCount} sprite submissions`
+                );
+            }
+        }
+
+        if (allowedSpriteCount === 0) {
+            return Object.freeze({
+                drawnSpriteCount: 0,
+                spriteBatchCount: 0,
+                skippedSpriteCount,
+                warnings: Object.freeze(warnings),
+            });
+        }
+
+        this._ensureResources();
+
+        for (let index = 0; index < allowedSpriteCount; index += 1) {
+            params.frameState.markActiveRenderer(this._submissionRendererIds[index]!);
+        }
+
+        const submissions =
+            allowedSpriteCount === this._submissions.length
+                ? this._submissions
+                : this._submissions.slice(0, allowedSpriteCount);
+
+        const buildResult = this._builder.build(submissions);
         if (buildResult.indexCount === 0) {
-            return;
+            return Object.freeze({
+                drawnSpriteCount: buildResult.spriteCount,
+                spriteBatchCount: buildResult.batches.length,
+                skippedSpriteCount,
+                warnings: Object.freeze(warnings),
+            });
         }
 
         const indexType =
@@ -237,6 +297,13 @@ export class SceneSpriteBatchRuntime {
         this._options.gl.bindVertexArray(null);
         this._resetClipRect();
         this._resetMaskState();
+
+        return Object.freeze({
+            drawnSpriteCount: buildResult.spriteCount,
+            spriteBatchCount: buildResult.batches.length,
+            skippedSpriteCount,
+            warnings: Object.freeze(warnings),
+        });
     }
 
     clear(): void {
@@ -261,6 +328,7 @@ export class SceneSpriteBatchRuntime {
         }
 
         this._submissions.length = 0;
+        this._submissionRendererIds.length = 0;
         this._resetClipRect();
         this._resetMaskState();
     }

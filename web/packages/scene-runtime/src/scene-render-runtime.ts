@@ -55,6 +55,10 @@ export class SceneRenderRuntime {
         passCount: 0,
         opaqueCount: 0,
         transparentCount: 0,
+        meshTransparentCount: 0,
+        spriteTransparentCount: 0,
+        spriteBatchCount: 0,
+        skippedSpriteCount: 0,
         warnings: Object.freeze([]) as readonly string[],
     });
 
@@ -183,7 +187,13 @@ export class SceneRenderRuntime {
         let planningPassCount = 0;
         let planningOpaqueCount = 0;
         let planningTransparentCount = 0;
+        let planningMeshTransparentCount = 0;
+        let planningSpriteTransparentCount = 0;
+        let planningSpriteBatchCount = 0;
+        let planningSkippedSpriteCount = 0;
         const planningWarnings: string[] = [];
+        const maxTransparentPrimitives = this._options.planning?.maxTransparentPrimitives;
+        let remainingTransparentBudget = maxTransparentPrimitives;
 
         for (const renderPass of renderPasses) {
             this._renderPassPreparer.prepare(renderPass, cameraFrame?.camera);
@@ -223,6 +233,9 @@ export class SceneRenderRuntime {
                 deltaSeconds: params.deltaSeconds,
                 viewportWidth: params.viewportWidth,
                 viewportHeight: params.viewportHeight,
+                ...(remainingTransparentBudget !== undefined
+                    ? { maxTransparentPrimitives: remainingTransparentBudget }
+                    : {}),
                 cameraFrame,
                 lighting,
                 renderItems,
@@ -251,30 +264,67 @@ export class SceneRenderRuntime {
             planningPassCount += plannedRenderItems.stats.passCount;
             planningOpaqueCount += plannedRenderItems.stats.opaqueCount;
             planningTransparentCount += plannedRenderItems.stats.transparentCount;
+            planningMeshTransparentCount += plannedRenderItems.stats.meshTransparentCount;
             for (const warning of plannedRenderItems.stats.warnings) {
                 if (!planningWarnings.includes(warning)) {
                     planningWarnings.push(warning);
                 }
             }
 
+            if (remainingTransparentBudget !== undefined) {
+                remainingTransparentBudget = Math.max(
+                    0,
+                    remainingTransparentBudget - plannedRenderItems.stats.meshTransparentCount
+                );
+            }
+
             for (const item of plannedRenderItems.orderedItems) {
                 this._drawExecutor.execute(item, drawContext, renderFrame);
             }
 
-            this._spriteBatchRuntime.render({
+            const spriteStats = this._spriteBatchRuntime.render({
                 actors,
                 cameraFrame,
                 renderPass,
                 frameState: renderFrame,
                 viewportWidth: params.viewportWidth,
                 viewportHeight: params.viewportHeight,
+                ...(remainingTransparentBudget !== undefined && maxTransparentPrimitives !== undefined
+                    ? {
+                          transparentBudget: {
+                              total: maxTransparentPrimitives,
+                              remaining: remainingTransparentBudget,
+                          },
+                      }
+                    : {}),
             });
+
+            planningTransparentCount += spriteStats.drawnSpriteCount;
+            planningSpriteTransparentCount += spriteStats.drawnSpriteCount;
+            planningSpriteBatchCount += spriteStats.spriteBatchCount;
+            planningSkippedSpriteCount += spriteStats.skippedSpriteCount;
+            for (const warning of spriteStats.warnings) {
+                if (!planningWarnings.includes(warning)) {
+                    planningWarnings.push(warning);
+                }
+            }
+
+            if (remainingTransparentBudget !== undefined) {
+                remainingTransparentBudget = Math.max(
+                    0,
+                    remainingTransparentBudget - spriteStats.drawnSpriteCount
+                );
+            }
         }
 
         this._planningStats = Object.freeze({
             passCount: planningPassCount,
             opaqueCount: planningOpaqueCount,
             transparentCount: planningTransparentCount,
+            meshTransparentCount: planningMeshTransparentCount,
+            spriteTransparentCount: planningSpriteTransparentCount,
+            spriteBatchCount: planningSpriteBatchCount,
+            skippedSpriteCount: planningSkippedSpriteCount,
             warnings: Object.freeze(planningWarnings),
         });
 
