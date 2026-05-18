@@ -40,6 +40,11 @@ export default [
     }),
     ...createPackageConfig({
         packageDir,
+        inputRelativePath: 'src/planner.ts',
+        outputBasename: 'planner',
+    }),
+    ...createPackageConfig({
+        packageDir,
         inputRelativePath: 'src/shader-effect.ts',
         outputBasename: 'shader-effect',
     }),

@@ -202,6 +202,8 @@ export type {
 	ScenePrefabResolutionResult,
 	ScenePrefabResolver,
 	SceneRegistry,
+	SceneRenderPlanningOptions,
+	SceneRenderPlanningStats,
 	SceneRenderPassDefinition,
 	SceneRenderPassHandle,
 	SceneRenderStats,

@@ -44,6 +44,11 @@
             "import": "./dist/pipeline.mjs",
             "require": "./dist/pipeline.js"
         },
+        "./planner": {
+            "types": "./dist/planner.d.ts",
+            "import": "./dist/planner.mjs",
+            "require": "./dist/planner.js"
+        },
         "./shader-effect": {
             "types": "./dist/shader-effect.d.ts",
             "import": "./dist/shader-effect.mjs",
