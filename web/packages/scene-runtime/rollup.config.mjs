@@ -30,6 +30,21 @@ export default [
     }),
     ...createPackageConfig({
         packageDir,
+        inputRelativePath: 'src/scene-core-profile.ts',
+        outputBasename: 'scene-core-profile',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/scene-2d-profile.ts',
+        outputBasename: 'scene-2d-profile',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/scene-3d-profile.ts',
+        outputBasename: 'scene-3d-profile',
+    }),
+    ...createPackageConfig({
+        packageDir,
         inputRelativePath: 'src/scene-facade.ts',
         outputBasename: 'scene-facade',
     }),

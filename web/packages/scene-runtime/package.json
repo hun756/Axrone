@@ -34,6 +34,21 @@
             "import": "./dist/scene-profile.mjs",
             "require": "./dist/scene-profile.js"
         },
+        "./scene-core-profile": {
+            "types": "./dist/scene-core-profile.d.ts",
+            "import": "./dist/scene-core-profile.mjs",
+            "require": "./dist/scene-core-profile.js"
+        },
+        "./scene-2d-profile": {
+            "types": "./dist/scene-2d-profile.d.ts",
+            "import": "./dist/scene-2d-profile.mjs",
+            "require": "./dist/scene-2d-profile.js"
+        },
+        "./scene-3d-profile": {
+            "types": "./dist/scene-3d-profile.d.ts",
+            "import": "./dist/scene-3d-profile.mjs",
+            "require": "./dist/scene-3d-profile.js"
+        },
         "./scene-facade": {
             "types": "./dist/scene-facade.d.ts",
             "import": "./dist/scene-facade.mjs",
