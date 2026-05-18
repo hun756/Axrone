@@ -48,6 +48,11 @@
             "types": "./dist/batch.d.ts",
             "import": "./dist/batch.mjs",
             "require": "./dist/batch.js"
+        },
+        "./pipeline": {
+            "types": "./dist/pipeline.d.ts",
+            "import": "./dist/pipeline.mjs",
+            "require": "./dist/pipeline.js"
         }
     },
     "scripts": {
@@ -56,6 +61,7 @@
         "test": "vitest run"
     },
     "dependencies": {
+        "@axrone/render-core": "^0.1.0",
         "@axrone/ecs-runtime": "^0.1.0",
         "@axrone/geometry": "^0.1.0",
         "@axrone/memory": "^0.0.1",
