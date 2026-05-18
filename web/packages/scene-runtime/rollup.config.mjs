@@ -30,6 +30,16 @@ export default [
     }),
     ...createPackageConfig({
         packageDir,
+        inputRelativePath: 'src/scene-profile-contract.ts',
+        outputBasename: 'scene-profile-contract',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/scene-manifest-profile.ts',
+        outputBasename: 'scene-manifest-profile',
+    }),
+    ...createPackageConfig({
+        packageDir,
         inputRelativePath: 'src/scene-core-profile.ts',
         outputBasename: 'scene-core-profile',
     }),
@@ -42,6 +52,11 @@ export default [
         packageDir,
         inputRelativePath: 'src/scene-3d-profile.ts',
         outputBasename: 'scene-3d-profile',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/scene-full-profile.ts',
+        outputBasename: 'scene-full-profile',
     }),
     ...createPackageConfig({
         packageDir,

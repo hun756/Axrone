@@ -18,7 +18,7 @@ export const createSceneRuntimeProfile = <
     profile: SceneRuntimeProfile<R>
 ): SceneRuntimeProfile<R> => profile;
 
-export const resolveSceneRegistryFromProfile = <
+export const resolveSceneRegistryFromProfileWithFallback = <
     R extends ComponentRegistry = Record<string, never>,
 >(
     profile: SceneRuntimeProfile<R> | undefined,
