@@ -380,6 +380,7 @@ export interface SceneOptions<R extends ComponentRegistry = Record<string, never
     extends SceneCanvasOptions {
     readonly registry?: R;
     readonly profile?: SceneRuntimeProfile<R>;
+    readonly renderPlanning?: SceneRenderPlanningOptions;
     readonly worldConfig?: {
         readonly maxEntities?: number;
         readonly enableMetrics?: boolean;
@@ -740,10 +741,22 @@ export interface SceneLoopState {
     readonly sceneId: string;
 }
 
+export interface SceneRenderPlanningOptions {
+    readonly maxTransparentPrimitives?: number;
+}
+
+export interface SceneRenderPlanningStats {
+    readonly passCount: number;
+    readonly opaqueCount: number;
+    readonly transparentCount: number;
+    readonly warnings: readonly string[];
+}
+
 export interface SceneRenderStats {
     readonly frame: number;
     readonly drawCalls: number;
     readonly trianglesSubmitted: number;
+    readonly planning: SceneRenderPlanningStats;
 }
 
 export interface SceneActorFactory<R extends ComponentRegistry = Record<string, never>> {

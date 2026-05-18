@@ -12,13 +12,20 @@ import { SceneMaterialTextureBinder } from './material-texture-binder';
 import { SceneMorphMeshRuntime } from './morph-mesh-runtime';
 import { SceneRenderFrameState } from './render-frame-state';
 import { SceneRenderItemCollector } from './render-item-collector';
+import { SceneRenderPlanner } from './scene-render-planner';
 import { SceneRenderPassPreparer } from './render-pass-preparer';
 import { SceneRenderStateApplier } from './render-state-applier';
 import type { SceneResourceRuntime } from './scene-resource-runtime';
 import { SceneSkinningUniformBinder } from './skinning-uniform-binder';
 import { SceneSpriteBatchRuntime } from './sprite-batch-runtime';
 import type { SceneMeshResource } from './mesh-registry';
-import type { SceneMeshDefinition, SceneRenderStats, SceneUniformValue } from './types';
+import type {
+    SceneMeshDefinition,
+    SceneRenderPlanningOptions,
+    SceneRenderPlanningStats,
+    SceneRenderStats,
+    SceneUniformValue,
+} from './types';
 import { SceneUniformWriter } from './uniform-writer';
 
 export interface SceneRenderRuntimeOptions {
@@ -32,6 +39,7 @@ export interface SceneRenderRuntimeOptions {
     readonly createMeshResource: (definition: SceneMeshDefinition) => SceneMeshResource;
     readonly disposeMesh: (mesh: SceneMeshResource) => void;
     readonly applyMissingVertexAttributeDefaults: (mesh: SceneMeshResource) => void;
+    readonly planning?: SceneRenderPlanningOptions;
 }
 
 export interface SceneRenderRuntimeParams {
@@ -43,6 +51,13 @@ export interface SceneRenderRuntimeParams {
 }
 
 export class SceneRenderRuntime {
+    private static readonly _EMPTY_PLANNING_STATS: SceneRenderPlanningStats = Object.freeze({
+        passCount: 0,
+        opaqueCount: 0,
+        transparentCount: 0,
+        warnings: Object.freeze([]) as readonly string[],
+    });
+
     private readonly _lightingCollector: SceneLightingCollector;
     private readonly _cameraFrameCollector = new SceneCameraFrameStateCollector();
     private readonly _renderItemCollector = new SceneRenderItemCollector();
@@ -56,8 +71,10 @@ export class SceneRenderRuntime {
     private readonly _lightingUniformBinder: SceneLightingUniformBinder;
     private readonly _skinningUniformBinder: SceneSkinningUniformBinder;
     private readonly _morphMeshRuntime: SceneMorphMeshRuntime;
+    private readonly _renderPlanner: SceneRenderPlanner;
     private readonly _drawExecutor: SceneDrawExecutor;
     private readonly _spriteBatchRuntime: SceneSpriteBatchRuntime;
+    private _planningStats: SceneRenderPlanningStats = SceneRenderRuntime._EMPTY_PLANNING_STATS;
     private readonly _textureUniformSetter = (
         shader: Parameters<SceneUniformWriter['write']>[0],
         name: string,
@@ -83,6 +100,7 @@ export class SceneRenderRuntime {
             createMeshResource: _options.createMeshResource,
             disposeMesh: _options.disposeMesh,
         });
+        this._renderPlanner = new SceneRenderPlanner(_options.planning);
         this._drawExecutor = new SceneDrawExecutor({
             gl: _options.gl,
             resources: _options.resources,
@@ -111,6 +129,7 @@ export class SceneRenderRuntime {
             frame: this._renderFrameState.frame,
             drawCalls: this._renderFrameState.drawCalls,
             trianglesSubmitted: this._renderFrameState.trianglesSubmitted,
+            planning: this._planningStats,
         };
     }
 
@@ -139,6 +158,7 @@ export class SceneRenderRuntime {
 
     render(params: SceneRenderRuntimeParams): void {
         const renderFrame = this._renderFrameState.begin(params.frame);
+        this._planningStats = SceneRenderRuntime._EMPTY_PLANNING_STATS;
         const actors = this._options.getActors();
         const camera = selectSceneCamera(actors);
         const cameraFrame = this._cameraFrameCollector.collect(
@@ -159,6 +179,11 @@ export class SceneRenderRuntime {
             return;
         }
         this._options.gl.viewport(0, 0, params.viewportWidth, params.viewportHeight);
+
+        let planningPassCount = 0;
+        let planningOpaqueCount = 0;
+        let planningTransparentCount = 0;
+        const planningWarnings: string[] = [];
 
         for (const renderPass of renderPasses) {
             this._renderPassPreparer.prepare(renderPass, cameraFrame?.camera);
@@ -193,7 +218,46 @@ export class SceneRenderRuntime {
                     isBlended: (renderer) => this._isBlendedRenderer(renderer, renderPass),
                 }
             );
-            for (const item of renderItems) {
+            const plannedRenderItems = this._renderPlanner.plan({
+                frame: params.frame,
+                deltaSeconds: params.deltaSeconds,
+                viewportWidth: params.viewportWidth,
+                viewportHeight: params.viewportHeight,
+                cameraFrame,
+                lighting,
+                renderItems,
+                resolveBounds: (renderer) => {
+                    const meshId = renderer.meshId;
+                    return meshId
+                        ? this._options.resources.meshes.getDefinition(meshId)?.bounds
+                        : undefined;
+                },
+                resolveMaterial: (renderer) => {
+                    const material =
+                        renderer.materialId !== null
+                            ? this._options.resources.materials.get(renderer.materialId)
+                            : undefined;
+                    return {
+                        materialId: material?.id ?? renderer.materialId,
+                        shadingModel: material?.surface?.shadingModel ?? 'custom',
+                        alphaMode: material?.surface?.alphaMode ?? 'opaque',
+                        transparent:
+                            (material?.surface?.alphaMode ?? 'opaque') === 'blend' ||
+                            this._isBlendedRenderer(renderer, renderPass),
+                    };
+                },
+            });
+
+            planningPassCount += plannedRenderItems.stats.passCount;
+            planningOpaqueCount += plannedRenderItems.stats.opaqueCount;
+            planningTransparentCount += plannedRenderItems.stats.transparentCount;
+            for (const warning of plannedRenderItems.stats.warnings) {
+                if (!planningWarnings.includes(warning)) {
+                    planningWarnings.push(warning);
+                }
+            }
+
+            for (const item of plannedRenderItems.orderedItems) {
                 this._drawExecutor.execute(item, drawContext, renderFrame);
             }
 
@@ -207,6 +271,13 @@ export class SceneRenderRuntime {
             });
         }
 
+        this._planningStats = Object.freeze({
+            passCount: planningPassCount,
+            opaqueCount: planningOpaqueCount,
+            transparentCount: planningTransparentCount,
+            warnings: Object.freeze(planningWarnings),
+        });
+
         this._options.gl.bindVertexArray(null);
         this._morphMeshRuntime.prune(renderFrame.activeRendererIds);
     }
@@ -216,6 +287,8 @@ export class SceneRenderRuntime {
     }
 
     clear(): void {
+        this._planningStats = SceneRenderRuntime._EMPTY_PLANNING_STATS;
+        this._renderPlanner.reset();
         this._morphMeshRuntime.clear();
         this._spriteBatchRuntime.clear();
     }
