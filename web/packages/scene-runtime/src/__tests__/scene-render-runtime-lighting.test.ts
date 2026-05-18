@@ -115,7 +115,11 @@ const createMockGL = () => {
 
 const createSceneShader = (
     gl: WebGL2RenderingContext,
-    uniformNames: readonly string[]
+    uniformNames: readonly string[],
+    options: {
+        readonly id?: string;
+        readonly blend?: boolean;
+    } = {}
 ): SceneShaderResource => {
     const locationEntries = uniformNames.map((name) => [
         name,
@@ -123,7 +127,7 @@ const createSceneShader = (
     ] as const);
 
     return {
-        id: 'shader',
+        id: options.id ?? 'shader',
         program: {} as WebGLProgram,
         uniformLocations: new Map(locationEntries),
         uniformTypes: new Map([
@@ -138,7 +142,7 @@ const createSceneShader = (
         attributeNames: { position: 'a_Position' },
         depthTest: false,
         cull: false,
-        blend: false,
+        blend: options.blend ?? false,
     };
 };
 
@@ -304,5 +308,191 @@ describe('SceneRenderRuntime lighting integration', () => {
         expect((gl.drawArrays as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(1);
         expect(runtime.stats.drawCalls).toBe(1);
         expect(runtime.stats.trianglesSubmitted).toBe(1);
+        expect(runtime.stats.planning.passCount).toBeGreaterThan(0);
+        expect(runtime.stats.planning.opaqueCount).toBe(1);
+        expect(runtime.stats.planning.transparentCount).toBe(0);
+    });
+
+    it('enforces transparent primitive budgets through render-core planning before execution', () => {
+        const { gl } = createMockGL();
+        const world = new World(createSceneRegistry());
+
+        const cameraActor = new Actor(world);
+        cameraActor.addComponent(Camera, { primary: true });
+        cameraActor.requireComponent(Transform);
+
+        const opaqueActor = new Actor(world);
+        opaqueActor.addComponent(MeshRenderer, {
+            meshId: 'mesh',
+            materialId: 'opaque-material',
+            passId: 'main',
+            receiveLighting: false,
+        });
+        opaqueActor.requireComponent(Transform);
+
+        const transparentActorA = new Actor(world);
+        transparentActorA.addComponent(MeshRenderer, {
+            meshId: 'mesh',
+            materialId: 'transparent-material-a',
+            passId: 'main',
+            receiveLighting: false,
+        });
+        transparentActorA.requireComponent(Transform);
+
+        const transparentActorB = new Actor(world);
+        transparentActorB.addComponent(MeshRenderer, {
+            meshId: 'mesh',
+            materialId: 'transparent-material-b',
+            passId: 'main',
+            receiveLighting: false,
+        });
+        transparentActorB.requireComponent(Transform);
+
+        const mesh: SceneMeshResource = {
+            id: 'mesh',
+            vertexArray: {} as WebGLVertexArrayObject,
+            vertexBuffer: {} as WebGLBuffer,
+            indexBuffer: null,
+            vertexCount: 3,
+            indexCount: 0,
+            indexType: null,
+            topology: 'triangles',
+            mode: gl.TRIANGLES,
+            attributes: new Set(['position']),
+        };
+        const meshDefinition: SceneMeshDefinition = {
+            id: 'mesh',
+            vertices: new Float32Array([
+                0, 0, 0,
+                1, 0, 0,
+                0, 1, 0,
+            ]),
+            attributes: [
+                {
+                    semantic: 'position',
+                    componentCount: 3,
+                    offset: 0,
+                    stride: 12,
+                },
+            ],
+            vertexCount: 3,
+            topology: 'triangles',
+        };
+        const opaqueShader = createSceneShader(gl, [], {
+            id: 'opaque-shader',
+            blend: false,
+        });
+        const transparentShader = createSceneShader(gl, [], {
+            id: 'transparent-shader',
+            blend: true,
+        });
+        const opaqueMaterial: SceneMaterialResource = {
+            id: 'opaque-material',
+            shaderId: opaqueShader.id,
+            uniforms: new Map(),
+            textureBindings: new Map(),
+            surface: {
+                shadingModel: 'unlit',
+                alphaMode: 'opaque',
+            },
+            passes: Object.freeze([]),
+        };
+        const transparentMaterialA: SceneMaterialResource = {
+            id: 'transparent-material-a',
+            shaderId: transparentShader.id,
+            uniforms: new Map(),
+            textureBindings: new Map(),
+            surface: {
+                shadingModel: 'unlit',
+                alphaMode: 'blend',
+            },
+            passes: Object.freeze([]),
+        };
+        const transparentMaterialB: SceneMaterialResource = {
+            id: 'transparent-material-b',
+            shaderId: transparentShader.id,
+            uniforms: new Map(),
+            textureBindings: new Map(),
+            surface: {
+                shadingModel: 'unlit',
+                alphaMode: 'blend',
+            },
+            passes: Object.freeze([]),
+        };
+        const renderPass: SceneRenderPassResource = {
+            id: 'main',
+            order: 0,
+            rendererPassId: 'main',
+            materialPassId: null,
+            enabled: true,
+            clearFlags: [],
+            clearColor: null,
+            clearDepth: null,
+        };
+        const materials = new Map([
+            [opaqueMaterial.id, opaqueMaterial],
+            [transparentMaterialA.id, transparentMaterialA],
+            [transparentMaterialB.id, transparentMaterialB],
+        ]);
+        const shaders = new Map([
+            [opaqueShader.id, opaqueShader],
+            [transparentShader.id, transparentShader],
+        ]);
+        const resources = {
+            materials: {
+                get: (id: string) => materials.get(id),
+                getTextureSlots: () => Object.freeze([]),
+            },
+            meshes: {
+                get: (id: string) => (id === mesh.id ? mesh : undefined),
+                getDefinition: (id: string) => (id === mesh.id ? meshDefinition : undefined),
+            },
+            shaders: {
+                get: (id: string) => shaders.get(id),
+            },
+            textures: {
+                get: () => undefined,
+            },
+            renderPasses: {
+                getEnabledResources: () => [renderPass],
+            },
+            resolveSampler: () => ({
+                bind: vi.fn(),
+                nativeHandle: null,
+            }),
+        } as unknown as SceneResourceRuntime;
+        const runtime = new SceneRenderRuntime({
+            gl,
+            resources,
+            ambientLight: Vec3.ZERO.clone(),
+            skyLight: Vec3.ZERO.clone(),
+            groundLight: Vec3.ZERO.clone(),
+            defaultClearColor: new Vec4(0, 0, 0, 1),
+            planning: {
+                maxTransparentPrimitives: 1,
+            },
+            getActors: () => world.getAllActors(),
+            createMeshResource: vi.fn(() => mesh),
+            disposeMesh: vi.fn(),
+            applyMissingVertexAttributeDefaults: vi.fn(),
+        });
+
+        runtime.render({
+            frame: 2,
+            elapsedSeconds: 2,
+            deltaSeconds: 1 / 60,
+            viewportWidth: 640,
+            viewportHeight: 360,
+        });
+
+        expect((gl.drawArrays as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(2);
+        expect(runtime.stats.drawCalls).toBe(2);
+        expect(runtime.stats.trianglesSubmitted).toBe(2);
+        expect(runtime.stats.planning.opaqueCount).toBe(1);
+        expect(runtime.stats.planning.transparentCount).toBe(1);
+        expect(runtime.stats.planning.warnings).toEqual([
+            'transparent primitive budget exceeded at 1',
+        ]);
+        expect(runtime.stats.planning.passCount).toBeGreaterThan(0);
     });
 });
