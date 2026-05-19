@@ -96,6 +96,12 @@
       "@axrone/render-core/*": [
         "./packages/render-core/src/*"
       ],
+      "@axrone/render-webgl2": [
+        "./packages/render-webgl2/src/index.ts"
+      ],
+      "@axrone/render-webgl2/*": [
+        "./packages/render-webgl2/src/*"
+      ],
       "@axrone/runtime-profile-core": [
         "./packages/runtime-profile-core/src/index.ts"
       ],
