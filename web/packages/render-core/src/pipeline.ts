@@ -118,6 +118,9 @@ interface FrameBuild<TNative> {
     readonly livePasses: readonly ResolvedRenderPass[];
 }
 
+const isPromiseLike = <T>(value: T | PromiseLike<T>): value is PromiseLike<T> =>
+    typeof value === 'object' && value !== null && 'then' in value;
+
 const DEFAULT_HDR_SETTINGS: NormalizedHdrSettings = Object.freeze({
     enabled: true,
     colorFormat: 'rgba16f',
@@ -485,6 +488,52 @@ export class RenderPipeline<TNative = unknown> implements IDisposable {
                 this._options.locale,
                 {
                     frame: built.result.frame,
+                },
+                error instanceof Error ? error : new Error(String(error))
+            );
+        } finally {
+            this._graph.endFrame();
+        }
+    }
+
+    renderImmediate(input: RenderFrameInput): RenderFrameResult<TNative> {
+        const built = this._buildFrame(input);
+        const backend = this._options.backend;
+
+        try {
+            if (backend?.beginFrame) {
+                const beginResult = backend.beginFrame(built.context);
+                if (isPromiseLike(beginResult)) {
+                    throw new Error('renderImmediate does not support async beginFrame backends');
+                }
+            }
+
+            if (backend?.executePass) {
+                for (const pass of built.livePasses) {
+                    const passResult = backend.executePass(pass, built.context);
+                    if (isPromiseLike(passResult)) {
+                        throw new Error(
+                            `renderImmediate does not support async executePass backends (${pass.kind})`
+                        );
+                    }
+                }
+            }
+
+            if (backend?.endFrame) {
+                const endResult = backend.endFrame(built.result, built.context);
+                if (isPromiseLike(endResult)) {
+                    throw new Error('renderImmediate does not support async endFrame backends');
+                }
+            }
+
+            return built.result;
+        } catch (error) {
+            throw new RenderExecutionError(
+                'BACKEND_FAILED',
+                this._options.locale,
+                {
+                    frame: built.result.frame,
+                    mode: 'immediate',
                 },
                 error instanceof Error ? error : new Error(String(error))
             );
