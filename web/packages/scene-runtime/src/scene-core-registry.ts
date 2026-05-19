@@ -37,7 +37,7 @@ export const createCoreSceneRegistry = <R extends ComponentRegistry = Record<str
     createSceneRegistryWithSource(CORE_SCENE_BUILT_IN_REGISTRY_SOURCE, {
         registry: options.registry,
         builtIns: options.builtIns ?? SCENE_CORE_BUILT_IN_MANIFEST.builtIns,
-    });
+    }) as SceneRegistry<R>;
 
 export const createCoreSceneRegistryFromBuiltInManifests = <
     R extends ComponentRegistry = Record<string, never>,

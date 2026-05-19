@@ -103,5 +103,5 @@ export function createSceneRegistry<
     return createSceneRegistryWithSource(DEFAULT_SCENE_BUILT_IN_REGISTRY, {
         registry: options.registry,
         builtIns: options.builtIns ?? DEFAULT_SCENE_BUILT_IN_COMPONENTS,
-    });
+    }) as SceneRegistry<R>;
 }
