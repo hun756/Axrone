@@ -75,12 +75,15 @@ export const resolveSceneBuiltInComponents = (
 
 export const createSceneRegistryWithSource = <
     R extends ComponentRegistry = Record<string, never>,
+    TBuiltIns extends readonly SceneBuiltInComponentName[] | undefined = undefined,
 >(
     source: SceneBuiltInRegistrySource,
-    options: SceneRegistryBuilderOptions<R> = {}
-): SceneRegistry<R> => {
+    options: SceneRegistryBuilderOptions<R, TBuiltIns> = {}
+): TBuiltIns extends readonly SceneBuiltInComponentName[]
+    ? SceneRegistryForBuiltIns<R, TBuiltIns>
+    : SceneRegistry<R> => {
     const registry: Record<string, ComponentConstructor> = {};
-    const builtIns = options.builtIns ?? resolveSourceBuiltIns(source);
+    const builtIns = (options.builtIns ?? resolveSourceBuiltIns(source)) as readonly SceneBuiltInComponentName[];
 
     for (const componentName of builtIns) {
         const component = source[componentName];
@@ -94,7 +97,9 @@ export const createSceneRegistryWithSource = <
     return {
         ...registry,
         ...(options.registry ?? {}),
-    } as SceneRegistry<R>;
+    } as TBuiltIns extends readonly SceneBuiltInComponentName[]
+        ? SceneRegistryForBuiltIns<R, TBuiltIns>
+        : SceneRegistry<R>;
 };
 
 export const createSceneRegistryFromBuiltInManifestsWithSource = <
