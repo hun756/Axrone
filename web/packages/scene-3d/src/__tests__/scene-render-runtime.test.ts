@@ -44,6 +44,16 @@ describe('SceneRenderRuntime', () => {
             frame: 12,
             drawCalls: 0,
             trianglesSubmitted: 0,
+            planning: {
+                passCount: 0,
+                opaqueCount: 0,
+                transparentCount: 0,
+                meshTransparentCount: 0,
+                spriteTransparentCount: 0,
+                spriteBatchCount: 0,
+                skippedSpriteCount: 0,
+                warnings: [],
+            },
         });
         expect(gl.viewport).not.toHaveBeenCalled();
     });
@@ -78,6 +88,16 @@ describe('SceneRenderRuntime', () => {
             frame: 18,
             drawCalls: 0,
             trianglesSubmitted: 0,
+            planning: {
+                passCount: 0,
+                opaqueCount: 0,
+                transparentCount: 0,
+                meshTransparentCount: 0,
+                spriteTransparentCount: 0,
+                spriteBatchCount: 0,
+                skippedSpriteCount: 0,
+                warnings: [],
+            },
         });
     });
 });
