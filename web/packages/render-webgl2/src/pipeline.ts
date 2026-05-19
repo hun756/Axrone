@@ -94,6 +94,7 @@ export interface ManagedWebGL2RenderPipelineBackendOptions {
     readonly handlers?: WebGL2RenderPassHandlerMap;
     readonly defaultFramebuffer?: WebGLFramebuffer | null;
     readonly strictUnsupportedPasses?: boolean;
+    readonly directFrameOutput?: boolean;
 }
 
 interface WebGL2FormatInfo {
@@ -133,6 +134,12 @@ const getNow = (): number =>
     typeof performance !== 'undefined' && typeof performance.now === 'function'
         ? performance.now()
         : Date.now();
+
+const isPromiseLike = <T>(value: T | PromiseLike<T>): value is PromiseLike<T> =>
+    typeof value === 'object' && value !== null && 'then' in value;
+
+const isFrameResourceName = (value: RenderResourceName | null): boolean =>
+    value !== null && value.startsWith('frame:');
 
 const resolveFormatInfo = (
     gl: WebGL2RenderingContext,
@@ -424,6 +431,7 @@ export const createManagedWebGL2RenderPipelineBackend = (
     const { gl } = options;
     const framebufferCache = new Map<string, WebGLFramebuffer>();
     const strictUnsupportedPasses = options.strictUnsupportedPasses ?? true;
+    const directFrameOutput = options.directFrameOutput ?? false;
     let lastFrameCapture: WebGL2RenderFrameCapture | null = null;
     let frameCaptures: WebGL2RenderPassCapture[] = [];
     let frameStartTime = 0;
@@ -454,6 +462,20 @@ export const createManagedWebGL2RenderPipelineBackend = (
         depthTarget: RenderResourceName | null,
         context: RenderExecutionContext<WebGL2RenderResourceHandle>
     ): WebGL2ResolvedFramebufferBinding => {
+        if (
+            directFrameOutput &&
+            (isFrameResourceName(colorTarget) || isFrameResourceName(depthTarget))
+        ) {
+            return {
+                framebuffer: options.defaultFramebuffer ?? null,
+                colorTarget,
+                depthTarget,
+                width: context.viewport.width,
+                height: context.viewport.height,
+                defaultFramebuffer: true,
+            };
+        }
+
         const colorHandle = getTextureHandle(context.graph, colorTarget);
         const depthHandle = getTextureHandle(context.graph, depthTarget);
 
@@ -550,6 +572,10 @@ export const createManagedWebGL2RenderPipelineBackend = (
         pass: Extract<ResolvedRenderPass, { kind: 'present' }>,
         context: RenderExecutionContext<WebGL2RenderResourceHandle>
     ): void => {
+        if (directFrameOutput && isFrameResourceName(pass.metadata.source)) {
+            return;
+        }
+
         const sourceBinding = resolveManagedFramebuffer(pass.metadata.source, null, context);
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER, sourceBinding.framebuffer);
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, options.defaultFramebuffer ?? null);
@@ -568,7 +594,7 @@ export const createManagedWebGL2RenderPipelineBackend = (
     };
 
     return {
-        async beginFrame(context) {
+        beginFrame(context) {
             profiler.frame = context.frame;
             profiler.passCount = 0;
             profiler.drawCalls = 0;
@@ -578,7 +604,7 @@ export const createManagedWebGL2RenderPipelineBackend = (
             frameCaptures = [];
             frameStartTime = getNow();
         },
-        async executePass(pass, context) {
+        executePass(pass, context) {
             const handler = options.handlers?.[pass.kind];
             const binding = resolveFramebuffer(pass, context);
 
@@ -589,41 +615,52 @@ export const createManagedWebGL2RenderPipelineBackend = (
                 profiler.clears += 1;
             }
 
-            let result: WebGL2RenderPassExecutionResult | undefined;
+            const finalizePass = (result: WebGL2RenderPassExecutionResult | undefined): void => {
+                profiler.passCount += 1;
+                profiler.drawCalls += (pass.kind === 'present' ? 1 : 0) + (result?.drawCalls ?? 0);
+                frameCaptures.push(
+                    Object.freeze({
+                        name: pass.name,
+                        kind: pass.kind,
+                        target: pass.target,
+                        queue: pass.queue,
+                        itemCount: pass.items?.length ?? 0,
+                        lightCount: pass.lights?.length ?? 0,
+                        probeCount: pass.probes?.length ?? 0,
+                        defaultFramebuffer: binding.defaultFramebuffer,
+                        notes: result?.notes ?? Object.freeze([]),
+                    })
+                );
+            };
 
             if (pass.kind === 'present') {
                 performPresent(pass, context);
                 profiler.presents += 1;
+                finalizePass(undefined);
+                return;
             } else if (handler) {
-                const handlerResult = await handler(pass, context, {
+                const handlerResult = handler(pass, context, {
                     binding,
                     pass,
                     frame: context.frame,
                 });
-                result = handlerResult ?? undefined;
+                if (isPromiseLike(handlerResult)) {
+                    return handlerResult.then((resolvedResult) => {
+                        finalizePass(resolvedResult ?? undefined);
+                    });
+                }
+
+                finalizePass(handlerResult ?? undefined);
+                return;
             } else if (strictUnsupportedPasses && PASS_REQUIRES_HANDLER.has(pass.kind)) {
                 throw new Error(
                     `No WebGL2 render pass handler is registered for '${pass.kind}' passes`
                 );
             }
 
-            profiler.passCount += 1;
-            profiler.drawCalls += (pass.kind === 'present' ? 1 : 0) + (result?.drawCalls ?? 0);
-            frameCaptures.push(
-                Object.freeze({
-                    name: pass.name,
-                    kind: pass.kind,
-                    target: pass.target,
-                    queue: pass.queue,
-                    itemCount: pass.items?.length ?? 0,
-                    lightCount: pass.lights?.length ?? 0,
-                    probeCount: pass.probes?.length ?? 0,
-                    defaultFramebuffer: binding.defaultFramebuffer,
-                    notes: result?.notes ?? Object.freeze([]),
-                })
-            );
+            finalizePass(undefined);
         },
-        async endFrame(result, _context) {
+        endFrame(result, _context) {
             gl.bindFramebuffer(gl.FRAMEBUFFER, options.defaultFramebuffer ?? null);
             gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
