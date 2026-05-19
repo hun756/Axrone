@@ -1,31 +1,42 @@
-import { RenderTextureRegistry } from '@axrone/render-core/graph';
-import { ReusableList } from '@axrone/render-core/memory';
-import { RenderFrameClassifier, RenderPassPlanner } from '@axrone/render-core/planner';
+import { RenderPipeline } from '@axrone/render-core';
 import type {
     RenderCameraState,
+    RenderClearState,
     RenderLight,
     RenderMaterialSnapshot,
     RenderPrimitiveInstance,
+    ResolvedRenderPass,
 } from '@axrone/render-core/types';
+import {
+    createManagedWebGL2RenderPipelineBackend,
+    createWebGL2RenderResourceAllocator,
+    type ManagedWebGL2RenderPipelineBackend,
+    type WebGL2RenderResourceHandle,
+} from '@axrone/render-webgl2/pipeline';
 import type { BoundingSphere } from '@axrone/geometry';
 import type { SceneCameraFrameState } from './camera-frame-state';
-import type { SceneLightingState } from './lighting-collector';
 import type { MeshRenderer } from './components/mesh-renderer';
+import type { SceneDrawExecutor, SceneDrawExecutorContext } from './draw-executor';
+import type { SceneLightingState } from './lighting-collector';
+import type { SceneRenderFrameState } from './render-frame-state';
 import type { SceneRenderItem } from './render-item-collector';
+import type { SceneRenderPassResource } from './render-pass-registry';
 import type {
     SceneMaterialAlphaMode,
     SceneRenderPlanningOptions,
     SceneRenderPlanningStats,
 } from './types';
 
-export interface SceneRenderPlannerParams {
+export interface SceneRenderPipelineParams {
     readonly frame: number;
     readonly deltaSeconds: number;
     readonly viewportWidth: number;
     readonly viewportHeight: number;
-    readonly maxTransparentPrimitives?: number;
     readonly cameraFrame: SceneCameraFrameState;
     readonly lighting: SceneLightingState;
+    readonly renderPass: SceneRenderPassResource;
+    readonly drawContext: SceneDrawExecutorContext;
+    readonly frameState: SceneRenderFrameState;
     readonly renderItems: readonly SceneRenderItem[];
     readonly resolveBounds: (renderer: MeshRenderer) => Readonly<BoundingSphere> | null | undefined;
     readonly resolveMaterial: (renderer: MeshRenderer) => {
@@ -34,11 +45,6 @@ export interface SceneRenderPlannerParams {
         readonly alphaMode: SceneMaterialAlphaMode;
         readonly transparent: boolean;
     };
-}
-
-export interface SceneRenderPlannerResult {
-    readonly orderedItems: readonly SceneRenderItem[];
-    readonly stats: SceneRenderPlanningStats;
 }
 
 const DEFAULT_SCENE_RENDER_PLANNING_STATS: SceneRenderPlanningStats = Object.freeze({
@@ -54,6 +60,22 @@ const DEFAULT_SCENE_RENDER_PLANNING_STATS: SceneRenderPlanningStats = Object.fre
 
 const clampCosine = (value: number): number => Math.min(1, Math.max(-1, value));
 
+const toVector3Tuple = (
+    value:
+        | { readonly x: number; readonly y: number; readonly z: number }
+        | readonly [number, number, number]
+): readonly [number, number, number] =>
+    'x' in value ? [value.x, value.y, value.z] : [value[0], value[1], value[2]];
+
+const toVector4Tuple = (
+    value:
+        | { readonly x: number; readonly y: number; readonly z: number; readonly w: number }
+        | readonly [number, number, number, number]
+): readonly [number, number, number, number] =>
+    'x' in value
+        ? [value.x, value.y, value.z, value.w]
+        : [value[0], value[1], value[2], value[3]];
+
 const createDirectionalLightId = (index: number): string => `scene-light:directional:${index}`;
 const createPointLightId = (index: number): string => `scene-light:point:${index}`;
 const createSpotLightId = (index: number): string => `scene-light:spot:${index}`;
@@ -66,25 +88,49 @@ const toRenderBounds = (
     }
 
     return {
-        center: bounds.center,
+        center: toVector3Tuple(bounds.center),
         extents: [bounds.radius, bounds.radius, bounds.radius],
     };
 };
 
-const toRenderCameraState = (cameraFrame: SceneCameraFrameState): RenderCameraState => ({
+const resolveRenderClearState = (
+    cameraFrame: SceneCameraFrameState,
+    renderPass: SceneRenderPassResource
+): RenderClearState => {
+    const clearFlags = cameraFrame.camera.clearFlags
+        ? renderPass.clearFlags.filter((flag) => cameraFrame.camera.clearFlags.includes(flag))
+        : renderPass.clearFlags;
+
+    return {
+        ...(clearFlags.includes('color')
+            ? {
+                  color: toVector4Tuple(
+                      renderPass.clearColor ?? cameraFrame.camera.clearColor
+                  ),
+              }
+            : {}),
+        ...(clearFlags.includes('depth')
+            ? {
+                  depth: renderPass.clearDepth ?? cameraFrame.camera.clearDepth,
+              }
+            : {}),
+    };
+};
+
+const toRenderCameraState = (
+    cameraFrame: SceneCameraFrameState,
+    clearState: RenderClearState
+): RenderCameraState => ({
     id: `scene-camera:${cameraFrame.camera.id}`,
     viewMatrix: cameraFrame.viewMatrix,
     projectionMatrix: cameraFrame.projectionMatrix,
     viewProjectionMatrix: cameraFrame.viewProjectionMatrix,
     camera3D: cameraFrame.camera3D,
     frustum: cameraFrame.camera3D.frustum,
-    position: cameraFrame.position,
+    position: toVector3Tuple(cameraFrame.position),
     near: cameraFrame.camera.near,
     far: cameraFrame.camera.far,
-    clearState: {
-        color: cameraFrame.camera.clearColor,
-        depth: cameraFrame.camera.clearDepth,
-    },
+    clearState,
 });
 
 const toRenderLights = (lighting: SceneLightingState): readonly RenderLight[] => {
@@ -165,7 +211,7 @@ const toRenderLights = (lighting: SceneLightingState): readonly RenderLight[] =>
 
 const createMaterialSnapshot = (
     item: SceneRenderItem,
-    resolvedMaterial: SceneRenderPlannerParams['resolveMaterial'] extends (
+    resolvedMaterial: SceneRenderPipelineParams['resolveMaterial'] extends (
         renderer: MeshRenderer
     ) => infer TResult
         ? TResult
@@ -189,86 +235,100 @@ const createMaterialSnapshot = (
     };
 };
 
-export class SceneRenderPlanner {
-    private readonly _graph = new RenderTextureRegistry();
-    private readonly _defaultMaxTransparentPrimitives: number;
-    private _classifier: RenderFrameClassifier;
-    private readonly _planner: RenderPassPlanner;
-    private readonly _warnings = new ReusableList<string>(16);
-    private readonly _primitiveLookup = new Map<string, SceneRenderItem>();
-    private readonly _orderedItems: SceneRenderItem[] = [];
-    private _activeMaxTransparentPrimitives: number;
+interface SceneRenderPipelineOptions {
+    readonly gl: WebGL2RenderingContext;
+    readonly drawExecutor: Pick<SceneDrawExecutor, 'execute'>;
+    readonly planning?: SceneRenderPlanningOptions;
+}
 
-    constructor(options: SceneRenderPlanningOptions = {}) {
-        this._defaultMaxTransparentPrimitives = Math.max(
-            0,
-            Math.floor(options.maxTransparentPrimitives ?? Number.MAX_SAFE_INTEGER)
-        );
-        this._activeMaxTransparentPrimitives = this._defaultMaxTransparentPrimitives;
-        this._classifier = this._createClassifier(this._activeMaxTransparentPrimitives);
-        this._planner = new RenderPassPlanner(this._graph, {
-            shadows: {
-                atlasSize: 1024,
-                cascadeCount: 1,
-                cascadeSplitLambda: 0.5,
-                maxDistance: 1000,
-                filter: 'pcf',
+interface ActiveExecutionState {
+    readonly drawContext: SceneDrawExecutorContext;
+    readonly frameState: SceneRenderFrameState;
+}
+
+export class SceneRenderPipeline {
+    private readonly _primitiveLookup = new Map<string, SceneRenderItem>();
+    private readonly _options: SceneRenderPipelineOptions;
+    private _activeExecution: ActiveExecutionState | null = null;
+    private _backend: ManagedWebGL2RenderPipelineBackend;
+    private _pipeline: RenderPipeline<WebGL2RenderResourceHandle>;
+
+    constructor(options: SceneRenderPipelineOptions) {
+        this._options = options;
+        this._backend = this._createBackend();
+        this._pipeline = this._createPipeline();
+    }
+
+    private _createBackend(): ManagedWebGL2RenderPipelineBackend {
+        return createManagedWebGL2RenderPipelineBackend({
+            gl: this._options.gl,
+            directFrameOutput: true,
+            handlers: {
+                opaque: (pass) => this._executeDrawPass(pass),
+                transparent: (pass) => this._executeDrawPass(pass),
             },
+        });
+    }
+
+    private _createPipeline(): RenderPipeline<WebGL2RenderResourceHandle> {
+        return new RenderPipeline<WebGL2RenderResourceHandle>({
+            name: 'SceneRenderPipeline',
+            hdr: false,
             tonemapping: {
                 mode: 'none',
             },
-            lightBaking: {
-                budgetMs: 0,
+            shadows: false,
+            gi: {
+                mode: 'disabled',
             },
+            volumetrics: {
+                enabled: false,
+            },
+            lightBaking: false,
+            postProcess: Object.freeze([]),
             enableDepthPrepass: false,
-        });
-    }
-
-    private _createClassifier(maxTransparentPrimitives: number): RenderFrameClassifier {
-        return new RenderFrameClassifier({
-            maxTransparentPrimitives,
-            maxActiveLocalLights: 4,
             maxActiveReflectionProbes: 0,
-            maxShadowedLights: 0,
+            maxActiveLocalLights: 4,
+            maxTransparentPrimitives: this._options.planning?.maxTransparentPrimitives,
+            backend: this._backend,
+            resourceAllocator: createWebGL2RenderResourceAllocator(this._options.gl),
         });
     }
 
-    private _ensureClassifier(maxTransparentPrimitives: number): void {
-        if (maxTransparentPrimitives === this._activeMaxTransparentPrimitives) {
-            return;
+    private _executeDrawPass(pass: ResolvedRenderPass): { readonly drawCalls: number } {
+        if (!this._activeExecution) {
+            return { drawCalls: 0 };
         }
 
-        this._classifier.clear();
-        this._classifier = this._createClassifier(maxTransparentPrimitives);
-        this._activeMaxTransparentPrimitives = maxTransparentPrimitives;
+        const drawCallsBefore = this._activeExecution.frameState.drawCalls;
+        for (const primitive of pass.items?.toArray() ?? []) {
+            const item = this._primitiveLookup.get(primitive.id);
+            if (item) {
+                this._options.drawExecutor.execute(
+                    item,
+                    this._activeExecution.drawContext,
+                    this._activeExecution.frameState
+                );
+            }
+        }
+
+        return {
+            drawCalls: this._activeExecution.frameState.drawCalls - drawCallsBefore,
+        };
     }
 
-    plan(params: SceneRenderPlannerParams): SceneRenderPlannerResult {
-        if (params.renderItems.length === 0) {
-            return {
-                orderedItems: Object.freeze([]) as readonly SceneRenderItem[],
-                stats: DEFAULT_SCENE_RENDER_PLANNING_STATS,
-            };
-        }
-
-        const maxTransparentPrimitives = Math.max(
-            0,
-            Math.floor(params.maxTransparentPrimitives ?? this._defaultMaxTransparentPrimitives)
-        );
-        this._ensureClassifier(maxTransparentPrimitives);
+    render(params: SceneRenderPipelineParams): SceneRenderPlanningStats {
+        const clearState = resolveRenderClearState(params.cameraFrame, params.renderPass);
+        const camera = toRenderCameraState(params.cameraFrame, clearState);
+        const lights = toRenderLights(params.lighting);
+        const primitives: RenderPrimitiveInstance[] = [];
 
         this._primitiveLookup.clear();
-        this._orderedItems.length = 0;
 
-        const camera = toRenderCameraState(params.cameraFrame);
-        const primitives: RenderPrimitiveInstance[] = [];
         for (let index = 0; index < params.renderItems.length; index += 1) {
             const item = params.renderItems[index]!;
             const primitiveId = `scene-primitive:${item.renderer.id}`;
-            const material = createMaterialSnapshot(
-                item,
-                params.resolveMaterial(item.renderer)
-            );
+            const material = createMaterialSnapshot(item, params.resolveMaterial(item.renderer));
 
             primitives.push({
                 id: primitiveId,
@@ -283,106 +343,55 @@ export class SceneRenderPlanner {
             this._primitiveLookup.set(primitiveId, item);
         }
 
-        const lights = toRenderLights(params.lighting);
-
-        this._warnings.reset();
-        this._classifier.reset();
-        this._graph.beginFrame(params.frame);
+        this._activeExecution = {
+            drawContext: params.drawContext,
+            frameState: params.frameState,
+        };
 
         try {
-            this._classifier.classify(
-                {
-                    frame: params.frame,
-                    deltaTime: params.deltaSeconds,
-                    camera,
-                    primitives,
-                    lights,
-                    viewport: {
-                        width: params.viewportWidth,
-                        height: params.viewportHeight,
-                    },
-                },
-                params.frame,
-                this._warnings
-            );
-
-            const plannedPasses = this._planner.plan({
+            const result = this._pipeline.renderImmediate({
                 frame: params.frame,
+                deltaTime: params.deltaSeconds,
                 viewport: {
                     width: params.viewportWidth,
                     height: params.viewportHeight,
                 },
                 camera,
-                environment: undefined,
-                hdr: {
-                    enabled: false,
-                    colorFormat: 'rgba8',
-                    outputColorSpace: 'srgb',
-                    exposure: null,
-                },
-                gi: {
-                    mode: 'disabled',
-                },
-                volumetrics: {
-                    enabled: false,
-                    froxelResolution: [1, 1, 1],
-                    temporalReprojection: false,
-                },
-                shadowEnabled: false,
-                probeUpdateCount: 0,
-                postEffects: Object.freeze([]),
-                bakeTasks: Object.freeze([]),
-                opaque: this._classifier.opaque,
-                transparent: this._classifier.transparent,
-                shadowCasters: this._classifier.shadowCasters,
-                activeLights: this._classifier.activeLights,
-                shadowLights: this._classifier.shadowLights,
-                activeProbes: this._classifier.activeProbes,
-                probeUpdates: this._classifier.probeUpdates,
+                primitives,
+                lights,
             });
 
-            for (let passIndex = 0; passIndex < plannedPasses.length; passIndex += 1) {
-                const pass = plannedPasses[passIndex]!;
-                if (pass.kind !== 'opaque' && pass.kind !== 'transparent') {
-                    continue;
-                }
-
-                for (const primitive of pass.items?.toArray() ?? []) {
-                    const item = this._primitiveLookup.get(primitive.id);
-                    if (item) {
-                        this._orderedItems.push(item);
-                    }
-                }
-            }
-
-            return {
-                orderedItems: Object.freeze([...this._orderedItems]),
-                stats: Object.freeze({
-                    passCount: plannedPasses.length,
-                    opaqueCount: this._classifier.opaque.length,
-                    transparentCount: this._classifier.transparent.length,
-                    meshTransparentCount: this._classifier.transparent.length,
-                    spriteTransparentCount: 0,
-                    spriteBatchCount: 0,
-                    skippedSpriteCount: 0,
-                    warnings: Object.freeze(this._warnings.toArray()),
-                }),
-            };
+            return Object.freeze({
+                passCount: result.statistics.passCount,
+                opaqueCount: result.statistics.opaqueCount,
+                transparentCount: result.statistics.transparentCount,
+                meshTransparentCount: result.statistics.transparentCount,
+                spriteTransparentCount: 0,
+                spriteBatchCount: 0,
+                skippedSpriteCount: 0,
+                warnings: Object.freeze([...result.warnings]),
+            });
         } finally {
-            this._graph.endFrame();
+            this._activeExecution = null;
+            this._primitiveLookup.clear();
         }
     }
 
     reset(): void {
-        this._planner.clear();
-        this._classifier.clear();
-        this._warnings.clear();
+        this._activeExecution = null;
         this._primitiveLookup.clear();
-        this._orderedItems.length = 0;
+        this._pipeline.dispose();
+        this._backend.dispose();
+        this._backend = this._createBackend();
+        this._pipeline = this._createPipeline();
     }
 
     dispose(): void {
-        this.reset();
-        this._graph.dispose();
+        this._pipeline.dispose();
+        this._backend.dispose();
+        this._activeExecution = null;
+        this._primitiveLookup.clear();
     }
 }
+
+export { DEFAULT_SCENE_RENDER_PLANNING_STATS };
