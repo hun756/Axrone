@@ -55,7 +55,7 @@ export const get2DSceneBuiltInRegistrySource = (): SceneBuiltInRegistrySource =>
 export const create2DSceneRegistry = <R extends ComponentRegistry = Record<string, never>>(
     options: SceneRegistryBuilderOptions<R> = {}
 ): SceneRegistry<R> =>
-    createSceneRegistryWithSource(SCENE_2D_BUILT_IN_REGISTRY_SOURCE, options);
+    createSceneRegistryWithSource(SCENE_2D_BUILT_IN_REGISTRY_SOURCE, options) as SceneRegistry<R>;
 
 export const create2DSceneRegistryFromBuiltInManifests = <
     R extends ComponentRegistry = Record<string, never>,
