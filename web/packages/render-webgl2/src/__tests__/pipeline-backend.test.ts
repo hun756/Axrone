@@ -319,6 +319,87 @@ describe('render-webgl2 pipeline backend', () => {
         expect(backend.getProfilerSnapshot().drawCalls).toBe(1);
     });
 
+    it('renders frame outputs directly to the default framebuffer when configured', async () => {
+        const gl = createMockGL();
+        const allocator = createWebGL2RenderResourceAllocator(gl);
+        const colorDescriptor: RenderTextureDescriptor = {
+            width: 256,
+            height: 128,
+            format: 'rgba8',
+            usage: ['color-attachment', 'sampled'],
+        };
+        const depthDescriptor: RenderTextureDescriptor = {
+            width: 256,
+            height: 128,
+            format: 'depth24',
+            usage: ['depth-attachment', 'sampled'],
+        };
+        const graph = createGraph([
+            createSnapshot('frame', 'scene-color', colorDescriptor, allocator.createTexture(colorDescriptor)),
+            createSnapshot('frame', 'scene-depth', depthDescriptor, allocator.createTexture(depthDescriptor)),
+        ]);
+        const context = createContext(graph);
+        const opaqueHandler = vi.fn(() => ({
+            drawCalls: 1,
+        }));
+        const backend = createManagedWebGL2RenderPipelineBackend({
+            gl,
+            directFrameOutput: true,
+            handlers: {
+                opaque: opaqueHandler,
+            },
+        });
+
+        await backend.beginFrame(context);
+        await backend.executePass(
+            {
+                kind: 'opaque',
+                name: createRenderPassName('opaque'),
+                order: 0,
+                queue: 'geometry',
+                enabled: true,
+                estimatedCost: 1,
+                target: createRenderResourceName('frame', 'scene-color'),
+                inputs: [
+                    createRenderResourceName('frame', 'scene-color'),
+                    createRenderResourceName('frame', 'scene-depth'),
+                ],
+                metadata: {
+                    color: createRenderResourceName('frame', 'scene-color'),
+                    depth: createRenderResourceName('frame', 'scene-depth'),
+                    hdr: false,
+                    giMode: 'disabled',
+                    ibl: false,
+                },
+                items: createRenderList([]),
+            },
+            context
+        );
+        await backend.executePass(
+            {
+                kind: 'present',
+                name: createRenderPassName('present'),
+                order: 1,
+                queue: 'present',
+                enabled: true,
+                estimatedCost: 0.1,
+                target: createRenderResourceName('swap', 'back-buffer'),
+                inputs: [createRenderResourceName('frame', 'scene-color')],
+                metadata: {
+                    source: createRenderResourceName('frame', 'scene-color'),
+                    destination: createRenderResourceName('swap', 'back-buffer'),
+                    colorSpace: 'srgb',
+                },
+            },
+            context
+        );
+
+        expect(opaqueHandler).toHaveBeenCalledTimes(1);
+        expect(gl.createFramebuffer).not.toHaveBeenCalled();
+        expect(gl.blitFramebuffer).not.toHaveBeenCalled();
+        expect(backend.getProfilerSnapshot().presents).toBe(1);
+    });
+
     it('fails loudly for unsupported passes when no handler is registered', async () => {
         const gl = createMockGL();
         const backend = createManagedWebGL2RenderPipelineBackend({ gl });
@@ -326,7 +407,7 @@ describe('render-webgl2 pipeline backend', () => {
 
         await backend.beginFrame(context);
 
-        await expect(
+        expect(() =>
             backend.executePass(
                 {
                     kind: 'post-process',
@@ -358,6 +439,6 @@ describe('render-webgl2 pipeline backend', () => {
                 },
                 context
             )
-        ).rejects.toThrow(/No WebGL2 render pass handler is registered/);
+        ).toThrow(/No WebGL2 render pass handler is registered/);
     });
 });
