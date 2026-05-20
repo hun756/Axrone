@@ -84,6 +84,9 @@ const createMockGL = (): WebGL2RenderingContext => {
         disable: vi.fn(),
         depthMask: vi.fn(),
         colorMask: vi.fn(),
+        uniform2f: vi.fn(),
+        uniform3f: vi.fn(),
+        uniform4f: vi.fn(),
         uniform1i: vi.fn(),
         uniform1f: vi.fn(),
         drawArrays: vi.fn(),
@@ -101,6 +104,94 @@ describe('SceneRenderPipeline', () => {
             },
             pipeline: {
                 hdr: true,
+            },
+        });
+        const frameState = new SceneRenderFrameState().begin(1);
+
+        const stats = pipeline.render({
+            frame: 1,
+            deltaSeconds: 1 / 60,
+            viewportWidth: 640,
+            viewportHeight: 360,
+            cameraFrame: {
+                camera: {
+                    id: 'camera:main',
+                    clearFlags: ['color', 'depth'],
+                    clearColor: [0.1, 0.2, 0.3, 1],
+                    clearDepth: 1,
+                    near: 0.1,
+                    far: 100,
+                },
+                viewMatrix: new Mat4(),
+                projectionMatrix: new Mat4(),
+                viewProjectionMatrix: new Mat4(),
+                camera3D: {
+                    frustum: {},
+                },
+                position: [0, 0, 5],
+            } as any,
+            lighting: {
+                stats: {
+                    selectedDirectionalCount: 0,
+                    selectedPointCount: 0,
+                    selectedSpotCount: 0,
+                },
+            } as any,
+            renderPass: {
+                id: 'main',
+                clearFlags: ['color', 'depth'],
+                clearColor: null,
+                clearDepth: null,
+            } as any,
+            drawContext: {} as any,
+            frameState,
+            renderItems: [
+                {
+                    renderer: {
+                        id: 'renderer:cube',
+                        meshId: 'mesh:cube',
+                        renderOrder: 0,
+                        visible: true,
+                        receiveLighting: true,
+                    },
+                    transform: {
+                        worldMatrix: new Mat4(),
+                    },
+                },
+            ] as any,
+            resolveBounds: () => null,
+            resolveMaterial: () => ({
+                materialId: 'material:cube',
+                shadingModel: 'pbr',
+                alphaMode: 'opaque',
+                transparent: false,
+            }),
+        });
+
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(stats).toEqual(
+            expect.objectContaining({
+                passCount: 3,
+                opaqueCount: 1,
+                transparentCount: 0,
+            })
+        );
+        expect(gl.drawArrays).toHaveBeenCalledWith(gl.TRIANGLES, 0, 3);
+        expect(gl.blitFramebuffer).toHaveBeenCalledTimes(1);
+
+        pipeline.dispose();
+    });
+
+    it('routes configured post-process effects through the fullscreen backend path', () => {
+        const gl = createMockGL();
+        const execute = vi.fn();
+        const pipeline = new SceneRenderPipeline({
+            gl,
+            drawExecutor: {
+                execute,
+            },
+            pipeline: {
+                postProcess: [{ category: 'builtin', name: 'vignette' }],
             },
         });
         const frameState = new SceneRenderFrameState().begin(1);
