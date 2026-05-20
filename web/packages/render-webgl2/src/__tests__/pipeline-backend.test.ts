@@ -117,6 +117,9 @@ const createMockGL = (): WebGL2RenderingContext => {
         disable: vi.fn(),
         depthMask: vi.fn(),
         colorMask: vi.fn(),
+        uniform2f: vi.fn(),
+        uniform3f: vi.fn(),
+        uniform4f: vi.fn(),
         uniform1i: vi.fn(),
         uniform1f: vi.fn(),
         drawArrays: vi.fn(),
@@ -499,6 +502,68 @@ describe('render-webgl2 pipeline backend', () => {
         expect(gl.useProgram).toHaveBeenCalled();
         expect(gl.uniform1i).toHaveBeenCalled();
         expect(gl.uniform1f).toHaveBeenCalled();
+        expect(gl.drawArrays).toHaveBeenCalledWith(gl.TRIANGLES, 0, 3);
+        expect(backend.getProfilerSnapshot().drawCalls).toBe(1);
+    });
+
+    it('executes supported built-in post-process passes without a custom handler', async () => {
+        const gl = createMockGL();
+        const allocator = createWebGL2RenderResourceAllocator(gl);
+        const sourceDescriptor: RenderTextureDescriptor = {
+            width: 256,
+            height: 128,
+            format: 'rgba8',
+            usage: ['color-attachment', 'sampled'],
+        };
+        const targetDescriptor: RenderTextureDescriptor = {
+            width: 256,
+            height: 128,
+            format: 'rgba8',
+            usage: ['color-attachment', 'sampled'],
+        };
+
+        const graph = createGraph([
+            createSnapshot('frame', 'scene-color', sourceDescriptor, allocator.createTexture(sourceDescriptor)),
+            createSnapshot('post', 'fxaa', targetDescriptor, allocator.createTexture(targetDescriptor)),
+        ]);
+        const context = createContext(graph);
+        const backend = createManagedWebGL2RenderPipelineBackend({ gl });
+
+        await backend.beginFrame(context);
+        await backend.executePass(
+            {
+                kind: 'post-process',
+                name: createRenderPassName('post-process:fxaa'),
+                order: 1,
+                queue: 'post-process',
+                enabled: true,
+                estimatedCost: 0.2,
+                target: createRenderResourceName('post', 'fxaa'),
+                inputs: [createRenderResourceName('frame', 'scene-color')],
+                metadata: {
+                    source: createRenderResourceName('frame', 'scene-color'),
+                    target: createRenderResourceName('post', 'fxaa'),
+                    phase: 'after-tonemap',
+                    effect: {
+                        category: 'builtin',
+                        name: 'fxaa',
+                        phase: 'after-tonemap',
+                        quality: 'high',
+                        order: 0,
+                        settings: {
+                            subpixel: 0.75,
+                            edgeThreshold: 0.166,
+                            edgeThresholdMin: 0.0833,
+                        },
+                    },
+                },
+            },
+            context
+        );
+
+        expect(gl.useProgram).toHaveBeenCalled();
+        expect(gl.uniform2f).toHaveBeenCalled();
+        expect(gl.uniform4f).toHaveBeenCalled();
         expect(gl.drawArrays).toHaveBeenCalledWith(gl.TRIANGLES, 0, 3);
         expect(backend.getProfilerSnapshot().drawCalls).toBe(1);
     });
