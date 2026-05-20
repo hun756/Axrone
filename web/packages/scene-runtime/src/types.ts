@@ -6,6 +6,7 @@ import type { ComponentConstructor, ComponentRegistry } from '@axrone/ecs-runtim
 import type { System, SystemQuery } from '@axrone/ecs-runtime';
 import type { GameLoopScheduler, GameLoopStatus } from '@axrone/game-loop';
 import type { RenderShaderEffectDefinition } from '@axrone/render-core/shader-effect';
+import type { RenderHdrSettings, RenderTonemappingSettings } from '@axrone/render-core/types';
 import type { Camera } from './components/camera';
 import type { Animator } from './components/animator';
 import type { DirectionalLight } from './components/directional-light';
@@ -381,6 +382,7 @@ export interface SceneOptions<R extends ComponentRegistry = Record<string, never
     readonly registry?: R;
     readonly profile?: SceneRuntimeProfile<R>;
     readonly renderPlanning?: SceneRenderPlanningOptions;
+    readonly renderPipeline?: SceneRenderPipelineSettings;
     readonly worldConfig?: {
         readonly maxEntities?: number;
         readonly enableMetrics?: boolean;
@@ -743,6 +745,11 @@ export interface SceneLoopState {
 
 export interface SceneRenderPlanningOptions {
     readonly maxTransparentPrimitives?: number;
+}
+
+export interface SceneRenderPipelineSettings {
+    readonly hdr?: boolean | Partial<RenderHdrSettings>;
+    readonly tonemapping?: Partial<RenderTonemappingSettings>;
 }
 
 export interface SceneRenderPlanningStats {

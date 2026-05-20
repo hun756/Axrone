@@ -2,10 +2,12 @@ import { RenderPipeline } from '@axrone/render-core';
 import type {
     RenderCameraState,
     RenderClearState,
+    RenderHdrSettings,
     RenderLight,
     RenderMaterialSnapshot,
     RenderPrimitiveInstance,
     ResolvedRenderPass,
+    RenderTonemappingSettings,
 } from '@axrone/render-core/types';
 import {
     createManagedWebGL2RenderPipelineBackend,
@@ -24,6 +26,7 @@ import type { SceneRenderPassResource } from './render-pass-registry';
 import type {
     SceneMaterialAlphaMode,
     SceneRenderPlanningOptions,
+    SceneRenderPipelineSettings,
     SceneRenderPlanningStats,
 } from './types';
 
@@ -235,10 +238,50 @@ const createMaterialSnapshot = (
     };
 };
 
+const resolveSceneHdrOption = (
+    settings: SceneRenderPipelineSettings | undefined
+): false | true | Partial<RenderHdrSettings> => {
+    const hdr = settings?.hdr;
+
+    if (hdr === undefined || hdr === false) {
+        return false;
+    }
+
+    if (hdr === true) {
+        return true;
+    }
+
+    return {
+        ...hdr,
+        enabled: hdr.enabled ?? true,
+    };
+};
+
+const isHdrEnabled = (value: false | true | Partial<RenderHdrSettings>): boolean =>
+    value === true || (typeof value === 'object' && (value.enabled ?? true));
+
+const resolveSceneTonemappingOption = (
+    settings: SceneRenderPipelineSettings | undefined,
+    hdrEnabled: boolean
+): Partial<RenderTonemappingSettings> | undefined => {
+    if (settings?.tonemapping) {
+        return settings.tonemapping;
+    }
+
+    if (hdrEnabled) {
+        return undefined;
+    }
+
+    return {
+        mode: 'none',
+    };
+};
+
 interface SceneRenderPipelineOptions {
     readonly gl: WebGL2RenderingContext;
     readonly drawExecutor: Pick<SceneDrawExecutor, 'execute'>;
     readonly planning?: SceneRenderPlanningOptions;
+    readonly pipeline?: SceneRenderPipelineSettings;
 }
 
 interface ActiveExecutionState {
@@ -260,9 +303,13 @@ export class SceneRenderPipeline {
     }
 
     private _createBackend(): ManagedWebGL2RenderPipelineBackend {
+        const hdr = resolveSceneHdrOption(this._options.pipeline);
+        const hdrEnabled = isHdrEnabled(hdr);
+        const tonemapping = resolveSceneTonemappingOption(this._options.pipeline, hdrEnabled);
+
         return createManagedWebGL2RenderPipelineBackend({
             gl: this._options.gl,
-            directFrameOutput: true,
+            directFrameOutput: !hdrEnabled && (tonemapping?.mode ?? 'none') === 'none',
             handlers: {
                 opaque: (pass) => this._executeDrawPass(pass),
                 transparent: (pass) => this._executeDrawPass(pass),
@@ -271,12 +318,14 @@ export class SceneRenderPipeline {
     }
 
     private _createPipeline(): RenderPipeline<WebGL2RenderResourceHandle> {
+        const hdr = resolveSceneHdrOption(this._options.pipeline);
+        const hdrEnabled = isHdrEnabled(hdr);
+        const tonemapping = resolveSceneTonemappingOption(this._options.pipeline, hdrEnabled);
+
         return new RenderPipeline<WebGL2RenderResourceHandle>({
             name: 'SceneRenderPipeline',
-            hdr: false,
-            tonemapping: {
-                mode: 'none',
-            },
+            hdr,
+            ...(tonemapping ? { tonemapping } : {}),
             shadows: false,
             gi: {
                 mode: 'disabled',

@@ -203,6 +203,7 @@ export type {
 	ScenePrefabResolver,
 	SceneRegistry,
 	SceneRenderPlanningOptions,
+	SceneRenderPipelineSettings,
 	SceneRenderPlanningStats,
 	SceneRenderPassDefinition,
 	SceneRenderPassHandle,

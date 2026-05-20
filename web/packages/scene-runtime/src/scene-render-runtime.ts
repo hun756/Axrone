@@ -22,6 +22,7 @@ import type { SceneMeshResource } from './mesh-registry';
 import type {
     SceneMeshDefinition,
     SceneRenderPlanningOptions,
+    SceneRenderPipelineSettings,
     SceneRenderPlanningStats,
     SceneRenderStats,
     SceneUniformValue,
@@ -40,6 +41,7 @@ export interface SceneRenderRuntimeOptions {
     readonly disposeMesh: (mesh: SceneMeshResource) => void;
     readonly applyMissingVertexAttributeDefaults: (mesh: SceneMeshResource) => void;
     readonly planning?: SceneRenderPlanningOptions;
+    readonly pipeline?: SceneRenderPipelineSettings;
 }
 
 export interface SceneRenderRuntimeParams {
@@ -121,6 +123,7 @@ export class SceneRenderRuntime {
             gl: _options.gl,
             drawExecutor: this._drawExecutor,
             planning: _options.planning,
+            pipeline: _options.pipeline,
         });
         this._spriteBatchRuntime = new SceneSpriteBatchRuntime({
             gl: _options.gl,

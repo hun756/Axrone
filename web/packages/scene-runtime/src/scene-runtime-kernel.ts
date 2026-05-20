@@ -91,6 +91,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
             groundLight,
             defaultClearColor,
             planning: sceneOptions.renderPlanning,
+            pipeline: sceneOptions.renderPipeline,
             getActors: () => this.world.getAllActors(),
             createMeshResource: (definition) => this.assets.createMeshResource(definition),
             disposeMesh: (mesh) => this.assets.disposeMesh(mesh),
