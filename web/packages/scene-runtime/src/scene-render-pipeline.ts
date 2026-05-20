@@ -1,5 +1,6 @@
 import { RenderPipeline } from '@axrone/render-core';
 import type {
+    AnyPostProcessEffect,
     RenderCameraState,
     RenderClearState,
     RenderHdrSettings,
@@ -277,6 +278,14 @@ const resolveSceneTonemappingOption = (
     };
 };
 
+const resolveScenePostProcessOptions = (
+    settings: SceneRenderPipelineSettings | undefined
+): readonly AnyPostProcessEffect[] => settings?.postProcess ?? Object.freeze([]);
+
+const hasEnabledScenePostProcessEffects = (
+    settings: SceneRenderPipelineSettings | undefined
+): boolean => settings?.postProcess?.some((effect) => effect.enabled !== false) ?? false;
+
 interface SceneRenderPipelineOptions {
     readonly gl: WebGL2RenderingContext;
     readonly drawExecutor: Pick<SceneDrawExecutor, 'execute'>;
@@ -306,10 +315,14 @@ export class SceneRenderPipeline {
         const hdr = resolveSceneHdrOption(this._options.pipeline);
         const hdrEnabled = isHdrEnabled(hdr);
         const tonemapping = resolveSceneTonemappingOption(this._options.pipeline, hdrEnabled);
+        const hasPostProcess = hasEnabledScenePostProcessEffects(this._options.pipeline);
 
         return createManagedWebGL2RenderPipelineBackend({
             gl: this._options.gl,
-            directFrameOutput: !hdrEnabled && (tonemapping?.mode ?? 'none') === 'none',
+            directFrameOutput:
+                !hdrEnabled &&
+                (tonemapping?.mode ?? 'none') === 'none' &&
+                !hasPostProcess,
             handlers: {
                 opaque: (pass) => this._executeDrawPass(pass),
                 transparent: (pass) => this._executeDrawPass(pass),
@@ -321,6 +334,7 @@ export class SceneRenderPipeline {
         const hdr = resolveSceneHdrOption(this._options.pipeline);
         const hdrEnabled = isHdrEnabled(hdr);
         const tonemapping = resolveSceneTonemappingOption(this._options.pipeline, hdrEnabled);
+        const postProcess = resolveScenePostProcessOptions(this._options.pipeline);
 
         return new RenderPipeline<WebGL2RenderResourceHandle>({
             name: 'SceneRenderPipeline',
@@ -334,11 +348,16 @@ export class SceneRenderPipeline {
                 enabled: false,
             },
             lightBaking: false,
-            postProcess: Object.freeze([]),
+            postProcess,
             enableDepthPrepass: false,
             maxActiveReflectionProbes: 0,
             maxActiveLocalLights: 4,
             maxTransparentPrimitives: this._options.planning?.maxTransparentPrimitives,
+            ...(this._options.pipeline?.maxPostProcessPasses !== undefined
+                ? {
+                      maxPostProcessPasses: this._options.pipeline.maxPostProcessPasses,
+                  }
+                : {}),
             backend: this._backend,
             resourceAllocator: createWebGL2RenderResourceAllocator(this._options.gl),
         });

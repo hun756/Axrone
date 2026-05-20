@@ -6,7 +6,11 @@ import type { ComponentConstructor, ComponentRegistry } from '@axrone/ecs-runtim
 import type { System, SystemQuery } from '@axrone/ecs-runtime';
 import type { GameLoopScheduler, GameLoopStatus } from '@axrone/game-loop';
 import type { RenderShaderEffectDefinition } from '@axrone/render-core/shader-effect';
-import type { RenderHdrSettings, RenderTonemappingSettings } from '@axrone/render-core/types';
+import type {
+    AnyPostProcessEffect,
+    RenderHdrSettings,
+    RenderTonemappingSettings,
+} from '@axrone/render-core/types';
 import type { Camera } from './components/camera';
 import type { Animator } from './components/animator';
 import type { DirectionalLight } from './components/directional-light';
@@ -750,6 +754,8 @@ export interface SceneRenderPlanningOptions {
 export interface SceneRenderPipelineSettings {
     readonly hdr?: boolean | Partial<RenderHdrSettings>;
     readonly tonemapping?: Partial<RenderTonemappingSettings>;
+    readonly postProcess?: readonly AnyPostProcessEffect[];
+    readonly maxPostProcessPasses?: number;
 }
 
 export interface SceneRenderPlanningStats {
