@@ -3,7 +3,6 @@ import type {
     BodyId,
     ShapeId,
     BodyType,
-    BodyFlags,
     Mass,
     Inertia,
     IMassData2D,
@@ -12,6 +11,7 @@ import type {
     PhysicsConstants,
 } from '../types';
 import type { IPhysicsBody2D, IPhysicsBodyDef2D } from '../types';
+import { BodyFlags } from '../types';
 
 type BodyManagerState = 'active' | 'stepping' | 'disposed';
 
@@ -246,6 +246,15 @@ export class BodyManager2D implements Disposable {
         }
     }
 
+    applyForceToCenter(bodyId: BodyId, force: Readonly<IVec2Like>): void {
+        this.applyForce(bodyId, force);
+    }
+
+    applyTorque(bodyId: BodyId, torque: number): void {
+        const index = this._getIndex(bodyId);
+        this._bodyData[index * BODY_SOA_STRIDE + TORQUE_OFFSET] += torque;
+    }
+
     applyImpulse(bodyId: BodyId, impulse: Readonly<IVec2Like>, point?: Readonly<IVec2Like>): void {
         const index = this._getIndex(bodyId);
         const offset = index * BODY_SOA_STRIDE;
@@ -268,6 +277,17 @@ export class BodyManager2D implements Disposable {
         }
     }
 
+    applyImpulseToCenter(bodyId: BodyId, impulse: Readonly<IVec2Like>): void {
+        this.applyImpulse(bodyId, impulse);
+    }
+
+    applyAngularImpulse(bodyId: BodyId, impulse: number): void {
+        const index = this._getIndex(bodyId);
+        const offset = index * BODY_SOA_STRIDE;
+        this._bodyData[offset + ANGULAR_VELOCITY_OFFSET] +=
+            impulse * this._bodyData[offset + INV_INERTIA_OFFSET];
+    }
+
     getMass(bodyId: BodyId): Mass {
         const index = this._getIndex(bodyId);
         return this._bodyData[index * BODY_SOA_STRIDE + MASS_OFFSET] as Mass;
@@ -276,6 +296,32 @@ export class BodyManager2D implements Disposable {
     getInverseMass(bodyId: BodyId): number {
         const index = this._getIndex(bodyId);
         return this._bodyData[index * BODY_SOA_STRIDE + INV_MASS_OFFSET];
+    }
+
+    getInertia(bodyId: BodyId): Inertia {
+        const index = this._getIndex(bodyId);
+        return this._bodyData[index * BODY_SOA_STRIDE + INERTIA_OFFSET] as Inertia;
+    }
+
+    getInverseInertia(bodyId: BodyId): number {
+        const index = this._getIndex(bodyId);
+        return this._bodyData[index * BODY_SOA_STRIDE + INV_INERTIA_OFFSET];
+    }
+
+    getLocalCenter(bodyId: BodyId, out?: IVec2Like): IVec2Like {
+        const index = this._getIndex(bodyId);
+        const offset = index * BODY_SOA_STRIDE + CENTER_OFFSET;
+
+        if (out) {
+            out.x = this._bodyData[offset];
+            out.y = this._bodyData[offset + 1];
+            return out;
+        }
+
+        return {
+            x: this._bodyData[offset],
+            y: this._bodyData[offset + 1],
+        };
     }
 
     setMassData(bodyId: BodyId, mass: number, inertia: number, center: Readonly<IVec2Like>): void {
@@ -295,9 +341,105 @@ export class BodyManager2D implements Disposable {
         return this._bodyTypes[index] as BodyType;
     }
 
+    setBodyType(bodyId: BodyId, type: BodyType): void {
+        const index = this._getIndex(bodyId);
+        this._bodyTypes[index] = type;
+    }
+
+    getFlags(bodyId: BodyId): BodyFlags {
+        const index = this._getIndex(bodyId);
+        return this._bodyFlags[index] as BodyFlags;
+    }
+
+    getGravityScale(bodyId: BodyId): number {
+        return this._gravityScales[this._getIndex(bodyId)];
+    }
+
+    setGravityScale(bodyId: BodyId, gravityScale: number): void {
+        this._gravityScales[this._getIndex(bodyId)] = gravityScale;
+    }
+
+    getLinearDamping(bodyId: BodyId): number {
+        return this._dampingData[this._getIndex(bodyId) * 2];
+    }
+
+    setLinearDamping(bodyId: BodyId, damping: number): void {
+        this._dampingData[this._getIndex(bodyId) * 2] = damping;
+    }
+
+    getAngularDamping(bodyId: BodyId): number {
+        return this._dampingData[this._getIndex(bodyId) * 2 + 1];
+    }
+
+    setAngularDamping(bodyId: BodyId, damping: number): void {
+        this._dampingData[this._getIndex(bodyId) * 2 + 1] = damping;
+    }
+
+    getSleepTime(bodyId: BodyId): number {
+        return this._bodyData[this._getIndex(bodyId) * BODY_SOA_STRIDE + SLEEP_TIME_OFFSET];
+    }
+
+    getUserData(bodyId: BodyId): unknown {
+        return this._userData.get(bodyId);
+    }
+
+    setUserData(bodyId: BodyId, userData: unknown): void {
+        if (userData === undefined) {
+            this._userData.delete(bodyId);
+            return;
+        }
+
+        this._userData.set(bodyId, userData);
+    }
+
     isAwake(bodyId: BodyId): boolean {
         const index = this._getIndex(bodyId);
         return (this._bodyFlags[index] & (1 << 5)) !== 0;
+    }
+
+    isEnabled(bodyId: BodyId): boolean {
+        const index = this._getIndex(bodyId);
+        return (this._bodyFlags[index] & BodyFlags.Active) !== 0;
+    }
+
+    setEnabled(bodyId: BodyId, enabled: boolean): void {
+        const index = this._getIndex(bodyId);
+        if (enabled) {
+            this._bodyFlags[index] |= BodyFlags.Active;
+            return;
+        }
+
+        this._bodyFlags[index] &= ~BodyFlags.Active;
+    }
+
+    isFixedRotation(bodyId: BodyId): boolean {
+        const index = this._getIndex(bodyId);
+        return (this._bodyFlags[index] & BodyFlags.FixedRotation) !== 0;
+    }
+
+    setFixedRotation(bodyId: BodyId, fixedRotation: boolean): void {
+        const index = this._getIndex(bodyId);
+        if (fixedRotation) {
+            this._bodyFlags[index] |= BodyFlags.FixedRotation;
+            return;
+        }
+
+        this._bodyFlags[index] &= ~BodyFlags.FixedRotation;
+    }
+
+    isBullet(bodyId: BodyId): boolean {
+        const index = this._getIndex(bodyId);
+        return (this._bodyFlags[index] & BodyFlags.Bullet) !== 0;
+    }
+
+    setBullet(bodyId: BodyId, bullet: boolean): void {
+        const index = this._getIndex(bodyId);
+        if (bullet) {
+            this._bodyFlags[index] |= BodyFlags.Bullet;
+            return;
+        }
+
+        this._bodyFlags[index] &= ~BodyFlags.Bullet;
     }
 
     setAwake(bodyId: BodyId, awake: boolean): void {
