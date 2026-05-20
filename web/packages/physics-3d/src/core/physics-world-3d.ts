@@ -1,10 +1,42 @@
-import { Vec3, type IVec3Like } from '@axrone/numeric';
+import { Vec3, type IQuatLike, type IVec3Like } from '@axrone/numeric';
 import type {
+    BodyFlags,
+    IAABBQueryCallback,
+    ICollisionFilter,
+    IConstraint3D,
+    IMassData3D,
+    IMaterial,
+    IPhysicsBody3D,
+    IPhysicsWorldStatistics,
+    IRaycastResult3D,
+    IShape3D,
+} from '../types';
+import {
+    BodyType,
+    ShapeType,
+} from '../types';
+import type {
+    BodyId3D,
+    ConstraintId3D,
+    IBoxShapeDef3D,
+    ICapsuleShapeDef3D,
+    ICollisionFilter3D,
+    IConeTwistConstraintDef3D,
     IContactListener3D,
+    IConvexHullShapeDef3D,
+    ICylinderShapeDef3D,
+    IFixedConstraintDef3D,
+    IGenericConstraintDef3D,
+    IHingeConstraintDef3D,
+    IPhysicsBodyDef3D,
     IPhysicsProfiler3D,
     IPhysicsWorld3DConfig,
     IQueryFilter3D,
+    ISliderConstraintDef3D,
+    ISphereShapeDef3D,
+    ISpringConstraintDef3D,
     RaycastCallback3D,
+    ShapeId3D,
 } from '../types/physics-3d';
 import {
     BodyManager3D,
@@ -14,6 +46,400 @@ import {
 
 export { BodyManager3D, ShapeManager3D, ConstraintManager3D } from './physics-managers-3d';
 
+const BODY_TYPE_STATIC = 0;
+const BODY_TYPE_DYNAMIC = 2;
+
+const SHAPE_TYPE_CAPSULE = 1;
+const SHAPE_TYPE_BOX = 3;
+const SHAPE_TYPE_SPHERE = 5;
+const SHAPE_TYPE_CYLINDER = 6;
+const SHAPE_TYPE_CONVEX_HULL = 8;
+
+const CONSTRAINT_TYPE_FIXED = 0;
+const CONSTRAINT_TYPE_HINGE = 2;
+const CONSTRAINT_TYPE_SLIDER = 3;
+const CONSTRAINT_TYPE_CONE_TWIST = 4;
+const CONSTRAINT_TYPE_GENERIC = 5;
+const CONSTRAINT_TYPE_SPRING = 6;
+
+type SupportedShapeDef3D =
+    | ({ readonly kind: typeof SHAPE_TYPE_SPHERE } & ISphereShapeDef3D)
+    | ({ readonly kind: typeof SHAPE_TYPE_BOX } & IBoxShapeDef3D)
+    | ({ readonly kind: typeof SHAPE_TYPE_CAPSULE } & ICapsuleShapeDef3D)
+    | ({ readonly kind: typeof SHAPE_TYPE_CYLINDER } & ICylinderShapeDef3D)
+    | ({ readonly kind: typeof SHAPE_TYPE_CONVEX_HULL } & IConvexHullShapeDef3D);
+
+type SupportedConstraintDef3D =
+    | ({ readonly kind: typeof CONSTRAINT_TYPE_FIXED } & IFixedConstraintDef3D)
+    | ({ readonly kind: typeof CONSTRAINT_TYPE_HINGE } & IHingeConstraintDef3D)
+    | ({ readonly kind: typeof CONSTRAINT_TYPE_SLIDER } & ISliderConstraintDef3D)
+    | ({ readonly kind: typeof CONSTRAINT_TYPE_SPRING } & ISpringConstraintDef3D)
+    | ({ readonly kind: typeof CONSTRAINT_TYPE_CONE_TWIST } & IConeTwistConstraintDef3D)
+    | ({ readonly kind: typeof CONSTRAINT_TYPE_GENERIC } & IGenericConstraintDef3D);
+
+interface IShapeDescriptor3D {
+    readonly id: ShapeId3D;
+    readonly bodyId: BodyId3D;
+    readonly type: number;
+    readonly def: SupportedShapeDef3D;
+    material: IMaterial;
+    isSensor: boolean;
+    filter: ICollisionFilter3D;
+    userData?: unknown;
+}
+
+interface IConstraintDescriptor3D {
+    readonly id: ConstraintId3D;
+    readonly type: number;
+    readonly def: SupportedConstraintDef3D;
+    enabled: boolean;
+    readonly collideConnected: boolean;
+    userData?: unknown;
+}
+
+interface IShapeOptions3D {
+    readonly isSensor?: boolean;
+    readonly userData?: unknown;
+}
+
+interface IAabb3D {
+    readonly min: IVec3Like;
+    readonly max: IVec3Like;
+}
+
+interface IShapeRayHit3D {
+    readonly fraction: number;
+    readonly normal: IVec3Like;
+}
+
+const IDENTITY_ROTATION: IQuatLike = { x: 0, y: 0, z: 0, w: 1 };
+const DEFAULT_MATERIAL: IMaterial = { friction: 0.4, restitution: 0, density: 1 };
+const DEFAULT_FILTER: ICollisionFilter3D = { categoryBits: 1, maskBits: 0xffff, groupIndex: 0 };
+
+function cloneVec3(vector: Readonly<IVec3Like>): IVec3Like {
+    return { x: vector.x, y: vector.y, z: vector.z };
+}
+
+function cloneQuat(rotation: Readonly<IQuatLike>): IQuatLike {
+    return { x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w };
+}
+
+function addVec3(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
+    return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+}
+
+function subVec3(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
+    return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+}
+
+function scaleVec3(vector: Readonly<IVec3Like>, scalar: number): IVec3Like {
+    return { x: vector.x * scalar, y: vector.y * scalar, z: vector.z * scalar };
+}
+
+function dotVec3(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): number {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function crossVec3(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
+    return {
+        x: a.y * b.z - a.z * b.y,
+        y: a.z * b.x - a.x * b.z,
+        z: a.x * b.y - a.y * b.x,
+    };
+}
+
+function lengthSquaredVec3(vector: Readonly<IVec3Like>): number {
+    return dotVec3(vector, vector);
+}
+
+function lengthVec3(vector: Readonly<IVec3Like>): number {
+    return Math.sqrt(lengthSquaredVec3(vector));
+}
+
+function normalizeVec3(vector: Readonly<IVec3Like>): IVec3Like {
+    const length = lengthVec3(vector);
+    if (length <= 1e-10) {
+        return { x: 0, y: 0, z: 0 };
+    }
+
+    const inverseLength = 1 / length;
+    return scaleVec3(vector, inverseLength);
+}
+
+function conjugateQuat(rotation: Readonly<IQuatLike>): IQuatLike {
+    return { x: -rotation.x, y: -rotation.y, z: -rotation.z, w: rotation.w };
+}
+
+function multiplyQuat(a: Readonly<IQuatLike>, b: Readonly<IQuatLike>): IQuatLike {
+    return {
+        x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+        y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+        z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+        w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+    };
+}
+
+function rotateVec3(vector: Readonly<IVec3Like>, rotation: Readonly<IQuatLike>): IVec3Like {
+    const qx = rotation.x;
+    const qy = rotation.y;
+    const qz = rotation.z;
+    const qw = rotation.w;
+
+    const tx = 2 * (qy * vector.z - qz * vector.y);
+    const ty = 2 * (qz * vector.x - qx * vector.z);
+    const tz = 2 * (qx * vector.y - qy * vector.x);
+
+    return {
+        x: vector.x + qw * tx + (qy * tz - qz * ty),
+        y: vector.y + qw * ty + (qz * tx - qx * tz),
+        z: vector.z + qw * tz + (qx * ty - qy * tx),
+    };
+}
+
+function inverseRotateVec3(vector: Readonly<IVec3Like>, rotation: Readonly<IQuatLike>): IVec3Like {
+    return rotateVec3(vector, conjugateQuat(rotation));
+}
+
+function transformPoint3D(
+    point: Readonly<IVec3Like>,
+    position: Readonly<IVec3Like>,
+    rotation: Readonly<IQuatLike>
+): IVec3Like {
+    return addVec3(position, rotateVec3(point, rotation));
+}
+
+function inverseTransformPoint3D(
+    point: Readonly<IVec3Like>,
+    position: Readonly<IVec3Like>,
+    rotation: Readonly<IQuatLike>
+): IVec3Like {
+    return inverseRotateVec3(subVec3(point, position), rotation);
+}
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
+}
+
+function componentMin(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
+    return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), z: Math.min(a.z, b.z) };
+}
+
+function componentMax(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
+    return { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y), z: Math.max(a.z, b.z) };
+}
+
+function expandAabb(aabb: IAabb3D, point: Readonly<IVec3Like>): IAabb3D {
+    return {
+        min: componentMin(aabb.min, point),
+        max: componentMax(aabb.max, point),
+    };
+}
+
+function intersectsAabb(a: IAabb3D, b: IAabb3D): boolean {
+    return !(
+        a.max.x < b.min.x ||
+        a.min.x > b.max.x ||
+        a.max.y < b.min.y ||
+        a.min.y > b.max.y ||
+        a.max.z < b.min.z ||
+        a.min.z > b.max.z
+    );
+}
+
+function makeMaterial(material?: Partial<IMaterial>): IMaterial {
+    return {
+        friction: material?.friction ?? DEFAULT_MATERIAL.friction,
+        restitution: material?.restitution ?? DEFAULT_MATERIAL.restitution,
+        density: material?.density ?? DEFAULT_MATERIAL.density,
+        ...(material?.rollingFriction !== undefined
+            ? { rollingFriction: material.rollingFriction }
+            : {}),
+        ...(material?.spinningFriction !== undefined
+            ? { spinningFriction: material.spinningFriction }
+            : {}),
+    };
+}
+
+function makeFilter(filter?: ICollisionFilter3D): ICollisionFilter3D {
+    return {
+        categoryBits: filter?.categoryBits ?? DEFAULT_FILTER.categoryBits,
+        maskBits: filter?.maskBits ?? DEFAULT_FILTER.maskBits,
+        groupIndex: filter?.groupIndex ?? DEFAULT_FILTER.groupIndex,
+    };
+}
+
+function supportsQueryFilter(shapeFilter: Readonly<ICollisionFilter3D>, filter?: IQueryFilter3D): boolean {
+    if (!filter) return true;
+    if (filter.groupIndex !== undefined && shapeFilter.groupIndex !== filter.groupIndex) {
+        return false;
+    }
+    if (
+        filter.categoryBits !== undefined &&
+        (shapeFilter.categoryBits & filter.categoryBits) === 0
+    ) {
+        return false;
+    }
+    if (filter.maskBits !== undefined && (shapeFilter.maskBits & filter.maskBits) === 0) {
+        return false;
+    }
+    return true;
+}
+
+function getAxisVector(axis: 0 | 1 | 2 | undefined): IVec3Like {
+    switch (axis ?? 1) {
+        case 0:
+            return { x: 1, y: 0, z: 0 };
+        case 2:
+            return { x: 0, y: 0, z: 1 };
+        default:
+            return { x: 0, y: 1, z: 0 };
+    }
+}
+
+function getBoxWorldExtents(
+    halfExtents: Readonly<IVec3Like>,
+    rotation: Readonly<IQuatLike>
+): IVec3Like {
+    const xx = rotation.x * rotation.x;
+    const yy = rotation.y * rotation.y;
+    const zz = rotation.z * rotation.z;
+    const xy = rotation.x * rotation.y;
+    const xz = rotation.x * rotation.z;
+    const yz = rotation.y * rotation.z;
+    const wx = rotation.w * rotation.x;
+    const wy = rotation.w * rotation.y;
+    const wz = rotation.w * rotation.z;
+
+    const m00 = 1 - 2 * (yy + zz);
+    const m01 = 2 * (xy - wz);
+    const m02 = 2 * (xz + wy);
+    const m10 = 2 * (xy + wz);
+    const m11 = 1 - 2 * (xx + zz);
+    const m12 = 2 * (yz - wx);
+    const m20 = 2 * (xz - wy);
+    const m21 = 2 * (yz + wx);
+    const m22 = 1 - 2 * (xx + yy);
+
+    return {
+        x:
+            Math.abs(m00) * halfExtents.x +
+            Math.abs(m01) * halfExtents.y +
+            Math.abs(m02) * halfExtents.z,
+        y:
+            Math.abs(m10) * halfExtents.x +
+            Math.abs(m11) * halfExtents.y +
+            Math.abs(m12) * halfExtents.z,
+        z:
+            Math.abs(m20) * halfExtents.x +
+            Math.abs(m21) * halfExtents.y +
+            Math.abs(m22) * halfExtents.z,
+    };
+}
+
+function linePointDistanceSquared(
+    point: Readonly<IVec3Like>,
+    lineStart: Readonly<IVec3Like>,
+    lineEnd: Readonly<IVec3Like>
+): number {
+    const line = subVec3(lineEnd, lineStart);
+    const lineLengthSquared = lengthSquaredVec3(line);
+    if (lineLengthSquared <= 1e-10) {
+        return lengthSquaredVec3(subVec3(point, lineStart));
+    }
+
+    const t = clamp(dotVec3(subVec3(point, lineStart), line) / lineLengthSquared, 0, 1);
+    const closestPoint = addVec3(lineStart, scaleVec3(line, t));
+    return lengthSquaredVec3(subVec3(point, closestPoint));
+}
+
+function raySphereHit(
+    origin: Readonly<IVec3Like>,
+    direction: Readonly<IVec3Like>,
+    center: Readonly<IVec3Like>,
+    radius: number,
+    maxFraction: number
+): IShapeRayHit3D | null {
+    const m = subVec3(origin, center);
+    const a = dotVec3(direction, direction);
+    const b = dotVec3(m, direction);
+    const c = dotVec3(m, m) - radius * radius;
+
+    if (c <= 0) {
+        return { fraction: 0, normal: normalizeVec3(m) };
+    }
+    if (a <= 1e-10) {
+        return null;
+    }
+
+    const discriminant = b * b - a * c;
+    if (discriminant < 0) {
+        return null;
+    }
+
+    const fraction = (-b - Math.sqrt(discriminant)) / a;
+    if (fraction < 0 || fraction > maxFraction) {
+        return null;
+    }
+
+    const hitPoint = addVec3(origin, scaleVec3(direction, fraction));
+    return { fraction, normal: normalizeVec3(subVec3(hitPoint, center)) };
+}
+
+function rayAabbHit(
+    origin: Readonly<IVec3Like>,
+    direction: Readonly<IVec3Like>,
+    min: Readonly<IVec3Like>,
+    max: Readonly<IVec3Like>,
+    maxFraction: number
+): IShapeRayHit3D | null {
+    let tMin = 0;
+    let tMax = maxFraction;
+    let normal: IVec3Like = { x: 0, y: 0, z: 0 };
+
+    for (const axis of ['x', 'y', 'z'] as const) {
+        const originComponent = origin[axis];
+        const directionComponent = direction[axis];
+        const minComponent = min[axis];
+        const maxComponent = max[axis];
+
+        if (Math.abs(directionComponent) <= 1e-10) {
+            if (originComponent < minComponent || originComponent > maxComponent) {
+                return null;
+            }
+            continue;
+        }
+
+        const inverseDirection = 1 / directionComponent;
+        let t1 = (minComponent - originComponent) * inverseDirection;
+        let t2 = (maxComponent - originComponent) * inverseDirection;
+        let axisNormal: IVec3Like =
+            axis === 'x'
+                ? { x: -1, y: 0, z: 0 }
+                : axis === 'y'
+                  ? { x: 0, y: -1, z: 0 }
+                  : { x: 0, y: 0, z: -1 };
+
+        if (t1 > t2) {
+            const swap = t1;
+            t1 = t2;
+            t2 = swap;
+            axisNormal = scaleVec3(axisNormal, -1);
+        }
+
+        if (t1 > tMin) {
+            tMin = t1;
+            normal = axisNormal;
+        }
+        tMax = Math.min(tMax, t2);
+
+        if (tMin > tMax) {
+            return null;
+        }
+    }
+
+    return { fraction: tMin, normal };
+}
+
 export class PhysicsWorld3D implements Disposable {
     readonly config: Readonly<IPhysicsWorld3DConfig>;
     private readonly _gravity: Vec3;
@@ -21,9 +447,16 @@ export class PhysicsWorld3D implements Disposable {
     private readonly _bodyManager: BodyManager3D;
     private readonly _shapeManager: ShapeManager3D;
     private readonly _constraintManager: ConstraintManager3D;
+    private readonly _shapeDescriptors = new Map<ShapeId3D, IShapeDescriptor3D>();
+    private readonly _shapeViews = new Map<ShapeId3D, IShape3D>();
+    private readonly _constraintDescriptors = new Map<ConstraintId3D, IConstraintDescriptor3D>();
+    private readonly _constraintViews = new Map<ConstraintId3D, IConstraint3D>();
+    private readonly _bodyViews = new Map<BodyId3D, IPhysicsBody3D>();
 
     private _profiler: IPhysicsProfiler3D | null = null;
     private _contactListener: IContactListener3D | null = null;
+    private _collisionFilter: ICollisionFilter | null = null;
+    private _autoClearForces = true;
     private _disposed = false;
 
     constructor(config: IPhysicsWorld3DConfig = {}) {
@@ -57,6 +490,285 @@ export class PhysicsWorld3D implements Disposable {
         return this._gravity;
     }
 
+    createBody(def: IPhysicsBodyDef3D): BodyId3D {
+        return this._bodyManager.createBody(def);
+    }
+
+    destroyBody(bodyId: BodyId3D): void {
+        const shapeIds = [...this._shapeManager.getShapesForBody(bodyId)];
+        for (const shapeId of shapeIds) {
+            this.destroyShape(shapeId);
+        }
+
+        const constraintIds = [...this._constraintManager.getConstraintsForBody(bodyId)];
+        for (const constraintId of constraintIds) {
+            this.destroyConstraint(constraintId);
+        }
+
+        this._bodyViews.delete(bodyId);
+        this._bodyManager.destroyBody(bodyId);
+    }
+
+    getBody(bodyId: BodyId3D): IPhysicsBody3D | null {
+        if (!this._bodyManager.hasBody(bodyId)) {
+            return null;
+        }
+
+        let view = this._bodyViews.get(bodyId);
+        if (!view) {
+            view = this._createBodyView(bodyId);
+            this._bodyViews.set(bodyId, view);
+        }
+        return view;
+    }
+
+    getBodies(): ReadonlyMap<BodyId3D, IPhysicsBody3D> {
+        const bodies = new Map<BodyId3D, IPhysicsBody3D>();
+        for (const bodyId of this._bodyManager.getBodyIds()) {
+            const body = this.getBody(bodyId);
+            if (body) {
+                bodies.set(bodyId, body);
+            }
+        }
+        return bodies;
+    }
+
+    createSphereShape(
+        bodyId: BodyId3D,
+        def: ISphereShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeOptions3D
+    ): ShapeId3D {
+        const shapeId = this._shapeManager.createSphere(bodyId, def, material, filter);
+        this._shapeDescriptors.set(shapeId, {
+            id: shapeId,
+            bodyId,
+            type: SHAPE_TYPE_SPHERE,
+            def: { ...def, kind: SHAPE_TYPE_SPHERE },
+            material: makeMaterial(material),
+            isSensor: options?.isSensor ?? false,
+            filter: makeFilter(filter),
+            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
+        });
+        return shapeId;
+    }
+
+    createBoxShape(
+        bodyId: BodyId3D,
+        def: IBoxShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeOptions3D
+    ): ShapeId3D {
+        const shapeId = this._shapeManager.createBox(bodyId, def, material, filter);
+        this._shapeDescriptors.set(shapeId, {
+            id: shapeId,
+            bodyId,
+            type: SHAPE_TYPE_BOX,
+            def: { ...def, kind: SHAPE_TYPE_BOX },
+            material: makeMaterial(material),
+            isSensor: options?.isSensor ?? false,
+            filter: makeFilter(filter),
+            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
+        });
+        return shapeId;
+    }
+
+    createCapsuleShape(
+        bodyId: BodyId3D,
+        def: ICapsuleShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeOptions3D
+    ): ShapeId3D {
+        const shapeId = this._shapeManager.createCapsule(bodyId, def, material, filter);
+        this._shapeDescriptors.set(shapeId, {
+            id: shapeId,
+            bodyId,
+            type: SHAPE_TYPE_CAPSULE,
+            def: { ...def, kind: SHAPE_TYPE_CAPSULE },
+            material: makeMaterial(material),
+            isSensor: options?.isSensor ?? false,
+            filter: makeFilter(filter),
+            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
+        });
+        return shapeId;
+    }
+
+    createCylinderShape(
+        bodyId: BodyId3D,
+        def: ICylinderShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeOptions3D
+    ): ShapeId3D {
+        const shapeId = this._shapeManager.createCylinder(bodyId, def, material, filter);
+        this._shapeDescriptors.set(shapeId, {
+            id: shapeId,
+            bodyId,
+            type: SHAPE_TYPE_CYLINDER,
+            def: { ...def, kind: SHAPE_TYPE_CYLINDER },
+            material: makeMaterial(material),
+            isSensor: options?.isSensor ?? false,
+            filter: makeFilter(filter),
+            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
+        });
+        return shapeId;
+    }
+
+    createConvexHullShape(
+        bodyId: BodyId3D,
+        def: IConvexHullShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeOptions3D
+    ): ShapeId3D {
+        const shapeId = this._shapeManager.createConvexHull(bodyId, def, material, filter);
+        this._shapeDescriptors.set(shapeId, {
+            id: shapeId,
+            bodyId,
+            type: SHAPE_TYPE_CONVEX_HULL,
+            def: { ...def, vertices: def.vertices.map(cloneVec3), kind: SHAPE_TYPE_CONVEX_HULL },
+            material: makeMaterial(material),
+            isSensor: options?.isSensor ?? false,
+            filter: makeFilter(filter),
+            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
+        });
+        return shapeId;
+    }
+
+    destroyShape(shapeId: ShapeId3D): void {
+        this._shapeViews.delete(shapeId);
+        this._shapeDescriptors.delete(shapeId);
+        this._shapeManager.destroyShape(shapeId);
+    }
+
+    getShape(shapeId: ShapeId3D): IShape3D | null {
+        const descriptor = this._shapeDescriptors.get(shapeId);
+        if (!descriptor) {
+            return null;
+        }
+
+        let view = this._shapeViews.get(shapeId);
+        if (!view) {
+            view = this._createShapeView(descriptor);
+            this._shapeViews.set(shapeId, view);
+        }
+        return view;
+    }
+
+    createFixedConstraint(def: IFixedConstraintDef3D): ConstraintId3D {
+        return this._registerConstraint(
+            this._constraintManager.createFixed(def),
+            CONSTRAINT_TYPE_FIXED,
+            { ...def, localAnchorA: cloneVec3(def.localAnchorA), localAnchorB: cloneVec3(def.localAnchorB), kind: CONSTRAINT_TYPE_FIXED }
+        );
+    }
+
+    createHingeConstraint(def: IHingeConstraintDef3D): ConstraintId3D {
+        return this._registerConstraint(
+            this._constraintManager.createHinge(def),
+            CONSTRAINT_TYPE_HINGE,
+            {
+                ...def,
+                localAnchorA: cloneVec3(def.localAnchorA),
+                localAnchorB: cloneVec3(def.localAnchorB),
+                localAxisA: cloneVec3(def.localAxisA),
+                localAxisB: cloneVec3(def.localAxisB),
+                kind: CONSTRAINT_TYPE_HINGE,
+            }
+        );
+    }
+
+    createSliderConstraint(def: ISliderConstraintDef3D): ConstraintId3D {
+        return this._registerConstraint(
+            this._constraintManager.createSlider(def),
+            CONSTRAINT_TYPE_SLIDER,
+            {
+                ...def,
+                localAnchorA: cloneVec3(def.localAnchorA),
+                localAnchorB: cloneVec3(def.localAnchorB),
+                localAxisA: cloneVec3(def.localAxisA),
+                kind: CONSTRAINT_TYPE_SLIDER,
+            }
+        );
+    }
+
+    createSpringConstraint(def: ISpringConstraintDef3D): ConstraintId3D {
+        return this._registerConstraint(
+            this._constraintManager.createSpring(def),
+            CONSTRAINT_TYPE_SPRING,
+            { ...def, localAnchorA: cloneVec3(def.localAnchorA), localAnchorB: cloneVec3(def.localAnchorB), kind: CONSTRAINT_TYPE_SPRING }
+        );
+    }
+
+    createConeTwistConstraint(def: IConeTwistConstraintDef3D): ConstraintId3D {
+        return this._registerConstraint(
+            this._constraintManager.createConeTwist(def),
+            CONSTRAINT_TYPE_CONE_TWIST,
+            {
+                ...def,
+                localFrameA: {
+                    position: cloneVec3(def.localFrameA.position),
+                    rotation: cloneQuat(def.localFrameA.rotation),
+                },
+                localFrameB: {
+                    position: cloneVec3(def.localFrameB.position),
+                    rotation: cloneQuat(def.localFrameB.rotation),
+                },
+                kind: CONSTRAINT_TYPE_CONE_TWIST,
+            }
+        );
+    }
+
+    createGenericConstraint(def: IGenericConstraintDef3D): ConstraintId3D {
+        return this._registerConstraint(
+            this._constraintManager.createGeneric(def),
+            CONSTRAINT_TYPE_GENERIC,
+            {
+                ...def,
+                localFrameA: {
+                    position: cloneVec3(def.localFrameA.position),
+                    rotation: cloneQuat(def.localFrameA.rotation),
+                },
+                localFrameB: {
+                    position: cloneVec3(def.localFrameB.position),
+                    rotation: cloneQuat(def.localFrameB.rotation),
+                },
+                linearLowerLimit: cloneVec3(def.linearLowerLimit),
+                linearUpperLimit: cloneVec3(def.linearUpperLimit),
+                angularLowerLimit: cloneVec3(def.angularLowerLimit),
+                angularUpperLimit: cloneVec3(def.angularUpperLimit),
+                ...(def.linearStiffness ? { linearStiffness: cloneVec3(def.linearStiffness) } : {}),
+                ...(def.angularStiffness ? { angularStiffness: cloneVec3(def.angularStiffness) } : {}),
+                ...(def.linearDamping ? { linearDamping: cloneVec3(def.linearDamping) } : {}),
+                ...(def.angularDamping ? { angularDamping: cloneVec3(def.angularDamping) } : {}),
+                kind: CONSTRAINT_TYPE_GENERIC,
+            }
+        );
+    }
+
+    destroyConstraint(constraintId: ConstraintId3D): void {
+        this._constraintViews.delete(constraintId);
+        this._constraintDescriptors.delete(constraintId);
+        this._constraintManager.destroyConstraint(constraintId);
+    }
+
+    getConstraint(constraintId: ConstraintId3D): IConstraint3D | null {
+        const descriptor = this._constraintDescriptors.get(constraintId);
+        if (!descriptor) {
+            return null;
+        }
+
+        let view = this._constraintViews.get(constraintId);
+        if (!view) {
+            view = this._createConstraintView(descriptor);
+            this._constraintViews.set(constraintId, view);
+        }
+        return view;
+    }
+
     getBodyManager(): BodyManager3D {
         return this._bodyManager;
     }
@@ -87,6 +799,20 @@ export class PhysicsWorld3D implements Disposable {
         this._contactListener = listener;
     }
 
+    setCollisionFilter(filter: ICollisionFilter | null): void {
+        this._collisionFilter = filter;
+    }
+
+    setGravity(gravity: Readonly<IVec3Like>): void {
+        this._gravity.x = gravity.x;
+        this._gravity.y = gravity.y;
+        this._gravity.z = gravity.z;
+    }
+
+    getGravity(): Readonly<IVec3Like> {
+        return this._gravity;
+    }
+
     raycast(
         origin: IVec3Like,
         direction: IVec3Like,
@@ -94,11 +820,172 @@ export class PhysicsWorld3D implements Disposable {
         callback: RaycastCallback3D,
         filter?: IQueryFilter3D
     ): void {
-        void origin;
-        void direction;
-        void maxDistance;
-        void callback;
-        void filter;
+        for (const result of this.rayCastAll(origin, direction, maxDistance, filter)) {
+            if (!callback(result)) {
+                break;
+            }
+        }
+    }
+
+    rayCastClosest(
+        origin: Readonly<IVec3Like>,
+        direction: Readonly<IVec3Like>,
+        maxFraction: number,
+        filter?: IQueryFilter3D
+    ): IRaycastResult3D | null {
+        return this.rayCastAll(origin, direction, maxFraction, filter)[0] ?? null;
+    }
+
+    rayCastAll(
+        origin: Readonly<IVec3Like>,
+        direction: Readonly<IVec3Like>,
+        maxFraction: number,
+        filter?: IQueryFilter3D
+    ): readonly IRaycastResult3D[] {
+        const results: IRaycastResult3D[] = [];
+
+        for (const descriptor of this._shapeDescriptors.values()) {
+            if (!supportsQueryFilter(descriptor.filter, filter)) {
+                continue;
+            }
+
+            const hit = this._rayCastShape(descriptor, origin, direction, maxFraction);
+            if (!hit) {
+                continue;
+            }
+
+            results.push({
+                hit: true,
+                bodyId: descriptor.bodyId,
+                shapeId: descriptor.id,
+                point: addVec3(origin, scaleVec3(direction, hit.fraction)),
+                normal: hit.normal,
+                fraction: hit.fraction,
+            });
+        }
+
+        results.sort((left, right) => left.fraction - right.fraction);
+        return results;
+    }
+
+    queryAABB(min: Readonly<IVec3Like>, max: Readonly<IVec3Like>, callback: IAABBQueryCallback): void {
+        for (const shapeId of this.queryAABBAll(min, max)) {
+            if (!callback(shapeId)) {
+                break;
+            }
+        }
+    }
+
+    queryAABBAll(
+        min: Readonly<IVec3Like>,
+        max: Readonly<IVec3Like>,
+        filter?: IQueryFilter3D
+    ): readonly ShapeId3D[] {
+        const queryBounds = { min: cloneVec3(min), max: cloneVec3(max) };
+        const shapeIds: ShapeId3D[] = [];
+
+        for (const descriptor of this._shapeDescriptors.values()) {
+            if (!supportsQueryFilter(descriptor.filter, filter)) {
+                continue;
+            }
+            if (intersectsAabb(this._computeShapeAabb(descriptor), queryBounds)) {
+                shapeIds.push(descriptor.id);
+            }
+        }
+
+        return shapeIds;
+    }
+
+    queryPoint(point: Readonly<IVec3Like>, callback: IAABBQueryCallback): void {
+        for (const shapeId of this.queryPointAll(point)) {
+            if (!callback(shapeId)) {
+                break;
+            }
+        }
+    }
+
+    queryPointAll(point: Readonly<IVec3Like>, filter?: IQueryFilter3D): readonly ShapeId3D[] {
+        const shapeIds: ShapeId3D[] = [];
+
+        for (const descriptor of this._shapeDescriptors.values()) {
+            if (!supportsQueryFilter(descriptor.filter, filter)) {
+                continue;
+            }
+            if (this._testPointShape(descriptor, point)) {
+                shapeIds.push(descriptor.id);
+            }
+        }
+
+        return shapeIds;
+    }
+
+    shiftOrigin(newOrigin: Readonly<IVec3Like>): void {
+        for (const bodyId of this._bodyManager.getBodyIds()) {
+            const position = this._bodyManager.getPosition(bodyId);
+            this._bodyManager.setPosition(bodyId, subVec3(position, newOrigin));
+        }
+    }
+
+    clearForces(): void {
+        // The current 3D runtime applies forces directly into velocity state,
+        // so there is no accumulated force buffer to clear yet.
+    }
+
+    wakeAllBodies(): void {
+        for (const bodyId of this._bodyManager.getBodyIds()) {
+            this._bodyManager.setAwake(bodyId, true);
+        }
+    }
+
+    getStatistics(): IPhysicsWorldStatistics {
+        return {
+            bodyCount: this._bodyManager.bodyCount,
+            shapeCount: this._shapeManager.shapeCount,
+            constraintCount: this._constraintManager.constraintCount,
+            contactCount: 0,
+            proxyCount: this._shapeManager.shapeCount,
+            islandCount: 0,
+            treeHeight: 0,
+            treeBalance: 0,
+            treeQuality: 0,
+            stepTime: this._profiler?.stepTime ?? 0,
+            collisionTime: this._profiler?.collisionTime ?? 0,
+            solveTime: this._profiler?.solveTime ?? 0,
+            broadphaseTime: this._profiler?.broadphaseTime ?? 0,
+            narrowphaseTime: this._profiler?.narrowphaseTime ?? 0,
+        };
+    }
+
+    getProfiler(): IPhysicsProfiler3D | null {
+        return this._profiler;
+    }
+
+    setAutoClearForces(flag: boolean): void {
+        this._autoClearForces = flag;
+    }
+
+    getAutoClearForces(): boolean {
+        return this._autoClearForces;
+    }
+
+    getProxyCount(): number {
+        return this._shapeManager.shapeCount;
+    }
+
+    getTreeHeight(): number {
+        return 0;
+    }
+
+    getTreeBalance(): number {
+        return 0;
+    }
+
+    getTreeQuality(): number {
+        return 0;
+    }
+
+    validate(): boolean {
+        return !this._disposed;
     }
 
     private _integrateVelocities(dt: number): void {
@@ -108,16 +995,26 @@ export class PhysicsWorld3D implements Disposable {
         const gravityZ = this._gravity.z * dt;
 
         for (const bodyId of bodyIds) {
-            if (this._bodyManager.getBodyType(bodyId) !== 2) continue;
+            if (this._bodyManager.getBodyType(bodyId) !== BODY_TYPE_DYNAMIC) continue;
+            if (!this._bodyManager.isEnabled(bodyId)) continue;
             if (!this._bodyManager.isAwake(bodyId)) continue;
 
             const gravityScale = this._bodyManager.getGravityScale(bodyId);
             const velocity = this._bodyManager.getLinearVelocity(bodyId);
+            const angularVelocity = this._bodyManager.getAngularVelocity(bodyId);
+            const linearDamping = Math.max(0, 1 - this._bodyManager.getLinearDamping(bodyId) * dt);
+            const angularDamping = Math.max(0, 1 - this._bodyManager.getAngularDamping(bodyId) * dt);
 
             this._bodyManager.setLinearVelocity(bodyId, {
-                x: velocity.x + gravityX * gravityScale,
-                y: velocity.y + gravityY * gravityScale,
-                z: velocity.z + gravityZ * gravityScale,
+                x: (velocity.x + gravityX * gravityScale) * linearDamping,
+                y: (velocity.y + gravityY * gravityScale) * linearDamping,
+                z: (velocity.z + gravityZ * gravityScale) * linearDamping,
+            });
+
+            this._bodyManager.setAngularVelocity(bodyId, {
+                x: this._bodyManager.isFixedRotation(bodyId) ? 0 : angularVelocity.x * angularDamping,
+                y: this._bodyManager.isFixedRotation(bodyId) ? 0 : angularVelocity.y * angularDamping,
+                z: this._bodyManager.isFixedRotation(bodyId) ? 0 : angularVelocity.z * angularDamping,
             });
         }
     }
@@ -130,7 +1027,8 @@ export class PhysicsWorld3D implements Disposable {
         const bodyIds = this._bodyManager.getBodyIds();
 
         for (const bodyId of bodyIds) {
-            if (this._bodyManager.getBodyType(bodyId) === 0) continue;
+            if (this._bodyManager.getBodyType(bodyId) === BODY_TYPE_STATIC) continue;
+            if (!this._bodyManager.isEnabled(bodyId)) continue;
             if (!this._bodyManager.isAwake(bodyId)) continue;
 
             const position = this._bodyManager.getPosition(bodyId);
@@ -150,7 +1048,7 @@ export class PhysicsWorld3D implements Disposable {
                     angularVelocity.z * angularVelocity.z
             );
 
-            if (angularSpeed > 1e-10) {
+            if (angularSpeed > 1e-10 && !this._bodyManager.isFixedRotation(bodyId)) {
                 const halfAngle = angularSpeed * dt * 0.5;
                 const s = Math.sin(halfAngle) / angularSpeed;
                 const c = Math.cos(halfAngle);
@@ -194,11 +1092,709 @@ export class PhysicsWorld3D implements Disposable {
                 });
             }
         }
+
+        if (this._autoClearForces) {
+            this.clearForces();
+        }
+    }
+
+    private _registerConstraint(
+        constraintId: ConstraintId3D,
+        type: number,
+        def: SupportedConstraintDef3D
+    ): ConstraintId3D {
+        this._constraintDescriptors.set(constraintId, {
+            id: constraintId,
+            type,
+            def,
+            enabled: true,
+            collideConnected: def.collideConnected ?? false,
+            ...(def.userData !== undefined ? { userData: def.userData } : {}),
+        });
+        return constraintId;
+    }
+
+    private _createBodyView(bodyId: BodyId3D): IPhysicsBody3D {
+        const bodyWorld = this;
+
+        return {
+            id: bodyId,
+            get type() {
+                return bodyWorld._bodyManager.getBodyType(bodyId) as BodyType;
+            },
+            get transform() {
+                return {
+                    position: cloneVec3(bodyWorld._bodyManager.getPosition(bodyId)),
+                    rotation: cloneQuat(bodyWorld._bodyManager.getRotation(bodyId)),
+                };
+            },
+            get velocity() {
+                return {
+                    linear: cloneVec3(bodyWorld._bodyManager.getLinearVelocity(bodyId)),
+                    angular: cloneVec3(bodyWorld._bodyManager.getAngularVelocity(bodyId)),
+                };
+            },
+            get massData() {
+                return bodyWorld._getBodyMassData(bodyId);
+            },
+            get shapes() {
+                return bodyWorld._shapeManager.getShapesForBody(bodyId);
+            },
+            get flags() {
+                let flags = bodyWorld._bodyManager.getBodyFlags(bodyId) as BodyFlags;
+                if (!bodyWorld._bodyManager.isAwake(bodyId)) {
+                    flags |= BodyFlags.Sleeping;
+                }
+                return flags;
+            },
+            get gravityScale() {
+                return bodyWorld._bodyManager.getGravityScale(bodyId);
+            },
+            get linearDamping() {
+                return bodyWorld._bodyManager.getLinearDamping(bodyId);
+            },
+            get angularDamping() {
+                return bodyWorld._bodyManager.getAngularDamping(bodyId);
+            },
+            get sleepTime() {
+                return 0;
+            },
+            get userData() {
+                return bodyWorld._bodyManager.getUserData(bodyId);
+            },
+            applyForce(force, point) {
+                bodyWorld._bodyManager.applyForce(bodyId, force, point);
+            },
+            applyForceToCenter(force) {
+                bodyWorld._bodyManager.applyForceToCenter(bodyId, force);
+            },
+            applyTorque(torque) {
+                bodyWorld._bodyManager.applyTorque(bodyId, torque);
+            },
+            applyImpulse(impulse, point) {
+                bodyWorld._bodyManager.applyImpulse(bodyId, impulse, point);
+            },
+            applyImpulseToCenter(impulse) {
+                bodyWorld._bodyManager.applyImpulseToCenter(bodyId, impulse);
+            },
+            applyAngularImpulse(impulse) {
+                bodyWorld._bodyManager.applyAngularImpulse(bodyId, impulse);
+            },
+            getPosition() {
+                return cloneVec3(bodyWorld._bodyManager.getPosition(bodyId));
+            },
+            setPosition(position) {
+                bodyWorld._bodyManager.setPosition(bodyId, position);
+            },
+            getRotation() {
+                return cloneQuat(bodyWorld._bodyManager.getRotation(bodyId));
+            },
+            setRotation(rotation) {
+                bodyWorld._bodyManager.setRotation(bodyId, rotation);
+            },
+            getTransform() {
+                return {
+                    position: cloneVec3(bodyWorld._bodyManager.getPosition(bodyId)),
+                    rotation: cloneQuat(bodyWorld._bodyManager.getRotation(bodyId)),
+                };
+            },
+            setTransform(position, rotation) {
+                bodyWorld._bodyManager.setPosition(bodyId, position);
+                bodyWorld._bodyManager.setRotation(bodyId, rotation);
+            },
+            getLinearVelocity() {
+                return cloneVec3(bodyWorld._bodyManager.getLinearVelocity(bodyId));
+            },
+            setLinearVelocity(velocity) {
+                bodyWorld._bodyManager.setLinearVelocity(bodyId, velocity);
+            },
+            getAngularVelocity() {
+                return cloneVec3(bodyWorld._bodyManager.getAngularVelocity(bodyId));
+            },
+            setAngularVelocity(velocity) {
+                bodyWorld._bodyManager.setAngularVelocity(bodyId, velocity);
+            },
+            getLocalPoint(worldPoint) {
+                return inverseTransformPoint3D(
+                    worldPoint,
+                    bodyWorld._bodyManager.getPosition(bodyId),
+                    bodyWorld._bodyManager.getRotation(bodyId)
+                );
+            },
+            getWorldPoint(localPoint) {
+                return transformPoint3D(
+                    localPoint,
+                    bodyWorld._bodyManager.getPosition(bodyId),
+                    bodyWorld._bodyManager.getRotation(bodyId)
+                );
+            },
+            getLocalVector(worldVector) {
+                return inverseRotateVec3(worldVector, bodyWorld._bodyManager.getRotation(bodyId));
+            },
+            getWorldVector(localVector) {
+                return rotateVec3(localVector, bodyWorld._bodyManager.getRotation(bodyId));
+            },
+            getLinearVelocityAtPoint(point) {
+                const relativePoint = subVec3(point, bodyWorld._bodyManager.getPosition(bodyId));
+                return addVec3(
+                    bodyWorld._bodyManager.getLinearVelocity(bodyId),
+                    crossVec3(bodyWorld._bodyManager.getAngularVelocity(bodyId), relativePoint)
+                );
+            },
+            getMass() {
+                return bodyWorld._bodyManager.getMass(bodyId);
+            },
+            getInertiaTensor() {
+                return cloneVec3(bodyWorld._bodyManager.getInertiaTensor(bodyId));
+            },
+            getMassData() {
+                return bodyWorld._getBodyMassData(bodyId);
+            },
+            setMassData(massData) {
+                bodyWorld._bodyManager.setMass(bodyId, massData.mass);
+                bodyWorld._bodyManager.setInertiaTensor(bodyId, massData.inertiaTensor);
+            },
+            resetMassData() {
+                const massData = bodyWorld._computeBodyMassData(bodyId);
+                bodyWorld._bodyManager.setMass(bodyId, massData.mass);
+                bodyWorld._bodyManager.setInertiaTensor(bodyId, massData.inertiaTensor);
+            },
+            isSleeping() {
+                return !bodyWorld._bodyManager.isAwake(bodyId);
+            },
+            setSleeping(sleeping) {
+                bodyWorld._bodyManager.setAwake(bodyId, !sleeping);
+            },
+            isAwake() {
+                return bodyWorld._bodyManager.isAwake(bodyId);
+            },
+            setAwake(awake) {
+                bodyWorld._bodyManager.setAwake(bodyId, awake);
+            },
+            isEnabled() {
+                return bodyWorld._bodyManager.isEnabled(bodyId);
+            },
+            setEnabled(enabled) {
+                bodyWorld._bodyManager.setEnabled(bodyId, enabled);
+            },
+            isFixedRotation() {
+                return bodyWorld._bodyManager.isFixedRotation(bodyId);
+            },
+            setFixedRotation(fixed) {
+                bodyWorld._bodyManager.setFixedRotation(bodyId, fixed);
+            },
+            isBullet() {
+                return bodyWorld._bodyManager.isBullet(bodyId);
+            },
+            setBullet(bullet) {
+                bodyWorld._bodyManager.setBullet(bodyId, bullet);
+            },
+            getWorldCenter() {
+                const massData = bodyWorld._getBodyMassData(bodyId);
+                return transformPoint3D(
+                    massData.center,
+                    bodyWorld._bodyManager.getPosition(bodyId),
+                    bodyWorld._bodyManager.getRotation(bodyId)
+                );
+            },
+            getLocalCenter() {
+                return cloneVec3(bodyWorld._getBodyMassData(bodyId).center);
+            },
+        };
+    }
+
+    private _createShapeView(descriptor: IShapeDescriptor3D): IShape3D {
+        return {
+            id: descriptor.id,
+            bodyId: descriptor.bodyId,
+            get type() {
+                return descriptor.type as ShapeType;
+            },
+            get material() {
+                return descriptor.material;
+            },
+            get isSensor() {
+                return descriptor.isSensor;
+            },
+            get filter() {
+                return descriptor.filter;
+            },
+            get userData() {
+                return descriptor.userData;
+            },
+            computeAABB: () => this._computeShapeAabb(descriptor),
+            computeMassData: (density) => this._computeShapeMassData(descriptor, density),
+            testPoint: (point) => this._testPointShape(descriptor, point),
+            rayCast: (origin, direction, maxFraction) => {
+                const hit = this._rayCastShape(descriptor, origin, direction, maxFraction);
+                if (!hit) {
+                    return null;
+                }
+                return { hit: true, fraction: hit.fraction, normal: hit.normal };
+            },
+            getCenter: () => this._getShapeWorldCenter(descriptor),
+        };
+    }
+
+    private _createConstraintView(descriptor: IConstraintDescriptor3D): IConstraint3D {
+        return {
+            id: descriptor.id,
+            type: descriptor.type,
+            bodyIdA: descriptor.def.bodyIdA,
+            bodyIdB: descriptor.def.bodyIdB,
+            collideConnected: descriptor.collideConnected,
+            get userData() {
+                return descriptor.userData;
+            },
+            getAnchorA: () => this._getConstraintAnchor(descriptor.def, true),
+            getAnchorB: () => this._getConstraintAnchor(descriptor.def, false),
+            getReactionForce: () => ({ x: 0, y: 0, z: 0 }),
+            getReactionTorque: () => ({ x: 0, y: 0, z: 0 }),
+            isEnabled: () => descriptor.enabled,
+            setEnabled: (enabled) => {
+                descriptor.enabled = enabled;
+            },
+        };
+    }
+
+    private _getBodyMassData(bodyId: BodyId3D): IMassData3D {
+        const mass = this._bodyManager.getMass(bodyId);
+        const inertiaTensor = this._bodyManager.getInertiaTensor(bodyId);
+        return {
+            mass,
+            inverseMass: mass > 0 ? 1 / mass : 0,
+            inertiaTensor: cloneVec3(inertiaTensor),
+            inverseInertiaTensor: {
+                x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
+                y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
+                z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
+            },
+            center: this._computeBodyMassData(bodyId).center,
+        };
+    }
+
+    private _computeBodyMassData(bodyId: BodyId3D): IMassData3D {
+        const shapes = this._shapeManager.getShapesForBody(bodyId);
+        if (shapes.length === 0 || this._bodyManager.getBodyType(bodyId) !== BODY_TYPE_DYNAMIC) {
+            return {
+                mass: this._bodyManager.getMass(bodyId),
+                inverseMass: this._bodyManager.getInverseMass(bodyId),
+                inertiaTensor: cloneVec3(this._bodyManager.getInertiaTensor(bodyId)),
+                inverseInertiaTensor: {
+                    x: this._bodyManager.getInertiaTensor(bodyId).x > 0 ? 1 / this._bodyManager.getInertiaTensor(bodyId).x : 0,
+                    y: this._bodyManager.getInertiaTensor(bodyId).y > 0 ? 1 / this._bodyManager.getInertiaTensor(bodyId).y : 0,
+                    z: this._bodyManager.getInertiaTensor(bodyId).z > 0 ? 1 / this._bodyManager.getInertiaTensor(bodyId).z : 0,
+                },
+                center: { x: 0, y: 0, z: 0 },
+            };
+        }
+
+        let totalMass = 0;
+        let center = { x: 0, y: 0, z: 0 };
+        const shapeMassData: IMassData3D[] = [];
+
+        for (const shapeId of shapes) {
+            const descriptor = this._shapeDescriptors.get(shapeId);
+            if (!descriptor) {
+                continue;
+            }
+            const massData = this._computeShapeMassData(descriptor, descriptor.material.density);
+            shapeMassData.push(massData);
+            totalMass += massData.mass;
+            center = addVec3(center, scaleVec3(massData.center, massData.mass));
+        }
+
+        if (totalMass <= 1e-10) {
+            return {
+                mass: 0,
+                inverseMass: 0,
+                inertiaTensor: { x: 0, y: 0, z: 0 },
+                inverseInertiaTensor: { x: 0, y: 0, z: 0 },
+                center: { x: 0, y: 0, z: 0 },
+            };
+        }
+
+        center = scaleVec3(center, 1 / totalMass);
+
+        let inertiaTensor = { x: 0, y: 0, z: 0 };
+        for (const massData of shapeMassData) {
+            const offset = subVec3(massData.center, center);
+            inertiaTensor = {
+                x:
+                    inertiaTensor.x +
+                    massData.inertiaTensor.x +
+                    massData.mass * (offset.y * offset.y + offset.z * offset.z),
+                y:
+                    inertiaTensor.y +
+                    massData.inertiaTensor.y +
+                    massData.mass * (offset.x * offset.x + offset.z * offset.z),
+                z:
+                    inertiaTensor.z +
+                    massData.inertiaTensor.z +
+                    massData.mass * (offset.x * offset.x + offset.y * offset.y),
+            };
+        }
+
+        return {
+            mass: totalMass,
+            inverseMass: totalMass > 0 ? 1 / totalMass : 0,
+            inertiaTensor,
+            inverseInertiaTensor: {
+                x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
+                y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
+                z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
+            },
+            center,
+        };
+    }
+
+    private _computeShapeMassData(descriptor: IShapeDescriptor3D, density: number): IMassData3D {
+        const safeDensity = Math.max(0, density);
+        switch (descriptor.type) {
+            case SHAPE_TYPE_SPHERE: {
+                const radius = descriptor.def.radius;
+                const mass = ((4 / 3) * Math.PI * radius * radius * radius) * safeDensity;
+                const inertia = (2 / 5) * mass * radius * radius;
+                return {
+                    mass,
+                    inverseMass: mass > 0 ? 1 / mass : 0,
+                    inertiaTensor: { x: inertia, y: inertia, z: inertia },
+                    inverseInertiaTensor: {
+                        x: inertia > 0 ? 1 / inertia : 0,
+                        y: inertia > 0 ? 1 / inertia : 0,
+                        z: inertia > 0 ? 1 / inertia : 0,
+                    },
+                    center: cloneVec3(descriptor.def.center),
+                };
+            }
+            case SHAPE_TYPE_BOX: {
+                const halfExtents = descriptor.def.halfExtents;
+                const fullExtents = scaleVec3(halfExtents, 2);
+                const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
+                const inertiaTensor = {
+                    x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
+                    y: (mass * (fullExtents.x * fullExtents.x + fullExtents.z * fullExtents.z)) / 12,
+                    z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
+                };
+                return {
+                    mass,
+                    inverseMass: mass > 0 ? 1 / mass : 0,
+                    inertiaTensor,
+                    inverseInertiaTensor: {
+                        x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
+                        y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
+                        z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
+                    },
+                    center: cloneVec3(descriptor.def.center),
+                };
+            }
+            case SHAPE_TYPE_CAPSULE: {
+                const segment = subVec3(descriptor.def.p2, descriptor.def.p1);
+                const segmentLength = lengthVec3(segment);
+                const radius = descriptor.def.radius;
+                const cylinderMass = Math.PI * radius * radius * segmentLength * safeDensity;
+                const sphereMass = ((4 / 3) * Math.PI * radius * radius * radius) * safeDensity;
+                const mass = cylinderMass + sphereMass;
+                const inertia = radius * radius * mass;
+                return {
+                    mass,
+                    inverseMass: mass > 0 ? 1 / mass : 0,
+                    inertiaTensor: { x: inertia, y: inertia, z: inertia },
+                    inverseInertiaTensor: {
+                        x: inertia > 0 ? 1 / inertia : 0,
+                        y: inertia > 0 ? 1 / inertia : 0,
+                        z: inertia > 0 ? 1 / inertia : 0,
+                    },
+                    center: scaleVec3(addVec3(descriptor.def.p1, descriptor.def.p2), 0.5),
+                };
+            }
+            case SHAPE_TYPE_CYLINDER: {
+                const radius = descriptor.def.radius;
+                const height = descriptor.def.height;
+                const mass = Math.PI * radius * radius * height * safeDensity;
+                const radial = (mass * (3 * radius * radius + height * height)) / 12;
+                const axial = 0.5 * mass * radius * radius;
+                const axis = descriptor.def.axis ?? 1;
+                const inertiaTensor =
+                    axis === 0
+                        ? { x: axial, y: radial, z: radial }
+                        : axis === 2
+                          ? { x: radial, y: radial, z: axial }
+                          : { x: radial, y: axial, z: radial };
+                return {
+                    mass,
+                    inverseMass: mass > 0 ? 1 / mass : 0,
+                    inertiaTensor,
+                    inverseInertiaTensor: {
+                        x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
+                        y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
+                        z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
+                    },
+                    center: cloneVec3(descriptor.def.center),
+                };
+            }
+            case SHAPE_TYPE_CONVEX_HULL: {
+                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
+                const fullExtents = subVec3(bounds.max, bounds.min);
+                const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
+                const inertiaTensor = {
+                    x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
+                    y: (mass * (fullExtents.x * fullExtents.x + fullExtents.z * fullExtents.z)) / 12,
+                    z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
+                };
+                return {
+                    mass,
+                    inverseMass: mass > 0 ? 1 / mass : 0,
+                    inertiaTensor,
+                    inverseInertiaTensor: {
+                        x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
+                        y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
+                        z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
+                    },
+                    center: scaleVec3(addVec3(bounds.min, bounds.max), 0.5),
+                };
+            }
+            default:
+                return {
+                    mass: 0,
+                    inverseMass: 0,
+                    inertiaTensor: { x: 0, y: 0, z: 0 },
+                    inverseInertiaTensor: { x: 0, y: 0, z: 0 },
+                    center: { x: 0, y: 0, z: 0 },
+                };
+        }
+    }
+
+    private _computeShapeAabb(descriptor: IShapeDescriptor3D): IAabb3D {
+        const position = this._bodyManager.getPosition(descriptor.bodyId);
+        const rotation = this._bodyManager.getRotation(descriptor.bodyId);
+        switch (descriptor.type) {
+            case SHAPE_TYPE_SPHERE: {
+                const center = transformPoint3D(descriptor.def.center, position, rotation);
+                const radius = descriptor.def.radius;
+                return {
+                    min: { x: center.x - radius, y: center.y - radius, z: center.z - radius },
+                    max: { x: center.x + radius, y: center.y + radius, z: center.z + radius },
+                };
+            }
+            case SHAPE_TYPE_BOX: {
+                const center = transformPoint3D(descriptor.def.center, position, rotation);
+                const worldRotation = multiplyQuat(rotation, descriptor.def.rotation ?? IDENTITY_ROTATION);
+                const extents = getBoxWorldExtents(descriptor.def.halfExtents, worldRotation);
+                return {
+                    min: subVec3(center, extents),
+                    max: addVec3(center, extents),
+                };
+            }
+            case SHAPE_TYPE_CAPSULE: {
+                const p1 = transformPoint3D(descriptor.def.p1, position, rotation);
+                const p2 = transformPoint3D(descriptor.def.p2, position, rotation);
+                const radius = descriptor.def.radius;
+                return {
+                    min: {
+                        x: Math.min(p1.x, p2.x) - radius,
+                        y: Math.min(p1.y, p2.y) - radius,
+                        z: Math.min(p1.z, p2.z) - radius,
+                    },
+                    max: {
+                        x: Math.max(p1.x, p2.x) + radius,
+                        y: Math.max(p1.y, p2.y) + radius,
+                        z: Math.max(p1.z, p2.z) + radius,
+                    },
+                };
+            }
+            case SHAPE_TYPE_CYLINDER: {
+                const center = transformPoint3D(descriptor.def.center, position, rotation);
+                const axis = descriptor.def.axis ?? 1;
+                const localHalfExtents =
+                    axis === 0
+                        ? { x: descriptor.def.height * 0.5, y: descriptor.def.radius, z: descriptor.def.radius }
+                        : axis === 2
+                          ? { x: descriptor.def.radius, y: descriptor.def.radius, z: descriptor.def.height * 0.5 }
+                          : { x: descriptor.def.radius, y: descriptor.def.height * 0.5, z: descriptor.def.radius };
+                const extents = getBoxWorldExtents(localHalfExtents, rotation);
+                return {
+                    min: subVec3(center, extents),
+                    max: addVec3(center, extents),
+                };
+            }
+            case SHAPE_TYPE_CONVEX_HULL: {
+                let bounds: IAabb3D | null = null;
+                for (const vertex of descriptor.def.vertices) {
+                    const worldVertex = transformPoint3D(vertex, position, rotation);
+                    bounds = bounds
+                        ? expandAabb(bounds, worldVertex)
+                        : { min: cloneVec3(worldVertex), max: cloneVec3(worldVertex) };
+                }
+                return bounds ?? { min: cloneVec3(position), max: cloneVec3(position) };
+            }
+            default:
+                return { min: cloneVec3(position), max: cloneVec3(position) };
+        }
+    }
+
+    private _testPointShape(descriptor: IShapeDescriptor3D, point: Readonly<IVec3Like>): boolean {
+        const position = this._bodyManager.getPosition(descriptor.bodyId);
+        const rotation = this._bodyManager.getRotation(descriptor.bodyId);
+
+        switch (descriptor.type) {
+            case SHAPE_TYPE_SPHERE: {
+                const center = transformPoint3D(descriptor.def.center, position, rotation);
+                return lengthSquaredVec3(subVec3(point, center)) <= descriptor.def.radius ** 2;
+            }
+            case SHAPE_TYPE_BOX: {
+                const bodyLocal = inverseTransformPoint3D(point, position, rotation);
+                const centered = subVec3(bodyLocal, descriptor.def.center);
+                const localRotation = descriptor.def.rotation ?? IDENTITY_ROTATION;
+                const localPoint = inverseRotateVec3(centered, localRotation);
+                return (
+                    Math.abs(localPoint.x) <= descriptor.def.halfExtents.x &&
+                    Math.abs(localPoint.y) <= descriptor.def.halfExtents.y &&
+                    Math.abs(localPoint.z) <= descriptor.def.halfExtents.z
+                );
+            }
+            case SHAPE_TYPE_CAPSULE: {
+                const localPoint = inverseTransformPoint3D(point, position, rotation);
+                return (
+                    linePointDistanceSquared(localPoint, descriptor.def.p1, descriptor.def.p2) <=
+                    descriptor.def.radius ** 2
+                );
+            }
+            case SHAPE_TYPE_CYLINDER: {
+                const localPoint = inverseTransformPoint3D(point, position, rotation);
+                const centered = subVec3(localPoint, descriptor.def.center);
+                const axis = descriptor.def.axis ?? 1;
+                const halfHeight = descriptor.def.height * 0.5;
+                if (axis === 0) {
+                    return (
+                        Math.abs(centered.x) <= halfHeight &&
+                        centered.y * centered.y + centered.z * centered.z <= descriptor.def.radius ** 2
+                    );
+                }
+                if (axis === 2) {
+                    return (
+                        Math.abs(centered.z) <= halfHeight &&
+                        centered.x * centered.x + centered.y * centered.y <= descriptor.def.radius ** 2
+                    );
+                }
+                return (
+                    Math.abs(centered.y) <= halfHeight &&
+                    centered.x * centered.x + centered.z * centered.z <= descriptor.def.radius ** 2
+                );
+            }
+            case SHAPE_TYPE_CONVEX_HULL: {
+                const localPoint = inverseTransformPoint3D(point, position, rotation);
+                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
+                return (
+                    localPoint.x >= bounds.min.x &&
+                    localPoint.x <= bounds.max.x &&
+                    localPoint.y >= bounds.min.y &&
+                    localPoint.y <= bounds.max.y &&
+                    localPoint.z >= bounds.min.z &&
+                    localPoint.z <= bounds.max.z
+                );
+            }
+            default:
+                return false;
+        }
+    }
+
+    private _rayCastShape(
+        descriptor: IShapeDescriptor3D,
+        origin: Readonly<IVec3Like>,
+        direction: Readonly<IVec3Like>,
+        maxFraction: number
+    ): IShapeRayHit3D | null {
+        const position = this._bodyManager.getPosition(descriptor.bodyId);
+        const rotation = this._bodyManager.getRotation(descriptor.bodyId);
+
+        switch (descriptor.type) {
+            case SHAPE_TYPE_SPHERE: {
+                const center = transformPoint3D(descriptor.def.center, position, rotation);
+                return raySphereHit(origin, direction, center, descriptor.def.radius, maxFraction);
+            }
+            case SHAPE_TYPE_BOX: {
+                const worldRotation = multiplyQuat(rotation, descriptor.def.rotation ?? IDENTITY_ROTATION);
+                const center = transformPoint3D(descriptor.def.center, position, rotation);
+                const localOrigin = inverseTransformPoint3D(origin, center, worldRotation);
+                const localDirection = inverseRotateVec3(direction, worldRotation);
+                const hit = rayAabbHit(
+                    localOrigin,
+                    localDirection,
+                    scaleVec3(descriptor.def.halfExtents, -1),
+                    descriptor.def.halfExtents,
+                    maxFraction
+                );
+                if (!hit) {
+                    return null;
+                }
+                return { fraction: hit.fraction, normal: rotateVec3(hit.normal, worldRotation) };
+            }
+            default: {
+                const aabb = this._computeShapeAabb(descriptor);
+                const hit = rayAabbHit(origin, direction, aabb.min, aabb.max, maxFraction);
+                return hit ? { fraction: hit.fraction, normal: hit.normal } : null;
+            }
+        }
+    }
+
+    private _getShapeWorldCenter(descriptor: IShapeDescriptor3D): IVec3Like {
+        const position = this._bodyManager.getPosition(descriptor.bodyId);
+        const rotation = this._bodyManager.getRotation(descriptor.bodyId);
+        switch (descriptor.type) {
+            case SHAPE_TYPE_SPHERE:
+            case SHAPE_TYPE_BOX:
+            case SHAPE_TYPE_CYLINDER:
+                return transformPoint3D(descriptor.def.center, position, rotation);
+            case SHAPE_TYPE_CAPSULE:
+                return transformPoint3D(scaleVec3(addVec3(descriptor.def.p1, descriptor.def.p2), 0.5), position, rotation);
+            case SHAPE_TYPE_CONVEX_HULL: {
+                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
+                return transformPoint3D(scaleVec3(addVec3(bounds.min, bounds.max), 0.5), position, rotation);
+            }
+            default:
+                return cloneVec3(position);
+        }
+    }
+
+    private _getConstraintAnchor(def: SupportedConstraintDef3D, firstBody: boolean): IVec3Like {
+        if (def.kind === CONSTRAINT_TYPE_FIXED || def.kind === CONSTRAINT_TYPE_HINGE || def.kind === CONSTRAINT_TYPE_SLIDER || def.kind === CONSTRAINT_TYPE_SPRING) {
+            const bodyId = firstBody ? def.bodyIdA : def.bodyIdB;
+            const localAnchor = firstBody ? def.localAnchorA : def.localAnchorB;
+            return transformPoint3D(
+                localAnchor,
+                this._bodyManager.getPosition(bodyId),
+                this._bodyManager.getRotation(bodyId)
+            );
+        }
+
+        const bodyId = firstBody ? def.bodyIdA : def.bodyIdB;
+        const localFrame = firstBody ? def.localFrameA : def.localFrameB;
+        return transformPoint3D(
+            localFrame.position,
+            this._bodyManager.getPosition(bodyId),
+            this._bodyManager.getRotation(bodyId)
+        );
+    }
+
+    private _computeLocalConvexBounds(vertices: readonly IVec3Like[]): IAabb3D {
+        let bounds: IAabb3D | null = null;
+        for (const vertex of vertices) {
+            bounds = bounds
+                ? expandAabb(bounds, vertex)
+                : { min: cloneVec3(vertex), max: cloneVec3(vertex) };
+        }
+        return bounds ?? { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
     }
 
     [Symbol.dispose](): void {
         if (this._disposed) return;
         this._disposed = true;
+        this._bodyViews.clear();
+        this._shapeViews.clear();
+        this._shapeDescriptors.clear();
+        this._constraintViews.clear();
+        this._constraintDescriptors.clear();
         this._bodyManager[Symbol.dispose]();
         this._shapeManager[Symbol.dispose]();
         this._constraintManager[Symbol.dispose]();
