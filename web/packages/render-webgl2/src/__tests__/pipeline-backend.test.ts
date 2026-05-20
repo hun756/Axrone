@@ -19,15 +19,22 @@ import {
 const createMockGL = (): WebGL2RenderingContext => {
     let nextTextureId = 1;
     let nextFramebufferId = 1;
+    let nextShaderId = 1;
+    let nextProgramId = 1;
+    let nextVertexArrayId = 1;
 
     return {
         FRAMEBUFFER: 0x8d40,
         READ_FRAMEBUFFER: 0x8ca8,
         DRAW_FRAMEBUFFER: 0x8ca9,
+        DEPTH_TEST: 0x0b71,
+        CULL_FACE: 0x0b44,
+        BLEND: 0x0be2,
         TEXTURE_2D: 0x0de1,
         TEXTURE_2D_ARRAY: 0x8c1a,
         TEXTURE_3D: 0x806f,
         TEXTURE_CUBE_MAP: 0x8513,
+        TEXTURE0: 0x84c0,
         TEXTURE_MIN_FILTER: 0x2801,
         TEXTURE_MAG_FILTER: 0x2800,
         TEXTURE_WRAP_S: 0x2802,
@@ -57,6 +64,11 @@ const createMockGL = (): WebGL2RenderingContext => {
         R32F: 0x822e,
         HALF_FLOAT: 0x140b,
         FLOAT: 0x1406,
+        TRIANGLES: 0x0004,
+        VERTEX_SHADER: 0x8b31,
+        FRAGMENT_SHADER: 0x8b30,
+        COMPILE_STATUS: 0x8b81,
+        LINK_STATUS: 0x8b82,
         DEPTH_COMPONENT24: 0x81a6,
         DEPTH_COMPONENT32F: 0x8cac,
         DEPTH_COMPONENT: 0x1902,
@@ -64,9 +76,31 @@ const createMockGL = (): WebGL2RenderingContext => {
         DEPTH24_STENCIL8: 0x88f0,
         DEPTH_STENCIL: 0x84f9,
         UNSIGNED_INT_24_8: 0x84fa,
+        createShader: vi.fn((type: number) => ({ id: nextShaderId++, type }) as unknown as WebGLShader),
+        shaderSource: vi.fn(),
+        compileShader: vi.fn(),
+        getShaderParameter: vi.fn(() => true),
+        getShaderInfoLog: vi.fn(() => ''),
+        deleteShader: vi.fn(),
+        createProgram: vi.fn(() => ({ id: nextProgramId++ }) as unknown as WebGLProgram),
+        attachShader: vi.fn(),
+        linkProgram: vi.fn(),
+        getProgramParameter: vi.fn(() => true),
+        getProgramInfoLog: vi.fn(() => ''),
+        deleteProgram: vi.fn(),
+        getUniformLocation: vi.fn(
+            (_program: WebGLProgram, name: string) => ({ name }) as unknown as WebGLUniformLocation
+        ),
+        useProgram: vi.fn(),
+        createVertexArray: vi.fn(
+            () => ({ id: nextVertexArrayId++ }) as unknown as WebGLVertexArrayObject
+        ),
+        bindVertexArray: vi.fn(),
+        deleteVertexArray: vi.fn(),
         createTexture: vi.fn(() => ({ id: nextTextureId++ }) as unknown as WebGLTexture),
         deleteTexture: vi.fn(),
         bindTexture: vi.fn(),
+        activeTexture: vi.fn(),
         texParameteri: vi.fn(),
         texStorage2D: vi.fn(),
         texStorage3D: vi.fn(),
@@ -80,6 +114,12 @@ const createMockGL = (): WebGL2RenderingContext => {
         clearDepth: vi.fn(),
         clearStencil: vi.fn(),
         clear: vi.fn(),
+        disable: vi.fn(),
+        depthMask: vi.fn(),
+        colorMask: vi.fn(),
+        uniform1i: vi.fn(),
+        uniform1f: vi.fn(),
+        drawArrays: vi.fn(),
         blitFramebuffer: vi.fn(),
     } as unknown as WebGL2RenderingContext;
 };
@@ -398,6 +438,69 @@ describe('render-webgl2 pipeline backend', () => {
         expect(gl.createFramebuffer).not.toHaveBeenCalled();
         expect(gl.blitFramebuffer).not.toHaveBeenCalled();
         expect(backend.getProfilerSnapshot().presents).toBe(1);
+    });
+
+    it('executes tonemap passes through the built-in fullscreen shader when no custom handler is registered', async () => {
+        const gl = createMockGL();
+        const allocator = createWebGL2RenderResourceAllocator(gl);
+        const sourceDescriptor: RenderTextureDescriptor = {
+            width: 256,
+            height: 128,
+            format: 'rgba16f',
+            usage: ['color-attachment', 'sampled'],
+        };
+        const targetDescriptor: RenderTextureDescriptor = {
+            width: 256,
+            height: 128,
+            format: 'rgba16f',
+            usage: ['color-attachment', 'sampled'],
+        };
+
+        const graph = createGraph([
+            createSnapshot('frame', 'scene-color', sourceDescriptor, allocator.createTexture(sourceDescriptor)),
+            createSnapshot('post', 'ping', targetDescriptor, allocator.createTexture(targetDescriptor)),
+        ]);
+        const context = createContext(graph);
+        const backend = createManagedWebGL2RenderPipelineBackend({ gl });
+
+        await backend.beginFrame(context);
+        await backend.executePass(
+            {
+                kind: 'tonemap',
+                name: createRenderPassName('tonemap'),
+                order: 1,
+                queue: 'post-process',
+                enabled: true,
+                estimatedCost: 0.12,
+                target: createRenderResourceName('post', 'ping'),
+                inputs: [createRenderResourceName('frame', 'scene-color')],
+                metadata: {
+                    source: createRenderResourceName('frame', 'scene-color'),
+                    target: createRenderResourceName('post', 'ping'),
+                    mode: 'aces-fitted',
+                    gamma: 2.2,
+                    contrast: 1,
+                    saturation: 1,
+                    shoulderStrength: 0.22,
+                    toeStrength: 0.3,
+                    hdr: true,
+                    colorSpace: 'srgb',
+                    exposure: {
+                        mode: 'manual',
+                        exposure: 1,
+                    },
+                    exposureHistory: null,
+                },
+            },
+            context
+        );
+
+        expect(gl.createProgram).toHaveBeenCalledTimes(1);
+        expect(gl.useProgram).toHaveBeenCalled();
+        expect(gl.uniform1i).toHaveBeenCalled();
+        expect(gl.uniform1f).toHaveBeenCalled();
+        expect(gl.drawArrays).toHaveBeenCalledWith(gl.TRIANGLES, 0, 3);
+        expect(backend.getProfilerSnapshot().drawCalls).toBe(1);
     });
 
     it('fails loudly for unsupported passes when no handler is registered', async () => {
