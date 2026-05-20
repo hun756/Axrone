@@ -383,6 +383,35 @@ describe('RenderPipeline', () => {
         );
     });
 
+    it('allocates a scratch target for tonemap when HDR frames do not have post-process passes', () => {
+        const pipeline = new RenderPipeline({
+            hdr: true,
+        });
+
+        const result = pipeline.plan({
+            frame: 1,
+            deltaTime: 1 / 60,
+            viewport: { width: 1280, height: 720 },
+            camera: createCamera(),
+            primitives: [createOpaquePrimitive()],
+        });
+
+        const tonemap = result.passes.find((pass) => pass.kind === 'tonemap');
+        const present = result.passes.find((pass) => pass.kind === 'present');
+
+        expect(tonemap?.metadata).toEqual(
+            expect.objectContaining({
+                source: 'frame:scene-color',
+                target: 'post:ping',
+            })
+        );
+        expect(present?.metadata).toEqual(
+            expect.objectContaining({
+                source: 'post:ping',
+            })
+        );
+    });
+
     it('uses the provided frame number when deciding reflection probe refresh cadence', () => {
         const pipeline = new RenderPipeline({
             maxActiveReflectionProbes: 1,
