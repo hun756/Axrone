@@ -12,6 +12,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 import {
     createManagedWebGL2RenderPipelineBackend,
+    defineWebGL2RenderPassExecutor,
     createWebGL2RenderResourceAllocator,
     type WebGL2RenderResourceHandle,
 } from '../pipeline';
@@ -239,9 +240,13 @@ describe('render-webgl2 pipeline backend', () => {
         }));
         const backend = createManagedWebGL2RenderPipelineBackend({
             gl,
-            handlers: {
-                opaque: opaqueHandler,
-            },
+            executors: [
+                defineWebGL2RenderPassExecutor({
+                    kind: 'opaque',
+                    name: 'test-opaque',
+                    execute: opaqueHandler,
+                }),
+            ],
         });
 
         const pass: ResolvedRenderPass = {
@@ -296,6 +301,7 @@ describe('render-webgl2 pipeline backend', () => {
         );
 
         expect(opaqueHandler).toHaveBeenCalledTimes(1);
+        expect(backend.hasExecutor('opaque')).toBe(true);
         expect(gl.createFramebuffer).toHaveBeenCalledTimes(1);
         expect(gl.framebufferTexture2D).toHaveBeenCalledTimes(2);
         expect(gl.viewport).toHaveBeenCalledWith(0, 0, 128, 64);
@@ -388,9 +394,13 @@ describe('render-webgl2 pipeline backend', () => {
         const backend = createManagedWebGL2RenderPipelineBackend({
             gl,
             directFrameOutput: true,
-            handlers: {
-                opaque: opaqueHandler,
-            },
+            executors: [
+                defineWebGL2RenderPassExecutor({
+                    kind: 'opaque',
+                    name: 'test-direct-opaque',
+                    execute: opaqueHandler,
+                }),
+            ],
         });
 
         await backend.beginFrame(context);
@@ -607,6 +617,6 @@ describe('render-webgl2 pipeline backend', () => {
                 },
                 context
             )
-        ).toThrow(/No WebGL2 render pass handler is registered/);
+        ).toThrow(/No WebGL2 render pass executor is registered/);
     });
 });
