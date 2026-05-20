@@ -145,15 +145,19 @@ const createSnapshot = (
     namespace: string,
     name: string,
     descriptor: Readonly<RenderTextureDescriptor>,
-    native: WebGL2RenderResourceHandle
+    native: WebGL2RenderResourceHandle,
+    options: {
+        readonly reused?: boolean;
+        readonly lastFrameUsed?: number;
+    } = {}
 ) => ({
     id: createRenderResourceName(namespace, name),
     descriptor,
     lifetime: 'transient' as const,
     native,
     version: 1,
-    reused: false,
-    lastFrameUsed: 7,
+    reused: options.reused ?? false,
+    lastFrameUsed: options.lastFrameUsed ?? 7,
 });
 
 const createGraph = (
@@ -502,7 +506,8 @@ describe('render-webgl2 pipeline backend', () => {
                         mode: 'manual',
                         exposure: 1,
                     },
-                    exposureHistory: null,
+                    exposureHistorySource: null,
+                    exposureHistoryTarget: null,
                 },
             },
             context
@@ -514,6 +519,97 @@ describe('render-webgl2 pipeline backend', () => {
         expect(gl.uniform1f).toHaveBeenCalled();
         expect(gl.drawArrays).toHaveBeenCalledWith(gl.TRIANGLES, 0, 3);
         expect(backend.getProfilerSnapshot().drawCalls).toBe(1);
+    });
+
+    it('resolves automatic exposure history before tonemapping HDR frames', async () => {
+        const gl = createMockGL();
+        const allocator = createWebGL2RenderResourceAllocator(gl);
+        const sourceDescriptor: RenderTextureDescriptor = {
+            width: 256,
+            height: 128,
+            format: 'rgba16f',
+            usage: ['color-attachment', 'sampled'],
+        };
+        const targetDescriptor: RenderTextureDescriptor = {
+            width: 256,
+            height: 128,
+            format: 'rgba16f',
+            usage: ['color-attachment', 'sampled'],
+        };
+        const historyDescriptor: RenderTextureDescriptor = {
+            width: 1,
+            height: 1,
+            format: 'r16f',
+            usage: ['color-attachment', 'sampled', 'history'],
+        };
+
+        const graph = createGraph([
+            createSnapshot('frame', 'scene-color', sourceDescriptor, allocator.createTexture(sourceDescriptor)),
+            createSnapshot('post', 'ping', targetDescriptor, allocator.createTexture(targetDescriptor)),
+            createSnapshot(
+                'history',
+                'exposure-b',
+                historyDescriptor,
+                allocator.createTexture(historyDescriptor),
+                {
+                    reused: true,
+                    lastFrameUsed: 6,
+                }
+            ),
+            createSnapshot(
+                'history',
+                'exposure-a',
+                historyDescriptor,
+                allocator.createTexture(historyDescriptor)
+            ),
+        ]);
+        const context = createContext(graph);
+        const backend = createManagedWebGL2RenderPipelineBackend({ gl });
+
+        await backend.beginFrame(context);
+        await backend.executePass(
+            {
+                kind: 'tonemap',
+                name: createRenderPassName('tonemap'),
+                order: 1,
+                queue: 'post-process',
+                enabled: true,
+                estimatedCost: 0.12,
+                target: createRenderResourceName('post', 'ping'),
+                inputs: [
+                    createRenderResourceName('frame', 'scene-color'),
+                    createRenderResourceName('history', 'exposure-b'),
+                ],
+                metadata: {
+                    source: createRenderResourceName('frame', 'scene-color'),
+                    target: createRenderResourceName('post', 'ping'),
+                    mode: 'aces-fitted',
+                    gamma: 2.2,
+                    contrast: 1,
+                    saturation: 1,
+                    shoulderStrength: 0.22,
+                    toeStrength: 0.3,
+                    hdr: true,
+                    colorSpace: 'srgb',
+                    exposure: {
+                        mode: 'automatic',
+                        keyValue: 0.18,
+                        minExposure: -6,
+                        maxExposure: 6,
+                        adaptationRate: 1.5,
+                    },
+                    exposureHistorySource: createRenderResourceName('history', 'exposure-b'),
+                    exposureHistoryTarget: createRenderResourceName('history', 'exposure-a'),
+                },
+            },
+            context
+        );
+
+        expect(gl.createProgram).toHaveBeenCalledTimes(2);
+        expect(gl.viewport).toHaveBeenCalledWith(0, 0, 1, 1);
+        expect(gl.activeTexture).toHaveBeenCalledWith(gl.TEXTURE0 + 1);
+        expect(gl.drawArrays).toHaveBeenCalledWith(gl.TRIANGLES, 0, 3);
+        expect(backend.getProfilerSnapshot().drawCalls).toBe(2);
     });
 
     it('executes supported built-in post-process passes without a custom handler', async () => {
