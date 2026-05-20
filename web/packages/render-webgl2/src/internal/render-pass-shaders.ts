@@ -15,6 +15,7 @@ export const TONEMAP_FRAGMENT_SHADER_SOURCE = `#version 300 es
 precision highp float;
 
 uniform sampler2D uSource;
+uniform sampler2D uExposureHistory;
 uniform int uMode;
 uniform float uExposureScale;
 uniform float uGamma;
@@ -23,6 +24,7 @@ uniform float uSaturation;
 uniform float uShoulderStrength;
 uniform float uToeStrength;
 uniform int uColorSpace;
+uniform int uUseExposureHistory;
 
 in vec2 vUv;
 out vec4 outColor;
@@ -150,7 +152,10 @@ vec3 applyTonemap(vec3 color) {
 
 void main() {
     vec4 sampled = texture(uSource, vUv);
-    vec3 color = sampled.rgb * uExposureScale;
+    float exposureScale = uUseExposureHistory != 0
+        ? max(texture(uExposureHistory, vec2(0.5, 0.5)).r, 1e-4)
+        : uExposureScale;
+    vec3 color = sampled.rgb * exposureScale;
     color = applyTonemap(color);
 
     float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
@@ -163,6 +168,70 @@ void main() {
     }
 
     outColor = vec4(color, sampled.a);
+}
+`;
+
+export const EXPOSURE_HISTORY_FRAGMENT_SHADER_SOURCE = `#version 300 es
+precision highp float;
+
+uniform sampler2D uSource;
+uniform sampler2D uPreviousExposure;
+uniform float uKeyValue;
+uniform float uMinExposure;
+uniform float uMaxExposure;
+uniform float uAdaptationRate;
+uniform float uDeltaTime;
+uniform int uHasPreviousExposure;
+
+in vec2 vUv;
+out vec4 outColor;
+
+float luma(vec3 color) {
+    return dot(color, vec3(0.2126, 0.7152, 0.0722));
+}
+
+vec3 sampleSource(vec2 uv) {
+    return texture(uSource, clamp(uv, vec2(0.001), vec2(0.999))).rgb;
+}
+
+void main() {
+    vec2 samplePoints[16] = vec2[](
+        vec2(0.125, 0.125),
+        vec2(0.375, 0.125),
+        vec2(0.625, 0.125),
+        vec2(0.875, 0.125),
+        vec2(0.125, 0.375),
+        vec2(0.375, 0.375),
+        vec2(0.625, 0.375),
+        vec2(0.875, 0.375),
+        vec2(0.125, 0.625),
+        vec2(0.375, 0.625),
+        vec2(0.625, 0.625),
+        vec2(0.875, 0.625),
+        vec2(0.125, 0.875),
+        vec2(0.375, 0.875),
+        vec2(0.625, 0.875),
+        vec2(0.875, 0.875)
+    );
+
+    float logAverageLuminance = 0.0;
+    for (int index = 0; index < 16; index += 1) {
+        logAverageLuminance += log(max(luma(sampleSource(samplePoints[index])), 1e-4));
+    }
+
+    float averageLuminance = exp(logAverageLuminance / 16.0);
+    float targetExposure = uKeyValue / max(averageLuminance, 1e-4);
+    float minExposureScale = exp2(uMinExposure);
+    float maxExposureScale = exp2(uMaxExposure);
+    targetExposure = clamp(targetExposure, minExposureScale, maxExposureScale);
+
+    float previousExposure = uHasPreviousExposure != 0
+        ? texture(uPreviousExposure, vec2(0.5, 0.5)).r
+        : targetExposure;
+    float blendFactor = 1.0 - exp(-max(uAdaptationRate, 0.0) * max(uDeltaTime, 0.0));
+    float adaptedExposure = mix(previousExposure, targetExposure, clamp(blendFactor, 0.0, 1.0));
+
+    outColor = vec4(adaptedExposure, 0.0, 0.0, 1.0);
 }
 `;
 
