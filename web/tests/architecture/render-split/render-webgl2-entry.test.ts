@@ -15,6 +15,8 @@ describe('render-webgl2 entry', () => {
         expect(renderWebgl2Buffer.createBufferFactory).toBeDefined();
         expect(renderWebgl2Buffer.Buffer).toBeDefined();
         expect(renderWebgl2Pipeline.createWebGL2RenderResourceAllocator).toBeDefined();
+        expect(renderWebgl2Pipeline.createWebGL2RenderPassLibrary).toBeDefined();
+        expect(renderWebgl2Pipeline.defineWebGL2RenderPassExecutor).toBeDefined();
         expect(renderWebgl2Pipeline.createManagedWebGL2RenderPipelineBackend).toBeDefined();
         expect('TextureFormat' in renderWebgl2Pipeline).toBe(false);
     });
