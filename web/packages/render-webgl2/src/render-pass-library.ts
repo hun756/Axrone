@@ -29,6 +29,7 @@ import {
 	type WebGL2ResolvedFramebufferBinding,
 } from './pipeline-contracts';
 import {
+	EXPOSURE_HISTORY_FRAGMENT_SHADER_SOURCE,
 	FULLSCREEN_VERTEX_SHADER_SOURCE,
 	POST_PROCESS_FRAGMENT_SHADER_SOURCE,
 	TONEMAP_FRAGMENT_SHADER_SOURCE,
@@ -72,6 +73,7 @@ interface MutableProfilerState {
 
 interface WebGL2TonemapUniforms {
 	readonly source: WebGLUniformLocation | null;
+	readonly exposureHistory: WebGLUniformLocation | null;
 	readonly mode: WebGLUniformLocation | null;
 	readonly exposureScale: WebGLUniformLocation | null;
 	readonly gamma: WebGLUniformLocation | null;
@@ -80,12 +82,30 @@ interface WebGL2TonemapUniforms {
 	readonly shoulderStrength: WebGLUniformLocation | null;
 	readonly toeStrength: WebGLUniformLocation | null;
 	readonly colorSpace: WebGLUniformLocation | null;
+	readonly useExposureHistory: WebGLUniformLocation | null;
 }
 
 interface WebGL2TonemapResources {
 	readonly program: WebGLProgram;
 	readonly vertexArray: WebGLVertexArrayObject | null;
 	readonly uniforms: WebGL2TonemapUniforms;
+}
+
+interface WebGL2ExposureUniforms {
+	readonly source: WebGLUniformLocation | null;
+	readonly previousExposure: WebGLUniformLocation | null;
+	readonly keyValue: WebGLUniformLocation | null;
+	readonly minExposure: WebGLUniformLocation | null;
+	readonly maxExposure: WebGLUniformLocation | null;
+	readonly adaptationRate: WebGLUniformLocation | null;
+	readonly deltaTime: WebGLUniformLocation | null;
+	readonly hasPreviousExposure: WebGLUniformLocation | null;
+}
+
+interface WebGL2ExposureResources {
+	readonly program: WebGLProgram;
+	readonly vertexArray: WebGLVertexArrayObject | null;
+	readonly uniforms: WebGL2ExposureUniforms;
 }
 
 interface WebGL2PostProcessUniforms {
@@ -135,6 +155,10 @@ const REQUIRED_EXECUTOR_KIND_SET = new Set<RenderPassKind>(REQUIRED_EXECUTOR_KIN
 const EMPTY_NOTES = Object.freeze([]) as readonly string[];
 const EMPTY_EXECUTORS = Object.freeze([]) as readonly WebGL2AnyRenderPassExecutorDescriptor[];
 const TONEMAP_PASS_NOTES = Object.freeze(['builtin-tonemap']) as readonly string[];
+const AUTOMATIC_EXPOSURE_TONEMAP_PASS_NOTES = Object.freeze([
+	'builtin-tonemap',
+	'builtin-auto-exposure',
+]) as readonly string[];
 const PRESENT_PASS_NOTES = Object.freeze(['builtin-present']) as readonly string[];
 const DIRECT_PRESENT_PASS_NOTES = Object.freeze(['builtin-present:direct']) as readonly string[];
 const POST_PROCESS_NOTES = new Map<string, readonly string[]>();
@@ -215,6 +239,14 @@ const resolveSourceTextureMessage = (
 	locale === 'tr'
 		? `Yerlesik WebGL2 ${kind} gecisleri 2D doku kaynagi gerektirir`
 		: `Built-in WebGL2 ${kind} passes require a 2D texture source`;
+
+const resolveTonemapExposureHistoryMessage = (
+	locale: WebGL2RenderPassLocale,
+	kind: 'source' | 'target'
+): string =>
+	locale === 'tr'
+		? `Yerlesik WebGL2 automatic exposure yolu ${kind === 'source' ? 'kaynak' : 'hedef'} 2D history dokusu gerektirir`
+		: `Built-in WebGL2 automatic exposure requires a 2D history ${kind} texture`;
 
 const resolveAuxiliaryTextureMessage = (
 	locale: WebGL2RenderPassLocale,
@@ -644,6 +676,7 @@ class WebGL2FramebufferResolver {
 
 class WebGL2FullscreenProgramCache {
 	private _tonemapResources: WebGL2TonemapResources | null = null;
+	private _exposureResources: WebGL2ExposureResources | null = null;
 	private _postProcessResources: WebGL2PostProcessResources | null = null;
 
 	constructor(
@@ -663,6 +696,7 @@ class WebGL2FullscreenProgramCache {
 			vertexArray,
 			uniforms: {
 				source: this._gl.getUniformLocation(program, 'uSource'),
+				exposureHistory: this._gl.getUniformLocation(program, 'uExposureHistory'),
 				mode: this._gl.getUniformLocation(program, 'uMode'),
 				exposureScale: this._gl.getUniformLocation(program, 'uExposureScale'),
 				gamma: this._gl.getUniformLocation(program, 'uGamma'),
@@ -671,10 +705,39 @@ class WebGL2FullscreenProgramCache {
 				shoulderStrength: this._gl.getUniformLocation(program, 'uShoulderStrength'),
 				toeStrength: this._gl.getUniformLocation(program, 'uToeStrength'),
 				colorSpace: this._gl.getUniformLocation(program, 'uColorSpace'),
+				useExposureHistory: this._gl.getUniformLocation(program, 'uUseExposureHistory'),
 			},
 		};
 
 		return this._tonemapResources;
+	}
+
+	getExposureResources(): WebGL2ExposureResources {
+		if (this._exposureResources) {
+			return this._exposureResources;
+		}
+
+		const program = this._createFullscreenProgram(
+			EXPOSURE_HISTORY_FRAGMENT_SHADER_SOURCE,
+			'exposure-history'
+		);
+		const vertexArray = this._gl.createVertexArray?.() ?? null;
+		this._exposureResources = {
+			program,
+			vertexArray,
+			uniforms: {
+				source: this._gl.getUniformLocation(program, 'uSource'),
+				previousExposure: this._gl.getUniformLocation(program, 'uPreviousExposure'),
+				keyValue: this._gl.getUniformLocation(program, 'uKeyValue'),
+				minExposure: this._gl.getUniformLocation(program, 'uMinExposure'),
+				maxExposure: this._gl.getUniformLocation(program, 'uMaxExposure'),
+				adaptationRate: this._gl.getUniformLocation(program, 'uAdaptationRate'),
+				deltaTime: this._gl.getUniformLocation(program, 'uDeltaTime'),
+				hasPreviousExposure: this._gl.getUniformLocation(program, 'uHasPreviousExposure'),
+			},
+		};
+
+		return this._exposureResources;
 	}
 
 	getPostProcessResources(): WebGL2PostProcessResources {
@@ -712,6 +775,12 @@ class WebGL2FullscreenProgramCache {
 		if (this._tonemapResources?.program) {
 			this._gl.deleteProgram?.(this._tonemapResources.program);
 		}
+		if (this._exposureResources?.vertexArray) {
+			this._gl.deleteVertexArray?.(this._exposureResources.vertexArray);
+		}
+		if (this._exposureResources?.program) {
+			this._gl.deleteProgram?.(this._exposureResources.program);
+		}
 		if (this._postProcessResources?.vertexArray) {
 			this._gl.deleteVertexArray?.(this._postProcessResources.vertexArray);
 		}
@@ -719,6 +788,7 @@ class WebGL2FullscreenProgramCache {
 			this._gl.deleteProgram?.(this._postProcessResources.program);
 		}
 		this._tonemapResources = null;
+		this._exposureResources = null;
 		this._postProcessResources = null;
 	}
 
@@ -842,6 +912,26 @@ const resolveTonemapExposureScale = (
 	return Math.max(0, exposure.keyValue ?? 0.18) / 0.18;
 };
 
+const resolveAutomaticExposureSettings = (
+	exposure: WebGL2RenderPassOf<'tonemap'>['metadata']['exposure']
+): {
+	readonly keyValue: number;
+	readonly minExposure: number;
+	readonly maxExposure: number;
+	readonly adaptationRate: number;
+} | null => {
+	if (!exposure || exposure.mode !== 'automatic') {
+		return null;
+	}
+
+	return {
+		keyValue: exposure.keyValue ?? 0.18,
+		minExposure: exposure.minExposure ?? -6,
+		maxExposure: exposure.maxExposure ?? 6,
+		adaptationRate: exposure.adaptationRate ?? 1.5,
+	};
+};
+
 const resolvePostProcessEffectId = (effectName: string): number => {
 	switch (effectName) {
 		case 'fxaa':
@@ -914,8 +1004,18 @@ const createBuiltinExecutors = (
 			kind: 'tonemap',
 			name: 'builtin-tonemap',
 			priority: BUILTIN_EXECUTOR_PRIORITY,
-			execute(pass, context) {
+			execute(pass, context, execution) {
 				const sourceTexture = framebuffers.getTextureHandle(context.graph, pass.metadata.source);
+				const automaticExposure = resolveAutomaticExposureSettings(pass.metadata.exposure);
+				const exposureHistorySourceSnapshot = pass.metadata.exposureHistorySource
+					? framebuffers.getTextureSnapshot(context.graph, pass.metadata.exposureHistorySource)
+					: null;
+				const exposureHistorySourceTexture = pass.metadata.exposureHistorySource
+					? framebuffers.getTextureHandle(context.graph, pass.metadata.exposureHistorySource)
+					: null;
+				const exposureHistoryTargetTexture = pass.metadata.exposureHistoryTarget
+					? framebuffers.getTextureHandle(context.graph, pass.metadata.exposureHistoryTarget)
+					: null;
 
 				if (!sourceTexture || sourceTexture.target !== gl.TEXTURE_2D) {
 					throw createValidationError(
@@ -927,6 +1027,88 @@ const createBuiltinExecutors = (
 				}
 
 				const resources = programs.getTonemapResources();
+				let resolvedExposureTexture: WebGL2RenderTextureNativeHandle | null = null;
+				let drawCalls = 1;
+
+				if (automaticExposure && pass.metadata.exposureHistoryTarget) {
+					if (
+						!exposureHistoryTargetTexture ||
+						exposureHistoryTargetTexture.target !== gl.TEXTURE_2D
+					) {
+						throw createValidationError(
+							locale,
+							'SOURCE_TEXTURE_INVALID',
+							resolveTonemapExposureHistoryMessage(locale, 'target'),
+							pass
+						);
+					}
+
+					const hasPreviousExposure = exposureHistorySourceSnapshot?.reused === true;
+					if (
+						hasPreviousExposure &&
+						(!exposureHistorySourceTexture || exposureHistorySourceTexture.target !== gl.TEXTURE_2D)
+					) {
+						throw createValidationError(
+							locale,
+							'SOURCE_TEXTURE_INVALID',
+							resolveTonemapExposureHistoryMessage(locale, 'source'),
+							pass
+						);
+					}
+
+					const exposureBinding = framebuffers.resolveBinding(
+						pass.metadata.exposureHistoryTarget,
+						null,
+						context
+					);
+					const exposureResources = programs.getExposureResources();
+
+					gl.bindFramebuffer(gl.FRAMEBUFFER, exposureBinding.framebuffer);
+					gl.viewport(0, 0, exposureBinding.width, exposureBinding.height);
+					gl.disable(gl.DEPTH_TEST);
+					gl.disable(gl.CULL_FACE);
+					gl.disable(gl.BLEND);
+					gl.depthMask?.(false);
+					gl.colorMask?.(true, true, true, true);
+					gl.useProgram(exposureResources.program);
+					gl.bindVertexArray?.(exposureResources.vertexArray);
+					gl.activeTexture?.(gl.TEXTURE0);
+					gl.bindTexture(gl.TEXTURE_2D, sourceTexture.texture);
+					gl.uniform1i?.(exposureResources.uniforms.source, 0);
+					gl.activeTexture?.(gl.TEXTURE0 + 1);
+					gl.bindTexture(
+						gl.TEXTURE_2D,
+						hasPreviousExposure ? exposureHistorySourceTexture?.texture ?? null : null
+					);
+					gl.uniform1i?.(exposureResources.uniforms.previousExposure, 1);
+					gl.uniform1f?.(exposureResources.uniforms.keyValue, automaticExposure.keyValue);
+					gl.uniform1f?.(exposureResources.uniforms.minExposure, automaticExposure.minExposure);
+					gl.uniform1f?.(exposureResources.uniforms.maxExposure, automaticExposure.maxExposure);
+					gl.uniform1f?.(
+						exposureResources.uniforms.adaptationRate,
+						automaticExposure.adaptationRate
+					);
+					gl.uniform1f?.(
+						exposureResources.uniforms.deltaTime,
+						context.statistics.deltaTime
+					);
+					gl.uniform1i?.(
+						exposureResources.uniforms.hasPreviousExposure,
+						hasPreviousExposure ? 1 : 0
+					);
+					gl.drawArrays(gl.TRIANGLES, 0, 3);
+					gl.bindVertexArray?.(null);
+					gl.activeTexture?.(gl.TEXTURE0 + 1);
+					gl.bindTexture(gl.TEXTURE_2D, null);
+					gl.activeTexture?.(gl.TEXTURE0);
+					gl.bindTexture(gl.TEXTURE_2D, null);
+
+					resolvedExposureTexture = exposureHistoryTargetTexture;
+					drawCalls += 1;
+
+					gl.bindFramebuffer(gl.FRAMEBUFFER, execution.binding.framebuffer);
+					gl.viewport(0, 0, execution.binding.width, execution.binding.height);
+				}
 
 				gl.disable(gl.DEPTH_TEST);
 				gl.disable(gl.CULL_FACE);
@@ -938,7 +1120,14 @@ const createBuiltinExecutors = (
 				gl.activeTexture?.(gl.TEXTURE0);
 				gl.bindTexture(gl.TEXTURE_2D, sourceTexture.texture);
 				gl.uniform1i?.(resources.uniforms.source, 0);
+				gl.activeTexture?.(gl.TEXTURE0 + 1);
+				gl.bindTexture(gl.TEXTURE_2D, resolvedExposureTexture?.texture ?? null);
+				gl.uniform1i?.(resources.uniforms.exposureHistory, 1);
 				gl.uniform1i?.(resources.uniforms.mode, resolveTonemapModeId(pass.metadata.mode));
+				gl.uniform1i?.(
+					resources.uniforms.useExposureHistory,
+					resolvedExposureTexture ? 1 : 0
+				);
 				gl.uniform1f?.(
 					resources.uniforms.exposureScale,
 					resolveTonemapExposureScale(pass.metadata.exposure)
@@ -957,13 +1146,18 @@ const createBuiltinExecutors = (
 				);
 				gl.drawArrays(gl.TRIANGLES, 0, 3);
 				gl.bindVertexArray?.(null);
+				gl.activeTexture?.(gl.TEXTURE0 + 1);
+				gl.bindTexture(gl.TEXTURE_2D, null);
+				gl.activeTexture?.(gl.TEXTURE0);
 				gl.bindTexture(gl.TEXTURE_2D, null);
 				gl.useProgram(null);
 				gl.depthMask?.(true);
 
 				return {
-					drawCalls: 1,
-					notes: TONEMAP_PASS_NOTES,
+					drawCalls,
+					notes: resolvedExposureTexture
+						? AUTOMATIC_EXPOSURE_TONEMAP_PASS_NOTES
+						: TONEMAP_PASS_NOTES,
 				};
 			},
 		}),
