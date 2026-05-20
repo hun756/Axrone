@@ -11,9 +11,10 @@ import type {
     RenderTonemappingSettings,
 } from '@axrone/render-core/types';
 import {
-    createManagedWebGL2RenderPipelineBackend,
+    createWebGL2RenderPassLibrary,
     createWebGL2RenderResourceAllocator,
-    type ManagedWebGL2RenderPipelineBackend,
+    defineWebGL2RenderPassExecutor,
+    type ManagedWebGL2RenderPassLibrary,
     type WebGL2RenderResourceHandle,
 } from '@axrone/render-webgl2/pipeline';
 import type { BoundingSphere } from '@axrone/geometry';
@@ -302,7 +303,7 @@ export class SceneRenderPipeline {
     private readonly _primitiveLookup = new Map<string, SceneRenderItem>();
     private readonly _options: SceneRenderPipelineOptions;
     private _activeExecution: ActiveExecutionState | null = null;
-    private _backend: ManagedWebGL2RenderPipelineBackend;
+    private _backend: ManagedWebGL2RenderPassLibrary;
     private _pipeline: RenderPipeline<WebGL2RenderResourceHandle>;
 
     constructor(options: SceneRenderPipelineOptions) {
@@ -311,22 +312,30 @@ export class SceneRenderPipeline {
         this._pipeline = this._createPipeline();
     }
 
-    private _createBackend(): ManagedWebGL2RenderPipelineBackend {
+    private _createBackend(): ManagedWebGL2RenderPassLibrary {
         const hdr = resolveSceneHdrOption(this._options.pipeline);
         const hdrEnabled = isHdrEnabled(hdr);
         const tonemapping = resolveSceneTonemappingOption(this._options.pipeline, hdrEnabled);
         const hasPostProcess = hasEnabledScenePostProcessEffects(this._options.pipeline);
 
-        return createManagedWebGL2RenderPipelineBackend({
+        return createWebGL2RenderPassLibrary({
             gl: this._options.gl,
             directFrameOutput:
                 !hdrEnabled &&
                 (tonemapping?.mode ?? 'none') === 'none' &&
                 !hasPostProcess,
-            handlers: {
-                opaque: (pass) => this._executeDrawPass(pass),
-                transparent: (pass) => this._executeDrawPass(pass),
-            },
+            executors: [
+                defineWebGL2RenderPassExecutor({
+                    kind: 'opaque',
+                    name: 'scene-draw-opaque',
+                    execute: (pass) => this._executeDrawPass(pass),
+                }),
+                defineWebGL2RenderPassExecutor({
+                    kind: 'transparent',
+                    name: 'scene-draw-transparent',
+                    execute: (pass) => this._executeDrawPass(pass),
+                }),
+            ],
         });
     }
 
