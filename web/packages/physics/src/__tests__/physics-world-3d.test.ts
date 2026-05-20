@@ -56,4 +56,102 @@ describe('PhysicsWorld3D modular structure', () => {
         expect(world.getConstraintManager().getConstraintsForBody(bodyA)).toContain(constraintId);
         expect(world.getConstraintManager().getConstraintsForBody(bodyB)).toContain(constraintId);
     });
+
+    it('exposes truthful body facades over manager-backed 3d runtime state', () => {
+        const world = new PhysicsWorld3D();
+        const bodyId = world.createBody({
+            type: 2,
+            position: { x: 1, y: 2, z: 3 },
+            linearDamping: 0.25,
+            angularDamping: 0.5,
+            fixedRotation: true,
+            bullet: true,
+            userData: { label: 'hero' },
+        });
+        world.createSphereShape(bodyId, {
+            center: { x: 0, y: 0, z: 0 },
+            radius: 0.75,
+        });
+
+        const body = world.getBody(bodyId);
+
+        expect(body).not.toBeNull();
+        expect(body?.getPosition()).toEqual({ x: 1, y: 2, z: 3 });
+        expect(body?.linearDamping).toBeCloseTo(0.25, 5);
+        expect(body?.angularDamping).toBeCloseTo(0.5, 5);
+        expect(body?.isFixedRotation()).toBe(true);
+        expect(body?.isBullet()).toBe(true);
+        expect(body?.shapes).toHaveLength(1);
+        expect(body?.userData).toEqual({ label: 'hero' });
+
+        body?.applyImpulseToCenter({ x: 2, y: 0, z: 0 });
+
+        expect(world.getBodyManager().getLinearVelocity(bodyId).x).toBeCloseTo(2, 5);
+    });
+
+    it('supports world-created 3d shapes for queries and ray casts', () => {
+        const world = new PhysicsWorld3D();
+        const bodyId = world.createBody({
+            type: 0,
+            position: { x: 0, y: 0, z: 0 },
+        });
+        const sphereId = world.createSphereShape(
+            bodyId,
+            { center: { x: 0, y: 0, z: 0 }, radius: 1 },
+            { density: 2 },
+            { categoryBits: 0x2, maskBits: 0xffff, groupIndex: 0 },
+            { userData: 'sphere' }
+        );
+        const boxId = world.createBoxShape(bodyId, {
+            center: { x: 3, y: 0, z: 0 },
+            halfExtents: { x: 0.5, y: 0.5, z: 0.5 },
+        });
+
+        const sphere = world.getShape(sphereId);
+        const rayHit = world.rayCastClosest(
+            { x: -5, y: 0, z: 0 },
+            { x: 1, y: 0, z: 0 },
+            10,
+            { categoryBits: 0x2 }
+        );
+
+        expect(sphere).not.toBeNull();
+        expect(sphere?.userData).toBe('sphere');
+        expect(sphere?.computeMassData(2).mass).toBeCloseTo((4 / 3) * Math.PI * 2, 5);
+        expect(world.queryPointAll({ x: 0.25, y: 0, z: 0 })).toContain(sphereId);
+        expect(world.queryAABBAll({ x: 2.4, y: -1, z: -1 }, { x: 3.6, y: 1, z: 1 })).toContain(boxId);
+        expect(rayHit?.shapeId).toBe(sphereId);
+        expect(rayHit?.point.x).toBeCloseTo(-1, 5);
+    });
+
+    it('exposes supported 3d constraints through world-level facades', () => {
+        const world = new PhysicsWorld3D();
+        const bodyA = world.createBody({ type: 2, position: { x: 0, y: 0, z: 0 } });
+        const bodyB = world.createBody({ type: 2, position: { x: 2, y: 0, z: 0 } });
+        const constraintId = world.createHingeConstraint({
+            bodyIdA: bodyA,
+            bodyIdB: bodyB,
+            localAnchorA: { x: 0.5, y: 0, z: 0 },
+            localAnchorB: { x: -0.5, y: 0, z: 0 },
+            localAxisA: { x: 0, y: 1, z: 0 },
+            localAxisB: { x: 0, y: 1, z: 0 },
+            enableLimit: true,
+            lowerLimit: -0.25,
+            upperLimit: 0.25,
+            collideConnected: true,
+            userData: { label: 'hinge' },
+        });
+
+        const constraint = world.getConstraint(constraintId);
+
+        expect(constraint).not.toBeNull();
+        expect(constraint?.collideConnected).toBe(true);
+        expect(constraint?.userData).toEqual({ label: 'hinge' });
+        expect(constraint?.getAnchorA()).toEqual({ x: 0.5, y: 0, z: 0 });
+        expect(constraint?.getAnchorB()).toEqual({ x: 1.5, y: 0, z: 0 });
+
+        constraint?.setEnabled(false);
+
+        expect(constraint?.isEnabled()).toBe(false);
+    });
 });
