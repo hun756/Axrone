@@ -57,6 +57,11 @@ interface RenderPassPlannerShadowSettings {
 
 interface RenderPassPlannerTonemappingSettings {
     readonly mode: RenderTonemappingMode;
+    readonly gamma: number;
+    readonly contrast: number;
+    readonly saturation: number;
+    readonly shoulderStrength: number;
+    readonly toeStrength: number;
 }
 
 interface RenderPassPlannerLightBakingSettings {
@@ -496,7 +501,14 @@ export class RenderPassPlanner<TNative = unknown> {
             });
         }
 
-        if (this._effectsBefore.length + this._effectsAfter.length > 0) {
+        const needsTonemap = input.hdr.enabled || this._settings.tonemapping.mode !== 'none';
+        const needsPostScratch =
+            this._effectsBefore.length + this._effectsAfter.length > 0 ||
+            (needsTonemap &&
+                this._effectsBefore.length === 0 &&
+                this._effectsAfter.length === 0);
+
+        if (needsPostScratch) {
             ping = this._acquireTexture(
                 createRenderResourceName('post', 'ping'),
                 {
@@ -571,16 +583,16 @@ export class RenderPassPlanner<TNative = unknown> {
             currentColor = target;
         }
 
-        const tonemapTarget: RenderResourceName<'post' | 'frame'> =
-            input.hdr.enabled || this._settings.tonemapping.mode !== 'none'
-                ? ((this._effectsAfter.length > 0
-                      ? this._effectsBefore.length % 2 === 0
-                            ? (ping as RenderResourceName<'post'>)
-                            : (pong as RenderResourceName<'post'>)
-                      : sceneColor) as RenderResourceName<'post' | 'frame'>)
+          const tonemapTarget: RenderResourceName<'post' | 'frame'> =
+            needsTonemap
+                ? ((this._effectsAfter.length > 0 || currentColor === sceneColor
+                    ? this._effectsBefore.length % 2 === 0
+                        ? (ping as RenderResourceName<'post'>)
+                        : (pong as RenderResourceName<'post'>)
+                    : sceneColor) as RenderResourceName<'post' | 'frame'>)
                 : (currentColor as RenderResourceName<'post' | 'frame'>);
 
-        if (input.hdr.enabled || this._settings.tonemapping.mode !== 'none') {
+          if (needsTonemap) {
             order = this._pushPass(order, {
                 kind: 'tonemap',
                 name: createRenderPassName('tonemap'),
@@ -592,6 +604,11 @@ export class RenderPassPlanner<TNative = unknown> {
                     source: currentColor,
                     target: tonemapTarget,
                     mode: this._settings.tonemapping.mode,
+                    gamma: this._settings.tonemapping.gamma,
+                    contrast: this._settings.tonemapping.contrast,
+                    saturation: this._settings.tonemapping.saturation,
+                    shoulderStrength: this._settings.tonemapping.shoulderStrength,
+                    toeStrength: this._settings.tonemapping.toeStrength,
                     hdr: input.hdr.enabled,
                     colorSpace: input.hdr.outputColorSpace,
                     exposure: input.hdr.exposure ?? null,
