@@ -170,9 +170,11 @@ export const POST_PROCESS_FRAGMENT_SHADER_SOURCE = `#version 300 es
 precision highp float;
 
 uniform sampler2D uSource;
+uniform sampler2D uAuxSource;
 uniform int uEffectMode;
 uniform vec2 uTexelSize;
 uniform vec4 uPrimary;
+uniform vec4 uSecondary;
 uniform vec3 uColor;
 uniform vec3 uLift;
 uniform vec3 uGammaVec;
@@ -194,6 +196,14 @@ float hash12(vec2 value) {
 
 vec3 sampleSource(vec2 uv) {
     return texture(uSource, clamp(uv, uTexelSize * 0.5, vec2(1.0) - uTexelSize * 0.5)).rgb;
+}
+
+vec3 sampleAux(vec2 uv) {
+    return texture(uAuxSource, clamp(uv, uTexelSize * 0.5, vec2(1.0) - uTexelSize * 0.5)).rgb;
+}
+
+float sampleAuxDepth(vec2 uv) {
+    return texture(uAuxSource, clamp(uv, uTexelSize * 0.5, vec2(1.0) - uTexelSize * 0.5)).r;
 }
 
 vec3 applyFxaa(vec2 uv) {
@@ -290,6 +300,152 @@ vec3 applyColorGrading(vec3 color) {
     return clamp(color, 0.0, 1.0);
 }
 
+float linearizeDepth(float depth) {
+    float nearPlane = max(uSecondary.x, 0.0001);
+    float farPlane = max(uSecondary.y, nearPlane + 0.0001);
+    float z = depth * 2.0 - 1.0;
+    return (2.0 * nearPlane * farPlane) /
+        max(farPlane + nearPlane - z * (farPlane - nearPlane), 0.0001);
+}
+
+vec3 applySharpen(vec2 uv, float strength) {
+    vec3 current = sampleSource(uv);
+    vec3 blur = (
+        sampleSource(uv + vec2(uTexelSize.x, 0.0)) +
+        sampleSource(uv - vec2(uTexelSize.x, 0.0)) +
+        sampleSource(uv + vec2(0.0, uTexelSize.y)) +
+        sampleSource(uv - vec2(0.0, uTexelSize.y))
+    ) * 0.25;
+
+    return max(current + (current - blur) * clamp(strength, 0.0, 1.0), vec3(0.0));
+}
+
+vec3 applyBloom(vec3 color, vec2 uv) {
+    float threshold = max(uPrimary.x, 0.0);
+    float knee = max(uPrimary.y, 0.0001);
+    float intensity = max(uPrimary.z, 0.0);
+    float radius = mix(2.0, 7.0, clamp(uPrimary.w, 0.0, 1.5) / 1.5);
+    vec2 stepUv = uTexelSize * radius;
+    vec2 offsets[8] = vec2[](
+        vec2(-1.0, 0.0),
+        vec2(1.0, 0.0),
+        vec2(0.0, -1.0),
+        vec2(0.0, 1.0),
+        vec2(-0.707, -0.707),
+        vec2(0.707, -0.707),
+        vec2(-0.707, 0.707),
+        vec2(0.707, 0.707)
+    );
+
+    vec3 bloom = vec3(0.0);
+    float weightSum = 0.0;
+
+    for (int index = 0; index < 8; index += 1) {
+        vec3 sampleColor = sampleSource(uv + offsets[index] * stepUv);
+        float brightness = luma(sampleColor);
+        float soft = clamp(brightness - threshold + knee, 0.0, 2.0 * knee);
+        soft = soft * soft / max(4.0 * knee, 0.0001);
+        float contribution = max(brightness - threshold, soft) / max(brightness, 0.0001);
+        bloom += sampleColor * contribution;
+        weightSum += max(contribution, 0.0001);
+    }
+
+    if (weightSum <= 0.0) {
+        return color;
+    }
+
+    return color + bloom / weightSum * intensity;
+}
+
+vec3 applySsao(vec3 color, vec2 uv) {
+    float centerDepth = linearizeDepth(sampleAuxDepth(uv));
+    float radius = max(uPrimary.x, 0.01);
+    float intensity = max(uPrimary.y, 0.0);
+    float bias = max(uPrimary.z, 0.0);
+    float sampleScale = clamp(uPrimary.w / 16.0, 0.5, 2.0);
+    vec2 stepUv = uTexelSize * radius * 12.0 * sampleScale;
+    vec2 offsets[8] = vec2[](
+        vec2(-1.0, 0.0),
+        vec2(1.0, 0.0),
+        vec2(0.0, -1.0),
+        vec2(0.0, 1.0),
+        vec2(-0.866, -0.5),
+        vec2(0.866, -0.5),
+        vec2(-0.866, 0.5),
+        vec2(0.866, 0.5)
+    );
+
+    float occlusion = 0.0;
+    float weightSum = 0.0;
+
+    for (int index = 0; index < 8; index += 1) {
+        float sampleDepth = linearizeDepth(sampleAuxDepth(uv + offsets[index] * stepUv));
+        float depthDelta = centerDepth - sampleDepth;
+        float weight = 1.0 - smoothstep(0.0, radius * 32.0, abs(depthDelta));
+        float blocked = smoothstep(bias, bias + radius * 8.0, depthDelta);
+        occlusion += blocked * weight;
+        weightSum += max(weight, 0.0001);
+    }
+
+    float ao = 1.0 - clamp((occlusion / max(weightSum, 0.0001)) * intensity, 0.0, 0.95);
+    return color * ao;
+}
+
+vec3 applyDepthOfField(vec3 color, vec2 uv) {
+    float focusDistance = max(uPrimary.x, 0.01);
+    float aperture = max(uPrimary.y, 0.01);
+    float focalLength = max(uPrimary.z, 1.0);
+    float maxCoC = max(uPrimary.w, 0.0);
+    float sceneDepth = linearizeDepth(sampleAuxDepth(uv));
+    float cocPixels = min(
+        maxCoC,
+        abs(sceneDepth - focusDistance) / max(focusDistance, 0.01) * aperture * (focalLength / 50.0)
+    );
+
+    if (cocPixels < 0.25) {
+        return color;
+    }
+
+    vec2 stepUv = uTexelSize * cocPixels * 0.35;
+    vec2 offsets[8] = vec2[](
+        vec2(-1.0, 0.0),
+        vec2(1.0, 0.0),
+        vec2(0.0, -1.0),
+        vec2(0.0, 1.0),
+        vec2(-0.707, -0.707),
+        vec2(0.707, -0.707),
+        vec2(-0.707, 0.707),
+        vec2(0.707, 0.707)
+    );
+
+    vec3 blurred = color;
+
+    for (int index = 0; index < 8; index += 1) {
+        blurred += sampleSource(uv + offsets[index] * stepUv);
+    }
+
+    return blurred / 9.0;
+}
+
+vec3 applyTaa(vec2 uv) {
+    vec3 current = applySharpen(uv, uPrimary.y);
+    if (uSecondary.z < 0.5) {
+        return current;
+    }
+
+    vec2 jitterOffset = uSecondary.xy * uPrimary.z * uTexelSize;
+    vec3 history = sampleAux(uv - jitterOffset);
+    vec3 neighborA = sampleSource(uv + vec2(uTexelSize.x, 0.0));
+    vec3 neighborB = sampleSource(uv - vec2(uTexelSize.x, 0.0));
+    vec3 neighborC = sampleSource(uv + vec2(0.0, uTexelSize.y));
+    vec3 neighborD = sampleSource(uv - vec2(0.0, uTexelSize.y));
+    vec3 neighborhoodMin = min(current, min(min(neighborA, neighborB), min(neighborC, neighborD)));
+    vec3 neighborhoodMax = max(current, max(max(neighborA, neighborB), max(neighborC, neighborD)));
+
+    history = clamp(history, neighborhoodMin, neighborhoodMax);
+    return mix(current, history, clamp(uPrimary.x, 0.0, 0.98));
+}
+
 void main() {
     vec4 sampled = texture(uSource, vUv);
     vec3 color = sampled.rgb;
@@ -304,8 +460,16 @@ void main() {
         color = applyChromaticAberration(vUv);
     } else if (uEffectMode == 5) {
         color = applyColorGrading(color);
+    } else if (uEffectMode == 6) {
+        color = applyBloom(color, vUv);
+    } else if (uEffectMode == 7) {
+        color = applySsao(color, vUv);
+    } else if (uEffectMode == 8) {
+        color = applyDepthOfField(color, vUv);
+    } else if (uEffectMode == 9) {
+        color = applyTaa(vUv);
     }
 
-    outColor = vec4(clamp(color, 0.0, 1.0), sampled.a);
+    outColor = vec4(max(color, vec3(0.0)), sampled.a);
 }
 `;

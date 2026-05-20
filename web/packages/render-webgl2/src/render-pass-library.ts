@@ -1,11 +1,12 @@
-import type {
-	ReadonlyRenderResourceRegistry,
-	RenderClearState,
-	RenderExecutionContext,
-	RenderFrameResult,
-	RenderPassKind,
-	RenderResourceName,
-	ResolvedRenderPass,
+import {
+	BUILTIN_POST_PROCESS_EFFECTS as CORE_BUILTIN_POST_PROCESS_EFFECTS,
+	type ReadonlyRenderResourceRegistry,
+	type RenderClearState,
+	type RenderExecutionContext,
+	type RenderFrameResult,
+	type RenderPassKind,
+	type RenderResourceName,
+	type ResolvedRenderPass,
 } from '@axrone/render-core/types';
 import {
 	defineWebGL2RenderPassExecutor,
@@ -89,9 +90,11 @@ interface WebGL2TonemapResources {
 
 interface WebGL2PostProcessUniforms {
 	readonly source: WebGLUniformLocation | null;
+	readonly auxSource: WebGLUniformLocation | null;
 	readonly effectMode: WebGLUniformLocation | null;
 	readonly texelSize: WebGLUniformLocation | null;
 	readonly primary: WebGLUniformLocation | null;
+	readonly secondary: WebGLUniformLocation | null;
 	readonly color: WebGLUniformLocation | null;
 	readonly lift: WebGLUniformLocation | null;
 	readonly gamma: WebGLUniformLocation | null;
@@ -112,14 +115,6 @@ interface BuiltinExecutorDependencies {
 	readonly programs: WebGL2FullscreenProgramCache;
 }
 
-const BUILTIN_POST_PROCESS_EFFECTS = [
-	'color-grading',
-	'chromatic-aberration',
-	'film-grain',
-	'fxaa',
-	'vignette',
-] as const;
-
 const REQUIRED_EXECUTOR_KINDS = [
 	'depth-prepass',
 	'shadow',
@@ -135,7 +130,7 @@ const REQUIRED_EXECUTOR_KINDS = [
 ] as const satisfies readonly RenderPassKind[];
 
 const BUILTIN_EXECUTOR_PRIORITY = -1024;
-const BUILTIN_POST_PROCESS_EFFECT_SET = new Set<string>(BUILTIN_POST_PROCESS_EFFECTS);
+const BUILTIN_POST_PROCESS_EFFECT_SET = new Set<string>(CORE_BUILTIN_POST_PROCESS_EFFECTS);
 const REQUIRED_EXECUTOR_KIND_SET = new Set<RenderPassKind>(REQUIRED_EXECUTOR_KINDS);
 const EMPTY_NOTES = Object.freeze([]) as readonly string[];
 const EMPTY_EXECUTORS = Object.freeze([]) as readonly WebGL2AnyRenderPassExecutorDescriptor[];
@@ -220,6 +215,14 @@ const resolveSourceTextureMessage = (
 	locale === 'tr'
 		? `Yerlesik WebGL2 ${kind} gecisleri 2D doku kaynagi gerektirir`
 		: `Built-in WebGL2 ${kind} passes require a 2D texture source`;
+
+const resolveAuxiliaryTextureMessage = (
+	locale: WebGL2RenderPassLocale,
+	effectName: string
+): string =>
+	locale === 'tr'
+		? `Yerlesik WebGL2 ${effectName} gecisi yardimci 2D doku girdisi gerektirir`
+		: `Built-in WebGL2 ${effectName} pass requires an auxiliary 2D texture input`;
 
 const resolveShaderCreateMessage = (
 	locale: WebGL2RenderPassLocale,
@@ -686,9 +689,11 @@ class WebGL2FullscreenProgramCache {
 			vertexArray,
 			uniforms: {
 				source: this._gl.getUniformLocation(program, 'uSource'),
+				auxSource: this._gl.getUniformLocation(program, 'uAuxSource'),
 				effectMode: this._gl.getUniformLocation(program, 'uEffectMode'),
 				texelSize: this._gl.getUniformLocation(program, 'uTexelSize'),
 				primary: this._gl.getUniformLocation(program, 'uPrimary'),
+				secondary: this._gl.getUniformLocation(program, 'uSecondary'),
 				color: this._gl.getUniformLocation(program, 'uColor'),
 				lift: this._gl.getUniformLocation(program, 'uLift'),
 				gamma: this._gl.getUniformLocation(program, 'uGammaVec'),
@@ -849,10 +854,21 @@ const resolvePostProcessEffectId = (effectName: string): number => {
 			return 4;
 		case 'color-grading':
 			return 5;
+		case 'bloom':
+			return 6;
+		case 'ssao':
+			return 7;
+		case 'depth-of-field':
+			return 8;
+		case 'taa':
+			return 9;
 		default:
 			return 0;
 	}
 };
+
+const requiresAuxiliaryPostProcessTexture = (effectName: string): boolean =>
+	effectName === 'ssao' || effectName === 'depth-of-field' || effectName === 'taa';
 
 const createBuiltinExecutors = (
 	dependencies: BuiltinExecutorDependencies
@@ -968,6 +984,10 @@ const createBuiltinExecutors = (
 					pass.metadata.source
 				);
 				const sourceTexture = framebuffers.getTextureHandle(context.graph, pass.metadata.source);
+				const auxiliaryInput = pass.inputs.length > 1 ? pass.inputs[1] ?? null : null;
+				const auxiliaryTexture = auxiliaryInput
+					? framebuffers.getTextureHandle(context.graph, auxiliaryInput)
+					: null;
 
 				if (!sourceTexture || sourceTexture.target !== gl.TEXTURE_2D) {
 					throw createValidationError(
@@ -978,17 +998,38 @@ const createBuiltinExecutors = (
 					);
 				}
 
+				if (
+					requiresAuxiliaryPostProcessTexture(effect.name) &&
+					(!auxiliaryTexture || auxiliaryTexture.target !== gl.TEXTURE_2D)
+				) {
+					throw createValidationError(
+						locale,
+						'SOURCE_TEXTURE_INVALID',
+						resolveAuxiliaryTextureMessage(locale, effect.name),
+						pass
+					);
+				}
+
 				const width = sourceSnapshot?.descriptor.width ?? context.viewport.width;
 				const height = sourceSnapshot?.descriptor.height ?? context.viewport.height;
 				const resources = programs.getPostProcessResources();
 
 				let primary: readonly [number, number, number, number] = [0, 0, 0, 0];
+				let secondary: readonly [number, number, number, number] = [0, 0, 0, 0];
 				let color: readonly [number, number, number] = [0, 0, 0];
 				let lift: readonly [number, number, number] = [1, 1, 1];
 				let gamma: readonly [number, number, number] = [1, 1, 1];
 				let gain: readonly [number, number, number] = [1, 1, 1];
 
 				switch (effect.name) {
+					case 'bloom':
+						primary = [
+							effect.settings.threshold ?? 1,
+							effect.settings.knee ?? 0.5,
+							effect.settings.intensity ?? 0.65,
+							effect.settings.radius ?? 0.9,
+						];
+						break;
 					case 'fxaa':
 						primary = [
 							effect.settings.subpixel ?? 0.75,
@@ -1028,6 +1069,38 @@ const createBuiltinExecutors = (
 						gamma = effect.settings.gamma ?? [1, 1, 1];
 						gain = effect.settings.gain ?? [1, 1, 1];
 						break;
+					case 'ssao':
+						primary = [
+							effect.settings.radius ?? 0.35,
+							effect.settings.intensity ?? 1,
+							effect.settings.bias ?? 0.025,
+							effect.settings.sampleCount ?? 16,
+						];
+						secondary = [context.camera.near, context.camera.far, 0, 0];
+						break;
+					case 'depth-of-field':
+						primary = [
+							effect.settings.focusDistance ?? 10,
+							effect.settings.aperture ?? 5.6,
+							effect.settings.focalLength ?? 50,
+							effect.settings.maxCoC ?? 12,
+						];
+						secondary = [context.camera.near, context.camera.far, 0, 0];
+						break;
+					case 'taa':
+						primary = [
+							effect.settings.blendFactor ?? 0.92,
+							effect.settings.sharpen ?? 0.1,
+							effect.settings.jitterScale ?? 1,
+							0,
+						];
+						secondary = [
+							context.camera.jitter?.[0] ?? 0,
+							context.camera.jitter?.[1] ?? 0,
+							auxiliaryTexture ? 1 : 0,
+							0,
+						];
+						break;
 				}
 
 				gl.disable(gl.DEPTH_TEST);
@@ -1040,6 +1113,9 @@ const createBuiltinExecutors = (
 				gl.activeTexture?.(gl.TEXTURE0);
 				gl.bindTexture(gl.TEXTURE_2D, sourceTexture.texture);
 				gl.uniform1i?.(resources.uniforms.source, 0);
+				gl.activeTexture?.(gl.TEXTURE0 + 1);
+				gl.bindTexture(gl.TEXTURE_2D, auxiliaryTexture?.texture ?? null);
+				gl.uniform1i?.(resources.uniforms.auxSource, 1);
 				gl.uniform1i?.(
 					resources.uniforms.effectMode,
 					resolvePostProcessEffectId(effect.name)
@@ -1056,6 +1132,13 @@ const createBuiltinExecutors = (
 					primary[2],
 					primary[3]
 				);
+				gl.uniform4f?.(
+					resources.uniforms.secondary,
+					secondary[0],
+					secondary[1],
+					secondary[2],
+					secondary[3]
+				);
 				gl.uniform3f?.(resources.uniforms.color, color[0], color[1], color[2]);
 				gl.uniform3f?.(resources.uniforms.lift, lift[0], lift[1], lift[2]);
 				gl.uniform3f?.(resources.uniforms.gamma, gamma[0], gamma[1], gamma[2]);
@@ -1063,6 +1146,9 @@ const createBuiltinExecutors = (
 				gl.uniform1f?.(resources.uniforms.frameSeed, context.frame);
 				gl.drawArrays(gl.TRIANGLES, 0, 3);
 				gl.bindVertexArray?.(null);
+				gl.activeTexture?.(gl.TEXTURE0 + 1);
+				gl.bindTexture(gl.TEXTURE_2D, null);
+				gl.activeTexture?.(gl.TEXTURE0);
 				gl.bindTexture(gl.TEXTURE_2D, null);
 				gl.useProgram(null);
 				gl.depthMask?.(true);
