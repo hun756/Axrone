@@ -525,6 +525,12 @@ describe('render-webgl2 pipeline backend', () => {
             format: 'rgba8',
             usage: ['color-attachment', 'sampled'],
         };
+        const depthDescriptor: RenderTextureDescriptor = {
+            width: 256,
+            height: 128,
+            format: 'depth24',
+            usage: ['depth-attachment', 'sampled'],
+        };
         const targetDescriptor: RenderTextureDescriptor = {
             width: 256,
             height: 128,
@@ -534,7 +540,12 @@ describe('render-webgl2 pipeline backend', () => {
 
         const graph = createGraph([
             createSnapshot('frame', 'scene-color', sourceDescriptor, allocator.createTexture(sourceDescriptor)),
-            createSnapshot('post', 'fxaa', targetDescriptor, allocator.createTexture(targetDescriptor)),
+            createSnapshot('frame', 'scene-depth', depthDescriptor, allocator.createTexture(depthDescriptor)),
+            createSnapshot('history', 'taa-a', targetDescriptor, allocator.createTexture(targetDescriptor)),
+            createSnapshot('post', 'bloom', targetDescriptor, allocator.createTexture(targetDescriptor)),
+            createSnapshot('post', 'ssao', targetDescriptor, allocator.createTexture(targetDescriptor)),
+            createSnapshot('post', 'dof', targetDescriptor, allocator.createTexture(targetDescriptor)),
+            createSnapshot('history', 'taa-b', targetDescriptor, allocator.createTexture(targetDescriptor)),
         ]);
         const context = createContext(graph);
         const backend = createManagedWebGL2RenderPipelineBackend({ gl });
@@ -543,27 +554,129 @@ describe('render-webgl2 pipeline backend', () => {
         await backend.executePass(
             {
                 kind: 'post-process',
-                name: createRenderPassName('post-process:fxaa'),
+                name: createRenderPassName('post-process:bloom'),
                 order: 1,
                 queue: 'post-process',
                 enabled: true,
                 estimatedCost: 0.2,
-                target: createRenderResourceName('post', 'fxaa'),
+                target: createRenderResourceName('post', 'bloom'),
                 inputs: [createRenderResourceName('frame', 'scene-color')],
                 metadata: {
                     source: createRenderResourceName('frame', 'scene-color'),
-                    target: createRenderResourceName('post', 'fxaa'),
-                    phase: 'after-tonemap',
+                    target: createRenderResourceName('post', 'bloom'),
+                    phase: 'before-tonemap',
                     effect: {
                         category: 'builtin',
-                        name: 'fxaa',
-                        phase: 'after-tonemap',
+                        name: 'bloom',
+                        phase: 'before-tonemap',
                         quality: 'high',
                         order: 0,
                         settings: {
-                            subpixel: 0.75,
-                            edgeThreshold: 0.166,
-                            edgeThresholdMin: 0.0833,
+                            threshold: 1,
+                            knee: 0.5,
+                            intensity: 0.65,
+                            radius: 0.9,
+                        },
+                    },
+                },
+            },
+            context
+        );
+        await backend.executePass(
+            {
+                kind: 'post-process',
+                name: createRenderPassName('post-process:ssao'),
+                order: 2,
+                queue: 'post-process',
+                enabled: true,
+                estimatedCost: 0.2,
+                target: createRenderResourceName('post', 'ssao'),
+                inputs: [
+                    createRenderResourceName('frame', 'scene-color'),
+                    createRenderResourceName('frame', 'scene-depth'),
+                ],
+                metadata: {
+                    source: createRenderResourceName('frame', 'scene-color'),
+                    target: createRenderResourceName('post', 'ssao'),
+                    phase: 'before-tonemap',
+                    effect: {
+                        category: 'builtin',
+                        name: 'ssao',
+                        phase: 'before-tonemap',
+                        quality: 'high',
+                        order: 1,
+                        settings: {
+                            radius: 0.35,
+                            intensity: 1,
+                            bias: 0.025,
+                            sampleCount: 16,
+                        },
+                    },
+                },
+            },
+            context
+        );
+        await backend.executePass(
+            {
+                kind: 'post-process',
+                name: createRenderPassName('post-process:depth-of-field'),
+                order: 3,
+                queue: 'post-process',
+                enabled: true,
+                estimatedCost: 0.2,
+                target: createRenderResourceName('post', 'dof'),
+                inputs: [
+                    createRenderResourceName('frame', 'scene-color'),
+                    createRenderResourceName('frame', 'scene-depth'),
+                ],
+                metadata: {
+                    source: createRenderResourceName('frame', 'scene-color'),
+                    target: createRenderResourceName('post', 'dof'),
+                    phase: 'before-tonemap',
+                    effect: {
+                        category: 'builtin',
+                        name: 'depth-of-field',
+                        phase: 'before-tonemap',
+                        quality: 'high',
+                        order: 2,
+                        settings: {
+                            focusDistance: 10,
+                            aperture: 5.6,
+                            focalLength: 50,
+                            maxCoC: 12,
+                        },
+                    },
+                },
+            },
+            context
+        );
+        await backend.executePass(
+            {
+                kind: 'post-process',
+                name: createRenderPassName('post-process:taa'),
+                order: 4,
+                queue: 'post-process',
+                enabled: true,
+                estimatedCost: 0.2,
+                target: createRenderResourceName('history', 'taa-b'),
+                inputs: [
+                    createRenderResourceName('frame', 'scene-color'),
+                    createRenderResourceName('history', 'taa-a'),
+                ],
+                metadata: {
+                    source: createRenderResourceName('frame', 'scene-color'),
+                    target: createRenderResourceName('history', 'taa-b'),
+                    phase: 'before-tonemap',
+                    effect: {
+                        category: 'builtin',
+                        name: 'taa',
+                        phase: 'before-tonemap',
+                        quality: 'high',
+                        order: 3,
+                        settings: {
+                            blendFactor: 0.92,
+                            sharpen: 0.1,
+                            jitterScale: 1,
                         },
                     },
                 },
@@ -574,8 +687,9 @@ describe('render-webgl2 pipeline backend', () => {
         expect(gl.useProgram).toHaveBeenCalled();
         expect(gl.uniform2f).toHaveBeenCalled();
         expect(gl.uniform4f).toHaveBeenCalled();
+        expect(gl.activeTexture).toHaveBeenCalledWith(gl.TEXTURE0 + 1);
         expect(gl.drawArrays).toHaveBeenCalledWith(gl.TRIANGLES, 0, 3);
-        expect(backend.getProfilerSnapshot().drawCalls).toBe(1);
+        expect(backend.getProfilerSnapshot().drawCalls).toBe(4);
     });
 
     it('fails loudly for unsupported passes when no handler is registered', async () => {
@@ -601,8 +715,8 @@ describe('render-webgl2 pipeline backend', () => {
                         target: createRenderResourceName('post', 'fx'),
                         phase: 'before-tonemap',
                         effect: {
-                            category: 'builtin',
-                            name: 'bloom',
+                            category: 'custom',
+                            name: 'custom-bloom',
                             phase: 'before-tonemap',
                             quality: 'medium',
                             order: 0,
