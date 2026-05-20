@@ -109,6 +109,7 @@ describe('SceneRenderPipeline', () => {
         const frameState = new SceneRenderFrameState().begin(1);
 
         const stats = pipeline.render({
+            actors: [],
             frame: 1,
             deltaSeconds: 1 / 60,
             viewportWidth: 640,
@@ -197,6 +198,7 @@ describe('SceneRenderPipeline', () => {
         const frameState = new SceneRenderFrameState().begin(1);
 
         const stats = pipeline.render({
+            actors: [],
             frame: 1,
             deltaSeconds: 1 / 60,
             viewportWidth: 640,
@@ -268,5 +270,117 @@ describe('SceneRenderPipeline', () => {
         expect(gl.blitFramebuffer).toHaveBeenCalledTimes(1);
 
         pipeline.dispose();
+    });
+
+    it('owns sprite batching and transparent budget aggregation for the active render pass', () => {
+        const gl = createMockGL();
+        const execute = vi.fn();
+        const spriteRender = vi.fn(() => ({
+            drawnSpriteCount: 2,
+            spriteBatchCount: 1,
+            skippedSpriteCount: 1,
+            warnings: ['sprite budget warning'],
+        }));
+        const spriteClear = vi.fn();
+        const pipeline = new SceneRenderPipeline({
+            gl,
+            drawExecutor: {
+                execute,
+            },
+            planning: {
+                maxTransparentPrimitives: 5,
+            },
+            spriteBatchRuntime: {
+                render: spriteRender,
+                clear: spriteClear,
+            },
+        });
+        const frameState = new SceneRenderFrameState().begin(1);
+
+        const stats = pipeline.render({
+            actors: [{} as any],
+            frame: 1,
+            deltaSeconds: 1 / 60,
+            viewportWidth: 640,
+            viewportHeight: 360,
+            cameraFrame: {
+                camera: {
+                    id: 'camera:main',
+                    clearFlags: ['color', 'depth'],
+                    clearColor: [0.1, 0.2, 0.3, 1],
+                    clearDepth: 1,
+                    near: 0.1,
+                    far: 100,
+                },
+                viewMatrix: new Mat4(),
+                projectionMatrix: new Mat4(),
+                viewProjectionMatrix: new Mat4(),
+                camera3D: {
+                    frustum: {},
+                },
+                position: [0, 0, 5],
+            } as any,
+            lighting: {
+                stats: {
+                    selectedDirectionalCount: 0,
+                    selectedPointCount: 0,
+                    selectedSpotCount: 0,
+                },
+            } as any,
+            renderPass: {
+                id: 'main',
+                clearFlags: ['color', 'depth'],
+                clearColor: null,
+                clearDepth: null,
+            } as any,
+            drawContext: {} as any,
+            frameState,
+            renderItems: [
+                {
+                    renderer: {
+                        id: 'renderer:glass',
+                        meshId: 'mesh:glass',
+                        renderOrder: 0,
+                        visible: true,
+                        receiveLighting: true,
+                    },
+                    transform: {
+                        worldMatrix: new Mat4(),
+                    },
+                },
+            ] as any,
+            resolveBounds: () => null,
+            resolveMaterial: () => ({
+                materialId: 'material:glass',
+                shadingModel: 'pbr',
+                alphaMode: 'blend',
+                transparent: true,
+            }),
+        });
+
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(spriteRender).toHaveBeenCalledWith(
+            expect.objectContaining({
+                transparentBudget: {
+                    total: 5,
+                    remaining: 4,
+                },
+            })
+        );
+        expect(stats).toEqual(
+            expect.objectContaining({
+                transparentCount: 3,
+                meshTransparentCount: 1,
+                spriteTransparentCount: 2,
+                spriteBatchCount: 1,
+                skippedSpriteCount: 1,
+                warnings: ['sprite budget warning'],
+            })
+        );
+
+        pipeline.reset();
+        expect(spriteClear).toHaveBeenCalledTimes(1);
+        pipeline.dispose();
+        expect(spriteClear).toHaveBeenCalledTimes(2);
     });
 });
