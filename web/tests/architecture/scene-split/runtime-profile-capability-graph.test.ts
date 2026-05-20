@@ -121,6 +121,8 @@ describe('runtime profile capability graph', () => {
             '@axrone/render-2d',
             '@axrone/render-3d',
             '@axrone/render-webgl2',
+            '@axrone/runtime-profile-2d',
+            '@axrone/runtime-profile-3d',
             '@axrone/scene-2d',
             '@axrone/scene-3d',
             '@axrone/scene-runtime',
