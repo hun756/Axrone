@@ -59,6 +59,7 @@ export class BodyManager3D implements Disposable {
     private readonly _bodyIdToIndex = new Map<BodyId3D, number>();
     private readonly _indexToBodyId = new Map<number, BodyId3D>();
     private readonly _freeIndices: number[] = [];
+    private readonly _userData = new Map<BodyId3D, unknown>();
 
     private readonly _positions: Float64Array;
     private readonly _velocities: Float64Array;
@@ -146,6 +147,10 @@ export class BodyManager3D implements Disposable {
         if (def.enabled !== false) flags |= 64;
         this._bodyFlags[index] = flags;
 
+        if (def.userData !== undefined) {
+            this._userData.set(bodyId, def.userData);
+        }
+
         const massOffset = index * MASS_STRIDE;
         if (def.type === 2) {
             this._massData[massOffset] = 1;
@@ -188,8 +193,13 @@ export class BodyManager3D implements Disposable {
         this._gravityScales[index] = 1;
         this._dampings[index * 2] = 0;
         this._dampings[index * 2 + 1] = 0;
+        this._userData.delete(bodyId);
 
         this._bodyCount -= 1;
+    }
+
+    hasBody(bodyId: BodyId3D): boolean {
+        return this._bodyIdToIndex.has(bodyId);
     }
 
     getPosition(bodyId: BodyId3D): IVec3Like {
@@ -294,6 +304,63 @@ export class BodyManager3D implements Disposable {
         this._bodyTypes[index] = type;
     }
 
+    getBodyFlags(bodyId: BodyId3D): number {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined) return 0;
+        return this._bodyFlags[index];
+    }
+
+    isEnabled(bodyId: BodyId3D): boolean {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined) return false;
+        return (this._bodyFlags[index] & 64) !== 0;
+    }
+
+    setEnabled(bodyId: BodyId3D, enabled: boolean): void {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined) return;
+
+        if (enabled) {
+            this._bodyFlags[index] |= 64;
+        } else {
+            this._bodyFlags[index] &= ~64;
+        }
+    }
+
+    isFixedRotation(bodyId: BodyId3D): boolean {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined) return false;
+        return (this._bodyFlags[index] & 1) !== 0;
+    }
+
+    setFixedRotation(bodyId: BodyId3D, fixed: boolean): void {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined) return;
+
+        if (fixed) {
+            this._bodyFlags[index] |= 1;
+        } else {
+            this._bodyFlags[index] &= ~1;
+        }
+    }
+
+    isBullet(bodyId: BodyId3D): boolean {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined) return false;
+        return (this._bodyFlags[index] & 2) !== 0;
+    }
+
+    setBullet(bodyId: BodyId3D, bullet: boolean): void {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined) return;
+
+        if (bullet) {
+            this._bodyFlags[index] |= 2;
+        } else {
+            this._bodyFlags[index] &= ~2;
+        }
+    }
+
     getMass(bodyId: BodyId3D): number {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return 0;
@@ -338,6 +405,45 @@ export class BodyManager3D implements Disposable {
         this._massData[offset + 3] = inertia.x > 0 ? 1 / inertia.x : 0;
         this._massData[offset + 4] = inertia.y > 0 ? 1 / inertia.y : 0;
         this._massData[offset + 5] = inertia.z > 0 ? 1 / inertia.z : 0;
+    }
+
+    getLinearDamping(bodyId: BodyId3D): number {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined) return 0;
+        return this._dampings[index * 2];
+    }
+
+    setLinearDamping(bodyId: BodyId3D, damping: number): void {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined) return;
+        this._dampings[index * 2] = damping;
+    }
+
+    getAngularDamping(bodyId: BodyId3D): number {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined) return 0;
+        return this._dampings[index * 2 + 1];
+    }
+
+    setAngularDamping(bodyId: BodyId3D, damping: number): void {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined) return;
+        this._dampings[index * 2 + 1] = damping;
+    }
+
+    getUserData(bodyId: BodyId3D): unknown {
+        return this._userData.get(bodyId);
+    }
+
+    setUserData(bodyId: BodyId3D, userData: unknown): void {
+        if (!this._bodyIdToIndex.has(bodyId)) return;
+
+        if (userData === undefined) {
+            this._userData.delete(bodyId);
+            return;
+        }
+
+        this._userData.set(bodyId, userData);
     }
 
     isAwake(bodyId: BodyId3D): boolean {
@@ -461,6 +567,27 @@ export class BodyManager3D implements Disposable {
         this.setAwake(bodyId, true);
     }
 
+    applyImpulseToCenter(bodyId: BodyId3D, impulse: IVec3Like): void {
+        this.applyImpulse(bodyId, impulse);
+    }
+
+    applyAngularImpulse(bodyId: BodyId3D, impulse: IVec3Like): void {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined || this._bodyTypes[index] !== 2) return;
+
+        const massOffset = index * MASS_STRIDE + 5;
+        const invIx = this._massData[massOffset];
+        const invIy = this._massData[massOffset + 1];
+        const invIz = this._massData[massOffset + 2];
+
+        const angOffset = index * VELOCITY_STRIDE + ANGULAR_VEL_OFFSET;
+        this._velocities[angOffset] += impulse.x * invIx;
+        this._velocities[angOffset + 1] += impulse.y * invIy;
+        this._velocities[angOffset + 2] += impulse.z * invIz;
+
+        this.setAwake(bodyId, true);
+    }
+
     getBodyIds(): BodyId3D[] {
         return Array.from(this._bodyIdToIndex.keys());
     }
@@ -497,6 +624,7 @@ export class BodyManager3D implements Disposable {
         this._bodyIdToIndex.clear();
         this._indexToBodyId.clear();
         this._freeIndices.length = 0;
+        this._userData.clear();
     }
 }
 
