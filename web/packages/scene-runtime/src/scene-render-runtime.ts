@@ -79,7 +79,6 @@ export class SceneRenderRuntime {
     private readonly _morphMeshRuntime: SceneMorphMeshRuntime;
     private readonly _drawExecutor: SceneDrawExecutor;
     private readonly _renderPipeline: SceneRenderPipeline;
-    private readonly _spriteBatchRuntime: SceneSpriteBatchRuntime;
     private _planningStats: SceneRenderPlanningStats = SceneRenderRuntime._EMPTY_PLANNING_STATS;
     private readonly _textureUniformSetter = (
         shader: Parameters<SceneUniformWriter['write']>[0],
@@ -119,19 +118,20 @@ export class SceneRenderRuntime {
             textureUniformSetter: this._textureUniformSetter,
             applyMissingVertexAttributeDefaults: _options.applyMissingVertexAttributeDefaults,
         });
-        this._renderPipeline = new SceneRenderPipeline({
-            gl: _options.gl,
-            drawExecutor: this._drawExecutor,
-            planning: _options.planning,
-            pipeline: _options.pipeline,
-        });
-        this._spriteBatchRuntime = new SceneSpriteBatchRuntime({
+        const spriteBatchRuntime = new SceneSpriteBatchRuntime({
             gl: _options.gl,
             resources: _options.resources,
             renderStateApplier: this._renderStateApplier,
             uniformWriter: this._uniformWriter,
             materialTextureBinder: this._materialTextureBinder,
             textureUniformSetter: this._textureUniformSetter,
+        });
+        this._renderPipeline = new SceneRenderPipeline({
+            gl: _options.gl,
+            drawExecutor: this._drawExecutor,
+            spriteBatchRuntime,
+            planning: _options.planning,
+            pipeline: _options.pipeline,
         });
     }
 
@@ -199,8 +199,6 @@ export class SceneRenderRuntime {
         let planningSpriteBatchCount = 0;
         let planningSkippedSpriteCount = 0;
         const planningWarnings: string[] = [];
-        const maxTransparentPrimitives = this._options.planning?.maxTransparentPrimitives;
-        let remainingTransparentBudget = maxTransparentPrimitives;
 
         for (const renderPass of renderPasses) {
             if (!cameraFrame) {
@@ -240,6 +238,7 @@ export class SceneRenderRuntime {
                 deltaSeconds: params.deltaSeconds,
                 viewportWidth: params.viewportWidth,
                 viewportHeight: params.viewportHeight,
+                actors,
                 cameraFrame,
                 lighting,
                 renderPass,
@@ -278,46 +277,9 @@ export class SceneRenderRuntime {
                 }
             }
 
-            if (remainingTransparentBudget !== undefined) {
-                remainingTransparentBudget = Math.max(
-                    0,
-                    remainingTransparentBudget - meshPlanning.meshTransparentCount
-                );
-            }
-
-            const spriteStats = this._spriteBatchRuntime.render({
-                actors,
-                cameraFrame,
-                renderPass,
-                frameState: renderFrame,
-                viewportWidth: params.viewportWidth,
-                viewportHeight: params.viewportHeight,
-                ...(remainingTransparentBudget !== undefined && maxTransparentPrimitives !== undefined
-                    ? {
-                          transparentBudget: {
-                              total: maxTransparentPrimitives,
-                              remaining: remainingTransparentBudget,
-                          },
-                      }
-                    : {}),
-            });
-
-            planningTransparentCount += spriteStats.drawnSpriteCount;
-            planningSpriteTransparentCount += spriteStats.drawnSpriteCount;
-            planningSpriteBatchCount += spriteStats.spriteBatchCount;
-            planningSkippedSpriteCount += spriteStats.skippedSpriteCount;
-            for (const warning of spriteStats.warnings) {
-                if (!planningWarnings.includes(warning)) {
-                    planningWarnings.push(warning);
-                }
-            }
-
-            if (remainingTransparentBudget !== undefined) {
-                remainingTransparentBudget = Math.max(
-                    0,
-                    remainingTransparentBudget - spriteStats.drawnSpriteCount
-                );
-            }
+            planningSpriteTransparentCount += meshPlanning.spriteTransparentCount;
+            planningSpriteBatchCount += meshPlanning.spriteBatchCount;
+            planningSkippedSpriteCount += meshPlanning.skippedSpriteCount;
         }
 
         this._planningStats = Object.freeze({
@@ -344,6 +306,5 @@ export class SceneRenderRuntime {
         this._renderPassPreparer.reset();
         this._renderPipeline.reset();
         this._morphMeshRuntime.clear();
-        this._spriteBatchRuntime.clear();
     }
 }

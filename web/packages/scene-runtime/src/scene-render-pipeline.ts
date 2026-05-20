@@ -1,3 +1,4 @@
+import type { Actor } from '@axrone/ecs-runtime';
 import { RenderPipeline } from '@axrone/render-core';
 import type {
     AnyPostProcessEffect,
@@ -25,6 +26,7 @@ import type { SceneLightingState } from './lighting-collector';
 import type { SceneRenderFrameState } from './render-frame-state';
 import type { SceneRenderItem } from './render-item-collector';
 import type { SceneRenderPassResource } from './render-pass-registry';
+import type { SceneSpriteBatchRuntime } from './sprite-batch-runtime';
 import type {
     SceneMaterialAlphaMode,
     SceneRenderPlanningOptions,
@@ -33,6 +35,7 @@ import type {
 } from './types';
 
 export interface SceneRenderPipelineParams {
+    readonly actors?: readonly Actor[];
     readonly frame: number;
     readonly deltaSeconds: number;
     readonly viewportWidth: number;
@@ -51,6 +54,8 @@ export interface SceneRenderPipelineParams {
         readonly transparent: boolean;
     };
 }
+
+type SceneSpriteBatchRenderer = Pick<SceneSpriteBatchRuntime, 'render' | 'clear'>;
 
 const DEFAULT_SCENE_RENDER_PLANNING_STATS: SceneRenderPlanningStats = Object.freeze({
     passCount: 0,
@@ -287,9 +292,19 @@ const hasEnabledScenePostProcessEffects = (
     settings: SceneRenderPipelineSettings | undefined
 ): boolean => settings?.postProcess?.some((effect) => effect.enabled !== false) ?? false;
 
+const pushUniqueWarnings = (target: string[], warnings: readonly string[]): void => {
+    for (let index = 0; index < warnings.length; index += 1) {
+        const warning = warnings[index]!;
+        if (!target.includes(warning)) {
+            target.push(warning);
+        }
+    }
+};
+
 interface SceneRenderPipelineOptions {
     readonly gl: WebGL2RenderingContext;
     readonly drawExecutor: Pick<SceneDrawExecutor, 'execute'>;
+    readonly spriteBatchRuntime?: SceneSpriteBatchRenderer;
     readonly planning?: SceneRenderPlanningOptions;
     readonly pipeline?: SceneRenderPipelineSettings;
 }
@@ -438,15 +453,45 @@ export class SceneRenderPipeline {
                 lights,
             });
 
+            const meshTransparentCount = result.statistics.transparentCount;
+            const warnings = [...result.warnings];
+            const spriteStats =
+                this._options.spriteBatchRuntime && params.actors
+                    ? this._options.spriteBatchRuntime.render({
+                          actors: params.actors,
+                          cameraFrame: params.cameraFrame,
+                          renderPass: params.renderPass,
+                          frameState: params.frameState,
+                          viewportWidth: params.viewportWidth,
+                          viewportHeight: params.viewportHeight,
+                          ...(this._options.planning?.maxTransparentPrimitives !== undefined
+                              ? {
+                                    transparentBudget: {
+                                        total: this._options.planning.maxTransparentPrimitives,
+                                        remaining: Math.max(
+                                            0,
+                                            this._options.planning.maxTransparentPrimitives -
+                                                meshTransparentCount
+                                        ),
+                                    },
+                                }
+                              : {}),
+                      })
+                    : null;
+
+            if (spriteStats) {
+                pushUniqueWarnings(warnings, spriteStats.warnings);
+            }
+
             return Object.freeze({
                 passCount: result.statistics.passCount,
                 opaqueCount: result.statistics.opaqueCount,
-                transparentCount: result.statistics.transparentCount,
-                meshTransparentCount: result.statistics.transparentCount,
-                spriteTransparentCount: 0,
-                spriteBatchCount: 0,
-                skippedSpriteCount: 0,
-                warnings: Object.freeze([...result.warnings]),
+                transparentCount: meshTransparentCount + (spriteStats?.drawnSpriteCount ?? 0),
+                meshTransparentCount,
+                spriteTransparentCount: spriteStats?.drawnSpriteCount ?? 0,
+                spriteBatchCount: spriteStats?.spriteBatchCount ?? 0,
+                skippedSpriteCount: spriteStats?.skippedSpriteCount ?? 0,
+                warnings: Object.freeze(warnings),
             });
         } finally {
             this._activeExecution = null;
@@ -457,6 +502,7 @@ export class SceneRenderPipeline {
     reset(): void {
         this._activeExecution = null;
         this._primitiveLookup.clear();
+        this._options.spriteBatchRuntime?.clear();
         this._pipeline.dispose();
         this._backend.dispose();
         this._backend = this._createBackend();
@@ -466,6 +512,7 @@ export class SceneRenderPipeline {
     dispose(): void {
         this._pipeline.dispose();
         this._backend.dispose();
+        this._options.spriteBatchRuntime?.clear();
         this._activeExecution = null;
         this._primitiveLookup.clear();
     }
