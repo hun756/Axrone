@@ -112,6 +112,11 @@ interface RenderPassPlanningInput {
 const clamp = (value: number, min: number, max: number): number =>
     value < min ? min : value > max ? max : value;
 
+const requiresSceneDepthPostProcessInput = (
+    effect: ResolvedPostProcessEffect
+): boolean =>
+    effect.category === 'builtin' && (effect.name === 'ssao' || effect.name === 'depth-of-field');
+
 const computeCascadeSplits = (
     near: number,
     far: number,
@@ -533,6 +538,9 @@ export class RenderPassPlanner<TNative = unknown> {
 
         for (let i = 0; i < this._effectsBefore.length; i++) {
             const effect = this._effectsBefore.at(i);
+            const auxiliaryInputs = requiresSceneDepthPostProcessInput(effect)
+                ? [sceneDepth]
+                : [];
             const taaTargetHistory =
                 effect.category === 'builtin' && effect.name === 'taa'
                     ? (this._acquireTexture(
@@ -565,7 +573,9 @@ export class RenderPassPlanner<TNative = unknown> {
                     : i % 2 === 0
                       ? (ping as RenderResourceName<'post'>)
                       : (pong as RenderResourceName<'post'>);
-            const inputs = taaSourceHistory ? [currentColor, taaSourceHistory] : [currentColor];
+            const inputs = taaSourceHistory
+                ? [currentColor, taaSourceHistory]
+                : [currentColor, ...auxiliaryInputs];
             order = this._pushPass(order, {
                 kind: 'post-process',
                 name: createRenderPassName(`post-process:${effect.name}`),
@@ -629,7 +639,9 @@ export class RenderPassPlanner<TNative = unknown> {
                 name: createRenderPassName(`post-process:${effect.name}`),
                 queue: 'post-process',
                 target,
-                inputs: [currentColor],
+                inputs: requiresSceneDepthPostProcessInput(effect)
+                    ? [currentColor, sceneDepth]
+                    : [currentColor],
                 estimatedCost: getRenderPostEffectCost(effect),
                 metadata: {
                     source: currentColor,

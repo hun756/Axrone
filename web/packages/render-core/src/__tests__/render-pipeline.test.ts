@@ -383,6 +383,33 @@ describe('RenderPipeline', () => {
         );
     });
 
+    it('attaches scene depth to depth-aware post-process passes', () => {
+        const pipeline = new RenderPipeline({
+            postProcess: [
+                { category: 'builtin', name: 'ssao' },
+                { category: 'builtin', name: 'depth-of-field' },
+            ],
+        });
+
+        const result = pipeline.plan({
+            frame: 1,
+            deltaTime: 1 / 60,
+            viewport: { width: 1280, height: 720 },
+            camera: createCamera(),
+            primitives: [createOpaquePrimitive()],
+        });
+
+        const ssao = result.passes.find(
+            (pass) => pass.kind === 'post-process' && pass.metadata.effect.name === 'ssao'
+        );
+        const depthOfField = result.passes.find(
+            (pass) => pass.kind === 'post-process' && pass.metadata.effect.name === 'depth-of-field'
+        );
+
+        expect(ssao?.inputs).toContain('frame:depth');
+        expect(depthOfField?.inputs).toContain('frame:depth');
+    });
+
     it('allocates a scratch target for tonemap when HDR frames do not have post-process passes', () => {
         const pipeline = new RenderPipeline({
             hdr: true,
