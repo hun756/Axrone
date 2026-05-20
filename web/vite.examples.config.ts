@@ -88,6 +88,7 @@ export default defineConfig({
             input: {
                 index: path.resolve(workspaceDir, 'examples/index.html'),
                 'engine-benchmark': path.resolve(workspaceDir, 'examples/engine-benchmark.html'),
+                'playable-2d': path.resolve(workspaceDir, 'examples/playable-2d/index.html'),
             },
             output: {
                 manualChunks(id) {
