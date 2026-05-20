@@ -165,7 +165,7 @@ const exposureHistoryDescriptor = (): RenderTextureDescriptor => ({
     width: 1,
     height: 1,
     format: 'r16f',
-    usage: ['sampled', 'history'],
+    usage: ['color-attachment', 'sampled', 'history'],
 });
 
 const giModeOf = (settings: RenderGlobalIlluminationSettings): RenderGlobalIlluminationMode =>
@@ -254,10 +254,24 @@ export class RenderPassPlanner<TNative = unknown> {
         let currentColor: RenderResourceName = sceneColor;
         let ping: RenderResourceName<'post'> | null = null;
         let pong: RenderResourceName<'post'> | null = null;
-        const exposureHistory =
+        const exposureHistoryTarget =
             input.hdr.enabled && input.hdr.exposure?.mode === 'automatic'
                 ? (this._acquireTexture(
-                      createRenderResourceName('history', 'exposure'),
+                      createRenderResourceName(
+                          'history',
+                          input.frame % 2 === 0 ? 'exposure-b' : 'exposure-a'
+                      ),
+                      exposureHistoryDescriptor(),
+                      'history'
+                  ).id as RenderResourceName<'history'>)
+                : null;
+        const exposureHistorySource =
+            input.hdr.enabled && input.hdr.exposure?.mode === 'automatic'
+                ? (this._acquireTexture(
+                      createRenderResourceName(
+                          'history',
+                          input.frame % 2 === 0 ? 'exposure-a' : 'exposure-b'
+                      ),
                       exposureHistoryDescriptor(),
                       'history'
                   ).id as RenderResourceName<'history'>)
@@ -608,7 +622,7 @@ export class RenderPassPlanner<TNative = unknown> {
                 name: createRenderPassName('tonemap'),
                 queue: 'post-process',
                 target: tonemapTarget,
-                inputs: exposureHistory ? [currentColor, exposureHistory] : [currentColor],
+                                inputs: exposureHistorySource ? [currentColor, exposureHistorySource] : [currentColor],
                 estimatedCost: 0.12,
                 metadata: {
                     source: currentColor,
@@ -622,7 +636,8 @@ export class RenderPassPlanner<TNative = unknown> {
                     hdr: input.hdr.enabled,
                     colorSpace: input.hdr.outputColorSpace,
                     exposure: input.hdr.exposure ?? null,
-                    exposureHistory,
+                    exposureHistorySource,
+                    exposureHistoryTarget,
                 },
             });
             currentColor = tonemapTarget;

@@ -378,9 +378,11 @@ describe('RenderPipeline', () => {
             expect.objectContaining({
                 hdr: true,
                 colorSpace: 'srgb',
-                exposureHistory: 'history:exposure',
+                exposureHistorySource: 'history:exposure-b',
+                exposureHistoryTarget: 'history:exposure-a',
             })
         );
+        expect(tonemap?.inputs).toContain('history:exposure-b');
     });
 
     it('attaches scene depth to depth-aware post-process passes', () => {
