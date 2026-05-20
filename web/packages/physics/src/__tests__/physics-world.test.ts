@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PhysicsWorld2D } from '@axrone/physics';
-import { BodyType, ShapeType } from '@axrone/physics';
+import { BodyType, ShapeType, ConstraintType } from '@axrone/physics';
 
 describe('PhysicsWorld2D Integration', () => {
     let world: PhysicsWorld2D;
@@ -92,6 +92,40 @@ describe('PhysicsWorld2D Integration', () => {
 
             bodies.forEach((id) => world.destroyBody(id));
         });
+
+        it('returns live body facades', () => {
+            const bodyId = world.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 3, y: 4 },
+                rotation: Math.PI / 4,
+                linearDamping: 0.5,
+                angularDamping: 1.25,
+                gravityScale: 2,
+                bullet: true,
+            });
+
+            const shapeId = world.createCircleShape(bodyId, {
+                radius: 1,
+                offset: { x: 1, y: 0 },
+                density: 2,
+            });
+
+            const body = world.getBody(bodyId);
+
+            expect(body).not.toBeNull();
+            expect(body!.id).toBe(bodyId);
+            expect(body!.type).toBe(BodyType.Dynamic);
+            expect(body!.shapes).toEqual([shapeId]);
+            expect(body!.gravityScale).toBe(2);
+            expect(body!.linearDamping).toBeCloseTo(0.5);
+            expect(body!.angularDamping).toBeCloseTo(1.25);
+            expect(body!.isBullet()).toBe(true);
+            expect(body!.getPosition()).toEqual({ x: 3, y: 4 });
+            expect(body!.getMass()).toBeGreaterThan(0);
+
+            body!.setLinearVelocity({ x: 2, y: -1 });
+            expect(body!.getLinearVelocity()).toEqual({ x: 2, y: -1 });
+        });
     });
 
     describe('Shape Lifecycle', () => {
@@ -170,6 +204,26 @@ describe('PhysicsWorld2D Integration', () => {
 
             world.destroyBody(bodyId);
         });
+
+        it('returns shape facades with geometry queries', () => {
+            const circleId = world.createCircleShape(bodyId, {
+                radius: 1,
+                offset: { x: 2, y: 0 },
+                density: 1,
+            });
+
+            const shape = world.getShape(circleId);
+
+            expect(shape).not.toBeNull();
+            expect(shape!.type).toBe(ShapeType.Circle);
+            expect(shape!.computeAABB()).toEqual({
+                min: { x: 1, y: -1 },
+                max: { x: 3, y: 1 },
+            });
+            expect(shape!.testPoint({ x: 2, y: 0 })).toBe(true);
+            expect(shape!.testPoint({ x: 4.5, y: 0 })).toBe(false);
+            expect(shape!.computeMassData(1).mass).toBeGreaterThan(0);
+        });
     });
 
     describe('Constraint Lifecycle', () => {
@@ -223,6 +277,58 @@ describe('PhysicsWorld2D Integration', () => {
             });
 
             world.destroyConstraint(constraintId);
+        });
+
+        it('returns manager-backed constraint facades', () => {
+            const distanceId = world.createDistanceConstraint({
+                bodyIdA: bodyA,
+                bodyIdB: bodyB,
+                localAnchorA: { x: 0, y: 0 },
+                localAnchorB: { x: 0, y: 0 },
+                length: 5,
+            });
+
+            const wheelId = world.createWheelConstraint({
+                bodyIdA: bodyA,
+                bodyIdB: bodyB,
+                localAnchorA: { x: 0, y: 0 },
+                localAnchorB: { x: 0, y: 0 },
+                localAxisA: { x: 1, y: 0 },
+                motorSpeed: 2,
+            });
+
+            const ropeId = world.createRopeConstraint({
+                bodyIdA: bodyA,
+                bodyIdB: bodyB,
+                localAnchorA: { x: 0, y: 0 },
+                localAnchorB: { x: 0, y: 0 },
+                maxLength: 8,
+            });
+
+            const gearId = world.createGearConstraint({
+                bodyIdA: bodyA,
+                bodyIdB: bodyB,
+                constraintIdA: distanceId,
+                constraintIdB: wheelId,
+                ratio: 2,
+            });
+
+            const distance = world.getConstraint(distanceId);
+            const wheel = world.getConstraint(wheelId);
+            const rope = world.getConstraint(ropeId);
+            const gear = world.getConstraint(gearId);
+
+            expect(distance?.type).toBe(ConstraintType.Distance);
+            expect(wheel?.type).toBe(ConstraintType.Wheel);
+            expect(rope?.type).toBe(ConstraintType.Rope);
+            expect(gear?.type).toBe(ConstraintType.Gear);
+
+            wheel!.setEnabled(false);
+            expect(wheel!.isEnabled()).toBe(false);
+            expect(distance!.getAnchorA()).toEqual({ x: 0, y: 0 });
+            expect(world.getConstraintManager().hasConstraint(wheelId)).toBe(true);
+            expect(world.getConstraintManager().hasConstraint(ropeId)).toBe(true);
+            expect(world.getConstraintManager().hasConstraint(gearId)).toBe(true);
         });
     });
 
@@ -497,6 +603,104 @@ describe('PhysicsWorld2D Integration', () => {
                 world.step(1 / 60);
             }
         });
+
+        it('routes wheel, gear, and rope constraints through the island solver', () => {
+            const anchorBody = world.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+                rotation: 0.5,
+            });
+
+            const wheelBody = world.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 4, y: 0 },
+                rotation: -0.25,
+            });
+
+            world.createCircleShape(anchorBody, {
+                radius: 0.5,
+                offset: { x: 0, y: 0 },
+            });
+
+            world.createCircleShape(wheelBody, {
+                radius: 0.5,
+                offset: { x: 0, y: 0 },
+            });
+
+            const wheelId = world.createWheelConstraint({
+                bodyIdA: anchorBody,
+                bodyIdB: wheelBody,
+                localAnchorA: { x: 0, y: 0 },
+                localAnchorB: { x: 0, y: 0 },
+                localAxisA: { x: 1, y: 0 },
+                enableLimit: true,
+                lowerTranslation: -0.5,
+                upperTranslation: 0.5,
+                enableMotor: true,
+                motorSpeed: 3,
+                maxMotorTorque: 8,
+            });
+
+            const ropeId = world.createRopeConstraint({
+                bodyIdA: anchorBody,
+                bodyIdB: wheelBody,
+                localAnchorA: { x: 0, y: 0 },
+                localAnchorB: { x: 0, y: 0 },
+                maxLength: 1,
+            });
+
+            world.createGearConstraint({
+                bodyIdA: anchorBody,
+                bodyIdB: wheelBody,
+                constraintIdA: wheelId,
+                constraintIdB: ropeId,
+                ratio: 1.5,
+            });
+
+            world.step(1 / 60);
+
+            expect(world.getSolver().getLastPreparedConstraintCount()).toBeGreaterThanOrEqual(3);
+            expect(world.getSolver().getLastSolvedConstraintCount()).toBeGreaterThanOrEqual(3);
+        });
+
+        it('applies corrective rope impulses when overstretched', () => {
+            const bodyA = world.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+                rotation: 0,
+            });
+
+            const bodyB = world.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 6, y: 0 },
+                rotation: 0,
+            });
+
+            world.createCircleShape(bodyA, {
+                radius: 0.5,
+                offset: { x: 0, y: 0 },
+            });
+
+            world.createCircleShape(bodyB, {
+                radius: 0.5,
+                offset: { x: 0, y: 0 },
+            });
+
+            world.createRopeConstraint({
+                bodyIdA: bodyA,
+                bodyIdB: bodyB,
+                localAnchorA: { x: 0, y: 0 },
+                localAnchorB: { x: 0, y: 0 },
+                maxLength: 2,
+            });
+
+            world.step(1 / 60);
+
+            const velocityA = world.getBody(bodyA)!.getLinearVelocity();
+            const velocityB = world.getBody(bodyB)!.getLinearVelocity();
+
+            expect(Math.abs(velocityA.x) + Math.abs(velocityB.x)).toBeGreaterThan(0);
+        });
     });
 
     describe('Query Operations', () => {
@@ -519,22 +723,42 @@ describe('PhysicsWorld2D Integration', () => {
                 results.push(shapeId);
                 return true;
             });
+
+            expect(results.length).toBeGreaterThan(0);
+            expect(world.queryAABBAll({ x: 2, y: -1 }, { x: 5, y: 1 }).length).toBe(results.length);
         });
 
         it('raycasts through scene', () => {
+            const nearBody = world.createBody({
+                type: BodyType.Static,
+                position: { x: 2, y: 0 },
+                rotation: 0,
+            });
+
+            const nearShape = world.createCircleShape(nearBody, {
+                radius: 0.5,
+                offset: { x: 0, y: 0 },
+            });
+
             const body = world.createBody({
                 type: BodyType.Static,
                 position: { x: 5, y: 0 },
                 rotation: 0,
             });
 
-            world.createBoxShape(body, {
+            const boxShape = world.createBoxShape(body, {
                 width: 2,
                 height: 2,
                 offset: { x: 0, y: 0 },
             });
 
             const hit = world.rayCastClosest({ x: 0, y: 0 }, { x: 1, y: 0 }, 20);
+            const allHits = world.rayCastAll({ x: 0, y: 0 }, { x: 1, y: 0 }, 20);
+            const pointHits = world.queryPointAll({ x: 5, y: 0 });
+
+            expect(hit?.shapeId).toBe(nearShape);
+            expect(allHits.map((entry) => entry.shapeId)).toEqual([nearShape, boxShape]);
+            expect(pointHits).toContain(boxShape);
         });
     });
 
