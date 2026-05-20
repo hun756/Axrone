@@ -6,8 +6,11 @@ import type {
     IRevoluteConstraintDef2D,
     IPrismaticConstraintDef2D,
     IWeldConstraintDef2D,
+    IWheelConstraintDef2D,
     IMotorConstraintDef2D,
     IMouseConstraintDef2D,
+    IGearConstraintDef,
+    IRopeConstraintDef2D,
 } from '../types';
 
 const enum ConstraintManagerError {
@@ -39,8 +42,11 @@ const DISTANCE_STRIDE = 10;
 const REVOLUTE_STRIDE = 14;
 const PRISMATIC_STRIDE = 16;
 const WELD_STRIDE = 8;
+const WHEEL_STRIDE = 14;
 const MOTOR_STRIDE = 10;
 const MOUSE_STRIDE = 8;
+const GEAR_STRIDE = 3;
+const ROPE_STRIDE = 5;
 
 export class ConstraintManager2D implements Disposable {
     private _nextConstraintId: number = 1;
@@ -51,21 +57,30 @@ export class ConstraintManager2D implements Disposable {
     private readonly _revoluteData: Float64Array;
     private readonly _prismaticData: Float64Array;
     private readonly _weldData: Float64Array;
+    private readonly _wheelData: Float64Array;
     private readonly _motorData: Float64Array;
     private readonly _mouseData: Float64Array;
+    private readonly _gearData: Float64Array;
+    private readonly _ropeData: Float64Array;
     private readonly _constraintToDistanceIndex: Map<ConstraintId, number>;
     private readonly _constraintToRevoluteIndex: Map<ConstraintId, number>;
     private readonly _constraintToPrismaticIndex: Map<ConstraintId, number>;
     private readonly _constraintToWeldIndex: Map<ConstraintId, number>;
+    private readonly _constraintToWheelIndex: Map<ConstraintId, number>;
     private readonly _constraintToMotorIndex: Map<ConstraintId, number>;
     private readonly _constraintToMouseIndex: Map<ConstraintId, number>;
+    private readonly _constraintToGearIndex: Map<ConstraintId, number>;
+    private readonly _constraintToRopeIndex: Map<ConstraintId, number>;
     private readonly _bodyToConstraints: Map<BodyId, Set<ConstraintId>>;
     private _distanceCount: number = 0;
     private _revoluteCount: number = 0;
     private _prismaticCount: number = 0;
     private _weldCount: number = 0;
+    private _wheelCount: number = 0;
     private _motorCount: number = 0;
     private _mouseCount: number = 0;
+    private _gearCount: number = 0;
+    private _ropeCount: number = 0;
     private _disposed: boolean = false;
 
     constructor(maxConstraints: number = 512) {
@@ -77,15 +92,21 @@ export class ConstraintManager2D implements Disposable {
         this._revoluteData = new Float64Array(quarterMax * REVOLUTE_STRIDE);
         this._prismaticData = new Float64Array(quarterMax * PRISMATIC_STRIDE);
         this._weldData = new Float64Array(quarterMax * WELD_STRIDE);
+        this._wheelData = new Float64Array(quarterMax * WHEEL_STRIDE);
         this._motorData = new Float64Array(quarterMax * MOTOR_STRIDE);
         this._mouseData = new Float64Array(quarterMax * MOUSE_STRIDE);
+        this._gearData = new Float64Array(quarterMax * GEAR_STRIDE);
+        this._ropeData = new Float64Array(quarterMax * ROPE_STRIDE);
 
         this._constraintToDistanceIndex = new Map();
         this._constraintToRevoluteIndex = new Map();
         this._constraintToPrismaticIndex = new Map();
         this._constraintToWeldIndex = new Map();
+        this._constraintToWheelIndex = new Map();
         this._constraintToMotorIndex = new Map();
         this._constraintToMouseIndex = new Map();
+        this._constraintToGearIndex = new Map();
+        this._constraintToRopeIndex = new Map();
         this._bodyToConstraints = new Map();
     }
 
@@ -197,6 +218,34 @@ export class ConstraintManager2D implements Disposable {
         return constraintId;
     }
 
+    createWheelConstraint(def: IWheelConstraintDef2D): ConstraintId {
+        this._assertNotDisposed();
+        this._assertCapacity();
+
+        const constraintId = this._nextConstraintId++ as ConstraintId;
+        const index = this._wheelCount++;
+        const offset = index * WHEEL_STRIDE;
+
+        this._wheelData[offset] = def.localAnchorA.x;
+        this._wheelData[offset + 1] = def.localAnchorA.y;
+        this._wheelData[offset + 2] = def.localAnchorB.x;
+        this._wheelData[offset + 3] = def.localAnchorB.y;
+        this._wheelData[offset + 4] = def.localAxisA.x;
+        this._wheelData[offset + 5] = def.localAxisA.y;
+        this._wheelData[offset + 6] = def.enableLimit ? 1 : 0;
+        this._wheelData[offset + 7] = def.lowerTranslation ?? 0;
+        this._wheelData[offset + 8] = def.upperTranslation ?? 0;
+        this._wheelData[offset + 9] = def.enableMotor ? 1 : 0;
+        this._wheelData[offset + 10] = def.motorSpeed ?? 0;
+        this._wheelData[offset + 11] = (def.maxMotorTorque as number) ?? 0;
+        this._wheelData[offset + 12] = def.stiffness ?? 0;
+        this._wheelData[offset + 13] = def.damping ?? 0;
+
+        this._constraintToWheelIndex.set(constraintId, index);
+        this._registerConstraint(constraintId, ConstraintType.Wheel, def);
+        return constraintId;
+    }
+
     createMotorConstraint(def: IMotorConstraintDef2D): ConstraintId {
         this._assertNotDisposed();
         this._assertCapacity();
@@ -243,6 +292,42 @@ export class ConstraintManager2D implements Disposable {
         return constraintId;
     }
 
+    createGearConstraint(def: IGearConstraintDef): ConstraintId {
+        this._assertNotDisposed();
+        this._assertCapacity();
+
+        const constraintId = this._nextConstraintId++ as ConstraintId;
+        const index = this._gearCount++;
+        const offset = index * GEAR_STRIDE;
+
+        this._gearData[offset] = def.constraintIdA;
+        this._gearData[offset + 1] = def.constraintIdB;
+        this._gearData[offset + 2] = def.ratio ?? 1;
+
+        this._constraintToGearIndex.set(constraintId, index);
+        this._registerConstraint(constraintId, ConstraintType.Gear, def);
+        return constraintId;
+    }
+
+    createRopeConstraint(def: IRopeConstraintDef2D): ConstraintId {
+        this._assertNotDisposed();
+        this._assertCapacity();
+
+        const constraintId = this._nextConstraintId++ as ConstraintId;
+        const index = this._ropeCount++;
+        const offset = index * ROPE_STRIDE;
+
+        this._ropeData[offset] = def.localAnchorA.x;
+        this._ropeData[offset + 1] = def.localAnchorA.y;
+        this._ropeData[offset + 2] = def.localAnchorB.x;
+        this._ropeData[offset + 3] = def.localAnchorB.y;
+        this._ropeData[offset + 4] = def.maxLength;
+
+        this._constraintToRopeIndex.set(constraintId, index);
+        this._registerConstraint(constraintId, ConstraintType.Rope, def);
+        return constraintId;
+    }
+
     destroyConstraint(constraintId: ConstraintId): void {
         this._assertNotDisposed();
 
@@ -262,9 +347,27 @@ export class ConstraintManager2D implements Disposable {
         this._constraintToRevoluteIndex.delete(constraintId);
         this._constraintToPrismaticIndex.delete(constraintId);
         this._constraintToWeldIndex.delete(constraintId);
+        this._constraintToWheelIndex.delete(constraintId);
         this._constraintToMotorIndex.delete(constraintId);
         this._constraintToMouseIndex.delete(constraintId);
+        this._constraintToGearIndex.delete(constraintId);
+        this._constraintToRopeIndex.delete(constraintId);
         this._constraintCount--;
+    }
+
+    getConstraintBodies(constraintId: ConstraintId): { bodyIdA: BodyId; bodyIdB: BodyId } {
+        const metadata = this._metadata.get(constraintId);
+        if (!metadata) {
+            throw new ConstraintError(
+                `Constraint ${constraintId} not found`,
+                ConstraintManagerError.CONSTRAINT_NOT_FOUND
+            );
+        }
+
+        return {
+            bodyIdA: metadata.bodyIdA,
+            bodyIdB: metadata.bodyIdB,
+        };
     }
 
     getConstraintType(constraintId: ConstraintId): ConstraintType {
@@ -303,6 +406,65 @@ export class ConstraintManager2D implements Disposable {
     getConstraintsForBody(bodyId: BodyId): readonly ConstraintId[] {
         const constraints = this._bodyToConstraints.get(bodyId);
         return constraints ? Array.from(constraints) : [];
+    }
+
+    getWheelConstraintData(constraintId: ConstraintId) {
+        const index = this._constraintToWheelIndex.get(constraintId);
+        if (index === undefined) {
+            throw new ConstraintError(
+                `Wheel constraint ${constraintId} not found`,
+                ConstraintManagerError.CONSTRAINT_NOT_FOUND
+            );
+        }
+
+        const offset = index * WHEEL_STRIDE;
+        return {
+            localAnchorA: { x: this._wheelData[offset], y: this._wheelData[offset + 1] },
+            localAnchorB: { x: this._wheelData[offset + 2], y: this._wheelData[offset + 3] },
+            localAxisA: { x: this._wheelData[offset + 4], y: this._wheelData[offset + 5] },
+            enableLimit: this._wheelData[offset + 6] !== 0,
+            lowerTranslation: this._wheelData[offset + 7],
+            upperTranslation: this._wheelData[offset + 8],
+            enableMotor: this._wheelData[offset + 9] !== 0,
+            motorSpeed: this._wheelData[offset + 10],
+            maxMotorTorque: this._wheelData[offset + 11] as Torque,
+            stiffness: this._wheelData[offset + 12],
+            damping: this._wheelData[offset + 13],
+        };
+    }
+
+    getGearConstraintData(constraintId: ConstraintId) {
+        const index = this._constraintToGearIndex.get(constraintId);
+        if (index === undefined) {
+            throw new ConstraintError(
+                `Gear constraint ${constraintId} not found`,
+                ConstraintManagerError.CONSTRAINT_NOT_FOUND
+            );
+        }
+
+        const offset = index * GEAR_STRIDE;
+        return {
+            constraintIdA: this._gearData[offset] as ConstraintId,
+            constraintIdB: this._gearData[offset + 1] as ConstraintId,
+            ratio: this._gearData[offset + 2],
+        };
+    }
+
+    getRopeConstraintData(constraintId: ConstraintId) {
+        const index = this._constraintToRopeIndex.get(constraintId);
+        if (index === undefined) {
+            throw new ConstraintError(
+                `Rope constraint ${constraintId} not found`,
+                ConstraintManagerError.CONSTRAINT_NOT_FOUND
+            );
+        }
+
+        const offset = index * ROPE_STRIDE;
+        return {
+            localAnchorA: { x: this._ropeData[offset], y: this._ropeData[offset + 1] },
+            localAnchorB: { x: this._ropeData[offset + 2], y: this._ropeData[offset + 3] },
+            maxLength: this._ropeData[offset + 4],
+        };
     }
 
     hasConstraint(constraintId: ConstraintId): boolean {
@@ -370,8 +532,11 @@ export class ConstraintManager2D implements Disposable {
         this._constraintToRevoluteIndex.clear();
         this._constraintToPrismaticIndex.clear();
         this._constraintToWeldIndex.clear();
+        this._constraintToWheelIndex.clear();
         this._constraintToMotorIndex.clear();
         this._constraintToMouseIndex.clear();
+        this._constraintToGearIndex.clear();
+        this._constraintToRopeIndex.clear();
         this._bodyToConstraints.clear();
     }
 }
