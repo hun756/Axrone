@@ -3,6 +3,7 @@ import type { BodyId, ContactId, ConstraintId, SolverFlags, PhysicsConstants } f
 import type { BodyManager2D } from './body-manager';
 import type { ContactManager2D } from './contact-manager';
 import type { ConstraintManager2D } from './constraint-manager';
+import { ConstraintSolver2D } from './constraint-solver';
 
 interface ProfilerData {
     solveVelocityTime: number;
@@ -64,6 +65,7 @@ export class IslandSolver2D {
     private readonly _bodyManager: BodyManager2D;
     private readonly _contactManager: ContactManager2D;
     private readonly _constraintManager: ConstraintManager2D;
+    private readonly _constraintSolver: ConstraintSolver2D;
 
     private readonly _velocities: Float64Array;
     private readonly _positions: Float64Array;
@@ -79,9 +81,18 @@ export class IslandSolver2D {
         this._bodyManager = bodyManager;
         this._contactManager = contactManager;
         this._constraintManager = constraintManager;
+        this._constraintSolver = new ConstraintSolver2D(constraintManager, bodyManager);
 
         this._velocities = new Float64Array(maxBodiesPerIsland * 3);
         this._positions = new Float64Array(maxBodiesPerIsland * 3);
+    }
+
+    getLastPreparedConstraintCount(): number {
+        return this._constraintSolver.getLastPreparedConstraintCount();
+    }
+
+    getLastSolvedConstraintCount(): number {
+        return this._constraintSolver.getLastSolvedConstraintCount();
     }
 
     solveIslands(
@@ -239,6 +250,13 @@ export class IslandSolver2D {
                 this._bodyManager.setAngularVelocity(bodyId, this._velocities[offset + 2]);
             }
         }
+
+        this._constraintSolver.solveConstraints(
+            Array.from(new Set(this._constraintStack)),
+            dt,
+            velIters,
+            posIters
+        );
 
         this._storeImpulses();
         this._velocityConstraints.length = 0;
