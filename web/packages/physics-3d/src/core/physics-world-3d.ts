@@ -21,12 +21,14 @@ import type {
     IBoxShapeDef3D,
     ICapsuleShapeDef3D,
     ICollisionFilter3D,
+    IConeShapeDef3D,
     IConeTwistConstraintDef3D,
     IContactListener3D,
     IConvexHullShapeDef3D,
     ICylinderShapeDef3D,
     IFixedConstraintDef3D,
     IGenericConstraintDef3D,
+    IHeightFieldShapeDef3D,
     IHingeConstraintDef3D,
     IPhysicsBodyDef3D,
     IPhysicsProfiler3D,
@@ -35,6 +37,7 @@ import type {
     ISliderConstraintDef3D,
     ISphereShapeDef3D,
     ISpringConstraintDef3D,
+    ITriangleMeshShapeDef3D,
     RaycastCallback3D,
     ShapeId3D,
 } from '../types/physics-3d';
@@ -53,7 +56,10 @@ const SHAPE_TYPE_CAPSULE = 1;
 const SHAPE_TYPE_BOX = 3;
 const SHAPE_TYPE_SPHERE = 5;
 const SHAPE_TYPE_CYLINDER = 6;
+const SHAPE_TYPE_CONE = 7;
 const SHAPE_TYPE_CONVEX_HULL = 8;
+const SHAPE_TYPE_TRIANGLE_MESH = 9;
+const SHAPE_TYPE_HEIGHTFIELD = 10;
 
 const CONSTRAINT_TYPE_FIXED = 0;
 const CONSTRAINT_TYPE_HINGE = 2;
@@ -67,7 +73,10 @@ type SupportedShapeDef3D =
     | ({ readonly kind: typeof SHAPE_TYPE_BOX } & IBoxShapeDef3D)
     | ({ readonly kind: typeof SHAPE_TYPE_CAPSULE } & ICapsuleShapeDef3D)
     | ({ readonly kind: typeof SHAPE_TYPE_CYLINDER } & ICylinderShapeDef3D)
-    | ({ readonly kind: typeof SHAPE_TYPE_CONVEX_HULL } & IConvexHullShapeDef3D);
+    | ({ readonly kind: typeof SHAPE_TYPE_CONE } & IConeShapeDef3D)
+    | ({ readonly kind: typeof SHAPE_TYPE_CONVEX_HULL } & IConvexHullShapeDef3D)
+    | ({ readonly kind: typeof SHAPE_TYPE_TRIANGLE_MESH } & ITriangleMeshShapeDef3D)
+    | ({ readonly kind: typeof SHAPE_TYPE_HEIGHTFIELD } & IHeightFieldShapeDef3D);
 
 type SupportedConstraintDef3D =
     | ({ readonly kind: typeof CONSTRAINT_TYPE_FIXED } & IFixedConstraintDef3D)
@@ -352,6 +361,70 @@ function linePointDistanceSquared(
     return lengthSquaredVec3(subVec3(point, closestPoint));
 }
 
+function triangleNormal(
+    a: Readonly<IVec3Like>,
+    b: Readonly<IVec3Like>,
+    c: Readonly<IVec3Like>
+): IVec3Like {
+    return normalizeVec3(crossVec3(subVec3(b, a), subVec3(c, a)));
+}
+
+function rayTriangleHit(
+    origin: Readonly<IVec3Like>,
+    direction: Readonly<IVec3Like>,
+    a: Readonly<IVec3Like>,
+    b: Readonly<IVec3Like>,
+    c: Readonly<IVec3Like>,
+    maxFraction: number
+): IShapeRayHit3D | null {
+    const edge1 = subVec3(b, a);
+    const edge2 = subVec3(c, a);
+    const p = crossVec3(direction, edge2);
+    const determinant = dotVec3(edge1, p);
+
+    if (Math.abs(determinant) <= 1e-10) {
+        return null;
+    }
+
+    const inverseDeterminant = 1 / determinant;
+    const t = subVec3(origin, a);
+    const u = dotVec3(t, p) * inverseDeterminant;
+    if (u < 0 || u > 1) {
+        return null;
+    }
+
+    const q = crossVec3(t, edge1);
+    const v = dotVec3(direction, q) * inverseDeterminant;
+    if (v < 0 || u + v > 1) {
+        return null;
+    }
+
+    const fraction = dotVec3(edge2, q) * inverseDeterminant;
+    if (fraction < 0 || fraction > maxFraction) {
+        return null;
+    }
+
+    const normal = triangleNormal(a, b, c);
+    return {
+        fraction,
+        normal: dotVec3(normal, direction) > 0 ? scaleVec3(normal, -1) : normal,
+    };
+}
+
+function getHeightFieldLocalVertex(
+    def: Readonly<IHeightFieldShapeDef3D>,
+    xIndex: number,
+    zIndex: number
+): IVec3Like {
+    const halfWidth = (def.width - 1) * 0.5;
+    const halfDepth = (def.depth - 1) * 0.5;
+    return {
+        x: (xIndex - halfWidth) * def.scaleX,
+        y: def.heights[zIndex * def.width + xIndex] * def.scaleY,
+        z: (zIndex - halfDepth) * def.scaleZ,
+    };
+}
+
 function raySphereHit(
     origin: Readonly<IVec3Like>,
     direction: Readonly<IVec3Like>,
@@ -617,6 +690,27 @@ export class PhysicsWorld3D implements Disposable {
         return shapeId;
     }
 
+    createConeShape(
+        bodyId: BodyId3D,
+        def: IConeShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeOptions3D
+    ): ShapeId3D {
+        const shapeId = this._shapeManager.createCone(bodyId, def, material, filter);
+        this._shapeDescriptors.set(shapeId, {
+            id: shapeId,
+            bodyId,
+            type: SHAPE_TYPE_CONE,
+            def: { ...def, kind: SHAPE_TYPE_CONE },
+            material: makeMaterial(material),
+            isSensor: options?.isSensor ?? false,
+            filter: makeFilter(filter),
+            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
+        });
+        return shapeId;
+    }
+
     createConvexHullShape(
         bodyId: BodyId3D,
         def: IConvexHullShapeDef3D,
@@ -630,6 +724,60 @@ export class PhysicsWorld3D implements Disposable {
             bodyId,
             type: SHAPE_TYPE_CONVEX_HULL,
             def: { ...def, vertices: def.vertices.map(cloneVec3), kind: SHAPE_TYPE_CONVEX_HULL },
+            material: makeMaterial(material),
+            isSensor: options?.isSensor ?? false,
+            filter: makeFilter(filter),
+            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
+        });
+        return shapeId;
+    }
+
+    createTriangleMeshShape(
+        bodyId: BodyId3D,
+        def: ITriangleMeshShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeOptions3D
+    ): ShapeId3D {
+        const shapeId = this._shapeManager.createTriangleMesh(bodyId, def, material, filter);
+        this._shapeDescriptors.set(shapeId, {
+            id: shapeId,
+            bodyId,
+            type: SHAPE_TYPE_TRIANGLE_MESH,
+            def: {
+                vertices: def.vertices.map(cloneVec3),
+                indices: [...def.indices],
+                kind: SHAPE_TYPE_TRIANGLE_MESH,
+            },
+            material: makeMaterial(material),
+            isSensor: options?.isSensor ?? false,
+            filter: makeFilter(filter),
+            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
+        });
+        return shapeId;
+    }
+
+    createHeightFieldShape(
+        bodyId: BodyId3D,
+        def: IHeightFieldShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeOptions3D
+    ): ShapeId3D {
+        const shapeId = this._shapeManager.createHeightField(bodyId, def, material, filter);
+        this._shapeDescriptors.set(shapeId, {
+            id: shapeId,
+            bodyId,
+            type: SHAPE_TYPE_HEIGHTFIELD,
+            def: {
+                heights: new Float32Array(def.heights),
+                width: def.width,
+                depth: def.depth,
+                scaleX: def.scaleX,
+                scaleY: def.scaleY,
+                scaleZ: def.scaleZ,
+                kind: SHAPE_TYPE_HEIGHTFIELD,
+            },
             material: makeMaterial(material),
             isSensor: options?.isSensor ?? false,
             filter: makeFilter(filter),
@@ -1533,8 +1681,75 @@ export class PhysicsWorld3D implements Disposable {
                     center: cloneVec3(descriptor.def.center),
                 };
             }
+            case SHAPE_TYPE_CONE: {
+                const radius = descriptor.def.radius;
+                const height = descriptor.def.height;
+                const mass = ((Math.PI * radius * radius * height) / 3) * safeDensity;
+                const axis = descriptor.def.axis ?? 1;
+                const transverse = ((3 / 20) * mass * radius * radius) + ((3 / 5) * mass * height * height);
+                const axial = (3 / 10) * mass * radius * radius;
+                const inertiaTensor =
+                    axis === 0
+                        ? { x: axial, y: transverse, z: transverse }
+                        : axis === 2
+                          ? { x: transverse, y: transverse, z: axial }
+                          : { x: transverse, y: axial, z: transverse };
+                return {
+                    mass,
+                    inverseMass: mass > 0 ? 1 / mass : 0,
+                    inertiaTensor,
+                    inverseInertiaTensor: {
+                        x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
+                        y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
+                        z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
+                    },
+                    center: cloneVec3(descriptor.def.center),
+                };
+            }
             case SHAPE_TYPE_CONVEX_HULL: {
                 const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
+                const fullExtents = subVec3(bounds.max, bounds.min);
+                const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
+                const inertiaTensor = {
+                    x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
+                    y: (mass * (fullExtents.x * fullExtents.x + fullExtents.z * fullExtents.z)) / 12,
+                    z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
+                };
+                return {
+                    mass,
+                    inverseMass: mass > 0 ? 1 / mass : 0,
+                    inertiaTensor,
+                    inverseInertiaTensor: {
+                        x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
+                        y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
+                        z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
+                    },
+                    center: scaleVec3(addVec3(bounds.min, bounds.max), 0.5),
+                };
+            }
+            case SHAPE_TYPE_TRIANGLE_MESH: {
+                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
+                const fullExtents = subVec3(bounds.max, bounds.min);
+                const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
+                const inertiaTensor = {
+                    x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
+                    y: (mass * (fullExtents.x * fullExtents.x + fullExtents.z * fullExtents.z)) / 12,
+                    z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
+                };
+                return {
+                    mass,
+                    inverseMass: mass > 0 ? 1 / mass : 0,
+                    inertiaTensor,
+                    inverseInertiaTensor: {
+                        x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
+                        y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
+                        z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
+                    },
+                    center: scaleVec3(addVec3(bounds.min, bounds.max), 0.5),
+                };
+            }
+            case SHAPE_TYPE_HEIGHTFIELD: {
+                const bounds = this._computeLocalHeightFieldBounds(descriptor.def);
                 const fullExtents = subVec3(bounds.max, bounds.min);
                 const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
                 const inertiaTensor = {
@@ -1618,6 +1833,21 @@ export class PhysicsWorld3D implements Disposable {
                     max: addVec3(center, extents),
                 };
             }
+            case SHAPE_TYPE_CONE: {
+                const center = transformPoint3D(descriptor.def.center, position, rotation);
+                const axis = descriptor.def.axis ?? 1;
+                const localHalfExtents =
+                    axis === 0
+                        ? { x: descriptor.def.height * 0.5, y: descriptor.def.radius, z: descriptor.def.radius }
+                        : axis === 2
+                          ? { x: descriptor.def.radius, y: descriptor.def.radius, z: descriptor.def.height * 0.5 }
+                          : { x: descriptor.def.radius, y: descriptor.def.height * 0.5, z: descriptor.def.radius };
+                const extents = getBoxWorldExtents(localHalfExtents, rotation);
+                return {
+                    min: subVec3(center, extents),
+                    max: addVec3(center, extents),
+                };
+            }
             case SHAPE_TYPE_CONVEX_HULL: {
                 let bounds: IAabb3D | null = null;
                 for (const vertex of descriptor.def.vertices) {
@@ -1625,6 +1855,37 @@ export class PhysicsWorld3D implements Disposable {
                     bounds = bounds
                         ? expandAabb(bounds, worldVertex)
                         : { min: cloneVec3(worldVertex), max: cloneVec3(worldVertex) };
+                }
+                return bounds ?? { min: cloneVec3(position), max: cloneVec3(position) };
+            }
+            case SHAPE_TYPE_TRIANGLE_MESH: {
+                let bounds: IAabb3D | null = null;
+                for (const vertex of descriptor.def.vertices) {
+                    const worldVertex = transformPoint3D(vertex, position, rotation);
+                    bounds = bounds
+                        ? expandAabb(bounds, worldVertex)
+                        : { min: cloneVec3(worldVertex), max: cloneVec3(worldVertex) };
+                }
+                return bounds ?? { min: cloneVec3(position), max: cloneVec3(position) };
+            }
+            case SHAPE_TYPE_HEIGHTFIELD: {
+                const localBounds = this._computeLocalHeightFieldBounds(descriptor.def);
+                const corners: readonly IVec3Like[] = [
+                    { x: localBounds.min.x, y: localBounds.min.y, z: localBounds.min.z },
+                    { x: localBounds.min.x, y: localBounds.min.y, z: localBounds.max.z },
+                    { x: localBounds.min.x, y: localBounds.max.y, z: localBounds.min.z },
+                    { x: localBounds.min.x, y: localBounds.max.y, z: localBounds.max.z },
+                    { x: localBounds.max.x, y: localBounds.min.y, z: localBounds.min.z },
+                    { x: localBounds.max.x, y: localBounds.min.y, z: localBounds.max.z },
+                    { x: localBounds.max.x, y: localBounds.max.y, z: localBounds.min.z },
+                    { x: localBounds.max.x, y: localBounds.max.y, z: localBounds.max.z },
+                ];
+                let bounds: IAabb3D | null = null;
+                for (const corner of corners) {
+                    const worldCorner = transformPoint3D(corner, position, rotation);
+                    bounds = bounds
+                        ? expandAabb(bounds, worldCorner)
+                        : { min: cloneVec3(worldCorner), max: cloneVec3(worldCorner) };
                 }
                 return bounds ?? { min: cloneVec3(position), max: cloneVec3(position) };
             }
@@ -1682,6 +1943,25 @@ export class PhysicsWorld3D implements Disposable {
                     centered.x * centered.x + centered.z * centered.z <= descriptor.def.radius ** 2
                 );
             }
+            case SHAPE_TYPE_CONE: {
+                const localPoint = inverseTransformPoint3D(point, position, rotation);
+                const centered = subVec3(localPoint, descriptor.def.center);
+                const axis = descriptor.def.axis ?? 1;
+                const halfHeight = descriptor.def.height * 0.5;
+                const axial = axis === 0 ? centered.x : axis === 2 ? centered.z : centered.y;
+                if (axial < -halfHeight || axial > halfHeight) {
+                    return false;
+                }
+                const normalizedHeight = (axial + halfHeight) / descriptor.def.height;
+                const allowedRadius = descriptor.def.radius * (1 - normalizedHeight);
+                const radialSquared =
+                    axis === 0
+                        ? centered.y * centered.y + centered.z * centered.z
+                        : axis === 2
+                          ? centered.x * centered.x + centered.y * centered.y
+                          : centered.x * centered.x + centered.z * centered.z;
+                return radialSquared <= allowedRadius * allowedRadius;
+            }
             case SHAPE_TYPE_CONVEX_HULL: {
                 const localPoint = inverseTransformPoint3D(point, position, rotation);
                 const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
@@ -1693,6 +1973,49 @@ export class PhysicsWorld3D implements Disposable {
                     localPoint.z >= bounds.min.z &&
                     localPoint.z <= bounds.max.z
                 );
+            }
+            case SHAPE_TYPE_TRIANGLE_MESH: {
+                const localPoint = inverseTransformPoint3D(point, position, rotation);
+                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
+                if (
+                    localPoint.x < bounds.min.x ||
+                    localPoint.x > bounds.max.x ||
+                    localPoint.y < bounds.min.y ||
+                    localPoint.y > bounds.max.y ||
+                    localPoint.z < bounds.min.z ||
+                    localPoint.z > bounds.max.z
+                ) {
+                    return false;
+                }
+
+                let hitCount = 0;
+                const localDirection = { x: 1, y: 0, z: 0 };
+                for (let index = 0; index + 2 < descriptor.def.indices.length; index += 3) {
+                    const a = descriptor.def.vertices[descriptor.def.indices[index]];
+                    const b = descriptor.def.vertices[descriptor.def.indices[index + 1]];
+                    const c = descriptor.def.vertices[descriptor.def.indices[index + 2]];
+                    const hit = rayTriangleHit(
+                        localPoint,
+                        localDirection,
+                        a,
+                        b,
+                        c,
+                        Number.POSITIVE_INFINITY
+                    );
+                    if (hit && hit.fraction <= 1e-6) {
+                        return true;
+                    }
+                    if (hit) {
+                        hitCount += 1;
+                    }
+                }
+
+                return (hitCount & 1) === 1;
+            }
+            case SHAPE_TYPE_HEIGHTFIELD: {
+                const localPoint = inverseTransformPoint3D(point, position, rotation);
+                const sampledHeight = this._sampleHeightFieldHeight(descriptor.def, localPoint.x, localPoint.z);
+                return sampledHeight !== null && localPoint.y <= sampledHeight + 1e-4;
             }
             default:
                 return false;
@@ -1730,6 +2053,84 @@ export class PhysicsWorld3D implements Disposable {
                 }
                 return { fraction: hit.fraction, normal: rotateVec3(hit.normal, worldRotation) };
             }
+            case SHAPE_TYPE_TRIANGLE_MESH: {
+                let closestHit: IShapeRayHit3D | null = null;
+                for (let index = 0; index + 2 < descriptor.def.indices.length; index += 3) {
+                    const a = transformPoint3D(
+                        descriptor.def.vertices[descriptor.def.indices[index]],
+                        position,
+                        rotation
+                    );
+                    const b = transformPoint3D(
+                        descriptor.def.vertices[descriptor.def.indices[index + 1]],
+                        position,
+                        rotation
+                    );
+                    const c = transformPoint3D(
+                        descriptor.def.vertices[descriptor.def.indices[index + 2]],
+                        position,
+                        rotation
+                    );
+                    const hit = rayTriangleHit(origin, direction, a, b, c, maxFraction);
+                    if (!hit || (closestHit && hit.fraction >= closestHit.fraction)) {
+                        continue;
+                    }
+                    closestHit = hit;
+                }
+                return closestHit;
+            }
+            case SHAPE_TYPE_HEIGHTFIELD: {
+                let closestHit: IShapeRayHit3D | null = null;
+                for (let zIndex = 0; zIndex < descriptor.def.depth - 1; zIndex += 1) {
+                    for (let xIndex = 0; xIndex < descriptor.def.width - 1; xIndex += 1) {
+                        const topLeft = transformPoint3D(
+                            getHeightFieldLocalVertex(descriptor.def, xIndex, zIndex),
+                            position,
+                            rotation
+                        );
+                        const topRight = transformPoint3D(
+                            getHeightFieldLocalVertex(descriptor.def, xIndex + 1, zIndex),
+                            position,
+                            rotation
+                        );
+                        const bottomLeft = transformPoint3D(
+                            getHeightFieldLocalVertex(descriptor.def, xIndex, zIndex + 1),
+                            position,
+                            rotation
+                        );
+                        const bottomRight = transformPoint3D(
+                            getHeightFieldLocalVertex(descriptor.def, xIndex + 1, zIndex + 1),
+                            position,
+                            rotation
+                        );
+
+                        const firstHit = rayTriangleHit(
+                            origin,
+                            direction,
+                            topLeft,
+                            topRight,
+                            bottomLeft,
+                            maxFraction
+                        );
+                        if (firstHit && (!closestHit || firstHit.fraction < closestHit.fraction)) {
+                            closestHit = firstHit;
+                        }
+
+                        const secondHit = rayTriangleHit(
+                            origin,
+                            direction,
+                            bottomLeft,
+                            topRight,
+                            bottomRight,
+                            maxFraction
+                        );
+                        if (secondHit && (!closestHit || secondHit.fraction < closestHit.fraction)) {
+                            closestHit = secondHit;
+                        }
+                    }
+                }
+                return closestHit;
+            }
             default: {
                 const aabb = this._computeShapeAabb(descriptor);
                 const hit = rayAabbHit(origin, direction, aabb.min, aabb.max, maxFraction);
@@ -1745,11 +2146,20 @@ export class PhysicsWorld3D implements Disposable {
             case SHAPE_TYPE_SPHERE:
             case SHAPE_TYPE_BOX:
             case SHAPE_TYPE_CYLINDER:
+            case SHAPE_TYPE_CONE:
                 return transformPoint3D(descriptor.def.center, position, rotation);
             case SHAPE_TYPE_CAPSULE:
                 return transformPoint3D(scaleVec3(addVec3(descriptor.def.p1, descriptor.def.p2), 0.5), position, rotation);
             case SHAPE_TYPE_CONVEX_HULL: {
                 const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
+                return transformPoint3D(scaleVec3(addVec3(bounds.min, bounds.max), 0.5), position, rotation);
+            }
+            case SHAPE_TYPE_TRIANGLE_MESH: {
+                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
+                return transformPoint3D(scaleVec3(addVec3(bounds.min, bounds.max), 0.5), position, rotation);
+            }
+            case SHAPE_TYPE_HEIGHTFIELD: {
+                const bounds = this._computeLocalHeightFieldBounds(descriptor.def);
                 return transformPoint3D(scaleVec3(addVec3(bounds.min, bounds.max), 0.5), position, rotation);
             }
             default:
@@ -1785,6 +2195,57 @@ export class PhysicsWorld3D implements Disposable {
                 : { min: cloneVec3(vertex), max: cloneVec3(vertex) };
         }
         return bounds ?? { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
+    }
+
+    private _computeLocalHeightFieldBounds(def: Readonly<IHeightFieldShapeDef3D>): IAabb3D {
+        let bounds: IAabb3D | null = null;
+        for (let zIndex = 0; zIndex < def.depth; zIndex += 1) {
+            for (let xIndex = 0; xIndex < def.width; xIndex += 1) {
+                const vertex = getHeightFieldLocalVertex(def, xIndex, zIndex);
+                bounds = bounds
+                    ? expandAabb(bounds, vertex)
+                    : { min: cloneVec3(vertex), max: cloneVec3(vertex) };
+            }
+        }
+
+        return bounds ?? { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
+    }
+
+    private _sampleHeightFieldHeight(
+        def: Readonly<IHeightFieldShapeDef3D>,
+        x: number,
+        z: number
+    ): number | null {
+        if (def.width < 2 || def.depth < 2 || def.scaleX <= 0 || def.scaleZ <= 0) {
+            return null;
+        }
+
+        const halfWidth = (def.width - 1) * 0.5;
+        const halfDepth = (def.depth - 1) * 0.5;
+        const gridX = x / def.scaleX + halfWidth;
+        const gridZ = z / def.scaleZ + halfDepth;
+
+        if (gridX < 0 || gridZ < 0 || gridX > def.width - 1 || gridZ > def.depth - 1) {
+            return null;
+        }
+
+        const x0 = Math.min(def.width - 2, Math.max(0, Math.floor(gridX)));
+        const z0 = Math.min(def.depth - 2, Math.max(0, Math.floor(gridZ)));
+        const localX = gridX - x0;
+        const localZ = gridZ - z0;
+
+        const topLeft = def.heights[z0 * def.width + x0] * def.scaleY;
+        const topRight = def.heights[z0 * def.width + x0 + 1] * def.scaleY;
+        const bottomLeft = def.heights[(z0 + 1) * def.width + x0] * def.scaleY;
+        const bottomRight = def.heights[(z0 + 1) * def.width + x0 + 1] * def.scaleY;
+
+        if (localX + localZ <= 1) {
+            return topLeft + (topRight - topLeft) * localX + (bottomLeft - topLeft) * localZ;
+        }
+
+        const u = 1 - localX;
+        const v = 1 - localZ;
+        return bottomRight + (bottomLeft - bottomRight) * u + (topRight - bottomRight) * v;
     }
 
     [Symbol.dispose](): void {
