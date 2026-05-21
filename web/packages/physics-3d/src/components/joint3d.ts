@@ -73,6 +73,7 @@ export abstract class Joint3D extends Component {
     protected _constraintId: ConstraintId3D = INVALID_CONSTRAINT_ID;
     protected _constraintManager: ConstraintManager3D | null = null;
     protected _world: PhysicsWorld3D | null = null;
+    protected _ownerBody: Rigidbody3D | null = null;
     protected _joint3dEnabled: boolean = true;
     protected _connectedBody: Rigidbody3D | null = null;
     protected _autoConfigureConnectedAnchor: boolean = true;
@@ -202,6 +203,7 @@ export abstract class Joint3D extends Component {
     initialize(world: PhysicsWorld3D, ownerBody: Rigidbody3D, connectedBody?: Rigidbody3D): void {
         this._world = world;
         this._constraintManager = world.getConstraintManager();
+        this._ownerBody = ownerBody;
         this._connectedBody = connectedBody ?? null;
         this._createConstraint(ownerBody);
     }
@@ -218,6 +220,7 @@ export abstract class Joint3D extends Component {
         }
         this._constraintManager = null;
         this._world = null;
+        this._ownerBody = null;
         this._connectedBody = null;
     }
 
@@ -227,8 +230,15 @@ export abstract class Joint3D extends Component {
     protected _recreateConstraint(): void {
         if (this._constraintId !== INVALID_CONSTRAINT_ID && this._constraintManager) {
             this._constraintManager.destroyConstraint(this._constraintId);
-            this._constraintId = INVALID_CONSTRAINT_ID;
         }
+
+        this._constraintId = INVALID_CONSTRAINT_ID;
+
+        if (!this._constraintManager || !this._ownerBody) {
+            return;
+        }
+
+        this._createConstraint(this._ownerBody);
     }
 
     protected _configureConnectedAnchor(): void {
@@ -332,7 +342,7 @@ export class FixedJoint3D extends Joint3D {
         this._constraintId = this._constraintManager.createFixed(def);
     }
     protected override _updateConstraint(): void {
-        if (this._constraintId === INVALID_CONSTRAINT_ID) return;
+        this._recreateConstraint();
     }
 }
 
@@ -429,7 +439,7 @@ export class HingeJoint3D extends Joint3D {
         this._constraintId = this._constraintManager.createHinge(def);
     }
     protected override _updateConstraint(): void {
-        if (this._constraintId === INVALID_CONSTRAINT_ID) return;
+        this._recreateConstraint();
     }
 }
 
@@ -517,7 +527,7 @@ export class SliderJoint3D extends Joint3D {
         this._constraintId = this._constraintManager.createSlider(def);
     }
     protected override _updateConstraint(): void {
-        if (this._constraintId === INVALID_CONSTRAINT_ID) return;
+        this._recreateConstraint();
     }
 }
 
@@ -587,7 +597,7 @@ export class SpringJoint3D extends Joint3D {
         this._constraintId = this._constraintManager.createSpring(def);
     }
     protected override _updateConstraint(): void {
-        if (this._constraintId === INVALID_CONSTRAINT_ID) return;
+        this._recreateConstraint();
     }
 
     private _configureDistance(): void {
@@ -823,7 +833,7 @@ export class ConfigurableJoint3D extends Joint3D {
         this._constraintId = this._constraintManager.createGeneric(def);
     }
     protected override _updateConstraint(): void {
-        if (this._constraintId === INVALID_CONSTRAINT_ID) return;
+        this._recreateConstraint();
     }
 }
 
@@ -949,7 +959,7 @@ export class CharacterJoint3D extends Joint3D {
         this._constraintId = this._constraintManager.createConeTwist(def);
     }
     protected override _updateConstraint(): void {
-        if (this._constraintId === INVALID_CONSTRAINT_ID) return;
+        this._recreateConstraint();
     }
 }
 
