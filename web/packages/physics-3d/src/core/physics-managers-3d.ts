@@ -5,10 +5,12 @@ import type {
     IBoxShapeDef3D,
     ICapsuleShapeDef3D,
     ICollisionFilter3D,
+    IConeShapeDef3D,
     IConeTwistConstraintDef3D,
     IConvexHullShapeDef3D,
     IFixedConstraintDef3D,
     IGenericConstraintDef3D,
+    IHeightFieldShapeDef3D,
     IHingeConstraintDef3D,
     IPhysicsBodyDef3D,
     ISliderConstraintDef3D,
@@ -16,6 +18,7 @@ import type {
     ISpringConstraintDef3D,
     ICollisionFilter3D as ICollisionFilter3DShape,
     ICylinderShapeDef3D,
+    ITriangleMeshShapeDef3D,
     ShapeId3D,
 } from '../types/physics-3d';
 import type { BodyType, IMaterial } from '../types';
@@ -753,6 +756,28 @@ export class ShapeManager3D implements Disposable {
         );
     }
 
+    createCone(
+        bodyId: BodyId3D,
+        def: IConeShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3DShape
+    ): ShapeId3D {
+        return this._createShape(
+            bodyId,
+            7,
+            (offset) => {
+                this._shapeData[offset] = def.center.x;
+                this._shapeData[offset + 1] = def.center.y;
+                this._shapeData[offset + 2] = def.center.z;
+                this._shapeData[offset + 3] = def.radius;
+                this._shapeData[offset + 4] = def.height;
+                this._shapeData[offset + 5] = def.axis ?? 1;
+            },
+            material,
+            filter
+        );
+    }
+
     createConvexHull(
         bodyId: BodyId3D,
         def: IConvexHullShapeDef3D,
@@ -764,6 +789,55 @@ export class ShapeManager3D implements Disposable {
             8,
             (offset) => {
                 this._shapeData[offset] = def.vertices.length;
+            },
+            material,
+            filter
+        );
+    }
+
+    createTriangleMesh(
+        bodyId: BodyId3D,
+        def: ITriangleMeshShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3DShape
+    ): ShapeId3D {
+        return this._createShape(
+            bodyId,
+            9,
+            (offset) => {
+                this._shapeData[offset] = def.vertices.length;
+                this._shapeData[offset + 1] = def.indices.length;
+            },
+            material,
+            filter
+        );
+    }
+
+    createHeightField(
+        bodyId: BodyId3D,
+        def: IHeightFieldShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3DShape
+    ): ShapeId3D {
+        let minHeight = Infinity;
+        let maxHeight = -Infinity;
+        for (let index = 0; index < def.heights.length; index += 1) {
+            const height = def.heights[index];
+            minHeight = Math.min(minHeight, height);
+            maxHeight = Math.max(maxHeight, height);
+        }
+
+        return this._createShape(
+            bodyId,
+            10,
+            (offset) => {
+                this._shapeData[offset] = def.width;
+                this._shapeData[offset + 1] = def.depth;
+                this._shapeData[offset + 2] = def.scaleX;
+                this._shapeData[offset + 3] = def.scaleY;
+                this._shapeData[offset + 4] = def.scaleZ;
+                this._shapeData[offset + 5] = Number.isFinite(minHeight) ? minHeight : 0;
+                this._shapeData[offset + 6] = Number.isFinite(maxHeight) ? maxHeight : 0;
             },
             material,
             filter
