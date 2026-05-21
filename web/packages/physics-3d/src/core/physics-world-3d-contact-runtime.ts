@@ -4,6 +4,7 @@ import type {
     ICollisionFilter,
     IContactManifold3D,
     Impulse,
+    ManifoldId,
 } from '../types';
 import { PhysicsConstants } from '../types';
 import type {
@@ -138,6 +139,10 @@ export class PhysicsWorld3DContactRuntime {
         const solvePositionTime = performance.now() - solvePositionStart;
 
         for (const manifold of solvableContacts) {
+            this._finalizeContactPosition(manifold);
+        }
+
+        for (const manifold of solvableContacts) {
             this._stabilizeRestingContactVelocity(manifold);
         }
 
@@ -258,7 +263,7 @@ export class PhysicsWorld3DContactRuntime {
         );
 
         return {
-            id: previous?.id ?? this._nextManifoldId++,
+            id: previous?.id ?? (this._nextManifoldId++ as ManifoldId),
             pairKey: pair.pairKey,
             descriptorA: pair.descriptorA,
             descriptorB: pair.descriptorB,
@@ -299,11 +304,7 @@ export class PhysicsWorld3DContactRuntime {
             return addVec3(this._host.getShapeWorldCenter(descriptor), scaleVec3(direction, radius));
         }
 
-        const offset = scaleVec3(
-            collision.normal,
-            collision.penetration * (firstShape ? 0.5 : -0.5)
-        );
-        return addVec3(collision.point, offset);
+        return collision.point;
     }
 
     private _detectCollision(
@@ -577,7 +578,7 @@ export class PhysicsWorld3DContactRuntime {
             }
 
             const correctionMagnitude =
-                ((penetration - PhysicsConstants.ALLOWED_PENETRATION) * 0.8) / inverseMassSum;
+                ((penetration - PhysicsConstants.ALLOWED_PENETRATION) * 0.82) / inverseMassSum;
             const correction = scaleVec3(manifold.normal, correctionMagnitude);
 
             if (inverseMassA > 0) {
@@ -640,6 +641,49 @@ export class PhysicsWorld3DContactRuntime {
         const impulse = scaleVec3(anchors.direction, impulseMagnitude);
         this._applySolveImpulse(descriptor.def.bodyIdA, negateVec3(impulse), anchors.anchorA);
         this._applySolveImpulse(descriptor.def.bodyIdB, impulse, anchors.anchorB);
+    }
+
+    private _finalizeContactPosition(manifold: IResolvedContactManifold3D): void {
+        for (const point of manifold.points) {
+            point.separation = this._getCurrentPointSeparation(manifold, point);
+            const penetration = Math.max(0, -point.separation);
+            if (penetration <= PhysicsConstants.ALLOWED_PENETRATION) {
+                continue;
+            }
+
+            const inverseMassA = this._getBodySolveInverseMass(manifold.bodyIdA);
+            const inverseMassB = this._getBodySolveInverseMass(manifold.bodyIdB);
+            const inverseMassSum = inverseMassA + inverseMassB;
+            if (inverseMassSum <= PhysicsConstants.EPSILON) {
+                continue;
+            }
+
+            const correction = scaleVec3(
+                manifold.normal,
+                (penetration - PhysicsConstants.ALLOWED_PENETRATION) / inverseMassSum
+            );
+
+            if (inverseMassA > 0) {
+                this._host.bodyManager.setPosition(
+                    manifold.bodyIdA,
+                    subVec3(
+                        this._host.bodyManager.getPosition(manifold.bodyIdA),
+                        scaleVec3(correction, inverseMassA)
+                    )
+                );
+            }
+            if (inverseMassB > 0) {
+                this._host.bodyManager.setPosition(
+                    manifold.bodyIdB,
+                    addVec3(
+                        this._host.bodyManager.getPosition(manifold.bodyIdB),
+                        scaleVec3(correction, inverseMassB)
+                    )
+                );
+            }
+
+            point.separation = this._getCurrentPointSeparation(manifold, point);
+        }
     }
 
     private _stabilizeRestingContactVelocity(manifold: IResolvedContactManifold3D): void {
