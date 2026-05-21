@@ -207,4 +207,78 @@ describe('PhysicsWorld3D modular structure', () => {
 
         expect(constraint?.isEnabled()).toBe(false);
     });
+
+    it('detects, resolves, and reports 3d contacts through the world pipeline', () => {
+        const world = new PhysicsWorld3D({ gravity: { x: 0, y: -10, z: 0 } });
+        const events: string[] = [];
+
+        world.setContactListener({
+            onCollisionBegin(payload: any) {
+                events.push(`begin:${payload.bodyIdA}:${payload.bodyIdB}`);
+            },
+            onCollisionStay(payload: any) {
+                events.push(`stay:${payload.bodyIdA}:${payload.bodyIdB}`);
+            },
+            onCollisionEnd(bodyIdA: number, bodyIdB: number) {
+                events.push(`end:${bodyIdA}:${bodyIdB}`);
+            },
+        } as any);
+
+        const groundBody = world.createBody({ type: 0, position: { x: 0, y: 0, z: 0 } });
+        world.createBoxShape(groundBody, {
+            center: { x: 0, y: 0, z: 0 },
+            halfExtents: { x: 5, y: 0.5, z: 5 },
+        });
+
+        const sphereBody = world.createBody({
+            type: 2,
+            position: { x: 0, y: 2, z: 0 },
+            linearVelocity: { x: 0, y: 0, z: 0 },
+        });
+        world.createSphereShape(sphereBody, {
+            center: { x: 0, y: 0, z: 0 },
+            radius: 0.5,
+        });
+
+        world.step(0.5);
+        world.step(0.1);
+
+        const restingPosition = world.getBodyManager().getPosition(sphereBody);
+        const restingVelocity = world.getBodyManager().getLinearVelocity(sphereBody);
+        const statistics = world.getStatistics();
+
+        expect(restingPosition.y).toBeGreaterThanOrEqual(0.99);
+        expect(restingVelocity.y).toBeGreaterThanOrEqual(-0.01);
+        expect(statistics.contactCount).toBeGreaterThan(0);
+        expect(events.some((event) => event.startsWith('begin:'))).toBe(true);
+        expect(events.some((event) => event.startsWith('stay:'))).toBe(true);
+
+        world.getBodyManager().setPosition(sphereBody, { x: 0, y: 5, z: 0 });
+        world.getBodyManager().setLinearVelocity(sphereBody, { x: 0, y: 0, z: 0 });
+        world.step(0.05);
+
+        expect(events.some((event) => event.startsWith('end:'))).toBe(true);
+    });
+
+    it('applies basic anchor stabilization for world-managed 3d constraints', () => {
+        const world = new PhysicsWorld3D({ gravity: { x: 0, y: 0, z: 0 } });
+        const anchorBody = world.createBody({ type: 0, position: { x: 0, y: 0, z: 0 } });
+        const dynamicBody = world.createBody({
+            type: 2,
+            position: { x: 2, y: 0, z: 0 },
+            linearVelocity: { x: 8, y: 0, z: 0 },
+        });
+
+        world.createFixedConstraint({
+            bodyIdA: anchorBody,
+            bodyIdB: dynamicBody,
+            localAnchorA: { x: 0, y: 0, z: 0 },
+            localAnchorB: { x: 0, y: 0, z: 0 },
+        });
+
+        world.step(0.25, 8, 8);
+
+        const position = world.getBodyManager().getPosition(dynamicBody);
+        expect(position.x).toBeLessThan(2.5);
+    });
 });
