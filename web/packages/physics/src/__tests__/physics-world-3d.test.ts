@@ -124,6 +124,59 @@ describe('PhysicsWorld3D modular structure', () => {
         expect(rayHit?.point.x).toBeCloseTo(-1, 5);
     });
 
+    it('supports additional cone, triangle-mesh, and heightfield world shapes', () => {
+        const world = new PhysicsWorld3D();
+        const coneBody = world.createBody({ type: 0, position: { x: -4, y: 0, z: 0 } });
+        const meshBody = world.createBody({ type: 0, position: { x: 0, y: 0, z: 0 } });
+        const heightFieldBody = world.createBody({ type: 0, position: { x: 5, y: 0, z: 0 } });
+
+        const coneId = world.createConeShape(coneBody, {
+            center: { x: 0, y: 0, z: 0 },
+            radius: 1,
+            height: 2,
+            axis: 1,
+        });
+        const meshId = world.createTriangleMeshShape(meshBody, {
+            vertices: [
+                { x: -1, y: 0, z: -1 },
+                { x: 1, y: 0, z: -1 },
+                { x: 0, y: 0, z: 1 },
+            ],
+            indices: [0, 1, 2],
+        });
+        const heightFieldId = world.createHeightFieldShape(heightFieldBody, {
+            heights: new Float32Array([1, 1, 1, 1]),
+            width: 2,
+            depth: 2,
+            scaleX: 1,
+            scaleY: 1,
+            scaleZ: 1,
+        });
+
+        expect(world.getShape(coneId)?.computeMassData(1).mass).toBeGreaterThan(0);
+        expect(world.queryPointAll({ x: -4, y: -0.75, z: 0 })).toContain(coneId);
+        expect(
+            world.queryAABBAll({ x: -1, y: -0.1, z: -1 }, { x: 1, y: 0.1, z: 1 })
+        ).toContain(meshId);
+
+        const meshHit = world.rayCastClosest(
+            { x: 0, y: 2, z: 0 },
+            { x: 0, y: -1, z: 0 },
+            5
+        );
+        const heightFieldHit = world.rayCastClosest(
+            { x: 5, y: 3, z: 0 },
+            { x: 0, y: -1, z: 0 },
+            5
+        );
+
+        expect(meshHit?.shapeId).toBe(meshId);
+        expect(meshHit?.point.y).toBeCloseTo(0, 5);
+        expect(heightFieldHit?.shapeId).toBe(heightFieldId);
+        expect(heightFieldHit?.point.y).toBeCloseTo(1, 5);
+        expect(world.queryPointAll({ x: 5, y: 0.25, z: 0 })).toContain(heightFieldId);
+    });
+
     it('exposes supported 3d constraints through world-level facades', () => {
         const world = new PhysicsWorld3D();
         const bodyA = world.createBody({ type: 2, position: { x: 0, y: 0, z: 0 } });
