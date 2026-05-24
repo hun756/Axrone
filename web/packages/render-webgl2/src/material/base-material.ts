@@ -169,6 +169,12 @@ export interface PBRMaterialConfig extends MaterialConfig {
     metallicFactor?: number;
     roughnessFactor?: number;
     metallicRoughnessTexture?: WebGLTexture;
+    clearcoatFactor?: number;
+    clearcoatRoughnessFactor?: number;
+    clearcoatTexture?: WebGLTexture;
+    clearcoatRoughnessTexture?: WebGLTexture;
+    clearcoatNormalTexture?: WebGLTexture;
+    clearcoatNormalScale?: number;
     normalTexture?: WebGLTexture;
     normalScale?: number;
     occlusionTexture?: WebGLTexture;
