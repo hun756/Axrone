@@ -21,19 +21,28 @@ const DEFAULT_STAGE_PHASES = Object.freeze([
 
 const normalizeExtension = (value: string): string => value.replace(/^\./, '').toLowerCase();
 
-const getSourceExtension = (uri?: string): string | undefined => {
+const getSourceExtensions = (uri?: string): readonly string[] => {
     if (!uri) {
-        return undefined;
+        return [];
     }
 
     const path = uri.split(/[?#]/, 1)[0] ?? '';
-    const lastDot = path.lastIndexOf('.');
+    const fileName = path.split(/[\\/]/).pop() ?? '';
+    const segments = fileName.split('.');
 
-    if (lastDot <= 0 || lastDot === path.length - 1) {
-        return undefined;
+    if (segments.length < 2) {
+        return [];
     }
 
-    return normalizeExtension(path.slice(lastDot + 1));
+    const extensions: string[] = [];
+    for (let start = segments.length - 1; start > 0; start -= 1) {
+        const extension = normalizeExtension(segments.slice(start).join('.'));
+        if (extension) {
+            extensions.push(extension);
+        }
+    }
+
+    return extensions;
 };
 
 const matchesImporter = <TSchema extends AssetSchema>(
@@ -61,13 +70,13 @@ const matchesImporter = <TSchema extends AssetSchema>(
     }
 
     if (importer.extensions?.length) {
-        const sourceExtension = getSourceExtension(context.source.uri);
-        if (!sourceExtension) {
+        const sourceExtensions = getSourceExtensions(context.source.uri);
+        if (sourceExtensions.length === 0) {
             return false;
         }
 
         const extensionMatch = importer.extensions.some(
-            (value) => normalizeExtension(value) === sourceExtension
+            (value) => sourceExtensions.includes(normalizeExtension(value))
         );
 
         if (!extensionMatch) {
@@ -189,7 +198,7 @@ export class AssetImporterRegistry<TSchema extends AssetSchema = AssetSchema> {
         const candidates: AssetImporter<TSchema>[] = [];
         const seen = new Set<AssetImporter<TSchema>>();
         const sourceMimeType = context.source.mimeType?.trim().toLowerCase();
-        const sourceExtension = getSourceExtension(context.source.uri);
+        const sourceExtensions = getSourceExtensions(context.source.uri);
 
         const append = (values?: readonly AssetImporter<TSchema>[]): void => {
             for (const importer of values ?? []) {
@@ -204,7 +213,7 @@ export class AssetImporterRegistry<TSchema extends AssetSchema = AssetSchema> {
         if (sourceMimeType) {
             append(this._mimeTypeIndex.get(sourceMimeType));
         }
-        if (sourceExtension) {
+        for (const sourceExtension of sourceExtensions) {
             append(this._extensionIndex.get(sourceExtension));
         }
         append(this._wildcardImporters);

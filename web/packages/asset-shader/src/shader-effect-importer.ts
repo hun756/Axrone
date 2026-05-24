@@ -537,7 +537,7 @@ export const createShaderEffectJsonImporter = (): AssetImporter<AssetShaderImpor
     id: 'asset-shader.effect.json',
     priority: 20,
     sourceKinds: ['json', 'text'],
-    extensions: ['effect.json', 'shader.json', 'json'],
+    extensions: ['effect.json', 'shader.json'],
     canImport: ({ source }) => {
         try {
             normalizeShaderEffectJsonSource(source, readJsonLikeSource(source));
