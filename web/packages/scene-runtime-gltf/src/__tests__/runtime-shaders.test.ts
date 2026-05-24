@@ -49,10 +49,19 @@ describe('scene-runtime glTF shader effects', () => {
         ).toBe('int');
         expect(definition.effect?.properties?.some((property) => property.name === 'u_LocalLightType')).toBe(false);
         expect(GLTF_PBR_SHADER_EFFECT.properties?.some((property) => property.name === '_MetallicFactor')).toBe(true);
+        expect(GLTF_PBR_SHADER_EFFECT.properties?.some((property) => property.name === '_ClearcoatFactor')).toBe(true);
+        expect(
+            GLTF_PBR_SHADER_EFFECT.properties?.some(
+                (property) => property.name === '_ClearcoatNormalTexture_Scale'
+            )
+        ).toBe(true);
         expect(GLTF_UNLIT_SHADER_EFFECT.properties?.some((property) => property.name === '_BaseColorTexture')).toBe(true);
         expect(definition.fragmentSource).toContain('uniform vec3 u_DirectionalLightDirection[1];');
         expect(definition.fragmentSource).toContain('uniform int u_PointLightCount;');
         expect(definition.fragmentSource).toContain('uniform float u_SpotLightInnerConeCosine[4];');
+        expect(definition.fragmentSource).toContain('uniform sampler2D _ClearcoatTexture;');
+        expect(definition.fragmentSource).toContain('vec3 resolveClearcoatNormal(vec3 baseNormal)');
+        expect(definition.fragmentSource).toContain('vec3 evaluateClearcoatLight(');
         expect(definition.fragmentSource).not.toContain('u_LocalLightType');
         expect(definition.cull).toBe(true);
         expect(definition.blend).toBe(false);
