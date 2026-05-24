@@ -96,6 +96,7 @@ const SUPPORTED_GLTF_EXTENSIONS = new Set<string>([
     'EXT_meshopt_compression',
     'KHR_draco_mesh_compression',
     'KHR_lights_punctual',
+    'KHR_materials_clearcoat',
     'KHR_materials_emissive_strength',
     'KHR_materials_unlit',
     'KHR_mesh_quantization',
@@ -2249,6 +2250,15 @@ const collectTextureUsages = (root: GltfRootJson): Map<number, Set<GltfTextureUs
         addUsage(material.normalTexture?.index, 'normal');
         addUsage(material.occlusionTexture?.index, 'occlusion');
         addUsage(material.emissiveTexture?.index, 'emissive');
+        addUsage(material.extensions?.KHR_materials_clearcoat?.clearcoatTexture?.index, 'clearcoat');
+        addUsage(
+            material.extensions?.KHR_materials_clearcoat?.clearcoatRoughnessTexture?.index,
+            'clearcoatRoughness'
+        );
+        addUsage(
+            material.extensions?.KHR_materials_clearcoat?.clearcoatNormalTexture?.index,
+            'clearcoatNormal'
+        );
     }
 
     return usages;
@@ -2348,10 +2358,13 @@ const createMaterialDefinition = (
 } => {
     const emissiveStrength =
         material.extensions?.KHR_materials_emissive_strength?.emissiveStrength ?? 1;
+    const clearcoat = material.extensions?.KHR_materials_clearcoat;
     const uniforms: Record<string, number | readonly number[]> = {
         _BaseColorFactor: material.pbrMetallicRoughness?.baseColorFactor ?? [1, 1, 1, 1],
         _MetallicFactor: material.pbrMetallicRoughness?.metallicFactor ?? 1,
         _RoughnessFactor: material.pbrMetallicRoughness?.roughnessFactor ?? 1,
+        _ClearcoatFactor: clearcoat?.clearcoatFactor ?? 0,
+        _ClearcoatRoughnessFactor: clearcoat?.clearcoatRoughnessFactor ?? 0,
         _EmissiveFactor: scaleEmissiveFactor(material.emissiveFactor, emissiveStrength),
         _AlphaMode:
             material.alphaMode === 'MASK' ? 1 : material.alphaMode === 'BLEND' ? 2 : 0,
@@ -2414,6 +2427,19 @@ const createMaterialDefinition = (
     addTexture('normal', material.normalTexture, '_NormalTexture', 'linear');
     addTexture('occlusion', material.occlusionTexture, '_OcclusionTexture', 'linear');
     addTexture('emissive', material.emissiveTexture, '_EmissiveTexture', 'srgb');
+    addTexture('clearcoat', clearcoat?.clearcoatTexture, '_ClearcoatTexture', 'linear');
+    addTexture(
+        'clearcoatRoughness',
+        clearcoat?.clearcoatRoughnessTexture,
+        '_ClearcoatRoughnessTexture',
+        'linear'
+    );
+    addTexture(
+        'clearcoatNormal',
+        clearcoat?.clearcoatNormalTexture,
+        '_ClearcoatNormalTexture',
+        'linear'
+    );
 
     const unlit = material.extensions?.KHR_materials_unlit !== undefined;
 
