@@ -71,6 +71,28 @@ const GLTF_TEXTURE_UNIFORM_SPECS: readonly GltfTextureUniformSpec[] = [
         defaultST: [1, 1, 0, 0] as const,
         defaultRotation: 0,
     },
+    {
+        usage: 'clearcoat',
+        uniformName: '_ClearcoatTexture',
+        defaultTexCoord: -1,
+        defaultST: [1, 1, 0, 0] as const,
+        defaultRotation: 0,
+    },
+    {
+        usage: 'clearcoatRoughness',
+        uniformName: '_ClearcoatRoughnessTexture',
+        defaultTexCoord: -1,
+        defaultST: [1, 1, 0, 0] as const,
+        defaultRotation: 0,
+    },
+    {
+        usage: 'clearcoatNormal',
+        uniformName: '_ClearcoatNormalTexture',
+        defaultTexCoord: -1,
+        defaultST: [1, 1, 0, 0] as const,
+        defaultRotation: 0,
+        defaultScale: 1,
+    },
 ];
 
 const toGltfTextureMimeType = (texture: GltfTextureAsset): string | undefined => {
@@ -331,6 +353,11 @@ const createRuntimeSurfaceDefinition = (
     const normalMap = toRuntimeSurfaceTextureBinding(asset.textures.normal);
     const occlusionMap = toRuntimeSurfaceTextureBinding(asset.textures.occlusion);
     const emissiveMap = toRuntimeSurfaceTextureBinding(asset.textures.emissive);
+    const clearcoatMap = toRuntimeSurfaceTextureBinding(asset.textures.clearcoat);
+    const clearcoatRoughnessMap = toRuntimeSurfaceTextureBinding(
+        asset.textures.clearcoatRoughness
+    );
+    const clearcoatNormalMap = toRuntimeSurfaceTextureBinding(asset.textures.clearcoatNormal);
 
     return {
         shadingModel: asset.unlit ? 'unlit' : 'pbr',
@@ -352,6 +379,14 @@ const createRuntimeSurfaceDefinition = (
             useMetallicRoughnessMap: Boolean(metallicRoughnessMap?.textureId),
             useOcclusionMap: Boolean(occlusionMap?.textureId),
             useEmissiveMap: Boolean(emissiveMap?.textureId),
+            useClearcoat:
+                (typeof uniforms._ClearcoatFactor === 'number' && uniforms._ClearcoatFactor > 0) ||
+                Boolean(clearcoatMap?.textureId) ||
+                Boolean(clearcoatRoughnessMap?.textureId) ||
+                Boolean(clearcoatNormalMap?.textureId),
+            useClearcoatMap: Boolean(clearcoatMap?.textureId),
+            useClearcoatRoughnessMap: Boolean(clearcoatRoughnessMap?.textureId),
+            useClearcoatNormalMap: Boolean(clearcoatNormalMap?.textureId),
             useAlphaTest: asset.alphaMode === 'MASK',
         },
         tilingOffset: [1, 1, 0, 0],
@@ -375,6 +410,16 @@ const createRuntimeSurfaceDefinition = (
             typeof uniforms._RoughnessFactor === 'number' ? uniforms._RoughnessFactor : 1,
         metallic:
             typeof uniforms._MetallicFactor === 'number' ? uniforms._MetallicFactor : 1,
+        clearcoat:
+            typeof uniforms._ClearcoatFactor === 'number' ? uniforms._ClearcoatFactor : 0,
+        clearcoatRoughness:
+            typeof uniforms._ClearcoatRoughnessFactor === 'number'
+                ? uniforms._ClearcoatRoughnessFactor
+                : 0,
+        clearcoatNormalScale:
+            typeof uniforms._ClearcoatNormalTexture_Scale === 'number'
+                ? uniforms._ClearcoatNormalTexture_Scale
+                : 1,
         specularIntensity: 1,
         emissive:
             Array.isArray(emissive) && emissive.length >= 3
@@ -390,6 +435,9 @@ const createRuntimeSurfaceDefinition = (
         metallicRoughnessMap,
         occlusionMap,
         emissiveMap,
+        clearcoatMap,
+        clearcoatRoughnessMap,
+        clearcoatNormalMap,
     };
 };
 

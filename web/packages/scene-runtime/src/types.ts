@@ -181,6 +181,10 @@ export interface SceneMaterialSurfaceFeaturesDefinition {
     readonly useMetallicRoughnessMap?: boolean;
     readonly useOcclusionMap?: boolean;
     readonly useEmissiveMap?: boolean;
+    readonly useClearcoat?: boolean;
+    readonly useClearcoatMap?: boolean;
+    readonly useClearcoatRoughnessMap?: boolean;
+    readonly useClearcoatNormalMap?: boolean;
     readonly useAlphaTest?: boolean;
 }
 
@@ -207,6 +211,9 @@ export interface SceneMaterialSurfaceDefinition {
     readonly occlusion?: number;
     readonly roughness?: number;
     readonly metallic?: number;
+    readonly clearcoat?: number;
+    readonly clearcoatRoughness?: number;
+    readonly clearcoatNormalScale?: number;
     readonly specularIntensity?: number;
     readonly emissive?: readonly [number, number, number];
     readonly emissiveScale?: readonly [number, number, number];
@@ -216,6 +223,9 @@ export interface SceneMaterialSurfaceDefinition {
     readonly metallicRoughnessMap?: SceneMaterialSurfaceTextureBindingDefinition;
     readonly occlusionMap?: SceneMaterialSurfaceTextureBindingDefinition;
     readonly emissiveMap?: SceneMaterialSurfaceTextureBindingDefinition;
+    readonly clearcoatMap?: SceneMaterialSurfaceTextureBindingDefinition;
+    readonly clearcoatRoughnessMap?: SceneMaterialSurfaceTextureBindingDefinition;
+    readonly clearcoatNormalMap?: SceneMaterialSurfaceTextureBindingDefinition;
 }
 
 export type SceneMaterialPassPrimitive = 'triangle-list' | 'line-list' | 'point-list';

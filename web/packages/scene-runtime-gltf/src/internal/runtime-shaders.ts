@@ -385,6 +385,12 @@ export const createGltfRuntimeSurfaceFeatures = (
     uniforms?: GltfMaterialUniformMap
 ): SceneMaterialSurfaceFeaturesDefinition => {
     const unlit = shaderId.startsWith(GLTF_SHADER_UNLIT_ID);
+    const useClearcoatMap =
+        !unlit && normalizeNumericUniform(uniforms?._ClearcoatTexture_TexCoord, -1) >= 0;
+    const useClearcoatRoughnessMap =
+        !unlit && normalizeNumericUniform(uniforms?._ClearcoatRoughnessTexture_TexCoord, -1) >= 0;
+    const useClearcoatNormalMap =
+        !unlit && normalizeNumericUniform(uniforms?._ClearcoatNormalTexture_TexCoord, -1) >= 0;
 
     return {
         useVertexColor: false,
@@ -392,7 +398,10 @@ export const createGltfRuntimeSurfaceFeatures = (
             normalizeNumericUniform(uniforms?._MetallicRoughnessTexture_TexCoord, 0) === 1 ||
             normalizeNumericUniform(uniforms?._NormalTexture_TexCoord, 0) === 1 ||
             normalizeNumericUniform(uniforms?._OcclusionTexture_TexCoord, 0) === 1 ||
-            normalizeNumericUniform(uniforms?._EmissiveTexture_TexCoord, 0) === 1,
+            normalizeNumericUniform(uniforms?._EmissiveTexture_TexCoord, 0) === 1 ||
+            normalizeNumericUniform(uniforms?._ClearcoatTexture_TexCoord, 0) === 1 ||
+            normalizeNumericUniform(uniforms?._ClearcoatRoughnessTexture_TexCoord, 0) === 1 ||
+            normalizeNumericUniform(uniforms?._ClearcoatNormalTexture_TexCoord, 0) === 1,
         useNormalMap: !unlit && normalizeNumericUniform(uniforms?._NormalTexture_TexCoord, -1) >= 0,
         useTwoSided: isGltfDoubleSided(uniforms),
         useAlbedoMap: normalizeNumericUniform(uniforms?._BaseColorTexture_TexCoord, -1) >= 0,
@@ -401,6 +410,15 @@ export const createGltfRuntimeSurfaceFeatures = (
             !unlit && normalizeNumericUniform(uniforms?._MetallicRoughnessTexture_TexCoord, -1) >= 0,
         useOcclusionMap: !unlit && normalizeNumericUniform(uniforms?._OcclusionTexture_TexCoord, -1) >= 0,
         useEmissiveMap: !unlit && normalizeNumericUniform(uniforms?._EmissiveTexture_TexCoord, -1) >= 0,
+        useClearcoat:
+            !unlit &&
+            (normalizeNumericUniform(uniforms?._ClearcoatFactor, 0) > 0 ||
+                useClearcoatMap ||
+                useClearcoatRoughnessMap ||
+                useClearcoatNormalMap),
+        useClearcoatMap,
+        useClearcoatRoughnessMap,
+        useClearcoatNormalMap,
         useAlphaTest: normalizeNumericUniform(uniforms?._AlphaMode, 0) >= 0.5 && normalizeNumericUniform(uniforms?._AlphaMode, 0) < 1.5,
     };
 };
@@ -432,6 +450,9 @@ export const createGltfRuntimeSurfaceDefinition = (
     occlusion: normalizeNumericUniform(uniforms?._OcclusionTexture_Strength, 1),
     roughness: normalizeNumericUniform(uniforms?._RoughnessFactor, 1),
     metallic: normalizeNumericUniform(uniforms?._MetallicFactor, 1),
+    clearcoat: normalizeNumericUniform(uniforms?._ClearcoatFactor, 0),
+    clearcoatRoughness: normalizeNumericUniform(uniforms?._ClearcoatRoughnessFactor, 0),
+    clearcoatNormalScale: normalizeNumericUniform(uniforms?._ClearcoatNormalTexture_Scale, 1),
     specularIntensity: 1,
     emissive: Array.isArray(uniforms?._EmissiveFactor)
         ? [
