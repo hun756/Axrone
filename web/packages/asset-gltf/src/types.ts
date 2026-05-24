@@ -152,7 +152,10 @@ export type GltfTextureUsage =
     | 'metallicRoughness'
     | 'normal'
     | 'occlusion'
-    | 'emissive';
+    | 'emissive'
+    | 'clearcoat'
+    | 'clearcoatRoughness'
+    | 'clearcoatNormal';
 
 export interface GltfTextureTransform {
     readonly offset: readonly [number, number];
@@ -554,6 +557,14 @@ export interface GltfPbrMetallicRoughnessJson {
     readonly metallicRoughnessTexture?: GltfTextureBindingJson;
 }
 
+export interface GltfMaterialClearcoatJson {
+	readonly clearcoatFactor?: number;
+	readonly clearcoatTexture?: GltfTextureBindingJson;
+	readonly clearcoatRoughnessFactor?: number;
+	readonly clearcoatRoughnessTexture?: GltfTextureBindingJson;
+	readonly clearcoatNormalTexture?: GltfTextureBindingJson;
+}
+
 export interface GltfMaterialJson {
     readonly name?: string;
     readonly pbrMetallicRoughness?: GltfPbrMetallicRoughnessJson;
@@ -565,6 +576,7 @@ export interface GltfMaterialJson {
     readonly alphaCutoff?: number;
     readonly doubleSided?: boolean;
     readonly extensions?: {
+        readonly KHR_materials_clearcoat?: GltfMaterialClearcoatJson;
         readonly KHR_materials_emissive_strength?: {
             readonly emissiveStrength?: number;
         };
