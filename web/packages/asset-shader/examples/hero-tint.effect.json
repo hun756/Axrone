@@ -1,0 +1,35 @@
+{
+  "attributes": [
+    {
+      "name": "a_Position",
+      "type": "vec3",
+      "location": 0
+    }
+  ],
+  "properties": [
+    {
+      "name": "u_Tint",
+      "type": "vec4",
+      "stages": ["fragment"],
+      "scope": "material",
+      "inspector": {
+        "label": "Tint",
+        "group": "Surface",
+        "control": "color"
+      }
+    }
+  ],
+  "vertex": {
+    "main": ["gl_Position = vec4(a_Position, 1.0);"]
+  },
+  "fragment": {
+    "precision": "highp",
+    "outputs": [
+      {
+        "name": "o_Color",
+        "type": "vec4"
+      }
+    ],
+    "main": ["o_Color = u_Tint;"]
+  }
+}
