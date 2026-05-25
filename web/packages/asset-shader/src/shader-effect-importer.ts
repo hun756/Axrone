@@ -14,11 +14,16 @@ import {
     type RenderShaderInspectorControlDefinition,
     type RenderShaderInspectorOptionDefinition,
     type RenderShaderInterfaceDefinition,
+    type RenderShaderKeywordDefinition,
     type RenderShaderLibraryDefinition,
+    type RenderShaderPassDefinition,
+    type RenderShaderPropertyBindingChannel,
+    type RenderShaderPropertyBindingDefinition,
     type RenderShaderPropertyDefinition,
     type RenderShaderSerializableValue,
     type RenderShaderStageDefinition,
     type RenderShaderStageName,
+    type RenderShaderTechniqueDefinition,
     type RenderShaderValueType,
 } from '@axrone/render-core/shader-effect';
 
@@ -46,7 +51,10 @@ export interface ShaderEffectJsonSource {
     readonly attributes?: readonly unknown[];
     readonly varyings?: readonly unknown[];
     readonly properties?: readonly unknown[];
+    readonly keywords?: readonly unknown[];
     readonly libraries?: readonly unknown[];
+    readonly defaultTechnique?: string;
+    readonly techniques?: readonly unknown[];
     readonly vertex?: unknown;
     readonly fragment?: unknown;
     readonly renderState?: unknown;
@@ -82,6 +90,16 @@ const INSPECTOR_CONTROL_TYPES = new Set<
 const INTERFACE_INTERPOLATIONS = new Set<
     NonNullable<RenderShaderInterfaceDefinition['interpolation']>
 >(['flat', 'smooth']);
+const PROPERTY_BINDING_CHANNELS = new Set<RenderShaderPropertyBindingChannel>([
+    'r',
+    'g',
+    'b',
+    'a',
+    'x',
+    'y',
+    'z',
+    'w',
+]);
 const INSPECTOR_GROUP_FALLBACK = 'Properties';
 
 const isShaderSerializableValue = (value: unknown): value is RenderShaderSerializableValue => {
@@ -423,7 +441,77 @@ const normalizeProperties = (
             stages: ensureStageNames(object.stages, `${label}[${index}].stages`),
             scope,
             defaultValue: defaultValue as RenderShaderSerializableValue | undefined,
+            binding: normalizePropertyBinding(object.binding, `${label}[${index}].binding`),
             inspector: normalizeInspector(object.inspector, `${label}[${index}].inspector`),
+        };
+    });
+};
+
+const normalizePropertyBinding = (
+    value: unknown,
+    label: string
+): RenderShaderPropertyBindingDefinition | undefined => {
+    if (value === undefined) {
+        return undefined;
+    }
+
+    const object = ensurePlainObject(value, label);
+    const channelsValue = object.channels;
+    let channels: readonly RenderShaderPropertyBindingChannel[] | undefined;
+    if (channelsValue !== undefined) {
+        if (Array.isArray(channelsValue) === false) {
+            throw new Error(`${label}.channels must be an array`);
+        }
+
+        channels = channelsValue.map((entry, index) => {
+            const channel = ensureString(entry, `${label}.channels[${index}]`) as RenderShaderPropertyBindingChannel;
+            if (!PROPERTY_BINDING_CHANNELS.has(channel)) {
+                throw new Error(`${label}.channels[${index}] must be a supported target channel`);
+            }
+
+            return channel;
+        });
+    }
+
+    return {
+        target: ensureString(object.target, `${label}.target`),
+        channels,
+    };
+};
+
+const normalizeKeywords = (
+    value: unknown,
+    label: string
+): readonly RenderShaderKeywordDefinition[] | undefined => {
+    if (value === undefined) {
+        return undefined;
+    }
+
+    if (Array.isArray(value) === false) {
+        throw new Error(`${label} must be an array`);
+    }
+
+    return value.map((entry, index) => {
+        const object = ensurePlainObject(entry, `${label}[${index}]`);
+        const defaultValue = object.defaultValue;
+        if (
+            defaultValue !== undefined &&
+            typeof defaultValue !== 'boolean' &&
+            typeof defaultValue !== 'string'
+        ) {
+            throw new Error(`${label}[${index}].defaultValue must be a boolean or string`);
+        }
+
+        const options = ensureOptionalStringArray(object.options, `${label}[${index}].options`);
+        if (typeof defaultValue === 'string' && options && !options.includes(defaultValue)) {
+            throw new Error(`${label}[${index}].defaultValue must match one of the declared options`);
+        }
+
+        return {
+            name: ensureString(object.name, `${label}[${index}].name`),
+            stages: ensureStageNames(object.stages, `${label}[${index}].stages`),
+            options,
+            defaultValue: defaultValue as RenderShaderKeywordDefinition['defaultValue'],
         };
     });
 };
@@ -492,6 +580,64 @@ const normalizeRenderState = (
     };
 };
 
+const normalizeOptionalStage = (
+    value: unknown,
+    label: string
+): RenderShaderStageDefinition | undefined =>
+    value === undefined ? undefined : normalizeStage(value, label);
+
+const normalizePasses = (
+    value: unknown,
+    label: string
+): readonly RenderShaderPassDefinition[] => {
+    if (Array.isArray(value) === false || value.length === 0) {
+        throw new Error(`${label} must be a non-empty array`);
+    }
+
+    return value.map((entry, index) => {
+        const object = ensurePlainObject(entry, `${label}[${index}]`);
+        return {
+            id: ensureString(object.id, `${label}[${index}].id`),
+            vertex: normalizeOptionalStage(object.vertex, `${label}[${index}].vertex`),
+            fragment: normalizeOptionalStage(object.fragment, `${label}[${index}].fragment`),
+            renderState: normalizeRenderState(
+                object.renderState,
+                `${label}[${index}].renderState`
+            ),
+            keywords: ensureOptionalStringArray(object.keywords, `${label}[${index}].keywords`),
+        };
+    });
+};
+
+const normalizeTechniques = (
+    value: unknown,
+    label: string
+): readonly RenderShaderTechniqueDefinition[] | undefined => {
+    if (value === undefined) {
+        return undefined;
+    }
+
+    if (Array.isArray(value) === false) {
+        throw new Error(`${label} must be an array`);
+    }
+
+    return value.map((entry, index) => {
+        const object = ensurePlainObject(entry, `${label}[${index}]`);
+        return {
+            id: ensureString(object.id, `${label}[${index}].id`),
+            label: ensureOptionalString(object.label, `${label}[${index}].label`),
+            passes: normalizePasses(object.passes, `${label}[${index}].passes`),
+        };
+    });
+};
+
+const hasSchemaV2Fields = (candidate: Record<string, unknown>): boolean =>
+    candidate.keywords !== undefined ||
+    candidate.defaultTechnique !== undefined ||
+    candidate.techniques !== undefined ||
+    (Array.isArray(candidate.properties) &&
+        candidate.properties.some((entry) => isPlainObject(entry) && entry.binding !== undefined));
+
 export const normalizeShaderEffectJsonSource = (
     source: AssetImportSource,
     payload: unknown
@@ -506,13 +652,20 @@ export const normalizeShaderEffectJsonSource = (
     }
 
     const version = candidate.version;
-    if (version !== undefined && version !== 1) {
-        throw new Error('Shader effect payload.version must be 1');
+    if (version !== undefined && version !== 1 && version !== 2) {
+        throw new Error('Shader effect payload.version must be 1 or 2');
+    }
+
+    const normalizedVersion = version ?? (hasSchemaV2Fields(candidate) ? 2 : 1);
+    if (normalizedVersion === 1 && hasSchemaV2Fields(candidate)) {
+        throw new Error(
+            'Shader effect payload.version must be 2 when keywords, property bindings, or techniques are used'
+        );
     }
 
     const definition: RenderShaderEffectDefinition = {
         format: 'axrone.shader/effect',
-        version: 1,
+        version: normalizedVersion,
         id:
             typeof candidate.id === 'string' && candidate.id.trim() !== ''
                 ? candidate.id
@@ -520,7 +673,13 @@ export const normalizeShaderEffectJsonSource = (
         attributes: normalizeAttributes(candidate.attributes, 'Shader effect payload.attributes'),
         varyings: normalizeInterfaces(candidate.varyings, 'Shader effect payload.varyings'),
         properties: normalizeProperties(candidate.properties, 'Shader effect payload.properties'),
+        keywords: normalizeKeywords(candidate.keywords, 'Shader effect payload.keywords'),
         libraries: normalizeLibraries(candidate.libraries, 'Shader effect payload.libraries'),
+        defaultTechnique: ensureOptionalString(
+            candidate.defaultTechnique,
+            'Shader effect payload.defaultTechnique'
+        ),
+        techniques: normalizeTechniques(candidate.techniques, 'Shader effect payload.techniques'),
         vertex: normalizeStage(candidate.vertex, 'Shader effect payload.vertex'),
         fragment: normalizeStage(candidate.fragment, 'Shader effect payload.fragment'),
         renderState: normalizeRenderState(
