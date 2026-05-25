@@ -17,6 +17,7 @@ Generic `.json` files are intentionally not matched by the shader importer. This
 - import-pipeline integration through `createAssetShaderImportPipeline()`
 - canonical `RenderShaderEffectDefinition` output
 - compatibility with runtime consumption through `@axrone/scene-runtime`
+- schema v2 metadata for keywords, property target-channel bindings, and techniques/passes
 
 ## Authoring Flow
 
@@ -27,7 +28,8 @@ Generic `.json` files are intentionally not matched by the shader importer. This
 
 ## Example Assets
 
-The package includes two canonical examples under `examples/`:
+The package includes canonical examples under `examples/`:
 
 - `hero-tint.effect.json`: minimal shorthand authored effect asset
 - `rig-preview.shader.json`: wrapped effect payload with inspector select options and array uniforms
+- `advanced-surface.effect.json`: schema v2 metadata with keywords, property bindings, and a technique/pass layout
