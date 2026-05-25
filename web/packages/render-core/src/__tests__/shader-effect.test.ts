@@ -110,4 +110,67 @@ describe('render shader effect compiler', () => {
         expect(cloned.vertex.main).toHaveLength(3);
         expect(Array.isArray(cloned.libraries?.[0]?.code) ? cloned.libraries[0].code : []).toHaveLength(3);
     });
+
+    it('clones schema v2 keyword, binding, and technique metadata', () => {
+        const effect: RenderShaderEffectDefinition = {
+            format: 'axrone.shader/effect',
+            version: 2,
+            id: 'effect/advanced',
+            properties: [
+                {
+                    name: 'u_Tint',
+                    type: 'vec4',
+                    stages: ['fragment'],
+                    scope: 'material',
+                    binding: {
+                        target: 'u_SurfaceParams',
+                        channels: ['r', 'g', 'b', 'a'],
+                    },
+                },
+            ],
+            keywords: [
+                { name: 'USE_FOG', stages: ['fragment'], defaultValue: false },
+                { name: 'SURFACE_MODE', options: ['OPAQUE', 'BLEND'], defaultValue: 'OPAQUE' },
+            ],
+            defaultTechnique: 'forward',
+            techniques: [
+                {
+                    id: 'forward',
+                    label: 'Forward',
+                    passes: [
+                        {
+                            id: 'lit',
+                            keywords: ['USE_FOG', 'SURFACE_MODE'],
+                            renderState: { blend: true },
+                        },
+                    ],
+                },
+            ],
+            vertex: {
+                main: ['gl_Position = vec4(0.0);'],
+            },
+            fragment: {
+                precision: 'highp',
+                outputs: [{ name: 'o_Color', type: 'vec4' }],
+                main: ['o_Color = u_Tint;'],
+            },
+        };
+
+        const cloned = cloneRenderShaderEffectDefinition(effect);
+        const mutableEffect = effect as any;
+        mutableEffect.properties[0].binding.channels.push('x');
+        mutableEffect.keywords[1].options.push('MASK');
+        mutableEffect.techniques[0].passes[0].keywords.push('EXTRA_KEYWORD');
+
+        expect(cloned.properties?.[0]?.binding).toEqual({
+            target: 'u_SurfaceParams',
+            channels: ['r', 'g', 'b', 'a'],
+        });
+        expect(cloned.keywords?.[1]?.options).toEqual(['OPAQUE', 'BLEND']);
+        expect(cloned.defaultTechnique).toBe('forward');
+        expect(cloned.techniques?.[0]?.passes[0]?.keywords).toEqual([
+            'USE_FOG',
+            'SURFACE_MODE',
+        ]);
+    });
 });
