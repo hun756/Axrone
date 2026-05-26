@@ -1,11 +1,3 @@
-/**
- * @fileoverview gltf-texture.ts
- *
- * Texture and sampler mapping utilities for GLTF import.
- * Maps GLTF sampler/filter values to engine enums and handles texture format inference.
- *
- * @packageDocumentation
- */
 
 import { FilterMode, TextureFormat, WrapMode } from '@axrone/render-webgl2';
 import type {
