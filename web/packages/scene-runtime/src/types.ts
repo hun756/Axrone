@@ -186,6 +186,11 @@ export interface SceneMaterialSurfaceFeaturesDefinition {
     readonly useClearcoatRoughnessMap?: boolean;
     readonly useClearcoatNormalMap?: boolean;
     readonly useAlphaTest?: boolean;
+    readonly useAnisotropy?: boolean;
+    readonly useSheen?: boolean;
+    readonly useSubsurface?: boolean;
+    readonly useTransmission?: boolean;
+    readonly useIridescence?: boolean;
 }
 
 export interface SceneMaterialSurfaceTextureBindingDefinition {
@@ -217,6 +222,20 @@ export interface SceneMaterialSurfaceDefinition {
     readonly specularIntensity?: number;
     readonly emissive?: readonly [number, number, number];
     readonly emissiveScale?: readonly [number, number, number];
+    readonly sheenFactor?: number;
+    readonly sheenColor?: readonly [number, number, number];
+    readonly sheenRoughness?: number;
+    readonly anisotropy?: number;
+    readonly anisotropyRotation?: number;
+    readonly subsurfaceFactor?: number;
+    readonly subsurfaceColor?: readonly [number, number, number];
+    readonly subsurfaceThickness?: number;
+    readonly transmissionFactor?: number;
+    readonly ior?: number;
+    readonly thickness?: number;
+    readonly iridescenceFactor?: number;
+    readonly iridescenceIor?: number;
+    readonly iridescenceThickness?: number;
     readonly albedoMap?: SceneMaterialSurfaceTextureBindingDefinition;
     readonly normalMap?: SceneMaterialSurfaceTextureBindingDefinition;
     readonly pbrMap?: SceneMaterialSurfaceTextureBindingDefinition;
