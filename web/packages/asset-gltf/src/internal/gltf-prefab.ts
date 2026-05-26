@@ -14,22 +14,17 @@ import type {
     GltfRootJson,
     GltfSkinAsset,
 } from '../types';
-import type { GltfActorSnapshot, GltfComponentSnapshot } from '../asset-ir';
+import type { GltfActorSnapshot, GltfComponentSnapshot, PrefabBuildContext, PrefabBuildResult, GltfSkinBinding, MeshRendererComponentData, AnimatorSerializableClip, AnimatorSerializableTrack, AnimatorComponentData } from './gltf-component-snapshot';
+import type { AnimationManifest } from './gltf-animation-types';
 import { GltfSchemaError } from '../errors';
 import { encodeGltfValue } from '../value-serialization';
-import { EMPTY_ARRAY, MAX_SCENE_LOCAL_LIGHTS, type PrefabBuildResult, type GltfSkinBinding, type PortableAnimationManifest } from './gltf-constants';
+import { EMPTY_ARRAY, MAX_SCENE_LOCAL_LIGHTS } from './gltf-constants';
+import { sanitizeName, ensureArray } from './gltf-utils';
 import { createTransformSnapshot, createActorSnapshot, nodeIdFromIndex } from './gltf-scene-transform';
 import { createCameraSnapshot } from './gltf-camera';
 import { createDirectionalLightSnapshot, createPointLightSnapshot, createSpotLightSnapshot, resolveNodeLight } from './gltf-light';
 import { createSkinBinding } from './gltf-skin';
 import { resolveSceneAnimationControllerMetadata } from './gltf-animation-controller';
-
-const sanitizeName = (value: string | undefined, fallback: string): string => {
-    const trimmed = value?.trim();
-    return trimmed && trimmed.length > 0 ? trimmed : fallback;
-};
-
-const ensureArray = <T>(value: readonly T[] | undefined): readonly T[] => value ?? EMPTY_ARRAY;
 
 const createMeshRendererSnapshot = (
     meshKey: string,
@@ -183,18 +178,20 @@ export const createAnimatorSnapshot = (
     });
 };
 
-export const buildPrefabDefinition = (
-    root: GltfRootJson,
-    sceneIndex: number,
-    defaultSceneIndex: number,
-    meshKeysByMesh: readonly (readonly string[])[],
-    materialKeysByMesh: readonly (readonly (string | undefined)[])[],
-    skinsByIndex: readonly (GltfSkinAsset | undefined)[],
-    skinKeysByIndex: readonly string[],
-    animationsByIndex: readonly (GltfAnimationClipAsset | undefined)[],
-    animationKeysByIndex: readonly string[],
-    manifest: PortableAnimationManifest | undefined
-): PrefabBuildResult => {
+export const buildPrefabDefinition = (context: PrefabBuildContext): PrefabBuildResult => {
+    const {
+        root,
+        sceneIndex,
+        defaultSceneIndex,
+        meshKeysByMesh,
+        materialKeysByMesh,
+        skinsByIndex,
+        skinKeysByIndex,
+        animationsByIndex,
+        animationKeysByIndex,
+        manifest,
+    } = context;
+
     const scene = root.scenes?.[sceneIndex];
     if (!scene) {
         throw new GltfSchemaError(`Missing scene ${sceneIndex}`);
