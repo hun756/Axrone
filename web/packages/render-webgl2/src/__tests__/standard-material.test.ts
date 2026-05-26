@@ -132,7 +132,7 @@ describe('StandardMaterialComponent – Metallic & Smoothness', () => {
 
     it('S-034b – smoothness clamps min', () => {
         mat.smoothness = -0.5;
-        expect(mat.smoothness).toBeGreaterThanOrEqual(0);
+        expect(mat.smoothness).toBe(0);
     });
 
     it('S-035 – smoothness valid value stores correctly', () => {
@@ -166,7 +166,7 @@ describe('StandardMaterialComponent – Normal Map', () => {
 
     it('S-042b – normalScale clamps min', () => {
         mat.normalScale = -0.5;
-        expect(mat.normalScale).toBeGreaterThanOrEqual(0);
+        expect(mat.normalScale).toBe(0);
     });
 });
 
@@ -226,7 +226,7 @@ describe('StandardMaterialComponent – Occlusion', () => {
 
     it('S-062b – occlusionStrength clamps min', () => {
         mat.occlusionStrength = -0.5;
-        expect(mat.occlusionStrength).toBeGreaterThanOrEqual(0);
+        expect(mat.occlusionStrength).toBe(0);
     });
 });
 
@@ -261,7 +261,7 @@ describe('StandardMaterialComponent – Emission', () => {
 
     it('S-074 – emissionIntensity clamps min', () => {
         mat.emissionIntensity = -5;
-        expect(mat.emissionIntensity).toBeGreaterThanOrEqual(0);
+        expect(mat.emissionIntensity).toBe(0);
     });
 
     it('S-075 – emissionIntensity valid value stores correctly', () => {
@@ -318,7 +318,7 @@ describe('StandardMaterialComponent – Rendering Mode', () => {
 
     it('S-084b – alphaCutoff clamps min', () => {
         mat.alphaCutoff = -0.5;
-        expect(mat.alphaCutoff).toBeGreaterThanOrEqual(0);
+        expect(mat.alphaCutoff).toBe(0);
     });
 
     it('S-085 – rapid rendering mode switching maintains consistency', () => {

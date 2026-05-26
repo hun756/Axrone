@@ -114,7 +114,7 @@ describe('PBRMaterialComponent – Metallic & Roughness', () => {
 
     it('P-030b – metallicFactor setter clamps min to 0', () => {
         mat.metallicFactor = -0.5;
-        expect(mat.metallicFactor).toBeGreaterThanOrEqual(0);
+        expect(mat.metallicFactor).toBe(0);
     });
 
     it('P-031 – roughnessFactor setter clamps max to 1', () => {
@@ -124,7 +124,7 @@ describe('PBRMaterialComponent – Metallic & Roughness', () => {
 
     it('P-031b – roughnessFactor setter clamps min to 0', () => {
         mat.roughnessFactor = -1.0;
-        expect(mat.roughnessFactor).toBeGreaterThanOrEqual(0);
+        expect(mat.roughnessFactor).toBe(0);
     });
 
     it('P-032 – metallicFactor valid value stores correctly', () => {
@@ -232,7 +232,7 @@ describe('PBRMaterialComponent – Clearcoat', () => {
 
     it('P-054b – clearcoatNormalScale clamps min to 0', () => {
         mat.clearcoatNormalScale = -0.5;
-        expect(mat.clearcoatNormalScale).toBeGreaterThanOrEqual(0);
+        expect(mat.clearcoatNormalScale).toBe(0);
     });
 });
 
@@ -329,7 +329,7 @@ describe('PBRMaterialComponent – Alpha Mode', () => {
 
     it('P-084b – alphaCutoff clamps min to 0', () => {
         mat.alphaCutoff = -0.5;
-        expect(mat.alphaCutoff).toBeGreaterThanOrEqual(0);
+        expect(mat.alphaCutoff).toBe(0);
     });
 
     it('P-085 – alphaCutoff valid value stores correctly', () => {
