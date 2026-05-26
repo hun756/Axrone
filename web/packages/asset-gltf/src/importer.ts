@@ -1,6 +1,6 @@
 import { EMPTY_ARRAY, DEFAULT_SAMPLER_ID, DEFAULT_MATERIAL_KEY_SUFFIX, DEFAULT_MATERIAL_NAME, DEFAULT_DOCUMENT_NAME, SUPPORTED_GLTF_EXTENSIONS } from './internal/gltf-constants';
-import type { GltfAnimationClipMetadataSourceIndex } from './internal/gltf-constants';
-import { maybeFreeze } from './internal/gltf-utils';
+import type { AnimationClipMetadataIndex } from './internal/gltf-animation-types';
+import { maybeFreeze, sanitizeName, ensureArray } from './internal/gltf-utils';
 import { inferTextureFormat } from './internal/gltf-texture';
 import type {
     AssetImportDiagnostic,
@@ -56,11 +56,6 @@ import {
 
 import { nodeIdFromIndex } from './internal/gltf-scene-transform';
 
-const sanitizeName = (value: string | undefined, fallback: string): string => {
-    const trimmed = value?.trim();
-    return trimmed && trimmed.length > 0 ? trimmed : fallback;
-};
-
 const listUnsupportedExtensions = (
     extensions: readonly string[] | undefined
 ): readonly string[] =>
@@ -114,7 +109,6 @@ const createDocumentName = (
         DEFAULT_DOCUMENT_NAME
     );
 
-const ensureArray = <T>(value: readonly T[] | undefined): readonly T[] => value ?? EMPTY_ARRAY;
 
 const accessorTypeComponentCount = (type: GltfAccessorJson['type']): number => {
     switch (type) {
@@ -217,7 +211,7 @@ const createAnimationClipAsset = async (
     root: GltfRootJson,
     animationIndex: number,
     accessors: GltfAccessorRuntime,
-    clipMetadataSources: import('./internal/gltf-constants').GltfAnimationClipMetadataSourceIndex,
+    clipMetadataSources: AnimationClipMetadataIndex,
     diagnostics: AssetImportDiagnostic[],
     freeze: boolean
 ): Promise<GltfAnimationClipAsset> => {
@@ -672,18 +666,18 @@ export const createGltfImporter = <
             const sceneEntries: GltfDocumentSceneAsset[] = [];
 
             for (let sceneIndex = 0; sceneIndex < scenes.length; sceneIndex += 1) {
-                const built = buildPrefabDefinition(
-                    normalized.json,
+                const built = buildPrefabDefinition({
+                    root: normalized.json,
                     sceneIndex,
                     defaultSceneIndex,
                     meshKeysByMesh,
                     materialKeysByMesh,
                     skinsByIndex,
-                    skinKeys,
+                    skinKeysByIndex: skinKeys,
                     animationsByIndex,
-                    animationKeys,
-                    animationManifest
-                );
+                    animationKeysByIndex: animationKeys,
+                    manifest: animationManifest,
+                });
                 diagnostics.push(...built.diagnostics);
                 const key = String(createSubKey(`scene/${sceneIndex}/prefab`));
                 const asset = maybeFreeze(
