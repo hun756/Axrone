@@ -1,13 +1,15 @@
+import type { Vec3Tuple, QuatTuple, NodeId, TransformDecomposition, LightReference } from './gltf-branded-types';
+import type { GltfActorSnapshot, GltfComponentSnapshot, TransformComponentData } from './gltf-component-snapshot';
 import type { GltfNodeJson } from '../types';
-import type { GltfActorSnapshot, GltfComponentSnapshot } from '../asset-ir';
+import { nodeId } from './gltf-branded-types';
 
-export const decomposeNodeTransform = (
-    node: GltfNodeJson
-): {
-    readonly position: readonly [number, number, number];
-    readonly rotation: readonly [number, number, number, number];
-    readonly scale: readonly [number, number, number];
-} => {
+export interface DecomposedTransform {
+    readonly position: Vec3Tuple;
+    readonly rotation: QuatTuple;
+    readonly scale: Vec3Tuple;
+}
+
+export const decomposeNodeTransform = (node: GltfNodeJson): DecomposedTransform => {
     if (node.matrix && node.matrix.length === 16) {
         const m = node.matrix;
         const sx = Math.hypot(m[0], m[1], m[2]);
@@ -23,10 +25,7 @@ export const decomposeNodeTransform = (
         const rm21 = sz === 0 ? 0 : m[9] / sz;
         const rm22 = sz === 0 ? 1 : m[10] / sz;
         const trace = rm00 + rm11 + rm22;
-        let x = 0;
-        let y = 0;
-        let z = 0;
-        let w = 1;
+        let x = 0, y = 0, z = 0, w = 1;
 
         if (trace > 0) {
             const s = Math.sqrt(trace + 1) * 2;
@@ -36,59 +35,50 @@ export const decomposeNodeTransform = (
             z = (rm10 - rm01) / s;
         } else if (rm00 > rm11 && rm00 > rm22) {
             const s = Math.sqrt(1 + rm00 - rm11 - rm22) * 2;
-            w = (rm21 - rm12) / s;
-            x = 0.25 * s;
-            y = (rm01 + rm10) / s;
-            z = (rm02 + rm20) / s;
+            w = (rm21 - rm12) / s; x = 0.25 * s; y = (rm01 + rm10) / s; z = (rm02 + rm20) / s;
         } else if (rm11 > rm22) {
             const s = Math.sqrt(1 + rm11 - rm00 - rm22) * 2;
-            w = (rm02 - rm20) / s;
-            x = (rm01 + rm10) / s;
-            y = 0.25 * s;
-            z = (rm12 + rm21) / s;
+            w = (rm02 - rm20) / s; x = (rm01 + rm10) / s; y = 0.25 * s; z = (rm12 + rm21) / s;
         } else {
             const s = Math.sqrt(1 + rm22 - rm00 - rm11) * 2;
-            w = (rm10 - rm01) / s;
-            x = (rm02 + rm20) / s;
-            y = (rm12 + rm21) / s;
-            z = 0.25 * s;
+            w = (rm10 - rm01) / s; x = (rm02 + rm20) / s; y = (rm12 + rm21) / s; z = 0.25 * s;
         }
 
-        return {
-            position: [m[12], m[13], m[14]],
-            rotation: [x, y, z, w],
-            scale: [sx || 1, sy || 1, sz || 1],
-        };
+        return Object.freeze({
+            position: Object.freeze([m[12], m[13], m[14]]) as Vec3Tuple,
+            rotation: Object.freeze([x, y, z, w]) as QuatTuple,
+            scale: Object.freeze([sx || 1, sy || 1, sz || 1]) as Vec3Tuple,
+        });
     }
 
-    return {
-        position: node.translation ?? [0, 0, 0],
-        rotation: node.rotation ?? [0, 0, 0, 1],
-        scale: node.scale ?? [1, 1, 1],
-    };
+    return Object.freeze({
+        position: Object.freeze(node.translation ?? [0, 0, 0]) as Vec3Tuple,
+        rotation: Object.freeze(node.rotation ?? [0, 0, 0, 1]) as QuatTuple,
+        scale: Object.freeze(node.scale ?? [1, 1, 1]) as Vec3Tuple,
+    });
 };
 
 export const createTransformSnapshot = (node: GltfNodeJson): GltfComponentSnapshot => {
     const transform = decomposeNodeTransform(node);
     return Object.freeze({
-        type: 'Transform',
+        type: 'Transform' as const,
         data: Object.freeze({
-            position: Object.freeze([...transform.position]),
-            rotation: Object.freeze([...transform.rotation]),
-            scale: Object.freeze([...transform.scale]),
-        }),
+            position: Object.freeze([...transform.position]) as Vec3Tuple,
+            rotation: Object.freeze([...transform.rotation]) as QuatTuple,
+            scale: Object.freeze([...transform.scale]) as Vec3Tuple,
+        } satisfies TransformComponentData),
     });
 };
 
 export const createActorSnapshot = (
-    nodeId: string,
-    parentNodeId: string | null,
+    nodeIndex: number,
+    parentIndex: number | null,
     name: string,
     components: readonly GltfComponentSnapshot[]
 ): GltfActorSnapshot =>
     Object.freeze({
-        nodeId,
-        parentNodeId,
+        nodeId: nodeId(nodeIndex),
+        parentNodeId: parentIndex !== null ? nodeId(parentIndex) : null,
         name,
         layer: 0,
         tag: 'Default',
@@ -98,4 +88,4 @@ export const createActorSnapshot = (
         components,
     });
 
-export const nodeIdFromIndex = (nodeIndex: number): string => `node/${nodeIndex}`;
+export const nodeIdFromIndex = (nodeIndex: number): NodeId => nodeId(nodeIndex);
