@@ -167,7 +167,7 @@ export type SceneTextureBindingDefinition =
           readonly unit?: number;
       };
 
-export type SceneMaterialShadingModel = 'unlit' | 'pbr';
+export type SceneMaterialShadingModel = 'unlit' | 'pbr' | 'toon';
 export type SceneMaterialAlphaMode = 'opaque' | 'mask' | 'blend';
 export type SceneMaterialUvSet = 0 | 1;
 
