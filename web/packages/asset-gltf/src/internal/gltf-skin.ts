@@ -1,10 +1,8 @@
 import type { GltfSkinAsset } from '../types';
-import type { GltfSkinBinding } from './gltf-constants';
+import type { GltfSkinBinding } from './gltf-component-snapshot';
 
 export const createSkinBinding = (skin: GltfSkinAsset | undefined): GltfSkinBinding | undefined => {
-    if (!skin) {
-        return undefined;
-    }
+    if (!skin) return undefined;
 
     return Object.freeze({
         jointNodeIds: Object.freeze([...skin.jointNodeIds]),
