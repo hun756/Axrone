@@ -15,15 +15,14 @@ import type {
 } from '../types';
 import type { NormalizedGltfSource } from './source-runtime';
 import { basenameOfUri, stripExtension } from './source-runtime';
-import {
-    ANIMATION_MANIFEST_RESOURCE_NAMES,
-    EMPTY_ARRAY,
-    type GltfAnimationClipMetadataSource,
-    type GltfAnimationClipMetadataSourceIndex,
-    type PortableAnimationFeatureExportDefinition,
-    type PortableAnimationManifest,
-    type PortableAnimationManifestSceneEntry,
-} from './gltf-constants';
+import { ANIMATION_MANIFEST_RESOURCE_NAMES, EMPTY_ARRAY } from './gltf-constants';
+import type {
+    AnimationManifest,
+    AnimationManifestSceneEntry,
+    AnimationClipMetadata,
+    AnimationClipMetadataIndex,
+} from './gltf-animation-types';
+import type { PortableAnimationFeatureExportDefinition } from './gltf-constants';
 import {
     isFiniteNumber,
     isBooleanTuple3,
@@ -35,6 +34,11 @@ import {
     normalizeVector3Tuple,
     rotateVectorByQuaternion,
 } from './gltf-utils';
+
+type PortableAnimationManifest = AnimationManifest;
+type PortableAnimationManifestSceneEntry = AnimationManifestSceneEntry;
+type GltfAnimationClipMetadataSource = AnimationClipMetadata;
+type GltfAnimationClipMetadataSourceIndex = AnimationClipMetadataIndex;
 
 export const createAnimationMetadataDiagnostic = (
     sceneIndex: number,
