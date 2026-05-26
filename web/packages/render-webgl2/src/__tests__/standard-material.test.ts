@@ -447,7 +447,7 @@ describe('StandardMaterialComponent – Edge Cases', () => {
     it('S-122 – metallic boundary: exactly 0 stores correctly', () => {
         const mat = new StandardMaterialComponent();
         mat.metallic = 0;
-        expect(mat.metallic).toBeGreaterThanOrEqual(0);
+        expect(mat.metallic).toBe(0);
     });
 
     it('S-124 – heightScale boundary: exactly 0.005', () => {
