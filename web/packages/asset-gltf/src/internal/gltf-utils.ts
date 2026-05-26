@@ -1,13 +1,5 @@
-/**
- * @fileoverview gltf-utils.ts
- *
- * Shared utility functions for the GLTF import pipeline.
- * Pure functions with no side effects — safe for tree-shaking.
- *
- * @packageDocumentation
- */
-
 import { deepFreeze, isPlainObject } from '@axrone/utility';
+import { EMPTY_ARRAY } from './gltf-constants';
 
 export const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);
@@ -25,23 +17,15 @@ export const maybeFreeze = <T>(value: T, enabled: boolean): T =>
     (enabled ? (deepFreeze(value) as T) : value);
 
 export const cloneSerializableMetadata = (value: unknown): unknown => {
-    if (
-        value === null ||
-        typeof value === 'string' ||
-        typeof value === 'number' ||
-        typeof value === 'boolean'
-    ) {
+    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
         return value;
     }
-
     if (Array.isArray(value)) {
         return value.map((entry) => cloneSerializableMetadata(entry));
     }
-
     if (!isPlainObject(value)) {
         return undefined;
     }
-
     const cloned: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(value)) {
         const clonedEntry = cloneSerializableMetadata(entry);
@@ -49,15 +33,11 @@ export const cloneSerializableMetadata = (value: unknown): unknown => {
             cloned[key] = clonedEntry;
         }
     }
-
     return cloned;
 };
 
 export const sanitizeAnimationTags = (value: unknown): readonly string[] | undefined => {
-    if (!Array.isArray(value)) {
-        return undefined;
-    }
-
+    if (!Array.isArray(value)) return undefined;
     const tags = [...new Set(value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0))];
     return tags.length > 0 ? Object.freeze(tags) : undefined;
 };
@@ -66,9 +46,7 @@ export const normalizeVector3Tuple = (
     value: readonly [number, number, number]
 ): readonly [number, number, number] => {
     const length = Math.hypot(value[0], value[1], value[2]);
-    if (length <= Number.EPSILON) {
-        return Object.freeze([0, 0, 1]) as readonly [number, number, number];
-    }
+    if (length <= Number.EPSILON) return Object.freeze([0, 0, 1]) as readonly [number, number, number];
     return Object.freeze([value[0] / length, value[1] / length, value[2] / length]) as readonly [number, number, number];
 };
 
@@ -76,15 +54,8 @@ export const normalizeQuaternionTuple = (
     value: readonly [number, number, number, number]
 ): readonly [number, number, number, number] => {
     const length = Math.hypot(value[0], value[1], value[2], value[3]);
-    if (length <= Number.EPSILON) {
-        return Object.freeze([0, 0, 0, 1]) as readonly [number, number, number, number];
-    }
-    return Object.freeze([
-        value[0] / length,
-        value[1] / length,
-        value[2] / length,
-        value[3] / length,
-    ]) as readonly [number, number, number, number];
+    if (length <= Number.EPSILON) return Object.freeze([0, 0, 0, 1]) as readonly [number, number, number, number];
+    return Object.freeze([value[0] / length, value[1] / length, value[2] / length, value[3] / length]) as readonly [number, number, number, number];
 };
 
 export const rotateVectorByQuaternion = (
@@ -104,3 +75,28 @@ export const rotateVectorByQuaternion = (
         vector[2] + (uvZ * w + uuvZ) * 2,
     ]);
 };
+
+export const sanitizeName = (value: string | undefined, fallback: string): string => {
+    const trimmed = value?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : fallback;
+};
+
+export const ensureArray = <T>(value: readonly T[] | undefined): readonly T[] =>
+    value ?? (EMPTY_ARRAY as readonly T[]);
+
+export const freezeMap = <K, V>(map: Map<K, V>): ReadonlyMap<K, V> => {
+    const entries = [...map.entries()];
+    return Object.freeze(new Map(entries)) as ReadonlyMap<K, V>;
+};
+
+export const deduplicate = <T>(items: readonly T[]): readonly T[] =>
+    Object.freeze([...new Set(items)]);
+
+export const deduplicateStrings = (items: readonly (string | undefined)[]): readonly string[] =>
+    Object.freeze([...new Set(items.filter((item): item is string => typeof item === 'string' && item.length > 0))]);
+
+export const sortedEntries = <K, V>(map: ReadonlyMap<K, V>, compareFn?: (a: K, b: K) => number): readonly (readonly [K, V])[] =>
+    Object.freeze([...map.entries()].sort(([a], [b]) => compareFn?.(a, b) ?? 0));
+
+export const isNonNullable = <T>(value: T): value is NonNullable<T> =>
+    value !== null && value !== undefined;
