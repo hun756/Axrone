@@ -343,7 +343,7 @@ export class StandardMaterialComponent extends BaseMaterialComponent<StandardMat
     }
 
     get metallic(): number {
-        return this.getProperty<number>('_Metallic') || 0;
+        return this.getProperty<number>('_Metallic') ?? 0;
     }
 
     set metallic(value: number) {
@@ -364,7 +364,7 @@ export class StandardMaterialComponent extends BaseMaterialComponent<StandardMat
     }
 
     get smoothness(): number {
-        return this.getProperty<number>('_Glossiness') || 0.5;
+        return this.getProperty<number>('_Glossiness') ?? 0.5;
     }
 
     set smoothness(value: number) {
@@ -385,7 +385,7 @@ export class StandardMaterialComponent extends BaseMaterialComponent<StandardMat
     }
 
     get normalScale(): number {
-        return this.getProperty<number>('_BumpScale') || 1;
+        return this.getProperty<number>('_BumpScale') ?? 1;
     }
 
     set normalScale(value: number) {
@@ -406,7 +406,7 @@ export class StandardMaterialComponent extends BaseMaterialComponent<StandardMat
     }
 
     get heightScale(): number {
-        return this.getProperty<number>('_Parallax') || 0.02;
+        return this.getProperty<number>('_Parallax') ?? 0.02;
     }
 
     set heightScale(value: number) {
@@ -427,7 +427,7 @@ export class StandardMaterialComponent extends BaseMaterialComponent<StandardMat
     }
 
     get occlusionStrength(): number {
-        return this.getProperty<number>('_OcclusionStrength') || 1;
+        return this.getProperty<number>('_OcclusionStrength') ?? 1;
     }
 
     set occlusionStrength(value: number) {
@@ -441,7 +441,7 @@ export class StandardMaterialComponent extends BaseMaterialComponent<StandardMat
     }
 
     set emission(value: Vec3) {
-        const intensity = this.getProperty<number>('_EmissionIntensity') || 1;
+        const intensity = this.getProperty<number>('_EmissionIntensity') ?? 1;
         this.setProperty('_EmissionColor', {
             x: value.x * intensity,
             y: value.y * intensity,
@@ -469,7 +469,7 @@ export class StandardMaterialComponent extends BaseMaterialComponent<StandardMat
     }
 
     get emissionIntensity(): number {
-        return this.getProperty<number>('_EmissionIntensity') || 1;
+        return this.getProperty<number>('_EmissionIntensity') ?? 1;
     }
 
     set emissionIntensity(value: number) {
@@ -477,7 +477,7 @@ export class StandardMaterialComponent extends BaseMaterialComponent<StandardMat
     }
 
     get renderingMode(): 'Opaque' | 'Cutout' | 'Fade' | 'Transparent' {
-        const mode = this.getProperty<number>('_Mode') || 0;
+        const mode = this.getProperty<number>('_Mode') ?? 0;
         switch (mode) {
             case 1:
                 return 'Cutout';
@@ -530,7 +530,7 @@ export class StandardMaterialComponent extends BaseMaterialComponent<StandardMat
     }
 
     get alphaCutoff(): number {
-        return this.getProperty<number>('_Cutoff') || 0.5;
+        return this.getProperty<number>('_Cutoff') ?? 0.5;
     }
 
     set alphaCutoff(value: number) {
@@ -543,7 +543,7 @@ export class StandardMaterialComponent extends BaseMaterialComponent<StandardMat
     }
 
     set mainTextureScale(value: Vec2) {
-        const st = this.getProperty<Vec4>('_MainTex_ST') || { x: 1, y: 1, z: 0, w: 0 };
+        const st = this.getProperty<Vec4>('_MainTex_ST') ?? { x: 1, y: 1, z: 0, w: 0 };
         this.setProperty('_MainTex_ST', { x: value.x, y: value.y, z: st.z, w: st.w });
     }
 
@@ -553,7 +553,7 @@ export class StandardMaterialComponent extends BaseMaterialComponent<StandardMat
     }
 
     set mainTextureOffset(value: Vec2) {
-        const st = this.getProperty<Vec4>('_MainTex_ST') || { x: 1, y: 1, z: 0, w: 0 };
+        const st = this.getProperty<Vec4>('_MainTex_ST') ?? { x: 1, y: 1, z: 0, w: 0 };
         this.setProperty('_MainTex_ST', { x: st.x, y: st.y, z: value.x, w: value.y });
     }
 

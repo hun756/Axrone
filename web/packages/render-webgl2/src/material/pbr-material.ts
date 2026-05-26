@@ -346,7 +346,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get metallicFactor(): number {
-        return this.getProperty<number>('_MetallicFactor') || 1;
+        return this.getProperty<number>('_MetallicFactor') ?? 1;
     }
 
     set metallicFactor(value: number) {
@@ -354,7 +354,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get roughnessFactor(): number {
-        return this.getProperty<number>('_RoughnessFactor') || 1;
+        return this.getProperty<number>('_RoughnessFactor') ?? 1;
     }
 
     set roughnessFactor(value: number) {
@@ -375,7 +375,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get clearcoatFactor(): number {
-        return this.getProperty<number>('_ClearcoatFactor') || 0;
+        return this.getProperty<number>('_ClearcoatFactor') ?? 0;
     }
 
     set clearcoatFactor(value: number) {
@@ -383,7 +383,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get clearcoatRoughnessFactor(): number {
-        return this.getProperty<number>('_ClearcoatRoughnessFactor') || 0;
+        return this.getProperty<number>('_ClearcoatRoughnessFactor') ?? 0;
     }
 
     set clearcoatRoughnessFactor(value: number) {
@@ -430,7 +430,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get clearcoatNormalScale(): number {
-        return this.getProperty<number>('_ClearcoatNormalTexture_Scale') || 1;
+        return this.getProperty<number>('_ClearcoatNormalTexture_Scale') ?? 1;
     }
 
     set clearcoatNormalScale(value: number) {
@@ -451,7 +451,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get normalScale(): number {
-        return this.getProperty<number>('_NormalScale') || 1;
+        return this.getProperty<number>('_NormalScale') ?? 1;
     }
 
     set normalScale(value: number) {
@@ -472,7 +472,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get occlusionStrength(): number {
-        return this.getProperty<number>('_OcclusionStrength') || 1;
+        return this.getProperty<number>('_OcclusionStrength') ?? 1;
     }
 
     set occlusionStrength(value: number) {
@@ -503,7 +503,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get alphaMode(): 'OPAQUE' | 'MASK' | 'BLEND' {
-        const mode = this.getProperty<number>('_AlphaMode') || 0;
+        const mode = this.getProperty<number>('_AlphaMode') ?? 0;
         switch (mode) {
             case 1:
                 return 'MASK';
@@ -545,7 +545,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get alphaCutoff(): number {
-        return this.getProperty<number>('_AlphaCutoff') || 0.5;
+        return this.getProperty<number>('_AlphaCutoff') ?? 0.5;
     }
 
     set alphaCutoff(value: number) {
@@ -553,7 +553,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get doubleSided(): boolean {
-        return this.getProperty<boolean>('_DoubleSided') || false;
+        return this.getProperty<boolean>('_DoubleSided') ?? false;
     }
 
     set doubleSided(value: boolean) {
