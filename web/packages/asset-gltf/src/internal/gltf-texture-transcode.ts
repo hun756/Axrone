@@ -11,6 +11,7 @@ import type {
     GltfTextureTranscoder,
     GltfTranscodeStage,
 } from '../types';
+import type { TextureFormat } from '@axrone/render-webgl2';
 
 export class GltfTextureTranscoderRegistry {
     private readonly _transcoders = new Map<string, GltfTextureTranscoder>();
@@ -52,11 +53,11 @@ export class GltfTextureTranscoderRegistry {
     }
 }
 
-export const isTextureWrite = <TSchema extends GltfAssetSchemaLike>(
+const isTextureWrite = <TSchema extends GltfAssetSchemaLike>(
     input: AssetWriteInput<TSchema>
 ): boolean => input.kind === 'gltf.texture';
 
-export const applyTextureTranscode = <TSchema extends GltfAssetSchemaLike>(
+const applyTextureTranscode = <TSchema extends GltfAssetSchemaLike>(
     input: AssetWriteInput<TSchema>,
     result: GltfTextureTranscodeResult
 ): AssetWriteInput<TSchema> => {
@@ -160,7 +161,7 @@ export const createGltfTextureTranscodeStage = <
 };
 
 export const createPassthroughGltfTextureTranscoder = (
-    targetFormat?: import('@axrone/render-webgl2').TextureFormat
+    targetFormat?: TextureFormat
 ): GltfTextureTranscoder => ({
     id: 'gltf.texture.passthrough',
     priority: -100,
