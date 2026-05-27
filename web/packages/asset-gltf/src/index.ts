@@ -103,7 +103,32 @@ export type {
     GltfTextureSourceDefinition,
     GltfUniformValue,
     GltfVertexAttribute,
+    ComponentType,
+    ComponentDataMap,
+    ComponentSnapshotOf,
+    ComponentDataOf,
+    TransformComponentData,
+    CameraComponentData,
+    DirectionalLightComponentData,
+    PointLightComponentData,
+    SpotLightComponentData,
+    MeshRendererComponentData,
+    AnimatorComponentData,
+    GltfComponentVisitor,
 } from './asset-ir';
+
+export {
+    visitComponent,
+    mapComponents,
+    isTransformSnapshot,
+    isCameraSnapshot,
+    isDirectionalLightSnapshot,
+    isPointLightSnapshot,
+    isSpotLightSnapshot,
+    isMeshRendererSnapshot,
+    isAnimatorSnapshot,
+    isLightSnapshot,
+} from './internal/gltf-component-snapshot';
 
 export {
     GltfAccessorError,

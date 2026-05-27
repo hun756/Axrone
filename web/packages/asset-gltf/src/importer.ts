@@ -24,6 +24,7 @@ import { buildMeshDefinition, collectPrimitiveDiagnostics } from './internal/mes
 import type {
     GltfAccessorJson,
     GltfAnimationClipAsset,
+    GltfAssetKind,
     GltfAssetSchema,
     GltfAssetSchemaLike,
     GltfDocumentAsset,
@@ -55,6 +56,21 @@ import {
 } from './internal/gltf-texture-transcode';
 
 import { nodeIdFromIndex } from './internal/gltf-scene-transform';
+
+const writeAsset = <TSchema extends GltfAssetSchemaLike, TKind extends GltfAssetKind>(
+    kind: TKind,
+    stableKey: string,
+    name: string,
+    data: TSchema[TKind],
+    dependencies?: readonly string[]
+): AssetWriteInput<TSchema> =>
+    Object.freeze({
+        kind,
+        stableKey,
+        name,
+        data,
+        ...(dependencies ? { dependencies: Object.freeze(dependencies) } : {}),
+    }) as AssetWriteInput<TSchema>;
 
 const listUnsupportedExtensions = (
     extensions: readonly string[] | undefined
@@ -345,10 +361,6 @@ const createAnimationClipAsset = async (
     );
 };
 
-const asWrite = <TSchema extends GltfAssetSchemaLike>(
-    input: AssetWriteInput<any>
-): AssetWriteInput<TSchema> => input as unknown as AssetWriteInput<TSchema>;
-
 export { GltfTextureTranscoderRegistry, createGltfTextureTranscodeStage, createPassthroughGltfTextureTranscoder };
 
 export const createGltfImporter = <
@@ -476,12 +488,7 @@ export const createGltfImporter = <
                 );
 
                 additional.push(
-                    asWrite<TSchema>(Object.freeze({
-                        kind: 'gltf.texture',
-                        stableKey: textureKeys[textureIndex],
-                        name: asset.id,
-                        data: asset as unknown as TSchema['gltf.texture'],
-                    }))
+                    writeAsset<TSchema, 'gltf.texture'>('gltf.texture', textureKeys[textureIndex], asset.id, asset as TSchema['gltf.texture'])
                 );
             }
 
@@ -508,12 +515,7 @@ export const createGltfImporter = <
                     freeze
                 );
                 additional.push(
-                    asWrite<TSchema>(Object.freeze({
-                        kind: 'gltf.material',
-                        stableKey: defaultMaterialKey,
-                        name: asset.id,
-                        data: asset as unknown as TSchema['gltf.material'],
-                    }))
+                    writeAsset<TSchema, 'gltf.material'>('gltf.material', defaultMaterialKey, asset.id, asset as TSchema['gltf.material'])
                 );
             }
 
@@ -539,15 +541,8 @@ export const createGltfImporter = <
                 );
 
                 additional.push(
-                    asWrite<TSchema>(Object.freeze({
-                        kind: 'gltf.material',
-                        stableKey: key,
-                        name: asset.id,
-                        data: asset as unknown as TSchema['gltf.material'],
-                        dependencies: Object.freeze(
-                            Object.values(asset.textures).map((binding) => binding.textureKey)
-                        ),
-                    }))
+                    writeAsset<TSchema, 'gltf.material'>('gltf.material', key, asset.id, asset as TSchema['gltf.material'],
+                        Object.values(asset.textures).map((binding) => binding.textureKey))
                 );
             }
 
@@ -593,17 +588,8 @@ export const createGltfImporter = <
                     );
 
                     additional.push(
-                        asWrite<TSchema>(Object.freeze({
-                            kind: 'gltf.mesh',
-                            stableKey: key,
-                            name: meshAsset.id,
-                            data: meshAsset as unknown as TSchema['gltf.mesh'],
-                            ...(materialKey
-                                ? {
-                                      dependencies: Object.freeze([materialKey]),
-                                  }
-                                : {}),
-                        }))
+                        writeAsset<TSchema, 'gltf.mesh'>('gltf.mesh', key, meshAsset.id, meshAsset as TSchema['gltf.mesh'],
+                            materialKey ? [materialKey] : undefined)
                     );
                     primitiveKeys.push(key);
                     primitiveMaterialKeys.push(materialKey);
@@ -618,12 +604,7 @@ export const createGltfImporter = <
                 const asset = await createSkinAsset(normalized.json, skinIndex, accessors, freeze);
                 skinsByIndex[skinIndex] = asset;
                 additional.push(
-                    asWrite<TSchema>(Object.freeze({
-                        kind: 'gltf.skin',
-                        stableKey: key,
-                        name: asset.id,
-                        data: asset as unknown as TSchema['gltf.skin'],
-                    }))
+                    writeAsset<TSchema, 'gltf.skin'>('gltf.skin', key, asset.id, asset as TSchema['gltf.skin'])
                 );
             }
 
@@ -639,12 +620,7 @@ export const createGltfImporter = <
                 );
                 animationsByIndex[animationIndex] = asset;
                 additional.push(
-                    asWrite<TSchema>(Object.freeze({
-                        kind: 'gltf.animation',
-                        stableKey: key,
-                        name: asset.id,
-                        data: asset as unknown as TSchema['gltf.animation'],
-                    }))
+                    writeAsset<TSchema, 'gltf.animation'>('gltf.animation', key, asset.id, asset as TSchema['gltf.animation'])
                 );
             }
 
@@ -702,18 +678,8 @@ export const createGltfImporter = <
                 );
 
                 additional.push(
-                    asWrite<TSchema>(Object.freeze({
-                        kind: 'gltf.prefab',
-                        stableKey: key,
-                        name: asset.id,
-                        data: asset as unknown as TSchema['gltf.prefab'],
-                        dependencies: Object.freeze([
-                            ...built.meshKeys,
-                            ...built.skinKeys,
-                            ...built.animationKeys,
-                            ...built.materialKeys,
-                        ]),
-                    }))
+                    writeAsset<TSchema, 'gltf.prefab'>('gltf.prefab', key, asset.id, asset as TSchema['gltf.prefab'],
+                        [...built.meshKeys, ...built.skinKeys, ...built.animationKeys, ...built.materialKeys])
                 );
                 sceneEntries.push(
                     maybeFreeze(
@@ -785,20 +751,8 @@ export const createGltfImporter = <
             );
 
             return Object.freeze({
-                primary: asWrite<TSchema>(Object.freeze({
-                    kind: 'gltf.document',
-                    stableKey: String(createSubKey('document')),
-                    name: document.name,
-                    data: document as unknown as TSchema['gltf.document'],
-                    dependencies: Object.freeze([
-                        ...document.textureKeys,
-                        ...document.materialKeys,
-                        ...document.meshKeys,
-                        ...document.skinKeys,
-                        ...document.animationKeys,
-                        ...document.scenes.map((scene) => scene.prefabKey),
-                    ]),
-                })),
+                primary: writeAsset<TSchema, 'gltf.document'>('gltf.document', String(createSubKey('document')), document.name, document as TSchema['gltf.document'],
+                    [...document.textureKeys, ...document.materialKeys, ...document.meshKeys, ...document.skinKeys, ...document.animationKeys, ...document.scenes.map((scene) => scene.prefabKey)]),
                 additional: Object.freeze(additional),
                 diagnostics: Object.freeze(diagnostics),
             }) as AssetImportResult<TSchema>;
