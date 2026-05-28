@@ -425,6 +425,21 @@ export class MeshRenderer extends Component {
         );
 
         if (this._resolvedJointTransforms.some((entry) => entry === null)) {
+            const missingIndices: number[] = [];
+            const missingNodeIds: string[] = [];
+            for (let i = 0; i < this._resolvedJointTransforms.length; i++) {
+                if (this._resolvedJointTransforms[i] === null) {
+                    missingIndices.push(i);
+                    missingNodeIds.push(this._skin.jointNodeIds[i]!);
+                }
+            }
+            const availableNodeIds = [...transformsByNodeId.keys()].slice(0, 10);
+            console.warn(
+                `[MeshRenderer] _resolveJointTransforms: ${missingIndices.length}/${this._skin.jointNodeIds.length} joint(s) not resolved. ` +
+                `Missing: [${missingNodeIds.slice(0, 5).join(', ')}${missingNodeIds.length > 5 ? '...' : ''}]. ` +
+                `Available: [${availableNodeIds.join(', ')}${transformsByNodeId.size > 10 ? '...' : ''}]. ` +
+                `Skinning will be disabled for this mesh. instanceId=${instanceId ?? 'null'}.`,
+            );
             this._resolvedJointWorldMatrices = null;
             return null;
         }
