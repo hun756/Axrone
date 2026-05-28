@@ -256,9 +256,14 @@ export class SceneRenderRuntime {
                         renderer.materialId !== null
                             ? this._options.resources.materials.get(renderer.materialId)
                             : undefined;
+                    const rawShadingModel = material?.surface?.shadingModel ?? 'custom';
+                    const shadingModel =
+                        rawShadingModel === 'unlit' || rawShadingModel === 'pbr'
+                            ? rawShadingModel
+                            : 'custom' as const;
                     return {
                         materialId: material?.id ?? renderer.materialId,
-                        shadingModel: material?.surface?.shadingModel ?? 'custom',
+                        shadingModel,
                         alphaMode: material?.surface?.alphaMode ?? 'opaque',
                         transparent:
                             (material?.surface?.alphaMode ?? 'opaque') === 'blend' ||
