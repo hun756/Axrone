@@ -185,6 +185,10 @@ export class Animator extends Component {
     private _cullingMode: AnimatorCullingMode;
     private readonly _tempVec3 = new Vec3();
     private readonly _tempQuat = new Quat();
+    private _stepAnimationWarned = false;
+    private _stepEvaluationModeLogged = false;
+    private _cullingModeWarned = false;
+    private _applyFrameLogged = false;
 
     constructor(config: AnimatorConfig = {}) {
         super();
@@ -501,14 +505,29 @@ export class Animator extends Component {
         if (this._playOnStart && this._currentClipId) {
             this._playing = true;
         }
+
+        console.info(
+            `[Animator] start: clipId="${this._currentClipId ?? 'null'}", playOnStart=${this._playOnStart}, ` +
+            `playing=${this._playing}, clips=${this._clipDefinitions.length}, ` +
+            `layers=${this._layerDefinitions?.length ?? 'auto'}, loop=${this._loop}`,
+        );
+
         const controller = this._ensureController();
         if (!controller) {
+            console.warn(
+                `[Animator] start: _ensureController returned null. ` +
+                `Animation will NOT play on start. clipDefinitions=${this._clipDefinitions.length}`,
+            );
             return;
         }
         if (this._currentClipId) {
             try {
                 controller.play(this._currentClipId);
-            } catch {}
+            } catch (e) {
+                console.error(
+                    `[Animator] start: controller.play("${this._currentClipId}") threw: ${e instanceof Error ? e.message : String(e)}`,
+                );
+            }
         }
         if (this._time > 0) {
             controller.seek(this._time);
@@ -592,6 +611,26 @@ export class Animator extends Component {
     }
 
     override deserialize(data: Record<string, any>): void {
+        const clipCount = Array.isArray(data.clips) ? data.clips.length : 0;
+        const layerCount = Array.isArray(data.layers) ? data.layers.length : 0;
+        const paramCount = Array.isArray(data.parameters) ? data.parameters.length : 0;
+        console.info(
+            `[Animator] deserialize: clips=${clipCount}, layers=${layerCount}, parameters=${paramCount}, ` +
+            `clipId="${typeof data.clipId === 'string' ? data.clipId : 'undefined'}", ` +
+            `playOnStart=${data.playOnStart ?? 'undefined'}, loop=${data.loop ?? 'undefined'}`,
+        );
+        if (clipCount > 0) {
+            for (const clip of data.clips as Array<Record<string, unknown>>) {
+                const trackCount = Array.isArray(clip.tracks) ? clip.tracks.length : 0;
+                const targetNodeIds = Array.isArray(clip.tracks)
+                    ? (clip.tracks as Array<Record<string, unknown>>).map((t) => String(t.targetNodeId ?? t.target ?? '')).filter(Boolean).slice(0, 5)
+                    : [];
+                console.info(
+                    `[Animator] deserialize: clip "${String(clip.id ?? '?')}" has ${trackCount} track(s), ` +
+                    `targets: [${targetNodeIds.join(', ')}${trackCount > 5 ? '...' : ''}]`,
+                );
+            }
+        }
         this._applyConfig({
             clips: Array.isArray(data.clips) ? data.clips : [],
             parameters: Array.isArray(data.parameters) ? data.parameters : [],
@@ -669,6 +708,21 @@ export class Animator extends Component {
 
         this._rebuildTargetMap(instanceId);
         if (this._clipDefinitions.length === 0 || this._resolvedTargets.size === 0) {
+            console.warn(
+                `[Animator] _ensureController: Cannot build AnimationController. ` +
+                `clipDefinitions=${this._clipDefinitions.length}, resolvedTargets=${this._resolvedTargets.size}. ` +
+                `instanceId=${instanceId ?? 'null'}. ` +
+                `Animation will NOT play.`,
+            );
+            if (this._clipDefinitions.length > 0 && this._resolvedTargets.size === 0) {
+                const requiredNodeIds = this._getRequiredTargetNodeIds();
+                console.warn(
+                    `[Animator] _ensureController: Clips reference ${requiredNodeIds.length} target node(s) ` +
+                    `[${requiredNodeIds.slice(0, 10).join(', ')}${requiredNodeIds.length > 10 ? '...' : ''}] ` +
+                    `but no PrefabNodeBinding matches were found in the actor hierarchy. ` +
+                    `Verify that imported GLB bone nodes exist as scene entities with correct PrefabNodeBinding.nodeId.`,
+                );
+            }
             this._controller = null;
             this._controllerDirty = this._clipDefinitions.length > 0;
             return null;
@@ -679,6 +733,16 @@ export class Animator extends Component {
                 (targetNodeId) => !this._resolvedTargets.has(targetNodeId)
             )
         ) {
+            const missingTargets = this._getRequiredRigTargetNodeIds().filter(
+                (id) => !this._resolvedTargets.has(id)
+            );
+            const availableTargets = [...this._resolvedTargets.keys()].slice(0, 15).join(', ');
+            console.warn(
+                `[Animator] _ensureController: ${missingTargets.length} required rig target(s) not resolved: ` +
+                `[${missingTargets.slice(0, 10).join(', ')}${missingTargets.length > 10 ? '...' : ''}]. ` +
+                `Available targets: [${availableTargets}${this._resolvedTargets.size > 15 ? '...' : ''}]. ` +
+                `Controller will NOT be created.`,
+            );
             this._controller = null;
             this._controllerDirty = true;
             return null;
@@ -724,7 +788,11 @@ export class Animator extends Component {
         if (this._currentClipId) {
             try {
                 this._controller.play(this._currentClipId);
-            } catch {}
+            } catch (e) {
+                console.error(
+                    `[Animator] _ensureController: controller.play("${this._currentClipId}") threw: ${e instanceof Error ? e.message : String(e)}`,
+                );
+            }
         }
         if (this._time > 0) {
             this._controller.seek(this._time);
@@ -737,6 +805,13 @@ export class Animator extends Component {
         if (!this._isStreamingBlocked(streaming)) {
             this._applyFrame(this._controller.currentFrame);
         }
+        console.info(
+            `[Animator] _ensureController: Controller created. ` +
+            `bones=${bones.length}, layers=${layers.length}, clips=${this._clipDefinitions.length}, ` +
+            `currentClipId="${this._currentClipId ?? 'null'}", ` +
+            `resolvedTargets=${this._resolvedTargets.size}, ` +
+            `cullingMode="${this._cullingMode}".`,
+        );
         return this._controller;
     }
 
@@ -817,10 +892,29 @@ export class Animator extends Component {
     private _stepAnimation(deltaTime: number): void {
         const controller = this._ensureController();
         if (!controller || !this._playing) {
+            if (!controller && this._playing && !this._stepAnimationWarned) {
+                this._stepAnimationWarned = true;
+                console.warn(
+                    `[Animator] _stepAnimation: playing=true but controller is null. ` +
+                    `clipDefinitions=${this._clipDefinitions.length}, resolvedTargets=${this._resolvedTargets.size}. ` +
+                    `Animation cannot proceed. (This warning will not repeat.)`,
+                );
+            }
             return;
         }
+        this._stepAnimationWarned = false;
 
         const evaluationMode = this._resolveEvaluationMode();
+        if (!this._stepEvaluationModeLogged) {
+            this._stepEvaluationModeLogged = true;
+            console.info(
+                `[Animator] _stepAnimation: First frame. evaluationMode="${evaluationMode}", ` +
+                `cullingMode="${this._cullingMode}", playing=${this._playing}, ` +
+                `clipId="${this._currentClipId ?? 'null'}", ` +
+                `controller.boneCount=${controller.rig.boneCount}, ` +
+                `controller.activeClips=${controller.activeClips.length}.`,
+            );
+        }
         if (evaluationMode === 'skip') {
             return;
         }
@@ -854,7 +948,17 @@ export class Animator extends Component {
             return 'apply';
         }
 
-        return this._cullingMode === 'Cull Completely' ? 'skip' : 'update-only';
+        const mode = this._cullingMode === 'Cull Completely' ? 'skip' : 'update-only';
+        if (!this._cullingModeWarned) {
+            this._cullingModeWarned = true;
+            console.warn(
+                `[Animator] _resolveEvaluationMode: No visible renderer in hierarchy. ` +
+                `cullingMode="${this._cullingMode}", evaluationMode="${mode}". ` +
+                `Animation transforms will NOT be applied. ` +
+                `Set cullingMode to "Always Animate" or ensure a visible MeshRenderer exists. (This warning will not repeat.)`,
+            );
+        }
+        return mode;
     }
 
     private _hasVisibleRendererInHierarchy(): boolean {
@@ -1122,6 +1226,29 @@ export class Animator extends Component {
                 })
             );
         }
+
+        if (this._clipDefinitions.length > 0 && this._resolvedTargets.size === 0) {
+            const requiredTargets = this._getRequiredTargetNodeIds();
+            console.warn(
+                `[Animator] _rebuildTargetMap: Resolved 0 targets from actor hierarchy ` +
+                `(rootActor=${rootActor ? 'exists' : 'null'}, allActors=${Array.isArray(allActors) ? allActors.length : 0}). ` +
+                `Clips require ${requiredTargets.length} target(s): ` +
+                `[${requiredTargets.slice(0, 10).join(', ')}${requiredTargets.length > 10 ? '...' : ''}]. ` +
+                `instanceId=${instanceId ?? 'null'}.`,
+            );
+        } else if (this._clipDefinitions.length > 0) {
+            const requiredTargets = this._getRequiredRigTargetNodeIds();
+            const resolvedTargetIds = [...this._resolvedTargets.keys()];
+            const unresolved = requiredTargets.filter((id) => !this._resolvedTargets.has(id));
+            if (unresolved.length > 0) {
+                console.warn(
+                    `[Animator] _rebuildTargetMap: Resolved ${this._resolvedTargets.size} target(s) ` +
+                    `[${resolvedTargetIds.slice(0, 10).join(', ')}${resolvedTargetIds.length > 10 ? '...' : ''}], ` +
+                    `but ${unresolved.length} required rig target(s) are missing: ` +
+                    `[${unresolved.slice(0, 10).join(', ')}${unresolved.length > 10 ? '...' : ''}].`,
+                );
+            }
+        }
     }
 
     private _applyFrame(frame: AnimationFrame): void {
@@ -1130,11 +1257,13 @@ export class Animator extends Component {
             return;
         }
 
+        let appliedCount = 0;
         for (let boneIndex = 0; boneIndex < controller.rig.boneCount; boneIndex += 1) {
             const target = this._resolvedTargets.get(controller.rig.boneNames[boneIndex]!);
             if (!target?.transform) {
                 continue;
             }
+            appliedCount++;
             const translationOffset = boneIndex * 3;
             const rotationOffset = boneIndex * 4;
             this._tempVec3.x = frame.pose.translations[translationOffset]!;
@@ -1150,6 +1279,15 @@ export class Animator extends Component {
             this._tempVec3.y = frame.pose.scales[translationOffset + 1]!;
             this._tempVec3.z = frame.pose.scales[translationOffset + 2]!;
             target.transform.scale = this._tempVec3;
+        }
+
+        if (!this._applyFrameLogged) {
+            this._applyFrameLogged = true;
+            console.info(
+                `[Animator] _applyFrame: First frame applied. ` +
+                `boneCount=${controller.rig.boneCount}, appliedTransforms=${appliedCount}, ` +
+                `curveBindings=${controller.curveLayout.bindings.length}.`,
+            );
         }
 
         for (let bindingIndex = 0; bindingIndex < controller.curveLayout.bindings.length; bindingIndex += 1) {
