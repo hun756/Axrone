@@ -71,14 +71,16 @@ export const createTransformSnapshot = (node: GltfNodeJson): GltfComponentSnapsh
 };
 
 export const createActorSnapshot = (
-    nodeIndex: number,
-    parentIndex: number | null,
+    nodeIdOrIndex: number | string,
+    parentNodeIdOrIndex: (number | string) | null,
     name: string,
     components: readonly GltfComponentSnapshot[]
 ): GltfActorSnapshot =>
     Object.freeze({
-        nodeId: nodeId(nodeIndex),
-        parentNodeId: parentIndex !== null ? nodeId(parentIndex) : null,
+        nodeId: typeof nodeIdOrIndex === 'string' ? nodeIdOrIndex : nodeId(nodeIdOrIndex),
+        parentNodeId: parentNodeIdOrIndex !== null
+            ? (typeof parentNodeIdOrIndex === 'string' ? parentNodeIdOrIndex : nodeId(parentNodeIdOrIndex))
+            : null,
         name,
         layer: 0,
         tag: 'Default',
