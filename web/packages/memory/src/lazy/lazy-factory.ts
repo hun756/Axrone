@@ -1,5 +1,8 @@
 import { ILazy, ILazyAsync, ILazyFactory, __factory_brand, __state_brand } from './lazy-core';
 import { LazyImpl, LazyAsyncImpl } from './lazy-impl';
+import { LruMap } from '../internal/lru-map';
+
+const TRUE = true as const;
 
 export class LazyFactoryImpl<TArgs extends readonly unknown[], TResult>
     implements ILazyFactory<TArgs, TResult>
@@ -11,16 +14,20 @@ export class LazyFactoryImpl<TArgs extends readonly unknown[], TResult>
     readonly cache = new Map<string, TResult>();
     readonly keySelector: (...args: TArgs) => string;
     readonly maxCacheSize: number;
-    readonly accessOrder: string[] = [];
+    readonly accessOrder: LruMap<string, true>;
 
     constructor(
         factory: (...args: TArgs) => TResult,
         keySelector: (...args: TArgs) => string = (...args) => JSON.stringify(args),
-        maxCacheSize = Infinity
+        maxCacheSize = Number.POSITIVE_INFINITY
     ) {
         this.factory = factory;
         this.keySelector = keySelector;
         this.maxCacheSize = maxCacheSize;
+        this.accessOrder = new LruMap<string, true>({
+            capacity: Number.isFinite(maxCacheSize) && maxCacheSize > 0 ? maxCacheSize : 1024,
+            order: 'least-recently-used',
+        });
     }
 
     get cacheSize(): number {
@@ -39,7 +46,7 @@ export class LazyFactoryImpl<TArgs extends readonly unknown[], TResult>
         const key = this.keySelector(...args);
 
         if (this.cache.has(key)) {
-            this.updateAccessOrder(key);
+            this.accessOrder.touch(key);
             return this.cache.get(key)!;
         }
 
@@ -50,7 +57,7 @@ export class LazyFactoryImpl<TArgs extends readonly unknown[], TResult>
         }
 
         this.cache.set(key, result);
-        this.accessOrder.push(key);
+        this.accessOrder.set(key, TRUE);
 
         return result;
     }
@@ -59,7 +66,7 @@ export class LazyFactoryImpl<TArgs extends readonly unknown[], TResult>
         const key = this.keySelector(...args);
 
         if (this.cache.has(key)) {
-            this.updateAccessOrder(key);
+            this.accessOrder.touch(key);
             return [true, this.cache.get(key)!];
         }
 
@@ -69,34 +76,19 @@ export class LazyFactoryImpl<TArgs extends readonly unknown[], TResult>
     invalidate(...args: TArgs): boolean {
         const key = this.keySelector(...args);
         const existed = this.cache.delete(key);
-
-        if (existed) {
-            const index = this.accessOrder.indexOf(key);
-            if (index !== -1) {
-                this.accessOrder.splice(index, 1);
-            }
-        }
-
+        this.accessOrder.delete(key);
         return existed;
     }
 
     clear(): void {
         this.cache.clear();
-        this.accessOrder.length = 0;
-    }
-
-    private updateAccessOrder(key: string): void {
-        const index = this.accessOrder.indexOf(key);
-        if (index !== -1) {
-            this.accessOrder.splice(index, 1);
-        }
-        this.accessOrder.push(key);
+        this.accessOrder.clear();
     }
 
     private evictLeastRecentlyUsed(): void {
-        if (this.accessOrder.length > 0) {
-            const oldestKey = this.accessOrder.shift()!;
-            this.cache.delete(oldestKey);
+        const oldest = this.accessOrder.pop();
+        if (oldest !== undefined) {
+            this.cache.delete(oldest.key);
         }
     }
 }
