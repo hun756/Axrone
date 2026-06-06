@@ -47,6 +47,7 @@ export interface MemoryPoolOptions<T extends PoolableObject> {
     readonly maxObjectAge?: number;
     readonly threadSafe?: boolean;
     readonly asyncFactory?: () => Promise<T>;
+    readonly estimatedObjectSize?: number;
 }
 
 export interface PoolPerformanceMetrics {
@@ -201,9 +202,9 @@ export type InternalPoolMetrics = {
 };
 
 type ResolvedMemoryPoolOptions<T extends PoolableObject> = Required<
-    Omit<MemoryPoolOptions<T>, 'asyncFactory'>
+    Omit<MemoryPoolOptions<T>, 'asyncFactory' | 'estimatedObjectSize'>
 > &
-    Pick<MemoryPoolOptions<T>, 'asyncFactory'>;
+    Pick<MemoryPoolOptions<T>, 'asyncFactory' | 'estimatedObjectSize'>;
 
 export const validateMemoryPoolOptions = <T extends PoolableObject>(
     options: ResolvedMemoryPoolOptions<T>
