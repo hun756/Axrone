@@ -567,6 +567,7 @@ describe('ObjectPool', () => {
             const pool = createBasicPool(() => new TestUser(), {
                 initialCapacity: 1,
                 autoExpand: true,
+                evictionPolicy: 'none',
             });
 
             expect(pool.getTotalCount()).toBe(1);
