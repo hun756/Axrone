@@ -80,10 +80,11 @@ export class HeapSerializationError extends HeapError {
     }
 }
 
-const enum InternalOrder {
-    Min = 1,
-    Max = -1,
-}
+const InternalOrder = {
+    Min: 1,
+    Max: -1,
+} as const;
+type InternalOrder = (typeof InternalOrder)[keyof typeof InternalOrder];
 
 const isFunction = (value: unknown): value is (...args: readonly unknown[]) => unknown =>
     typeof value === 'function';
@@ -181,8 +182,12 @@ const ensureSerializable = <T>(value: unknown): HeapSerialized<T> => {
     return value as HeapSerialized<T>;
 };
 
-const siftUpThreshold = (baseLength: number, incoming: number): number =>
-    Math.ceil(baseLength / Math.log2(baseLength + incoming + 1));
+const siftUpThreshold = (baseLength: number, incoming: number): number => {
+    if (incoming <= 0) return 0;
+    const denom = Math.log2(baseLength + incoming + 1);
+    if (denom <= 0) return baseLength;
+    return Math.ceil(baseLength / denom);
+};
 
 export class BinaryHeap<T, O extends HeapOrder = 'min'> implements ReadonlyBinaryHeap<T, O> {
     readonly #store: T[];
