@@ -1,5 +1,46 @@
 import { MemoryPool, MemoryPoolOptions, PoolableObject } from './mempool';
 
+class CircularBuffer {
+    readonly #data: number[];
+    readonly #capacity: number;
+    #head: number = 0;
+    #size: number = 0;
+    #sum: number = 0;
+
+    constructor(capacity: number) {
+        this.#capacity = capacity;
+        this.#data = new Array(capacity);
+    }
+
+    push(value: number): void {
+        if (this.#size < this.#capacity) {
+            this.#data[(this.#head + this.#size) % this.#capacity] = value;
+            this.#size++;
+        } else {
+            this.#sum -= this.#data[this.#head]!;
+            this.#data[this.#head] = value;
+            this.#head = (this.#head + 1) % this.#capacity;
+        }
+        this.#sum += value;
+    }
+
+    toArray(): number[] {
+        const result: number[] = [];
+        for (let i = 0; i < this.#size; i++) {
+            result.push(this.#data[(this.#head + i) % this.#capacity]!);
+        }
+        return result;
+    }
+
+    get size(): number {
+        return this.#size;
+    }
+
+    get sum(): number {
+        return this.#sum;
+    }
+}
+
 export type TypedArrayType =
     | Float32Array
     | Float64Array
@@ -110,10 +151,10 @@ export class TypedArrayPool<T extends TypedArrayType> {
         growthFactor: number;
     };
     private readonly _buckets: readonly number[];
-    private readonly _performanceTracker: {
-        allocationTimes: number[];
-        zeroingTimes: number[];
-        copyTimes: number[];
+    private _performanceTracker: {
+        allocationTimes: CircularBuffer;
+        zeroingTimes: CircularBuffer;
+        copyTimes: CircularBuffer;
     };
     private readonly _stats = {
         totalAllocations: 0,
@@ -163,9 +204,9 @@ export class TypedArrayPool<T extends TypedArrayType> {
 
         this._pools = new Map();
         this._performanceTracker = {
-            allocationTimes: [],
-            zeroingTimes: [],
-            copyTimes: [],
+            allocationTimes: new CircularBuffer(1000),
+            zeroingTimes: new CircularBuffer(1000),
+            copyTimes: new CircularBuffer(1000),
         };
 
         this._initializePools();
@@ -273,9 +314,9 @@ export class TypedArrayPool<T extends TypedArrayType> {
         this._stats.oversizedRequests = 0;
         this._stats.alignmentMisses = 0;
 
-        this._performanceTracker.allocationTimes.length = 0;
-        this._performanceTracker.zeroingTimes.length = 0;
-        this._performanceTracker.copyTimes.length = 0;
+        this._performanceTracker.allocationTimes = new CircularBuffer(1000);
+        this._performanceTracker.zeroingTimes = new CircularBuffer(1000);
+        this._performanceTracker.copyTimes = new CircularBuffer(1000);
     }
 
     dispose(): void {
@@ -380,25 +421,12 @@ export class TypedArrayPool<T extends TypedArrayType> {
 
     private _createAlignedBuffer(length: number): ArrayBuffer {
         const requiredBytes = length * this._options.arrayConstructor.BYTES_PER_ELEMENT;
-        const alignedBytes =
-            Math.ceil(requiredBytes / this._options.alignment) * this._options.alignment;
+        const alignment = this._options.alignment;
+        const alignedBytes = alignment > 1
+            ? Math.ceil(requiredBytes / alignment) * alignment
+            : requiredBytes;
 
-        const buffer = new ArrayBuffer(alignedBytes);
-
-        if (this._options.alignment > 1) {
-            const address = this._getBufferAddress(buffer);
-            if (address % this._options.alignment !== 0) {
-                this._stats.alignmentMisses++;
-            }
-        }
-
-        return buffer;
-    }
-
-    private _getBufferAddress(buffer: ArrayBuffer): number {
-        // This is a heuristic - JavaScript doesn't expose actual memory addresses
-        // We use the buffer's identity hash as a proxy
-        return buffer.byteLength; // Simplified approach
+        return new ArrayBuffer(alignedBytes);
     }
 
     private _generateDefaultBuckets(): number[] {
@@ -439,28 +467,27 @@ export class TypedArrayPool<T extends TypedArrayType> {
     }
 
     private _trackPerformance(type: 'allocation' | 'zeroing' | 'copy', time: number): void {
-        const tracker = this._performanceTracker;
-        const array = tracker[`${type}Times`];
-
-        array.push(time);
-
-        if (array.length > 1000) {
-            array.shift();
-        }
+        const buffer = this._performanceTracker[`${type}Times`];
+        buffer.push(time);
     }
 
     private _getPerformanceStats(type: 'allocation' | 'zeroing' | 'copy') {
-        const times = this._performanceTracker[`${type}Times`];
+        const buffer = this._performanceTracker[`${type}Times`];
 
-        if (times.length === 0) {
+        if (buffer.size === 0) {
             return { min: 0, max: 0, avg: 0, samples: 0 };
         }
 
-        const min = Math.min(...times);
-        const max = Math.max(...times);
-        const avg = times.reduce((sum, t) => sum + t, 0) / times.length;
+        const times = buffer.toArray();
+        let min = Infinity;
+        let max = -Infinity;
+        for (const t of times) {
+            if (t < min) min = t;
+            if (t > max) max = t;
+        }
+        const avg = buffer.sum / buffer.size;
 
-        return { min, max, avg, samples: times.length };
+        return { min, max, avg, samples: buffer.size };
     }
 
     private _calculateAlignmentUtilization(): number {
