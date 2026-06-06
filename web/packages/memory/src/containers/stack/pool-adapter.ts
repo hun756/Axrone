@@ -24,8 +24,12 @@ class PoolNode<T> implements StackNode<T> {
 }
 
 export class StackMemoryPool {
-    private readonly pool: UtilityMemoryPool<PoolNode<any>>;
-    private idCounter = 1;
+    static #instanceCounter = 0;
+    readonly #pool: UtilityMemoryPool<PoolNode<any>>;
+    readonly #idCounter: () => number = (() => {
+        let n = 0;
+        return () => ++n >>> 0;
+    })();
 
     constructor(options?: Partial<MemoryPoolOptions<PoolNode<any>>>) {
         const opts: MemoryPoolOptions<PoolNode<any>> = Object.assign(
@@ -36,17 +40,17 @@ export class StackMemoryPool {
                 resetOnRecycle: true,
                 autoExpand: true,
                 enableMetrics: false,
-                name: `StackMemoryPool-${Math.floor(Math.random() * 1e6)}`,
+                name: `StackMemoryPool-${++StackMemoryPool.#instanceCounter}`,
             },
             options || {}
         );
 
-        this.pool = new UtilityMemoryPool<PoolNode<any>>(opts);
+        this.#pool = new UtilityMemoryPool<PoolNode<any>>(opts);
     }
 
     allocate<T>(value: T, next: StackNode<T> | null, generation: number): StackNode<T> {
-        const node = this.pool.acquire() as PoolNode<T>;
-        node.id = this.idCounter++ as any;
+        const node = this.#pool.acquire() as PoolNode<T>;
+        node.id = this.#idCounter() as any;
         node.value = value;
         node.next = next as PoolNode<T> | null;
         node.refs = 1;
@@ -60,7 +64,7 @@ export class StackMemoryPool {
         if ((node as any).refs > 1) return;
 
         try {
-            this.pool.release(node as unknown as PoolNode<any>);
+            this.#pool.release(node as unknown as PoolNode<any>);
         } catch (e) {
             // ignore pool errors
         }
@@ -68,7 +72,7 @@ export class StackMemoryPool {
 
     clear(): void {
         try {
-            this.pool.clear();
+            this.#pool.clear();
         } catch (e) {
             // ignore
         }
@@ -76,7 +80,7 @@ export class StackMemoryPool {
 
     getStats() {
         try {
-            const m = this.pool.getMetrics();
+            const m = this.#pool.getMetrics();
             return {
                 totalAllocated: m.allocations,
                 totalDeallocated: m.releases,
