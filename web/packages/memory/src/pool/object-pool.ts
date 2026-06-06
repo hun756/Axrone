@@ -434,10 +434,6 @@ export class ObjectPool<T extends {}> implements Disposable {
             }
         };
     }
-
-    private _findWrapper(obj: T): PoolableWrapper<T> | null {
-        return this._objToWrapper.get(obj) ?? null;
-    }
 }
 
 export type { PoolableObject, MemoryPoolOptions, PoolPerformanceMetrics } from './mempool';
