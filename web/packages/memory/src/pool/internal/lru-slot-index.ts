@@ -35,16 +35,11 @@ export class LruSlotIndex {
         return entry?.key ?? null;
     }
 
-    peekOldestAllocated(): number | null {
-        const entry = this.#map.peekOldest();
-        return entry?.key ?? null;
-    }
-
     rebuild<T extends PoolableObject>(slots: ReadonlyArray<PoolSlot<T> | undefined>): void {
         this.#map.clear();
         for (let i = 0; i < slots.length; i++) {
             const slot = slots[i];
-            if (slot && slot.status === 'allocated') {
+            if (slot && slot.status === 'free') {
                 this.#map.set(i, slot.lastAccessed);
             }
         }
