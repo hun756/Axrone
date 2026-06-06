@@ -1283,6 +1283,4 @@ export function createPriorityQueue<T, P, O extends PriorityOrder = 'max'>(
 }
 
 export const isPriorityQueue = PriorityQueue.isPriorityQueue;
-
-export type { Comparator, Equality } from './binary-heap';
 export type { HeapIndex, QueueSize, Capacity } from './types';
