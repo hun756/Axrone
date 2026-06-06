@@ -59,7 +59,10 @@ export class BufferPool {
     private readonly pools: Map<number, ObjectPool<PoolableArrayBuffer>>;
     private readonly options: Required<BufferPoolOptions>;
     private readonly bucketSizes: number[];
-    private readonly bufferToPoolMap: WeakMap<ArrayBuffer, PoolableArrayBuffer>;
+    private readonly bufferToPoolMap: WeakMap<ArrayBuffer, {
+        wrapper: PoolableArrayBuffer;
+        bucketIndex: number;
+    }>;
 
     private constructor(options: BufferPoolOptions = {}) {
         this.options = {
@@ -142,7 +145,7 @@ export class BufferPool {
                 },
 
                 onAcquireHandler: (buffer: PoolableArrayBuffer) => {
-                    this.bufferToPoolMap.set(buffer.buffer, buffer);
+                    this.bufferToPoolMap.set(buffer.buffer, { wrapper: buffer, bucketIndex: i });
                     this.options.onAcquire(buffer.buffer);
                 },
 
@@ -233,21 +236,18 @@ export class BufferPool {
             return;
         }
 
-        const poolableBuffer = this.bufferToPoolMap.get(buffer);
-        if (!poolableBuffer) {
-            // Buffer wasn't from pool, just ignore
+        const entry = this.bufferToPoolMap.get(buffer);
+        if (!entry) {
             return;
         }
 
-        const bucketIndex = this.getBucketIndexForExactSize(buffer.byteLength);
-        const pool = this.pools.get(bucketIndex);
-
+        const pool = this.pools.get(entry.bucketIndex);
         if (!pool) {
             return;
         }
 
         try {
-            pool.release(poolableBuffer);
+            pool.release(entry.wrapper);
         } catch (error) {
             console.warn(`Failed to release buffer to pool:`, error);
         }
@@ -351,17 +351,6 @@ export class BufferPool {
             }
         }
         return -1;
-    }
-
-    private findPoolableBuffer(
-        pool: ObjectPool<PoolableArrayBuffer>,
-        buffer: ArrayBuffer
-    ): PoolableArrayBuffer | null {
-        try {
-            return null;
-        } catch {
-            return null;
-        }
     }
 
     private calculateOverallHitRatio(): number {
