@@ -14,6 +14,7 @@ import {
     type PoolSlot,
     type PoolableObject,
 } from './pool-support';
+import { LruMap } from '../internal/lru-map';
 
 export {
     MemoryPoolError,
@@ -32,23 +33,30 @@ export {
 export class MemoryPool<T extends PoolableObject>
     implements MemoryPoolOperations<T>, AsyncMemoryPoolOperations<T>, Iterable<T>
 {
+    private static _poolIdCounter: number = 0;
+    private readonly _id: number;
+
     private readonly _slots: PoolSlot<T>[] = [];
     private readonly _freeList: Set<number> = new Set();
-    private readonly _lruHeap: number[] = [];
     private readonly _waitQueue: Array<(obj: T | null) => void> = [];
+
+    private _lruFreeIds: LruMap<number, number> | null = null;
 
     private readonly _metrics: InternalPoolMetrics;
 
-    private readonly _options: Required<Omit<MemoryPoolOptions<T>, 'asyncFactory'>> &
-        Pick<MemoryPoolOptions<T>, 'asyncFactory'>;
+    private readonly _options: Required<Omit<MemoryPoolOptions<T>, 'asyncFactory' | 'estimatedObjectSize'>> &
+        Pick<MemoryPoolOptions<T>, 'asyncFactory' | 'estimatedObjectSize'>;
 
     private _nextId: number = 0;
     private _isDisposed: boolean = false;
     private _lastRoundRobinIndex: number = 0;
     private _asyncFactoryPromise: Promise<void> | null = null;
     private _factoryAvgTime: number = 0;
+    private _reentrancyDepth: number = 0;
 
     constructor(options: MemoryPoolOptions<T>) {
+        this._id = ++MemoryPool._poolIdCounter;
+
         this._options = {
             initialCapacity: options.initialCapacity ?? 32,
             maxCapacity: options.maxCapacity ?? 4096,
@@ -74,15 +82,26 @@ export class MemoryPool<T extends PoolableObject>
             onOutOfMemory: options.onOutOfMemory ?? (() => undefined),
             enableMetrics: options.enableMetrics ?? true,
             enableInstrumentation: options.enableInstrumentation ?? false,
-            name: options.name ?? `MemoryPool-${Math.floor(Math.random() * 1000000)}`,
+            name: options.name ?? `MemoryPool-${this._id}`,
             maxObjectAge: options.maxObjectAge ?? 0,
             threadSafe: options.threadSafe ?? false,
             asyncFactory: options.asyncFactory,
+            estimatedObjectSize: options.estimatedObjectSize,
         };
 
         validateMemoryPoolOptions(this._options);
 
         this._metrics = createInternalPoolMetrics();
+
+        if (this._options.allocationStrategy === 'least-recently-used' ||
+            this._options.allocationStrategy === 'most-recently-used') {
+            this._lruFreeIds = new LruMap<number, number>({
+                capacity: this._options.maxCapacity,
+                order: this._options.allocationStrategy === 'most-recently-used'
+                    ? 'most-recently-used'
+                    : 'least-recently-used',
+            });
+        }
 
         if (this._options.preallocate) {
             this._preallocate();
@@ -118,22 +137,17 @@ export class MemoryPool<T extends PoolableObject>
                     this._metrics.misses++;
                 }
 
-                if (this._options.autoExpand && this._slots.length < this._options.maxCapacity) {
+                let replenished = false;
+                if (this._options.evictionPolicy !== 'none') {
+                    replenished = this._tryEvictObject();
+                }
+                if (!replenished && this._options.autoExpand && this._slots.length < this._options.maxCapacity) {
                     this._expand();
-                } else {
-                    if (this._options.evictionPolicy !== 'none') {
-                        const evicted = this._tryEvictObject();
-                        if (!evicted) {
-                            this._options.onOutOfMemory(1, 0);
-                            throw new MemoryPoolError(
-                                'Pool depleted and no objects can be evicted',
-                                MemoryPoolErrorCode.POOL_DEPLETED,
-                                this._options.name,
-                                { requested: 1, available: 0 }
-                            );
-                        }
-                    } else {
-                        this._options.onOutOfMemory(1, 0);
+                    replenished = this._freeList.size > 0;
+                }
+                if (!replenished) {
+                    this._options.onOutOfMemory(1, 0);
+                    if (this._options.evictionPolicy === 'none') {
                         throw new MemoryPoolError(
                             'Pool depleted',
                             MemoryPoolErrorCode.POOL_DEPLETED,
@@ -141,6 +155,12 @@ export class MemoryPool<T extends PoolableObject>
                             { requested: 1, available: 0 }
                         );
                     }
+                    throw new MemoryPoolError(
+                        'Pool depleted and no objects can be evicted',
+                        MemoryPoolErrorCode.POOL_DEPLETED,
+                        this._options.name,
+                        { requested: 1, available: 0 }
+                    );
                 }
             }
 
@@ -323,18 +343,25 @@ export class MemoryPool<T extends PoolableObject>
                     slot.lastAccessed = Date.now();
                     slot.allocCount++;
 
-                    waiter(obj);
+                    this._reentrancyDepth++;
+                    queueMicrotask(() => {
+                        this._reentrancyDepth--;
+                        try {
+                            waiter(obj);
+                        } catch (e) {
+                            console.error(
+                                `Error notifying async waiter in pool "${this._options.name}":`,
+                                e
+                            );
+                        }
+                    });
                     return;
                 }
             }
 
             this._freeList.add(id);
 
-            if (
-                this._options.allocationStrategy === 'least-recently-used' ||
-                this._options.allocationStrategy === 'most-recently-used' ||
-                this._options.evictionPolicy === 'lru'
-            ) {
+            if (this._lruFreeIds) {
                 this._updateLruHeap(id);
             }
 
@@ -410,7 +437,7 @@ export class MemoryPool<T extends PoolableObject>
 
         this._slots.length = 0;
         this._freeList.clear();
-        this._lruHeap.length = 0;
+        if (this._lruFreeIds) this._lruFreeIds.clear();
         this._nextId = 0;
 
         if (this._options.preallocate) {
@@ -509,7 +536,7 @@ export class MemoryPool<T extends PoolableObject>
             newFreeList.add(i);
         }
 
-        this._lruHeap.length = 0;
+        if (this._lruFreeIds) this._lruFreeIds.clear();
         if (
             this._options.allocationStrategy === 'least-recently-used' ||
             this._options.allocationStrategy === 'most-recently-used' ||
@@ -736,7 +763,7 @@ export class MemoryPool<T extends PoolableObject>
 
         this._slots.length = 0;
         this._freeList.clear();
-        this._lruHeap.length = 0;
+        if (this._lruFreeIds) this._lruFreeIds.clear();
     }
 
     public async acquireAsync(): Promise<T> {
@@ -784,11 +811,12 @@ export class MemoryPool<T extends PoolableObject>
     }
 
     public async releaseAsync(obj: T): Promise<void> {
+        await Promise.resolve();
         this.release(obj);
-        return Promise.resolve();
     }
 
     public async tryAcquireAsync(timeoutMs: number = 0): Promise<T | null> {
+        await Promise.resolve();
         const obj = this.tryAcquire();
         if (obj !== null) {
             return obj;
@@ -821,18 +849,18 @@ export class MemoryPool<T extends PoolableObject>
     }
 
     public async releaseAllAsync(): Promise<void> {
+        await Promise.resolve();
         this.releaseAll();
-        return Promise.resolve();
     }
 
     public async clearAsync(): Promise<void> {
+        await Promise.resolve();
         this.clear();
-        return Promise.resolve();
     }
 
     public async drainAsync(): Promise<void> {
+        await Promise.resolve();
         this.drain();
-        return Promise.resolve();
     }
 
     public [Symbol.iterator](): Iterator<T> {
@@ -871,11 +899,7 @@ export class MemoryPool<T extends PoolableObject>
 
         this._nextId = this._options.initialCapacity;
 
-        if (
-            this._options.allocationStrategy === 'least-recently-used' ||
-            this._options.allocationStrategy === 'most-recently-used' ||
-            this._options.evictionPolicy === 'lru'
-        ) {
+        if (this._lruFreeIds) {
             this._rebuildLruHeap(this._slots);
         }
     }
@@ -999,11 +1023,7 @@ export class MemoryPool<T extends PoolableObject>
 
         this._nextId = Math.max(this._nextId, newCapacity);
 
-        if (
-            this._options.allocationStrategy === 'least-recently-used' ||
-            this._options.allocationStrategy === 'most-recently-used' ||
-            this._options.evictionPolicy === 'lru'
-        ) {
+        if (this._lruFreeIds) {
             this._rebuildLruHeap(this._slots);
         }
     }
@@ -1084,74 +1104,65 @@ export class MemoryPool<T extends PoolableObject>
 
         this._nextId = compactedSlots.length;
 
-        if (
-            this._options.allocationStrategy === 'least-recently-used' ||
-            this._options.allocationStrategy === 'most-recently-used' ||
-            this._options.evictionPolicy === 'lru'
-        ) {
+        if (this._lruFreeIds) {
             this._rebuildLruHeap(this._slots);
         }
     }
 
     private _updateLruHeap(slotId: number): void {
-        // This is a simplified heap operation for now
-        // A more sophisticated heap implementation would be used in a production environment
-
-        // For now, just rebuild the entire heap
-        // This is inefficient but simpler and safer for now
-        this._rebuildLruHeap(this._slots);
+        if (!this._lruFreeIds) return;
+        const slot = this._slots[slotId];
+        if (!slot) {
+            this._lruFreeIds.delete(slotId);
+            return;
+        }
+        if (slot.status !== 'free') {
+            this._lruFreeIds.delete(slotId);
+            return;
+        }
+        this._lruFreeIds.set(slotId, slot.lastAccessed);
     }
 
     private _rebuildLruHeap(slots: PoolSlot<T>[]): void {
-        this._lruHeap.length = 0;
-
+        if (!this._lruFreeIds) return;
+        this._lruFreeIds.clear();
         for (let i = 0; i < slots.length; i++) {
             const slot = slots[i];
             if (slot && slot.status === 'free') {
-                this._lruHeap.push(i);
+                this._lruFreeIds.set(i, slot.lastAccessed);
             }
-        }
-
-        if (
-            this._options.allocationStrategy === 'least-recently-used' ||
-            this._options.evictionPolicy === 'lru'
-        ) {
-            // Oldest first (min-heap)
-            this._lruHeap.sort((a, b) => slots[a].lastAccessed - slots[b].lastAccessed);
-        } else {
-            // Newest first (max-heap)
-            this._lruHeap.sort((a, b) => slots[b].lastAccessed - slots[a].lastAccessed);
         }
     }
 
     private _getNextFreeId(): number {
         if (this._freeList.size === 0) {
-            return -1; // no free IDs
+            return -1;
         }
 
         switch (this._options.allocationStrategy) {
             case 'least-recently-used':
-                if (this._lruHeap.length > 0) {
-                    return this._lruHeap.shift() as number;
-                }
-                break;
-
             case 'most-recently-used':
-                if (this._lruHeap.length > 0) {
-                    return this._lruHeap.shift() as number;
+                if (this._lruFreeIds) {
+                    const entry = this._lruFreeIds.peekOldest();
+                    if (entry !== undefined) {
+                        this._lruFreeIds.delete(entry.key);
+                        return entry.key;
+                    }
                 }
                 break;
 
-            case 'round-robin':
+            case 'round-robin': {
                 const freeIds = Array.from(this._freeList);
                 const id = freeIds[this._lastRoundRobinIndex % freeIds.length];
                 this._lastRoundRobinIndex = (this._lastRoundRobinIndex + 1) % freeIds.length;
                 return id;
+            }
 
             case 'first-available':
-            default:
+            default: {
                 const firstId = this._freeList.values().next().value;
                 return firstId ?? -1;
+            }
         }
 
         const firstId = this._freeList.values().next().value;
@@ -1316,28 +1327,22 @@ export class MemoryPool<T extends PoolableObject>
     }
 
     private _getEstimatedMemoryUsage(): number {
-        // This is a very rough estimate and not accurate in JavaScript
-        // In a real implementation, you would use a more sophisticated approach
-
-        // Estimate base object size (slots array, free list, etc.)
         const baseSize =
-            // Size of slots array (references)
             this._slots.length * 8 +
-            // Size of free list
             this._freeList.size * 8 +
-            // Size of LRU heap
-            this._lruHeap.length * 8 +
-            // Size of wait queue
+            (this._lruFreeIds ? this._lruFreeIds.size * 16 : 0) +
             this._waitQueue.length * 8 +
-            // Fixed overhead
             1024;
 
-        // Add estimate for each created object
+        const configured = this._options.estimatedObjectSize;
+        const perObject = typeof configured === 'number' && configured > 0 ? configured : 0;
+
         let objectsSize = 0;
-        for (const slot of this._slots) {
-            if (slot && slot.obj) {
-                // Very rough estimate for a complex object
-                objectsSize += 512;
+        if (perObject > 0) {
+            for (const slot of this._slots) {
+                if (slot && slot.obj) {
+                    objectsSize += perObject;
+                }
             }
         }
 
@@ -1484,71 +1489,5 @@ export class MemoryPool<T extends PoolableObject>
         }
 
         await Promise.all(asyncCreationPromises);
-    }
-}
-
-class PoolableWrapper<T extends {}> implements PoolableObject {
-    public readonly value: T;
-    public __poolId?: number;
-    public __poolStatus?: PoolObjectStatus;
-    public __lastAccessed?: number;
-    public __allocCount?: number;
-
-    constructor(value: T) {
-        this.value = value;
-    }
-
-    public reset(): void {
-        const obj = this.value;
-
-        if (Array.isArray(obj)) {
-            (obj as unknown as Array<any>).length = 0;
-        } else if (obj instanceof Map) {
-            (obj as Map<any, any>).clear();
-        } else if (obj instanceof Set) {
-            (obj as Set<any>).clear();
-        } else if (obj instanceof Date) {
-            (obj as Date).setTime(0);
-        } else if (obj instanceof RegExp) {
-        } else if (obj instanceof Promise) {
-        } else if (obj instanceof Error) {
-            for (const key in obj) {
-                const value = (obj as any)[key];
-
-                if (value === null || value === undefined) {
-                    continue;
-                } else if (typeof value === 'number') {
-                    (obj as any)[key] = 0;
-                } else if (typeof value === 'string') {
-                    (obj as any)[key] = '';
-                } else if (typeof value === 'boolean') {
-                    (obj as any)[key] = false;
-                } else if (Array.isArray(value)) {
-                    value.length = 0;
-                } else if (value instanceof Map || value instanceof Set) {
-                    value.clear();
-                }
-            }
-
-            for (const key in obj) {
-                const value = (obj as any)[key];
-
-                if (
-                    typeof value === 'object' &&
-                    value !== null &&
-                    !(value instanceof Array) &&
-                    !(value instanceof Map) &&
-                    !(value instanceof Set) &&
-                    !(value instanceof Date) &&
-                    !(value instanceof RegExp) &&
-                    !(value instanceof Promise) &&
-                    !(value instanceof Error)
-                ) {
-                    for (const nestedKey in value) {
-                        delete value[nestedKey];
-                    }
-                }
-            }
-        }
     }
 }
