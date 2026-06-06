@@ -342,17 +342,6 @@ export class BufferPool {
         return Math.min(bucketIndex, POOL_DEFAULTS.BUCKET_COUNT - 1);
     }
 
-    private getBucketIndexForExactSize(exactSize: number): number {
-        const log2Size = Math.log2(exactSize);
-        if (log2Size % 1 === 0 && log2Size >= 5) {
-            const bucketIndex = log2Size - 5;
-            if (bucketIndex >= 0 && bucketIndex < POOL_DEFAULTS.BUCKET_COUNT) {
-                return bucketIndex;
-            }
-        }
-        return -1;
-    }
-
     private calculateOverallHitRatio(): number {
         let totalHits = 0;
         let totalRequests = 0;
