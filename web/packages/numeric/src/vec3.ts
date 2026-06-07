@@ -1,6 +1,7 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON, HALF_PI, PI_2 } from './common';
 import { clampNegOneOne, clamp01 } from './clamp';
+import { fmix32, hashCombineFloat } from './hash';
 import {
     sampleStandardNormal,
     sampleNormalInRange,
@@ -71,11 +72,11 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     }
 
     getHashCode(): number {
-        let h1 = 2166136261;
-        h1 = Math.imul(h1 ^ Math.floor(this.x * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this.y * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this.z * 1000), 16777619);
-        return h1 >>> 0;
+        let h = 2166136261;
+        h = hashCombineFloat(h, this.x);
+        h = hashCombineFloat(h, this.y);
+        h = hashCombineFloat(h, this.z);
+        return fmix32(h);
     }
 
     static add<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
@@ -290,18 +291,6 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return v.x * v.x + v.y * v.y + v.z * v.z;
     }
 
-    static fastLength<T extends IVec3Like>(v: Readonly<T>): number {
-        const ax = Math.abs(v.x);
-        const ay = Math.abs(v.y);
-        const az = Math.abs(v.z);
-
-        const max = Math.max(ax, ay, az);
-        const mid = ax + ay + az - max - Math.min(ax, ay, az);
-        const min = Math.min(ax, ay, az);
-
-        return max + 0.4 * mid + 0.2 * min;
-    }
-
     static normalize<T extends IVec3Like, U extends IVec3Like>(v: Readonly<T>, out?: U): U {
         const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
         if (length < EPSILON) {
@@ -315,35 +304,6 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             return out;
         } else {
             return { x: v.x / length, y: v.y / length, z: v.z / length } as U;
-        }
-    }
-
-    static normalizeQuake<T extends IVec3Like>(v: Readonly<T>, out?: T): T {
-        const vx = v.x;
-        const vy = v.y;
-        const vz = v.z;
-        const lenSq = vx * vx + vy * vy + vz * vz;
-        if (lenSq < EPSILON) {
-            throw new Error('Cannot normalize a zero-length vector');
-        }
-
-        let i = 0;
-        const buf = new ArrayBuffer(4);
-        const view = new DataView(buf);
-        view.setFloat32(0, lenSq);
-        i = view.getInt32(0);
-        i = 0x5f3759df - (i >> 1);
-        view.setInt32(0, i);
-        let invLen = view.getFloat32(0);
-        invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
-
-        if (out) {
-            out.x = vx * invLen;
-            out.y = vy * invLen;
-            out.z = vz * invLen;
-            return out;
-        } else {
-            return { x: vx * invLen, y: vy * invLen, z: vz * invLen } as T;
         }
     }
 
@@ -365,21 +325,6 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         const dy = a.y - b.y;
         const dz = a.z - b.z;
         return Math.sqrt(dx * dx + dy * dy + dz * dz);
-    }
-
-    static distanceFast<T extends IVec3Like, U extends IVec3Like>(
-        a: Readonly<T>,
-        b: Readonly<U>
-    ): number {
-        const dx = Math.abs(a.x - b.x);
-        const dy = Math.abs(a.y - b.y);
-        const dz = Math.abs(a.z - b.z);
-
-        const max = Math.max(dx, dy, dz);
-        const mid = dx + dy + dz - max - Math.min(dx, dy, dz);
-        const min = Math.min(dx, dy, dz);
-
-        return max + 0.4 * mid + 0.2 * min;
     }
 
     static manhattanDistance<T extends IVec3Like, U extends IVec3Like>(
@@ -960,18 +905,6 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return Math.sqrt(this.lengthSquared());
     }
 
-    fastLength(): number {
-        const ax = Math.abs(this.x);
-        const ay = Math.abs(this.y);
-        const az = Math.abs(this.z);
-
-        const max = Math.max(ax, ay, az);
-        const mid = ax + ay + az - max - Math.min(ax, ay, az);
-        const min = Math.min(ax, ay, az);
-
-        return max + 0.4 * mid + 0.2 * min;
-    }
-
     inverse(): Vec3 {
         if (
             Math.abs(this.x) < EPSILON ||
@@ -1010,28 +943,6 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return this;
     }
 
-    normalizeFast(): Vec3 {
-        const lenSq = this.x * this.x + this.y * this.y + this.z * this.z;
-        if (lenSq < EPSILON) {
-            throw new Error('Cannot normalize a zero-length vector');
-        }
-
-        let i = 0;
-        const buf = new ArrayBuffer(4);
-        const view = new DataView(buf);
-        view.setFloat32(0, lenSq);
-        i = view.getInt32(0);
-        i = 0x5f3759df - (i >> 1);
-        view.setInt32(0, i);
-        let invLen = view.getFloat32(0);
-        invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
-
-        this.x *= invLen;
-        this.y *= invLen;
-        this.z *= invLen;
-        return this;
-    }
-
     distanceSquared<T extends IVec3Like>(other: Readonly<T>): number {
         const dx = this.x - other.x;
         const dy = this.y - other.y;
@@ -1044,18 +955,6 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         const dy = this.y - other.y;
         const dz = this.z - other.z;
         return Math.sqrt(dx * dx + dy * dy + dz * dz);
-    }
-
-    distanceFast<T extends IVec3Like>(other: Readonly<T>): number {
-        const dx = Math.abs(this.x - other.x);
-        const dy = Math.abs(this.y - other.y);
-        const dz = Math.abs(this.z - other.z);
-
-        const max = Math.max(dx, dy, dz);
-        const mid = dx + dy + dz - max - Math.min(dx, dy, dz);
-        const min = Math.min(dx, dy, dz);
-
-        return max + 0.4 * mid + 0.2 * min;
     }
 
     manhattanDistance<T extends IVec3Like>(other: Readonly<T>): number {
@@ -1282,10 +1181,10 @@ export class Vec3EqualityComparer implements EqualityComparer<Vec3> {
     hash(obj: Readonly<Vec3>): number {
         if (!obj) return 0;
 
-        let h1 = 2166136261;
-        h1 = Math.imul(h1 ^ Math.floor(obj.x * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(obj.y * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(obj.z * 1000), 16777619);
-        return h1 >>> 0;
+        let h = 2166136261;
+        h = hashCombineFloat(h, obj.x);
+        h = hashCombineFloat(h, obj.y);
+        h = hashCombineFloat(h, obj.z);
+        return fmix32(h);
     }
 }

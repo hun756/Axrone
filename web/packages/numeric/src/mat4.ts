@@ -4,6 +4,7 @@ import { IVec3Like } from './vec3';
 import { IVec4Like } from './vec4';
 import { IQuatLike } from './quat';
 import { clamp01 } from './clamp';
+import { fmix32, hashCombineFloat } from './hash';
 
 declare const __matrix4Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
@@ -211,11 +212,11 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
     }
 
     getHashCode(): number {
-        let h1 = 2166136261;
+        let h = 2166136261;
         for (let i = 0; i < 16; i++) {
-            h1 = Math.imul(h1 ^ Math.floor(this.data[i] * 1000), 16777619);
+            h = hashCombineFloat(h, this.data[i]!);
         }
-        return h1 >>> 0;
+        return fmix32(h);
     }
 
     static multiply<
@@ -1206,14 +1207,61 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         scale: Readonly<S>,
         out?: V
     ): MatrixOperationReturnType<V, Mat4> {
-        const rotationMatrix = Mat4.fromQuaternion(rotation);
+        const qx = rotation.x;
+        const qy = rotation.y;
+        const qz = rotation.z;
+        const qw = rotation.w;
 
-        const translationMatrix = Mat4.translate(translation);
+        const lenSq = qx * qx + qy * qy + qz * qz + qw * qw;
+        if (lenSq < EPSILON) {
+            throw new Error('Cannot create rotation matrix from zero-length quaternion');
+        }
+        const invLen = 1 / Math.sqrt(lenSq);
+        const nx = qx * invLen;
+        const ny = qy * invLen;
+        const nz = qz * invLen;
+        const nw = qw * invLen;
 
-        const scaleMatrix = Mat4.scale(scale);
+        const x2 = nx + nx;
+        const y2 = ny + ny;
+        const z2 = nz + nz;
+        const xx = nx * x2;
+        const xy = nx * y2;
+        const xz = nx * z2;
+        const yy = ny * y2;
+        const yz = ny * z2;
+        const zz = nz * z2;
+        const wx = nw * x2;
+        const wy = nw * y2;
+        const wz = nw * z2;
 
-        const temp = Mat4.multiply(translationMatrix, rotationMatrix);
-        const result = Mat4.multiply(temp, scaleMatrix, out);
+        const sx = scale.x;
+        const sy = scale.y;
+        const sz = scale.z;
+
+        const tx = translation.x;
+        const ty = translation.y;
+        const tz = translation.z;
+
+        const result = (out as IMutableMat4) || (new Mat4() as IMutableMat4);
+        const data = asMutableMatrix4Data(result.data);
+
+        data[0] = (1 - (yy + zz)) * sx;
+        data[1] = (xy - wz) * sy;
+        data[2] = (xz + wy) * sz;
+        data[3] = tx;
+        data[4] = (xy + wz) * sx;
+        data[5] = (1 - (xx + zz)) * sy;
+        data[6] = (yz - wx) * sz;
+        data[7] = ty;
+        data[8] = (xz - wy) * sx;
+        data[9] = (yz + wx) * sy;
+        data[10] = (1 - (xx + yy)) * sz;
+        data[11] = tz;
+        data[12] = 0;
+        data[13] = 0;
+        data[14] = 0;
+        data[15] = 1;
 
         return result as MatrixOperationReturnType<V, Mat4>;
     }

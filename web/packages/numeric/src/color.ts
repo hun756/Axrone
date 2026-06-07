@@ -1,6 +1,7 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON } from './common';
 import { clamp, clamp01 } from './clamp';
+import { fmix32, hashCombineFloat } from './hash';
 
 export interface IColorLike {
     r: number;
@@ -398,12 +399,12 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     }
 
     getHashCode(): number {
-        let h1 = 2166136261;
-        h1 = Math.imul(h1 ^ Math.floor(this.r * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this.g * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this.b * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this.a * 1000), 16777619);
-        return h1 >>> 0;
+        let h = 2166136261;
+        h = hashCombineFloat(h, this.r);
+        h = hashCombineFloat(h, this.g);
+        h = hashCombineFloat(h, this.b);
+        h = hashCombineFloat(h, this.a);
+        return fmix32(h);
     }
 
     toHSL<T extends IColorHSL>(out?: T): T {

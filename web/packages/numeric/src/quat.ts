@@ -2,6 +2,7 @@ import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from
 import { EPSILON } from './common';
 import { clamp01 } from './clamp';
 import { IVec3Like } from './vec3';
+import { fmix32, hashCombineFloat } from './hash';
 
 export interface IQuatLike {
     x: number;
@@ -67,12 +68,12 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
     }
 
     getHashCode(): number {
-        let h1 = 2166136261;
-        h1 = Math.imul(h1 ^ Math.floor(this.x * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this.y * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this.z * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this.w * 1000), 16777619);
-        return h1 >>> 0;
+        let h = 2166136261;
+        h = hashCombineFloat(h, this.x);
+        h = hashCombineFloat(h, this.y);
+        h = hashCombineFloat(h, this.z);
+        h = hashCombineFloat(h, this.w);
+        return fmix32(h);
     }
 
     static add<T extends IQuatLike, U extends IQuatLike, V extends IQuatLike>(
@@ -879,11 +880,11 @@ export class QuatEqualityComparer implements EqualityComparer<Quat> {
     hash(obj: Readonly<Quat>): number {
         if (!obj) return 0;
 
-        let h1 = 2166136261;
-        h1 = Math.imul(h1 ^ Math.floor(obj.x * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(obj.y * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(obj.z * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(obj.w * 1000), 16777619);
-        return h1 >>> 0;
+        let h = 2166136261;
+        h = hashCombineFloat(h, obj.x);
+        h = hashCombineFloat(h, obj.y);
+        h = hashCombineFloat(h, obj.z);
+        h = hashCombineFloat(h, obj.w);
+        return fmix32(h);
     }
 }

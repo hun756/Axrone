@@ -2,6 +2,7 @@ import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from
 import { EPSILON, HALF_PI, PI_2 } from './common';
 import { IVec2Like } from './vec2';
 import { clamp01 } from './clamp';
+import { fmix32, hashCombineFloat } from './hash';
 
 declare const __matrix2Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
@@ -110,11 +111,11 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
     }
 
     getHashCode(): number {
-        let h1 = 2166136261;
+        let h = 2166136261;
         for (let i = 0; i < 4; i++) {
-            h1 = Math.imul(h1 ^ Math.floor(this.data[i] * 1000), 16777619);
+            h = hashCombineFloat(h, this.data[i]!);
         }
-        return h1 >>> 0;
+        return fmix32(h);
     }
 
     static multiply<

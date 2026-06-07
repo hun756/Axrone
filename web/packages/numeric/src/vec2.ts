@@ -1,6 +1,7 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON, HALF_PI, PI_2 } from './common';
 import { clamp01, clampNegOneOne } from './clamp';
+import { fmix32, hashCombineFloat } from './hash';
 import {
     sampleStandardNormal,
     sampleNormalInRange,
@@ -62,10 +63,10 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     }
 
     getHashCode(): number {
-        let h1 = 2166136261;
-        h1 = Math.imul(h1 ^ Math.floor(this.x * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this.y * 1000), 16777619);
-        return h1 >>> 0;
+        let h = 2166136261;
+        h = hashCombineFloat(h, this.x);
+        h = hashCombineFloat(h, this.y);
+        return fmix32(h);
     }
 
     static add<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
@@ -268,13 +269,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return v.x * v.x + v.y * v.y;
     }
 
-    static fastLength<T extends IVec2Like>(v: Readonly<T>): number {
-        // Fast approximation of vector length (~3.4% error max)
-        const min = Math.min(Math.abs(v.x), Math.abs(v.y));
-        const max = Math.max(Math.abs(v.x), Math.abs(v.y));
-        return max + 0.3 * min;
-    }
-
     static normalize<T extends IVec2Like>(v: Readonly<T>, out?: T): T {
         const length = Math.sqrt(v.x * v.x + v.y * v.y);
         if (length < EPSILON) {
@@ -287,33 +281,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             return out;
         } else {
             return { x: v.x / length, y: v.y / length } as T;
-        }
-    }
-
-    static normalizeFast<T extends IVec2Like>(v: Readonly<T>, out?: T): T {
-        const vx = v.x;
-        const vy = v.y;
-        const lenSq = vx * vx + vy * vy;
-        if (lenSq < EPSILON) {
-            throw new Error('Cannot normalize a zero-length vector');
-        }
-
-        let i = 0;
-        const buf = new ArrayBuffer(4);
-        const view = new DataView(buf);
-        view.setFloat32(0, lenSq);
-        i = view.getInt32(0);
-        i = 0x5f3759df - (i >> 1);
-        view.setInt32(0, i);
-        let invLen = view.getFloat32(0);
-        invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
-
-        if (out) {
-            out.x = vx * invLen;
-            out.y = vy * invLen;
-            return out;
-        } else {
-            return { x: vx * invLen, y: vy * invLen } as T;
         }
     }
 
@@ -333,18 +300,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         const dx = a.x - b.x;
         const dy = a.y - b.y;
         return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    static distanceFast<T extends IVec2Like, U extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>
-    ): number {
-        // Fast approximation of vector distance (~3.4% error max)
-        const dx = Math.abs(a.x - b.x);
-        const dy = Math.abs(a.y - b.y);
-        const min = Math.min(dx, dy);
-        const max = Math.max(dx, dy);
-        return max + 0.3 * min;
     }
 
     static manhattanDistance<T extends IVec2Like, U extends IVec2Like>(
@@ -375,28 +330,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
 
         const cosTheta = dotProduct / (lengthA * lengthB);
         return Math.acos(clampNegOneOne(cosTheta));
-    }
-
-    static fastAngle<T extends IVec2Like, U extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>
-    ): number {
-        const x = b.x - a.x;
-        const y = b.y - a.y;
-
-        if (x === 0) return y > 0 ? HALF_PI : -HALF_PI;
-
-        const abs_y = Math.abs(y);
-        const abs_x = Math.abs(x);
-        const a_val = abs_x > abs_y ? abs_y / abs_x : abs_x / abs_y;
-        const s = a_val * a_val;
-        let r = ((-0.0464964749 * s + 0.15931422) * s - 0.327622764) * s * a_val + a_val;
-
-        if (abs_y > abs_x) r = HALF_PI - r;
-        if (x < 0) r = Math.PI - r;
-        if (y < 0) r = -r;
-
-        return r;
     }
 
     static angle2Deg<T extends IVec2Like, U extends IVec2Like>(
@@ -861,13 +794,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return Math.sqrt(this.lengthSquared());
     }
 
-    fastLength(): number {
-        // Fast approximation of vector length (~3.4% error max)
-        const min = Math.min(Math.abs(this.x), Math.abs(this.y));
-        const max = Math.max(Math.abs(this.x), Math.abs(this.y));
-        return max + 0.3 * min;
-    }
-
     inverse(): Vec2 {
         if (Math.abs(this.x) < EPSILON || Math.abs(this.y) < EPSILON) {
             throw new Error('Inversion of zero or near-zero value');
@@ -898,27 +824,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return this;
     }
 
-    normalizeFast(): Vec2 {
-        const lenSq = this.x * this.x + this.y * this.y;
-        if (lenSq < EPSILON) {
-            throw new Error('Cannot normalize a zero-length vector');
-        }
-
-        let i = 0;
-        const buf = new ArrayBuffer(4);
-        const view = new DataView(buf);
-        view.setFloat32(0, lenSq);
-        i = view.getInt32(0);
-        i = 0x5f3759df - (i >> 1);
-        view.setInt32(0, i);
-        let invLen = view.getFloat32(0);
-        invLen = invLen * (1.5 - lenSq * 0.5 * invLen * invLen);
-
-        this.x *= invLen;
-        this.y *= invLen;
-        return this;
-    }
-
     distanceSquared<T extends IVec2Like>(other: Readonly<T>): number {
         const dx = this.x - other.x;
         const dy = this.y - other.y;
@@ -929,15 +834,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         const dx = this.x - other.x;
         const dy = this.y - other.y;
         return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    distanceFast<T extends IVec2Like>(other: Readonly<T>): number {
-        // Fast approximation of vector distance (~3.4% error max)
-        const dx = Math.abs(this.x - other.x);
-        const dy = Math.abs(this.y - other.y);
-        const min = Math.min(dx, dy);
-        const max = Math.max(dx, dy);
-        return max + 0.3 * min;
     }
 
     manhattanDistance<T extends IVec2Like>(other: Readonly<T>): number {
@@ -964,25 +860,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     angle(): number {
         const angle = Math.atan2(this.y, this.x);
         return angle < 0 ? angle + Math.PI * 2 : angle;
-    }
-
-    fastAngle<T extends IVec2Like>(other: Readonly<T>): number {
-        const x = other.x - this.x;
-        const y = other.y - this.y;
-
-        if (x === 0) return y > 0 ? HALF_PI : -HALF_PI;
-
-        const abs_y = Math.abs(y);
-        const abs_x = Math.abs(x);
-        const a_val = abs_x > abs_y ? abs_y / abs_x : abs_x / abs_y;
-        const s = a_val * a_val;
-        let r = ((-0.0464964749 * s + 0.15931422) * s - 0.327622764) * s * a_val + a_val;
-
-        if (abs_y > abs_x) r = HALF_PI - r;
-        if (x < 0) r = Math.PI - r;
-        if (y < 0) r = -r;
-
-        return r;
     }
 
     angle2Deg<T extends IVec2Like>(other: Readonly<T>): number {
@@ -1087,9 +964,9 @@ export class Vec2EqualityComparer implements EqualityComparer<Vec2> {
     hash(obj: Readonly<Vec2>): number {
         if (!obj) return 0;
 
-        let h1 = 2166136261;
-        h1 = Math.imul(h1 ^ Math.floor(obj.x * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(obj.y * 1000), 16777619);
-        return h1 >>> 0;
+        let h = 2166136261;
+        h = hashCombineFloat(h, obj.x);
+        h = hashCombineFloat(h, obj.y);
+        return fmix32(h);
     }
 }
