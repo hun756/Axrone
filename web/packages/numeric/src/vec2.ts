@@ -523,24 +523,31 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         out?: T
     ): T {
         const t1 = clamp01(t);
-        const angleA = Vec2.angleBetween(a, b);
-        const angleB = Vec2.angleBetween(b, a);
-        let angleDiff = angleA - angleB;
 
-        if (angleDiff < 0) angleDiff += Math.PI * 2;
-        if (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        const lenASq = a.x * a.x + a.y * a.y;
+        const lenBSq = b.x * b.x + b.y * b.y;
+        if (lenASq < EPSILON * EPSILON || lenBSq < EPSILON * EPSILON) {
+            return Vec2.lerpUnClamped(a, b, t1, out);
+        }
 
-        const resultAngle = angleA + angleDiff * t1;
-        const lenA = Vec2.len(a);
-        const lenB = Vec2.len(b);
+        const rA = Math.sqrt(lenASq);
+        const rB = Math.sqrt(lenBSq);
 
-        const resultLength = lenA + (lenB - lenA) * t1;
+        const angleA = Math.atan2(a.y, a.x);
+        const angleB = Math.atan2(b.y, b.x);
 
-        const cos = Math.cos(resultAngle);
-        const sin = Math.sin(resultAngle);
+        let diff = angleB - angleA;
+        if (diff > Math.PI) {
+            diff -= Math.PI * 2;
+        } else if (diff < -Math.PI) {
+            diff += Math.PI * 2;
+        }
 
-        const x = resultLength * cos;
-        const y = resultLength * sin;
+        const angle = angleA + diff * t1;
+        const r = rA + (rB - rA) * t1;
+
+        const x = r * Math.cos(angle);
+        const y = r * Math.sin(angle);
 
         if (out) {
             out.x = x;
