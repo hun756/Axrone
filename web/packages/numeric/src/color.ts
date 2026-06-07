@@ -149,7 +149,9 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     static readonly LIME: Readonly<Color> = Object.freeze(new Color(0.5, 1, 0, 1));
     static readonly AQUA: Readonly<Color> = Object.freeze(new Color(0, 1, 1, 1));
     static readonly TEAL: Readonly<Color> = Object.freeze(new Color(0, 0.5, 0.5, 1));
-    static readonly SILVER: Readonly<Color> = Object.freeze(new Color(0.75, 0.75, 0.75, 1));
+    static readonly SILVER: Readonly<Color> = Object.freeze(
+        new Color(0.7529411764705882, 0.7529411764705882, 0.7529411764705882, 1)
+    );
     static readonly FUCHSIA: Readonly<Color> = Object.freeze(new Color(1, 0, 1, 1));
 
     static from<T extends IColorLike>(c: Readonly<T>): Color {
