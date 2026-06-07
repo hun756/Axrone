@@ -102,12 +102,52 @@ const _linearToSRGB = (c: number): number => {
 };
 
 const _hueToRgb = (p: number, q: number, t: number): number => {
-    if (t < 0) t += 1;
-    if (t > 1) t -= 1;
-    if (t < 1 / 6) return p + (q - p) * 6 * t;
-    if (t < 1 / 2) return q;
-    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    let tt = t;
+    if (tt < 0) tt += 1;
+    if (tt > 1) tt -= 1;
+    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+    if (tt < 1 / 2) return q;
+    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
     return p;
+};
+
+const _hslToRgbRaw = (h: number, s: number, l: number): { r: number; g: number; b: number } => {
+    if (s === 0) return { r: l, g: l, b: l };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    const hNorm = h / 360;
+    return {
+        r: _hueToRgb(p, q, hNorm + 1 / 3),
+        g: _hueToRgb(p, q, hNorm),
+        b: _hueToRgb(p, q, hNorm - 1 / 3),
+    };
+};
+
+const _labToRgbRaw = (l: number, a: number, b: number): { r: number; g: number; b: number } => {
+    const fy = (l + 16) / 116;
+    const fx = a / 500 + fy;
+    const fz = fy - b / 200;
+
+    const xr = fx ** 3 > 0.008856 ? fx ** 3 : (116 * fx - 16) / 903.3;
+    const yr = l > 8 ? fy ** 3 : l / 903.3;
+    const zr = fz ** 3 > 0.008856 ? fz ** 3 : (116 * fz - 16) / 903.3;
+
+    const x = xr * D65_X;
+    const y = yr * D65_Y;
+    const z = zr * D65_Z;
+
+    return _xyzToLinearRgbRaw(x, y, z);
+};
+
+const _xyzToLinearRgbRaw = (x: number, y: number, z: number): { r: number; g: number; b: number } => {
+    let r = x * 3.2406 + y * -1.5372 + z * -0.4986;
+    let g = x * -0.9689 + y * 1.8758 + z * 0.0415;
+    let b = x * 0.0557 + y * -0.204 + z * 1.057;
+    return {
+        r: _linearToSRGB(r),
+        g: _linearToSRGB(g),
+        b: _linearToSRGB(b),
+    };
 };
 
 const D65_X = 0.95047;
@@ -178,39 +218,51 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     }
 
     static fromHex(hex: string): Color {
-        hex = hex.replace(/^#/, '').trim();
+        const cleaned = hex.replace(/^#/, '').trim();
 
-        if (!/^[0-9A-Fa-f]+$/.test(hex)) {
+        if (cleaned.length !== 3 && cleaned.length !== 4 && cleaned.length !== 6 && cleaned.length !== 8) {
+            throw new Error(
+                `Invalid hex color format: must be 3, 4, 6, or 8 hex digits (got ${cleaned.length})`
+            );
+        }
+
+        if (!/^[0-9A-Fa-f]+$/.test(cleaned)) {
             throw new Error('Invalid hex color format: contains non-hexadecimal characters');
         }
 
-        if (hex.length === 3) {
-            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-        } else if (hex.length === 4) {
-            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+        let normalized = cleaned;
+        if (normalized.length === 3) {
+            normalized =
+                normalized[0] + normalized[0] + normalized[1] + normalized[1] + normalized[2] + normalized[2];
+        } else if (normalized.length === 4) {
+            normalized =
+                normalized[0] +
+                normalized[0] +
+                normalized[1] +
+                normalized[1] +
+                normalized[2] +
+                normalized[2] +
+                normalized[3] +
+                normalized[3];
         }
 
-        if (hex.length !== 6 && hex.length !== 8) {
-            throw new Error('Invalid hex color format: must be 3, 4, 6, or 8 characters');
-        }
+        const parsed = parseInt(normalized, 16);
 
-        const parsed = parseInt(hex, 16);
-
-        if (hex.length === 6) {
+        if (normalized.length === 6) {
             return new Color(
                 ((parsed >> 16) & 0xff) / 255,
                 ((parsed >> 8) & 0xff) / 255,
                 (parsed & 0xff) / 255,
                 1
             );
-        } else {
-            return new Color(
-                ((parsed >> 24) & 0xff) / 255,
-                ((parsed >> 16) & 0xff) / 255,
-                ((parsed >> 8) & 0xff) / 255,
-                (parsed & 0xff) / 255
-            );
         }
+
+        return new Color(
+            ((parsed >> 24) & 0xff) / 255,
+            ((parsed >> 16) & 0xff) / 255,
+            ((parsed >> 8) & 0xff) / 255,
+            (parsed & 0xff) / 255
+        );
     }
 
     static fromRGB(r: number, g: number, b: number, a: number = 1): Color {
@@ -221,24 +273,12 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     }
 
     static fromHSL(h: number, s: number, l: number, a: number = 1): Color {
-        h = _mod(h, 360);
-        s = clamp01(s);
-        l = clamp01(l);
-        a = clamp01(a);
-
-        if (s === 0) {
-            return new Color(l, l, l, a);
-        }
-
-        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-        const p = 2 * l - q;
-        const hNorm = h / 360;
-
-        const r = _hueToRgb(p, q, hNorm + 1 / 3);
-        const g = _hueToRgb(p, q, hNorm);
-        const b = _hueToRgb(p, q, hNorm - 1 / 3);
-
-        return new Color(r, g, b, a);
+        const hN = _mod(h, 360);
+        const sN = clamp01(s);
+        const lN = clamp01(l);
+        const aN = clamp01(a);
+        const { r, g, b } = _hslToRgbRaw(hN, sN, lN);
+        return new Color(r, g, b, aN);
     }
 
     static fromHSV(h: number, s: number, v: number, a: number = 1): Color {
@@ -300,31 +340,13 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     }
 
     static fromLab(l: number, a: number, b: number, alpha: number = 1): Color {
-        const fy = (l + 16) / 116;
-        const fx = a / 500 + fy;
-        const fz = fy - b / 200;
-
-        const xr = fx ** 3 > 0.008856 ? fx ** 3 : (116 * fx - 16) / 903.3;
-        const yr = l > 8 ? fy ** 3 : l / 903.3;
-        const zr = fz ** 3 > 0.008856 ? fz ** 3 : (116 * fz - 16) / 903.3;
-
-        const x = xr * D65_X;
-        const y = yr * D65_Y;
-        const z = zr * D65_Z;
-
-        return Color.fromXYZ(x, y, z, alpha);
+        const { r, g, b: bb } = _labToRgbRaw(l, a, b);
+        return new Color(clamp01(r), clamp01(g), clamp01(bb), clamp01(alpha));
     }
 
     static fromXYZ(x: number, y: number, z: number, alpha: number = 1): Color {
-        let r = x * 3.2406 + y * -1.5372 + z * -0.4986;
-        let g = x * -0.9689 + y * 1.8758 + z * 0.0415;
-        let b = x * 0.0557 + y * -0.204 + z * 1.057;
-
-        r = _linearToSRGB(r);
-        g = _linearToSRGB(g);
-        b = _linearToSRGB(b);
-
-        return new Color(clamp01(r), clamp01(g), clamp01(b), clamp01(alpha));
+        const { r, g, b: bb } = _xyzToLinearRgbRaw(x, y, z);
+        return new Color(clamp01(r), clamp01(g), clamp01(bb), clamp01(alpha));
     }
 
     static fromTemperature(kelvin: number, alpha: number = 1): Color {
@@ -352,42 +374,12 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     }
 
     static fromNamedColor(name: string): Color {
-        const namedColors: Record<string, Color> = {
-            transparent: Color.TRANSPARENT,
-            black: Color.BLACK,
-            white: Color.WHITE,
-            red: Color.RED,
-            green: Color.GREEN,
-            blue: Color.BLUE,
-            yellow: Color.YELLOW,
-            cyan: Color.CYAN,
-            magenta: Color.MAGENTA,
-            orange: Color.ORANGE,
-            purple: Color.PURPLE,
-            brown: Color.BROWN,
-            pink: Color.PINK,
-            gray: Color.GRAY,
-            grey: Color.GRAY,
-            lightgray: Color.LIGHT_GRAY,
-            lightgrey: Color.LIGHT_GRAY,
-            darkgray: Color.DARK_GRAY,
-            darkgrey: Color.DARK_GRAY,
-            navy: Color.NAVY,
-            maroon: Color.MAROON,
-            olive: Color.OLIVE,
-            lime: Color.LIME,
-            aqua: Color.AQUA,
-            teal: Color.TEAL,
-            silver: Color.SILVER,
-            fuchsia: Color.FUCHSIA,
-        };
-
         const normalized = name.toLowerCase().replace(/\s+/g, '');
-        if (!(normalized in namedColors)) {
+        const entry = NAMED_COLORS[normalized];
+        if (!entry) {
             throw new Error(`Unknown color name: ${name}`);
         }
-
-        return namedColors[normalized].clone();
+        return entry.clone();
     }
 
     clone(): Color {
@@ -565,7 +557,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         const b = Math.round(this.b * 255);
         const a = Math.round(this.a * 255);
 
-        const toHex = (n: number) => n.toString(16).padStart(2, '0');
+        const toHex = (n: number) => n.toString(16).padStart(2, '0').toUpperCase();
 
         if (includeAlpha) {
             return `#${toHex(r)}${toHex(g)}${toHex(b)}${toHex(a)}`;
@@ -756,17 +748,20 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         const l = hslA.l + (hslB.l - hslA.l) * t1;
         const alpha = hslA.a + (hslB.a - hslA.a) * t1;
 
-        const result = Color.fromHSL(h, s, l, alpha);
-
         if (out) {
-            out.r = result.r;
-            out.g = result.g;
-            out.b = result.b;
-            out.a = result.a;
+            const hN = _mod(h, 360);
+            const sN = clamp01(s);
+            const lN = clamp01(l);
+            const aN = clamp01(alpha);
+            const { r, g, b: bb } = _hslToRgbRaw(hN, sN, lN);
+            out.r = r;
+            out.g = g;
+            out.b = bb;
+            out.a = aN;
             return out;
-        } else {
-            return result as unknown as V;
         }
+
+        return Color.fromHSL(h, s, l, alpha) as unknown as V;
     }
 
     static lerpLab<T extends IColorLike, U extends IColorLike, V extends IColorLike>(
@@ -781,21 +776,20 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         const labB = b instanceof Color ? b.toLab() : Color.from(b).toLab();
 
         const l = labA.l + (labB.l - labA.l) * t1;
-        const labAVal = labA.a + (labB.a - labA.a) * t1;
-        const labBVal = labA.b + (labB.b - labA.b) * t1;
+        const aVal = labA.a + (labB.a - labA.a) * t1;
+        const bVal = labA.b + (labB.b - labA.b) * t1;
         const alpha = labA.alpha + (labB.alpha - labA.alpha) * t1;
 
-        const result = Color.fromLab(l, labAVal, labBVal, alpha);
-
         if (out) {
-            out.r = result.r;
-            out.g = result.g;
-            out.b = result.b;
-            out.a = result.a;
+            const { r, g, b: bb } = _labToRgbRaw(l, aVal, bVal);
+            out.r = clamp01(r);
+            out.g = clamp01(g);
+            out.b = clamp01(bb);
+            out.a = clamp01(alpha);
             return out;
-        } else {
-            return result as unknown as V;
         }
+
+        return Color.fromLab(l, aVal, bVal, alpha) as unknown as V;
     }
 
     static lighten<T extends IColorLike, U extends IColorLike>(
@@ -804,19 +798,21 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         out?: U
     ): U {
         const hsl = color instanceof Color ? color.toHSL() : Color.from(color).toHSL();
-        hsl.l = clamp(hsl.l + amount, 0, 1);
-
-        const result = Color.fromHSL(hsl.h, hsl.s, hsl.l, hsl.a);
+        const lNew = clamp(hsl.l + amount, 0, 1);
+        const hNew = _mod(hsl.h, 360);
+        const sNew = clamp01(hsl.s);
+        const aNew = clamp01(hsl.a);
 
         if (out) {
-            out.r = result.r;
-            out.g = result.g;
-            out.b = result.b;
-            out.a = result.a;
+            const { r, g, b: bb } = _hslToRgbRaw(hNew, sNew, lNew);
+            out.r = r;
+            out.g = g;
+            out.b = bb;
+            out.a = aNew;
             return out;
-        } else {
-            return result as unknown as U;
         }
+
+        return Color.fromHSL(hNew, sNew, lNew, aNew) as unknown as U;
     }
 
     static darken<T extends IColorLike>(color: Readonly<T>, amount: number, out?: T): T {
@@ -829,19 +825,21 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         out?: U
     ): U {
         const hsl = color instanceof Color ? color.toHSL() : Color.from(color).toHSL();
-        hsl.s = clamp(hsl.s + amount, 0, 1);
-
-        const result = Color.fromHSL(hsl.h, hsl.s, hsl.l, hsl.a);
+        const sNew = clamp(hsl.s + amount, 0, 1);
+        const hNew = _mod(hsl.h, 360);
+        const lNew = clamp01(hsl.l);
+        const aNew = clamp01(hsl.a);
 
         if (out) {
-            out.r = result.r;
-            out.g = result.g;
-            out.b = result.b;
-            out.a = result.a;
+            const { r, g, b: bb } = _hslToRgbRaw(hNew, sNew, lNew);
+            out.r = r;
+            out.g = g;
+            out.b = bb;
+            out.a = aNew;
             return out;
-        } else {
-            return result as unknown as U;
         }
+
+        return Color.fromHSL(hNew, sNew, lNew, aNew) as unknown as U;
     }
 
     static desaturate<T extends IColorLike>(color: Readonly<T>, amount: number, out?: T): T {
@@ -854,19 +852,21 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         out?: U
     ): U {
         const hsl = color instanceof Color ? color.toHSL() : Color.from(color).toHSL();
-        hsl.h = _mod(hsl.h + degrees, 360);
-
-        const result = Color.fromHSL(hsl.h, hsl.s, hsl.l, hsl.a);
+        const hNew = _mod(hsl.h + degrees, 360);
+        const sNew = clamp01(hsl.s);
+        const lNew = clamp01(hsl.l);
+        const aNew = clamp01(hsl.a);
 
         if (out) {
-            out.r = result.r;
-            out.g = result.g;
-            out.b = result.b;
-            out.a = result.a;
+            const { r, g, b: bb } = _hslToRgbRaw(hNew, sNew, lNew);
+            out.r = r;
+            out.g = g;
+            out.b = bb;
+            out.a = aNew;
             return out;
-        } else {
-            return result as unknown as U;
         }
+
+        return Color.fromHSL(hNew, sNew, lNew, aNew) as unknown as U;
     }
 
     static invert<T extends IColorLike, U extends IColorLike>(color: Readonly<T>, out?: U): U {
@@ -911,33 +911,7 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         mode: ColorBlendMode,
         out?: V
     ): V {
-        const blendFunctions = {
-            [ColorBlendMode.NORMAL]: (a: number, b: number) => b,
-            [ColorBlendMode.MULTIPLY]: (a: number, b: number) => a * b,
-            [ColorBlendMode.SCREEN]: (a: number, b: number) => 1 - (1 - a) * (1 - b),
-            [ColorBlendMode.OVERLAY]: (a: number, b: number) =>
-                a < 0.5 ? 2 * a * b : 1 - 2 * (1 - a) * (1 - b),
-            [ColorBlendMode.SOFT_LIGHT]: (a: number, b: number) =>
-                b < 0.5
-                    ? 2 * a * b + a * a * (1 - 2 * b)
-                    : 2 * a * (1 - b) + Math.sqrt(a) * (2 * b - 1),
-            [ColorBlendMode.HARD_LIGHT]: (a: number, b: number) =>
-                b < 0.5 ? 2 * a * b : 1 - 2 * (1 - a) * (1 - b),
-            [ColorBlendMode.COLOR_DODGE]: (a: number, b: number) =>
-                b === 1 ? 1 : Math.min(1, a / (1 - b)),
-            [ColorBlendMode.COLOR_BURN]: (a: number, b: number) =>
-                b === 0 ? 0 : Math.max(0, 1 - (1 - a) / b),
-            [ColorBlendMode.DARKEN]: (a: number, b: number) => Math.min(a, b),
-            [ColorBlendMode.LIGHTEN]: (a: number, b: number) => Math.max(a, b),
-            [ColorBlendMode.DIFFERENCE]: (a: number, b: number) => Math.abs(a - b),
-            [ColorBlendMode.EXCLUSION]: (a: number, b: number) => a + b - 2 * a * b,
-            [ColorBlendMode.HUE]: (a: number, b: number) => b,
-            [ColorBlendMode.SATURATION]: (a: number, b: number) => b,
-            [ColorBlendMode.COLOR]: (a: number, b: number) => b,
-            [ColorBlendMode.LUMINOSITY]: (a: number, b: number) => b,
-        };
-
-        const blendFunc = blendFunctions[mode];
+        const blendFunc = BLEND_FUNCTIONS[mode];
         if (!blendFunc) {
             throw new Error(`Unsupported blend mode: ${mode}`);
         }
@@ -1155,6 +1129,58 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return Color.isAccessible(this, background, level);
     }
 }
+
+type BlendFn = (a: number, b: number) => number;
+
+const NAMED_COLORS: Readonly<Record<string, Readonly<Color>>> = Object.freeze({
+    transparent: Color.TRANSPARENT,
+    black: Color.BLACK,
+    white: Color.WHITE,
+    red: Color.RED,
+    green: Color.GREEN,
+    blue: Color.BLUE,
+    yellow: Color.YELLOW,
+    cyan: Color.CYAN,
+    magenta: Color.MAGENTA,
+    orange: Color.ORANGE,
+    purple: Color.PURPLE,
+    brown: Color.BROWN,
+    pink: Color.PINK,
+    gray: Color.GRAY,
+    grey: Color.GRAY,
+    lightgray: Color.LIGHT_GRAY,
+    lightgrey: Color.LIGHT_GRAY,
+    darkgray: Color.DARK_GRAY,
+    darkgrey: Color.DARK_GRAY,
+    navy: Color.NAVY,
+    maroon: Color.MAROON,
+    olive: Color.OLIVE,
+    lime: Color.LIME,
+    aqua: Color.AQUA,
+    teal: Color.TEAL,
+    silver: Color.SILVER,
+    fuchsia: Color.FUCHSIA,
+});
+
+const BLEND_FUNCTIONS: Readonly<Record<ColorBlendMode, BlendFn>> = Object.freeze({
+    [ColorBlendMode.NORMAL]: (_a, b) => b,
+    [ColorBlendMode.MULTIPLY]: (a, b) => a * b,
+    [ColorBlendMode.SCREEN]: (a, b) => 1 - (1 - a) * (1 - b),
+    [ColorBlendMode.OVERLAY]: (a, b) => (a < 0.5 ? 2 * a * b : 1 - 2 * (1 - a) * (1 - b)),
+    [ColorBlendMode.SOFT_LIGHT]: (a, b) =>
+        b < 0.5 ? 2 * a * b + a * a * (1 - 2 * b) : 2 * a * (1 - b) + Math.sqrt(a) * (2 * b - 1),
+    [ColorBlendMode.HARD_LIGHT]: (a, b) => (b < 0.5 ? 2 * a * b : 1 - 2 * (1 - a) * (1 - b)),
+    [ColorBlendMode.COLOR_DODGE]: (a, b) => (b === 1 ? 1 : Math.min(1, a / (1 - b))),
+    [ColorBlendMode.COLOR_BURN]: (a, b) => (b === 0 ? 0 : Math.max(0, 1 - (1 - a) / b)),
+    [ColorBlendMode.DARKEN]: (a, b) => Math.min(a, b),
+    [ColorBlendMode.LIGHTEN]: (a, b) => Math.max(a, b),
+    [ColorBlendMode.DIFFERENCE]: (a, b) => Math.abs(a - b),
+    [ColorBlendMode.EXCLUSION]: (a, b) => a + b - 2 * a * b,
+    [ColorBlendMode.HUE]: (_a, b) => b,
+    [ColorBlendMode.SATURATION]: (_a, b) => b,
+    [ColorBlendMode.COLOR]: (_a, b) => b,
+    [ColorBlendMode.LUMINOSITY]: (_a, b) => b,
+});
 
 export class ColorComparer implements Comparer<Color> {
     private readonly mode: ColorComparisonMode;
