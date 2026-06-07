@@ -225,18 +225,12 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         v: Readonly<T>,
         out?: V
     ): MatrixOperationReturnType<V, Mat2> {
-        if (out) {
-            const outData = asMutableMatrix2Data((out as IMutableMat2).data);
-
-            outData[0] = 1;
-            outData[1] = v.x;
-            outData[2] = 0;
-            outData[3] = 1;
-
-            return out as MatrixOperationReturnType<V, Mat2>;
-        } else {
-            return new Mat2([1, v.x, 0, 1]) as MatrixOperationReturnType<V, Mat2>;
-        }
+        void v;
+        void out;
+        throw new Error(
+            'Mat2.translate is not supported: a 2x2 matrix cannot represent a 2D affine translation. ' +
+                'Use Mat3.translate for 2D affine transformations.'
+        );
     }
 
     static scale<T extends IVec2Like, V extends IMat2Like | undefined = undefined>(
