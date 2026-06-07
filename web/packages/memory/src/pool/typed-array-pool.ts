@@ -1,45 +1,5 @@
 import { MemoryPool, MemoryPoolOptions, PoolableObject } from './mempool';
-
-class CircularBuffer {
-    readonly #data: number[];
-    readonly #capacity: number;
-    #head: number = 0;
-    #size: number = 0;
-    #sum: number = 0;
-
-    constructor(capacity: number) {
-        this.#capacity = capacity;
-        this.#data = new Array(capacity);
-    }
-
-    push(value: number): void {
-        if (this.#size < this.#capacity) {
-            this.#data[(this.#head + this.#size) % this.#capacity] = value;
-            this.#size++;
-        } else {
-            this.#sum -= this.#data[this.#head]!;
-            this.#data[this.#head] = value;
-            this.#head = (this.#head + 1) % this.#capacity;
-        }
-        this.#sum += value;
-    }
-
-    toArray(): number[] {
-        const result: number[] = [];
-        for (let i = 0; i < this.#size; i++) {
-            result.push(this.#data[(this.#head + i) % this.#capacity]!);
-        }
-        return result;
-    }
-
-    get size(): number {
-        return this.#size;
-    }
-
-    get sum(): number {
-        return this.#sum;
-    }
-}
+import { CircularBuffer } from './internal/circular-buffer';
 
 export type TypedArrayType =
     | Float32Array
@@ -152,9 +112,9 @@ export class TypedArrayPool<T extends TypedArrayType> {
     };
     private readonly _buckets: readonly number[];
     private _performanceTracker: {
-        allocationTimes: CircularBuffer;
-        zeroingTimes: CircularBuffer;
-        copyTimes: CircularBuffer;
+        allocationTimes: CircularBuffer<number>;
+        zeroingTimes: CircularBuffer<number>;
+        copyTimes: CircularBuffer<number>;
     };
     private readonly _stats = {
         totalAllocations: 0,
@@ -204,9 +164,9 @@ export class TypedArrayPool<T extends TypedArrayType> {
 
         this._pools = new Map();
         this._performanceTracker = {
-            allocationTimes: new CircularBuffer(1000),
-            zeroingTimes: new CircularBuffer(1000),
-            copyTimes: new CircularBuffer(1000),
+            allocationTimes: new CircularBuffer<number>(1000),
+            zeroingTimes: new CircularBuffer<number>(1000),
+            copyTimes: new CircularBuffer<number>(1000),
         };
 
         this._initializePools();
@@ -314,9 +274,9 @@ export class TypedArrayPool<T extends TypedArrayType> {
         this._stats.oversizedRequests = 0;
         this._stats.alignmentMisses = 0;
 
-        this._performanceTracker.allocationTimes = new CircularBuffer(1000);
-        this._performanceTracker.zeroingTimes = new CircularBuffer(1000);
-        this._performanceTracker.copyTimes = new CircularBuffer(1000);
+        this._performanceTracker.allocationTimes = new CircularBuffer<number>(1000);
+        this._performanceTracker.zeroingTimes = new CircularBuffer<number>(1000);
+        this._performanceTracker.copyTimes = new CircularBuffer<number>(1000);
     }
 
     dispose(): void {
@@ -485,7 +445,7 @@ export class TypedArrayPool<T extends TypedArrayType> {
             if (t < min) min = t;
             if (t > max) max = t;
         }
-        const avg = buffer.sum / buffer.size;
+        const avg = buffer.reduce((a, b) => a + b, 0) / buffer.size;
 
         return { min, max, avg, samples: buffer.size };
     }
