@@ -22,5 +22,8 @@
     "keywords": [],
     "author": "",
     "license": "ISC",
-    "description": ""
+    "description": "",
+    "dependencies": {
+        "@axrone/hash": "^0.0.1"
+    }
 }

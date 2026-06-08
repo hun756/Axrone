@@ -1,3 +1,5 @@
+import { Djb2 } from '@axrone/hash';
+
 /**
  * Defines a generic comparer interface for comparing two values.
  * @template T - The type of the values to be compared.
@@ -261,13 +263,9 @@ export abstract class EquatableBase<T> implements IEquatable<T> {
      */
     static hashCode<T>(obj: T): number {
         const str = JSON.stringify(obj);
-        let hash = 0;
-        if (str.length === 0) return hash;
-        for (let i = 0; i < str.length; i++) {
-            const char = str.charCodeAt(i);
-            hash = (hash << 5) - hash + char;
-            hash |= 0;
-        }
-        return hash;
+        if (str.length === 0) return 0;
+        const h = new Djb2();
+        h.updateString(str);
+        return h.digest() as unknown as number;
     }
 }
