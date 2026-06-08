@@ -2,7 +2,7 @@ import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from
 import { EPSILON } from './common';
 import { clamp01 } from './clamp';
 import { IVec3Like } from './vec3';
-import { fmix32, hashCombineFloat } from './hash';
+import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
 export interface IQuatLike {
     x: number;
@@ -68,12 +68,16 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
     }
 
     getHashCode(): number {
-        let h = 2166136261;
-        h = hashCombineFloat(h, this.x);
-        h = hashCombineFloat(h, this.y);
-        h = hashCombineFloat(h, this.z);
-        h = hashCombineFloat(h, this.w);
-        return fmix32(h);
+        return new Fnv1a32()
+            .updateF32(this.x)
+            .updateF32(this.y)
+            .updateF32(this.z)
+            .updateF32(this.w)
+            .digest();
+    }
+
+    hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {
+        hasher.updateF32(this.x).updateF32(this.y).updateF32(this.z).updateF32(this.w);
     }
 
     static add<T extends IQuatLike, U extends IQuatLike, V extends IQuatLike>(
@@ -879,12 +883,11 @@ export class QuatEqualityComparer implements EqualityComparer<Quat> {
 
     hash(obj: Readonly<Quat>): number {
         if (!obj) return 0;
-
-        let h = 2166136261;
-        h = hashCombineFloat(h, obj.x);
-        h = hashCombineFloat(h, obj.y);
-        h = hashCombineFloat(h, obj.z);
-        h = hashCombineFloat(h, obj.w);
-        return fmix32(h);
+        return new Fnv1a32()
+            .updateF32(obj.x)
+            .updateF32(obj.y)
+            .updateF32(obj.z)
+            .updateF32(obj.w)
+            .digest();
     }
 }

@@ -4,7 +4,7 @@ import { IVec3Like } from './vec3';
 import { IVec4Like } from './vec4';
 import { IQuatLike } from './quat';
 import { clamp01 } from './clamp';
-import { fmix32, hashCombineFloat } from './hash';
+import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
 declare const __matrix4Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
@@ -212,11 +212,13 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
     }
 
     getHashCode(): number {
-        let h = 2166136261;
-        for (let i = 0; i < 16; i++) {
-            h = hashCombineFloat(h, this.data[i]!);
-        }
-        return fmix32(h);
+        const h = new Fnv1a32();
+        for (let i = 0; i < 16; i++) h.updateF32(this.data[i]!);
+        return h.digest();
+    }
+
+    hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {
+        for (let i = 0; i < 16; i++) hasher.updateF32(this.data[i]!);
     }
 
     static multiply<

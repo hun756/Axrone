@@ -2,7 +2,7 @@ import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from
 import { EPSILON, HALF_PI, PI_2 } from './common';
 import { IVec2Like } from './vec2';
 import { clamp01 } from './clamp';
-import { fmix32, hashCombineFloat } from './hash';
+import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
 declare const __matrix2Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
@@ -111,11 +111,13 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
     }
 
     getHashCode(): number {
-        let h = 2166136261;
-        for (let i = 0; i < 4; i++) {
-            h = hashCombineFloat(h, this.data[i]!);
-        }
-        return fmix32(h);
+        const h = new Fnv1a32();
+        for (let i = 0; i < 4; i++) h.updateF32(this.data[i]!);
+        return h.digest();
+    }
+
+    hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {
+        for (let i = 0; i < 4; i++) hasher.updateF32(this.data[i]!);
     }
 
     static multiply<

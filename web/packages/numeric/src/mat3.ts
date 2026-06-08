@@ -3,7 +3,7 @@ import { EPSILON, HALF_PI, PI_2 } from './common';
 import { IVec2Like } from './vec2';
 import { IVec3Like } from './vec3';
 import { clamp01 } from './clamp';
-import { fmix32, hashCombineFloat } from './hash';
+import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
 declare const __matrix3Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
@@ -148,11 +148,13 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
     }
 
     getHashCode(): number {
-        let h = 2166136261;
-        for (let i = 0; i < 9; i++) {
-            h = hashCombineFloat(h, this.data[i]!);
-        }
-        return fmix32(h);
+        const h = new Fnv1a32();
+        for (let i = 0; i < 9; i++) h.updateF32(this.data[i]!);
+        return h.digest();
+    }
+
+    hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {
+        for (let i = 0; i < 9; i++) hasher.updateF32(this.data[i]!);
     }
 
     static multiply<

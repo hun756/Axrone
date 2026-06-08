@@ -1,7 +1,7 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
 import { EPSILON, HALF_PI, PI_2 } from './common';
 import { clampNegOneOne, clamp01 } from './clamp';
-import { fmix32, hashCombineFloat } from './hash';
+import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 import {
     sampleStandardNormal,
     sampleNormalInRange,
@@ -72,11 +72,11 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     }
 
     getHashCode(): number {
-        let h = 2166136261;
-        h = hashCombineFloat(h, this.x);
-        h = hashCombineFloat(h, this.y);
-        h = hashCombineFloat(h, this.z);
-        return fmix32(h);
+        return new Fnv1a32().updateF32(this.x).updateF32(this.y).updateF32(this.z).digest();
+    }
+
+    hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {
+        hasher.updateF32(this.x).updateF32(this.y).updateF32(this.z);
     }
 
     static add<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
@@ -1180,11 +1180,6 @@ export class Vec3EqualityComparer implements EqualityComparer<Vec3> {
 
     hash(obj: Readonly<Vec3>): number {
         if (!obj) return 0;
-
-        let h = 2166136261;
-        h = hashCombineFloat(h, obj.x);
-        h = hashCombineFloat(h, obj.y);
-        h = hashCombineFloat(h, obj.z);
-        return fmix32(h);
+        return new Fnv1a32().updateF32(obj.x).updateF32(obj.y).updateF32(obj.z).digest();
     }
 }
