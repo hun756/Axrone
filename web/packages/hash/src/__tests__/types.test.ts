@@ -29,8 +29,14 @@ describe('hash/types — branded types and type guards', () => {
 
         it('truncates to 32-bit unsigned', () => {
             expect(asHash32(0x100000000)).toBe(0);
+        });
+
+        it('handles -1', () => {
             expect(asHash32(-1)).toBe(4294967295);
-            expect(asHash32(0xffffffffffffffff >>> 0)).toBe(0xffffffff);
+        });
+
+        it('handles 0xffffffffffffffff', () => {
+            expect(asHash32(0xffffffffffffffff)).toBe(0xffffffff);
         });
 
         it('rejects non-finite values', () => {
