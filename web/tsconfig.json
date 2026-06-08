@@ -18,6 +18,12 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
+      "@axrone/hash": [
+        "./packages/hash/src/index.ts"
+      ],
+      "@axrone/hash/*": [
+        "./packages/hash/src/*"
+      ],
       "@axrone/asset-core": [
         "./packages/asset-core/src/index.ts"
       ],
