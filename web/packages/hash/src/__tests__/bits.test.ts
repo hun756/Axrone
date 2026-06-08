@@ -22,41 +22,57 @@ import {
     writeU16BE,
 } from '../hash/bits';
 
+const U32 = (n: number): number => n >>> 0;
+
 describe('hash/bits — bit/byte operations', () => {
     describe('float32ToBits / bitsToFloat32', () => {
-        it('round-trips finite numbers', () => {
-            for (const v of [0, 1, -1, 0.5, -0.5, 1.5, -1.5, 3.14159, -3.14159, 1e10, -1e10, 1e-10, 100, -100]) {
+        it('round-trips finite numbers (with float32 precision loss)', () => {
+            const values: Array<[number, number]> = [
+                [0, 0],
+                [1, 1],
+                [-1, -1],
+                [0.5, 0.5],
+                [-0.5, -0.5],
+                [1.5, 1.5],
+                [-1.5, -1.5],
+                [3.14159, 3.141590118408203], // float32 round
+                [-3.14159, -3.141590118408203],
+                [1e10, 1e10],
+                [-1e10, -1e10],
+                [1e-10, 1.000000013351432e-10], // float32 round
+                [100, 100],
+                [-100, -100],
+            ];
+            for (const [v, expected] of values) {
                 const bits = float32ToBits(v);
                 const back = bitsToFloat32(bits);
-                expect(back).toBe(v);
+                expect(back).toBe(expected);
             }
         });
 
         it('handles special floats', () => {
-            const posInf = float32ToBits(Infinity);
-            const negInf = float32ToBits(-Infinity);
-            expect(posInf).toBe(0x7f800000);
-            expect(negInf).toBe(0xff800000);
-            const nanBits = float32ToBits(NaN);
+            expect(U32(float32ToBits(Infinity))).toBe(0x7f800000);
+            expect(U32(float32ToBits(-Infinity))).toBe(0xff800000);
+            const nanBits = U32(float32ToBits(NaN));
             expect(nanBits & 0x7f800000).toBe(0x7f800000);
             expect(nanBits & 0x007fffff).not.toBe(0);
         });
 
         it('handles zero and -zero', () => {
-            expect(float32ToBits(0)).toBe(0);
-            expect(float32ToBits(-0)).toBe(0x80000000);
+            expect(U32(float32ToBits(0))).toBe(0);
+            expect(U32(float32ToBits(-0))).toBe(0x80000000);
         });
 
         it('handles small subnormal numbers', () => {
             const tiny = 1.4e-45;
-            expect(bitsToFloat32(float32ToBits(tiny))).toBe(tiny);
+            expect(bitsToFloat32(float32ToBits(tiny))).toBe(1.401298464324817e-45);
         });
 
         it('produces known IEEE 754 representations', () => {
-            expect(float32ToBits(1.0)).toBe(0x3f800000);
-            expect(float32ToBits(2.0)).toBe(0x40000000);
-            expect(float32ToBits(0.5)).toBe(0x3f000000);
-            expect(float32ToBits(-0.0)).toBe(0x80000000);
+            expect(U32(float32ToBits(1.0))).toBe(0x3f800000);
+            expect(U32(float32ToBits(2.0))).toBe(0x40000000);
+            expect(U32(float32ToBits(0.5))).toBe(0x3f000000);
+            expect(U32(float32ToBits(-0.0))).toBe(0x80000000);
         });
     });
 
@@ -75,7 +91,7 @@ describe('hash/bits — bit/byte operations', () => {
             expect(infHi).toBe(0x7ff00000);
             const [ninfLo, ninfHi] = float64ToBitsPair(-Infinity);
             expect(ninfLo).toBe(0);
-            expect(ninfHi).toBe(0xfff00000);
+            expect(U32(ninfHi)).toBe(0xfff00000);
         });
 
         it('produces known IEEE 754 representations', () => {
