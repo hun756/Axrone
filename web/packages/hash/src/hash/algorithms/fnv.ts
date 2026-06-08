@@ -1,6 +1,5 @@
 import type { BytesLike } from '../../../types';
 import { float32ToBits, float64ToBitsPair, writeU32LE } from '../bits';
-import { fmix32 } from '../mixers';
 import { asHash32, asHash64, asSeed32, type Hash32, type Hash64, type HashValue, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
 
@@ -117,7 +116,7 @@ abstract class Fnv1a32Base implements IHasher<Hash32> {
 
     digest(): Hash32 {
         this._finalized = true;
-        return asHash32(fmix32(this._h));
+        return asHash32(this._h);
     }
 
     digestBytes(): Uint8Array {
@@ -370,13 +369,7 @@ export class Fnv1a64 implements IHasher<Hash64> {
 
     digest(): Hash64 {
         this._finalized = true;
-        let h = this._h;
-        h ^= h >> 33n;
-        h = (h * 0xff51afd7ed558ccdn) & 0xffffffffffffffffn;
-        h ^= h >> 33n;
-        h = (h * 0xc4ceb9fe1a85ec53n) & 0xffffffffffffffffn;
-        h ^= h >> 33n;
-        return asHash64(h);
+        return asHash64(this._h);
     }
 
     digestBytes(): Uint8Array {
