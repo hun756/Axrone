@@ -32,7 +32,8 @@ describe('hash/types — branded types and type guards', () => {
         });
 
         it('handles -1', () => {
-            expect(asHash32(-1)).toBe(0xffffffff);
+            const r = asHash32(-1);
+            expect(r).toEqual(4294967295);
         });
 
         it('handles 0xffffffffffffffff', () => {
