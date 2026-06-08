@@ -44,5 +44,8 @@
     "license": "MIT",
     "publishConfig": {
         "access": "public"
+    },
+    "dependencies": {
+        "@axrone/hash": "^0.0.1"
     }
 }
