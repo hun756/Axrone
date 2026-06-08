@@ -138,7 +138,7 @@ describe('xxHash64', () => {
         it('different seeds give different output', () => {
             const a = new XxHash64();
             a.updateBytes(enc.encode('test'));
-            const b = new XxHash64(12345n);
+            const b = new XxHash64(12345);
             b.updateBytes(enc.encode('test'));
             expect((a.digest() as unknown as bigint)).not.toBe((b.digest() as unknown as bigint));
         });

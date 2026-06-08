@@ -143,7 +143,7 @@ describe('Murmur2 64-bit', () => {
     it('different seeds give different output', () => {
         const a = new Murmur2_64();
         a.updateBytes(enc.encode('test'));
-        const b = new Murmur2_64(12345n as any);
+        const b = new Murmur2_64(12345 as any);
         b.updateBytes(enc.encode('test'));
         expect((a.digest() as unknown as bigint)).not.toBe((b.digest() as unknown as bigint));
     });

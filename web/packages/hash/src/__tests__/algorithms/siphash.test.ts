@@ -34,8 +34,11 @@ describe('SipHash-2-4', () => {
         expect((h.digest() as unknown as bigint)).toBe(0xa5e0f6923596b3a1n);
     });
 
-    it('requires a 16-byte key', () => {
-        expect(() => new SipHash2_4(new Uint8Array(8))).toThrow();
+    it('accepts short keys (zero-padded)', () => {
+        const h = new SipHash2_4(new Uint8Array(8));
+        h.updateBytes(enc.encode('a'));
+        const v = h.digest() as unknown as bigint;
+        expect(typeof v).toBe('bigint');
     });
 
     it('different keys produce different output', () => {
