@@ -1,4 +1,5 @@
 import { Vec2, Vec3, IVec2Like, IVec3Like, EPSILON } from '@axrone/numeric';
+import { Fnv1a32 } from '@axrone/hash';
 import type { IRaycastHit2D, IRaycastHit3D, LayerMask, RaycastFlags } from '../types/raycast-types';
 import type { BodyId, ShapeId } from '../types/primitives';
 
@@ -80,18 +81,14 @@ export class RaycastCache2D {
         maxDistance: number,
         layerMask: LayerMask
     ): number {
-        let hash = 0;
-        hash = (hash * 31 + this._floatToInt(origin.x)) | 0;
-        hash = (hash * 31 + this._floatToInt(origin.y)) | 0;
-        hash = (hash * 31 + this._floatToInt(direction.x)) | 0;
-        hash = (hash * 31 + this._floatToInt(direction.y)) | 0;
-        hash = (hash * 31 + this._floatToInt(maxDistance)) | 0;
-        hash = (hash * 31 + (layerMask as number)) | 0;
-        return hash;
-    }
-
-    private _floatToInt(value: number): number {
-        return Math.floor(value * 1000);
+        const h = new Fnv1a32();
+        h.updateF32(origin.x);
+        h.updateF32(origin.y);
+        h.updateF32(direction.x);
+        h.updateF32(direction.y);
+        h.updateF32(maxDistance);
+        h.updateU32(layerMask as number);
+        return h.digest() as unknown as number;
     }
 
     private _evictOldest(): void {
@@ -189,20 +186,16 @@ export class RaycastCache3D {
         maxDistance: number,
         layerMask: LayerMask
     ): number {
-        let hash = 0;
-        hash = (hash * 31 + this._floatToInt(origin.x)) | 0;
-        hash = (hash * 31 + this._floatToInt(origin.y)) | 0;
-        hash = (hash * 31 + this._floatToInt(origin.z)) | 0;
-        hash = (hash * 31 + this._floatToInt(direction.x)) | 0;
-        hash = (hash * 31 + this._floatToInt(direction.y)) | 0;
-        hash = (hash * 31 + this._floatToInt(direction.z)) | 0;
-        hash = (hash * 31 + this._floatToInt(maxDistance)) | 0;
-        hash = (hash * 31 + (layerMask as number)) | 0;
-        return hash;
-    }
-
-    private _floatToInt(value: number): number {
-        return Math.floor(value * 1000);
+        const h = new Fnv1a32();
+        h.updateF32(origin.x);
+        h.updateF32(origin.y);
+        h.updateF32(origin.z);
+        h.updateF32(direction.x);
+        h.updateF32(direction.y);
+        h.updateF32(direction.z);
+        h.updateF32(maxDistance);
+        h.updateU32(layerMask as number);
+        return h.digest() as unknown as number;
     }
 
     private _evictOldest(): void {
