@@ -61,6 +61,7 @@
         "test": "vitest run"
     },
     "dependencies": {
+        "@axrone/hash": "^0.0.1",
         "@axrone/numeric": "^0.0.1"
     }
 }

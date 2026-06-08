@@ -1,4 +1,5 @@
 import type { IVec2Like } from '@axrone/numeric';
+import { Fnv1a32 } from '@axrone/hash';
 import type {
     GradientSpread,
     ShapeApproximationOptions,
@@ -261,12 +262,9 @@ export const applyGradientSpread = (value: number, spread: GradientSpread): numb
 };
 
 export const hashString = (value: string): string => {
-    let hash = 2166136261;
-    for (let index = 0; index < value.length; index++) {
-        hash ^= value.charCodeAt(index);
-        hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(16).padStart(8, '0');
+    const h = new Fnv1a32();
+    h.updateString(value);
+    return h.digestHex();
 };
 
 export const formatPointKey = (point: Readonly<IVec2Like>): string =>
