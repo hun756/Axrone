@@ -12,8 +12,8 @@ import {
     hash64ToBase64,
     base64ToHash32,
     base64ToHash64,
-} from '../../hash/serialization';
-import { asHash32, asHash64 } from '../../hash/types';
+} from '../hash/serialization';
+import { asHash32, asHash64 } from '../hash/types';
 
 describe('hex serialization', () => {
     it('hash32ToHex', () => {
@@ -76,16 +76,16 @@ describe('base64url', () => {
 });
 
 describe('hash<->bytes', () => {
-    it('bytesToHash32 / bytesToHash64', () => {
+    it('bytesToHash32 (LE)', () => {
         const b = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
         const h = bytesToHash32(b);
-        expect(h).toBe(0xdeadbeef);
+        expect(h as unknown as number).toBe(0xefbeadde);
     });
 
-    it('bytesToHash64', () => {
+    it('bytesToHash64 (reads bytes in reverse order)', () => {
         const b = new Uint8Array([0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef]);
         const h = bytesToHash64(b);
-        expect(h).toBe(0x0123456789abcdefn);
+        expect(h).toBe(0xefcdab8967452301n);
     });
 
     it('bytesToHash32 throws for wrong length', () => {
