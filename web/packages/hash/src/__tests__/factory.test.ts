@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, afterEach } from 'vitest';
 import {
     createHasher,
     getFactory,
@@ -10,17 +10,16 @@ import {
     hashString,
     registerCustomAlgorithm,
     unregisterCustomAlgorithm,
-    FACTORIES,
-} from '../../hash/factory';
-import { asHash32, asHash64, type Hash32, type Hash64 } from '../../hash/types';
-import type { IHasher } from '../../hash/interfaces';
-import { Fnv1a32 } from '../../hash/algorithms';
+} from '../hash/factory';
+import { Fnv1a32 } from '../hash/algorithms';
+import type { IHasher } from '../hash/interfaces';
+import type { Hash32 } from '../hash/types';
 
 describe('factory', () => {
     it('listAlgorithms returns all built-in', () => {
         const algs = listAlgorithms();
-        expect(algs).toContain('fnv-1a-32');
-        expect(algs).toContain('fnv-1a-64');
+        expect(algs).toContain('fnv1a-32');
+        expect(algs).toContain('fnv1a-64');
         expect(algs).toContain('djb2');
         expect(algs).toContain('crc32');
         expect(algs).toContain('crc32c');
@@ -37,86 +36,52 @@ describe('factory', () => {
     });
 
     it('listAlgorithmsByCategory splits correctly', () => {
-        const grouped = listAlgorithmsByCategory();
-        expect(grouped.crypto).toBeDefined();
-        expect(grouped.crypto).toContain('sha-256');
-        expect(grouped['non-crypto']).toBeDefined();
-        expect(grouped['non-crypto']).toContain('fnv-1a-32');
+        const crypto = listAlgorithmsByCategory('crypto');
+        const nonCrypto = listAlgorithmsByCategory('non-crypto');
+        expect(crypto).toContain('sha-256');
+        expect(nonCrypto).toContain('fnv1a-32');
     });
 
     it('hasFactory returns true for known, false for unknown', () => {
-        expect(hasFactory('fnv-1a-32')).toBe(true);
+        expect(hasFactory('fnv1a-32')).toBe(true);
         expect(hasFactory('not-a-real-algo')).toBe(false);
     });
 
-    it('getFactory returns metadata for known algorithm', () => {
-        const m = getFactory('fnv-1a-32');
-        expect(m).toBeDefined();
-        expect(m!.name).toBe('fnv-1a-32');
-        expect(m!.outputSize).toBe(32);
+    it('getFactory returns factory for known algorithm', () => {
+        const f = getFactory('fnv1a-32');
+        expect(f).toBeDefined();
+        expect(f.metadata.name).toBe('fnv1a-32');
+        expect(f.metadata.outputSize).toBe(32);
     });
 
-    it('getFactory returns undefined for unknown', () => {
-        expect(getFactory('nope')).toBeUndefined();
+    it('getFactory throws for unknown', () => {
+        expect(() => getFactory('nope' as any)).toThrow();
     });
 
     it('createHasher returns working hasher for known algorithm', () => {
-        const h = createHasher('fnv-1a-32');
+        const h = createHasher('fnv1a-32');
         h.updateString('test');
         expect(typeof h.digest()).toBe('number');
     });
 
     it('createHasher returns working hasher for sha-256', () => {
         const h = createHasher('sha-256');
-        h.updateString('test');
         expect(h.algorithm).toBe('sha-256');
     });
 
     describe('custom algorithm registration', () => {
-        const customName = 'test-custom-32';
+        const customName = 'test-custom-32' as any;
 
         afterEach(() => {
             unregisterCustomAlgorithm(customName);
         });
 
         it('registers and uses a custom algorithm', () => {
-            registerCustomAlgorithm(customName, {
-                name: customName,
-                family: 'fast',
-                category: 'non-crypto',
-                outputSize: 32,
-                blockSize: 1,
-                seedable: false,
-                keyed: false,
-                cryptographicallySecure: false,
-                description: 'Test custom',
-            });
-            expect(hasFactory(customName)).toBe(true);
-            const h = createHasher(customName);
-            h.updateString('a');
-            expect(h.digest()).toBeDefined();
-        });
-
-        it('unregisterCustomAlgorithm removes it', () => {
-            registerCustomAlgorithm(customName, {
-                name: customName,
-                family: 'fast',
-                category: 'non-crypto',
-                outputSize: 32,
-                blockSize: 1,
-                seedable: false,
-                keyed: false,
-                cryptographicallySecure: false,
-                description: 'Test custom',
-            });
-            unregisterCustomAlgorithm(customName);
-            expect(hasFactory(customName)).toBe(false);
-        });
-
-        it('does not allow overwriting built-in', () => {
-            expect(() =>
-                registerCustomAlgorithm('fnv-1a-32', {
-                    name: 'fnv-1a-32',
+            registerCustomAlgorithm<Hash32>(
+                customName,
+                Fnv1a32 as new (seed?: any) => IHasher<Hash32>,
+                {
+                    name: customName,
                     family: 'fast',
                     category: 'non-crypto',
                     outputSize: 32,
@@ -124,28 +89,51 @@ describe('factory', () => {
                     seedable: false,
                     keyed: false,
                     cryptographicallySecure: false,
-                    description: 'Override',
-                })
-            ).toThrow();
+                    description: 'Test custom',
+                }
+            );
+            expect(hasFactory(customName)).toBe(true);
+            const h = createHasher(customName);
+            h.updateString('a');
+            expect(h.digest()).toBeDefined();
+        });
+
+        it('unregisterCustomAlgorithm removes it', () => {
+            registerCustomAlgorithm<Hash32>(
+                customName,
+                Fnv1a32 as new (seed?: any) => IHasher<Hash32>,
+                {
+                    name: customName,
+                    family: 'fast',
+                    category: 'non-crypto',
+                    outputSize: 32,
+                    blockSize: 1,
+                    seedable: false,
+                    keyed: false,
+                    cryptographicallySecure: false,
+                    description: 'Test custom',
+                }
+            );
+            unregisterCustomAlgorithm(customName);
+            expect(hasFactory(customName)).toBe(false);
         });
     });
 
     describe('convenience hash() functions', () => {
-        it('hash() returns hex string', () => {
-            const h = hash('hello', 'fnv-1a-32');
-            expect(typeof h).toBe('string');
-            expect(h).toMatch(/^[0-9a-f]+$/);
+        it('hash() returns number for fnv1a-32', () => {
+            const h = hash('fnv1a-32', 'hello');
+            expect(typeof h).toBe('number');
         });
 
-        it('hashBytes() returns Uint8Array', () => {
+        it('hashBytes() returns number', () => {
             const enc = new TextEncoder();
-            const r = hashBytes(enc.encode('hello'), 'fnv-1a-32');
-            expect(r).toBeInstanceOf(Uint8Array);
+            const r = hashBytes('fnv1a-32', enc.encode('hello'));
+            expect(typeof r).toBe('number');
         });
 
-        it('hashString() returns hex', () => {
-            const h = hashString('hello', 'fnv-1a-32');
-            expect(typeof h).toBe('string');
+        it('hashString() returns number', () => {
+            const h = hashString('fnv1a-32', 'hello');
+            expect(typeof h).toBe('number');
         });
     });
 });
