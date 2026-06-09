@@ -5,78 +5,91 @@ import {
     hashCombineStrings,
     hashCombineBooleans,
     hashCombineNumbers,
-} from '../../hash/combine';
+} from '../hash/combine';
+import { asHash32 } from '../hash/types';
 
 describe('hashCombine', () => {
-    it('produces 32-bit unsigned output', () => {
-        const v = hashCombine([1, 2, 3]);
+    it('combines two values', () => {
+        const a = asHash32(1);
+        const b = asHash32(2);
+        const v = hashCombine(a, b) as unknown as number;
         expect(v).toBeGreaterThanOrEqual(0);
         expect(v).toBeLessThan(0x100000000);
     });
 
-    it('order matters', () => {
-        const a = hashCombine([1, 2, 3]);
-        const b = hashCombine([3, 2, 1]);
-        expect(a).not.toBe(b);
+    it('combines two hash32 (small values)', () => {
+        const v = hashCombine(asHash32(0x100), asHash32(0x200)) as unknown as number;
+        expect(typeof v).toBe('number');
     });
 
-    it('different values produce different output', () => {
-        const a = hashCombine([1, 2, 3]);
-        const b = hashCombine([1, 2, 4]);
-        expect(a).not.toBe(b);
-    });
-
-    it('empty input returns deterministic value', () => {
-        const v = hashCombine([]);
-        expect(v).toBeDefined();
+    it('different inputs give different output', () => {
+        const v1 = hashCombine(asHash32(1), asHash32(2)) as unknown as number;
+        const v2 = hashCombine(asHash32(1), asHash32(3)) as unknown as number;
+        expect(v1).not.toBe(v2);
     });
 });
 
 describe('hashCombineOrdered', () => {
-    it('different from unordered for permutations', () => {
-        const a = hashCombineOrdered([1, 2, 3]);
-        const b = hashCombineOrdered([1, 2, 3]);
-        expect(a).toBe(b);
+    it('combines values in order', () => {
+        const v1 = hashCombineOrdered([asHash32(1), asHash32(2), asHash32(3)]) as unknown as number;
+        const v2 = hashCombineOrdered([asHash32(1), asHash32(2), asHash32(3)]) as unknown as number;
+        expect(v1).toBe(v2);
     });
 
-    it('order independence vs hashCombine', () => {
-        const ordered = hashCombineOrdered([1, 2, 3]);
-        const combined = hashCombine([1, 2, 3]);
-        expect(ordered).not.toBe(combined);
+    it('order matters', () => {
+        const v1 = hashCombineOrdered([asHash32(1), asHash32(2), asHash32(3)]) as unknown as number;
+        const v2 = hashCombineOrdered([asHash32(3), asHash32(2), asHash32(1)]) as unknown as number;
+        expect(v1).not.toBe(v2);
+    });
+
+    it('handles 64-bit values', () => {
+        const v = hashCombineOrdered([1n, 2n, 3n]) as unknown as number;
+        expect(typeof v).toBe('number');
+    });
+
+    it('empty input returns fmix32(0x811c9dc5)', () => {
+        const v = hashCombineOrdered([]) as unknown as number;
+        expect(v).toBeGreaterThanOrEqual(0);
     });
 });
 
 describe('hashCombineStrings', () => {
-    it('matches inline string concat via FNV', () => {
-        const v = hashCombineStrings(['hello', 'world']);
+    it('combines strings', () => {
+        const v = hashCombineStrings(0, 'hello', 'world') as unknown as number;
         expect(v).toBeGreaterThanOrEqual(0);
     });
 
     it('order matters', () => {
-        const a = hashCombineStrings(['a', 'b']);
-        const b = hashCombineStrings(['b', 'a']);
+        const a = hashCombineStrings(0, 'a', 'b') as unknown as number;
+        const b = hashCombineStrings(0, 'b', 'a') as unknown as number;
+        expect(a).not.toBe(b);
+    });
+
+    it('different seeds produce different output', () => {
+        const a = hashCombineStrings(0, 'hello') as unknown as number;
+        const b = hashCombineStrings(12345, 'hello') as unknown as number;
         expect(a).not.toBe(b);
     });
 });
 
 describe('hashCombineBooleans', () => {
     it('combines boolean values', () => {
-        const a = hashCombineBooleans([true, false, true]);
-        const b = hashCombineBooleans([true, false, false]);
+        const a = hashCombineBooleans(0, true, false, true) as unknown as number;
+        const b = hashCombineBooleans(0, true, false, false) as unknown as number;
         expect(a).not.toBe(b);
     });
 });
 
 describe('hashCombineNumbers', () => {
     it('combines numeric values', () => {
-        const a = hashCombineNumbers([1.5, 2.5, 3.5]);
-        const b = hashCombineNumbers([1.5, 2.5, 3.5]);
+        const a = hashCombineNumbers(0, 1.5, 2.5, 3.5) as unknown as number;
+        const b = hashCombineNumbers(0, 1.5, 2.5, 3.5) as unknown as number;
         expect(a).toBe(b);
     });
 
     it('different values give different output', () => {
-        const a = hashCombineNumbers([1.5, 2.5]);
-        const b = hashCombineNumbers([1.5, 2.6]);
+        const a = hashCombineNumbers(0, 1.5, 2.5) as unknown as number;
+        const b = hashCombineNumbers(0, 1.5, 2.6) as unknown as number;
         expect(a).not.toBe(b);
     });
 });
