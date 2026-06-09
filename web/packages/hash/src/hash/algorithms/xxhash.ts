@@ -68,25 +68,15 @@ export class XxHash32 implements IHasher<Hash32> {
     }
 
     private _consume(input: number): void {
-        switch (this._memSize) {
-            case 0:
-                this._mem[0] = input;
-                break;
-            case 1:
-                this._mem[1] = input;
-                break;
-            case 2:
-                this._mem[2] = input;
-                break;
-            case 3:
-                this._mem[3] = input;
-                this._v1 = this._round(this._v1, this._mem[0]!);
-                this._v2 = this._round(this._v2, this._mem[1]!);
-                this._v3 = this._round(this._v3, this._mem[2]!);
-                this._v4 = this._round(this._v4, this._mem[3]!);
-                break;
+        this._mem[this._memSize] = input;
+        this._memSize++;
+        if (this._memSize === 4) {
+            this._v1 = this._round(this._v1, this._mem[0]!);
+            this._v2 = this._round(this._v2, this._mem[1]!);
+            this._v3 = this._round(this._v3, this._mem[2]!);
+            this._v4 = this._round(this._v4, this._mem[3]!);
+            this._memSize = 0;
         }
-        this._memSize = (this._memSize + 1) & 3;
     }
 
     updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {
