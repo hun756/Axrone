@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { Fnv1a32, XxHash32, Murmur3_32, Djb2, Crc32 } from '../../hash/algorithms';
-import { structHash, fieldNumber, fieldU32, fieldBoolean } from '../../hash/struct';
-import type { IHasher } from '../../hash/interfaces';
-import type { Hash32, HashValue } from '../../hash/types';
+import { Fnv1a32, XxHash32, Murmur3_32, Djb2, Crc32 } from '../hash/algorithms';
+import { structHash, fieldNumber, fieldU32, fieldBoolean } from '../hash/struct';
+import type { IHasher } from '../hash/interfaces';
+import type { Hash32, HashValue } from '../hash/types';
 
 interface Vec2 { x: number; y: number }
 interface Vec3 { x: number; y: number; z: number }
