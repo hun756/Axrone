@@ -1,3 +1,42 @@
+// Result monad - Ok/Err pattern for functional error handling
+export {
+    ResultError,
+    Result,
+    Ok,
+    Err,
+    ok,
+    err,
+    isResult,
+    isOk,
+    isErr,
+    assertOk,
+    assertErr,
+    fromThrowable,
+    tryCatch,
+    tryCatchAsync,
+    fromPromise,
+    fromNullable,
+    fromOption,
+    fromJSON,
+    all,
+    allT,
+    any,
+    partition,
+    combine,
+    retry,
+    retryAsync,
+    AsyncResult,
+} from './result';
+
+export type {
+    IResult,
+    UnwrapOk,
+    UnwrapErr,
+    UnwrapOkTuple,
+    UnwrapErrTuple,
+} from './result';
+
+// Types
 export type {
     Primitive,
     TypedArray,
@@ -71,6 +110,7 @@ export type { ICloneable } from './clone/cloner';
 export type { CloneSerializableOptions } from './clone/serializable-clone';
 export { cloneData, deepClone } from './clone/deep-clone';
 export { cloneSerializable } from './clone/serializable-clone';
+
 export type { Disposable, IDisposable } from './disposable';
 export { deepFreeze } from './freeze';
 export { isPlainObject, isRecord } from './object';
