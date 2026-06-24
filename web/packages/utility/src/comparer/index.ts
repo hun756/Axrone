@@ -80,6 +80,4 @@ export type {
     FloatingPointUtils,
 } from './fp-compare';
 
-export { CustomComparer, ObjectPropertyComparer, ComparerFactory, EquatableBase } from './comparer-legacy';
-export type { IEquatable } from './comparer-legacy';
-export { FpCompare } from './fp-compare-legacy';
+
