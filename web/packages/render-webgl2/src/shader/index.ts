@@ -28,6 +28,15 @@ export type {
     UniformScalarValue,
 } from './uniform-cache';
 
+export type {
+    ShaderSourceOptimizationOptions,
+    ShaderSourceOptimizationResult,
+} from './source-optimizer';
+export {
+    optimizeShaderSource,
+    optimizeShaderSources,
+} from './source-optimizer';
+
 export {
     generateVersionDirective,
     generatePrecisionDirective,

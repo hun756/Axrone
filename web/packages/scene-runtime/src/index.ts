@@ -233,4 +233,5 @@ export {
 	ScenePrefabError,
 	ScenePrefabResolutionError,
 	ScenePrefabValidationError,
+	SceneShaderError,
 } from './errors';
