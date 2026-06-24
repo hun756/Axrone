@@ -5,6 +5,7 @@ import {
     POST_PROCESS_FRAGMENT_SHADER_SOURCE,
 } from '@axrone/render-webgl2/internal/render-pass-shaders';
 import { optimizeShaderSource } from '@axrone/render-webgl2/shader/source-optimizer';
+import { compileRenderShaderEffect } from '@axrone/render-core/shader-effect';
 import { SceneShaderFactory } from '@axrone/scene-runtime/scene-shader-factory';
 import type { SceneShaderResource } from '@axrone/scene-runtime/shader-registry';
 import type { SceneShaderDefinition } from '@axrone/scene-runtime/types';
@@ -498,6 +499,66 @@ const runBenchmark = (config: BenchmarkConfig): BenchmarkReport => {
     return report;
 };
 
+interface EffectCompileReport {
+    readonly generatedAt: string;
+    readonly shaders: readonly {
+        readonly id: string;
+        readonly vertexSourceChars: number;
+        readonly fragmentSourceChars: number;
+        readonly hasPrecompiledSources: boolean;
+        readonly effectCompileMs: MetricSummary;
+    }[];
+    readonly summary: {
+        readonly totalWastedMsPerCreateCall: number;
+        readonly shadersWithRedundantCompile: number;
+    };
+}
+
+const measureEffectCompileCost = (iterations = 500): EffectCompileReport => {
+    const defs = collectSceneDefinitions();
+    const shaders = defs.map((def) => {
+        const compiled = def.effect ? compileRenderShaderEffect(def.effect) : null;
+        const vertexSource = def.vertexSource ?? compiled?.vertexSource ?? '';
+        const fragmentSource = def.fragmentSource ?? compiled?.fragmentSource ?? '';
+
+        const hasPrecompiledSources = Boolean(def.vertexSource && def.fragmentSource);
+
+        const times: number[] = [];
+        for (let w = 0; w < 50; w += 1) {
+            if (def.effect) compileRenderShaderEffect(def.effect);
+        }
+        for (let i = 0; i < iterations; i += 1) {
+            if (!def.effect) {
+                times.push(0);
+                continue;
+            }
+            const start = performance.now();
+            compileRenderShaderEffect(def.effect);
+            times.push(performance.now() - start);
+        }
+
+        return {
+            id: def.id,
+            vertexSourceChars: vertexSource.length,
+            fragmentSourceChars: fragmentSource.length,
+            hasPrecompiledSources,
+            effectCompileMs: computeStats(times),
+        };
+    });
+
+    const wastedShaders = shaders.filter((s) => s.hasPrecompiledSources && s.effectCompileMs.mean > 0);
+    const totalWasted = wastedShaders.reduce((sum, s) => sum + s.effectCompileMs.mean, 0);
+
+    return {
+        generatedAt: new Date().toISOString(),
+        shaders,
+        summary: {
+            totalWastedMsPerCreateCall: Number(totalWasted.toFixed(4)),
+            shadersWithRedundantCompile: wastedShaders.length,
+        },
+    };
+};
+
 interface ShaderBenchmarkApi {
     readonly isReady: true;
     readonly getEnvironment: () => ReturnType<typeof getEnvironment>;
@@ -509,6 +570,7 @@ interface ShaderBenchmarkApi {
         duplicateCount?: number;
     }) => Promise<FactoryBenchmarkReport>;
     readonly getShaderSources: () => { id: string; vertexChars: number; fragmentChars: number }[];
+    readonly measureEffectCompileCost: (iterations?: number) => EffectCompileReport;
 }
 
 interface ComparisonEntry {
@@ -829,6 +891,7 @@ const api: ShaderBenchmarkApi = {
             fragmentChars: sample.fragmentSource.length,
         }));
     },
+    measureEffectCompileCost,
 };
 
 declare global {

@@ -366,27 +366,32 @@ export class SceneShaderFactory {
     }
 
     private _resolveSources(definition: SceneShaderDefinition): ResolvedSources {
-        const compiledEffect = definition.effect
-            ? compileRenderShaderEffect(definition.effect)
-            : null;
-        const vertexSource = definition.vertexSource ?? compiledEffect?.vertexSource;
-        const fragmentSource = definition.fragmentSource ?? compiledEffect?.fragmentSource;
+        if (definition.vertexSource && definition.fragmentSource) {
+            return {
+                vertexSource: definition.vertexSource,
+                fragmentSource: definition.fragmentSource,
+                uniformNames: Array.from(
+                    new Set(
+                        definition.uniforms ??
+                            extractUniformNames(definition.vertexSource, definition.fragmentSource)
+                    )
+                ),
+            };
+        }
 
-        if (!vertexSource || !fragmentSource) {
+        if (!definition.effect) {
             throw new SceneShaderError(
                 `Shader definition '${definition.id}' must provide shader sources or an effect definition`
             );
         }
 
-        const uniformNames = Array.from(
-            new Set(
-                definition.uniforms ??
-                    compiledEffect?.uniformNames ??
-                    extractUniformNames(vertexSource, fragmentSource)
-            )
-        );
+        const compiledEffect = compileRenderShaderEffect(definition.effect);
 
-        return { vertexSource, fragmentSource, uniformNames };
+        return {
+            vertexSource: compiledEffect.vertexSource,
+            fragmentSource: compiledEffect.fragmentSource,
+            uniformNames: Array.from(new Set(definition.uniforms ?? compiledEffect.uniformNames)),
+        };
     }
 
     private _resolveAttributeNames(
