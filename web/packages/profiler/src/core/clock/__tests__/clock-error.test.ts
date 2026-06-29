@@ -31,7 +31,7 @@ describe('ClockError', () => {
 
   it('should create ClockOverflowError', () => {
     const error = new ClockOverflowError();
-    expect(error.message).toBe('Clock value overflow');
+    expect(error.message).toBe('Clock timestamp overflow detected');
   });
 
   it('should create ClockSkewError', () => {
