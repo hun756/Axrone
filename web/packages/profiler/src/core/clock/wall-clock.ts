@@ -1,4 +1,3 @@
-import { Ok, Err, type Result } from '@axrone/utility';
 import type { ClockId, TimePoint, Duration, ClockSnapshot, ClockMetadata, ClockState, ClockMetrics, ClockPrecision } from './types';
 import { TIME_CONVERSION } from './types';
 import { ClockError, ClockNotRunningError, ClockAlreadyRunningError, ClockSkewError } from './clock-error';
