@@ -1,7 +1,8 @@
 import { ProfilerErrorBase, ProfilerStartupError, ProfilerTickError } from './errors';
 import { Ok, Err, type Result } from '@axrone/utility';
-import type { SampleEvent, MemorySample, MetricsSummary, TimelineEvent, HistogramBucket, ProfilerResult } from './types';
-import { FlameGraphBuilder, FlameGraphNode } from './core/flame-graph';
+import type { SampleEvent, MetricsSummary, TimelineEvent, HistogramBucket, ProfilerResult } from './types';
+import { FlameGraphBuilder } from './core/flame-graph';
+import type { FlameGraphNode } from './core/flame-graph';
 import { LogBoundedHistogram } from './core/metrics-collector';
 import { TimelineRecorder, type TimelineRecordEvent } from './core/timeline-recorder';
 import { MemoryTracker } from './core/memory-tracker';
@@ -22,7 +23,6 @@ interface TimerEntry {
 interface OverheadMetrics {
   totalOverheadNs: bigint;
   timerCount: number;
-  sampleCount: number;
   maxTimerDurationNs: bigint;
 }
 
@@ -39,7 +39,6 @@ export class ProfileTimerTree implements Iterable<FlameGraphNode> {
   private readonly overhead: OverheadMetrics = {
     totalOverheadNs: 0n,
     timerCount: 0,
-    sampleCount: 0,
     maxTimerDurationNs: 0n,
   };
 
@@ -389,8 +388,6 @@ export class Profiler implements AsyncDisposable {
   }
 }
 
-let lastProfileDurationMs = 0;
-
 export function profile<T>(fn: () => T): Result<T, ProfilerErrorBase> {
   try {
     const value = fn();
@@ -398,10 +395,6 @@ export function profile<T>(fn: () => T): Result<T, ProfilerErrorBase> {
   } catch (e) {
     return Err.of(new ProfilerStartupError(String(e)));
   }
-}
-
-export function getProfileLastProfileTime(): number {
-  return lastProfileDurationMs;
 }
 
 export const CORE_PROFILE_ID = 0 as const;
