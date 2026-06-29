@@ -54,6 +54,13 @@ export class TimelineRecorder implements AsyncDisposable {
     this.onTick?.(event);
   }
 
+  recordEvent(event: TimelineRecordEvent): void {
+    if (this.disposed) return;
+    if (this.events.length >= this.maxEvents) return;
+    this.events.push(event);
+    this.onTick?.(event);
+  }
+
   getEvents(): readonly TimelineRecordEvent[] {
     return [...this.events];
   }
