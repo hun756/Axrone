@@ -38,7 +38,7 @@ export class LogBoundedHistogram {
       this.sums.push(0n);
     }
     this.countsPerBucket[bucketIndex] += 1n;
-    this.sums[bucketIndex] += BigInt(durationMs);
+    this.sums[bucketIndex] += BigInt(Math.floor(durationMs));
     if (durationMs < this.minValueInternal) this.minValueInternal = durationMs;
     if (durationMs > this.maxValueInternal) this.maxValueInternal = durationMs;
   }
@@ -56,8 +56,9 @@ export class LogBoundedHistogram {
     const total = this.sums.reduce((acc, val) => acc + val, 0n);
     if (total === 0n) return { totalDurationMs: 0n, histogramBuckets: [] };
 
-    const mean = this.sums.length > 0
-      ? Number(this.sums.reduce((acc, val) => acc + val, 0n) / BigInt(this.sums.length))
+    const totalCount = this.countsPerBucket.reduce((acc, v) => acc + v, 0n);
+    const mean = totalCount > 0n
+      ? Number(this.sums.reduce((acc, val) => acc + val, 0n) / totalCount)
       : 0;
 
     const sorted: Array<{ value: number; cumulativeCount: bigint }> = [];
@@ -74,7 +75,7 @@ export class LogBoundedHistogram {
       totalDurationMs: total,
       histogramBuckets: this.bucketBoundaries.slice(),
       countsPerBucket: this.countsPerBucket.slice(),
-      means: this.sums.map((v, i) => Number(v / BigInt(this.countsPerBucket[i] ?? 1))),
+      means: this.sums.map((v, i) => Number(v / (this.countsPerBucket[i] || 1n))),
       meanMs: mean,
       minMs: this.minValueInternal,
       maxMs: this.maxValueInternal,
@@ -109,6 +110,8 @@ export class LogBoundedHistogram {
   [Symbol.asyncDispose](): Promise<void> {
     this.countsPerBucket.length = 0;
     this.sums.length = 0;
+    this.minValueInternal = Infinity;
+    this.maxValueInternal = -Infinity;
     return Promise.resolve();
   }
 }
