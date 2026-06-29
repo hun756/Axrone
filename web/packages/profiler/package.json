@@ -34,7 +34,11 @@
         "clean": "rimraf dist",
         "typecheck": "tsc --noEmit -p tsconfig.build.json",
         "test": "vitest run",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "lint": "eslint src --ext .ts",
+        "lint:fix": "eslint src --ext .ts --fix",
+        "format": "prettier --write \"src/**/*.ts\" --config ../../.prettierrc",
+        "format:check": "prettier --check \"src/**/*.ts\" --config ../../.prettierrc"
     },
     "dependencies": {
         "@axrone/utility": "workspace:*"
