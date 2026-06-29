@@ -1,7 +1,6 @@
 export class FlameGraphNode implements AsyncDisposable {
   readonly name: string;
   private durationNs = 0n;
-  private children: FlameGraphNode[] = [];
   private uniqueSignatures = new Set<string>();
   private disposed = false;
 
@@ -12,11 +11,6 @@ export class FlameGraphNode implements AsyncDisposable {
   addDuration(durationNs: bigint): void {
     if (this.disposed) return;
     this.durationNs += durationNs;
-  }
-
-  addChild(child: FlameGraphNode): void {
-    if (this.disposed || child.disposed) return;
-    this.children.push(child);
   }
 
   addSignature(signature: string): void {
@@ -35,9 +29,6 @@ export class FlameGraphNode implements AsyncDisposable {
   }
 
   [Symbol.asyncDispose](): Promise<void> {
-    for (const child of this.children) {
-      child[Symbol.asyncDispose]();
-    }
     this.disposed = true;
     return Promise.resolve();
   }

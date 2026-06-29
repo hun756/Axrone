@@ -24,7 +24,6 @@ export class WallClock implements AsyncDisposable {
   private _maxDriftNs = 0n;
   private _lastTickValue: bigint | null = null;
   private _lastWallValue: number | null = null;
-  private _lastMonotonicNs: bigint | null = null;
   private _precision: ClockPrecision;
   private _disposed = false;
 
@@ -49,8 +48,7 @@ export class WallClock implements AsyncDisposable {
 
   private detectSkew(wallTimeMs: number): void {
     if (this._lastWallValue !== null) {
-      const expected = this._lastWallValue + 1;
-      const skew = Math.abs(wallTimeMs - expected);
+      const skew = Math.abs(wallTimeMs - this._lastWallValue);
       if (skew > this.maxSkewMs) {
         const skewNs = BigInt(skew) * 1_000_000n;
         if (skewNs > this._maxDriftNs) {
@@ -64,7 +62,6 @@ export class WallClock implements AsyncDisposable {
     if (this._disposed) throw new ClockError('Clock is disposed');
     if (this._state === 'running') throw new ClockAlreadyRunningError();
     this._state = 'running';
-    this._lastMonotonicNs = BigInt(Math.floor(performance.now() * 1_000_000));
     this._lastWallValue = Date.now();
   }
 
@@ -84,7 +81,6 @@ export class WallClock implements AsyncDisposable {
     if (this._disposed) throw new ClockError('Clock is disposed');
     if (this._state !== 'paused') throw new ClockError('Clock is not paused');
     this._state = 'running';
-    this._lastMonotonicNs = BigInt(Math.floor(performance.now() * 1_000_000));
     this._lastWallValue = Date.now();
   }
 

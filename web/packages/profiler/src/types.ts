@@ -62,11 +62,6 @@ export interface TimelineEvent {
 
 export type FlameGraphLayoutAlgorithm = 'squarified' | 'slicing';
 
-export const FLAME_GRAPH_LAYOUT_DEFAULTS: Readonly<Record<FlameGraphLayoutAlgorithm, { minNodeWidthPx?: number }>> = Object.freeze({
-  squarified: { minNodeWidthPx: 10 },
-  slicing: { minNodeWidthPx: 5 },
-});
-
 export interface FlameGraphOptions {
   readonly maxDepth?: number;
   readonly sortByDurationMs?: boolean;

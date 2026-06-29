@@ -49,17 +49,6 @@ class PerformanceAPIMemoryProvider implements MemoryProvider {
   getHeapUsage(): bigint {
     return 0n;
   }
-  async getHeapUsageAsync(): Promise<bigint> {
-    try {
-      const perf = performance as unknown as Record<string, (() => Promise<{ bytes?: number }>) | undefined>;
-      const measureFn = perf.measureUserAgentSpecificMemory;
-      if (!measureFn) return 0n;
-      const measurement = await measureFn();
-      return BigInt(measurement?.bytes ?? 0);
-    } catch {
-      return 0n;
-    }
-  }
 }
 
 class NullMemoryProvider implements MemoryProvider {
@@ -87,15 +76,11 @@ export class MemoryTracker implements AsyncDisposable {
   private timerId?: ReturnType<typeof setTimeout>;
   private readonly onMemoryChange: ((sample: MemorySampleEvent) => void) | undefined;
   private readonly provider: MemoryProvider;
-  private readonly performanceProvider?: PerformanceAPIMemoryProvider;
   private totalSamples = 0;
 
   constructor(options?: { readonly onMemoryChange?: (sample: MemorySampleEvent) => void }) {
     this.onMemoryChange = options?.onMemoryChange;
     this.provider = createMemoryProvider();
-    if (this.provider instanceof PerformanceAPIMemoryProvider) {
-      this.performanceProvider = this.provider;
-    }
   }
 
   startTracking(options?: { readonly intervalMs?: number }): void {
@@ -112,7 +97,10 @@ export class MemoryTracker implements AsyncDisposable {
   }
 
   stopTracking(): void {
-    clearTimeout(this.timerId!);
+    if (this.timerId !== undefined) {
+      clearTimeout(this.timerId);
+      this.timerId = undefined;
+    }
     this.isTracking = false;
   }
 

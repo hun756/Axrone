@@ -19,7 +19,6 @@ export class MonotonicClock implements AsyncDisposable {
   private _state: ClockState = 'stopped';
   private _totalTicks = 0n;
   private _totalElapsedNs = 0n;
-  private _maxDriftNs = 0n;
   private _lastTickValue: bigint | null = null;
   private _precision: ClockPrecision;
   private _disposed = false;
@@ -123,7 +122,7 @@ export class MonotonicClock implements AsyncDisposable {
     return Object.freeze({
       totalTicks: this._totalTicks,
       totalElapsedNs: elapsed - this.startTimeNs,
-      maxDriftNs: this._maxDriftNs,
+      maxDriftNs: 0n,
       state: this._state,
       uptimeMs,
     });

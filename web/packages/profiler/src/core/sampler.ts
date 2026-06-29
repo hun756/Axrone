@@ -105,8 +105,8 @@ export class ContinuousSampler implements AsyncDisposable {
     return this.lastDurationMs;
   }
 
-  getState(): SamplerState {
-    return { ...this.state, lastTickTimestampNs: null };
+  getState(): Readonly<SamplerState> {
+    return Object.freeze({ ...this.state });
   }
 
   [Symbol.asyncDispose](): Promise<void> {
