@@ -30,6 +30,44 @@ export {
   PROFILER_ERROR_CODES,
 } from './errors';
 
+// Clock
+export type {
+  Nanoseconds,
+  Microseconds,
+  Milliseconds,
+  Seconds,
+  ClockId,
+  TimeUnit,
+  Duration,
+  TimePoint,
+  ClockSnapshot,
+  ClockState,
+  ClockSourceType,
+  ClockMetadata,
+  ClockMetrics,
+  ClockPrecision,
+  MonotonicClockOptions,
+  WallClockOptions,
+  VirtualClockOptions,
+  StopwatchOptions,
+  LapResult,
+} from './core/clock';
+
+export {
+  TIME_CONVERSION,
+  ClockError,
+  ClockNotRunningError,
+  ClockAlreadyRunningError,
+  ClockOverflowError,
+  ClockSkewError,
+  ClockResolutionError,
+  isClockError,
+  MonotonicClock,
+  WallClock,
+  VirtualClock,
+  Stopwatch,
+} from './core/clock';
+
 // Core modules
 export { ContinuousSampler } from './core/sampler';
 export type { StackFrameCapture } from './core/stack-capture';

@@ -22,6 +22,11 @@
             "types": "./dist/profile.d.ts",
             "import": "./dist/profile.mjs",
             "require": "./dist/profile.js"
+        },
+        "./clock": {
+            "types": "./dist/core/clock/index.d.ts",
+            "import": "./dist/core/clock/index.mjs",
+            "require": "./dist/core/clock/index.js"
         }
     },
     "scripts": {
