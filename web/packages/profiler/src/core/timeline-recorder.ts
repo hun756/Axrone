@@ -66,6 +66,7 @@ export class TimelineRecorder implements AsyncDisposable {
   }
 
   [Symbol.asyncDispose](): Promise<void> {
+    this.disposed = true;
     this.stop();
     return Promise.resolve();
   }
