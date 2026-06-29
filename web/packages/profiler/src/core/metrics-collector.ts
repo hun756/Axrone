@@ -1,4 +1,4 @@
-export interface HistogramBucket {
+export interface HistogramBucketEntry {
   readonly boundaries: number[];
   readonly countsPerBucket: bigint[];
 }

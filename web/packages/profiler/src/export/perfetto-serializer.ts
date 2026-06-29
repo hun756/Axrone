@@ -12,7 +12,7 @@ export interface PerfettoEvent {
   readonly timestampNs: bigint;
   readonly name: string;
   readonly type: string;
-  readonly ph: 'b' | 'x' | 'i';
+  readonly ph: 'B' | 'b' | 'E' | 'x' | 'i';
   readonly args?: Record<string, unknown>;
   readonly cat?: string;
 }
@@ -24,7 +24,7 @@ export class PerfettoSerializer implements AsyncDisposable {
   recordSample(stackFrames: StackFrameCapture[], durationNs?: bigint): void {
     if (this.disposed) return;
     const ph: 'x' | 'b' = durationNs !== undefined ? 'x' : 'b';
-    const nowNs = BigInt(Date.now()) * 1_000_000n;
+    const nowNs = BigInt(Math.floor(performance.now() * 1_000_000));
     this.events.push({
       timestampNs: nowNs,
       name: stackFrames.length > 0 ? `sample.${stackFrames[0].function}` : 'sample',
@@ -35,11 +35,18 @@ export class PerfettoSerializer implements AsyncDisposable {
 
     for (const frame of stackFrames) {
       this.events.push({
-        timestampNs: BigInt(Date.now()) * 1_000_000n,
+        timestampNs: nowNs,
         name: frame.function,
-        type: 'function_call_start',
-        ph: 'b',
+        type: 'function_call',
+        ph: 'B',
         args: { lineNumber: frame.lineNumber },
+      });
+      this.events.push({
+        timestampNs: nowNs,
+        name: frame.function,
+        type: 'function_call',
+        ph: 'E',
+        args: {},
       });
     }
   }
@@ -54,7 +61,7 @@ export class PerfettoSerializer implements AsyncDisposable {
 
     return Object.freeze({
       version: '2',
-      sessionId: '',
+      sessionId: String(Date.now()),
       startedAtNs: startedAt,
       endedAtNs: endedAt,
       events: this.events,

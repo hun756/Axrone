@@ -107,7 +107,7 @@ export class StackCaptureEngine {
     }
     return {
       function: match[5] || 'unknown',
-      file: match[6],
+      file: match[5],
       lineNumber: parseInt(match[6], 10) || undefined,
       columnNumber: parseInt(match[7], 10) || undefined,
     };
