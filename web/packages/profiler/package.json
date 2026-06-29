@@ -32,7 +32,9 @@
     "scripts": {
         "build": "rollup -c rollup.config.mjs",
         "clean": "rimraf dist",
-        "typecheck": "tsc --noEmit -p tsconfig.build.json"
+        "typecheck": "tsc --noEmit -p tsconfig.build.json",
+        "test": "vitest run",
+        "test:watch": "vitest"
     },
     "dependencies": {
         "@axrone/utility": "workspace:*"
