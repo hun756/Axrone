@@ -2,23 +2,16 @@ import { Ok, Err, type Result } from '@axrone/utility';
 
 export class ProfilerErrorBase extends Error {
   public readonly code: string;
-  public readonly cause?: unknown;
+  public override readonly cause?: unknown;
 
   constructor(message: string, options?: { cause?: unknown }) {
-    super(message);
+    super(message, options);
     this.name = new.target.name;
     this.code = 'PROFILER_ERROR';
-    if (options?.cause !== undefined) {
-      try {
-        this.cause = JSON.stringify(options.cause);
-      } catch {
-        this.cause = String(options.cause);
-      }
-    }
   }
 
   toJSON(): Record<string, unknown> {
-    return { name: this.name, message: this.message, code: this.code };
+    return { name: this.name, message: this.message, code: this.code, cause: this.cause };
   }
 }
 

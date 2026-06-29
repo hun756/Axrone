@@ -1,4 +1,4 @@
-import type { ClockId, TimePoint, Duration, ClockSnapshot, ClockMetadata, ClockState, ClockMetrics, ClockPrecision } from './types';
+import type { ClockId, TimePoint, Duration, ClockSnapshot, ClockMetadata, ClockState, ClockMetrics, ClockPrecision, Nanoseconds } from './types';
 import { TIME_CONVERSION } from './types';
 import { ClockError, ClockNotRunningError, ClockAlreadyRunningError, ClockOverflowError } from './clock-error';
 
@@ -44,15 +44,15 @@ export class VirtualClock implements AsyncDisposable {
     this._realStartNs = BigInt(Math.floor(performance.now() * 1_000_000));
   }
 
-  now(): bigint {
+  now(): Nanoseconds {
     if (this._disposed) throw new ClockError('Clock is disposed');
-    if (this._state === 'stopped') return this._currentTimeNs;
+    if (this._state === 'stopped') return this._currentTimeNs as unknown as Nanoseconds;
     const realElapsed = BigInt(Math.floor(performance.now() * 1_000_000)) - this._realStartNs;
     const scaledElapsed = this.applyTimeScale(realElapsed);
     const virtualTime = this.startTimeNs + scaledElapsed;
     this._currentTimeNs = virtualTime;
     this._lastTickValue = virtualTime;
-    return virtualTime;
+    return virtualTime as unknown as Nanoseconds;
   }
 
   private applyTimeScale(elapsed: bigint): bigint {
@@ -78,7 +78,7 @@ export class VirtualClock implements AsyncDisposable {
   pause(): void {
     if (this._disposed) throw new ClockError('Clock is disposed');
     if (this._state !== 'running') throw new ClockNotRunningError();
-    this.now();
+    this.sample();
     this._state = 'paused';
   }
 

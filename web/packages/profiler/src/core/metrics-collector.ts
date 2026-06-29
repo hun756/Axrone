@@ -106,8 +106,9 @@ export class LogBoundedHistogram {
     return this.maxValueInternal;
   }
 
-  [Symbol.dispose](): void {
+  [Symbol.asyncDispose](): Promise<void> {
     this.countsPerBucket.length = 0;
     this.sums.length = 0;
+    return Promise.resolve();
   }
 }

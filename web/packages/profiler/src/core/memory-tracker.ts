@@ -113,11 +113,12 @@ export class MemoryTracker implements AsyncDisposable {
       change = currentHeapSize - this.lastUsedHeapSize;
     }
 
+    const source = this.provider.name as MemorySampleEvent['source'];
     const sample: MemorySampleEvent = {
       timestampMs: Date.now(),
       usedHeapSizeBytes: currentHeapSize,
       heapSizeChangeSinceLastSample: change,
-      source: this.provider.name as MemorySampleEvent['source'],
+      source,
     };
 
     this.onMemoryChange?.(sample);

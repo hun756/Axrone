@@ -1,4 +1,4 @@
-export const PROFILER_VERSION = '2.0.0' as const;
+export const PROFILER_VERSION = '0.1.0' as const;
 
 // Types
 export type {

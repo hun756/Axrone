@@ -74,6 +74,7 @@ export class WallClock implements AsyncDisposable {
   pause(): void {
     if (this._disposed) throw new ClockError('Clock is disposed');
     if (this._state !== 'running') throw new ClockNotRunningError();
+    this.sample();
     this._state = 'paused';
   }
 
