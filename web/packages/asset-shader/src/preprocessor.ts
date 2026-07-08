@@ -617,6 +617,29 @@ export const preprocessGLSL = (
                     taken: condition,
                     seenElse: false,
                     parentActive: isEmitting(),
+                    line,
+                });
+                break;
+            }
+            case 'ifdef': {
+                const condition = isEmitting() && macros.has(directive.rest.trim());
+                frames.push({
+                    active: condition,
+                    taken: condition,
+                    seenElse: false,
+                    parentActive: condition ? true : isEmitting(),
+                    line,
+                });
+                break;
+            }
+            case 'ifndef': {
+                const condition = isEmitting() && !macros.has(directive.rest.trim());
+                frames.push({
+                    active: condition,
+                    taken: condition,
+                    seenElse: false,
+                    parentActive: isEmitting(),
+                    line,
                 });
                 break;
             }
