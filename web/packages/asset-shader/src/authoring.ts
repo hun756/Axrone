@@ -23,6 +23,12 @@ import {
     normalizeShaderEffectJsonSource,
     type AssetShaderImportSchema,
 } from './shader-effect-importer';
+import { extendShaderEffect, type PartialShaderEffectOverride } from './compose';
+import {
+    reflectShaderEffect,
+    type ShaderEffectReflection,
+} from './reflection';
+import { registerShaderLibrary, type ShaderLibraryEntry } from './library';
 
 /**
  * File-based shader authoring layer.
@@ -214,6 +220,111 @@ export const defineShaderEffect = (
 export const serializeShaderEffectToJson = (
     effect: RenderShaderEffectDefinition
 ): Record<string, unknown> => JSON.parse(JSON.stringify(effect)) as Record<string, unknown>;
+
+/** Declare a shader keyword (variant switch). */
+export const keyword = (
+    name: string,
+    stages?: readonly RenderShaderStageName[],
+    options?: readonly string[],
+    defaultValue?: boolean | string,
+    inspector?: RenderShaderInspectorControlDefinition
+): RenderShaderKeywordDefinition => ({
+    name,
+    ...(stages !== undefined ? { stages } : {}),
+    ...(options !== undefined ? { options } : {}),
+    ...(defaultValue !== undefined ? { defaultValue } : {}),
+    ...(inspector !== undefined ? { inspector } : {}),
+});
+
+/** Declare a multi-pass technique. */
+export const technique = (
+    id: string,
+    passes: readonly RenderShaderPassDefinitionInput[],
+    label?: string
+): RenderShaderTechniqueDefinition => ({
+    id,
+    ...(label !== undefined ? { label } : {}),
+    passes: passes.map((entry) => pass(entry.id, entry)),
+});
+
+export interface RenderShaderPassDefinitionInput {
+    readonly id: string;
+    readonly vertex?: RenderShaderStageDefinition;
+    readonly fragment?: RenderShaderStageDefinition;
+    readonly renderState?: RenderShaderEffectRenderStateDefinition;
+    readonly keywords?: readonly string[];
+}
+
+/** Declare a single render pass within a technique. */
+export const pass = (
+    id: string,
+    options: Omit<RenderShaderPassDefinitionInput, 'id'> = {}
+): RenderShaderTechniqueDefinition['passes'][number] => ({
+    id,
+    ...(options.vertex !== undefined ? { vertex: options.vertex } : {}),
+    ...(options.fragment !== undefined ? { fragment: options.fragment } : {}),
+    ...(options.renderState !== undefined ? { renderState: options.renderState } : {}),
+    ...(options.keywords !== undefined ? { keywords: options.keywords } : {}),
+});
+
+/**
+ * Register a reusable GLSL chunk in the global library registry and return it.
+ * Chunks are pulled into effects via `#include <id>`.
+ */
+export const library = (id: string, code: string): ShaderLibraryEntry =>
+    registerShaderLibrary(id, code);
+
+/** Inherit and override a base effect (shader "parent"). */
+export const extend = (
+    base: RenderShaderEffectDefinition,
+    override: PartialShaderEffectOverride
+): RenderShaderEffectDefinition => extendShaderEffect(base, override);
+
+/** Reflect an effect into stable metadata for editors / tooling. */
+export const reflect = (effect: RenderShaderEffectDefinition): ShaderEffectReflection =>
+    reflectShaderEffect(effect);
+
+/** Convenience: a `slider`-backed ranged numeric property. */
+export const rangeProp = (
+    name: string,
+    type: RenderShaderValueType,
+    min: number,
+    max: number,
+    step: number,
+    defaultValue?: RenderShaderPropertyDefinition['defaultValue'],
+    options?: ShaderEffectPropertyOptions
+): RenderShaderPropertyDefinition =>
+    prop(name, type, options?.scope ?? 'material', defaultValue, {
+        ...options,
+        inspector: { control: 'slider', min, max, step, ...(options?.inspector ?? {}) },
+    });
+
+/** Convenience: a `toggle`-backed boolean property. */
+export const toggleProp = (
+    name: string,
+    defaultValue: boolean = false,
+    options?: ShaderEffectPropertyOptions
+): RenderShaderPropertyDefinition =>
+    prop(name, 'bool', options?.scope ?? 'material', defaultValue, {
+        ...options,
+        inspector: { control: 'toggle', ...(options?.inspector ?? {}) },
+    });
+
+/** Convenience: a `select`-backed integer enum property. */
+export const enumProp = (
+    name: string,
+    optionLabels: readonly string[],
+    defaultIndex: number = 0,
+    options?: ShaderEffectPropertyOptions
+): RenderShaderPropertyDefinition =>
+    prop(name, 'int', options?.scope ?? 'material', defaultIndex, {
+        ...options,
+        inspector: {
+            control: 'select',
+            options: optionLabels.map((label, value) => ({ label, value })),
+            ...(options?.inspector ?? {}),
+        },
+    });
 
 /**
  * Wrap a `.ts`-authored effect into an `AssetCustomSource` so it can be passed
