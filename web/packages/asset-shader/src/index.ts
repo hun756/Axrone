@@ -24,6 +24,22 @@ export {
     createShaderEffectJsonImporter,
     normalizeShaderEffectJsonSource,
 } from './shader-effect-importer';
+export {
+    attr,
+    createShaderEffectModuleImporter,
+    defineShaderEffect,
+    fragStage,
+    glsl,
+    prop,
+    serializeShaderEffectToJson,
+    toShaderEffectSource,
+    varying,
+    vtxStage,
+    type DefineShaderEffectInput,
+    type ShaderEffectGlslBlock,
+    type ShaderEffectPropertyOptions,
+    type ShaderEffectStageOptions,
+} from './authoring';
 
 export type {
     CompiledRenderShaderEffect,
