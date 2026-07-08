@@ -152,6 +152,7 @@ export const varying = (
 });
 
 export type ShaderEffectPropertyOptions = {
+    readonly scope?: RenderShaderPropertyDefinition['scope'];
     readonly stages?: readonly RenderShaderStageName[];
     readonly arrayLength?: number;
     readonly inspector?: RenderShaderInspectorControlDefinition;
