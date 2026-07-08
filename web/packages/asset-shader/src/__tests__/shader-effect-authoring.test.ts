@@ -14,7 +14,12 @@ import {
     varying,
 } from '../authoring';
 import { createAssetShaderImportPipeline } from '../shader-effect-importer';
-import { nebulaVeil } from '../../examples/nebula-veil.effect';
+import { buildShaderVariant } from '../variants';
+import {
+    nebulaDeepField,
+    nebulaVeil,
+    nebulaVeilReflection,
+} from '../../examples/nebula-veil.effect';
 
 describe('shader effect authoring helpers', () => {
     it('dedents and splits GLSL written as a template literal', () => {
@@ -133,8 +138,23 @@ describe('shader effect module importer', () => {
 
         expect(compiled.id).toBe('nebulaVeil');
         expect(compiled.vertexSource).toContain('#version 300 es');
-        expect(compiled.fragmentSource).toContain('float hash13(vec3 p3)');
-        expect(compiled.fragmentSource).toContain('aces(');
+        expect(compiled.fragmentSource).toContain('#include <axrone/noise>');
         expect(compiled.uniformNames).toContain('u_density');
+    });
+
+    it('resolves includes, variants and reflection for the authored example', () => {
+        const highFog = buildShaderVariant(nebulaVeil, {
+            selection: { USE_FOG: true, QUALITY: 'HIGH' },
+        });
+        expect(highFog.fragmentSource).toContain('float hash13(vec3 p3)');
+        expect(highFog.fragmentSource).toContain('density *= 1.5');
+
+        const lowNoFog = buildShaderVariant(nebulaVeil, {
+            selection: { USE_FOG: false, QUALITY: 'LOW' },
+        });
+        expect(lowNoFog.fragmentSource).not.toContain('density *= 1.5');
+
+        expect(nebulaVeilReflection.variantCount).toBe(4);
+        expect(nebulaDeepField.id).toBe('nebulaDeepField');
     });
 });
