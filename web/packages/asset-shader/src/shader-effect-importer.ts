@@ -26,6 +26,7 @@ import {
     type RenderShaderTechniqueDefinition,
     type RenderShaderValueType,
 } from '@axrone/render-core/shader-effect';
+import { createShaderEffectModuleImporter } from './authoring';
 
 export type AssetShaderImportKind = 'shaderEffect';
 
@@ -731,5 +732,9 @@ export const createAssetShaderImportPipeline = (
 ): AssetImportPipeline<AssetShaderImportSchema> =>
     new AssetImportPipeline<AssetShaderImportSchema>({
         ...options,
-        importers: [createShaderEffectJsonImporter(), ...(options.importers ?? [])],
+        importers: [
+            createShaderEffectJsonImporter(),
+            createShaderEffectModuleImporter(),
+            ...(options.importers ?? []),
+        ],
     });
