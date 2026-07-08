@@ -643,16 +643,6 @@ export const preprocessGLSL = (
                 });
                 break;
             }
-            case 'ifdef': {
-                const condition = isEmitting() && macros.has(directive.rest.trim());
-                frames.push({ active: condition, taken: condition, seenElse: false, parentActive: condition ? true : isEmitting() });
-                break;
-            }
-            case 'ifndef': {
-                const condition = isEmitting() && !macros.has(directive.rest.trim());
-                frames.push({ active: condition, taken: condition, seenElse: false, parentActive: isEmitting() });
-                break;
-            }
             case 'elif': {
                 const frame = frames[frames.length - 1];
                 if (!frame) {
