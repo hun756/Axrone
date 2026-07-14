@@ -285,7 +285,44 @@ function collideCapsulePolygon(
     ctx: CollisionContext,
     manifold: WritableManifold
 ): void {
-    manifold.pointCount = 0;
+    const worldP1 = transformPoint(capsule.p1, ctx.transformA);
+    const worldP2 = transformPoint(capsule.p2, ctx.transformA);
+
+    // Find closest point on polygon boundary to capsule segment
+    let minDistSq = Infinity;
+    let closestOnPoly: IVec2Like = { x: 0, y: 0 };
+    let closestOnSeg: IVec2Like = { x: 0, y: 0 };
+
+    for (let i = 0; i < poly.vertices.length; i++) {
+        const v0 = transformPoint(poly.vertices[i], ctx.transformB);
+        const v1 = transformPoint(poly.vertices[(i + 1) % poly.vertices.length], ctx.transformB);
+
+        const { pointA, pointB, distSq } = closestPointsSegmentSegment(worldP1, worldP2, v0, v1);
+        if (distSq < minDistSq) {
+            minDistSq = distSq;
+            closestOnSeg = pointA;
+            closestOnPoly = pointB;
+        }
+    }
+
+    if (minDistSq > capsule.radius * capsule.radius) {
+        manifold.pointCount = 0;
+        return;
+    }
+
+    const dist = Math.sqrt(minDistSq);
+    const invDist = dist > EPSILON ? 1 / dist : 0;
+    const dx = closestOnSeg.x - closestOnPoly.x;
+    const dy = closestOnSeg.y - closestOnPoly.y;
+
+    manifold.normal.x = dx * invDist;
+    manifold.normal.y = dy * invDist;
+    manifold.pointCount = 1;
+
+    const point = manifold.points[0];
+    point.localPointA = inverseTransformPoint(closestOnSeg, ctx.transformA);
+    point.localPointB = inverseTransformPoint(closestOnPoly, ctx.transformB);
+    point.separation = dist - capsule.radius;
 }
 
 function collideBoxCapsule(
@@ -294,7 +331,19 @@ function collideBoxCapsule(
     ctx: CollisionContext,
     manifold: WritableManifold
 ): void {
-    manifold.pointCount = 0;
+    // Treat box as polygon and delegate to capsule-polygon
+    const boxVertices = getBoxVertices(box);
+    collideCapsulePolygon(
+        capsule,
+        { vertices: boxVertices },
+        { ...ctx, transformA: ctx.transformB, transformB: { position: box.center, rotation: box.rotation } },
+        manifold
+    );
+    // Flip normal since we swapped A/B
+    if (manifold.pointCount > 0) {
+        manifold.normal.x = -manifold.normal.x;
+        manifold.normal.y = -manifold.normal.y;
+    }
 }
 
 const collideCapsuleCircle = (a: any, b: any, ctx: CollisionContext, m: WritableManifold) =>
@@ -423,11 +472,12 @@ function getBoxVertices(box: {
     halfHeight: number;
     rotation: number;
 }): IVec2Like[] {
+    // Local-space corners (axis-aligned), rotation is applied by SAT via transform
     return [
-        { x: box.center.x - box.halfWidth, y: box.center.y - box.halfHeight },
-        { x: box.center.x + box.halfWidth, y: box.center.y - box.halfHeight },
-        { x: box.center.x + box.halfWidth, y: box.center.y + box.halfHeight },
-        { x: box.center.x - box.halfWidth, y: box.center.y + box.halfHeight },
+        { x: -box.halfWidth, y: -box.halfHeight },
+        { x:  box.halfWidth, y: -box.halfHeight },
+        { x:  box.halfWidth, y:  box.halfHeight },
+        { x: -box.halfWidth, y:  box.halfHeight },
     ];
 }
 
