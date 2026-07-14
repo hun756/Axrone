@@ -326,11 +326,7 @@ export class DynamicAABBTree2D {
                 const child1 = node.child1;
                 const child2 = node.child2;
 
-                node.aabb.getUnion(this._nodes[child1].aabb, node.aabb);
-                node.aabb.getUnion(this._nodes[child2].aabb, node.aabb); // Redundant if getUnion overwrites? Careful with implementation
-                // Actually:
                 this._nodes[child1].aabb.getUnion(this._nodes[child2].aabb, node.aabb);
-
                 node.height = 1 + Math.max(this._nodes[child1].height, this._nodes[child2].height);
 
                 index = node.parent;
