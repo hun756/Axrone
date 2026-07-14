@@ -22,76 +22,84 @@ export interface ISweepTestQuery {
 
 export class ContinuousRaycast3D {
     private readonly _raycastSystem: RaycastSystem3D;
-    private readonly _tempVec3: Vec3 = Vec3.ZERO.clone();
     private readonly _epsilon: number = 1e-6;
 
     constructor(raycastSystem: RaycastSystem3D) {
         this._raycastSystem = raycastSystem;
     }
 
+    /**
+     * Conservative advancement sweep (TOI).
+     *
+     * Scans the swept segment in fixed sub-intervals [i/iter, (i+1)/iter], casting
+     * forward from the *start* of each sub-interval by exactly one step. This
+     * guarantees the entire path is covered with no gaps and no overshoot beyond
+     * the endpoint, so tunnelling cannot occur as long as the step is smaller than
+     * the smallest object diameter. The first contact is then tightened with a
+     * bisection between the sub-interval bounds.
+     */
     public sweepTest(query: ISweepTestQuery): ITimeOfImpact {
         const displacement = Vec3.subtract(query.endPosition, query.startPosition);
         const distance = Vec3.len(displacement);
 
-        if (distance < this._epsilon) {
-            return this._createNoHit();
-        }
+        if (distance < this._epsilon) return this._createNoHit();
 
         const direction = Vec3.multiplyScalar(displacement, 1 / distance);
+        const iterations = Math.max(1, Math.floor(query.maxIterations));
+        const stepSize = distance / iterations;
 
-        let t0 = 0;
-        let t1 = 1;
-        let iteration = 0;
+        let prevT = 0;
+        let prevPos = query.startPosition;
 
-        while (iteration < query.maxIterations && t1 - t0 > query.tolerance) {
-            const midT = (t0 + t1) * 0.5;
-            const testPosition = Vec3.create(
-                query.startPosition.x + displacement.x * midT,
-                query.startPosition.y + displacement.y * midT,
-                query.startPosition.z + displacement.z * midT
-            );
-
-            const rayDistance = distance * (1 - midT);
+        for (let i = 0; i < iterations; i++) {
             const hit = this._raycastSystem.raycast(
-                testPosition,
-                direction,
-                rayDistance,
-                query.layerMask
+                prevPos, direction, stepSize + this._epsilon, query.layerMask
             );
 
-            if (hit) {
-                t1 = midT;
-            } else {
-                t0 = midT;
-            }
+            if (hit && hit.distance <= stepSize + this._epsilon) {
+                const hitFrac = hit.distance / distance;
+                let lo = prevT;
+                let hi = prevT + hitFrac;
 
-            iteration++;
-        }
+                for (let b = 0; b < 12 && hi - lo > query.tolerance; b++) {
+                    const mid = (lo + hi) * 0.5;
+                    const midPos = Vec3.create(
+                        query.startPosition.x + displacement.x * mid,
+                        query.startPosition.y + displacement.y * mid,
+                        query.startPosition.z + displacement.z * mid
+                    );
+                    const midHit = this._raycastSystem.raycast(
+                        midPos, direction, distance * (1 - mid) + this._epsilon, query.layerMask
+                    );
+                    if (midHit) hi = mid;
+                    else lo = mid;
+                }
 
-        if (t1 < 1.0) {
-            const hitPosition = Vec3.create(
-                query.startPosition.x + displacement.x * t1,
-                query.startPosition.y + displacement.y * t1,
-                query.startPosition.z + displacement.z * t1
-            );
+                const impactPos = Vec3.create(
+                    query.startPosition.x + displacement.x * hi,
+                    query.startPosition.y + displacement.y * hi,
+                    query.startPosition.z + displacement.z * hi
+                );
+                const finalHit = this._raycastSystem.raycast(
+                    impactPos, direction, this._epsilon * 2 + stepSize, query.layerMask
+                );
 
-            const finalHit = this._raycastSystem.raycast(
-                hitPosition,
-                direction,
-                distance * (1 - t1) + this._epsilon,
-                query.layerMask
-            );
-
-            if (finalHit) {
                 return {
                     hit: true,
-                    time: t1,
-                    fraction: t1,
-                    normal: finalHit.normal,
-                    witness1: hitPosition,
-                    witness2: finalHit.point,
+                    time: hi,
+                    fraction: hi,
+                    normal: finalHit ? finalHit.normal : hit.normal,
+                    witness1: impactPos,
+                    witness2: finalHit ? finalHit.point : hit.point,
                 };
             }
+
+            prevT = (i + 1) / iterations;
+            prevPos = Vec3.create(
+                query.startPosition.x + displacement.x * prevT,
+                query.startPosition.y + displacement.y * prevT,
+                query.startPosition.z + displacement.z * prevT
+            );
         }
 
         return this._createNoHit();
@@ -229,14 +237,18 @@ export class ContinuousRaycast3D {
 export class AdaptiveRaycaster3D {
     private readonly _raycastSystem: RaycastSystem3D;
     private readonly _performanceThreshold: number = 16.67;
-    private readonly _performanceHistory: number[] = [];
-    private readonly _maxHistorySize: number = 60;
+    // Ring buffer for O(1) push/evict instead of array.shift() O(n)
+    private readonly _historySize: number = 60;
+    private readonly _history: Float64Array;
+    private _historyHead: number = 0;
+    private _historyCount: number = 0;
     private _currentQuality: number = 1.0;
     private _minQuality: number = 0.25;
     private _maxQuality: number = 1.0;
 
     constructor(raycastSystem: RaycastSystem3D) {
         this._raycastSystem = raycastSystem;
+        this._history = new Float64Array(this._historySize);
     }
 
     public adaptiveRaycast(
@@ -294,19 +306,22 @@ export class AdaptiveRaycaster3D {
     }
 
     private _updatePerformanceHistory(performanceTime: number): void {
-        this._performanceHistory.push(performanceTime);
-
-        if (this._performanceHistory.length > this._maxHistorySize) {
-            this._performanceHistory.shift();
-        }
+        this._history[this._historyHead] = performanceTime;
+        this._historyHead = (this._historyHead + 1) % this._historySize;
+        if (this._historyCount < this._historySize) this._historyCount++;
     }
 
     private _adjustQuality(): void {
-        if (this._performanceHistory.length < 10) return;
+        if (this._historyCount < 10) return;
 
-        const recentPerformance = this._performanceHistory.slice(-10);
-        const avgPerformance =
-            recentPerformance.reduce((a, b) => a + b, 0) / recentPerformance.length;
+        // Compute average over last 10 samples from ring buffer
+        let sum = 0;
+        const count = Math.min(10, this._historyCount);
+        for (let i = 0; i < count; i++) {
+            const idx = (this._historyHead - 1 - i + this._historySize) % this._historySize;
+            sum += this._history[idx];
+        }
+        const avgPerformance = sum / count;
 
         if (avgPerformance > this._performanceThreshold * 1.2) {
             this._currentQuality = Math.max(this._minQuality, this._currentQuality * 0.9);
@@ -323,7 +338,8 @@ export class AdaptiveRaycaster3D {
 
 export class PriorityRaycaster3D {
     private readonly _raycastSystem: RaycastSystem3D;
-    private readonly _queue: Array<{
+    // Min-heap: O(log N) enqueue vs O(N log N) full sort
+    private readonly _heap: Array<{
         priority: number;
         origin: IVec3Like;
         direction: IVec3Like;
@@ -346,29 +362,18 @@ export class PriorityRaycaster3D {
         layerMask: LayerMask,
         callback: (hit: IRaycastHit3D | null) => void
     ): void {
-        this._queue.push({
-            priority,
-            origin,
-            direction,
-            maxDistance,
-            layerMask,
-            callback,
-        });
-
-        this._queue.sort((a, b) => b.priority - a.priority);
+        this._heap.push({ priority, origin, direction, maxDistance, layerMask, callback });
+        this._heapifyUp(this._heap.length - 1);
     }
 
     public processBatch(budget?: number): number {
         const effectiveBudget = budget ?? this._currentBudget;
         let processed = 0;
 
-        while (this._queue.length > 0 && processed < effectiveBudget) {
-            const item = this._queue.shift()!;
+        while (this._heap.length > 0 && processed < effectiveBudget) {
+            const item = this._heapPop()!;
             const hit = this._raycastSystem.raycast(
-                item.origin,
-                item.direction,
-                item.maxDistance,
-                item.layerMask
+                item.origin, item.direction, item.maxDistance, item.layerMask
             );
             item.callback(hit);
             processed++;
@@ -387,11 +392,50 @@ export class PriorityRaycaster3D {
     }
 
     public get queueSize(): number {
-        return this._queue.length;
+        return this._heap.length;
     }
 
     public clear(): void {
-        this._queue.length = 0;
+        this._heap.length = 0;
+    }
+
+    // Max-heap by priority (higher priority = processed first)
+    private _heapifyUp(i: number): void {
+        while (i > 0) {
+            const parent = (i - 1) >> 1;
+            if (this._heap[parent].priority >= this._heap[i].priority) break;
+            const tmp = this._heap[parent];
+            this._heap[parent] = this._heap[i];
+            this._heap[i] = tmp;
+            i = parent;
+        }
+    }
+
+    private _heapifyDown(i: number): void {
+        const n = this._heap.length;
+        while (true) {
+            let largest = i;
+            const l = 2 * i + 1;
+            const r = 2 * i + 2;
+            if (l < n && this._heap[l].priority > this._heap[largest].priority) largest = l;
+            if (r < n && this._heap[r].priority > this._heap[largest].priority) largest = r;
+            if (largest === i) break;
+            const tmp = this._heap[largest];
+            this._heap[largest] = this._heap[i];
+            this._heap[i] = tmp;
+            i = largest;
+        }
+    }
+
+    private _heapPop() {
+        if (this._heap.length === 0) return null;
+        const top = this._heap[0];
+        const last = this._heap.pop()!;
+        if (this._heap.length > 0) {
+            this._heap[0] = last;
+            this._heapifyDown(0);
+        }
+        return top;
     }
 }
 
