@@ -40,6 +40,9 @@ export class RaycastSystem2D {
         this._cache = new RaycastCache2D();
         this._batcher = new RaycastBatcher2D();
         this._statistics = new RaycastStatistics();
+        this._batcher.setRaycaster((origin, direction, maxDistance, layerMask, flags) =>
+            this.raycast(origin, direction, maxDistance, layerMask, flags)
+        );
     }
 
     public raycast(
@@ -221,6 +224,9 @@ export class RaycastSystem3D {
         this._cache = new RaycastCache3D();
         this._batcher = new RaycastBatcher3D();
         this._statistics = new RaycastStatistics();
+        this._batcher.setRaycaster((origin, direction, maxDistance, layerMask, flags) =>
+            this.raycast(origin, direction, maxDistance, layerMask, flags)
+        );
     }
 
     public raycast(
