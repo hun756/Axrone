@@ -297,6 +297,12 @@ export class ContactManager2D implements Disposable {
         this._collisionFilter = filter;
     }
 
+    getContactBodies(contactId: ContactId): { bodyIdA: BodyId; bodyIdB: BodyId } | null {
+        const data = this._contactMetadata.get(contactId);
+        if (!data) return null;
+        return { bodyIdA: data.bodyIdA, bodyIdB: data.bodyIdB };
+    }
+
     getContactsForBody(bodyId: BodyId): IterableIterator<ContactId> {
         const contacts = this._bodyToContacts.get(bodyId);
         return contacts ? contacts.values() : [][Symbol.iterator]();
