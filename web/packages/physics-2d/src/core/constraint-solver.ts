@@ -50,8 +50,7 @@ export class ConstraintSolver2D {
         velocityIterations: number,
         positionIterations: number
     ): void {
-        const uniqueConstraints = Array.from(new Set(constraints));
-        this.prepareConstraints(uniqueConstraints, deltaTime);
+        this.prepareConstraints(constraints, deltaTime);
 
         if (this._jacobianCache.size === 0) {
             this._lastSolvedConstraintCount = 0;
@@ -146,14 +145,15 @@ export class ConstraintSolver2D {
                     const effectiveMass = totalInvMass > SOLVER_EPSILON ? 1 / totalInvMass : 0;
 
                     let impulse = -effectiveMass * error;
-                    if (jacobian.lowerLimit !== undefined && impulse < jacobian.lowerLimit) {
-                        impulse = jacobian.lowerLimit;
-                    }
-                    if (jacobian.upperLimit !== undefined && impulse > jacobian.upperLimit) {
-                        impulse = jacobian.upperLimit;
+                    // Unilateral constraint guard (e.g. Rope lowerLimit: 0)
+                    if (!isFinite(jacobian.lowerLimit) || impulse >= jacobian.lowerLimit) {
+                        if (isFinite(jacobian.upperLimit)) {
+                            impulse = Math.min(impulse, jacobian.upperLimit);
+                        }
+                    } else {
+                        continue;
                     }
 
-                    // Apply position correction directly
                     if (bodyA.invMass > 0) {
                         bodyA.position.x += bodyA.invMass * impulse * jacobian.j1.linear.x;
                         bodyA.position.y += bodyA.invMass * impulse * jacobian.j1.linear.y;
@@ -179,6 +179,9 @@ export class ConstraintSolver2D {
         for (const solverBody of this._bodyMap.values()) {
             this._bodyManager.setLinearVelocity(solverBody.bodyId, solverBody.linearVelocity);
             this._bodyManager.setAngularVelocity(solverBody.bodyId, solverBody.angularVelocity);
+            // Write back position corrections from solvePositionConstraints
+            this._bodyManager.setPosition(solverBody.bodyId, solverBody.position);
+            this._bodyManager.setRotation(solverBody.bodyId, solverBody.rotation);
         }
     }
 
@@ -591,13 +594,13 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const rA = Vec2.rotate(Vec2.subtract(data.linearOffset, bodyA.localCenter), bodyA.rotation);
+        const rA = Vec2.rotate(Vec2.subtract({ x: 0, y: 0 }, bodyA.localCenter), bodyA.rotation);
         const rB = Vec2.rotate(Vec2.subtract({ x: 0, y: 0 }, bodyB.localCenter), bodyB.rotation);
         const h = Math.max(dt, SOLVER_EPSILON);
 
-        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.linearOffset, bodyA.rotation));
+        const worldTarget = Vec2.add(bodyA.position, Vec2.rotate(data.linearOffset, bodyA.rotation));
         const worldAnchorB = { x: bodyB.position.x, y: bodyB.position.y };
-        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
+        const delta = Vec2.subtract(worldAnchorB, worldTarget);
 
         const jacobians: JacobianRow[] = [
             {
