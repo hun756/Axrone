@@ -1,4 +1,5 @@
 import { Vec2, IVec2Like, EPSILON } from '@axrone/numeric';
+import { ObjectPool } from '@axrone/memory';
 import type { ShapeId, ContactId, IContactPoint2D } from '../types';
 import type { IContactManifold2D } from '../types/collision';
 import type { ShapeManager2D } from './shape-manager';
@@ -384,23 +385,49 @@ const COLLISION_MATRIX: ReadonlyArray<ReadonlyArray<CollisionFn | null>> = [
 
 export class Narrowphase2D {
     private readonly _tempVec: Vec2;
-    private readonly _manifoldPool: WritableManifold[];
-    private _poolIndex: number = 0;
+    private readonly _manifoldPool: ObjectPool<WritableManifold>;
 
     constructor() {
         this._tempVec = Vec2.ZERO.clone();
-        this._manifoldPool = Array.from({ length: 64 }, () => ({
-            pointCount: 0,
-            normal: { x: 0, y: 0 },
-            points: Array.from({ length: CollisionConfig.MAX_MANIFOLD_POINTS }, (_, i) => ({
-                id: i as ContactId,
-                localPointA: { x: 0, y: 0 },
-                localPointB: { x: 0, y: 0 },
-                normalImpulse: 0,
-                tangentImpulse: 0,
-                separation: 0,
-            })),
-        }));
+        this._manifoldPool = new ObjectPool<WritableManifold>({
+            name: 'NarrowphaseManifoldPool',
+            initialCapacity: 64,
+            maxCapacity: 512,
+            factory: (): WritableManifold => ({
+                pointCount: 0,
+                normal: { x: 0, y: 0 },
+                points: Array.from({ length: CollisionConfig.MAX_MANIFOLD_POINTS }, (_, i) => ({
+                    id: i as ContactId,
+                    localPointA: { x: 0, y: 0 },
+                    localPointB: { x: 0, y: 0 },
+                    normalImpulse: 0,
+                    tangentImpulse: 0,
+                    separation: 0,
+                })),
+            }),
+            resetHandler: (manifold: WritableManifold): void => {
+                manifold.pointCount = 0;
+                manifold.normal.x = 0;
+                manifold.normal.y = 0;
+                for (const point of manifold.points) {
+                    point.normalImpulse = 0;
+                    point.tangentImpulse = 0;
+                    point.separation = 0;
+                }
+            },
+        });
+    }
+
+    acquireManifold(): WritableManifold {
+        return this._manifoldPool.acquire();
+    }
+
+    releaseManifold(manifold: WritableManifold): void {
+        this._manifoldPool.release(manifold);
+    }
+
+    dispose(): void {
+        this._manifoldPool[Symbol.dispose]();
     }
 
     collide(
