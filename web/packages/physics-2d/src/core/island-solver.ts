@@ -4,11 +4,17 @@ import type { BodyManager2D } from './body-manager';
 import type { ContactManager2D } from './contact-manager';
 import type { ConstraintManager2D } from './constraint-manager';
 import { ConstraintSolver2D } from './constraint-solver';
+import { PhysicsConstants } from '../types';
 
 interface ProfilerData {
     solveVelocityTime: number;
     solvePositionTime: number;
 }
+
+const LINEAR_SLEEP_TOLERANCE_SQ = PhysicsConstants.LINEAR_SLEEP_TOLERANCE * PhysicsConstants.LINEAR_SLEEP_TOLERANCE;
+const ANGULAR_SLEEP_TOLERANCE_SQ = PhysicsConstants.ANGULAR_SLEEP_TOLERANCE * PhysicsConstants.ANGULAR_SLEEP_TOLERANCE;
+const MAX_TRANSLATION_SQ = PhysicsConstants.MAX_TRANSLATION * PhysicsConstants.MAX_TRANSLATION;
+const MAX_ROTATION_SQ = PhysicsConstants.MAX_ROTATION * PhysicsConstants.MAX_ROTATION;
 
 interface VelocityConstraintPoint {
     rA: IVec2Like;
@@ -209,6 +215,8 @@ export class IslandSolver2D {
         velIters: number,
         posIters: number,
         flags: SolverFlags,
+        gravity: { x: number; y: number },
+        allowSleep: boolean,
         profiler?: ProfilerData
     ): void {
         const h = dt;
@@ -249,6 +257,46 @@ export class IslandSolver2D {
                 this._invI[i] = 0;
                 this._localCenters[i * 2] = 0;
                 this._localCenters[i * 2 + 1] = 0;
+            }
+        }
+
+        // Gravity integration: apply gravity force to dynamic bodies
+        for (let i = 0; i < bodyCount; i++) {
+            const bodyId = this._bodyStack[i];
+            const type = this._bodyManager.getBodyType(bodyId);
+
+            if (type !== 0) {
+                const offset = i * 3;
+                const gravityScale = this._bodyManager.getGravityScale(bodyId);
+                const invMass = this._invMass[i];
+
+                // Apply gravity: v += (g * gravityScale) * h
+                this._velocities[offset] += gravity.x * gravityScale * h;
+                this._velocities[offset + 1] += gravity.y * gravityScale * h;
+
+                // Apply damping
+                const linearDamping = this._bodyManager.getLinearDamping(bodyId);
+                const angularDamping = this._bodyManager.getAngularDamping(bodyId);
+                const linearDampingFactor = Math.max(0, 1 - linearDamping * h);
+                const angularDampingFactor = Math.max(0, 1 - angularDamping * h);
+
+                this._velocities[offset] *= linearDampingFactor;
+                this._velocities[offset + 1] *= linearDampingFactor;
+                this._velocities[offset + 2] *= angularDampingFactor;
+
+                // Clamp velocities to prevent instability
+                const vx = this._velocities[offset];
+                const vy = this._velocities[offset + 1];
+                const w = this._velocities[offset + 2];
+                const speedSq = vx * vx + vy * vy;
+                if (speedSq > MAX_TRANSLATION_SQ) {
+                    const scale = PhysicsConstants.MAX_TRANSLATION / Math.sqrt(speedSq);
+                    this._velocities[offset] = vx * scale;
+                    this._velocities[offset + 1] = vy * scale;
+                }
+                if (w * w > MAX_ROTATION_SQ) {
+                    this._velocities[offset + 2] = w > 0 ? PhysicsConstants.MAX_ROTATION : -PhysicsConstants.MAX_ROTATION;
+                }
             }
         }
 
@@ -317,9 +365,60 @@ export class IslandSolver2D {
             posIters
         );
 
+        // Sleep system: update sleep timers and put resting bodies to sleep
+        if (allowSleep) {
+            const minSleepTime = this._updateSleepTimers(h);
+            if (minSleepTime >= PhysicsConstants.SLEEP_TIME) {
+                this._putIslandToSleep();
+            }
+        }
+
         this._storeImpulses();
         this._velocityConstraints.length = 0;
         this._positionConstraints.length = 0;
+    }
+
+    private _updateSleepTimers(h: number): number {
+        let minSleepTime = Infinity;
+
+        for (let i = 0; i < this._bodyStack.length; i++) {
+            const bodyId = this._bodyStack[i];
+            const type = this._bodyManager.getBodyType(bodyId);
+
+            if (type !== 2) continue; // Only dynamic bodies sleep
+
+            const offset = i * 3;
+            const vx = this._velocities[offset];
+            const vy = this._velocities[offset + 1];
+            const w = this._velocities[offset + 2];
+
+            const linVelSq = vx * vx + vy * vy;
+            const angVelSq = w * w;
+
+            if (linVelSq > LINEAR_SLEEP_TOLERANCE_SQ || angVelSq > ANGULAR_SLEEP_TOLERANCE_SQ) {
+                this._bodyManager.setSleepTime(bodyId, 0);
+                minSleepTime = 0;
+            } else {
+                const newSleepTime = this._bodyManager.getSleepTime(bodyId) + h;
+                this._bodyManager.setSleepTime(bodyId, newSleepTime);
+                if (newSleepTime < minSleepTime) {
+                    minSleepTime = newSleepTime;
+                }
+            }
+        }
+
+        return minSleepTime;
+    }
+
+    private _putIslandToSleep(): void {
+        for (let i = 0; i < this._bodyStack.length; i++) {
+            const bodyId = this._bodyStack[i];
+            const type = this._bodyManager.getBodyType(bodyId);
+
+            if (type === 2) {
+                this._bodyManager.setAwake(bodyId, false);
+            }
+        }
     }
 
     private _initializeVelocityConstraints(): void {
