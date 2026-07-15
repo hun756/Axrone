@@ -1,4 +1,4 @@
-import type { IVec2Like } from '@axrone/numeric';
+import { Vec2, clamp, type IVec2Like } from '@axrone/numeric';
 import { AABB2D } from '@axrone/geometry';
 import type { BodyId, ShapeId, IRaycastResult2D } from '../types';
 import { GJK2D } from './collision-algorithms';
@@ -22,10 +22,7 @@ export class ContinuousCollisionDetection {
         velocityB: IVec2Like,
         deltaTime: number
     ): CCDResult {
-        const relativeVelocity = {
-            x: velocityA.x - velocityB.x,
-            y: velocityA.y - velocityB.y,
-        };
+        const relativeVelocity = Vec2.subtract(velocityA, velocityB);
 
         let tLower = 0;
         let tUpper = deltaTime;
@@ -161,13 +158,10 @@ export class ContinuousCollisionDetection {
                 };
             }
 
-            const relativeVelocity = {
-                x: velocityA.x - velocityB.x,
-                y: velocityA.y - velocityB.y,
-            };
+            const relativeVelocity = Vec2.subtract(velocityA, velocityB);
 
             const velocityLength = Math.sqrt(
-                relativeVelocity.x * relativeVelocity.x + relativeVelocity.y * relativeVelocity.y
+                Vec2.lengthSquared(relativeVelocity)
             );
 
             if (velocityLength < this.EPSILON) {
@@ -206,14 +200,13 @@ export class ContinuousCollisionDetection {
         transformB: { position: IVec2Like; rotation: number },
         closest?: IVec2Like
     ): IVec2Like {
-        if (closest && (closest.x * closest.x + closest.y * closest.y) > this.EPSILON) {
-            const length = Math.sqrt(closest.x * closest.x + closest.y * closest.y);
+        if (closest && Vec2.lengthSquared(closest) > this.EPSILON) {
+            const length = Math.sqrt(Vec2.lengthSquared(closest));
             return { x: closest.x / length, y: closest.y / length };
         }
 
-        const dx = transformB.position.x - transformA.position.x;
-        const dy = transformB.position.y - transformA.position.y;
-        const length = Math.sqrt(dx * dx + dy * dy);
+        const delta = Vec2.subtract(transformB.position, transformA.position);
+        const length = Math.sqrt(Vec2.lengthSquared(delta));
 
         if (length > this.EPSILON) {
             return { x: dx / length, y: dy / length };
@@ -283,14 +276,11 @@ export class Raycaster2D {
         radius: number,
         maxDistance: number = Infinity
     ): { hit: boolean; distance: number; point: IVec2Like; normal: IVec2Like } {
-        const oc = {
-            x: origin.x - center.x,
-            y: origin.y - center.y,
-        };
+        const oc = Vec2.subtract(origin, center);
 
-        const a = direction.x * direction.x + direction.y * direction.y;
-        const b = 2 * (oc.x * direction.x + oc.y * direction.y);
-        const c = oc.x * oc.x + oc.y * oc.y - radius * radius;
+        const a = Vec2.lengthSquared(direction);
+        const b = 2 * Vec2.dot(oc, direction);
+        const c = Vec2.lengthSquared(oc) - radius * radius;
 
         const discriminant = b * b - 4 * a * c;
 
@@ -344,24 +334,15 @@ export class Raycaster2D {
         let hitNormal: IVec2Like = { x: 0, y: 0 };
         let hit = false;
 
-        const cos = Math.cos(transform.rotation);
-        const sin = Math.sin(transform.rotation);
-
         for (let i = 0; i < vertices.length; i++) {
             const j = (i + 1) % vertices.length;
 
             const v1 = vertices[i];
             const v2 = vertices[j];
 
-            const p1 = {
-                x: cos * v1.x - sin * v1.y + transform.position.x,
-                y: sin * v1.x + cos * v1.y + transform.position.y,
-            };
+            const p1 = Vec2.add(transform.position, Vec2.rotate(v1, transform.rotation));
 
-            const p2 = {
-                x: cos * v2.x - sin * v2.y + transform.position.x,
-                y: sin * v2.x + cos * v2.y + transform.position.y,
-            };
+            const p2 = Vec2.add(transform.position, Vec2.rotate(v2, transform.rotation));
 
             const result = this.raycastSegment(origin, direction, p1, p2, maxDistance);
 
@@ -388,23 +369,20 @@ export class Raycaster2D {
         p2: IVec2Like,
         maxDistance: number
     ): { hit: boolean; distance: number; point: IVec2Like; normal: IVec2Like } {
-        const edge = {
-            x: p2.x - p1.x,
-            y: p2.y - p1.y,
-        };
+        const edge = Vec2.subtract(p2, p1);
 
         const normal = {
             x: -edge.y,
             y: edge.x,
         };
 
-        const length = Math.sqrt(normal.x * normal.x + normal.y * normal.y);
+        const length = Math.sqrt(Vec2.lengthSquared(normal));
         if (length > this.EPSILON) {
             normal.x /= length;
             normal.y /= length;
         }
 
-        const denom = direction.x * normal.x + direction.y * normal.y;
+        const denom = Vec2.dot(direction, normal);
 
         if (Math.abs(denom) < this.EPSILON) {
             return {
@@ -415,7 +393,7 @@ export class Raycaster2D {
             };
         }
 
-        const t = ((p1.x - origin.x) * normal.x + (p1.y - origin.y) * normal.y) / denom;
+        const t = Vec2.dot(Vec2.subtract(p1, origin), normal) / denom;
 
         if (t < 0 || t > maxDistance) {
             return {
@@ -432,8 +410,8 @@ export class Raycaster2D {
         };
 
         const edgeParam =
-            ((point.x - p1.x) * edge.x + (point.y - p1.y) * edge.y) /
-            (edge.x * edge.x + edge.y * edge.y);
+            Vec2.dot(Vec2.subtract(point, p1), edge) /
+            Vec2.lengthSquared(edge);
 
         if (edgeParam < 0 || edgeParam > 1) {
             return {
