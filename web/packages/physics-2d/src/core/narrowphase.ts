@@ -64,11 +64,23 @@ function collideCircleCircle(
     const distSq = dx * dx + dy * dy;
     const radiusSum = circleA.radius + circleB.radius;
     const radiusSumSq = radiusSum * radiusSum;
-    if (distSq > radiusSumSq || distSq < EPSILON * EPSILON) {
+    if (distSq > radiusSumSq) {
         manifold.pointCount = 0;
         return;
     }
     const dist = Math.sqrt(distSq);
+    if (dist < EPSILON) {
+        manifold.normal.x = 0;
+        manifold.normal.y = 1;
+        const contactX = worldCenterA.x;
+        const contactY = worldCenterA.y;
+        manifold.pointCount = 1;
+        const point = manifold.points[0];
+        point.localPointA = inverseTransformPoint({ x: contactX, y: contactY }, ctx.transformA);
+        point.localPointB = inverseTransformPoint({ x: contactX, y: contactY }, ctx.transformB);
+        point.separation = -radiusSum;
+        return;
+    }
     const invDist = 1 / dist;
     manifold.normal.x = dx * invDist;
     manifold.normal.y = dy * invDist;
@@ -268,8 +280,8 @@ function collideBoxCapsule(
     setNormal(manifold.normal, dx, dy);
     manifold.pointCount = 1;
     const point = manifold.points[0];
-    point.localPointA = inverseTransformPoint(closestSeg, ctx.transformB);
-    point.localPointB = inverseTransformPoint(closestBox, ctx.transformA);
+    point.localPointA = inverseTransformPoint(closestBox, ctx.transformA);
+    point.localPointB = inverseTransformPoint(closestSeg, ctx.transformB);
     point.separation = Math.sqrt(minDistSq) - capsule.radius;
 }
 
@@ -391,12 +403,24 @@ function findContactPoint(verticesA: IVec2Like[], _verticesB: IVec2Like[], norma
     return deepest;
 }
 
-function findPolygonContacts(verticesA: readonly IVec2Like[], _verticesB: readonly IVec2Like[], normal: IVec2Like, ctx: CollisionContext, penetration: number): IVec2Like[] {
+function findPolygonContacts(verticesA: readonly IVec2Like[], verticesB: readonly IVec2Like[], normal: IVec2Like, ctx: CollisionContext, penetration: number): IVec2Like[] {
     const contacts: IVec2Like[] = [];
     const threshold = penetration + CollisionConfig.CONTACT_SLOP;
+    // Use a reference point from polygon B to compute depth relative to the contact plane
+    const refVertex = transformPoint(verticesB[0], ctx.transformB);
+    const refDot = normal.x * refVertex.x + normal.y * refVertex.y;
     for (const v of verticesA) {
         const wv = transformPoint(v, ctx.transformA);
-        if (-(normal.x * wv.x + normal.y * wv.y) <= threshold) contacts.push(wv);
+        const depth = (normal.x * wv.x + normal.y * wv.y) - refDot;
+        if (depth <= threshold) contacts.push(wv);
+    }
+    // Also check vertices from polygon B against polygon A
+    const refVertexA = transformPoint(verticesA[0], ctx.transformA);
+    const refDotA = normal.x * refVertexA.x + normal.y * refVertexA.y;
+    for (const v of verticesB) {
+        const wv = transformPoint(v, ctx.transformB);
+        const depth = refDotA - (normal.x * wv.x + normal.y * wv.y);
+        if (depth <= threshold) contacts.push(wv);
     }
     return contacts;
 }
