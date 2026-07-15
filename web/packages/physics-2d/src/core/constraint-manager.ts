@@ -467,6 +467,124 @@ export class ConstraintManager2D implements Disposable {
         };
     }
 
+    getDistanceConstraintData(constraintId: ConstraintId) {
+        const index = this._constraintToDistanceIndex.get(constraintId);
+        if (index === undefined) {
+            throw new ConstraintError(
+                `Distance constraint ${constraintId} not found`,
+                ConstraintManagerError.CONSTRAINT_NOT_FOUND
+            );
+        }
+        const offset = index * DISTANCE_STRIDE;
+        return {
+            localAnchorA: { x: this._distanceData[offset], y: this._distanceData[offset + 1] },
+            localAnchorB: { x: this._distanceData[offset + 2], y: this._distanceData[offset + 3] },
+            length: this._distanceData[offset + 4],
+            minLength: this._distanceData[offset + 5],
+            maxLength: this._distanceData[offset + 6],
+            stiffness: this._distanceData[offset + 7],
+            damping: this._distanceData[offset + 8],
+        };
+    }
+
+    getRevoluteConstraintData(constraintId: ConstraintId) {
+        const index = this._constraintToRevoluteIndex.get(constraintId);
+        if (index === undefined) {
+            throw new ConstraintError(
+                `Revolute constraint ${constraintId} not found`,
+                ConstraintManagerError.CONSTRAINT_NOT_FOUND
+            );
+        }
+        const offset = index * REVOLUTE_STRIDE;
+        return {
+            localAnchorA: { x: this._revoluteData[offset], y: this._revoluteData[offset + 1] },
+            localAnchorB: { x: this._revoluteData[offset + 2], y: this._revoluteData[offset + 3] },
+            referenceAngle: this._revoluteData[offset + 4],
+            enableLimit: this._revoluteData[offset + 5] !== 0,
+            lowerAngle: this._revoluteData[offset + 6],
+            upperAngle: this._revoluteData[offset + 7],
+            enableMotor: this._revoluteData[offset + 8] !== 0,
+            motorSpeed: this._revoluteData[offset + 9],
+            maxMotorTorque: this._revoluteData[offset + 10],
+        };
+    }
+
+    getPrismaticConstraintData(constraintId: ConstraintId) {
+        const index = this._constraintToPrismaticIndex.get(constraintId);
+        if (index === undefined) {
+            throw new ConstraintError(
+                `Prismatic constraint ${constraintId} not found`,
+                ConstraintManagerError.CONSTRAINT_NOT_FOUND
+            );
+        }
+        const offset = index * PRISMATIC_STRIDE;
+        return {
+            localAnchorA: { x: this._prismaticData[offset], y: this._prismaticData[offset + 1] },
+            localAnchorB: { x: this._prismaticData[offset + 2], y: this._prismaticData[offset + 3] },
+            localAxisA: { x: this._prismaticData[offset + 4], y: this._prismaticData[offset + 5] },
+            referenceAngle: this._prismaticData[offset + 6],
+            enableLimit: this._prismaticData[offset + 7] !== 0,
+            lowerTranslation: this._prismaticData[offset + 8],
+            upperTranslation: this._prismaticData[offset + 9],
+            enableMotor: this._prismaticData[offset + 10] !== 0,
+            motorSpeed: this._prismaticData[offset + 11],
+            maxMotorForce: this._prismaticData[offset + 12],
+        };
+    }
+
+    getWeldConstraintData(constraintId: ConstraintId) {
+        const index = this._constraintToWeldIndex.get(constraintId);
+        if (index === undefined) {
+            throw new ConstraintError(
+                `Weld constraint ${constraintId} not found`,
+                ConstraintManagerError.CONSTRAINT_NOT_FOUND
+            );
+        }
+        const offset = index * WELD_STRIDE;
+        return {
+            localAnchorA: { x: this._weldData[offset], y: this._weldData[offset + 1] },
+            localAnchorB: { x: this._weldData[offset + 2], y: this._weldData[offset + 3] },
+            referenceAngle: this._weldData[offset + 4],
+            stiffness: this._weldData[offset + 5],
+            damping: this._weldData[offset + 6],
+        };
+    }
+
+    getMotorConstraintData(constraintId: ConstraintId) {
+        const index = this._constraintToMotorIndex.get(constraintId);
+        if (index === undefined) {
+            throw new ConstraintError(
+                `Motor constraint ${constraintId} not found`,
+                ConstraintManagerError.CONSTRAINT_NOT_FOUND
+            );
+        }
+        const offset = index * MOTOR_STRIDE;
+        return {
+            linearOffset: { x: this._motorData[offset], y: this._motorData[offset + 1] },
+            angularOffset: this._motorData[offset + 2],
+            maxForce: this._motorData[offset + 3],
+            maxTorque: this._motorData[offset + 4],
+            correctionFactor: this._motorData[offset + 5],
+        };
+    }
+
+    getMouseConstraintData(constraintId: ConstraintId) {
+        const index = this._constraintToMouseIndex.get(constraintId);
+        if (index === undefined) {
+            throw new ConstraintError(
+                `Mouse constraint ${constraintId} not found`,
+                ConstraintManagerError.CONSTRAINT_NOT_FOUND
+            );
+        }
+        const offset = index * MOUSE_STRIDE;
+        return {
+            target: { x: this._mouseData[offset], y: this._mouseData[offset + 1] },
+            maxForce: this._mouseData[offset + 2],
+            stiffness: this._mouseData[offset + 3],
+            damping: this._mouseData[offset + 4],
+        };
+    }
+
     hasConstraint(constraintId: ConstraintId): boolean {
         return this._metadata.has(constraintId);
     }
