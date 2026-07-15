@@ -379,6 +379,11 @@ export class BodyManager2D implements Disposable {
         return this._bodyData[this._getIndex(bodyId) * BODY_SOA_STRIDE + SLEEP_TIME_OFFSET];
     }
 
+    setSleepTime(bodyId: BodyId, time: number): void {
+        const index = this._getIndex(bodyId);
+        this._bodyData[index * BODY_SOA_STRIDE + SLEEP_TIME_OFFSET] = time;
+    }
+
     getUserData(bodyId: BodyId): unknown {
         return this._userData.get(bodyId);
     }
