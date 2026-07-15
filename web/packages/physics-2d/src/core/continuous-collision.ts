@@ -174,7 +174,7 @@ export class ContinuousCollisionDetection {
                 break;
             }
 
-            const dt = distance / velocityLength;
+            const dt = distance.distance / velocityLength;
             t += dt;
 
             if (t >= deltaTime) {
