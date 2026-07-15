@@ -209,7 +209,7 @@ export class ContinuousCollisionDetection {
         const length = Math.sqrt(Vec2.lengthSquared(delta));
 
         if (length > this.EPSILON) {
-            return { x: dx / length, y: dy / length };
+            return { x: delta.x / length, y: delta.y / length };
         }
 
         return { x: 1, y: 0 };
