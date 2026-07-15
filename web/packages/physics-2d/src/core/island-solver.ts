@@ -124,6 +124,7 @@ export class IslandSolver2D {
         positionIterations: number,
         allowSleep: boolean,
         flags: SolverFlags,
+        gravity: { x: number; y: number },
         profiler?: ProfilerData
     ): void {
         const bodies = this._bodyManager.getBodyIds();
@@ -148,6 +149,8 @@ export class IslandSolver2D {
                     velocityIterations,
                     positionIterations,
                     flags,
+                    gravity,
+                    allowSleep,
                     profiler
                 );
                 this._bodyStack.length = 0;
