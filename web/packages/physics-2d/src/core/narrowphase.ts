@@ -40,6 +40,17 @@ interface WritableManifold {
     }>;
 }
 
+function setNormal(out: { x: number; y: number }, dx: number, dy: number): void {
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d > EPSILON) {
+        out.x = dx / d;
+        out.y = dy / d;
+    } else {
+        out.x = 0;
+        out.y = 1;
+    }
+}
+
 function collideCircleCircle(
     circleA: { center: IVec2Like; radius: number },
     circleB: { center: IVec2Like; radius: number },
@@ -48,27 +59,22 @@ function collideCircleCircle(
 ): void {
     const worldCenterA = transformPoint(circleA.center, ctx.transformA);
     const worldCenterB = transformPoint(circleB.center, ctx.transformB);
-
     const dx = worldCenterB.x - worldCenterA.x;
     const dy = worldCenterB.y - worldCenterA.y;
     const distSq = dx * dx + dy * dy;
     const radiusSum = circleA.radius + circleB.radius;
     const radiusSumSq = radiusSum * radiusSum;
-
     if (distSq > radiusSumSq || distSq < EPSILON * EPSILON) {
         manifold.pointCount = 0;
         return;
     }
-
     const dist = Math.sqrt(distSq);
     const invDist = 1 / dist;
     manifold.normal.x = dx * invDist;
     manifold.normal.y = dy * invDist;
-
     const separation = dist - radiusSum;
     const contactX = worldCenterA.x + manifold.normal.x * circleA.radius;
     const contactY = worldCenterA.y + manifold.normal.y * circleA.radius;
-
     manifold.pointCount = 1;
     const point = manifold.points[0];
     point.localPointA = inverseTransformPoint({ x: contactX, y: contactY }, ctx.transformA);
@@ -84,18 +90,11 @@ function collideBoxBox(
 ): void {
     const verticesA = getBoxVertices(boxA);
     const verticesB = getBoxVertices(boxB);
-
     const result = SAT2D.testPolygonPolygon(verticesA, verticesB, ctx.transformA, ctx.transformB);
-
-    if (!result.colliding) {
-        manifold.pointCount = 0;
-        return;
-    }
-
+    if (!result.colliding) { manifold.pointCount = 0; return; }
     manifold.normal.x = result.normal.x;
     manifold.normal.y = result.normal.y;
     manifold.pointCount = 1;
-
     const contactPoint = findContactPoint(verticesA, verticesB, result.normal, ctx);
     const point = manifold.points[0];
     point.localPointA = inverseTransformPoint(contactPoint, ctx.transformA);
@@ -109,29 +108,11 @@ function collidePolygonPolygon(
     ctx: CollisionContext,
     manifold: WritableManifold
 ): void {
-    const result = SAT2D.testPolygonPolygon(
-        polyA.vertices,
-        polyB.vertices,
-        ctx.transformA,
-        ctx.transformB
-    );
-
-    if (!result.colliding) {
-        manifold.pointCount = 0;
-        return;
-    }
-
+    const result = SAT2D.testPolygonPolygon(polyA.vertices, polyB.vertices, ctx.transformA, ctx.transformB);
+    if (!result.colliding) { manifold.pointCount = 0; return; }
     manifold.normal.x = result.normal.x;
     manifold.normal.y = result.normal.y;
-
-    const contacts = findPolygonContacts(
-        polyA.vertices,
-        polyB.vertices,
-        result.normal,
-        ctx,
-        result.penetration
-    );
-
+    const contacts = findPolygonContacts(polyA.vertices, polyB.vertices, result.normal, ctx, result.penetration);
     manifold.pointCount = Math.min(contacts.length, CollisionConfig.MAX_MANIFOLD_POINTS);
     for (let i = 0; i < manifold.pointCount; i++) {
         const point = manifold.points[i];
@@ -149,28 +130,17 @@ function collideCircleBox(
 ): void {
     const worldCenter = transformPoint(circle.center, ctx.transformA);
     const boxVertices = getBoxVertices(box);
-
     const closestPoint = findClosestPointOnPolygon(worldCenter, boxVertices, ctx.transformB);
     const dx = worldCenter.x - closestPoint.x;
     const dy = worldCenter.y - closestPoint.y;
     const distSq = dx * dx + dy * dy;
-
-    if (distSq > circle.radius * circle.radius) {
-        manifold.pointCount = 0;
-        return;
-    }
-
-    const dist = Math.sqrt(distSq);
-    const invDist = dist > EPSILON ? 1 / dist : 0;
-
-    manifold.normal.x = dx * invDist;
-    manifold.normal.y = dy * invDist;
+    if (distSq > circle.radius * circle.radius) { manifold.pointCount = 0; return; }
+    setNormal(manifold.normal, dx, dy);
     manifold.pointCount = 1;
-
     const point = manifold.points[0];
     point.localPointA = inverseTransformPoint(closestPoint, ctx.transformA);
     point.localPointB = inverseTransformPoint(closestPoint, ctx.transformB);
-    point.separation = dist - circle.radius;
+    point.separation = Math.sqrt(distSq) - circle.radius;
 }
 
 function collideCirclePolygon(
@@ -181,27 +151,16 @@ function collideCirclePolygon(
 ): void {
     const worldCenter = transformPoint(circle.center, ctx.transformA);
     const closestPoint = findClosestPointOnPolygon(worldCenter, poly.vertices, ctx.transformB);
-
     const dx = worldCenter.x - closestPoint.x;
     const dy = worldCenter.y - closestPoint.y;
     const distSq = dx * dx + dy * dy;
-
-    if (distSq > circle.radius * circle.radius) {
-        manifold.pointCount = 0;
-        return;
-    }
-
-    const dist = Math.sqrt(distSq);
-    const invDist = dist > EPSILON ? 1 / dist : 0;
-
-    manifold.normal.x = dx * invDist;
-    manifold.normal.y = dy * invDist;
+    if (distSq > circle.radius * circle.radius) { manifold.pointCount = 0; return; }
+    setNormal(manifold.normal, dx, dy);
     manifold.pointCount = 1;
-
     const point = manifold.points[0];
     point.localPointA = inverseTransformPoint(closestPoint, ctx.transformA);
     point.localPointB = inverseTransformPoint(closestPoint, ctx.transformB);
-    point.separation = dist - circle.radius;
+    point.separation = Math.sqrt(distSq) - circle.radius;
 }
 
 function collideCapsuleCapsule(
@@ -214,36 +173,19 @@ function collideCapsuleCapsule(
     const worldA2 = transformPoint(capsuleA.p2, ctx.transformA);
     const worldB1 = transformPoint(capsuleB.p1, ctx.transformB);
     const worldB2 = transformPoint(capsuleB.p2, ctx.transformB);
-
-    const { pointA, pointB, distSq } = closestPointsSegmentSegment(
-        worldA1,
-        worldA2,
-        worldB1,
-        worldB2
-    );
-
+    const { pointA, pointB, distSq } = closestPointsSegmentSegment(worldA1, worldA2, worldB1, worldB2);
     const radiusSum = capsuleA.radius + capsuleB.radius;
-    if (distSq > radiusSum * radiusSum) {
-        manifold.pointCount = 0;
-        return;
-    }
-
-    const dist = Math.sqrt(distSq);
-    const invDist = dist > EPSILON ? 1 / dist : 0;
+    if (distSq > radiusSum * radiusSum) { manifold.pointCount = 0; return; }
     const dx = pointB.x - pointA.x;
     const dy = pointB.y - pointA.y;
-
-    manifold.normal.x = dx * invDist;
-    manifold.normal.y = dy * invDist;
+    setNormal(manifold.normal, dx, dy);
     manifold.pointCount = 1;
-
     const contactX = (pointA.x + pointB.x) * 0.5;
     const contactY = (pointA.y + pointB.y) * 0.5;
-
     const point = manifold.points[0];
     point.localPointA = inverseTransformPoint({ x: contactX, y: contactY }, ctx.transformA);
     point.localPointB = inverseTransformPoint({ x: contactX, y: contactY }, ctx.transformB);
-    point.separation = dist - radiusSum;
+    point.separation = Math.sqrt(distSq) - radiusSum;
 }
 
 function collideCircleCapsule(
@@ -255,29 +197,18 @@ function collideCircleCapsule(
     const worldCenter = transformPoint(circle.center, ctx.transformA);
     const worldP1 = transformPoint(capsule.p1, ctx.transformB);
     const worldP2 = transformPoint(capsule.p2, ctx.transformB);
-
     const closestPoint = closestPointOnSegment(worldCenter, worldP1, worldP2);
     const dx = worldCenter.x - closestPoint.x;
     const dy = worldCenter.y - closestPoint.y;
     const distSq = dx * dx + dy * dy;
-
     const radiusSum = circle.radius + capsule.radius;
-    if (distSq > radiusSum * radiusSum) {
-        manifold.pointCount = 0;
-        return;
-    }
-
-    const dist = Math.sqrt(distSq);
-    const invDist = dist > EPSILON ? 1 / dist : 0;
-
-    manifold.normal.x = dx * invDist;
-    manifold.normal.y = dy * invDist;
+    if (distSq > radiusSum * radiusSum) { manifold.pointCount = 0; return; }
+    setNormal(manifold.normal, dx, dy);
     manifold.pointCount = 1;
-
     const point = manifold.points[0];
     point.localPointA = inverseTransformPoint(closestPoint, ctx.transformA);
     point.localPointB = inverseTransformPoint(closestPoint, ctx.transformB);
-    point.separation = dist - radiusSum;
+    point.separation = Math.sqrt(distSq) - radiusSum;
 }
 
 function collideCapsulePolygon(
@@ -288,16 +219,12 @@ function collideCapsulePolygon(
 ): void {
     const worldP1 = transformPoint(capsule.p1, ctx.transformA);
     const worldP2 = transformPoint(capsule.p2, ctx.transformA);
-
-    // Find closest point on polygon boundary to capsule segment
     let minDistSq = Infinity;
     let closestOnPoly: IVec2Like = { x: 0, y: 0 };
     let closestOnSeg: IVec2Like = { x: 0, y: 0 };
-
     for (let i = 0; i < poly.vertices.length; i++) {
         const v0 = transformPoint(poly.vertices[i], ctx.transformB);
         const v1 = transformPoint(poly.vertices[(i + 1) % poly.vertices.length], ctx.transformB);
-
         const { pointA, pointB, distSq } = closestPointsSegmentSegment(worldP1, worldP2, v0, v1);
         if (distSq < minDistSq) {
             minDistSq = distSq;
@@ -305,25 +232,15 @@ function collideCapsulePolygon(
             closestOnPoly = pointB;
         }
     }
-
-    if (minDistSq > capsule.radius * capsule.radius) {
-        manifold.pointCount = 0;
-        return;
-    }
-
-    const dist = Math.sqrt(minDistSq);
-    const invDist = dist > EPSILON ? 1 / dist : 0;
+    if (minDistSq > capsule.radius * capsule.radius) { manifold.pointCount = 0; return; }
     const dx = closestOnSeg.x - closestOnPoly.x;
     const dy = closestOnSeg.y - closestOnPoly.y;
-
-    manifold.normal.x = dx * invDist;
-    manifold.normal.y = dy * invDist;
+    setNormal(manifold.normal, dx, dy);
     manifold.pointCount = 1;
-
     const point = manifold.points[0];
     point.localPointA = inverseTransformPoint(closestOnSeg, ctx.transformA);
     point.localPointB = inverseTransformPoint(closestOnPoly, ctx.transformB);
-    point.separation = dist - capsule.radius;
+    point.separation = Math.sqrt(minDistSq) - capsule.radius;
 }
 
 function collideBoxCapsule(
@@ -332,87 +249,38 @@ function collideBoxCapsule(
     ctx: CollisionContext,
     manifold: WritableManifold
 ): void {
-    // Build box world vertices using box's local center offset from body transform
     const boxWorldVertices = getBoxVertices(box).map(v =>
-        transformPoint(
-            { x: v.x + box.center.x, y: v.y + box.center.y },
-            ctx.transformA
-        )
+        transformPoint({ x: v.x + box.center.x, y: v.y + box.center.y }, ctx.transformA)
     );
-    const worldCapsuleP1 = transformPoint(capsule.p1, ctx.transformB);
-    const worldCapsuleP2 = transformPoint(capsule.p2, ctx.transformB);
-
-    const { pointA, pointB, distSq } = closestPointsSegmentSegment(
-        worldCapsuleP1,
-        worldCapsuleP2,
-        boxWorldVertices[0],
-        boxWorldVertices[1]
-    );
-
-    let minDistSq = distSq;
-    let closestOnSeg = pointA;
-    let closestOnBox = pointB;
-
-    for (let i = 1; i < boxWorldVertices.length; i++) {
+    const worldC1 = transformPoint(capsule.p1, ctx.transformB);
+    const worldC2 = transformPoint(capsule.p2, ctx.transformB);
+    let minDistSq = Infinity;
+    let closestSeg: IVec2Like = { x: 0, y: 0 };
+    let closestBox: IVec2Like = { x: 0, y: 0 };
+    for (let i = 0; i < boxWorldVertices.length; i++) {
         const j = (i + 1) % boxWorldVertices.length;
-        const { pointA: segP, pointB: boxP, distSq: dSq } = closestPointsSegmentSegment(
-            worldCapsuleP1,
-            worldCapsuleP2,
-            boxWorldVertices[i],
-            boxWorldVertices[j]
-        );
-        if (dSq < minDistSq) {
-            minDistSq = dSq;
-            closestOnSeg = segP;
-            closestOnBox = boxP;
-        }
+        const { pointA, pointB, distSq } = closestPointsSegmentSegment(worldC1, worldC2, boxWorldVertices[i], boxWorldVertices[j]);
+        if (distSq < minDistSq) { minDistSq = distSq; closestSeg = pointA; closestBox = pointB; }
     }
-
-    if (minDistSq > capsule.radius * capsule.radius) {
-        manifold.pointCount = 0;
-        return;
-    }
-
-    const dist = Math.sqrt(minDistSq);
-    const invDist = dist > EPSILON ? 1 / dist : 0;
-    const dx = closestOnSeg.x - closestOnBox.x;
-    const dy = closestOnSeg.y - closestOnBox.y;
-    const fallbackDx = capsule.p1.x + capsule.p2.x - box.center.x;
-    const fallbackDy = capsule.p1.y + capsule.p2.y - box.center.y;
-
-    manifold.normal.x = dist > EPSILON ? dx * invDist : (fallbackDx !== 0 ? fallbackDx / Math.sqrt(fallbackDx * fallbackDx + fallbackDy * fallbackDy) : 0);
-    manifold.normal.y = dist > EPSILON ? dy * invDist : (fallbackDy !== 0 ? fallbackDy / Math.sqrt(fallbackDx * fallbackDx + fallbackDy * fallbackDy) : 1);
+    if (minDistSq > capsule.radius * capsule.radius) { manifold.pointCount = 0; return; }
+    const dx = closestSeg.x - closestBox.x;
+    const dy = closestSeg.y - closestBox.y;
+    setNormal(manifold.normal, dx, dy);
     manifold.pointCount = 1;
-
     const point = manifold.points[0];
-    point.localPointA = inverseTransformPoint(closestOnSeg, ctx.transformA);
-    point.localPointB = inverseTransformPoint(closestOnBox, ctx.transformB);
-    point.separation = dist - capsule.radius;
+    point.localPointA = inverseTransformPoint(closestSeg, ctx.transformB);
+    point.localPointB = inverseTransformPoint(closestBox, ctx.transformA);
+    point.separation = Math.sqrt(minDistSq) - capsule.radius;
 }
 
 const collideCapsuleCircle = (a: any, b: any, ctx: CollisionContext, m: WritableManifold) =>
-    collideCircleCapsule(
-        b,
-        a,
-        { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA },
-        m
-    );
+    collideCircleCapsule(b, a, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, m);
 const collidePolygonCircle = (a: any, b: any, ctx: CollisionContext, m: WritableManifold) =>
-    collideCirclePolygon(
-        b,
-        a,
-        { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA },
-        m
-    );
+    collideCirclePolygon(b, a, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, m);
 const collideBoxCircle = (a: any, b: any, ctx: CollisionContext, m: WritableManifold) =>
     collideCircleBox(b, a, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, m);
 const collidePolygonCapsule = (a: any, b: any, ctx: CollisionContext, m: WritableManifold) =>
-    collideCapsulePolygon(
-        b,
-        a,
-        { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA },
-        m
-    );
+    collideCapsulePolygon(b, a, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, m);
 const collideBoxPolygon = collidePolygonPolygon;
 const collidePolygonBox = collideBoxPolygon;
 const collideCapsuleBox = (a: any, b: any, ctx: CollisionContext, m: WritableManifold) =>
@@ -461,17 +329,9 @@ export class Narrowphase2D {
         });
     }
 
-    acquireManifold(): WritableManifold {
-        return this._manifoldPool.acquire();
-    }
-
-    releaseManifold(manifold: WritableManifold): void {
-        this._manifoldPool.release(manifold);
-    }
-
-    dispose(): void {
-        this._manifoldPool[Symbol.dispose]();
-    }
+    acquireManifold(): WritableManifold { return this._manifoldPool.acquire(); }
+    releaseManifold(manifold: WritableManifold): void { this._manifoldPool.release(manifold); }
+    dispose(): void { this._manifoldPool[Symbol.dispose](); }
 
     collide(
         shapeIdA: ShapeId,
@@ -483,214 +343,110 @@ export class Narrowphase2D {
         manifold: IContactManifold2D
     ): void {
         const collisionFn = COLLISION_MATRIX[typeA]?.[typeB];
-        if (!collisionFn) {
-            (manifold as any).pointCount = 0;
-            return;
-        }
-
+        if (!collisionFn) { (manifold as any).pointCount = 0; return; }
         const shapeA = this.getShapeData(shapeIdA, typeA, shapeManager);
         const shapeB = this.getShapeData(shapeIdB, typeB, shapeManager);
-
         collisionFn(shapeA, shapeB, ctx, manifold as any);
     }
 
     private getShapeData(shapeId: ShapeId, type: ShapeType, manager: ShapeManager2D): any {
         switch (type) {
-            case ShapeType.Circle:
-                return manager.getCircleData(shapeId);
-            case ShapeType.Box:
-                return manager.getBoxData(shapeId);
-            case ShapeType.Polygon:
-                return manager.getPolygonData(shapeId);
-            case ShapeType.Capsule:
-                return manager.getCapsuleData(shapeId);
-            default:
-                return null;
+            case ShapeType.Circle: return manager.getCircleData(shapeId);
+            case ShapeType.Box: return manager.getBoxData(shapeId);
+            case ShapeType.Polygon: return manager.getPolygonData(shapeId);
+            case ShapeType.Capsule: return manager.getCapsuleData(shapeId);
+            default: return null;
         }
     }
 }
 
-function transformPoint(
-    point: IVec2Like,
-    transform: { position: IVec2Like; rotation: number }
-): IVec2Like {
-    const cos = Math.cos(transform.rotation);
-    const sin = Math.sin(transform.rotation);
-    return {
-        x: cos * point.x - sin * point.y + transform.position.x,
-        y: sin * point.x + cos * point.y + transform.position.y,
-    };
+function transformPoint(point: IVec2Like, t: { position: IVec2Like; rotation: number }): IVec2Like {
+    const c = Math.cos(t.rotation), s = Math.sin(t.rotation);
+    return { x: c * point.x - s * point.y + t.position.x, y: s * point.x + c * point.y + t.position.y };
 }
 
-function inverseTransformPoint(
-    point: IVec2Like,
-    transform: { position: IVec2Like; rotation: number }
-): IVec2Like {
-    const dx = point.x - transform.position.x;
-    const dy = point.y - transform.position.y;
-    const cos = Math.cos(-transform.rotation);
-    const sin = Math.sin(-transform.rotation);
-    return {
-        x: cos * dx - sin * dy,
-        y: sin * dx + cos * dy,
-    };
+function inverseTransformPoint(point: IVec2Like, t: { position: IVec2Like; rotation: number }): IVec2Like {
+    const dx = point.x - t.position.x, dy = point.y - t.position.y;
+    const c = Math.cos(-t.rotation), s = Math.sin(-t.rotation);
+    return { x: c * dx - s * dy, y: s * dx + c * dy };
 }
 
-function getBoxVertices(box: {
-    center: IVec2Like;
-    halfWidth: number;
-    halfHeight: number;
-    rotation: number;
-}): IVec2Like[] {
-    // Local-space corners (axis-aligned), rotation is applied by SAT via transform
+function getBoxVertices(box: { center: IVec2Like; halfWidth: number; halfHeight: number; rotation: number }): IVec2Like[] {
     return [
         { x: -box.halfWidth, y: -box.halfHeight },
-        { x:  box.halfWidth, y: -box.halfHeight },
-        { x:  box.halfWidth, y:  box.halfHeight },
-        { x: -box.halfWidth, y:  box.halfHeight },
+        { x: box.halfWidth, y: -box.halfHeight },
+        { x: box.halfWidth, y: box.halfHeight },
+        { x: -box.halfWidth, y: box.halfHeight },
     ];
 }
 
-function findContactPoint(
-    verticesA: IVec2Like[],
-    verticesB: IVec2Like[],
-    normal: IVec2Like,
-    ctx: CollisionContext
-): IVec2Like {
+function findContactPoint(verticesA: IVec2Like[], _verticesB: IVec2Like[], normal: IVec2Like, ctx: CollisionContext): IVec2Like {
     let maxDepth = -Infinity;
-    let deepestPoint: IVec2Like = { x: 0, y: 0 };
-
-    for (const vertex of verticesA) {
-        const worldVertex = transformPoint(vertex, ctx.transformA);
-        const depth = normal.x * worldVertex.x + normal.y * worldVertex.y;
-        if (depth > maxDepth) {
-            maxDepth = depth;
-            deepestPoint = worldVertex;
-        }
+    let deepest: IVec2Like = { x: 0, y: 0 };
+    for (const v of verticesA) {
+        const wv = transformPoint(v, ctx.transformA);
+        const depth = normal.x * wv.x + normal.y * wv.y;
+        if (depth > maxDepth) { maxDepth = depth; deepest = wv; }
     }
-
-    return deepestPoint;
+    return deepest;
 }
 
-function findPolygonContacts(
-    verticesA: readonly IVec2Like[],
-    verticesB: readonly IVec2Like[],
-    normal: IVec2Like,
-    ctx: CollisionContext,
-    penetration: number
-): IVec2Like[] {
+function findPolygonContacts(verticesA: readonly IVec2Like[], _verticesB: readonly IVec2Like[], normal: IVec2Like, ctx: CollisionContext, penetration: number): IVec2Like[] {
     const contacts: IVec2Like[] = [];
     const threshold = penetration + CollisionConfig.CONTACT_SLOP;
-
-    for (const vertex of verticesA) {
-        const worldVertex = transformPoint(vertex, ctx.transformA);
-        const depth = -(normal.x * worldVertex.x + normal.y * worldVertex.y);
-        if (depth <= threshold) {
-            contacts.push(worldVertex);
-        }
+    for (const v of verticesA) {
+        const wv = transformPoint(v, ctx.transformA);
+        if (-(normal.x * wv.x + normal.y * wv.y) <= threshold) contacts.push(wv);
     }
-
     return contacts;
 }
 
-function findClosestPointOnPolygon(
-    point: IVec2Like,
-    vertices: readonly IVec2Like[],
-    transform: { position: IVec2Like; rotation: number }
-): IVec2Like {
-    let minDistSq = Infinity;
-    let closestPoint: IVec2Like = { x: 0, y: 0 };
-
+function findClosestPointOnPolygon(point: IVec2Like, vertices: readonly IVec2Like[], t: { position: IVec2Like; rotation: number }): IVec2Like {
+    let minD = Infinity;
+    let best: IVec2Like = { x: 0, y: 0 };
     for (let i = 0; i < vertices.length; i++) {
         const j = (i + 1) % vertices.length;
-        const v1 = transformPoint(vertices[i], transform);
-        const v2 = transformPoint(vertices[j], transform);
-        const closest = closestPointOnSegment(point, v1, v2);
-        const dx = point.x - closest.x;
-        const dy = point.y - closest.y;
-        const distSq = dx * dx + dy * dy;
-
-        if (distSq < minDistSq) {
-            minDistSq = distSq;
-            closestPoint = closest;
-        }
+        const v1 = transformPoint(vertices[i], t), v2 = transformPoint(vertices[j], t);
+        const cp = closestPointOnSegment(point, v1, v2);
+        const dx = point.x - cp.x, dy = point.y - cp.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < minD) { minD = d2; best = cp; }
     }
-
-    return closestPoint;
+    return best;
 }
 
-function closestPointOnSegment(point: IVec2Like, a: IVec2Like, b: IVec2Like): IVec2Like {
-    const abx = b.x - a.x;
-    const aby = b.y - a.y;
-    const apx = point.x - a.x;
-    const apy = point.y - a.y;
-
+function closestPointOnSegment(p: IVec2Like, a: IVec2Like, b: IVec2Like): IVec2Like {
+    const abx = b.x - a.x, aby = b.y - a.y;
+    const apx = p.x - a.x, apy = p.y - a.y;
     const ab2 = abx * abx + aby * aby;
-    const ap_ab = apx * abx + apy * aby;
-    const t = ab2 > EPSILON ? Math.max(0, Math.min(1, ap_ab / ab2)) : 0;
-
-    return {
-        x: a.x + abx * t,
-        y: a.y + aby * t,
-    };
+    const t = ab2 > EPSILON ? Math.max(0, Math.min(1, (apx * abx + apy * aby) / ab2)) : 0;
+    return { x: a.x + abx * t, y: a.y + aby * t };
 }
 
-function closestPointsSegmentSegment(
-    a1: IVec2Like,
-    a2: IVec2Like,
-    b1: IVec2Like,
-    b2: IVec2Like
-): { pointA: IVec2Like; pointB: IVec2Like; distSq: number } {
-    const d1x = a2.x - a1.x;
-    const d1y = a2.y - a1.y;
-    const d2x = b2.x - b1.x;
-    const d2y = b2.y - b1.y;
-    const rx = a1.x - b1.x;
-    const ry = a1.y - b1.y;
-
+function closestPointsSegmentSegment(a1: IVec2Like, a2: IVec2Like, b1: IVec2Like, b2: IVec2Like): { pointA: IVec2Like; pointB: IVec2Like; distSq: number } {
+    const d1x = a2.x - a1.x, d1y = a2.y - a1.y;
+    const d2x = b2.x - b1.x, d2y = b2.y - b1.y;
+    const rx = a1.x - b1.x, ry = a1.y - b1.y;
     const a = d1x * d1x + d1y * d1y;
     const e = d2x * d2x + d2y * d2y;
     const f = d2x * rx + d2y * ry;
-
-    let s = 0;
-    let t = 0;
-
-    if (a < EPSILON && e < EPSILON) {
-        s = t = 0;
-    } else if (a < EPSILON) {
-        t = Math.max(0, Math.min(1, f / e));
-    } else {
+    let s = 0, t = 0;
+    if (a < EPSILON && e < EPSILON) { s = t = 0; }
+    else if (a < EPSILON) { t = Math.max(0, Math.min(1, f / e)); }
+    else {
         const c = d1x * rx + d1y * ry;
-        if (e < EPSILON) {
-            s = Math.max(0, Math.min(1, -c / a));
-        } else {
+        if (e < EPSILON) { s = Math.max(0, Math.min(1, -c / a)); }
+        else {
             const b = d1x * d2x + d1y * d2y;
             const denom = a * e - b * b;
-
-            if (denom !== 0) {
-                s = Math.max(0, Math.min(1, (b * f - c * e) / denom));
-            }
-
+            if (denom !== 0) s = Math.max(0, Math.min(1, (b * f - c * e) / denom));
             t = (b * s + f) / e;
-
-            if (t < 0) {
-                t = 0;
-                s = Math.max(0, Math.min(1, -c / a));
-            } else if (t > 1) {
-                t = 1;
-                s = Math.max(0, Math.min(1, (b - c) / a));
-            }
+            if (t < 0) { t = 0; s = Math.max(0, Math.min(1, -c / a)); }
+            else if (t > 1) { t = 1; s = Math.max(0, Math.min(1, (b - c) / a)); }
         }
     }
-
-    const pointA = { x: a1.x + d1x * s, y: a1.y + d1y * s };
-    const pointB = { x: b1.x + d2x * t, y: b1.y + d2y * t };
-    const dx = pointB.x - pointA.x;
-    const dy = pointB.y - pointA.y;
-
-    return {
-        pointA,
-        pointB,
-        distSq: dx * dx + dy * dy,
-    };
+    const pA = { x: a1.x + d1x * s, y: a1.y + d1y * s };
+    const pB = { x: b1.x + d2x * t, y: b1.y + d2y * t };
+    const dx = pB.x - pA.x, dy = pB.y - pA.y;
+    return { pointA: pA, pointB: pB, distSq: dx * dx + dy * dy };
 }
