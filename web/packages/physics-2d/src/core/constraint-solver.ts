@@ -29,6 +29,7 @@ interface JacobianRow {
 
 const SOLVER_EPSILON = 1e-6;
 const BAUMGARTE = 0.2;
+const POSITION_SLOP = 0.005;
 
 export class ConstraintSolver2D {
     private readonly _constraintManager: ConstraintManager2D;
@@ -124,7 +125,45 @@ export class ConstraintSolver2D {
             minError = Infinity;
             for (const jacobians of this._jacobianCache.values()) {
                 for (const jacobian of jacobians) {
-                    minError = Math.min(minError, Math.abs(jacobian.bias));
+                    const bodyA = this._bodyMap.get(jacobian.bodyIdA);
+                    const bodyB = this._bodyMap.get(jacobian.bodyIdB);
+                    if (!bodyA || !bodyB) continue;
+
+                    const error = jacobian.bias;
+                    minError = Math.min(minError, Math.abs(error));
+
+                    if (Math.abs(error) <= POSITION_SLOP) continue;
+
+                    const sumJInvJ =
+                        bodyA.invMass * Vec2.lengthSquared(jacobian.j1.linear) +
+                        bodyA.invI * jacobian.j1.angular * jacobian.j1.angular +
+                        bodyB.invMass * Vec2.lengthSquared(jacobian.j2.linear) +
+                        bodyB.invI * jacobian.j2.angular * jacobian.j2.angular;
+
+                    if (sumJInvJ <= SOLVER_EPSILON) continue;
+
+                    const totalInvMass = sumJInvJ + (jacobian.softness ?? 0);
+                    const effectiveMass = totalInvMass > SOLVER_EPSILON ? 1 / totalInvMass : 0;
+
+                    let impulse = -effectiveMass * error;
+                    if (jacobian.lowerLimit !== undefined && impulse < jacobian.lowerLimit) {
+                        impulse = jacobian.lowerLimit;
+                    }
+                    if (jacobian.upperLimit !== undefined && impulse > jacobian.upperLimit) {
+                        impulse = jacobian.upperLimit;
+                    }
+
+                    // Apply position correction directly
+                    if (bodyA.invMass > 0) {
+                        bodyA.position.x += bodyA.invMass * impulse * jacobian.j1.linear.x;
+                        bodyA.position.y += bodyA.invMass * impulse * jacobian.j1.linear.y;
+                        bodyA.rotation += bodyA.invI * impulse * jacobian.j1.angular;
+                    }
+                    if (bodyB.invMass > 0) {
+                        bodyB.position.x += bodyB.invMass * impulse * jacobian.j2.linear.x;
+                        bodyB.position.y += bodyB.invMass * impulse * jacobian.j2.linear.y;
+                        bodyB.rotation += bodyB.invI * impulse * jacobian.j2.angular;
+                    }
                 }
             }
 
