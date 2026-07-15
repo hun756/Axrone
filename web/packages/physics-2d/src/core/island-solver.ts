@@ -11,8 +11,8 @@ interface ProfilerData {
 }
 
 interface VelocityConstraintPoint {
-    rA: Vec2;
-    rB: Vec2;
+    rA: IVec2Like;
+    rB: IVec2Like;
     normalMass: number;
     tangentMass: number;
     velocityBias: number;
@@ -483,7 +483,7 @@ export class IslandSolver2D {
         }
     }
 
-    private _getPointVelocity(index: number, r: Vec2, out: Vec2): Vec2 {
+    private _getPointVelocity(index: number, r: IVec2Like, out: Vec2): Vec2 {
         const offset = index * 3;
         const vx = this._velocities[offset];
         const vy = this._velocities[offset + 1];
@@ -498,8 +498,8 @@ export class IslandSolver2D {
         indexB: number,
         px: number,
         py: number,
-        rA: Vec2,
-        rB: Vec2
+        rA: IVec2Like,
+        rB: IVec2Like
     ): void {
         const invMassA = this._invMass[indexA];
         const invMassB = this._invMass[indexB];
