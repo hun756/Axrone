@@ -1,6 +1,7 @@
 import type { IVec2Like } from '@axrone/numeric';
 import { AABB2D } from '@axrone/geometry';
 import type { BodyId, ShapeId, IRaycastResult2D } from '../types';
+import { GJK2D } from './collision-algorithms';
 
 interface CCDResult {
     hit: boolean;
@@ -143,12 +144,13 @@ export class ContinuousCollisionDetection {
                 currentTransformB
             );
 
-            if (distance < this.TOI_THRESHOLD) {
+            if (distance.distance < this.TOI_THRESHOLD) {
                 const normal = this.computeSeparatingAxis(
                     verticesA,
                     verticesB,
                     currentTransformA,
-                    currentTransformB
+                    currentTransformB,
+                    distance.closest
                 );
 
                 return {
@@ -193,45 +195,22 @@ export class ContinuousCollisionDetection {
         verticesB: readonly IVec2Like[],
         transformA: { position: IVec2Like; rotation: number },
         transformB: { position: IVec2Like; rotation: number }
-    ): number {
-        let minDistance = Infinity;
-
-        const cosA = Math.cos(transformA.rotation);
-        const sinA = Math.sin(transformA.rotation);
-        const cosB = Math.cos(transformB.rotation);
-        const sinB = Math.sin(transformB.rotation);
-
-        for (const vA of verticesA) {
-            const worldA = {
-                x: cosA * vA.x - sinA * vA.y + transformA.position.x,
-                y: sinA * vA.x + cosA * vA.y + transformA.position.y,
-            };
-
-            for (const vB of verticesB) {
-                const worldB = {
-                    x: cosB * vB.x - sinB * vB.y + transformB.position.x,
-                    y: sinB * vB.x + cosB * vB.y + transformB.position.y,
-                };
-
-                const dx = worldB.x - worldA.x;
-                const dy = worldB.y - worldA.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                if (distance < minDistance) {
-                    minDistance = distance;
-                }
-            }
-        }
-
-        return minDistance;
+    ): { distance: number; closest: IVec2Like } {
+        return GJK2D.distance(verticesA, verticesB, transformA, transformB);
     }
 
     private static computeSeparatingAxis(
         verticesA: readonly IVec2Like[],
         verticesB: readonly IVec2Like[],
         transformA: { position: IVec2Like; rotation: number },
-        transformB: { position: IVec2Like; rotation: number }
+        transformB: { position: IVec2Like; rotation: number },
+        closest?: IVec2Like
     ): IVec2Like {
+        if (closest && (closest.x * closest.x + closest.y * closest.y) > this.EPSILON) {
+            const length = Math.sqrt(closest.x * closest.x + closest.y * closest.y);
+            return { x: closest.x / length, y: closest.y / length };
+        }
+
         const dx = transformB.position.x - transformA.position.x;
         const dy = transformB.position.y - transformA.position.y;
         const length = Math.sqrt(dx * dx + dy * dy);
