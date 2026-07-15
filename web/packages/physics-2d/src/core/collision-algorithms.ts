@@ -55,6 +55,124 @@ export class GJK2D {
         return false;
     }
 
+    static distance(
+        verticesA: readonly IVec2Like[],
+        verticesB: readonly IVec2Like[],
+        transformA: { position: IVec2Like; rotation: number },
+        transformB: { position: IVec2Like; rotation: number }
+    ): { distance: number; closest: IVec2Like } {
+        let direction: IVec2Like = {
+            x: transformB.position.x - transformA.position.x,
+            y: transformB.position.y - transformA.position.y,
+        };
+        if (this.dot(direction, direction) < GJK2D.EPSILON) {
+            direction = { x: 1, y: 0 };
+        }
+
+        let simplex: IVec2Like[] = [];
+        const first = this.support(verticesA, verticesB, transformA, transformB, direction);
+        simplex.push(first.point);
+        let closest: IVec2Like = first.point;
+        direction = { x: -closest.x, y: -closest.y };
+
+        for (let iter = 0; iter < GJK2D.MAX_ITERATIONS; iter++) {
+            if (this.dot(direction, direction) < GJK2D.EPSILON) {
+                break;
+            }
+
+            const s = this.support(verticesA, verticesB, transformA, transformB, direction);
+            simplex.push(s.point);
+
+            if (this.dot(s.point, direction) - this.dot(closest, direction) < 1e-10) {
+                break;
+            }
+
+            const reduced = this.closestPointOnSimplex(simplex);
+            simplex = reduced.simplex;
+            closest = reduced.closest;
+            direction = { x: -closest.x, y: -closest.y };
+        }
+
+        return { distance: Math.sqrt(this.dot(closest, closest)), closest };
+    }
+
+    private static closestPointOnSimplex(simplex: IVec2Like[]): { simplex: IVec2Like[]; closest: IVec2Like } {
+        if (simplex.length === 1) {
+            return { simplex: [simplex[0]], closest: simplex[0] };
+        }
+
+        if (simplex.length === 2) {
+            const a = simplex[0];
+            const b = simplex[1];
+            const ab = { x: b.x - a.x, y: b.y - a.y };
+            const denom = this.dot(ab, ab);
+            let t = denom > GJK2D.EPSILON ? -this.dot(a, ab) / denom : 0;
+            if (t <= 0) {
+                return { simplex: [a], closest: a };
+            }
+            if (t >= 1) {
+                return { simplex: [b], closest: b };
+            }
+            return { simplex: [a, b], closest: { x: a.x + t * ab.x, y: a.y + t * ab.y } };
+        }
+
+        const a = simplex[0];
+        const b = simplex[1];
+        const c = simplex[2];
+
+        const ab = { x: b.x - a.x, y: b.y - a.y };
+        const ac = { x: c.x - a.x, y: c.y - a.y };
+        const ap = { x: -a.x, y: -a.y };
+        const d1 = this.dot(ab, ap);
+        const d2 = this.dot(ac, ap);
+        if (d1 <= 0 && d2 <= 0) {
+            return { simplex: [a], closest: a };
+        }
+
+        const bp = { x: -b.x, y: -b.y };
+        const d3 = this.dot(ab, bp);
+        const d4 = this.dot(ac, bp);
+        if (d3 >= 0 && d4 <= d3) {
+            return { simplex: [b], closest: b };
+        }
+
+        const vc = d1 * d4 - d3 * d2;
+        if (vc <= 0 && d1 >= 0 && d3 <= 0) {
+            const t = d1 / (d1 - d3);
+            return { simplex: [a, b], closest: { x: a.x + t * ab.x, y: a.y + t * ab.y } };
+        }
+
+        const cp = { x: -c.x, y: -c.y };
+        const d5 = this.dot(ab, cp);
+        const d6 = this.dot(ac, cp);
+        if (d6 >= 0 && d5 <= d6) {
+            return { simplex: [c], closest: c };
+        }
+
+        const vb = d5 * d2 - d1 * d6;
+        if (vb <= 0 && d2 >= 0 && d6 <= 0) {
+            const t = d2 / (d2 - d6);
+            return { simplex: [a, c], closest: { x: a.x + t * ac.x, y: a.y + t * ac.y } };
+        }
+
+        const va = d3 * d6 - d5 * d4;
+        if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) {
+            const t = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+            const bc = { x: c.x - b.x, y: c.y - b.y };
+            return { simplex: [b, c], closest: { x: b.x + t * bc.x, y: b.y + t * bc.y } };
+        }
+
+        const denom = va + vb + vc;
+        const inv = denom > GJK2D.EPSILON ? 1 / denom : 0;
+        const wA = va * inv;
+        const wB = vb * inv;
+        const wC = vc * inv;
+        return {
+            simplex: [a, b, c],
+            closest: { x: wA * a.x + wB * b.x + wC * c.x, y: wA * a.y + wB * b.y + wC * c.y },
+        };
+    }
+
     private static support(
         verticesA: readonly IVec2Like[],
         verticesB: readonly IVec2Like[],
