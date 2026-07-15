@@ -1,4 +1,4 @@
-import type { IVec2Like } from '@axrone/numeric';
+import { Vec2, clamp, type IVec2Like } from '@axrone/numeric';
 import type { BodyId, ConstraintId } from '../types';
 import { ConstraintType } from '../types';
 import type { ConstraintManager2D } from './constraint-manager';
@@ -165,15 +165,15 @@ export class ConstraintSolver2D {
         const bodyB = this._ensureSolverBody(jacobian.bodyIdB);
 
         const velocityAlongJacobian =
-            dotVec2(jacobian.j1.linear, bodyA.linearVelocity) +
+            Vec2.dot(jacobian.j1.linear, bodyA.linearVelocity) +
             jacobian.j1.angular * bodyA.angularVelocity +
-            dotVec2(jacobian.j2.linear, bodyB.linearVelocity) +
+            Vec2.dot(jacobian.j2.linear, bodyB.linearVelocity) +
             jacobian.j2.angular * bodyB.angularVelocity;
 
         const sumJInvJ =
-            bodyA.invMass * lengthSquared(jacobian.j1.linear) +
+            bodyA.invMass * Vec2.lengthSquared(jacobian.j1.linear) +
             bodyA.invI * jacobian.j1.angular * jacobian.j1.angular +
-            bodyB.invMass * lengthSquared(jacobian.j2.linear) +
+            bodyB.invMass * Vec2.lengthSquared(jacobian.j2.linear) +
             bodyB.invI * jacobian.j2.angular * jacobian.j2.angular;
 
         const softness = jacobian.softness ?? 0;
@@ -209,17 +209,17 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const worldAnchorA = transformPoint(bodyA.position, bodyA.rotation, data.localAnchorA);
-        const worldAnchorB = transformPoint(bodyB.position, bodyB.rotation, data.localAnchorB);
-        const delta = subtractVec2(worldAnchorB, worldAnchorA);
-        const distance = Math.sqrt(lengthSquared(delta));
+        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
+        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
+        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
+        const distance = Math.sqrt(Vec2.lengthSquared(delta));
         if (distance <= SOLVER_EPSILON) {
             return;
         }
 
         const ndir = { x: delta.x / distance, y: delta.y / distance };
-        const rA = rotateVec2(subtractVec2(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = rotateVec2(subtractVec2(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
+        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
+        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
         const h = Math.max(dt, SOLVER_EPSILON);
 
         const error = distance - data.length;
@@ -237,8 +237,8 @@ export class ConstraintSolver2D {
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -ndir.x, y: -ndir.y }, angular: -cross2D(rA, ndir) },
-                j2: { linear: { x: ndir.x, y: ndir.y }, angular: cross2D(rB, ndir) },
+                j1: { linear: { x: -ndir.x, y: -ndir.y }, angular: -Vec2.cross(rA, ndir) },
+                j2: { linear: { x: ndir.x, y: ndir.y }, angular: Vec2.cross(rB, ndir) },
                 bias: -bias,
                 impulse: 0,
                 lowerLimit: -Infinity,
@@ -254,11 +254,11 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const rA = rotateVec2(subtractVec2(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = rotateVec2(subtractVec2(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
-        const worldAnchorA = transformPoint(bodyA.position, bodyA.rotation, data.localAnchorA);
-        const worldAnchorB = transformPoint(bodyB.position, bodyB.rotation, data.localAnchorB);
-        const delta = subtractVec2(worldAnchorB, worldAnchorA);
+        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
+        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
+        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
+        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
+        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
         const h = Math.max(dt, SOLVER_EPSILON);
 
         const jacobians: JacobianRow[] = [
@@ -329,22 +329,22 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const rA = rotateVec2(subtractVec2(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = rotateVec2(subtractVec2(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
-        const worldAnchorA = transformPoint(bodyA.position, bodyA.rotation, data.localAnchorA);
-        const worldAnchorB = transformPoint(bodyB.position, bodyB.rotation, data.localAnchorB);
-        const worldAxisA = normalizeVec2(rotateVec2(data.localAxisA, bodyA.rotation), { x: 1, y: 0 });
+        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
+        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
+        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
+        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
+        const worldAxisA = Vec2.normalize(Vec2.rotate(data.localAxisA, bodyA.rotation), { x: 1, y: 0 });
         const perp = { x: -worldAxisA.y, y: worldAxisA.x };
-        const delta = subtractVec2(worldAnchorB, worldAnchorA);
-        const lateralError = dotVec2(perp, delta);
+        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
+        const lateralError = Vec2.dot(perp, delta);
         const h = Math.max(dt, SOLVER_EPSILON);
 
         const jacobians: JacobianRow[] = [
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -perp.x, y: -perp.y }, angular: -cross2D(rA, perp) },
-                j2: { linear: { x: perp.x, y: perp.y }, angular: cross2D(rB, perp) },
+                j1: { linear: { x: -perp.x, y: -perp.y }, angular: -Vec2.cross(rA, perp) },
+                j2: { linear: { x: perp.x, y: perp.y }, angular: Vec2.cross(rB, perp) },
                 bias: -BAUMGARTE * lateralError / h,
                 impulse: 0,
                 lowerLimit: -Infinity,
@@ -366,7 +366,7 @@ export class ConstraintSolver2D {
             });
         }
 
-        const translation = dotVec2(delta, worldAxisA);
+        const translation = Vec2.dot(delta, worldAxisA);
         if (data.enableLimit) {
             let limitError = 0;
             if (translation < data.lowerTranslation) {
@@ -378,8 +378,8 @@ export class ConstraintSolver2D {
                 jacobians.push({
                     bodyIdA,
                     bodyIdB,
-                    j1: { linear: { x: -worldAxisA.x, y: -worldAxisA.y }, angular: -cross2D(rA, worldAxisA) },
-                    j2: { linear: { x: worldAxisA.x, y: worldAxisA.y }, angular: cross2D(rB, worldAxisA) },
+                    j1: { linear: { x: -worldAxisA.x, y: -worldAxisA.y }, angular: -Vec2.cross(rA, worldAxisA) },
+                    j2: { linear: { x: worldAxisA.x, y: worldAxisA.y }, angular: Vec2.cross(rB, worldAxisA) },
                     bias: -BAUMGARTE * limitError / h,
                     impulse: 0,
                     lowerLimit: -Infinity,
@@ -392,8 +392,8 @@ export class ConstraintSolver2D {
             jacobians.push({
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -worldAxisA.x, y: -worldAxisA.y }, angular: -cross2D(rA, worldAxisA) },
-                j2: { linear: { x: worldAxisA.x, y: worldAxisA.y }, angular: cross2D(rB, worldAxisA) },
+                j1: { linear: { x: -worldAxisA.x, y: -worldAxisA.y }, angular: -Vec2.cross(rA, worldAxisA) },
+                j2: { linear: { x: worldAxisA.x, y: worldAxisA.y }, angular: Vec2.cross(rB, worldAxisA) },
                 bias: -data.motorSpeed,
                 impulse: 0,
                 lowerLimit: -data.maxMotorForce * h,
@@ -410,11 +410,11 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const rA = rotateVec2(subtractVec2(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = rotateVec2(subtractVec2(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
-        const worldAnchorA = transformPoint(bodyA.position, bodyA.rotation, data.localAnchorA);
-        const worldAnchorB = transformPoint(bodyB.position, bodyB.rotation, data.localAnchorB);
-        const delta = subtractVec2(worldAnchorB, worldAnchorA);
+        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
+        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
+        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
+        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
+        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
         const angleError = bodyB.rotation - bodyA.rotation - data.referenceAngle;
         const h = Math.max(dt, SOLVER_EPSILON);
 
@@ -473,22 +473,22 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const rA = rotateVec2(subtractVec2(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = rotateVec2(subtractVec2(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
-        const worldAnchorA = transformPoint(bodyA.position, bodyA.rotation, data.localAnchorA);
-        const worldAnchorB = transformPoint(bodyB.position, bodyB.rotation, data.localAnchorB);
-        const worldAxisA = normalizeVec2(rotateVec2(data.localAxisA, bodyA.rotation), { x: 1, y: 0 });
+        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
+        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
+        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
+        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
+        const worldAxisA = Vec2.normalize(Vec2.rotate(data.localAxisA, bodyA.rotation), { x: 1, y: 0 });
         const perp = { x: -worldAxisA.y, y: worldAxisA.x };
-        const delta = subtractVec2(worldAnchorB, worldAnchorA);
-        const lateralError = dotVec2(perp, delta);
+        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
+        const lateralError = Vec2.dot(perp, delta);
         const h = Math.max(dt, SOLVER_EPSILON);
 
         const jacobians: JacobianRow[] = [
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -perp.x, y: -perp.y }, angular: -cross2D(rA, perp) },
-                j2: { linear: { x: perp.x, y: perp.y }, angular: cross2D(rB, perp) },
+                j1: { linear: { x: -perp.x, y: -perp.y }, angular: -Vec2.cross(rA, perp) },
+                j2: { linear: { x: perp.x, y: perp.y }, angular: Vec2.cross(rB, perp) },
                 bias: -BAUMGARTE * lateralError / h,
                 impulse: 0,
                 lowerLimit: -Infinity,
@@ -496,7 +496,7 @@ export class ConstraintSolver2D {
             },
         ];
 
-        const translation = dotVec2(delta, worldAxisA);
+        const translation = Vec2.dot(delta, worldAxisA);
         let axisError = 0;
         if (data.enableLimit) {
             if (translation < data.lowerTranslation) {
@@ -520,8 +520,8 @@ export class ConstraintSolver2D {
             jacobians.push({
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -worldAxisA.x, y: -worldAxisA.y }, angular: -cross2D(rA, worldAxisA) },
-                j2: { linear: { x: worldAxisA.x, y: worldAxisA.y }, angular: cross2D(rB, worldAxisA) },
+                j1: { linear: { x: -worldAxisA.x, y: -worldAxisA.y }, angular: -Vec2.cross(rA, worldAxisA) },
+                j2: { linear: { x: worldAxisA.x, y: worldAxisA.y }, angular: Vec2.cross(rB, worldAxisA) },
                 bias: -bias,
                 impulse: 0,
                 lowerLimit: -Infinity,
@@ -552,13 +552,13 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const rA = rotateVec2(subtractVec2(data.linearOffset, bodyA.localCenter), bodyA.rotation);
-        const rB = rotateVec2(subtractVec2({ x: 0, y: 0 }, bodyB.localCenter), bodyB.rotation);
+        const rA = Vec2.rotate(Vec2.subtract(data.linearOffset, bodyA.localCenter), bodyA.rotation);
+        const rB = Vec2.rotate(Vec2.subtract({ x: 0, y: 0 }, bodyB.localCenter), bodyB.rotation);
         const h = Math.max(dt, SOLVER_EPSILON);
 
-        const worldAnchorA = transformPoint(bodyA.position, bodyA.rotation, data.linearOffset);
+        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.linearOffset, bodyA.rotation));
         const worldAnchorB = { x: bodyB.position.x, y: bodyB.position.y };
-        const delta = subtractVec2(worldAnchorB, worldAnchorA);
+        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
 
         const jacobians: JacobianRow[] = [
             {
@@ -606,9 +606,9 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         this._ensureSolverBody(bodyIdB);
 
-        const anchorA = transformPoint(bodyA.position, bodyA.rotation, { x: 0, y: 0 });
-        const rA = rotateVec2(subtractVec2({ x: 0, y: 0 }, bodyA.localCenter), bodyA.rotation);
-        const delta = subtractVec2(data.target, anchorA);
+        const anchorA = Vec2.add(bodyA.position, Vec2.rotate({ x: 0, y: 0 }, bodyA.rotation));
+        const rA = Vec2.rotate(Vec2.subtract({ x: 0, y: 0 }, bodyA.localCenter), bodyA.rotation);
+        const delta = Vec2.subtract(data.target, anchorA);
         const h = Math.max(dt, SOLVER_EPSILON);
 
         let softness: number | undefined;
@@ -677,18 +677,18 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const worldAnchorA = transformPoint(bodyA.position, bodyA.rotation, data.localAnchorA);
-        const worldAnchorB = transformPoint(bodyB.position, bodyB.rotation, data.localAnchorB);
-        const delta = subtractVec2(worldAnchorB, worldAnchorA);
-        const distance = Math.sqrt(lengthSquared(delta));
+        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
+        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
+        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
+        const distance = Math.sqrt(Vec2.lengthSquared(delta));
 
         if (distance <= data.maxLength + SOLVER_EPSILON) {
             return;
         }
 
-        const ndir = normalizeVec2(delta, { x: 1, y: 0 });
-        const rA = rotateVec2(subtractVec2(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = rotateVec2(subtractVec2(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
+        const ndir = Vec2.normalize(delta, { x: 1, y: 0 });
+        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
+        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
         const error = distance - data.maxLength;
         const h = Math.max(dt, SOLVER_EPSILON);
 
@@ -696,8 +696,8 @@ export class ConstraintSolver2D {
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -ndir.x, y: -ndir.y }, angular: -cross2D(rA, ndir) },
-                j2: { linear: { x: ndir.x, y: ndir.y }, angular: cross2D(rB, ndir) },
+                j1: { linear: { x: -ndir.x, y: -ndir.y }, angular: -Vec2.cross(rA, ndir) },
+                j2: { linear: { x: ndir.x, y: ndir.y }, angular: Vec2.cross(rB, ndir) },
                 bias: -BAUMGARTE * error / h,
                 impulse: 0,
                 lowerLimit: 0,
@@ -735,60 +735,4 @@ export class ConstraintSolver2D {
         this._bodyMap.set(bodyId, solverBody);
         return solverBody;
     }
-}
-
-function clamp(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value));
-}
-
-function dotVec2(a: Readonly<IVec2Like>, b: Readonly<IVec2Like>): number {
-    return a.x * b.x + a.y * b.y;
-}
-
-function lengthSquared(vector: Readonly<IVec2Like>): number {
-    return dotVec2(vector, vector);
-}
-
-function subtractVec2(a: Readonly<IVec2Like>, b: Readonly<IVec2Like>): IVec2Like {
-    return {
-        x: a.x - b.x,
-        y: a.y - b.y,
-    };
-}
-
-function rotateVec2(vector: Readonly<IVec2Like>, angle: number): IVec2Like {
-    const cosine = Math.cos(angle);
-    const sine = Math.sin(angle);
-    return {
-        x: cosine * vector.x - sine * vector.y,
-        y: sine * vector.x + cosine * vector.y,
-    };
-}
-
-function transformPoint(
-    position: Readonly<IVec2Like>,
-    rotation: number,
-    localPoint: Readonly<IVec2Like>
-): IVec2Like {
-    const rotated = rotateVec2(localPoint, rotation);
-    return {
-        x: position.x + rotated.x,
-        y: position.y + rotated.y,
-    };
-}
-
-function normalizeVec2(vector: Readonly<IVec2Like>, fallback: Readonly<IVec2Like>): IVec2Like {
-    const length = Math.sqrt(lengthSquared(vector));
-    if (length <= SOLVER_EPSILON) {
-        return { x: fallback.x, y: fallback.y };
-    }
-
-    return {
-        x: vector.x / length,
-        y: vector.y / length,
-    };
-}
-
-function cross2D(a: Readonly<IVec2Like>, b: Readonly<IVec2Like>): number {
-    return a.x * b.y - a.y * b.x;
 }
