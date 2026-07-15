@@ -341,6 +341,9 @@ export class SAT2D {
         let minPenetration = -Infinity;
         let bestNormal: IVec2Like = { x: 0, y: 0 };
 
+        const cosA = Math.cos(transformA.rotation);
+        const sinA = Math.sin(transformA.rotation);
+
         for (let i = 0; i < verticesA.length; i++) {
             const j = (i + 1) % verticesA.length;
 
@@ -349,16 +352,19 @@ export class SAT2D {
                 y: verticesA[j].y - verticesA[i].y,
             };
 
-            const normal = {
-                x: -edge.y,
-                y: edge.x,
-            };
+            let nx = -edge.y;
+            let ny = edge.x;
 
-            const length = Math.sqrt(normal.x * normal.x + normal.y * normal.y);
+            const length = Math.sqrt(nx * nx + ny * ny);
             if (length > SAT2D.EPSILON) {
-                normal.x /= length;
-                normal.y /= length;
+                nx /= length;
+                ny /= length;
             }
+
+            const normal = {
+                x: cosA * nx - sinA * ny,
+                y: sinA * nx + cosA * ny,
+            };
 
             const { min: minA, max: maxA } = this.projectPolygon(verticesA, transformA, normal);
             const { min: minB, max: maxB } = this.projectPolygon(verticesB, transformB, normal);
