@@ -117,6 +117,16 @@ export class ContinuousCollisionDetection {
         let t = 0;
         const maxIterations = 32;
 
+        let maxRadius = 0;
+        for (const v of verticesA) {
+            const r = Math.sqrt(v.x * v.x + v.y * v.y);
+            maxRadius = Math.max(maxRadius, r);
+        }
+        for (const v of verticesB) {
+            const r = Math.sqrt(v.x * v.x + v.y * v.y);
+            maxRadius = Math.max(maxRadius, r);
+        }
+
         for (let iter = 0; iter < maxIterations; iter++) {
             const currentTransformA = {
                 position: {
@@ -160,18 +170,6 @@ export class ContinuousCollisionDetection {
 
             const relativeVelocity = Vec2.subtract(velocityA, velocityB);
             const linearSpeed = Math.sqrt(Vec2.lengthSquared(relativeVelocity));
-
-            // Account for angular velocity contribution to maximum motion
-            // Use bounding radius approximation: angular speed * max_radius
-            let maxRadius = 0;
-            for (const v of verticesA) {
-                const r = Math.sqrt(v.x * v.x + v.y * v.y);
-                maxRadius = Math.max(maxRadius, r);
-            }
-            for (const v of verticesB) {
-                const r = Math.sqrt(v.x * v.x + v.y * v.y);
-                maxRadius = Math.max(maxRadius, r);
-            }
             const angularSpeed = Math.abs(angularVelocityA) + Math.abs(angularVelocityB);
             const totalSpeed = linearSpeed + angularSpeed * maxRadius;
 
