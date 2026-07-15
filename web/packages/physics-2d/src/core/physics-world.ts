@@ -63,6 +63,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     private readonly _shapeStore: PhysicsWorld2DShapeStore;
     private readonly _constraintStore: PhysicsWorld2DConstraintStore;
     private readonly _shapeProxyMap = new Map<ShapeId, number>();
+    private readonly _shapePreviousCenter = new Map<ShapeId, { x: number; y: number }>();
     private readonly _contactPairCache = new Map<string, ContactId>();
 
     private _autoClearForces = true;
@@ -180,17 +181,24 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             const shapeAabb = this._computeShapeAabb(shapeId);
             if (!shapeAabb) continue;
 
+            const currentCenter = {
+                x: (shapeAabb.min.x + shapeAabb.max.x) * 0.5,
+                y: (shapeAabb.min.y + shapeAabb.max.y) * 0.5,
+            };
+
             const existingProxy = this._shapeProxyMap.get(shapeId);
             if (existingProxy !== undefined) {
+                const previousCenter = this._shapePreviousCenter.get(shapeId) ?? currentCenter;
                 const displacement = {
-                    x: shapeAabb.max.x - shapeAabb.min.x,
-                    y: shapeAabb.max.y - shapeAabb.min.y,
+                    x: currentCenter.x - previousCenter.x,
+                    y: currentCenter.y - previousCenter.y,
                 };
                 this._broadphase.moveProxy(existingProxy, shapeAabb, displacement);
             } else {
                 const proxyId = this._broadphase.createProxy(shapeAabb, shapeId);
                 this._shapeProxyMap.set(shapeId, proxyId);
             }
+            this._shapePreviousCenter.set(shapeId, currentCenter);
         }
     }
 
