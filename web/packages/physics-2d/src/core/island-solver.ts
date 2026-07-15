@@ -271,7 +271,6 @@ export class IslandSolver2D {
             if (type !== 0) {
                 const offset = i * 3;
                 const gravityScale = this._bodyManager.getGravityScale(bodyId);
-                const invMass = this._invMass[i];
 
                 // Apply gravity: v += (g * gravityScale) * h
                 this._velocities[offset] += gravity.x * gravityScale * h;
@@ -362,7 +361,7 @@ export class IslandSolver2D {
         }
 
         this._constraintSolver.solveConstraints(
-            Array.from(new Set(this._constraintStack)),
+            this._constraintStack,
             dt,
             velIters,
             posIters
