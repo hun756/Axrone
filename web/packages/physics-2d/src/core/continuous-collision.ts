@@ -159,16 +159,27 @@ export class ContinuousCollisionDetection {
             }
 
             const relativeVelocity = Vec2.subtract(velocityA, velocityB);
+            const linearSpeed = Math.sqrt(Vec2.lengthSquared(relativeVelocity));
 
-            const velocityLength = Math.sqrt(
-                Vec2.lengthSquared(relativeVelocity)
-            );
+            // Account for angular velocity contribution to maximum motion
+            // Use bounding radius approximation: angular speed * max_radius
+            let maxRadius = 0;
+            for (const v of verticesA) {
+                const r = Math.sqrt(v.x * v.x + v.y * v.y);
+                maxRadius = Math.max(maxRadius, r);
+            }
+            for (const v of verticesB) {
+                const r = Math.sqrt(v.x * v.x + v.y * v.y);
+                maxRadius = Math.max(maxRadius, r);
+            }
+            const angularSpeed = Math.abs(angularVelocityA) + Math.abs(angularVelocityB);
+            const totalSpeed = linearSpeed + angularSpeed * maxRadius;
 
-            if (velocityLength < this.EPSILON) {
+            if (totalSpeed < this.EPSILON) {
                 break;
             }
 
-            const dt = distance.distance / velocityLength;
+            const dt = distance.distance / totalSpeed;
             t += dt;
 
             if (t >= deltaTime) {
