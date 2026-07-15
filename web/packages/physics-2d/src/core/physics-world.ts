@@ -1,5 +1,6 @@
 import { Vec2 } from '@axrone/numeric';
 import type { IVec2Like } from '@axrone/numeric';
+import { AABB2D } from '@axrone/geometry';
 import type {
     IPhysicsWorld2D,
     IPhysicsWorldConfig,
@@ -8,6 +9,7 @@ import type {
     BodyId,
     ShapeId,
     ConstraintId,
+    ContactId,
     IPhysicsBodyDef2D,
     ICircleShapeDef,
     IBoxShapeDef2D,
@@ -40,6 +42,8 @@ import { ShapeManager2D } from './shape-manager';
 import { ConstraintManager2D } from './constraint-manager';
 import { ContactManager2D } from './contact-manager';
 import { IslandSolver2D } from './island-solver';
+import { Narrowphase2D } from './narrowphase';
+import { DynamicAABBTree2D } from './broadphase';
 import { createPhysicsBody2DView } from './physics-world-2d-body-view';
 import { PhysicsWorld2DConstraintStore } from './physics-world-2d-constraint-store';
 import { PhysicsWorld2DShapeStore } from './physics-world-2d-shape-store';
@@ -53,9 +57,13 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     private readonly _constraintManager: ConstraintManager2D;
     private readonly _contactManager: ContactManager2D;
     private readonly _solver: IslandSolver2D;
+    private readonly _narrowphase: Narrowphase2D;
+    private readonly _broadphase: DynamicAABBTree2D;
     private readonly _bodyViews = new Map<BodyId, IPhysicsBody2D>();
     private readonly _shapeStore: PhysicsWorld2DShapeStore;
     private readonly _constraintStore: PhysicsWorld2DConstraintStore;
+    private readonly _shapeProxyMap = new Map<ShapeId, number>();
+    private readonly _contactPairCache = new Map<string, ContactId>();
 
     private _autoClearForces = true;
     private _profiler: IPhysicsProfiler | null = null;
@@ -88,6 +96,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             this._contactManager,
             this._constraintManager
         );
+
+        this._narrowphase = new Narrowphase2D();
+        this._broadphase = new DynamicAABBTree2D(1024);
 
         if (config.enableProfiler) {
             this._profiler = {
@@ -137,13 +148,18 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const solverFlags = this.config.solverFlags ?? SolverFlags.Default;
         const allowSleep = this.config.allowSleep ?? true;
 
+        // Broadphase → Narrowphase → Contact pipeline
+        this._updateBroadphase();
+        this._detectCollisions();
+
         this._solver.solveIslands(
             deltaTime,
             velocityIterations,
             positionIterations,
             allowSleep,
             solverFlags,
-            this._profiler
+            { x: this._gravity.x, y: this._gravity.y },
+            this._profiler as any
         );
 
         if (this._autoClearForces) {
@@ -154,6 +170,170 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         if (this._profiler) {
             this._profiler.stepTime = this._stepTime;
         }
+    }
+
+    private _updateBroadphase(): void {
+        for (const [shapeId, descriptor] of this._shapeStore.entries()) {
+            const aabb = this._shapeStore.getDescriptor(shapeId);
+            if (!aabb) continue;
+
+            const shapeAabb = this._computeShapeAabb(shapeId);
+            if (!shapeAabb) continue;
+
+            const existingProxy = this._shapeProxyMap.get(shapeId);
+            if (existingProxy !== undefined) {
+                const displacement = {
+                    x: shapeAabb.max.x - shapeAabb.min.x,
+                    y: shapeAabb.max.y - shapeAabb.min.y,
+                };
+                this._broadphase.moveProxy(existingProxy, shapeAabb, displacement);
+            } else {
+                const proxyId = this._broadphase.createProxy(shapeAabb, shapeId);
+                this._shapeProxyMap.set(shapeId, proxyId);
+            }
+        }
+    }
+
+    private _detectCollisions(): void {
+        const candidatePairs: Array<{ shapeIdA: ShapeId; shapeIdB: ShapeId; aabbA: any; aabbB: any }> = [];
+        const visitedPairs = new Set<string>();
+
+        for (const [shapeIdA, proxyIdA] of this._shapeProxyMap) {
+            const aabbA = this._broadphase.getAABB(proxyIdA);
+
+            this._broadphase.query((proxyIdB: number) => {
+                if (proxyIdB === proxyIdA) return true;
+
+                const shapeIdB = this._broadphase.getUserData(proxyIdB) as ShapeId;
+                if (!shapeIdB) return true;
+
+                const descriptorA = this._shapeStore.getDescriptor(shapeIdA);
+                const descriptorB = this._shapeStore.getDescriptor(shapeIdB);
+                if (!descriptorA || !descriptorB) return true;
+
+                if (descriptorA.bodyId === descriptorB.bodyId) return true;
+
+                const typeA = this._bodyManager.getBodyType(descriptorA.bodyId);
+                const typeB = this._bodyManager.getBodyType(descriptorB.bodyId);
+                if (typeA === 0 && typeB === 0) return true;
+
+                const pairKey = shapeIdA < shapeIdB
+                    ? `${shapeIdA}:${shapeIdB}`
+                    : `${shapeIdB}:${shapeIdA}`;
+
+                if (visitedPairs.has(pairKey)) return true;
+                visitedPairs.add(pairKey);
+
+                candidatePairs.push({
+                    shapeIdA: shapeIdA < shapeIdB ? shapeIdA : shapeIdB,
+                    shapeIdB: shapeIdA < shapeIdB ? shapeIdB : shapeIdA,
+                    aabbA,
+                    aabbB: this._broadphase.getAABB(proxyIdB),
+                });
+
+                return true;
+            }, aabbA);
+        }
+
+        this._processNarrowphase(candidatePairs);
+    }
+
+    private _processNarrowphase(
+        candidatePairs: Array<{ shapeIdA: ShapeId; shapeIdB: ShapeId; aabbA: any; aabbB: any }>
+    ): void {
+        const activeContactIds = new Set<ContactId>();
+
+        for (const pair of candidatePairs) {
+            const descriptorA = this._shapeStore.getDescriptor(pair.shapeIdA);
+            const descriptorB = this._shapeStore.getDescriptor(pair.shapeIdB);
+            if (!descriptorA || !descriptorB) continue;
+
+            const pairKey = `${pair.shapeIdA}:${pair.shapeIdB}`;
+            const existingContactId = this._contactPairCache.get(pairKey);
+
+            const posA = this._bodyManager.getPosition(descriptorA.bodyId);
+            const rotA = this._bodyManager.getRotation(descriptorA.bodyId);
+            const posB = this._bodyManager.getPosition(descriptorB.bodyId);
+            const rotB = this._bodyManager.getRotation(descriptorB.bodyId);
+
+            const ctx = {
+                bodyIdA: descriptorA.bodyId,
+                bodyIdB: descriptorB.bodyId,
+                transformA: { position: posA, rotation: rotA },
+                transformB: { position: posB, rotation: rotB },
+            };
+
+            const manifold = this._narrowphase.acquireManifold();
+            const typeA = this._shapeManager.getShapeType(pair.shapeIdA);
+            const typeB = this._shapeManager.getShapeType(pair.shapeIdB);
+
+            this._narrowphase.collide(
+                pair.shapeIdA,
+                pair.shapeIdB,
+                typeA,
+                typeB,
+                this._shapeManager,
+                ctx,
+                manifold as any
+            );
+
+            if (manifold.pointCount > 0) {
+                let contactId = existingContactId;
+                if (!contactId || !this._contactManager.getContactData(contactId)) {
+                    contactId = this._contactManager.createContact(
+                        pair.shapeIdA,
+                        pair.shapeIdB,
+                        descriptorA.bodyId,
+                        descriptorB.bodyId
+                    );
+                    this._contactPairCache.set(pairKey, contactId);
+                }
+
+                const manifoldData = {
+                    id: contactId as any,
+                    bodyIdA: descriptorA.bodyId,
+                    bodyIdB: descriptorB.bodyId,
+                    shapeIdA: pair.shapeIdA,
+                    shapeIdB: pair.shapeIdB,
+                    normal: manifold.normal,
+                    pointCount: manifold.pointCount,
+                    points: manifold.points.slice(0, manifold.pointCount).map((p, i) => ({
+                        id: p.id,
+                        localPointA: p.localPointA,
+                        localPointB: p.localPointB,
+                        normalImpulse: p.normalImpulse,
+                        tangentImpulse: p.tangentImpulse,
+                        separation: p.separation,
+                    })),
+                };
+
+                this._contactManager.updateContact(contactId, manifoldData as any);
+                activeContactIds.add(contactId);
+            }
+
+            this._narrowphase.releaseManifold(manifold);
+        }
+
+        for (const [pairKey, contactId] of this._contactPairCache) {
+            if (!activeContactIds.has(contactId)) {
+                this._contactManager.destroyContact(contactId);
+                this._contactPairCache.delete(pairKey);
+            }
+        }
+    }
+
+    private _computeShapeAabb(shapeId: ShapeId): AABB2D | null {
+        const descriptor = this._shapeStore.getDescriptor(shapeId);
+        if (!descriptor) return null;
+
+        const bodyId = descriptor.bodyId;
+        if (!this._bodyManager.hasBody(bodyId)) return null;
+
+        const shape = this._shapeStore.getShapeView(shapeId);
+        if (!shape) return null;
+
+        const aabb = shape.computeAABB();
+        return new AABB2D(aabb.min, aabb.max);
     }
 
     createBody(def: IPhysicsBodyDef2D): BodyId {
