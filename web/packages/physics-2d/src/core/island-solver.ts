@@ -689,6 +689,7 @@ export class IslandSolver2D {
 
                 let c = separation + POSITION_SLOP;
                 if (c > 0) c = 0;
+                c = Math.max(c, -MAX_LINEAR_CORRECTION);
 
                 const impulse = -normalMass * c;
                 const px = impulse * normal.x;
