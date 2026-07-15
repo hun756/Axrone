@@ -332,19 +332,62 @@ function collideBoxCapsule(
     ctx: CollisionContext,
     manifold: WritableManifold
 ): void {
-    // Treat box as polygon and delegate to capsule-polygon
-    const boxVertices = getBoxVertices(box);
-    collideCapsulePolygon(
-        capsule,
-        { vertices: boxVertices },
-        { ...ctx, transformA: ctx.transformB, transformB: { position: box.center, rotation: box.rotation } },
-        manifold
+    // Build box world vertices using box's local center offset from body transform
+    const boxWorldVertices = getBoxVertices(box).map(v =>
+        transformPoint(
+            { x: v.x + box.center.x, y: v.y + box.center.y },
+            ctx.transformA
+        )
     );
-    // Flip normal since we swapped A/B
-    if (manifold.pointCount > 0) {
-        manifold.normal.x = -manifold.normal.x;
-        manifold.normal.y = -manifold.normal.y;
+    const worldCapsuleP1 = transformPoint(capsule.p1, ctx.transformB);
+    const worldCapsuleP2 = transformPoint(capsule.p2, ctx.transformB);
+
+    const { pointA, pointB, distSq } = closestPointsSegmentSegment(
+        worldCapsuleP1,
+        worldCapsuleP2,
+        boxWorldVertices[0],
+        boxWorldVertices[1]
+    );
+
+    let minDistSq = distSq;
+    let closestOnSeg = pointA;
+    let closestOnBox = pointB;
+
+    for (let i = 1; i < boxWorldVertices.length; i++) {
+        const j = (i + 1) % boxWorldVertices.length;
+        const { pointA: segP, pointB: boxP, distSq: dSq } = closestPointsSegmentSegment(
+            worldCapsuleP1,
+            worldCapsuleP2,
+            boxWorldVertices[i],
+            boxWorldVertices[j]
+        );
+        if (dSq < minDistSq) {
+            minDistSq = dSq;
+            closestOnSeg = segP;
+            closestOnBox = boxP;
+        }
     }
+
+    if (minDistSq > capsule.radius * capsule.radius) {
+        manifold.pointCount = 0;
+        return;
+    }
+
+    const dist = Math.sqrt(minDistSq);
+    const invDist = dist > EPSILON ? 1 / dist : 0;
+    const dx = closestOnSeg.x - closestOnBox.x;
+    const dy = closestOnSeg.y - closestOnBox.y;
+    const fallbackDx = capsule.p1.x + capsule.p2.x - box.center.x;
+    const fallbackDy = capsule.p1.y + capsule.p2.y - box.center.y;
+
+    manifold.normal.x = dist > EPSILON ? dx * invDist : (fallbackDx !== 0 ? fallbackDx / Math.sqrt(fallbackDx * fallbackDx + fallbackDy * fallbackDy) : 0);
+    manifold.normal.y = dist > EPSILON ? dy * invDist : (fallbackDy !== 0 ? fallbackDy / Math.sqrt(fallbackDx * fallbackDx + fallbackDy * fallbackDy) : 1);
+    manifold.pointCount = 1;
+
+    const point = manifold.points[0];
+    point.localPointA = inverseTransformPoint(closestOnSeg, ctx.transformA);
+    point.localPointB = inverseTransformPoint(closestOnBox, ctx.transformB);
+    point.separation = dist - capsule.radius;
 }
 
 const collideCapsuleCircle = (a: any, b: any, ctx: CollisionContext, m: WritableManifold) =>
