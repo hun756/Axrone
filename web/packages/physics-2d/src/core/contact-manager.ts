@@ -161,7 +161,15 @@ export class ContactManager2D implements Disposable {
         if (this._contactListener?.onCollisionEnd) {
             const wasTouching = (this._contactFlags[index] & 2) !== 0;
             if (wasTouching) {
-                // Construct event... (simplified for this improved snippet)
+                this._contactListener.onCollisionEnd({
+                    type: 2,
+                    bodyIdA: metadata.bodyIdA,
+                    bodyIdB: metadata.bodyIdB,
+                    shapeIdA: metadata.shapeIdA,
+                    shapeIdB: metadata.shapeIdB,
+                    manifold: this._buildManifoldFromContact(contactId, index),
+                    timestamp: Date.now(),
+                });
             }
         }
 
@@ -189,6 +197,7 @@ export class ContactManager2D implements Disposable {
         const offset = index * 16;
         this._contactData[offset + 3] = manifold.normal.x;
         this._contactData[offset + 4] = manifold.normal.y;
+        this._contactData[offset + 15] = manifold.pointCount;
 
         if (manifold.pointCount > 0) {
             this._contactData[offset + 5] = manifold.points[0].localPointA.x;
@@ -206,16 +215,59 @@ export class ContactManager2D implements Disposable {
             this._contactData[offset + 14] = manifold.points[1].separation;
         }
 
-        if (isTouching && !wasTouching) {
-            if (this._contactListener?.onCollisionBegin) {
-            }
-        } else if (!isTouching && wasTouching) {
-            if (this._contactListener?.onCollisionEnd) {
-            }
-        } else if (isTouching && wasTouching) {
-            if (this._contactListener?.onCollisionStay) {
+        const metadata = this._contactMetadata.get(contactId);
+        if (metadata) {
+            const timestamp = Date.now();
+
+            if (isTouching && !wasTouching) {
+                this._contactListener?.onCollisionBegin?.({
+                    type: 0,
+                    bodyIdA: metadata.bodyIdA,
+                    bodyIdB: metadata.bodyIdB,
+                    shapeIdA: metadata.shapeIdA,
+                    shapeIdB: metadata.shapeIdB,
+                    manifold,
+                    timestamp,
+                });
+            } else if (!isTouching && wasTouching) {
+                this._contactListener?.onCollisionEnd?.({
+                    type: 2,
+                    bodyIdA: metadata.bodyIdA,
+                    bodyIdB: metadata.bodyIdB,
+                    shapeIdA: metadata.shapeIdA,
+                    shapeIdB: metadata.shapeIdB,
+                    manifold,
+                    timestamp,
+                });
+            } else if (isTouching && wasTouching) {
+                this._contactListener?.onCollisionStay?.({
+                    type: 1,
+                    bodyIdA: metadata.bodyIdA,
+                    bodyIdB: metadata.bodyIdB,
+                    shapeIdA: metadata.shapeIdA,
+                    shapeIdB: metadata.shapeIdB,
+                    manifold,
+                    timestamp,
+                });
             }
         }
+    }
+
+    private _buildManifoldFromContact(contactId: ContactId, index: number): IContactManifold2D {
+        const metadata = this._contactMetadata.get(contactId);
+        const offset = index * 16;
+        const pointCount = this._contactData[offset + 15];
+
+        return {
+            id: contactId as unknown as ManifoldId,
+            bodyIdA: metadata?.bodyIdA ?? (0 as BodyId),
+            bodyIdB: metadata?.bodyIdB ?? (0 as BodyId),
+            shapeIdA: metadata?.shapeIdA ?? (0 as ShapeId),
+            shapeIdB: metadata?.shapeIdB ?? (0 as ShapeId),
+            normal: { x: this._contactData[offset + 3], y: this._contactData[offset + 4] },
+            pointCount,
+            points: [],
+        };
     }
 
     getWarmStartImpulse(
