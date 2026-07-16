@@ -231,6 +231,12 @@ export class SpatialOctree<T> {
         this._octree.insert([min, max], item);
     }
 
+    public remove(item: T): boolean {
+        const removed = this._octree.remove(item);
+        this._itemBounds.delete(item);
+        return removed;
+    }
+
     public query(min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): T[] {
         const results = this._octree.query([min, max]);
         return results.map((result) => result.item);
