@@ -1,6 +1,5 @@
 import { Vec3, type IQuatLike, type IVec3Like } from '@axrone/numeric';
 import type {
-    BodyFlags,
     IAABBQueryCallback,
     ICollisionFilter,
     IConstraint3D,
@@ -12,6 +11,7 @@ import type {
     IShape3D,
 } from '../types';
 import {
+    BodyFlags,
     BodyType,
     ShapeType,
 } from '../types';
