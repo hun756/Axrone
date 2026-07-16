@@ -439,6 +439,13 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._shapeManager.destroyShape(shapeId);
         this._shapeStore.removeShape(shapeId);
 
+        const proxyId = this._shapeProxyMap.get(shapeId);
+        if (proxyId !== undefined) {
+            this._broadphase.destroyProxy(proxyId);
+            this._shapeProxyMap.delete(shapeId);
+        }
+        this._shapePreviousCenter.delete(shapeId);
+
         if (descriptor && this._bodyManager.hasBody(descriptor.bodyId)) {
             this._shapeStore.resetBodyMassData(descriptor.bodyId);
         }
