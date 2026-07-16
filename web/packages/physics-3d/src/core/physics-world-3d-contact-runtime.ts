@@ -79,6 +79,7 @@ export class PhysicsWorld3DContactRuntime {
     private _contactManifolds = new Map<string, IResolvedContactManifold3D>();
     private readonly _broadphase = new DynamicAABBTree3D(1024);
     private readonly _shapeProxyMap = new Map<ShapeId3D, number>();
+    private readonly _shapePreviousCenter = new Map<ShapeId3D, IVec3Like>();
 
     /** Warm-start impulse cache keyed by pairKey (shapeIdA:shapeIdB). */
     private readonly _warmImpulses = new Map<string, { normal: number; tangent: number }>();
@@ -103,6 +104,7 @@ export class PhysicsWorld3DContactRuntime {
             this._broadphase.destroyProxy(proxy);
             this._shapeProxyMap.delete(shapeId);
         }
+        this._shapePreviousCenter.delete(shapeId);
     }
 
     solve(deltaTime: number, velIters: number, posIters: number): void {
@@ -168,14 +170,25 @@ export class PhysicsWorld3DContactRuntime {
             if (!this._host.bodyManager.isEnabled(d.bodyId)) continue;
             const rawAabb = this._host.computeShapeAabb(d);
             const aabb = new AABB3D(rawAabb.min, rawAabb.max);
+            const currentCenter = {
+                x: (aabb.min.x + aabb.max.x) * 0.5,
+                y: (aabb.min.y + aabb.max.y) * 0.5,
+                z: (aabb.min.z + aabb.max.z) * 0.5,
+            };
             const existing = this._shapeProxyMap.get(d.id);
             if (existing !== undefined) {
-                const disp = { x: aabb.max.x - aabb.min.x, y: aabb.max.y - aabb.min.y, z: aabb.max.z - aabb.min.z };
+                const prev = this._shapePreviousCenter.get(d.id) ?? currentCenter;
+                const disp = {
+                    x: currentCenter.x - prev.x,
+                    y: currentCenter.y - prev.y,
+                    z: currentCenter.z - prev.z,
+                };
                 this._broadphase.moveProxy(existing, aabb, disp);
             } else {
                 const pid = this._broadphase.createProxy(aabb, d.id);
                 this._shapeProxyMap.set(d.id, pid);
             }
+            this._shapePreviousCenter.set(d.id, currentCenter);
         }
         this._broadphase.queryPairs((pA, pB) => {
             const sA = this._broadphase.getUserData(pA) as ShapeId3D;
@@ -582,8 +595,7 @@ export class PhysicsWorld3DContactRuntime {
 
     private _warmStartContact(manifold: IResolvedContactManifold3D): void {
         const normal = (manifold.points[0].normalImpulse as number) ?? 0;
-        const tangent = (manifold.points[0].tangentImpulse1 as number) ?? 0;
-        if (normal === 0 && tangent === 0) return;
+        if (normal === 0) return;
 
         const wp = midpointVec3(
             this._lp2w(manifold.bodyIdA, manifold.points[0].localPointA),
@@ -591,10 +603,11 @@ export class PhysicsWorld3DContactRuntime {
         );
 
         const normalImpulse = scaleVec3(manifold.normal, normal);
-        const tangentImpulse = scaleVec3(manifold.tangent1, tangent);
-        const impulse = addVec3(normalImpulse, tangentImpulse);
-        this._applyImp(manifold.bodyIdA, negateVec3(impulse), wp);
-        this._applyImp(manifold.bodyIdB, impulse, wp);
+        this._applyImp(manifold.bodyIdA, negateVec3(normalImpulse), wp);
+        this._applyImp(manifold.bodyIdB, normalImpulse, wp);
+
+        manifold.points[0].tangentImpulse1 = 0 as Impulse;
+        manifold.points[0].tangentImpulse2 = 0 as Impulse;
     }
 
     private _solveContactPosition(manifold: IResolvedContactManifold3D): void {
@@ -669,11 +682,16 @@ export class PhysicsWorld3DContactRuntime {
         const parent = new Map<number, number>();
         const find = (x: number): number => {
             let root = x;
-            while (parent.get(root) !== root) root = parent.get(root)!;
-            while (parent.get(x) !== root) {
-                const next = parent.get(x)!;
-                parent.set(x, root);
-                x = next;
+            while (true) {
+                const p = parent.get(root);
+                if (p === undefined || p === root) break;
+                root = p;
+            }
+            let curr = x;
+            while (curr !== root) {
+                const next = parent.get(curr)!;
+                parent.set(curr, root);
+                curr = next;
             }
             return root;
         };
