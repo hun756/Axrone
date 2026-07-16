@@ -12,22 +12,7 @@ import type {
     IGearConstraintDef,
     IRopeConstraintDef2D,
 } from '../types';
-
-const enum ConstraintManagerError {
-    INVALID_STATE = 'INVALID_STATE',
-    CONSTRAINT_NOT_FOUND = 'CONSTRAINT_NOT_FOUND',
-    CAPACITY_EXCEEDED = 'CAPACITY_EXCEEDED',
-}
-
-class ConstraintError extends Error {
-    readonly code: ConstraintManagerError;
-    constructor(message: string, code: ConstraintManagerError) {
-        super(message);
-        this.name = 'ConstraintError';
-        this.code = code;
-        Object.setPrototypeOf(this, ConstraintError.prototype);
-    }
-}
+import { PhysicsError } from './foundation';
 
 interface ConstraintMetadata {
     readonly type: ConstraintType;
@@ -112,6 +97,10 @@ export class ConstraintManager2D implements Disposable {
 
     get constraintCount(): number {
         return this._constraintCount;
+    }
+
+    private _throwNotFound(constraintId: ConstraintId): never {
+        throw new PhysicsError(`Constraint ${constraintId} not found`, 'NOT_FOUND', { constraintId });
     }
 
     createDistanceConstraint(def: IDistanceConstraintDef2D): ConstraintId {
@@ -332,12 +321,7 @@ export class ConstraintManager2D implements Disposable {
         this._assertNotDisposed();
 
         const metadata = this._metadata.get(constraintId);
-        if (!metadata) {
-            throw new ConstraintError(
-                `Constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
+        if (!metadata) this._throwNotFound(constraintId);
 
         this._removeFromBody(metadata.bodyIdA, constraintId);
         this._removeFromBody(metadata.bodyIdB, constraintId);
@@ -357,12 +341,7 @@ export class ConstraintManager2D implements Disposable {
 
     getConstraintBodies(constraintId: ConstraintId): { bodyIdA: BodyId; bodyIdB: BodyId } {
         const metadata = this._metadata.get(constraintId);
-        if (!metadata) {
-            throw new ConstraintError(
-                `Constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
+        if (!metadata) this._throwNotFound(constraintId);
 
         return {
             bodyIdA: metadata.bodyIdA,
@@ -372,34 +351,19 @@ export class ConstraintManager2D implements Disposable {
 
     getConstraintType(constraintId: ConstraintId): ConstraintType {
         const metadata = this._metadata.get(constraintId);
-        if (!metadata) {
-            throw new ConstraintError(
-                `Constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
+        if (!metadata) this._throwNotFound(constraintId);
         return metadata.type;
     }
 
     isEnabled(constraintId: ConstraintId): boolean {
         const metadata = this._metadata.get(constraintId);
-        if (!metadata) {
-            throw new ConstraintError(
-                `Constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
+        if (!metadata) this._throwNotFound(constraintId);
         return metadata.enabled;
     }
 
     setEnabled(constraintId: ConstraintId, enabled: boolean): void {
         const metadata = this._metadata.get(constraintId);
-        if (!metadata) {
-            throw new ConstraintError(
-                `Constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
+        if (!metadata) this._throwNotFound(constraintId);
         metadata.enabled = enabled;
     }
 
@@ -408,15 +372,16 @@ export class ConstraintManager2D implements Disposable {
         return constraints ? Array.from(constraints) : [];
     }
 
-    getWheelConstraintData(constraintId: ConstraintId) {
-        const index = this._constraintToWheelIndex.get(constraintId);
+    private _getDataIndex<T>(map: Map<ConstraintId, number>, id: ConstraintId, name: string): number {
+        const index = map.get(id);
         if (index === undefined) {
-            throw new ConstraintError(
-                `Wheel constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
+            throw new PhysicsError(`${name} constraint ${id} not found`, 'NOT_FOUND', { constraintId: id });
         }
+        return index;
+    }
 
+    getWheelConstraintData(constraintId: ConstraintId) {
+        const index = this._getDataIndex(this._constraintToWheelIndex, constraintId, 'Wheel');
         const offset = index * WHEEL_STRIDE;
         return {
             localAnchorA: { x: this._wheelData[offset], y: this._wheelData[offset + 1] },
@@ -434,14 +399,7 @@ export class ConstraintManager2D implements Disposable {
     }
 
     getGearConstraintData(constraintId: ConstraintId) {
-        const index = this._constraintToGearIndex.get(constraintId);
-        if (index === undefined) {
-            throw new ConstraintError(
-                `Gear constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
-
+        const index = this._getDataIndex(this._constraintToGearIndex, constraintId, 'Gear');
         const offset = index * GEAR_STRIDE;
         return {
             constraintIdA: this._gearData[offset] as ConstraintId,
@@ -451,14 +409,7 @@ export class ConstraintManager2D implements Disposable {
     }
 
     getRopeConstraintData(constraintId: ConstraintId) {
-        const index = this._constraintToRopeIndex.get(constraintId);
-        if (index === undefined) {
-            throw new ConstraintError(
-                `Rope constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
-
+        const index = this._getDataIndex(this._constraintToRopeIndex, constraintId, 'Rope');
         const offset = index * ROPE_STRIDE;
         return {
             localAnchorA: { x: this._ropeData[offset], y: this._ropeData[offset + 1] },
@@ -468,13 +419,7 @@ export class ConstraintManager2D implements Disposable {
     }
 
     getDistanceConstraintData(constraintId: ConstraintId) {
-        const index = this._constraintToDistanceIndex.get(constraintId);
-        if (index === undefined) {
-            throw new ConstraintError(
-                `Distance constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
+        const index = this._getDataIndex(this._constraintToDistanceIndex, constraintId, 'Distance');
         const offset = index * DISTANCE_STRIDE;
         return {
             localAnchorA: { x: this._distanceData[offset], y: this._distanceData[offset + 1] },
@@ -488,13 +433,7 @@ export class ConstraintManager2D implements Disposable {
     }
 
     getRevoluteConstraintData(constraintId: ConstraintId) {
-        const index = this._constraintToRevoluteIndex.get(constraintId);
-        if (index === undefined) {
-            throw new ConstraintError(
-                `Revolute constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
+        const index = this._getDataIndex(this._constraintToRevoluteIndex, constraintId, 'Revolute');
         const offset = index * REVOLUTE_STRIDE;
         return {
             localAnchorA: { x: this._revoluteData[offset], y: this._revoluteData[offset + 1] },
@@ -510,13 +449,7 @@ export class ConstraintManager2D implements Disposable {
     }
 
     getPrismaticConstraintData(constraintId: ConstraintId) {
-        const index = this._constraintToPrismaticIndex.get(constraintId);
-        if (index === undefined) {
-            throw new ConstraintError(
-                `Prismatic constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
+        const index = this._getDataIndex(this._constraintToPrismaticIndex, constraintId, 'Prismatic');
         const offset = index * PRISMATIC_STRIDE;
         return {
             localAnchorA: { x: this._prismaticData[offset], y: this._prismaticData[offset + 1] },
@@ -533,13 +466,7 @@ export class ConstraintManager2D implements Disposable {
     }
 
     getWeldConstraintData(constraintId: ConstraintId) {
-        const index = this._constraintToWeldIndex.get(constraintId);
-        if (index === undefined) {
-            throw new ConstraintError(
-                `Weld constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
+        const index = this._getDataIndex(this._constraintToWeldIndex, constraintId, 'Weld');
         const offset = index * WELD_STRIDE;
         return {
             localAnchorA: { x: this._weldData[offset], y: this._weldData[offset + 1] },
@@ -551,13 +478,7 @@ export class ConstraintManager2D implements Disposable {
     }
 
     getMotorConstraintData(constraintId: ConstraintId) {
-        const index = this._constraintToMotorIndex.get(constraintId);
-        if (index === undefined) {
-            throw new ConstraintError(
-                `Motor constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
+        const index = this._getDataIndex(this._constraintToMotorIndex, constraintId, 'Motor');
         const offset = index * MOTOR_STRIDE;
         return {
             linearOffset: { x: this._motorData[offset], y: this._motorData[offset + 1] },
@@ -569,13 +490,7 @@ export class ConstraintManager2D implements Disposable {
     }
 
     getMouseConstraintData(constraintId: ConstraintId) {
-        const index = this._constraintToMouseIndex.get(constraintId);
-        if (index === undefined) {
-            throw new ConstraintError(
-                `Mouse constraint ${constraintId} not found`,
-                ConstraintManagerError.CONSTRAINT_NOT_FOUND
-            );
-        }
+        const index = this._getDataIndex(this._constraintToMouseIndex, constraintId, 'Mouse');
         const offset = index * MOUSE_STRIDE;
         return {
             target: { x: this._mouseData[offset], y: this._mouseData[offset + 1] },
@@ -629,16 +544,13 @@ export class ConstraintManager2D implements Disposable {
 
     private _assertNotDisposed(): void {
         if (this._disposed) {
-            throw new ConstraintError('Manager is disposed', ConstraintManagerError.INVALID_STATE);
+            throw new PhysicsError('Manager is disposed', 'INVALID_STATE');
         }
     }
 
     private _assertCapacity(): void {
         if (this._constraintCount >= this._maxConstraints) {
-            throw new ConstraintError(
-                'Constraint capacity exceeded',
-                ConstraintManagerError.CAPACITY_EXCEEDED
-            );
+            throw new PhysicsError('Constraint capacity exceeded', 'CAPACITY_EXCEEDED');
         }
     }
 
