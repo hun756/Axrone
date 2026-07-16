@@ -101,17 +101,24 @@ export class GJK3D {
         let hit = false;
         for (let iter = 0; iter < maxIterations; iter++) {
             if (lengthSq(d) < EPS_SQ) {
-                hit = true;
-                break;
+                // Degenerate direction: perturb to break out of coplanar/colinear
+                // configurations (standard GJK robustness trick).
+                const angle = iter * 2.39996; // golden angle
+                d = { x: Math.cos(angle) * 0.1, y: 0.5, z: Math.sin(angle) * 0.1 };
+                if (simplex.length >= 1) {
+                    d = sub(d, simplex[simplex.length - 1].v);
+                    if (lengthSq(d) < EPS_SQ) {
+                        d = { x: 1, y: 0, z: 0 };
+                    }
+                }
             }
             const a = support(d);
             if (dot(a.v, d) < 0) {
-                // No progress toward the origin: a separating axis exists.
                 break;
             }
             simplex.push(a);
             if (nextSimplex(simplex, d)) {
-                hit = true;
+                hit = simplex.length === 4;
                 break;
             }
         }
