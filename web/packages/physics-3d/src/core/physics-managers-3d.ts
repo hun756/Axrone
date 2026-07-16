@@ -397,6 +397,18 @@ export class BodyManager3D implements Disposable {
         };
     }
 
+    getInverseInertia(bodyId: BodyId3D): IVec3Like {
+        const index = this._bodyIdToIndex.get(bodyId);
+        if (index === undefined) return { x: 0, y: 0, z: 0 };
+
+        const offset = index * MASS_STRIDE + 5;
+        return {
+            x: this._massData[offset],
+            y: this._massData[offset + 1],
+            z: this._massData[offset + 2],
+        };
+    }
+
     setInertiaTensor(bodyId: BodyId3D, inertia: IVec3Like): void {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return;
