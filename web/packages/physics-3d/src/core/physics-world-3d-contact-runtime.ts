@@ -407,38 +407,39 @@ export class PhysicsWorld3DContactRuntime {
         const cA = this._host.getShapeWorldCenter(dA), cB = this._host.getShapeWorldCenter(dB);
         const delta = subVec3(cB, cA);
         const dist = lengthVec3(delta);
-        const rSum = (dA.def as any).radius + (dB.def as any).radius;
+        const rA = isSphereDef(dA.def) ? dA.def.radius : 0;
+        const rB = isSphereDef(dB.def) ? dB.def.radius : 0;
+        const rSum = rA + rB;
         if (dist > rSum) return null;
         const n = dist > PhysicsConstants.EPSILON ? scaleVec3(delta, 1 / dist) : { x: 1, y: 0, z: 0 };
         const pen = rSum - dist;
-        return { normal: n, point: addVec3(cA, scaleVec3(n, (dA.def as any).radius - pen * 0.5)), penetration: pen };
+        return { normal: n, point: addVec3(cA, scaleVec3(n, rA - pen * 0.5)), penetration: pen };
     }
 
     private _cSphBox(s: IShapeDescriptor3D, b: IShapeDescriptor3D): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {
         const sC = this._host.getShapeWorldCenter(s);
         const bP = this._host.bodyManager.getPosition(b.bodyId), bR = this._host.bodyManager.getRotation(b.bodyId);
-        const bD = b.def as any;
-        const bC = transformPoint3D(bD.center, bP, bR);
-        const bRot = multiplyQuat(bR, bD.rotation ?? IDENTITY_ROTATION);
+        if (!isSphereDef(s.def) || !isBoxDef(b.def)) return null;
+        const bC = transformPoint3D(b.def.center, bP, bR);
+        const bRot = multiplyQuat(bR, b.def.rotation ?? IDENTITY_ROTATION);
         const localSC = inverseTransformPoint3D(sC, bC, bRot);
-        const closestLocal = { x: clamp(localSC.x, -bD.halfExtents.x, bD.halfExtents.x), y: clamp(localSC.y, -bD.halfExtents.y, bD.halfExtents.y), z: clamp(localSC.z, -bD.halfExtents.z, bD.halfExtents.z) };
+        const closestLocal = { x: clamp(localSC.x, -b.def.halfExtents.x, b.def.halfExtents.x), y: clamp(localSC.y, -b.def.halfExtents.y, b.def.halfExtents.y), z: clamp(localSC.z, -b.def.halfExtents.z, b.def.halfExtents.z) };
         const closestWorld = transformPoint3D(closestLocal, bC, bRot);
         const delta = subVec3(sC, closestWorld);
         const dist = lengthVec3(delta);
-        const r = (s.def as any).radius;
+        const r = s.def.radius;
         if (dist > r) return null;
         if (dist > PhysicsConstants.EPSILON) return { normal: scaleVec3(delta, -1 / dist), point: closestWorld, penetration: r - dist };
         return { normal: { x: 0, y: 1, z: 0 }, point: closestWorld, penetration: r };
     }
 
     private _cBoxBox(dA: IShapeDescriptor3D, dB: IShapeDescriptor3D): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {
-        const bDA = dA.def as any, bDB = dB.def as any;
+        if (!isBoxDef(dA.def) || !isBoxDef(dB.def)) return null;
+        const bDA = dA.def, bDB = dB.def;
         const cA = transformPoint3D(bDA.center, this._host.bodyManager.getPosition(dA.bodyId), this._host.bodyManager.getRotation(dA.bodyId));
         const cB = transformPoint3D(bDB.center, this._host.bodyManager.getPosition(dB.bodyId), this._host.bodyManager.getRotation(dB.bodyId));
         const rA = multiplyQuat(this._host.bodyManager.getRotation(dA.bodyId), bDA.rotation ?? IDENTITY_ROTATION);
         const rB = multiplyQuat(this._host.bodyManager.getRotation(dB.bodyId), bDB.rotation ?? IDENTITY_ROTATION);
-        const axisX = (v: any) => rotateVec3(v, rA), axisY = (v: any) => rotateVec3(v, rA), axisZ = (v: any) => rotateVec3(v, rA);
-        const bxX = (v: any) => rotateVec3(v, rB), byY = (v: any) => rotateVec3(v, rB), bzZ = (v: any) => rotateVec3(v, rB);
         const xA = rotateVec3({ x: 1, y: 0, z: 0 }, rA), yA = rotateVec3({ x: 0, y: 1, z: 0 }, rA), zA = rotateVec3({ x: 0, y: 0, z: 1 }, rA);
         const xB = rotateVec3({ x: 1, y: 0, z: 0 }, rB), yB = rotateVec3({ x: 0, y: 1, z: 0 }, rB), zB = rotateVec3({ x: 0, y: 0, z: 1 }, rB);
         const axes = [xA, yA, zA, xB, yB, zB];
@@ -457,13 +458,13 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     private _cCapCap(dA: IShapeDescriptor3D, dB: IShapeDescriptor3D): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {
-        const cA = dA.def as any, cB = dB.def as any;
-        const p1A = transformPoint3D(cA.p1, this._host.bodyManager.getPosition(dA.bodyId), this._host.bodyManager.getRotation(dA.bodyId));
-        const p2A = transformPoint3D(cA.p2, this._host.bodyManager.getPosition(dA.bodyId), this._host.bodyManager.getRotation(dA.bodyId));
-        const p1B = transformPoint3D(cB.p1, this._host.bodyManager.getPosition(dB.bodyId), this._host.bodyManager.getRotation(dB.bodyId));
-        const p2B = transformPoint3D(cB.p2, this._host.bodyManager.getPosition(dB.bodyId), this._host.bodyManager.getRotation(dB.bodyId));
+        if (!isCapsuleDef(dA.def) || !isCapsuleDef(dB.def)) return null;
+        const p1A = transformPoint3D(dA.def.p1, this._host.bodyManager.getPosition(dA.bodyId), this._host.bodyManager.getRotation(dA.bodyId));
+        const p2A = transformPoint3D(dA.def.p2, this._host.bodyManager.getPosition(dA.bodyId), this._host.bodyManager.getRotation(dA.bodyId));
+        const p1B = transformPoint3D(dB.def.p1, this._host.bodyManager.getPosition(dB.bodyId), this._host.bodyManager.getRotation(dB.bodyId));
+        const p2B = transformPoint3D(dB.def.p2, this._host.bodyManager.getPosition(dB.bodyId), this._host.bodyManager.getRotation(dB.bodyId));
         const closest = this._segSeg(p1A, p2A, p1B, p2B);
-        const rSum = cA.radius + cB.radius;
+        const rSum = dA.def.radius + dB.def.radius;
         if (closest.distSq > rSum * rSum) return null;
         const dist = Math.sqrt(closest.distSq);
         const invD = dist > PhysicsConstants.EPSILON ? 1 / dist : 0;
@@ -472,35 +473,36 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     private _cCapSph(cap: IShapeDescriptor3D, sph: IShapeDescriptor3D): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {
-        const cD = cap.def as any, sD = sph.def as any;
-        const p1 = transformPoint3D(cD.p1, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
-        const p2 = transformPoint3D(cD.p2, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
+        if (!isCapsuleDef(cap.def) || !isSphereDef(sph.def)) return null;
+        const p1 = transformPoint3D(cap.def.p1, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
+        const p2 = transformPoint3D(cap.def.p2, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
         const sC = this._host.getShapeWorldCenter(sph);
         const closest = this._closestSeg(sC, p1, p2);
         const delta = subVec3(sC, closest);
         const dist = lengthVec3(delta);
-        const rSum = cD.radius + sD.radius;
+        const rSum = cap.def.radius + sph.def.radius;
         if (dist > rSum) return null;
         const invD = dist > PhysicsConstants.EPSILON ? 1 / dist : 0;
         return { normal: { x: delta.x * invD, y: delta.y * invD, z: delta.z * invD }, point: closest, penetration: rSum - dist };
     }
 
     private _cCapBox(cap: IShapeDescriptor3D, box: IShapeDescriptor3D): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {
-        const cD = cap.def as any, bD = box.def as any;
-        const p1 = transformPoint3D(cD.p1, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
-        const p2 = transformPoint3D(cD.p2, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
-        const bC = transformPoint3D(bD.center, this._host.bodyManager.getPosition(box.bodyId), this._host.bodyManager.getRotation(box.bodyId));
-        const bRot = multiplyQuat(this._host.bodyManager.getRotation(box.bodyId), bD.rotation ?? IDENTITY_ROTATION);
+        if (!isCapsuleDef(cap.def) || !isBoxDef(box.def)) return null;
+        const p1 = transformPoint3D(cap.def.p1, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
+        const p2 = transformPoint3D(cap.def.p2, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
+        const bC = transformPoint3D(box.def.center, this._host.bodyManager.getPosition(box.bodyId), this._host.bodyManager.getRotation(box.bodyId));
+        const bRot = multiplyQuat(this._host.bodyManager.getRotation(box.bodyId), box.def.rotation ?? IDENTITY_ROTATION);
         const l1 = inverseTransformPoint3D(p1, bC, bRot), l2 = inverseTransformPoint3D(p2, bC, bRot);
-        const c1 = { x: clamp(l1.x, -bD.halfExtents.x, bD.halfExtents.x), y: clamp(l1.y, -bD.halfExtents.y, bD.halfExtents.y), z: clamp(l1.z, -bD.halfExtents.z, bD.halfExtents.z) };
-        const c2 = { x: clamp(l2.x, -bD.halfExtents.x, bD.halfExtents.x), y: clamp(l2.y, -bD.halfExtents.y, bD.halfExtents.y), z: clamp(l2.z, -bD.halfExtents.z, bD.halfExtents.z) };
+        const hE = box.def.halfExtents;
+        const c1 = { x: clamp(l1.x, -hE.x, hE.x), y: clamp(l1.y, -hE.y, hE.y), z: clamp(l1.z, -hE.z, hE.z) };
+        const c2 = { x: clamp(l2.x, -hE.x, hE.x), y: clamp(l2.y, -hE.y, hE.y), z: clamp(l2.z, -hE.z, hE.z) };
         const closest = this._closestSeg({ x: 0, y: 0, z: 0 }, c1, c2);
         const delta = subVec3(closest, { x: 0, y: 0, z: 0 });
         const dist = lengthVec3(delta);
-        if (dist > cD.radius) return null;
+        if (dist > cap.def.radius) return null;
         const invD = dist > PhysicsConstants.EPSILON ? 1 / dist : 0;
         const localN = { x: delta.x * invD, y: delta.y * invD, z: delta.z * invD };
-        return { normal: rotateVec3(localN, bRot), point: transformPoint3D({ x: 0, y: 0, z: 0 }, bC, bRot), penetration: cD.radius - dist };
+        return { normal: rotateVec3(localN, bRot), point: transformPoint3D({ x: 0, y: 0, z: 0 }, bC, bRot), penetration: cap.def.radius - dist };
     }
 
     private _cAabbApprox(dA: IShapeDescriptor3D, dB: IShapeDescriptor3D, aabbA: IAabb3D, aabbB: IAabb3D): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {
