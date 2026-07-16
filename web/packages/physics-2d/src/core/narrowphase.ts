@@ -406,17 +406,27 @@ function findContactPoint(verticesA: IVec2Like[], _verticesB: IVec2Like[], norma
 function findPolygonContacts(verticesA: readonly IVec2Like[], verticesB: readonly IVec2Like[], normal: IVec2Like, ctx: CollisionContext, penetration: number): IVec2Like[] {
     const contacts: IVec2Like[] = [];
     const threshold = penetration + CollisionConfig.CONTACT_SLOP;
-    // Use a reference point from polygon B to compute depth relative to the contact plane
-    const refVertex = transformPoint(verticesB[0], ctx.transformB);
-    const refDot = normal.x * refVertex.x + normal.y * refVertex.y;
+    let maxProjB = -Infinity;
+    let bestB: IVec2Like = verticesB[0];
+    for (const v of verticesB) {
+        const wv = transformPoint(v, ctx.transformB);
+        const proj = normal.x * wv.x + normal.y * wv.y;
+        if (proj > maxProjB) { maxProjB = proj; bestB = wv; }
+    }
+    const refDot = normal.x * bestB.x + normal.y * bestB.y;
     for (const v of verticesA) {
         const wv = transformPoint(v, ctx.transformA);
         const depth = (normal.x * wv.x + normal.y * wv.y) - refDot;
         if (depth <= threshold) contacts.push(wv);
     }
-    // Also check vertices from polygon B against polygon A
-    const refVertexA = transformPoint(verticesA[0], ctx.transformA);
-    const refDotA = normal.x * refVertexA.x + normal.y * refVertexA.y;
+    let maxProjA = -Infinity;
+    let bestA: IVec2Like = verticesA[0];
+    for (const v of verticesA) {
+        const wv = transformPoint(v, ctx.transformA);
+        const proj = normal.x * wv.x + normal.y * wv.y;
+        if (proj > maxProjA) { maxProjA = proj; bestA = wv; }
+    }
+    const refDotA = normal.x * bestA.x + normal.y * bestA.y;
     for (const v of verticesB) {
         const wv = transformPoint(v, ctx.transformB);
         const depth = refDotA - (normal.x * wv.x + normal.y * wv.y);
