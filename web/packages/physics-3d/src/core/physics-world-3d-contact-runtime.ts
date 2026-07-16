@@ -54,6 +54,13 @@ import {
     shouldShapeFiltersCollide,
     subVec3,
     transformPoint3D,
+    isSphereDef,
+    isBoxDef,
+    isCapsuleDef,
+    isCylinderDef,
+    isConeDef,
+    isConvexHullDef,
+    isTriangleMeshDef,
 } from './physics-world-3d-shared';
 
 import { GJK3D, supportFromVertices, type Support3D, type IVec3 } from './gjk3d';
@@ -77,7 +84,7 @@ export class PhysicsWorld3DContactRuntime {
     private _nextContactId = 1 as ContactId;
     private _nextManifoldId = 1;
     private _contactManifolds = new Map<string, IResolvedContactManifold3D>();
-    private readonly _broadphase = new DynamicAABBTree3D(1024);
+    private readonly _broadphase = new DynamicAABBTree3D<ShapeId3D>(1024);
     private readonly _shapeProxyMap = new Map<ShapeId3D, number>();
     private readonly _shapePreviousCenter = new Map<ShapeId3D, IVec3Like>();
 
@@ -191,8 +198,9 @@ export class PhysicsWorld3DContactRuntime {
             this._shapePreviousCenter.set(d.id, currentCenter);
         }
         this._broadphase.queryPairs((pA, pB) => {
-            const sA = this._broadphase.getUserData(pA) as ShapeId3D;
-            const sB = this._broadphase.getUserData(pB) as ShapeId3D;
+            const sA = this._broadphase.getUserData(pA);
+            const sB = this._broadphase.getUserData(pB);
+            if (!sA || !sB) return true;
             const dA = this._host.shapeDescriptors.get(sA);
             const dB = this._host.shapeDescriptors.get(sB);
             if (!dA || !dB) return true;
@@ -242,9 +250,8 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     private _getContactPointOnShape(d: IShapeDescriptor3D, c: { normal: IVec3Like; point: IVec3Like; penetration: number }, first: boolean): IVec3Like {
-        if (d.type === SHAPE_TYPE_SPHERE) {
-            const r = (d.def as any).radius;
-            return addVec3(this._host.getShapeWorldCenter(d), scaleVec3(first ? c.normal : negateVec3(c.normal), r));
+        if (isSphereDef(d.def)) {
+            return addVec3(this._host.getShapeWorldCenter(d), scaleVec3(first ? c.normal : negateVec3(c.normal), d.def.radius));
         }
         return c.point;
     }
@@ -303,104 +310,97 @@ export class PhysicsWorld3DContactRuntime {
         const bm = this._host.bodyManager;
         const pos = bm.getPosition(descriptor.bodyId);
         const rot = bm.getRotation(descriptor.bodyId);
-        const def = descriptor.def as any;
+        const def = descriptor.def;
 
-        switch (descriptor.type) {
-            case SHAPE_TYPE_SPHERE: {
-                const center = this._host.getShapeWorldCenter(descriptor);
-                const r = def.radius as number;
-                return (dir: IVec3): IVec3 => {
-                    const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
-                    const inv = len > 1e-6 ? r / len : 0;
-                    return { x: center.x + dir.x * inv, y: center.y + dir.y * inv, z: center.z + dir.z * inv };
-                };
-            }
-            case SHAPE_TYPE_BOX: {
-                const center = transformPoint3D(def.center, pos, rot);
-                const halfExtents = def.halfExtents as IVec3Like;
-                const rotFull = multiplyQuat(rot, def.rotation ?? IDENTITY_ROTATION);
-                const axes = [
-                    rotateVec3({ x: 1, y: 0, z: 0 }, rotFull),
-                    rotateVec3({ x: 0, y: 1, z: 0 }, rotFull),
-                    rotateVec3({ x: 0, y: 0, z: 1 }, rotFull),
-                ];
-                const ext = [halfExtents.x, halfExtents.y, halfExtents.z];
-                return (dir: IVec3): IVec3 => {
-                    let x = center.x, y = center.y, z = center.z;
-                    for (let i = 0; i < 3; i++) {
-                        const s = (dir.x * axes[i].x + dir.y * axes[i].y + dir.z * axes[i].z) >= 0 ? ext[i] : -ext[i];
-                        x += axes[i].x * s;
-                        y += axes[i].y * s;
-                        z += axes[i].z * s;
-                    }
-                    return { x, y, z };
-                };
-            }
-            case SHAPE_TYPE_CAPSULE: {
-                const p1 = transformPoint3D(def.p1, pos, rot);
-                const p2 = transformPoint3D(def.p2, pos, rot);
-                const r = def.radius as number;
-                return (dir: IVec3): IVec3 => {
-                    const d1 = dir.x * p1.x + dir.y * p1.y + dir.z * p1.z;
-                    const d2 = dir.x * p2.x + dir.y * p2.y + dir.z * p2.z;
-                    const base = d1 >= d2 ? p1 : p2;
-                    const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
-                    const inv = len > 1e-6 ? r / len : 0;
-                    return { x: base.x + dir.x * inv, y: base.y + dir.y * inv, z: base.z + dir.z * inv };
-                };
-            }
-            case SHAPE_TYPE_CONVEX_HULL:
-            case SHAPE_TYPE_TRIANGLE_MESH:
-            case SHAPE_TYPE_CYLINDER:
-            case SHAPE_TYPE_CONE: {
-                const vertices = this._worldVerticesOf(descriptor);
-                if (vertices.length === 0) return null;
-                return supportFromVertices(vertices as IVec3[]);
-            }
-            default:
-                return null;
+        if (isSphereDef(def)) {
+            const center = this._host.getShapeWorldCenter(descriptor);
+            const r = def.radius;
+            return (dir: IVec3): IVec3 => {
+                const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+                const inv = len > 1e-6 ? r / len : 0;
+                return { x: center.x + dir.x * inv, y: center.y + dir.y * inv, z: center.z + dir.z * inv };
+            };
         }
+        if (isBoxDef(def)) {
+            const center = transformPoint3D(def.center, pos, rot);
+            const halfExtents = def.halfExtents;
+            const rotFull = multiplyQuat(rot, def.rotation ?? IDENTITY_ROTATION);
+            const axes = [
+                rotateVec3({ x: 1, y: 0, z: 0 }, rotFull),
+                rotateVec3({ x: 0, y: 1, z: 0 }, rotFull),
+                rotateVec3({ x: 0, y: 0, z: 1 }, rotFull),
+            ];
+            const ext = [halfExtents.x, halfExtents.y, halfExtents.z];
+            return (dir: IVec3): IVec3 => {
+                let x = center.x, y = center.y, z = center.z;
+                for (let i = 0; i < 3; i++) {
+                    const s = (dir.x * axes[i].x + dir.y * axes[i].y + dir.z * axes[i].z) >= 0 ? ext[i] : -ext[i];
+                    x += axes[i].x * s;
+                    y += axes[i].y * s;
+                    z += axes[i].z * s;
+                }
+                return { x, y, z };
+            };
+        }
+        if (isCapsuleDef(def)) {
+            const p1 = transformPoint3D(def.p1, pos, rot);
+            const p2 = transformPoint3D(def.p2, pos, rot);
+            const r = def.radius;
+            return (dir: IVec3): IVec3 => {
+                const d1 = dir.x * p1.x + dir.y * p1.y + dir.z * p1.z;
+                const d2 = dir.x * p2.x + dir.y * p2.y + dir.z * p2.z;
+                const base = d1 >= d2 ? p1 : p2;
+                const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+                const inv = len > 1e-6 ? r / len : 0;
+                return { x: base.x + dir.x * inv, y: base.y + dir.y * inv, z: base.z + dir.z * inv };
+            };
+        }
+        if (isConvexHullDef(def) || isTriangleMeshDef(def) || isCylinderDef(def) || isConeDef(def)) {
+            const vertices = this._worldVerticesOf(descriptor);
+            if (vertices.length === 0) return null;
+            return supportFromVertices(vertices as IVec3[]);
+        }
+        return null;
     }
 
     private _worldVerticesOf(descriptor: IShapeDescriptor3D): IVec3Like[] {
         const bm = this._host.bodyManager;
         const pos = bm.getPosition(descriptor.bodyId);
         const rot = bm.getRotation(descriptor.bodyId);
-        const def = descriptor.def as any;
+        const def = descriptor.def;
 
-        if (
-            descriptor.type === SHAPE_TYPE_CONVEX_HULL ||
-            descriptor.type === SHAPE_TYPE_TRIANGLE_MESH
-        ) {
-            const verts: IVec3Like[] = def.vertices as IVec3Like[];
-            return verts.map((v) => transformPoint3D(v, pos, rot));
+        if (isConvexHullDef(def) || isTriangleMeshDef(def)) {
+            return def.vertices.map((v) => transformPoint3D(v, pos, rot));
         }
 
-        // Cylinder / cone: a coarse convex vertex approximation (top & bottom rings).
-        const center = (def.center as IVec3Like) ?? { x: 0, y: 0, z: 0 };
-        const radius = (def.radius as number) ?? 0;
-        const height = (def.height as number) ?? 0;
-        const segments = 8;
-        const c = transformPoint3D(center, pos, rot);
-        const localY = rotateVec3({ x: 0, y: 1, z: 0 }, rot);
-        const localX = rotateVec3({ x: 1, y: 0, z: 0 }, rot);
-        const localZ = rotateVec3({ x: 0, y: 0, z: 1 }, rot);
-        const ringOffset = scaleVec3(localY, height * 0.5);
-        const top = addVec3(c, ringOffset);
-        const bottom = subVec3(c, ringOffset);
-        const verts: IVec3Like[] = [];
-        for (let i = 0; i < segments; i++) {
-            const a = (i / segments) * Math.PI * 2;
-            const ox = Math.cos(a) * radius;
-            const oz = Math.sin(a) * radius;
-            const radial = addVec3(scaleVec3(localX, ox), scaleVec3(localZ, oz));
-            verts.push(addVec3(top, radial));
-            verts.push(addVec3(bottom, radial));
+        if (isCylinderDef(def) || isConeDef(def)) {
+            const center = def.center ?? { x: 0, y: 0, z: 0 };
+            const radius = def.radius ?? 0;
+            const height = def.height ?? 0;
+            const segments = 8;
+            const c = transformPoint3D(center, pos, rot);
+            const localY = rotateVec3({ x: 0, y: 1, z: 0 }, rot);
+            const localX = rotateVec3({ x: 1, y: 0, z: 0 }, rot);
+            const localZ = rotateVec3({ x: 0, y: 0, z: 1 }, rot);
+            const ringOffset = scaleVec3(localY, height * 0.5);
+            const top = addVec3(c, ringOffset);
+            const bottom = subVec3(c, ringOffset);
+            const verts: IVec3Like[] = [];
+            for (let i = 0; i < segments; i++) {
+                const a = (i / segments) * Math.PI * 2;
+                const ox = Math.cos(a) * radius;
+                const oz = Math.sin(a) * radius;
+                const radial = addVec3(scaleVec3(localX, ox), scaleVec3(localZ, oz));
+                verts.push(addVec3(top, radial));
+                verts.push(addVec3(bottom, radial));
+            }
+            if (isConeDef(def)) {
+                verts.push(addVec3(c, scaleVec3(localY, height)));
+            }
+            return verts;
         }
-        if (descriptor.type === SHAPE_TYPE_CONE) {
-            verts.push(addVec3(c, scaleVec3(localY, height)));
-        }
-        return verts;
+
+        return [];
     }
 
     private _cSphSph(dA: IShapeDescriptor3D, dB: IShapeDescriptor3D): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {

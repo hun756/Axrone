@@ -519,6 +519,62 @@ export function raySphereHit(
     return { fraction, normal: normalizeVec3(subVec3(hitPoint, center)) };
 }
 
+export function isSphereDef(def: SupportedShapeDef3D): def is { readonly kind: typeof SHAPE_TYPE_SPHERE } & ISphereShapeDef3D {
+    return def.kind === SHAPE_TYPE_SPHERE;
+}
+
+export function isBoxDef(def: SupportedShapeDef3D): def is { readonly kind: typeof SHAPE_TYPE_BOX } & IBoxShapeDef3D {
+    return def.kind === SHAPE_TYPE_BOX;
+}
+
+export function isCapsuleDef(def: SupportedShapeDef3D): def is { readonly kind: typeof SHAPE_TYPE_CAPSULE } & ICapsuleShapeDef3D {
+    return def.kind === SHAPE_TYPE_CAPSULE;
+}
+
+export function isCylinderDef(def: SupportedShapeDef3D): def is { readonly kind: typeof SHAPE_TYPE_CYLINDER } & ICylinderShapeDef3D {
+    return def.kind === SHAPE_TYPE_CYLINDER;
+}
+
+export function isConeDef(def: SupportedShapeDef3D): def is { readonly kind: typeof SHAPE_TYPE_CONE } & IConeShapeDef3D {
+    return def.kind === SHAPE_TYPE_CONE;
+}
+
+export function isConvexHullDef(def: SupportedShapeDef3D): def is { readonly kind: typeof SHAPE_TYPE_CONVEX_HULL } & IConvexHullShapeDef3D {
+    return def.kind === SHAPE_TYPE_CONVEX_HULL;
+}
+
+export function isTriangleMeshDef(def: SupportedShapeDef3D): def is { readonly kind: typeof SHAPE_TYPE_TRIANGLE_MESH } & ITriangleMeshShapeDef3D {
+    return def.kind === SHAPE_TYPE_TRIANGLE_MESH;
+}
+
+export function isHeightFieldDef(def: SupportedShapeDef3D): def is { readonly kind: typeof SHAPE_TYPE_HEIGHTFIELD } & IHeightFieldShapeDef3D {
+    return def.kind === SHAPE_TYPE_HEIGHTFIELD;
+}
+
+export function isFixedDef(def: SupportedConstraintDef3D): def is { readonly kind: typeof CONSTRAINT_TYPE_FIXED } & IFixedConstraintDef3D {
+    return def.kind === CONSTRAINT_TYPE_FIXED;
+}
+
+export function isHingeDef(def: SupportedConstraintDef3D): def is { readonly kind: typeof CONSTRAINT_TYPE_HINGE } & IHingeConstraintDef3D {
+    return def.kind === CONSTRAINT_TYPE_HINGE;
+}
+
+export function isSliderDef(def: SupportedConstraintDef3D): def is { readonly kind: typeof CONSTRAINT_TYPE_SLIDER } & ISliderConstraintDef3D {
+    return def.kind === CONSTRAINT_TYPE_SLIDER;
+}
+
+export function isSpringDef(def: SupportedConstraintDef3D): def is { readonly kind: typeof CONSTRAINT_TYPE_SPRING } & ISpringConstraintDef3D {
+    return def.kind === CONSTRAINT_TYPE_SPRING;
+}
+
+export function isConeTwistDef(def: SupportedConstraintDef3D): def is { readonly kind: typeof CONSTRAINT_TYPE_CONE_TWIST } & IConeTwistConstraintDef3D {
+    return def.kind === CONSTRAINT_TYPE_CONE_TWIST;
+}
+
+export function isGenericDef(def: SupportedConstraintDef3D): def is { readonly kind: typeof CONSTRAINT_TYPE_GENERIC } & IGenericConstraintDef3D {
+    return def.kind === CONSTRAINT_TYPE_GENERIC;
+}
+
 export function rayAabbHit(
     origin: Readonly<IVec3Like>,
     direction: Readonly<IVec3Like>,
