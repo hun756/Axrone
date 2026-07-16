@@ -1,10 +1,10 @@
 import { AABB3D } from '@axrone/geometry';
 import type { IVec3Like } from '@axrone/numeric';
 
-interface TreeNode3D {
+interface TreeNode3D<TUserData> {
     id: number;
     aabb: AABB3D;
-    userData: any;
+    userData: TUserData | null;
     parent: number;
     child1: number;
     child2: number;
@@ -13,13 +13,12 @@ interface TreeNode3D {
 
 const NULL_NODE = -1;
 
-/** Wraps IAABB union into AABB3D since getUnion returns the interface type */
 function toAabb3D(union: { min: Readonly<IVec3Like>; max: Readonly<IVec3Like> }): AABB3D {
     return new AABB3D(union.min, union.max);
 }
 
-export class DynamicAABBTree3D {
-    private _nodes: TreeNode3D[];
+export class DynamicAABBTree3D<TUserData = unknown> {
+    private _nodes: TreeNode3D<TUserData>[];
     private _root: number = NULL_NODE;
     private _freeList: number = 0;
     private _nodeCount: number = 0;
@@ -31,10 +30,9 @@ export class DynamicAABBTree3D {
         this._nodes = new Array(initialCapacity);
         const empty = AABB3D.EMPTY;
         for (let i = 0; i < initialCapacity - 1; ++i) {
-            const cloned = AABB3D.from(empty);
             this._nodes[i] = {
                 id: i,
-                aabb: cloned,
+                aabb: AABB3D.from(empty),
                 userData: null,
                 parent: i + 1,
                 child1: NULL_NODE,
@@ -53,7 +51,7 @@ export class DynamicAABBTree3D {
         };
     }
 
-    createProxy(aabb: AABB3D, userData: any): number {
+    createProxy(aabb: AABB3D, userData: TUserData): number {
         const proxyId = this._allocateNode();
         const fatAabb = AABB3D.from(aabb);
         fatAabb.expand(this._fatAabbMargin);
@@ -163,7 +161,7 @@ export class DynamicAABBTree3D {
         }
     }
 
-    getUserData(proxyId: number): any {
+    getUserData(proxyId: number): TUserData | null {
         return this._nodes[proxyId].userData;
     }
 
@@ -184,7 +182,7 @@ export class DynamicAABBTree3D {
         if (this._freeList === NULL_NODE) {
             const oldCapacity = this._nodeCapacity;
             this._nodeCapacity *= 2;
-            const newNodes = new Array(this._nodeCapacity);
+            const newNodes = new Array<TreeNode3D<TUserData>>(this._nodeCapacity);
             for (let i = 0; i < oldCapacity; i++) {
                 newNodes[i] = this._nodes[i];
             }
