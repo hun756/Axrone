@@ -130,11 +130,11 @@ export class BodyManager2D implements Disposable {
         this._bodyTypes[index] = def.type;
 
         let flags = 0;
-        if (def.awake !== false) flags |= 1 << 5;
-        if (def.enabled !== false) flags |= 1 << 6;
-        if (def.fixedRotation) flags |= 1 << 0;
-        if (def.bullet) flags |= 1 << 1;
-        if (def.allowSleep !== false) flags |= 1 << 4;
+        if (def.awake !== false) flags |= BodyFlags.Awake;
+        if (def.enabled !== false) flags |= BodyFlags.Active;
+        if (def.fixedRotation) flags |= BodyFlags.FixedRotation;
+        if (def.bullet) flags |= BodyFlags.Bullet;
+        if (def.allowSleep !== false) flags |= BodyFlags.AutoSleep;
         this._bodyFlags[index] = flags;
 
         this._gravityScales[index] = def.gravityScale ?? 1.0;
@@ -399,7 +399,7 @@ export class BodyManager2D implements Disposable {
 
     isAwake(bodyId: BodyId): boolean {
         const index = this._getIndex(bodyId);
-        return (this._bodyFlags[index] & (1 << 5)) !== 0;
+        return (this._bodyFlags[index] & BodyFlags.Awake) !== 0;
     }
 
     isEnabled(bodyId: BodyId): boolean {
@@ -450,10 +450,10 @@ export class BodyManager2D implements Disposable {
     setAwake(bodyId: BodyId, awake: boolean): void {
         const index = this._getIndex(bodyId);
         if (awake) {
-            this._bodyFlags[index] |= 1 << 5;
+            this._bodyFlags[index] |= BodyFlags.Awake;
             this._bodyData[index * BODY_SOA_STRIDE + SLEEP_TIME_OFFSET] = 0;
         } else {
-            this._bodyFlags[index] &= ~(1 << 5);
+            this._bodyFlags[index] &= ~BodyFlags.Awake;
             this._bodyData[index * BODY_SOA_STRIDE + LINEAR_VELOCITY_OFFSET] = 0;
             this._bodyData[index * BODY_SOA_STRIDE + LINEAR_VELOCITY_OFFSET + 1] = 0;
             this._bodyData[index * BODY_SOA_STRIDE + ANGULAR_VELOCITY_OFFSET] = 0;
