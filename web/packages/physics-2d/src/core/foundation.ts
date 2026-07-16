@@ -18,7 +18,7 @@ export function createBrandedFactory<B extends string>(brand: B): BrandedFactory
 
 export type ManagerState = 'idle' | 'active' | 'stepping' | 'disposed';
 
-export type ErrorCode = 
+export type ErrorCode =
     | 'INVALID_STATE'
     | 'NOT_FOUND'
     | 'CAPACITY_EXCEEDED'
@@ -75,11 +75,7 @@ export function assertCapacity(current: number, max: number, name: string): void
 }
 
 export type ReadonlyVec2 = Readonly<IVec2Like>;
-
-export interface IVec2Output {
-    x: number;
-    y: number;
-}
+export type IVec2Output = IVec2Like;
 
 export type CollisionPairKey = Brand<number, 'CollisionPairKey'>;
 
@@ -191,98 +187,4 @@ export function buildCollisionMatrix<
         matrix.set(`${a}:${b}`, fn);
     }
     return matrix as CollisionMatrix<TShapeKind, TFn>;
-}
-
-export interface IEventListener<TEvent> {
-    (event: TEvent): void;
-}
-
-export interface IDisposableEventEmitter<TEventMap extends Record<string, unknown>> {
-    on<K extends keyof TEventMap & string>(event: K, listener: IEventListener<TEventMap[K]>): () => void;
-    off<K extends keyof TEventMap & string>(event: K, listener: IEventListener<TEventMap[K]>): void;
-    emit<K extends keyof TEventMap & string>(event: K, data: TEventMap[K]): void;
-    removeAllListeners(event?: keyof TEventMap & string): void;
-}
-
-export class TypedEventEmitter<TEventMap extends Record<string, unknown>>
-    implements IDisposableEventEmitter<TEventMap>, Disposable
-{
-    private readonly _listeners = new Map<string, Set<IEventListener<any>>>();
-
-    on<K extends keyof TEventMap & string>(event: K, listener: IEventListener<TEventMap[K]>): () => void {
-        let set = this._listeners.get(event);
-        if (!set) {
-            set = new Set();
-            this._listeners.set(event, set);
-        }
-        set.add(listener);
-        return () => this.off(event, listener);
-    }
-
-    off<K extends keyof TEventMap & string>(event: K, listener: IEventListener<TEventMap[K]>): void {
-        this._listeners.get(event)?.delete(listener);
-    }
-
-    emit<K extends keyof TEventMap & string>(event: K, data: TEventMap[K]): void {
-        const set = this._listeners.get(event);
-        if (set) {
-            for (const listener of set) {
-                listener(data);
-            }
-        }
-    }
-
-    removeAllListeners(event?: keyof TEventMap & string): void {
-        if (event) {
-            this._listeners.delete(event);
-        } else {
-            this._listeners.clear();
-        }
-    }
-
-    listenerCount(event: keyof TEventMap & string): number {
-        return this._listeners.get(event)?.size ?? 0;
-    }
-
-    [Symbol.dispose](): void {
-        this._listeners.clear();
-    }
-}
-
-export interface IBuilder<T> {
-    build(): T;
-}
-
-export interface ICloneable<T> {
-    clone(): T;
-}
-
-export interface IResettable {
-    reset(): void;
-}
-
-export type DeepReadonly<T> = {
-    readonly [K in keyof T]: T[K] extends object ? DeepReadonly<T[K]> : T[K];
-};
-
-export type Mutable<T> = {
-    -readonly [K in keyof T]: T[K];
-};
-
-export type PickRequired<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>;
-
-export type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
-    k: infer I
-) => void
-    ? I
-    : never;
-
-export type ExhaustiveCheck<T extends never> = T;
-
-export function exhaustiveSwitch(value: never): never {
-    throw new PhysicsError(`Unhandled case: ${value}`, 'INVALID_ARGUMENT');
-}
-
-export function unreachable(message: string): never {
-    throw new PhysicsError(message, 'INVALID_ARGUMENT');
 }
