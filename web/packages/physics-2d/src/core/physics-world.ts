@@ -26,6 +26,7 @@ import type {
     IGearConstraintDef,
     IRopeConstraintDef2D,
     IContactListener2D,
+    IContactManifold2D,
     ICollisionFilter,
     RaycastCallback2D,
     IRaycastResult2D,
@@ -64,7 +65,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     private readonly _constraintStore: PhysicsWorld2DConstraintStore;
     private readonly _shapeProxyMap = new Map<ShapeId, number>();
     private readonly _shapePreviousCenter = new Map<ShapeId, { x: number; y: number }>();
-    private readonly _contactPairCache = new Map<string, ContactId>();
+    private readonly _contactPairCache = new Map<number, ContactId>();
 
     private _autoClearForces = true;
     private _profiler: IPhysicsProfiler | null = null;
@@ -160,7 +161,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             allowSleep,
             solverFlags,
             { x: this._gravity.x, y: this._gravity.y },
-            this._profiler as any
+            this._profiler ?? undefined
         );
 
         if (this._autoClearForces) {
@@ -203,8 +204,8 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     }
 
     private _detectCollisions(): void {
-        const candidatePairs: Array<{ shapeIdA: ShapeId; shapeIdB: ShapeId; aabbA: any; aabbB: any }> = [];
-        const visitedPairs = new Set<string>();
+        const candidatePairs: Array<{ shapeIdA: ShapeId; shapeIdB: ShapeId }> = [];
+        const visitedPairs = new Set<number>();
 
         for (const [shapeIdA, proxyIdA] of this._shapeProxyMap) {
             const aabbA = this._broadphase.getAABB(proxyIdA);
@@ -212,7 +213,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             this._broadphase.query((proxyIdB: number) => {
                 if (proxyIdB === proxyIdA) return true;
 
-                const shapeIdB = this._broadphase.getUserData(proxyIdB) as ShapeId;
+                const shapeIdB = this._broadphase.getUserData(proxyIdB);
                 if (!shapeIdB) return true;
 
                 const descriptorA = this._shapeStore.getDescriptor(shapeIdA);
@@ -225,18 +226,16 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 const typeB = this._bodyManager.getBodyType(descriptorB.bodyId);
                 if (typeA === 0 && typeB === 0) return true;
 
-                const pairKey = shapeIdA < shapeIdB
-                    ? `${shapeIdA}:${shapeIdB}`
-                    : `${shapeIdB}:${shapeIdA}`;
+                const lo = shapeIdA < shapeIdB ? shapeIdA : shapeIdB;
+                const hi = shapeIdA < shapeIdB ? shapeIdB : shapeIdA;
+                const pairKey = (lo as number) * 0x100000 + (hi as number);
 
                 if (visitedPairs.has(pairKey)) return true;
                 visitedPairs.add(pairKey);
 
                 candidatePairs.push({
-                    shapeIdA: shapeIdA < shapeIdB ? shapeIdA : shapeIdB,
-                    shapeIdB: shapeIdA < shapeIdB ? shapeIdB : shapeIdA,
-                    aabbA,
-                    aabbB: this._broadphase.getAABB(proxyIdB),
+                    shapeIdA: lo,
+                    shapeIdB: hi,
                 });
 
                 return true;
@@ -247,7 +246,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     }
 
     private _processNarrowphase(
-        candidatePairs: Array<{ shapeIdA: ShapeId; shapeIdB: ShapeId; aabbA: any; aabbB: any }>
+        candidatePairs: Array<{ shapeIdA: ShapeId; shapeIdB: ShapeId }>
     ): void {
         const activeContactIds = new Set<ContactId>();
 
@@ -256,7 +255,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             const descriptorB = this._shapeStore.getDescriptor(pair.shapeIdB);
             if (!descriptorA || !descriptorB) continue;
 
-            const pairKey = `${pair.shapeIdA}:${pair.shapeIdB}`;
+            const pairKey = (pair.shapeIdA as number) * 0x100000 + (pair.shapeIdB as number);
             const existingContactId = this._contactPairCache.get(pairKey);
 
             const posA = this._bodyManager.getPosition(descriptorA.bodyId);
@@ -282,7 +281,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 typeB,
                 this._shapeManager,
                 ctx,
-                manifold as any
+                manifold
             );
 
             if (manifold.pointCount > 0) {
@@ -297,25 +296,25 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                     this._contactPairCache.set(pairKey, contactId);
                 }
 
-                const manifoldData = {
-                    id: contactId as any,
+                const manifoldData: IContactManifold2D = {
+                    id: contactId as unknown as IContactManifold2D['id'],
                     bodyIdA: descriptorA.bodyId,
                     bodyIdB: descriptorB.bodyId,
                     shapeIdA: pair.shapeIdA,
                     shapeIdB: pair.shapeIdB,
                     normal: manifold.normal,
                     pointCount: manifold.pointCount,
-                    points: manifold.points.slice(0, manifold.pointCount).map((p, i) => ({
+                    points: manifold.points.slice(0, manifold.pointCount).map((p) => ({
                         id: p.id,
                         localPointA: p.localPointA,
                         localPointB: p.localPointB,
-                        normalImpulse: p.normalImpulse,
-                        tangentImpulse: p.tangentImpulse,
+                        normalImpulse: p.normalImpulse as IContactManifold2D['points'][number]['normalImpulse'],
+                        tangentImpulse: p.tangentImpulse as IContactManifold2D['points'][number]['tangentImpulse'],
                         separation: p.separation,
                     })),
                 };
 
-                this._contactManager.updateContact(contactId, manifoldData as any);
+                this._contactManager.updateContact(contactId, manifoldData);
                 activeContactIds.add(contactId);
             }
 
