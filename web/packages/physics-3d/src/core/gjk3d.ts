@@ -294,9 +294,10 @@ function EPA(simplex: MVert[], support: (dir: IVec3) => MVert, maxIterations = 6
     for (let iter = 0; iter < maxIterations; iter++) {
         let minDist = Infinity;
         let minNormal: IVec3 = { x: 0, y: 1, z: 0 };
-        let minFace = -1;
+        let minFaceIdx = -1;
 
-        for (const face of faces) {
+        for (let fi = 0; fi < faces.length; fi++) {
+            const face = faces[fi];
             const [ia, ib, ic] = face;
             const pa = vertices[ia];
             const pb = vertices[ib];
@@ -312,18 +313,18 @@ function EPA(simplex: MVert[], support: (dir: IVec3) => MVert, maxIterations = 6
             if (dist < minDist) {
                 minDist = dist;
                 minNormal = n;
-                minFace = face[0] * 1000000 + face[1] * 1000 + face[2];
+                minFaceIdx = fi;
             }
         }
 
-        if (minFace < 0) break;
+        if (minFaceIdx < 0) break;
 
         bestNormal = minNormal;
         bestDepth = minDist;
 
         const sup = support(minNormal);
         const newDist = dot(minNormal, sup.v);
-        if (minDist > 1e-4 && newDist - minDist < EPS) {
+        if (newDist - minDist < EPS) {
             return { normal: minNormal, depth: minDist, point: scale(minNormal, minDist) };
         }
 
