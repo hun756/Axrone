@@ -27,6 +27,16 @@ export {
 export { BoundingVolumeHierarchy } from './core/raycast-bvh';
 export { SpatialHashGrid3D, SpatialOctree } from './core/raycast-spatial';
 export {
+    SpatialHashBroadphase3D,
+    OctreeBroadphase3D,
+} from './core/broadphase-3d';
+export type {
+    IBroadphase3D,
+    IBroadphaseItem3D,
+    IBroadphaseResult3D,
+    IAABB3DLike,
+} from './core/broadphase-3d';
+export {
     RaycastCache2D,
     RaycastCache3D,
     RaycastBatcher2D,
