@@ -25,7 +25,11 @@ import {
     IDENTITY_ROTATION,
     SHAPE_TYPE_BOX,
     SHAPE_TYPE_CAPSULE,
+    SHAPE_TYPE_CONE,
+    SHAPE_TYPE_CONVEX_HULL,
+    SHAPE_TYPE_CYLINDER,
     SHAPE_TYPE_SPHERE,
+    SHAPE_TYPE_TRIANGLE_MESH,
     type IAabb3D,
     type IConstraintDescriptor3D,
     type IResolvedContactManifold3D,
@@ -52,6 +56,8 @@ import {
     transformPoint3D,
 } from './physics-world-3d-shared';
 
+import { GJK3D, supportFromVertices, type Support3D, type IVec3 } from './gjk3d';
+
 export interface IPhysicsWorld3DContactRuntimeHost {
     readonly bodyManager: BodyManager3D;
     readonly shapeDescriptors: ReadonlyMap<ShapeId3D, IShapeDescriptor3D>;
@@ -74,10 +80,18 @@ export class PhysicsWorld3DContactRuntime {
     private readonly _broadphase = new DynamicAABBTree3D(1024);
     private readonly _shapeProxyMap = new Map<ShapeId3D, number>();
 
+    /** Warm-start impulse cache keyed by pairKey (shapeIdA:shapeIdB). */
+    private readonly _warmImpulses = new Map<string, { normal: number; tangent: number }>();
+    private _lastIslandCount = 0;
+
     constructor(private readonly _host: IPhysicsWorld3DContactRuntimeHost) {}
 
     get contactCount(): number {
         return this._contactManifolds.size;
+    }
+
+    get islandCount(): number {
+        return this._lastIslandCount;
     }
 
     pruneShape(shapeId: ShapeId3D): void {
@@ -99,7 +113,13 @@ export class PhysicsWorld3DContactRuntime {
         const next = new Map<string, IResolvedContactManifold3D>();
         for (const pair of pairs) {
             const m = this._buildContactManifold(pair);
-            if (m) next.set(pair.pairKey, m);
+            if (!m) continue;
+            const warm = this._warmImpulses.get(pair.pairKey);
+            if (warm) {
+                m.points[0].normalImpulse = warm.normal as Impulse;
+                m.points[0].tangentImpulse1 = warm.tangent as Impulse;
+            }
+            next.set(pair.pairKey, m);
         }
         const nTime = performance.now() - nStart;
         const profiler = this._host.getProfiler();
@@ -108,11 +128,36 @@ export class PhysicsWorld3DContactRuntime {
             profiler.narrowphaseTime = nTime;
             profiler.collisionTime = bTime + nTime;
         }
-        for (const m of next.values()) this._solveContactVelocity(m);
+
+        // Build islands (connected components of bodies via contacts) and report the count.
+        this._lastIslandCount = this._buildIslandCount(next);
+
+        // Warm start: apply cached accumulated impulses to velocities before iterating.
+        for (const m of next.values()) this._warmStartContact(m);
+
+        const vStart = performance.now();
+        for (let i = 0; i < velIters; i++) {
+            for (const m of next.values()) this._solveContactVelocity(m);
+        }
+        if (profiler) profiler.solveVelocityTime = performance.now() - vStart;
+
+        const pStart = performance.now();
         for (let i = 0; i < posIters; i++) {
             for (const m of next.values()) this._solveContactPosition(m);
         }
         for (const m of next.values()) this._finalizeContactPosition(m);
+        if (profiler) profiler.solvePositionTime = performance.now() - pStart;
+
+        // Persist accumulated impulses for next-frame warm starting.
+        this._warmImpulses.clear();
+        for (const m of next.values()) {
+            const p = m.points[0];
+            this._warmImpulses.set(m.pairKey, {
+                normal: p.normalImpulse as number,
+                tangent: p.tangentImpulse1 as number,
+            });
+        }
+
         this._contactManifolds = next;
     }
 
@@ -202,7 +247,147 @@ export class PhysicsWorld3DContactRuntime {
         if (tA === SHAPE_TYPE_SPHERE && tB === SHAPE_TYPE_CAPSULE) { const k = this._cCapSph(dB, dA); return k ? { normal: negateVec3(k.normal), point: k.point, penetration: k.penetration } : null; }
         if (tA === SHAPE_TYPE_CAPSULE && tB === SHAPE_TYPE_BOX) return this._cCapBox(dA, dB);
         if (tA === SHAPE_TYPE_BOX && tB === SHAPE_TYPE_CAPSULE) { const k = this._cCapBox(dB, dA); return k ? { normal: negateVec3(k.normal), point: k.point, penetration: k.penetration } : null; }
+        // Convex hull / triangle mesh: real GJK/EPA narrowphase (replaces AABB fallback).
+        if (
+            tA === SHAPE_TYPE_CONVEX_HULL || tA === SHAPE_TYPE_TRIANGLE_MESH ||
+            tB === SHAPE_TYPE_CONVEX_HULL || tB === SHAPE_TYPE_TRIANGLE_MESH
+        ) {
+            return this._cConvex(dA, dB, aabbA, aabbB);
+        }
         return this._cAabbApprox(dA, dB, aabbA, aabbB);
+    }
+
+    /**
+     * Generic convex-vs-convex narrowphase using GJK (collision) + EPA
+     * (penetration). Works for any pair where at least one shape is a convex
+     * hull or triangle mesh; the other shape is given an exact convex support
+     * (sphere/box/capsule) or a vertex-set support (convex/mesh).
+     */
+    private _cConvex(
+        dA: IShapeDescriptor3D,
+        dB: IShapeDescriptor3D,
+        aabbA: IAabb3D,
+        aabbB: IAabb3D
+    ): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {
+        const supportA = this._supportForShape(dA);
+        const supportB = this._supportForShape(dB);
+        if (!supportA || !supportB) {
+            return this._cAabbApprox(dA, dB, aabbA, aabbB);
+        }
+
+        const result = GJK3D.intersect(supportA, supportB);
+        if (!result.hit) return null;
+
+        return {
+            normal: { x: result.normal.x, y: result.normal.y, z: result.normal.z },
+            point: { x: result.point.x, y: result.point.y, z: result.point.z },
+            penetration: result.depth,
+        };
+    }
+
+    /** Returns a convex support function for a shape descriptor, or null to fall back to AABB. */
+    private _supportForShape(descriptor: IShapeDescriptor3D): Support3D | null {
+        const bm = this._host.bodyManager;
+        const pos = bm.getPosition(descriptor.bodyId);
+        const rot = bm.getRotation(descriptor.bodyId);
+        const def = descriptor.def as any;
+
+        switch (descriptor.type) {
+            case SHAPE_TYPE_SPHERE: {
+                const center = this._host.getShapeWorldCenter(descriptor);
+                const r = def.radius as number;
+                return (dir: IVec3): IVec3 => {
+                    const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+                    const inv = len > 1e-6 ? r / len : 0;
+                    return { x: center.x + dir.x * inv, y: center.y + dir.y * inv, z: center.z + dir.z * inv };
+                };
+            }
+            case SHAPE_TYPE_BOX: {
+                const center = transformPoint3D(def.center, pos, rot);
+                const halfExtents = def.halfExtents as IVec3Like;
+                const rotFull = multiplyQuat(rot, def.rotation ?? IDENTITY_ROTATION);
+                const axes = [
+                    rotateVec3({ x: 1, y: 0, z: 0 }, rotFull),
+                    rotateVec3({ x: 0, y: 1, z: 0 }, rotFull),
+                    rotateVec3({ x: 0, y: 0, z: 1 }, rotFull),
+                ];
+                const ext = [halfExtents.x, halfExtents.y, halfExtents.z];
+                return (dir: IVec3): IVec3 => {
+                    let x = center.x, y = center.y, z = center.z;
+                    for (let i = 0; i < 3; i++) {
+                        const s = (dir.x * axes[i].x + dir.y * axes[i].y + dir.z * axes[i].z) >= 0 ? ext[i] : -ext[i];
+                        x += axes[i].x * s;
+                        y += axes[i].y * s;
+                        z += axes[i].z * s;
+                    }
+                    return { x, y, z };
+                };
+            }
+            case SHAPE_TYPE_CAPSULE: {
+                const p1 = transformPoint3D(def.p1, pos, rot);
+                const p2 = transformPoint3D(def.p2, pos, rot);
+                const r = def.radius as number;
+                return (dir: IVec3): IVec3 => {
+                    const d1 = dir.x * p1.x + dir.y * p1.y + dir.z * p1.z;
+                    const d2 = dir.x * p2.x + dir.y * p2.y + dir.z * p2.z;
+                    const base = d1 >= d2 ? p1 : p2;
+                    const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+                    const inv = len > 1e-6 ? r / len : 0;
+                    return { x: base.x + dir.x * inv, y: base.y + dir.y * inv, z: base.z + dir.z * inv };
+                };
+            }
+            case SHAPE_TYPE_CONVEX_HULL:
+            case SHAPE_TYPE_TRIANGLE_MESH:
+            case SHAPE_TYPE_CYLINDER:
+            case SHAPE_TYPE_CONE: {
+                const vertices = this._worldVerticesOf(descriptor);
+                if (vertices.length === 0) return null;
+                return supportFromVertices(vertices as IVec3[]);
+            }
+            default:
+                return null;
+        }
+    }
+
+    private _worldVerticesOf(descriptor: IShapeDescriptor3D): IVec3Like[] {
+        const bm = this._host.bodyManager;
+        const pos = bm.getPosition(descriptor.bodyId);
+        const rot = bm.getRotation(descriptor.bodyId);
+        const def = descriptor.def as any;
+
+        if (
+            descriptor.type === SHAPE_TYPE_CONVEX_HULL ||
+            descriptor.type === SHAPE_TYPE_TRIANGLE_MESH
+        ) {
+            const verts: IVec3Like[] = def.vertices as IVec3Like[];
+            return verts.map((v) => transformPoint3D(v, pos, rot));
+        }
+
+        // Cylinder / cone: a coarse convex vertex approximation (top & bottom rings).
+        const center = (def.center as IVec3Like) ?? { x: 0, y: 0, z: 0 };
+        const radius = (def.radius as number) ?? 0;
+        const height = (def.height as number) ?? 0;
+        const segments = 8;
+        const c = transformPoint3D(center, pos, rot);
+        const localY = rotateVec3({ x: 0, y: 1, z: 0 }, rot);
+        const localX = rotateVec3({ x: 1, y: 0, z: 0 }, rot);
+        const localZ = rotateVec3({ x: 0, y: 0, z: 1 }, rot);
+        const ringOffset = scaleVec3(localY, height * 0.5);
+        const top = addVec3(c, ringOffset);
+        const bottom = subVec3(c, ringOffset);
+        const verts: IVec3Like[] = [];
+        for (let i = 0; i < segments; i++) {
+            const a = (i / segments) * Math.PI * 2;
+            const ox = Math.cos(a) * radius;
+            const oz = Math.sin(a) * radius;
+            const radial = addVec3(scaleVec3(localX, ox), scaleVec3(localZ, oz));
+            verts.push(addVec3(top, radial));
+            verts.push(addVec3(bottom, radial));
+        }
+        if (descriptor.type === SHAPE_TYPE_CONE) {
+            verts.push(addVec3(c, scaleVec3(localY, height)));
+        }
+        return verts;
     }
 
     private _cSphSph(dA: IShapeDescriptor3D, dB: IShapeDescriptor3D): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {
@@ -320,30 +505,96 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     private _solveContactVelocity(manifold: IResolvedContactManifold3D): void {
+        const bm = this._host.bodyManager;
+        const cA = bm.getPosition(manifold.bodyIdA);
+        const cB = bm.getPosition(manifold.bodyIdB);
+        const invMassA = this._invMass(manifold.bodyIdA);
+        const invMassB = this._invMass(manifold.bodyIdB);
+        const invIA = this._invInertia(manifold.bodyIdA);
+        const invIB = this._invInertia(manifold.bodyIdB);
+        const iSum = invMassA + invMassB;
+        if (iSum <= PhysicsConstants.EPSILON) return;
+
         for (const point of manifold.points) {
-            const wp = midpointVec3(this._lp2w(manifold.bodyIdA, point.localPointA), this._lp2w(manifold.bodyIdB, point.localPointB));
+            const wp = midpointVec3(
+                this._lp2w(manifold.bodyIdA, point.localPointA),
+                this._lp2w(manifold.bodyIdB, point.localPointB)
+            );
+            const rA = subVec3(wp, cA);
+            const rB = subVec3(wp, cB);
+
+            // Normal effective mass (includes angular inertia via diagonal inertia tensors).
+            const rnA = crossVec3(rA, manifold.normal);
+            const rnB = crossVec3(rB, manifold.normal);
+            const kNormal =
+                invMassA +
+                invMassB +
+                invIA.x * rnA.x * rnA.x +
+                invIA.y * rnA.y * rnA.y +
+                invIA.z * rnA.z * rnA.z +
+                invIB.x * rnB.x * rnB.x +
+                invIB.y * rnB.y * rnB.y +
+                invIB.z * rnB.z * rnB.z;
+            const normalMass = kNormal > PhysicsConstants.EPSILON ? 1 / kNormal : 0;
+
             const relV = subVec3(this._getWPV(manifold.bodyIdB, wp), this._getWPV(manifold.bodyIdA, wp));
             const ns = dotVec3(relV, manifold.normal);
-            if (ns >= 0) continue;
-            const iSum = this._invMass(manifold.bodyIdA) + this._invMass(manifold.bodyIdB);
-            if (iSum <= PhysicsConstants.EPSILON) continue;
-            const rest = ns < -PhysicsConstants.VELOCITY_THRESHOLD ? manifold.restitution : 0;
-            const nImp = (-(1 + rest) * ns) / iSum;
-            if (nImp <= 0) continue;
-            point.normalImpulse = ((point.normalImpulse + nImp) as unknown) as Impulse;
-            this._applyImp(manifold.bodyIdA, negateVec3(scaleVec3(manifold.normal, nImp)), wp);
-            this._applyImp(manifold.bodyIdB, scaleVec3(manifold.normal, nImp), wp);
-            const upV = subVec3(this._getWPV(manifold.bodyIdB, wp), this._getWPV(manifold.bodyIdA, wp));
-            const tanV = subVec3(upV, scaleVec3(manifold.normal, dotVec3(upV, manifold.normal)));
+            if (ns < 0) {
+                const rest = ns < -PhysicsConstants.VELOCITY_THRESHOLD ? manifold.restitution : 0;
+                let dPn = normalMass * (-(1 + rest) * ns);
+                const newPn = Math.max((point.normalImpulse as number) + dPn, 0);
+                dPn = newPn - (point.normalImpulse as number);
+                point.normalImpulse = newPn as unknown as Impulse;
+                this._applyImp(manifold.bodyIdA, negateVec3(scaleVec3(manifold.normal, dPn)), wp);
+                this._applyImp(manifold.bodyIdB, scaleVec3(manifold.normal, dPn), wp);
+            }
+
+            // Friction along the tangent defined by the current relative velocity.
+            const relV2 = subVec3(this._getWPV(manifold.bodyIdB, wp), this._getWPV(manifold.bodyIdA, wp));
+            const vn = dotVec3(relV2, manifold.normal);
+            const tanV = subVec3(relV2, scaleVec3(manifold.normal, vn));
             const tLen = lengthVec3(tanV);
             if (tLen <= PhysicsConstants.EPSILON) continue;
+
             const tan = scaleVec3(tanV, 1 / tLen);
-            const tSpeed = dotVec3(upV, tan);
-            const tImp = clamp(-tSpeed / iSum, -manifold.friction * nImp, manifold.friction * nImp);
-            point.tangentImpulse1 = ((point.tangentImpulse1 + tImp) as unknown) as Impulse;
-            this._applyImp(manifold.bodyIdA, negateVec3(scaleVec3(tan, tImp)), wp);
-            this._applyImp(manifold.bodyIdB, scaleVec3(tan, tImp), wp);
+            const rtA = crossVec3(rA, tan);
+            const rtB = crossVec3(rB, tan);
+            const kTangent =
+                invMassA +
+                invMassB +
+                invIA.x * rtA.x * rtA.x +
+                invIA.y * rtA.y * rtA.y +
+                invIA.z * rtA.z * rtA.z +
+                invIB.x * rtB.x * rtB.x +
+                invIB.y * rtB.y * rtB.y +
+                invIB.z * rtB.z * rtB.z;
+            const tangentMass = kTangent > PhysicsConstants.EPSILON ? 1 / kTangent : 0;
+
+            let dPt = tangentMass * -dotVec3(relV2, tan);
+            const maxPt = manifold.friction * (point.normalImpulse as number);
+            const newPt = clamp((point.tangentImpulse1 as number) + dPt, -maxPt, maxPt);
+            dPt = newPt - (point.tangentImpulse1 as number);
+            point.tangentImpulse1 = newPt as unknown as Impulse;
+            this._applyImp(manifold.bodyIdA, negateVec3(scaleVec3(tan, dPt)), wp);
+            this._applyImp(manifold.bodyIdB, scaleVec3(tan, dPt), wp);
         }
+    }
+
+    private _warmStartContact(manifold: IResolvedContactManifold3D): void {
+        const normal = (manifold.points[0].normalImpulse as number) ?? 0;
+        const tangent = (manifold.points[0].tangentImpulse1 as number) ?? 0;
+        if (normal === 0 && tangent === 0) return;
+
+        const wp = midpointVec3(
+            this._lp2w(manifold.bodyIdA, manifold.points[0].localPointA),
+            this._lp2w(manifold.bodyIdB, manifold.points[0].localPointB)
+        );
+
+        const normalImpulse = scaleVec3(manifold.normal, normal);
+        const tangentImpulse = scaleVec3(manifold.tangent1, tangent);
+        const impulse = addVec3(normalImpulse, tangentImpulse);
+        this._applyImp(manifold.bodyIdA, negateVec3(impulse), wp);
+        this._applyImp(manifold.bodyIdB, impulse, wp);
     }
 
     private _solveContactPosition(manifold: IResolvedContactManifold3D): void {
@@ -399,6 +650,48 @@ export class PhysicsWorld3DContactRuntime {
     private _invMass(bodyId: BodyId3D): number {
         if (this._host.bodyManager.getBodyType(bodyId) !== 2 || !this._host.bodyManager.isEnabled(bodyId)) return 0;
         return this._host.bodyManager.getInverseMass(bodyId);
+    }
+
+    private _invInertia(bodyId: BodyId3D): IVec3Like {
+        const bm = this._host.bodyManager;
+        if (bm.getBodyType(bodyId) !== 2 || !bm.isEnabled(bodyId) || bm.isFixedRotation(bodyId)) {
+            return { x: 0, y: 0, z: 0 };
+        }
+        return bm.getInverseInertia(bodyId);
+    }
+
+    /**
+     * Counts contact islands: connected components of bodies linked by active
+     * contact manifolds. Enables island-level reporting and (combined with warm
+     * starting) stable, ordered sequential-impulse solving.
+     */
+    private _buildIslandCount(manifolds: ReadonlyMap<string, IResolvedContactManifold3D>): number {
+        const parent = new Map<number, number>();
+        const find = (x: number): number => {
+            let root = x;
+            while (parent.get(root) !== root) root = parent.get(root)!;
+            while (parent.get(x) !== root) {
+                const next = parent.get(x)!;
+                parent.set(x, root);
+                x = next;
+            }
+            return root;
+        };
+        const union = (a: number, b: number): void => {
+            const ra = find(a);
+            const rb = find(b);
+            if (ra !== rb) parent.set(ra, rb);
+        };
+
+        for (const m of manifolds.values()) {
+            if (!parent.has(m.bodyIdA)) parent.set(m.bodyIdA, m.bodyIdA);
+            if (!parent.has(m.bodyIdB)) parent.set(m.bodyIdB, m.bodyIdB);
+            union(m.bodyIdA, m.bodyIdB);
+        }
+
+        const roots = new Set<number>();
+        for (const key of parent.keys()) roots.add(find(key));
+        return roots.size;
     }
 
     private _applyImp(bodyId: BodyId3D, impulse: IVec3Like, point: IVec3Like): void {
