@@ -138,21 +138,15 @@ export class OctreeBroadphase3D<T extends IBroadphaseItem3D> implements IBroadph
     }
 
     update(item: T, min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): void {
-        this._bounds.delete(item);
-        this._octree.clear();
+        this._octree.remove(item);
         this._bounds.set(item, [min, max]);
-        for (const [existing, [existingMin, existingMax]] of this._bounds) {
-            this._octree.insert(existing, existingMin, existingMax);
-        }
+        this._octree.insert(item, min, max);
     }
 
     remove(item: T): void {
+        this._octree.remove(item);
         this._bounds.delete(item);
         this._itemId.delete(item);
-        this._octree.clear();
-        for (const [existing, [existingMin, existingMax]] of this._bounds) {
-            this._octree.insert(existing, existingMin, existingMax);
-        }
     }
 
     queryPairs(): IBroadphaseResult3D<T>[] {
