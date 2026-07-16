@@ -1,4 +1,4 @@
-import { Vec2, IVec2Like, EPSILON } from '@axrone/numeric';
+import { Vec2, type IVec2Like, EPSILON } from '@axrone/numeric';
 import { ObjectPool } from '@axrone/memory';
 import type { ShapeId, ContactId, IContactPoint2D } from '../types';
 import type { IContactManifold2D } from '../types/collision';
@@ -20,13 +20,6 @@ interface CollisionContext {
     transformB: { position: IVec2Like; rotation: number };
 }
 
-type CollisionFn = (
-    shapeA: any,
-    shapeB: any,
-    ctx: CollisionContext,
-    manifold: WritableManifold
-) => void;
-
 interface WritableManifold {
     pointCount: number;
     normal: { x: number; y: number };
@@ -39,6 +32,30 @@ interface WritableManifold {
         separation: number;
     }>;
 }
+
+interface CircleShapeData {
+    readonly center: IVec2Like;
+    readonly radius: number;
+}
+
+interface BoxShapeData {
+    readonly center: IVec2Like;
+    readonly halfWidth: number;
+    readonly halfHeight: number;
+    readonly rotation: number;
+}
+
+interface PolygonShapeData {
+    readonly vertices: IVec2Like[];
+}
+
+interface CapsuleShapeData {
+    readonly p1: IVec2Like;
+    readonly p2: IVec2Like;
+    readonly radius: number;
+}
+
+type ShapeData = CircleShapeData | BoxShapeData | PolygonShapeData | CapsuleShapeData;
 
 function setNormal(out: { x: number; y: number }, dx: number, dy: number): void {
     const d = Math.sqrt(dx * dx + dy * dy);
@@ -285,24 +302,31 @@ function collideBoxCapsule(
     point.separation = Math.sqrt(minDistSq) - capsule.radius;
 }
 
-const collideCapsuleCircle = (a: any, b: any, ctx: CollisionContext, m: WritableManifold) =>
+const collideCapsuleCircle = (a: CapsuleShapeData, b: CircleShapeData, ctx: CollisionContext, m: WritableManifold) =>
     collideCircleCapsule(b, a, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, m);
-const collidePolygonCircle = (a: any, b: any, ctx: CollisionContext, m: WritableManifold) =>
+const collidePolygonCircle = (a: PolygonShapeData, b: CircleShapeData, ctx: CollisionContext, m: WritableManifold) =>
     collideCirclePolygon(b, a, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, m);
-const collideBoxCircle = (a: any, b: any, ctx: CollisionContext, m: WritableManifold) =>
+const collideBoxCircle = (a: BoxShapeData, b: CircleShapeData, ctx: CollisionContext, m: WritableManifold) =>
     collideCircleBox(b, a, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, m);
-const collidePolygonCapsule = (a: any, b: any, ctx: CollisionContext, m: WritableManifold) =>
+const collidePolygonCapsule = (a: PolygonShapeData, b: CapsuleShapeData, ctx: CollisionContext, m: WritableManifold) =>
     collideCapsulePolygon(b, a, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, m);
 const collideBoxPolygon = collidePolygonPolygon;
 const collidePolygonBox = collideBoxPolygon;
-const collideCapsuleBox = (a: any, b: any, ctx: CollisionContext, m: WritableManifold) =>
+const collideCapsuleBox = (a: CapsuleShapeData, b: BoxShapeData, ctx: CollisionContext, m: WritableManifold) =>
     collideBoxCapsule(b, a, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, m);
 
+type CollisionFn = (
+    shapeA: ShapeData,
+    shapeB: ShapeData,
+    ctx: CollisionContext,
+    manifold: WritableManifold
+) => void;
+
 const COLLISION_MATRIX: ReadonlyArray<ReadonlyArray<CollisionFn | null>> = [
-    [collideCircleCircle, collideCircleCapsule, collideCirclePolygon, collideCircleBox, null],
-    [collideCapsuleCircle, collideCapsuleCapsule, collideCapsulePolygon, collideCapsuleBox, null],
-    [collidePolygonCircle, collidePolygonCapsule, collidePolygonPolygon, collidePolygonBox, null],
-    [collideBoxCircle, collideBoxCapsule, collideBoxPolygon, collideBoxBox, null],
+    [collideCircleCircle as CollisionFn, collideCircleCapsule as CollisionFn, collideCirclePolygon as CollisionFn, collideCircleBox as CollisionFn, null],
+    [collideCapsuleCircle as CollisionFn, collideCapsuleCapsule as CollisionFn, collideCapsulePolygon as CollisionFn, collideCapsuleBox as CollisionFn, null],
+    [collidePolygonCircle as CollisionFn, collidePolygonCapsule as CollisionFn, collidePolygonPolygon as CollisionFn, collidePolygonBox as CollisionFn, null],
+    [collideBoxCircle as CollisionFn, collideBoxCapsule as CollisionFn, collideBoxPolygon as CollisionFn, collideBoxBox as CollisionFn, null],
     [null, null, null, null, null],
 ] as const;
 
@@ -352,16 +376,17 @@ export class Narrowphase2D {
         typeB: ShapeType,
         shapeManager: ShapeManager2D,
         ctx: CollisionContext,
-        manifold: IContactManifold2D
+        manifold: WritableManifold
     ): void {
         const collisionFn = COLLISION_MATRIX[typeA]?.[typeB];
-        if (!collisionFn) { (manifold as any).pointCount = 0; return; }
+        if (!collisionFn) { manifold.pointCount = 0; return; }
         const shapeA = this.getShapeData(shapeIdA, typeA, shapeManager);
         const shapeB = this.getShapeData(shapeIdB, typeB, shapeManager);
-        collisionFn(shapeA, shapeB, ctx, manifold as any);
+        if (!shapeA || !shapeB) { manifold.pointCount = 0; return; }
+        collisionFn(shapeA, shapeB, ctx, manifold);
     }
 
-    private getShapeData(shapeId: ShapeId, type: ShapeType, manager: ShapeManager2D): any {
+    private getShapeData(shapeId: ShapeId, type: ShapeType, manager: ShapeManager2D): ShapeData | null {
         switch (type) {
             case ShapeType.Circle: return manager.getCircleData(shapeId);
             case ShapeType.Box: return manager.getBoxData(shapeId);
