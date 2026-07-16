@@ -1,18 +1,10 @@
 import { AABB2D } from '@axrone/geometry';
-import type { ShapeId, BodyId } from '../types';
-import type { IAABBQueryCallback, IQueryFilter } from '../types/world';
+import type { ShapeId } from '../types';
 
-export interface BroadphaseProxy {
-    id: number;
-    aabb: AABB2D;
-    userData: any;
-    isMoved: boolean;
-}
-
-interface TreeNode {
-    id: number;
-    aabb: AABB2D;
-    userData: any;
+interface TreeNode<TUserData = ShapeId> {
+    readonly id: number;
+    readonly aabb: AABB2D;
+    userData: TUserData | null;
     parent: number;
     child1: number;
     child2: number;
@@ -21,29 +13,31 @@ interface TreeNode {
 
 const NULL_NODE = -1;
 
-export class DynamicAABBTree2D {
-    private _nodes: TreeNode[];
+export class DynamicAABBTree2D<TUserData = ShapeId> {
+    private _nodes: TreeNode<TUserData>[];
     private _root: number = NULL_NODE;
     private _freeList: number = 0;
     private _nodeCount: number = 0;
     private _nodeCapacity: number;
     private readonly _growthFactor: number = 2.0;
 
+    private readonly _tmpCombinedAABB = new AABB2D();
+    private readonly _tmpChildUnionAABB = new AABB2D();
+
     constructor(initialCapacity: number = 1024) {
         this._nodeCapacity = initialCapacity;
-        this._nodes = new Array(initialCapacity);
+        this._nodes = new Array<TreeNode<TUserData>>(initialCapacity);
 
         for (let i = 0; i < initialCapacity - 1; ++i) {
             this._nodes[i] = {
                 id: i,
                 aabb: new AABB2D(),
                 userData: null,
-                parent: i,
+                parent: i + 1,
                 child1: NULL_NODE,
                 child2: NULL_NODE,
                 height: -1,
             };
-            this._nodes[i].parent = i + 1;
         }
         this._nodes[initialCapacity - 1] = {
             id: initialCapacity - 1,
@@ -56,7 +50,7 @@ export class DynamicAABBTree2D {
         };
     }
 
-    createProxy(aabb: AABB2D, userData: any): number {
+    createProxy(aabb: AABB2D, userData: TUserData): number {
         const proxyId = this._allocateNode();
 
         const fattenedAABB = aabb.clone() as AABB2D;
@@ -123,7 +117,7 @@ export class DynamicAABBTree2D {
         }
     }
 
-    getUserData(proxyId: number): any {
+    getUserData(proxyId: number): TUserData | null {
         return this._nodes[proxyId].userData;
     }
 
@@ -206,34 +200,31 @@ export class DynamicAABBTree2D {
 
             const area = node.aabb.surfaceArea;
 
-            const combinedAABB = new AABB2D();
-            node.aabb.getUnion(leafAABB, combinedAABB);
-            const combinedArea = combinedAABB.surfaceArea;
+            node.aabb.getUnion(leafAABB, this._tmpCombinedAABB);
+            const combinedArea = this._tmpCombinedAABB.surfaceArea;
 
             const cost = 2.0 * combinedArea;
 
             const inheritanceCost = 2.0 * (combinedArea - area);
 
-            let cost1;
-            const combinedAABB1 = new AABB2D();
-            this._nodes[child1].aabb.getUnion(leafAABB, combinedAABB1);
+            let cost1: number;
+            this._nodes[child1].aabb.getUnion(leafAABB, this._tmpCombinedAABB);
             if (this._nodes[child1].child1 === NULL_NODE) {
-                cost1 = combinedAABB1.surfaceArea + inheritanceCost;
+                cost1 = this._tmpCombinedAABB.surfaceArea + inheritanceCost;
             } else {
                 cost1 =
-                    combinedAABB1.surfaceArea -
+                    this._tmpCombinedAABB.surfaceArea -
                     this._nodes[child1].aabb.surfaceArea +
                     inheritanceCost;
             }
 
-            let cost2;
-            const combinedAABB2 = new AABB2D();
-            this._nodes[child2].aabb.getUnion(leafAABB, combinedAABB2);
+            let cost2: number;
+            this._nodes[child2].aabb.getUnion(leafAABB, this._tmpChildUnionAABB);
             if (this._nodes[child2].child1 === NULL_NODE) {
-                cost2 = combinedAABB2.surfaceArea + inheritanceCost;
+                cost2 = this._tmpChildUnionAABB.surfaceArea + inheritanceCost;
             } else {
                 cost2 =
-                    combinedAABB2.surfaceArea -
+                    this._tmpChildUnionAABB.surfaceArea -
                     this._nodes[child2].aabb.surfaceArea +
                     inheritanceCost;
             }
