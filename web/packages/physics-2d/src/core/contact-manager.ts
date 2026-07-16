@@ -9,22 +9,7 @@ import type {
     ICollisionFilter,
 } from '../types';
 import { CollisionEventType } from '../types';
-
-const enum ContactManagerError {
-    INVALID_STATE = 'INVALID_STATE',
-    CONTACT_NOT_FOUND = 'CONTACT_NOT_FOUND',
-    CAPACITY_EXCEEDED = 'CAPACITY_EXCEEDED',
-}
-
-class ContactError extends Error {
-    readonly code: ContactManagerError;
-    constructor(message: string, code: ContactManagerError) {
-        super(message);
-        this.name = 'ContactError';
-        this.code = code;
-        Object.setPrototypeOf(this, ContactError.prototype);
-    }
-}
+import { PhysicsError, assertCapacity, assertFound } from './foundation';
 
 const CONTACT_DATA_STRIDE = 16;
 const WARM_START_DATA_STRIDE = 8;
@@ -112,9 +97,9 @@ export class ContactManager2D implements Disposable {
         }
 
         if (this._contactCount >= this._maxContacts && this._freeIndices.length === 0) {
-            throw new ContactError(
+            throw new PhysicsError(
                 'Contact capacity exceeded',
-                ContactManagerError.CAPACITY_EXCEEDED
+                'CAPACITY_EXCEEDED'
             );
         }
 
@@ -407,7 +392,7 @@ export class ContactManager2D implements Disposable {
 
     private _assertNotDisposed(): void {
         if (this._disposed) {
-            throw new ContactError('Manager is disposed', ContactManagerError.INVALID_STATE);
+            throw new PhysicsError('Manager is disposed', 'INVALID_STATE');
         }
     }
 
