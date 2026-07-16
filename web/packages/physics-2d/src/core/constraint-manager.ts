@@ -156,7 +156,7 @@ export class ConstraintManager2D implements Disposable {
         this._revoluteData[offset + 7] = def.upperAngle ?? 0;
         this._revoluteData[offset + 8] = def.enableMotor ? 1 : 0;
         this._revoluteData[offset + 9] = def.motorSpeed ?? 0;
-        this._revoluteData[offset + 10] = (def.maxMotorTorque as number) ?? 0;
+        this._revoluteData[offset + 10] = Number(def.maxMotorTorque ?? 0);
         this._revoluteData[offset + 11] = 0;
         this._revoluteData[offset + 12] = 0;
         this._revoluteData[offset + 13] = 0;
@@ -186,7 +186,7 @@ export class ConstraintManager2D implements Disposable {
         this._prismaticData[offset + 9] = def.upperTranslation ?? 0;
         this._prismaticData[offset + 10] = def.enableMotor ? 1 : 0;
         this._prismaticData[offset + 11] = def.motorSpeed ?? 0;
-        this._prismaticData[offset + 12] = (def.maxMotorForce as number) ?? 0;
+        this._prismaticData[offset + 12] = Number(def.maxMotorForce ?? 0);
         this._prismaticData[offset + 13] = 0;
         this._prismaticData[offset + 14] = 0;
         this._prismaticData[offset + 15] = 0;
@@ -237,7 +237,7 @@ export class ConstraintManager2D implements Disposable {
         this._wheelData[offset + 8] = def.upperTranslation ?? 0;
         this._wheelData[offset + 9] = def.enableMotor ? 1 : 0;
         this._wheelData[offset + 10] = def.motorSpeed ?? 0;
-        this._wheelData[offset + 11] = (def.maxMotorTorque as number) ?? 0;
+        this._wheelData[offset + 11] = Number(def.maxMotorTorque ?? 0);
         this._wheelData[offset + 12] = def.stiffness ?? 0;
         this._wheelData[offset + 13] = def.damping ?? 0;
 
@@ -257,8 +257,8 @@ export class ConstraintManager2D implements Disposable {
         this._motorData[offset] = def.linearOffset.x;
         this._motorData[offset + 1] = def.linearOffset.y;
         this._motorData[offset + 2] = def.angularOffset ?? 0;
-        this._motorData[offset + 3] = (def.maxForce as number) ?? 1;
-        this._motorData[offset + 4] = (def.maxTorque as number) ?? 1;
+        this._motorData[offset + 3] = Number(def.maxForce ?? 1);
+        this._motorData[offset + 4] = Number(def.maxTorque ?? 1);
         this._motorData[offset + 5] = def.correctionFactor ?? 0.3;
         this._motorData[offset + 6] = 0;
         this._motorData[offset + 7] = 0;
@@ -280,7 +280,7 @@ export class ConstraintManager2D implements Disposable {
 
         this._mouseData[offset] = def.target.x;
         this._mouseData[offset + 1] = def.target.y;
-        this._mouseData[offset + 2] = (def.maxForce as number) ?? 1000;
+        this._mouseData[offset + 2] = Number(def.maxForce ?? 1000);
         this._mouseData[offset + 3] = def.stiffness ?? 5;
         this._mouseData[offset + 4] = def.damping ?? 0.7;
         this._mouseData[offset + 5] = 0;
