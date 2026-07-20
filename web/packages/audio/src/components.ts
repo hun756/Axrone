@@ -1,6 +1,7 @@
 import { Component } from '@axrone/ecs-runtime';
 import type { ComponentConfig } from '@axrone/ecs-runtime';
 import type { Transform } from '@axrone/ecs-runtime';
+import { script } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
 import { toAudioClipSelector } from './asset';
 import {
@@ -46,6 +47,12 @@ export interface AudioListenerComponentConfig extends ComponentConfig {
     readonly metadata?: Readonly<Record<string, AudioJsonValue>>;
 }
 
+@script({
+    scriptName: 'AudioListener',
+    priority: 800,
+    executeInEditMode: true,
+    singleton: false,
+})
 export class AudioListenerComponent extends Component<AudioListenerComponentConfig> {
     private _listenerId: AudioListenerId;
     private _active: boolean;
@@ -226,6 +233,12 @@ export interface AudioSourceComponentConfig<TSchema extends AudioAssetSchema = A
     readonly metadata?: Readonly<Record<string, AudioJsonValue>>;
 }
 
+@script({
+    scriptName: 'AudioSource',
+    priority: 810,
+    executeInEditMode: true,
+    singleton: false,
+})
 export class AudioSourceComponent<
     TSchema extends AudioAssetSchema = AudioAssetSchema,
 > extends Component<AudioSourceComponentConfig<TSchema>> {
