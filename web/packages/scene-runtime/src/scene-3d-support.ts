@@ -151,5 +151,44 @@ export type { PointLightConfig } from './components/point-light';
 export { PointLight } from './components/point-light';
 export type { SpotLightConfig } from './components/spot-light';
 export { SpotLight } from './components/spot-light';
+export type { AreaLightConfig, AreaLightShape } from './components/area-light';
+export { AreaLight } from './components/area-light';
+export type {
+    TrailRendererConfig,
+    TrailRendererGradientStop,
+    TrailTextureMode,
+    TrailAlignment,
+} from './components/trail-renderer';
+export { TrailRenderer } from './components/trail-renderer';
+export type {
+    LineRendererConfig,
+    LineRendererGradientStop,
+    LineTextureMode,
+    LineAlignment,
+} from './components/line-renderer';
+export { LineRenderer } from './components/line-renderer';
+export type { LODGroupConfig, LODLevel, LODLevelConfig } from './components/lod-group';
+export { LODGroup } from './components/lod-group';
+export type {
+    ReflectionProbeConfig,
+    ReflectionProbeMode,
+    ReflectionProbeShape,
+    ReflectionProbeRefreshMode,
+    ReflectionProbeTimeSlicingMode,
+    ReflectionProbeClearFlags,
+} from './components/reflection-probe';
+export { ReflectionProbe } from './components/reflection-probe';
+export type {
+    BillboardRendererConfig,
+    BillboardMode,
+} from './components/billboard-renderer';
+export { BillboardRenderer } from './components/billboard-renderer';
+export type {
+    NavMeshAgentConfig,
+    NavMeshAgentPathStatus,
+    NavMeshAgentObstacleAvoidanceQuality,
+    NavMeshPath,
+} from './components/navmesh-agent';
+export { NavMeshAgent } from './components/navmesh-agent';
 
 export { decodeSceneValue, encodeSceneValue } from './serialization';

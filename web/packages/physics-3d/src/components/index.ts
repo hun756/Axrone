@@ -8,3 +8,4 @@ export * from './CylinderCollider3D';
 export * from './MeshCollider3D';
 export * from './joint3d';
 export * from './character-controller';
+export * from './raycast3d';
