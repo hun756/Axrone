@@ -21,7 +21,7 @@ import type {
     ShapeId3D,
 } from '../types/physics-3d';
 import type { BodyType, IMaterial } from '../types';
-import { BodyFlags, BodyTypeEnum, ShapeType } from '../types';
+import { BodyFlags, BodyType as BodyTypeEnum, ShapeType } from '../types';
 
 const BODY_TYPE_DYNAMIC = BodyTypeEnum.Dynamic;
 
@@ -58,7 +58,7 @@ interface ManagerPool<T> {
     maxCapacity: number;
 }
 
-class BodyManager3D implements Disposable {
+export class BodyManager3D implements Disposable {
     private readonly _nextBodyId = 1n;
     private readonly _bodyCount = 0n;
     private readonly _maxBodies = 4096n;
