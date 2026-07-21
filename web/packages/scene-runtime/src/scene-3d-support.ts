@@ -190,5 +190,18 @@ export type {
     NavMeshPath,
 } from './components/navmesh-agent';
 export { NavMeshAgent } from './components/navmesh-agent';
+export type {
+    ParticleSystemConfig,
+    ParticleRenderData,
+    ParticleBurst,
+    ParticleShapeType,
+    ParticleSimulationSpace,
+    ParticleRenderMode,
+    ParticleBlendMode,
+    ParticleSpriteMode,
+    ParticleStopAction,
+    ParticleColorMode,
+} from './components/particle-system';
+export { ParticleSystem } from './components/particle-system';
 
 export { decodeSceneValue, encodeSceneValue } from './serialization';
