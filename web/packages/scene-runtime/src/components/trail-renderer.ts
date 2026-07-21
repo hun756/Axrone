@@ -352,10 +352,13 @@ export class TrailRenderer extends Component {
             startWidth: this._startWidth,
             endWidth: this._endWidth,
             widthCurve: [...this._widthCurve],
-            colorGradient: this._colorGradient.map((stop) => ({
-                position: stop.position,
-                color: [stop.color.x, stop.color.y, stop.color.z, stop.color.w],
-            })),
+            colorGradient: this._colorGradient.map((stop) => {
+                const color = toVec4(stop.color);
+                return {
+                    position: stop.position,
+                    color: [color.x, color.y, color.z, color.w],
+                };
+            }),
             textureMode: this._textureMode,
             alignment: this._alignment,
             textureScale: [this._textureScaleX, this._textureScaleY],
