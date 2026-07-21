@@ -1,49 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { World, ComponentError } from '@axrone/ecs-runtime/world';
-import { script } from '@axrone/ecs-runtime/decorators';
-import { Component } from '@axrone/ecs-runtime';
-
-@script({
-    scriptName: 'GameManager',
-    singleton: true,
-})
-class GameManager extends Component {
-    score = 0;
-    level = 1;
-
-    incrementScore(points: number): void {
-        this.score += points;
-    }
-
-    nextLevel(): void {
-        this.level++;
-    }
-}
-
-@script({
-    scriptName: 'Health',
-})
-class Health extends Component {
-    current = 100;
-    max = 100;
-
-    damage(amount: number): void {
-        this.current = Math.max(0, this.current - amount);
-    }
-}
-
-@script({
-    scriptName: 'AudioManager',
-    singleton: true,
-})
-class AudioManager extends Component {
-    volume = 1.0;
-    muted = false;
-
-    setVolume(vol: number): void {
-        this.volume = Math.max(0, Math.min(1, vol));
-    }
-}
+import GameManager from './components/GameManager';
+import Health from './components/Health';
+import AudioManager from './components/AudioManager';
 
 type TestRegistry = {
     GameManager: typeof GameManager;

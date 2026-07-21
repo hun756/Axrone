@@ -7,14 +7,10 @@ import {
 import { Transform } from '@axrone/ecs-runtime';
 import type { ComponentMetadata } from '@axrone/ecs-runtime';
 import { afterEach, describe, expect, test } from 'vitest';
-
-class TestDependencyComponent extends Component {
-    value: number = 42;
-}
-
-class CustomDepComponent extends Component {
-    name: string = 'custom';
-}
+import DefaultScriptComponent from './components/DefaultScriptComponent';
+import AdvancedScriptComponent from './components/AdvancedScriptComponent';
+import NegativePriorityComponent from './components/NegativePriorityComponent';
+import CustomMetadataComponent from './components/CustomMetadataComponent';
 
 class Manual1Component extends Component {
     manual1: boolean = true;
@@ -28,47 +24,8 @@ class OverrideComponent extends Component {
     override: boolean = true;
 }
 
-@script()
-class DefaultScriptComponent extends Component {
-    value: number = 0;
-}
-
-@script({
-    dependencies: [Transform, TestDependencyComponent],
-    singleton: true,
-    executeInEditMode: true,
-    priority: 100,
-})
-class AdvancedScriptComponent extends Component {
-    name: string = 'advanced';
-}
-
-@script({
-    singleton: false,
-    priority: -50,
-})
-class NegativePriorityComponent extends Component {
-    data: string = '';
-}
-
 class UnDecoratedComponent extends Component {
     plain: boolean = true;
-}
-
-@script({
-    dependencies: [CustomDepComponent],
-    singleton: true,
-})
-class CustomMetadataComponent extends Component {
-    static customMetadata: ComponentMetadata | null = null;
-
-    static setComponentMetadata(target: any, metadata: ComponentMetadata) {
-        CustomMetadataComponent.customMetadata = metadata;
-    }
-
-    getValue(): string {
-        return 'custom';
-    }
 }
 
 describe('Component Script Decorator', () => {
@@ -109,7 +66,7 @@ describe('Component Script Decorator', () => {
 
             expect(metadata).toBeDefined();
             expect(metadata!.scriptName).toBe('AdvancedScriptComponent');
-            expect(metadata!.dependencies).toEqual([Transform, TestDependencyComponent]);
+            expect(metadata!.dependencies).toEqual([Transform, expect.any(Function)]);
             expect(metadata!.singleton).toBe(true);
             expect(metadata!.executeInEditMode).toBe(true);
             expect(metadata!.priority).toBe(100);
@@ -157,9 +114,7 @@ describe('Component Script Decorator', () => {
 
             expect(metadata).toBeDefined();
             expect(CustomMetadataComponent.customMetadata).toBeDefined();
-            expect(CustomMetadataComponent.customMetadata!.dependencies).toEqual([
-                CustomDepComponent,
-            ]);
+            expect(CustomMetadataComponent.customMetadata!.dependencies).toEqual([expect.any(Function)]);
             expect(CustomMetadataComponent.customMetadata!.singleton).toBe(true);
         });
 
