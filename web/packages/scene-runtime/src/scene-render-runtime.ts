@@ -18,6 +18,7 @@ import { SceneRenderStateApplier } from './render-state-applier';
 import type { SceneResourceRuntime } from './scene-resource-runtime';
 import { SceneSkinningUniformBinder } from './skinning-uniform-binder';
 import { SceneSpriteBatchRuntime } from './sprite-batch-runtime';
+import { SceneParticleBatchRuntime } from './particle-batch-runtime';
 import type { SceneMeshResource } from './mesh-registry';
 import type {
     SceneMeshDefinition,
@@ -126,10 +127,15 @@ export class SceneRenderRuntime {
             materialTextureBinder: this._materialTextureBinder,
             textureUniformSetter: this._textureUniformSetter,
         });
+        const particleBatchRuntime = new SceneParticleBatchRuntime({
+            gl: _options.gl,
+            uniformWriter: this._uniformWriter,
+        });
         this._renderPipeline = new SceneRenderPipeline({
             gl: _options.gl,
             drawExecutor: this._drawExecutor,
             spriteBatchRuntime,
+            particleBatchRuntime,
             planning: _options.planning,
             pipeline: _options.pipeline,
         });
