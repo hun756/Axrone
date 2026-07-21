@@ -190,6 +190,10 @@ const normalizePropertyTypeId = (
         if (name === 'vec3') {
             return 'vec3';
         }
+
+        if (type.prototype instanceof Component) {
+            return 'component';
+        }
     }
 
     if (typeof type !== 'string') {
@@ -215,6 +219,8 @@ const normalizePropertyTypeId = (
             return 'entity';
         case 'transform':
             return 'transform';
+        case 'component':
+            return 'component';
         default:
             return undefined;
     }
@@ -587,6 +593,14 @@ export class ScenePrefabRuntime {
             case 'transform': {
                 const targetActor = this._resolveActorReference(value, createdByNodeId, createdActors);
                 return targetActor?.getComponent(Transform) ?? null;
+            }
+            case 'component': {
+                const componentType = metadata.type;
+                if (typeof componentType !== 'function') {
+                    return null;
+                }
+                const targetActor = this._resolveActorReference(value, createdByNodeId, createdActors);
+                return targetActor?.getComponent(componentType as ComponentConstructor) ?? null;
             }
             default:
                 return value;
