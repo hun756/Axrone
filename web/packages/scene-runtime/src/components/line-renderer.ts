@@ -372,10 +372,13 @@ export class LineRenderer extends Component {
             widthCurve: [...this._widthCurve],
             startColor: [this._startColor.x, this._startColor.y, this._startColor.z, this._startColor.w],
             endColor: [this._endColor.x, this._endColor.y, this._endColor.z, this._endColor.w],
-            colorGradient: this._colorGradient.map((stop) => ({
-                position: stop.position,
-                color: [stop.color.x, stop.color.y, stop.color.z, stop.color.w],
-            })),
+            colorGradient: this._colorGradient.map((stop) => {
+                const color = toVec4(stop.color);
+                return {
+                    position: stop.position,
+                    color: [color.x, color.y, color.z, color.w],
+                };
+            }),
             cornerVertices: this._cornerVertices,
             endCapVertices: this._endCapVertices,
             textureMode: this._textureMode,
