@@ -27,6 +27,7 @@ import type { SceneRenderFrameState } from './render-frame-state';
 import type { SceneRenderItem } from './render-item-collector';
 import type { SceneRenderPassResource } from './render-pass-registry';
 import type { SceneSpriteBatchRuntime } from './sprite-batch-runtime';
+import type { SceneParticleBatchRuntime } from './particle-batch-runtime';
 import type {
     SceneMaterialAlphaMode,
     SceneRenderPlanningOptions,
@@ -56,6 +57,7 @@ export interface SceneRenderPipelineParams {
 }
 
 type SceneSpriteBatchRenderer = Pick<SceneSpriteBatchRuntime, 'render' | 'clear'>;
+type SceneParticleBatchRenderer = Pick<SceneParticleBatchRuntime, 'render' | 'clear'>;
 
 const DEFAULT_SCENE_RENDER_PLANNING_STATS: SceneRenderPlanningStats = Object.freeze({
     passCount: 0,
@@ -305,6 +307,7 @@ interface SceneRenderPipelineOptions {
     readonly gl: WebGL2RenderingContext;
     readonly drawExecutor: Pick<SceneDrawExecutor, 'execute'>;
     readonly spriteBatchRuntime?: SceneSpriteBatchRenderer;
+    readonly particleBatchRuntime?: SceneParticleBatchRenderer;
     readonly planning?: SceneRenderPlanningOptions;
     readonly pipeline?: SceneRenderPipelineSettings;
 }
@@ -483,6 +486,16 @@ export class SceneRenderPipeline {
                 pushUniqueWarnings(warnings, spriteStats.warnings);
             }
 
+            if (this._options.particleBatchRuntime && params.actors) {
+                this._options.particleBatchRuntime.render({
+                    actors: params.actors,
+                    cameraFrame: params.cameraFrame,
+                    frameState: params.frameState,
+                    viewportWidth: params.viewportWidth,
+                    viewportHeight: params.viewportHeight,
+                });
+            }
+
             return Object.freeze({
                 passCount: result.statistics.passCount,
                 opaqueCount: result.statistics.opaqueCount,
@@ -503,6 +516,7 @@ export class SceneRenderPipeline {
         this._activeExecution = null;
         this._primitiveLookup.clear();
         this._options.spriteBatchRuntime?.clear();
+        this._options.particleBatchRuntime?.clear();
         this._pipeline.dispose();
         this._backend.dispose();
         this._backend = this._createBackend();
@@ -513,6 +527,7 @@ export class SceneRenderPipeline {
         this._pipeline.dispose();
         this._backend.dispose();
         this._options.spriteBatchRuntime?.clear();
+        this._options.particleBatchRuntime?.clear();
         this._activeExecution = null;
         this._primitiveLookup.clear();
     }
