@@ -38,6 +38,21 @@ class HydratedFollower extends Component {
 	public tintHex = '#ffffff';
 }
 
+@script({
+	scriptName: 'HydrationMarker',
+})
+class HydrationMarker extends Component {
+	public label = 'marker';
+}
+
+@script({
+	scriptName: 'ComponentRefFollower',
+})
+class ComponentRefFollower extends Component {
+	@property({ type: HydrationMarker })
+	public marker: HydrationMarker | null = null;
+}
+
 const createPrefabComponent = (type: string, data: unknown) => ({
 	type,
 	data: encodeSceneValue(data),
@@ -47,6 +62,8 @@ const createPrefabHarness = () => {
 	const registry = createSceneRegistry({
 		registry: {
 			HydratedFollower,
+			HydrationMarker,
+			ComponentRefFollower,
 		},
 	});
 	const world = new World(registry);
@@ -56,6 +73,8 @@ const createPrefabHarness = () => {
 	});
 
 	actors.registerComponent(HydratedFollower);
+	actors.registerComponent(HydrationMarker);
+	actors.registerComponent(ComponentRefFollower);
 
 	return {
 		actors,
@@ -127,6 +146,59 @@ const createHydrationPrefab = (): ScenePrefabDefinition => ({
 	],
 });
 
+const createComponentRefPrefab = (): ScenePrefabDefinition => ({
+	id: 'prefab/component-reference',
+	actors: [
+		{
+			nodeId: 'node/follower',
+			parentNodeId: null,
+			name: 'Follower',
+			layer: 0,
+			tag: 'default',
+			active: true,
+			persistent: false,
+			pooled: false,
+			components: [
+				createPrefabComponent('Transform', {
+					position: [0, 0, 0],
+					rotation: [0, 0, 0, 1],
+					scale: [1, 1, 1],
+				}),
+				createPrefabComponent('ComponentRefFollower', {
+					scriptPath: 'Scripts/component-ref-follower.ts',
+					className: 'ComponentRefFollower',
+					scriptName: 'ComponentRefFollower',
+					executeInEditMode: false,
+					propertyValues: {
+						marker: {
+							kind: 'entity',
+							target: 'node/marker-owner',
+						},
+					},
+				}),
+			],
+		},
+		{
+			nodeId: 'node/marker-owner',
+			parentNodeId: null,
+			name: 'MarkerOwner',
+			layer: 0,
+			tag: 'default',
+			active: true,
+			persistent: false,
+			pooled: false,
+			components: [
+				createPrefabComponent('Transform', {
+					position: [0, 0, 0],
+					rotation: [0, 0, 0, 1],
+					scale: [1, 1, 1],
+				}),
+				createPrefabComponent('HydrationMarker', {}),
+			],
+		},
+	],
+});
+
 describe('ScenePrefabRuntime property hydration', () => {
 	it('hydrates editor propertyValues into live script instances', () => {
 		expect(getComponentPropertyMetadata(HydratedFollower).map((entry) => entry.propertyKey)).toEqual([
@@ -154,5 +226,17 @@ describe('ScenePrefabRuntime property hydration', () => {
 		expect(component?.tintHex).toBe('#ff00aa');
 		expect(component?.targetActor).toBe(targetActor);
 		expect(component?.targetTransform).toBe(targetActor?.getComponent(Transform));
+	});
+
+	it('resolves a component-typed property to the target component instance', () => {
+		const harness = createPrefabHarness();
+		const actors = harness.actors.instantiatePrefab(createComponentRefPrefab());
+		const followerActor = actors.find((actor) => actor.name === 'Follower');
+		const markerOwnerActor = actors.find((actor) => actor.name === 'MarkerOwner');
+		const follower = followerActor?.getComponent(ComponentRefFollower);
+
+		expect(follower).toBeDefined();
+		expect(markerOwnerActor).toBeDefined();
+		expect(follower?.marker).toBe(markerOwnerActor?.getComponent(HydrationMarker));
 	});
 });
