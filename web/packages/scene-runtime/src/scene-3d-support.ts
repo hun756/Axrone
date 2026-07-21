@@ -203,5 +203,12 @@ export type {
     ParticleColorMode,
 } from './components/particle-system';
 export { ParticleSystem } from './components/particle-system';
+export { createParticleShaderDefinition, DEFAULT_SCENE_PARTICLE_SHADER_ID } from './particle-shader';
+export type {
+    SceneParticleBatchRuntimeOptions,
+    SceneParticleBatchRuntimeRenderParams,
+    SceneParticleBatchRuntimeRenderStats,
+} from './particle-batch-runtime';
+export { SceneParticleBatchRuntime } from './particle-batch-runtime';
 
 export { decodeSceneValue, encodeSceneValue } from './serialization';
