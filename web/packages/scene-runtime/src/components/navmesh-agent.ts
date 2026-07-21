@@ -367,7 +367,7 @@ export class NavMeshAgent extends Component {
 
         const currentPosition = this.getWorldPosition();
         const toCorner = Vec3.subtract(nextCorner, currentPosition, new Vec3());
-        const distanceToCorner = Vec3.length(toCorner);
+        const distanceToCorner = Vec3.len(toCorner);
 
         if (distanceToCorner <= this._stoppingDistance) {
             this._currentCornerIndex++;
@@ -389,13 +389,13 @@ export class NavMeshAgent extends Component {
                 ? distanceToCorner
                 : this._speed;
 
-            const currentSpeed = Vec3.length(this._velocity);
+            const currentSpeed = Vec3.len(this._velocity);
             const newSpeed = Math.min(
                 targetSpeed,
                 currentSpeed + this._acceleration * deltaTime
             );
 
-            this._velocity = Vec3.scale(toCorner, newSpeed, new Vec3());
+            this._velocity = Vec3.multiplyScalar(toCorner, newSpeed, new Vec3());
         }
 
         this._updateRemainingDistance();
