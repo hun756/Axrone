@@ -314,16 +314,33 @@ export class ScenePrefabRuntime {
             }
         }
 
+        // Pass 1: add every component across all actors first, so that
+        // component references can resolve against fully-populated actors in
+        // pass 2 regardless of actor/component ordering.
+        const pendingComponentData: Array<{
+            readonly component: Component;
+            readonly snapshot: SceneComponentSnapshot;
+        }> = [];
         for (const pendingHydration of pendingComponentHydration) {
             for (const componentSnapshot of pendingHydration.components) {
-                this._hydrateComponent(
+                const component = this._instantiateComponent(
                     pendingHydration.actor,
                     componentSnapshot,
                     options,
-                    createdByNodeId,
-                    createdActors,
                 );
+                pendingComponentData.push({ component, snapshot: componentSnapshot });
             }
+        }
+
+        // Pass 2: normalize and apply component data, resolving entity /
+        // transform / component references now that all components exist.
+        for (const pending of pendingComponentData) {
+            this._applyComponentData(
+                pending.component,
+                pending.snapshot,
+                createdByNodeId,
+                createdActors,
+            );
         }
 
         for (let index = 0; index < resolvedPrefab.actors.length; index += 1) {
@@ -407,13 +424,11 @@ export class ScenePrefabRuntime {
         return prefab;
     }
 
-    private _hydrateComponent(
+    private _instantiateComponent(
         actor: Actor,
         snapshot: SceneComponentSnapshot,
         options: ScenePrefabInstantiateOptions,
-        createdByNodeId: ReadonlyMap<string, Actor>,
-        createdActors: readonly Actor[]
-    ): void {
+    ): Component {
         const componentType = this._host.componentCatalog.get(snapshot.type);
         if (!componentType) {
             throw new SceneLifecycleError(
@@ -424,13 +439,23 @@ export class ScenePrefabRuntime {
         const existingComponent = actor
             .getAllComponents()
             .find((component) => component.constructor === componentType);
-        const component =
+
+        return (
             existingComponent ??
             actor.addComponent(
                 componentType as new (...args: any[]) => Component,
                 ...(options.componentArgsResolver?.(snapshot.type, snapshot.data) ?? [])
-            );
+            )
+        );
+    }
 
+    private _applyComponentData(
+        component: Component,
+        snapshot: SceneComponentSnapshot,
+        createdByNodeId: ReadonlyMap<string, Actor>,
+        createdActors: readonly Actor[]
+    ): void {
+        const componentType = component.constructor as ComponentConstructor;
         const decoded = decodeSceneValue(snapshot.data);
         const normalized =
             decoded && typeof decoded === 'object' && !Array.isArray(decoded)
