@@ -1,11 +1,7 @@
 import {
-	Actor,
-	Component,
 	Transform,
 	World,
 	getComponentPropertyMetadata,
-	property,
-	script,
 } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
 import { describe, expect, it } from 'vitest';
@@ -14,44 +10,9 @@ import { createSceneRegistry } from '../scene-registry';
 import { encodeSceneValue } from '../serialization';
 import { SceneActorRuntime } from '../scene-actor-runtime';
 import type { ScenePrefabDefinition } from '../types';
-
-@script({
-	scriptName: 'HydratedFollower',
-})
-class HydratedFollower extends Component {
-	@property({ type: Actor })
-	public targetActor: Actor | null = null;
-
-	@property({ type: Transform })
-	public targetTransform: Transform | null = null;
-
-	@property({ type: 'vec3' })
-	public offset = new Vec3(0, 0, 0);
-
-	@property({ type: 'number' })
-	public speed = 0;
-
-	@property({ type: 'boolean' })
-	public enabledFlag = false;
-
-	@property({ type: 'string' })
-	public tintHex = '#ffffff';
-}
-
-@script({
-	scriptName: 'HydrationMarker',
-})
-class HydrationMarker extends Component {
-	public label = 'marker';
-}
-
-@script({
-	scriptName: 'ComponentRefFollower',
-})
-class ComponentRefFollower extends Component {
-	@property({ type: HydrationMarker })
-	public marker: HydrationMarker | null = null;
-}
+import { HydratedFollower } from './fixtures/HydratedFollower';
+import { HydrationMarker } from './fixtures/HydrationMarker';
+import { ComponentRefFollower } from './fixtures/ComponentRefFollower';
 
 const createPrefabComponent = (type: string, data: unknown) => ({
 	type,
