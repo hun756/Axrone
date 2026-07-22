@@ -130,6 +130,7 @@ export class SceneRenderRuntime {
         const particleBatchRuntime = new SceneParticleBatchRuntime({
             gl: _options.gl,
             uniformWriter: this._uniformWriter,
+            renderStateApplier: this._renderStateApplier,
         });
         this._renderPipeline = new SceneRenderPipeline({
             gl: _options.gl,

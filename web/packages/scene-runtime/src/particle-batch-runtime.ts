@@ -6,6 +6,7 @@ import type { ParticleRenderData } from './components/particle-system';
 import { SceneMeshError } from './errors';
 import { createParticleShaderDefinition } from './particle-shader';
 import type { SceneRenderFrameState } from './render-frame-state';
+import type { SceneRenderStateApplier } from './render-state-applier';
 import { SceneShaderFactory } from './scene-shader-factory';
 import type { SceneShaderResource } from './shader-registry';
 import type { SceneUniformWriteTarget } from './uniform-writer';
@@ -31,6 +32,7 @@ const SPRITE_MODE_INDEX: Readonly<Record<string, number>> = Object.freeze({
 export interface SceneParticleBatchRuntimeOptions {
     readonly gl: WebGL2RenderingContext;
     readonly uniformWriter: SceneUniformWriteTarget;
+    readonly renderStateApplier: Pick<SceneRenderStateApplier, 'reset'>;
 }
 
 export interface SceneParticleBatchRuntimeRenderParams {
@@ -77,7 +79,7 @@ export class SceneParticleBatchRuntime {
     private _vertexData: Float32Array;
     private _vertexCapacity: number;
     private readonly _subjects: SceneParticleRenderSubject[] = [];
-    private _debugFrame = 0;
+    private _failed = false;
 
     constructor(private readonly _options: SceneParticleBatchRuntimeOptions) {
         this._shaderFactory = new SceneShaderFactory({ gl: _options.gl });
@@ -86,6 +88,10 @@ export class SceneParticleBatchRuntime {
     }
 
     render(params: SceneParticleBatchRuntimeRenderParams): SceneParticleBatchRuntimeRenderStats {
+        if (this._failed) {
+            return EMPTY_STATS;
+        }
+
         this._subjects.length = 0;
         for (const actor of params.actors) {
             if (!actor.active) {
@@ -101,50 +107,57 @@ export class SceneParticleBatchRuntime {
             return EMPTY_STATS;
         }
 
-        this._ensureResources();
-
         const gl = this._options.gl;
-        const shader = this._shader!;
-
-        gl.useProgram(shader.program);
-        gl.bindVertexArray(this._vertexArray);
-
-        // Shared per-frame state.
-        gl.enable(gl.BLEND);
-        gl.blendEquation(gl.FUNC_ADD);
-        gl.enable(gl.DEPTH_TEST);
-        gl.depthMask(false);
-        gl.disable(gl.CULL_FACE);
-
-        this._options.uniformWriter.write(
-            shader,
-            'u_ViewProjection',
-            params.cameraFrame.viewProjectionMatrix
-        );
-        this._options.uniformWriter.write(shader, 'u_PointScale', params.viewportHeight * 0.5);
-        this._options.uniformWriter.write(shader, 'u_MaxPointSize', MAX_POINT_SIZE);
-
         let drawnParticleCount = 0;
         let particleSystemCount = 0;
 
-        for (const subject of this._subjects) {
-            const vertexCount = this._drawSubject(gl, shader, subject, params);
-            if (vertexCount > 0) {
-                drawnParticleCount += vertexCount;
-                particleSystemCount += 1;
-            }
-        }
+        try {
+            this._ensureResources();
 
-        // Restore state so subsequent passes start from a clean slate.
-        gl.depthMask(true);
-        gl.bindVertexArray(null);
-        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            const shader = this._shader!;
 
-        if (this._debugFrame++ % 120 === 0) {
-            // eslint-disable-next-line no-console
-            console.log(
-                `[particle-batch] actors=${params.actors.length} systems=${this._subjects.length} drawn=${drawnParticleCount}`
+            gl.useProgram(shader.program);
+            gl.bindVertexArray(this._vertexArray);
+
+            gl.enable(gl.BLEND);
+            gl.blendEquation(gl.FUNC_ADD);
+            gl.enable(gl.DEPTH_TEST);
+            gl.depthMask(false);
+            gl.disable(gl.CULL_FACE);
+
+            this._options.uniformWriter.write(
+                shader,
+                'u_ViewProjection',
+                params.cameraFrame.viewProjectionMatrix
             );
+            this._options.uniformWriter.write(shader, 'u_PointScale', params.viewportHeight * 0.5);
+            this._options.uniformWriter.write(shader, 'u_MaxPointSize', MAX_POINT_SIZE);
+
+            for (const subject of this._subjects) {
+                const vertexCount = this._drawSubject(gl, shader, subject, params);
+                if (vertexCount > 0) {
+                    drawnParticleCount += vertexCount;
+                    particleSystemCount += 1;
+                }
+            }
+        } catch (error) {
+            // A rendering add-on must never be able to halt the scene loop.
+            // Disable further attempts and surface the failure once.
+            this._failed = true;
+            // eslint-disable-next-line no-console
+            console.error('[particle-batch] disabled after render failure:', error);
+        } finally {
+            // Return the GL context to a known-good baseline and invalidate the
+            // shared render-state-applier cache. The applier only re-issues GL
+            // state when its cached value changes; our direct GL mutations here
+            // desync that cache, so without this reset the next mesh draw would
+            // inherit our blend/cull/depth state and corrupt the scene.
+            gl.depthMask(true);
+            gl.disable(gl.BLEND);
+            gl.enable(gl.CULL_FACE);
+            gl.bindVertexArray(null);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            this._options.renderStateApplier.reset();
         }
 
         return { drawnParticleCount, particleSystemCount };
