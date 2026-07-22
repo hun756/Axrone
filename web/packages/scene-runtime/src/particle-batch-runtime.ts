@@ -77,6 +77,7 @@ export class SceneParticleBatchRuntime {
     private _vertexData: Float32Array;
     private _vertexCapacity: number;
     private readonly _subjects: SceneParticleRenderSubject[] = [];
+    private _debugFrame = 0;
 
     constructor(private readonly _options: SceneParticleBatchRuntimeOptions) {
         this._shaderFactory = new SceneShaderFactory({ gl: _options.gl });
@@ -110,6 +111,7 @@ export class SceneParticleBatchRuntime {
 
         // Shared per-frame state.
         gl.enable(gl.BLEND);
+        gl.blendEquation(gl.FUNC_ADD);
         gl.enable(gl.DEPTH_TEST);
         gl.depthMask(false);
         gl.disable(gl.CULL_FACE);
@@ -137,6 +139,13 @@ export class SceneParticleBatchRuntime {
         gl.depthMask(true);
         gl.bindVertexArray(null);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        if (this._debugFrame++ % 120 === 0) {
+            // eslint-disable-next-line no-console
+            console.log(
+                `[particle-batch] actors=${params.actors.length} systems=${this._subjects.length} drawn=${drawnParticleCount}`
+            );
+        }
 
         return { drawnParticleCount, particleSystemCount };
     }
