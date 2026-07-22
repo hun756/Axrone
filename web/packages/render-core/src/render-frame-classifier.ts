@@ -250,19 +250,37 @@ export class RenderFrameClassifier {
             return true;
         }
 
-        const centerX = getX(bounds.center);
-        const centerY = getY(bounds.center);
-        const centerZ = getZ(bounds.center);
+        const localCenterX = getX(bounds.center);
+        const localCenterY = getY(bounds.center);
+        const localCenterZ = getZ(bounds.center);
         const extentX = getX(bounds.extents);
         const extentY = getY(bounds.extents);
         const extentZ = getZ(bounds.extents);
 
-        this._primitiveFrustumMin.x = centerX - extentX;
-        this._primitiveFrustumMin.y = centerY - extentY;
-        this._primitiveFrustumMin.z = centerZ - extentZ;
-        this._primitiveFrustumMax.x = centerX + extentX;
-        this._primitiveFrustumMax.y = centerY + extentY;
-        this._primitiveFrustumMax.z = centerZ + extentZ;
+        // The supplied bounds are expressed in the primitive's local mesh space. Transform the
+        // center into world space with the (row-major) world matrix, and grow the extents by the
+        // matrix's largest axis scale, before frustum testing. Skipping this culls objects that
+        // sit far from the world origin as soon as the camera moves away with them, because their
+        // untransformed bounds remain near the origin and fall outside the frustum.
+        const m = primitive.worldMatrix.data;
+        const centerX = m[0]! * localCenterX + m[1]! * localCenterY + m[2]! * localCenterZ + m[3]!;
+        const centerY = m[4]! * localCenterX + m[5]! * localCenterY + m[6]! * localCenterZ + m[7]!;
+        const centerZ = m[8]! * localCenterX + m[9]! * localCenterY + m[10]! * localCenterZ + m[11]!;
+
+        const scaleX = Math.hypot(m[0]!, m[4]!, m[8]!);
+        const scaleY = Math.hypot(m[1]!, m[5]!, m[9]!);
+        const scaleZ = Math.hypot(m[2]!, m[6]!, m[10]!);
+        const maxScale = Math.max(scaleX, scaleY, scaleZ, 1e-6);
+        const worldExtentX = extentX * maxScale;
+        const worldExtentY = extentY * maxScale;
+        const worldExtentZ = extentZ * maxScale;
+
+        this._primitiveFrustumMin.x = centerX - worldExtentX;
+        this._primitiveFrustumMin.y = centerY - worldExtentY;
+        this._primitiveFrustumMin.z = centerZ - worldExtentZ;
+        this._primitiveFrustumMax.x = centerX + worldExtentX;
+        this._primitiveFrustumMax.y = centerY + worldExtentY;
+        this._primitiveFrustumMax.z = centerZ + worldExtentZ;
 
         return frustum.intersectsAabb(this._primitiveFrustumBounds);
     }
