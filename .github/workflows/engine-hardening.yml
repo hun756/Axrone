@@ -37,3 +37,40 @@ jobs:
 
       - name: Run engine hardening gate
         run: yarn ci:engine-hardening
+
+  check-integration:
+    name: check-integration
+    runs-on: ubuntu-latest
+    needs: engine-hardening
+    steps:
+      - name: Checkout engine
+        uses: actions/checkout@v4
+        with:
+          path: Axrone
+
+      - name: Checkout Editor
+        uses: actions/checkout@v4
+        with:
+          repository: pleyfy/Editor
+          path: Editor
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install engine dependencies
+        working-directory: Axrone/web
+        run: yarn install --frozen-lockfile
+
+      - name: Build engine
+        working-directory: Axrone/web
+        run: yarn build
+
+      - name: Install Editor dependencies
+        working-directory: Editor
+        run: npm install
+
+      - name: Type-check Editor against engine dist
+        working-directory: Editor
+        run: npm run check
