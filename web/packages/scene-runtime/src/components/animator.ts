@@ -186,9 +186,7 @@ export class Animator extends Component {
     private readonly _tempVec3 = new Vec3();
     private readonly _tempQuat = new Quat();
     private _stepAnimationWarned = false;
-    private _stepEvaluationModeLogged = false;
     private _cullingModeWarned = false;
-    private _applyFrameLogged = false;
 
     constructor(config: AnimatorConfig = {}) {
         super();
@@ -506,12 +504,6 @@ export class Animator extends Component {
             this._playing = true;
         }
 
-        console.info(
-            `[Animator] start: clipId="${this._currentClipId ?? 'null'}", playOnStart=${this._playOnStart}, ` +
-            `playing=${this._playing}, clips=${this._clipDefinitions.length}, ` +
-            `layers=${this._layerDefinitions?.length ?? 'auto'}, loop=${this._loop}`,
-        );
-
         const controller = this._ensureController();
         if (!controller) {
             console.warn(
@@ -611,26 +603,6 @@ export class Animator extends Component {
     }
 
     override deserialize(data: Record<string, any>): void {
-        const clipCount = Array.isArray(data.clips) ? data.clips.length : 0;
-        const layerCount = Array.isArray(data.layers) ? data.layers.length : 0;
-        const paramCount = Array.isArray(data.parameters) ? data.parameters.length : 0;
-        console.info(
-            `[Animator] deserialize: clips=${clipCount}, layers=${layerCount}, parameters=${paramCount}, ` +
-            `clipId="${typeof data.clipId === 'string' ? data.clipId : 'undefined'}", ` +
-            `playOnStart=${data.playOnStart ?? 'undefined'}, loop=${data.loop ?? 'undefined'}`,
-        );
-        if (clipCount > 0) {
-            for (const clip of data.clips as Array<Record<string, unknown>>) {
-                const trackCount = Array.isArray(clip.tracks) ? clip.tracks.length : 0;
-                const targetNodeIds = Array.isArray(clip.tracks)
-                    ? (clip.tracks as Array<Record<string, unknown>>).map((t) => String(t.targetNodeId ?? t.target ?? '')).filter(Boolean).slice(0, 5)
-                    : [];
-                console.info(
-                    `[Animator] deserialize: clip "${String(clip.id ?? '?')}" has ${trackCount} track(s), ` +
-                    `targets: [${targetNodeIds.join(', ')}${trackCount > 5 ? '...' : ''}]`,
-                );
-            }
-        }
         this._applyConfig({
             clips: Array.isArray(data.clips) ? data.clips : [],
             parameters: Array.isArray(data.parameters) ? data.parameters : [],
@@ -805,13 +777,6 @@ export class Animator extends Component {
         if (!this._isStreamingBlocked(streaming)) {
             this._applyFrame(this._controller.currentFrame);
         }
-        console.info(
-            `[Animator] _ensureController: Controller created. ` +
-            `bones=${bones.length}, layers=${layers.length}, clips=${this._clipDefinitions.length}, ` +
-            `currentClipId="${this._currentClipId ?? 'null'}", ` +
-            `resolvedTargets=${this._resolvedTargets.size}, ` +
-            `cullingMode="${this._cullingMode}".`,
-        );
         return this._controller;
     }
 
@@ -905,16 +870,6 @@ export class Animator extends Component {
         this._stepAnimationWarned = false;
 
         const evaluationMode = this._resolveEvaluationMode();
-        if (!this._stepEvaluationModeLogged) {
-            this._stepEvaluationModeLogged = true;
-            console.info(
-                `[Animator] _stepAnimation: First frame. evaluationMode="${evaluationMode}", ` +
-                `cullingMode="${this._cullingMode}", playing=${this._playing}, ` +
-                `clipId="${this._currentClipId ?? 'null'}", ` +
-                `controller.boneCount=${controller.rig.boneCount}, ` +
-                `controller.activeClips=${controller.activeClips.length}.`,
-            );
-        }
         if (evaluationMode === 'skip') {
             return;
         }
@@ -1257,13 +1212,11 @@ export class Animator extends Component {
             return;
         }
 
-        let appliedCount = 0;
         for (let boneIndex = 0; boneIndex < controller.rig.boneCount; boneIndex += 1) {
             const target = this._resolvedTargets.get(controller.rig.boneNames[boneIndex]!);
             if (!target?.transform) {
                 continue;
             }
-            appliedCount++;
             const translationOffset = boneIndex * 3;
             const rotationOffset = boneIndex * 4;
             this._tempVec3.x = frame.pose.translations[translationOffset]!;
@@ -1279,15 +1232,6 @@ export class Animator extends Component {
             this._tempVec3.y = frame.pose.scales[translationOffset + 1]!;
             this._tempVec3.z = frame.pose.scales[translationOffset + 2]!;
             target.transform.scale = this._tempVec3;
-        }
-
-        if (!this._applyFrameLogged) {
-            this._applyFrameLogged = true;
-            console.info(
-                `[Animator] _applyFrame: First frame applied. ` +
-                `boneCount=${controller.rig.boneCount}, appliedTransforms=${appliedCount}, ` +
-                `curveBindings=${controller.curveLayout.bindings.length}.`,
-            );
         }
 
         for (let bindingIndex = 0; bindingIndex < controller.curveLayout.bindings.length; bindingIndex += 1) {
