@@ -59,3 +59,8 @@ export {
     ScenePrefabResolutionError,
     ScenePrefabValidationError,
 } from './errors';
+export {
+    unpackScenePrefabInstance,
+    createScenePrefabVariant,
+    applyOverridesToBaseDefinition,
+} from './scene-prefab-variant';
