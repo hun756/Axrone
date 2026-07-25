@@ -27,7 +27,7 @@ const MAX_GLTF_DIRECTIONAL_LIGHTS = GLTF_LIGHTING_LAYOUT.capacity.maxDirectional
 const MAX_GLTF_POINT_LIGHTS = GLTF_LIGHTING_LAYOUT.capacity.maxPointLights;
 const MAX_GLTF_SPOT_LIGHTS = GLTF_LIGHTING_LAYOUT.capacity.maxSpotLights;
 
-type GltfMaterialUniformMap = Readonly<Record<string, unknown>>;
+export type GltfMaterialUniformMap = Readonly<Record<string, unknown>>;
 
 const HIDDEN_INSPECTOR = Object.freeze({ hidden: true } as const);
 const GLTF_ALPHA_MODE_OPTIONS = Object.freeze([
