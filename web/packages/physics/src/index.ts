@@ -2,6 +2,11 @@ export * from '@axrone/physics-core';
 export * from '@axrone/physics-2d';
 export * from '@axrone/physics-3d';
 
+// TS2308 belirsizlik çözümü: şemsiye paket düzeyinde physics-core'un generic
+// sabiti kazanır; 3D'ye özgü joint sabiti açık takma adla erişilebilir kalır.
+export { INVALID_CONSTRAINT_ID } from '@axrone/physics-core';
+export { INVALID_CONSTRAINT_ID as INVALID_JOINT_CONSTRAINT_ID_3D } from '@axrone/physics-3d';
+
 export type {
     RaycastId,
     LayerMask,
