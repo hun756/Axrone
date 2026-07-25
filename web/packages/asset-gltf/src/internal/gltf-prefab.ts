@@ -6,6 +6,7 @@ import type {
     AnimationMotionFeatureDefinition,
 } from '@axrone/animation/types';
 import type { AssetImportDiagnostic } from '../asset-contract';
+import type { GltfDiagnostic } from './gltf-diagnostics';
 import type {
     GltfAnimationClipAsset,
     GltfAnimationControllerMetadata,
@@ -62,7 +63,9 @@ const createMeshRendererSnapshot = (
                 ...(skinData ? { skin: skinData } : {}),
             })
         ),
-    });
+        // Snapshot verisi tel-formatında (encodeGltfValue) saklanır; tüketiciler
+        // Float32Array benzeri alanları $type zarfından geçirir.
+    }) as unknown as GltfComponentSnapshot;
 };
 
 const createMorphWeights = (
@@ -175,7 +178,8 @@ export const createAnimatorSnapshot = (
                 time: 0,
             })
         ),
-    });
+        // Snapshot verisi tel-formatında (encodeGltfValue) saklanır; bkz. createMeshRendererSnapshot.
+    }) as unknown as GltfComponentSnapshot;
 };
 
 export const buildPrefabDefinition = (context: PrefabBuildContext): PrefabBuildResult => {
@@ -204,7 +208,7 @@ export const buildPrefabDefinition = (context: PrefabBuildContext): PrefabBuildR
     const skinKeys = new Set<string>();
     const animationKeys = new Set<string>();
     const materialKeys = new Set<string>();
-    const diagnostics: AssetImportDiagnostic[] = [];
+    const diagnostics: GltfDiagnostic[] = [];
     let primaryCameraAssigned = false;
     let primaryDirectionalAssigned = false;
     let directionalLightCount = 0;
@@ -338,11 +342,11 @@ export const buildPrefabDefinition = (context: PrefabBuildContext): PrefabBuildR
                         `${nodeName} Primitive ${primitiveIndex}`,
                         Object.freeze([
                             Object.freeze({
-                                type: 'Transform',
+                                type: 'Transform' as const,
                                 data: Object.freeze({
-                                    position: Object.freeze([0, 0, 0]),
-                                    rotation: Object.freeze([0, 0, 0, 1]),
-                                    scale: Object.freeze([1, 1, 1]),
+                                    position: [0, 0, 0] as const,
+                                    rotation: [0, 0, 0, 1] as const,
+                                    scale: [1, 1, 1] as const,
                                 }),
                             }),
                             createMeshRendererSnapshot(
@@ -429,7 +433,7 @@ export const buildPrefabDefinition = (context: PrefabBuildContext): PrefabBuildR
                 level: 'warning',
                 code: 'gltf.light.directional.runtime-limit',
                 message: `Scene ${sceneIndex} imports ${directionalLightCount} directional lights, but Axrone currently shades only one directional light`,
-            } satisfies AssetImportDiagnostic)
+            } satisfies GltfDiagnostic)
         );
     }
 
@@ -439,7 +443,7 @@ export const buildPrefabDefinition = (context: PrefabBuildContext): PrefabBuildR
                 level: 'warning',
                 code: 'gltf.light.local.runtime-limit',
                 message: `Scene ${sceneIndex} imports ${localLightCount} local lights, but Axrone currently shades only ${MAX_SCENE_LOCAL_LIGHTS} point/spot lights`,
-            } satisfies AssetImportDiagnostic)
+            } satisfies GltfDiagnostic)
         );
     }
 

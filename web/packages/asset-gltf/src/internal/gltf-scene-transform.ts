@@ -77,9 +77,9 @@ export const createActorSnapshot = (
     components: readonly GltfComponentSnapshot[]
 ): GltfActorSnapshot =>
     Object.freeze({
-        nodeId: typeof nodeIdOrIndex === 'string' ? nodeIdOrIndex : nodeId(nodeIdOrIndex),
+        nodeId: typeof nodeIdOrIndex === 'string' ? (nodeIdOrIndex as NodeId) : nodeId(nodeIdOrIndex),
         parentNodeId: parentNodeIdOrIndex !== null
-            ? (typeof parentNodeIdOrIndex === 'string' ? parentNodeIdOrIndex : nodeId(parentNodeIdOrIndex))
+            ? (typeof parentNodeIdOrIndex === 'string' ? (parentNodeIdOrIndex as NodeId) : nodeId(parentNodeIdOrIndex))
             : null,
         name,
         layer: 0,

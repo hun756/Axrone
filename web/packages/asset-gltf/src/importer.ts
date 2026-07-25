@@ -1,4 +1,4 @@
-import { EMPTY_ARRAY, DEFAULT_SAMPLER_ID, DEFAULT_MATERIAL_KEY_SUFFIX, DEFAULT_MATERIAL_NAME, DEFAULT_DOCUMENT_NAME, SUPPORTED_GLTF_EXTENSIONS } from './internal/gltf-constants';
+import { EMPTY_ARRAY, DEFAULT_SAMPLER_ID, DEFAULT_MATERIAL_KEY_SUFFIX, DEFAULT_MATERIAL_NAME, DEFAULT_DOCUMENT_NAME, isSupportedExtension } from './internal/gltf-constants';
 import type { AnimationClipMetadataIndex } from './internal/gltf-animation-types';
 import { maybeFreeze, sanitizeName, ensureArray } from './internal/gltf-utils';
 import { inferTextureFormat } from './internal/gltf-texture';
@@ -76,7 +76,7 @@ const listUnsupportedExtensions = (
     extensions: readonly string[] | undefined
 ): readonly string[] =>
     Object.freeze(
-        [...new Set(extensions?.filter((extension) => !SUPPORTED_GLTF_EXTENSIONS.has(extension)) ?? [])].sort(
+        [...new Set(extensions?.filter((extension) => !isSupportedExtension(extension)) ?? [])].sort(
             (left, right) => left.localeCompare(right)
         )
     );

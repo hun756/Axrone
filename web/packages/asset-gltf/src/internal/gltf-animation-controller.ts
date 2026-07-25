@@ -13,13 +13,12 @@ import type {
 } from '../types';
 import {
     EMPTY_ARRAY,
-    VALID_ANIMATION_PARAMETER_KINDS,
-    VALID_ANIMATION_LAYER_MODES,
-    VALID_ANIMATION_IK_SOLVERS,
-    VALID_ANIMATION_CONDITION_KINDS,
-    VALID_ANIMATION_CONDITION_OPERATORS,
-    type PortableAnimationManifest,
+    isAnimationConditionOperator,
+    isAnimationIkSolver,
+    isAnimationLayerMode,
+    isAnimationParameterKind,
 } from './gltf-constants';
+import type { PortableAnimationManifest } from '../animation-manifest';
 import {
     isFiniteNumber,
     isBooleanTuple3,
@@ -52,7 +51,7 @@ const validateAnimationConditionMetadata = (
         return false;
     }
 
-    if (VALID_ANIMATION_CONDITION_KINDS.has(condition.kind) === false) {
+    if (isAnimationParameterKind(condition.kind) === false) {
         return false;
     }
 
@@ -65,7 +64,7 @@ const validateAnimationConditionMetadata = (
         case 'int':
             return (
                 typeof condition.operator === 'string' &&
-                VALID_ANIMATION_CONDITION_OPERATORS.has(condition.operator) &&
+                isAnimationConditionOperator(condition.operator) &&
                 isFiniteNumber(condition.value)
             );
         case 'bool':
@@ -215,7 +214,7 @@ const validateAnimationIkLayerMetadata = (
             isPlainObject(job) &&
             typeof job.id === 'string' &&
             typeof job.solver === 'string' &&
-            VALID_ANIMATION_IK_SOLVERS.has(job.solver) &&
+            isAnimationIkSolver(job.solver) &&
             typeof job.rootBone === 'string' &&
             boneIds.has(job.rootBone) &&
             typeof job.tipBone === 'string' &&
@@ -254,10 +253,10 @@ export const sanitizeAnimationParameters = (
 
         const name = typeof entry.name === 'string' ? entry.name : null;
         const kind =
-            typeof entry.kind === 'string' && VALID_ANIMATION_PARAMETER_KINDS.has(entry.kind)
+            typeof entry.kind === 'string' && isAnimationParameterKind(entry.kind)
                 ? (entry.kind as AnimationParameterDefinition['kind'])
                 : null;
-        if (!name || !kind || VALID_ANIMATION_PARAMETER_KINDS.has(kind) === false) {
+        if (!name || !kind) {
             diagnostics.push(
                 createAnimationMetadataDiagnostic(
                     sceneIndex,
@@ -357,7 +356,7 @@ export const sanitizeAnimationLayers = (
 
         if (
             entry.mode !== undefined &&
-            (typeof entry.mode !== 'string' || VALID_ANIMATION_LAYER_MODES.has(entry.mode) === false)
+            (typeof entry.mode !== 'string' || isAnimationLayerMode(entry.mode) === false)
         ) {
             diagnostics.push(
                 createAnimationMetadataDiagnostic(sceneIndex, `layer '${entry.id}' has an unsupported mode`)

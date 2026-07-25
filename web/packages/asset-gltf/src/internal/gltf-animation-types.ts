@@ -8,7 +8,7 @@ import type {
     AnimationParameterDefinition,
     AnimationRootMotionDefinition,
 } from '@axrone/animation/types';
-import type { PortableAnimationFeatureExportDefinition } from './gltf-constants';
+import type { PortableAnimationFeatureExportDefinition } from '../animation-manifest';
 
 export interface AnimationControllerSource {
     readonly parameters?: readonly AnimationParameterDefinition[];

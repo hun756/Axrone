@@ -22,7 +22,7 @@ import type {
     AnimationClipMetadata,
     AnimationClipMetadataIndex,
 } from './gltf-animation-types';
-import type { PortableAnimationFeatureExportDefinition } from './gltf-constants';
+import type { PortableAnimationFeatureExportDefinition } from '../animation-manifest';
 import {
     isFiniteNumber,
     isBooleanTuple3,
@@ -39,6 +39,14 @@ type PortableAnimationManifest = AnimationManifest;
 type PortableAnimationManifestSceneEntry = AnimationManifestSceneEntry;
 type GltfAnimationClipMetadataSource = AnimationClipMetadata;
 type GltfAnimationClipMetadataSourceIndex = AnimationClipMetadataIndex;
+
+const toMetadataRecord = (value: object | undefined): Record<string, unknown> | undefined =>
+    value as Record<string, unknown> | undefined;
+
+const toMetadataRecordArray = (
+    value: readonly object[] | undefined
+): readonly Record<string, unknown>[] | undefined =>
+    value as readonly Record<string, unknown>[] | undefined;
 
 export const createAnimationMetadataDiagnostic = (
     sceneIndex: number,
@@ -261,7 +269,10 @@ export const resolvePortableSceneAnimationMetadataSource = (
 
     const sceneEntry = resolvePortableAnimationManifestSceneEntry(manifest, scene, sceneIndex);
 
-    return mergeAnimationMetadataSources(manifest.controller, sceneEntry?.controller);
+    return mergeAnimationMetadataSources(
+        toMetadataRecord(manifest.controller),
+        toMetadataRecord(sceneEntry?.controller),
+    );
 };
 
 export const sanitizeAnimationClipEvents = (
@@ -710,7 +721,7 @@ export const resolvePortableAnimationClipMetadataSources = (
     freeze: boolean
 ): GltfAnimationClipMetadataSourceIndex =>
     resolveAnimationClipMetadataEntries(
-        manifest?.clips,
+        toMetadataRecordArray(manifest?.clips),
         diagnostics,
         (message) => createAnimationManifestDiagnostic(`Animation manifest ${message}`),
         freeze
@@ -724,7 +735,9 @@ export const resolveScenePortableAnimationClipMetadataSources = (
     freeze: boolean
 ): GltfAnimationClipMetadataSourceIndex =>
     resolveAnimationClipMetadataEntries(
-        resolvePortableAnimationManifestSceneEntry(manifest, scene, sceneIndex)?.clips,
+        toMetadataRecordArray(
+            resolvePortableAnimationManifestSceneEntry(manifest, scene, sceneIndex)?.clips,
+        ),
         diagnostics,
         (message) => createAnimationMetadataDiagnostic(sceneIndex, `clip override ${message}`),
         freeze
