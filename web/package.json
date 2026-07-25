@@ -42,7 +42,17 @@
         "test:all": "yarn test && yarn test:architecture && yarn test:browser && yarn test:webgl",
         "ci:engine-hardening": "yarn test:architecture && yarn verify:engine-hardening",
         "verify:engine-hardening": "yarn test:hardening && yarn build && yarn test:runtime-profile-governance && yarn test:playable-2d-bundle-governance && yarn test:playable-2d-size-governance && yarn test:playable-2d-smoke && yarn test:engine-benchmark-governance -- --refresh --headless --strictStability && yarn examples:build",
-        "docs": "typedoc"
+        "docs": "typedoc",
+        "prepare": "husky"
+    },
+    "lint-staged": {
+        "**/*.{ts,tsx}": [
+            "eslint --fix",
+            "prettier --write"
+        ],
+        "**/*.{js,jsx,json,md}": [
+            "prettier --write"
+        ]
     },
     "devDependencies": {
         "@commitlint/cli": "^19.8.0",

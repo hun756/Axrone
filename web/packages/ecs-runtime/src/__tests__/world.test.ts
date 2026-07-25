@@ -1,6 +1,8 @@
 import { World, WorldError, EntityError, ComponentError } from '@axrone/ecs-runtime/world';
 import { Component, script, Transform } from '@axrone/ecs-runtime';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import SingletonComponent from './components/SingletonComponent';
+import DynamicSingletonComponent from './components/DynamicSingletonComponent';
 
 const flushBehaviorSubject = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -20,16 +22,6 @@ class AnotherComponent extends Component {
         super();
         this.name = name;
     }
-}
-
-@script({ singleton: true })
-class SingletonComponent extends Component {
-    label: string = 'singleton';
-}
-
-@script({ singleton: true })
-class DynamicSingletonComponent extends Component {
-    label: string = 'dynamic-singleton';
 }
 
 describe('World', () => {

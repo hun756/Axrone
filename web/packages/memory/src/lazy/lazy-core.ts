@@ -30,7 +30,7 @@ export interface ILazyFactoryMetadata<TArgs extends readonly unknown[], TResult>
     readonly cache: Map<string, TResult>;
     readonly keySelector: (...args: TArgs) => string;
     readonly maxCacheSize: number;
-    readonly accessOrder: string[];
+    readonly accessOrder: { readonly size: number; clear(): void };
 }
 
 export type LazyCore<T> = Nominal<ILazyMetadata<T>, 'LazyCore'>;

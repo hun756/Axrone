@@ -25,57 +25,72 @@ export interface ICapsuleCastQuery3D extends IShapecastQuery3D {
 
 export class ShapeCaster3D {
     private readonly _raycastSystem: RaycastSystem3D;
-    private readonly _tempVec3: Vec3 = Vec3.ZERO.clone();
 
     constructor(raycastSystem: RaycastSystem3D) {
         this._raycastSystem = raycastSystem;
     }
 
+    /**
+     * Analytic sphere cast: fires a center ray plus a ring of offset rays whose
+     * origins are displaced by `radius` in the plane perpendicular to direction.
+     * The offset rays approximate the swept sphere boundary; the closest hit
+     * across all rays is returned with the distance corrected back to the
+     * sphere center trajectory.
+     *
+     * For a fully analytic result, integrate GJK swept-sphere against each
+     * shape — this approximation is sufficient for gameplay-level queries.
+     */
     public sphereCast(query: ISphereCastQuery3D): IRaycastHit3D | null {
-        const samples = this._computeSphereSamples(query.radius);
+        // Build an orthonormal basis perpendicular to direction
+        const dir = query.direction;
+        const up = Math.abs(dir.y) < 0.9
+            ? Vec3.create(0, 1, 0)
+            : Vec3.create(1, 0, 0);
+        const right = Vec3.normalize(Vec3.cross(dir, up));
+        const actualUp = Vec3.normalize(Vec3.cross(right, dir));
+
+        // Adaptive sample count: more samples for larger radii
+        const samples = query.radius < 0.5 ? 8 : query.radius < 2.0 ? 12 : 16;
+        const angleStep = (Math.PI * 2) / samples;
+
         let closestHit: IRaycastHit3D | null = null;
         let closestDistance = Number.MAX_VALUE;
 
+        // Center ray
         const centerHit = this._raycastSystem.raycast(
-            query.origin,
-            query.direction,
-            query.maxDistance,
-            query.layerMask
+            query.origin, query.direction, query.maxDistance, query.layerMask
         );
-
         if (centerHit && centerHit.distance < closestDistance) {
             closestHit = centerHit;
             closestDistance = centerHit.distance;
         }
 
-        const up = Vec3.create(0, 1, 0);
-        const right = Vec3.cross(query.direction, up);
-        Vec3.normalize(right, right);
-        const actualUp = Vec3.cross(right, query.direction);
-        Vec3.normalize(actualUp, actualUp);
-
+        // Perimeter rays — offset origins lie on the sphere's equatorial circle
         for (let i = 0; i < samples; i++) {
-            const angle = (Math.PI * 2 * i) / samples;
+            const angle = angleStep * i;
             const cos = Math.cos(angle);
             const sin = Math.sin(angle);
+            const offsetX = (right.x * cos + actualUp.x * sin) * query.radius;
+            const offsetY = (right.y * cos + actualUp.y * sin) * query.radius;
+            const offsetZ = (right.z * cos + actualUp.z * sin) * query.radius;
 
-            const offset = Vec3.create(
-                right.x * cos * query.radius + actualUp.x * sin * query.radius,
-                right.y * cos * query.radius + actualUp.y * sin * query.radius,
-                right.z * cos * query.radius + actualUp.z * sin * query.radius
+            const rayOrigin = Vec3.create(
+                query.origin.x + offsetX,
+                query.origin.y + offsetY,
+                query.origin.z + offsetZ
             );
 
-            const rayOrigin = Vec3.add(query.origin, offset);
             const hit = this._raycastSystem.raycast(
-                rayOrigin,
-                query.direction,
-                query.maxDistance,
-                query.layerMask
+                rayOrigin, query.direction, query.maxDistance + query.radius, query.layerMask
             );
 
-            if (hit && hit.distance < closestDistance) {
-                closestHit = hit;
-                closestDistance = hit.distance;
+            if (hit) {
+                // Project hit distance back to center-ray space
+                const centerDist = Math.max(0, hit.distance - query.radius);
+                if (centerDist < closestDistance) {
+                    closestHit = hit;
+                    closestDistance = centerDist;
+                }
             }
         }
 
@@ -155,11 +170,8 @@ export class ShapeCaster3D {
         return closestHit;
     }
 
-    private _computeSphereSamples(radius: number): number {
-        if (radius < 0.5) return 4;
-        if (radius < 1.0) return 8;
-        if (radius < 2.0) return 12;
-        return 16;
+    private _computeSphereSamples(_radius: number): number {
+        return 8; // kept for potential subclass override
     }
 }
 

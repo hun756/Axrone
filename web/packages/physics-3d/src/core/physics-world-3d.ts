@@ -1,6 +1,5 @@
 import { Vec3, type IQuatLike, type IVec3Like } from '@axrone/numeric';
 import type {
-    BodyFlags,
     IAABBQueryCallback,
     ICollisionFilter,
     IConstraint3D,
@@ -12,6 +11,7 @@ import type {
     IShape3D,
 } from '../types';
 import {
+    BodyFlags,
     BodyType,
     ShapeType,
 } from '../types';
@@ -699,7 +699,7 @@ export class PhysicsWorld3D implements Disposable {
             constraintCount: this._constraintManager.constraintCount,
             contactCount: this._contactRuntime.contactCount,
             proxyCount: this._shapeManager.shapeCount,
-            islandCount: 0,
+            islandCount: this._contactRuntime.islandCount,
             treeHeight: 0,
             treeBalance: 0,
             treeQuality: 0,

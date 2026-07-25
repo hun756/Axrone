@@ -1,4 +1,4 @@
-import { Vec2, Vec3, IVec2Like, IVec3Like, EPSILON } from '@axrone/numeric';
+import { Vec3, IVec2Like, IVec3Like, EPSILON } from '@axrone/numeric';
 import type { IAABB } from '@axrone/geometry';
 
 export interface IRayIntersection {
@@ -9,8 +9,7 @@ export interface IRayIntersection {
 
 export class RayPrimitiveIntersector2D {
     private static readonly PARALLEL_EPSILON = 1e-8;
-    private static readonly _tempVec2 = Vec2.ZERO.clone();
-    private static readonly _tempVec2_2 = Vec2.ZERO.clone();
+    // Removed static mutable temp vectors — use local variables to avoid re-entrancy corruption
 
     public static intersectAABB(
         origin: Readonly<IVec2Like>,
@@ -52,31 +51,22 @@ export class RayPrimitiveIntersector2D {
         radius: number,
         maxDistance: number
     ): IRayIntersection {
-        const oc = this._tempVec2;
-        Vec2.subtract(origin, center, oc);
+        const ocx = origin.x - center.x;
+        const ocy = origin.y - center.y;
 
-        const a = Vec2.dot(direction, direction);
-        const b = 2.0 * Vec2.dot(oc, direction);
-        const c = Vec2.dot(oc, oc) - radius * radius;
+        const a = direction.x * direction.x + direction.y * direction.y;
+        const b = 2.0 * (ocx * direction.x + ocy * direction.y);
+        const c = ocx * ocx + ocy * ocy - radius * radius;
         const discriminant = b * b - 4 * a * c;
 
-        if (discriminant < 0) {
-            return { hit: false, distance: 0, fraction: 0 };
-        }
+        if (discriminant < 0) return { hit: false, distance: 0, fraction: 0 };
 
         const sqrtDisc = Math.sqrt(discriminant);
         const t1 = (-b - sqrtDisc) / (2.0 * a);
         const t2 = (-b + sqrtDisc) / (2.0 * a);
+        let t = t1 < 0 ? t2 : t1;
 
-        let t = t1;
-        if (t < 0) {
-            t = t2;
-        }
-
-        if (t < 0 || t > maxDistance) {
-            return { hit: false, distance: 0, fraction: 0 };
-        }
-
+        if (t < 0 || t > maxDistance) return { hit: false, distance: 0, fraction: 0 };
         return { hit: true, distance: t, fraction: t / maxDistance };
     }
 
@@ -87,24 +77,20 @@ export class RayPrimitiveIntersector2D {
         p1: Readonly<IVec2Like>,
         maxDistance: number
     ): IRayIntersection {
-        const v1 = this._tempVec2;
-        const v2 = this._tempVec2_2;
+        const v1x = origin.x - p0.x;
+        const v1y = origin.y - p0.y;
+        const v2x = p1.x - p0.x;
+        const v2y = p1.y - p0.y;
 
-        Vec2.subtract(origin, p0, v1);
-        Vec2.subtract(p1, p0, v2);
+        const cross1 = direction.x * v2y - direction.y * v2x;
+        if (Math.abs(cross1) < this.PARALLEL_EPSILON) return { hit: false, distance: 0, fraction: 0 };
 
-        const cross1 = Vec2.cross(direction, v2);
-        if (Math.abs(cross1) < this.PARALLEL_EPSILON) {
-            return { hit: false, distance: 0, fraction: 0 };
-        }
-
-        const t = Vec2.cross(v2, v1) / cross1;
-        const u = Vec2.cross(direction, v1) / cross1;
+        const t = (v2x * v1y - v2y * v1x) / cross1;
+        const u = (direction.x * v1y - direction.y * v1x) / cross1;
 
         if (t >= 0 && t <= maxDistance && u >= 0 && u <= 1) {
             return { hit: true, distance: t, fraction: t / maxDistance };
         }
-
         return { hit: false, distance: 0, fraction: 0 };
     }
 
@@ -119,34 +105,30 @@ export class RayPrimitiveIntersector2D {
         const cos = Math.cos(-rotation);
         const sin = Math.sin(-rotation);
 
-        const localOrigin = this._tempVec2;
         const dx = origin.x - center.x;
         const dy = origin.y - center.y;
-        localOrigin.x = dx * cos - dy * sin;
-        localOrigin.y = dx * sin + dy * cos;
+        const localOriginX = dx * cos - dy * sin;
+        const localOriginY = dx * sin + dy * cos;
 
-        const localDir = this._tempVec2_2;
-        localDir.x = direction.x * cos - direction.y * sin;
-        localDir.y = direction.x * sin + direction.y * cos;
+        const localDirX = direction.x * cos - direction.y * sin;
+        const localDirY = direction.x * sin + direction.y * cos;
 
-        const invDir = Vec2.create(
-            Math.abs(localDir.x) > EPSILON ? 1.0 / localDir.x : Number.MAX_VALUE,
-            Math.abs(localDir.y) > EPSILON ? 1.0 / localDir.y : Number.MAX_VALUE
-        );
+        const invDirX = Math.abs(localDirX) > EPSILON ? 1.0 / localDirX : Number.MAX_VALUE;
+        const invDirY = Math.abs(localDirY) > EPSILON ? 1.0 / localDirY : Number.MAX_VALUE;
 
         let tMin = 0;
         let tMax = maxDistance;
 
         {
-            const t1 = (-extents.x - localOrigin.x) * invDir.x;
-            const t2 = (extents.x - localOrigin.x) * invDir.x;
+            const t1 = (-extents.x - localOriginX) * invDirX;
+            const t2 = (extents.x - localOriginX) * invDirX;
             tMin = Math.max(tMin, Math.min(t1, t2));
             tMax = Math.min(tMax, Math.max(t1, t2));
         }
 
         {
-            const t1 = (-extents.y - localOrigin.y) * invDir.y;
-            const t2 = (extents.y - localOrigin.y) * invDir.y;
+            const t1 = (-extents.y - localOriginY) * invDirY;
+            const t2 = (extents.y - localOriginY) * invDirY;
             tMin = Math.max(tMin, Math.min(t1, t2));
             tMax = Math.min(tMax, Math.max(t1, t2));
         }
@@ -213,9 +195,7 @@ export class RayPrimitiveIntersector2D {
 
 export class RayPrimitiveIntersector3D {
     private static readonly PARALLEL_EPSILON = 1e-8;
-    private static readonly _tempVec3 = Vec3.ZERO.clone();
-    private static readonly _tempVec3_2 = Vec3.ZERO.clone();
-    private static readonly _tempVec3_3 = Vec3.ZERO.clone();
+    // Removed static mutable temp vectors — use local variables to avoid re-entrancy corruption
 
     public static intersectAABB(
         origin: Readonly<IVec3Like>,
@@ -264,31 +244,23 @@ export class RayPrimitiveIntersector3D {
         radius: number,
         maxDistance: number
     ): IRayIntersection {
-        const oc = this._tempVec3;
-        Vec3.subtract(origin, center, oc);
+        const ocx = origin.x - center.x;
+        const ocy = origin.y - center.y;
+        const ocz = origin.z - center.z;
 
-        const a = Vec3.dot(direction, direction);
-        const b = 2.0 * Vec3.dot(oc, direction);
-        const c = Vec3.dot(oc, oc) - radius * radius;
+        const a = direction.x * direction.x + direction.y * direction.y + direction.z * direction.z;
+        const b = 2.0 * (ocx * direction.x + ocy * direction.y + ocz * direction.z);
+        const c = ocx * ocx + ocy * ocy + ocz * ocz - radius * radius;
         const discriminant = b * b - 4 * a * c;
 
-        if (discriminant < 0) {
-            return { hit: false, distance: 0, fraction: 0 };
-        }
+        if (discriminant < 0) return { hit: false, distance: 0, fraction: 0 };
 
         const sqrtDisc = Math.sqrt(discriminant);
         const t1 = (-b - sqrtDisc) / (2.0 * a);
         const t2 = (-b + sqrtDisc) / (2.0 * a);
+        let t = t1 < 0 ? t2 : t1;
 
-        let t = t1;
-        if (t < 0) {
-            t = t2;
-        }
-
-        if (t < 0 || t > maxDistance) {
-            return { hit: false, distance: 0, fraction: 0 };
-        }
-
+        if (t < 0 || t > maxDistance) return { hit: false, distance: 0, fraction: 0 };
         return { hit: true, distance: t, fraction: t / maxDistance };
     }
 
@@ -299,18 +271,11 @@ export class RayPrimitiveIntersector3D {
         planeDistance: number,
         maxDistance: number
     ): IRayIntersection {
-        const denom = Vec3.dot(direction, planeNormal);
+        const denom = direction.x * planeNormal.x + direction.y * planeNormal.y + direction.z * planeNormal.z;
+        if (Math.abs(denom) < this.PARALLEL_EPSILON) return { hit: false, distance: 0, fraction: 0 };
 
-        if (Math.abs(denom) < this.PARALLEL_EPSILON) {
-            return { hit: false, distance: 0, fraction: 0 };
-        }
-
-        const t = -(Vec3.dot(origin, planeNormal) + planeDistance) / denom;
-
-        if (t < 0 || t > maxDistance) {
-            return { hit: false, distance: 0, fraction: 0 };
-        }
-
+        const t = -(origin.x * planeNormal.x + origin.y * planeNormal.y + origin.z * planeNormal.z + planeDistance) / denom;
+        if (t < 0 || t > maxDistance) return { hit: false, distance: 0, fraction: 0 };
         return { hit: true, distance: t, fraction: t / maxDistance };
     }
 
@@ -324,50 +289,33 @@ export class RayPrimitiveIntersector3D {
         cullBackface: boolean,
         outBarycentric?: { u: number; v: number }
     ): IRayIntersection {
-        const edge1 = this._tempVec3;
-        const edge2 = this._tempVec3_2;
-        const h = this._tempVec3_3;
+        // Möller–Trumbore — all local variables, no shared mutable state
+        const e1x = v1.x - v0.x, e1y = v1.y - v0.y, e1z = v1.z - v0.z;
+        const e2x = v2.x - v0.x, e2y = v2.y - v0.y, e2z = v2.z - v0.z;
+        const hx = direction.y * e2z - direction.z * e2y;
+        const hy = direction.z * e2x - direction.x * e2z;
+        const hz = direction.x * e2y - direction.y * e2x;
 
-        Vec3.subtract(v1, v0, edge1);
-        Vec3.subtract(v2, v0, edge2);
-        Vec3.cross(direction, edge2, h);
+        const a = e1x * hx + e1y * hy + e1z * hz;
 
-        const a = Vec3.dot(edge1, h);
-
-        if (cullBackface && a < this.PARALLEL_EPSILON) {
-            return { hit: false, distance: 0, fraction: 0 };
-        }
-
-        if (Math.abs(a) < this.PARALLEL_EPSILON) {
-            return { hit: false, distance: 0, fraction: 0 };
-        }
+        if (cullBackface && a < this.PARALLEL_EPSILON) return { hit: false, distance: 0, fraction: 0 };
+        if (Math.abs(a) < this.PARALLEL_EPSILON) return { hit: false, distance: 0, fraction: 0 };
 
         const f = 1.0 / a;
-        const s = Vec3.subtract(origin, v0);
-        const u = f * Vec3.dot(s, h);
+        const sx = origin.x - v0.x, sy = origin.y - v0.y, sz = origin.z - v0.z;
+        const u = f * (sx * hx + sy * hy + sz * hz);
+        if (u < 0.0 || u > 1.0) return { hit: false, distance: 0, fraction: 0 };
 
-        if (u < 0.0 || u > 1.0) {
-            return { hit: false, distance: 0, fraction: 0 };
-        }
+        const qx = sy * e1z - sz * e1y;
+        const qy = sz * e1x - sx * e1z;
+        const qz = sx * e1y - sy * e1x;
+        const v = f * (direction.x * qx + direction.y * qy + direction.z * qz);
+        if (v < 0.0 || u + v > 1.0) return { hit: false, distance: 0, fraction: 0 };
 
-        const q = Vec3.cross(s, edge1);
-        const v = f * Vec3.dot(direction, q);
+        const t = f * (e2x * qx + e2y * qy + e2z * qz);
+        if (t < EPSILON || t > maxDistance) return { hit: false, distance: 0, fraction: 0 };
 
-        if (v < 0.0 || u + v > 1.0) {
-            return { hit: false, distance: 0, fraction: 0 };
-        }
-
-        const t = f * Vec3.dot(edge2, q);
-
-        if (t < EPSILON || t > maxDistance) {
-            return { hit: false, distance: 0, fraction: 0 };
-        }
-
-        if (outBarycentric) {
-            outBarycentric.u = u;
-            outBarycentric.v = v;
-        }
-
+        if (outBarycentric) { outBarycentric.u = u; outBarycentric.v = v; }
         return { hit: true, distance: t, fraction: t / maxDistance };
     }
 

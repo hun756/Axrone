@@ -1,4 +1,5 @@
 import { Vec2, Vec3, IVec2Like, IVec3Like, EPSILON } from '@axrone/numeric';
+import { Fnv1a32 } from '@axrone/hash';
 import type { IRaycastHit2D, IRaycastHit3D, LayerMask, RaycastFlags } from '../types/raycast-types';
 import type { BodyId, ShapeId } from '../types/primitives';
 
@@ -80,18 +81,14 @@ export class RaycastCache2D {
         maxDistance: number,
         layerMask: LayerMask
     ): number {
-        let hash = 0;
-        hash = (hash * 31 + this._floatToInt(origin.x)) | 0;
-        hash = (hash * 31 + this._floatToInt(origin.y)) | 0;
-        hash = (hash * 31 + this._floatToInt(direction.x)) | 0;
-        hash = (hash * 31 + this._floatToInt(direction.y)) | 0;
-        hash = (hash * 31 + this._floatToInt(maxDistance)) | 0;
-        hash = (hash * 31 + (layerMask as number)) | 0;
-        return hash;
-    }
-
-    private _floatToInt(value: number): number {
-        return Math.floor(value * 1000);
+        const h = new Fnv1a32();
+        h.updateF32(origin.x);
+        h.updateF32(origin.y);
+        h.updateF32(direction.x);
+        h.updateF32(direction.y);
+        h.updateF32(maxDistance);
+        h.updateU32(layerMask as number);
+        return h.digest() as unknown as number;
     }
 
     private _evictOldest(): void {
@@ -189,20 +186,16 @@ export class RaycastCache3D {
         maxDistance: number,
         layerMask: LayerMask
     ): number {
-        let hash = 0;
-        hash = (hash * 31 + this._floatToInt(origin.x)) | 0;
-        hash = (hash * 31 + this._floatToInt(origin.y)) | 0;
-        hash = (hash * 31 + this._floatToInt(origin.z)) | 0;
-        hash = (hash * 31 + this._floatToInt(direction.x)) | 0;
-        hash = (hash * 31 + this._floatToInt(direction.y)) | 0;
-        hash = (hash * 31 + this._floatToInt(direction.z)) | 0;
-        hash = (hash * 31 + this._floatToInt(maxDistance)) | 0;
-        hash = (hash * 31 + (layerMask as number)) | 0;
-        return hash;
-    }
-
-    private _floatToInt(value: number): number {
-        return Math.floor(value * 1000);
+        const h = new Fnv1a32();
+        h.updateF32(origin.x);
+        h.updateF32(origin.y);
+        h.updateF32(origin.z);
+        h.updateF32(direction.x);
+        h.updateF32(direction.y);
+        h.updateF32(direction.z);
+        h.updateF32(maxDistance);
+        h.updateU32(layerMask as number);
+        return h.digest() as unknown as number;
     }
 
     private _evictOldest(): void {
@@ -258,9 +251,14 @@ interface BatchedRaycast3D {
 export class RaycastBatcher2D {
     private readonly _pending: BatchedRaycast2D[] = [];
     private readonly _batchSize: number;
+    private _raycaster: ((origin: Readonly<IVec2Like>, direction: Readonly<IVec2Like>, maxDistance: number, layerMask: LayerMask, flags: RaycastFlags) => IRaycastHit2D | null) | null = null;
 
     constructor(batchSize: number = BATCH_SIZE) {
         this._batchSize = batchSize;
+    }
+
+    public setRaycaster(fn: (origin: Readonly<IVec2Like>, direction: Readonly<IVec2Like>, maxDistance: number, layerMask: LayerMask, flags: RaycastFlags) => IRaycastHit2D | null): void {
+        this._raycaster = fn;
     }
 
     public add(
@@ -271,15 +269,7 @@ export class RaycastBatcher2D {
         flags: RaycastFlags,
         callback: (hit: IRaycastHit2D | null) => void
     ): void {
-        this._pending.push({
-            origin,
-            direction,
-            maxDistance,
-            layerMask,
-            flags,
-            callback,
-        });
-
+        this._pending.push({ origin, direction, maxDistance, layerMask, flags, callback });
         if (this._pending.length >= this._batchSize) {
             this.flush();
         }
@@ -287,9 +277,13 @@ export class RaycastBatcher2D {
 
     public flush(): void {
         if (this._pending.length === 0) return;
-
         this._sortByDirection();
-
+        for (const item of this._pending) {
+            const hit = this._raycaster
+                ? this._raycaster(item.origin, item.direction, item.maxDistance, item.layerMask, item.flags)
+                : null;
+            item.callback(hit);
+        }
         this._pending.length = 0;
     }
 
@@ -309,9 +303,14 @@ export class RaycastBatcher2D {
 export class RaycastBatcher3D {
     private readonly _pending: BatchedRaycast3D[] = [];
     private readonly _batchSize: number;
+    private _raycaster: ((origin: Readonly<IVec3Like>, direction: Readonly<IVec3Like>, maxDistance: number, layerMask: LayerMask, flags: RaycastFlags) => IRaycastHit3D | null) | null = null;
 
     constructor(batchSize: number = BATCH_SIZE) {
         this._batchSize = batchSize;
+    }
+
+    public setRaycaster(fn: (origin: Readonly<IVec3Like>, direction: Readonly<IVec3Like>, maxDistance: number, layerMask: LayerMask, flags: RaycastFlags) => IRaycastHit3D | null): void {
+        this._raycaster = fn;
     }
 
     public add(
@@ -322,15 +321,7 @@ export class RaycastBatcher3D {
         flags: RaycastFlags,
         callback: (hit: IRaycastHit3D | null) => void
     ): void {
-        this._pending.push({
-            origin,
-            direction,
-            maxDistance,
-            layerMask,
-            flags,
-            callback,
-        });
-
+        this._pending.push({ origin, direction, maxDistance, layerMask, flags, callback });
         if (this._pending.length >= this._batchSize) {
             this.flush();
         }
@@ -338,9 +329,13 @@ export class RaycastBatcher3D {
 
     public flush(): void {
         if (this._pending.length === 0) return;
-
         this._sortByDirection();
-
+        for (const item of this._pending) {
+            const hit = this._raycaster
+                ? this._raycaster(item.origin, item.direction, item.maxDistance, item.layerMask, item.flags)
+                : null;
+            item.callback(hit);
+        }
         this._pending.length = 0;
     }
 
@@ -360,7 +355,6 @@ export class RaycastBatcher3D {
                 b.direction.z
             );
             const phi2 = Math.atan2(b.direction.y, b.direction.x);
-
             const diff = theta1 - theta2;
             return Math.abs(diff) > EPSILON ? diff : phi1 - phi2;
         });

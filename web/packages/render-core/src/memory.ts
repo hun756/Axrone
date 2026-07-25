@@ -1,4 +1,5 @@
 import type { ReadonlyRenderList } from './types';
+import { Fnv1a32 } from '@axrone/hash';
 
 export type SortDirection = 1 | -1;
 export type SortOrder = readonly [SortDirection, SortDirection, SortDirection];
@@ -7,6 +8,7 @@ const DEFAULT_SORT_ORDER: SortOrder = [1, 1, 1] as const;
 
 export class StringKeyCache {
     private readonly _hashes = new Map<string, number>();
+    private readonly _hasher = new Fnv1a32();
 
     get(value: string): number {
         const cached = this._hashes.get(value);
@@ -14,12 +16,10 @@ export class StringKeyCache {
             return cached;
         }
 
-        let hash = 2166136261;
-        for (let i = 0; i < value.length; i++) {
-            hash = Math.imul(hash ^ value.charCodeAt(i), 16777619);
-        }
+        this._hasher.reset();
+        this._hasher.updateString(value);
+        const resolved = this._hasher.digest() as unknown as number;
 
-        const resolved = hash >>> 0;
         this._hashes.set(value, resolved);
         return resolved;
     }

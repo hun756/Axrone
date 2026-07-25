@@ -1,128 +1,74 @@
-export type {
-    Primitive,
-    TypedArray,
-    TypedArrayConstructor,
-    NumericTypedArray,
-    NumericTypedArrayConstructor,
-    Builtin,
-    BuiltinObject,
-    DeepReadonly,
-    DeepReadonlyPartial,
-    DeepMutable,
-    JsonPrimitive,
-    JsonObject,
-    JsonArray,
-    JsonValue,
-    Brand,
-    Nominal,
-    Opaque,
-    MaybePromise,
-    Constructor,
-    AbstractConstructor,
-    ArrayElement,
-    NonEmptyReadonlyArray,
-    Mutable,
-    ReadonlyTuple2,
-    ReadonlyTuple3,
-    ReadonlyTuple4,
-} from './types';
+// Result monad
+export * from './result';
 
-export type {
-    CompareResult,
-    Comparable,
-    OrderKey,
-    Comparer,
-    EqualityComparer,
-    Equatable,
-    KeySelector,
-    PropertyPath,
-    ExtractPropertyType,
-    ComparerOptions,
-    EqualityComparerOptions,
-    DeepPartial,
-    KeysOfType,
-} from './comparer/comparer';
+// Other utilities
+export * from './disposable';
+export * from './freeze';
+export * from './object';
+export * from './types';
 
+// Submodules
+export * from './clone/index';
+export * from './comparer/index';
+
+// Singleton (selective exports to avoid conflicts with result.ts and types.ts)
 export {
-    DefaultComparer,
-    DefaultEqualityComparer,
-    ReverseComparer,
-    CompositeComparer,
-    KeyComparer,
-    StringComparer,
-    NumberComparer,
-    DateComparer,
-    DeepEqualityComparer,
-    ComparerError,
-    InvalidOperationError,
-    comparer,
-    equality,
-    createOrderKey,
-    createPropertyAccessor,
-    sorted,
-    min,
-    max,
-    isEquatable,
-    isComparer,
-    isEqualityComparer,
-} from './comparer/comparer';
-
-export type { ICloneable } from './clone/cloner';
-export type { CloneSerializableOptions } from './clone/serializable-clone';
-export { cloneData, deepClone } from './clone/deep-clone';
-export { cloneSerializable } from './clone/serializable-clone';
-export type { Disposable, IDisposable } from './disposable';
-export { deepFreeze } from './freeze';
-export { isPlainObject, isRecord } from './object';
-
+    __singleton_brand,
+    __async_singleton_brand,
+    __scoped_singleton_brand,
+    __singleton_state_brand,
+} from './singleton/index';
 export type {
-    SingletonKey,
     SingletonState,
     SingletonLifecycle,
-    ISingleton,
-    IAsyncSingleton,
-    IScopedSingleton,
-    ISingletonScope,
-    ISingletonRegistry,
+    SingletonKey,
     ISingletonMetadata,
     IAsyncSingletonMetadata,
     IScopedSingletonMetadata,
+    SingletonCore,
+    AsyncSingletonCore,
+    ScopedSingletonCore,
+    ISingleton,
+    IAsyncSingleton,
+    IScopedSingleton,
+    ScopeDisposer,
+    ISingletonScope,
+    ISingletonRegistry,
+    SingletonDisposer,
     SingletonOptions,
     AsyncSingletonOptions,
-    SingletonDisposer,
-    ScopeDisposer,
     ExtractSingletonType,
-} from './singleton';
-
+    IsSingletonType,
+    IsAsyncSingletonType,
+    IsScopedSingletonType,
+} from './singleton/index';
 export {
     SingletonImpl,
     AsyncSingletonImpl,
     ScopedSingletonImpl,
     SingletonScopeImpl,
-    SingletonRegistryImpl,
-    SingletonError,
-    SingletonErrorCode,
     createRootScope,
+    SingletonRegistryImpl,
     getGlobalRegistry,
     resetGlobalRegistry,
     resetGlobalRegistryAsync,
-    create as createSingleton,
-    createAsync as createAsyncSingleton,
-    createScoped as createScopedSingleton,
-    createLazy as createLazySingleton,
-    createLazyAsync as createLazyAsyncSingleton,
-    fromValue as singletonFromValue,
-    fromPromise as singletonFromPromise,
-    createRegistered as createRegisteredSingleton,
-    createRegisteredAsync as createRegisteredAsyncSingleton,
+    SingletonError,
+    SingletonErrorCode,
+    create,
+    createAsync,
+    createScoped,
+    createLazy,
+    createLazyAsync,
+    fromValue,
+    createRegistered,
+    createRegisteredAsync,
     isSingleton,
     isAsyncSingleton,
     isScopedSingleton,
     isAnySingleton,
-    resolve as resolveSingleton,
-    tryResolve as tryResolveSingleton,
-    map as mapSingleton,
-    mapAsync as mapAsyncSingleton,
-    combine as combineSingletons,
-    combineAsync as combineAsyncSingletons,
-} from './singleton';
+    resolve,
+    tryResolve,
+    map,
+    mapAsync,
+    combineAsync,
+} from './singleton/index';

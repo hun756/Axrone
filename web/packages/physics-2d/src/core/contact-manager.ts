@@ -7,28 +7,35 @@ import type {
     IContactManifold2D,
     IContactListener2D,
     ICollisionFilter,
-    Friction,
-    Restitution,
-    Impulse,
 } from '../types';
+import { CollisionEventType } from '../types';
+import { PhysicsError, assertCapacity, assertFound } from './foundation';
 
-const enum ContactManagerError {
-    INVALID_STATE = 'INVALID_STATE',
-    CONTACT_NOT_FOUND = 'CONTACT_NOT_FOUND',
-    CAPACITY_EXCEEDED = 'CAPACITY_EXCEEDED',
+const CONTACT_DATA_STRIDE = 16;
+const WARM_START_DATA_STRIDE = 8;
+const CONTACT_FLAG_ENABLED = 1;
+const CONTACT_FLAG_TOUCHING = 2;
+
+const EMPTY_CONTACT_ITERATOR: IterableIterator<ContactId> = [][Symbol.iterator]() as IterableIterator<ContactId>;
+
+const enum ContactDataOffset {
+    FRICTION = 0,
+    RESTITUTION = 1,
+    TANGENT_SPEED = 2,
+    NORMAL_X = 3,
+    NORMAL_Y = 4,
+    POINT_0_LOCAL_A_X = 5,
+    POINT_0_LOCAL_A_Y = 6,
+    POINT_0_LOCAL_B_X = 7,
+    POINT_0_LOCAL_B_Y = 8,
+    POINT_0_SEPARATION = 9,
+    POINT_1_LOCAL_A_X = 10,
+    POINT_1_LOCAL_A_Y = 11,
+    POINT_1_LOCAL_B_X = 12,
+    POINT_1_LOCAL_B_Y = 13,
+    POINT_1_SEPARATION = 14,
+    POINT_COUNT = 15,
 }
-
-class ContactError extends Error {
-    readonly code: ContactManagerError;
-    constructor(message: string, code: ContactManagerError) {
-        super(message);
-        this.name = 'ContactError';
-        this.code = code;
-        Object.setPrototypeOf(this, ContactError.prototype);
-    }
-}
-
-const CONTACT_STRIDE = 16;
 
 export class ContactManager2D implements Disposable {
     private _nextContactId: number = 1;
@@ -86,12 +93,13 @@ export class ContactManager2D implements Disposable {
         this._assertNotDisposed();
 
         if (this._collisionFilter && !this._collisionFilter.shouldCollide(shapeIdA, shapeIdB)) {
+            return 0 as ContactId;
         }
 
         if (this._contactCount >= this._maxContacts && this._freeIndices.length === 0) {
-            throw new ContactError(
+            throw new PhysicsError(
                 'Contact capacity exceeded',
-                ContactManagerError.CAPACITY_EXCEEDED
+                'CAPACITY_EXCEEDED'
             );
         }
 
@@ -108,35 +116,28 @@ export class ContactManager2D implements Disposable {
             manifoldId: contactId as unknown as ManifoldId,
         });
 
-        const dataOffset = index * 16;
-        this._contactData[dataOffset] = 0.2;
-        this._contactData[dataOffset + 1] = 0.0;
-        this._contactData[dataOffset + 2] = 0.0;
-        this._contactData[dataOffset + 3] = 0;
-        this._contactData[dataOffset + 4] = 0;
-        this._contactData[dataOffset + 5] = 0;
-        this._contactData[dataOffset + 6] = 0;
-        this._contactData[dataOffset + 7] = 0;
-        this._contactData[dataOffset + 8] = 0;
-        this._contactData[dataOffset + 9] = 0;
-        this._contactData[dataOffset + 10] = 0;
-        this._contactData[dataOffset + 11] = 0;
-        this._contactData[dataOffset + 12] = 0;
-        this._contactData[dataOffset + 13] = 0;
-        this._contactData[dataOffset + 14] = 0;
-        this._contactData[dataOffset + 15] = 0;
+        const dataOffset = index * CONTACT_DATA_STRIDE;
+        this._contactData[dataOffset + ContactDataOffset.FRICTION] = 0.2;
+        this._contactData[dataOffset + ContactDataOffset.RESTITUTION] = 0.0;
+        this._contactData[dataOffset + ContactDataOffset.TANGENT_SPEED] = 0.0;
+        this._contactData[dataOffset + ContactDataOffset.NORMAL_X] = 0;
+        this._contactData[dataOffset + ContactDataOffset.NORMAL_Y] = 0;
+        this._contactData[dataOffset + ContactDataOffset.POINT_0_LOCAL_A_X] = 0;
+        this._contactData[dataOffset + ContactDataOffset.POINT_0_LOCAL_A_Y] = 0;
+        this._contactData[dataOffset + ContactDataOffset.POINT_0_LOCAL_B_X] = 0;
+        this._contactData[dataOffset + ContactDataOffset.POINT_0_LOCAL_B_Y] = 0;
+        this._contactData[dataOffset + ContactDataOffset.POINT_0_SEPARATION] = 0;
+        this._contactData[dataOffset + ContactDataOffset.POINT_1_LOCAL_A_X] = 0;
+        this._contactData[dataOffset + ContactDataOffset.POINT_1_LOCAL_A_Y] = 0;
+        this._contactData[dataOffset + ContactDataOffset.POINT_1_LOCAL_B_X] = 0;
+        this._contactData[dataOffset + ContactDataOffset.POINT_1_LOCAL_B_Y] = 0;
+        this._contactData[dataOffset + ContactDataOffset.POINT_1_SEPARATION] = 0;
+        this._contactData[dataOffset + ContactDataOffset.POINT_COUNT] = 0;
 
-        const warmOffset = index * 8;
-        this._warmStartData[warmOffset] = 0;
-        this._warmStartData[warmOffset + 1] = 0;
-        this._warmStartData[warmOffset + 2] = 0;
-        this._warmStartData[warmOffset + 3] = 0;
-        this._warmStartData[warmOffset + 4] = 0;
-        this._warmStartData[warmOffset + 5] = 0;
-        this._warmStartData[warmOffset + 6] = 0;
-        this._warmStartData[warmOffset + 7] = 0;
+        const warmOffset = index * WARM_START_DATA_STRIDE;
+        this._warmStartData.fill(0, warmOffset, warmOffset + WARM_START_DATA_STRIDE);
 
-        this._contactFlags[index] = 1;
+        this._contactFlags[index] = CONTACT_FLAG_ENABLED;
         this._contactIndices[index * 2] = 0;
         this._contactIndices[index * 2 + 1] = 0;
 
@@ -159,9 +160,17 @@ export class ContactManager2D implements Disposable {
         const metadata = this._contactMetadata.get(contactId)!;
 
         if (this._contactListener?.onCollisionEnd) {
-            const wasTouching = (this._contactFlags[index] & 2) !== 0;
+            const wasTouching = (this._contactFlags[index] & CONTACT_FLAG_TOUCHING) !== 0;
             if (wasTouching) {
-                // Construct event... (simplified for this improved snippet)
+                this._contactListener.onCollisionEnd({
+                    type: CollisionEventType.End,
+                    bodyIdA: metadata.bodyIdA,
+                    bodyIdB: metadata.bodyIdB,
+                    shapeIdA: metadata.shapeIdA,
+                    shapeIdB: metadata.shapeIdB,
+                    manifold: this._buildManifoldFromContact(contactId, index),
+                    timestamp: performance.now(),
+                });
             }
         }
 
@@ -178,44 +187,88 @@ export class ContactManager2D implements Disposable {
         const index = this._contactIdToIndex.get(contactId);
         if (index === undefined) return;
 
-        const wasTouching = (this._contactFlags[index] & 2) !== 0;
+        const wasTouching = (this._contactFlags[index] & CONTACT_FLAG_TOUCHING) !== 0;
         const isTouching = manifold.pointCount > 0;
 
         let flags = this._contactFlags[index];
-        if (isTouching) flags |= 2;
-        else flags &= ~2;
+        if (isTouching) flags |= CONTACT_FLAG_TOUCHING;
+        else flags &= ~CONTACT_FLAG_TOUCHING;
         this._contactFlags[index] = flags;
 
-        const offset = index * 16;
-        this._contactData[offset + 3] = manifold.normal.x;
-        this._contactData[offset + 4] = manifold.normal.y;
+        const offset = index * CONTACT_DATA_STRIDE;
+        this._contactData[offset + ContactDataOffset.NORMAL_X] = manifold.normal.x;
+        this._contactData[offset + ContactDataOffset.NORMAL_Y] = manifold.normal.y;
+        this._contactData[offset + ContactDataOffset.POINT_COUNT] = manifold.pointCount;
 
         if (manifold.pointCount > 0) {
-            this._contactData[offset + 5] = manifold.points[0].localPointA.x;
-            this._contactData[offset + 6] = manifold.points[0].localPointA.y;
-            this._contactData[offset + 7] = manifold.points[0].localPointB.x;
-            this._contactData[offset + 8] = manifold.points[0].localPointB.y;
-            this._contactData[offset + 9] = manifold.points[0].separation;
+            this._contactData[offset + ContactDataOffset.POINT_0_LOCAL_A_X] = manifold.points[0].localPointA.x;
+            this._contactData[offset + ContactDataOffset.POINT_0_LOCAL_A_Y] = manifold.points[0].localPointA.y;
+            this._contactData[offset + ContactDataOffset.POINT_0_LOCAL_B_X] = manifold.points[0].localPointB.x;
+            this._contactData[offset + ContactDataOffset.POINT_0_LOCAL_B_Y] = manifold.points[0].localPointB.y;
+            this._contactData[offset + ContactDataOffset.POINT_0_SEPARATION] = manifold.points[0].separation;
         }
 
         if (manifold.pointCount > 1) {
-            this._contactData[offset + 10] = manifold.points[1].localPointA.x;
-            this._contactData[offset + 11] = manifold.points[1].localPointA.y;
-            this._contactData[offset + 12] = manifold.points[1].localPointB.x;
-            this._contactData[offset + 13] = manifold.points[1].localPointB.y;
-            this._contactData[offset + 14] = manifold.points[1].separation;
+            this._contactData[offset + ContactDataOffset.POINT_1_LOCAL_A_X] = manifold.points[1].localPointA.x;
+            this._contactData[offset + ContactDataOffset.POINT_1_LOCAL_A_Y] = manifold.points[1].localPointA.y;
+            this._contactData[offset + ContactDataOffset.POINT_1_LOCAL_B_X] = manifold.points[1].localPointB.x;
+            this._contactData[offset + ContactDataOffset.POINT_1_LOCAL_B_Y] = manifold.points[1].localPointB.y;
+            this._contactData[offset + ContactDataOffset.POINT_1_SEPARATION] = manifold.points[1].separation;
         }
 
-        if (isTouching && !wasTouching) {
-            if (this._contactListener?.onCollisionBegin) {
-            }
-        } else if (!isTouching && wasTouching) {
-            if (this._contactListener?.onCollisionEnd) {
-            }
-        } else if (isTouching && wasTouching) {
-            if (this._contactListener?.onCollisionStay) {
+        const metadata = this._contactMetadata.get(contactId);
+        if (metadata) {
+            const timestamp = performance.now();
+
+            if (isTouching && !wasTouching) {
+                this._contactListener?.onCollisionBegin?.({
+                    type: CollisionEventType.Begin,
+                    bodyIdA: metadata.bodyIdA,
+                    bodyIdB: metadata.bodyIdB,
+                    shapeIdA: metadata.shapeIdA,
+                    shapeIdB: metadata.shapeIdB,
+                    manifold,
+                    timestamp,
+                });
+            } else if (!isTouching && wasTouching) {
+                this._contactListener?.onCollisionEnd?.({
+                    type: CollisionEventType.End,
+                    bodyIdA: metadata.bodyIdA,
+                    bodyIdB: metadata.bodyIdB,
+                    shapeIdA: metadata.shapeIdA,
+                    shapeIdB: metadata.shapeIdB,
+                    manifold,
+                    timestamp,
+                });
+            } else if (isTouching && wasTouching) {
+                this._contactListener?.onCollisionStay?.({
+                    type: CollisionEventType.Stay,
+                    bodyIdA: metadata.bodyIdA,
+                    bodyIdB: metadata.bodyIdB,
+                    shapeIdA: metadata.shapeIdA,
+                    shapeIdB: metadata.shapeIdB,
+                    manifold,
+                    timestamp,
+                });
             }
         }
+    }
+
+    private _buildManifoldFromContact(contactId: ContactId, index: number): IContactManifold2D {
+        const metadata = this._contactMetadata.get(contactId);
+        const offset = index * CONTACT_DATA_STRIDE;
+        const pointCount = this._contactData[offset + ContactDataOffset.POINT_COUNT];
+
+        return {
+            id: contactId as unknown as ManifoldId,
+            bodyIdA: metadata?.bodyIdA ?? (0 as BodyId),
+            bodyIdB: metadata?.bodyIdB ?? (0 as BodyId),
+            shapeIdA: metadata?.shapeIdA ?? (0 as ShapeId),
+            shapeIdB: metadata?.shapeIdB ?? (0 as ShapeId),
+            normal: { x: this._contactData[offset + ContactDataOffset.NORMAL_X], y: this._contactData[offset + ContactDataOffset.NORMAL_Y] },
+            pointCount,
+            points: [],
+        };
     }
 
     getWarmStartImpulse(
@@ -225,7 +278,7 @@ export class ContactManager2D implements Disposable {
         const index = this._contactIdToIndex.get(contactId);
         if (index === undefined) return { normalImpulse: 0, tangentImpulse: 0 };
 
-        const offset = index * 8 + pointIndex * 4;
+        const offset = index * WARM_START_DATA_STRIDE + pointIndex * 4;
         return {
             normalImpulse: this._warmStartData[offset],
             tangentImpulse: this._warmStartData[offset + 1],
@@ -241,7 +294,7 @@ export class ContactManager2D implements Disposable {
         const index = this._contactIdToIndex.get(contactId);
         if (index === undefined) return;
 
-        const offset = index * 8 + pointIndex * 4;
+        const offset = index * WARM_START_DATA_STRIDE + pointIndex * 4;
         this._warmStartData[offset] = normalImpulse;
         this._warmStartData[offset + 1] = tangentImpulse;
         this._warmStartData[offset + 2] = 0;
@@ -259,31 +312,31 @@ export class ContactManager2D implements Disposable {
         const index = this._contactIdToIndex.get(contactId);
         if (index === undefined) return null;
 
-        const offset = index * 16;
-        const pointCount = this._contactData[offset + 15];
+        const offset = index * CONTACT_DATA_STRIDE;
+        const pointCount = this._contactData[offset + ContactDataOffset.POINT_COUNT];
 
         return {
-            friction: this._contactData[offset],
-            restitution: this._contactData[offset + 1],
-            normal: { x: this._contactData[offset + 3], y: this._contactData[offset + 4] },
-            pointCount: pointCount,
+            friction: this._contactData[offset + ContactDataOffset.FRICTION],
+            restitution: this._contactData[offset + ContactDataOffset.RESTITUTION],
+            normal: { x: this._contactData[offset + ContactDataOffset.NORMAL_X], y: this._contactData[offset + ContactDataOffset.NORMAL_Y] },
+            pointCount,
             point0: {
-                localA: { x: this._contactData[offset + 5], y: this._contactData[offset + 6] },
-                localB: { x: this._contactData[offset + 7], y: this._contactData[offset + 8] },
-                separation: this._contactData[offset + 9],
+                localA: { x: this._contactData[offset + ContactDataOffset.POINT_0_LOCAL_A_X], y: this._contactData[offset + ContactDataOffset.POINT_0_LOCAL_A_Y] },
+                localB: { x: this._contactData[offset + ContactDataOffset.POINT_0_LOCAL_B_X], y: this._contactData[offset + ContactDataOffset.POINT_0_LOCAL_B_Y] },
+                separation: this._contactData[offset + ContactDataOffset.POINT_0_SEPARATION],
             },
             point1:
                 pointCount > 1
                     ? {
                           localA: {
-                              x: this._contactData[offset + 10],
-                              y: this._contactData[offset + 11],
+                              x: this._contactData[offset + ContactDataOffset.POINT_1_LOCAL_A_X],
+                              y: this._contactData[offset + ContactDataOffset.POINT_1_LOCAL_A_Y],
                           },
                           localB: {
-                              x: this._contactData[offset + 12],
-                              y: this._contactData[offset + 13],
+                              x: this._contactData[offset + ContactDataOffset.POINT_1_LOCAL_B_X],
+                              y: this._contactData[offset + ContactDataOffset.POINT_1_LOCAL_B_Y],
                           },
-                          separation: this._contactData[offset + 14],
+                          separation: this._contactData[offset + ContactDataOffset.POINT_1_SEPARATION],
                       }
                     : undefined,
         };
@@ -297,9 +350,18 @@ export class ContactManager2D implements Disposable {
         this._collisionFilter = filter;
     }
 
+    getContactBodies(contactId: ContactId): { bodyIdA: BodyId; bodyIdB: BodyId } | null {
+        const data = this._contactMetadata.get(contactId);
+        if (!data) return null;
+        return { bodyIdA: data.bodyIdA, bodyIdB: data.bodyIdB };
+    }
+
     getContactsForBody(bodyId: BodyId): IterableIterator<ContactId> {
         const contacts = this._bodyToContacts.get(bodyId);
-        return contacts ? contacts.values() : [][Symbol.iterator]();
+        if (!contacts) {
+            return EMPTY_CONTACT_ITERATOR;
+        }
+        return contacts.values();
     }
 
     private _allocateIndex(): number {
@@ -330,7 +392,7 @@ export class ContactManager2D implements Disposable {
 
     private _assertNotDisposed(): void {
         if (this._disposed) {
-            throw new ContactError('Manager is disposed', ContactManagerError.INVALID_STATE);
+            throw new PhysicsError('Manager is disposed', 'INVALID_STATE');
         }
     }
 

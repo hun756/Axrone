@@ -1,5 +1,6 @@
 import { Vec2 } from '@axrone/numeric';
 import type { IVec2Like } from '@axrone/numeric';
+import { AABB2D } from '@axrone/geometry';
 import type {
     IPhysicsWorld2D,
     IPhysicsWorldConfig,
@@ -8,6 +9,7 @@ import type {
     BodyId,
     ShapeId,
     ConstraintId,
+    ContactId,
     IPhysicsBodyDef2D,
     ICircleShapeDef,
     IBoxShapeDef2D,
@@ -24,6 +26,7 @@ import type {
     IGearConstraintDef,
     IRopeConstraintDef2D,
     IContactListener2D,
+    IContactManifold2D,
     ICollisionFilter,
     RaycastCallback2D,
     IRaycastResult2D,
@@ -40,9 +43,57 @@ import { ShapeManager2D } from './shape-manager';
 import { ConstraintManager2D } from './constraint-manager';
 import { ContactManager2D } from './contact-manager';
 import { IslandSolver2D } from './island-solver';
+import { Narrowphase2D } from './narrowphase';
+import { DynamicAABBTree2D } from './broadphase';
 import { createPhysicsBody2DView } from './physics-world-2d-body-view';
 import { PhysicsWorld2DConstraintStore } from './physics-world-2d-constraint-store';
 import { PhysicsWorld2DShapeStore } from './physics-world-2d-shape-store';
+import type { IConstraintDescriptor2D } from './physics-world-2d-helpers';
+
+const NULL_VEC: IVec2Like = { x: 0, y: 0 };
+
+function cloneVec(v: Readonly<IVec2Like>): IVec2Like {
+    return { x: v.x, y: v.y };
+}
+
+type ConstraintRegistration = Omit<IConstraintDescriptor2D, 'storage'>;
+
+function baseDescriptor(
+    type: ConstraintType,
+    def: { bodyIdA: BodyId; bodyIdB: BodyId; collideConnected?: boolean; userData?: unknown }
+): ConstraintRegistration {
+    return {
+        type,
+        bodyIdA: def.bodyIdA,
+        bodyIdB: def.bodyIdB,
+        collideConnected: def.collideConnected ?? false,
+        enabled: true,
+        userData: def.userData,
+        localAnchorA: null,
+        localAnchorB: null,
+        localAxisA: null,
+        linearOffset: null,
+        target: null,
+        constraintIdA: null,
+        constraintIdB: null,
+        referenceAngle: null,
+        angularOffset: null,
+        length: null,
+        minLength: null,
+        maxLength: null,
+        stiffness: null,
+        damping: null,
+        lowerTranslation: null,
+        upperTranslation: null,
+        motorSpeed: null,
+        maxMotorTorque: null,
+        maxMotorForce: null,
+        maxForce: null,
+        maxTorque: null,
+        correctionFactor: null,
+        ratio: null,
+    };
+}
 
 export class PhysicsWorld2D implements IPhysicsWorld2D {
     readonly config: Readonly<IPhysicsWorldConfig>;
@@ -53,9 +104,14 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     private readonly _constraintManager: ConstraintManager2D;
     private readonly _contactManager: ContactManager2D;
     private readonly _solver: IslandSolver2D;
+    private readonly _narrowphase: Narrowphase2D;
+    private readonly _broadphase: DynamicAABBTree2D;
     private readonly _bodyViews = new Map<BodyId, IPhysicsBody2D>();
     private readonly _shapeStore: PhysicsWorld2DShapeStore;
     private readonly _constraintStore: PhysicsWorld2DConstraintStore;
+    private readonly _shapeProxyMap = new Map<ShapeId, number>();
+    private readonly _shapePreviousCenter = new Map<ShapeId, { x: number; y: number }>();
+    private readonly _contactPairCache = new Map<number, ContactId>();
 
     private _autoClearForces = true;
     private _profiler: IPhysicsProfiler | null = null;
@@ -88,6 +144,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             this._contactManager,
             this._constraintManager
         );
+
+        this._narrowphase = new Narrowphase2D();
+        this._broadphase = new DynamicAABBTree2D(1024);
 
         if (config.enableProfiler) {
             this._profiler = {
@@ -129,13 +188,14 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     }
 
     step(deltaTime: number, velocityIterations: number = 8, positionIterations: number = 3): void {
-        if (this._disposed) {
-            return;
-        }
+        if (this._disposed) return;
 
         const t0 = performance.now();
         const solverFlags = this.config.solverFlags ?? SolverFlags.Default;
         const allowSleep = this.config.allowSleep ?? true;
+
+        this._updateBroadphase();
+        this._detectCollisions();
 
         this._solver.solveIslands(
             deltaTime,
@@ -143,7 +203,8 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             positionIterations,
             allowSleep,
             solverFlags,
-            this._profiler
+            { x: this._gravity.x, y: this._gravity.y },
+            this._profiler ?? undefined
         );
 
         if (this._autoClearForces) {
@@ -154,6 +215,164 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         if (this._profiler) {
             this._profiler.stepTime = this._stepTime;
         }
+    }
+
+    private _updateBroadphase(): void {
+        for (const [shapeId] of this._shapeStore.entries()) {
+            const shapeAabb = this._computeShapeAabb(shapeId);
+            if (!shapeAabb) continue;
+
+            const currentCenterX = (shapeAabb.min.x + shapeAabb.max.x) * 0.5;
+            const currentCenterY = (shapeAabb.min.y + shapeAabb.max.y) * 0.5;
+
+            const existingProxy = this._shapeProxyMap.get(shapeId);
+            if (existingProxy !== undefined) {
+                const prev = this._shapePreviousCenter.get(shapeId);
+                const displacement = {
+                    x: currentCenterX - (prev?.x ?? currentCenterX),
+                    y: currentCenterY - (prev?.y ?? currentCenterY),
+                };
+                this._broadphase.moveProxy(existingProxy, shapeAabb, displacement);
+            } else {
+                const proxyId = this._broadphase.createProxy(shapeAabb, shapeId);
+                this._shapeProxyMap.set(shapeId, proxyId);
+            }
+            this._shapePreviousCenter.set(shapeId, { x: currentCenterX, y: currentCenterY });
+        }
+    }
+
+    private _detectCollisions(): void {
+        const candidatePairs: Array<{ shapeIdA: ShapeId; shapeIdB: ShapeId }> = [];
+        const visitedPairs = new Set<number>();
+
+        for (const [shapeIdA, proxyIdA] of this._shapeProxyMap) {
+            const aabbA = this._broadphase.getAABB(proxyIdA);
+
+            this._broadphase.query((proxyIdB: number) => {
+                if (proxyIdB === proxyIdA) return true;
+
+                const shapeIdB = this._broadphase.getUserData(proxyIdB);
+                if (!shapeIdB) return true;
+
+                const descriptorA = this._shapeStore.getDescriptor(shapeIdA);
+                const descriptorB = this._shapeStore.getDescriptor(shapeIdB);
+                if (!descriptorA || !descriptorB) return true;
+                if (descriptorA.bodyId === descriptorB.bodyId) return true;
+
+                const typeA = this._bodyManager.getBodyType(descriptorA.bodyId);
+                const typeB = this._bodyManager.getBodyType(descriptorB.bodyId);
+                if (typeA === 0 && typeB === 0) return true;
+
+                const lo = shapeIdA < shapeIdB ? shapeIdA : shapeIdB;
+                const hi = shapeIdA < shapeIdB ? shapeIdB : shapeIdA;
+                const pairKey = (lo as number) * 0x100000 + (hi as number);
+
+                if (visitedPairs.has(pairKey)) return true;
+                visitedPairs.add(pairKey);
+
+                candidatePairs.push({ shapeIdA: lo, shapeIdB: hi });
+                return true;
+            }, aabbA);
+        }
+
+        this._processNarrowphase(candidatePairs);
+    }
+
+    private _processNarrowphase(
+        candidatePairs: Array<{ shapeIdA: ShapeId; shapeIdB: ShapeId }>
+    ): void {
+        const activeContactIds = new Set<ContactId>();
+
+        for (const pair of candidatePairs) {
+            const descriptorA = this._shapeStore.getDescriptor(pair.shapeIdA);
+            const descriptorB = this._shapeStore.getDescriptor(pair.shapeIdB);
+            if (!descriptorA || !descriptorB) continue;
+
+            const pairKey = (pair.shapeIdA as number) * 0x100000 + (pair.shapeIdB as number);
+            const existingContactId = this._contactPairCache.get(pairKey);
+
+            const posA = this._bodyManager.getPosition(descriptorA.bodyId);
+            const rotA = this._bodyManager.getRotation(descriptorA.bodyId);
+            const posB = this._bodyManager.getPosition(descriptorB.bodyId);
+            const rotB = this._bodyManager.getRotation(descriptorB.bodyId);
+
+            const ctx = {
+                bodyIdA: descriptorA.bodyId,
+                bodyIdB: descriptorB.bodyId,
+                transformA: { position: posA, rotation: rotA },
+                transformB: { position: posB, rotation: rotB },
+            };
+
+            const manifold = this._narrowphase.acquireManifold();
+            const typeA = this._shapeManager.getShapeType(pair.shapeIdA);
+            const typeB = this._shapeManager.getShapeType(pair.shapeIdB);
+
+            this._narrowphase.collide(
+                pair.shapeIdA,
+                pair.shapeIdB,
+                typeA,
+                typeB,
+                this._shapeManager,
+                ctx,
+                manifold
+            );
+
+            if (manifold.pointCount > 0) {
+                let contactId = existingContactId;
+                if (!contactId || !this._contactManager.getContactData(contactId)) {
+                    contactId = this._contactManager.createContact(
+                        pair.shapeIdA,
+                        pair.shapeIdB,
+                        descriptorA.bodyId,
+                        descriptorB.bodyId
+                    );
+                    this._contactPairCache.set(pairKey, contactId);
+                }
+
+                const manifoldData: IContactManifold2D = {
+                    id: contactId as unknown as IContactManifold2D['id'],
+                    bodyIdA: descriptorA.bodyId,
+                    bodyIdB: descriptorB.bodyId,
+                    shapeIdA: pair.shapeIdA,
+                    shapeIdB: pair.shapeIdB,
+                    normal: manifold.normal,
+                    pointCount: manifold.pointCount,
+                    points: manifold.points.slice(0, manifold.pointCount).map((p) => ({
+                        id: p.id,
+                        localPointA: p.localPointA,
+                        localPointB: p.localPointB,
+                        normalImpulse: p.normalImpulse as IContactManifold2D['points'][number]['normalImpulse'],
+                        tangentImpulse: p.tangentImpulse as IContactManifold2D['points'][number]['tangentImpulse'],
+                        separation: p.separation,
+                    })),
+                };
+
+                this._contactManager.updateContact(contactId, manifoldData);
+                activeContactIds.add(contactId);
+            }
+
+            this._narrowphase.releaseManifold(manifold);
+        }
+
+        for (const [pairKey, contactId] of this._contactPairCache) {
+            if (!activeContactIds.has(contactId)) {
+                this._contactManager.destroyContact(contactId);
+                this._contactPairCache.delete(pairKey);
+            }
+        }
+    }
+
+    private _computeShapeAabb(shapeId: ShapeId): AABB2D | null {
+        const descriptor = this._shapeStore.getDescriptor(shapeId);
+        if (!descriptor) return null;
+
+        if (!this._bodyManager.hasBody(descriptor.bodyId)) return null;
+
+        const shape = this._shapeStore.getShapeView(shapeId);
+        if (!shape) return null;
+
+        const aabb = shape.computeAABB();
+        return new AABB2D(aabb.min, aabb.max);
     }
 
     createBody(def: IPhysicsBodyDef2D): BodyId {
@@ -182,17 +401,15 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     }
 
     getBody(bodyId: BodyId): IPhysicsBody2D | null {
-        if (!this._bodyManager.hasBody(bodyId)) {
-            return null;
-        }
+        if (!this._bodyManager.hasBody(bodyId)) return null;
 
         let view = this._bodyViews.get(bodyId);
         if (!view) {
             view = createPhysicsBody2DView(bodyId, {
                 bodyManager: this._bodyManager,
                 shapeManager: this._shapeManager,
-                getBodyWorldCenter: (currentBodyId) => this._shapeStore.getBodyWorldCenter(currentBodyId),
-                resetBodyMassData: (currentBodyId) => this._shapeStore.resetBodyMassData(currentBodyId),
+                getBodyWorldCenter: (id) => this._shapeStore.getBodyWorldCenter(id),
+                resetBodyMassData: (id) => this._shapeStore.resetBodyMassData(id),
             });
             this._bodyViews.set(bodyId, view);
         }
@@ -251,6 +468,13 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._shapeManager.destroyShape(shapeId);
         this._shapeStore.removeShape(shapeId);
 
+        const proxyId = this._shapeProxyMap.get(shapeId);
+        if (proxyId !== undefined) {
+            this._broadphase.destroyProxy(proxyId);
+            this._shapeProxyMap.delete(shapeId);
+        }
+        this._shapePreviousCenter.delete(shapeId);
+
         if (descriptor && this._bodyManager.hasBody(descriptor.bodyId)) {
             this._shapeStore.resetBodyMassData(descriptor.bodyId);
         }
@@ -260,38 +484,26 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         return this._shapeStore.getShapeView(shapeId);
     }
 
+    private _registerConstraint(
+        type: ConstraintType,
+        def: { bodyIdA: BodyId; bodyIdB: BodyId; collideConnected?: boolean; userData?: unknown },
+        overrides: Partial<ConstraintRegistration>
+    ): ConstraintId {
+        const desc = { ...baseDescriptor(type, def), ...overrides };
+        return this._constraintStore.createStandaloneConstraint(desc);
+    }
+
     createDistanceConstraint(def: IDistanceConstraintDef2D): ConstraintId {
         const constraintId = this._constraintManager.createDistanceConstraint(def);
         this._constraintStore.registerManagedConstraint(constraintId, {
-            type: ConstraintType.Distance,
-            bodyIdA: def.bodyIdA,
-            bodyIdB: def.bodyIdB,
-            collideConnected: def.collideConnected ?? false,
-            enabled: true,
-            userData: def.userData,
+            ...baseDescriptor(ConstraintType.Distance, def),
             localAnchorA: cloneVec(def.localAnchorA),
             localAnchorB: cloneVec(def.localAnchorB),
-            localAxisA: null,
-            linearOffset: null,
-            target: null,
-            constraintIdA: null,
-            constraintIdB: null,
-            referenceAngle: null,
-            angularOffset: null,
             length: def.length ?? null,
             minLength: def.minLength ?? null,
             maxLength: def.maxLength ?? null,
             stiffness: def.stiffness ?? null,
             damping: def.damping ?? null,
-            lowerTranslation: null,
-            upperTranslation: null,
-            motorSpeed: null,
-            maxMotorTorque: null,
-            maxMotorForce: null,
-            maxForce: null,
-            maxTorque: null,
-            correctionFactor: null,
-            ratio: null,
         });
         return constraintId;
     }
@@ -299,35 +511,12 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     createRevoluteConstraint(def: IRevoluteConstraintDef2D): ConstraintId {
         const constraintId = this._constraintManager.createRevoluteConstraint(def);
         this._constraintStore.registerManagedConstraint(constraintId, {
-            type: ConstraintType.Revolute,
-            bodyIdA: def.bodyIdA,
-            bodyIdB: def.bodyIdB,
-            collideConnected: def.collideConnected ?? false,
-            enabled: true,
-            userData: def.userData,
+            ...baseDescriptor(ConstraintType.Revolute, def),
             localAnchorA: cloneVec(def.localAnchorA),
             localAnchorB: cloneVec(def.localAnchorB),
-            localAxisA: null,
-            linearOffset: null,
-            target: null,
-            constraintIdA: null,
-            constraintIdB: null,
             referenceAngle: def.referenceAngle ?? 0,
-            angularOffset: null,
-            length: null,
-            minLength: null,
-            maxLength: null,
-            stiffness: null,
-            damping: null,
-            lowerTranslation: null,
-            upperTranslation: null,
             motorSpeed: def.motorSpeed ?? null,
             maxMotorTorque: def.maxMotorTorque ?? null,
-            maxMotorForce: null,
-            maxForce: null,
-            maxTorque: null,
-            correctionFactor: null,
-            ratio: null,
         });
         return constraintId;
     }
@@ -335,35 +524,15 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     createPrismaticConstraint(def: IPrismaticConstraintDef2D): ConstraintId {
         const constraintId = this._constraintManager.createPrismaticConstraint(def);
         this._constraintStore.registerManagedConstraint(constraintId, {
-            type: ConstraintType.Prismatic,
-            bodyIdA: def.bodyIdA,
-            bodyIdB: def.bodyIdB,
-            collideConnected: def.collideConnected ?? false,
-            enabled: true,
-            userData: def.userData,
+            ...baseDescriptor(ConstraintType.Prismatic, def),
             localAnchorA: cloneVec(def.localAnchorA),
             localAnchorB: cloneVec(def.localAnchorB),
             localAxisA: cloneVec(def.localAxisA),
-            linearOffset: null,
-            target: null,
-            constraintIdA: null,
-            constraintIdB: null,
             referenceAngle: def.referenceAngle ?? 0,
-            angularOffset: null,
-            length: null,
-            minLength: null,
-            maxLength: null,
-            stiffness: null,
-            damping: null,
             lowerTranslation: def.lowerTranslation ?? null,
             upperTranslation: def.upperTranslation ?? null,
             motorSpeed: def.motorSpeed ?? null,
-            maxMotorTorque: null,
             maxMotorForce: def.maxMotorForce ?? null,
-            maxForce: null,
-            maxTorque: null,
-            correctionFactor: null,
-            ratio: null,
         });
         return constraintId;
     }
@@ -371,35 +540,12 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     createWeldConstraint(def: IWeldConstraintDef2D): ConstraintId {
         const constraintId = this._constraintManager.createWeldConstraint(def);
         this._constraintStore.registerManagedConstraint(constraintId, {
-            type: ConstraintType.Weld,
-            bodyIdA: def.bodyIdA,
-            bodyIdB: def.bodyIdB,
-            collideConnected: def.collideConnected ?? false,
-            enabled: true,
-            userData: def.userData,
+            ...baseDescriptor(ConstraintType.Weld, def),
             localAnchorA: cloneVec(def.localAnchorA),
             localAnchorB: cloneVec(def.localAnchorB),
-            localAxisA: null,
-            linearOffset: null,
-            target: null,
-            constraintIdA: null,
-            constraintIdB: null,
             referenceAngle: def.referenceAngle ?? 0,
-            angularOffset: null,
-            length: null,
-            minLength: null,
-            maxLength: null,
             stiffness: def.stiffness ?? null,
             damping: def.damping ?? null,
-            lowerTranslation: null,
-            upperTranslation: null,
-            motorSpeed: null,
-            maxMotorTorque: null,
-            maxMotorForce: null,
-            maxForce: null,
-            maxTorque: null,
-            correctionFactor: null,
-            ratio: null,
         });
         return constraintId;
     }
@@ -407,35 +553,16 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     createWheelConstraint(def: IWheelConstraintDef2D): ConstraintId {
         const constraintId = this._constraintManager.createWheelConstraint(def);
         this._constraintStore.registerManagedConstraint(constraintId, {
-            type: ConstraintType.Wheel,
-            bodyIdA: def.bodyIdA,
-            bodyIdB: def.bodyIdB,
-            collideConnected: def.collideConnected ?? false,
-            enabled: true,
-            userData: def.userData,
+            ...baseDescriptor(ConstraintType.Wheel, def),
             localAnchorA: cloneVec(def.localAnchorA),
             localAnchorB: cloneVec(def.localAnchorB),
             localAxisA: cloneVec(def.localAxisA),
-            linearOffset: null,
-            target: null,
-            constraintIdA: null,
-            constraintIdB: null,
-            referenceAngle: null,
-            angularOffset: null,
-            length: null,
-            minLength: null,
-            maxLength: null,
             stiffness: def.stiffness ?? null,
             damping: def.damping ?? null,
             lowerTranslation: def.lowerTranslation ?? null,
             upperTranslation: def.upperTranslation ?? null,
             motorSpeed: def.motorSpeed ?? null,
             maxMotorTorque: def.maxMotorTorque ?? null,
-            maxMotorForce: null,
-            maxForce: null,
-            maxTorque: null,
-            correctionFactor: null,
-            ratio: null,
         });
         return constraintId;
     }
@@ -443,35 +570,12 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     createMotorConstraint(def: IMotorConstraintDef2D): ConstraintId {
         const constraintId = this._constraintManager.createMotorConstraint(def);
         this._constraintStore.registerManagedConstraint(constraintId, {
-            type: ConstraintType.Motor,
-            bodyIdA: def.bodyIdA,
-            bodyIdB: def.bodyIdB,
-            collideConnected: def.collideConnected ?? false,
-            enabled: true,
-            userData: def.userData,
-            localAnchorA: null,
-            localAnchorB: null,
-            localAxisA: null,
+            ...baseDescriptor(ConstraintType.Motor, def),
             linearOffset: cloneVec(def.linearOffset),
-            target: null,
-            constraintIdA: null,
-            constraintIdB: null,
-            referenceAngle: null,
             angularOffset: def.angularOffset ?? 0,
-            length: null,
-            minLength: null,
-            maxLength: null,
-            stiffness: null,
-            damping: null,
-            lowerTranslation: null,
-            upperTranslation: null,
-            motorSpeed: null,
-            maxMotorTorque: null,
-            maxMotorForce: null,
             maxForce: def.maxForce ?? null,
             maxTorque: def.maxTorque ?? null,
             correctionFactor: def.correctionFactor ?? null,
-            ratio: null,
         });
         return constraintId;
     }
@@ -479,35 +583,11 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     createMouseConstraint(def: IMouseConstraintDef2D): ConstraintId {
         const constraintId = this._constraintManager.createMouseConstraint(def);
         this._constraintStore.registerManagedConstraint(constraintId, {
-            type: ConstraintType.Mouse,
-            bodyIdA: def.bodyIdA,
-            bodyIdB: def.bodyIdB,
-            collideConnected: def.collideConnected ?? false,
-            enabled: true,
-            userData: def.userData,
-            localAnchorA: null,
-            localAnchorB: null,
-            localAxisA: null,
-            linearOffset: null,
+            ...baseDescriptor(ConstraintType.Mouse, def),
             target: cloneVec(def.target),
-            constraintIdA: null,
-            constraintIdB: null,
-            referenceAngle: null,
-            angularOffset: null,
-            length: null,
-            minLength: null,
-            maxLength: null,
             stiffness: def.stiffness ?? null,
             damping: def.damping ?? null,
-            lowerTranslation: null,
-            upperTranslation: null,
-            motorSpeed: null,
-            maxMotorTorque: null,
-            maxMotorForce: null,
             maxForce: def.maxForce ?? null,
-            maxTorque: null,
-            correctionFactor: null,
-            ratio: null,
         });
         return constraintId;
     }
@@ -515,34 +595,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     createGearConstraint(def: IGearConstraintDef): ConstraintId {
         const constraintId = this._constraintManager.createGearConstraint(def);
         this._constraintStore.registerManagedConstraint(constraintId, {
-            type: ConstraintType.Gear,
-            bodyIdA: def.bodyIdA,
-            bodyIdB: def.bodyIdB,
-            collideConnected: def.collideConnected ?? false,
-            enabled: true,
-            userData: def.userData,
-            localAnchorA: null,
-            localAnchorB: null,
-            localAxisA: null,
-            linearOffset: null,
-            target: null,
+            ...baseDescriptor(ConstraintType.Gear, def),
             constraintIdA: def.constraintIdA,
             constraintIdB: def.constraintIdB,
-            referenceAngle: null,
-            angularOffset: null,
-            length: null,
-            minLength: null,
-            maxLength: null,
-            stiffness: null,
-            damping: null,
-            lowerTranslation: null,
-            upperTranslation: null,
-            motorSpeed: null,
-            maxMotorTorque: null,
-            maxMotorForce: null,
-            maxForce: null,
-            maxTorque: null,
-            correctionFactor: null,
             ratio: def.ratio ?? 1,
         });
         return constraintId;
@@ -551,35 +606,10 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     createRopeConstraint(def: IRopeConstraintDef2D): ConstraintId {
         const constraintId = this._constraintManager.createRopeConstraint(def);
         this._constraintStore.registerManagedConstraint(constraintId, {
-            type: ConstraintType.Rope,
-            bodyIdA: def.bodyIdA,
-            bodyIdB: def.bodyIdB,
-            collideConnected: def.collideConnected ?? false,
-            enabled: true,
-            userData: def.userData,
+            ...baseDescriptor(ConstraintType.Rope, def),
             localAnchorA: cloneVec(def.localAnchorA),
             localAnchorB: cloneVec(def.localAnchorB),
-            localAxisA: null,
-            linearOffset: null,
-            target: null,
-            constraintIdA: null,
-            constraintIdB: null,
-            referenceAngle: null,
-            angularOffset: null,
-            length: null,
-            minLength: null,
             maxLength: def.maxLength,
-            stiffness: null,
-            damping: null,
-            lowerTranslation: null,
-            upperTranslation: null,
-            motorSpeed: null,
-            maxMotorTorque: null,
-            maxMotorForce: null,
-            maxForce: null,
-            maxTorque: null,
-            correctionFactor: null,
-            ratio: null,
         });
         return constraintId;
     }
@@ -630,14 +660,10 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         let clippedFraction = maxFraction;
 
         for (const hit of this._shapeStore.rayCastAll(origin, direction, maxFraction)) {
-            if (hit.fraction > clippedFraction) {
-                continue;
-            }
+            if (hit.fraction > clippedFraction) continue;
 
             const callbackResult = callback(hit.shapeId, hit.point, hit.normal, hit.fraction);
-            if (callbackResult === 0) {
-                break;
-            }
+            if (callbackResult === 0) break;
 
             if (Number.isFinite(callbackResult) && callbackResult > 0) {
                 clippedFraction = Math.min(clippedFraction, callbackResult);
@@ -670,9 +696,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         callback: IAABBQueryCallback
     ): void {
         for (const shapeId of this._shapeStore.queryAABBAll(min, max)) {
-            if (!callback(shapeId)) {
-                break;
-            }
+            if (!callback(shapeId)) break;
         }
     }
 
@@ -686,9 +710,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
 
     queryPoint(point: Readonly<IVec2Like>, callback: IAABBQueryCallback): void {
         for (const shapeId of this._shapeStore.queryPointAll(point)) {
-            if (!callback(shapeId)) {
-                break;
-            }
+            if (!callback(shapeId)) break;
         }
     }
 
@@ -770,9 +792,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     dump(): void {}
 
     [Symbol.dispose](): void {
-        if (this._disposed) {
-            return;
-        }
+        if (this._disposed) return;
 
         this._disposed = true;
         this._bodyViews.clear();
@@ -784,8 +804,4 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._constraintManager[Symbol.dispose]();
         this._contactManager[Symbol.dispose]();
     }
-}
-
-function cloneVec(vector: Readonly<IVec2Like>): IVec2Like {
-    return { x: vector.x, y: vector.y };
 }

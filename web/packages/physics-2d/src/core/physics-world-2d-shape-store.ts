@@ -15,7 +15,7 @@ import type {
     IMaterial,
     ShapeType,
 } from '../types';
-import { BodyType, ShapeType as ShapeTypeValue } from '../types';
+import { BodyType, CollisionFilter, ShapeType as ShapeTypeValue } from '../types';
 
 import { BodyManager2D } from './body-manager';
 import { ShapeManager2D } from './shape-manager';

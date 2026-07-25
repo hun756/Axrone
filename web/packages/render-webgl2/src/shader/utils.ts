@@ -1,4 +1,5 @@
 import { ShaderDataType, ShaderStage } from './interfaces';
+import { Djb2 } from '@axrone/hash';
 
 export const getShaderDataTypeSize = (type: ShaderDataType): number => {
     switch (type) {
@@ -232,13 +233,9 @@ export const generateIncludes = (includes: string[]): string => {
 };
 
 export const hashShaderSource = (source: string): string => {
-    let hash = 0;
-    for (let i = 0; i < source.length; i++) {
-        const char = source.charCodeAt(i);
-        hash = (hash << 5) - hash + char;
-        hash = hash & hash;
-    }
-    return Math.abs(hash).toString(36);
+    const h = new Djb2();
+    h.updateString(source);
+    return (h.digest() as unknown as number).toString(36);
 };
 
 export const generateVariantKey = (

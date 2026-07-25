@@ -93,6 +93,13 @@ export type {
 export { SceneSnapshotRuntime } from './scene-snapshot-runtime';
 
 export type {
+	AnimatorConfig,
+	AnimatorClipConfig,
+	AnimatorTrackConfig,
+} from './components/animator';
+export { Animator } from './components/animator';
+
+export type {
 	CompiledRenderShaderEffect,
 	RenderShaderAttributeDefinition,
 	RenderShaderEffectDefinition,
@@ -233,4 +240,5 @@ export {
 	ScenePrefabError,
 	ScenePrefabResolutionError,
 	ScenePrefabValidationError,
+	SceneShaderError,
 } from './errors';
