@@ -31,6 +31,7 @@
         "test:playable-2d-size-governance": "node ./scripts/playable-2d-governance.mjs --mode=size",
         "test:playable-2d-smoke": "node ./scripts/playable-2d-governance.mjs --mode=smoke",
         "test:engine-benchmark-governance": "node ./scripts/engine-benchmark-governance.mjs",
+        "test:capability-descriptor-governance": "node ./scripts/capability-descriptor-governance.mjs",
         "test:watch": "vitest --watch",
         "test:ui": "vitest --ui",
         "test:browser": "vitest run --config vitest.config.browser.ts",
@@ -41,7 +42,7 @@
         "test:coverage": "vitest --coverage",
         "test:all": "yarn test && yarn test:architecture && yarn test:browser && yarn test:webgl",
         "ci:engine-hardening": "yarn test:architecture && yarn verify:engine-hardening",
-        "verify:engine-hardening": "yarn test:hardening && yarn build && yarn test:runtime-profile-governance && yarn test:playable-2d-bundle-governance && yarn test:playable-2d-size-governance && yarn test:playable-2d-smoke && yarn test:engine-benchmark-governance -- --refresh --headless --strictStability && yarn examples:build",
+        "verify:engine-hardening": "yarn test:hardening && yarn build && yarn test:runtime-profile-governance && yarn test:capability-descriptor-governance && yarn test:playable-2d-bundle-governance && yarn test:playable-2d-size-governance && yarn test:playable-2d-smoke && yarn test:engine-benchmark-governance -- --refresh --headless --strictStability && yarn examples:build",
         "docs": "typedoc",
         "prepare": "husky"
     },
