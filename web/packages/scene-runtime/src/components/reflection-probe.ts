@@ -28,8 +28,12 @@ export interface ReflectionProbeConfig {
     readonly cullingMask?: number;
     readonly importance?: number;
     readonly hdr?: boolean;
-    readonly customTextureId?: string;
+    readonly customTextureId?: string | null;
 }
+
+type MutableReflectionProbeConfig = {
+    -readonly [K in keyof ReflectionProbeConfig]: ReflectionProbeConfig[K];
+};
 
 const toVec3 = (
     value?: Vec3 | readonly [number, number, number],
@@ -405,65 +409,65 @@ export class ReflectionProbe extends Component {
         };
     }
 
-    override deserialize(data: Record<string, any>): void {
-        const patch: ReflectionProbeConfig = {};
+    override deserialize(data: Record<string, unknown>): void {
+        const patch: MutableReflectionProbeConfig = {};
 
         if (typeof data.mode === 'string') {
-            (patch as any).mode = data.mode;
+            patch.mode = data.mode as ReflectionProbeMode;
         }
         if (typeof data.shape === 'string') {
-            (patch as any).shape = data.shape;
+            patch.shape = data.shape as ReflectionProbeShape;
         }
         if (typeof data.refreshMode === 'string') {
-            (patch as any).refreshMode = data.refreshMode;
+            patch.refreshMode = data.refreshMode as ReflectionProbeRefreshMode;
         }
         if (typeof data.timeSlicingMode === 'string') {
-            (patch as any).timeSlicingMode = data.timeSlicingMode;
+            patch.timeSlicingMode = data.timeSlicingMode as ReflectionProbeTimeSlicingMode;
         }
         if (typeof data.resolution === 'number') {
-            (patch as any).resolution = data.resolution;
+            patch.resolution = data.resolution;
         }
         if (typeof data.clearFlags === 'string') {
-            (patch as any).clearFlags = data.clearFlags;
+            patch.clearFlags = data.clearFlags as ReflectionProbeClearFlags;
         }
         if (Array.isArray(data.backgroundColor) && data.backgroundColor.length === 3) {
-            (patch as any).backgroundColor = data.backgroundColor;
+            patch.backgroundColor = data.backgroundColor as [number, number, number];
         }
         if (typeof data.intensity === 'number') {
-            (patch as any).intensity = data.intensity;
+            patch.intensity = data.intensity;
         }
         if (typeof data.blendDistance === 'number') {
-            (patch as any).blendDistance = data.blendDistance;
+            patch.blendDistance = data.blendDistance;
         }
         if (typeof data.boxProjection === 'boolean') {
-            (patch as any).boxProjection = data.boxProjection;
+            patch.boxProjection = data.boxProjection;
         }
         if (Array.isArray(data.boxSize) && data.boxSize.length === 3) {
-            (patch as any).boxSize = data.boxSize;
+            patch.boxSize = data.boxSize as [number, number, number];
         }
         if (Array.isArray(data.boxOffset) && data.boxOffset.length === 3) {
-            (patch as any).boxOffset = data.boxOffset;
+            patch.boxOffset = data.boxOffset as [number, number, number];
         }
         if (typeof data.nearClip === 'number') {
-            (patch as any).nearClip = data.nearClip;
+            patch.nearClip = data.nearClip;
         }
         if (typeof data.farClip === 'number') {
-            (patch as any).farClip = data.farClip;
+            patch.farClip = data.farClip;
         }
         if (typeof data.shadowDistance === 'number') {
-            (patch as any).shadowDistance = data.shadowDistance;
+            patch.shadowDistance = data.shadowDistance;
         }
         if (typeof data.cullingMask === 'number') {
-            (patch as any).cullingMask = data.cullingMask;
+            patch.cullingMask = data.cullingMask;
         }
         if (typeof data.importance === 'number') {
-            (patch as any).importance = data.importance;
+            patch.importance = data.importance;
         }
         if (typeof data.hdr === 'boolean') {
-            (patch as any).hdr = data.hdr;
+            patch.hdr = data.hdr;
         }
         if (typeof data.customTextureId === 'string' || data.customTextureId === null) {
-            (patch as any).customTextureId = data.customTextureId;
+            patch.customTextureId = data.customTextureId;
         }
 
         this._applyConfig(patch);
