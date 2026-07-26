@@ -8,6 +8,7 @@ export {
     createGltfUnlitShaderDefinition,
     resolveGltfRuntimeShaderId,
 } from './internal/runtime-shaders';
+export type { GltfMaterialUniformMap } from './internal/runtime-shaders';
 
 export type {
     GltfSceneSnapshotOptions,

@@ -45,6 +45,45 @@ export interface RenderShaderInspectorControlDefinition {
     readonly step?: number;
     readonly options?: readonly RenderShaderInspectorOptionDefinition[];
     readonly hidden?: boolean;
+    readonly order?: number;
+    readonly tooltip?: string;
+    readonly readOnly?: boolean;
+    readonly visibleWhen?: string;
+}
+
+export type RenderShaderPropertyBindingChannel =
+    | 'r'
+    | 'g'
+    | 'b'
+    | 'a'
+    | 'x'
+    | 'y'
+    | 'z'
+    | 'w';
+
+export interface RenderShaderPropertyBindingDefinition {
+    readonly target: string;
+    readonly channels?: readonly RenderShaderPropertyBindingChannel[];
+}
+
+export interface RenderShaderKeywordDefinition {
+    readonly name: string;
+    readonly stages?: readonly RenderShaderStageName[];
+    readonly options?: readonly string[];
+    readonly defaultValue?: boolean | string;
+    readonly inspector?: RenderShaderInspectorControlDefinition;
+}
+
+export interface RenderShaderPropertyMigrationDefinition {
+    readonly formerlySerializedAs?: string;
+    readonly targetChannels?: readonly RenderShaderPropertyBindingChannel[];
+    readonly removed?: boolean;
+    readonly reason?: string;
+}
+
+export interface RenderShaderEffectMigrationDefinition {
+    readonly properties?: Readonly<Record<string, RenderShaderPropertyMigrationDefinition>>;
+    readonly keywords?: Readonly<Record<string, RenderShaderPropertyMigrationDefinition>>;
 }
 
 export interface RenderShaderPropertyDefinition {
@@ -54,6 +93,7 @@ export interface RenderShaderPropertyDefinition {
     readonly stages?: readonly RenderShaderStageName[];
     readonly scope?: 'material' | 'object' | 'camera' | 'frame' | 'system' | 'internal';
     readonly defaultValue?: RenderShaderSerializableValue;
+    readonly binding?: RenderShaderPropertyBindingDefinition;
     readonly inspector?: RenderShaderInspectorControlDefinition;
 }
 
@@ -91,17 +131,35 @@ export interface RenderShaderEffectRenderStateDefinition {
     readonly blend?: boolean;
 }
 
+export interface RenderShaderPassDefinition {
+    readonly id: string;
+    readonly vertex?: RenderShaderStageDefinition;
+    readonly fragment?: RenderShaderStageDefinition;
+    readonly renderState?: RenderShaderEffectRenderStateDefinition;
+    readonly keywords?: readonly string[];
+}
+
+export interface RenderShaderTechniqueDefinition {
+    readonly id: string;
+    readonly label?: string;
+    readonly passes: readonly RenderShaderPassDefinition[];
+}
+
 export interface RenderShaderEffectDefinition {
     readonly format: 'axrone.shader/effect';
-    readonly version: 1;
+    readonly version: 1 | 2;
     readonly id: string;
     readonly attributes?: readonly RenderShaderAttributeDefinition[];
     readonly varyings?: readonly RenderShaderInterfaceDefinition[];
     readonly properties?: readonly RenderShaderPropertyDefinition[];
+    readonly keywords?: readonly RenderShaderKeywordDefinition[];
     readonly libraries?: readonly RenderShaderLibraryDefinition[];
+    readonly defaultTechnique?: string;
+    readonly techniques?: readonly RenderShaderTechniqueDefinition[];
     readonly vertex: RenderShaderStageDefinition;
     readonly fragment: RenderShaderStageDefinition;
     readonly renderState?: RenderShaderEffectRenderStateDefinition;
+    readonly migrations?: RenderShaderEffectMigrationDefinition;
 }
 
 export interface CompiledRenderShaderEffect {
@@ -162,8 +220,32 @@ const cloneInspector = (
                                         }))
                                     : undefined,
               hidden: value.hidden,
+              order: value.order,
+              tooltip: value.tooltip,
+              readOnly: value.readOnly,
+              visibleWhen: value.visibleWhen,
           }
         : undefined;
+
+const clonePropertyBinding = (
+    value: RenderShaderPropertyBindingDefinition | undefined
+): RenderShaderPropertyBindingDefinition | undefined =>
+    value
+        ? {
+              target: value.target,
+              channels: value.channels ? [...value.channels] : undefined,
+          }
+        : undefined;
+
+const cloneKeywords = (
+    value: readonly RenderShaderKeywordDefinition[] | undefined
+): readonly RenderShaderKeywordDefinition[] | undefined =>
+    value?.map((entry) => ({
+        name: entry.name,
+        stages: entry.stages ? [...entry.stages] : undefined,
+        options: entry.options ? [...entry.options] : undefined,
+        defaultValue: entry.defaultValue,
+    }));
 
 const cloneInterfaces = (
     value: readonly RenderShaderInterfaceDefinition[] | undefined
@@ -193,6 +275,7 @@ const cloneProperties = (
         stages: entry.stages ? [...entry.stages] : undefined,
         scope: entry.scope,
         defaultValue: entry.defaultValue,
+        binding: clonePropertyBinding(entry.binding),
         inspector: cloneInspector(entry.inspector),
     }));
 
@@ -218,6 +301,70 @@ const cloneStage = (stage: RenderShaderStageDefinition): RenderShaderStageDefini
     includes: stage.includes ? [...stage.includes] : undefined,
     main: [...stage.main],
 });
+
+const cloneRenderState = (
+    value: RenderShaderEffectRenderStateDefinition | undefined
+): RenderShaderEffectRenderStateDefinition | undefined =>
+    value
+        ? {
+              depthTest: value.depthTest,
+              cull: value.cull,
+              blend: value.blend,
+          }
+        : undefined;
+
+const clonePropertyMigration = (
+    value: RenderShaderPropertyMigrationDefinition | undefined
+): RenderShaderPropertyMigrationDefinition | undefined =>
+    value
+        ? {
+              formerlySerializedAs: value.formerlySerializedAs,
+              targetChannels: value.targetChannels ? [...value.targetChannels] : undefined,
+              removed: value.removed,
+              reason: value.reason,
+          }
+        : undefined;
+
+const cloneMigrations = (
+    value: RenderShaderEffectMigrationDefinition | undefined
+): RenderShaderEffectMigrationDefinition | undefined => {
+    if (!value) return undefined;
+    const properties: Record<string, RenderShaderPropertyMigrationDefinition> = {};
+    if (value.properties) {
+        for (const [key, migration] of Object.entries(value.properties)) {
+            const cloned = clonePropertyMigration(migration);
+            if (cloned) properties[key] = cloned;
+        }
+    }
+    const keywords: Record<string, RenderShaderPropertyMigrationDefinition> = {};
+    if (value.keywords) {
+        for (const [key, migration] of Object.entries(value.keywords)) {
+            const cloned = clonePropertyMigration(migration);
+            if (cloned) keywords[key] = cloned;
+        }
+    }
+    return { properties, keywords };
+};
+
+const clonePasses = (
+    value: readonly RenderShaderPassDefinition[] | undefined
+): readonly RenderShaderPassDefinition[] | undefined =>
+    value?.map((entry) => ({
+        id: entry.id,
+        vertex: entry.vertex ? cloneStage(entry.vertex) : undefined,
+        fragment: entry.fragment ? cloneStage(entry.fragment) : undefined,
+        renderState: cloneRenderState(entry.renderState),
+        keywords: entry.keywords ? [...entry.keywords] : undefined,
+    }));
+
+const cloneTechniques = (
+    value: readonly RenderShaderTechniqueDefinition[] | undefined
+): readonly RenderShaderTechniqueDefinition[] | undefined =>
+    value?.map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        passes: clonePasses(entry.passes) ?? [],
+    }));
 
 const formatInterfaceLine = (
     direction: 'in' | 'out',
@@ -454,16 +601,14 @@ export const cloneRenderShaderEffectDefinition = (
     attributes: cloneAttributes(effect.attributes),
     varyings: cloneInterfaces(effect.varyings),
     properties: cloneProperties(effect.properties),
+    keywords: cloneKeywords(effect.keywords),
     libraries: cloneLibraries(effect.libraries),
+    defaultTechnique: effect.defaultTechnique,
+    techniques: cloneTechniques(effect.techniques),
     vertex: cloneStage(effect.vertex),
     fragment: cloneStage(effect.fragment),
-    renderState: effect.renderState
-        ? {
-              depthTest: effect.renderState.depthTest,
-              cull: effect.renderState.cull,
-              blend: effect.renderState.blend,
-          }
-        : undefined,
+    renderState: cloneRenderState(effect.renderState),
+    migrations: cloneMigrations(effect.migrations),
 });
 
 export const compileRenderShaderEffect = (

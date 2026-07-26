@@ -74,7 +74,7 @@ describe('Scene2D', () => {
         const sprite = spriteActor.getComponent(SpriteRenderer);
 
         expect(camera?.orthographic).toBe(true);
-        expect(camera?.near).toBe(-1000);
+        expect(camera?.near).toBe(0.1);
         expect(camera?.far).toBe(1000);
         expect(cameraTransform?.position.z).toBe(1);
         expect(sprite?.textureId).toBe('hero');
@@ -224,6 +224,56 @@ describe('Scene2D', () => {
         expect(gl.drawElements).toHaveBeenCalledTimes(2);
         expect(gl.enable).toHaveBeenCalledWith(gl.SCISSOR_TEST);
         expect(gl.scissor).toHaveBeenCalledTimes(2);
+
+        scene.dispose();
+    });
+
+    it('enforces transparent sprite budgets through the 2d facade render planning surface', async () => {
+        const canvas = document.createElement('canvas');
+        const scene = new Scene2D({
+            ...createSceneOptions(scheduler, canvas),
+            renderPlanning: {
+                maxTransparentPrimitives: 1,
+            },
+        });
+        const gl = scene.gl as any;
+
+        await scene.registerTexture({
+            id: 'hero',
+            source: {
+                kind: 'data',
+                width: 1,
+                height: 1,
+                channels: 4,
+                data: [255, 255, 255, 255],
+            },
+            generateMipmaps: false,
+        });
+
+        scene.createCameraActor({ name: 'Camera' }, { primary: true });
+        scene.createSpriteActor(
+            { name: 'HeroA' },
+            { textureId: 'hero', size: [1, 1], renderOrder: 0 }
+        );
+        scene.createSpriteActor(
+            { name: 'HeroB' },
+            { textureId: 'hero', size: [2, 1], renderOrder: 1 }
+        );
+
+        scene.start(0);
+        scheduler.flush(16);
+
+        expect(gl.drawElements).toHaveBeenCalledTimes(1);
+        expect(scene.renderStats.drawCalls).toBe(1);
+        expect(scene.renderStats.trianglesSubmitted).toBe(2);
+        expect(scene.renderStats.planning.transparentCount).toBe(1);
+        expect(scene.renderStats.planning.meshTransparentCount).toBe(0);
+        expect(scene.renderStats.planning.spriteTransparentCount).toBe(1);
+        expect(scene.renderStats.planning.spriteBatchCount).toBe(1);
+        expect(scene.renderStats.planning.skippedSpriteCount).toBe(1);
+        expect(scene.renderStats.planning.warnings).toEqual([
+            'transparent primitive budget exceeded at 1; skipped 1 sprite submissions',
+        ]);
 
         scene.dispose();
     });

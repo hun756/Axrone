@@ -2,6 +2,7 @@ import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from
 import { EPSILON, HALF_PI, PI_2 } from './common';
 import { IVec2Like } from './vec2';
 import { clamp01 } from './clamp';
+import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
 declare const __matrix2Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
@@ -110,11 +111,13 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
     }
 
     getHashCode(): number {
-        let h1 = 2166136261;
-        for (let i = 0; i < 4; i++) {
-            h1 = Math.imul(h1 ^ Math.floor(this.data[i] * 1000), 16777619);
-        }
-        return h1 >>> 0;
+        const h = new Fnv1a32();
+        for (let i = 0; i < 4; i++) h.updateF32(this.data[i]!);
+        return h.digest();
+    }
+
+    hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {
+        for (let i = 0; i < 4; i++) hasher.updateF32(this.data[i]!);
     }
 
     static multiply<
@@ -225,18 +228,12 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         v: Readonly<T>,
         out?: V
     ): MatrixOperationReturnType<V, Mat2> {
-        if (out) {
-            const outData = asMutableMatrix2Data((out as IMutableMat2).data);
-
-            outData[0] = 1;
-            outData[1] = v.x;
-            outData[2] = 0;
-            outData[3] = 1;
-
-            return out as MatrixOperationReturnType<V, Mat2>;
-        } else {
-            return new Mat2([1, v.x, 0, 1]) as MatrixOperationReturnType<V, Mat2>;
-        }
+        void v;
+        void out;
+        throw new Error(
+            'Mat2.translate is not supported: a 2x2 matrix cannot represent a 2D affine translation. ' +
+                'Use Mat3.translate for 2D affine transformations.'
+        );
     }
 
     static scale<T extends IVec2Like, V extends IMat2Like | undefined = undefined>(

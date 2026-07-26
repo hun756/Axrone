@@ -102,10 +102,11 @@ export class PriorityQueueSerializationError extends PriorityQueueError {
     }
 }
 
-const enum InternalOrder {
-    Min = 1,
-    Max = -1,
-}
+const InternalOrder = {
+    Min: 1,
+    Max: -1,
+} as const;
+type InternalOrder = (typeof InternalOrder)[keyof typeof InternalOrder];
 
 type Node<T, P> = {
     value: T;
@@ -1282,6 +1283,4 @@ export function createPriorityQueue<T, P, O extends PriorityOrder = 'max'>(
 }
 
 export const isPriorityQueue = PriorityQueue.isPriorityQueue;
-
-export type { Comparator, Equality } from './binary-heap';
 export type { HeapIndex, QueueSize, Capacity } from './types';

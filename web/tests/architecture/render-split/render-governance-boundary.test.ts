@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -13,6 +14,29 @@ const workspaceDir = path.resolve(testDir, '../../..');
 const packagesDir = path.resolve(workspaceDir, 'packages');
 const examplesDir = path.resolve(workspaceDir, 'examples');
 const renderCoreDir = path.resolve(packagesDir, 'render-core/src');
+const renderCorePackageJsonPath = path.resolve(packagesDir, 'render-core/package.json');
+
+const readPublicPackageSpecifiers = (packageName: string, packageJsonPath: string): ReadonlySet<string> => {
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as {
+        exports?: Record<string, unknown>;
+    };
+    const publicSpecifiers = new Set<string>([packageName]);
+
+    for (const exportKey of Object.keys(packageJson.exports ?? {})) {
+        if (!exportKey.startsWith('./')) {
+            continue;
+        }
+
+        publicSpecifiers.add(`${packageName}/${exportKey.slice(2)}`);
+    }
+
+    return publicSpecifiers;
+};
+
+const publicRenderCoreSpecifiers = readPublicPackageSpecifiers(
+    '@axrone/render-core',
+    renderCorePackageJsonPath
+);
 
 const collectWorkspaceSourceFiles = (): readonly string[] =>
     [packagesDir, examplesDir].flatMap((dirPath) =>
@@ -22,7 +46,8 @@ const collectWorkspaceSourceFiles = (): readonly string[] =>
     );
 
 const isPrivateRenderCoreSpecifier = (specifier: string): boolean =>
-    specifier.startsWith('@axrone/render-core/') || specifier.includes('render-core/src/');
+    specifier.includes('render-core/src/') ||
+    (specifier.startsWith('@axrone/render-core/') && !publicRenderCoreSpecifiers.has(specifier));
 
 const isPrivateRenderWebgl2Specifier = (specifier: string): boolean =>
     specifier.includes('render-webgl2/src/');

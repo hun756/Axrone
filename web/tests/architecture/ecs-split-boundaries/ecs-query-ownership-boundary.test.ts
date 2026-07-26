@@ -4,9 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
-const ecsQuerySrcDir = path.resolve(testDir, '../../../packages/ecs-query/src');
+const ecsQuerySrcDir = path.resolve(testDir, '../../../packages/ecs-runtime/src/query');
+// Query is a leaf module inside ecs-runtime: it must not reach any
+// @axrone/ecs package surface, the component-system runtime internals,
+// or the sibling storage/support modules.
 const disallowedImportPattern =
-    /(?:from ['"]|import\(['"])(?:[^'"]*@axrone\/ecs(?!-query)|[^'"]*core\/src\/(?:component-system|event|observer)|[^'"]*ecs\/src\/component-system)(?:\/[^'"]*)?['"]/g;
+    /(?:from ['"]|import\(['"])(?:[^'"]*@axrone\/ecs|[^'"]*component-system|(?:\.\.\/)+(?:storage|support))(?:\/[^'"]*)?['"]/g;
 
 const collectTypeScriptFiles = (dirPath: string): readonly string[] => {
     const files: string[] = [];
@@ -35,8 +38,8 @@ const collectTypeScriptFiles = (dirPath: string): readonly string[] => {
     return files;
 };
 
-describe('ecs-query ownership boundary', () => {
-    it('keeps ecs-query owned sources off ecs and core internals', () => {
+describe('ecs-runtime query module boundary', () => {
+    it('keeps query-owned sources off runtime internals and sibling modules', () => {
         const violatingFiles = collectTypeScriptFiles(ecsQuerySrcDir)
             .filter((filePath) => {
                 const content = fs.readFileSync(filePath, 'utf8');

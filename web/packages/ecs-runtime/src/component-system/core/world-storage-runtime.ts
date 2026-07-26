@@ -2,8 +2,8 @@ import {
     type WorldDestroyedEntity as StorageWorldDestroyedEntity,
     type WorldStorageDebugInfo as StorageWorldStorageDebugInfo,
     WorldStorageRuntime as BaseWorldStorageRuntime,
-} from '@axrone/ecs-storage/world-storage-runtime';
-import type { WorldArchetypeResolution as StorageWorldArchetypeResolution } from '@axrone/ecs-storage/archetype-store';
+} from '../../storage/world-storage-runtime';
+import type { WorldArchetypeResolution as StorageWorldArchetypeResolution } from '../../storage/archetype-store';
 import type { ArchetypeId, ComponentRegistry, Entity } from '../types/core';
 
 export type WorldArchetypeResolution<R extends ComponentRegistry> = StorageWorldArchetypeResolution<

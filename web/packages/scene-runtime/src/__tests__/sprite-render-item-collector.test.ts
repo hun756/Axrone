@@ -4,7 +4,7 @@ import { Transform } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
 import { describe, expect, it } from 'vitest';
 import { SpriteRenderer } from '../components/sprite-renderer';
-import { SceneSpriteRenderItemCollector } from '../sprite-render-item-collector';
+import { SceneSpriteRenderItemCollector } from '../rendering/sprite-render-item-collector';
 
 const createMockActor = (transform: Transform, renderer: SpriteRenderer): Actor =>
     ({

@@ -217,8 +217,9 @@ export class CameraFrustum implements IDisposable {
         return this;
     }
 
-    copy(other: Readonly<CameraFrustum>): this {
+    copy(other: CameraFrustum): this {
         this.assertActive();
+        other.assertActive();
         this._planes.set(other._planes);
         return this;
     }

@@ -1,7 +1,7 @@
 import { Hierarchy, Transform, World } from '@axrone/ecs-runtime';
 import { describe, expect, it } from 'vitest';
 import { SceneComponentCatalog } from '../component-catalog';
-import { PrefabNodeBinding } from '../components/prefab-node-binding';
+import { PrefabNodeBinding } from '@axrone/scene-prefab';
 import {
     createScenePrefabScopedNodeId,
     createScenePrefabWorkflow,

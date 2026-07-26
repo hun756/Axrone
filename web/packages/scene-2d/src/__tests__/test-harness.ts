@@ -95,6 +95,9 @@ export const createMockGL = (canvas: HTMLCanvasElement) => {
         LINK_STATUS: 0x8b82,
         COLOR_BUFFER_BIT: 0x4000,
         DEPTH_BUFFER_BIT: 0x0100,
+        FRAMEBUFFER: 0x8d40,
+        READ_FRAMEBUFFER: 0x8ca8,
+        DRAW_FRAMEBUFFER: 0x8ca9,
         DEPTH_TEST: 0x0b71,
         CULL_FACE: 0x0b44,
         BLEND: 0x0be2,
@@ -102,6 +105,10 @@ export const createMockGL = (canvas: HTMLCanvasElement) => {
         BACK: 0x0405,
         SRC_ALPHA: 0x0302,
         ONE_MINUS_SRC_ALPHA: 0x0303,
+        RGBA8: 0x8058,
+        RGBA: 0x1908,
+        DEPTH_COMPONENT24: 0x81a6,
+        DEPTH_COMPONENT: 0x1902,
         TEXTURE_2D: 0x0de1,
         TEXTURE_3D: 0x806f,
         TEXTURE_CUBE_MAP: 0x8513,
@@ -229,11 +236,15 @@ export const createMockGL = (canvas: HTMLCanvasElement) => {
             textures.add(texture);
             return texture as WebGLTexture;
         }),
+        bindFramebuffer: vi.fn(),
         bindTexture: vi.fn(),
         activeTexture: vi.fn(),
         deleteTexture: vi.fn((texture: object) => {
             textures.delete(texture);
         }),
+        texParameteri: vi.fn(),
+        texStorage2D: vi.fn(),
+        texStorage3D: vi.fn(),
         texImage2D: vi.fn(),
         texImage3D: vi.fn(),
         compressedTexImage2D: vi.fn(),

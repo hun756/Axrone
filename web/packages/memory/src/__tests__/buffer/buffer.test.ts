@@ -15,11 +15,20 @@ describe('ByteBuffer core — professional tests', () => {
         expect(b.capacity).toBeGreaterThanOrEqual(128);
     });
 
-    it('wraps ArrayBuffer and caches the wrapper', () => {
+    it('wraps ArrayBuffer; each wrap() returns an independent view over the same buffer', () => {
         const ab = new ArrayBuffer(64);
         const w1 = ByteBuffer.wrap(ab);
         const w2 = ByteBuffer.wrap(ab);
-        expect(w1).toBe(w2);
+        expect(w1).not.toBe(w2);
+        expect(w1.capacity).toBe(64);
+        expect(w2.capacity).toBe(64);
+
+        w1.putUint8(0xab);
+        expect(w2.getUint8()).toBe(0xab);
+
+        const w1PosBefore = w1.position;
+        w2.seek(10);
+        expect(w1.position).toBe(w1PosBefore);
     });
 
     it('put/get primitive types respect byte order and position', () => {

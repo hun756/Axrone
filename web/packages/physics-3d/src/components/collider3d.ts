@@ -77,13 +77,17 @@ export abstract class Collider3D extends Component {
         return this._isTrigger;
     }
     set isTrigger(value: boolean) {
+        if (this._isTrigger === value) return;
         this._isTrigger = value;
+        this._updateShape();
     }
     get providesContacts(): boolean {
         return this._providesContacts;
     }
     set providesContacts(value: boolean) {
+        if (this._providesContacts === value) return;
         this._providesContacts = value;
+        this._updateShape();
     }
     get contactOffset(): number {
         return this._contactOffset;
@@ -120,25 +124,32 @@ export abstract class Collider3D extends Component {
         if (value.frictionCombine !== undefined)
             this._material.frictionCombine = value.frictionCombine;
         if (value.bounceCombine !== undefined) this._material.bounceCombine = value.bounceCombine;
+        this._updateShape();
     }
 
     get categoryBits(): number {
         return this._filter.categoryBits;
     }
     set categoryBits(value: number) {
+        if (this._filter.categoryBits === value) return;
         this._filter.categoryBits = value;
+        this._updateShape();
     }
     get maskBits(): number {
         return this._filter.maskBits;
     }
     set maskBits(value: number) {
+        if (this._filter.maskBits === value) return;
         this._filter.maskBits = value;
+        this._updateShape();
     }
     get groupIndex(): number {
         return this._filter.groupIndex;
     }
     set groupIndex(value: number) {
+        if (this._filter.groupIndex === value) return;
         this._filter.groupIndex = value;
+        this._updateShape();
     }
 
     initialize(world: PhysicsWorld3D, rigidbody?: Rigidbody3D): void {
@@ -160,10 +171,7 @@ export abstract class Collider3D extends Component {
     }
 
     override onDestroy(): void {
-        if (this._shapeManager && this._shapeId !== INVALID_SHAPE_ID) {
-            this._shapeManager.destroyShape(this._shapeId);
-            this._shapeId = INVALID_SHAPE_ID;
-        }
+        this._destroyCurrentShape();
         this._shapeManager = null;
         this._world = null;
         this._rigidbody = null;
@@ -243,6 +251,18 @@ export abstract class Collider3D extends Component {
         this._bounds.max.x = maxX;
         this._bounds.max.y = maxY;
         this._bounds.max.z = maxZ;
+    }
+
+    protected _destroyCurrentShape(): void {
+        if (this._shapeId === INVALID_SHAPE_ID) return;
+
+        if (this._world) {
+            this._world.destroyShape(this._shapeId);
+        } else if (this._shapeManager) {
+            this._shapeManager.destroyShape(this._shapeId);
+        }
+
+        this._shapeId = INVALID_SHAPE_ID;
     }
 }
 

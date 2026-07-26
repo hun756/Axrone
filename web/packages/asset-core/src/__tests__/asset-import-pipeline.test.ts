@@ -185,4 +185,32 @@ describe('AssetImportPipeline', () => {
             expect.arrayContaining(['result.before', 'stage.before', 'stage.after'])
         );
     });
+
+    it('matches compound file extensions during importer selection', async () => {
+        const effectImporter: AssetImporter<PipelineAssetSchema, TextSource, 'text'> = {
+            id: 'test.effect',
+            sourceKinds: ['text'],
+            extensions: ['effect.json'],
+            import: ({ source }) => ({
+                primary: {
+                    kind: 'text',
+                    data: source.data,
+                },
+            }),
+        };
+
+        const database = new AssetDatabase<PipelineAssetSchema>({
+            importers: [effectImporter],
+        });
+
+        const receipt = await database.import({
+            kind: 'text',
+            data: 'compound-extension',
+            uri: 'assets/hero-tint.effect.json',
+            mimeType: 'application/json',
+        });
+
+        expect(receipt.importerId).toBe('test.effect');
+        expect(receipt.primary.data).toBe('compound-extension');
+    });
 });

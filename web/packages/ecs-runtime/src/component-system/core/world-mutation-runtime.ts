@@ -1,5 +1,5 @@
 import type { EventKey } from '@axrone/event';
-import type { WorldStorageRuntime } from '@axrone/ecs-storage/world-storage-runtime';
+import type { WorldStorageRuntime } from '../../storage/world-storage-runtime';
 import { getComponentMetadata } from '../decorators/script';
 import type {
     ArchetypeId,

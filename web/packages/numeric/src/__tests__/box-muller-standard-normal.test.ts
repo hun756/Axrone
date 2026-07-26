@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     StandardNormal,
     BoxMullerTransform,
-    createDefaultRandomGenerator,
+    DefaultRandomGenerator,
     BoxMullerNormalDistribution,
     ErrorCodes,
     isIDistribution,
@@ -69,7 +69,7 @@ describe('Integration Tests', () => {
     });
 
     it('should validate DefaultRandomGenerator with isIDistribution', () => {
-        const generator = createDefaultRandomGenerator();
+        const generator = DefaultRandomGenerator.getInstance();
         expect(typeof generator.float).toBe('function');
     });
 

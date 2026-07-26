@@ -58,6 +58,58 @@ const PBR_PROPERTIES: MaterialProperty[] = [
     },
 
     {
+        name: '_ClearcoatFactor',
+        displayName: 'Clear Coat Factor',
+        type: 'float',
+        defaultValue: 0.0,
+        range: { min: 0, max: 1 },
+        category: 'Clear Coat',
+        tooltip: 'Clear coat layer intensity',
+    },
+    {
+        name: '_ClearcoatRoughnessFactor',
+        displayName: 'Clear Coat Roughness',
+        type: 'float',
+        defaultValue: 0.0,
+        range: { min: 0, max: 1 },
+        category: 'Clear Coat',
+        tooltip: 'Clear coat roughness factor',
+    },
+    {
+        name: '_ClearcoatTexture',
+        displayName: 'Clear Coat Texture',
+        type: 'texture',
+        defaultValue: null,
+        category: 'Clear Coat',
+        tooltip: 'Clear coat texture (R)',
+    },
+    {
+        name: '_ClearcoatRoughnessTexture',
+        displayName: 'Clear Coat Roughness Texture',
+        type: 'texture',
+        defaultValue: null,
+        category: 'Clear Coat',
+        tooltip: 'Clear coat roughness texture (G)',
+    },
+    {
+        name: '_ClearcoatNormalTexture',
+        displayName: 'Clear Coat Normal Texture',
+        type: 'texture',
+        defaultValue: null,
+        category: 'Clear Coat',
+        tooltip: 'Clear coat normal map texture',
+    },
+    {
+        name: '_ClearcoatNormalTexture_Scale',
+        displayName: 'Clear Coat Normal Scale',
+        type: 'float',
+        defaultValue: 1.0,
+        range: { min: 0, max: 2 },
+        category: 'Clear Coat',
+        tooltip: 'Clear coat normal map scale factor',
+    },
+
+    {
         name: '_NormalTexture',
         displayName: 'Normal Texture',
         type: 'texture',
@@ -210,6 +262,24 @@ const PBR_KEYWORDS: MaterialKeyword[] = [
         description: 'Enable emissive texture',
         category: 'Textures',
     },
+    {
+        name: '_CLEARCOATTEXTURE',
+        displayName: 'Clear Coat Texture',
+        description: 'Enable clear coat texture',
+        category: 'Textures',
+    },
+    {
+        name: '_CLEARCOATROUGHNESSTEXTURE',
+        displayName: 'Clear Coat Roughness Texture',
+        description: 'Enable clear coat roughness texture',
+        category: 'Textures',
+    },
+    {
+        name: '_CLEARCOATNORMALTEXTURE',
+        displayName: 'Clear Coat Normal Texture',
+        description: 'Enable clear coat normal texture',
+        category: 'Textures',
+    },
 
     {
         name: '_ALPHAMODE_OPAQUE',
@@ -276,7 +346,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get metallicFactor(): number {
-        return this.getProperty<number>('_MetallicFactor') || 1;
+        return this.getProperty<number>('_MetallicFactor') ?? 1;
     }
 
     set metallicFactor(value: number) {
@@ -284,7 +354,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get roughnessFactor(): number {
-        return this.getProperty<number>('_RoughnessFactor') || 1;
+        return this.getProperty<number>('_RoughnessFactor') ?? 1;
     }
 
     set roughnessFactor(value: number) {
@@ -304,6 +374,69 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
         }
     }
 
+    get clearcoatFactor(): number {
+        return this.getProperty<number>('_ClearcoatFactor') ?? 0;
+    }
+
+    set clearcoatFactor(value: number) {
+        this.setProperty('_ClearcoatFactor', Math.max(0, Math.min(1, value)));
+    }
+
+    get clearcoatRoughnessFactor(): number {
+        return this.getProperty<number>('_ClearcoatRoughnessFactor') ?? 0;
+    }
+
+    set clearcoatRoughnessFactor(value: number) {
+        this.setProperty('_ClearcoatRoughnessFactor', Math.max(0, Math.min(1, value)));
+    }
+
+    get clearcoatTexture(): WebGLTexture | null {
+        return this.getProperty<WebGLTexture>('_ClearcoatTexture');
+    }
+
+    set clearcoatTexture(value: WebGLTexture | null) {
+        this.setTexture('_ClearcoatTexture', value);
+        if (value) {
+            this.enableKeyword('_CLEARCOATTEXTURE');
+        } else {
+            this.disableKeyword('_CLEARCOATTEXTURE');
+        }
+    }
+
+    get clearcoatRoughnessTexture(): WebGLTexture | null {
+        return this.getProperty<WebGLTexture>('_ClearcoatRoughnessTexture');
+    }
+
+    set clearcoatRoughnessTexture(value: WebGLTexture | null) {
+        this.setTexture('_ClearcoatRoughnessTexture', value);
+        if (value) {
+            this.enableKeyword('_CLEARCOATROUGHNESSTEXTURE');
+        } else {
+            this.disableKeyword('_CLEARCOATROUGHNESSTEXTURE');
+        }
+    }
+
+    get clearcoatNormalTexture(): WebGLTexture | null {
+        return this.getProperty<WebGLTexture>('_ClearcoatNormalTexture');
+    }
+
+    set clearcoatNormalTexture(value: WebGLTexture | null) {
+        this.setTexture('_ClearcoatNormalTexture', value);
+        if (value) {
+            this.enableKeyword('_CLEARCOATNORMALTEXTURE');
+        } else {
+            this.disableKeyword('_CLEARCOATNORMALTEXTURE');
+        }
+    }
+
+    get clearcoatNormalScale(): number {
+        return this.getProperty<number>('_ClearcoatNormalTexture_Scale') ?? 1;
+    }
+
+    set clearcoatNormalScale(value: number) {
+        this.setProperty('_ClearcoatNormalTexture_Scale', Math.max(0, Math.min(2, value)));
+    }
+
     get normalTexture(): WebGLTexture | null {
         return this.getProperty<WebGLTexture>('_NormalTexture');
     }
@@ -318,7 +451,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get normalScale(): number {
-        return this.getProperty<number>('_NormalScale') || 1;
+        return this.getProperty<number>('_NormalScale') ?? 1;
     }
 
     set normalScale(value: number) {
@@ -339,7 +472,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get occlusionStrength(): number {
-        return this.getProperty<number>('_OcclusionStrength') || 1;
+        return this.getProperty<number>('_OcclusionStrength') ?? 1;
     }
 
     set occlusionStrength(value: number) {
@@ -370,7 +503,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get alphaMode(): 'OPAQUE' | 'MASK' | 'BLEND' {
-        const mode = this.getProperty<number>('_AlphaMode') || 0;
+        const mode = this.getProperty<number>('_AlphaMode') ?? 0;
         switch (mode) {
             case 1:
                 return 'MASK';
@@ -412,7 +545,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get alphaCutoff(): number {
-        return this.getProperty<number>('_AlphaCutoff') || 0.5;
+        return this.getProperty<number>('_AlphaCutoff') ?? 0.5;
     }
 
     set alphaCutoff(value: number) {
@@ -420,7 +553,7 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     get doubleSided(): boolean {
-        return this.getProperty<boolean>('_DoubleSided') || false;
+        return this.getProperty<boolean>('_DoubleSided') ?? false;
     }
 
     set doubleSided(value: boolean) {
@@ -462,6 +595,9 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
 
         if (this.baseColorTexture) this.enableKeyword('_BASECOLORTEXTURE');
         if (this.metallicRoughnessTexture) this.enableKeyword('_METALLICROUGHNESSTEXTURE');
+        if (this.clearcoatTexture) this.enableKeyword('_CLEARCOATTEXTURE');
+        if (this.clearcoatRoughnessTexture) this.enableKeyword('_CLEARCOATROUGHNESSTEXTURE');
+        if (this.clearcoatNormalTexture) this.enableKeyword('_CLEARCOATNORMALTEXTURE');
         if (this.normalTexture) this.enableKeyword('_NORMALTEXTURE');
         if (this.occlusionTexture) this.enableKeyword('_OCCLUSIONTEXTURE');
         if (this.emissiveTexture) this.enableKeyword('_EMISSIVETEXTURE');
@@ -541,6 +677,21 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
             };
         }
 
+        const clearcoatExtension = gltfMaterial.extensions?.KHR_materials_clearcoat;
+        if (clearcoatExtension) {
+            if (clearcoatExtension.clearcoatFactor !== undefined) {
+                this.clearcoatFactor = clearcoatExtension.clearcoatFactor;
+            }
+
+            if (clearcoatExtension.clearcoatRoughnessFactor !== undefined) {
+                this.clearcoatRoughnessFactor = clearcoatExtension.clearcoatRoughnessFactor;
+            }
+
+            if (clearcoatExtension.clearcoatNormalTexture?.scale !== undefined) {
+                this.clearcoatNormalScale = clearcoatExtension.clearcoatNormalTexture.scale;
+            }
+        }
+
         if (gltfMaterial.alphaMode) {
             this.alphaMode = gltfMaterial.alphaMode as 'OPAQUE' | 'MASK' | 'BLEND';
         }
@@ -555,6 +706,24 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
     }
 
     public exportToGLTF(): any {
+        const clearcoatExtension =
+            this.clearcoatFactor > 0 ||
+            this.clearcoatTexture ||
+            this.clearcoatRoughnessTexture ||
+            this.clearcoatNormalTexture
+                ? {
+                      ...(this.clearcoatFactor > 0 ? { clearcoatFactor: this.clearcoatFactor } : {}),
+                      ...(this.clearcoatRoughnessFactor > 0
+                          ? { clearcoatRoughnessFactor: this.clearcoatRoughnessFactor }
+                          : {}),
+                      ...(this.clearcoatTexture ? { clearcoatTexture: {} } : {}),
+                      ...(this.clearcoatRoughnessTexture ? { clearcoatRoughnessTexture: {} } : {}),
+                      ...(this.clearcoatNormalTexture
+                          ? { clearcoatNormalTexture: { scale: this.clearcoatNormalScale } }
+                          : {}),
+                  }
+                : undefined;
+
         return {
             name: this.constructor.name,
             pbrMetallicRoughness: {
@@ -582,6 +751,13 @@ export class PBRMaterialComponent extends BaseMaterialComponent<PBRMaterialConfi
             alphaMode: this.alphaMode,
             alphaCutoff: this.alphaMode === 'MASK' ? this.alphaCutoff : undefined,
             doubleSided: this.doubleSided || undefined,
+            ...(clearcoatExtension
+                ? {
+                      extensions: {
+                          KHR_materials_clearcoat: clearcoatExtension,
+                      },
+                  }
+                : {}),
         };
     }
 }

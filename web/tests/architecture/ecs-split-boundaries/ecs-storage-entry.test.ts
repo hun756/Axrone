@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import * as ecsStorage from '@axrone/ecs-storage';
+import * as ecsStorage from '@axrone/ecs-runtime/storage';
 
-describe('ecs-storage entry', () => {
+describe('ecs-runtime storage subpath entry', () => {
     it('surfaces storage ownership without leaking world orchestration', () => {
         expect(ecsStorage.ComponentPool).toBeDefined();
         expect(ecsStorage.Archetype).toBeDefined();

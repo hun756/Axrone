@@ -11,59 +11,10 @@ import {
     clearScriptCaches,
     __debugScriptSystem,
 } from '@axrone/ecs-runtime';
-
-@script({
-    scriptName: 'TestComponent',
-    priority: 100,
-    version: '1.0.0',
-    author: 'Test Team',
-    description: 'A test component for unit testing',
-    tags: ['test', 'unit'],
-    dependencies: [],
-    singleton: false,
-    executeInEditMode: true,
-    validateDependencies: true,
-    enableMetrics: true,
-})
-class TestComponent extends Component {
-    public value: number = 42;
-
-    constructor(value: number = 42) {
-        super();
-        this.value = value;
-    }
-}
-
-@script({
-    scriptName: 'DependentComponent',
-    dependencies: [TestComponent],
-    priority: 50,
-    version: '1.1.0',
-    tags: ['test', 'dependent'],
-})
-class DependentComponent extends Component {
-    public testComponent?: TestComponent;
-
-    awake(): void {
-        this.testComponent = this.requireComponent(TestComponent);
-    }
-}
-
-@script({
-    scriptName: 'DeprecatedComponent',
-    deprecated: true,
-    deprecationMessage: 'Use NewComponent instead',
-    version: '0.9.0',
-})
-class DeprecatedComponent extends Component {}
-
-@script({
-    scriptName: 'ExperimentalComponent',
-    experimental: true,
-    version: '2.0.0',
-    tags: ['experimental', 'alpha'],
-})
-class ExperimentalComponent extends Component {}
+import TestComponent from './components/TestComponent';
+import DependentComponent from './components/DependentComponent';
+import DeprecatedComponent from './components/DeprecatedComponent';
+import ExperimentalComponent from './components/ExperimentalComponent';
 
 // Mock globals for testing
 (global as any).process = {

@@ -1,4 +1,5 @@
 import { Vec2, Vec3, Vec4 } from '@axrone/numeric';
+import { Djb2 } from '@axrone/hash';
 import {
     TextureDimension,
     TextureFormat,
@@ -753,13 +754,9 @@ export class TextureUtils {
     }
 
     private static simpleHash(str: string): string {
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-            const char = str.charCodeAt(i);
-            hash = (hash << 5) - hash + char;
-            hash = hash & hash;
-        }
-        return Math.abs(hash).toString(36);
+        const h = new Djb2();
+        h.updateString(str);
+        return (h.digest() as unknown as number).toString(36);
     }
 
     public static getDefaultSamplerOptions(usage: TextureUsage): ITextureSamplerOptions {

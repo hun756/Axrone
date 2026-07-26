@@ -109,6 +109,11 @@ export {
 
 export type {
     AudioListenerComponentConfig,
+    AudioSpeakerMode,
+    AudioHrtfPlugin,
+    AudioOcclusionMode,
+    AudioReverbPreset,
+    AudioVirtualVoiceBehavior,
     AudioSourceComponentConfig,
 } from './components';
 export {

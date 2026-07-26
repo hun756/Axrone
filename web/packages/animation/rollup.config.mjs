@@ -50,6 +50,16 @@ export default [
     }),
     ...createPackageConfig({
         packageDir,
+        inputRelativePath: 'src/streaming.ts',
+        outputBasename: 'streaming',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/streaming-chunk.ts',
+        outputBasename: 'streaming-chunk',
+    }),
+    ...createPackageConfig({
+        packageDir,
         inputRelativePath: 'src/pose.ts',
         outputBasename: 'pose',
     }),

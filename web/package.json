@@ -19,7 +19,7 @@
         "lint:fix": "lerna run lint:fix --parallel --stream",
         "test": "vitest",
         "test:architecture": "vitest run --config vitest.config.architecture.ts",
-        "test:profiles": "vitest run --config vitest.config.architecture.ts tests/architecture/scene-split/runtime-profile-entry.test.ts tests/architecture/scene-split/runtime-profile-smoke.test.ts tests/architecture/scene-split/runtime-profile-capability-graph.test.ts",
+        "test:profiles": "vitest run --config vitest.config.architecture.ts tests/architecture/scene-split/runtime-profile-entry.test.ts tests/architecture/scene-split/runtime-profile-smoke.test.ts tests/architecture/scene-split/runtime-profile-capability-graph.test.ts tests/architecture/scene-split/playable-2d-entry-boundary.test.ts",
         "test:render-governance": "vitest run --config vitest.config.architecture.ts tests/architecture/render-split",
         "test:input-governance": "vitest run --config vitest.config.architecture.ts tests/architecture/input-split",
         "test:consumer-migration": "vitest run --config vitest.config.architecture.ts tests/architecture/scene-split/core-consumer-migration-boundary.test.ts",
@@ -27,7 +27,11 @@
         "test:utility-governance": "node ./scripts/utility-governance.mjs",
         "test:hardening": "yarn test:profiles && yarn test:render-governance && yarn test:input-governance && yarn test:consumer-migration && yarn test:duplicate-governance && yarn test:utility-governance",
         "test:runtime-profile-governance": "node ./scripts/runtime-profile-governance.mjs",
+        "test:playable-2d-bundle-governance": "node ./scripts/playable-2d-governance.mjs --mode=bundle",
+        "test:playable-2d-size-governance": "node ./scripts/playable-2d-governance.mjs --mode=size",
+        "test:playable-2d-smoke": "node ./scripts/playable-2d-governance.mjs --mode=smoke",
         "test:engine-benchmark-governance": "node ./scripts/engine-benchmark-governance.mjs",
+        "test:capability-descriptor-governance": "node ./scripts/capability-descriptor-governance.mjs",
         "test:watch": "vitest --watch",
         "test:ui": "vitest --ui",
         "test:browser": "vitest run --config vitest.config.browser.ts",
@@ -38,8 +42,18 @@
         "test:coverage": "vitest --coverage",
         "test:all": "yarn test && yarn test:architecture && yarn test:browser && yarn test:webgl",
         "ci:engine-hardening": "yarn test:architecture && yarn verify:engine-hardening",
-        "verify:engine-hardening": "yarn test:hardening && yarn build && yarn test:runtime-profile-governance && yarn test:engine-benchmark-governance -- --refresh --headless --strictStability && yarn examples:build",
-        "docs": "typedoc"
+        "verify:engine-hardening": "yarn test:hardening && yarn build && yarn test:runtime-profile-governance && yarn test:capability-descriptor-governance && yarn test:playable-2d-bundle-governance && yarn test:playable-2d-size-governance && yarn test:playable-2d-smoke && yarn test:engine-benchmark-governance -- --refresh --headless --strictStability && yarn examples:build",
+        "docs": "typedoc",
+        "prepare": "husky"
+    },
+    "lint-staged": {
+        "**/*.{ts,tsx}": [
+            "eslint --fix",
+            "prettier --write"
+        ],
+        "**/*.{js,jsx,json,md}": [
+            "prettier --write"
+        ]
     },
     "devDependencies": {
         "@commitlint/cli": "^19.8.0",

@@ -46,7 +46,7 @@ export class Camera3D<TProjection extends CameraProjection = CameraProjection> i
     constructor(options: Readonly<CameraOptions<TProjection>>) {
         this._locale = options.locale ?? DEFAULT_CAMERA_LOCALE;
         this._id = createCameraId(options.id, this._locale);
-        this._projection = cloneProjection(options.projection, this._locale);
+        this._projection = cloneProjection<TProjection>(options.projection, this._locale);
         this._frustum = new CameraFrustum(undefined, this._locale);
         this.setPose(options.pose);
     }
@@ -148,7 +148,7 @@ export class Camera3D<TProjection extends CameraProjection = CameraProjection> i
 
     setProjection(projection: Readonly<TProjection>): this {
         this.assertActive();
-        this._projection = cloneProjection(projection, this._locale);
+        this._projection = cloneProjection<TProjection>(projection, this._locale);
         this._dirty = true;
         return this;
     }

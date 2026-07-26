@@ -9,27 +9,17 @@ const physicsBridgeSrcDir = path.resolve(packagesDir, 'physics/src');
 const physicsCoreSrcDir = path.resolve(packagesDir, 'physics-core/src');
 const physics2dSrcDir = path.resolve(packagesDir, 'physics-2d/src');
 const physics3dSrcDir = path.resolve(packagesDir, 'physics-3d/src');
+const raycastSrcDir = path.resolve(packagesDir, 'raycast/src');
 const corePhysicsDir = path.resolve(testDir, '../../../packages/core/src/physics');
 const coreComponentPhysicsDir = path.resolve(testDir, '../../../packages/core/src/component-system/components/physics');
 const disallowedCoreSourceBypassPattern =
     /(?:from ['"]|import\(['"])(?:\.\.\/)+core\/src\/(?:input|physics|geometry|component-system)(?:\/[^'"]*)?['"]/g;
 const disallowedSiblingSourceBypassPattern =
-    /(?:from ['"]|import\(['"])(?:\.\.\/)+(?:geometry|physics|physics-core|physics-2d|physics-3d)\/src(?:\/[^'"]*)?['"]/g;
+    /(?:from ['"]|import\(['"])(?:\.\.\/)+(?:geometry|physics|physics-core|physics-2d|physics-3d|raycast)\/src(?:\/[^'"]*)?['"]/g;
+// The umbrella package is a pure facade since the raycast subsystem moved to
+// @axrone/raycast (refactor plan phase 2.2).
 const allowedPhysicsBridgeFiles = [
-    'core/broadphase.ts',
-    'core/raycast-advanced.ts',
-    'core/raycast-bvh.ts',
-    'core/raycast-continuous.ts',
-    'core/raycast-engine.ts',
-    'core/raycast-errors.ts',
-    'core/raycast-optimization.ts',
-    'core/raycast-primitives.ts',
-    'core/raycast-spatial.ts',
-    'core/raycast-system.ts',
-    'core/raycast-utils.ts',
     'index.ts',
-    'types/primitives.ts',
-    'types/raycast-types.ts',
 ] as const;
 
 const collectTypeScriptFiles = (dirPath: string): readonly string[] => {
@@ -61,7 +51,13 @@ const collectTypeScriptFiles = (dirPath: string): readonly string[] => {
 
 describe('physics ownership boundary', () => {
     it('keeps split physics packages on local files and public package dependencies', () => {
-        const ownerPackageDirs = [physicsBridgeSrcDir, physicsCoreSrcDir, physics2dSrcDir, physics3dSrcDir];
+        const ownerPackageDirs = [
+            physicsBridgeSrcDir,
+            physicsCoreSrcDir,
+            physics2dSrcDir,
+            physics3dSrcDir,
+            raycastSrcDir,
+        ];
         const violatingFiles = ownerPackageDirs
             .flatMap((dirPath) => collectTypeScriptFiles(dirPath))
             .filter((filePath) => {
@@ -78,7 +74,7 @@ describe('physics ownership boundary', () => {
         expect(violatingFiles).toEqual([]);
     });
 
-    it('keeps @axrone/physics as a thin bridge over split packages plus raycast sources', () => {
+    it('keeps @axrone/physics as a pure facade over the split packages', () => {
         const bridgeFiles = collectTypeScriptFiles(physicsBridgeSrcDir)
             .map((filePath) => path.relative(physicsBridgeSrcDir, filePath).replace(/\\/g, '/'))
             .sort((left, right) => left.localeCompare(right));

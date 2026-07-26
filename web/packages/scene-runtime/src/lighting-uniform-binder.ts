@@ -18,7 +18,9 @@ export class SceneLightingUniformBinder {
         this._writer.write(shader, 'u_ReceiveLighting', renderer.receiveLighting);
 
         for (const [name, value] of Object.entries(values)) {
-            this._writer.write(shader, name, value);
+            if (value !== null && value !== undefined) {
+                this._writer.write(shader, name, value);
+            }
         }
 
         if (!renderer.receiveLighting) {

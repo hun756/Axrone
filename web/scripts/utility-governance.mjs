@@ -229,6 +229,18 @@ for (const file of files) {
                 message: `Use ${violation.constructorName}.fromArray(${violation.sourceName}) instead of indexed constructor arguments.`,
             });
         }
+
+        // Detect local EPSILON / SOLVER_EPSILON / GEOMETRIC_EPSILON / PHYSICS_EPSILON literal declarations
+        // Only flags assignments with numeric literals (e.g. = 1e-6), not aliases (= OTHER_VAR)
+        const epsilonPattern = /^\s*(?:export\s+)?const\s+(EPSILON|SOLVER_EPSILON|GEOMETRIC_EPSILON|PHYSICS_EPSILON)\s*=\s*[\d.eE+-]+\s*;/gm;
+        let epsilonMatch;
+        while ((epsilonMatch = epsilonPattern.exec(source))) {
+            violations.push({
+                file: relativePath,
+                line: lineOf(source, epsilonMatch.index),
+                message: `Local '${epsilonMatch[1]}' should be imported from '@axrone/numeric' instead of redeclared.`,
+            });
+        }
     }
 }
 

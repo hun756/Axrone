@@ -4,6 +4,7 @@ import { StackIterator } from './stack-iterator';
 import { createStackSize, __variance, createStackCapacity } from './stack-core';
 import { ReadonlyStackInterface, StackConfiguration } from './interfaces';
 import { StackSize, StackNode, StackCapacity, StackResult, NodeId } from './types';
+import { Fnv1a32 } from '@axrone/hash';
 
 export abstract class AbstractStack<T> implements ReadonlyStackInterface<T> {
     protected _size: StackSize = createStackSize(0);
@@ -194,15 +195,15 @@ export abstract class AbstractStack<T> implements ReadonlyStackInterface<T> {
     }
 
     hash(): number {
-        let hash = 0;
+        const h = new Fnv1a32();
         let current = this._head;
 
         while (current !== null) {
-            hash = (hash * 31 + this._config.hashFn(current.value)) | 0;
+            h.updateU32(this._config.hashFn(current.value) >>> 0);
             current = current.next;
         }
 
-        return hash;
+        return h.digest() as unknown as number;
     }
 
     validate(): StackResult<boolean, StackIntegrityError> {
@@ -277,11 +278,9 @@ export abstract class AbstractStack<T> implements ReadonlyStackInterface<T> {
 
     private defaultHashFn(value: T): number {
         if (typeof value === 'string') {
-            let hash = 0;
-            for (let i = 0; i < value.length; i++) {
-                hash = (hash * 31 + value.charCodeAt(i)) | 0;
-            }
-            return hash;
+            const h = new Fnv1a32();
+            h.updateString(value);
+            return h.digest() as unknown as number;
         }
 
         if (typeof value === 'number') {

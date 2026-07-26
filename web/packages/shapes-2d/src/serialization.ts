@@ -5,11 +5,13 @@ import {
     createCircleShape,
     createEllipseShape,
     createLineShape,
+    createPolygonShape,
     createRectangleShape,
     createTriangleShape,
 } from './shape';
 import type {
     GradientStopInput,
+    PolygonRingInput,
     ResolvedColor,
     Shape2D,
     ShapeFingerprint,
@@ -104,12 +106,22 @@ export interface SerializedLineShape extends SerializedAppearance {
     readonly end: readonly [number, number];
 }
 
+export interface SerializedPolygonShape extends SerializedAppearance {
+    readonly type: 'shape/polygon';
+    readonly points: readonly (readonly [number, number])[];
+    readonly holes: readonly (readonly (readonly [number, number])[])[];
+    readonly winding: 'ccw' | 'cw';
+    readonly closed: boolean;
+    readonly convex: boolean;
+}
+
 export type SerializedShape =
     | SerializedRectangleShape
     | SerializedCircleShape
     | SerializedEllipseShape
     | SerializedTriangleShape
-    | SerializedLineShape;
+    | SerializedLineShape
+    | SerializedPolygonShape;
 
 const serializeColor = (color: ResolvedColor): readonly [number, number, number, number] => [
     color.r,
@@ -222,6 +234,23 @@ export const serializeShape = (shape: Shape2D): SerializedShape => {
                 end: [shape.end.x, shape.end.y] as const,
                 ...appearance,
             };
+        case 'polygon': {
+            const points = shape.outer.points.map(
+                (p) => [p.x, p.y] as readonly [number, number]
+            );
+            const holes = shape.holes.map((hole) =>
+                hole.points.map((p) => [p.x, p.y] as readonly [number, number])
+            );
+            return {
+                type: 'shape/polygon',
+                points,
+                holes,
+                winding: shape.outer.winding,
+                closed: shape.closed,
+                convex: shape.convex,
+                ...appearance,
+            };
+        }
     }
 };
 
@@ -316,6 +345,23 @@ export const deserializeShape = (shape: SerializedShape): Shape2D => {
                 end: shape.end,
                 ...appearance,
             });
+        case 'shape/polygon': {
+            const holeInputs: PolygonRingInput[] = shape.holes.map((hole) => ({
+                points: hole.map((p) => p as readonly [number, number]),
+                winding: 'cw',
+            }));
+            return createPolygonShape({
+                outer: {
+                    points: shape.points.map(
+                        (p) => p as readonly [number, number]
+                    ),
+                    winding: shape.winding,
+                },
+                holes: holeInputs,
+                closed: shape.closed,
+                ...appearance,
+            });
+        }
         default:
             throw new SerializationError('Unsupported serialized shape type');
     }

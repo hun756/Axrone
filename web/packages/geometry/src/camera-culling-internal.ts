@@ -7,7 +7,9 @@ import type {
     BoundingVolume,
     CameraId,
     CameraLocale,
+    CameraOrthographicProjection,
     CameraProjection,
+    CameraPerspectiveProjection,
     CameraSerialized,
     Matrix4Tuple,
     ResolvedCameraPose,
@@ -18,38 +20,40 @@ export const DEFAULT_CAMERA_LOCALE: CameraLocale = 'en';
 export const DEFAULT_UP_VECTOR: ReadonlyTuple3<number> = [0, 1, 0] as const;
 export const DEFAULT_CAMERA_ID = 'camera';
 
-export const readX = (value: Vector3Input): number => (Array.isArray(value) ? value[0] : value.x);
-export const readY = (value: Vector3Input): number => (Array.isArray(value) ? value[1] : value.y);
-export const readZ = (value: Vector3Input): number => (Array.isArray(value) ? value[2] : value.z);
+const isVectorTuple = (value: Vector3Input): value is ReadonlyTuple3<number> => Array.isArray(value);
 
-export const assertFiniteNumber = (
+export const readX = (value: Vector3Input): number => (isVectorTuple(value) ? value[0] : value.x);
+export const readY = (value: Vector3Input): number => (isVectorTuple(value) ? value[1] : value.y);
+export const readZ = (value: Vector3Input): number => (isVectorTuple(value) ? value[2] : value.z);
+
+export function assertFiniteNumber(
     value: unknown,
     locale: CameraLocale,
     field: string,
     code: 'INVALID_ARGUMENT' | 'INVALID_PROJECTION' | 'INVALID_RADIUS' | 'INVALID_VECTOR'
-): asserts value is number => {
+): asserts value is number {
     if (typeof value !== 'number' || Number.isFinite(value) === false) {
         throw new CameraValidationError(code, locale, { field, value });
     }
-};
+}
 
-export const assertPositiveFiniteNumber = (
+export function assertPositiveFiniteNumber(
     value: unknown,
     locale: CameraLocale,
     field: string,
     code: 'INVALID_ARGUMENT' | 'INVALID_PROJECTION'
-): asserts value is number => {
+): asserts value is number {
     assertFiniteNumber(value, locale, field, code);
     if (value <= 0) {
         throw new CameraValidationError(code, locale, { field, value });
     }
-};
+}
 
-export const assertVector3 = (
+export function assertVector3(
     value: unknown,
     locale: CameraLocale,
     field: string
-): asserts value is Vector3Input => {
+): asserts value is Vector3Input {
     if (Array.isArray(value)) {
         if (value.length !== 3) {
             throw new CameraValidationError('INVALID_VECTOR', locale, { field, value });
@@ -68,13 +72,13 @@ export const assertVector3 = (
     assertFiniteNumber(candidate.x, locale, `${field}.x`, 'INVALID_VECTOR');
     assertFiniteNumber(candidate.y, locale, `${field}.y`, 'INVALID_VECTOR');
     assertFiniteNumber(candidate.z, locale, `${field}.z`, 'INVALID_VECTOR');
-};
+}
 
-export const assertMatrix = (
+export function assertMatrix(
     matrix: unknown,
     locale: CameraLocale,
     field: string
-): asserts matrix is Readonly<IMat4Like> => {
+): asserts matrix is Readonly<IMat4Like> {
     if (typeof matrix !== 'object' || matrix === null || !('data' in matrix)) {
         throw new CameraValidationError('INVALID_MATRIX', locale, { field, matrix });
     }
@@ -87,7 +91,7 @@ export const assertMatrix = (
     for (let index = 0; index < 16; index++) {
         assertFiniteNumber(data[index], locale, `${field}[${index}]`, 'INVALID_ARGUMENT');
     }
-};
+}
 
 export const createCameraId = (value: string | undefined, locale: CameraLocale): CameraId => {
     const id = value?.trim() || DEFAULT_CAMERA_ID;
@@ -97,10 +101,22 @@ export const createCameraId = (value: string | undefined, locale: CameraLocale):
     return id as CameraId;
 };
 
-export const cloneProjection = <TProjection extends CameraProjection>(
+export function cloneProjection(
+    projection: Readonly<CameraPerspectiveProjection>,
+    locale: CameraLocale
+): CameraPerspectiveProjection;
+export function cloneProjection(
+    projection: Readonly<CameraOrthographicProjection>,
+    locale: CameraLocale
+): CameraOrthographicProjection;
+export function cloneProjection<TProjection extends CameraProjection>(
     projection: Readonly<TProjection>,
     locale: CameraLocale
-): TProjection => {
+): TProjection;
+export function cloneProjection(
+    projection: Readonly<CameraProjection>,
+    locale: CameraLocale
+): CameraProjection {
     if (projection.kind === 'perspective') {
         assertPositiveFiniteNumber(
             projection.verticalFieldOfView,
@@ -131,7 +147,7 @@ export const cloneProjection = <TProjection extends CameraProjection>(
             aspectRatio: projection.aspectRatio,
             near: projection.near,
             far: projection.far,
-        }) as TProjection;
+        }) as CameraPerspectiveProjection;
     }
 
     assertFiniteNumber(projection.left, locale, 'projection.left', 'INVALID_PROJECTION');
@@ -156,8 +172,8 @@ export const cloneProjection = <TProjection extends CameraProjection>(
         top: projection.top,
         near: projection.near,
         far: projection.far,
-    }) as TProjection;
-};
+    }) as CameraOrthographicProjection;
+}
 
 export const buildProjectionMatrix = (
     projection: Readonly<CameraProjection>,
@@ -291,10 +307,10 @@ export const toMatrix4Tuple = (matrix: Readonly<IMat4Like>): Matrix4Tuple => {
     ] as const;
 };
 
-export const assertBoundingSphere = (
+export function assertBoundingSphere(
     sphere: Readonly<BoundingSphere>,
     locale: CameraLocale
-): void => {
+): void {
     assertVector3(sphere.center, locale, 'bounds.center');
     assertFiniteNumber(sphere.radius, locale, 'bounds.radius', 'INVALID_RADIUS');
     if (sphere.radius < 0) {
@@ -326,10 +342,10 @@ export const normalizedAabbExtents = (
     return { minX, minY, minZ, maxX, maxY, maxZ };
 };
 
-export const assertBoundingVolume = (
+export function assertBoundingVolume(
     bounds: Readonly<BoundingVolume>,
     locale: CameraLocale
-): void => {
+): void {
     if (bounds.kind === 'sphere') {
         assertBoundingSphere(bounds, locale);
         return;

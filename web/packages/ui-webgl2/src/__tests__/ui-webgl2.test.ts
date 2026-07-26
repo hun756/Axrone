@@ -1,6 +1,6 @@
 import { createGameLoop } from '@axrone/game-loop';
 import { describe, expect, it, vi } from 'vitest';
-import type { GlyphAtlasEntry, TextLayoutResult, UIFrame, UIFrameMetrics, WidgetId } from '@axrone/ui';
+import type { GlyphAtlasEntry, TextLayoutResult, UIFrame, UIFrameMetrics, WidgetId } from '@axrone/ui/types';
 import {
     WebGL2UIRenderer,
     attachUIOverlayToScene,

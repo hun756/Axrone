@@ -8,6 +8,16 @@ export default [
     ...createPackageConfig({ packageDir }),
     ...createPackageConfig({
         packageDir,
+        inputRelativePath: 'src/types.ts',
+        outputBasename: 'types/index',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/errors.ts',
+        outputBasename: 'errors/index',
+    }),
+    ...createPackageConfig({
+        packageDir,
         inputRelativePath: 'src/runtime.ts',
         outputBasename: 'runtime/index',
     }),

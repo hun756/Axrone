@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import * as ecsQuery from '@axrone/ecs-query';
+import * as ecsQuery from '@axrone/ecs-runtime/query';
 
-describe('ecs-query entry', () => {
+describe('ecs-runtime query subpath entry', () => {
     it('surfaces query runtime primitives without leaking broader world ownership', () => {
         expect(ecsQuery.OptimizedQueryCache).toBeDefined();
         expect(ecsQuery.WorldQueryRuntime).toBeDefined();

@@ -1050,5 +1050,142 @@ describe('InputSystem', () => {
 
         expect(input.read('jump')).toBe(true);
     });
+
+    it('removes all DOM listeners after attachment dispose so events are no longer processed', () => {
+        const input = createInputSystem({
+            schema: {
+                fire: { kind: 'button' },
+            },
+            contexts: [
+                {
+                    id: 'gameplay',
+                    bindings: {
+                        fire: [{ type: 'control', control: 'keyboard/KeyF' }],
+                    },
+                },
+            ],
+        });
+
+        const attachment = input.attach({ document, window });
+
+        // Before dispose: events are processed
+        const keyDown = new Event('keydown') as KeyboardEvent;
+        Object.defineProperty(keyDown, 'code', { value: 'KeyF' });
+        Object.defineProperty(keyDown, 'repeat', { value: false });
+        document.dispatchEvent(keyDown);
+        input.update(1);
+        expect(input.read('fire')).toBe(true);
+
+        // Release the key before dispose
+        const keyUp = new Event('keyup') as KeyboardEvent;
+        Object.defineProperty(keyUp, 'code', { value: 'KeyF' });
+        Object.defineProperty(keyUp, 'repeat', { value: false });
+        document.dispatchEvent(keyUp);
+        input.update(2);
+        expect(input.read('fire')).toBe(false);
+
+        // Dispose the attachment
+        attachment.dispose();
+        expect(attachment.isDisposed).toBe(true);
+
+        // After dispose: new events should NOT be captured
+        const keyDownAfter = new Event('keydown') as KeyboardEvent;
+        Object.defineProperty(keyDownAfter, 'code', { value: 'KeyF' });
+        Object.defineProperty(keyDownAfter, 'repeat', { value: false });
+        document.dispatchEvent(keyDownAfter);
+        input.update(3);
+        // fire should still be false because the listener was removed and the new keydown was not captured
+        expect(input.read('fire')).toBe(false);
+    });
+
+    it('supports gamepad hot-plug: disconnect and reconnect cycle', () => {
+        const input = createInputSystem({
+            schema: {
+                accelerate: { kind: 'axis' },
+            },
+            contexts: [
+                {
+                    id: 'driving',
+                    bindings: {
+                        accelerate: [{ type: 'control', control: 'gamepad/0/axis/1' }],
+                    },
+                },
+            ],
+        });
+
+        // Initial gamepad snapshot with axis value
+        input.dispatch({
+            type: 'gamepad',
+            gamepads: [
+                {
+                    index: 0,
+                    connected: true,
+                    buttons: Array.from({ length: 16 }, () => 0),
+                    axes: [0, -0.75, 0, 0],
+                },
+            ],
+        });
+        input.update(1);
+        expect(input.read('accelerate')).toBeCloseTo(-0.75, 1);
+
+        // Simulate gamepad disconnect
+        input.dispatch({
+            type: 'gamepad',
+            gamepads: [
+                {
+                    index: 0,
+                    connected: false,
+                    buttons: Array.from({ length: 16 }, () => 0),
+                    axes: [0, 0, 0, 0],
+                },
+            ],
+        });
+        input.update(2);
+        // After disconnect, axis should be 0
+        expect(input.read('accelerate')).toBe(0);
+
+        // Simulate gamepad reconnect with different axis value
+        input.dispatch({
+            type: 'gamepad',
+            gamepads: [
+                {
+                    index: 0,
+                    connected: true,
+                    buttons: Array.from({ length: 16 }, () => 0),
+                    axes: [0, -0.5, 0, 0],
+                },
+            ],
+        });
+        input.update(3);
+        expect(input.read('accelerate')).toBeCloseTo(-0.5, 1);
+    });
+
+    it('cleans up rebinding session state when system is disposed', () => {
+        const input = createInputSystem({
+            schema: {
+                shoot: { kind: 'button' },
+            },
+            contexts: [
+                {
+                    id: 'gameplay',
+                    bindings: {
+                        shoot: [{ type: 'control', control: 'keyboard/Space' }],
+                    },
+                },
+            ],
+        });
+
+        // Begin a rebinding session
+        const session = input.beginRebinding({
+            context: 'gameplay',
+            action: 'shoot',
+            index: 0,
+        });
+        expect(session).toBeDefined();
+
+        // Dispose the system while rebinding is active
+        input.dispose();
+        expect(input.isDisposed).toBe(true);
+    });
 });
 

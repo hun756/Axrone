@@ -3,7 +3,7 @@ import type { AssetDatabase } from './database';
 import type { AssetImportPipeline } from './importer';
 
 export type AssetSchema = Readonly<Record<string, unknown>>;
-export type AssetKind<TSchema extends AssetSchema = AssetSchema> = Extract<keyof TSchema, string>;
+export type AssetKind<TSchema extends AssetSchema = AssetSchema> = string & keyof TSchema;
 export type AssetData<
     TSchema extends AssetSchema,
     TKind extends AssetKind<TSchema> = AssetKind<TSchema>,

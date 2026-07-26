@@ -1,6 +1,6 @@
 import { type IVec3Like, Vec3 } from '@axrone/numeric';
 import { script } from '@axrone/ecs-runtime/decorators';
-import type { IConvexHullShapeDef3D } from '../types';
+import type { IConvexHullShapeDef3D, ITriangleMeshShapeDef3D } from '../types';
 import { Collider3D, INVALID_SHAPE_ID } from './collider3d';
 
 @script({ scriptName: 'MeshCollider3D' })
@@ -28,7 +28,7 @@ export class MeshCollider3D extends Collider3D {
     }
 
     protected override _createShape(): void {
-        if (!this._shapeManager || !this._rigidbody) return;
+        if (!this._rigidbody || this._vertices.length === 0) return;
         if (this._convex) {
             const vArr: IVec3Like[] = [];
             for (let i = 0; i < this._vertices.length; i += 3)
@@ -38,17 +38,53 @@ export class MeshCollider3D extends Collider3D {
                     z: this._vertices[i + 2],
                 });
             const def: IConvexHullShapeDef3D = { vertices: vArr };
-            this._shapeId = this._shapeManager.createConvexHull(
+            if (this._world) {
+                this._shapeId = this._world.createConvexHullShape(
+                    this._rigidbody.bodyId,
+                    def,
+                    this._getMaterial(),
+                    this._getFilter(),
+                    { isSensor: this.isTrigger }
+                );
+                return;
+            }
+
+            if (!this._shapeManager) return;
+            this._shapeId = this._shapeManager.createConvexHull(this._rigidbody.bodyId, def, this._getMaterial(), this._getFilter());
+            return;
+        }
+
+        const vertices: IVec3Like[] = [];
+        for (let i = 0; i < this._vertices.length; i += 3) {
+            vertices.push({
+                x: this._vertices[i],
+                y: this._vertices[i + 1],
+                z: this._vertices[i + 2],
+            });
+        }
+
+        const indices = Array.from(this._indices, (value) => value as number);
+        const def: ITriangleMeshShapeDef3D = { vertices, indices };
+
+        if (this._world) {
+            this._shapeId = this._world.createTriangleMeshShape(
                 this._rigidbody.bodyId,
                 def,
                 this._getMaterial(),
-                this._getFilter()
+                this._getFilter(),
+                { isSensor: this.isTrigger }
             );
+            return;
         }
+
+        if (!this._shapeManager) return;
+        this._shapeId = this._shapeManager.createTriangleMesh(this._rigidbody.bodyId, def, this._getMaterial(), this._getFilter());
     }
 
     protected override _updateShape(): void {
         if (this._shapeId === INVALID_SHAPE_ID) return;
+        this._destroyCurrentShape();
+        this._createShape();
     }
 
     protected override _calculateBounds(): void {
@@ -81,6 +117,26 @@ export class MeshCollider3D extends Collider3D {
         ray: { origin: IVec3Like; direction: IVec3Like },
         maxDistance: number
     ): { hit: boolean; point?: IVec3Like; normal?: IVec3Like; distance?: number } {
+        if (this._world && this._shapeId !== INVALID_SHAPE_ID) {
+            const hit = this._world.getShape(this._shapeId)?.rayCast(
+                ray.origin,
+                ray.direction,
+                maxDistance
+            );
+            if (hit) {
+                return {
+                    hit: true,
+                    point: {
+                        x: ray.origin.x + ray.direction.x * hit.fraction,
+                        y: ray.origin.y + ray.direction.y * hit.fraction,
+                        z: ray.origin.z + ray.direction.z * hit.fraction,
+                    },
+                    normal: hit.normal,
+                    distance: hit.fraction,
+                };
+            }
+        }
+
         return { hit: false };
     }
 }

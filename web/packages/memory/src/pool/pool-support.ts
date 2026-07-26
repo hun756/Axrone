@@ -47,6 +47,7 @@ export interface MemoryPoolOptions<T extends PoolableObject> {
     readonly maxObjectAge?: number;
     readonly threadSafe?: boolean;
     readonly asyncFactory?: () => Promise<T>;
+    readonly estimatedObjectSize?: number;
 }
 
 export interface PoolPerformanceMetrics {
@@ -116,18 +117,21 @@ export interface AsyncMemoryPoolOperations<T extends PoolableObject> {
     drainAsync(): Promise<void>;
 }
 
-export const enum MemoryPoolErrorCode {
-    POOL_DEPLETED = 'POOL_DEPLETED',
-    POOL_DISPOSED = 'POOL_DISPOSED',
-    VALIDATION_FAILED = 'VALIDATION_FAILED',
-    FOREIGN_OBJECT = 'FOREIGN_OBJECT',
-    ALREADY_RELEASED = 'ALREADY_RELEASED',
-    IN_USE_DURING_OPERATION = 'IN_USE_DURING_OPERATION',
-    INITIALIZATION_FAILED = 'INITIALIZATION_FAILED',
-    TIMEOUT_EXCEEDED = 'TIMEOUT_EXCEEDED',
-    INVALID_OPERATION = 'INVALID_OPERATION',
-    INTERNAL_ERROR = 'INTERNAL_ERROR',
-}
+export const MemoryPoolErrorCode = {
+    POOL_DEPLETED: 'POOL_DEPLETED',
+    POOL_DISPOSED: 'POOL_DISPOSED',
+    VALIDATION_FAILED: 'VALIDATION_FAILED',
+    FOREIGN_OBJECT: 'FOREIGN_OBJECT',
+    ALREADY_RELEASED: 'ALREADY_RELEASED',
+    IN_USE_DURING_OPERATION: 'IN_USE_DURING_OPERATION',
+    INITIALIZATION_FAILED: 'INITIALIZATION_FAILED',
+    TIMEOUT_EXCEEDED: 'TIMEOUT_EXCEEDED',
+    INVALID_OPERATION: 'INVALID_OPERATION',
+    INTERNAL_ERROR: 'INTERNAL_ERROR',
+} as const;
+
+export type MemoryPoolErrorCode =
+    (typeof MemoryPoolErrorCode)[keyof typeof MemoryPoolErrorCode];
 
 export class MemoryPoolError extends Error {
     readonly code: MemoryPoolErrorCode;
@@ -172,6 +176,8 @@ type TimerMetric = {
     last: number;
 };
 
+export type { TimerMetric };
+
 export type InternalPoolMetrics = {
     allocations: number;
     releases: number;
@@ -201,9 +207,11 @@ export type InternalPoolMetrics = {
 };
 
 type ResolvedMemoryPoolOptions<T extends PoolableObject> = Required<
-    Omit<MemoryPoolOptions<T>, 'asyncFactory'>
+    Omit<MemoryPoolOptions<T>, 'asyncFactory' | 'estimatedObjectSize'>
 > &
-    Pick<MemoryPoolOptions<T>, 'asyncFactory'>;
+    Pick<MemoryPoolOptions<T>, 'asyncFactory' | 'estimatedObjectSize'>;
+
+export type { ResolvedMemoryPoolOptions };
 
 export const validateMemoryPoolOptions = <T extends PoolableObject>(
     options: ResolvedMemoryPoolOptions<T>

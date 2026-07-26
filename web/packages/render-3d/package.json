@@ -13,6 +13,11 @@
             "types": "./dist/index.d.ts",
             "import": "./dist/index.mjs",
             "require": "./dist/index.js"
+        },
+        "./capabilities": {
+            "types": "./dist/capabilities.d.ts",
+            "import": "./dist/capabilities.mjs",
+            "require": "./dist/capabilities.js"
         }
     },
     "scripts": {

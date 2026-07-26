@@ -1,6 +1,5 @@
 import type { AssetImportSource } from '../asset-contract';
 import { isPlainObject } from '@axrone/utility';
-import { MeshoptDecoder } from 'meshoptimizer';
 import {
     GltfContainerError,
     GltfResourceError,
@@ -23,6 +22,15 @@ const GLB_MAGIC = 0x46546c67;
 const GLB_JSON_CHUNK = 0x4e4f534a;
 const GLB_BIN_CHUNK = 0x004e4942;
 const EMPTY_ARRAY = Object.freeze([]) as readonly never[];
+
+/** Lazy-loaded MeshoptDecoder module (dynamic import for tree-shaking). */
+let _meshoptModule: typeof import('meshoptimizer') | undefined;
+async function loadMeshoptDecoder(): Promise<typeof import('meshoptimizer').MeshoptDecoder> {
+    if (!_meshoptModule) {
+        _meshoptModule = await import('meshoptimizer');
+    }
+    return _meshoptModule.MeshoptDecoder;
+}
 
 export interface NormalizedGltfSource {
     readonly format: 'gltf' | 'glb';
@@ -559,6 +567,8 @@ export class GltfResourceRuntime {
                 `bufferView ${index} EXT_meshopt_compression byteLength must equal byteStride * count`
             );
         }
+
+        const MeshoptDecoder = await loadMeshoptDecoder();
 
         if (!MeshoptDecoder.supported) {
             throw new GltfResourceError(

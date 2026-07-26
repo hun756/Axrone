@@ -4,6 +4,7 @@ import { IVec3Like } from './vec3';
 import { IVec4Like } from './vec4';
 import { IQuatLike } from './quat';
 import { clamp01 } from './clamp';
+import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
 declare const __matrix4Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
@@ -211,11 +212,13 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
     }
 
     getHashCode(): number {
-        let h1 = 2166136261;
-        for (let i = 0; i < 16; i++) {
-            h1 = Math.imul(h1 ^ Math.floor(this.data[i] * 1000), 16777619);
-        }
-        return h1 >>> 0;
+        const h = new Fnv1a32();
+        for (let i = 0; i < 16; i++) h.updateF32(this.data[i]!);
+        return h.digest();
+    }
+
+    hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {
+        for (let i = 0; i < 16; i++) hasher.updateF32(this.data[i]!);
     }
 
     static multiply<
@@ -931,17 +934,17 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             }
         }
 
-        let z0 = eyeX - centerX,
-            z1 = eyeY - centerY,
-            z2 = eyeZ - centerZ;
+        let z0 = centerX - eyeX,
+            z1 = centerY - eyeY,
+            z2 = centerZ - eyeZ;
         let len = 1 / Math.sqrt(z0 * z0 + z1 * z1 + z2 * z2);
         z0 *= len;
         z1 *= len;
         z2 *= len;
 
-        let x0 = upY * z2 - upZ * z1;
-        let x1 = upZ * z0 - upX * z2;
-        let x2 = upX * z1 - upY * z0;
+        let x0 = z1 * upZ - z2 * upY;
+        let x1 = z2 * upX - z0 * upZ;
+        let x2 = z0 * upY - z1 * upX;
 
         len = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2);
         if (len < EPSILON) {
@@ -953,9 +956,9 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             x2 *= len;
         }
 
-        let y0 = z1 * x2 - z2 * x1;
-        let y1 = z2 * x0 - z0 * x2;
-        let y2 = z0 * x1 - z1 * x0;
+        let y0 = x1 * z2 - x2 * z1;
+        let y1 = x2 * z0 - x0 * z2;
+        let y2 = x0 * z1 - x1 * z0;
 
         len = Math.sqrt(y0 * y0 + y1 * y1 + y2 * y2);
         if (len < EPSILON) {
@@ -971,40 +974,43 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             const outData = asMutableMatrix4Data((out as IMutableMat4).data);
 
             outData[0] = x0;
-            outData[1] = y0;
-            outData[2] = z0;
-            outData[3] = 0;
-            outData[4] = x1;
+            outData[1] = x1;
+            outData[2] = x2;
+            outData[3] = -(x0 * eyeX + x1 * eyeY + x2 * eyeZ);
+
+            outData[4] = y0;
             outData[5] = y1;
-            outData[6] = z1;
-            outData[7] = 0;
-            outData[8] = x2;
-            outData[9] = y2;
-            outData[10] = z2;
-            outData[11] = 0;
-            outData[12] = -(x0 * eyeX + x1 * eyeY + x2 * eyeZ);
-            outData[13] = -(y0 * eyeX + y1 * eyeY + y2 * eyeZ);
-            outData[14] = -(z0 * eyeX + z1 * eyeY + z2 * eyeZ);
+            outData[6] = y2;
+            outData[7] = -(y0 * eyeX + y1 * eyeY + y2 * eyeZ);
+
+            outData[8] = -z0;
+            outData[9] = -z1;
+            outData[10] = -z2;
+            outData[11] = z0 * eyeX + z1 * eyeY + z2 * eyeZ;
+
+            outData[12] = 0;
+            outData[13] = 0;
+            outData[14] = 0;
             outData[15] = 1;
 
             return out as MatrixOperationReturnType<V, Mat4>;
         } else {
             return new Mat4([
                 x0,
-                y0,
-                z0,
-                0,
                 x1,
-                y1,
-                z1,
-                0,
                 x2,
-                y2,
-                z2,
-                0,
                 -(x0 * eyeX + x1 * eyeY + x2 * eyeZ),
+                y0,
+                y1,
+                y2,
                 -(y0 * eyeX + y1 * eyeY + y2 * eyeZ),
-                -(z0 * eyeX + z1 * eyeY + z2 * eyeZ),
+                -z0,
+                -z1,
+                -z2,
+                z0 * eyeX + z1 * eyeY + z2 * eyeZ,
+                0,
+                0,
+                0,
                 1,
             ]) as MatrixOperationReturnType<V, Mat4>;
         }
@@ -1203,14 +1209,61 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         scale: Readonly<S>,
         out?: V
     ): MatrixOperationReturnType<V, Mat4> {
-        const rotationMatrix = Mat4.fromQuaternion(rotation);
+        const qx = rotation.x;
+        const qy = rotation.y;
+        const qz = rotation.z;
+        const qw = rotation.w;
 
-        const translationMatrix = Mat4.translate(translation);
+        const lenSq = qx * qx + qy * qy + qz * qz + qw * qw;
+        if (lenSq < EPSILON) {
+            throw new Error('Cannot create rotation matrix from zero-length quaternion');
+        }
+        const invLen = 1 / Math.sqrt(lenSq);
+        const nx = qx * invLen;
+        const ny = qy * invLen;
+        const nz = qz * invLen;
+        const nw = qw * invLen;
 
-        const scaleMatrix = Mat4.scale(scale);
+        const x2 = nx + nx;
+        const y2 = ny + ny;
+        const z2 = nz + nz;
+        const xx = nx * x2;
+        const xy = nx * y2;
+        const xz = nx * z2;
+        const yy = ny * y2;
+        const yz = ny * z2;
+        const zz = nz * z2;
+        const wx = nw * x2;
+        const wy = nw * y2;
+        const wz = nw * z2;
 
-        const temp = Mat4.multiply(translationMatrix, rotationMatrix);
-        const result = Mat4.multiply(temp, scaleMatrix, out);
+        const sx = scale.x;
+        const sy = scale.y;
+        const sz = scale.z;
+
+        const tx = translation.x;
+        const ty = translation.y;
+        const tz = translation.z;
+
+        const result = (out as IMutableMat4) || (new Mat4() as IMutableMat4);
+        const data = asMutableMatrix4Data(result.data);
+
+        data[0] = (1 - (yy + zz)) * sx;
+        data[1] = (xy - wz) * sy;
+        data[2] = (xz + wy) * sz;
+        data[3] = tx;
+        data[4] = (xy + wz) * sx;
+        data[5] = (1 - (xx + zz)) * sy;
+        data[6] = (yz - wx) * sz;
+        data[7] = ty;
+        data[8] = (xz - wy) * sx;
+        data[9] = (yz + wx) * sy;
+        data[10] = (1 - (xx + yy)) * sz;
+        data[11] = tz;
+        data[12] = 0;
+        data[13] = 0;
+        data[14] = 0;
+        data[15] = 1;
 
         return result as MatrixOperationReturnType<V, Mat4>;
     }

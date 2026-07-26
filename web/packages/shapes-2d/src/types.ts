@@ -142,6 +142,33 @@ export interface LineShape extends BaseShape<'line'> {
     readonly end: Readonly<IVec2Like>;
 }
 
+export type PolygonWinding = 'ccw' | 'cw';
+
+export interface PolygonRing {
+    readonly points: readonly Readonly<IVec2Like>[];
+    readonly winding: PolygonWinding;
+}
+
+export interface PolygonRingInput {
+    readonly points: readonly ShapePointInput[];
+    readonly winding?: PolygonWinding;
+}
+
+export interface PolygonShape extends BaseShape<'polygon'> {
+    readonly outer: PolygonRing;
+    readonly holes: readonly PolygonRing[];
+    readonly closed: boolean;
+    readonly convex: boolean;
+}
+
+export interface PolygonShapeInput extends ShapeAppearanceInput {
+    readonly points?: readonly ShapePointInput[];
+    readonly outer?: PolygonRingInput;
+    readonly holes?: readonly PolygonRingInput[];
+    readonly winding?: PolygonWinding;
+    readonly closed?: boolean;
+}
+
 export interface RectangleShapeInput extends ShapeAppearanceInput {
     readonly x: number;
     readonly y: number;
@@ -179,6 +206,7 @@ export interface ShapeKindMap {
     readonly ellipse: EllipseShape;
     readonly triangle: TriangleShape;
     readonly line: LineShape;
+    readonly polygon: PolygonShape;
 }
 
 export type ShapeKind = keyof ShapeKindMap;

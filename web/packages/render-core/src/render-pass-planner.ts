@@ -57,6 +57,11 @@ interface RenderPassPlannerShadowSettings {
 
 interface RenderPassPlannerTonemappingSettings {
     readonly mode: RenderTonemappingMode;
+    readonly gamma: number;
+    readonly contrast: number;
+    readonly saturation: number;
+    readonly shoulderStrength: number;
+    readonly toeStrength: number;
 }
 
 interface RenderPassPlannerLightBakingSettings {
@@ -107,6 +112,11 @@ interface RenderPassPlanningInput {
 const clamp = (value: number, min: number, max: number): number =>
     value < min ? min : value > max ? max : value;
 
+const requiresSceneDepthPostProcessInput = (
+    effect: ResolvedPostProcessEffect
+): boolean =>
+    effect.category === 'builtin' && (effect.name === 'ssao' || effect.name === 'depth-of-field');
+
 const computeCascadeSplits = (
     near: number,
     far: number,
@@ -155,7 +165,7 @@ const exposureHistoryDescriptor = (): RenderTextureDescriptor => ({
     width: 1,
     height: 1,
     format: 'r16f',
-    usage: ['sampled', 'history'],
+    usage: ['color-attachment', 'sampled', 'history'],
 });
 
 const giModeOf = (settings: RenderGlobalIlluminationSettings): RenderGlobalIlluminationMode =>
@@ -244,10 +254,24 @@ export class RenderPassPlanner<TNative = unknown> {
         let currentColor: RenderResourceName = sceneColor;
         let ping: RenderResourceName<'post'> | null = null;
         let pong: RenderResourceName<'post'> | null = null;
-        const exposureHistory =
+        const exposureHistoryTarget =
             input.hdr.enabled && input.hdr.exposure?.mode === 'automatic'
                 ? (this._acquireTexture(
-                      createRenderResourceName('history', 'exposure'),
+                      createRenderResourceName(
+                          'history',
+                          input.frame % 2 === 0 ? 'exposure-b' : 'exposure-a'
+                      ),
+                      exposureHistoryDescriptor(),
+                      'history'
+                  ).id as RenderResourceName<'history'>)
+                : null;
+        const exposureHistorySource =
+            input.hdr.enabled && input.hdr.exposure?.mode === 'automatic'
+                ? (this._acquireTexture(
+                      createRenderResourceName(
+                          'history',
+                          input.frame % 2 === 0 ? 'exposure-a' : 'exposure-b'
+                      ),
                       exposureHistoryDescriptor(),
                       'history'
                   ).id as RenderResourceName<'history'>)
@@ -496,7 +520,14 @@ export class RenderPassPlanner<TNative = unknown> {
             });
         }
 
-        if (this._effectsBefore.length + this._effectsAfter.length > 0) {
+        const needsTonemap = input.hdr.enabled || this._settings.tonemapping.mode !== 'none';
+        const needsPostScratch =
+            this._effectsBefore.length + this._effectsAfter.length > 0 ||
+            (needsTonemap &&
+                this._effectsBefore.length === 0 &&
+                this._effectsAfter.length === 0);
+
+        if (needsPostScratch) {
             ping = this._acquireTexture(
                 createRenderResourceName('post', 'ping'),
                 {
@@ -521,6 +552,9 @@ export class RenderPassPlanner<TNative = unknown> {
 
         for (let i = 0; i < this._effectsBefore.length; i++) {
             const effect = this._effectsBefore.at(i);
+            const auxiliaryInputs = requiresSceneDepthPostProcessInput(effect)
+                ? [sceneDepth]
+                : [];
             const taaTargetHistory =
                 effect.category === 'builtin' && effect.name === 'taa'
                     ? (this._acquireTexture(
@@ -553,7 +587,9 @@ export class RenderPassPlanner<TNative = unknown> {
                     : i % 2 === 0
                       ? (ping as RenderResourceName<'post'>)
                       : (pong as RenderResourceName<'post'>);
-            const inputs = taaSourceHistory ? [currentColor, taaSourceHistory] : [currentColor];
+            const inputs = taaSourceHistory
+                ? [currentColor, taaSourceHistory]
+                : [currentColor, ...auxiliaryInputs];
             order = this._pushPass(order, {
                 kind: 'post-process',
                 name: createRenderPassName(`post-process:${effect.name}`),
@@ -571,31 +607,37 @@ export class RenderPassPlanner<TNative = unknown> {
             currentColor = target;
         }
 
-        const tonemapTarget: RenderResourceName<'post' | 'frame'> =
-            input.hdr.enabled || this._settings.tonemapping.mode !== 'none'
-                ? ((this._effectsAfter.length > 0
-                      ? this._effectsBefore.length % 2 === 0
-                            ? (ping as RenderResourceName<'post'>)
-                            : (pong as RenderResourceName<'post'>)
-                      : sceneColor) as RenderResourceName<'post' | 'frame'>)
+          const tonemapTarget: RenderResourceName<'post' | 'frame'> =
+            needsTonemap
+                ? ((this._effectsAfter.length > 0 || currentColor === sceneColor
+                    ? this._effectsBefore.length % 2 === 0
+                        ? (ping as RenderResourceName<'post'>)
+                        : (pong as RenderResourceName<'post'>)
+                    : sceneColor) as RenderResourceName<'post' | 'frame'>)
                 : (currentColor as RenderResourceName<'post' | 'frame'>);
 
-        if (input.hdr.enabled || this._settings.tonemapping.mode !== 'none') {
+          if (needsTonemap) {
             order = this._pushPass(order, {
                 kind: 'tonemap',
                 name: createRenderPassName('tonemap'),
                 queue: 'post-process',
                 target: tonemapTarget,
-                inputs: exposureHistory ? [currentColor, exposureHistory] : [currentColor],
+                                inputs: exposureHistorySource ? [currentColor, exposureHistorySource] : [currentColor],
                 estimatedCost: 0.12,
                 metadata: {
                     source: currentColor,
                     target: tonemapTarget,
                     mode: this._settings.tonemapping.mode,
+                    gamma: this._settings.tonemapping.gamma,
+                    contrast: this._settings.tonemapping.contrast,
+                    saturation: this._settings.tonemapping.saturation,
+                    shoulderStrength: this._settings.tonemapping.shoulderStrength,
+                    toeStrength: this._settings.tonemapping.toeStrength,
                     hdr: input.hdr.enabled,
                     colorSpace: input.hdr.outputColorSpace,
                     exposure: input.hdr.exposure ?? null,
-                    exposureHistory,
+                    exposureHistorySource,
+                    exposureHistoryTarget,
                 },
             });
             currentColor = tonemapTarget;
@@ -612,7 +654,9 @@ export class RenderPassPlanner<TNative = unknown> {
                 name: createRenderPassName(`post-process:${effect.name}`),
                 queue: 'post-process',
                 target,
-                inputs: [currentColor],
+                inputs: requiresSceneDepthPostProcessInput(effect)
+                    ? [currentColor, sceneDepth]
+                    : [currentColor],
                 estimatedCost: getRenderPostEffectCost(effect),
                 metadata: {
                     source: currentColor,

@@ -15,7 +15,11 @@ export interface OrbitCameraControllerConfig {
 }
 
 const ORBIT_MIN_DISTANCE = 1e-4;
-const ORBIT_PARALLEL_DOT_THRESHOLD = 0.999;
+// Must stay ABOVE sin(ORBIT_ELEVATION_LIMIT); otherwise the look-rotation up vector switches
+// (Y -> Z) partway through the reachable orbit range and the view (and the world-axis gizmo)
+// suddenly rolls/flips as the camera approaches the top or bottom pole. Keeping it just under 1
+// leaves the switch as a pure degeneracy guard that never fires during normal orbiting.
+const ORBIT_PARALLEL_DOT_THRESHOLD = 0.9999;
 const ORBIT_ELEVATION_LIMIT = Math.PI * 0.49;
 
 const toVec3 = (

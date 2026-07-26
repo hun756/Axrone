@@ -1,0 +1,57 @@
+{
+  "effect": {
+    "format": "axrone.shader/effect",
+    "version": 1,
+    "id": "shader/rig-preview",
+    "attributes": [
+      {
+        "name": "a_Position",
+        "type": "vec3",
+        "location": 0
+      }
+    ],
+    "properties": [
+      {
+        "name": "u_JointMatrices",
+        "type": "mat4",
+        "arrayLength": 32,
+        "stages": ["vertex"],
+        "scope": "object"
+      },
+      {
+        "name": "u_Mode",
+        "type": "float",
+        "stages": ["fragment"],
+        "scope": "material",
+        "inspector": {
+          "label": "Mode",
+          "group": "Rendering",
+          "control": "select",
+          "options": [
+            {
+              "label": "Opaque",
+              "value": 0
+            },
+            {
+              "label": "Blend",
+              "value": 2
+            }
+          ]
+        }
+      }
+    ],
+    "vertex": {
+      "main": ["gl_Position = vec4(a_Position, 1.0);"]
+    },
+    "fragment": {
+      "precision": "highp",
+      "outputs": [
+        {
+          "name": "o_Color",
+          "type": "vec4"
+        }
+      ],
+      "main": ["o_Color = vec4(vec3(u_Mode / 2.0), 1.0);"]
+    }
+  }
+}

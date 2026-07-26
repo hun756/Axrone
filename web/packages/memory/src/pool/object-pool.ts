@@ -64,6 +64,7 @@ export class ObjectPool<T extends {}> implements Disposable {
             | 'onAcquireHandler'
             | 'onReleaseHandler'
             | 'onEvictHandler'
+            | 'estimatedObjectSize'
         >
     > &
         Pick<
@@ -74,9 +75,11 @@ export class ObjectPool<T extends {}> implements Disposable {
             | 'onAcquireHandler'
             | 'onReleaseHandler'
             | 'onEvictHandler'
+            | 'estimatedObjectSize'
         >;
     private _state: ObjectPoolState = 'active';
     private readonly _activeObjects = new WeakSet<T>();
+    private readonly _objToWrapper = new WeakMap<T, PoolableWrapper<T>>();
 
     constructor(options: ObjectPoolOptions<T>) {
         this._options = {
@@ -108,6 +111,7 @@ export class ObjectPool<T extends {}> implements Disposable {
             onAcquireHandler: options.onAcquireHandler,
             onReleaseHandler: options.onReleaseHandler,
             onEvictHandler: options.onEvictHandler,
+            estimatedObjectSize: options.estimatedObjectSize,
 
             validator: () => true,
             onAcquire: () => {},
@@ -138,6 +142,7 @@ export class ObjectPool<T extends {}> implements Disposable {
         const obj = wrapper.value;
 
         this._activeObjects.add(obj);
+        this._objToWrapper.set(obj, wrapper);
 
         return obj;
     }
@@ -154,7 +159,7 @@ export class ObjectPool<T extends {}> implements Disposable {
             );
         }
 
-        const wrapper = this._findWrapper(obj);
+        const wrapper = this._objToWrapper.get(obj);
         if (!wrapper) {
             throw new ObjectPoolError(
                 'Wrapper not found for object',
@@ -163,6 +168,7 @@ export class ObjectPool<T extends {}> implements Disposable {
         }
 
         this._activeObjects.delete(obj);
+        this._objToWrapper.delete(obj);
         this._pool.release(wrapper);
     }
 
@@ -178,6 +184,7 @@ export class ObjectPool<T extends {}> implements Disposable {
 
         const obj = wrapper.value;
         this._activeObjects.add(obj);
+        this._objToWrapper.set(obj, wrapper);
 
         return obj;
     }
@@ -189,6 +196,7 @@ export class ObjectPool<T extends {}> implements Disposable {
         const obj = wrapper.value;
 
         this._activeObjects.add(obj);
+        this._objToWrapper.set(obj, wrapper);
 
         return obj;
     }
@@ -205,7 +213,7 @@ export class ObjectPool<T extends {}> implements Disposable {
             );
         }
 
-        const wrapper = this._findWrapper(obj);
+        const wrapper = this._objToWrapper.get(obj);
         if (!wrapper) {
             throw new ObjectPoolError(
                 'Wrapper not found for object',
@@ -214,6 +222,7 @@ export class ObjectPool<T extends {}> implements Disposable {
         }
 
         this._activeObjects.delete(obj);
+        this._objToWrapper.delete(obj);
         await this._pool.releaseAsync(wrapper);
     }
 
@@ -229,6 +238,7 @@ export class ObjectPool<T extends {}> implements Disposable {
 
         const obj = wrapper.value;
         this._activeObjects.add(obj);
+        this._objToWrapper.set(obj, wrapper);
 
         return obj;
     }
@@ -423,20 +433,6 @@ export class ObjectPool<T extends {}> implements Disposable {
                 console.warn(`onEvict handler error in pool "${this._options.name}":`, error);
             }
         };
-    }
-
-    private _findWrapper(obj: T): PoolableWrapper<T> | null {
-        for (let i = 0; i < this._pool.getTotalCount(); i++) {
-            try {
-                const slot = (this._pool as any)._slots[i];
-                if (slot?.obj?.value === obj) {
-                    return slot.obj;
-                }
-            } catch {
-                continue;
-            }
-        }
-        return null;
     }
 }
 

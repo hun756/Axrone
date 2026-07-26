@@ -13,6 +13,18 @@ export interface SceneLifecycleRuntimeOptions {
     readonly render: (deltaTime: number) => void;
     readonly disposeAssets: () => void;
     readonly disposeWorld: () => void;
+    /**
+     * Invoked after `webglcontextlost` has been observed (and default-
+     * prevented so the browser may restore the context). The loop is already
+     * paused when this fires.
+     */
+    readonly onContextLost?: () => void;
+    /**
+     * Invoked on `webglcontextrestored`, before the loop is resumed. Wire
+     * GPU cache invalidation (e.g. render runtime / backend) here so the
+     * next frame rebuilds resources lazily.
+     */
+    readonly onContextRestored?: () => void;
 }
 
 export class SceneLifecycleRuntime {
@@ -25,7 +37,29 @@ export class SceneLifecycleRuntime {
     private readonly _render: (deltaTime: number) => void;
     private readonly _disposeAssets: () => void;
     private readonly _disposeWorld: () => void;
+    private readonly _onContextLost?: () => void;
+    private readonly _onContextRestored?: () => void;
+    private readonly _handleContextLost = (event: Event): void => {
+        // preventDefault signals the browser that we intend to restore.
+        event.preventDefault?.();
+        this._contextLost = true;
+        if (this._loop.status === 'running') {
+            this._resumeAfterRestore = true;
+            this._loop.pause();
+        }
+        this._onContextLost?.();
+    };
+    private readonly _handleContextRestored = (): void => {
+        this._contextLost = false;
+        this._onContextRestored?.();
+        if (this._resumeAfterRestore && !this._disposed) {
+            this._resumeAfterRestore = false;
+            this._loop.resume();
+        }
+    };
     private _pixelRatio: number;
+    private _contextLost = false;
+    private _resumeAfterRestore = false;
     private _disposed = false;
 
     constructor(options: SceneLifecycleRuntimeOptions) {
@@ -38,7 +72,11 @@ export class SceneLifecycleRuntime {
         this._render = options.render;
         this._disposeAssets = options.disposeAssets;
         this._disposeWorld = options.disposeWorld;
+        this._onContextLost = options.onContextLost;
+        this._onContextRestored = options.onContextRestored;
         this._pixelRatio = options.pixelRatio > 0 ? options.pixelRatio : 1;
+        this._canvas.addEventListener?.('webglcontextlost', this._handleContextLost);
+        this._canvas.addEventListener?.('webglcontextrestored', this._handleContextRestored);
     }
 
     get status(): GameLoopStatus {
@@ -47,6 +85,10 @@ export class SceneLifecycleRuntime {
 
     get isDisposed(): boolean {
         return this._disposed;
+    }
+
+    get isContextLost(): boolean {
+        return this._contextLost;
     }
 
     start(now?: number): void {
@@ -95,6 +137,9 @@ export class SceneLifecycleRuntime {
         if (this._disposed) {
             return;
         }
+
+        this._canvas.removeEventListener?.('webglcontextlost', this._handleContextLost);
+        this._canvas.removeEventListener?.('webglcontextrestored', this._handleContextRestored);
 
         let lifecycleError: SceneLifecycleError | null = null;
 

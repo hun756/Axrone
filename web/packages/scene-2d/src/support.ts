@@ -1,0 +1,1 @@
+export * from '@axrone/scene-runtime/scene-2d-support';

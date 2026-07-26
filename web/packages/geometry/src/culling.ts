@@ -1,4 +1,4 @@
-import type { IDisposable, ReadonlyMap } from '@axrone/utility';
+import type { IDisposable } from '@axrone/utility';
 import { CameraValidationError } from './camera-culling-errors';
 import {
     assertBoundingVolume,

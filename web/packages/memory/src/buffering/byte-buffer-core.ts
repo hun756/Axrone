@@ -21,14 +21,13 @@ import { BufferUtils } from './utils';
 
 export class ByteBuffer implements IByteBuffer {
     private static readonly DEFAULT_ORDER = ByteOrder.Big;
-    private static readonly CACHE_SIZE = PERFORMANCE_DEFAULTS.CACHE_SIZE;
-    private static readonly cache: WeakMap<ArrayBuffer, ByteBuffer> = new WeakMap();
+    private static readonly VIEW_CACHE_CAPACITY = PERFORMANCE_DEFAULTS.CACHE_SIZE ?? 256;
     private static readonly pool = BufferPool.getInstance();
     private static readonly viewCache = new Map<string, WeakMap<ByteBuffer, BufferView<any>>>();
 
-    private readonly buffer: ArrayBuffer;
-    private readonly view: DataView;
-    private readonly u8Array: Uint8Array;
+    private buffer: ArrayBuffer;
+    private view: DataView;
+    private u8Array: Uint8Array;
     private pos: number;
     private readonly typedArrayCache: Map<keyof TypedArrayMap, TypedArrayMap[keyof TypedArrayMap]>;
     private byteOrder: ByteOrder;
@@ -61,14 +60,7 @@ export class ByteBuffer implements IByteBuffer {
 
     static wrap(array: ArrayBuffer | ArrayBufferView, order = ByteOrder.Big): ByteBuffer {
         const buffer = array instanceof ArrayBuffer ? array : (array.buffer as ArrayBuffer);
-        let cached = ByteBuffer.cache.get(buffer);
-
-        if (!cached) {
-            cached = new ByteBuffer(buffer, order, false);
-            ByteBuffer.cache.set(buffer, cached);
-        }
-
-        return cached;
+        return new ByteBuffer(buffer, order, false);
     }
 
     static directBuffer(
@@ -82,6 +74,10 @@ export class ByteBuffer implements IByteBuffer {
         const cacheKey = `${type}-${this.buffer.byteLength}`;
 
         if (!ByteBuffer.viewCache.has(cacheKey)) {
+            if (ByteBuffer.viewCache.size >= ByteBuffer.VIEW_CACHE_CAPACITY) {
+                const oldestKey = ByteBuffer.viewCache.keys().next().value;
+                if (oldestKey !== undefined) ByteBuffer.viewCache.delete(oldestKey);
+            }
             ByteBuffer.viewCache.set(cacheKey, new WeakMap());
         }
 
@@ -194,11 +190,9 @@ export class ByteBuffer implements IByteBuffer {
             ByteBuffer.pool.release(this.buffer);
         }
 
-        Object.assign(this, {
-            buffer: newBuffer,
-            view: new DataView(newBuffer),
-            u8Array: new Uint8Array(newBuffer),
-        });
+        this.buffer = newBuffer;
+        this.view = new DataView(newBuffer);
+        this.u8Array = new Uint8Array(newBuffer);
 
         this.typedArrayCache.clear();
     }
@@ -916,23 +910,15 @@ export class ByteBuffer implements IByteBuffer {
 
         if (a.remaining !== b.remaining) return false;
 
-        if (typeof Uint8Array.prototype.every === 'function') {
-            return a.u8Array
-                .subarray(a.pos, a.limitPos)
-                .every((value, i) => value === b.u8Array[b.pos + i]);
-        } else {
-            const len = a.remaining;
-            for (let i = 0; i < len; i++) {
-                if (a.u8Array[a.pos + i] !== b.u8Array[b.pos + i]) {
-                    return false;
-                }
-            }
-            return true;
-        }
+        return a.u8Array
+            .subarray(a.pos, a.limitPos)
+            .every((value, i) => value === b.u8Array[b.pos + i]);
     }
 
     static concat(buffers: ByteBuffer[], order = ByteOrder.Big): ByteBuffer {
-        if (buffers.length === 0) return ByteBuffer.alloc(0, order);
+        if (buffers.length === 0) {
+            return new ByteBuffer(new ArrayBuffer(0), order, false);
+        }
 
         let totalCapacity = 0;
         for (const buffer of buffers) {
