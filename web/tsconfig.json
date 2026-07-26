@@ -78,6 +78,12 @@
       "@axrone/physics/*": [
         "./packages/physics/src/*"
       ],
+      "@axrone/raycast": [
+        "./packages/raycast/src/index.ts"
+      ],
+      "@axrone/raycast/*": [
+        "./packages/raycast/src/*"
+      ],
       "@axrone/physics-core": [
         "./packages/physics-core/src/index.ts"
       ],
@@ -132,6 +138,12 @@
       "@axrone/runtime-profile-full/*": [
         "./packages/runtime-profile-full/src/*"
       ],
+      "@axrone/scene-prefab": [
+        "./packages/scene-prefab/src/index.ts"
+      ],
+      "@axrone/scene-prefab/*": [
+        "./packages/scene-prefab/src/*"
+      ],
       "@axrone/scene-runtime-gltf": [
         "./packages/scene-runtime-gltf/src/index.ts"
       ],
@@ -155,18 +167,6 @@
       ],
       "@axrone/ecs-runtime/*": [
         "./packages/ecs-runtime/src/*"
-      ],
-      "@axrone/ecs-query/*": [
-        "./packages/ecs-query/src/*"
-      ],
-      "@axrone/ecs-storage/*": [
-        "./packages/ecs-storage/src/*"
-      ],
-      "@axrone/ecs-world-support": [
-        "./packages/ecs-world-support/src/index.ts"
-      ],
-      "@axrone/ecs-world-support/*": [
-        "./packages/ecs-world-support/src/*"
       ],
       "@axrone/tween": [
         "./packages/tween/src/index.ts"
