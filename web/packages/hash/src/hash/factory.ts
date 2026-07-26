@@ -1,10 +1,9 @@
 import type { IHasher, IHashFactory, HashFactoryOptions } from './interfaces';
 import {
-    asHash32, asHash64, asHash128, asHash256, asHash512,
-    type Hash32, type Hash64, type Hash128, type Hash256, type Hash512,
+    type Hash32, type Hash64, type Hash256, type Hash512,
     type HashValue, type Seed32, type HashAlgorithmName, type HashAlgorithmMetadata
 } from './types';
-import { Fnv1a32, Fnv1_32, Fnv1a64, Djb2, Djb2a, Sdbm, Crc32, Crc32c, Murmur3_32, Murmur2_64, XxHash32, XxHash64, Cyrb53, SipHash2_4, Sha1, Sha256, Sha384, Sha512 } from './algorithms';
+import { Fnv1a32, Fnv1_32, Fnv1a64, Djb2, Djb2a, Sdbm, Crc32, Crc32c, Murmur3_32, Murmur2_64, XxHash32, XxHash64, Sha1, Sha256, Sha384, Sha512 } from './algorithms';
 
 type AnyCtor<H extends HashValue> = new (seed?: Seed32, ...rest: any[]) => IHasher<H>;
 
@@ -68,8 +67,6 @@ export const FACTORIES: ReadonlyMap<HashAlgorithmName, IHashFactory<any>> = (() 
     m.set('murmur2-64', createFactory<Hash64>('murmur2-64', Murmur2_64 as AnyCtor<Hash64>, 64, 8, true, false, false, 'fast', 'non-crypto', 'MurmurHash2 64-bit'));
     m.set('xxhash32', createFactory<Hash32>('xxhash32', XxHash32 as AnyCtor<Hash32>, 32, 16, true, false, false, 'fast', 'non-crypto', 'xxHash32'));
     m.set('xxhash64', createFactory<Hash64>('xxhash64', XxHash64 as AnyCtor<Hash64>, 64, 32, true, false, false, 'fast', 'non-crypto', 'xxHash64'));
-    m.set('cyrb53', createFactory<Hash64>('cyrb53', Cyrb53 as AnyCtor<Hash64>, 64, 1, true, false, false, 'fast', 'non-crypto', 'cyrb53 64-bit pair'));
-    m.set('siphash-2-4', createFactory<Hash64>('siphash-2-4', SipHash2_4 as AnyCtor<Hash64>, 64, 8, true, true, false, 'keyed', 'non-crypto', 'SipHash-2-4 keyed PRF'));
     m.set('sha-1', createFactory<Hash256>('sha-1', Sha1 as AnyCtor<Hash256>, 160, 64, false, false, false, 'cryptographic', 'crypto', 'SHA-1 (insecure)'));
     m.set('sha-256', createFactory<Hash256>('sha-256', Sha256 as AnyCtor<Hash256>, 256, 64, false, false, true, 'cryptographic', 'crypto', 'SHA-256'));
     m.set('sha-384', createFactory<Hash512>('sha-384', Sha384 as AnyCtor<Hash512>, 384, 128, false, false, true, 'cryptographic', 'crypto', 'SHA-384'));

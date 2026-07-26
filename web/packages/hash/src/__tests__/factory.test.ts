@@ -27,8 +27,6 @@ describe('factory', () => {
         expect(algs).toContain('murmur2-64');
         expect(algs).toContain('xxhash32');
         expect(algs).toContain('xxhash64');
-        expect(algs).toContain('cyrb53');
-        expect(algs).toContain('siphash-2-4');
         expect(algs).toContain('sha-1');
         expect(algs).toContain('sha-256');
         expect(algs).toContain('sha-384');
