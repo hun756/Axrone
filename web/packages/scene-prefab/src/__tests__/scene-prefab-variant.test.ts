@@ -5,7 +5,7 @@ import {
     applyOverridesToBaseDefinition,
 } from '../scene-prefab-variant';
 import { createScenePrefabWorkflow } from '../scene-prefab-workflow';
-import { encodeSceneValue } from '../serialization';
+import { encodeSceneValue } from '@axrone/scene-runtime/serialization';
 import type { ScenePrefabDefinition, ScenePrefabOverrideOperation } from '../types';
 
 const createActor = (

@@ -4,7 +4,7 @@ import type {
     ComponentConstructor,
     ComponentRegistry,
 } from '@axrone/ecs-runtime';
-import { PrefabNodeBinding } from './components/prefab-node-binding';
+import { PrefabNodeBinding } from '@axrone/scene-prefab';
 
 export type SceneRuntimeBuiltInComponentName =
     | 'Hierarchy'

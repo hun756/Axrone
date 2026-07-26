@@ -3,7 +3,7 @@ import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
 import type { SceneUniformValue } from '../types';
-import { PrefabNodeBinding } from './prefab-node-binding';
+import { PrefabNodeBinding } from '@axrone/scene-prefab';
 
 export interface MeshRendererSkinConfig {
     readonly jointNodeIds: readonly string[];

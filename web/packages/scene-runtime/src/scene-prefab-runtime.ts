@@ -1,22 +1,22 @@
 import { Hierarchy } from '@axrone/ecs-runtime';
-import { Actor, type ActorConfig } from '@axrone/ecs-runtime';
+import { Actor, type ActorConfig, type ActorLayer, type ActorTag } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import type { ComponentConstructor } from '@axrone/ecs-runtime';
 import { Transform, getComponentPropertyMetadata } from '@axrone/ecs-runtime';
 import type { PropertyMetadata, PropertyTypeId, PropertyTypeReference } from '@axrone/ecs-runtime';
 import { Vec2, Vec3 } from '@axrone/numeric';
-import { PrefabNodeBinding } from './components/prefab-node-binding';
+import { PrefabNodeBinding } from '@axrone/scene-prefab';
 import type { SceneComponentTypeResolver } from './component-catalog';
 import { SceneLifecycleError } from './errors';
-import { hasScenePrefabComposition } from './scene-prefab-internals';
-import { resolveScenePrefab } from './scene-prefab-workflow';
+import { hasScenePrefabComposition } from '@axrone/scene-prefab';
+import { resolveScenePrefab } from '@axrone/scene-prefab';
 import { decodeSceneValue, encodeSceneValue } from './serialization';
 import type {
     SceneActorSnapshot,
     SceneComponentSnapshot,
     ScenePrefabDefinition,
-    ScenePrefabInstantiateOptions,
-} from './types';
+} from '@axrone/scene-prefab';
+import type { ScenePrefabInstantiateOptions } from './types';
 
 interface ScenePrefabHost {
     readonly componentCatalog: SceneComponentTypeResolver;
@@ -274,8 +274,8 @@ export class ScenePrefabRuntime {
         for (const actorSnapshot of resolvedPrefab.actors) {
             const actor = this._host.createActor({
                 name: `${options.namePrefix ?? ''}${actorSnapshot.name}`,
-                layer: actorSnapshot.layer as any,
-                tag: actorSnapshot.tag as any,
+                layer: actorSnapshot.layer as unknown as ActorLayer,
+                tag: actorSnapshot.tag as unknown as ActorTag,
                 active: false,
                 persistent: actorSnapshot.persistent,
                 pooled: actorSnapshot.pooled,

@@ -1,3 +1,10 @@
+/**
+ * Re-export bridge — all prefab exports now come from @axrone/scene-prefab.
+ *
+ * This file is kept so that the `./prefab` subpath export of
+ * @axrone/scene-runtime continues to work during the migration.
+ * New code should import from `@axrone/scene-prefab` directly.
+ */
 export type {
     ScenePrefabActorField,
     ScenePrefabActorFieldValue,
@@ -29,7 +36,11 @@ export type {
     ScenePrefabResolvedDefinition,
     ScenePrefabResolutionResult,
     ScenePrefabResolver,
-} from './types';
+    SceneSerializedValue,
+    SceneComponentSnapshot,
+    SceneActorSnapshot,
+    ScenePrefabInstantiateOptions,
+} from '@axrone/scene-prefab';
 export {
     createScenePrefabComponentSelector,
     createScenePrefabScopedNodeId,
@@ -38,29 +49,29 @@ export {
     hasScenePrefabComposition,
     isScenePrefabReference,
     serializeScenePrefabPropertyPath,
-} from './scene-prefab-internals';
-export { applyScenePrefabOverrides } from './scene-prefab-operations';
+} from '@axrone/scene-prefab';
+export { applyScenePrefabOverrides } from '@axrone/scene-prefab';
 export {
     diffScenePrefabDefinitions,
     mergeScenePrefabDefinitions,
-} from './scene-prefab-diff';
+} from '@axrone/scene-prefab';
 export type {
     ResolveScenePrefabOptions,
     ScenePrefabWorkflowOptions,
-} from './scene-prefab-workflow';
+} from '@axrone/scene-prefab';
 export {
     createScenePrefabWorkflow,
     resolveScenePrefab,
     ScenePrefabWorkflow,
-} from './scene-prefab-workflow';
+} from '@axrone/scene-prefab';
 export {
     ScenePrefabConflictError,
     ScenePrefabError,
     ScenePrefabResolutionError,
     ScenePrefabValidationError,
-} from './errors';
+} from '@axrone/scene-prefab';
 export {
     unpackScenePrefabInstance,
     createScenePrefabVariant,
     applyOverridesToBaseDefinition,
-} from './scene-prefab-variant';
+} from '@axrone/scene-prefab';

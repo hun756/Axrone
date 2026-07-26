@@ -1,6 +1,6 @@
 import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import { Hierarchy, Transform } from '@axrone/ecs-runtime';
-import { PrefabNodeBinding } from './components/prefab-node-binding';
+import { PrefabNodeBinding } from '@axrone/scene-prefab';
 import {
     createSceneBuiltInManifest,
     createSceneRegistryFromBuiltInManifestsWithSource,

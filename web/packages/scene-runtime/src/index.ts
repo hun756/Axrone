@@ -129,30 +129,8 @@ export {
 	createSceneMaterialInspectorControls,
 	createSceneMaterialInspectorSections,
 } from './material-inspector';
-export type {
-	ResolveScenePrefabOptions,
-	ScenePrefabWorkflowOptions,
-} from './scene-prefab-workflow';
-export {
-	createScenePrefabWorkflow,
-	resolveScenePrefab,
-	ScenePrefabWorkflow,
-} from './scene-prefab-workflow';
-export {
-	applyScenePrefabOverrides,
-} from './scene-prefab-operations';
-export {
-	diffScenePrefabDefinitions,
-	mergeScenePrefabDefinitions,
-} from './scene-prefab-diff';
-export {
-	createScenePrefabComponentSelector,
-	createScenePrefabScopedNodeId,
-	findScenePrefabComponentIndex,
-	getScenePrefabComponentSelectorKey,
-	hasScenePrefabComposition,
-	serializeScenePrefabPropertyPath,
-} from './scene-prefab-internals';
+// Prefab functions and workflow moved to @axrone/scene-prefab.
+// Use the ./prefab subpath or import from @axrone/scene-prefab directly.
 
 export type {
 	SceneBuiltInRegistry,
