@@ -8,6 +8,17 @@ import type {
 } from '@axrone/render-core/types';
 
 declare const webgl2RenderPassExecutorIdBrand: unique symbol;
+declare const webgl2NativeFramebufferHandleBrand: unique symbol;
+
+/**
+ * Opaque identity token for a context-owned framebuffer. The raw
+ * `WebGLFramebuffer` never leaves render-webgl2 internals
+ * (`internal/native-framebuffer-handle.ts`); executors may only compare or
+ * forward this handle.
+ */
+export type WebGL2NativeFramebufferHandle = {
+    readonly [webgl2NativeFramebufferHandleBrand]: 'webgl2-framebuffer';
+};
 
 export interface WebGL2RenderTextureNativeHandle {
     readonly kind: 'texture';
@@ -29,7 +40,7 @@ export interface WebGL2RenderPassExecutionResult {
 }
 
 export interface WebGL2ResolvedFramebufferBinding {
-    readonly framebuffer: WebGLFramebuffer | null;
+    readonly framebuffer: WebGL2NativeFramebufferHandle | null;
     readonly colorTarget: RenderResourceName | null;
     readonly depthTarget: RenderResourceName | null;
     readonly width: number;
@@ -133,6 +144,13 @@ export interface ManagedWebGL2RenderPassLibrary
     getProfilerSnapshot(): WebGL2RenderBackendProfilerSnapshot;
     hasExecutor(kind: RenderPassKind): boolean;
     listExecutors(kind?: RenderPassKind): readonly WebGL2AnyRenderPassExecutorDescriptor[];
+    /**
+     * Forgets all context-owned GPU caches (framebuffers, fullscreen
+     * programs) without issuing GL delete calls. Call after
+     * `webglcontextrestored` so resources are rebuilt lazily on the next
+     * frame instead of referencing invalidated handles.
+     */
+    invalidateContextResources(): void;
     dispose(): void;
     [Symbol.dispose](): void;
 }
@@ -156,15 +174,30 @@ export const createWebGL2RenderPassExecutorId = <const K extends RenderPassKind>
     name: string
 ): WebGL2RenderPassExecutorId<K> => `${kind}:${name}` as WebGL2RenderPassExecutorId<K>;
 
-export const isWebGL2RenderPassExecutorDescriptor = <const K extends RenderPassKind>(
+export function isWebGL2RenderPassExecutorDescriptor(
+    value: WebGL2AnyRenderPassExecutorRegistration
+): value is WebGL2AnyRenderPassExecutorDescriptor;
+export function isWebGL2RenderPassExecutorDescriptor<const K extends RenderPassKind>(
     value: WebGL2RenderPassExecutorRegistration<K>
-): value is WebGL2RenderPassExecutorDescriptor<K> => 'id' in value;
+): value is WebGL2RenderPassExecutorDescriptor<K>;
+export function isWebGL2RenderPassExecutorDescriptor(
+    value: WebGL2AnyRenderPassExecutorRegistration
+): boolean {
+    return 'id' in value;
+}
 
-export const defineWebGL2RenderPassExecutor = <const K extends RenderPassKind>(
+export function defineWebGL2RenderPassExecutor<const K extends RenderPassKind>(
     definition: WebGL2RenderPassExecutorDefinition<K>
-): WebGL2RenderPassExecutorDescriptor<K> =>
-    Object.freeze({
+): WebGL2RenderPassExecutorDescriptor<K>;
+export function defineWebGL2RenderPassExecutor(
+    definition: WebGL2AnyRenderPassExecutorDefinition
+): WebGL2AnyRenderPassExecutorDescriptor;
+export function defineWebGL2RenderPassExecutor(
+    definition: WebGL2AnyRenderPassExecutorDefinition
+): WebGL2AnyRenderPassExecutorDescriptor {
+    return Object.freeze({
         ...definition,
         id: createWebGL2RenderPassExecutorId(definition.kind, definition.name),
         priority: definition.priority ?? 0,
-    });
+    }) as WebGL2AnyRenderPassExecutorDescriptor;
+}

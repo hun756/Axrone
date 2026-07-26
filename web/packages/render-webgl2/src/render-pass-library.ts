@@ -34,6 +34,10 @@ import {
 	POST_PROCESS_FRAGMENT_SHADER_SOURCE,
 	TONEMAP_FRAGMENT_SHADER_SOURCE,
 } from './internal/render-pass-shaders';
+import {
+	resolveNativeFramebuffer,
+	toNativeFramebufferHandle,
+} from './internal/native-framebuffer-handle';
 
 type WebGL2RuntimeRenderPassErrorCode =
 	| 'EXECUTOR_NOT_FOUND'
@@ -208,11 +212,6 @@ const createFramebufferCacheKey = (
 	colorTarget: RenderResourceName | null,
 	depthTarget: RenderResourceName | null
 ): string => `${colorTarget ?? 'none'}|${depthTarget ?? 'none'}`;
-
-const isExecutorForPass = <K extends RenderPassKind>(
-	descriptor: WebGL2AnyRenderPassExecutorDescriptor,
-	pass: WebGL2RenderPassOf<K>
-): descriptor is WebGL2RenderPassExecutorDescriptor<K> => descriptor.kind === pass.kind;
 
 const resolveMissingExecutorMessage = (
 	locale: WebGL2RenderPassLocale,
@@ -417,12 +416,17 @@ class WebGL2RenderPassExecutorRegistry {
 
 		for (let index = 0; index < descriptors.length; index += 1) {
 			const descriptor = descriptors[index]!;
-			if (!isExecutorForPass(descriptor, pass)) {
+			if (descriptor.kind !== pass.kind) {
 				continue;
 			}
 
-			if (!descriptor.matches || descriptor.matches(pass, context, execution)) {
-				return descriptor;
+			// The `_byKind` bucket plus the kind check above guarantee the
+			// descriptor targets this pass kind; the distributed union cannot
+			// express that relationship for a generic K, so narrow explicitly.
+			const typedDescriptor =
+				descriptor as unknown as WebGL2RenderPassExecutorDescriptor<K>;
+			if (!typedDescriptor.matches || typedDescriptor.matches(pass, context, execution)) {
+				return typedDescriptor;
 			}
 		}
 
@@ -488,7 +492,14 @@ const clearFramebuffer = (
 
 	if (clearState.color !== undefined && clearState.color !== null) {
 		const color = clearState.color;
-		gl.clearColor(color[0] ?? 0, color[1] ?? 0, color[2] ?? 0, color[3] ?? 1);
+		// RenderVector4Like is `Vec4 | readonly [number x4]`; only the tuple
+		// shape is indexable, so branch on the runtime representation.
+		if (Array.isArray(color)) {
+			gl.clearColor(color[0] ?? 0, color[1] ?? 0, color[2] ?? 0, color[3] ?? 1);
+		} else {
+			const vector = color as { x: number; y: number; z: number; w: number };
+			gl.clearColor(vector.x ?? 0, vector.y ?? 0, vector.z ?? 0, vector.w ?? 1);
+		}
 		bits |= gl.COLOR_BUFFER_BIT;
 	}
 
@@ -556,7 +567,7 @@ class WebGL2FramebufferResolver {
 	): WebGL2ResolvedFramebufferBinding {
 		if (this._directFrameOutput && (isFrameResourceName(colorTarget) || isFrameResourceName(depthTarget))) {
 			return {
-				framebuffer: this._defaultFramebuffer,
+				framebuffer: toNativeFramebufferHandle(this._defaultFramebuffer),
 				colorTarget,
 				depthTarget,
 				width: context.viewport.width,
@@ -570,7 +581,7 @@ class WebGL2FramebufferResolver {
 
 		if (!colorHandle && !depthHandle) {
 			return {
-				framebuffer: this._defaultFramebuffer,
+				framebuffer: toNativeFramebufferHandle(this._defaultFramebuffer),
 				colorTarget,
 				depthTarget,
 				width: context.viewport.width,
@@ -638,7 +649,7 @@ class WebGL2FramebufferResolver {
 		const sizeSnapshot = this.getTextureSnapshot(context.graph, colorTarget ?? depthTarget);
 
 		return {
-			framebuffer,
+			framebuffer: toNativeFramebufferHandle(framebuffer),
 			colorTarget,
 			depthTarget,
 			width: sizeSnapshot?.descriptor.width ?? context.viewport.width,
@@ -653,7 +664,7 @@ class WebGL2FramebufferResolver {
 	): WebGL2ResolvedFramebufferBinding {
 		if (pass.kind === 'present') {
 			return {
-				framebuffer: this._defaultFramebuffer,
+				framebuffer: toNativeFramebufferHandle(this._defaultFramebuffer),
 				colorTarget: null,
 				depthTarget: null,
 				width: context.viewport.width,
@@ -670,6 +681,15 @@ class WebGL2FramebufferResolver {
 		for (const framebuffer of this._cache.values()) {
 			this._gl.deleteFramebuffer(framebuffer);
 		}
+		this._cache.clear();
+	}
+
+	/**
+	 * Drops cached framebuffer handles without issuing GL delete calls.
+	 * Intended for `webglcontextlost` recovery: the underlying objects are
+	 * already invalid, so they only need to be forgotten and lazily rebuilt.
+	 */
+	invalidateContextResources(): void {
 		this._cache.clear();
 	}
 }
@@ -787,6 +807,16 @@ class WebGL2FullscreenProgramCache {
 		if (this._postProcessResources?.program) {
 			this._gl.deleteProgram?.(this._postProcessResources.program);
 		}
+		this._tonemapResources = null;
+		this._exposureResources = null;
+		this._postProcessResources = null;
+	}
+
+	/**
+	 * Drops cached fullscreen program/VAO handles without GL delete calls so
+	 * they are recompiled lazily after a restored context.
+	 */
+	invalidateContextResources(): void {
 		this._tonemapResources = null;
 		this._exposureResources = null;
 		this._postProcessResources = null;
@@ -979,7 +1009,7 @@ const createBuiltinExecutors = (
 				}
 
 				const sourceBinding = framebuffers.resolveBinding(pass.metadata.source, null, context);
-				gl.bindFramebuffer(gl.READ_FRAMEBUFFER, sourceBinding.framebuffer);
+				gl.bindFramebuffer(gl.READ_FRAMEBUFFER, resolveNativeFramebuffer(sourceBinding.framebuffer));
 				gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, framebuffers.defaultFramebuffer);
 				gl.blitFramebuffer(
 					0,
@@ -1063,7 +1093,7 @@ const createBuiltinExecutors = (
 					);
 					const exposureResources = programs.getExposureResources();
 
-					gl.bindFramebuffer(gl.FRAMEBUFFER, exposureBinding.framebuffer);
+					gl.bindFramebuffer(gl.FRAMEBUFFER, resolveNativeFramebuffer(exposureBinding.framebuffer));
 					gl.viewport(0, 0, exposureBinding.width, exposureBinding.height);
 					gl.disable(gl.DEPTH_TEST);
 					gl.disable(gl.CULL_FACE);
@@ -1106,7 +1136,7 @@ const createBuiltinExecutors = (
 					resolvedExposureTexture = exposureHistoryTargetTexture;
 					drawCalls += 1;
 
-					gl.bindFramebuffer(gl.FRAMEBUFFER, execution.binding.framebuffer);
+					gl.bindFramebuffer(gl.FRAMEBUFFER, resolveNativeFramebuffer(execution.binding.framebuffer));
 					gl.viewport(0, 0, execution.binding.width, execution.binding.height);
 				}
 
@@ -1173,6 +1203,12 @@ const createBuiltinExecutors = (
 			},
 			execute(pass, context) {
 				const effect = pass.metadata.effect;
+				if (effect.category !== 'builtin') {
+					// matches() guarantees only builtin effects reach this executor;
+					// this guard narrows the union for the settings switch below and
+					// stays defensive should a custom effect ever slip through.
+					return { drawCalls: 0, notes: EMPTY_NOTES };
+				}
 				const sourceSnapshot = framebuffers.getTextureSnapshot(
 					context.graph,
 					pass.metadata.source
@@ -1413,7 +1449,7 @@ class ManagedWebGL2RenderPassLibraryImpl implements ManagedWebGL2RenderPassLibra
 		const binding = this._framebuffers.resolveForPass(pass, context);
 		const gl = this._options.gl;
 
-		gl.bindFramebuffer(gl.FRAMEBUFFER, binding.framebuffer);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, resolveNativeFramebuffer(binding.framebuffer));
 		gl.viewport(0, 0, binding.width, binding.height);
 
 		if (clearFramebuffer(gl, pass.clearState) !== 0) {
@@ -1504,6 +1540,11 @@ class ManagedWebGL2RenderPassLibraryImpl implements ManagedWebGL2RenderPassLibra
 		this._programs.dispose();
 		this._frameCaptures.length = 0;
 		this._lastFrameCapture = null;
+	}
+
+	invalidateContextResources(): void {
+		this._framebuffers.invalidateContextResources();
+		this._programs.invalidateContextResources();
 	}
 
 	[Symbol.dispose](): void {
