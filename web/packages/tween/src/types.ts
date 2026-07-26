@@ -127,6 +127,8 @@ export interface ITween<T> {
 export interface IGroupable {
     id: number;
     isPlaying(): boolean;
+    getStatus(): 'idle' | 'running' | 'paused' | 'completed';
+    getTotalDuration(): number;
     start(time?: number): this;
     stop(): this;
     pause(): this;
