@@ -1,4 +1,4 @@
-import type { SceneMeshResource } from './mesh-registry';
+import type { SceneMeshResource } from '../mesh-registry';
 
 export class SceneRenderFrameState {
     private readonly _activeRendererIds = new Set<string>();

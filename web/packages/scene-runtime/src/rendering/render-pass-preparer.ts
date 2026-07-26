@@ -1,7 +1,7 @@
 import { Vec4 } from '@axrone/numeric';
-import type { Camera } from './components/camera';
+import type { Camera } from '../components/camera';
 import type { SceneRenderPassResource } from './render-pass-registry';
-import type { SceneClearFlag } from './types';
+import type { SceneClearFlag } from '../types';
 
 const isSameVec4 = (
     left: Vec4 | null | undefined,

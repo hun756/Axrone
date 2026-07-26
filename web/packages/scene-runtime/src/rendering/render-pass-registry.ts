@@ -1,5 +1,5 @@
 import { Vec4 } from '@axrone/numeric';
-import type { SceneClearFlag, SceneRenderPassDefinition, SceneRenderPassHandle } from './types';
+import type { SceneClearFlag, SceneRenderPassDefinition, SceneRenderPassHandle } from '../types';
 
 export interface SceneRenderPassResource {
     readonly id: string;

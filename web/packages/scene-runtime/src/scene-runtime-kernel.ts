@@ -5,7 +5,7 @@ import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import { SceneActorLifecycleRunner } from './actor-lifecycle-runner';
 import { SceneComponentCatalog } from './component-catalog';
 import { createSceneLoopSystems } from './loop-bridge';
-import { SceneRenderRuntime } from './scene-render-runtime';
+import { SceneRenderRuntime } from './rendering/scene-render-runtime';
 import { resolveSceneSurface } from './scene-surface-resolver';
 import type { SceneLoopState, SceneOptions, SceneRegistry } from './types';
 import { SceneActorRuntime } from './scene-actor-runtime';
@@ -154,6 +154,11 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
                 if (!this.world.isDisposed) {
                     this.world.clear();
                 }
+            },
+            onContextRestored: () => {
+                // Context-owned GPU caches reference invalidated handles;
+                // drop them so the next frame rebuilds resources lazily.
+                this.renderRuntime.invalidateContextResources();
             },
         });
         this.lifecycle.resize(sceneOptions.width, sceneOptions.height, pixelRatio);

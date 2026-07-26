@@ -78,4 +78,9 @@ export default [
         inputRelativePath: 'src/scene-2d-support.ts',
         outputBasename: 'scene-2d-support',
     }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/rendering/index.ts',
+        outputBasename: 'rendering',
+    }),
 ];

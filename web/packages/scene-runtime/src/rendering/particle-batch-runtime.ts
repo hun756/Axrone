@@ -1,15 +1,16 @@
 import { Mat4 } from '@axrone/numeric';
 import { Transform, type Actor } from '@axrone/ecs-runtime';
-import type { SceneCameraFrameState } from './camera-frame-state';
-import { ParticleSystem } from './components/particle-system';
-import type { ParticleRenderData } from './components/particle-system';
-import { SceneMeshError } from './errors';
-import { createParticleShaderDefinition } from './particle-shader';
+import type { SceneCameraFrameState } from '../camera-frame-state';
+import { ParticleSystem } from '../components/particle-system';
+import type { ParticleRenderData } from '../components/particle-system';
+import { SceneMeshError } from '../errors';
+import { SceneDirectGlPassGuard } from './internal/render-state-guard';
+import { createParticleShaderDefinition } from '../particle-shader';
 import type { SceneRenderFrameState } from './render-frame-state';
 import type { SceneRenderStateApplier } from './render-state-applier';
-import { SceneShaderFactory } from './scene-shader-factory';
-import type { SceneShaderResource } from './shader-registry';
-import type { SceneUniformWriteTarget } from './uniform-writer';
+import { SceneShaderFactory } from '../scene-shader-factory';
+import type { SceneShaderResource } from '../shader-registry';
+import type { SceneUniformWriteTarget } from '../uniform-writer';
 
 /**
  * Interleaved point-sprite vertex layout (9 floats / 36 bytes):
@@ -73,22 +74,27 @@ interface SceneParticleRenderSubject {
  */
 export class SceneParticleBatchRuntime {
     private readonly _shaderFactory: SceneShaderFactory;
+    private readonly _guard: SceneDirectGlPassGuard;
     private _shader: SceneShaderResource | null = null;
     private _vertexArray: WebGLVertexArrayObject | null = null;
     private _vertexBuffer: WebGLBuffer | null = null;
     private _vertexData: Float32Array;
     private _vertexCapacity: number;
     private readonly _subjects: SceneParticleRenderSubject[] = [];
-    private _failed = false;
 
     constructor(private readonly _options: SceneParticleBatchRuntimeOptions) {
         this._shaderFactory = new SceneShaderFactory({ gl: _options.gl });
+        this._guard = new SceneDirectGlPassGuard({
+            gl: _options.gl,
+            renderStateApplier: _options.renderStateApplier,
+            label: 'particle-batch',
+        });
         this._vertexCapacity = 1024;
         this._vertexData = new Float32Array(this._vertexCapacity * PARTICLE_VERTEX_FLOATS);
     }
 
     render(params: SceneParticleBatchRuntimeRenderParams): SceneParticleBatchRuntimeRenderStats {
-        if (this._failed) {
+        if (this._guard.isDisabled) {
             return EMPTY_STATS;
         }
 
@@ -108,10 +114,11 @@ export class SceneParticleBatchRuntime {
         }
 
         const gl = this._options.gl;
-        let drawnParticleCount = 0;
-        let particleSystemCount = 0;
 
-        try {
+        return this._guard.run(EMPTY_STATS, () => {
+            let drawnParticleCount = 0;
+            let particleSystemCount = 0;
+
             this._ensureResources();
 
             const shader = this._shader!;
@@ -140,27 +147,9 @@ export class SceneParticleBatchRuntime {
                     particleSystemCount += 1;
                 }
             }
-        } catch (error) {
-            // A rendering add-on must never be able to halt the scene loop.
-            // Disable further attempts and surface the failure once.
-            this._failed = true;
-            // eslint-disable-next-line no-console
-            console.error('[particle-batch] disabled after render failure:', error);
-        } finally {
-            // Return the GL context to a known-good baseline and invalidate the
-            // shared render-state-applier cache. The applier only re-issues GL
-            // state when its cached value changes; our direct GL mutations here
-            // desync that cache, so without this reset the next mesh draw would
-            // inherit our blend/cull/depth state and corrupt the scene.
-            gl.depthMask(true);
-            gl.disable(gl.BLEND);
-            gl.enable(gl.CULL_FACE);
-            gl.bindVertexArray(null);
-            gl.bindBuffer(gl.ARRAY_BUFFER, null);
-            this._options.renderStateApplier.reset();
-        }
 
-        return { drawnParticleCount, particleSystemCount };
+            return { drawnParticleCount, particleSystemCount };
+        });
     }
 
     clear(): void {

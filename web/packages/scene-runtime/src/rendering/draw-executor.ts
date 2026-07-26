@@ -1,25 +1,25 @@
-import type { SceneCameraFrameState } from './camera-frame-state';
-import type { SceneLightingState } from './lighting-collector';
+import type { SceneCameraFrameState } from '../camera-frame-state';
+import type { SceneLightingState } from '../lighting-collector';
 import {
     resolveSceneMaterialPass,
     type SceneMaterialResource,
-} from './material-registry';
-import type { SceneMeshResource } from './mesh-registry';
-import type { SceneMorphMeshRuntime } from './morph-mesh-runtime';
+} from '../material-registry';
+import type { SceneMeshResource } from '../mesh-registry';
+import type { SceneMorphMeshRuntime } from '../morph-mesh-runtime';
 import type { SceneRenderFrameState } from './render-frame-state';
 import type { SceneRenderItem } from './render-item-collector';
 import type { SceneRenderPassResource } from './render-pass-registry';
 import type { SceneRenderStateApplier } from './render-state-applier';
-import type { SceneShaderResource } from './shader-registry';
-import type { SceneFrameUniformBinder } from './frame-uniform-binder';
-import type { SceneLightingUniformBinder } from './lighting-uniform-binder';
+import type { SceneShaderResource } from '../shader-registry';
+import type { SceneFrameUniformBinder } from '../frame-uniform-binder';
+import type { SceneLightingUniformBinder } from '../lighting-uniform-binder';
 import type {
     SceneMaterialTextureBinder,
     SceneMaterialTextureUniformSetter,
-} from './material-texture-binder';
-import type { SceneSkinningUniformBinder } from './skinning-uniform-binder';
-import type { SceneUniformWriteTarget } from './uniform-writer';
-import type { SceneUniformValue } from './types';
+} from '../material-texture-binder';
+import type { SceneSkinningUniformBinder } from '../skinning-uniform-binder';
+import type { SceneUniformWriteTarget } from '../uniform-writer';
+import type { SceneUniformValue } from '../types';
 
 export interface SceneDrawExecutorContext {
     readonly renderPass: SceneRenderPassResource;
@@ -46,13 +46,13 @@ interface SceneDrawExecutorResources {
     };
     readonly meshes: {
         get(id: string): SceneMeshResource | undefined;
-        getDefinition(id: string): import('./types').SceneMeshDefinition | undefined;
+        getDefinition(id: string): import('../types').SceneMeshDefinition | undefined;
     };
     readonly shaders: {
         get(id: string): SceneShaderResource | undefined;
     };
     readonly textures: {
-        get(textureId: string): import('./texture-registry').SceneTextureResource | undefined;
+        get(textureId: string): import('../texture-registry').SceneTextureResource | undefined;
     };
     resolveSampler(id: string | null): import('@axrone/render-webgl2').ITextureSampler;
 }

@@ -19,10 +19,10 @@ import {
     type WebGL2RenderResourceHandle,
 } from '@axrone/render-webgl2/pipeline';
 import type { BoundingSphere } from '@axrone/geometry';
-import type { SceneCameraFrameState } from './camera-frame-state';
-import type { MeshRenderer } from './components/mesh-renderer';
+import type { SceneCameraFrameState } from '../camera-frame-state';
+import type { MeshRenderer } from '../components/mesh-renderer';
 import type { SceneDrawExecutor, SceneDrawExecutorContext } from './draw-executor';
-import type { SceneLightingState } from './lighting-collector';
+import type { SceneLightingState } from '../lighting-collector';
 import type { SceneRenderFrameState } from './render-frame-state';
 import type { SceneRenderItem } from './render-item-collector';
 import type { SceneRenderPassResource } from './render-pass-registry';
@@ -33,7 +33,7 @@ import type {
     SceneRenderPlanningOptions,
     SceneRenderPipelineSettings,
     SceneRenderPlanningStats,
-} from './types';
+} from '../types';
 
 export interface SceneRenderPipelineParams {
     readonly actors?: readonly Actor[];
@@ -520,6 +520,24 @@ export class SceneRenderPipeline {
         this._pipeline.dispose();
         this._backend.dispose();
         this._backend = this._createBackend();
+        this._pipeline = this._createPipeline();
+    }
+                                    
+    /**
+     * Recovers from a lost-and-restored WebGL context: forgets every cached
+     * GPU handle without issuing GL delete calls (the objects are already
+     * invalid) and rebuilds the backend so resources are recreated lazily on
+     * the next frame.
+     */
+    invalidateContextResources(): void {
+        this._activeExecution = null;
+        this._primitiveLookup.clear();
+        // Batch runtimes drop their GL objects; delete calls are no-ops on a
+        // lost context, so clear() is safe and resets their lazy creation.
+        this._options.spriteBatchRuntime?.clear();
+        this._options.particleBatchRuntime?.clear();
+        this._backend.invalidateContextResources();
+        this._pipeline.dispose();
         this._pipeline = this._createPipeline();
     }
 

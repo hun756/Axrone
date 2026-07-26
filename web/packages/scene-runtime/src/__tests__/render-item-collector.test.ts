@@ -4,7 +4,7 @@ import { Vec3 } from '@axrone/numeric';
 import type { Actor } from '@axrone/ecs-runtime';
 import { Transform } from '@axrone/ecs-runtime';
 import { MeshRenderer } from '../components/mesh-renderer';
-import { SceneRenderItemCollector } from '../render-item-collector';
+import { SceneRenderItemCollector } from '../rendering/render-item-collector';
 
 const createMockActor = (transform: Transform, renderer: MeshRenderer): Actor =>
 	({

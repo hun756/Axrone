@@ -9,20 +9,21 @@ import {
     type Render2DSpriteSource,
     type Render2DSpriteSubmission,
 } from '@axrone/render-2d';
-import type { SceneCameraFrameState } from './camera-frame-state';
-import { SpriteMask } from './components/sprite-mask';
-import { SceneMeshError } from './errors';
-import { resolveSceneMaterialPass } from './material-registry';
-import type { SceneMaterialTextureUniformSetter } from './material-texture-binder';
+import type { SceneCameraFrameState } from '../camera-frame-state';
+import { SpriteMask } from '../components/sprite-mask';
+import { SceneMeshError } from '../errors';
+import { resolveSceneMaterialPass } from '../material-registry';
+import { SceneDirectGlPassGuard } from './internal/render-state-guard';
+import type { SceneMaterialTextureUniformSetter } from '../material-texture-binder';
 import type { SceneRenderFrameState } from './render-frame-state';
 import type { SceneRenderPassResource } from './render-pass-registry';
 import type { SceneRenderStateApplier } from './render-state-applier';
-import type { SceneResourceRuntime } from './scene-resource-runtime';
-import { SceneShaderFactory } from './scene-shader-factory';
-import type { SceneShaderResource } from './shader-registry';
-import { createSprite2DShaderDefinition } from './sprite-2d-shader';
+import type { SceneResourceRuntime } from '../scene-resource-runtime';
+import { SceneShaderFactory } from '../scene-shader-factory';
+import type { SceneShaderResource } from '../shader-registry';
+import { createSprite2DShaderDefinition } from '../sprite-2d-shader';
 import { SceneSpriteRenderItemCollector } from './sprite-render-item-collector';
-import type { SceneUniformWriteTarget } from './uniform-writer';
+import type { SceneUniformWriteTarget } from '../uniform-writer';
 
 const MIN_CLIP_W = 1e-6;
 
@@ -120,11 +121,11 @@ export interface SceneSpriteBatchRuntimeOptions {
     readonly resources: SceneResourceRuntime;
     readonly renderStateApplier: Pick<
         SceneRenderStateApplier,
-        'apply' | 'resolvePrimitiveMode' | 'resolvePrimitiveTopology'
+        'apply' | 'reset' | 'resolvePrimitiveMode' | 'resolvePrimitiveTopology'
     >;
     readonly uniformWriter: SceneUniformWriteTarget;
     readonly materialTextureBinder: Pick<
-        import('./material-texture-binder').SceneMaterialTextureBinder,
+        import('../material-texture-binder').SceneMaterialTextureBinder,
         'bind' | 'unbind'
     >;
     readonly textureUniformSetter: SceneMaterialTextureUniformSetter;
@@ -163,6 +164,7 @@ export class SceneSpriteBatchRuntime {
     private readonly _collector = new SceneSpriteRenderItemCollector();
     private readonly _builder = new Render2DSpriteBatchBuilder();
     private readonly _shaderFactory: SceneShaderFactory;
+    private readonly _guard: SceneDirectGlPassGuard;
     private readonly _submissions: Render2DSpriteSubmission[] = [];
     private readonly _submissionRendererIds: string[] = [];
     private readonly _worldPointScratch = new Float32Array(3);
@@ -177,9 +179,18 @@ export class SceneSpriteBatchRuntime {
 
     constructor(private readonly _options: SceneSpriteBatchRuntimeOptions) {
         this._shaderFactory = new SceneShaderFactory({ gl: _options.gl });
+        this._guard = new SceneDirectGlPassGuard({
+            gl: _options.gl,
+            renderStateApplier: _options.renderStateApplier,
+            label: 'sprite-batch',
+        });
     }
 
     render(params: SceneSpriteBatchRuntimeRenderParams): SceneSpriteBatchRuntimeRenderStats {
+        if (this._guard.isDisabled) {
+            return SceneSpriteBatchRuntime._EMPTY_STATS;
+        }
+
         const items = this._collector.collect(params.actors, params.renderPass.rendererPassId, {
             cameraFrustum: params.cameraFrame.camera3D.frustum,
         });
@@ -261,48 +272,57 @@ export class SceneSpriteBatchRuntime {
             });
         }
 
-        this._ensureResources();
+        const failureStats = Object.freeze({
+            drawnSpriteCount: 0,
+            spriteBatchCount: 0,
+            skippedSpriteCount,
+            warnings: Object.freeze(warnings),
+        });
 
-        for (let index = 0; index < allowedSpriteCount; index += 1) {
-            params.frameState.markActiveRenderer(this._submissionRendererIds[index]!);
-        }
+        return this._guard.run(failureStats, () => {
+            this._ensureResources();
 
-        const submissions =
-            allowedSpriteCount === this._submissions.length
-                ? this._submissions
-                : this._submissions.slice(0, allowedSpriteCount);
+            for (let index = 0; index < allowedSpriteCount; index += 1) {
+                params.frameState.markActiveRenderer(this._submissionRendererIds[index]!);
+            }
 
-        const buildResult = this._builder.build(submissions);
-        if (buildResult.indexCount === 0) {
+            const submissions =
+                allowedSpriteCount === this._submissions.length
+                    ? this._submissions
+                    : this._submissions.slice(0, allowedSpriteCount);
+
+            const buildResult = this._builder.build(submissions);
+            if (buildResult.indexCount === 0) {
+                return Object.freeze({
+                    drawnSpriteCount: buildResult.spriteCount,
+                    spriteBatchCount: buildResult.batches.length,
+                    skippedSpriteCount,
+                    warnings: Object.freeze(warnings),
+                });
+            }
+
+            const indexType =
+                buildResult.indexData instanceof Uint32Array
+                    ? this._options.gl.UNSIGNED_INT
+                    : this._options.gl.UNSIGNED_SHORT;
+
+            this._upload(buildResult);
+
+            this._options.gl.bindVertexArray(this._vertexArray);
+            for (const batch of buildResult.batches) {
+                this._applyClipRect(batch.key.clipRect, params.viewportWidth, params.viewportHeight);
+                this._drawBatch(batch, indexType, params);
+            }
+            this._options.gl.bindVertexArray(null);
+            this._resetClipRect();
+            this._resetMaskState();
+
             return Object.freeze({
                 drawnSpriteCount: buildResult.spriteCount,
                 spriteBatchCount: buildResult.batches.length,
                 skippedSpriteCount,
                 warnings: Object.freeze(warnings),
             });
-        }
-
-        const indexType =
-            buildResult.indexData instanceof Uint32Array
-                ? this._options.gl.UNSIGNED_INT
-                : this._options.gl.UNSIGNED_SHORT;
-
-        this._upload(buildResult);
-
-        this._options.gl.bindVertexArray(this._vertexArray);
-        for (const batch of buildResult.batches) {
-            this._applyClipRect(batch.key.clipRect, params.viewportWidth, params.viewportHeight);
-            this._drawBatch(batch, indexType, params);
-        }
-        this._options.gl.bindVertexArray(null);
-        this._resetClipRect();
-        this._resetMaskState();
-
-        return Object.freeze({
-            drawnSpriteCount: buildResult.spriteCount,
-            spriteBatchCount: buildResult.batches.length,
-            skippedSpriteCount,
-            warnings: Object.freeze(warnings),
         });
     }
 
@@ -334,7 +354,7 @@ export class SceneSpriteBatchRuntime {
     }
 
     private _resolveSource(
-        renderer: import('./components/sprite-renderer').SpriteRenderer
+        renderer: import('../components/sprite-renderer').SpriteRenderer
     ): Render2DSpriteSource | null {
         if (renderer.materialId) {
             return {

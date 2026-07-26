@@ -1,25 +1,25 @@
 import { Vec3, Vec4 } from '@axrone/numeric';
 import type { Actor, Transform } from '@axrone/ecs-runtime';
-import { selectSceneCamera } from './camera-selector';
-import { SceneCameraFrameStateCollector } from './camera-frame-state';
+import { selectSceneCamera } from '../camera-selector';
+import { SceneCameraFrameStateCollector } from '../camera-frame-state';
 import { SceneDrawExecutionContextCache } from './draw-execution-context';
 import { SceneDrawExecutor } from './draw-executor';
-import { SceneFrameUniformBinder } from './frame-uniform-binder';
-import { SceneLightingCollector } from './lighting-collector';
-import { SceneLightingUniformBinder } from './lighting-uniform-binder';
-import { resolveSceneMaterialPass } from './material-registry';
-import { SceneMaterialTextureBinder } from './material-texture-binder';
-import { SceneMorphMeshRuntime } from './morph-mesh-runtime';
+import { SceneFrameUniformBinder } from '../frame-uniform-binder';
+import { SceneLightingCollector } from '../lighting-collector';
+import { SceneLightingUniformBinder } from '../lighting-uniform-binder';
+import { resolveSceneMaterialPass } from '../material-registry';
+import { SceneMaterialTextureBinder } from '../material-texture-binder';
+import { SceneMorphMeshRuntime } from '../morph-mesh-runtime';
 import { SceneRenderFrameState } from './render-frame-state';
 import { SceneRenderItemCollector } from './render-item-collector';
 import { SceneRenderPipeline } from './scene-render-pipeline';
 import { SceneRenderPassPreparer } from './render-pass-preparer';
 import { SceneRenderStateApplier } from './render-state-applier';
-import type { SceneResourceRuntime } from './scene-resource-runtime';
-import { SceneSkinningUniformBinder } from './skinning-uniform-binder';
+import type { SceneResourceRuntime } from '../scene-resource-runtime';
+import { SceneSkinningUniformBinder } from '../skinning-uniform-binder';
 import { SceneSpriteBatchRuntime } from './sprite-batch-runtime';
 import { SceneParticleBatchRuntime } from './particle-batch-runtime';
-import type { SceneMeshResource } from './mesh-registry';
+import type { SceneMeshResource } from '../mesh-registry';
 import type {
     SceneMeshDefinition,
     SceneRenderPlanningOptions,
@@ -27,8 +27,8 @@ import type {
     SceneRenderPlanningStats,
     SceneRenderStats,
     SceneUniformValue,
-} from './types';
-import { SceneUniformWriter } from './uniform-writer';
+} from '../types';
+import { SceneUniformWriter } from '../uniform-writer';
 
 export interface SceneRenderRuntimeOptions {
     readonly gl: WebGL2RenderingContext;
@@ -151,7 +151,7 @@ export class SceneRenderRuntime {
         };
     }
 
-    private _isBlendedRenderer(renderer: import('./components/mesh-renderer').MeshRenderer, renderPass: import('./render-pass-registry').SceneRenderPassResource): boolean {
+    private _isBlendedRenderer(renderer: import('../components/mesh-renderer').MeshRenderer, renderPass: import('./render-pass-registry').SceneRenderPassResource): boolean {
         if (renderer.materialId === null) {
             return false;
         }
@@ -317,6 +317,18 @@ export class SceneRenderRuntime {
         this._planningStats = SceneRenderRuntime._EMPTY_PLANNING_STATS;
         this._renderPassPreparer.reset();
         this._renderPipeline.reset();
+        this._morphMeshRuntime.clear();
+    }
+
+    /**
+     * Forgets context-owned GPU caches after a restored WebGL context so the
+     * next frame rebuilds them lazily. See
+     * {@link SceneRenderPipeline.invalidateContextResources}.
+     */
+    invalidateContextResources(): void {
+        this._planningStats = SceneRenderRuntime._EMPTY_PLANNING_STATS;
+        this._renderPassPreparer.reset();
+        this._renderPipeline.invalidateContextResources();
         this._morphMeshRuntime.clear();
     }
 }

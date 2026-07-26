@@ -2,7 +2,7 @@ import type { BoundingSphere, CameraFrustum } from '@axrone/geometry';
 import type { Actor } from '@axrone/ecs-runtime';
 import { Transform } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
-import { MeshRenderer } from './components/mesh-renderer';
+import { MeshRenderer } from '../components/mesh-renderer';
 
 export interface SceneRenderItem {
     transform: Transform;

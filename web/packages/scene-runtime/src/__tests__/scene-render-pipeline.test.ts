@@ -1,7 +1,7 @@
 import { Mat4 } from '@axrone/numeric';
 import { describe, expect, it, vi } from 'vitest';
-import { SceneRenderFrameState } from '../render-frame-state';
-import { SceneRenderPipeline } from '../scene-render-pipeline';
+import { SceneRenderFrameState } from '../rendering/render-frame-state';
+import { SceneRenderPipeline } from '../rendering/scene-render-pipeline';
 
 const createMockGL = (): WebGL2RenderingContext => {
     let nextTextureId = 1;

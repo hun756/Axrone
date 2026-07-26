@@ -9,9 +9,9 @@ import type {
     SceneMaterialPassPrimitive,
     SceneMaterialStencilFaceStateDefinition,
     SceneMaterialStencilOperation,
-} from './types';
+} from '../types';
 import type { SceneRenderPassResource } from './render-pass-registry';
-import type { SceneShaderResource } from './shader-registry';
+import type { SceneShaderResource } from '../shader-registry';
 
 interface SceneResolvedStencilState {
     readonly enabled: boolean;

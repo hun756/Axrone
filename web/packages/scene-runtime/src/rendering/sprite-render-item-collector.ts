@@ -2,7 +2,7 @@ import type { CameraFrustum } from '@axrone/geometry';
 import type { Actor } from '@axrone/ecs-runtime';
 import { Transform } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
-import { SpriteRenderer } from './components/sprite-renderer';
+import { SpriteRenderer } from '../components/sprite-renderer';
 
 export interface SceneSpriteRenderItem {
     actor: Actor;

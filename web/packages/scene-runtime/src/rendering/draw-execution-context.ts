@@ -1,6 +1,6 @@
-import type { SceneCameraFrameState } from './camera-frame-state';
+import type { SceneCameraFrameState } from '../camera-frame-state';
 import type { SceneDrawExecutorContext } from './draw-executor';
-import type { SceneLightingState } from './lighting-collector';
+import type { SceneLightingState } from '../lighting-collector';
 import type { SceneRenderPassResource } from './render-pass-registry';
 
 type MutableSceneDrawExecutorContext = {
