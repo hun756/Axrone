@@ -1,1 +1,0 @@
-export { DynamicAABBTree2D } from '@axrone/physics-2d';

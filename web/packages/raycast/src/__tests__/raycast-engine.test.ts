@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
     createRaycastSystem2D,
     createRaycastSystem3D,
-    ShapeType,
     RaycastLayer,
-} from '@axrone/physics';
-import type { BodyId, ShapeId, LayerMask } from '@axrone/physics';
+} from '../index';
+import { ShapeType } from '@axrone/physics-core';
+import type { BodyId, ShapeId } from '@axrone/physics-core';
+import type { LayerMask } from '../index';
 import type { IVec2Like, IVec3Like } from '@axrone/numeric';
 
 const v2 = (x: number, y: number): IVec2Like => ({ x, y });

@@ -3,10 +3,11 @@ import {
     createRaycastSystem3D,
     createContinuousRaycast3D,
     createShapeCaster3D,
-    ShapeType,
     RaycastLayer,
-} from '@axrone/physics';
-import type { BodyId, ShapeId, LayerMask } from '@axrone/physics';
+} from '../index';
+import { ShapeType } from '@axrone/physics-core';
+import type { BodyId, ShapeId } from '@axrone/physics-core';
+import type { LayerMask } from '../index';
 
 const ALL: LayerMask = RaycastLayer.All as LayerMask;
 

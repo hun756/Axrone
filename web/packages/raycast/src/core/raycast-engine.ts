@@ -1,5 +1,5 @@
 import { Vec2, Vec3, IVec2Like, IVec3Like, EPSILON } from '@axrone/numeric';
-import { AABB2D } from '@axrone/geometry';
+import { AABB2D, type IAABB } from '@axrone/geometry';
 import {
     IRay2D,
     IRay3D,
@@ -17,8 +17,18 @@ import {
 } from '../types/raycast-types';
 import type { BodyId, ShapeId } from '../types/primitives';
 import { RayPrimitiveIntersector2D, RayPrimitiveIntersector3D } from './raycast-primitives';
-import type { DynamicAABBTree2D } from './broadphase';
 import { ShapeType } from '@axrone/physics-core';
+
+/**
+ * Structural contract for a 2D broadphase that can answer AABB proxy queries.
+ * `DynamicAABBTree2D` from `@axrone/physics-2d` satisfies this shape; keeping
+ * it structural avoids a raycast -> physics-2d package dependency.
+ */
+export interface IRaycastBroadphaseSource2D {
+    query(callback: (proxyId: number) => boolean, aabb: AABB2D): void;
+    getUserData(proxyId: number): unknown;
+    getAABB(proxyId: number): IAABB<IVec2Like>;
+}
 
 const RAYCAST_HIT_POOL_SIZE = 512;
 const DEFAULT_MAX_HITS = 128;
@@ -255,7 +265,7 @@ export class Raycaster2D {
     private readonly _aabbTestResult = { tMin: 0, tMax: 0 };
 
     private _shapes: ShapeData2D[] = [];
-    private _broadphase: DynamicAABBTree2D | null = null;
+    private _broadphase: IRaycastBroadphaseSource2D | null = null;
 
     constructor() {
         this._hitPool = new ObjectPool(
@@ -265,7 +275,7 @@ export class Raycaster2D {
         );
     }
 
-    public setBroadphase(broadphase: DynamicAABBTree2D): void {
+    public setBroadphase(broadphase: IRaycastBroadphaseSource2D): void {
         this._broadphase = broadphase;
     }
 

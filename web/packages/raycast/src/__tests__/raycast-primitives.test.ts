@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RayPrimitiveIntersector2D, RayPrimitiveIntersector3D } from '@axrone/physics';
+import { RayPrimitiveIntersector2D, RayPrimitiveIntersector3D } from '../index';
 import type { IVec2Like, IVec3Like } from '@axrone/numeric';
 
 const v2 = (x: number, y: number): IVec2Like => ({ x, y });

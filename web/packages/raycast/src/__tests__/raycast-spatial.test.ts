@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SpatialHashGrid3D } from '@axrone/physics';
+import { SpatialHashGrid3D } from '../index';
 import type { IVec3Like } from '@axrone/numeric';
 
 const v3 = (x: number, y: number, z: number): IVec3Like => ({ x, y, z });
@@ -56,7 +56,7 @@ describe('SpatialHashGrid3D', () => {
         expect(far).not.toContain(1);
     });
 
-    it('updates an item's cells when re-inserted via update()', () => {
+    it("updates an item's cells when re-inserted via update()", () => {
         const grid = new SpatialHashGrid3D<number>(1);
         grid.insert(1, v3(0, 0, 0), v3(1, 1, 1));
         grid.update(1, v3(50, 50, 50), v3(51, 51, 51));
