@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EntityStore } from '@axrone/ecs-storage';
+import { EntityStore } from '../index';
 
 describe('EntityStore', () => {
     it('allocates entities into the configured empty archetype and recycles ids on destroy', () => {

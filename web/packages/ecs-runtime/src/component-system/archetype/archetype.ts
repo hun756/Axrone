@@ -1,1 +1,1 @@
-export { Archetype } from '@axrone/ecs-storage/archetype';
+export { Archetype } from '../../storage/archetype';

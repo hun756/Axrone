@@ -1,6 +1,6 @@
-import type { Archetype } from '@axrone/ecs-storage/archetype';
-import type { StorageComponentPool } from '@axrone/ecs-storage/types';
-import type { WorldQueryRuntime } from '@axrone/ecs-query/world-query-runtime';
+import type { Archetype } from '../../storage/archetype';
+import type { StorageComponentPool } from '../../storage/types';
+import type { WorldQueryRuntime } from '../../query/world-query-runtime';
 import type { ArchetypeId, ComponentInstance, ComponentRegistry, Entity } from '../types/core';
 import type { QueryResult } from '../types/system';
 

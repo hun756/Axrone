@@ -1,4 +1,4 @@
-import { ActorRegistry } from '@axrone/ecs-world-support/actor-registry';
+import { ActorRegistry } from '../../support/actor-registry';
 import type { Entity } from '../types/core';
 import type { Actor } from './actor';
 
