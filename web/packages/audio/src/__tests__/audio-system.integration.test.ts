@@ -304,4 +304,67 @@ describe('AudioSystem integration', () => {
         expect(diagnostics.counters.playbackCompletionCount).toBe(1);
         expect(diagnostics.lastEvent?.type).toBe('source:ended');
     });
+
+    it('disconnects all playback nodes when removeSource is called', async () => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000) as unknown as AudioBuffer;
+        const system = createAudioSystem({
+            context: context as unknown as AudioContext,
+            listeners: [{ id: 'main', active: true }],
+        });
+
+        system.upsertBus({ id: 'music' });
+        system.upsertSource({
+            id: 'theme',
+            busId: 'music',
+            clip: {
+                kind: 'buffer',
+                buffer,
+            },
+        });
+        await system.playSource('theme');
+
+        // Capture the playback nodes before removal
+        const sourceNodeBefore = context.bufferSourceNodes.at(-1);
+        expect(sourceNodeBefore).toBeDefined();
+        expect(sourceNodeBefore!.connections.length).toBeGreaterThan(0);
+
+        // Remove the source — should disconnect all nodes
+        const removed = system.removeSource('theme');
+        expect(removed).toBe(true);
+        expect(sourceNodeBefore!.connections.length).toBe(0);
+
+        // Source should no longer exist
+        expect(system.getSource('theme')).toBeUndefined();
+    });
+
+    it('disconnects all playback nodes when stopSource is called', async () => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000) as unknown as AudioBuffer;
+        const system = createAudioSystem({
+            context: context as unknown as AudioContext,
+            listeners: [{ id: 'main', active: true }],
+        });
+
+        system.upsertBus({ id: 'sfx' });
+        system.upsertSource({
+            id: 'click',
+            busId: 'sfx',
+            clip: {
+                kind: 'buffer',
+                buffer,
+            },
+        });
+        await system.playSource('click');
+
+        const sourceNode = context.bufferSourceNodes.at(-1);
+        expect(sourceNode).toBeDefined();
+        expect(sourceNode!.connections.length).toBeGreaterThan(0);
+
+        system.stopSource('click');
+        context.flush();
+
+        // After stop, nodes should be disconnected
+        expect(sourceNode!.connections.length).toBe(0);
+    });
 });

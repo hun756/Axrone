@@ -8,7 +8,14 @@
  *
  * This barrel keeps existing `from './components'` imports working.
  */
-export type { AudioListenerComponentConfig } from './audio-listener-component';
+export type {
+    AudioListenerComponentConfig,
+    AudioSpeakerMode,
+    AudioHrtfPlugin,
+    AudioOcclusionMode,
+    AudioReverbPreset,
+    AudioVirtualVoiceBehavior,
+} from './audio-listener-component';
 export { AudioListenerComponent } from './audio-listener-component';
 export type { AudioSourceComponentConfig } from './audio-source-component';
 export { AudioSourceComponent } from './audio-source-component';

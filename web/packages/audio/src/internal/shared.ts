@@ -26,6 +26,15 @@ export const DEFAULT_LISTENER_UP = Object.freeze({
     z: 0,
 } satisfies AudioVector3);
 
+const VALID_SAMPLE_RATES = new Set([22050, 44100, 48000, 96000]);
+const VALID_DSP_BUFFERS = new Set([128, 256, 512, 1024, 2048, 4096]);
+
+export const normalizeSampleRate = (value: number): number =>
+    VALID_SAMPLE_RATES.has(value) ? value : 48000;
+
+export const normalizeDspBuffer = (value: number): number =>
+    VALID_DSP_BUFFERS.has(value) ? value : 1024;
+
 export const DEFAULT_SOURCE_POSITION = DEFAULT_LISTENER_POSITION;
 export const DEFAULT_SOURCE_ORIENTATION = DEFAULT_LISTENER_FORWARD;
 

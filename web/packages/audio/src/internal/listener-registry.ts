@@ -10,7 +10,10 @@ import {
     DEFAULT_LISTENER_FORWARD,
     DEFAULT_LISTENER_POSITION,
     DEFAULT_LISTENER_UP,
+    clamp,
     cloneMetadata,
+    normalizeDspBuffer,
+    normalizeSampleRate,
     normalizeVector3,
 } from './shared';
 import { syncAudioListenerToContext } from './spatial';
@@ -36,29 +39,49 @@ export class AudioListenerRegistry {
                 position: normalizeVector3(descriptor.position, DEFAULT_LISTENER_POSITION),
                 forward: normalizeVector3(descriptor.forward, DEFAULT_LISTENER_FORWARD),
                 up: normalizeVector3(descriptor.up, DEFAULT_LISTENER_UP),
+                globalVolume: clamp(descriptor.globalVolume ?? 1.0, 0, 1),
+                dopplerFactor: clamp(descriptor.dopplerFactor ?? 1.0, 0, 5),
+                speakerMode: descriptor.speakerMode ?? 'stereo',
+                sampleRate: normalizeSampleRate(descriptor.sampleRate ?? 48000),
+                dspBufferSize: normalizeDspBuffer(descriptor.dspBufferSize ?? 1024),
+                realVoices: clamp(descriptor.realVoices ?? 32, 1, 256),
+                virtualVoices: clamp(descriptor.virtualVoices ?? 128, 1, 1024),
+                virtualVoiceBehavior: descriptor.virtualVoiceBehavior ?? 'playSilent',
+                hrtfPlugin: descriptor.hrtfPlugin ?? 'none',
+                occlusionMode: descriptor.occlusionMode ?? 'raycastDiffraction',
+                occlusionLayers: Array.isArray(descriptor.occlusionLayers) ? [...descriptor.occlusionLayers] : [0, 3, 6, 7],
+                reverbPreset: descriptor.reverbPreset ?? 'off',
+                reverbLevel: clamp(descriptor.reverbLevel ?? 0, 0, 1),
+                ambientClipId: descriptor.ambientClipId ?? '',
+                ambientVolume: clamp(descriptor.ambientVolume ?? 0.5, 0, 1),
+                followCamera: descriptor.followCamera ?? true,
                 metadata: cloneMetadata(descriptor.metadata),
             };
             this.#listeners.set(id, listener);
         }
 
-        if (descriptor.active !== undefined) {
-            listener.active = descriptor.active;
-        }
-        if (descriptor.enabled !== undefined) {
-            listener.enabled = descriptor.enabled;
-        }
-        if (descriptor.position !== undefined) {
-            listener.position = normalizeVector3(descriptor.position, DEFAULT_LISTENER_POSITION);
-        }
-        if (descriptor.forward !== undefined) {
-            listener.forward = normalizeVector3(descriptor.forward, DEFAULT_LISTENER_FORWARD);
-        }
-        if (descriptor.up !== undefined) {
-            listener.up = normalizeVector3(descriptor.up, DEFAULT_LISTENER_UP);
-        }
-        if (descriptor.metadata !== undefined) {
-            listener.metadata = cloneMetadata(descriptor.metadata);
-        }
+        if (descriptor.active !== undefined) listener.active = descriptor.active;
+        if (descriptor.enabled !== undefined) listener.enabled = descriptor.enabled;
+        if (descriptor.position !== undefined) listener.position = normalizeVector3(descriptor.position, DEFAULT_LISTENER_POSITION);
+        if (descriptor.forward !== undefined) listener.forward = normalizeVector3(descriptor.forward, DEFAULT_LISTENER_FORWARD);
+        if (descriptor.up !== undefined) listener.up = normalizeVector3(descriptor.up, DEFAULT_LISTENER_UP);
+        if (descriptor.globalVolume !== undefined) listener.globalVolume = clamp(descriptor.globalVolume, 0, 1);
+        if (descriptor.dopplerFactor !== undefined) listener.dopplerFactor = clamp(descriptor.dopplerFactor, 0, 5);
+        if (descriptor.speakerMode !== undefined) listener.speakerMode = descriptor.speakerMode;
+        if (descriptor.sampleRate !== undefined) listener.sampleRate = normalizeSampleRate(descriptor.sampleRate);
+        if (descriptor.dspBufferSize !== undefined) listener.dspBufferSize = normalizeDspBuffer(descriptor.dspBufferSize);
+        if (descriptor.realVoices !== undefined) listener.realVoices = clamp(descriptor.realVoices, 1, 256);
+        if (descriptor.virtualVoices !== undefined) listener.virtualVoices = clamp(descriptor.virtualVoices, 1, 1024);
+        if (descriptor.virtualVoiceBehavior !== undefined) listener.virtualVoiceBehavior = descriptor.virtualVoiceBehavior;
+        if (descriptor.hrtfPlugin !== undefined) listener.hrtfPlugin = descriptor.hrtfPlugin;
+        if (descriptor.occlusionMode !== undefined) listener.occlusionMode = descriptor.occlusionMode;
+        if (descriptor.occlusionLayers !== undefined) listener.occlusionLayers = [...descriptor.occlusionLayers];
+        if (descriptor.reverbPreset !== undefined) listener.reverbPreset = descriptor.reverbPreset;
+        if (descriptor.reverbLevel !== undefined) listener.reverbLevel = clamp(descriptor.reverbLevel, 0, 1);
+        if (descriptor.ambientClipId !== undefined) listener.ambientClipId = descriptor.ambientClipId;
+        if (descriptor.ambientVolume !== undefined) listener.ambientVolume = clamp(descriptor.ambientVolume, 0, 1);
+        if (descriptor.followCamera !== undefined) listener.followCamera = descriptor.followCamera;
+        if (descriptor.metadata !== undefined) listener.metadata = cloneMetadata(descriptor.metadata);
 
         if (listener.active) {
             this.#activate(listener.id);
@@ -109,6 +132,22 @@ export class AudioListenerRegistry {
             position: normalizeVector3(listener.position, DEFAULT_LISTENER_POSITION),
             forward: normalizeVector3(listener.forward, DEFAULT_LISTENER_FORWARD),
             up: normalizeVector3(listener.up, DEFAULT_LISTENER_UP),
+            globalVolume: listener.globalVolume,
+            dopplerFactor: listener.dopplerFactor,
+            speakerMode: listener.speakerMode,
+            sampleRate: listener.sampleRate,
+            dspBufferSize: listener.dspBufferSize,
+            realVoices: listener.realVoices,
+            virtualVoices: listener.virtualVoices,
+            virtualVoiceBehavior: listener.virtualVoiceBehavior,
+            hrtfPlugin: listener.hrtfPlugin,
+            occlusionMode: listener.occlusionMode,
+            occlusionLayers: Object.freeze([...listener.occlusionLayers]),
+            reverbPreset: listener.reverbPreset,
+            reverbLevel: listener.reverbLevel,
+            ambientClipId: listener.ambientClipId,
+            ambientVolume: listener.ambientVolume,
+            followCamera: listener.followCamera,
             metadata: listener.metadata,
         });
     }
