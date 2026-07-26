@@ -164,3 +164,4 @@ export {
     createPassthroughGltfTextureTranscoder,
     GltfTextureTranscoderRegistry,
 } from './importer';
+export { createGltfAssetDisposers } from './disposers';
