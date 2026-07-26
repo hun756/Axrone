@@ -450,9 +450,9 @@ export class NormalDistribution implements IDistribution<number> {
     }
 
     private erfInv(x: number): number {
-        const EPSILON = 1e-10;
+        const BOUNDARY_EPSILON = 1e-10;
 
-        if (Math.abs(x) >= 1.0 - EPSILON) {
+        if (Math.abs(x) >= 1.0 - BOUNDARY_EPSILON) {
             return x >= 0 ? 8.0 : -8.0;
         }
 

@@ -1,4 +1,4 @@
-import { Vec2, clamp, type IVec2Like } from '@axrone/numeric';
+import { Vec2, clamp, SOLVER_EPSILON as NUMERIC_SOLVER_EPSILON, type IVec2Like } from '@axrone/numeric';
 import type { BodyId, ConstraintId } from '../types';
 import { ConstraintType } from '../types';
 import type { ConstraintManager2D } from './constraint-manager';
@@ -27,7 +27,7 @@ interface JacobianRow {
     softness?: number;
 }
 
-const SOLVER_EPSILON = 1e-6;
+const SOLVER_EPSILON = NUMERIC_SOLVER_EPSILON;
 const BAUMGARTE = 0.2;
 const POSITION_SLOP = 0.005;
 

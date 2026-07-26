@@ -1,4 +1,4 @@
-import { Quat, Vec3 } from '@axrone/numeric';
+import { EPSILON, Quat, Vec3 } from '@axrone/numeric';
 import {
     LightKind as LightingLightKind,
     LightingFrameResolver,
@@ -14,7 +14,6 @@ import { SpotLight } from './components/spot-light';
 const DEFAULT_LIGHT_DIRECTION = Object.freeze(new Vec3(0, -1, 0));
 const DEFAULT_LIGHT_ATTENUATION = 2;
 const PRIMARY_DIRECTIONAL_PRIORITY = 1_000_000;
-const EPSILON = 1e-6;
 
 export type SceneLightingState = LightingSelectionState;
 

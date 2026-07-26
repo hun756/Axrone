@@ -1,6 +1,7 @@
 import type { IVec2Like } from '@axrone/numeric';
+import type { Brand } from '@axrone/utility';
 
-export type Brand<T, B extends string> = T & { readonly __brand: B };
+export type { Brand };
 
 export type BrandedFactory<B extends string> = {
     readonly brand: B;

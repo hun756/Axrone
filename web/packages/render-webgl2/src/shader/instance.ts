@@ -12,7 +12,7 @@ import {
     getShaderDataTypeSize,
 } from './utils';
 import { ByteBuffer } from '@axrone/memory';
-import { Mat4, Vec2, Vec3, Vec4 } from '@axrone/numeric';
+import { EPSILON, Mat4, Vec2, Vec3, Vec4 } from '@axrone/numeric';
 import {
     ShaderInstanceError,
     ShaderInstanceLifecycleError,
@@ -338,8 +338,6 @@ interface ShaderInstanceStats {
     readonly stateChanges: number;
     readonly uploadSkipped: number;
 }
-
-const EPSILON = 1e-6;
 
 const areFloatsEqual = (a: number, b: number): boolean => Math.abs(a - b) <= EPSILON;
 

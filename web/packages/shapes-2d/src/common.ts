@@ -1,4 +1,5 @@
 import type { IVec2Like } from '@axrone/numeric';
+import { GEOMETRIC_EPSILON } from '@axrone/numeric';
 import { Fnv1a32 } from '@axrone/hash';
 import type {
     GradientSpread,
@@ -9,7 +10,7 @@ import type {
 } from './types';
 import { PaintValidationError, ShapeValidationError } from './errors';
 
-export const EPSILON = 1e-9;
+export const EPSILON = GEOMETRIC_EPSILON;
 export const TAU = Math.PI * 2;
 export const DEFAULT_CURVE_TOLERANCE = 0.25;
 export const DEFAULT_MIN_CURVE_SEGMENTS = 16;
