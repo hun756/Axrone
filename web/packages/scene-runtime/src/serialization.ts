@@ -151,6 +151,9 @@ export const decodeSceneValue = (value: SceneSerializedValue): unknown => {
             case 'Uint8Array':
                 return new Uint8Array(encodedValue.map((entry) => Number(entry)));
             default:
+                console.warn(
+                    `[scene-runtime] Unknown serialized type '$type=${encodedType}', falling back to raw array decode`
+                );
                 return encodedValue.map((entry) => decodeSceneValue(entry as SceneSerializedValue));
         }
     }
