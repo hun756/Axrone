@@ -3,6 +3,7 @@ import { EPSILON, HALF_PI, PI_2 } from './common';
 import { IVec2Like } from './vec2';
 import { IVec3Like } from './vec3';
 import { clamp01 } from './clamp';
+import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
 declare const __matrix3Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
@@ -147,11 +148,13 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
     }
 
     getHashCode(): number {
-        let h1 = 2166136261;
-        for (let i = 0; i < 9; i++) {
-            h1 = Math.imul(h1 ^ Math.floor(this.data[i] * 1000), 16777619);
-        }
-        return h1 >>> 0;
+        const h = new Fnv1a32();
+        for (let i = 0; i < 9; i++) h.updateF32(this.data[i]!);
+        return h.digest();
+    }
+
+    hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {
+        for (let i = 0; i < 9; i++) hasher.updateF32(this.data[i]!);
     }
 
     static multiply<
@@ -602,6 +605,21 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
     >(normal: Readonly<T>, m: Readonly<U>, out?: V): V extends undefined ? T : V {
         const invTranspose = Mat3.transpose(Mat3.invert(m));
         return Mat3.transformVec3(normal, invTranspose, out);
+    }
+
+    static transformNormalWithIT<
+        T extends IVec3Like,
+        U extends IMat3Like,
+        V extends IVec3Like | undefined = undefined,
+    >(normal: Readonly<T>, it: Readonly<U>, out?: V): V extends undefined ? T : V {
+        return Mat3.transformVec3(normal, it, out);
+    }
+
+    static computeNormalMatrix<
+        T extends IMat3Like,
+        U extends IMat3Like | undefined = undefined,
+    >(m: Readonly<T>, out?: U): MatrixOperationReturnType<U, Mat3> {
+        return Mat3.transpose(Mat3.invert(m), out) as MatrixOperationReturnType<U, Mat3>;
     }
 
     static lerp<

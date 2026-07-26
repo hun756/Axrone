@@ -665,10 +665,16 @@ export interface RenderTonemapPassMetadata {
     readonly source: RenderResourceName;
     readonly target: RenderResourceName<'post' | 'frame'>;
     readonly mode: RenderTonemappingMode;
+    readonly gamma: number;
+    readonly contrast: number;
+    readonly saturation: number;
+    readonly shoulderStrength: number;
+    readonly toeStrength: number;
     readonly hdr: boolean;
     readonly colorSpace: RenderOutputColorSpace;
     readonly exposure: RenderExposureSettings | null;
-    readonly exposureHistory: RenderResourceName<'history'> | null;
+    readonly exposureHistorySource: RenderResourceName<'history'> | null;
+    readonly exposureHistoryTarget: RenderResourceName<'history'> | null;
 }
 
 export interface RenderPresentPassMetadata {

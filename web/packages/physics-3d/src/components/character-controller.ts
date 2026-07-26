@@ -174,40 +174,50 @@ export class CharacterController extends Component {
     override fixedUpdate(deltaTime: number): void {
         if (!this._bodyManager || this._bodyId === -1 || !this._ccEnabled) return;
         const position = this._bodyManager.getPosition(this._bodyId);
-        let newX = position.x;
-        let newY = position.y;
-        let newZ = position.z;
+        const motion = { x: 0, y: 0, z: 0 };
         if (
             this._pendingMovement.x !== 0 ||
             this._pendingMovement.y !== 0 ||
             this._pendingMovement.z !== 0
         ) {
-            newX += this._pendingMovement.x * deltaTime;
-            newY += this._pendingMovement.y * deltaTime;
-            newZ += this._pendingMovement.z * deltaTime;
+            motion.x += this._pendingMovement.x * deltaTime;
+            motion.y += this._pendingMovement.y * deltaTime;
+            motion.z += this._pendingMovement.z * deltaTime;
             this._pendingMovement.x = 0;
             this._pendingMovement.y = 0;
             this._pendingMovement.z = 0;
         }
         if (this._useGravity && !this._isGrounded) {
             this._verticalVelocity += GRAVITY_ACCELERATION * deltaTime;
-            newY += this._verticalVelocity * deltaTime;
+            motion.y += this._verticalVelocity * deltaTime;
         } else if (this._isGrounded) {
             this._verticalVelocity = 0;
         }
-        if (newX !== position.x || newY !== position.y || newZ !== position.z) {
-            this._bodyManager.setPosition(this._bodyId, { x: newX, y: newY, z: newZ });
-            syncTransformWorldPosition(this.transform, { x: newX, y: newY, z: newZ });
-            this._velocity.x = (newX - position.x) / deltaTime;
-            this._velocity.y = (newY - position.y) / deltaTime;
-            this._velocity.z = (newZ - position.z) / deltaTime;
+        const newPosition = this._performMove(position, motion);
+        if (
+            newPosition.x !== position.x ||
+            newPosition.y !== position.y ||
+            newPosition.z !== position.z
+        ) {
+            this._bodyManager.setPosition(this._bodyId, newPosition);
+            syncTransformWorldPosition(this.transform, newPosition);
+            this._velocity.x = (newPosition.x - position.x) / deltaTime;
+            this._velocity.y = (newPosition.y - position.y) / deltaTime;
+            this._velocity.z = (newPosition.z - position.z) / deltaTime;
         }
         this._updateGroundState();
+        if (this._isGrounded && this._verticalVelocity < 0) {
+            this._verticalVelocity = 0;
+        }
     }
 
     override onDestroy(): void {
-        if (this._shapeManager && this._shapeId !== -1) {
-            this._shapeManager.destroyShape(this._shapeId);
+        if (this._shapeId !== -1) {
+            if (this._world) {
+                this._world.destroyShape(this._shapeId);
+            } else if (this._shapeManager) {
+                this._shapeManager.destroyShape(this._shapeId);
+            }
             this._shapeId = -1 as ShapeId3D;
         }
         if (this._bodyManager && this._bodyId !== -1) {
@@ -249,67 +259,197 @@ export class CharacterController extends Component {
             awake: true,
             enabled: this._ccEnabled,
         });
+        this._createOrReplaceShape();
+    }
+
+    private _createOrReplaceShape(): void {
+        if (!this._shapeManager || this._bodyId === -1) return;
+
         const halfHeight = (this._height - this._radius * 2) * 0.5;
-        this._shapeId = this._shapeManager.createCapsule(
-            this._bodyId,
-            {
-                p1: { x: this._center.x, y: this._center.y - halfHeight, z: this._center.z },
-                p2: { x: this._center.x, y: this._center.y + halfHeight, z: this._center.z },
-                radius: this._radius,
-            },
-            {
-                friction: 0 as unknown as Friction,
-                restitution: 0 as unknown as Restitution,
-                density: 1 as unknown as Density,
-            },
-            { categoryBits: 1, maskBits: 0xffff, groupIndex: 0 }
-        );
+        const shapeDef = {
+            p1: { x: this._center.x, y: this._center.y - halfHeight, z: this._center.z },
+            p2: { x: this._center.x, y: this._center.y + halfHeight, z: this._center.z },
+            radius: this._radius,
+        };
+        const material = {
+            friction: 0 as unknown as Friction,
+            restitution: 0 as unknown as Restitution,
+            density: 1 as unknown as Density,
+        };
+        const filter = { categoryBits: 1, maskBits: 0xffff, groupIndex: 0 };
+
+        if (this._world) {
+            this._shapeId = this._world.createCapsuleShape(
+                this._bodyId,
+                shapeDef,
+                material,
+                filter
+            );
+            return;
+        }
+
+        this._shapeId = this._shapeManager.createCapsule(this._bodyId, shapeDef, material, filter);
     }
 
     private _recreateShape(): void {
-        if (this._shapeId !== -1 && this._shapeManager) {
-            this._shapeManager.destroyShape(this._shapeId);
+        if (this._shapeId !== -1) {
+            if (this._world) {
+                this._world.destroyShape(this._shapeId);
+            } else if (this._shapeManager) {
+                this._shapeManager.destroyShape(this._shapeId);
+            }
             this._shapeId = -1 as ShapeId3D;
         }
-        if (this._bodyId !== -1 && this._shapeManager) {
-            const halfHeight = (this._height - this._radius * 2) * 0.5;
-            this._shapeId = this._shapeManager.createCapsule(
-                this._bodyId,
-                {
-                    p1: { x: this._center.x, y: this._center.y - halfHeight, z: this._center.z },
-                    p2: { x: this._center.x, y: this._center.y + halfHeight, z: this._center.z },
-                    radius: this._radius,
-                },
-                {
-                    friction: 0 as unknown as Friction,
-                    restitution: 0 as unknown as Restitution,
-                    density: 1 as unknown as Density,
-                },
-                { categoryBits: 1, maskBits: 0xffff, groupIndex: 0 }
-            );
-        }
+        if (this._bodyId !== -1) this._createOrReplaceShape();
     }
 
     private _updateGroundState(): void {
-        if (!this._bodyManager || this._bodyId === -1) return;
+        if (!this._bodyManager || !this._world || this._bodyId === -1) return;
         this._groundNormal.x = 0;
         this._groundNormal.y = 1;
         this._groundNormal.z = 0;
         this._isGrounded = false;
-        this._collisionFlags = CollisionFlags.None;
+        this._collisionFlags &= ~CollisionFlags.Below;
+
+        const position = this._bodyManager.getPosition(this._bodyId);
+        const groundHit = this._getGroundHit(position);
+        if (!groundHit) {
+            return;
+        }
+
+        this._groundNormal.x = groundHit.normal.x;
+        this._groundNormal.y = groundHit.normal.y;
+        this._groundNormal.z = groundHit.normal.z;
+
+        const cosSlope = Math.cos((this._slopeLimit * Math.PI) / 180);
+        this._isGrounded = groundHit.normal.y >= cosSlope;
+        if (this._isGrounded) {
+            this._collisionFlags |= CollisionFlags.Below;
+        }
     }
 
     private _performMove(from: IVec3Like, motion: IVec3Like): IVec3Like {
-        const cosSlope = Math.cos((this._slopeLimit * Math.PI) / 180);
-        let resultX = from.x + motion.x;
-        let resultY = from.y + motion.y;
-        let resultZ = from.z + motion.z;
+        let resultX = from.x;
+        let resultY = from.y;
+        let resultZ = from.z;
         this._collisionFlags = CollisionFlags.None;
-        if (motion.y < 0 && this._isGrounded) {
-            resultY = from.y;
+
+        if (!this._detectCollisions || !this._world) {
+            return { x: from.x + motion.x, y: from.y + motion.y, z: from.z + motion.z };
+        }
+
+        if (motion.x !== 0) {
+            const candidate = { x: from.x + motion.x, y: from.y, z: from.z };
+            if (this._hasBlockingOverlap(candidate, true)) {
+                this._collisionFlags |= CollisionFlags.Sides;
+            } else {
+                resultX = candidate.x;
+            }
+        }
+
+        if (motion.z !== 0) {
+            const candidate = { x: resultX, y: from.y, z: from.z + motion.z };
+            if (this._hasBlockingOverlap(candidate, true)) {
+                this._collisionFlags |= CollisionFlags.Sides;
+            } else {
+                resultZ = candidate.z;
+            }
+        }
+
+        const verticalCandidate = { x: resultX, y: from.y + motion.y, z: resultZ };
+        if (motion.y > 0 && this._hasBlockingOverlap(verticalCandidate, false)) {
+            this._collisionFlags |= CollisionFlags.Above;
+        } else {
+            resultY = verticalCandidate.y;
+        }
+
+        const snapped = this._snapToGround({ x: resultX, y: resultY, z: resultZ }, motion.y <= 0);
+        if (snapped.y !== resultY) {
+            resultY = snapped.y;
             this._collisionFlags |= CollisionFlags.Below;
         }
+
         return { x: resultX, y: resultY, z: resultZ };
+    }
+
+    private _hasBlockingOverlap(position: IVec3Like, horizontalOnly: boolean): boolean {
+        if (!this._world) return false;
+
+        const bounds = this._getControllerBounds(position, horizontalOnly);
+        const shapeIds = this._world.queryAABBAll(bounds.min, bounds.max);
+        return shapeIds.some((shapeId) => shapeId !== this._shapeId);
+    }
+
+    private _getControllerBounds(
+        position: IVec3Like,
+        horizontalOnly: boolean
+    ): { min: IVec3Like; max: IVec3Like } {
+        const halfBodyHeight = this._radius + (this._height - this._radius * 2) * 0.5;
+        const center = {
+            x: position.x + this._center.x,
+            y: position.y + this._center.y,
+            z: position.z + this._center.z,
+        };
+        const minY = horizontalOnly
+            ? center.y - Math.max(0.001, halfBodyHeight - this._skinWidth * 2)
+            : center.y - halfBodyHeight;
+        const maxY = horizontalOnly
+            ? center.y + Math.max(0.001, halfBodyHeight - this._skinWidth * 2)
+            : center.y + halfBodyHeight;
+
+        return {
+            min: {
+                x: center.x - this._radius,
+                y: minY,
+                z: center.z - this._radius,
+            },
+            max: {
+                x: center.x + this._radius,
+                y: maxY,
+                z: center.z + this._radius,
+            },
+        };
+    }
+
+    private _getGroundHit(position: IVec3Like): IRaycastResult3D | null {
+        if (!this._world) return null;
+
+        const halfBodyHeight = this._radius + (this._height - this._radius * 2) * 0.5;
+        const origin = {
+            x: position.x + this._center.x,
+            y: position.y + this._center.y,
+            z: position.z + this._center.z,
+        };
+        const maxDistance = halfBodyHeight + this._stepOffset + this._skinWidth + 0.05;
+        const hits = this._world.rayCastAll(origin, { x: 0, y: -1, z: 0 }, maxDistance);
+
+        for (const hit of hits) {
+            if (hit.shapeId !== this._shapeId) {
+                return hit;
+            }
+        }
+
+        return null;
+    }
+
+    private _snapToGround(position: IVec3Like, allowSnap: boolean): IVec3Like {
+        if (!allowSnap) return position;
+
+        const hit = this._getGroundHit(position);
+        if (!hit) return position;
+
+        const cosSlope = Math.cos((this._slopeLimit * Math.PI) / 180);
+        if (hit.normal.y < cosSlope) {
+            return position;
+        }
+
+        const halfBodyHeight = this._radius + (this._height - this._radius * 2) * 0.5;
+        const targetY = hit.point.y + halfBodyHeight - this._center.y;
+        if (Math.abs(targetY - position.y) > this._stepOffset + this._skinWidth + 0.05) {
+            return position;
+        }
+
+        return { x: position.x, y: targetY, z: position.z };
     }
 }
 

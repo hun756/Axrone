@@ -1,5 +1,5 @@
 import type { Mat4, Quat, Vec2, Vec3, Vec4 } from '@axrone/numeric';
-import type { RenderShaderEffectDefinition } from '@axrone/render-core';
+import type { RenderShaderEffectDefinition } from '@axrone/render-core/shader-effect';
 import type { ColorSpace, FilterMode, TextureFormat, WrapMode } from '@axrone/render-webgl2';
 
 export type GltfMeshSemantic =
@@ -161,24 +161,34 @@ export interface GltfMaterialDefinition {
     readonly textures?: Readonly<Record<string, GltfTextureBindingDefinition>>;
 }
 
-export interface GltfComponentSnapshot {
-    readonly type: string;
-    readonly data: GltfSerializedValue;
-}
-
-export interface GltfActorSnapshot {
-    readonly nodeId?: string;
-    readonly parentNodeId?: string | null;
-    readonly name: string;
-    readonly layer: number;
-    readonly tag: string;
-    readonly active: boolean;
-    readonly persistent: boolean;
-    readonly pooled: boolean;
-    readonly components: readonly GltfComponentSnapshot[];
-}
-
-export interface GltfPrefabDefinition {
-    readonly id: string;
-    readonly actors: readonly GltfActorSnapshot[];
-}
+export type {
+    GltfComponentSnapshot,
+    GltfActorSnapshot,
+    GltfPrefabDefinition,
+    ComponentType,
+    ComponentDataMap,
+    ComponentSnapshotOf,
+    ComponentDataOf,
+    GltfComponentVisitor,
+    TransformComponentData,
+    CameraComponentData,
+    DirectionalLightComponentData,
+    PointLightComponentData,
+    SpotLightComponentData,
+    MeshRendererComponentData,
+    MeshRendererSkinData,
+    MeshRendererMorphData,
+    AnimatorComponentData,
+    AnimatorSerializableClip,
+    AnimatorSerializableTrack,
+    visitComponent,
+    mapComponents,
+    isTransformSnapshot,
+    isCameraSnapshot,
+    isDirectionalLightSnapshot,
+    isPointLightSnapshot,
+    isSpotLightSnapshot,
+    isMeshRendererSnapshot,
+    isAnimatorSnapshot,
+    isLightSnapshot,
+} from './internal/gltf-component-snapshot';

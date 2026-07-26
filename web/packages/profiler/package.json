@@ -1,0 +1,54 @@
+{
+    "name": "@axrone/profiler",
+    "version": "0.1.0",
+    "description": "High-performance runtime profiler with hierarchical timers, sampling buffers, markers, and performance metrics for the Axrone game engine.",
+    "type": "module",
+    "sideEffects": false,
+    "main": "./dist/index.js",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.js"
+        },
+        "./capabilities": {
+            "types": "./dist/capabilities.d.ts",
+            "import": "./dist/capabilities.mjs",
+            "require": "./dist/capabilities.js"
+        },
+        "./profile": {
+            "types": "./dist/profile.d.ts",
+            "import": "./dist/profile.mjs",
+            "require": "./dist/profile.js"
+        },
+        "./clock": {
+            "types": "./dist/core/clock/index.d.ts",
+            "import": "./dist/core/clock/index.mjs",
+            "require": "./dist/core/clock/index.js"
+        }
+    },
+    "scripts": {
+        "build": "rollup -c rollup.config.mjs",
+        "clean": "rimraf dist",
+        "typecheck": "tsc --noEmit -p tsconfig.build.json",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "lint": "eslint src --ext .ts",
+        "lint:fix": "eslint src --ext .ts --fix",
+        "format": "prettier --write \"src/**/*.ts\" --config ../../.prettierrc",
+        "format:check": "prettier --check \"src/**/*.ts\" --config ../../.prettierrc"
+    },
+    "dependencies": {
+        "@axrone/utility": "workspace:*"
+    },
+    "files": [
+        "dist"
+    ],
+    "license": "MIT",
+    "author": "Axrone",
+    "publishConfig": {
+        "access": "public"
+    }
+}

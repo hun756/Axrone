@@ -90,7 +90,9 @@ export const enum TextureFormat {
     ASTC_12x12 = 'ASTC_12x12',
 }
 
-export const enum FilterMode {
+// NOT: `const enum` yerine normal `enum` — paket sınırından (örn. Editor)
+// değer olarak import edilebilmesi için. String değerler aynıdır; davranış değişmez.
+export enum FilterMode {
     NEAREST = 'NEAREST',
     LINEAR = 'LINEAR',
     NEAREST_MIPMAP_NEAREST = 'NEAREST_MIPMAP_NEAREST',
@@ -99,7 +101,7 @@ export const enum FilterMode {
     LINEAR_MIPMAP_LINEAR = 'LINEAR_MIPMAP_LINEAR',
 }
 
-export const enum WrapMode {
+export enum WrapMode {
     REPEAT = 'REPEAT',
     CLAMP_TO_EDGE = 'CLAMP_TO_EDGE',
     CLAMP_TO_BORDER = 'CLAMP_TO_BORDER',
@@ -115,7 +117,7 @@ export const enum TextureUsage {
     COMPUTE = 'COMPUTE',
 }
 
-export const enum ColorSpace {
+export enum ColorSpace {
     LINEAR = 'LINEAR',
     SRGB = 'SRGB',
     HDR10 = 'HDR10',

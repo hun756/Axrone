@@ -14,6 +14,7 @@ import type {
     SceneMeshDefinition,
     ScenePrefabDefinition,
     SceneSamplerDefinition,
+    SceneSerializedValue,
     SceneShaderDefinition,
     SceneTextureDefinition,
 } from '@axrone/scene-runtime';
@@ -22,6 +23,12 @@ const adaptGltfComponentSnapshotToScene = (
     component: GltfComponentSnapshot
 ): ScenePrefabDefinition['actors'][number]['components'][number] => ({
     ...component,
+    // Gltf component payloads are plain JSON-compatible records; the scene
+    // contract types them as SceneSerializedValue (index-signature JSON).
+    // The structural conversion is safe and stays until the shared
+    // scene/gltf serialized-value contract extraction lands
+    // (duplicate-governance approved debt).
+    data: component.data as unknown as SceneSerializedValue,
 });
 
 const adaptGltfActorSnapshotToScene = (

@@ -162,6 +162,22 @@ export interface AudioListenerDescriptor {
     readonly position?: AudioVector3;
     readonly forward?: AudioVector3;
     readonly up?: AudioVector3;
+    readonly globalVolume?: number;
+    readonly dopplerFactor?: number;
+    readonly speakerMode?: string;
+    readonly sampleRate?: number;
+    readonly dspBufferSize?: number;
+    readonly realVoices?: number;
+    readonly virtualVoices?: number;
+    readonly virtualVoiceBehavior?: string;
+    readonly hrtfPlugin?: string;
+    readonly occlusionMode?: string;
+    readonly occlusionLayers?: readonly number[];
+    readonly reverbPreset?: string;
+    readonly reverbLevel?: number;
+    readonly ambientClipId?: string;
+    readonly ambientVolume?: number;
+    readonly followCamera?: boolean;
     readonly metadata?: Readonly<Record<string, AudioJsonValue>>;
 }
 
@@ -174,6 +190,22 @@ export interface AudioListenerState {
     readonly position: AudioVector3;
     readonly forward: AudioVector3;
     readonly up: AudioVector3;
+    readonly globalVolume: number;
+    readonly dopplerFactor: number;
+    readonly speakerMode: string;
+    readonly sampleRate: number;
+    readonly dspBufferSize: number;
+    readonly realVoices: number;
+    readonly virtualVoices: number;
+    readonly virtualVoiceBehavior: string;
+    readonly hrtfPlugin: string;
+    readonly occlusionMode: string;
+    readonly occlusionLayers: readonly number[];
+    readonly reverbPreset: string;
+    readonly reverbLevel: number;
+    readonly ambientClipId: string;
+    readonly ambientVolume: number;
+    readonly followCamera: boolean;
     readonly metadata: Readonly<Record<string, AudioJsonValue>>;
 }
 

@@ -5,3 +5,8 @@ export * from './CircleCollider2D';
 export * from './CapsuleCollider2D';
 export * from './PolygonCollider2D';
 export * from './joint2d';
+export * from './distance-joint2d';
+export * from './hinge-joint2d';
+export * from './slider-joint2d';
+export * from './spring-joint2d';
+export * from './fixed-joint2d';

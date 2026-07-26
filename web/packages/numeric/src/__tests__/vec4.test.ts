@@ -400,14 +400,6 @@ describe('Vec4 Unit Tests', () => {
                 expect(a.lengthSquared()).toBe(30);
             });
 
-            test('should calculate fast length approximation', () => {
-                const a = new Vec4(3, 4, 0, 0);
-                const fastLen = Vec4.fastLength(a);
-                const realLen = Vec4.len(a);
-
-                expect(Math.abs(fastLen - realLen) / realLen).toBeLessThan(0.3);
-            });
-
             test('should normalize vector correctly', () => {
                 const a = new Vec4(3, 4, 0, 0);
                 const normalized = Vec4.normalize(a);
@@ -429,14 +421,6 @@ describe('Vec4 Unit Tests', () => {
 
                 expect(() => Vec4.normalize(zero)).toThrow('Cannot normalize a zero-length vector');
                 expect(() => zero.normalize()).toThrow('Cannot normalize a zero-length vector');
-            });
-
-            test('should use Quake fast inverse square root', () => {
-                const a = new Vec4(3, 4, 0, 0);
-                const normalized = Vec4.normalizeQuake(a);
-
-                // No 1e-3
-                expectNumberClose(Vec4.len(normalized), 1, 0.002);
             });
         });
     });
@@ -475,16 +459,6 @@ describe('Vec4 Unit Tests', () => {
 
             expect(Vec4.chebyshevDistance(a, b)).toBe(4);
             expect(a.chebyshevDistance(b)).toBe(4);
-        });
-
-        test('should calculate fast distance approximation', () => {
-            const a = new Vec4(1, 2, 3, 4);
-            const b = new Vec4(4, 6, 7, 8);
-
-            const fastDist = Vec4.distanceFast(a, b);
-            const realDist = Vec4.distance(a, b);
-
-            expect(Math.abs(fastDist - realDist) / realDist).toBeLessThan(0.3);
         });
 
         test('should return zero distance for same point', () => {

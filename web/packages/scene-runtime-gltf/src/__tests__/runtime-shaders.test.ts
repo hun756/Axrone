@@ -49,10 +49,19 @@ describe('scene-runtime glTF shader effects', () => {
         ).toBe('int');
         expect(definition.effect?.properties?.some((property) => property.name === 'u_LocalLightType')).toBe(false);
         expect(GLTF_PBR_SHADER_EFFECT.properties?.some((property) => property.name === '_MetallicFactor')).toBe(true);
+        expect(GLTF_PBR_SHADER_EFFECT.properties?.some((property) => property.name === '_ClearcoatFactor')).toBe(true);
+        expect(
+            GLTF_PBR_SHADER_EFFECT.properties?.some(
+                (property) => property.name === '_ClearcoatNormalTexture_Scale'
+            )
+        ).toBe(true);
         expect(GLTF_UNLIT_SHADER_EFFECT.properties?.some((property) => property.name === '_BaseColorTexture')).toBe(true);
         expect(definition.fragmentSource).toContain('uniform vec3 u_DirectionalLightDirection[1];');
         expect(definition.fragmentSource).toContain('uniform int u_PointLightCount;');
         expect(definition.fragmentSource).toContain('uniform float u_SpotLightInnerConeCosine[4];');
+        expect(definition.fragmentSource).toContain('uniform sampler2D _ClearcoatTexture;');
+        expect(definition.fragmentSource).toContain('vec3 resolveClearcoatNormal(vec3 baseNormal)');
+        expect(definition.fragmentSource).toContain('vec3 evaluateClearcoatLight(');
         expect(definition.fragmentSource).not.toContain('u_LocalLightType');
         expect(definition.cull).toBe(true);
         expect(definition.blend).toBe(false);
@@ -84,6 +93,12 @@ describe('scene-runtime glTF shader effects', () => {
             _BaseColorTexture_TexCoord: 1,
             _MetallicFactor: 0.4,
             _RoughnessFactor: 0.2,
+            _ClearcoatFactor: 0.65,
+            _ClearcoatRoughnessFactor: 0.15,
+            _ClearcoatTexture_TexCoord: 0,
+            _ClearcoatRoughnessTexture_TexCoord: 0,
+            _ClearcoatNormalTexture_TexCoord: 0,
+            _ClearcoatNormalTexture_Scale: 0.8,
             _NormalTexture_TexCoord: 0,
             _NormalTexture_Scale: 1.5,
             _OcclusionTexture_TexCoord: 0,
@@ -98,6 +113,9 @@ describe('scene-runtime glTF shader effects', () => {
             alphaCutoff: 0.33,
             metallic: 0.4,
             roughness: 0.2,
+            clearcoat: 0.65,
+            clearcoatRoughness: 0.15,
+            clearcoatNormalScale: 0.8,
             normalScale: 1.5,
             occlusion: 0.75,
             emissive: [0.1, 0.2, 0.3],
@@ -107,6 +125,10 @@ describe('scene-runtime glTF shader effects', () => {
                 useNormalMap: true,
                 useOcclusionMap: true,
                 useEmissiveMap: true,
+                useClearcoat: true,
+                useClearcoatMap: true,
+                useClearcoatRoughnessMap: true,
+                useClearcoatNormalMap: true,
                 useAlphaTest: true,
                 hasSecondUv: true,
             },

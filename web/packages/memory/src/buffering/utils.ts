@@ -1,4 +1,5 @@
 import { ByteOrder } from './types';
+import { Djb2, Fnv1a32, Crc32 } from '@axrone/hash';
 
 export class BufferUtils {
     private static readonly textEncoder = new TextEncoder();
@@ -57,20 +58,13 @@ export class BufferUtils {
 
     static calculateHash(data: Uint8Array, algorithm: 'fnv1a' | 'djb2' = 'fnv1a'): number {
         if (algorithm === 'djb2') {
-            let hash = 5381;
-            for (let i = 0; i < data.length; i++) {
-                hash = (hash << 5) + hash + data[i];
-            }
-            return hash >>> 0;
+            const h = new Djb2();
+            h.updateBytes(data);
+            return h.digest() as unknown as number;
         }
-
-        const fnvPrime = 0x01000193;
-        let hash = 0x811c9dc5;
-        for (let i = 0; i < data.length; i++) {
-            hash ^= data[i];
-            hash = Math.imul(hash, fnvPrime);
-        }
-        return hash >>> 0;
+        const h = new Fnv1a32();
+        h.updateBytes(data);
+        return h.digest() as unknown as number;
     }
 
     static calculateCrc32(data: Uint8Array): number {

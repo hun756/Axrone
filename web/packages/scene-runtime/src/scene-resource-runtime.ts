@@ -2,7 +2,7 @@ import { Vec4 } from '@axrone/numeric';
 import type { ITextureSampler } from '@axrone/render-webgl2';
 import { SceneMaterialRegistry } from './material-registry';
 import { SceneMeshRegistry, type SceneMeshResource } from './mesh-registry';
-import { SceneRenderPassRegistry } from './render-pass-registry';
+import { SceneRenderPassRegistry } from './rendering/render-pass-registry';
 import { SceneSamplerRegistry, type SceneSamplerResource } from './sampler-registry';
 import { SceneShaderRegistry, type SceneShaderResource } from './shader-registry';
 import { SceneTextureRegistry, type SceneTextureResource } from './texture-registry';

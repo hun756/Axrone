@@ -69,6 +69,10 @@ export abstract class TweenCore<T> implements ITween<T> {
         return this._duration;
     }
 
+    getTotalDuration(): number {
+        return this._duration * (this._repeat + 1);
+    }
+
     from(properties: DeepPartial<T>): this {
         this._valuesStart = this._deepClone(properties);
         return this;

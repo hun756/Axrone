@@ -8,7 +8,8 @@ export type PropertyTypeId =
     | 'vec2'
     | 'vec3'
     | 'entity'
-    | 'transform';
+    | 'transform'
+    | 'component';
 
 export type PropertyTypeReference = PropertyTypeId | string | Function;
 

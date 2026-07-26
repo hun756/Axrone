@@ -92,6 +92,13 @@ export const cloneSceneMaterialSurfaceDefinition = (
               ),
               occlusionMap: cloneSurfaceTextureBindingDefinition(definition.occlusionMap),
               emissiveMap: cloneSurfaceTextureBindingDefinition(definition.emissiveMap),
+              clearcoatMap: cloneSurfaceTextureBindingDefinition(definition.clearcoatMap),
+              clearcoatRoughnessMap: cloneSurfaceTextureBindingDefinition(
+                  definition.clearcoatRoughnessMap
+              ),
+              clearcoatNormalMap: cloneSurfaceTextureBindingDefinition(
+                  definition.clearcoatNormalMap
+              ),
           }
         : undefined;
 

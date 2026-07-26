@@ -169,6 +169,12 @@ export interface PBRMaterialConfig extends MaterialConfig {
     metallicFactor?: number;
     roughnessFactor?: number;
     metallicRoughnessTexture?: WebGLTexture;
+    clearcoatFactor?: number;
+    clearcoatRoughnessFactor?: number;
+    clearcoatTexture?: WebGLTexture;
+    clearcoatRoughnessTexture?: WebGLTexture;
+    clearcoatNormalTexture?: WebGLTexture;
+    clearcoatNormalScale?: number;
     normalTexture?: WebGLTexture;
     normalScale?: number;
     occlusionTexture?: WebGLTexture;
@@ -222,7 +228,7 @@ export abstract class BaseMaterialComponent<
     }
 
     public getProperty<TValue extends MaterialPropertyValue>(name: string): TValue | null {
-        return (this._properties.get(name) as TValue) || null;
+        return (this._properties.get(name) as TValue) ?? null;
     }
 
     public hasProperty(name: string): boolean {
@@ -347,7 +353,7 @@ export abstract class BaseMaterialComponent<
     }
 
     public getRenderTag(key: string): string | null {
-        return this._renderTags.get(key) || null;
+        return this._renderTags.get(key) ?? null;
     }
 
     public hasRenderTag(key: string): boolean {
@@ -497,7 +503,7 @@ export abstract class BaseMaterialComponent<
     }
 
     public getFloat(propertyName: string): number {
-        return this.getProperty<number>(propertyName) || 0;
+        return this.getProperty<number>(propertyName) ?? 0;
     }
 
     public setVector(propertyName: string, vector: Vec2 | Vec3 | Vec4): void {

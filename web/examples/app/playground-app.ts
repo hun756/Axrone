@@ -1,5 +1,4 @@
-import { compileSceneProject } from '../playground/live-example-runtime';
-import { createLiveEditor, type LiveEditorController } from '../playground/live-editor';
+import type { LiveEditorController } from '../playground/tooling-entry';
 import type { PlaygroundSceneHandle } from '../projects/shared/playground-types';
 import { loadProjectCatalog } from './project-catalog';
 import { renderPlaygroundShell, type PlaygroundShell } from './shell';
@@ -59,7 +58,15 @@ type RuntimeSession = {
 	readonly objectCount: number;
 };
 
+type PlaygroundToolingModule = typeof import('../playground/tooling-entry');
+
 const sourceStoragePrefix = 'axrone:examples:vfs:';
+let playgroundToolingPromise: Promise<PlaygroundToolingModule> | undefined;
+
+const loadPlaygroundTooling = async (): Promise<PlaygroundToolingModule> => {
+	playgroundToolingPromise ??= import('../playground/tooling-entry');
+	return playgroundToolingPromise;
+};
 
 const cloneFiles = (files: readonly VirtualProjectFile[]): VirtualProjectFile[] =>
 	files.map((file) => ({ ...file }));
@@ -501,6 +508,7 @@ export const startPlaygroundApp = async (root: HTMLElement): Promise<void> => {
 		shell.previewStage.replaceChildren();
 
 		try {
+			const { compileSceneProject } = await loadPlaygroundTooling();
 			const sceneExample = compileSceneProject(createProjectFilesMap(project.files), project.entryFile);
 			const mountResult = await sceneExample.mount({ container: shell.previewStage });
 			const handle: PlaygroundSceneHandle = mountResult && typeof mountResult === 'object' && 'dispose' in mountResult
@@ -698,6 +706,7 @@ export const startPlaygroundApp = async (root: HTMLElement): Promise<void> => {
 
 	const editorProject = getCurrentProject();
 	if (editorProject) {
+		const { createLiveEditor } = await loadPlaygroundTooling();
 		editor = createLiveEditor({
 			container: shell.monacoContainer,
 			files: editorProject.files,

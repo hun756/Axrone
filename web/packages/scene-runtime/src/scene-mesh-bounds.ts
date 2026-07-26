@@ -3,8 +3,13 @@ import type { SceneMeshDefinition } from './types';
 
 const FLOAT_COMPONENT_TYPE = 0x1406;
 
+type BoundingSphereCenter = Readonly<BoundingSphere>['center'];
+
+const isBoundingSphereCenterTuple = (center: BoundingSphereCenter): center is readonly [number, number, number] =>
+    Array.isArray(center);
+
 const cloneCenter = (center: Readonly<BoundingSphere>['center']): readonly [number, number, number] =>
-    Array.isArray(center) ? [center[0], center[1], center[2]] : [center.x, center.y, center.z];
+    isBoundingSphereCenterTuple(center) ? [center[0], center[1], center[2]] : [center.x, center.y, center.z];
 
 export const cloneSceneMeshBounds = (
     bounds: Readonly<BoundingSphere> | undefined

@@ -1,0 +1,16 @@
+{
+    "assetCount": 0,
+    "brotliBytes": 71260,
+    "chunkCount": 1,
+    "entryChunkFile": "assets/playable-2d-B1vehhEu.js",
+    "gzipBytes": 84998,
+    "maxDelta": {
+        "assetCount": 1,
+        "brotliBytes": 512,
+        "chunkCount": 1,
+        "gzipBytes": 512,
+        "rawBytes": 1024
+    },
+    "moduleCount": 93,
+    "rawBytes": 350862
+}

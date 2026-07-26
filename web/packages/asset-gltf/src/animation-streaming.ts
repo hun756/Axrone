@@ -1,12 +1,14 @@
 import {
     encodeAnimationClipStreamingChunkPayload,
-    type AnimationClipDefinition,
-    type AnimationClipStreamingCatalogDefinition,
-    type AnimationClipStreamingChunkDefinition,
     type AnimationClipStreamingChunkMergeMode,
     type AnimationClipStreamingChunkPayload,
-    type AnimationTrackDefinition,
-} from '@axrone/animation';
+} from '@axrone/animation/streaming-chunk';
+import type {
+    AnimationClipDefinition,
+    AnimationClipStreamingCatalogDefinition,
+    AnimationClipStreamingChunkDefinition,
+    AnimationTrackDefinition,
+} from '@axrone/animation/types';
 import {
     createPortableAnimationManifest,
     type PortableAnimationClipManifestEntry,

@@ -1,4 +1,4 @@
-import { encodeAnimationClipStreamingChunkPayload } from '@axrone/animation';
+import { encodeAnimationClipStreamingChunkPayload } from '@axrone/animation/streaming-chunk';
 import { World, Transform } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
 import { describe, expect, it, vi } from 'vitest';

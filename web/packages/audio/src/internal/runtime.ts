@@ -30,6 +30,22 @@ export interface InternalListener {
     position: AudioVector3;
     forward: AudioVector3;
     up: AudioVector3;
+    globalVolume: number;
+    dopplerFactor: number;
+    speakerMode: string;
+    sampleRate: number;
+    dspBufferSize: number;
+    realVoices: number;
+    virtualVoices: number;
+    virtualVoiceBehavior: string;
+    hrtfPlugin: string;
+    occlusionMode: string;
+    occlusionLayers: number[];
+    reverbPreset: string;
+    reverbLevel: number;
+    ambientClipId: string;
+    ambientVolume: number;
+    followCamera: boolean;
     metadata: Readonly<Record<string, AudioJsonValue>>;
 }
 

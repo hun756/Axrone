@@ -4,6 +4,13 @@ import { createPackageConfig } from '../../build/create-package-config.mjs';
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url));
 
-export default createPackageConfig({
-    packageDir,
-});
+export default [
+    ...createPackageConfig({
+        packageDir,
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/capabilities.ts',
+        outputBasename: 'capabilities',
+    }),
+];

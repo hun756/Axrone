@@ -10,6 +10,16 @@ export default [
     }),
     ...createPackageConfig({
         packageDir,
+        inputRelativePath: 'src/types.ts',
+        outputBasename: 'types',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/errors.ts',
+        outputBasename: 'errors',
+    }),
+    ...createPackageConfig({
+        packageDir,
         inputRelativePath: 'src/scene-registry.ts',
         outputBasename: 'scene-registry',
     }),
@@ -17,6 +27,36 @@ export default [
         packageDir,
         inputRelativePath: 'src/scene-profile.ts',
         outputBasename: 'scene-profile',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/scene-profile-contract.ts',
+        outputBasename: 'scene-profile-contract',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/scene-manifest-profile.ts',
+        outputBasename: 'scene-manifest-profile',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/scene-core-profile.ts',
+        outputBasename: 'scene-core-profile',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/scene-2d-profile.ts',
+        outputBasename: 'scene-2d-profile',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/scene-3d-profile.ts',
+        outputBasename: 'scene-3d-profile',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/scene-full-profile.ts',
+        outputBasename: 'scene-full-profile',
     }),
     ...createPackageConfig({
         packageDir,
@@ -37,5 +77,10 @@ export default [
         packageDir,
         inputRelativePath: 'src/scene-2d-support.ts',
         outputBasename: 'scene-2d-support',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/rendering/index.ts',
+        outputBasename: 'rendering',
     }),
 ];

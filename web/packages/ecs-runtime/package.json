@@ -68,17 +68,29 @@
             "types": "./dist/types.d.ts",
             "import": "./dist/types.mjs",
             "require": "./dist/types.js"
+        },
+        "./storage": {
+            "types": "./dist/storage.d.ts",
+            "import": "./dist/storage.mjs",
+            "require": "./dist/storage.js"
+        },
+        "./query": {
+            "types": "./dist/query.d.ts",
+            "import": "./dist/query.mjs",
+            "require": "./dist/query.js"
+        },
+        "./support": {
+            "types": "./dist/support.d.ts",
+            "import": "./dist/support.mjs",
+            "require": "./dist/support.js"
         }
     },
     "scripts": {
-        "build": "rollup -c rollup.config.mjs",
+        "build": "node --max-old-space-size=8192 ../../node_modules/rollup/dist/bin/rollup -c rollup.config.mjs",
         "clean": "rimraf dist",
         "test": "vitest run"
     },
     "dependencies": {
-        "@axrone/ecs-query": "^0.1.0",
-        "@axrone/ecs-storage": "^0.1.0",
-        "@axrone/ecs-world-support": "^0.1.0",
         "@axrone/event": "^0.1.0",
         "@axrone/numeric": "^0.0.1",
         "@axrone/observer": "^0.1.0",

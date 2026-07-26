@@ -2,6 +2,7 @@ import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from
 import { EPSILON } from './common';
 import { clamp01 } from './clamp';
 import { IVec3Like } from './vec3';
+import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
 export interface IQuatLike {
     x: number;
@@ -67,12 +68,16 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
     }
 
     getHashCode(): number {
-        let h1 = 2166136261;
-        h1 = Math.imul(h1 ^ Math.floor(this.x * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this.y * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this.z * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this.w * 1000), 16777619);
-        return h1 >>> 0;
+        return new Fnv1a32()
+            .updateF32(this.x)
+            .updateF32(this.y)
+            .updateF32(this.z)
+            .updateF32(this.w)
+            .digest();
+    }
+
+    hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {
+        hasher.updateF32(this.x).updateF32(this.y).updateF32(this.z).updateF32(this.w);
     }
 
     static add<T extends IQuatLike, U extends IQuatLike, V extends IQuatLike>(
@@ -878,12 +883,11 @@ export class QuatEqualityComparer implements EqualityComparer<Quat> {
 
     hash(obj: Readonly<Quat>): number {
         if (!obj) return 0;
-
-        let h1 = 2166136261;
-        h1 = Math.imul(h1 ^ Math.floor(obj.x * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(obj.y * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(obj.z * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(obj.w * 1000), 16777619);
-        return h1 >>> 0;
+        return new Fnv1a32()
+            .updateF32(obj.x)
+            .updateF32(obj.y)
+            .updateF32(obj.z)
+            .updateF32(obj.w)
+            .digest();
     }
 }

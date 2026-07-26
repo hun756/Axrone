@@ -8,9 +8,9 @@ import type {
     TextGlyphPlacement,
     TextRenderCommand,
     UIFrame,
-    UIFrameSink,
-} from '@axrone/ui';
-import { DisposedUIError } from '@axrone/ui';
+} from '@axrone/ui/types';
+import type { UIFrameSink } from '@axrone/ui/render';
+import { DisposedUIError } from '@axrone/ui/errors';
 import type {
     WebGL2UICustomCommandContext,
     WebGL2UIMaterialImageContext,

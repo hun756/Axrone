@@ -13,4 +13,12 @@ describe('ecs ownership boundary', () => {
         expect(content).not.toContain('"@axrone/ecs"');
         expect(content).not.toContain('"@axrone/ecs/*"');
     });
+
+    it('removes merged ecs micro-package tsconfig path aliases', () => {
+        const content = fs.readFileSync(workspaceTsconfigPath, 'utf8');
+
+        expect(content).not.toContain('"@axrone/ecs-storage');
+        expect(content).not.toContain('"@axrone/ecs-query');
+        expect(content).not.toContain('"@axrone/ecs-world-support');
+    });
 });

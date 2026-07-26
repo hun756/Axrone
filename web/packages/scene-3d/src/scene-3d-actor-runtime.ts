@@ -1,18 +1,42 @@
-import { Transform, type Actor, type ActorConfig } from '@axrone/ecs-runtime';
+import {
+    Transform,
+    type Actor,
+    type ActorConfig,
+    type ComponentConstructor,
+} from '@axrone/ecs-runtime';
 import type { World } from '@axrone/ecs-runtime';
 import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import {
     SceneCapabilityError,
-    type SceneActorRuntime,
     type SceneRegistry,
 } from '@axrone/scene-runtime';
 import { Camera, type CameraConfig } from '@axrone/scene-runtime/scene-facade';
 import { MeshRenderer, type MeshRendererConfig } from '@axrone/scene-runtime/scene-3d-support';
 
+interface SceneActorBatchComponentEntry {
+    readonly type: ComponentConstructor;
+    readonly args?: readonly unknown[];
+}
+
+interface SceneActorBatchEntry {
+    readonly actorConfig?: ActorConfig;
+    readonly components?: readonly SceneActorBatchComponentEntry[];
+}
+
+interface Scene3DActorRuntimeHost<R extends ComponentRegistry = Record<string, never>> {
+    createActor(config?: ActorConfig): Actor<World<SceneRegistry<R>>>;
+    createActorsWithComponents(
+        configs: readonly SceneActorBatchEntry[],
+        profiling?: Record<string, number>
+    ): readonly Actor<World<SceneRegistry<R>>>[];
+    runInStructureBatch<T>(callback: () => T): T;
+    isComponentRegistered(componentTypeOrName: string | ComponentConstructor): boolean;
+}
+
 export interface Scene3DActorRuntimeOptions<
     R extends ComponentRegistry = Record<string, never>,
 > {
-    readonly actors: SceneActorRuntime<R>;
+    readonly actors: Scene3DActorRuntimeHost<R>;
 }
 
 export interface SceneRenderableActorCreateOptions {
@@ -29,7 +53,7 @@ export interface SceneRenderableActorInstance<
 }
 
 export class Scene3DActorRuntime<R extends ComponentRegistry = Record<string, never>> {
-    private readonly _actors: SceneActorRuntime<R>;
+    private readonly _actors: Scene3DActorRuntimeHost<R>;
 
     constructor(options: Scene3DActorRuntimeOptions<R>) {
         this._actors = options.actors;

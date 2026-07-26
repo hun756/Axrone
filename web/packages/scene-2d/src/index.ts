@@ -16,7 +16,7 @@ export type {
 	SceneManifestRuntimeProfileOptions,
 	SceneRuntimeProfile,
 	SceneRuntimeProfileContext,
-} from '@axrone/scene-runtime/scene-profile';
+} from './types';
 export {
 	CORE_SCENE_RUNTIME_PROFILE_ID,
 	SCENE_2D_RUNTIME_PROFILE_ID,
@@ -25,7 +25,7 @@ export {
 	get2DSceneRuntimeProfile,
 	getCoreSceneRuntimeProfile,
 	resolveSceneRegistryFromProfile,
-} from '@axrone/scene-runtime/scene-profile';
+} from './profile';
 
 export { createScene2D } from './scene-2d-factory';
 export { Scene2D } from './scene-2d';

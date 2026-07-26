@@ -25,6 +25,11 @@ export interface AudioClipStoreOptions<TSchema extends AudioAssetSchema = AudioA
     readonly assetDatabase?: AudioSystemOptions<TSchema>['assetDatabase'];
     readonly assetResolver?: AudioAssetResolver<TSchema>;
     readonly retryPolicy?: AudioRetryPolicy<TSchema>;
+    /**
+     * Maximum number of cached clip records. When exceeded, the least recently
+     * used entry is evicted (LRU). `0` or `undefined` means unlimited.
+     */
+    readonly maxEntries?: number;
 }
 
 export class AudioClipStore<TSchema extends AudioAssetSchema = AudioAssetSchema> {
@@ -32,9 +37,12 @@ export class AudioClipStore<TSchema extends AudioAssetSchema = AudioAssetSchema>
     readonly #assetDatabase?: AudioSystemOptions<TSchema>['assetDatabase'];
     readonly #assetResolver?: AudioAssetResolver<TSchema>;
     readonly #retryPolicy?: AudioRetryPolicy<TSchema>;
+    readonly #maxEntries: number;
     readonly #registeredClips = new Map<AudioClipId, AudioClipSelector<TSchema>>();
     readonly #clipCache = new Map<string, Promise<AudioClipRecord<TSchema>>>();
     readonly #bufferCacheKeys = new WeakMap<AudioBuffer, string>();
+    /** LRU order: most-recently-used key is at the end. */
+    readonly #lruOrder: string[] = [];
 
     #bufferCacheSequence = 0;
 
@@ -43,6 +51,7 @@ export class AudioClipStore<TSchema extends AudioAssetSchema = AudioAssetSchema>
         this.#assetDatabase = options.assetDatabase;
         this.#assetResolver = options.assetResolver;
         this.#retryPolicy = options.retryPolicy;
+        this.#maxEntries = Math.max(0, options.maxEntries ?? 0);
     }
 
     register(id: AudioClipId | string, clip: AudioClipInput<TSchema>): AudioClipId {
@@ -79,6 +88,7 @@ export class AudioClipStore<TSchema extends AudioAssetSchema = AudioAssetSchema>
         if (useCache) {
             const cached = this.#clipCache.get(cacheKey);
             if (cached) {
+                this.#touchLru(cacheKey);
                 return cached;
             }
         }
@@ -91,6 +101,8 @@ export class AudioClipStore<TSchema extends AudioAssetSchema = AudioAssetSchema>
 
         if (useCache) {
             this.#clipCache.set(cacheKey, pending);
+            this.#evictLruIfNeeded();
+            this.#lruOrder.push(cacheKey);
         }
 
         try {
@@ -98,6 +110,7 @@ export class AudioClipStore<TSchema extends AudioAssetSchema = AudioAssetSchema>
         } catch (error) {
             if (useCache) {
                 this.#clipCache.delete(cacheKey);
+                this.#removeLruEntry(cacheKey);
             }
             throw error;
         }
@@ -106,12 +119,38 @@ export class AudioClipStore<TSchema extends AudioAssetSchema = AudioAssetSchema>
     clear(): void {
         this.#registeredClips.clear();
         this.#clipCache.clear();
+        this.#lruOrder.length = 0;
     }
 
     #invalidate(selector: AudioClipSelector<TSchema>): void {
         const cacheKey = this.#cacheKeyForSelector(selector);
         if (cacheKey) {
             this.#clipCache.delete(cacheKey);
+            this.#removeLruEntry(cacheKey);
+        }
+    }
+
+    #touchLru(cacheKey: string): void {
+        this.#removeLruEntry(cacheKey);
+        this.#lruOrder.push(cacheKey);
+    }
+
+    #removeLruEntry(cacheKey: string): void {
+        const idx = this.#lruOrder.indexOf(cacheKey);
+        if (idx >= 0) {
+            this.#lruOrder.splice(idx, 1);
+        }
+    }
+
+    #evictLruIfNeeded(): void {
+        if (this.#maxEntries <= 0) {
+            return;
+        }
+        while (this.#clipCache.size >= this.#maxEntries && this.#lruOrder.length > 0) {
+            const evictKey = this.#lruOrder.shift();
+            if (evictKey !== undefined) {
+                this.#clipCache.delete(evictKey);
+            }
         }
     }
 

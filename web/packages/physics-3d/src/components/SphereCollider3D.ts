@@ -15,18 +15,27 @@ export class SphereCollider3D extends Collider3D {
     }
 
     protected override _createShape(): void {
-        if (!this._shapeManager || !this._rigidbody) return;
+        if (!this._rigidbody) return;
         const def: ISphereShapeDef3D = { center: this._center, radius: this._radius };
-        this._shapeId = this._shapeManager.createSphere(
-            this._rigidbody.bodyId,
-            def,
-            this._getMaterial(),
-            this._getFilter()
-        );
+        if (this._world) {
+            this._shapeId = this._world.createSphereShape(
+                this._rigidbody.bodyId,
+                def,
+                this._getMaterial(),
+                this._getFilter(),
+                { isSensor: this.isTrigger }
+            );
+            return;
+        }
+
+        if (!this._shapeManager) return;
+        this._shapeId = this._shapeManager.createSphere(this._rigidbody.bodyId, def, this._getMaterial(), this._getFilter());
     }
 
     protected override _updateShape(): void {
         if (this._shapeId === INVALID_SHAPE_ID) return;
+        this._destroyCurrentShape();
+        this._createShape();
     }
 
     protected override _calculateBounds(): void {

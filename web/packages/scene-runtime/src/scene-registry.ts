@@ -1,133 +1,75 @@
-import { Hierarchy } from '@axrone/ecs-runtime';
-import { Transform } from '@axrone/ecs-runtime';
-import type { ComponentConstructor, ComponentRegistry } from '@axrone/ecs-runtime';
-import { Animator } from './components/animator';
-import { Camera } from './components/camera';
-import { DirectionalLight } from './components/directional-light';
-import { FollowCameraController } from './components/follow-camera-controller';
-import { MeshRenderer } from './components/mesh-renderer';
-import { OrbitCameraController } from './components/orbit-camera-controller';
-import { PrefabNodeBinding } from './components/prefab-node-binding';
-import { PointLight } from './components/point-light';
-import { SpriteAnimator } from './components/sprite-animator';
-import { SpriteMask } from './components/sprite-mask';
-import { SpriteRenderer } from './components/sprite-renderer';
-import { SpotLight } from './components/spot-light';
+import type { ComponentRegistry } from '@axrone/ecs-runtime';
+import {
+    ANIMATION_SCENE_BUILT_IN_MANIFESTS,
+    SCENE_ANIMATION_BUILT_IN_MANIFEST,
+    getAnimationSceneBuiltInRegistrySource,
+} from './scene-animation-registry';
+import {
+    CORE_SCENE_BUILT_IN_MANIFESTS,
+    SCENE_CORE_BUILT_IN_MANIFEST,
+    getCoreSceneBuiltInRegistrySource,
+} from './scene-core-registry';
+import {
+    DEFAULT_SCENE_2D_BUILT_IN_MANIFESTS,
+    SCENE_2D_BUILT_IN_MANIFEST,
+    get2DSceneBuiltInRegistrySource,
+} from './scene-2d-registry';
+import {
+    DEFAULT_SCENE_3D_BUILT_IN_MANIFESTS,
+    SCENE_3D_BUILT_IN_MANIFEST,
+    get3DSceneBuiltInRegistrySource,
+} from './scene-3d-registry';
+import {
+    createSceneBuiltInManifest,
+    createSceneRegistryFromBuiltInManifestsWithSource,
+    createSceneRegistryWithSource,
+    resolveSceneBuiltInComponents,
+    type SceneBuiltInComponentName,
+    type SceneBuiltInManifest,
+    type SceneManifestRegistryBuilderOptions,
+    type SceneRegistryBuilderOptions,
+    type SceneRegistryForBuiltIns,
+} from './scene-built-in-support';
 import type { SceneBuiltInRegistry, SceneRegistry } from './types';
 
-export type SceneBuiltInComponentName = keyof SceneBuiltInRegistry;
-
-export interface SceneBuiltInManifest<
-    TBuiltIns extends readonly SceneBuiltInComponentName[] = readonly SceneBuiltInComponentName[],
-> {
-    readonly id: string;
-    readonly builtIns: TBuiltIns;
-}
-
-export type SceneRegistryForBuiltIns<
-    R extends ComponentRegistry,
-    TBuiltIns extends readonly SceneBuiltInComponentName[],
-> = R & Pick<SceneBuiltInRegistry, TBuiltIns[number]>;
-
-export interface SceneRegistryBuilderOptions<
-    R extends ComponentRegistry = Record<string, never>,
-    TBuiltIns extends readonly SceneBuiltInComponentName[] | undefined = undefined,
-> {
-    readonly registry?: R;
-    readonly builtIns?: TBuiltIns;
-}
-
-export interface SceneManifestRegistryBuilderOptions<
-    R extends ComponentRegistry = Record<string, never>,
-> {
-    readonly registry?: R;
-    readonly manifests?: readonly SceneBuiltInManifest[];
-}
-
 const DEFAULT_SCENE_BUILT_IN_REGISTRY: SceneBuiltInRegistry = Object.freeze({
-    Hierarchy,
-    Transform,
-    PrefabNodeBinding,
-    Animator,
-    Camera,
-    SpriteRenderer,
-    SpriteAnimator,
-    SpriteMask,
-    MeshRenderer,
-    DirectionalLight,
-    PointLight,
-    SpotLight,
-    OrbitCameraController,
-    FollowCameraController,
-});
+    ...getCoreSceneBuiltInRegistrySource(),
+    ...getAnimationSceneBuiltInRegistrySource(),
+    ...get2DSceneBuiltInRegistrySource(),
+    ...get3DSceneBuiltInRegistrySource(),
+}) as SceneBuiltInRegistry;
 
-export const createSceneBuiltInManifest = <
-    const TBuiltIns extends readonly SceneBuiltInComponentName[],
->(
-    manifest: SceneBuiltInManifest<TBuiltIns>
-): SceneBuiltInManifest<TBuiltIns> =>
-    Object.freeze({
-        id: manifest.id,
-        builtIns: Object.freeze([...manifest.builtIns]) as TBuiltIns,
-    });
+export type {
+    SceneBuiltInComponentName,
+    SceneBuiltInManifest,
+    SceneManifestRegistryBuilderOptions,
+    SceneRegistryBuilderOptions,
+    SceneRegistryForBuiltIns,
+};
+export { createSceneBuiltInManifest, resolveSceneBuiltInComponents };
 
-export const SCENE_CORE_BUILT_IN_MANIFEST = createSceneBuiltInManifest({
-    id: 'scene/core',
-    builtIns: ['Hierarchy', 'Transform', 'PrefabNodeBinding'] as const,
-});
-
-export const SCENE_ANIMATION_BUILT_IN_MANIFEST = createSceneBuiltInManifest({
-    id: 'scene/animation',
-    builtIns: ['Animator'] as const,
-});
-
-export const SCENE_2D_BUILT_IN_MANIFEST = createSceneBuiltInManifest({
-    id: 'scene/2d',
-    builtIns: ['Camera', 'SpriteRenderer', 'SpriteAnimator', 'SpriteMask'] as const,
-});
-
-export const SCENE_3D_BUILT_IN_MANIFEST = createSceneBuiltInManifest({
-    id: 'scene/3d',
-    builtIns: [
-        'Camera',
-        'MeshRenderer',
-        'DirectionalLight',
-        'PointLight',
-        'SpotLight',
-        'OrbitCameraController',
-        'FollowCameraController',
-    ] as const,
-});
+export {
+    SCENE_ANIMATION_BUILT_IN_MANIFEST,
+    SCENE_CORE_BUILT_IN_MANIFEST,
+    SCENE_2D_BUILT_IN_MANIFEST,
+    SCENE_3D_BUILT_IN_MANIFEST,
+};
 
 export const DEFAULT_SCENE_BUILT_IN_MANIFESTS = Object.freeze([
-    SCENE_CORE_BUILT_IN_MANIFEST,
-    SCENE_ANIMATION_BUILT_IN_MANIFEST,
+    ...CORE_SCENE_BUILT_IN_MANIFESTS,
+    ...ANIMATION_SCENE_BUILT_IN_MANIFESTS,
     SCENE_3D_BUILT_IN_MANIFEST,
 ]) as readonly SceneBuiltInManifest[];
 
-export const resolveSceneBuiltInComponents = (
-    manifests: readonly SceneBuiltInManifest[] = DEFAULT_SCENE_BUILT_IN_MANIFESTS
-): readonly SceneBuiltInComponentName[] => {
-    const resolved: SceneBuiltInComponentName[] = [];
-    const included = new Set<SceneBuiltInComponentName>();
-
-    for (let manifestIndex = 0; manifestIndex < manifests.length; manifestIndex += 1) {
-        const manifest = manifests[manifestIndex]!;
-        for (let builtInIndex = 0; builtInIndex < manifest.builtIns.length; builtInIndex += 1) {
-            const builtIn = manifest.builtIns[builtInIndex]!;
-            if (included.has(builtIn)) {
-                continue;
-            }
-
-            included.add(builtIn);
-            resolved.push(builtIn);
-        }
-    }
-
-    return Object.freeze(resolved);
-};
-
-export const DEFAULT_SCENE_BUILT_IN_COMPONENTS = resolveSceneBuiltInComponents();
+export const DEFAULT_SCENE_2D_BUILT_IN_COMPONENTS = resolveSceneBuiltInComponents(
+    DEFAULT_SCENE_2D_BUILT_IN_MANIFESTS
+);
+export const DEFAULT_SCENE_3D_BUILT_IN_COMPONENTS = resolveSceneBuiltInComponents(
+    DEFAULT_SCENE_3D_BUILT_IN_MANIFESTS
+);
+export const DEFAULT_SCENE_BUILT_IN_COMPONENTS = resolveSceneBuiltInComponents(
+    DEFAULT_SCENE_BUILT_IN_MANIFESTS
+);
 
 export const getDefaultSceneBuiltInRegistry = (): SceneBuiltInRegistry => ({
     ...DEFAULT_SCENE_BUILT_IN_REGISTRY,
@@ -138,10 +80,14 @@ export const createSceneRegistryFromBuiltInManifests = <
 >(
     options: SceneManifestRegistryBuilderOptions<R> = {}
 ): SceneRegistry<R> =>
-    createSceneRegistry({
-        registry: options.registry,
-        builtIns: resolveSceneBuiltInComponents(options.manifests),
-    });
+    createSceneRegistryFromBuiltInManifestsWithSource(
+        DEFAULT_SCENE_BUILT_IN_REGISTRY,
+        {
+            registry: options.registry,
+            manifests: options.manifests ?? DEFAULT_SCENE_BUILT_IN_MANIFESTS,
+        },
+        DEFAULT_SCENE_BUILT_IN_COMPONENTS
+    );
 
 export function createSceneRegistry<R extends ComponentRegistry = Record<string, never>>(
     options?: SceneRegistryBuilderOptions<R>
@@ -153,16 +99,9 @@ export function createSceneRegistry<
 export function createSceneRegistry<
     R extends ComponentRegistry = Record<string, never>,
     TBuiltIns extends readonly SceneBuiltInComponentName[] | undefined = undefined,
->(options: SceneRegistryBuilderOptions<R, TBuiltIns> = {}): ComponentRegistry {
-    const registry: Record<string, ComponentConstructor> = {};
-    const builtIns = options.builtIns ?? DEFAULT_SCENE_BUILT_IN_COMPONENTS;
-
-    for (const componentName of builtIns) {
-        registry[componentName] = DEFAULT_SCENE_BUILT_IN_REGISTRY[componentName];
-    }
-
-    return {
-        ...registry,
-        ...(options.registry ?? {}),
-    };
+>(options: SceneRegistryBuilderOptions<R, TBuiltIns> = {}): SceneRegistry<R> {
+    return createSceneRegistryWithSource(DEFAULT_SCENE_BUILT_IN_REGISTRY, {
+        registry: options.registry,
+        builtIns: options.builtIns ?? DEFAULT_SCENE_BUILT_IN_COMPONENTS,
+    }) as SceneRegistry<R>;
 }

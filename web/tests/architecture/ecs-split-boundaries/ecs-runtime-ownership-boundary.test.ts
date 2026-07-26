@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const ecsRuntimeSrcDir = path.resolve(testDir, '../../../packages/ecs-runtime/src');
 const disallowedImportPattern =
-    /(?:from ['"]|import\(['"])(?:[^'"]*@axrone\/ecs(?!-(?:runtime|query|storage|world-support))|[^'"]*core\/src\/(?:component-system|event|observer)|[^'"]*ecs\/src(?:\/[^'"]*)?)['"]/g;
+    /(?:from ['"]|import\(['"])(?:[^'"]*@axrone\/ecs(?!-runtime)|[^'"]*core\/src\/(?:component-system|event|observer)|[^'"]*ecs\/src(?:\/[^'"]*)?)['"]/g;
 
 const collectTypeScriptFiles = (dirPath: string): readonly string[] => {
     const files: string[] = [];

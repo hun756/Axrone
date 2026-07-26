@@ -43,4 +43,9 @@ export default [
         inputRelativePath: 'src/batch/index.ts',
         outputBasename: 'batch',
     }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/pipeline.ts',
+        outputBasename: 'pipeline',
+    }),
 ];

@@ -63,4 +63,19 @@ export default [
         inputRelativePath: 'src/types.ts',
         outputBasename: 'types',
     }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/storage.ts',
+        outputBasename: 'storage',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/query.ts',
+        outputBasename: 'query',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/support.ts',
+        outputBasename: 'support',
+    }),
 ];

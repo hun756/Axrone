@@ -142,17 +142,9 @@ export const vec3Add = (
     right: ArrayLike<number>,
     rightOffset: number
 ): void => {
-    const leftVector = vec3Pool.acquire();
-    const rightVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Vec3.add(loadVec3(left, leftOffset, leftVector), loadVec3(right, rightOffset, rightVector), resultVector);
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(rightVector);
-        vec3Pool.release(leftVector);
-    }
+    target[targetOffset] = left[leftOffset] + right[rightOffset];
+    target[targetOffset + 1] = left[leftOffset + 1] + right[rightOffset + 1];
+    target[targetOffset + 2] = left[leftOffset + 2] + right[rightOffset + 2];
 };
 
 export const vec3Subtract = (
@@ -163,21 +155,9 @@ export const vec3Subtract = (
     right: ArrayLike<number>,
     rightOffset: number
 ): void => {
-    const leftVector = vec3Pool.acquire();
-    const rightVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Vec3.subtract(
-            loadVec3(left, leftOffset, leftVector),
-            loadVec3(right, rightOffset, rightVector),
-            resultVector
-        );
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(rightVector);
-        vec3Pool.release(leftVector);
-    }
+    target[targetOffset] = left[leftOffset] - right[rightOffset];
+    target[targetOffset + 1] = left[leftOffset + 1] - right[rightOffset + 1];
+    target[targetOffset + 2] = left[leftOffset + 2] - right[rightOffset + 2];
 };
 
 export const vec3Multiply = (
@@ -188,21 +168,9 @@ export const vec3Multiply = (
     right: ArrayLike<number>,
     rightOffset: number
 ): void => {
-    const leftVector = vec3Pool.acquire();
-    const rightVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Vec3.multiply(
-            loadVec3(left, leftOffset, leftVector),
-            loadVec3(right, rightOffset, rightVector),
-            resultVector
-        );
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(rightVector);
-        vec3Pool.release(leftVector);
-    }
+    target[targetOffset] = left[leftOffset] * right[rightOffset];
+    target[targetOffset + 1] = left[leftOffset + 1] * right[rightOffset + 1];
+    target[targetOffset + 2] = left[leftOffset + 2] * right[rightOffset + 2];
 };
 
 export const vec3Scale = (
@@ -212,15 +180,9 @@ export const vec3Scale = (
     sourceOffset: number,
     scalar: number
 ): void => {
-    const sourceVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Vec3.multiplyScalar(loadVec3(source, sourceOffset, sourceVector), scalar, resultVector);
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(sourceVector);
-    }
+    target[targetOffset] = source[sourceOffset] * scalar;
+    target[targetOffset + 1] = source[sourceOffset + 1] * scalar;
+    target[targetOffset + 2] = source[sourceOffset + 2] * scalar;
 };
 
 export const vec3Lerp = (
@@ -232,22 +194,10 @@ export const vec3Lerp = (
     rightOffset: number,
     alpha: number
 ): void => {
-    const leftVector = vec3Pool.acquire();
-    const rightVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Vec3.lerp(
-            loadVec3(left, leftOffset, leftVector),
-            loadVec3(right, rightOffset, rightVector),
-            alpha,
-            resultVector
-        );
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(rightVector);
-        vec3Pool.release(leftVector);
-    }
+    const invAlpha = 1 - alpha;
+    target[targetOffset] = left[leftOffset] * invAlpha + right[rightOffset] * alpha;
+    target[targetOffset + 1] = left[leftOffset + 1] * invAlpha + right[rightOffset + 1] * alpha;
+    target[targetOffset + 2] = left[leftOffset + 2] * invAlpha + right[rightOffset + 2] * alpha;
 };
 
 export const vec3Dot = (
@@ -256,14 +206,11 @@ export const vec3Dot = (
     right: ArrayLike<number>,
     rightOffset: number
 ): number => {
-    const leftVector = vec3Pool.acquire();
-    const rightVector = vec3Pool.acquire();
-    try {
-        return Vec3.dot(loadVec3(left, leftOffset, leftVector), loadVec3(right, rightOffset, rightVector));
-    } finally {
-        vec3Pool.release(rightVector);
-        vec3Pool.release(leftVector);
-    }
+    return (
+        left[leftOffset] * right[rightOffset] +
+        left[leftOffset + 1] * right[rightOffset + 1] +
+        left[leftOffset + 2] * right[rightOffset + 2]
+    );
 };
 
 export const vec3Cross = (
@@ -274,21 +221,15 @@ export const vec3Cross = (
     right: ArrayLike<number>,
     rightOffset: number
 ): void => {
-    const leftVector = vec3Pool.acquire();
-    const rightVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Vec3.cross(
-            loadVec3(left, leftOffset, leftVector),
-            loadVec3(right, rightOffset, rightVector),
-            resultVector
-        );
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(rightVector);
-        vec3Pool.release(leftVector);
-    }
+    const lx = left[leftOffset];
+    const ly = left[leftOffset + 1];
+    const lz = left[leftOffset + 2];
+    const rx = right[rightOffset];
+    const ry = right[rightOffset + 1];
+    const rz = right[rightOffset + 2];
+    target[targetOffset] = ly * rz - lz * ry;
+    target[targetOffset + 1] = lz * rx - lx * rz;
+    target[targetOffset + 2] = lx * ry - ly * rx;
 };
 
 export const vec3LengthSquared = (source: ArrayLike<number>, offset: number): number => {

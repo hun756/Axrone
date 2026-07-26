@@ -31,23 +31,32 @@ export class CylinderCollider3D extends Collider3D {
     }
 
     protected override _createShape(): void {
-        if (!this._shapeManager || !this._rigidbody) return;
+        if (!this._rigidbody) return;
         const def: ICylinderShapeDef3D = {
             center: this._center,
             radius: this._radius,
             height: this._height,
             axis: this._axis,
         };
-        this._shapeId = this._shapeManager.createCylinder(
-            this._rigidbody.bodyId,
-            def,
-            this._getMaterial(),
-            this._getFilter()
-        );
+        if (this._world) {
+            this._shapeId = this._world.createCylinderShape(
+                this._rigidbody.bodyId,
+                def,
+                this._getMaterial(),
+                this._getFilter(),
+                { isSensor: this.isTrigger }
+            );
+            return;
+        }
+
+        if (!this._shapeManager) return;
+        this._shapeId = this._shapeManager.createCylinder(this._rigidbody.bodyId, def, this._getMaterial(), this._getFilter());
     }
 
     protected override _updateShape(): void {
         if (this._shapeId === INVALID_SHAPE_ID) return;
+        this._destroyCurrentShape();
+        this._createShape();
     }
 
     protected override _calculateBounds(): void {
@@ -83,6 +92,24 @@ export class CylinderCollider3D extends Collider3D {
         ray: { origin: IVec3Like; direction: IVec3Like },
         maxDistance: number
     ): { hit: boolean; point?: IVec3Like; normal?: IVec3Like; distance?: number } {
-        return { hit: false };
+        if (!this._world || this._shapeId === INVALID_SHAPE_ID) {
+            return { hit: false };
+        }
+
+        const hit = this._world.getShape(this._shapeId)?.rayCast(ray.origin, ray.direction, maxDistance);
+        if (!hit) {
+            return { hit: false };
+        }
+
+        return {
+            hit: true,
+            point: {
+                x: ray.origin.x + ray.direction.x * hit.fraction,
+                y: ray.origin.y + ray.direction.y * hit.fraction,
+                z: ray.origin.z + ray.direction.z * hit.fraction,
+            },
+            normal: hit.normal,
+            distance: hit.fraction,
+        };
     }
 }
