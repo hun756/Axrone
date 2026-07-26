@@ -13,39 +13,4 @@ export default [
         inputRelativePath: 'src/capabilities.ts',
         outputBasename: 'capabilities',
     }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/types.ts',
-        outputBasename: 'types',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/errors.ts',
-        outputBasename: 'errors',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/memory.ts',
-        outputBasename: 'memory',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/graph.ts',
-        outputBasename: 'graph',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/post-process.ts',
-        outputBasename: 'post-process',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/pipeline.ts',
-        outputBasename: 'pipeline',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/shader-effect.ts',
-        outputBasename: 'shader-effect',
-    }),
 ];
