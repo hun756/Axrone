@@ -9,6 +9,7 @@ import type {
     IPhysicsWorldStatistics,
     IRaycastResult3D,
     IShape3D,
+    Mass,
 } from '../types';
 import {
     BodyFlags,
@@ -576,7 +577,14 @@ export class PhysicsWorld3D implements Disposable {
         filter?: IQueryFilter3D
     ): void {
         for (const result of this.rayCastAll(origin, direction, maxDistance, filter)) {
-            if (!callback(result)) {
+            // Box2D-style continuation contract: returning 0 terminates the query.
+            const continuation = callback(
+                result.shapeId,
+                result.point,
+                result.normal,
+                result.fraction
+            );
+            if (continuation === 0) {
                 break;
             }
         }
@@ -1001,7 +1009,7 @@ export class PhysicsWorld3D implements Disposable {
                 );
             },
             getMass() {
-                return bodyWorld._bodyManager.getMass(bodyId);
+                return bodyWorld._bodyManager.getMass(bodyId) as Mass;
             },
             getInertiaTensor() {
                 return cloneVec3(bodyWorld._bodyManager.getInertiaTensor(bodyId));
@@ -1120,7 +1128,7 @@ export class PhysicsWorld3D implements Disposable {
         const mass = this._bodyManager.getMass(bodyId);
         const inertiaTensor = this._bodyManager.getInertiaTensor(bodyId);
         return {
-            mass,
+            mass: mass as Mass,
             inverseMass: mass > 0 ? 1 / mass : 0,
             inertiaTensor: cloneVec3(inertiaTensor),
             inverseInertiaTensor: {
@@ -1136,7 +1144,7 @@ export class PhysicsWorld3D implements Disposable {
         const shapes = this._shapeManager.getShapesForBody(bodyId);
         if (shapes.length === 0 || this._bodyManager.getBodyType(bodyId) !== BODY_TYPE_DYNAMIC) {
             return {
-                mass: this._bodyManager.getMass(bodyId),
+                mass: this._bodyManager.getMass(bodyId) as Mass,
                 inverseMass: this._bodyManager.getInverseMass(bodyId),
                 inertiaTensor: cloneVec3(this._bodyManager.getInertiaTensor(bodyId)),
                 inverseInertiaTensor: {
@@ -1165,7 +1173,7 @@ export class PhysicsWorld3D implements Disposable {
 
         if (totalMass <= 1e-10) {
             return {
-                mass: 0,
+                mass: 0 as Mass,
                 inverseMass: 0,
                 inertiaTensor: { x: 0, y: 0, z: 0 },
                 inverseInertiaTensor: { x: 0, y: 0, z: 0 },
@@ -1195,7 +1203,7 @@ export class PhysicsWorld3D implements Disposable {
         }
 
         return {
-            mass: totalMass,
+            mass: totalMass as Mass,
             inverseMass: totalMass > 0 ? 1 / totalMass : 0,
             inertiaTensor,
             inverseInertiaTensor: {
@@ -1209,13 +1217,13 @@ export class PhysicsWorld3D implements Disposable {
 
     private _computeShapeMassData(descriptor: IShapeDescriptor3D, density: number): IMassData3D {
         const safeDensity = Math.max(0, density);
-        switch (descriptor.type) {
+        switch (descriptor.def.kind) {
             case SHAPE_TYPE_SPHERE: {
                 const radius = descriptor.def.radius;
                 const mass = ((4 / 3) * Math.PI * radius * radius * radius) * safeDensity;
                 const inertia = (2 / 5) * mass * radius * radius;
                 return {
-                    mass,
+                    mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor: { x: inertia, y: inertia, z: inertia },
                     inverseInertiaTensor: {
@@ -1236,7 +1244,7 @@ export class PhysicsWorld3D implements Disposable {
                     z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
                 };
                 return {
-                    mass,
+                    mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor,
                     inverseInertiaTensor: {
@@ -1256,7 +1264,7 @@ export class PhysicsWorld3D implements Disposable {
                 const mass = cylinderMass + sphereMass;
                 const inertia = radius * radius * mass;
                 return {
-                    mass,
+                    mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor: { x: inertia, y: inertia, z: inertia },
                     inverseInertiaTensor: {
@@ -1281,7 +1289,7 @@ export class PhysicsWorld3D implements Disposable {
                           ? { x: radial, y: radial, z: axial }
                           : { x: radial, y: axial, z: radial };
                 return {
-                    mass,
+                    mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor,
                     inverseInertiaTensor: {
@@ -1306,7 +1314,7 @@ export class PhysicsWorld3D implements Disposable {
                           ? { x: transverse, y: transverse, z: axial }
                           : { x: transverse, y: axial, z: transverse };
                 return {
-                    mass,
+                    mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor,
                     inverseInertiaTensor: {
@@ -1327,7 +1335,7 @@ export class PhysicsWorld3D implements Disposable {
                     z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
                 };
                 return {
-                    mass,
+                    mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor,
                     inverseInertiaTensor: {
@@ -1348,7 +1356,7 @@ export class PhysicsWorld3D implements Disposable {
                     z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
                 };
                 return {
-                    mass,
+                    mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor,
                     inverseInertiaTensor: {
@@ -1369,7 +1377,7 @@ export class PhysicsWorld3D implements Disposable {
                     z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
                 };
                 return {
-                    mass,
+                    mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor,
                     inverseInertiaTensor: {
@@ -1382,7 +1390,7 @@ export class PhysicsWorld3D implements Disposable {
             }
             default:
                 return {
-                    mass: 0,
+                    mass: 0 as Mass,
                     inverseMass: 0,
                     inertiaTensor: { x: 0, y: 0, z: 0 },
                     inverseInertiaTensor: { x: 0, y: 0, z: 0 },
@@ -1394,7 +1402,7 @@ export class PhysicsWorld3D implements Disposable {
     private _computeShapeAabb(descriptor: IShapeDescriptor3D): IAabb3D {
         const position = this._bodyManager.getPosition(descriptor.bodyId);
         const rotation = this._bodyManager.getRotation(descriptor.bodyId);
-        switch (descriptor.type) {
+        switch (descriptor.def.kind) {
             case SHAPE_TYPE_SPHERE: {
                 const center = transformPoint3D(descriptor.def.center, position, rotation);
                 const radius = descriptor.def.radius;
@@ -1509,7 +1517,7 @@ export class PhysicsWorld3D implements Disposable {
         const position = this._bodyManager.getPosition(descriptor.bodyId);
         const rotation = this._bodyManager.getRotation(descriptor.bodyId);
 
-        switch (descriptor.type) {
+        switch (descriptor.def.kind) {
             case SHAPE_TYPE_SPHERE: {
                 const center = transformPoint3D(descriptor.def.center, position, rotation);
                 return lengthSquaredVec3(subVec3(point, center)) <= descriptor.def.radius ** 2;
@@ -1642,7 +1650,7 @@ export class PhysicsWorld3D implements Disposable {
         const position = this._bodyManager.getPosition(descriptor.bodyId);
         const rotation = this._bodyManager.getRotation(descriptor.bodyId);
 
-        switch (descriptor.type) {
+        switch (descriptor.def.kind) {
             case SHAPE_TYPE_SPHERE: {
                 const center = transformPoint3D(descriptor.def.center, position, rotation);
                 return raySphereHit(origin, direction, center, descriptor.def.radius, maxFraction);
@@ -1753,7 +1761,7 @@ export class PhysicsWorld3D implements Disposable {
     private _getShapeWorldCenter(descriptor: IShapeDescriptor3D): IVec3Like {
         const position = this._bodyManager.getPosition(descriptor.bodyId);
         const rotation = this._bodyManager.getRotation(descriptor.bodyId);
-        switch (descriptor.type) {
+        switch (descriptor.def.kind) {
             case SHAPE_TYPE_SPHERE:
             case SHAPE_TYPE_BOX:
             case SHAPE_TYPE_CYLINDER:

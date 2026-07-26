@@ -51,41 +51,41 @@ export class PhysicsError3D extends Error {
     }
 }
 
-interface ManagerPool<T> {
-    nextId: () => number;
-    indexMap: Map<number, T>;
-    freeList: number[];
-    maxCapacity: number;
+export interface IShapeCreateOptions3D {
+    readonly isSensor?: boolean;
 }
 
 export class BodyManager3D implements Disposable {
-    private readonly _nextBodyId = 1n;
-    private readonly _bodyCount = 0n;
-    private readonly _maxBodies = 4096n;
+    private _nextBodyId = 1n;
+    private _bodyCount = 0n;
+    private readonly _maxBodies: number;
     private readonly _bodyIdToIndex = new Map<BodyId3D, number>();
+    private readonly _freeList: number[] = [];
+    private readonly _userData = new Map<BodyId3D, unknown>();
 
-    private readonly _positions = new Float64Array(4096 * POSITION_STRIDE);
-    private readonly _velocities = new Float64Array(4096 * VELOCITY_STRIDE);
-    private readonly _massData = new Float64Array(4096 * MASS_STRIDE);
-    private readonly _bodyTypes = new Uint8Array(4096);
-    private readonly _bodyFlags = new Uint32Array(4096);
-    private readonly _gravityScales = new Float32Array(4096);
-    private readonly _dampings = new Float32Array(4096 * 2);
+    private readonly _positions: Float64Array;
+    private readonly _velocities: Float64Array;
+    private readonly _massData: Float64Array;
+    private readonly _bodyTypes: Uint8Array;
+    private readonly _bodyFlags: Uint32Array;
+    private readonly _gravityScales: Float32Array;
+    private readonly _dampings: Float32Array;
 
     constructor(maxBodies: number = 4096) {
         this._maxBodies = maxBodies;
-        const posInit = new Float64Array(this._positions.length, 0);
+        this._positions = new Float64Array(maxBodies * POSITION_STRIDE);
+        this._velocities = new Float64Array(maxBodies * VELOCITY_STRIDE);
+        this._massData = new Float64Array(maxBodies * MASS_STRIDE);
+        this._bodyTypes = new Uint8Array(maxBodies);
+        this._bodyFlags = new Uint32Array(maxBodies);
+        this._gravityScales = new Float32Array(maxBodies);
+        this._dampings = new Float32Array(maxBodies * 2);
+
         for (let i = 0; i < maxBodies; i++) {
-            posInit[i * POSITION_STRIDE + ROTATION_OFFSET + 3] = 1;
+            // Identity quaternion (w = 1) and neutral gravity scale defaults.
+            this._positions[i * POSITION_STRIDE + ROTATION_OFFSET + 3] = 1;
             this._gravityScales[i] = 1;
         }
-        this._positions.set(posInit);
-        this._velocities.set(new Float64Array(4096 * VELOCITY_STRIDE, 0));
-        this._massData.set(new Float64Array(4096 * MASS_STRIDE, 0));
-        this._bodyTypes.set(new Uint8Array(4096, 0));
-        this._bodyFlags.set(new Uint32Array(4096, 0));
-        this._gravityScales.set(new Float32Array(4096, 1));
-        this._dampings.set(new Float32Array(4096 * 2, 0));
     }
 
     get bodyCount(): number { return Number(this._bodyCount); }
@@ -95,8 +95,10 @@ export class BodyManager3D implements Disposable {
             throw new PhysicsError3D('Body capacity exceeded', BodyManagerError.CAPACITY_EXCEEDED);
         }
 
-        const bodyId = this._nextBodyId++ as BodyId3D;
+        const bodyId = this._nextBodyId as unknown as BodyId3D;
+        this._nextBodyId += 1n;
         const index = this._allocateIndex();
+        this._bodyIdToIndex.set(bodyId, index);
 
         const posOffset = index * POSITION_STRIDE;
         if (def.position) {
@@ -162,7 +164,7 @@ export class BodyManager3D implements Disposable {
         this._freeList.push(index);
 
         for (let i = 0; i < POSITION_STRIDE; i++) this._positions[index * POSITION_STRIDE + i] = 0;
-        this._velocities[index * VELOCITY_STRIDE].fill(0);
+        this._velocities.fill(0, index * VELOCITY_STRIDE, index * VELOCITY_STRIDE + VELOCITY_STRIDE);
         this._bodyTypes[index] = 0;
         this._bodyFlags[index] = 0;
         this._gravityScales[index] = 1;
@@ -292,14 +294,14 @@ export class BodyManager3D implements Disposable {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return { x: 0, y: 0, z: 0 };
         const offset = index * MASS_STRIDE + 2;
-        return this._readVec(this._massData as unknown as Float64Array, offset);
+        return this._readVec(this._massData, offset);
     }
 
     getInverseInertia(bodyId: BodyId3D): IVec3Like {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return { x: 0, y: 0, z: 0 };
         const offset = index * MASS_STRIDE + 5;
-        return this._readVec(this._massData as unknown as Float64Array, offset);
+        return this._readVec(this._massData, offset);
     }
 
     setInertiaTensor(bodyId: BodyId3D, inertia: IVec3Like): void {
@@ -465,7 +467,7 @@ export class BodyManager3D implements Disposable {
         return Number(this._bodyCount);
     }
 
-    #getBodyIndex(bodyId: BodyId3D): number {
+    private _getBodyIndex(bodyId: BodyId3D): number {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) throw new PhysicsError3D('Body not found', BodyManagerError.INVALID_STATE);
         return index;
@@ -473,6 +475,10 @@ export class BodyManager3D implements Disposable {
 
     private _readVec(arr: Float64Array, offset: number): IVec3Like {
         return { x: arr[offset], y: arr[offset + 1], z: arr[offset + 2] };
+    }
+
+    private _readQuat(arr: Float64Array, offset: number): IQuatLike {
+        return { x: arr[offset], y: arr[offset + 1], z: arr[offset + 2], w: arr[offset + 3] };
     }
 
     private _writeQuat(baseOffset: number, q: IQuatLike): void {
@@ -490,30 +496,37 @@ export class BodyManager3D implements Disposable {
 }
 
 export class ShapeManager3D implements Disposable {
-    private readonly _nextShapeId = 1n;
-    private readonly _shapeCount = 0n;
-    private readonly _maxShapes = 8192n;
+    private _nextShapeId = 1n;
+    private _shapeCount = 0n;
+    private readonly _maxShapes: number;
     private readonly _shapeIdToIndex = new Map<ShapeId3D, number>();
     private readonly _shapeToBody = new Map<ShapeId3D, BodyId3D>();
     private readonly _bodyToShapes = new Map<BodyId3D, Set<ShapeId3D>>();
+    private readonly _freeList: number[] = [];
 
-    private readonly _shapeTypes = new Uint8Array(8192);
-    private readonly _shapeData = new Float64Array(8192 * SHAPE_STRIDE);
-    private readonly _materials = new Float32Array(8192 * 4);
-    private readonly _filters = new Uint32Array(8192 * 3);
+    private readonly _shapeTypes: Uint8Array;
+    private readonly _shapeData: Float64Array;
+    private readonly _materials: Float32Array;
+    private readonly _filters: Int32Array;
 
     constructor(maxShapes: number = 8192) {
         this._maxShapes = maxShapes;
-        this._shapeTypes.set(new Uint8Array(8192, 0));
-        this._shapeData.set(new Float64Array(8192 * SHAPE_STRIDE, 0));
-        this._materials.set(new Float32Array(8192 * 4, 0));
-        this._filters.set(new Uint32Array(8192 * 3, 0));
+        this._shapeTypes = new Uint8Array(maxShapes);
+        this._shapeData = new Float64Array(maxShapes * SHAPE_STRIDE);
+        this._materials = new Float32Array(maxShapes * 4);
+        this._filters = new Int32Array(maxShapes * 3);
     }
 
     get shapeCount(): number { return Number(this._shapeCount); }
 
-    createSphere(bodyId: BodyId3D, def: ISphereShapeDef3D): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.Sphere, (offset) => {
+    createSphere(
+        bodyId: BodyId3D,
+        def: ISphereShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeCreateOptions3D
+    ): ShapeId3D {
+        return this._createShape(bodyId, ShapeType.Sphere, material, filter, options, (offset) => {
             this._shapeData[offset] = def.center.x;
             this._shapeData[offset + 1] = def.center.y;
             this._shapeData[offset + 2] = def.center.z;
@@ -521,8 +534,14 @@ export class ShapeManager3D implements Disposable {
         });
     }
 
-    createBox(bodyId: BodyId3D, def: IBoxShapeDef3D): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.Box, (offset) => {
+    createBox(
+        bodyId: BodyId3D,
+        def: IBoxShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeCreateOptions3D
+    ): ShapeId3D {
+        return this._createShape(bodyId, ShapeType.Box, material, filter, options, (offset) => {
             this._shapeData[offset] = def.center.x;
             this._shapeData[offset + 1] = def.center.y;
             this._shapeData[offset + 2] = def.center.z;
@@ -532,8 +551,14 @@ export class ShapeManager3D implements Disposable {
         });
     }
 
-    createCapsule(bodyId: BodyId3D, def: ICapsuleShapeDef3D): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.Capsule, (offset) => {
+    createCapsule(
+        bodyId: BodyId3D,
+        def: ICapsuleShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeCreateOptions3D
+    ): ShapeId3D {
+        return this._createShape(bodyId, ShapeType.Capsule, material, filter, options, (offset) => {
             this._shapeData[offset] = def.p1.x;
             this._shapeData[offset + 1] = def.p1.y;
             this._shapeData[offset + 2] = def.p1.z;
@@ -544,8 +569,14 @@ export class ShapeManager3D implements Disposable {
         });
     }
 
-    createCylinder(bodyId: BodyId3D, def: ICylinderShapeDef3D): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.Cylinder, (offset) => {
+    createCylinder(
+        bodyId: BodyId3D,
+        def: ICylinderShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeCreateOptions3D
+    ): ShapeId3D {
+        return this._createShape(bodyId, ShapeType.Cylinder, material, filter, options, (offset) => {
             this._shapeData[offset] = def.center.x;
             this._shapeData[offset + 1] = def.center.y;
             this._shapeData[offset + 2] = def.center.z;
@@ -555,8 +586,14 @@ export class ShapeManager3D implements Disposable {
         });
     }
 
-    createCone(bodyId: BodyId3D, def: IConeShapeDef3D): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.Cone, (offset) => {
+    createCone(
+        bodyId: BodyId3D,
+        def: IConeShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeCreateOptions3D
+    ): ShapeId3D {
+        return this._createShape(bodyId, ShapeType.Cone, material, filter, options, (offset) => {
             this._shapeData[offset] = def.center.x;
             this._shapeData[offset + 1] = def.center.y;
             this._shapeData[offset + 2] = def.center.z;
@@ -566,20 +603,38 @@ export class ShapeManager3D implements Disposable {
         });
     }
 
-    createConvexHull(bodyId: BodyId3D, def: IConvexHullShapeDef3D): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.ConvexHull, (offset) => {
+    createConvexHull(
+        bodyId: BodyId3D,
+        def: IConvexHullShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeCreateOptions3D
+    ): ShapeId3D {
+        return this._createShape(bodyId, ShapeType.ConvexHull, material, filter, options, (offset) => {
             this._shapeData[offset] = def.vertices.length;
         });
     }
 
-    createTriangleMesh(bodyId: BodyId3D, def: ITriangleMeshShapeDef3D): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.TriangleMesh, (offset) => {
+    createTriangleMesh(
+        bodyId: BodyId3D,
+        def: ITriangleMeshShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeCreateOptions3D
+    ): ShapeId3D {
+        return this._createShape(bodyId, ShapeType.TriangleMesh, material, filter, options, (offset) => {
             this._shapeData[offset] = def.vertices.length;
             this._shapeData[offset + 1] = def.indices.length;
         });
     }
 
-    createHeightField(bodyId: BodyId3D, def: IHeightFieldShapeDef3D): ShapeId3D {
+    createHeightField(
+        bodyId: BodyId3D,
+        def: IHeightFieldShapeDef3D,
+        material?: Partial<IMaterial>,
+        filter?: ICollisionFilter3D,
+        options?: IShapeCreateOptions3D
+    ): ShapeId3D {
         let minHeight = Infinity;
         let maxHeight = -Infinity;
         for (let index = 0; index < def.heights.length; index += 1) {
@@ -588,7 +643,7 @@ export class ShapeManager3D implements Disposable {
             if (height > maxHeight) maxHeight = height;
         }
 
-        return this._createShape(bodyId, ShapeType.HeightField, (offset) => {
+        return this._createShape(bodyId, ShapeType.HeightField, material, filter, options, (offset) => {
             this._shapeData[offset] = def.width;
             this._shapeData[offset + 1] = def.depth;
             this._shapeData[offset + 2] = def.scaleX;
@@ -619,6 +674,8 @@ export class ShapeManager3D implements Disposable {
         for (let i = 0; i < SHAPE_STRIDE; i++) {
             this._shapeData[index * SHAPE_STRIDE + i] = 0;
         }
+        this._materials.fill(0, index * 4, index * 4 + 4);
+        this._filters.fill(0, index * 3, index * 3 + 3);
         this._shapeTypes[index] = 0;
         this._shapeCount -= 1n;
     }
@@ -630,16 +687,42 @@ export class ShapeManager3D implements Disposable {
         return shapes ? Array.from(shapes) : [];
     }
 
+    getMaterial(shapeId: ShapeId3D): IMaterial {
+        const offset = this._getShapeIndex(shapeId) * 4;
+        return {
+            friction: this._materials[offset],
+            restitution: this._materials[offset + 1],
+            density: this._materials[offset + 2],
+        } as IMaterial;
+    }
+
+    getFilter(shapeId: ShapeId3D): ICollisionFilter3D {
+        const offset = this._getShapeIndex(shapeId) * 3;
+        return {
+            categoryBits: this._filters[offset],
+            maskBits: this._filters[offset + 1],
+            groupIndex: this._filters[offset + 2],
+        } as ICollisionFilter3D;
+    }
+
+    isSensor(shapeId: ShapeId3D): boolean {
+        return this._materials[this._getShapeIndex(shapeId) * 4 + 3] !== 0;
+    }
+
     private _createShape(
         bodyId: BodyId3D,
         type: ShapeType,
+        material: Partial<IMaterial> | undefined,
+        filter: ICollisionFilter3D | undefined,
+        options: IShapeCreateOptions3D | undefined,
         initData: (offset: number) => void
     ): ShapeId3D {
         if (Number(this._shapeCount) >= this._maxShapes && this._freeList.length === 0) {
             throw new PhysicsError3D('Shape capacity exceeded', BodyManagerError.CAPACITY_EXCEEDED);
         }
 
-        const shapeId = this._nextShapeId++ as ShapeId3D;
+        const shapeId = this._nextShapeId as unknown as ShapeId3D;
+        this._nextShapeId += 1n;
         const index = this._freeList.length > 0 ? this._freeList.pop()! : Number(this._shapeCount);
 
         this._shapeIdToIndex.set(shapeId, index);
@@ -656,11 +739,22 @@ export class ShapeManager3D implements Disposable {
         const dataOffset = index * SHAPE_STRIDE;
         initData(dataOffset);
 
+        const materialOffset = index * 4;
+        this._materials[materialOffset] = material?.friction ?? 0.5;
+        this._materials[materialOffset + 1] = material?.restitution ?? 0;
+        this._materials[materialOffset + 2] = material?.density ?? 1;
+        this._materials[materialOffset + 3] = options?.isSensor ? 1 : 0;
+
+        const filterOffset = index * 3;
+        this._filters[filterOffset] = filter?.categoryBits ?? 1;
+        this._filters[filterOffset + 1] = filter?.maskBits ?? -1;
+        this._filters[filterOffset + 2] = filter?.groupIndex ?? 0;
+
         this._shapeCount += 1n;
         return shapeId;
     }
 
-    #getShapeIndex(shapeId: ShapeId3D): number {
+    private _getShapeIndex(shapeId: ShapeId3D): number {
         const index = this._shapeIdToIndex.get(shapeId);
         if (index === undefined) throw new PhysicsError3D('Shape not found', BodyManagerError.INVALID_STATE);
         return index;
@@ -670,23 +764,25 @@ export class ShapeManager3D implements Disposable {
         this._shapeIdToIndex.clear();
         this._shapeToBody.clear();
         this._bodyToShapes.clear();
+        this._freeList.length = 0;
     }
 }
 
 export class ConstraintManager3D implements Disposable {
-    private readonly _nextConstraintId = 1n;
-    private readonly _constraintCount = 0n;
-    private readonly _maxConstraints = 2048n;
+    private _nextConstraintId = 1n;
+    private _constraintCount = 0n;
+    private readonly _maxConstraints: number;
     private readonly _constraintIdToIndex = new Map<ConstraintId3D, number>();
     private readonly _bodyToConstraints = new Map<BodyId3D, Set<ConstraintId3D>>();
+    private readonly _freeList: number[] = [];
 
-    private readonly _constraintTypes = new Uint8Array(2048);
-    private readonly _constraintData = new Float64Array(2048 * CONSTRAINT_STRIDE);
+    private readonly _constraintTypes: Uint8Array;
+    private readonly _constraintData: Float64Array;
 
     constructor(maxConstraints: number = 2048) {
         this._maxConstraints = maxConstraints;
-        this._constraintTypes.set(new Uint8Array(2048, 0));
-        this._constraintData.set(new Float64Array(2048 * CONSTRAINT_STRIDE, 0));
+        this._constraintTypes = new Uint8Array(maxConstraints);
+        this._constraintData = new Float64Array(maxConstraints * CONSTRAINT_STRIDE);
     }
 
     get constraintCount(): number { return Number(this._constraintCount); }
@@ -702,11 +798,8 @@ export class ConstraintManager3D implements Disposable {
         return this._createConstraint(2, def.bodyIdA, def.bodyIdB, (offset) => {
             this._writeVec(offset, def.localAnchorA);
             this._writeVec(offset + 3, def.localAnchorB);
-            if (def.rotation) {
-                this._writeQuat(offset + 6, def.rotation);
-            } else {
-                this._constraintData[offset + 9] = 1;
-            }
+            this._writeVec(offset + 6, def.localAxisA);
+            this._writeVec(offset + 9, def.localAxisB);
         });
     }
 
@@ -714,11 +807,7 @@ export class ConstraintManager3D implements Disposable {
         return this._createConstraint(3, def.bodyIdA, def.bodyIdB, (offset) => {
             this._writeVec(offset, def.localAnchorA);
             this._writeVec(offset + 3, def.localAnchorB);
-            if (def.rotation) {
-                this._writeQuat(offset + 6, def.rotation);
-            } else {
-                this._constraintData[offset + 9] = 1;
-            }
+            this._writeVec(offset + 6, def.localAxisA);
         });
     }
 
@@ -794,7 +883,8 @@ export class ConstraintManager3D implements Disposable {
             throw new PhysicsError3D('Constraint capacity exceeded', BodyManagerError.CAPACITY_EXCEEDED);
         }
 
-        const constraintId = this._nextConstraintId++ as ConstraintId3D;
+        const constraintId = this._nextConstraintId as unknown as ConstraintId3D;
+        this._nextConstraintId += 1n;
         const index = this._freeList.length > 0 ? this._freeList.pop()! : Number(this._constraintCount);
 
         this._constraintIdToIndex.set(constraintId, index);
@@ -816,10 +906,23 @@ export class ConstraintManager3D implements Disposable {
         return constraintId;
     }
 
-    #getConstraintIndex(constraintId: ConstraintId3D): number {
+    private _getConstraintIndex(constraintId: ConstraintId3D): number {
         const index = this._constraintIdToIndex.get(constraintId);
         if (index === undefined) throw new PhysicsError3D('Constraint not found', BodyManagerError.INVALID_STATE);
         return index;
+    }
+
+    private _writeVec(offset: number, v: IVec3Like): void {
+        this._constraintData[offset] = v.x;
+        this._constraintData[offset + 1] = v.y;
+        this._constraintData[offset + 2] = v.z;
+    }
+
+    private _writeQuat(offset: number, q: IQuatLike): void {
+        this._constraintData[offset] = q.x;
+        this._constraintData[offset + 1] = q.y;
+        this._constraintData[offset + 2] = q.z;
+        this._constraintData[offset + 3] = q.w ?? 1;
     }
 
     [Symbol.dispose](): void {
