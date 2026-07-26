@@ -7,6 +7,9 @@ export * from './freeze';
 export * from './object';
 export * from './types';
 
+// Message catalog helper
+export * from './message-catalog';
+
 // Submodules
 export * from './clone/index';
 export * from './comparer/index';
