@@ -47,3 +47,7 @@ export class AnimationIkError extends AnimationError {
         this.name = 'AnimationIkError';
     }
 }
+
+export const assertNever = (value: never, message: string): never => {
+    throw new AnimationError(`${message} '${String(value)}'`, 'ANIMATION_EXHAUSTIVENESS_ERROR');
+};
