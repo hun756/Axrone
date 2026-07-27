@@ -1,5 +1,5 @@
 import { AnimationValidationError } from './errors';
-import { clamp, quatApplyToVec3, quatCopy, quatDot, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Add, vec3Copy, vec3Lerp, vec3Multiply } from './math';
+import { clamp, quatAccumulateWeighted, quatApplyToVec3, quatCopy, quatFinalizeWeighted, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Add, vec3Copy, vec3Lerp, vec3Multiply } from './math';
 import type { AnimationCurveBindingDefinition } from './types';
 import type { AnimationRig } from './rig';
 
@@ -328,6 +328,10 @@ export const blendFrame = (
     return target;
 };
 
+// Hemisphere reference scratch for the shared weighted quaternion averaging
+// core (blendWeightedFrames is not re-entrant).
+const blendReferenceRotation = new Float32Array(4);
+
 export const blendWeightedFrames = (
     target: AnimationFrame,
     frames: readonly AnimationFrame[],
@@ -350,11 +354,6 @@ export const blendWeightedFrames = (
         let sx = 0;
         let sy = 0;
         let sz = 0;
-        let qx = 0;
-        let qy = 0;
-        let qz = 0;
-        let qw = 0;
-        let referenceIndex = -1;
 
         for (let frameIndex = 0; frameIndex < frames.length; frameIndex += 1) {
             const frame = frames[frameIndex]!;
@@ -362,6 +361,7 @@ export const blendWeightedFrames = (
             if (weight <= 0) {
                 continue;
             }
+            const isFirst = totalWeight <= 0;
             totalWeight += weight;
             tx += frame.pose.translations[translationOffset]! * weight;
             ty += frame.pose.translations[translationOffset + 1]! * weight;
@@ -369,23 +369,16 @@ export const blendWeightedFrames = (
             sx += frame.pose.scales[translationOffset]! * weight;
             sy += frame.pose.scales[translationOffset + 1]! * weight;
             sz += frame.pose.scales[translationOffset + 2]! * weight;
-            const sign =
-                referenceIndex >= 0 &&
-                quatDot(
-                    frames[referenceIndex]!.pose.rotations,
-                    rotationOffset,
-                    frame.pose.rotations,
-                    rotationOffset
-                ) < 0
-                    ? -1
-                    : 1;
-            qx += frame.pose.rotations[rotationOffset]! * weight * sign;
-            qy += frame.pose.rotations[rotationOffset + 1]! * weight * sign;
-            qz += frame.pose.rotations[rotationOffset + 2]! * weight * sign;
-            qw += frame.pose.rotations[rotationOffset + 3]! * weight * sign;
-            if (referenceIndex < 0) {
-                referenceIndex = frameIndex;
-            }
+            quatAccumulateWeighted(
+                target.pose.rotations,
+                rotationOffset,
+                blendReferenceRotation,
+                0,
+                frame.pose.rotations,
+                rotationOffset,
+                weight,
+                isFirst
+            );
         }
 
         if (totalWeight <= 0) {
@@ -399,11 +392,13 @@ export const blendWeightedFrames = (
         target.pose.scales[translationOffset] = sx * inverseWeight;
         target.pose.scales[translationOffset + 1] = sy * inverseWeight;
         target.pose.scales[translationOffset + 2] = sz * inverseWeight;
-        target.pose.rotations[rotationOffset] = qx * inverseWeight;
-        target.pose.rotations[rotationOffset + 1] = qy * inverseWeight;
-        target.pose.rotations[rotationOffset + 2] = qz * inverseWeight;
-        target.pose.rotations[rotationOffset + 3] = qw * inverseWeight;
-        quatNormalize(target.pose.rotations, rotationOffset, target.pose.rotations, rotationOffset);
+        quatFinalizeWeighted(
+            target.pose.rotations,
+            rotationOffset,
+            target.pose.rotations,
+            rotationOffset,
+            totalWeight
+        );
     }
 
     for (let curveIndex = 0; curveIndex < target.curves.values.length; curveIndex += 1) {
