@@ -151,6 +151,8 @@ export type { PointLightConfig } from './components/point-light';
 export { PointLight } from './components/point-light';
 export type { SpotLightConfig } from './components/spot-light';
 export { SpotLight } from './components/spot-light';
+export type { TerrainConfig } from './components/terrain';
+export { Terrain } from './components/terrain';
 export type { AreaLightConfig, AreaLightShape } from './components/area-light';
 export { AreaLight } from './components/area-light';
 export type {

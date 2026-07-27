@@ -168,6 +168,12 @@
       "@axrone/ecs-runtime/*": [
         "./packages/ecs-runtime/src/*"
       ],
+      "@axrone/terrain": [
+        "./packages/terrain/src/index.ts"
+      ],
+      "@axrone/terrain/*": [
+        "./packages/terrain/src/*"
+      ],
       "@axrone/tween": [
         "./packages/tween/src/index.ts"
       ],

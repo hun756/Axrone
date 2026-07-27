@@ -1,0 +1,308 @@
+import { Component, script } from '@axrone/ecs-runtime';
+import {
+    DEFAULT_TERRAIN_NOISE_OPTIONS,
+    isTerrainResolution,
+    type ResolvedTerrainNoiseOptions,
+    type TerrainDescriptor,
+    type TerrainNoiseOptions,
+    type TerrainResolution,
+    type TerrainSourceKind,
+} from '@axrone/terrain';
+
+export interface TerrainConfig {
+    readonly source?: TerrainSourceKind;
+    readonly heightmapAsset?: string;
+    readonly width?: number;
+    readonly length?: number;
+    readonly maxHeight?: number;
+    readonly resolution?: TerrainResolution;
+    readonly noise?: TerrainNoiseOptions;
+    readonly materialId?: string | null;
+    readonly castShadows?: boolean;
+    readonly generateCollider?: boolean;
+}
+
+const DEFAULT_TERRAIN_WIDTH = 100;
+const DEFAULT_TERRAIN_LENGTH = 100;
+const DEFAULT_TERRAIN_MAX_HEIGHT = 30;
+const DEFAULT_TERRAIN_RESOLUTION: TerrainResolution = 129;
+
+const TERRAIN_SOURCE_KINDS: readonly TerrainSourceKind[] = ['flat', 'noise', 'heightmap'];
+
+const normalizeSource = (value: unknown, fallback: TerrainSourceKind): TerrainSourceKind =>
+    TERRAIN_SOURCE_KINDS.includes(value as TerrainSourceKind)
+        ? (value as TerrainSourceKind)
+        : fallback;
+
+const normalizeDimension = (value: unknown, fallback: number): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const normalizeMaxHeight = (value: unknown, fallback: number): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+};
+
+const normalizeResolution = (value: unknown, fallback: TerrainResolution): TerrainResolution => {
+    const parsed = Number(value);
+    return isTerrainResolution(parsed) ? parsed : fallback;
+};
+
+const clamp = (value: number, min: number, max: number): number =>
+    value < min ? min : value > max ? max : value;
+
+const normalizeFinite = (value: unknown, fallback: number): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+/** Coerces arbitrary serialized noise data into a valid resolved option set. */
+const normalizeNoise = (value: TerrainNoiseOptions | null | undefined): ResolvedTerrainNoiseOptions => {
+    const defaults = DEFAULT_TERRAIN_NOISE_OPTIONS;
+    if (!value || typeof value !== 'object') {
+        return Object.freeze({ ...defaults });
+    }
+
+    return Object.freeze({
+        seed: Math.trunc(normalizeFinite(value.seed, defaults.seed)),
+        frequency: Math.max(normalizeFinite(value.frequency, defaults.frequency), 1e-4),
+        octaves: clamp(Math.trunc(normalizeFinite(value.octaves, defaults.octaves)), 1, 8),
+        persistence: clamp(normalizeFinite(value.persistence, defaults.persistence), 0.01, 1),
+        lacunarity: Math.max(normalizeFinite(value.lacunarity, defaults.lacunarity), 1),
+        offsetX: normalizeFinite(value.offsetX, defaults.offsetX),
+        offsetZ: normalizeFinite(value.offsetZ, defaults.offsetZ),
+    });
+};
+
+const areEqualNoise = (
+    left: ResolvedTerrainNoiseOptions,
+    right: ResolvedTerrainNoiseOptions
+): boolean =>
+    left.seed === right.seed &&
+    left.frequency === right.frequency &&
+    left.octaves === right.octaves &&
+    left.persistence === right.persistence &&
+    left.lacunarity === right.lacunarity &&
+    left.offsetX === right.offsetX &&
+    left.offsetZ === right.offsetZ;
+
+@script({
+    scriptName: 'Terrain',
+    priority: 100,
+    executeInEditMode: true,
+    singleton: false,
+    trackInstances: false,
+})
+export class Terrain extends Component {
+    private _source: TerrainSourceKind;
+    private _heightmapAsset: string;
+    private _width: number;
+    private _length: number;
+    private _maxHeight: number;
+    private _resolution: TerrainResolution;
+    private _noise: ResolvedTerrainNoiseOptions;
+    private _materialId: string | null;
+    private _castShadows: boolean;
+    private _generateCollider: boolean;
+    private _dataVersion = 0;
+
+    constructor(config: TerrainConfig = {}) {
+        super();
+        this._source = normalizeSource(config.source, 'noise');
+        this._heightmapAsset = typeof config.heightmapAsset === 'string' ? config.heightmapAsset : '';
+        this._width = normalizeDimension(config.width, DEFAULT_TERRAIN_WIDTH);
+        this._length = normalizeDimension(config.length, DEFAULT_TERRAIN_LENGTH);
+        this._maxHeight = normalizeMaxHeight(config.maxHeight, DEFAULT_TERRAIN_MAX_HEIGHT);
+        this._resolution = normalizeResolution(config.resolution, DEFAULT_TERRAIN_RESOLUTION);
+        this._noise = normalizeNoise(config.noise);
+        this._materialId = config.materialId ?? null;
+        this._castShadows = config.castShadows ?? true;
+        this._generateCollider = config.generateCollider ?? true;
+    }
+
+    /** Monotonic counter bumped whenever terrain geometry inputs change. */
+    get dataVersion(): number {
+        return this._dataVersion;
+    }
+
+    get source(): TerrainSourceKind {
+        return this._source;
+    }
+
+    set source(value: TerrainSourceKind) {
+        const normalized = normalizeSource(value, this._source);
+        if (normalized === this._source) {
+            return;
+        }
+
+        this._source = normalized;
+        this._dataVersion += 1;
+    }
+
+    get heightmapAsset(): string {
+        return this._heightmapAsset;
+    }
+
+    set heightmapAsset(value: string) {
+        const normalized = typeof value === 'string' ? value : '';
+        if (normalized === this._heightmapAsset) {
+            return;
+        }
+
+        this._heightmapAsset = normalized;
+        this._dataVersion += 1;
+    }
+
+    get width(): number {
+        return this._width;
+    }
+
+    set width(value: number) {
+        const normalized = normalizeDimension(value, this._width);
+        if (normalized === this._width) {
+            return;
+        }
+
+        this._width = normalized;
+        this._dataVersion += 1;
+    }
+
+    get length(): number {
+        return this._length;
+    }
+
+    set length(value: number) {
+        const normalized = normalizeDimension(value, this._length);
+        if (normalized === this._length) {
+            return;
+        }
+
+        this._length = normalized;
+        this._dataVersion += 1;
+    }
+
+    get maxHeight(): number {
+        return this._maxHeight;
+    }
+
+    set maxHeight(value: number) {
+        const normalized = normalizeMaxHeight(value, this._maxHeight);
+        if (normalized === this._maxHeight) {
+            return;
+        }
+
+        this._maxHeight = normalized;
+        this._dataVersion += 1;
+    }
+
+    get resolution(): TerrainResolution {
+        return this._resolution;
+    }
+
+    set resolution(value: TerrainResolution) {
+        const normalized = normalizeResolution(value, this._resolution);
+        if (normalized === this._resolution) {
+            return;
+        }
+
+        this._resolution = normalized;
+        this._dataVersion += 1;
+    }
+
+    get noise(): ResolvedTerrainNoiseOptions {
+        return this._noise;
+    }
+
+    set noise(value: TerrainNoiseOptions | null) {
+        const normalized = normalizeNoise(value);
+        if (areEqualNoise(this._noise, normalized)) {
+            return;
+        }
+
+        this._noise = normalized;
+        this._dataVersion += 1;
+    }
+
+    get materialId(): string | null {
+        return this._materialId;
+    }
+
+    set materialId(value: string | null) {
+        this._materialId = value;
+    }
+
+    get castShadows(): boolean {
+        return this._castShadows;
+    }
+
+    set castShadows(value: boolean) {
+        this._castShadows = Boolean(value);
+    }
+
+    get generateCollider(): boolean {
+        return this._generateCollider;
+    }
+
+    set generateCollider(value: boolean) {
+        this._generateCollider = Boolean(value);
+    }
+
+    /** Descriptor consumed by the @axrone/terrain builders. */
+    get descriptor(): TerrainDescriptor {
+        return {
+            width: this._width,
+            length: this._length,
+            maxHeight: this._maxHeight,
+            resolution: this._resolution,
+        };
+    }
+
+    override serialize(): Record<string, unknown> {
+        return {
+            source: this._source,
+            heightmapAsset: this._heightmapAsset,
+            width: this._width,
+            length: this._length,
+            maxHeight: this._maxHeight,
+            resolution: this._resolution,
+            noise: { ...this._noise },
+            materialId: this._materialId,
+            castShadows: this._castShadows,
+            generateCollider: this._generateCollider,
+        };
+    }
+
+    override deserialize(data: Record<string, any>): void {
+        if (typeof data.source === 'string') {
+            this.source = data.source as TerrainSourceKind;
+        }
+        if (typeof data.heightmapAsset === 'string') {
+            this.heightmapAsset = data.heightmapAsset;
+        }
+        if (typeof data.width === 'number') {
+            this.width = data.width;
+        }
+        if (typeof data.length === 'number') {
+            this.length = data.length;
+        }
+        if (typeof data.maxHeight === 'number') {
+            this.maxHeight = data.maxHeight;
+        }
+        if (typeof data.resolution === 'number') {
+            this.resolution = data.resolution as TerrainResolution;
+        }
+        if (typeof data.noise === 'object' && data.noise !== null && !Array.isArray(data.noise)) {
+            this.noise = data.noise as TerrainNoiseOptions;
+        }
+        if (typeof data.materialId === 'string' || data.materialId === null) {
+            this._materialId = data.materialId;
+        }
+        if (typeof data.castShadows === 'boolean') {
+            this._castShadows = data.castShadows;
+        }
+        if (typeof data.generateCollider === 'boolean') {
+            this._generateCollider = data.generateCollider;
+        }
+    }
+}

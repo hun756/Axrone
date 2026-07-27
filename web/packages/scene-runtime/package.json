@@ -108,6 +108,7 @@
         "@axrone/random": "^0.0.1",
         "@axrone/render-webgl2": "^0.1.0",
         "@axrone/scene-prefab": "^0.1.0",
+        "@axrone/terrain": "^0.1.0",
         "@axrone/utility": "^0.0.1"
     }
 }
