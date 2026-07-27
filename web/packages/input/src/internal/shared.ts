@@ -493,7 +493,7 @@ export const applyVectorProcessors = (
                 break;
             case 'normalize-vector2': {
                 const length = magnitude(nextX, nextY);
-                if (length > EPSILON) {
+                if (length > NUMERIC_EPSILON) {
                     nextX /= length;
                     nextY /= length;
                 }
@@ -501,12 +501,12 @@ export const applyVectorProcessors = (
             }
             case 'clamp-magnitude': {
                 const length = magnitude(nextX, nextY);
-                if (length <= EPSILON) {
+                if (length <= NUMERIC_EPSILON) {
                     break;
                 }
 
                 const clamped = clamp(length, processor.min, processor.max);
-                if (Math.abs(clamped - length) > EPSILON) {
+                if (Math.abs(clamped - length) > NUMERIC_EPSILON) {
                     const ratio = clamped / length;
                     nextX *= ratio;
                     nextY *= ratio;
