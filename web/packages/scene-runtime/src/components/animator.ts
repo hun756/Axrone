@@ -595,8 +595,8 @@ export class Animator extends Component {
             updateMode: this._updateMode,
             cullingMode: this._cullingMode,
             profile: controller?.profile ?? null,
-            pendingEvents: controller?.events ?? [],
-            activeClips: controller?.activeClips ?? [],
+            pendingEvents: [...(controller?.events ?? [])],
+            activeClips: [...(controller?.activeClips ?? [])],
             streaming: this._streamingSnapshot,
             pendingStreamingRequests: this._pendingStreamingRequests,
         };
