@@ -12,6 +12,7 @@ describe('scene-3d entry', () => {
         expect(scene3D.Scene).toBeDefined();
         expect(scene3D.Camera).toBeDefined();
         expect(scene3D.MeshRenderer).toBeDefined();
+        expect(scene3D.Terrain).toBeDefined();
         expect(scene3D.Scene3DActorRuntime).toBeDefined();
         expect(scene3D.SceneAssetFacade).toBeDefined();
         expect(scene3D.SceneLifecycleFacade).toBeDefined();
