@@ -1,4 +1,5 @@
 import { AnimationValidationError } from './errors';
+import { ANIMATION_EPSILON } from './math';
 import type {
     AnimationClipCompressionDefinition,
     AnimationClipDefinition,
@@ -64,7 +65,9 @@ const canRemoveLinearKeyframe = (
     const currentTime = times[index] ?? 0;
     const nextTime = times[index + 1] ?? currentTime;
     const span = nextTime - prevTime;
-    if (span <= Number.EPSILON) {
+    // Number.EPSILON (~2.2e-16) is far below meaningful animation time deltas;
+    // use the animation-scale epsilon so degenerate spans are actually caught.
+    if (span <= ANIMATION_EPSILON) {
         return false;
     }
 
