@@ -69,6 +69,11 @@
             "import": "./dist/pose.mjs",
             "require": "./dist/pose.js"
         },
+        "./parameters": {
+            "types": "./dist/parameters.d.ts",
+            "import": "./dist/parameters.mjs",
+            "require": "./dist/parameters.js"
+        },
         "./rig": {
             "types": "./dist/rig.d.ts",
             "import": "./dist/rig.mjs",

@@ -65,6 +65,11 @@ export default [
     }),
     ...createPackageConfig({
         packageDir,
+        inputRelativePath: 'src/parameters.ts',
+        outputBasename: 'parameters',
+    }),
+    ...createPackageConfig({
+        packageDir,
         inputRelativePath: 'src/rig.ts',
         outputBasename: 'rig',
     }),
