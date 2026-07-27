@@ -1,5 +1,5 @@
 import { createAnimationClips, AnimationClip } from './clip';
-import { AnimationScratchPool, type AnimationMotionEvaluationContext } from './blend-tree';
+import { AnimationScratchPool, resolveMotionDuration, type AnimationMotionEvaluationContext } from './blend-tree';
 import { AnimationStateMachineError, AnimationValidationError } from './errors';
 import { AnimationIkLayer } from './ik';
 import { AnimationParameterStore } from './parameters';
@@ -31,6 +31,7 @@ import type {
     AnimationControllerClipActivity,
     AnimationControllerEvent,
     AnimationControllerDefinition,
+    AnimationControllerLayerProfile,
     AnimationControllerProfile,
     AnimationCurveBindingDefinition,
     AnimationLayerBlendMode,
@@ -111,17 +112,22 @@ export class AnimationController<
     private readonly _rootMotionRotation = new Float32Array([0, 0, 0, 1]);
     private readonly _rootMotionConfig: NonNullable<AnimationControllerDefinition['rootMotion']> | null;
     private readonly _rootMotionBoneIndex: number;
-    private _events: readonly AnimationControllerEvent[] = Object.freeze([]);
-    private _activeClips: readonly AnimationControllerClipActivity[] = Object.freeze([]);
-    private _profile: AnimationControllerProfile = Object.freeze({
+    // Reused per-frame scratch collections keep the update hot path free of
+    // array/object churn; exposed results stay valid until the next
+    // update()/evaluate() call.
+    private readonly _eventScratch: AnimationControllerEvent[] = [];
+    private readonly _activeClipScratch: AnimationControllerClipActivity[] = [];
+    private _events: readonly AnimationControllerEvent[] = [];
+    private _activeClips: readonly AnimationControllerClipActivity[] = [];
+    private _profile: AnimationControllerProfile = {
         evaluationTimeMs: 0,
         sampledTrackCount: 0,
         activeClipCount: 0,
         emittedEventCount: 0,
         rootMotionTranslationMagnitude: 0,
         rootMotionRotationW: 1,
-        activeLayers: Object.freeze([]),
-    });
+        activeLayers: [],
+    };
 
     constructor(definition: AnimationControllerDefinition<TParameters>) {
         this.rig = new AnimationRig(definition.rig);
@@ -188,10 +194,12 @@ export class AnimationController<
         };
     }
 
+    /** Emitted events for the latest update; contents are reused and only valid until the next update()/evaluate() call. */
     get events(): readonly AnimationControllerEvent[] {
         return this._events;
     }
 
+    /** Active clip sampling info for the latest update; contents are reused and only valid until the next update()/evaluate() call. */
     get activeClips(): readonly AnimationControllerClipActivity[] {
         return this._activeClips;
     }
@@ -238,14 +246,20 @@ export class AnimationController<
         return this;
     }
 
-    crossFade(stateId: string, durationSeconds: number, layerId: string | undefined = this._layers[0]!.id): this {
+    crossFade(
+        stateId: string,
+        durationSeconds: number,
+        layerId: string | undefined = this._layers[0]!.id,
+        options: { canInterrupt?: boolean } = {}
+    ): this {
         const layerIndex = this._resolveLayerIndex(layerId);
         crossFadeLayerState(
             this._layers[layerIndex]!.machine,
             this._layerRuntimes[layerIndex]!,
             stateId,
             durationSeconds,
-            0
+            0,
+            options.canInterrupt ?? false
         );
         return this;
     }
@@ -254,7 +268,7 @@ export class AnimationController<
         const layerIndex = this._resolveLayerIndex(layerId);
         const runtime = this._layerRuntimes[layerIndex]!;
         const state = this._layers[layerIndex]!.machine.states[runtime.currentStateIndex]!;
-        const duration = Math.max(1e-6, state.motion.kind === 'clip' ? state.motion.clip.duration : 1);
+        const duration = Math.max(1e-6, resolveMotionDuration(state.motion, this.parameters));
         runtime.currentNormalizedTime = Math.max(0, timeSeconds) / duration;
         runtime.previousNormalizedTime = runtime.currentNormalizedTime;
         this.evaluate();
@@ -284,8 +298,10 @@ export class AnimationController<
         this.currentFrame.reset(this.rig, this._restFrame.curves.values);
         this._rootMotionTranslation.fill(0);
         quatCopy(this._rootMotionRotation, 0, [0, 0, 0, 1], 0);
-        const events: AnimationControllerEvent[] = [];
-        const activeClips: AnimationControllerClipActivity[] = [];
+        const events = this._eventScratch;
+        events.length = 0;
+        const activeClips = this._activeClipScratch;
+        activeClips.length = 0;
 
         for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
             const layer = this._layers[layerIndex]!;
@@ -403,25 +419,21 @@ export class AnimationController<
             }
         }
 
-        this._events = updateRootMotion
-            ? Object.freeze(
-                  [...events].sort(
-                      (left, right) =>
-                          left.time - right.time ||
-                          left.layerId.localeCompare(right.layerId) ||
-                          left.stateId.localeCompare(right.stateId)
-                  )
-              )
-            : Object.freeze([]);
-        this._activeClips = Object.freeze(
-            [...activeClips].sort(
-                (left, right) =>
-                    right.motionWeight - left.motionWeight ||
-                    left.layerId.localeCompare(right.layerId) ||
-                    left.stateId.localeCompare(right.stateId) ||
-                    left.clipId.localeCompare(right.clipId)
-            )
+        events.sort(
+            (left, right) =>
+                left.time - right.time ||
+                left.layerId.localeCompare(right.layerId) ||
+                left.stateId.localeCompare(right.stateId)
         );
+        this._events = events;
+        activeClips.sort(
+            (left, right) =>
+                right.motionWeight - left.motionWeight ||
+                left.layerId.localeCompare(right.layerId) ||
+                left.stateId.localeCompare(right.stateId) ||
+                left.clipId.localeCompare(right.clipId)
+        );
+        this._activeClips = activeClips;
     }
 
     private _countMotionTracks(motion: AnimationCompiledStateMachine['states'][number]['motion']): number {
@@ -448,22 +460,28 @@ export class AnimationController<
     }
 
     private _updateProfile(evaluationTimeMs: number): void {
-        const activeLayers = this._layers.map((layer, index) => {
+        // Profile snapshots stay immutable-by-construction: layer entries and
+        // the containing array are freshly allocated (layer counts are small),
+        // unlike the documented reused events/activeClips scratch arrays.
+        const activeLayers: AnimationControllerLayerProfile[] = [];
+        for (let index = 0; index < this._layers.length; index += 1) {
+            const layer = this._layers[index]!;
             const runtime = this._layerRuntimes[index]!;
             if (!runtime.transition) {
                 const state = layer.machine.states[runtime.currentStateIndex]!;
-                return Object.freeze({
+                activeLayers.push({
                     layerId: layer.id,
                     stateId: state.id,
                     normalizedTime: runtime.currentNormalizedTime,
                     weight: this._layerWeights[index] ?? 1,
                     transitioning: false,
                 });
+                continue;
             }
 
             const sourceState = layer.machine.states[runtime.transition.sourceStateIndex]!;
             const targetState = layer.machine.states[runtime.transition.targetStateIndex]!;
-            return Object.freeze({
+            activeLayers.push({
                 layerId: layer.id,
                 stateId: `${sourceState.id}->${targetState.id}`,
                 normalizedTime: runtime.transition.targetNormalizedTime,
@@ -471,7 +489,7 @@ export class AnimationController<
                 transitioning: true,
                 transitionProgress: runtime.transition.progress,
             });
-        });
+        }
 
         const sampledTrackCount = this._layers.reduce((sum, layer, index) => {
             if ((this._layerWeights[index] ?? 0) <= 0) {
@@ -488,7 +506,7 @@ export class AnimationController<
             );
         }, 0);
 
-        this._profile = Object.freeze({
+        this._profile = {
             evaluationTimeMs,
             sampledTrackCount,
             activeClipCount: this._activeClips.length,
@@ -499,7 +517,7 @@ export class AnimationController<
                 this._rootMotionTranslation[2]
             ),
             rootMotionRotationW: this._rootMotionRotation[3] ?? 1,
-            activeLayers: Object.freeze(activeLayers),
-        });
+            activeLayers,
+        };
     }
 }

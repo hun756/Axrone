@@ -1,4 +1,5 @@
 import { AnimationSamplingError, AnimationValidationError } from './errors';
+import { freezeTuple3 } from './internal';
 import { clamp, quatCopy, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, toFloat32Array, vec3Copy, vec3Lerp } from './math';
 import type { AnimationCurveLayout, AnimationFrame } from './pose';
 import type { AnimationRig } from './rig';
@@ -294,11 +295,11 @@ const sanitizeFootContacts = (
                     endTime,
                     ...(contact.lockTranslationAxes
                         ? {
-                              lockTranslationAxes: Object.freeze([
+                              lockTranslationAxes: freezeTuple3(
                                   contact.lockTranslationAxes[0],
                                   contact.lockTranslationAxes[1],
-                                  contact.lockTranslationAxes[2],
-                              ]) as readonly [boolean, boolean, boolean],
+                                  contact.lockTranslationAxes[2]
+                              ),
                           }
                         : {}),
                     ...(contact.metadata ? { metadata: cloneMetadataRecord(contact.metadata) ?? {} } : {}),
@@ -321,20 +322,20 @@ const sanitizeMotionFeatures = (
                     time: clamp(feature.time, 0, duration),
                     ...(feature.trajectoryPosition
                         ? {
-                              trajectoryPosition: Object.freeze([
+                              trajectoryPosition: freezeTuple3(
                                   feature.trajectoryPosition[0],
                                   feature.trajectoryPosition[1],
-                                  feature.trajectoryPosition[2],
-                              ]) as readonly [number, number, number],
+                                  feature.trajectoryPosition[2]
+                              ),
                           }
                         : {}),
                     ...(feature.facingDirection
                         ? {
-                              facingDirection: Object.freeze([
+                              facingDirection: freezeTuple3(
                                   feature.facingDirection[0],
                                   feature.facingDirection[1],
-                                  feature.facingDirection[2],
-                              ]) as readonly [number, number, number],
+                                  feature.facingDirection[2]
+                              ),
                           }
                         : {}),
                     ...(feature.tags && feature.tags.length > 0
@@ -442,7 +443,7 @@ const sanitizeStreamingDefinition = (
     } satisfies AnimationClipStreamingDefinition);
 };
 
-interface AnimationClipMutableFields {
+interface AnimationClipState {
     id: string;
     duration: number;
     translationTracks: readonly AnimationBoneTrack[];
@@ -455,21 +456,11 @@ interface AnimationClipMutableFields {
     features: readonly AnimationMotionFeatureDefinition[];
     compression: AnimationClipCompressionDefinition | null;
     streaming: AnimationClipStreamingDefinition | null;
+    definition: AnimationClipDefinition;
 }
 
 export class AnimationClip {
-    readonly id!: string;
-    readonly duration!: number;
-    readonly translationTracks!: readonly AnimationBoneTrack[];
-    readonly rotationTracks!: readonly AnimationBoneTrack[];
-    readonly scaleTracks!: readonly AnimationBoneTrack[];
-    readonly curveTracks!: readonly AnimationCurveTrack[];
-    readonly events!: readonly AnimationClipEventDefinition[];
-    readonly footContacts!: readonly AnimationFootContactDefinition[];
-    readonly tags!: readonly string[];
-    readonly features!: readonly AnimationMotionFeatureDefinition[];
-    readonly compression!: AnimationClipCompressionDefinition | null;
-    readonly streaming!: AnimationClipStreamingDefinition | null;
+    private _state!: AnimationClipState;
 
     private readonly _translationTrackByTarget = new Map<number, AnimationBoneTrack>();
     private readonly _rotationTrackByTarget = new Map<number, AnimationBoneTrack>();
@@ -484,7 +475,6 @@ export class AnimationClip {
     private readonly _sampleMidRotation = new Float32Array(4);
     private readonly _sampleZeroRotation = new Float32Array(4);
     private readonly _inverseQuaternion = new Float32Array(4);
-    private _definition!: AnimationClipDefinition;
 
     constructor(
         definition: AnimationClipDefinition,
@@ -496,8 +486,56 @@ export class AnimationClip {
         this._applyDefinition(definition);
     }
 
+    get id(): string {
+        return this._state.id;
+    }
+
+    get duration(): number {
+        return this._state.duration;
+    }
+
+    get translationTracks(): readonly AnimationBoneTrack[] {
+        return this._state.translationTracks;
+    }
+
+    get rotationTracks(): readonly AnimationBoneTrack[] {
+        return this._state.rotationTracks;
+    }
+
+    get scaleTracks(): readonly AnimationBoneTrack[] {
+        return this._state.scaleTracks;
+    }
+
+    get curveTracks(): readonly AnimationCurveTrack[] {
+        return this._state.curveTracks;
+    }
+
+    get events(): readonly AnimationClipEventDefinition[] {
+        return this._state.events;
+    }
+
+    get footContacts(): readonly AnimationFootContactDefinition[] {
+        return this._state.footContacts;
+    }
+
+    get tags(): readonly string[] {
+        return this._state.tags;
+    }
+
+    get features(): readonly AnimationMotionFeatureDefinition[] {
+        return this._state.features;
+    }
+
+    get compression(): AnimationClipCompressionDefinition | null {
+        return this._state.compression;
+    }
+
+    get streaming(): AnimationClipStreamingDefinition | null {
+        return this._state.streaming;
+    }
+
     get definition(): AnimationClipDefinition {
-        return this._definition;
+        return this._state.definition;
     }
 
     applyStreamingChunk(
@@ -505,7 +543,7 @@ export class AnimationClip {
         options: AnimationClipStreamingChunkApplicationOptions = {}
     ): this {
         this._applyDefinition(
-            applyAnimationClipStreamingChunkDefinition(this._definition, payload, {
+            applyAnimationClipStreamingChunkDefinition(this._state.definition, payload, {
                 clipId: this.id,
                 ...options,
             })
@@ -591,22 +629,22 @@ export class AnimationClip {
             }
         }
 
-        const mutable = this as unknown as AnimationClipMutableFields;
-        mutable.id = definition.id;
-        mutable.duration = resolvedDuration;
-        mutable.translationTracks = Object.freeze(translationTracks);
-        mutable.rotationTracks = Object.freeze(rotationTracks);
-        mutable.scaleTracks = Object.freeze(scaleTracks);
-        mutable.curveTracks = Object.freeze(curveTracks);
-        mutable.events = sanitizeClipEvents(definition.events, mutable.duration);
-        mutable.footContacts = sanitizeFootContacts(definition.footContacts, mutable.duration);
-        mutable.tags = sanitizeTags(definition.tags);
-        mutable.features = sanitizeMotionFeatures(definition.features, mutable.duration);
-        mutable.compression = definition.compression
-            ? Object.freeze({ ...definition.compression })
-            : null;
-        mutable.streaming = sanitizeStreamingDefinition(definition.streaming, mutable.duration);
-        this._definition = definition;
+        const resolvedFinalDuration = resolvedDuration;
+        this._state = {
+            id: definition.id,
+            duration: resolvedFinalDuration,
+            translationTracks: Object.freeze(translationTracks),
+            rotationTracks: Object.freeze(rotationTracks),
+            scaleTracks: Object.freeze(scaleTracks),
+            curveTracks: Object.freeze(curveTracks),
+            events: sanitizeClipEvents(definition.events, resolvedFinalDuration),
+            footContacts: sanitizeFootContacts(definition.footContacts, resolvedFinalDuration),
+            tags: sanitizeTags(definition.tags),
+            features: sanitizeMotionFeatures(definition.features, resolvedFinalDuration),
+            compression: definition.compression ? Object.freeze({ ...definition.compression }) : null,
+            streaming: sanitizeStreamingDefinition(definition.streaming, resolvedFinalDuration),
+            definition,
+        };
     }
 
     sampleTime(timeSeconds: number, frame: AnimationFrame): AnimationFrame {
@@ -658,17 +696,17 @@ export class AnimationClip {
                 if (event.time <= rangeStart || event.time > rangeEnd) {
                     continue;
                 }
-                out.push(
-                    Object.freeze({
-                        clipId: this.id,
-                        ...(event.id ? { id: event.id } : {}),
-                        name: event.name,
-                        time: event.time,
-                        normalizedTime: this.duration > 0 ? event.time / this.duration : 0,
-                        ...(event.payload !== undefined ? { payload: event.payload } : {}),
-                        ...(event.tags ? { tags: event.tags } : {}),
-                    } satisfies AnimationClipEventOccurrence)
-                );
+                // Hot path: no Object.freeze here; immutability is enforced by the
+                // readonly type surface to avoid per-frame hidden-class churn.
+                out.push({
+                    clipId: this.id,
+                    ...(event.id ? { id: event.id } : {}),
+                    name: event.name,
+                    time: event.time,
+                    normalizedTime: this.duration > 0 ? event.time / this.duration : 0,
+                    ...(event.payload !== undefined ? { payload: event.payload } : {}),
+                    ...(event.tags ? { tags: event.tags } : {}),
+                } satisfies AnimationClipEventOccurrence);
             }
         };
 

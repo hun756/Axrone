@@ -1,3 +1,5 @@
+import { assertNever } from './errors';
+import { freezeTuple2 } from './internal';
 import type {
     AnimationBlendTreeAdditiveDefinition,
     AnimationBlendTreeDefinition,
@@ -55,7 +57,7 @@ const freezeMotionDefinition = (motion: AnimationMotionDefinition): AnimationMot
                 children: Object.freeze(
                     motion.children.map((child) =>
                         Object.freeze({
-                            position: Object.freeze([child.position[0], child.position[1]]) as readonly [number, number],
+                            position: freezeTuple2(child.position[0], child.position[1]),
                             motion: freezeMotionDefinition(child.motion),
                         })
                     )
@@ -83,7 +85,7 @@ const freezeMotionDefinition = (motion: AnimationMotionDefinition): AnimationMot
                 ...(isFiniteNumber(motion.weight) ? { weight: motion.weight } : {}),
             } satisfies AnimationBlendTreeAdditiveDefinition);
         default:
-            return motion;
+            return assertNever(motion, 'Unsupported motion kind');
     }
 };
 
@@ -166,7 +168,7 @@ export class AnimationBlend2DGraphBuilder implements AnimationMotionBuilder {
             children: Object.freeze(
                 this._children.map((child) =>
                     Object.freeze({
-                        position: Object.freeze([child.x, child.y]) as readonly [number, number],
+                        position: freezeTuple2(child.x, child.y),
                         motion: toMotionDefinition(child.motion),
                     })
                 )

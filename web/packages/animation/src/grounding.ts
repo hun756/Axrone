@@ -1,4 +1,5 @@
 import { AnimationClip } from './clip';
+import { freezeTuple3 } from './internal';
 import type { AnimationGroundingContactResult, AnimationGroundingResult } from './types';
 
 const resolveBoneHeight = (
@@ -35,7 +36,7 @@ export const solvePlanarGrounding = (
 
     if (contacts.length === 0) {
         return Object.freeze({
-            rootOffset: Object.freeze([0, 0, 0]) as readonly [number, number, number],
+            rootOffset: freezeTuple3(0, 0, 0),
             contacts: Object.freeze([]),
         });
     }
@@ -50,7 +51,7 @@ export const solvePlanarGrounding = (
 
     const rootYOffset = totalWeight > 0 ? accumulatedOffset / totalWeight : 0;
     return Object.freeze({
-        rootOffset: Object.freeze([0, rootYOffset, 0]) as readonly [number, number, number],
+        rootOffset: freezeTuple3(0, rootYOffset, 0),
         contacts: Object.freeze(contacts),
     });
 };

@@ -3,6 +3,8 @@ import {
     type AnimationMotionBuilder,
     validateAnimationMotionDefinition,
 } from './blend-graph';
+import { assertNever } from './errors';
+import { freezeTuple3, freezeTuple4 } from './internal';
 import type {
     AnimationConditionDefinition,
     AnimationControllerDefinition,
@@ -80,7 +82,7 @@ const cloneCondition = (condition: AnimationConditionDefinition): AnimationCondi
                 parameter: condition.parameter,
             });
         default:
-            return condition;
+            return assertNever(condition, 'Unsupported transition condition kind');
     }
 };
 
@@ -92,11 +94,20 @@ const cloneRigDefinition = (rig: AnimationRigDefinition): AnimationRigDefinition
                 Object.freeze({
                     name: bone.name,
                     ...(bone.parent !== undefined ? { parent: bone.parent } : {}),
-                    ...(bone.translation ? { translation: Object.freeze([...bone.translation]) as readonly [number, number, number] } : {}),
-                    ...(bone.rotation
-                        ? { rotation: Object.freeze([...bone.rotation]) as readonly [number, number, number, number] }
+                    ...(bone.translation
+                        ? { translation: freezeTuple3(bone.translation[0], bone.translation[1], bone.translation[2]) }
                         : {}),
-                    ...(bone.scale ? { scale: Object.freeze([...bone.scale]) as readonly [number, number, number] } : {}),
+                    ...(bone.rotation
+                        ? {
+                              rotation: freezeTuple4(
+                                  bone.rotation[0],
+                                  bone.rotation[1],
+                                  bone.rotation[2],
+                                  bone.rotation[3]
+                              ),
+                          }
+                        : {}),
+                    ...(bone.scale ? { scale: freezeTuple3(bone.scale[0], bone.scale[1], bone.scale[2]) } : {}),
                     ...(bone.inverseBindMatrix
                         ? {
                               inverseBindMatrix:
@@ -127,11 +138,11 @@ const cloneRootMotionDefinition = (
         ...(typeof rootMotion.consume === 'boolean' ? { consume: rootMotion.consume } : {}),
         ...(rootMotion.projectTranslationAxes
             ? {
-                  projectTranslationAxes: Object.freeze([
+                  projectTranslationAxes: freezeTuple3(
                       rootMotion.projectTranslationAxes[0],
                       rootMotion.projectTranslationAxes[1],
-                      rootMotion.projectTranslationAxes[2],
-                  ]) as readonly [boolean, boolean, boolean],
+                      rootMotion.projectTranslationAxes[2]
+                  ),
               }
             : {}),
         ...(typeof rootMotion.extractRotation === 'boolean'
@@ -191,11 +202,11 @@ const cloneClipDefinition = (
                               endTime: contact.endTime,
                               ...(contact.lockTranslationAxes
                                   ? {
-                                        lockTranslationAxes: Object.freeze([
+                                        lockTranslationAxes: freezeTuple3(
                                             contact.lockTranslationAxes[0],
                                             contact.lockTranslationAxes[1],
-                                            contact.lockTranslationAxes[2],
-                                        ]) as readonly [boolean, boolean, boolean],
+                                            contact.lockTranslationAxes[2]
+                                        ),
                                     }
                                   : {}),
                               ...(contact.metadata
@@ -215,20 +226,20 @@ const cloneClipDefinition = (
                               time: feature.time,
                               ...(feature.trajectoryPosition
                                   ? {
-                                        trajectoryPosition: Object.freeze([
+                                        trajectoryPosition: freezeTuple3(
                                             feature.trajectoryPosition[0],
                                             feature.trajectoryPosition[1],
-                                            feature.trajectoryPosition[2],
-                                        ]) as readonly [number, number, number],
+                                            feature.trajectoryPosition[2]
+                                        ),
                                     }
                                   : {}),
                               ...(feature.facingDirection
                                   ? {
-                                        facingDirection: Object.freeze([
+                                        facingDirection: freezeTuple3(
                                             feature.facingDirection[0],
                                             feature.facingDirection[1],
-                                            feature.facingDirection[2],
-                                        ]) as readonly [number, number, number],
+                                            feature.facingDirection[2]
+                                        ),
                                     }
                                   : {}),
                               ...(feature.tags ? { tags: Object.freeze([...feature.tags]) } : {}),
