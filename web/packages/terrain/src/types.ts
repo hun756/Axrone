@@ -1,0 +1,171 @@
+import { TerrainError, TerrainErrorCode } from './errors';
+
+/** Supported vertex-grid resolutions per terrain side (power-of-two + 1). */
+export const TERRAIN_RESOLUTIONS = [33, 65, 129, 257] as const;
+
+export type TerrainResolution = (typeof TERRAIN_RESOLUTIONS)[number];
+
+export const isTerrainResolution = (value: number): value is TerrainResolution =>
+    (TERRAIN_RESOLUTIONS as readonly number[]).includes(value);
+
+export type TerrainSourceKind = 'flat' | 'noise' | 'heightmap';
+
+export interface TerrainDescriptor {
+    /** World-space size along the X axis. */
+    readonly width: number;
+    /** World-space size along the Z axis. */
+    readonly length: number;
+    /** World-space height applied to a normalized height of 1. */
+    readonly maxHeight: number;
+    /** Vertex count per side of the height grid. */
+    readonly resolution: TerrainResolution;
+}
+
+export interface TerrainNoiseOptions {
+    readonly seed?: number;
+    readonly frequency?: number;
+    readonly octaves?: number;
+    readonly persistence?: number;
+    readonly lacunarity?: number;
+    readonly offsetX?: number;
+    readonly offsetZ?: number;
+}
+
+export type ResolvedTerrainNoiseOptions = Required<TerrainNoiseOptions>;
+
+export const DEFAULT_TERRAIN_NOISE_OPTIONS: ResolvedTerrainNoiseOptions = Object.freeze({
+    seed: 1337,
+    frequency: 0.02,
+    octaves: 4,
+    persistence: 0.5,
+    lacunarity: 2.0,
+    offsetX: 0,
+    offsetZ: 0,
+});
+
+/**
+ * Grid mesh data produced from a terrain heightmap. All buffers are laid out
+ * for direct upload: positions/normals as xyz triples, uvs as uv pairs.
+ */
+export interface TerrainMeshData {
+    readonly positions: Float32Array;
+    readonly normals: Float32Array;
+    readonly uvs: Float32Array;
+    readonly indices: Uint32Array;
+    readonly vertexCount: number;
+    readonly triangleCount: number;
+}
+
+/**
+ * Plain heightfield collider source. Structurally compatible with the
+ * physics-3d `IHeightFieldShapeDef3D` contract without importing it, so the
+ * terrain package stays independent of the physics split.
+ */
+export interface TerrainHeightfieldSource {
+    readonly heights: Float32Array;
+    readonly width: number;
+    readonly depth: number;
+    readonly scaleX: number;
+    readonly scaleY: number;
+    readonly scaleZ: number;
+}
+
+export const validateTerrainDescriptor = (descriptor: TerrainDescriptor): void => {
+    if (!Number.isFinite(descriptor.width) || descriptor.width <= 0) {
+        throw new TerrainError(
+            `Invalid width: ${descriptor.width}`,
+            TerrainErrorCode.INVALID_DIMENSIONS,
+            { width: descriptor.width }
+        );
+    }
+
+    if (!Number.isFinite(descriptor.length) || descriptor.length <= 0) {
+        throw new TerrainError(
+            `Invalid length: ${descriptor.length}`,
+            TerrainErrorCode.INVALID_DIMENSIONS,
+            { length: descriptor.length }
+        );
+    }
+
+    if (!Number.isFinite(descriptor.maxHeight) || descriptor.maxHeight < 0) {
+        throw new TerrainError(
+            `Invalid maxHeight: ${descriptor.maxHeight}`,
+            TerrainErrorCode.INVALID_DIMENSIONS,
+            { maxHeight: descriptor.maxHeight }
+        );
+    }
+
+    if (!isTerrainResolution(descriptor.resolution)) {
+        throw new TerrainError(
+            `Invalid resolution: ${descriptor.resolution}. Expected one of ${TERRAIN_RESOLUTIONS.join(', ')}.`,
+            TerrainErrorCode.INVALID_RESOLUTION,
+            { resolution: descriptor.resolution }
+        );
+    }
+};
+
+export const resolveTerrainNoiseOptions = (
+    options: TerrainNoiseOptions = {}
+): ResolvedTerrainNoiseOptions => {
+    const resolved: ResolvedTerrainNoiseOptions = {
+        ...DEFAULT_TERRAIN_NOISE_OPTIONS,
+        ...options,
+    };
+
+    validateTerrainNoiseOptions(resolved);
+    return Object.freeze(resolved);
+};
+
+export const validateTerrainNoiseOptions = (options: ResolvedTerrainNoiseOptions): void => {
+    if (!Number.isFinite(options.seed)) {
+        throw new TerrainError(
+            `Invalid noise seed: ${options.seed}`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { seed: options.seed }
+        );
+    }
+
+    if (!Number.isFinite(options.frequency) || options.frequency <= 0) {
+        throw new TerrainError(
+            `Invalid noise frequency: ${options.frequency}`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { frequency: options.frequency }
+        );
+    }
+
+    if (!Number.isInteger(options.octaves) || options.octaves < 1 || options.octaves > 8) {
+        throw new TerrainError(
+            `Invalid noise octaves: ${options.octaves}. Expected an integer in [1, 8].`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { octaves: options.octaves }
+        );
+    }
+
+    if (
+        !Number.isFinite(options.persistence) ||
+        options.persistence <= 0 ||
+        options.persistence > 1
+    ) {
+        throw new TerrainError(
+            `Invalid noise persistence: ${options.persistence}. Expected a value in (0, 1].`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { persistence: options.persistence }
+        );
+    }
+
+    if (!Number.isFinite(options.lacunarity) || options.lacunarity < 1) {
+        throw new TerrainError(
+            `Invalid noise lacunarity: ${options.lacunarity}. Expected a value >= 1.`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { lacunarity: options.lacunarity }
+        );
+    }
+
+    if (!Number.isFinite(options.offsetX) || !Number.isFinite(options.offsetZ)) {
+        throw new TerrainError(
+            `Invalid noise offset: (${options.offsetX}, ${options.offsetZ})`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { offsetX: options.offsetX, offsetZ: options.offsetZ }
+        );
+    }
+};
