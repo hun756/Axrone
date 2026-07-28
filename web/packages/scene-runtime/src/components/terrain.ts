@@ -12,6 +12,7 @@ import {
 export interface TerrainConfig {
     readonly source?: TerrainSourceKind;
     readonly heightmapAsset?: string;
+    readonly heightData?: string;
     readonly width?: number;
     readonly length?: number;
     readonly maxHeight?: number;
@@ -27,7 +28,7 @@ const DEFAULT_TERRAIN_LENGTH = 100;
 const DEFAULT_TERRAIN_MAX_HEIGHT = 30;
 const DEFAULT_TERRAIN_RESOLUTION: TerrainResolution = 129;
 
-const TERRAIN_SOURCE_KINDS: readonly TerrainSourceKind[] = ['flat', 'noise', 'heightmap'];
+const TERRAIN_SOURCE_KINDS: readonly TerrainSourceKind[] = ['flat', 'noise', 'heightmap', 'sculpted'];
 
 const normalizeSource = (value: unknown, fallback: TerrainSourceKind): TerrainSourceKind =>
     TERRAIN_SOURCE_KINDS.includes(value as TerrainSourceKind)
@@ -97,6 +98,7 @@ const areEqualNoise = (
 export class Terrain extends Component {
     private _source: TerrainSourceKind;
     private _heightmapAsset: string;
+    private _heightData: string;
     private _width: number;
     private _length: number;
     private _maxHeight: number;
@@ -111,6 +113,7 @@ export class Terrain extends Component {
         super();
         this._source = normalizeSource(config.source, 'noise');
         this._heightmapAsset = typeof config.heightmapAsset === 'string' ? config.heightmapAsset : '';
+        this._heightData = typeof config.heightData === 'string' ? config.heightData : '';
         this._width = normalizeDimension(config.width, DEFAULT_TERRAIN_WIDTH);
         this._length = normalizeDimension(config.length, DEFAULT_TERRAIN_LENGTH);
         this._maxHeight = normalizeMaxHeight(config.maxHeight, DEFAULT_TERRAIN_MAX_HEIGHT);
@@ -151,6 +154,21 @@ export class Terrain extends Component {
         }
 
         this._heightmapAsset = normalized;
+        this._dataVersion += 1;
+    }
+
+    /** Serialized sculpted-height payload (`@axrone/terrain` codec format). */
+    get heightData(): string {
+        return this._heightData;
+    }
+
+    set heightData(value: string) {
+        const normalized = typeof value === 'string' ? value : '';
+        if (normalized === this._heightData) {
+            return;
+        }
+
+        this._heightData = normalized;
         this._dataVersion += 1;
     }
 
@@ -262,6 +280,7 @@ export class Terrain extends Component {
         return {
             source: this._source,
             heightmapAsset: this._heightmapAsset,
+            heightData: this._heightData,
             width: this._width,
             length: this._length,
             maxHeight: this._maxHeight,
@@ -279,6 +298,9 @@ export class Terrain extends Component {
         }
         if (typeof data.heightmapAsset === 'string') {
             this.heightmapAsset = data.heightmapAsset;
+        }
+        if (typeof data.heightData === 'string') {
+            this.heightData = data.heightData;
         }
         if (typeof data.width === 'number') {
             this.width = data.width;
