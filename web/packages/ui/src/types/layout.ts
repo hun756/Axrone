@@ -4,6 +4,7 @@ import type {
     Axis,
     ColorHexString,
     DisplayMode,
+    FlexWrapMode,
     JustifyMode,
     LengthKind,
     PositionMode,
@@ -107,6 +108,7 @@ export interface ResolvedLayout {
     readonly alignItems: AlignMode;
     readonly alignSelf: AlignSelfMode;
     readonly justifyContent: JustifyMode;
+    readonly flexWrap: FlexWrapMode;
     readonly position: PositionMode;
     readonly insetTop?: ResolvedLength;
     readonly insetRight?: ResolvedLength;
@@ -146,6 +148,7 @@ export interface WidgetLayoutInput {
     readonly alignItems?: AlignMode;
     readonly alignSelf?: AlignSelfMode;
     readonly justifyContent?: JustifyMode;
+    readonly flexWrap?: FlexWrapMode;
     readonly position?: PositionMode;
     readonly inset?: Readonly<Partial<Record<'top' | 'right' | 'bottom' | 'left', UILengthInput>>>;
     readonly anchor?: AnchorInput;

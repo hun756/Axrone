@@ -220,6 +220,7 @@ export const compileLayoutInput = (input: WidgetLayoutInput | undefined): Resolv
         alignItems: input?.alignItems ?? 'start',
         alignSelf: input?.alignSelf ?? 'auto',
         justifyContent: input?.justifyContent ?? 'start',
+        flexWrap: input?.flexWrap ?? 'no-wrap',
         position: input?.position ?? 'flow',
         insetTop: inset?.top === undefined ? undefined : compileLength(inset.top),
         insetRight: inset?.right === undefined ? undefined : compileLength(inset.right),

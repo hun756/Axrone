@@ -276,100 +276,145 @@ export class UILayoutEngine<TNode> {
                 shrink: childLayout.shrink,
             });
         }
-        let totalMain = 0;
-        let totalGrow = 0;
-        let totalShrink = 0;
-        for (let index = 0; index < flowChildren.length; index += 1) {
-            const child = flowChildren[index];
-            const childMain = horizontal ? child.width : child.height;
-            const outerMain = horizontal
-                ? childMain + child.margin.left + child.margin.right
-                : childMain + child.margin.top + child.margin.bottom;
-            totalMain += outerMain;
-            if (index > 0) {
-                totalMain += layout.gap;
+        const flexWrap = layout.flexWrap ?? 'no-wrap';
+        // Grow/shrink only applies to the single-line (no-wrap) case. When
+        // wrapping is enabled, children keep their natural main size so they
+        // wrap onto new lines instead of shrinking to fit one line.
+        if (flexWrap === 'no-wrap') {
+            let totalMain = 0;
+            let totalGrow = 0;
+            let totalShrink = 0;
+            for (let index = 0; index < flowChildren.length; index += 1) {
+                const child = flowChildren[index];
+                const childMain = horizontal ? child.width : child.height;
+                const outerMain = horizontal
+                    ? childMain + child.margin.left + child.margin.right
+                    : childMain + child.margin.top + child.margin.bottom;
+                totalMain += outerMain;
+                if (index > 0) {
+                    totalMain += layout.gap;
+                }
+                totalGrow += child.grow;
+                totalShrink += child.shrink;
             }
-            totalGrow += child.grow;
-            totalShrink += child.shrink;
+            const remaining = mainAvailable - totalMain;
+            if (remaining > 0 && totalGrow > 0) {
+                for (const child of flowChildren) {
+                    const delta = (remaining * child.grow) / totalGrow;
+                    if (horizontal) {
+                        child.width += delta;
+                    } else {
+                        child.height += delta;
+                    }
+                }
+            } else if (remaining < 0 && totalShrink > 0) {
+                const deficit = Math.abs(remaining);
+                for (const child of flowChildren) {
+                    const delta = (deficit * child.shrink) / totalShrink;
+                    if (horizontal) {
+                        child.width = Math.max(0, child.width - delta);
+                    } else {
+                        child.height = Math.max(0, child.height - delta);
+                    }
+                }
+            }
         }
-        const remaining = mainAvailable - totalMain;
-        if (remaining > 0 && totalGrow > 0) {
+        // Split flow children into lines (a single line when wrapping is disabled).
+        const lines: MeasuredChild<TNode>[][] = [];
+        if (flexWrap === 'no-wrap') {
+            lines.push(flowChildren);
+        } else {
+            let currentLine: MeasuredChild<TNode>[] = [];
+            let currentMain = 0;
             for (const child of flowChildren) {
-                const delta = (remaining * child.grow) / totalGrow;
-                if (horizontal) {
-                    child.width += delta;
-                } else {
-                    child.height += delta;
+                const outerMain = horizontal
+                    ? child.width + child.margin.left + child.margin.right
+                    : child.height + child.margin.top + child.margin.bottom;
+                const needed = currentLine.length > 0 ? outerMain + layout.gap : outerMain;
+                if (currentLine.length > 0 && currentMain + needed > mainAvailable) {
+                    lines.push(currentLine);
+                    currentLine = [];
+                    currentMain = 0;
                 }
+                currentLine.push(child);
+                currentMain += currentLine.length > 1 ? outerMain + layout.gap : outerMain;
             }
-        } else if (remaining < 0 && totalShrink > 0) {
-            const deficit = Math.abs(remaining);
-            for (const child of flowChildren) {
-                const delta = (deficit * child.shrink) / totalShrink;
-                if (horizontal) {
-                    child.width = Math.max(0, child.width - delta);
-                } else {
-                    child.height = Math.max(0, child.height - delta);
-                }
+            if (currentLine.length > 0) {
+                lines.push(currentLine);
+            }
+            if (flexWrap === 'wrap-reverse') {
+                lines.reverse();
             }
         }
-        let occupiedMain = 0;
-        for (let index = 0; index < flowChildren.length; index += 1) {
-            const child = flowChildren[index];
-            occupiedMain += horizontal
-                ? child.width + child.margin.left + child.margin.right
-                : child.height + child.margin.top + child.margin.bottom;
-            if (index > 0) {
-                occupiedMain += layout.gap;
-            }
-        }
-        const slack = Math.max(0, mainAvailable - occupiedMain);
-        let cursor = 0;
-        let gap = layout.gap;
-        switch (layout.justifyContent) {
-            case 'center':
-                cursor = slack / 2;
-                break;
-            case 'end':
-                cursor = slack;
-                break;
-            case 'space-between':
-                gap = flowChildren.length > 1 ? layout.gap + slack / (flowChildren.length - 1) : layout.gap;
-                break;
-            case 'space-around':
-                gap = flowChildren.length > 0 ? layout.gap + slack / flowChildren.length : layout.gap;
-                cursor = gap / 2;
-                break;
-            case 'space-evenly':
-                gap = flowChildren.length > 0 ? layout.gap + slack / (flowChildren.length + 1) : layout.gap;
-                cursor = gap;
-                break;
-            default:
-                break;
-        }
-        for (let index = 0; index < flowChildren.length; index += 1) {
-            const child = flowChildren[index];
-            const crossAlign: AlignMode = child.layout.alignSelf === 'auto' ? layout.alignItems : child.layout.alignSelf;
-            if (crossAlign === 'stretch') {
-                if (horizontal) {
-                    child.height = Math.max(0, crossAvailable - child.margin.top - child.margin.bottom);
-                } else {
-                    child.width = Math.max(0, crossAvailable - child.margin.left - child.margin.right);
+
+        let crossCursor = 0;
+        for (const line of lines) {
+            let occupiedMain = 0;
+            for (let index = 0; index < line.length; index += 1) {
+                const child = line[index];
+                occupiedMain += horizontal
+                    ? child.width + child.margin.left + child.margin.right
+                    : child.height + child.margin.top + child.margin.bottom;
+                if (index > 0) {
+                    occupiedMain += layout.gap;
                 }
             }
-            const mainStart = cursor + (horizontal ? child.margin.left : child.margin.top);
-            const crossSlack = horizontal
-                ? crossAvailable - child.height - child.margin.top - child.margin.bottom
-                : crossAvailable - child.width - child.margin.left - child.margin.right;
-            const crossOffset = this.resolveCrossOffset(crossAlign, crossSlack);
-            const childX = horizontal
-                ? box.contentX + mainStart
-                : box.contentX + child.margin.left + crossOffset;
-            const childY = horizontal
-                ? box.contentY + child.margin.top + crossOffset
-                : box.contentY + mainStart;
-            this.layoutNode(adapter, child.node, childX, childY, child.width, child.height, child.width, child.height);
-            cursor = mainStart + (horizontal ? child.width + child.margin.right : child.height + child.margin.bottom) + gap;
+            const slack = Math.max(0, mainAvailable - occupiedMain);
+            let cursor = 0;
+            let gap = layout.gap;
+            switch (layout.justifyContent) {
+                case 'center':
+                    cursor = slack / 2;
+                    break;
+                case 'end':
+                    cursor = slack;
+                    break;
+                case 'space-between':
+                    gap = line.length > 1 ? layout.gap + slack / (line.length - 1) : layout.gap;
+                    break;
+                case 'space-around':
+                    gap = line.length > 0 ? layout.gap + slack / line.length : layout.gap;
+                    cursor = gap / 2;
+                    break;
+                case 'space-evenly':
+                    gap = line.length > 0 ? layout.gap + slack / (line.length + 1) : layout.gap;
+                    cursor = gap;
+                    break;
+                default:
+                    break;
+            }
+            // Cross space: the full container cross extent for a single line, or
+            // this line's largest child when wrapping.
+            let lineCross = 0;
+            for (const child of line) {
+                const childCross = horizontal
+                    ? child.height + child.margin.top + child.margin.bottom
+                    : child.width + child.margin.left + child.margin.right;
+                lineCross = Math.max(lineCross, childCross);
+            }
+            const crossSpace = flexWrap === 'no-wrap' ? crossAvailable : lineCross;
+            for (const child of line) {
+                const crossAlign: AlignMode = child.layout.alignSelf === 'auto' ? layout.alignItems : child.layout.alignSelf;
+                if (crossAlign === 'stretch') {
+                    if (horizontal) {
+                        child.height = Math.max(0, crossSpace - child.margin.top - child.margin.bottom);
+                    } else {
+                        child.width = Math.max(0, crossSpace - child.margin.left - child.margin.right);
+                    }
+                }
+                const mainStart = cursor + (horizontal ? child.margin.left : child.margin.top);
+                const childCrossOuter = horizontal
+                    ? child.height + child.margin.top + child.margin.bottom
+                    : child.width + child.margin.left + child.margin.right;
+                const crossSlack = crossSpace - childCrossOuter;
+                const crossOffset = this.resolveCrossOffset(crossAlign, crossSlack);
+                const crossBase = crossCursor + (horizontal ? child.margin.top : child.margin.left) + crossOffset;
+                const childX = horizontal ? box.contentX + mainStart : box.contentX + crossBase;
+                const childY = horizontal ? box.contentY + crossBase : box.contentY + mainStart;
+                this.layoutNode(adapter, child.node, childX, childY, child.width, child.height, child.width, child.height);
+                cursor = mainStart + (horizontal ? child.width + child.margin.right : child.height + child.margin.bottom) + gap;
+            }
+            crossCursor += lineCross + layout.gap;
         }
         for (let child = adapter.getFirstChild(node); child !== null; child = adapter.getNextSibling(child)) {
             if (!adapter.isVisible(child)) {

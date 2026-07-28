@@ -541,4 +541,66 @@ describe('@axrone/ui runtime', () => {
         expect(stretchedBox.width).toBeCloseTo(400);
         expect(stretchedBox.height).toBeCloseTo(200);
     });
+
+    it('wraps flow children onto multiple lines when flexWrap is enabled', () => {
+        const runtime = new UIRuntime({ width: 400, height: 300 });
+        const container = runtime.createWidget({
+            layout: {
+                width: 200,
+                height: 300,
+                display: 'stack',
+                direction: 'row',
+                flexWrap: 'wrap',
+                gap: 10,
+            },
+        });
+        // Three 90px children in a 200px container with 10px gap:
+        // line 1 = child0 + child1 (90 + 10 + 90 = 190 <= 200), line 2 = child2.
+        const children = [0, 1, 2].map(() =>
+            runtime.createWidget({ layout: { width: 90, height: 40 } })
+        );
+        runtime.appendChild(runtime.root, container);
+        for (const child of children) {
+            runtime.appendChild(container, child);
+        }
+        runtime.commit();
+
+        const box0 = runtime.getLayoutBox(children[0]);
+        const box1 = runtime.getLayoutBox(children[1]);
+        const box2 = runtime.getLayoutBox(children[2]);
+
+        // First two share the first line.
+        expect(box0.y).toBeCloseTo(box1.y);
+        expect(box1.x).toBeCloseTo(box0.x + 90 + 10);
+        // Third wraps to a second line below.
+        expect(box2.y).toBeCloseTo(box0.y + 40 + 10);
+        expect(box2.x).toBeCloseTo(box0.x);
+    });
+
+    it('reverses line order with wrap-reverse', () => {
+        const runtime = new UIRuntime({ width: 400, height: 300 });
+        const container = runtime.createWidget({
+            layout: {
+                width: 200,
+                height: 300,
+                display: 'stack',
+                direction: 'row',
+                flexWrap: 'wrap-reverse',
+                gap: 10,
+            },
+        });
+        const children = [0, 1, 2].map(() =>
+            runtime.createWidget({ layout: { width: 90, height: 40 } })
+        );
+        runtime.appendChild(runtime.root, container);
+        for (const child of children) {
+            runtime.appendChild(container, child);
+        }
+        runtime.commit();
+
+        const box0 = runtime.getLayoutBox(children[0]);
+        const box2 = runtime.getLayoutBox(children[2]);
+        // With wrap-reverse the first line of children is placed below the second.
+        expect(box0.y).toBeGreaterThan(box2.y);
+    });
 });

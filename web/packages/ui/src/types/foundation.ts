@@ -27,6 +27,7 @@ export type TextDirectionMode = 'auto' | 'ltr' | 'rtl';
 export type ResolvedTextDirection = 'ltr' | 'rtl';
 export type UIImageFitMode = 'fill' | 'contain' | 'cover' | 'none' | 'scale-down';
 export type UIImageSamplingMode = 'linear' | 'nearest';
+export type FlexWrapMode = 'no-wrap' | 'wrap' | 'wrap-reverse';
 export type FontStyle = 'normal' | 'italic' | 'oblique';
 export type FontWeight =
     | 100
