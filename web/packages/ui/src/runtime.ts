@@ -1,5 +1,6 @@
 import {
     DisposedUIError,
+    InvalidUIAssetError,
     UIError,
     UIErrorCode,
     WidgetNotFoundError,
@@ -7,6 +8,12 @@ import {
 } from './errors';
 import { FontRegistry, ensureDefaultUIFont } from './font';
 import { UILayoutEngine, compileLayoutInput } from './layout';
+import {
+    type CanvasScaleResult,
+    resolveCanvasScale,
+    canvasScaleToTransform,
+    mapViewportPointToCanvas,
+} from './layout/canvas-scaler';
 import { NodeFlag } from './runtime/node-flags';
 import {
     type StoredWidgetRecord,
@@ -65,6 +72,7 @@ import type {
     ResolvedLayout,
     ResolvedTextBlock,
     ResolvedWidgetStyle,
+    RectLike,
     SizeLike,
     TextLayoutResult,
     TextRenderCommand,
@@ -78,6 +86,8 @@ import type {
     WidgetEventContext,
     WidgetEventHandlers,
     WidgetFocusChangeEvent,
+    UIAsset,
+    UICanvasConfig,
     WidgetId,
     WidgetKey,
     WidgetLayoutInput,
@@ -146,6 +156,9 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private viewportHeight: number;
     private locale: string;
     private lastLayoutPasses = 0;
+    private canvasConfig: UICanvasConfig | null = null;
+    private lastViewport: { readonly width: number; readonly height: number } | null = null;
+    private readonly bindingTable = new Map<string, WidgetId>();
 
     private readonly inputHost: UIInputDispatchHost = {
         getPressed: () => this.pressed,
@@ -211,6 +224,47 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
 
     get height(): number {
         return this.viewportHeight;
+    }
+
+    /** Returns the currently loaded canvas configuration, or null if no UIAsset is loaded. */
+    getCanvasConfig(): UICanvasConfig | null {
+        return this.canvasConfig;
+    }
+
+    /**
+     * Loads a UIAsset into this runtime.
+     * Sets the viewport to the asset's reference resolution, restores the widget tree,
+     * stores the canvas configuration for later use during commit(), and resolves the
+     * asset's named bindings against restored widget keys.
+     */
+    loadFromAsset(asset: UIAsset): this {
+        this.ensureActive();
+        this.canvasConfig = asset.canvas;
+        this.lastViewport = null;
+        this.setViewport(asset.canvas.referenceWidth, asset.canvas.referenceHeight);
+        this.restore({
+            viewportWidth: asset.canvas.referenceWidth,
+            viewportHeight: asset.canvas.referenceHeight,
+            locale: this.locale,
+            root: asset.root,
+        });
+        this.rebuildBindingTable(asset.bindings);
+        return this;
+    }
+
+    /**
+     * Resolves a named binding (declared in the loaded UIAsset) to the widget it targets.
+     * Returns null when no asset is loaded or the binding name is unknown.
+     */
+    getBoundWidget(name: string): WidgetId | null {
+        this.ensureActive();
+        return this.bindingTable.get(name) ?? null;
+    }
+
+    /** Returns the full binding-name to widget table resolved by the last loadFromAsset(). */
+    getBindingTable(): ReadonlyMap<string, WidgetId> {
+        this.ensureActive();
+        return this.bindingTable;
     }
 
     setViewport(width: number, height: number): this {
@@ -357,6 +411,8 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         for (const child of children) {
             this.removeWidget(child);
         }
+        this.bindingTable.clear();
+        this.lastViewport = null;
         return this;
     }
 
@@ -418,6 +474,120 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             this.lastLayoutPasses = this.layoutEngine.getLayoutPassCount();
         }
         return this.renderFrame();
+    }
+
+    /**
+     * Commits the UI frame targeting a specific actual viewport size.
+     * When a canvas config is loaded (via loadFromAsset), layout is computed at the
+     * reference resolution and then a scale transform is applied to all render commands
+     * to map them into the actual viewport.
+     *
+     * When no canvas config is loaded, this behaves identically to commit(viewport).
+     */
+    commitToViewport(actualWidth: number, actualHeight: number): UIFrame<TPayload> {
+        this.ensureActive();
+        this.lastViewport = { width: actualWidth, height: actualHeight };
+        if (!this.canvasConfig) {
+            return this.commit({ width: actualWidth, height: actualHeight });
+        }
+        // Ensure layout is computed at reference resolution
+        if (this.layoutDirty) {
+            this.layoutEngine.compute(
+                {
+                    root: this.rootId,
+                    getLayout: (node) => this.layouts[node as number]!,
+                    getFirstChild: (node) => {
+                        const child = this.firstChild[node as number];
+                        return child === 0 ? null : (child as WidgetId);
+                    },
+                    getNextSibling: (node) => {
+                        const sibling = this.nextSibling[node as number];
+                        return sibling === 0 ? null : (sibling as WidgetId);
+                    },
+                    measureContent: (node, constraints) => this.measureContent(node as number, constraints),
+                    setBox: (node, box) => this.writeBox(node as number, box),
+                    isVisible: (node) => this.isVisible(node as number),
+                },
+                { width: this.viewportWidth, height: this.viewportHeight }
+            );
+            this.layoutDirty = false;
+            this.lastLayoutPasses = this.layoutEngine.getLayoutPassCount();
+        }
+        // Render frame at reference resolution
+        const frame = this.renderFrame();
+        // Compute canvas scale from reference to actual viewport
+        const scaleResult = resolveCanvasScale(this.canvasConfig, actualWidth, actualHeight);
+        const transform = canvasScaleToTransform(scaleResult);
+        // Apply transform to all render commands
+        const scaledCommands = frame.commands.map((command) => {
+            switch (command.kind) {
+                case 'quad':
+                    return {
+                        ...command,
+                        x: command.x * scaleResult.scaleX + scaleResult.offsetX,
+                        y: command.y * scaleResult.scaleY + scaleResult.offsetY,
+                        width: command.width * scaleResult.scaleX,
+                        height: command.height * scaleResult.scaleY,
+                        borderWidth: command.borderWidth * Math.min(scaleResult.scaleX, scaleResult.scaleY),
+                        radius: scaleCornerRadii(command.radius, scaleResult.scaleX, scaleResult.scaleY),
+                        clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
+                        transform,
+                    };
+                case 'text':
+                    return {
+                        ...command,
+                        x: command.x * scaleResult.scaleX + scaleResult.offsetX,
+                        y: command.y * scaleResult.scaleY + scaleResult.offsetY,
+                        outlineWidth: command.outlineWidth * Math.min(scaleResult.scaleX, scaleResult.scaleY),
+                        clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
+                        transform,
+                    };
+                case 'image':
+                    return {
+                        ...command,
+                        x: command.x * scaleResult.scaleX + scaleResult.offsetX,
+                        y: command.y * scaleResult.scaleY + scaleResult.offsetY,
+                        width: command.width * scaleResult.scaleX,
+                        height: command.height * scaleResult.scaleY,
+                        radius: scaleCornerRadii(command.radius, scaleResult.scaleX, scaleResult.scaleY),
+                        clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
+                        transform,
+                    };
+                case 'custom':
+                    return {
+                        ...command,
+                        clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
+                    };
+                default:
+                    return command;
+            }
+        });
+        return {
+            viewportWidth: actualWidth,
+            viewportHeight: actualHeight,
+            commands: scaledCommands,
+            metrics: frame.metrics,
+        };
+    }
+
+    /**
+     * Dispatches an input event whose pointer coordinates are expressed in actual
+     * viewport (screen) pixels. When a canvas config is loaded and a commitToViewport()
+     * has been performed, pointer coordinates are mapped back into the reference
+     * canvas space before hit-testing. Non-pointer events pass through unchanged.
+     */
+    dispatchViewportInput(event: Readonly<UIInputEvent>): boolean {
+        this.ensureActive();
+        if (event.type !== 'pointer' || !this.canvasConfig || !this.lastViewport) {
+            return this.dispatchInput(event);
+        }
+        const scale = resolveCanvasScale(
+            this.canvasConfig,
+            this.lastViewport.width,
+            this.lastViewport.height
+        );
+        const mapped = mapViewportPointToCanvas(scale, event.x, event.y);
+        return this.dispatchInput({ ...event, x: mapped.x, y: mapped.y });
     }
 
     dispatchInput(event: Readonly<UIInputEvent>): boolean {
@@ -543,6 +713,50 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private ensureActive(): void {
         if (this.disposed) {
             throw new DisposedUIError('UIRuntime');
+        }
+    }
+
+    /**
+     * Resolves asset bindings (binding name -> widget key) against the restored
+     * widget tree. Ambiguous keys (shared by multiple widgets) and missing keys
+     * are treated as malformed asset data.
+     */
+    private rebuildBindingTable(bindings: UIAsset['bindings']): void {
+        this.bindingTable.clear();
+        if (!bindings) {
+            return;
+        }
+        const widgetsByKey = new Map<WidgetKey, WidgetId>();
+        const duplicateKeys = new Set<WidgetKey>();
+        for (let index = 0; index < this.records.length; index += 1) {
+            const record = this.records[index];
+            if (!record || record.key === undefined || record.key === null) {
+                continue;
+            }
+            if (widgetsByKey.has(record.key)) {
+                duplicateKeys.add(record.key);
+            } else {
+                widgetsByKey.set(record.key, index as WidgetId);
+            }
+        }
+        for (const [name, key] of Object.entries(bindings)) {
+            if (key === null) {
+                continue;
+            }
+            if (duplicateKeys.has(key)) {
+                throw new InvalidUIAssetError(
+                    `Binding "${name}" is ambiguous: multiple widgets share the key "${String(key)}".`,
+                    { name, key }
+                );
+            }
+            const widget = widgetsByKey.get(key);
+            if (widget === undefined) {
+                throw new InvalidUIAssetError(
+                    `Binding "${name}" refers to a widget key "${String(key)}" that does not exist in the asset tree.`,
+                    { name, key }
+                );
+            }
+            this.bindingTable.set(name, widget);
         }
     }
 
@@ -1271,6 +1485,34 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     }
 }
 
+// ─── Canvas-scale helpers (module-private) ──────────────────────────────────
+
+function scaleCornerRadii(
+    radii: CornerRadii,
+    scaleX: number,
+    scaleY: number
+): CornerRadii {
+    const sx = Math.min(scaleX, scaleY);
+    return {
+        topLeft: radii.topLeft * sx,
+        topRight: radii.topRight * sx,
+        bottomRight: radii.bottomRight * sx,
+        bottomLeft: radii.bottomLeft * sx,
+    };
+}
+
+function scaleClipRect(
+    rect: RectLike,
+    scale: CanvasScaleResult
+): RectLike {
+    return {
+        x: rect.x * scale.scaleX + scale.offsetX,
+        y: rect.y * scale.scaleY + scale.offsetY,
+        width: rect.width * scale.scaleX,
+        height: rect.height * scale.scaleY,
+    };
+}
+
 export type {
     ColorInput,
     FocusMoveDirection,
@@ -1290,3 +1532,6 @@ export type {
     WidgetStyleInput,
     UIRuntimeSnapshot,
 };
+
+export { serializeUIAsset, deserializeUIAsset, validateUIAsset } from './runtime/ui-asset-io';
+export type { UIAsset, UICanvasConfig, UICanvasScaleMode, UISafeAreaInset } from './types/ui-asset';
