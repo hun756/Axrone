@@ -1,11 +1,13 @@
 import { Component, script } from '@axrone/ecs-runtime';
 import {
     DEFAULT_TERRAIN_NOISE_OPTIONS,
+    TERRAIN_MAX_FOLIAGE_LAYERS,
     TERRAIN_MAX_LAYERS,
     isTerrainResolution,
     isTerrainSplatResolution,
     type ResolvedTerrainNoiseOptions,
     type TerrainDescriptor,
+    type TerrainFoliageLayer,
     type TerrainLayer,
     type TerrainNoiseOptions,
     type TerrainResolution,
@@ -25,6 +27,9 @@ export interface TerrainConfig {
     readonly layers?: readonly Partial<TerrainLayer>[];
     readonly splatData?: string;
     readonly splatResolution?: TerrainSplatResolution;
+    readonly foliageLayers?: readonly Partial<TerrainFoliageLayer>[];
+    readonly foliageData?: readonly string[];
+    readonly foliageSeed?: number;
     readonly materialId?: string | null;
     readonly castShadows?: boolean;
     readonly generateCollider?: boolean;
@@ -156,6 +161,92 @@ const areEqualLayers = (
             layer.tiling === right[index]!.tiling
     );
 
+let terrainFoliageLayerIdCounter = 0;
+
+const createTerrainFoliageLayerId = (): string => {
+    terrainFoliageLayerIdCounter += 1;
+    return `terrain_foliage_${terrainFoliageLayerIdCounter}`;
+};
+
+const DEFAULT_TERRAIN_FOLIAGE_SEED = 4242;
+
+const normalizeUnit = (value: unknown, fallback: number): number =>
+    clamp(normalizeFinite(value, fallback), 0, 1);
+
+/** Coerces serialized foliage layer data into a valid, capped layer list. */
+const normalizeFoliageLayers = (
+    value: readonly Partial<TerrainFoliageLayer>[] | null | undefined
+): readonly TerrainFoliageLayer[] => {
+    if (!Array.isArray(value)) {
+        return Object.freeze([]);
+    }
+
+    const layers: TerrainFoliageLayer[] = [];
+    for (const entry of value.slice(0, TERRAIN_MAX_FOLIAGE_LAYERS)) {
+        if (!entry || typeof entry !== 'object') {
+            continue;
+        }
+
+        const minScale = Math.max(normalizeFinite(entry.minScale, 0.8), 0.01);
+        const maxScale = Math.max(normalizeFinite(entry.maxScale, 1.4), minScale);
+        layers.push(
+            Object.freeze({
+                id:
+                    typeof entry.id === 'string' && entry.id.length > 0
+                        ? entry.id
+                        : createTerrainFoliageLayerId(),
+                name:
+                    typeof entry.name === 'string'
+                        ? entry.name
+                        : `Foliage ${layers.length + 1}`,
+                meshAsset: typeof entry.meshAsset === 'string' ? entry.meshAsset : '',
+                density: normalizeUnit(entry.density, 0.5),
+                minScale,
+                maxScale,
+                alignToNormal: Boolean(entry.alignToNormal),
+                maxSlopeDeg: clamp(normalizeFinite(entry.maxSlopeDeg, 45), 0, 90),
+            })
+        );
+    }
+
+    return Object.freeze(layers);
+};
+
+const areEqualFoliageLayers = (
+    left: readonly TerrainFoliageLayer[],
+    right: readonly TerrainFoliageLayer[]
+): boolean =>
+    left.length === right.length &&
+    left.every(
+        (layer, index) =>
+            layer.id === right[index]!.id &&
+            layer.name === right[index]!.name &&
+            layer.meshAsset === right[index]!.meshAsset &&
+            layer.density === right[index]!.density &&
+            layer.minScale === right[index]!.minScale &&
+            layer.maxScale === right[index]!.maxScale &&
+            layer.alignToNormal === right[index]!.alignToNormal &&
+            layer.maxSlopeDeg === right[index]!.maxSlopeDeg
+    );
+
+/** Per-layer density payload list, trimmed to the foliage layer cap. */
+const normalizeFoliageData = (
+    value: readonly string[] | null | undefined
+): readonly string[] => {
+    if (!Array.isArray(value)) {
+        return Object.freeze([]);
+    }
+
+    return Object.freeze(
+        value
+            .slice(0, TERRAIN_MAX_FOLIAGE_LAYERS)
+            .map((entry) => (typeof entry === 'string' ? entry : ''))
+    );
+};
+
+const areEqualStringLists = (left: readonly string[], right: readonly string[]): boolean =>
+    left.length === right.length && left.every((entry, index) => entry === right[index]);
+
 @script({
     scriptName: 'Terrain',
     priority: 100,
@@ -175,6 +266,9 @@ export class Terrain extends Component {
     private _layers: readonly TerrainLayer[];
     private _splatData: string;
     private _splatResolution: TerrainSplatResolution;
+    private _foliageLayers: readonly TerrainFoliageLayer[];
+    private _foliageData: readonly string[];
+    private _foliageSeed: number;
     private _materialId: string | null;
     private _castShadows: boolean;
     private _generateCollider: boolean;
@@ -195,6 +289,11 @@ export class Terrain extends Component {
         this._splatResolution = normalizeSplatResolution(
             config.splatResolution,
             DEFAULT_TERRAIN_SPLAT_RESOLUTION
+        );
+        this._foliageLayers = normalizeFoliageLayers(config.foliageLayers);
+        this._foliageData = normalizeFoliageData(config.foliageData);
+        this._foliageSeed = Math.trunc(
+            normalizeFinite(config.foliageSeed, DEFAULT_TERRAIN_FOLIAGE_SEED)
         );
         this._materialId = config.materialId ?? null;
         this._castShadows = config.castShadows ?? true;
@@ -362,6 +461,50 @@ export class Terrain extends Component {
         this._dataVersion += 1;
     }
 
+    get foliageLayers(): readonly TerrainFoliageLayer[] {
+        return this._foliageLayers;
+    }
+
+    set foliageLayers(value: readonly Partial<TerrainFoliageLayer>[] | null) {
+        const normalized = normalizeFoliageLayers(value);
+        if (areEqualFoliageLayers(this._foliageLayers, normalized)) {
+            return;
+        }
+
+        this._foliageLayers = normalized;
+        this._dataVersion += 1;
+    }
+
+    /** Per-layer density payloads (`@axrone/terrain` foliage codec format). */
+    get foliageData(): readonly string[] {
+        return this._foliageData;
+    }
+
+    set foliageData(value: readonly string[] | null) {
+        const normalized = normalizeFoliageData(value);
+        if (areEqualStringLists(this._foliageData, normalized)) {
+            return;
+        }
+
+        this._foliageData = normalized;
+        this._dataVersion += 1;
+    }
+
+    /** Seed for the deterministic foliage scatter of all layers. */
+    get foliageSeed(): number {
+        return this._foliageSeed;
+    }
+
+    set foliageSeed(value: number) {
+        const normalized = Math.trunc(normalizeFinite(value, this._foliageSeed));
+        if (normalized === this._foliageSeed) {
+            return;
+        }
+
+        this._foliageSeed = normalized;
+        this._dataVersion += 1;
+    }
+
     get materialId(): string | null {
         return this._materialId;
     }
@@ -409,6 +552,9 @@ export class Terrain extends Component {
             layers: this._layers.map((layer) => ({ ...layer })),
             splatData: this._splatData,
             splatResolution: this._splatResolution,
+            foliageLayers: this._foliageLayers.map((layer) => ({ ...layer })),
+            foliageData: [...this._foliageData],
+            foliageSeed: this._foliageSeed,
             materialId: this._materialId,
             castShadows: this._castShadows,
             generateCollider: this._generateCollider,
@@ -448,6 +594,15 @@ export class Terrain extends Component {
         }
         if (typeof data.splatResolution === 'number') {
             this.splatResolution = data.splatResolution as TerrainSplatResolution;
+        }
+        if (Array.isArray(data.foliageLayers)) {
+            this.foliageLayers = data.foliageLayers as readonly Partial<TerrainFoliageLayer>[];
+        }
+        if (Array.isArray(data.foliageData)) {
+            this.foliageData = data.foliageData as readonly string[];
+        }
+        if (typeof data.foliageSeed === 'number') {
+            this.foliageSeed = data.foliageSeed;
         }
         if (typeof data.materialId === 'string' || data.materialId === null) {
             this._materialId = data.materialId;

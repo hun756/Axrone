@@ -157,6 +157,10 @@ export {
     DEFAULT_TERRAIN_SPLAT_SHADER_ID,
     createTerrainSplatShaderDefinition,
 } from './terrain-splat-shader';
+export {
+    DEFAULT_TERRAIN_FOLIAGE_SHADER_ID,
+    createTerrainFoliageShaderDefinition,
+} from './terrain-foliage-shader';
 export type { AreaLightConfig, AreaLightShape } from './components/area-light';
 export { AreaLight } from './components/area-light';
 export type {

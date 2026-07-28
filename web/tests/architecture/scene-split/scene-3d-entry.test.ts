@@ -22,6 +22,7 @@ describe('scene-3d entry', () => {
         expect(scene3D.SceneAssetRuntime).toBeDefined();
         expect(scene3D.createUnlitColorShaderDefinition).toBeDefined();
         expect(scene3D.createTerrainSplatShaderDefinition).toBeDefined();
+        expect(scene3D.createTerrainFoliageShaderDefinition).toBeDefined();
         expect(scene3D.SCENE_3D_BUILT_IN_MANIFEST).toBeDefined();
         expect(scene3D.get3DSceneRuntimeProfile).toBeDefined();
     });
