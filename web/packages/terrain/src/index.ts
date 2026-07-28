@@ -8,3 +8,5 @@ export * from './physics/terrain-heightfield';
 export * from './sculpt/terrain-brush';
 export * from './sculpt/terrain-raycast';
 export * from './sculpt/terrain-height-codec';
+export * from './splat/terrain-splat';
+export * from './splat/terrain-splat-codec';

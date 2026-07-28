@@ -10,6 +10,26 @@ export const isTerrainResolution = (value: number): value is TerrainResolution =
 
 export type TerrainSourceKind = 'flat' | 'noise' | 'heightmap' | 'sculpted';
 
+/** Maximum simultaneous splat layers (one per RGBA channel). */
+export const TERRAIN_MAX_LAYERS = 4;
+
+/** Supported per-side splat weight-map resolutions. */
+export const TERRAIN_SPLAT_RESOLUTIONS = [64, 128, 256] as const;
+
+export type TerrainSplatResolution = (typeof TERRAIN_SPLAT_RESOLUTIONS)[number];
+
+export const isTerrainSplatResolution = (value: number): value is TerrainSplatResolution =>
+    (TERRAIN_SPLAT_RESOLUTIONS as readonly number[]).includes(value);
+
+export interface TerrainLayer {
+    readonly id: string;
+    readonly name: string;
+    /** Project-relative albedo texture path (empty until assigned). */
+    readonly textureAsset: string;
+    /** World-space tiling repeat across the terrain footprint. */
+    readonly tiling: number;
+}
+
 export interface TerrainDescriptor {
     /** World-space size along the X axis. */
     readonly width: number;
@@ -259,5 +279,34 @@ export const validateTerrainBrushOptions = (options: ResolvedTerrainBrushOptions
             TerrainErrorCode.VALIDATION_FAILED,
             { flattenTarget: options.flattenTarget }
         );
+    }
+};
+
+export const validateTerrainLayers = (layers: readonly TerrainLayer[]): void => {
+    if (layers.length > TERRAIN_MAX_LAYERS) {
+        throw new TerrainError(
+            `Terrain supports at most ${TERRAIN_MAX_LAYERS} splat layers, received ${layers.length}.`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { layerCount: layers.length }
+        );
+    }
+
+    for (let index = 0; index < layers.length; index += 1) {
+        const layer = layers[index]!;
+        if (typeof layer.id !== 'string' || layer.id.length === 0) {
+            throw new TerrainError(
+                `Terrain layer at index ${index} is missing a stable id.`,
+                TerrainErrorCode.VALIDATION_FAILED,
+                { index }
+            );
+        }
+
+        if (!Number.isFinite(layer.tiling) || layer.tiling <= 0) {
+            throw new TerrainError(
+                `Terrain layer '${layer.id}' has an invalid tiling value: ${layer.tiling}.`,
+                TerrainErrorCode.VALIDATION_FAILED,
+                { index, tiling: layer.tiling }
+            );
+        }
     }
 };
