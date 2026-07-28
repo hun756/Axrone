@@ -1,6 +1,7 @@
 import { createGameLoop } from '@axrone/game-loop';
 import { describe, expect, it, vi } from 'vitest';
-import type { GlyphAtlasEntry, TextLayoutResult, UIFrame, UIFrameMetrics, WidgetId } from '@axrone/ui/types';
+import type { GlyphAtlasEntry, TextLayoutResult, UIAsset, UIFrame, UIFrameMetrics, WidgetId } from '@axrone/ui/types';
+import { UIHost } from '@axrone/scene-runtime/scene-facade';
 import {
     WebGL2UIRenderer,
     attachUIOverlayToScene,
@@ -8,6 +9,7 @@ import {
     createManagedWebGL2UIOverlayRenderPipelineBackend,
     createUIOverlayRenderPipelineBackend,
 } from '../index';
+import { bindUIHostToScene, bindUIHostsToScene } from '../scene-host';
 
 const createMetrics = (): UIFrameMetrics => ({
     widgetCount: 2,
@@ -901,5 +903,192 @@ describe('@axrone/ui-webgl2', () => {
 
         expect(gl.texSubImage2D).toHaveBeenCalledTimes(2);
         expect(renderer.getStats().uploadedGlyphCount).toBe(2);
+    });
+});
+
+describe('scene-host UIHost binding', () => {
+    const createInputTarget = () => {
+        const listeners = new Map<string, Set<(event: unknown) => void>>();
+        return {
+            addEventListener: vi.fn((type: string, listener: (event: never) => void) => {
+                const bucket = listeners.get(type) ?? new Set();
+                bucket.add(listener as (event: unknown) => void);
+                listeners.set(type, bucket);
+            }),
+            removeEventListener: vi.fn((type: string, listener: (event: never) => void) => {
+                listeners.get(type)?.delete(listener as (event: unknown) => void);
+            }),
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 320, height: 180 }),
+            emit(type: string, event: unknown) {
+                for (const listener of listeners.get(type) ?? []) {
+                    listener(event);
+                }
+            },
+            listenerCount(type: string) {
+                return listeners.get(type)?.size ?? 0;
+            },
+        };
+    };
+
+    const createSceneTarget = () => {
+        const gl = createMockWebGL2Context();
+        const loop = createGameLoop({
+            state: { sceneId: 'scene:ui-host' },
+            autoStart: false,
+        });
+        return {
+            gl,
+            canvas: { width: 320, height: 180 } as HTMLCanvasElement,
+            loop,
+        };
+    };
+
+    const createHostAsset = (): UIAsset => ({
+        id: 'ui.hud',
+        name: 'HUD',
+        version: 1,
+        canvas: {
+            referenceWidth: 320,
+            referenceHeight: 180,
+            scaleMode: 'fill',
+            matchBias: 0.5,
+        },
+        bindings: { button: 'hud-button' },
+        root: {
+            role: 'root',
+            enabled: true,
+            interactive: false,
+            layout: { display: 'overlay', width: '100%', height: '100%' },
+            children: [
+                {
+                    role: 'button',
+                    key: 'hud-button',
+                    enabled: true,
+                    interactive: true,
+                    layout: { width: 100, height: 100 },
+                    style: { background: '#112233ff' },
+                    children: [],
+                },
+            ],
+        } as never,
+    });
+
+    it('wires pointer input with coordinate mapping when receiveInput is enabled', () => {
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        const host = new UIHost({ assetId: 'ui.hud', receiveInput: true });
+        const resolveAsset = vi.fn(() => createHostAsset());
+
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset,
+            input: { target },
+        });
+
+        expect(handle).not.toBeNull();
+        expect(resolveAsset).toHaveBeenCalledWith('ui.hud');
+        expect(target.listenerCount('pointerdown')).toBe(1);
+        expect(target.listenerCount('pointermove')).toBe(1);
+        expect(target.listenerCount('keydown')).toBe(0);
+
+        const pointerDown = vi.fn(() => true);
+        const button = handle!.runtime.getBoundWidget('button');
+        expect(button).not.toBeNull();
+        handle!.runtime.updateWidget(button!, { handlers: { pointerDown } });
+        handle!.render(320, 180);
+
+        // CSS rect is 320x180 and framebuffer is 320x180 => 1:1 mapping
+        target.emit('pointerdown', { clientX: 40, clientY: 40 });
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        target.emit('pointerdown', { clientX: 200, clientY: 150 });
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        handle!.dispose();
+        expect(target.listenerCount('pointerdown')).toBe(0);
+        expect(target.listenerCount('pointermove')).toBe(0);
+    });
+
+    it('maps CSS-scaled client coordinates into framebuffer pixels', () => {
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        // CSS size is half the framebuffer: 160x90 vs 320x180 => 2x scale
+        target.getBoundingClientRect = () => ({ left: 0, top: 0, width: 160, height: 90 });
+        const host = new UIHost({ assetId: 'ui.hud', receiveInput: true });
+
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset: () => createHostAsset(),
+            input: { target },
+        });
+        expect(handle).not.toBeNull();
+
+        const pointerDown = vi.fn(() => true);
+        handle!.runtime.updateWidget(handle!.runtime.getBoundWidget('button')!, {
+            handlers: { pointerDown },
+        });
+        handle!.render(320, 180);
+
+        // client (40, 40) -> framebuffer (80, 80): inside the 100x100 button
+        target.emit('pointerdown', { clientX: 40, clientY: 40 });
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        // client (70, 70) -> framebuffer (140, 140): outside the button
+        target.emit('pointerdown', { clientX: 70, clientY: 70 });
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        handle!.dispose();
+    });
+
+    it('does not attach input listeners when receiveInput is false', () => {
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        const host = new UIHost({ assetId: 'ui.hud', receiveInput: false });
+
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset: () => createHostAsset(),
+            input: { target },
+        });
+
+        expect(handle).not.toBeNull();
+        expect(target.addEventListener).not.toHaveBeenCalled();
+        handle!.dispose();
+    });
+
+    it('prefers resolveAsset over resolveAssetJson when both are provided', () => {
+        const scene = createSceneTarget();
+        const host = new UIHost({ assetId: 'ui.hud' });
+        const resolveAsset = vi.fn(() => createHostAsset());
+        const resolveAssetJson = vi.fn(() => JSON.stringify(createHostAsset()));
+
+        const handle = bindUIHostToScene({ scene, host, resolveAsset, resolveAssetJson });
+
+        expect(handle).not.toBeNull();
+        expect(resolveAsset).toHaveBeenCalledTimes(1);
+        expect(resolveAssetJson).not.toHaveBeenCalled();
+        handle!.dispose();
+    });
+
+    it('binds multiple hosts, skipping unresolvable ones, and disposes them together', () => {
+        const scene = createSceneTarget();
+        const bindable = new UIHost({ assetId: 'ui.hud' });
+        const emptyAssetId = new UIHost({ assetId: '' });
+        const unresolvable = new UIHost({ assetId: 'ui.missing' });
+
+        const bindings = bindUIHostsToScene({
+            scene,
+            hosts: [bindable, emptyAssetId, unresolvable],
+            resolveAsset: (assetId) => (assetId === 'ui.hud' ? createHostAsset() : null),
+        });
+
+        expect(bindings.handles).toHaveLength(1);
+        expect(bindings.handles[0].asset.id).toBe('ui.hud');
+
+        bindings.dispose();
+        expect(() => bindings.dispose()).not.toThrow();
     });
 });
