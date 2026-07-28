@@ -5,3 +5,6 @@ export * from './heightmap/heightmap-decode';
 export * from './generation/terrain-noise';
 export * from './mesh/terrain-mesh-builder';
 export * from './physics/terrain-heightfield';
+export * from './sculpt/terrain-brush';
+export * from './sculpt/terrain-raycast';
+export * from './sculpt/terrain-height-codec';

@@ -8,7 +8,7 @@ export type TerrainResolution = (typeof TERRAIN_RESOLUTIONS)[number];
 export const isTerrainResolution = (value: number): value is TerrainResolution =>
     (TERRAIN_RESOLUTIONS as readonly number[]).includes(value);
 
-export type TerrainSourceKind = 'flat' | 'noise' | 'heightmap';
+export type TerrainSourceKind = 'flat' | 'noise' | 'heightmap' | 'sculpted';
 
 export interface TerrainDescriptor {
     /** World-space size along the X axis. */
@@ -68,6 +68,40 @@ export interface TerrainHeightfieldSource {
     readonly scaleX: number;
     readonly scaleY: number;
     readonly scaleZ: number;
+}
+
+export type TerrainBrushKind = 'raise' | 'lower' | 'smooth' | 'flatten';
+
+export interface TerrainBrushOptions {
+    readonly kind?: TerrainBrushKind;
+    /** World-space brush radius. */
+    readonly radius?: number;
+    /** Normalized stamp intensity in (0, 1]. */
+    readonly strength?: number;
+    /** Falloff exponent shaping the brush edge; 1 = smoothstep. */
+    readonly falloff?: number;
+    /** Normalized target height for the flatten brush. */
+    readonly flattenTarget?: number;
+}
+
+export type ResolvedTerrainBrushOptions = Required<TerrainBrushOptions>;
+
+export const DEFAULT_TERRAIN_BRUSH_OPTIONS: ResolvedTerrainBrushOptions = Object.freeze({
+    kind: 'raise',
+    radius: 8,
+    strength: 0.5,
+    falloff: 1,
+    flattenTarget: 0,
+});
+
+export interface TerrainRaycastHit {
+    /** Hit position in terrain-local space (origin-centered grid). */
+    readonly point: { readonly x: number; readonly y: number; readonly z: number };
+    /** Normalized [0, 1] grid coordinates of the hit. */
+    readonly u: number;
+    readonly v: number;
+    /** Ray parameter at the hit. */
+    readonly distance: number;
 }
 
 export const validateTerrainDescriptor = (descriptor: TerrainDescriptor): void => {
@@ -166,6 +200,64 @@ export const validateTerrainNoiseOptions = (options: ResolvedTerrainNoiseOptions
             `Invalid noise offset: (${options.offsetX}, ${options.offsetZ})`,
             TerrainErrorCode.VALIDATION_FAILED,
             { offsetX: options.offsetX, offsetZ: options.offsetZ }
+        );
+    }
+};
+
+export const resolveTerrainBrushOptions = (
+    options: TerrainBrushOptions = {}
+): ResolvedTerrainBrushOptions => {
+    const resolved: ResolvedTerrainBrushOptions = {
+        ...DEFAULT_TERRAIN_BRUSH_OPTIONS,
+        ...options,
+    };
+
+    validateTerrainBrushOptions(resolved);
+    return Object.freeze(resolved);
+};
+
+export const validateTerrainBrushOptions = (options: ResolvedTerrainBrushOptions): void => {
+    if (!['raise', 'lower', 'smooth', 'flatten'].includes(options.kind)) {
+        throw new TerrainError(
+            `Invalid brush kind: ${options.kind}`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { kind: options.kind }
+        );
+    }
+
+    if (!Number.isFinite(options.radius) || options.radius <= 0) {
+        throw new TerrainError(
+            `Invalid brush radius: ${options.radius}`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { radius: options.radius }
+        );
+    }
+
+    if (!Number.isFinite(options.strength) || options.strength <= 0 || options.strength > 1) {
+        throw new TerrainError(
+            `Invalid brush strength: ${options.strength}. Expected a value in (0, 1].`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { strength: options.strength }
+        );
+    }
+
+    if (!Number.isFinite(options.falloff) || options.falloff <= 0 || options.falloff > 8) {
+        throw new TerrainError(
+            `Invalid brush falloff: ${options.falloff}. Expected a value in (0, 8].`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { falloff: options.falloff }
+        );
+    }
+
+    if (
+        !Number.isFinite(options.flattenTarget) ||
+        options.flattenTarget < 0 ||
+        options.flattenTarget > 1
+    ) {
+        throw new TerrainError(
+            `Invalid flatten target: ${options.flattenTarget}. Expected a value in [0, 1].`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { flattenTarget: options.flattenTarget }
         );
     }
 };
