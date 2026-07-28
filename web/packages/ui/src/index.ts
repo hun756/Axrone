@@ -26,4 +26,9 @@ export type { SystemFontFaceAssetOptions } from './font';
 export * from './font-runtime';
 export * from './text';
 export * from './runtime';
+export {
+    serializeUIAsset,
+    deserializeUIAsset,
+    validateUIAsset,
+} from './runtime/ui-asset-io';
 export * from './controls';
