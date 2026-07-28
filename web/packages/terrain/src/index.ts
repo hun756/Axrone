@@ -10,3 +10,6 @@ export * from './sculpt/terrain-raycast';
 export * from './sculpt/terrain-height-codec';
 export * from './splat/terrain-splat';
 export * from './splat/terrain-splat-codec';
+export * from './foliage/terrain-foliage-density';
+export * from './foliage/terrain-foliage-scatter';
+export * from './foliage/terrain-foliage-mesh';

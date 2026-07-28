@@ -30,6 +30,34 @@ export interface TerrainLayer {
     readonly tiling: number;
 }
 
+/** Maximum simultaneous foliage layers per terrain. */
+export const TERRAIN_MAX_FOLIAGE_LAYERS = 4;
+
+export interface TerrainFoliageLayer {
+    readonly id: string;
+    readonly name: string;
+    /** Project-relative mesh asset path (empty = built-in cross-quad card). */
+    readonly meshAsset: string;
+    /** Global density multiplier in [0, 1] applied on top of the painted map. */
+    readonly density: number;
+    readonly minScale: number;
+    readonly maxScale: number;
+    /** Tilt instances toward the surface normal instead of world up. */
+    readonly alignToNormal: boolean;
+    /** Instances are skipped on slopes steeper than this (degrees). */
+    readonly maxSlopeDeg: number;
+}
+
+export interface TerrainFoliageInstance {
+    /** Terrain-local position on the origin-centered grid. */
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+    /** Yaw rotation in radians. */
+    readonly rotationY: number;
+    readonly scale: number;
+}
+
 export interface TerrainDescriptor {
     /** World-space size along the X axis. */
     readonly width: number;
@@ -306,6 +334,62 @@ export const validateTerrainLayers = (layers: readonly TerrainLayer[]): void => 
                 `Terrain layer '${layer.id}' has an invalid tiling value: ${layer.tiling}.`,
                 TerrainErrorCode.VALIDATION_FAILED,
                 { index, tiling: layer.tiling }
+            );
+        }
+    }
+};
+
+export const validateTerrainFoliageLayers = (
+    layers: readonly TerrainFoliageLayer[]
+): void => {
+    if (layers.length > TERRAIN_MAX_FOLIAGE_LAYERS) {
+        throw new TerrainError(
+            `Terrain supports at most ${TERRAIN_MAX_FOLIAGE_LAYERS} foliage layers, received ${layers.length}.`,
+            TerrainErrorCode.VALIDATION_FAILED,
+            { layerCount: layers.length }
+        );
+    }
+
+    for (let index = 0; index < layers.length; index += 1) {
+        const layer = layers[index]!;
+        if (typeof layer.id !== 'string' || layer.id.length === 0) {
+            throw new TerrainError(
+                `Foliage layer at index ${index} is missing a stable id.`,
+                TerrainErrorCode.VALIDATION_FAILED,
+                { index }
+            );
+        }
+
+        if (!Number.isFinite(layer.density) || layer.density < 0 || layer.density > 1) {
+            throw new TerrainError(
+                `Foliage layer '${layer.id}' has an invalid density: ${layer.density}. Expected a value in [0, 1].`,
+                TerrainErrorCode.VALIDATION_FAILED,
+                { index, density: layer.density }
+            );
+        }
+
+        if (
+            !Number.isFinite(layer.minScale) ||
+            !Number.isFinite(layer.maxScale) ||
+            layer.minScale <= 0 ||
+            layer.maxScale < layer.minScale
+        ) {
+            throw new TerrainError(
+                `Foliage layer '${layer.id}' has an invalid scale range: [${layer.minScale}, ${layer.maxScale}].`,
+                TerrainErrorCode.VALIDATION_FAILED,
+                { index, minScale: layer.minScale, maxScale: layer.maxScale }
+            );
+        }
+
+        if (
+            !Number.isFinite(layer.maxSlopeDeg) ||
+            layer.maxSlopeDeg < 0 ||
+            layer.maxSlopeDeg > 90
+        ) {
+            throw new TerrainError(
+                `Foliage layer '${layer.id}' has an invalid max slope: ${layer.maxSlopeDeg}. Expected degrees in [0, 90].`,
+                TerrainErrorCode.VALIDATION_FAILED,
+                { index, maxSlopeDeg: layer.maxSlopeDeg }
             );
         }
     }
