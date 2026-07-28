@@ -59,7 +59,6 @@ import { TextLayoutEngine } from './text';
 import { WidgetRegistry } from './widget';
 import type {
     ColorInput,
-    CornerRadii,
     CustomRenderCommand,
     FocusMoveDirection,
     FontRegistryOptions,
@@ -518,38 +517,17 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         // Compute canvas scale from reference to actual viewport
         const scaleResult = resolveCanvasScale(this.canvasConfig, actualWidth, actualHeight);
         const transform = canvasScaleToTransform(scaleResult);
-        // Apply transform to all render commands
+        // Commands keep their reference-resolution geometry; the canvas scale is
+        // carried by `transform` and applied once by the renderer. Pre-scaling the
+        // geometry here as well would double-apply the scale. Clip rects are the
+        // exception: they feed the scissor test, which operates in viewport space.
         const scaledCommands = frame.commands.map((command) => {
             switch (command.kind) {
                 case 'quad':
-                    return {
-                        ...command,
-                        x: command.x * scaleResult.scaleX + scaleResult.offsetX,
-                        y: command.y * scaleResult.scaleY + scaleResult.offsetY,
-                        width: command.width * scaleResult.scaleX,
-                        height: command.height * scaleResult.scaleY,
-                        borderWidth: command.borderWidth * Math.min(scaleResult.scaleX, scaleResult.scaleY),
-                        radius: scaleCornerRadii(command.radius, scaleResult.scaleX, scaleResult.scaleY),
-                        clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
-                        transform,
-                    };
                 case 'text':
-                    return {
-                        ...command,
-                        x: command.x * scaleResult.scaleX + scaleResult.offsetX,
-                        y: command.y * scaleResult.scaleY + scaleResult.offsetY,
-                        outlineWidth: command.outlineWidth * Math.min(scaleResult.scaleX, scaleResult.scaleY),
-                        clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
-                        transform,
-                    };
                 case 'image':
                     return {
                         ...command,
-                        x: command.x * scaleResult.scaleX + scaleResult.offsetX,
-                        y: command.y * scaleResult.scaleY + scaleResult.offsetY,
-                        width: command.width * scaleResult.scaleX,
-                        height: command.height * scaleResult.scaleY,
-                        radius: scaleCornerRadii(command.radius, scaleResult.scaleX, scaleResult.scaleY),
                         clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
                         transform,
                     };
@@ -1486,20 +1464,6 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
 }
 
 // ─── Canvas-scale helpers (module-private) ──────────────────────────────────
-
-function scaleCornerRadii(
-    radii: CornerRadii,
-    scaleX: number,
-    scaleY: number
-): CornerRadii {
-    const sx = Math.min(scaleX, scaleY);
-    return {
-        topLeft: radii.topLeft * sx,
-        topRight: radii.topRight * sx,
-        bottomRight: radii.bottomRight * sx,
-        bottomLeft: radii.bottomLeft * sx,
-    };
-}
 
 function scaleClipRect(
     rect: RectLike,

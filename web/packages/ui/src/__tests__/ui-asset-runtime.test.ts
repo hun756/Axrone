@@ -39,7 +39,7 @@ const createAsset = (overrides: Partial<UIAsset> = {}): UIAsset => ({
 
 describe('@axrone/ui asset runtime integration', () => {
     describe('commitToViewport', () => {
-        it('scales commands into the actual viewport and populates transforms', () => {
+        it('keeps commands at reference resolution and carries the canvas scale in the transform', () => {
             const runtime = new UIRuntime();
             runtime.loadFromAsset(createAsset());
 
@@ -52,10 +52,11 @@ describe('@axrone/ui asset runtime integration', () => {
             const quad = frame.commands.find((command) => command.kind === 'quad');
             expect(quad).toBeDefined();
             if (quad && quad.kind === 'quad') {
+                // Geometry stays in reference space; the renderer applies the transform once.
                 expect(quad.x).toBeCloseTo(0);
-                expect(quad.y).toBeCloseTo(270);
-                expect(quad.width).toBeCloseTo(200); // 400 * 0.5
-                expect(quad.height).toBeCloseTo(540); // 1080 * 0.5
+                expect(quad.y).toBeCloseTo(0);
+                expect(quad.width).toBeCloseTo(400);
+                expect(quad.height).toBeCloseTo(1080);
                 expect(quad.transform).toBeDefined();
                 const [a, b, c, d, e, f] = quad.transform!;
                 expect(a).toBeCloseTo(0.5);
