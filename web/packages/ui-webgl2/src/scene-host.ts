@@ -1,6 +1,6 @@
-import type { UIAsset } from '@axrone/ui/types';
+import type { UIAsset, WidgetId } from '@axrone/ui/types';
 import { UIRuntime, deserializeUIAsset } from '@axrone/ui/runtime';
-import { UIHost } from '@axrone/scene-runtime/scene-facade';
+import { UIHost, setSceneUIWidgetRefResolver } from '@axrone/scene-runtime/scene-facade';
 import { attachUIOverlayToScene } from './scene';
 import type { SceneUIOverlayHandle, SceneUIOverlayTarget } from './types';
 
@@ -94,6 +94,108 @@ export interface UIHostSceneBindings<TPayload = unknown> extends Disposable {
     readonly handles: readonly UIHostBindingHandle<TPayload>[];
     dispose(): void;
 }
+
+// ─── UIHost runtime registry ────────────────────────────────────────────────
+
+const uiHostHandles = new WeakMap<UIHost, UIHostBindingHandle<unknown>>();
+
+/** Returns the live binding handle for a bound UIHost, or null when unbound/disposed. */
+export function getUIHostBinding(host: UIHost): UIHostBindingHandle | null {
+    return (uiHostHandles.get(host) as UIHostBindingHandle | undefined) ?? null;
+}
+
+/** Returns the live UIRuntime driving a bound UIHost, or null when unbound/disposed. */
+export function getUIHostRuntime(host: UIHost): UIRuntime | null {
+    return getUIHostBinding(host)?.runtime ?? null;
+}
+
+// ─── UIWidgetRef — script-facing widget handle ──────────────────────────────
+
+/** Serialized shape of a `@property({ type: 'ui-widget' })` value. */
+export interface UIWidgetRefValue {
+    readonly hostEntityId: string;
+    readonly widgetKey: string;
+}
+
+/**
+ * Lightweight handle a script uses to talk to a single widget inside a bound
+ * UIHost, resolved through the asset's key-based bindings. All mutations go
+ * through `UIRuntime.updateWidget`; when the host is unbound or disposed the
+ * calls become no-ops and `isValid()` reports false. The ref re-resolves
+ * lazily, so it survives a host being re-bound.
+ */
+export class UIWidgetRef {
+    constructor(
+        private readonly host: UIHost,
+        readonly widgetKey: string
+    ) {}
+
+    get runtime(): UIRuntime | null {
+        return getUIHostRuntime(this.host);
+    }
+
+    get widgetId(): WidgetId | null {
+        return this.runtime?.getBoundWidget(this.widgetKey) ?? null;
+    }
+
+    isValid(): boolean {
+        return this.widgetId !== null;
+    }
+
+    setText(value: string): boolean {
+        return this.update({ text: { value } });
+    }
+
+    setStyle(patch: Record<string, unknown>): boolean {
+        return this.update({ style: patch });
+    }
+
+    setLayout(patch: Record<string, unknown>): boolean {
+        return this.update({ layout: patch });
+    }
+
+    setHandlers(handlers: Record<string, unknown>): boolean {
+        return this.update({ handlers });
+    }
+
+    setEnabled(enabled: boolean): boolean {
+        return this.update({ enabled });
+    }
+
+    private update(patch: Record<string, unknown>): boolean {
+        const runtime = this.runtime;
+        const widgetId = runtime?.getBoundWidget(this.widgetKey) ?? null;
+        if (!runtime || widgetId === null) {
+            return false;
+        }
+        runtime.updateWidget(widgetId, patch as never);
+        return true;
+    }
+}
+
+/**
+ * Resolves a widget key against a bound UIHost. Returns null when the host is
+ * not bound yet or the key is missing from the asset's binding table.
+ */
+export function resolveUIWidgetRef(host: UIHost, widgetKey: string): UIWidgetRef | null {
+    const runtime = getUIHostRuntime(host);
+    if (!runtime || runtime.getBoundWidget(widgetKey) === null) {
+        return null;
+    }
+    return new UIWidgetRef(host, widgetKey);
+}
+
+/**
+ * Fulfils scene-runtime's structural resolver seam so `@property('ui-widget')`
+ * script values hydrate into live UIWidgetRefs without scene-runtime ever
+ * importing UI packages. Installed idempotently by the bind entry points.
+ */
+const uiWidgetRefResolver = (host: unknown, widgetKey: string): UIWidgetRef | null =>
+    host instanceof UIHost ? resolveUIWidgetRef(host, widgetKey) : null;
+
+const installUIWidgetRefResolver = (): void => {
+    setSceneUIWidgetRefResolver(uiWidgetRefResolver);
+};
 
 const resolveFramebufferSize = (scene: SceneUIOverlayTarget): { width: number; height: number } => ({
     width: scene.canvas.width || scene.gl.drawingBufferWidth,
@@ -223,6 +325,7 @@ export function bindUIHostToScene<TPayload = unknown>(
     options: UIHostBindingOptions<TPayload>
 ): UIHostBindingHandle<TPayload> | null {
     const { scene, host, priority } = options;
+    installUIWidgetRefResolver();
     const assetId = host.assetId;
     if (!assetId) {
         return null;
@@ -256,12 +359,15 @@ export function bindUIHostToScene<TPayload = unknown>(
             return;
         }
         disposed = true;
+        if (uiHostHandles.get(host) === handle) {
+            uiHostHandles.delete(host);
+        }
         disconnectInput?.();
         overlay.dispose();
         runtime.dispose();
     };
 
-    return {
+    const handle: UIHostBindingHandle<TPayload> = {
         runtime,
         asset,
         render(actualWidth: number, actualHeight: number) {
@@ -273,6 +379,9 @@ export function bindUIHostToScene<TPayload = unknown>(
         dispose: disposeBinding,
         [Symbol.dispose]: disposeBinding,
     };
+
+    uiHostHandles.set(host, handle as UIHostBindingHandle<unknown>);
+    return handle;
 }
 
 /** Options for binding multiple UIHost components in one call. */
@@ -293,6 +402,7 @@ export interface UIHostsBindingOptions<TPayload = unknown>
 export function bindUIHostsToScene<TPayload = unknown>(
     options: UIHostsBindingOptions<TPayload>
 ): UIHostSceneBindings<TPayload> {
+    installUIWidgetRefResolver();
     const hosts =
         options.hosts ??
         UIHost.getAllInstances().filter(

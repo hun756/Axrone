@@ -1,7 +1,7 @@
 import { createGameLoop } from '@axrone/game-loop';
 import { describe, expect, it, vi } from 'vitest';
 import type { GlyphAtlasEntry, TextLayoutResult, UIAsset, UIFrame, UIFrameMetrics, WidgetId } from '@axrone/ui/types';
-import { UIHost } from '@axrone/scene-runtime/scene-facade';
+import { UIHost, createLazySceneUIWidgetRef } from '@axrone/scene-runtime/scene-facade';
 import {
     WebGL2UIRenderer,
     attachUIOverlayToScene,
@@ -9,7 +9,13 @@ import {
     createManagedWebGL2UIOverlayRenderPipelineBackend,
     createUIOverlayRenderPipelineBackend,
 } from '../index';
-import { bindUIHostToScene, bindUIHostsToScene } from '../scene-host';
+import {
+    bindUIHostToScene,
+    bindUIHostsToScene,
+    getUIHostBinding,
+    getUIHostRuntime,
+    resolveUIWidgetRef,
+} from '../scene-host';
 
 const createMetrics = (): UIFrameMetrics => ({
     widgetCount: 2,
@@ -1090,5 +1096,85 @@ describe('scene-host UIHost binding', () => {
 
         bindings.dispose();
         expect(() => bindings.dispose()).not.toThrow();
+    });
+
+    it('registers bound hosts so getUIHostRuntime resolves the live runtime', () => {
+        const scene = createSceneTarget();
+        const host = new UIHost({ assetId: 'ui.hud' });
+
+        expect(getUIHostRuntime(host)).toBeNull();
+
+        const handle = bindUIHostToScene({ scene, host, resolveAsset: () => createHostAsset() });
+        expect(handle).not.toBeNull();
+        expect(getUIHostBinding(host)).toBe(handle);
+        expect(getUIHostRuntime(host)).toBe(handle!.runtime);
+
+        handle!.dispose();
+        expect(getUIHostBinding(host)).toBeNull();
+        expect(getUIHostRuntime(host)).toBeNull();
+    });
+
+    it('resolves UIWidgetRefs that mutate the bound widget and go inert on dispose', () => {
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        const host = new UIHost({ assetId: 'ui.hud', receiveInput: true });
+
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset: () => createHostAsset(),
+            input: { target },
+        });
+        expect(handle).not.toBeNull();
+
+        expect(resolveUIWidgetRef(host, 'missing-key')).toBeNull();
+
+        const ref = resolveUIWidgetRef(host, 'button');
+        expect(ref).not.toBeNull();
+        expect(ref!.isValid()).toBe(true);
+        expect(ref!.widgetId).toBe(handle!.runtime.getBoundWidget('button'));
+
+        // Mutations through the ref reach the live runtime: attach a handler
+        // and confirm the real input path invokes it.
+        const pointerDown = vi.fn(() => true);
+        expect(ref!.setHandlers({ pointerDown })).toBe(true);
+        expect(ref!.setStyle({ background: '#ff0000ff' })).toBe(true);
+        handle!.render(320, 180);
+        target.emit('pointerdown', { clientX: 40, clientY: 40 });
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        handle!.dispose();
+        expect(ref!.isValid()).toBe(false);
+        expect(ref!.setText('gone')).toBe(false);
+    });
+
+    it('lazily resolves scene-runtime ui-widget refs once the host is bound', () => {
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        const host = new UIHost({ assetId: 'ui.hud', receiveInput: true });
+
+        // Created before any binding exists — exactly how hydrated script
+        // properties behave when scripts instantiate before bindUIHostsToScene.
+        const lazyRef = createLazySceneUIWidgetRef(() => host, 'button');
+        expect(lazyRef.isValid()).toBe(false);
+        expect(lazyRef.setText('early')).toBe(false);
+
+        const bindings = bindUIHostsToScene({
+            scene,
+            hosts: [host],
+            resolveAsset: () => createHostAsset(),
+            input: { target },
+        });
+        expect(bindings.handles).toHaveLength(1);
+
+        expect(lazyRef.isValid()).toBe(true);
+        const pointerDown = vi.fn(() => true);
+        expect(lazyRef.setHandlers({ pointerDown })).toBe(true);
+        bindings.handles[0].render(320, 180);
+        target.emit('pointerdown', { clientX: 40, clientY: 40 });
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        bindings.dispose();
+        expect(lazyRef.isValid()).toBe(false);
     });
 });
