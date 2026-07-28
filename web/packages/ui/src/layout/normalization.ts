@@ -16,6 +16,8 @@ const ZERO_CORNERS: CornerRadii = Object.freeze({ topLeft: 0, topRight: 0, botto
 const DEFAULT_ANCHOR: Anchor = Object.freeze({
     x: 0,
     y: 0,
+    maxX: 0,
+    maxY: 0,
     pivotX: 0,
     pivotY: 0,
     offsetX: 0,
@@ -138,32 +140,36 @@ export const normalizeAnchor = (input: AnchorInput | undefined): Anchor => {
             case 'top-left':
                 return { ...DEFAULT_ANCHOR };
             case 'top':
-                return { ...DEFAULT_ANCHOR, x: 0.5, pivotX: 0.5 };
+                return { ...DEFAULT_ANCHOR, x: 0.5, maxX: 0.5, pivotX: 0.5 };
             case 'top-right':
-                return { ...DEFAULT_ANCHOR, x: 1, pivotX: 1 };
+                return { ...DEFAULT_ANCHOR, x: 1, maxX: 1, pivotX: 1 };
             case 'left':
-                return { ...DEFAULT_ANCHOR, y: 0.5, pivotY: 0.5 };
+                return { ...DEFAULT_ANCHOR, y: 0.5, maxY: 0.5, pivotY: 0.5 };
             case 'center':
-                return { ...DEFAULT_ANCHOR, x: 0.5, y: 0.5, pivotX: 0.5, pivotY: 0.5 };
+                return { ...DEFAULT_ANCHOR, x: 0.5, maxX: 0.5, y: 0.5, maxY: 0.5, pivotX: 0.5, pivotY: 0.5 };
             case 'right':
-                return { ...DEFAULT_ANCHOR, x: 1, y: 0.5, pivotX: 1, pivotY: 0.5 };
+                return { ...DEFAULT_ANCHOR, x: 1, maxX: 1, y: 0.5, maxY: 0.5, pivotX: 1, pivotY: 0.5 };
             case 'bottom-left':
-                return { ...DEFAULT_ANCHOR, y: 1, pivotY: 1 };
+                return { ...DEFAULT_ANCHOR, y: 1, maxY: 1, pivotY: 1 };
             case 'bottom':
-                return { ...DEFAULT_ANCHOR, x: 0.5, y: 1, pivotX: 0.5, pivotY: 1 };
+                return { ...DEFAULT_ANCHOR, x: 0.5, maxX: 0.5, y: 1, maxY: 1, pivotX: 0.5, pivotY: 1 };
             case 'bottom-right':
-                return { ...DEFAULT_ANCHOR, x: 1, y: 1, pivotX: 1, pivotY: 1 };
+                return { ...DEFAULT_ANCHOR, x: 1, maxX: 1, y: 1, maxY: 1, pivotX: 1, pivotY: 1 };
             case 'stretch':
-                return { ...DEFAULT_ANCHOR, stretch: true };
+                return { ...DEFAULT_ANCHOR, maxX: 1, maxY: 1, stretch: true };
             default:
                 return DEFAULT_ANCHOR;
         }
     }
+    const x = input.x ?? 0;
+    const y = input.y ?? 0;
     return {
-        x: input.x ?? 0,
-        y: input.y ?? 0,
-        pivotX: input.pivotX ?? input.x ?? 0,
-        pivotY: input.pivotY ?? input.y ?? 0,
+        x,
+        y,
+        maxX: input.maxX ?? x,
+        maxY: input.maxY ?? y,
+        pivotX: input.pivotX ?? x,
+        pivotY: input.pivotY ?? y,
         offsetX: input.offsetX ?? 0,
         offsetY: input.offsetY ?? 0,
         stretch: input.stretch ?? false,

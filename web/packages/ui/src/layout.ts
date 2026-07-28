@@ -420,16 +420,41 @@ export class UILayoutEngine<TNode> {
         if (top !== null && bottom !== null && (layout.height.kind === 'auto' || layout.height.kind === 'content' || layout.height.kind === 'stretch')) {
             height = Math.max(0, box.contentHeight - top - bottom - layout.margin.top - layout.margin.bottom);
         }
-        const x = left !== null
-            ? box.contentX + left + layout.margin.left
-            : right !== null
-              ? box.contentX + box.contentWidth - right - width - layout.margin.right
-              : box.contentX + box.contentWidth * layout.anchor.x + layout.anchor.offsetX - width * layout.anchor.pivotX;
-        const y = top !== null
-            ? box.contentY + top + layout.margin.top
-            : bottom !== null
-              ? box.contentY + box.contentHeight - bottom - height - layout.margin.bottom
-              : box.contentY + box.contentHeight * layout.anchor.y + layout.anchor.offsetY - height * layout.anchor.pivotY;
+        const anchor = layout.anchor;
+        const stretchX = anchor.maxX > anchor.x;
+        const stretchY = anchor.maxY > anchor.y;
+
+        let x: number;
+        if (left !== null) {
+            x = box.contentX + left + layout.margin.left;
+        } else if (right !== null) {
+            x = box.contentX + box.contentWidth - right - width - layout.margin.right;
+        } else if (stretchX) {
+            // Unity-style stretch: fill the region between the min/max anchors,
+            // using offsetX as a symmetric inset from both anchor edges.
+            const anchorLeft = box.contentX + box.contentWidth * anchor.x;
+            const anchorRight = box.contentX + box.contentWidth * anchor.maxX;
+            const inset = Math.abs(anchor.offsetX);
+            x = anchorLeft + inset + layout.margin.left;
+            width = Math.max(0, anchorRight - anchorLeft - inset * 2 - layout.margin.left - layout.margin.right);
+        } else {
+            x = box.contentX + box.contentWidth * anchor.x + anchor.offsetX - width * anchor.pivotX;
+        }
+
+        let y: number;
+        if (top !== null) {
+            y = box.contentY + top + layout.margin.top;
+        } else if (bottom !== null) {
+            y = box.contentY + box.contentHeight - bottom - height - layout.margin.bottom;
+        } else if (stretchY) {
+            const anchorTop = box.contentY + box.contentHeight * anchor.y;
+            const anchorBottom = box.contentY + box.contentHeight * anchor.maxY;
+            const inset = Math.abs(anchor.offsetY);
+            y = anchorTop + inset + layout.margin.top;
+            height = Math.max(0, anchorBottom - anchorTop - inset * 2 - layout.margin.top - layout.margin.bottom);
+        } else {
+            y = box.contentY + box.contentHeight * anchor.y + anchor.offsetY - height * anchor.pivotY;
+        }
         this.layoutNode(adapter, node, x, y, width, height, width, height);
     }
 
