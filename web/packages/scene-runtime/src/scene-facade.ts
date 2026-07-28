@@ -37,3 +37,10 @@ export { Camera } from './components/camera';
 
 export type { UIHostConfig, UIHostRenderMode } from './components/ui-host';
 export { UIHost } from './components/ui-host';
+
+export type { SceneUIWidgetRef, SceneUIWidgetRefResolver } from './ui-widget-ref';
+export {
+    createLazySceneUIWidgetRef,
+    getSceneUIWidgetRefResolver,
+    setSceneUIWidgetRefResolver,
+} from './ui-widget-ref';

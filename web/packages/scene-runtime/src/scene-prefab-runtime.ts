@@ -11,6 +11,8 @@ import { SceneLifecycleError } from './errors';
 import { hasScenePrefabComposition } from '@axrone/scene-prefab';
 import { resolveScenePrefab } from '@axrone/scene-prefab';
 import { decodeSceneValue, encodeSceneValue } from './serialization';
+import { UIHost } from './components/ui-host';
+import { createLazySceneUIWidgetRef } from './ui-widget-ref';
 import type {
     SceneActorSnapshot,
     SceneComponentSnapshot,
@@ -221,6 +223,8 @@ const normalizePropertyTypeId = (
             return 'transform';
         case 'component':
             return 'component';
+        case 'ui-widget':
+            return 'ui-widget';
         default:
             return undefined;
     }
@@ -626,6 +630,25 @@ export class ScenePrefabRuntime {
                 }
                 const targetActor = this._resolveActorReference(value, createdByNodeId, createdActors);
                 return targetActor?.getComponent(componentType as ComponentConstructor) ?? null;
+            }
+            case 'ui-widget': {
+                const objectValue = asRecord(value);
+                const hostEntityId = asString(objectValue.hostEntityId);
+                const widgetKey = asString(objectValue.widgetKey);
+                if (!hostEntityId || !widgetKey) {
+                    return null;
+                }
+                // UIHost bindings are established after hydration, so the ref
+                // resolves lazily through the injected resolver on first use.
+                return createLazySceneUIWidgetRef(
+                    () =>
+                        this._resolveActorReference(
+                            hostEntityId,
+                            createdByNodeId,
+                            createdActors,
+                        )?.getComponent(UIHost) ?? null,
+                    widgetKey,
+                );
             }
             default:
                 return value;
