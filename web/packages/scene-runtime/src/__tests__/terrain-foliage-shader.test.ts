@@ -11,6 +11,8 @@ describe('createTerrainFoliageShaderDefinition', () => {
         expect(definition.id).toBe(DEFAULT_TERRAIN_FOLIAGE_SHADER_ID);
         expect(definition.vertexSource).toContain('uniform mat4 u_Model;');
         expect(definition.fragmentSource).toContain('uniform vec4 u_TintColor;');
+        expect(definition.fragmentSource).toContain('uniform sampler2D u_Albedo;');
+        expect(definition.fragmentSource).toContain('uniform bool u_UseAlbedo;');
         expect(definition.fragmentSource).toContain('uniform vec3 u_DirectionalLightDirection[1];');
         expect(definition.fragmentSource).toContain('uniform bool u_ReceiveLighting;');
         expect(definition.attributes).toEqual({
