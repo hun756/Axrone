@@ -140,4 +140,89 @@ describe('UI Editor preview pipeline (browser)', () => {
         renderer.dispose();
         runtime.dispose();
     });
+
+    it('renders the exact single-button asset a user authors in the UI Editor', () => {
+        // Mirrors Assets/UI-test.ui.json: overlay root with ONE content-sized button.
+        const assetJson = JSON.stringify({
+            id: 'ui.UI/test',
+            name: 'UI/test',
+            version: 1,
+            canvas: {
+                referenceWidth: 1920,
+                referenceHeight: 1080,
+                scaleMode: 'match-width-or-height',
+                matchBias: 0.45,
+            },
+            bindings: { root: 'root', 'widget-4': 'widget-4' },
+            root: {
+                role: 'root',
+                key: 'root',
+                enabled: true,
+                interactive: false,
+                layout: { display: 'overlay', width: '100%', height: '100%' },
+                children: [
+                    {
+                        role: 'button',
+                        key: 'widget-4',
+                        enabled: true,
+                        interactive: true,
+                        layout: {
+                            width: 'content',
+                            height: 'content',
+                            padding: 12,
+                            direction: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                        },
+                        style: { background: '#0a74daff', radius: 8, color: '#ffffffff' },
+                        text: { value: 'Button', size: 16 },
+                        children: [],
+                    },
+                ],
+            },
+        });
+
+        const canvas = (window as any).createTestCanvas(800, 450) as HTMLCanvasElement;
+        const gl = (window as any).createWebGLContext(canvas, {
+            alpha: true,
+            antialias: true,
+            premultipliedAlpha: true,
+            preserveDrawingBuffer: true,
+        }) as WebGL2RenderingContext;
+
+        const renderer = new WebGL2UIRenderer({ gl });
+        const runtime = new UIRuntime();
+        runtime.loadFromAsset(deserializeUIAsset(assetJson));
+
+        const button = runtime.getBoundWidget('widget-4');
+        expect(button).not.toBeNull();
+
+        const frame = runtime.commitToViewport(canvas.width, canvas.height);
+        renderer.render(frame);
+
+        const box = runtime.getLayoutBox(button!);
+        expect(box.width, 'button layout width').toBeGreaterThan(0);
+        expect(box.height, 'button layout height').toBeGreaterThan(0);
+
+        const scale = resolveCanvasScale(
+            { referenceWidth: 1920, referenceHeight: 1080, scaleMode: 'match-width-or-height', matchBias: 0.45 },
+            canvas.width,
+            canvas.height,
+        );
+        const cx = (box.x + box.width / 2) * scale.scaleX + scale.offsetX;
+        const cy = (box.y + box.height / 2) * scale.scaleY + scale.offsetY;
+
+        const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+        gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        const idx =
+            (Math.max(0, Math.min(canvas.height - 1, Math.round(canvas.height - 1 - cy))) * canvas.width +
+                Math.max(0, Math.min(canvas.width - 1, Math.round(cx)))) *
+            4;
+
+        expect(box.width * scale.scaleX).toBeGreaterThan(4); // sanity: big enough to see
+        expect(pixels[idx + 3], 'button center alpha').toBeGreaterThan(0);
+
+        renderer.dispose();
+        runtime.dispose();
+    });
 });
