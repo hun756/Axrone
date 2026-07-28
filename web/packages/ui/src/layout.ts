@@ -17,6 +17,13 @@ export {
     resolveLength,
 } from './layout/normalization';
 
+export {
+    resolveCanvasScale,
+    canvasScaleToTransform,
+    mapViewportPointToCanvas,
+} from './layout/canvas-scaler';
+export type { CanvasScaleResult } from './layout/canvas-scaler';
+
 export interface LayoutTreeAdapter<TNode> {
     readonly root: TNode;
     getLayout(node: TNode): ResolvedLayout;
