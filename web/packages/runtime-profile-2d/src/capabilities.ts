@@ -10,4 +10,5 @@ export const RUNTIME_PROFILE_2D_CAPABILITY_PACKAGES = Object.freeze([
     RENDER_2D_CAPABILITY_PACKAGE,
     '@axrone/physics-core',
     '@axrone/physics-2d',
+    '@axrone/ui',
 ]) as readonly string[];
