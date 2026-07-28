@@ -153,6 +153,10 @@ export type { SpotLightConfig } from './components/spot-light';
 export { SpotLight } from './components/spot-light';
 export type { TerrainConfig } from './components/terrain';
 export { Terrain } from './components/terrain';
+export {
+    DEFAULT_TERRAIN_SPLAT_SHADER_ID,
+    createTerrainSplatShaderDefinition,
+} from './terrain-splat-shader';
 export type { AreaLightConfig, AreaLightShape } from './components/area-light';
 export { AreaLight } from './components/area-light';
 export type {

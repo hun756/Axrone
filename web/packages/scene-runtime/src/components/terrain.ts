@@ -1,12 +1,16 @@
 import { Component, script } from '@axrone/ecs-runtime';
 import {
     DEFAULT_TERRAIN_NOISE_OPTIONS,
+    TERRAIN_MAX_LAYERS,
     isTerrainResolution,
+    isTerrainSplatResolution,
     type ResolvedTerrainNoiseOptions,
     type TerrainDescriptor,
+    type TerrainLayer,
     type TerrainNoiseOptions,
     type TerrainResolution,
     type TerrainSourceKind,
+    type TerrainSplatResolution,
 } from '@axrone/terrain';
 
 export interface TerrainConfig {
@@ -18,6 +22,9 @@ export interface TerrainConfig {
     readonly maxHeight?: number;
     readonly resolution?: TerrainResolution;
     readonly noise?: TerrainNoiseOptions;
+    readonly layers?: readonly Partial<TerrainLayer>[];
+    readonly splatData?: string;
+    readonly splatResolution?: TerrainSplatResolution;
     readonly materialId?: string | null;
     readonly castShadows?: boolean;
     readonly generateCollider?: boolean;
@@ -88,6 +95,67 @@ const areEqualNoise = (
     left.offsetX === right.offsetX &&
     left.offsetZ === right.offsetZ;
 
+const DEFAULT_TERRAIN_SPLAT_RESOLUTION: TerrainSplatResolution = 128;
+
+const normalizeSplatResolution = (
+    value: unknown,
+    fallback: TerrainSplatResolution
+): TerrainSplatResolution => {
+    const parsed = Number(value);
+    return isTerrainSplatResolution(parsed) ? parsed : fallback;
+};
+
+let terrainLayerIdCounter = 0;
+
+const createTerrainLayerId = (): string => {
+    terrainLayerIdCounter += 1;
+    return `terrain_layer_${terrainLayerIdCounter}`;
+};
+
+/** Coerces arbitrary serialized layer data into a valid, capped layer list. */
+const normalizeLayers = (
+    value: readonly Partial<TerrainLayer>[] | null | undefined
+): readonly TerrainLayer[] => {
+    if (!Array.isArray(value)) {
+        return Object.freeze([]);
+    }
+
+    const layers: TerrainLayer[] = [];
+    for (const entry of value.slice(0, TERRAIN_MAX_LAYERS)) {
+        if (!entry || typeof entry !== 'object') {
+            continue;
+        }
+
+        const tiling = Number(entry.tiling);
+        layers.push(
+            Object.freeze({
+                id:
+                    typeof entry.id === 'string' && entry.id.length > 0
+                        ? entry.id
+                        : createTerrainLayerId(),
+                name: typeof entry.name === 'string' ? entry.name : `Layer ${layers.length + 1}`,
+                textureAsset: typeof entry.textureAsset === 'string' ? entry.textureAsset : '',
+                tiling: Number.isFinite(tiling) && tiling > 0 ? tiling : 8,
+            })
+        );
+    }
+
+    return Object.freeze(layers);
+};
+
+const areEqualLayers = (
+    left: readonly TerrainLayer[],
+    right: readonly TerrainLayer[]
+): boolean =>
+    left.length === right.length &&
+    left.every(
+        (layer, index) =>
+            layer.id === right[index]!.id &&
+            layer.name === right[index]!.name &&
+            layer.textureAsset === right[index]!.textureAsset &&
+            layer.tiling === right[index]!.tiling
+    );
+
 @script({
     scriptName: 'Terrain',
     priority: 100,
@@ -104,6 +172,9 @@ export class Terrain extends Component {
     private _maxHeight: number;
     private _resolution: TerrainResolution;
     private _noise: ResolvedTerrainNoiseOptions;
+    private _layers: readonly TerrainLayer[];
+    private _splatData: string;
+    private _splatResolution: TerrainSplatResolution;
     private _materialId: string | null;
     private _castShadows: boolean;
     private _generateCollider: boolean;
@@ -119,6 +190,12 @@ export class Terrain extends Component {
         this._maxHeight = normalizeMaxHeight(config.maxHeight, DEFAULT_TERRAIN_MAX_HEIGHT);
         this._resolution = normalizeResolution(config.resolution, DEFAULT_TERRAIN_RESOLUTION);
         this._noise = normalizeNoise(config.noise);
+        this._layers = normalizeLayers(config.layers);
+        this._splatData = typeof config.splatData === 'string' ? config.splatData : '';
+        this._splatResolution = normalizeSplatResolution(
+            config.splatResolution,
+            DEFAULT_TERRAIN_SPLAT_RESOLUTION
+        );
         this._materialId = config.materialId ?? null;
         this._castShadows = config.castShadows ?? true;
         this._generateCollider = config.generateCollider ?? true;
@@ -242,6 +319,49 @@ export class Terrain extends Component {
         this._dataVersion += 1;
     }
 
+    get layers(): readonly TerrainLayer[] {
+        return this._layers;
+    }
+
+    set layers(value: readonly Partial<TerrainLayer>[] | null) {
+        const normalized = normalizeLayers(value);
+        if (areEqualLayers(this._layers, normalized)) {
+            return;
+        }
+
+        this._layers = normalized;
+        this._dataVersion += 1;
+    }
+
+    /** Serialized splat weight payload (`@axrone/terrain` codec format). */
+    get splatData(): string {
+        return this._splatData;
+    }
+
+    set splatData(value: string) {
+        const normalized = typeof value === 'string' ? value : '';
+        if (normalized === this._splatData) {
+            return;
+        }
+
+        this._splatData = normalized;
+        this._dataVersion += 1;
+    }
+
+    get splatResolution(): TerrainSplatResolution {
+        return this._splatResolution;
+    }
+
+    set splatResolution(value: TerrainSplatResolution) {
+        const normalized = normalizeSplatResolution(value, this._splatResolution);
+        if (normalized === this._splatResolution) {
+            return;
+        }
+
+        this._splatResolution = normalized;
+        this._dataVersion += 1;
+    }
+
     get materialId(): string | null {
         return this._materialId;
     }
@@ -286,6 +406,9 @@ export class Terrain extends Component {
             maxHeight: this._maxHeight,
             resolution: this._resolution,
             noise: { ...this._noise },
+            layers: this._layers.map((layer) => ({ ...layer })),
+            splatData: this._splatData,
+            splatResolution: this._splatResolution,
             materialId: this._materialId,
             castShadows: this._castShadows,
             generateCollider: this._generateCollider,
@@ -316,6 +439,15 @@ export class Terrain extends Component {
         }
         if (typeof data.noise === 'object' && data.noise !== null && !Array.isArray(data.noise)) {
             this.noise = data.noise as TerrainNoiseOptions;
+        }
+        if (Array.isArray(data.layers)) {
+            this.layers = data.layers as readonly Partial<TerrainLayer>[];
+        }
+        if (typeof data.splatData === 'string') {
+            this.splatData = data.splatData;
+        }
+        if (typeof data.splatResolution === 'number') {
+            this.splatResolution = data.splatResolution as TerrainSplatResolution;
         }
         if (typeof data.materialId === 'string' || data.materialId === null) {
             this._materialId = data.materialId;
