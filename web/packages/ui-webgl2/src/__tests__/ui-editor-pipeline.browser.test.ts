@@ -225,4 +225,123 @@ describe('UI Editor preview pipeline (browser)', () => {
         renderer.dispose();
         runtime.dispose();
     });
+
+    it('renders an image widget through the project texture resolver to real pixels', () => {
+        // Mirrors the editor's image preset output: an absolute-positioned image
+        // widget whose source points at a project texture resource id.
+        const assetJson = JSON.stringify({
+            id: 'ui.image-widget',
+            name: 'image-widget',
+            version: 1,
+            canvas: {
+                referenceWidth: 1920,
+                referenceHeight: 1080,
+                scaleMode: 'match-width-or-height',
+                matchBias: 0.5,
+            },
+            bindings: { root: 'root', 'widget-img': 'widget-img' },
+            root: {
+                role: 'root',
+                key: 'root',
+                enabled: true,
+                interactive: false,
+                layout: { display: 'overlay', width: '100%', height: '100%' },
+                children: [
+                    {
+                        role: 'image',
+                        key: 'widget-img',
+                        enabled: true,
+                        interactive: false,
+                        layout: {
+                            position: 'absolute',
+                            inset: { left: 100, top: 80 },
+                            width: 200,
+                            height: 150,
+                        },
+                        image: {
+                            source: { kind: 'texture', resourceId: 'test:image', width: 64, height: 64 },
+                            fit: 'fill',
+                        },
+                        children: [],
+                    },
+                ],
+            },
+        });
+
+        const canvas = (window as any).createTestCanvas(800, 450) as HTMLCanvasElement;
+        const gl = (window as any).createWebGLContext(canvas, {
+            alpha: true,
+            antialias: true,
+            premultipliedAlpha: true,
+            preserveDrawingBuffer: true,
+        }) as WebGL2RenderingContext;
+
+        // Opaque red 4x4 texture standing in for a decoded project image file,
+        // uploaded exactly like UICanvasPreview's loadTexture does.
+        const texture = gl.createTexture()!;
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        const texels = new Uint8Array(4 * 4 * 4);
+        for (let i = 0; i < texels.length; i += 4) {
+            texels[i] = 255;
+            texels[i + 1] = 0;
+            texels[i + 2] = 0;
+            texels[i + 3] = 255;
+        }
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 4, 4, 0, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        let resolverCalls = 0;
+        const renderer = new WebGL2UIRenderer({
+            gl,
+            resolveImageResource(source) {
+                resolverCalls += 1;
+                if (source.kind !== 'texture' || source.resourceId !== 'test:image') {
+                    return null;
+                }
+                return { kind: 'texture', texture, sampler: null };
+            },
+        });
+        const runtime = new UIRuntime();
+        runtime.loadFromAsset(deserializeUIAsset(assetJson));
+
+        const imageWidget = runtime.getBoundWidget('widget-img');
+        expect(imageWidget).not.toBeNull();
+
+        const frame = runtime.commitToViewport(canvas.width, canvas.height);
+        expect(frame.commands.some((command) => command.kind === 'image')).toBe(true);
+
+        renderer.render(frame);
+
+        // The resolver must have been consulted and the textured quad drawn.
+        expect(resolverCalls).toBeGreaterThan(0);
+        expect(renderer.getStats().imageCount).toBeGreaterThanOrEqual(1);
+
+        const box = runtime.getLayoutBox(imageWidget!);
+        const scale = resolveCanvasScale(
+            { referenceWidth: 1920, referenceHeight: 1080, scaleMode: 'match-width-or-height', matchBias: 0.5 },
+            canvas.width,
+            canvas.height,
+        );
+        const cx = (box.x + box.width / 2) * scale.scaleX + scale.offsetX;
+        const cy = (box.y + box.height / 2) * scale.scaleY + scale.offsetY;
+
+        const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+        gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        const idx =
+            (Math.max(0, Math.min(canvas.height - 1, Math.round(canvas.height - 1 - cy))) * canvas.width +
+                Math.max(0, Math.min(canvas.width - 1, Math.round(cx)))) *
+            4;
+
+        expect(box.width * scale.scaleX).toBeGreaterThan(8); // sanity: big enough to see
+        expect(pixels[idx + 3], 'image center alpha').toBeGreaterThan(0);
+        expect(pixels[idx], 'image center red channel').toBeGreaterThan(200);
+        expect(pixels[idx + 2], 'image center blue channel').toBeLessThan(60);
+
+        renderer.dispose();
+        runtime.dispose();
+        gl.deleteTexture(texture);
+    });
 });
