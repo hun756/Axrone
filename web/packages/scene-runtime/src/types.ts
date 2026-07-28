@@ -561,6 +561,7 @@ export type SceneBuiltInRegistry = {
     readonly Terrain: typeof Terrain;
     readonly OrbitCameraController: typeof OrbitCameraController;
     readonly FollowCameraController: typeof FollowCameraController;
+    readonly UIHost: typeof import('./components/ui-host').UIHost;
 };
 
 export type SceneRegistry<R extends ComponentRegistry = Record<string, never>> = R &
