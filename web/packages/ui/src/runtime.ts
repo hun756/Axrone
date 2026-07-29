@@ -248,7 +248,29 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             root: asset.root,
         });
         this.rebuildBindingTable(asset.bindings);
+        this.remountControllers();
         return this;
+    }
+
+    /**
+     * Re-runs controller `mount` hooks after the binding table exists.
+     *
+     * Widgets are created before bindings are resolved, so a controller that
+     * reaches sibling widgets through `getBoundWidget` (a slider syncing its
+     * fill and handle, for example) cannot do so during the initial mount.
+     * Replaying `mount` once the table is ready gives controllers a chance to
+     * push their authored state into the tree before the first layout pass, so
+     * `mount` implementations must be idempotent.
+     */
+    private remountControllers(): void {
+        for (let index = 0; index < this.records.length; index += 1) {
+            const record = this.records[index];
+            if (!record?.controller) {
+                continue;
+            }
+            const controller = this.registry.resolve(record.controller);
+            controller?.mount?.(this.createControllerContext(index));
+        }
     }
 
     /**
@@ -264,6 +286,17 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     getBindingTable(): ReadonlyMap<string, WidgetId> {
         this.ensureActive();
         return this.bindingTable;
+    }
+
+    /**
+     * Returns the controller state of a widget, or null when it has no
+     * controller. Lets callers read live control values (a slider's value, a
+     * toggle's checked flag) without reaching into runtime internals.
+     */
+    getWidgetState<TState = unknown>(widget: WidgetId): TState | null {
+        this.ensureActive();
+        const index = this.requireWidget(widget);
+        return (this.states[index] as TState | undefined) ?? null;
     }
 
     setViewport(width: number, height: number): this {
