@@ -23,6 +23,32 @@ export interface UIWorldHit {
     readonly distance: number;
 }
 
+/** Structural view of an Axrone `Mat4` without importing @axrone/numeric. */
+export interface RowMajorMatrixLike {
+    readonly data: ArrayLike<number>;
+}
+
+/**
+ * Converts an Axrone row-major matrix (`Mat4.data`, translation at 3/7/11) into
+ * the column-major `Float32Array` the world-space UI APIs and WebGL expect.
+ *
+ * Engine matrices are row-major and are transposed on their way to the GPU (see
+ * SceneUniformWriter); world-space UI callers pass matrices directly, so this
+ * helper keeps that conversion in one place.
+ */
+export function toColumnMajorMatrix(
+    source: RowMajorMatrixLike | ArrayLike<number>
+): Float32Array {
+    const data = 'data' in source ? source.data : source;
+    const result = new Float32Array(16);
+    for (let row = 0; row < 4; row += 1) {
+        for (let column = 0; column < 4; column += 1) {
+            result[column * 4 + row] = data[row * 4 + column] ?? 0;
+        }
+    }
+    return result;
+}
+
 /** Column-major 4x4 multiply of a point (w = 1), returning the transformed point. */
 const transformPoint = (
     matrix: Float32Array,
