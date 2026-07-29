@@ -17,6 +17,7 @@ import type {
     WebGL2UIResolvedImageResource,
     WebGL2UIRendererOptions,
     WebGL2UIRendererStatistics,
+    WebGL2UIRenderOptions,
 } from './types';
 
 const QUAD_FLOATS_PER_INSTANCE = 23;
@@ -658,7 +659,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         };
     }
 
-    render(frame: Readonly<UIFrame<TPayload>>): void {
+    render(frame: Readonly<UIFrame<TPayload>>, options?: WebGL2UIRenderOptions): void {
         this.ensureActive();
         const previousState = captureGLState(this.gl);
         this.currentFrame = frame as UIFrame<TPayload>;
@@ -680,6 +681,11 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.activeTextPageKey = null;
 
         try {
+            if (options && 'framebuffer' in options) {
+                // Offscreen target (world-space UI). captureGLState/restoreGLState
+                // already round-trip the framebuffer binding.
+                this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, options.framebuffer ?? null);
+            }
             this.prepareFrame(frame.viewportWidth, frame.viewportHeight);
 
             for (const command of frame.commands) {

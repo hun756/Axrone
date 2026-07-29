@@ -56,6 +56,16 @@ export interface WebGL2UIResolveImageResourceContext<TPayload = unknown> {
     readonly command: ImageRenderCommand;
 }
 
+/** Per-render overrides for a single {@link UIFrame} submission. */
+export interface WebGL2UIRenderOptions {
+    /**
+     * Framebuffer the UI frame is drawn into. Omitted or null draws to the
+     * default framebuffer; supply an offscreen FBO to render UI into a texture
+     * (world-space UI). The previous binding is always restored afterwards.
+     */
+    readonly framebuffer?: WebGLFramebuffer | null;
+}
+
 export interface WebGL2UIResolvedTextureImage {
     readonly kind: 'texture';
     readonly texture: WebGLTexture;

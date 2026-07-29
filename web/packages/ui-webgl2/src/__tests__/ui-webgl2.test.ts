@@ -415,6 +415,34 @@ describe('@axrone/ui-webgl2', () => {
         expect(gl.getParameter(gl.BLEND_DST_ALPHA)).toBe(gl.SRC_ALPHA);
     });
 
+    it('renders into an offscreen framebuffer and restores the previous binding', () => {
+        const gl = createMockWebGL2Context();
+        const previousFramebuffer = { id: 'previous-framebuffer' } as unknown as WebGLFramebuffer;
+        const offscreen = { id: 'offscreen-framebuffer' } as unknown as WebGLFramebuffer;
+        const renderer = new WebGL2UIRenderer({ gl });
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer);
+        renderer.render(createFrame(), { framebuffer: offscreen });
+
+        // The UI must have been drawn against the offscreen target...
+        expect(gl.bindFramebuffer).toHaveBeenCalledWith(gl.FRAMEBUFFER, offscreen);
+        // ...and the scene's binding restored on the way out.
+        expect(gl.getParameter(gl.FRAMEBUFFER_BINDING)).toBe(previousFramebuffer);
+    });
+
+    it('draws to the default framebuffer when the render options omit a target', () => {
+        const gl = createMockWebGL2Context();
+        const previousFramebuffer = { id: 'previous-framebuffer' } as unknown as WebGLFramebuffer;
+        const renderer = new WebGL2UIRenderer({ gl });
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer);
+        renderer.render(createFrame());
+
+        // No target override: the binding is left untouched during the pass.
+        expect(gl.bindFramebuffer).not.toHaveBeenCalledWith(gl.FRAMEBUFFER, null);
+        expect(gl.getParameter(gl.FRAMEBUFFER_BINDING)).toBe(previousFramebuffer);
+    });
+
     it('decorates the pipeline backend and renders UI after the base backend ends the frame', async () => {
         const order: string[] = [];
         const frame = createFrame();
