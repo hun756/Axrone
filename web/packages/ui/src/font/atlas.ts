@@ -12,6 +12,8 @@ export interface GlyphAtlasSource {
     readonly rasterSize?: number;
     readonly width: number;
     readonly height: number;
+    readonly originX?: number;
+    readonly originY?: number;
     readonly data?: ArrayBuffer | ArrayBufferView | null;
     readonly format?: FontGlyphBitmapFormat;
     readonly rowStride?: number;
@@ -85,6 +87,8 @@ export class GlyphAtlas {
             y,
             width,
             height,
+            originX: glyph.originX ?? 0,
+            originY: glyph.originY ?? height,
             format,
             rowStride,
             distanceRange: glyph.distanceRange ?? 1,

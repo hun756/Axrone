@@ -48,6 +48,10 @@ export interface DynamicFontGlyphRaster {
     readonly rasterSize: number;
     readonly width: number;
     readonly height: number;
+    /** Pen-origin X inside the bitmap (pixels from the left edge to the glyph origin). */
+    readonly originX?: number;
+    /** Pen-origin Y inside the bitmap (pixels from the top edge to the baseline). */
+    readonly originY?: number;
     readonly data?: ArrayBuffer | ArrayBufferView | null;
     readonly format?: FontGlyphBitmapFormat;
     readonly rowStride?: number;
@@ -176,6 +180,10 @@ export interface GlyphAtlasEntry {
     readonly y: number;
     readonly width: number;
     readonly height: number;
+    /** Pen-origin X inside the bitmap (pixels from the left edge to the glyph origin). */
+    readonly originX: number;
+    /** Pen-origin Y inside the bitmap (pixels from the top edge to the baseline). */
+    readonly originY: number;
     readonly format: FontGlyphBitmapFormat;
     readonly rowStride: number;
     readonly distanceRange: number;
