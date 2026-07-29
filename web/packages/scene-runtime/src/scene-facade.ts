@@ -35,7 +35,7 @@ export { Animator } from './components/animator';
 export type { CameraConfig } from './components/camera';
 export { Camera } from './components/camera';
 
-export type { UIHostConfig, UIHostRenderMode } from './components/ui-host';
+export type { UIHostConfig, UIHostRenderMode, UIHostBillboardMode } from './components/ui-host';
 export { UIHost } from './components/ui-host';
 
 export type { SceneUIWidgetRef, SceneUIWidgetRefResolver } from './ui-widget-ref';
