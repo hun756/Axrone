@@ -174,4 +174,132 @@ describe('World-space UI pipeline (browser)', () => {
         surface.dispose();
         expect(gl.isTexture(surface.texture)).toBe(false);
     });
+
+    it('lets nearer geometry occlude the UI when depth testing is on', () => {
+        // Proves the "walk behind the machine and the UI disappears" behaviour:
+        // a nearer opaque quad writing depth must hide a farther UI quad.
+        const canvas = (window as any).createTestCanvas(128, 128) as HTMLCanvasElement;
+        const gl = (window as any).createWebGLContext(canvas, {
+            depth: true,
+            preserveDrawingBuffer: true,
+        }) as WebGL2RenderingContext;
+
+        const uiSurface = createUIWorldSurface(gl, 64, 64);
+        const blockerSurface = createUIWorldSurface(gl, 4, 4);
+        const quadRenderer = createUIWorldQuadRenderer(gl);
+
+        // Fill the UI surface red and the blocker surface green.
+        const fillSurface = (surface: typeof uiSurface, color: readonly number[]): void => {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, surface.framebuffer);
+            gl.viewport(0, 0, surface.width, surface.height);
+            gl.clearColor(color[0], color[1], color[2], color[3]);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        };
+        fillSurface(uiSurface, [1, 0, 0, 1]);
+        fillSurface(blockerSurface, [0, 1, 0, 1]);
+
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.enable(gl.DEPTH_TEST);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        // Blocker sits nearer the camera (clip z = -0.5) and writes depth.
+        const blockerModel = new Float32Array([
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, -0.5, 1,
+        ]);
+        quadRenderer.draw(blockerSurface.texture, {
+            modelMatrix: blockerModel,
+            viewProjection: identityMatrix(),
+            width: 2,
+            height: 2,
+            depthTest: true,
+            depthWrite: true,
+        });
+
+        // UI sits farther away (clip z = +0.5) and must fail the depth test.
+        const uiModel = new Float32Array([
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0.5, 1,
+        ]);
+        quadRenderer.draw(uiSurface.texture, {
+            modelMatrix: uiModel,
+            viewProjection: identityMatrix(),
+            width: 2,
+            height: 2,
+            depthTest: true,
+            depthWrite: false,
+        });
+
+        const pixels = new Uint8Array(4);
+        gl.readPixels(
+            Math.floor(canvas.width / 2),
+            Math.floor(canvas.height / 2),
+            1,
+            1,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            pixels
+        );
+
+        // Green blocker survived, red UI was occluded.
+        expect(pixels[1], 'blocker green channel').toBeGreaterThan(200);
+        expect(pixels[0], 'occluded UI red channel').toBeLessThan(60);
+
+        quadRenderer.dispose();
+        uiSurface.dispose();
+        blockerSurface.dispose();
+    });
+
+    it('draws the UI over nearer geometry when depth testing is off', () => {
+        // The complement of the occlusion test: screen-space style always-on-top.
+        const canvas = (window as any).createTestCanvas(128, 128) as HTMLCanvasElement;
+        const gl = (window as any).createWebGLContext(canvas, {
+            depth: true,
+            preserveDrawingBuffer: true,
+        }) as WebGL2RenderingContext;
+
+        const uiSurface = createUIWorldSurface(gl, 32, 32);
+        const quadRenderer = createUIWorldQuadRenderer(gl);
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, uiSurface.framebuffer);
+        gl.viewport(0, 0, uiSurface.width, uiSurface.height);
+        gl.clearColor(1, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.enable(gl.DEPTH_TEST);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        // Prime the depth buffer with a nearer surface.
+        quadRenderer.draw(uiSurface.texture, {
+            modelMatrix: new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -0.5, 1]),
+            viewProjection: identityMatrix(),
+            width: 2,
+            height: 2,
+            depthTest: true,
+            depthWrite: true,
+        });
+
+        quadRenderer.draw(uiSurface.texture, {
+            modelMatrix: new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0.5, 1]),
+            viewProjection: identityMatrix(),
+            width: 2,
+            height: 2,
+            depthTest: false,
+        });
+
+        const pixels = new Uint8Array(4);
+        gl.readPixels(64, 64, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        expect(pixels[0], 'UI red channel drawn on top').toBeGreaterThan(200);
+
+        quadRenderer.dispose();
+        uiSurface.dispose();
+    });
 });
