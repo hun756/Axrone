@@ -2,7 +2,12 @@ import type { UIAsset, WidgetId } from '@axrone/ui/types';
 import { UIRuntime, deserializeUIAsset } from '@axrone/ui/runtime';
 import { UIHost, setSceneUIWidgetRefResolver } from '@axrone/scene-runtime/scene-facade';
 import { attachUIOverlayToScene } from './scene';
+import { WebGL2UIRenderer } from './renderer';
+import { createUIWorldSurface } from './world-surface';
+import { createUIWorldQuadRenderer } from './world-quad';
 import type { SceneUIOverlayHandle, SceneUIOverlayTarget } from './types';
+
+let nextWorldHostSystemId = 1;
 
 /**
  * Structural DOM-like event target used for UIHost input wiring.
@@ -388,29 +393,210 @@ export function bindUIHostToScene<TPayload = unknown>(
 export interface UIHostsBindingOptions<TPayload = unknown>
     extends Omit<UIHostBindingOptions<TPayload>, 'host'> {
     /**
-     * The hosts to bind. Defaults to every live UIHost instance
-     * (`UIHost.getAllInstances()`) that is enabled and uses screen-overlay mode.
+     * The hosts to bind. Defaults to every live, enabled UIHost instance
+     * (`UIHost.getAllInstances()`); each host is routed by its `renderMode`.
      */
     readonly hosts?: readonly UIHost[];
+    /**
+     * Camera and transform sources required by `world-space` hosts. When omitted,
+     * world-space hosts are skipped (screen-overlay hosts still bind).
+     */
+    readonly world?: UIHostWorldSources;
+}
+
+// ─── world-space binding ────────────────────────────────────────────────────
+
+/**
+ * Matrix sources world-space UI needs from the caller. Supplied as callbacks so
+ * ui-webgl2 stays free of scene-3d/camera dependencies (see the ui boundary
+ * architecture test).
+ */
+export interface UIHostWorldSources {
+    /** Active camera view-projection matrix, 4x4 column-major. */
+    readonly viewProjection: () => Float32Array;
+    /** World matrix of the entity carrying the host, 4x4 column-major. */
+    readonly entityWorldMatrix: (host: UIHost) => Float32Array;
+    /** Camera world matrix; required only for `billboard: 'camera-facing'`. */
+    readonly cameraWorldMatrix?: () => Float32Array;
+}
+
+export interface UIHostWorldBindingOptions<TPayload = unknown>
+    extends UIHostBindingOptions<TPayload> {
+    readonly world: UIHostWorldSources;
+}
+
+const MAX_WORLD_TEXTURE_SIZE = 2048;
+
+const resolveWorldSurfaceSize = (host: UIHost): { width: number; height: number } => ({
+    width: Math.min(MAX_WORLD_TEXTURE_SIZE, Math.max(1, Math.round(host.worldWidth * host.textureScale))),
+    height: Math.min(MAX_WORLD_TEXTURE_SIZE, Math.max(1, Math.round(host.worldHeight * host.textureScale))),
+});
+
+/**
+ * Replaces the rotation basis of `model` with the camera's, keeping translation
+ * and the per-axis scale, so the quad squarely faces the viewer.
+ */
+const applyCameraFacing = (model: Float32Array, cameraWorld: Float32Array): Float32Array => {
+    const scaleX = Math.hypot(model[0], model[1], model[2]) || 1;
+    const scaleY = Math.hypot(model[4], model[5], model[6]) || 1;
+    const scaleZ = Math.hypot(model[8], model[9], model[10]) || 1;
+    const cameraScaleX = Math.hypot(cameraWorld[0], cameraWorld[1], cameraWorld[2]) || 1;
+    const cameraScaleY = Math.hypot(cameraWorld[4], cameraWorld[5], cameraWorld[6]) || 1;
+    const cameraScaleZ = Math.hypot(cameraWorld[8], cameraWorld[9], cameraWorld[10]) || 1;
+
+    const result = new Float32Array(16);
+    for (let axis = 0; axis < 3; axis += 1) {
+        const cameraScale = axis === 0 ? cameraScaleX : axis === 1 ? cameraScaleY : cameraScaleZ;
+        const targetScale = axis === 0 ? scaleX : axis === 1 ? scaleY : scaleZ;
+        const factor = targetScale / cameraScale;
+        result[axis * 4] = cameraWorld[axis * 4] * factor;
+        result[axis * 4 + 1] = cameraWorld[axis * 4 + 1] * factor;
+        result[axis * 4 + 2] = cameraWorld[axis * 4 + 2] * factor;
+        result[axis * 4 + 3] = 0;
+    }
+    result[12] = model[12];
+    result[13] = model[13];
+    result[14] = model[14];
+    result[15] = 1;
+    return result;
+};
+
+/**
+ * Binds a `world-space` UIHost: the asset is rendered into an offscreen texture
+ * and displayed on a camera-projected quad inside the 3D scene (the Unity World
+ * Space Canvas equivalent). Depth testing lets scene geometry occlude the UI.
+ *
+ * Returns null when the host has no assetId or the asset cannot be resolved.
+ */
+export function bindUIHostToWorld<TPayload = unknown>(
+    options: UIHostWorldBindingOptions<TPayload>
+): UIHostBindingHandle<TPayload> | null {
+    const { scene, host, priority, world } = options;
+    installUIWidgetRefResolver();
+    const assetId = host.assetId;
+    if (!assetId) {
+        return null;
+    }
+
+    const asset = resolveHostAsset(options, assetId);
+    if (!asset) {
+        return null;
+    }
+
+    const runtime = new UIRuntime<TPayload>();
+    runtime.loadFromAsset(asset);
+
+    const initialSize = resolveWorldSurfaceSize(host);
+    const surface = createUIWorldSurface(scene.gl, initialSize.width, initialSize.height);
+    const quadRenderer = createUIWorldQuadRenderer(scene.gl);
+    const uiRenderer = new WebGL2UIRenderer<TPayload>({ gl: scene.gl });
+
+    const drawWorldFrame = (): void => {
+        const size = resolveWorldSurfaceSize(host);
+        surface.resize(size.width, size.height);
+        // 1) UI into the offscreen texture at the surface resolution.
+        const frame = runtime.commitToViewport(surface.width, surface.height);
+        scene.gl.bindFramebuffer(scene.gl.FRAMEBUFFER, surface.framebuffer);
+        scene.gl.viewport(0, 0, surface.width, surface.height);
+        scene.gl.clearColor(0, 0, 0, 0);
+        scene.gl.clear(scene.gl.COLOR_BUFFER_BIT);
+        scene.gl.bindFramebuffer(scene.gl.FRAMEBUFFER, null);
+        uiRenderer.render(frame, { framebuffer: surface.framebuffer });
+
+        // 2) Textured quad into the scene, projected by the active camera.
+        const baseModel = world.entityWorldMatrix(host);
+        const cameraWorld =
+            host.billboard === 'camera-facing' ? world.cameraWorldMatrix?.() : undefined;
+        const model = cameraWorld ? applyCameraFacing(baseModel, cameraWorld) : baseModel;
+        quadRenderer.draw(surface.texture, {
+            modelMatrix: model,
+            viewProjection: world.viewProjection(),
+            width: host.worldWidth,
+            height: host.worldHeight,
+            depthTest: true,
+            depthWrite: false,
+        });
+    };
+
+    const systemId = `axrone.ui.world-host:${nextWorldHostSystemId++}`;
+    scene.loop.addSystem({
+        id: systemId,
+        priority: priority ?? -800,
+        enabled: true,
+        afterFrame: () => {
+            if (!disposed) {
+                drawWorldFrame();
+            }
+        },
+    } as Parameters<SceneUIOverlayTarget['loop']['addSystem']>[0]);
+
+    const disconnectInput =
+        host.receiveInput && options.input
+            ? connectUIHostInput(runtime, scene, options.input)
+            : null;
+
+    let disposed = false;
+
+    const disposeBinding = (): void => {
+        if (disposed) {
+            return;
+        }
+        disposed = true;
+        if (uiHostHandles.get(host) === handle) {
+            uiHostHandles.delete(host);
+        }
+        disconnectInput?.();
+        scene.loop.removeSystem(systemId);
+        quadRenderer.dispose();
+        surface.dispose();
+        uiRenderer.dispose();
+        runtime.dispose();
+    };
+
+    const handle: UIHostBindingHandle<TPayload> = {
+        runtime,
+        asset,
+        render() {
+            if (!disposed) {
+                drawWorldFrame();
+            }
+        },
+        dispose: disposeBinding,
+        [Symbol.dispose]: disposeBinding,
+    };
+
+    uiHostHandles.set(host, handle as UIHostBindingHandle<unknown>);
+    return handle;
 }
 
 /**
- * Binds every eligible UIHost component to the scene in one call.
- * Hosts with an empty assetId or an unresolvable asset are skipped silently,
- * mirroring the null behavior of `bindUIHostToScene`.
+ * Binds every eligible UIHost component to the scene in one call, routing each
+ * host by its `renderMode`. Hosts with an empty assetId or an unresolvable asset
+ * are skipped silently, mirroring the null behavior of `bindUIHostToScene`.
+ * World-space hosts additionally require `options.world`.
  */
 export function bindUIHostsToScene<TPayload = unknown>(
     options: UIHostsBindingOptions<TPayload>
 ): UIHostSceneBindings<TPayload> {
     installUIWidgetRefResolver();
-    const hosts =
-        options.hosts ??
-        UIHost.getAllInstances().filter(
-            (host) => host.enabled && host.renderMode === 'screen-overlay'
-        );
+    const hosts = options.hosts ?? UIHost.getAllInstances().filter((host) => host.enabled);
 
     const handles: UIHostBindingHandle<TPayload>[] = [];
     for (const host of hosts) {
+        if (host.renderMode === 'world-space') {
+            if (!options.world) {
+                continue;
+            }
+            const handle = bindUIHostToWorld<TPayload>({
+                ...options,
+                host,
+                world: options.world,
+            });
+            if (handle) {
+                handles.push(handle);
+            }
+            continue;
+        }
         const handle = bindUIHostToScene<TPayload>({ ...options, host });
         if (handle) {
             handles.push(handle);
