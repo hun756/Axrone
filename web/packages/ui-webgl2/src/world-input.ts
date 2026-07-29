@@ -178,8 +178,11 @@ export interface UIWorldPointerEvent {
 /**
  * Feeds a world-space hit into a UI runtime as a canvas-space pointer event.
  *
- * `hit === null` dispatches a `leave` at the last known position so hover and
- * press states do not stick when the pointer slides off the quad.
+ * `hit === null` dispatches a `move` to a point outside the canvas: the runtime
+ * only recomputes hover on `move`, so this is what makes it emit `pointerLeave`
+ * for whatever was hovered and clears the hover state. Sending a `leave` phase
+ * directly would be dropped, because the runtime resolves that phase through a
+ * hit test that necessarily fails on a miss.
  */
 export function dispatchWorldPointerToUIRuntime(
     runtime: UIRuntime | null,
@@ -191,14 +194,16 @@ export function dispatchWorldPointerToUIRuntime(
     if (!runtime) {
         return false;
     }
-    const phase = hit ? event.phase : 'leave';
-    const u = hit?.u ?? 0;
-    const v = hit?.v ?? 0;
+    const phase = hit ? event.phase : 'move';
+    // A miss must land outside the canvas: (0, 0) would still sit inside any
+    // widget anchored to the top-left corner and would not clear hover state.
+    const x = hit ? hit.u * referenceWidth : -1;
+    const y = hit ? hit.v * referenceHeight : -1;
     runtime.dispatchInput({
         type: 'pointer',
         phase,
-        x: u * referenceWidth,
-        y: v * referenceHeight,
+        x,
+        y,
         pointerId: event.pointerId ?? 1,
         button: event.button ?? 0,
         buttons: event.buttons ?? (phase === 'down' ? 1 : 0),

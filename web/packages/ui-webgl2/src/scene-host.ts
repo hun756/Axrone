@@ -4,7 +4,7 @@ import { UIHost, setSceneUIWidgetRefResolver } from '@axrone/scene-runtime/scene
 import { attachUIOverlayToScene } from './scene';
 import { WebGL2UIRenderer } from './renderer';
 import { createUIWorldSurface } from './world-surface';
-import { createUIWorldQuadRenderer } from './world-quad';
+import { createUIWorldQuadRenderer, orientQuadTowardCamera } from './world-quad';
 import type { SceneUIOverlayHandle, SceneUIOverlayTarget } from './types';
 
 let nextWorldHostSystemId = 1;
@@ -433,35 +433,6 @@ const resolveWorldSurfaceSize = (host: UIHost): { width: number; height: number 
 });
 
 /**
- * Replaces the rotation basis of `model` with the camera's, keeping translation
- * and the per-axis scale, so the quad squarely faces the viewer.
- */
-const applyCameraFacing = (model: Float32Array, cameraWorld: Float32Array): Float32Array => {
-    const scaleX = Math.hypot(model[0], model[1], model[2]) || 1;
-    const scaleY = Math.hypot(model[4], model[5], model[6]) || 1;
-    const scaleZ = Math.hypot(model[8], model[9], model[10]) || 1;
-    const cameraScaleX = Math.hypot(cameraWorld[0], cameraWorld[1], cameraWorld[2]) || 1;
-    const cameraScaleY = Math.hypot(cameraWorld[4], cameraWorld[5], cameraWorld[6]) || 1;
-    const cameraScaleZ = Math.hypot(cameraWorld[8], cameraWorld[9], cameraWorld[10]) || 1;
-
-    const result = new Float32Array(16);
-    for (let axis = 0; axis < 3; axis += 1) {
-        const cameraScale = axis === 0 ? cameraScaleX : axis === 1 ? cameraScaleY : cameraScaleZ;
-        const targetScale = axis === 0 ? scaleX : axis === 1 ? scaleY : scaleZ;
-        const factor = targetScale / cameraScale;
-        result[axis * 4] = cameraWorld[axis * 4] * factor;
-        result[axis * 4 + 1] = cameraWorld[axis * 4 + 1] * factor;
-        result[axis * 4 + 2] = cameraWorld[axis * 4 + 2] * factor;
-        result[axis * 4 + 3] = 0;
-    }
-    result[12] = model[12];
-    result[13] = model[13];
-    result[14] = model[14];
-    result[15] = 1;
-    return result;
-};
-
-/**
  * Binds a `world-space` UIHost: the asset is rendered into an offscreen texture
  * and displayed on a camera-projected quad inside the 3D scene (the Unity World
  * Space Canvas equivalent). Depth testing lets scene geometry occlude the UI.
@@ -507,7 +478,7 @@ export function bindUIHostToWorld<TPayload = unknown>(
         const baseModel = world.entityWorldMatrix(host);
         const cameraWorld =
             host.billboard === 'camera-facing' ? world.cameraWorldMatrix?.() : undefined;
-        const model = cameraWorld ? applyCameraFacing(baseModel, cameraWorld) : baseModel;
+        const model = cameraWorld ? orientQuadTowardCamera(baseModel, cameraWorld) : baseModel;
         quadRenderer.draw(surface.texture, {
             modelMatrix: model,
             viewProjection: world.viewProjection(),

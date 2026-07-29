@@ -57,6 +57,37 @@ void main() {
 
 const UNIT_QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
+/**
+ * Rebuilds a quad model matrix so it squarely faces the camera, keeping the
+ * entity translation and per-axis scale. Both matrices are column-major.
+ *
+ * Shared by the runtime binding and the editor viewport so billboard placement
+ * cannot drift between them.
+ */
+export function orientQuadTowardCamera(
+    model: Float32Array,
+    cameraWorld: Float32Array
+): Float32Array {
+    const result = new Float32Array(16);
+    for (let axis = 0; axis < 3; axis += 1) {
+        const base = axis * 4;
+        const modelScale =
+            Math.hypot(model[base], model[base + 1], model[base + 2]) || 1;
+        const cameraScale =
+            Math.hypot(cameraWorld[base], cameraWorld[base + 1], cameraWorld[base + 2]) || 1;
+        const factor = modelScale / cameraScale;
+        result[base] = cameraWorld[base] * factor;
+        result[base + 1] = cameraWorld[base + 1] * factor;
+        result[base + 2] = cameraWorld[base + 2] * factor;
+        result[base + 3] = 0;
+    }
+    result[12] = model[12];
+    result[13] = model[13];
+    result[14] = model[14];
+    result[15] = 1;
+    return result;
+}
+
 const compileShader = (
     gl: WebGL2RenderingContext,
     type: number,
