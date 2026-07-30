@@ -74,23 +74,30 @@ export function resolveImageCommand(
     if (containerWidth <= 0 || containerHeight <= 0) {
         return null;
     }
+    const sliced =
+        image.border.left > 0 ||
+        image.border.top > 0 ||
+        image.border.right > 0 ||
+        image.border.bottom > 0;
     const intrinsicWidth = image.source.width;
     const intrinsicHeight = image.source.height;
     let renderWidth = containerWidth;
     let renderHeight = containerHeight;
-    if (image.fit === 'none') {
-        renderWidth = intrinsicWidth;
-        renderHeight = intrinsicHeight;
-    } else if (image.fit !== 'fill') {
-        const containScale = Math.min(containerWidth / intrinsicWidth, containerHeight / intrinsicHeight);
-        const coverScale = Math.max(containerWidth / intrinsicWidth, containerHeight / intrinsicHeight);
-        const scale = image.fit === 'cover'
-            ? coverScale
-            : image.fit === 'scale-down'
-              ? Math.min(1, containScale)
-              : containScale;
-        renderWidth = intrinsicWidth * scale;
-        renderHeight = intrinsicHeight * scale;
+    if (!sliced) {
+        if (image.fit === 'none') {
+            renderWidth = intrinsicWidth;
+            renderHeight = intrinsicHeight;
+        } else if (image.fit !== 'fill') {
+            const containScale = Math.min(containerWidth / intrinsicWidth, containerHeight / intrinsicHeight);
+            const coverScale = Math.max(containerWidth / intrinsicWidth, containerHeight / intrinsicHeight);
+            const scale = image.fit === 'cover'
+                ? coverScale
+                : image.fit === 'scale-down'
+                  ? Math.min(1, containScale)
+                  : containScale;
+            renderWidth = intrinsicWidth * scale;
+            renderHeight = intrinsicHeight * scale;
+        }
     }
     return {
         kind: 'image',
@@ -107,6 +114,7 @@ export function resolveImageCommand(
         radius: style.radius,
         clip,
         uvRect: image.uvRect,
+        ...(sliced ? { border: image.border, fillCenter: image.fillCenter } : {}),
     };
 }
 

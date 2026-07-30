@@ -344,4 +344,234 @@ describe('UI Editor preview pipeline (browser)', () => {
         runtime.dispose();
         gl.deleteTexture(texture);
     });
+
+    it('draws a nine-slice image so corners keep their source pixels while the centre stretches', () => {
+        const canvas = (window as any).createTestCanvas(800, 450) as HTMLCanvasElement;
+        const gl = (window as any).createWebGLContext(canvas, {
+            alpha: true,
+            antialias: false,
+            premultipliedAlpha: true,
+            preserveDrawingBuffer: true,
+        }) as WebGL2RenderingContext;
+
+        const assetJson = JSON.stringify({
+            id: 'ui.nine-slice',
+            name: 'nine-slice',
+            version: 1,
+            canvas: {
+                referenceWidth: 400,
+                referenceHeight: 200,
+                scaleMode: 'fixed',
+                matchBias: 0.5,
+            },
+            bindings: { root: 'root', frame: 'frame' },
+            root: {
+                role: 'root',
+                key: 'root',
+                enabled: true,
+                interactive: false,
+                layout: { display: 'overlay', width: '100%', height: '100%' },
+                children: [
+                    {
+                        role: 'image',
+                        key: 'frame',
+                        enabled: true,
+                        interactive: false,
+                        layout: {
+                            position: 'absolute',
+                            inset: { left: 0, top: 0 },
+                            width: 300,
+                            height: 150,
+                        },
+                        image: {
+                            source: {
+                                kind: 'texture',
+                                resourceId: 'test:frame',
+                                width: 12,
+                                height: 12,
+                            },
+                            border: 4,
+                            sampling: 'nearest',
+                        },
+                        children: [],
+                    },
+                ],
+            },
+        });
+
+        const texture = gl.createTexture()!;
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        const texels = new Uint8Array(12 * 12 * 4);
+        for (let y = 0; y < 12; y += 1) {
+            for (let x = 0; x < 12; x += 1) {
+                const edgeX = x < 4 || x >= 8;
+                const edgeY = y < 4 || y >= 8;
+                const offset = (y * 12 + x) * 4;
+                if (edgeX && edgeY) {
+                    texels[offset] = 255;
+                } else if (edgeX || edgeY) {
+                    texels[offset + 1] = 255;
+                } else {
+                    texels[offset + 2] = 255;
+                }
+                texels[offset + 3] = 255;
+            }
+        }
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 12, 12, 0, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        const renderer = new WebGL2UIRenderer({
+            gl,
+            resolveImageResource(source) {
+                if (source.kind !== 'texture' || source.resourceId !== 'test:frame') {
+                    return null;
+                }
+                return { kind: 'texture', texture, sampler: null };
+            },
+        });
+        const runtime = new UIRuntime();
+        runtime.loadFromAsset(deserializeUIAsset(assetJson));
+        const frame = runtime.commitToViewport(canvas.width, canvas.height);
+
+        renderer.render(frame);
+
+        expect(renderer.getStats().imageCount, 'nine regions drawn').toBe(9);
+
+        const box = runtime.getLayoutBox(runtime.getBoundWidget('frame')!);
+        const scale = resolveCanvasScale(
+            {
+                referenceWidth: 400,
+                referenceHeight: 200,
+                scaleMode: 'fixed',
+                matchBias: 0.5,
+            },
+            canvas.width,
+            canvas.height,
+        );
+        const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+        gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+        const sampleAt = (refX: number, refY: number): readonly number[] => {
+            const cx = refX * scale.scaleX + scale.offsetX;
+            const cy = refY * scale.scaleY + scale.offsetY;
+            const px = Math.max(0, Math.min(canvas.width - 1, Math.round(cx)));
+            const py = Math.max(0, Math.min(canvas.height - 1, Math.round(canvas.height - 1 - cy)));
+            const index = (py * canvas.width + px) * 4;
+            return [pixels[index], pixels[index + 1], pixels[index + 2], pixels[index + 3]];
+        };
+
+        const topLeft = sampleAt(box.x + 2, box.y + 2);
+        expect(topLeft[0], 'top-left corner red').toBeGreaterThan(200);
+        expect(topLeft[2], 'top-left corner blue').toBeLessThan(60);
+
+        const bottomRight = sampleAt(box.x + box.width - 2, box.y + box.height - 2);
+        expect(bottomRight[0], 'bottom-right corner red').toBeGreaterThan(200);
+        expect(bottomRight[2], 'bottom-right corner blue').toBeLessThan(60);
+
+        const topEdge = sampleAt(box.x + box.width / 2, box.y + 2);
+        expect(topEdge[1], 'top edge green').toBeGreaterThan(200);
+        expect(topEdge[0], 'top edge red').toBeLessThan(60);
+
+        const leftEdge = sampleAt(box.x + 2, box.y + box.height / 2);
+        expect(leftEdge[1], 'left edge green').toBeGreaterThan(200);
+        expect(leftEdge[0], 'left edge red').toBeLessThan(60);
+
+        const centre = sampleAt(box.x + box.width / 2, box.y + box.height / 2);
+        expect(centre[2], 'centre blue').toBeGreaterThan(200);
+        expect(centre[0], 'centre red').toBeLessThan(60);
+
+        renderer.dispose();
+        runtime.dispose();
+        gl.deleteTexture(texture);
+    });
+
+    it('skips the centre region when fillCenter is disabled', () => {
+        const canvas = (window as any).createTestCanvas(800, 450) as HTMLCanvasElement;
+        const gl = (window as any).createWebGLContext(canvas, {
+            alpha: true,
+            antialias: false,
+            premultipliedAlpha: true,
+            preserveDrawingBuffer: true,
+        }) as WebGL2RenderingContext;
+
+        const assetJson = JSON.stringify({
+            id: 'ui.nine-slice-hollow',
+            name: 'nine-slice-hollow',
+            version: 1,
+            canvas: {
+                referenceWidth: 400,
+                referenceHeight: 200,
+                scaleMode: 'fixed',
+                matchBias: 0.5,
+            },
+            bindings: { root: 'root', frame: 'frame' },
+            root: {
+                role: 'root',
+                key: 'root',
+                enabled: true,
+                interactive: false,
+                layout: { display: 'overlay', width: '100%', height: '100%' },
+                children: [
+                    {
+                        role: 'image',
+                        key: 'frame',
+                        enabled: true,
+                        interactive: false,
+                        layout: {
+                            position: 'absolute',
+                            inset: { left: 0, top: 0 },
+                            width: 300,
+                            height: 150,
+                        },
+                        image: {
+                            source: {
+                                kind: 'texture',
+                                resourceId: 'test:frame',
+                                width: 3,
+                                height: 3,
+                            },
+                            border: 1,
+                            fillCenter: false,
+                            sampling: 'nearest',
+                        },
+                        children: [],
+                    },
+                ],
+            },
+        });
+
+        const texture = gl.createTexture()!;
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            1,
+            1,
+            0,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            new Uint8Array([255, 255, 255, 255]),
+        );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+        const renderer = new WebGL2UIRenderer({
+            gl,
+            resolveImageResource: () => ({ kind: 'texture', texture, sampler: null }),
+        });
+        const runtime = new UIRuntime();
+        runtime.loadFromAsset(deserializeUIAsset(assetJson));
+
+        renderer.render(runtime.commitToViewport(canvas.width, canvas.height));
+
+        expect(renderer.getStats().imageCount, 'eight regions drawn').toBe(8);
+
+        renderer.dispose();
+        runtime.dispose();
+        gl.deleteTexture(texture);
+    });
 });

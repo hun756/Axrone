@@ -1,8 +1,10 @@
 import type {
     CustomRenderCommand,
+    EdgeInsets,
     FontGlyphBitmapFormat,
     GlyphAtlasEntry,
     ImageRenderCommand,
+    CornerRadii,
     QuadRenderCommand,
     RectLike,
     TextGlyphPlacement,
@@ -23,6 +25,106 @@ import type {
 const QUAD_FLOATS_PER_INSTANCE = 23;
 const IMAGE_FLOATS_PER_INSTANCE = 22;
 const TEXT_FLOATS_PER_INSTANCE = 26;
+
+type SliceSpan = {
+    readonly offset: number;
+    readonly size: number;
+    readonly uvOffset: number;
+    readonly uvSize: number;
+};
+
+const resolveSliceSpans = (
+    extent: number,
+    startBorder: number,
+    endBorder: number,
+    sourceExtent: number,
+    uvOffset: number,
+    uvExtent: number
+): readonly SliceSpan[] => {
+    const totalBorder = startBorder + endBorder;
+    const scale = totalBorder > extent && totalBorder > 0 ? extent / totalBorder : 1;
+    const start = startBorder * scale;
+    const end = endBorder * scale;
+    const startUv = sourceExtent > 0 ? startBorder / sourceExtent : 0;
+    const endUv = sourceExtent > 0 ? endBorder / sourceExtent : 0;
+    return [
+        { offset: 0, size: start, uvOffset, uvSize: startUv },
+        {
+            offset: start,
+            size: Math.max(0, extent - start - end),
+            uvOffset: uvOffset + startUv,
+            uvSize: Math.max(0, uvExtent - startUv - endUv),
+        },
+        {
+            offset: extent - end,
+            size: end,
+            uvOffset: uvOffset + uvExtent - endUv,
+            uvSize: endUv,
+        },
+    ];
+};
+
+const ZERO_RADII: CornerRadii = Object.freeze({
+    topLeft: 0,
+    topRight: 0,
+    bottomRight: 0,
+    bottomLeft: 0,
+});
+
+const sliceImageCommand = (
+    command: ImageRenderCommand,
+    border: EdgeInsets
+): readonly ImageRenderCommand[] => {
+    const columns = resolveSliceSpans(
+        command.width,
+        border.left,
+        border.right,
+        Math.max(1, command.source.width),
+        command.uvRect.x,
+        command.uvRect.width
+    );
+    const rows = resolveSliceSpans(
+        command.height,
+        border.top,
+        border.bottom,
+        Math.max(1, command.source.height),
+        command.uvRect.y,
+        command.uvRect.height
+    );
+    const fillCenter = command.fillCenter !== false;
+    const slices: ImageRenderCommand[] = [];
+    for (let row = 0; row < rows.length; row += 1) {
+        for (let column = 0; column < columns.length; column += 1) {
+            if (row === 1 && column === 1 && !fillCenter) {
+                continue;
+            }
+            const horizontal = columns[column];
+            const vertical = rows[row];
+            if (horizontal.size <= 0 || vertical.size <= 0) {
+                continue;
+            }
+            if (horizontal.uvSize <= 0 || vertical.uvSize <= 0) {
+                continue;
+            }
+            slices.push({
+                ...command,
+                x: command.x + horizontal.offset,
+                y: command.y + vertical.offset,
+                width: horizontal.size,
+                height: vertical.size,
+                uvRect: {
+                    x: horizontal.uvOffset,
+                    y: vertical.uvOffset,
+                    width: horizontal.uvSize,
+                    height: vertical.uvSize,
+                },
+                radius: ZERO_RADII,
+                border: undefined,
+            });
+        }
+    }
+    return slices;
+};
 
 const QUAD_VERTEX_SOURCE = `#version 300 es
 precision mediump float;
@@ -908,6 +1010,20 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     }
 
     private pushImageCommand(command: ImageRenderCommand, frame: Readonly<UIFrame<TPayload>>): void {
+        const border = command.border;
+        if (
+            border &&
+            (border.left > 0 || border.top > 0 || border.right > 0 || border.bottom > 0)
+        ) {
+            for (const slice of sliceImageCommand(command, border)) {
+                this.pushImageQuad(slice, frame);
+            }
+            return;
+        }
+        this.pushImageQuad(command, frame);
+    }
+
+    private pushImageQuad(command: ImageRenderCommand, frame: Readonly<UIFrame<TPayload>>): void {
         const resource = this.resolveImageResource?.(command.source, {
             gl: this.gl,
             frame,
@@ -940,7 +1056,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         const base = this.imageCount * IMAGE_FLOATS_PER_INSTANCE;
         if (base + IMAGE_FLOATS_PER_INSTANCE > this.imageBatch.length) {
             this.flushImageBatch(frame.viewportHeight);
-            return this.pushImageCommand(command, frame);
+            return this.pushImageQuad(command, frame);
         }
         this.activeImageTexture = resource.texture;
         this.activeImageSampler = resource.sampler ?? null;

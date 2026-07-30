@@ -1,6 +1,7 @@
 import type {
     AffineTransform2D,
     CornerRadii,
+    EdgeInsets,
     LayoutBox,
     ReadonlyColor,
     WidgetLayoutInput,
@@ -140,6 +141,8 @@ export interface ImageRenderCommand {
     readonly clip: RectLike | null;
     readonly uvRect: UVRect;
     readonly transform?: AffineTransform2D;
+    readonly border?: EdgeInsets;
+    readonly fillCenter?: boolean;
 }
 
 export interface CustomRenderCommand<TPayload = unknown> {

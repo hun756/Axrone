@@ -91,6 +91,13 @@ export interface UIImageMaterialSource {
 
 export type UIImageSource = UIImageTextureSource | UIImageMaterialSource;
 
+export interface UIImageBorderInput {
+    readonly left?: number;
+    readonly top?: number;
+    readonly right?: number;
+    readonly bottom?: number;
+}
+
 export interface WidgetImageInput {
     readonly source: UIImageSource;
     readonly fit?: UIImageFitMode;
@@ -99,6 +106,8 @@ export interface WidgetImageInput {
     readonly sampling?: UIImageSamplingMode;
     readonly tint?: ColorInput;
     readonly uvRect?: Readonly<Partial<UVRect>>;
+    readonly border?: UIImageBorderInput | number;
+    readonly fillCenter?: boolean;
 }
 
 export interface ResolvedTextBlock {
@@ -146,6 +155,8 @@ export interface ResolvedWidgetImage {
     readonly sampling: UIImageSamplingMode;
     readonly tint: ReadonlyColor;
     readonly uvRect: UVRect;
+    readonly border: EdgeInsets;
+    readonly fillCenter: boolean;
 }
 
 export interface WidgetFocusPolicyInput {

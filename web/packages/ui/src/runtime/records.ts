@@ -144,6 +144,20 @@ export const compileWidgetImage = (input: WidgetImageInput | null): ResolvedWidg
                   width: Math.max(1, input.source.width),
                   height: Math.max(1, input.source.height),
               };
+    const border =
+        typeof input.border === 'number'
+            ? {
+                  top: Math.max(0, input.border),
+                  right: Math.max(0, input.border),
+                  bottom: Math.max(0, input.border),
+                  left: Math.max(0, input.border),
+              }
+            : {
+                  top: Math.max(0, input.border?.top ?? 0),
+                  right: Math.max(0, input.border?.right ?? 0),
+                  bottom: Math.max(0, input.border?.bottom ?? 0),
+                  left: Math.max(0, input.border?.left ?? 0),
+              };
     return {
         source,
         fit: input.fit ?? 'fill',
@@ -152,6 +166,8 @@ export const compileWidgetImage = (input: WidgetImageInput | null): ResolvedWidg
         sampling: input.sampling ?? 'linear',
         tint: normalizeColor(input.tint, WHITE),
         uvRect: normalizeUvRect(input.uvRect),
+        border,
+        fillCenter: input.fillCenter ?? true,
     };
 };
 
