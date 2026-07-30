@@ -488,6 +488,129 @@ describe('UI Editor preview pipeline (browser)', () => {
         gl.deleteTexture(texture);
     });
 
+    it('routes the authored material to the resolver and draws what it returns', () => {
+        const canvas = (window as any).createTestCanvas(800, 450) as HTMLCanvasElement;
+        const gl = (window as any).createWebGLContext(canvas, {
+            alpha: true,
+            antialias: false,
+            premultipliedAlpha: true,
+            preserveDrawingBuffer: true,
+        }) as WebGL2RenderingContext;
+
+        const assetJson = JSON.stringify({
+            id: 'ui.material-slot',
+            name: 'material-slot',
+            version: 1,
+            canvas: {
+                referenceWidth: 400,
+                referenceHeight: 200,
+                scaleMode: 'fixed',
+                matchBias: 0.5,
+            },
+            bindings: { root: 'root', panel: 'panel' },
+            root: {
+                role: 'root',
+                key: 'root',
+                enabled: true,
+                interactive: false,
+                layout: { display: 'overlay', width: '100%', height: '100%' },
+                children: [
+                    {
+                        role: 'container',
+                        key: 'panel',
+                        enabled: true,
+                        interactive: false,
+                        layout: {
+                            position: 'absolute',
+                            inset: { left: 0, top: 0 },
+                            width: 200,
+                            height: 100,
+                        },
+                        image: {
+                            source: {
+                                kind: 'texture',
+                                resourceId: '',
+                                width: 1,
+                                height: 1,
+                            },
+                            material: 'Assets/Materials/Mat_Panel.mat',
+                            sampling: 'nearest',
+                        },
+                        children: [],
+                    },
+                ],
+            },
+        });
+
+        const texture = gl.createTexture()!;
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            1,
+            1,
+            0,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            new Uint8Array([0, 255, 0, 255]),
+        );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+        const seenMaterials: (string | undefined)[] = [];
+        const renderer = new WebGL2UIRenderer({
+            gl,
+            resolveImageResource(source, context) {
+                seenMaterials.push(context.command.material);
+                if (context.command.material !== 'Assets/Materials/Mat_Panel.mat') {
+                    return null;
+                }
+                return { kind: 'texture', texture, sampler: null };
+            },
+        });
+        const runtime = new UIRuntime();
+        runtime.loadFromAsset(deserializeUIAsset(assetJson));
+        const frame = runtime.commitToViewport(canvas.width, canvas.height);
+
+        const imageCommand = frame.commands.find((command) => command.kind === 'image');
+        expect(imageCommand, 'image command emitted for a material-only image').toBeDefined();
+
+        renderer.render(frame);
+
+        expect(seenMaterials, 'resolver received the authored material').toContain(
+            'Assets/Materials/Mat_Panel.mat',
+        );
+
+        const box = runtime.getLayoutBox(runtime.getBoundWidget('panel')!);
+        const scale = resolveCanvasScale(
+            {
+                referenceWidth: 400,
+                referenceHeight: 200,
+                scaleMode: 'fixed',
+                matchBias: 0.5,
+            },
+            canvas.width,
+            canvas.height,
+        );
+        const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+        gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        const cx = (box.x + box.width / 2) * scale.scaleX + scale.offsetX;
+        const cy = (box.y + box.height / 2) * scale.scaleY + scale.offsetY;
+        const index =
+            (Math.max(0, Math.min(canvas.height - 1, Math.round(canvas.height - 1 - cy))) *
+                canvas.width +
+                Math.max(0, Math.min(canvas.width - 1, Math.round(cx)))) *
+            4;
+
+        expect(pixels[index + 1], 'material texture green channel').toBeGreaterThan(200);
+        expect(pixels[index], 'material texture red channel').toBeLessThan(60);
+
+        renderer.dispose();
+        runtime.dispose();
+        gl.deleteTexture(texture);
+    });
+
     it('skips the centre region when fillCenter is disabled', () => {
         const canvas = (window as any).createTestCanvas(800, 450) as HTMLCanvasElement;
         const gl = (window as any).createWebGLContext(canvas, {
