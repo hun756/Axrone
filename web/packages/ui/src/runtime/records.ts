@@ -160,6 +160,7 @@ export const compileWidgetImage = (input: WidgetImageInput | null): ResolvedWidg
               };
     return {
         source,
+        material: typeof input.material === 'string' ? input.material.trim() : '',
         fit: input.fit ?? 'fill',
         alignX: clamp(input.alignX ?? 0.5, 0, 1),
         alignY: clamp(input.alignY ?? 0.5, 0, 1),

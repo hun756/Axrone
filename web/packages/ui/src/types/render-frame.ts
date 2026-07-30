@@ -129,6 +129,7 @@ export interface ImageRenderCommand {
     readonly kind: 'image';
     readonly widget: WidgetId;
     readonly source: UIImageSource;
+    readonly material?: string;
     readonly x: number;
     readonly y: number;
     readonly width: number;

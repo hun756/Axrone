@@ -121,3 +121,61 @@ describe('image nine-slice', () => {
         runtime.dispose();
     });
 });
+
+describe('image material slot', () => {
+    it('leaves the material empty when none is authored', () => {
+        const { runtime } = createImageRuntime({});
+
+        expect(imageCommands(runtime)[0].material).toBeUndefined();
+
+        runtime.dispose();
+    });
+
+    it('carries the authored material alongside the texture source', () => {
+        const { runtime } = createImageRuntime({
+            material: 'Assets/Materials/Mat_Panel.mat',
+        });
+
+        const command = imageCommands(runtime)[0];
+
+        expect(command.material).toBe('Assets/Materials/Mat_Panel.mat');
+        expect(command.source).toMatchObject({ kind: 'texture', resourceId: 'ui:frame' });
+
+        runtime.dispose();
+    });
+
+    it('trims the authored material and drops whitespace-only values', () => {
+        const trimmed = createImageRuntime({ material: '  Assets/Materials/A.mat  ' });
+        expect(imageCommands(trimmed.runtime)[0].material).toBe('Assets/Materials/A.mat');
+        trimmed.runtime.dispose();
+
+        const blank = createImageRuntime({ material: '   ' });
+        expect(imageCommands(blank.runtime)[0].material).toBeUndefined();
+        blank.runtime.dispose();
+    });
+
+    it('round-trips the material through the snapshot', () => {
+        const { runtime } = createImageRuntime({ material: 'Assets/Materials/Mat_Panel.mat' });
+        runtime.commit();
+
+        const child = runtime.snapshot().root.children?.[0];
+
+        expect(child?.image?.material).toBe('Assets/Materials/Mat_Panel.mat');
+
+        runtime.dispose();
+    });
+
+    it('keeps the material on every nine-slice region', () => {
+        const { runtime } = createImageRuntime({
+            material: 'Assets/Materials/Mat_Panel.mat',
+            border: 8,
+        });
+
+        const command = imageCommands(runtime)[0];
+
+        expect(command.material).toBe('Assets/Materials/Mat_Panel.mat');
+        expect(command.border).toEqual({ top: 8, right: 8, bottom: 8, left: 8 });
+
+        runtime.dispose();
+    });
+});

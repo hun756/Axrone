@@ -103,6 +103,7 @@ export function resolveImageCommand(
         kind: 'image',
         widget: index as WidgetId,
         source: image.source,
+        ...(image.material ? { material: image.material } : {}),
         x: box.contentX + (containerWidth - renderWidth) * image.alignX,
         y: box.contentY + (containerHeight - renderHeight) * image.alignY,
         width: renderWidth,

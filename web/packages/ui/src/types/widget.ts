@@ -13,7 +13,7 @@ import type {
     WidgetRole,
 } from './foundation';
 import type { DeepReadonlyPartial } from '@axrone/utility';
-import type { ColorInput, CornerInput, CornerRadii, ReadonlyColor, WidgetLayoutInput } from './layout';
+import type { ColorInput, CornerInput, CornerRadii, EdgeInsets, ReadonlyColor, WidgetLayoutInput } from './layout';
 
 export interface WidgetStyleInput {
     readonly visible?: boolean;
@@ -100,6 +100,7 @@ export interface UIImageBorderInput {
 
 export interface WidgetImageInput {
     readonly source: UIImageSource;
+    readonly material?: string;
     readonly fit?: UIImageFitMode;
     readonly alignX?: number;
     readonly alignY?: number;
@@ -149,6 +150,7 @@ export interface ResolvedTextBlock {
 
 export interface ResolvedWidgetImage {
     readonly source: UIImageSource;
+    readonly material: string;
     readonly fit: UIImageFitMode;
     readonly alignX: number;
     readonly alignY: number;
