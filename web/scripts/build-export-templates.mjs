@@ -7,26 +7,25 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { createWorkspacePackageAliasEntries } from '../build/workspace-package-aliases.mjs';
+import {
+    PROFILE_IDS,
+    PROFILE_MODULE_CATALOG,
+    TEMPLATE_DEFINITIONS,
+} from '../export-templates/module-catalog.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const workspaceDir = path.resolve(scriptDir, '..');
 const templatesRootDir = path.resolve(workspaceDir, 'export-templates');
 const distRootDir = path.resolve(workspaceDir, 'dist', 'export-templates');
-
-const templates = [
-    {
-        id: 'web-full',
-        profileId: 'scene/3d-full',
-        entryRelativePath: 'web-full/runtime-entry.ts',
-        globalName: 'AxroneRuntime',
-        outputFileName: 'axrone-runtime.js',
-    },
-];
+const generatedDir = path.resolve(templatesRootDir, '.generated');
 
 const fail = (message) => {
     console.error(message);
     process.exitCode = 1;
 };
+
+const toIdentifier = (specifier) =>
+    `mod_${specifier.replace(/^@/, '').replace(/[^a-zA-Z0-9]+/g, '_')}`;
 
 const resolveEngineVersion = () => {
     const packageJsonPath = path.resolve(workspaceDir, 'packages', 'scene-3d', 'package.json');
@@ -38,15 +37,82 @@ const resolveEngineVersion = () => {
     return typeof packageJson.version === 'string' ? packageJson.version : '0.0.0';
 };
 
-const buildTemplate = async (template, engineVersion) => {
-    const entryPath = path.resolve(templatesRootDir, template.entryRelativePath);
-    if (!fs.existsSync(entryPath)) {
-        throw new Error(`Export template entry '${entryPath}' does not exist.`);
+const generateEntrySource = (definition) => {
+    const modules = PROFILE_MODULE_CATALOG[definition.profile];
+    const lines = [];
+
+    lines.push(
+        `import { createAxroneBoot, type AxroneBootOptions, type AxroneRuntimeHandle } from '../boot-factory';`
+    );
+    lines.push(
+        `import { ${definition.sceneFacadeExport} as SceneFacade } from '${definition.sceneFacadeModule}';`
+    );
+
+    const componentImports = [];
+    for (const componentSet of definition.engineComponents) {
+        lines.push(`import { ${componentSet.exports.join(', ')} } from '${componentSet.module}';`);
+        componentImports.push(...componentSet.exports);
     }
 
-    const outDir = path.resolve(distRootDir, template.id);
+    for (const specifier of modules) {
+        lines.push(`import * as ${toIdentifier(specifier)} from '${specifier}';`);
+    }
+
+    lines.push('');
+    lines.push('declare const __AXRONE_TEMPLATE_VERSION__: string;');
+    lines.push('declare const __AXRONE_TEMPLATE_PROFILE_ID__: string;');
+    lines.push('');
+    lines.push('export type AxroneRuntimeGlobal = {');
+    lines.push('    readonly version: string;');
+    lines.push('    readonly profileId: string;');
+    lines.push('    readonly modules: Readonly<Record<string, unknown>>;');
+    lines.push('    readonly boot: (options?: AxroneBootOptions) => Promise<AxroneRuntimeHandle>;');
+    lines.push('};');
+    lines.push('');
+    lines.push('const modules: Readonly<Record<string, unknown>> = Object.freeze({');
+    for (const specifier of modules) {
+        lines.push(`    ${JSON.stringify(specifier)}: ${toIdentifier(specifier)},`);
+    }
+    lines.push('});');
+    lines.push('');
+    lines.push('const engineComponentTypes = Object.freeze([');
+    for (const name of componentImports) {
+        lines.push(`    ${name},`);
+    }
+    lines.push(']);');
+    lines.push('');
+    lines.push('const runtime: AxroneRuntimeGlobal = Object.freeze({');
+    lines.push('    version: __AXRONE_TEMPLATE_VERSION__,');
+    lines.push('    profileId: __AXRONE_TEMPLATE_PROFILE_ID__,');
+    lines.push('    modules,');
+    lines.push(
+        '    boot: createAxroneBoot({ createScene: (options) => new SceneFacade(options), engineComponentTypes }),'
+    );
+    lines.push('});');
+    lines.push('');
+    lines.push("Reflect.set(globalThis, '__AXRONE_RUNTIME__', runtime);");
+    lines.push('');
+    lines.push('export default runtime;');
+    lines.push('');
+
+    return lines.join('\n');
+};
+
+const writeGeneratedEntry = (definition) => {
+    fs.mkdirSync(generatedDir, { recursive: true });
+    const entryPath = path.resolve(generatedDir, `${definition.id}-entry.ts`);
+    fs.writeFileSync(entryPath, generateEntrySource(definition), 'utf8');
+    return entryPath;
+};
+
+const buildTemplate = async (definition, engineVersion) => {
+    const modules = PROFILE_MODULE_CATALOG[definition.profile];
+    const entryPath = writeGeneratedEntry(definition);
+    const outDir = path.resolve(distRootDir, definition.id);
     fs.rmSync(outDir, { recursive: true, force: true });
     fs.mkdirSync(outDir, { recursive: true });
+
+    const outputFileName = 'axrone-runtime.js';
 
     await build({
         configFile: false,
@@ -54,7 +120,7 @@ const buildTemplate = async (template, engineVersion) => {
         publicDir: false,
         define: {
             __AXRONE_TEMPLATE_VERSION__: JSON.stringify(engineVersion),
-            __AXRONE_TEMPLATE_PROFILE_ID__: JSON.stringify(template.profileId),
+            __AXRONE_TEMPLATE_PROFILE_ID__: JSON.stringify(PROFILE_IDS[definition.profile]),
         },
         resolve: {
             alias: createWorkspacePackageAliasEntries(workspaceDir),
@@ -69,25 +135,27 @@ const buildTemplate = async (template, engineVersion) => {
             write: true,
             lib: {
                 entry: entryPath,
-                name: template.globalName,
+                name: 'AxroneRuntime',
                 formats: ['iife'],
-                fileName: () => template.outputFileName,
+                fileName: () => outputFileName,
             },
         },
     });
 
-    const outputPath = path.resolve(outDir, template.outputFileName);
+    const outputPath = path.resolve(outDir, outputFileName);
     if (!fs.existsSync(outputPath)) {
-        throw new Error(`Export template '${template.id}' did not emit '${template.outputFileName}'.`);
+        throw new Error(`Export template '${definition.id}' did not emit '${outputFileName}'.`);
     }
 
     const payload = fs.readFileSync(outputPath);
     const manifest = {
-        templateId: template.id,
-        profileId: template.profileId,
+        templateId: definition.id,
+        profile: definition.profile,
+        profileId: PROFILE_IDS[definition.profile],
         engineVersion,
-        runtimeFileName: template.outputFileName,
-        globalName: template.globalName,
+        runtimeFileName: outputFileName,
+        globalName: 'AxroneRuntime',
+        modules: [...modules].sort(),
         rawBytes: payload.byteLength,
         gzipBytes: gzipSync(payload).byteLength,
         brotliBytes: brotliCompressSync(payload).byteLength,
@@ -119,6 +187,20 @@ const runSmoke = (manifest) => {
             `Export template '${manifest.templateId}' left the version placeholder unresolved.`
         );
     }
+
+    if (!Array.isArray(manifest.modules) || manifest.modules.length === 0) {
+        throw new Error(`Export template '${manifest.templateId}' manifest has no module list.`);
+    }
+};
+
+const runSizeOrderingCheck = (manifestsById) => {
+    const web2d = manifestsById['web-2d'];
+    const webFull = manifestsById['web-full'];
+    if (web2d && webFull && web2d.rawBytes >= webFull.rawBytes) {
+        throw new Error(
+            `Expected web-2d (${web2d.rawBytes} bytes) to be smaller than web-full (${webFull.rawBytes} bytes).`
+        );
+    }
 };
 
 const { values: cli } = parseArgs({
@@ -129,26 +211,36 @@ const { values: cli } = parseArgs({
     strict: true,
 });
 
-const selectedTemplates = cli.template
-    ? templates.filter((template) => template.id === cli.template)
-    : templates;
+const selectedDefinitions = cli.template
+    ? TEMPLATE_DEFINITIONS.filter((definition) => definition.id === cli.template)
+    : TEMPLATE_DEFINITIONS;
 
-if (selectedTemplates.length === 0) {
+if (selectedDefinitions.length === 0) {
     fail(`No export template matches '${String(cli.template)}'.`);
 } else {
     const engineVersion = resolveEngineVersion();
+    const manifests = [];
 
-    for (const template of selectedTemplates) {
+    for (const definition of selectedDefinitions) {
         try {
-            const manifest = await buildTemplate(template, engineVersion);
+            const manifest = await buildTemplate(definition, engineVersion);
             runSmoke(manifest);
+            manifests.push(manifest);
             console.log(
-                `Export template ${manifest.templateId} built: ${manifest.rawBytes} bytes raw, ${manifest.gzipBytes} bytes gzip.`
+                `Export template ${manifest.templateId} built: ${manifest.modules.length} modules, ${manifest.rawBytes} bytes raw, ${manifest.gzipBytes} bytes gzip.`
             );
         } catch (error) {
             fail(
-                `Export template '${template.id}' build failed: ${error instanceof Error ? error.message : String(error)}`
+                `Export template '${definition.id}' build failed: ${error instanceof Error ? error.message : String(error)}`
             );
         }
     }
+
+    try {
+        runSizeOrderingCheck(Object.fromEntries(manifests.map((manifest) => [manifest.templateId, manifest])));
+    } catch (error) {
+        fail(error instanceof Error ? error.message : String(error));
+    }
+
+    fs.rmSync(generatedDir, { recursive: true, force: true });
 }
