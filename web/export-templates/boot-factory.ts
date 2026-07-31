@@ -3,10 +3,8 @@ import {
     getComponentMetadata,
     type ComponentConstructor,
 } from '@axrone/ecs-runtime';
-import { AudioListenerComponent, AudioSourceComponent } from '@axrone/audio';
-import { BoxCollider3D, CapsuleCollider3D, HingeJoint3D, Rigidbody3D } from '@axrone/physics-3d';
-import { Camera, Scene } from '@axrone/scene-3d/facade';
-import { ParticleSystem, PrefabNodeBinding } from '@axrone/scene-3d/support';
+import { Camera } from '@axrone/scene-runtime/scene-facade';
+import { PrefabNodeBinding } from '@axrone/scene-prefab';
 import type { SceneSnapshot } from '@axrone/scene-runtime';
 import {
     decodeAxroneGameData,
@@ -21,21 +19,30 @@ export type AxroneBootOptions = {
     readonly onProgress?: (stage: string) => void;
 };
 
+export type BootSceneFacade = {
+    readonly canvas: HTMLCanvasElement;
+    readonly world: {
+        getAllActors(): readonly {
+            getComponent<T extends ComponentConstructor>(type: T): InstanceType<T> | null;
+            getAllComponents(): readonly Component[];
+        }[];
+    };
+    registerComponent(componentType: ComponentConstructor): unknown;
+    loadScene(snapshot: SceneSnapshot, options?: { clearExisting?: boolean }): Promise<unknown>;
+    resize(width: number, height: number, pixelRatio?: number): void;
+    dispose(): void;
+};
+
 export type AxroneRuntimeHandle = {
-    readonly scene: Scene;
+    readonly scene: BootSceneFacade;
     readonly data: AxroneGameData;
     dispose(): void;
 };
 
-const ENGINE_COMPONENT_TYPES: readonly ComponentConstructor[] = Object.freeze([
-    Rigidbody3D,
-    BoxCollider3D,
-    CapsuleCollider3D,
-    HingeJoint3D,
-    AudioSourceComponent,
-    AudioListenerComponent,
-    ParticleSystem,
-]);
+export type AxroneBootDependencies = {
+    readonly createScene: (options: Record<string, unknown>) => BootSceneFacade;
+    readonly engineComponentTypes: readonly ComponentConstructor[];
+};
 
 const DEFAULT_DATA_URL = './game.data.json';
 
@@ -124,7 +131,7 @@ const resolveComponentTypeName = (component: Component): string =>
     component.constructor.name;
 
 const applyComponentStates = (
-    scene: Scene,
+    scene: BootSceneFacade,
     statesByNodeId: ReadonlyMap<string, readonly AxroneGameDataComponentState[]>
 ): void => {
     for (const actor of scene.world.getAllActors()) {
@@ -155,7 +162,7 @@ const applyComponentStates = (
     }
 };
 
-const applyCameraSelection = (scene: Scene, cameraEntityId: string | null): void => {
+const applyCameraSelection = (scene: BootSceneFacade, cameraEntityId: string | null): void => {
     let matched = false;
     let fallbackCamera: Camera | null = null;
 
@@ -189,77 +196,77 @@ const fetchGameData = async (dataUrl: string): Promise<AxroneGameData> => {
     return decodeAxroneGameData(await response.json());
 };
 
-export const bootAxroneRuntime = async (
-    options: AxroneBootOptions = {}
-): Promise<AxroneRuntimeHandle> => {
-    const dataUrl = options.dataUrl ?? DEFAULT_DATA_URL;
-    const container = resolveContainer(options.container);
-    const reportProgress = (stage: string): void => {
-        options.onProgress?.(stage);
-    };
+export const createAxroneBoot =
+    (dependencies: AxroneBootDependencies) =>
+    async (options: AxroneBootOptions = {}): Promise<AxroneRuntimeHandle> => {
+        const dataUrl = options.dataUrl ?? DEFAULT_DATA_URL;
+        const container = resolveContainer(options.container);
+        const reportProgress = (stage: string): void => {
+            options.onProgress?.(stage);
+        };
 
-    reportProgress('loading-data');
-    const data = await fetchGameData(dataUrl);
+        reportProgress('loading-data');
+        const data = await fetchGameData(dataUrl);
 
-    reportProgress('creating-scene');
-    const scene = new Scene({
-        width: container.clientWidth || data.presentation.width,
-        height: container.clientHeight || data.presentation.height,
-        autoStart: true,
-        parent: container,
-        appendToDom: true,
-        createCanvas: () => document.createElement('canvas'),
-        clearColor: data.environment.clearColor as [number, number, number, number],
-        ambientLight: data.environment.ambientLight as [number, number, number],
-        skyLight: data.environment.skyLight as [number, number, number],
-        groundLight: data.environment.groundLight as [number, number, number],
-    });
+        reportProgress('creating-scene');
+        const scene = dependencies.createScene({
+            width: container.clientWidth || data.presentation.width,
+            height: container.clientHeight || data.presentation.height,
+            autoStart: true,
+            parent: container,
+            appendToDom: true,
+            createCanvas: () => document.createElement('canvas'),
+            clearColor: data.environment.clearColor,
+            ambientLight: data.environment.ambientLight,
+            skyLight: data.environment.skyLight,
+            groundLight: data.environment.groundLight,
+        });
 
-    scene.canvas.style.display = 'block';
-    scene.canvas.style.width = '100%';
-    scene.canvas.style.height = '100%';
+        scene.canvas.style.display = 'block';
+        scene.canvas.style.width = '100%';
+        scene.canvas.style.height = '100%';
 
-    const resizeScene = (): void => {
-        scene.resize(
-            container.clientWidth || data.presentation.width,
-            container.clientHeight || data.presentation.height,
-            window.devicePixelRatio || 1
-        );
-    };
+        const resizeScene = (): void => {
+            scene.resize(
+                container.clientWidth || data.presentation.width,
+                container.clientHeight || data.presentation.height,
+                window.devicePixelRatio || 1
+            );
+        };
 
-    const resizeObserver = new ResizeObserver(() => {
+        const resizeObserver = new ResizeObserver(() => {
+            resizeScene();
+        });
+        resizeObserver.observe(container);
         resizeScene();
-    });
-    resizeObserver.observe(container);
-    resizeScene();
 
-    reportProgress('loading-scripts');
-    const scriptComponentTypes = await loadScriptComponentTypes(dataUrl, data.scripts);
+        reportProgress('loading-scripts');
+        const scriptComponentTypes = await loadScriptComponentTypes(dataUrl, data.scripts);
 
-    for (const componentType of ENGINE_COMPONENT_TYPES) {
-        scene.registerComponent(componentType);
-    }
-    for (const componentType of scriptComponentTypes) {
-        scene.registerComponent(componentType);
-    }
+        for (const componentType of dependencies.engineComponentTypes) {
+            scene.registerComponent(componentType);
+        }
+        for (const componentType of scriptComponentTypes) {
+            scene.registerComponent(componentType);
+        }
 
-    reportProgress('loading-scene');
-    await scene.loadScene(data.snapshot as SceneSnapshot, { clearExisting: false });
+        reportProgress('loading-scene');
+        await scene.loadScene(data.snapshot as SceneSnapshot, { clearExisting: false });
 
-    applyComponentStates(
-        scene,
-        new Map(data.componentStates.map((entry) => [entry.nodeId, entry.states]))
-    );
-    applyCameraSelection(scene, data.cameraEntityId);
+        applyComponentStates(
+            scene,
+            new Map(data.componentStates.map((entry) => [entry.nodeId, entry.states]))
+        );
+        applyCameraSelection(scene, data.cameraEntityId);
 
-    reportProgress('ready');
+        reportProgress('ready');
 
-    return {
-        scene,
-        data,
-        dispose() {
-            resizeObserver.disconnect();
-            scene.dispose();
-        },
+        return {
+            scene,
+            data,
+            dispose() {
+                resizeObserver.disconnect();
+                scene.dispose();
+            },
+        };
     };
-};
