@@ -16,7 +16,6 @@ const CORE_MODULES = [
     '@axrone/scene-prefab',
     '@axrone/animation',
     '@axrone/input',
-    '@axrone/input-core',
     '@axrone/tween',
     '@axrone/geometry',
     '@axrone/raycast',
