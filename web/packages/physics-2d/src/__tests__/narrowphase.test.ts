@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Narrowphase2D } from '@axrone/physics-2d';
 import { ShapeManager2D } from '@axrone/physics-2d';
-import { ShapeType } from '@axrone/physics-2d';
+import { ShapeType } from '@axrone/physics-core';
 
 describe('Narrowphase2D', () => {
     let narrowphase: Narrowphase2D;

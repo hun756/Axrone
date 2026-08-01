@@ -3,7 +3,7 @@ import { IslandSolver2D } from '@axrone/physics-2d';
 import { BodyManager2D } from '@axrone/physics-2d';
 import { ContactManager2D } from '@axrone/physics-2d';
 import { ConstraintManager2D } from '@axrone/physics-2d';
-import { BodyType } from '@axrone/physics-2d';
+import { BodyType } from '@axrone/physics-core';
 
 describe('IslandSolver2D', () => {
     let islandSolver: IslandSolver2D;

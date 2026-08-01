@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PhysicsWorld2D } from '@axrone/physics-2d';
-import { BodyType, ShapeType, ConstraintType } from '@axrone/physics-2d';
+import { BodyType, ShapeType, ConstraintType } from '@axrone/physics-core';
 
 describe('PhysicsWorld2D Integration', () => {
     let world: PhysicsWorld2D;

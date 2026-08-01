@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ShapeManager2D } from '@axrone/physics-2d';
-import { ShapeType } from '@axrone/physics-2d';
+import { ShapeType } from '@axrone/physics-core';
 import type { IVec2Like } from '@axrone/numeric';
 
 describe('ShapeManager2D', () => {

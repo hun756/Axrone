@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Narrowphase2D, ShapeManager2D, ShapeType } from '@axrone/physics-2d';
+import { Narrowphase2D, ShapeManager2D } from '@axrone/physics-2d';
+import { ShapeType } from '@axrone/physics-core';
 
 function makeManifold(): any {
     return {

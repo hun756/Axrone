@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ConstraintSolver2D } from '@axrone/physics-2d';
 import { ConstraintManager2D } from '@axrone/physics-2d';
 import { BodyManager2D } from '@axrone/physics-2d';
-import { BodyType, ConstraintType } from '@axrone/physics-2d';
+import { BodyType, ConstraintType } from '@axrone/physics-core';
 
 describe('ConstraintSolver2D', () => {
     let solver: ConstraintSolver2D;
