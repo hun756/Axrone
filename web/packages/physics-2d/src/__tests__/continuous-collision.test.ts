@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ContinuousCollisionDetection, Raycaster2D } from '@axrone/physics';
+import { ContinuousCollisionDetection, Raycaster2D } from '@axrone/physics-2d';
 import { AABB2D } from '@axrone/geometry';
 
 describe('ContinuousCollisionDetection', () => {

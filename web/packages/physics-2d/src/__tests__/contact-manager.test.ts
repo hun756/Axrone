@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ContactManager2D } from '@axrone/physics';
+import { ContactManager2D } from '@axrone/physics-2d';
 
 describe('ContactManager2D', () => {
     let manager: ContactManager2D;

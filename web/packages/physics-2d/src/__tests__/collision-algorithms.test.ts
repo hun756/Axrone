@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GJK2D, SAT2D, EPA2D } from '@axrone/physics';
+import { GJK2D, SAT2D, EPA2D } from '@axrone/physics-2d';
 
 describe('Collision Algorithms', () => {
     describe('GJK2D - Intersection Tests', () => {

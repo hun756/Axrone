@@ -4,7 +4,7 @@ import {
     ConstraintManager3D,
     PhysicsWorld3D,
     ShapeManager3D,
-} from '@axrone/physics';
+} from '@axrone/physics-3d';
 
 describe('PhysicsWorld3D modular structure', () => {
     it('exposes dedicated manager instances through the world facade', () => {

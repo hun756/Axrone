@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ConstraintManager2D } from '@axrone/physics';
-import { ConstraintType } from '@axrone/physics';
+import { ConstraintManager2D } from '@axrone/physics-2d';
+import { ConstraintType } from '@axrone/physics-2d';
 
 describe('ConstraintManager2D', () => {
     let manager: ConstraintManager2D;

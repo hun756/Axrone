@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DynamicAABBTree2D } from '@axrone/physics';
+import { DynamicAABBTree2D } from '@axrone/physics-2d';
 import { AABB2D } from '@axrone/geometry';
 
 describe('DynamicAABBTree2D — move integrity (regression for _removeLeaf)', () => {
