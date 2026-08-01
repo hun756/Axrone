@@ -1,5 +1,5 @@
 import type { AssetImportSource } from '../asset-contract';
-import { isPlainObject } from '@axrone/utility';
+import { isPlainObject, decode as decodeBase64 } from '@axrone/utility';
 import {
     GltfContainerError,
     GltfResourceError,
@@ -155,14 +155,9 @@ const parseDataUri = (
 
     const [, mimeType, base64Flag, payload] = match;
     if (base64Flag) {
-        const decoded = atob(payload);
-        const bytes = new Uint8Array(decoded.length);
-        for (let index = 0; index < decoded.length; index += 1) {
-            bytes[index] = decoded.charCodeAt(index);
-        }
         return {
             mimeType,
-            bytes,
+            bytes: decodeBase64(payload),
         };
     }
 
