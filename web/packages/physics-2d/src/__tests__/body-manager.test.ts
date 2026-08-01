@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BodyManager2D } from '@axrone/physics-2d';
-import { BodyType } from '@axrone/physics-2d';
+import { BodyType } from '@axrone/physics-core';
 
 describe('BodyManager2D', () => {
     let manager: BodyManager2D;
