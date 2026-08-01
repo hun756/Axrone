@@ -222,4 +222,167 @@ describe('lighting validation', () => {
         expect(genericPoint.attenuation).toBe(5);
         expect(genericSpot.innerConeCosine).toBeCloseTo(0.91);
     });
+
+    it('rejects Vec3 tuples with wrong length', () => {
+        expect(() =>
+            createDirectionalLightDefinition(
+                {
+                    direction: [0, -1],
+                },
+                'bad-tuple-2'
+            )
+        ).toThrow(LightingValidationError);
+
+        expect(() =>
+            createPointLightDefinition(
+                {
+                    position: [1, 2, 3, 4] as unknown as [number, number, number],
+                    range: 5,
+                },
+                'bad-tuple-4'
+            )
+        ).toThrow(LightingValidationError);
+    });
+
+    it('infers spot cone mode from input fields when coneMode is undefined', () => {
+        const spotFromAnglesOnly = createSpotLightDefinition(
+            {
+                direction: [0, -1, 0],
+                innerConeAngle: 0.15,
+                outerConeAngle: 0.45,
+            },
+            'spot-angle-infer'
+        );
+        expect(spotFromAnglesOnly.innerConeCosine).toBeCloseTo(Math.cos(0.15));
+        expect(spotFromAnglesOnly.outerConeCosine).toBeCloseTo(Math.cos(0.45));
+
+        const spotFromCosinesOnly = createSpotLightDefinition(
+            {
+                direction: [0, -1, 0],
+                innerConeCosine: 0.85,
+                outerConeCosine: 0.65,
+            },
+            'spot-cosine-infer'
+        );
+        expect(spotFromCosinesOnly.innerConeCosine).toBeCloseTo(0.85);
+        expect(spotFromCosinesOnly.outerConeCosine).toBeCloseTo(0.65);
+    });
+
+    it('uses default cone values when no cone fields are provided', () => {
+        const spotDefaults = createSpotLightDefinition(
+            {
+                direction: [0, -1, 0],
+            },
+            'spot-defaults'
+        );
+
+        expect(spotDefaults.innerConeCosine).toBeCloseTo(Math.cos(Math.PI / 8));
+        expect(spotDefaults.outerConeCosine).toBeCloseTo(Math.cos(Math.PI / 4));
+    });
+
+    it('rejects gamma = 0 with exclusive minimum boundary', () => {
+        expect(() => createLightingEnvironment({ gamma: 0 })).toThrow(
+            LightingValidationError
+        );
+    });
+
+    it('rejects NaN, Infinity, and negative values for numeric fields', () => {
+        expect(() =>
+            createDirectionalLightDefinition({ direction: [0, -1, 0], intensity: NaN }, 'nan-int')
+        ).toThrow(LightingValidationError);
+        expect(() =>
+            createDirectionalLightDefinition(
+                { direction: [0, -1, 0], intensity: Infinity },
+                'inf-int'
+            )
+        ).toThrow(LightingValidationError);
+        expect(() =>
+            createDirectionalLightDefinition({ direction: [0, -1, 0], intensity: -1 }, 'neg-int')
+        ).toThrow(LightingValidationError);
+        expect(() =>
+            createPointLightDefinition({ range: 5, attenuation: NaN }, 'nan-att')
+        ).toThrow(LightingValidationError);
+        expect(() =>
+            createPointLightDefinition({ range: 5, attenuation: -1 }, 'neg-att')
+        ).toThrow(LightingValidationError);
+    });
+
+    it('produces undefined metadata when input is null or undefined', () => {
+        const withNull = createDirectionalLightDefinition(
+            { direction: [0, -1, 0], metadata: null },
+            'null-meta'
+        );
+        expect(withNull.metadata).toBeUndefined();
+
+        const withUndefined = createDirectionalLightDefinition(
+            { direction: [0, -1, 0], metadata: undefined },
+            'undef-meta'
+        );
+        expect(withUndefined.metadata).toBeUndefined();
+
+        const withNoField = createDirectionalLightDefinition(
+            { direction: [0, -1, 0] },
+            'no-meta'
+        );
+        expect(withNoField.metadata).toBeUndefined();
+    });
+
+    it('applySpotLightPatch preserves existing cones when no cone fields are given', () => {
+        const spot = createSpotLightDefinition(
+            {
+                direction: [0, -1, 0],
+                coneMode: 'cosine',
+                innerConeCosine: 0.9,
+                outerConeCosine: 0.7,
+            },
+            'spot-preserve'
+        );
+
+        const patched = applySpotLightPatch(spot, { intensity: 5 });
+
+        expect(patched.innerConeCosine).toBeCloseTo(0.9);
+        expect(patched.outerConeCosine).toBeCloseTo(0.7);
+        expect(patched.intensity).toBe(5);
+    });
+
+    it('applySpotLightPatch handles angle mode with partial angle inputs', () => {
+        const spot = createSpotLightDefinition(
+            {
+                direction: [0, -1, 0],
+                coneMode: 'angle',
+                innerConeAngle: 0.2,
+                outerConeAngle: 0.5,
+            },
+            'spot-partial'
+        );
+
+        const patchedInnerOnly = applySpotLightPatch(spot, {
+            coneMode: 'angle',
+            innerConeAngle: 0.1,
+        });
+        expect(patchedInnerOnly.innerConeCosine).toBeCloseTo(Math.cos(0.1));
+        expect(patchedInnerOnly.outerConeCosine).toBeCloseTo(Math.cos(Math.PI / 4));
+
+        const patchedOuterOnly = applySpotLightPatch(spot, {
+            coneMode: 'angle',
+            outerConeAngle: 0.6,
+        });
+        expect(patchedOuterOnly.innerConeCosine).toBeCloseTo(Math.cos(Math.PI / 8));
+        expect(patchedOuterOnly.outerConeCosine).toBeCloseTo(Math.cos(0.6));
+    });
+
+    it('rejects non-finite values in Vec3 tuple members', () => {
+        expect(() =>
+            createDirectionalLightDefinition(
+                { direction: [NaN, -1, 0] },
+                'nan-dir'
+            )
+        ).toThrow(LightingValidationError);
+        expect(() =>
+            createPointLightDefinition(
+                { position: [Infinity, 0, 0], range: 5 },
+                'inf-pos'
+            )
+        ).toThrow(LightingValidationError);
+    });
 });
