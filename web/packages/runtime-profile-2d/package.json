@@ -32,7 +32,7 @@
     },
     "dependencies": {
         "@axrone/asset-2d": "^0.1.0",
-        "@axrone/input-core": "^0.1.0",
+        "@axrone/input": "^0.1.0",
         "@axrone/physics-2d": "^0.1.0",
         "@axrone/physics-core": "^0.1.0",
         "@axrone/render-2d": "^0.1.0",

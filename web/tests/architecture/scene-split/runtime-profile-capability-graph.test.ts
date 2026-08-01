@@ -33,10 +33,10 @@ describe('runtime profile capability graph', () => {
     it('keeps runtime-profile-core aligned with the cross-cutting scene-runtime/input capability seam', () => {
         expect(RUNTIME_PROFILE_CORE_CAPABILITY_PACKAGES).toEqual([
             '@axrone/scene-runtime',
-            '@axrone/input-core',
+            '@axrone/input',
         ]);
         expect(readDependencyKeys('runtime-profile-core')).toEqual([
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/scene-runtime',
         ]);
     });
@@ -45,7 +45,7 @@ describe('runtime profile capability graph', () => {
         expect(RUNTIME_PROFILE_2D_CAPABILITY_PACKAGES).toEqual([
             '@axrone/scene-runtime',
             '@axrone/scene-2d',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/asset-2d',
             '@axrone/render-2d',
             '@axrone/physics-core',
@@ -54,7 +54,7 @@ describe('runtime profile capability graph', () => {
         ]);
         expect(readDependencyKeys('runtime-profile-2d')).toEqual([
             '@axrone/asset-2d',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/physics-2d',
             '@axrone/physics-core',
             '@axrone/render-2d',
@@ -72,7 +72,7 @@ describe('runtime profile capability graph', () => {
         expect(RUNTIME_PROFILE_3D_CAPABILITY_PACKAGES).toEqual([
             '@axrone/scene-runtime',
             '@axrone/scene-3d',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/asset-core',
             '@axrone/asset-gltf',
             '@axrone/asset-ui',
@@ -87,7 +87,7 @@ describe('runtime profile capability graph', () => {
             '@axrone/asset-core',
             '@axrone/asset-gltf',
             '@axrone/asset-ui',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/physics-3d',
             '@axrone/physics-core',
             '@axrone/render-3d',
@@ -106,7 +106,7 @@ describe('runtime profile capability graph', () => {
         expect(RUNTIME_PROFILE_FULL_CAPABILITY_PACKAGES).toEqual([
             '@axrone/scene-runtime',
             '@axrone/scene-2d',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/asset-2d',
             '@axrone/render-2d',
             '@axrone/physics-core',
@@ -126,7 +126,7 @@ describe('runtime profile capability graph', () => {
             '@axrone/asset-core',
             '@axrone/asset-gltf',
             '@axrone/asset-ui',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/physics-2d',
             '@axrone/physics-3d',
             '@axrone/physics-core',

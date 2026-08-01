@@ -35,7 +35,7 @@
         "@axrone/asset-core": "^0.1.0",
         "@axrone/asset-gltf": "^0.1.0",
         "@axrone/asset-ui": "^0.1.0",
-        "@axrone/input-core": "^0.1.0",
+        "@axrone/input": "^0.1.0",
         "@axrone/physics-2d": "^0.1.0",
         "@axrone/physics-3d": "^0.1.0",
         "@axrone/physics-core": "^0.1.0",

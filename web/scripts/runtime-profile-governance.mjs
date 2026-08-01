@@ -108,7 +108,7 @@ const runtimeProfileBudgets = [
     {
         packageDir: 'runtime-profile-core',
         packageName: '@axrone/runtime-profile-core',
-        expectedDependencies: ['@axrone/input-core', '@axrone/scene-runtime'],
+        expectedDependencies: ['@axrone/input', '@axrone/scene-runtime'],
         maxEntryBytes: 2048,
         maxStartupMs: 80,
         // Raised from 6144 KB: the cold-import heap cost of scene-runtime grew
@@ -124,7 +124,7 @@ const runtimeProfileBudgets = [
         packageName: '@axrone/runtime-profile-2d',
         expectedDependencies: [
             '@axrone/asset-2d',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/physics-2d',
             '@axrone/physics-core',
             '@axrone/render-2d',
@@ -143,7 +143,7 @@ const runtimeProfileBudgets = [
             '@axrone/asset-core',
             '@axrone/asset-gltf',
             '@axrone/asset-ui',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/physics-3d',
             '@axrone/physics-core',
             '@axrone/render-3d',
@@ -165,7 +165,7 @@ const runtimeProfileBudgets = [
             '@axrone/asset-core',
             '@axrone/asset-gltf',
             '@axrone/asset-ui',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/physics-2d',
             '@axrone/physics-3d',
             '@axrone/physics-core',
