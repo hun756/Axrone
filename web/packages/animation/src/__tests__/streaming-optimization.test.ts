@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { AnimationClip } from '../clip';
-import { optimizeAnimationClipDefinition } from '../optimization';
+import { optimizeAnimationClipDefinition, optimizeAnimationClipDefinitions } from '../optimization';
 import { AnimationCurveLayout } from '../pose';
 import { AnimationRig } from '../rig';
 import { AnimationClipStreamingScheduler } from '../streaming';
+import { AnimationValidationError } from '../errors';
 import type { AnimationControllerClipActivity } from '../types';
 
 const rig = new AnimationRig({ bones: [{ name: 'root' }] });
@@ -152,5 +153,165 @@ describe('optimizeAnimationClipDefinition tolerances', () => {
             compression: { codec: 'keyframe-reduced', positionTolerance: 100 },
         });
         expect(optimized.tracks[0]?.keyframeCount).toBe(3);
+    });
+});
+
+describe('AnimationClipStreamingScheduler markChunkRequested', () => {
+    it('prevents duplicate requests by setting status to requested', () => {
+        const scheduler = new AnimationClipStreamingScheduler([makeStreamedClip('walk')]);
+        expect(scheduler.markChunkRequested('walk', 'walk:virtual:0')).toBe(true);
+        // After marking requested, a subsequent update should not re-request the same chunk
+        const snapshot = scheduler.update([activity('walk', 0.1)]);
+        // The chunk should be in 'requested' status, not generating new pending requests
+        expect(snapshot.clips[0]?.requestedChunkIds).toContain('walk:virtual:0');
+    });
+});
+
+describe('AnimationClipStreamingScheduler global reset', () => {
+    it('resets all clips when no clipId is provided', () => {
+        const scheduler = new AnimationClipStreamingScheduler([
+            makeStreamedClip('walk'),
+            makeStreamedClip('run'),
+        ]);
+        scheduler.update([activity('walk', 0.1), activity('run', 0.1)]);
+        scheduler.markChunkLoaded('walk', 'walk:virtual:0');
+        scheduler.markChunkLoaded('run', 'run:virtual:0');
+        // Global reset clears all state
+        scheduler.reset();
+        const snapshot = scheduler.update([activity('walk', 0.1), activity('run', 0.1)]);
+        // After reset, chunks should be re-requested
+        expect(snapshot.pendingRequests.length).toBeGreaterThan(0);
+    });
+});
+
+describe('AnimationClipStreamingScheduler snapshot content', () => {
+    it('contains chunk snapshots with correct fields', () => {
+        const scheduler = new AnimationClipStreamingScheduler([makeStreamedClip('walk', 3)]);
+        const snapshot = scheduler.update([activity('walk', 0.1)]);
+        expect(snapshot.clips).toHaveLength(1);
+        const clipSnapshot = snapshot.clips[0]!;
+        expect(clipSnapshot.clipId).toBe('walk');
+        expect(clipSnapshot.enabled).toBe(true);
+        expect(clipSnapshot.mode).toBe('streamed');
+        expect(clipSnapshot.priority).toBe(3);
+        expect(clipSnapshot.chunks.length).toBeGreaterThan(0);
+        expect(clipSnapshot.chunks[0]!.status).toBe('requested');
+    });
+
+    it('reports ready=true when all active chunks are loaded', () => {
+        const scheduler = new AnimationClipStreamingScheduler([makeStreamedClip('walk')]);
+        scheduler.update([activity('walk', 0.1)]);
+        scheduler.markChunkLoaded('walk', 'walk:virtual:0');
+        const snapshot = scheduler.update([activity('walk', 0.1)]);
+        expect(snapshot.clips[0]?.ready).toBe(true);
+    });
+});
+
+describe('optimizeAnimationClipDefinition codec none', () => {
+    it('skips optimization when codec is none', () => {
+        const optimized = optimizeAnimationClipDefinition({
+            id: 'no-opt',
+            tracks: [
+                {
+                    target: 'root',
+                    path: 'translation',
+                    times: [0, 0.5, 1],
+                    values: [0, 0, 0, 0.5, 0, 0, 1, 0, 0],
+                },
+            ],
+            compression: { codec: 'none' },
+        });
+        // codec 'none' returns the original track unchanged (no keyframeCount added)
+        expect(optimized.tracks[0]?.times.length).toBe(3);
+    });
+});
+
+describe('optimizeAnimationClipDefinition custom tolerances', () => {
+    it('uses rotationToleranceDegrees for rotation tracks', () => {
+        const optimized = optimizeAnimationClipDefinition({
+            id: 'rotation',
+            tracks: [
+                {
+                    target: 'root',
+                    path: 'rotation',
+                    times: [0, 0.5, 1],
+                    values: [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+                },
+            ],
+            compression: { codec: 'keyframe-reduced', rotationToleranceDegrees: 180 },
+        });
+        // With very high tolerance, middle keyframe should be removed
+        expect(optimized.tracks[0]?.keyframeCount).toBe(2);
+    });
+
+    it('uses scaleTolerance for scale tracks', () => {
+        const optimized = optimizeAnimationClipDefinition({
+            id: 'scale',
+            tracks: [
+                {
+                    target: 'root',
+                    path: 'scale',
+                    times: [0, 0.5, 1],
+                    values: [1, 1, 1, 1.0001, 1, 1, 1, 1, 1],
+                },
+            ],
+            compression: { codec: 'keyframe-reduced', scaleTolerance: 0.01 },
+        });
+        expect(optimized.tracks[0]?.keyframeCount).toBe(2);
+    });
+});
+
+describe('optimizeAnimationClipDefinition invalid component count', () => {
+    it('throws for zero component count', () => {
+        expect(() =>
+            optimizeAnimationClipDefinition({
+                id: 'bad',
+                tracks: [
+                    {
+                        target: 'root',
+                        path: 'translation',
+                        times: [0, 0.5, 1],
+                        values: [0, 0, 0, 0.5, 0, 0, 1, 0, 0],
+                        valueComponentCount: 0,
+                    },
+                ],
+                compression: { codec: 'keyframe-reduced' },
+            })
+        ).toThrow(AnimationValidationError);
+    });
+});
+
+describe('optimizeAnimationClipDefinitions batch', () => {
+    it('optimizes multiple clips with shared compression', () => {
+        const results = optimizeAnimationClipDefinitions(
+            [
+                {
+                    id: 'a',
+                    tracks: [
+                        {
+                            target: 'root',
+                            path: 'translation',
+                            times: [0, 0.5, 1],
+                            values: [0, 0, 0, 0.5, 0, 0, 1, 0, 0],
+                        },
+                    ],
+                },
+                {
+                    id: 'b',
+                    tracks: [
+                        {
+                            target: 'root',
+                            path: 'translation',
+                            times: [0, 0.5, 1],
+                            values: [0, 0, 0, 0.5, 0, 0, 1, 0, 0],
+                        },
+                    ],
+                },
+            ],
+            { codec: 'keyframe-reduced', positionTolerance: 1e-3 }
+        );
+        expect(results).toHaveLength(2);
+        expect(results[0]!.tracks[0]?.keyframeCount).toBe(2);
+        expect(results[1]!.tracks[0]?.keyframeCount).toBe(2);
     });
 });
