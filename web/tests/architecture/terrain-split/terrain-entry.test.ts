@@ -12,7 +12,7 @@ const testDir = path.dirname(fileURLToPath(import.meta.url));
 const packagesDir = path.resolve(testDir, '../../../packages');
 const terrainSrcDir = path.resolve(packagesDir, 'terrain/src');
 
-const allowedPackageDependencies = new Set(['@axrone/numeric', '@axrone/random']);
+const allowedPackageDependencies = new Set(['@axrone/numeric', '@axrone/random', '@axrone/utility']);
 const packageImportPattern =
     /(?:from ['"]|import\(['"]|(?:^|\s)import\s+['"]|require\(['"])(@axrone\/[a-z0-9-]+)(?:\/[^'"]*)?['"]/g;
 const siblingSourceBypassPattern = /(?:from ['"]|import\(['"])(?:\.\.\/)+[a-z0-9-]+\/src(?:\/[^'"]*)?['"]/g;
