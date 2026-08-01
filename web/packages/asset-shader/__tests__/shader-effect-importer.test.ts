@@ -603,3 +603,134 @@ describe('normalizeShaderEffectJsonSource – Edge Cases', () => {
         expect(result.keywords![0].stages).toEqual(['fragment']);
     });
 });
+
+describe('normalizeShaderEffectJsonSource – Validation Errors', () => {
+    it('K-080 – negative attribute location throws', () => {
+        expect(() =>
+            normalizeShaderEffectJsonSource(makeSource(), {
+                id: 'neg-loc',
+                attributes: [{ name: 'a_Pos', type: 'vec3', location: -1 }],
+                vertex: { main: ['void main(){}'] },
+                fragment: { main: ['void main(){}'] },
+            })
+        ).toThrow('location must be a non-negative integer');
+    });
+
+    it('K-081 – unknown property scope throws', () => {
+        expect(() =>
+            normalizeShaderEffectJsonSource(makeSource(), {
+                id: 'bad-scope',
+                properties: [{ name: 'u_X', type: 'float', scope: 'unknown' }],
+                vertex: { main: ['void main(){}'] },
+                fragment: { main: ['void main(){}'] },
+            })
+        ).toThrow('scope must be a supported property scope');
+    });
+
+    it('K-082 – keyword string defaultValue not in options throws', () => {
+        expect(() =>
+            normalizeShaderEffectJsonSource(makeSource(), {
+                id: 'bad-kw',
+                version: 2,
+                keywords: [
+                    { name: 'MODE', options: ['A', 'B'], defaultValue: 'C' },
+                ],
+                vertex: { main: ['void main(){}'] },
+                fragment: { main: ['void main(){}'] },
+            })
+        ).toThrow('defaultValue must match one of the declared options');
+    });
+
+    it('K-083 – unknown stage precision throws', () => {
+        expect(() =>
+            normalizeShaderEffectJsonSource(makeSource(), {
+                id: 'bad-prec',
+                vertex: { main: ['void main(){}'] },
+                fragment: { precision: 'ultra', main: ['void main(){}'] },
+            })
+        ).toThrow("precision must be 'lowp', 'mediump', or 'highp'");
+    });
+
+    it('K-084 – invalid interpolation value throws', () => {
+        expect(() =>
+            normalizeShaderEffectJsonSource(makeSource(), {
+                id: 'bad-interp',
+                varyings: [{ name: 'v_X', type: 'float', interpolation: 'noperspective' }],
+                vertex: { main: ['void main(){}'] },
+                fragment: { main: ['void main(){}'] },
+            })
+        ).toThrow("interpolation must be 'flat' or 'smooth'");
+    });
+
+    it('K-085 – empty passes array throws', () => {
+        expect(() =>
+            normalizeShaderEffectJsonSource(makeSource(), {
+                id: 'empty-passes',
+                version: 2,
+                techniques: [{ id: 'fwd', passes: [] }],
+                vertex: { main: ['void main(){}'] },
+                fragment: { main: ['void main(){}'] },
+            })
+        ).toThrow('must be a non-empty array');
+    });
+
+    it('K-086 – declarations with mixed string and string-array entries', () => {
+        const result = normalizeShaderEffectJsonSource(makeSource(), {
+            id: 'mixed-decl',
+            vertex: {
+                declarations: ['uniform mat4 u_MVP;', ['uniform float u_Time;', 'uniform float u_Delta;']],
+                main: ['void main(){}'],
+            },
+            fragment: { main: ['void main(){}'] },
+        });
+        expect(result.vertex.declarations).toHaveLength(2);
+        expect(result.vertex.declarations![0]).toBe('uniform mat4 u_MVP;');
+        expect(Array.isArray(result.vertex.declarations![1])).toBe(true);
+    });
+});
+
+describe('normalizeShaderEffectJsonSource – Source Kinds & Wrappers', () => {
+    it('K-090 – text source kind parses JSON string', () => {
+        const textSource: AssetImportSource = {
+            kind: 'text',
+            data: JSON.stringify({
+                id: 'from-text',
+                vertex: { main: ['void main(){}'] },
+                fragment: { main: ['void main(){}'] },
+            }),
+        };
+        const result = normalizeShaderEffectJsonSource(
+            textSource,
+            JSON.parse(textSource.data as string)
+        );
+        expect(result.id).toBe('from-text');
+    });
+
+    it('K-091 – nested effect wrapper extracts inner payload', () => {
+        const result = normalizeShaderEffectJsonSource(makeSource(), {
+            effect: {
+                id: 'nested-effect',
+                vertex: { main: ['void main(){}'] },
+                fragment: { main: ['void main(){}'] },
+            },
+        });
+        expect(result.id).toBe('nested-effect');
+    });
+
+    it('K-092 – non-object payload throws', () => {
+        expect(() =>
+            normalizeShaderEffectJsonSource(makeSource(), 'not-an-object')
+        ).toThrow('Shader effect payload');
+    });
+
+    it('K-093 – invalid value type for property throws', () => {
+        expect(() =>
+            normalizeShaderEffectJsonSource(makeSource(), {
+                id: 'bad-prop-type',
+                properties: [{ name: 'u_X', type: 42 }],
+                vertex: { main: ['void main(){}'] },
+                fragment: { main: ['void main(){}'] },
+            })
+        ).toThrow('must be a non-empty string');
+    });
+});
