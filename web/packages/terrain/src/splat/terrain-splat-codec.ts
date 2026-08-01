@@ -1,5 +1,5 @@
 import { TerrainError, TerrainErrorCode } from '../errors';
-import { decodeBase64ToBytes, encodeBytesToBase64 } from '../internal/base64';
+import { encode as encodeBytesToBase64, decode as decodeBase64ToBytes } from '@axrone/utility';
 import type { TerrainSplatResolution } from '../types';
 import { isTerrainSplatResolution } from '../types';
 
@@ -34,7 +34,15 @@ export const decodeTerrainSplat = (
         );
     }
 
-    const bytes = decodeBase64ToBytes(value.slice(SPLAT_DATA_PREFIX.length));
+    let bytes: Uint8Array;
+    try {
+        bytes = decodeBase64ToBytes(value.slice(SPLAT_DATA_PREFIX.length));
+    } catch {
+        throw new TerrainError(
+            'Payload contains an invalid base64 character.',
+            TerrainErrorCode.SOURCE_DECODE_FAILED,
+        );
+    }
     const expectedLength = resolution * resolution * 4;
     if (bytes.length !== expectedLength) {
         throw new TerrainError(

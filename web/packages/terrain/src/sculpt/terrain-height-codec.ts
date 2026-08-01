@@ -1,5 +1,5 @@
 import { TerrainError, TerrainErrorCode } from '../errors';
-import { decodeBase64ToBytes, encodeBytesToBase64 } from '../internal/base64';
+import { encode as encodeBytesToBase64, decode as decodeBase64ToBytes } from '@axrone/utility';
 import type { TerrainResolution } from '../types';
 import { isTerrainResolution } from '../types';
 
@@ -48,7 +48,15 @@ export const decodeTerrainHeights = (
         );
     }
 
-    const bytes = decodeBase64ToBytes(value.slice(HEIGHT_DATA_PREFIX.length));
+    let bytes: Uint8Array;
+    try {
+        bytes = decodeBase64ToBytes(value.slice(HEIGHT_DATA_PREFIX.length));
+    } catch {
+        throw new TerrainError(
+            'Payload contains an invalid base64 character.',
+            TerrainErrorCode.SOURCE_DECODE_FAILED,
+        );
+    }
     const expectedLength = resolution * resolution;
     if (bytes.length !== expectedLength * 2) {
         throw new TerrainError(

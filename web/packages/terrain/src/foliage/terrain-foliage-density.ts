@@ -1,5 +1,5 @@
 import { TerrainError, TerrainErrorCode } from '../errors';
-import { decodeBase64ToBytes, encodeBytesToBase64 } from '../internal/base64';
+import { encode as encodeBytesToBase64, decode as decodeBase64ToBytes } from '@axrone/utility';
 import type {
     ResolvedTerrainBrushOptions,
     TerrainDescriptor,
@@ -176,7 +176,15 @@ export const decodeTerrainFoliageDensity = (
         );
     }
 
-    const bytes = decodeBase64ToBytes(value.slice(DENSITY_DATA_PREFIX.length));
+    let bytes: Uint8Array;
+    try {
+        bytes = decodeBase64ToBytes(value.slice(DENSITY_DATA_PREFIX.length));
+    } catch {
+        throw new TerrainError(
+            'Payload contains an invalid base64 character.',
+            TerrainErrorCode.SOURCE_DECODE_FAILED,
+        );
+    }
     if (bytes.length !== resolution * resolution) {
         throw new TerrainError(
             `Foliage density payload length ${bytes.length} does not match resolution ${resolution} (expected ${resolution * resolution} bytes).`,
