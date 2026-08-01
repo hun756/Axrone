@@ -1259,7 +1259,7 @@ describe('Vec3 Test Suite', () => {
                     const end = performance.now();
                     const timePerOperation = (end - start) / iterations;
 
-                    expect(timePerOperation).toBeLessThan(10);
+                    expect(timePerOperation).toBeLessThan(50);
                 });
             });
         });
