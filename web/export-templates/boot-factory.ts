@@ -16,6 +16,8 @@ import {
 export type AxroneBootOptions = {
     readonly container?: HTMLElement | string | null;
     readonly dataUrl?: string;
+    readonly data?: unknown;
+    readonly scriptTypes?: readonly ComponentConstructor[];
     readonly onProgress?: (stage: string) => void;
 };
 
@@ -206,7 +208,9 @@ export const createAxroneBoot =
         };
 
         reportProgress('loading-data');
-        const data = await fetchGameData(dataUrl);
+        const data = options.data
+            ? decodeAxroneGameData(options.data)
+            : await fetchGameData(dataUrl);
 
         reportProgress('creating-scene');
         const scene = dependencies.createScene({
@@ -241,7 +245,9 @@ export const createAxroneBoot =
         resizeScene();
 
         reportProgress('loading-scripts');
-        const scriptComponentTypes = await loadScriptComponentTypes(dataUrl, data.scripts);
+        const scriptComponentTypes = options.scriptTypes && options.scriptTypes.length > 0
+            ? [...options.scriptTypes]
+            : await loadScriptComponentTypes(dataUrl, data.scripts);
 
         for (const componentType of dependencies.engineComponentTypes) {
             scene.registerComponent(componentType);
