@@ -6,6 +6,7 @@ import {
     enumerateShaderVariants,
     selectionToShaderDefines,
     shaderVariantCount,
+    shaderVariantKey,
 } from '../variants';
 import { defineShaderEffect, fragStage, glsl, keyword, prop, vtxStage, varying } from '../authoring';
 
@@ -90,5 +91,50 @@ describe('shader variant compilation', () => {
         const a = buildShaderVariant(baseEffect, { selection: { USE_FOG: true, QUALITY: 'LOW' } });
         const b = buildShaderVariant(baseEffect, { selection: { QUALITY: 'LOW', USE_FOG: true } });
         expect(a.key).toBe(b.key);
+    });
+});
+
+describe('shaderVariantKey', () => {
+    it('formats and sorts keys alphabetically', () => {
+        const key = shaderVariantKey({ QUALITY: 'HIGH', USE_FOG: true });
+        expect(key).toBe('QUALITY=HIGH|USE_FOG=true');
+    });
+
+    it('returns empty string for empty selection', () => {
+        expect(shaderVariantKey({})).toBe('');
+    });
+});
+
+describe('shader variant edge cases', () => {
+    it('shaderVariantCount returns 1 for empty keywords', () => {
+        expect(shaderVariantCount([])).toBe(1);
+    });
+
+    it('enumerateShaderVariants returns [{}] for empty keywords', () => {
+        const variants = enumerateShaderVariants([]);
+        expect(variants).toEqual([{}]);
+    });
+
+    it('selectionToShaderDefines falls back to index 0 for missing enum selection', () => {
+        const keywords = [keyword('MODE', ['fragment'], ['A', 'B', 'C'], 'B')];
+        const defines = selectionToShaderDefines(keywords, {});
+        // Missing selection -> resolvedIndex = 0 -> option 'A'
+        expect(defines.A).toBe(1);
+        expect(defines.MODE).toBe(0);
+    });
+
+    it('buildShaderVariant emits #line markers when preserveLineMarkers is true', () => {
+        const variant = buildShaderVariant(baseEffect, {
+            selection: { USE_FOG: false, QUALITY: 'LOW' },
+            preserveLineMarkers: true,
+        });
+        expect(variant.vertexSource).toContain('#line');
+        expect(variant.fragmentSource).toContain('#line');
+    });
+
+    it('buildShaderVariants respects preserveLineMarkers option', () => {
+        const variants = buildShaderVariants(baseEffect, { preserveLineMarkers: true });
+        expect(variants.length).toBeGreaterThan(0);
+        expect(variants[0]?.vertexSource).toContain('#line');
     });
 });
