@@ -3,6 +3,7 @@ import { float32ToBits, float64ToBitsPair, readU32LE, rotl32, writeU32LE } from 
 import { fmix32Alt } from '../mixers';
 import { asHash32, asSeed32, asHash64, type Hash32, type Hash64, type Seed32, type HashAlgorithmMetadata, type HashValue } from '../types';
 import type { IHasher } from '../interfaces';
+import { encode } from '@axrone/utility';
 
 const XXH32_METADATA: HashAlgorithmMetadata = {
     name: 'xxhash32',
@@ -207,10 +208,7 @@ export class XxHash32 implements IHasher<Hash32> {
     }
 
     digestBase64(): string {
-        const bytes = this.digestBytes();
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-        return typeof btoa !== 'undefined' ? btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
+        return encode(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
@@ -480,10 +478,7 @@ export class XxHash64 implements IHasher<Hash64> {
     }
 
     digestBase64(): string {
-        const bytes = this.digestBytes();
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-        return typeof btoa !== 'undefined' ? btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
+        return encode(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
