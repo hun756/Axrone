@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LightKind } from '../constants';
 import { LightingDisposedError, LightingValidationError } from '../errors';
+import { LIGHTING_RIG_ACCESS } from '../internal';
 import { LightingRig } from '../rig';
 import type { LightingSelectionState } from '../types';
 
@@ -152,5 +153,73 @@ describe('LightingRig', () => {
 
         rig.dispose();
         expect(rig.isDisposed).toBe(true);
+    });
+
+    it('generates sequential auto-IDs for lights without explicit ids', () => {
+        const rig = new LightingRig();
+        const d = rig.addDirectional({ direction: [0, -1, 0] });
+        const p = rig.addPoint({ position: [0, 0, 0], range: 5 });
+        const s = rig.addSpot({
+            direction: [0, -1, 0],
+            coneMode: 'cosine',
+            innerConeCosine: 0.9,
+            outerConeCosine: 0.7,
+        });
+
+        expect(String(d.id)).toMatch(/^directional:\d+$/);
+        expect(String(p.id)).toMatch(/^point:\d+$/);
+        expect(String(s.id)).toMatch(/^spot:\d+$/);
+
+        const ids = [String(d.id), String(p.id), String(s.id)];
+        const uniqueIds = new Set(ids);
+        expect(uniqueIds.size).toBe(3);
+    });
+
+    it('supports method chaining on setEnvironment and resetEnvironment', () => {
+        const rig = new LightingRig();
+
+        const chainResult = rig.setEnvironment({ exposure: 1.5 });
+        expect(chainResult).toBe(rig);
+
+        const resetResult = rig.resetEnvironment();
+        expect(resetResult).toBe(rig);
+    });
+
+    it('preserves insertion ordering after update', () => {
+        const rig = new LightingRig();
+        const a = rig.addPoint({ id: 'a', position: [0, 0, 0], range: 1 });
+        const b = rig.addPoint({ id: 'b', position: [0, 0, 1], range: 2 });
+        const c = rig.addPoint({ id: 'c', position: [0, 0, 2], range: 3 });
+
+        rig.update(b.id, { intensity: 99 });
+
+        expect(rig.list().map((l) => String(l.id))).toEqual(['a', 'b', 'c']);
+        expect(rig.get(b.id)?.intensity).toBe(99);
+        expect(rig.get(a.id)?.id).toBe(a.id);
+        expect(rig.get(c.id)?.id).toBe(c.id);
+    });
+
+    it('exposes a snapshot via LIGHTING_RIG_ACCESS matching rig state', () => {
+        const rig = new LightingRig({
+            id: 'snap-rig',
+            environment: { ambient: [0.5, 0.5, 0.5] },
+        });
+        rig.addPoint({ id: 'p1', position: [1, 2, 3], range: 5 });
+
+        const snapshot = rig[LIGHTING_RIG_ACCESS]();
+
+        expect(String(snapshot.id)).toBe('snap-rig');
+        expect(Number(snapshot.version)).toBe(Number(rig.version));
+        expect(snapshot.environment.ambient.x).toBe(0.5);
+        expect(snapshot.entries).toHaveLength(1);
+        expect(String(snapshot.entries[0]!.definition.id)).toBe('p1');
+        expect(snapshot.entries[0]!.sequence).toBeGreaterThan(0);
+    });
+
+    it('throws on LIGHTING_RIG_ACCESS after disposal', () => {
+        const rig = new LightingRig();
+        rig.dispose();
+
+        expect(() => rig[LIGHTING_RIG_ACCESS]()).toThrow(LightingDisposedError);
     });
 });
