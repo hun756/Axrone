@@ -10,6 +10,7 @@ import {
     hashString,
     registerCustomAlgorithm,
     unregisterCustomAlgorithm,
+    FACTORIES,
 } from '../hash/factory';
 import { Fnv1a32 } from '../hash/algorithms';
 import type { IHasher } from '../hash/interfaces';
@@ -54,6 +55,15 @@ describe('factory', () => {
 
     it('getFactory throws for unknown', () => {
         expect(() => getFactory('nope' as any)).toThrow();
+    });
+
+    it('getFactory throws with HASH_ALGORITHM_NOT_FOUND error code', () => {
+        try {
+            getFactory('nope' as any);
+            expect.fail('should have thrown');
+        } catch (e: any) {
+            expect(e.code).toBe('HASH_ALGORITHM_NOT_FOUND');
+        }
     });
 
     it('createHasher returns working hasher for known algorithm', () => {
@@ -132,6 +142,95 @@ describe('factory', () => {
         it('hashString() returns number', () => {
             const h = hashString('fnv1a-32', 'hello');
             expect(typeof h).toBe('number');
+        });
+
+        it('hash() returns bigint for fnv1a-64', () => {
+            const h = hash('fnv1a-64', 'hello');
+            expect(typeof h).toBe('bigint');
+        });
+
+        it('hashBytes() returns bigint for xxhash64', () => {
+            const enc = new TextEncoder();
+            const r = hashBytes('xxhash64', enc.encode('hello'));
+            expect(typeof r).toBe('bigint');
+        });
+
+        it('hashString() returns bigint for murmur2-64', () => {
+            const r = hashString('murmur2-64', 'hello');
+            expect(typeof r).toBe('bigint');
+        });
+    });
+
+    describe('FACTORIES metadata correctness', () => {
+        it('fnv1a-32 metadata', () => {
+            const f = FACTORIES.get('fnv1a-32')!;
+            expect(f.metadata.outputSize).toBe(32);
+            expect(f.metadata.blockSize).toBe(1);
+            expect(f.metadata.seedable).toBe(true);
+            expect(f.metadata.keyed).toBe(false);
+            expect(f.metadata.cryptographicallySecure).toBe(false);
+        });
+
+        it('fnv1a-64 metadata', () => {
+            const f = FACTORIES.get('fnv1a-64')!;
+            expect(f.metadata.outputSize).toBe(64);
+            expect(f.metadata.seedable).toBe(true);
+        });
+
+        it('crc32 metadata', () => {
+            const f = FACTORIES.get('crc32')!;
+            expect(f.metadata.outputSize).toBe(32);
+            expect(f.metadata.category).toBe('checksum');
+            expect(f.metadata.seedable).toBe(true);
+        });
+
+        it('murmur3-32 metadata', () => {
+            const f = FACTORIES.get('murmur3-32')!;
+            expect(f.metadata.outputSize).toBe(32);
+            expect(f.metadata.blockSize).toBe(4);
+        });
+
+        it('xxhash64 metadata', () => {
+            const f = FACTORIES.get('xxhash64')!;
+            expect(f.metadata.outputSize).toBe(64);
+            expect(f.metadata.blockSize).toBe(32);
+        });
+
+        it('sha-256 metadata', () => {
+            const f = FACTORIES.get('sha-256')!;
+            expect(f.metadata.outputSize).toBe(256);
+            expect(f.metadata.blockSize).toBe(64);
+            expect(f.metadata.cryptographicallySecure).toBe(true);
+            expect(f.metadata.seedable).toBe(false);
+        });
+
+        it('sha-512 metadata', () => {
+            const f = FACTORIES.get('sha-512')!;
+            expect(f.metadata.outputSize).toBe(512);
+            expect(f.metadata.blockSize).toBe(128);
+            expect(f.metadata.cryptographicallySecure).toBe(true);
+        });
+
+        it('djb2 metadata', () => {
+            const f = FACTORIES.get('djb2')!;
+            expect(f.metadata.outputSize).toBe(32);
+            expect(f.metadata.seedable).toBe(false);
+        });
+    });
+
+    describe('createHasher with options', () => {
+        it('createHasher with seed option', () => {
+            const h1 = createHasher('fnv1a-32');
+            const h2 = createHasher('fnv1a-32', { seed: 42 as any });
+            h1.updateString('test');
+            h2.updateString('test');
+            expect(h1.digest()).not.toBe(h2.digest());
+        });
+
+        it('createHasher for xxhash64 returns working hasher', () => {
+            const h = createHasher('xxhash64');
+            h.updateString('test');
+            expect(typeof h.digest()).toBe('bigint');
         });
     });
 });
