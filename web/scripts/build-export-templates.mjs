@@ -105,6 +105,34 @@ const writeGeneratedEntry = (definition) => {
     return entryPath;
 };
 
+/**
+ * Patch Emscripten WASM module guards that check `.startsWith("file://")` on a
+ * relative URL (which never matches). Replace with `location.protocol` checks so
+ * the runtime correctly skips `fetch()` on `file://` pages where WASM bytes are
+ * already embedded in the bundle.
+ */
+const patchEmscriptenFileGuards = (filePath) => {
+    let source = fs.readFileSync(filePath, 'utf8');
+    const original = source;
+
+    // Fix 1: Direct fetch() guard — check page protocol instead of WASM URL
+    source = source.replace(
+        /typeof fetch=="function"&&!(\w+)\.startsWith\("file:\/\/"\)/g,
+        'typeof fetch=="function"&&location.protocol!="file:"'
+    );
+
+    // Fix 2: instantiateStreaming guard — same protocol check
+    source = source.replace(
+        /(\w+)\.startsWith\("file:\/\/"\)\|\|(\w+)\|\|typeof fetch!="function"/g,
+        'location.protocol==="file:"||$2||typeof fetch!="function"'
+    );
+
+    if (source !== original) {
+        fs.writeFileSync(filePath, source, 'utf8');
+        console.log('  Patched Emscripten file:// fetch guards.');
+    }
+};
+
 const buildTemplate = async (definition, engineVersion) => {
     const modules = PROFILE_MODULE_CATALOG[definition.profile];
     const entryPath = writeGeneratedEntry(definition);
@@ -147,6 +175,8 @@ const buildTemplate = async (definition, engineVersion) => {
     if (!fs.existsSync(outputPath)) {
         throw new Error(`Export template '${definition.id}' did not emit '${outputFileName}'.`);
     }
+
+    patchEmscriptenFileGuards(outputPath);
 
     const payload = fs.readFileSync(outputPath);
     const manifest = {
