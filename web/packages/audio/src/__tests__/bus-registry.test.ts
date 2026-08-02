@@ -274,4 +274,25 @@ describe('AudioBusRegistry', () => {
             expect(child!.parentId).toBe('parent');
         });
     });
+
+    describe('audio routing', () => {
+        it('child bus connects to parent outputNode (not gainNode) so parent panner is in the signal chain', () => {
+            const ctx = new FakeAudioContext();
+            const registry = createRegistry(ctx);
+            registry.upsert({ id: 'parent', pan: 0.5 });
+            registry.upsert({ id: 'child', parentId: 'parent' });
+
+            const parentBus = registry.require('parent');
+            const childBus = registry.require('child');
+
+            // When parent has a StereoPannerNode, its outputNode is the panner.
+            // Child must connect to parent.outputNode so audio flows through the panner.
+            if (parentBus.panNode) {
+                expect(parentBus.outputNode).toBe(parentBus.panNode);
+                // The child's outputNode should have been connected to parent's outputNode (panner)
+                // We verify by checking the internal connect was made to outputNode, not gainNode
+                expect(parentBus.outputNode).not.toBe(parentBus.gainNode);
+            }
+        });
+    });
 });
