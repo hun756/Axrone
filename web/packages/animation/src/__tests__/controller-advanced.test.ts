@@ -97,6 +97,49 @@ describe('AnimationController.dispose()', () => {
         expect(controller.rootMotion.translation).toEqual([0, 0, 0]);
         expect(controller.rootMotion.rotation).toEqual([0, 0, 0, 1]);
     });
+
+    it('resets accumulated root motion after an update cycle', () => {
+        const controller = new AnimationController({
+            rig: { bones: [{ name: 'hips' }] },
+            clips: [
+                {
+                    id: 'walk',
+                    tracks: [
+                        {
+                            target: 'hips',
+                            path: 'translation',
+                            times: [0, 1],
+                            values: [0, 0, 0, 4, 0, 0],
+                        },
+                    ],
+                },
+            ],
+            layers: [
+                {
+                    id: 'base',
+                    stateMachine: {
+                        entryState: 'walk',
+                        states: [{ id: 'walk', motion: { kind: 'clip', clipId: 'walk' } }],
+                    },
+                },
+            ],
+            rootMotion: { bone: 'hips', consume: true },
+        });
+        // Drive root motion accumulation
+        controller.update(0.5);
+        expect(controller.rootMotion.translation[0]).not.toBeCloseTo(0, 2);
+        // After dispose, root motion must be back to zero / identity
+        controller.dispose();
+        expect(controller.rootMotion.translation).toEqual([0, 0, 0]);
+        expect(controller.rootMotion.rotation).toEqual([0, 0, 0, 1]);
+    });
+
+    it('is safe to call multiple times', () => {
+        const controller = makeController();
+        controller.dispose();
+        expect(() => controller.dispose()).not.toThrow();
+        expect(controller.rootMotion.translation).toEqual([0, 0, 0]);
+    });
 });
 
 describe('AnimationController multi-layer', () => {
