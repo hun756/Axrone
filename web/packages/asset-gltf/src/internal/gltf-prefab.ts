@@ -370,12 +370,18 @@ export const buildPrefabDefinition = (context: PrefabBuildContext): PrefabBuildR
         }
 
         for (const child of ensureArray(node.children)) {
-            visitNode(child, baseNodeId);
+            stack.push({ nodeIndex: child, parentNodeId: baseNodeId });
         }
     };
 
+    // Iterative traversal with explicit stack to avoid stack overflow on deep hierarchies
+    const stack: Array<{ nodeIndex: number; parentNodeId: string | null }> = [];
     for (const rootNode of ensureArray(scene.nodes)) {
-        visitNode(rootNode, null);
+        stack.push({ nodeIndex: rootNode, parentNodeId: null });
+    }
+    while (stack.length > 0) {
+        const { nodeIndex, parentNodeId } = stack.pop()!;
+        visitNode(nodeIndex, parentNodeId);
     }
 
     const importedNodeIds = new Set(nodeIds.filter((nodeId) => nodeId.startsWith('node/')));
