@@ -9,6 +9,7 @@ import type {
 } from '../types';
 import { type DecodedAccessor, GltfAccessorRuntime } from './accessor-runtime';
 import { GltfResourceRuntime } from './source-runtime';
+import { componentTypeByteSize, accessorComponentCount } from './gltf-utils';
 
 const SUPPORTED_ATTRIBUTE_SEMANTICS = [
     'POSITION',
@@ -145,9 +146,16 @@ const loadConfiguredDracoDecoderModule = async (
         }
     }
 
-    const promise = Promise.resolve(moduleFactory(createDracoDecoderModuleConfig(options))).catch(
-        (error) => withDracoDecoderHint(error, options)
-    );
+    const promise = Promise.resolve(moduleFactory(createDracoDecoderModuleConfig(options)))
+        .catch((error) => {
+            // Remove failed promise from cache so subsequent calls can retry
+            if (cacheKey) {
+                dracoDecoderModulePromisesByWasmUrl.delete(cacheKey);
+            } else {
+                dracoDecoderModulePromisesByFactory.delete(moduleFactory);
+            }
+            return withDracoDecoderHint(error, options);
+        });
 
     if (cacheKey) {
         dracoDecoderModulePromisesByWasmUrl.set(cacheKey, promise);
@@ -163,31 +171,17 @@ const loadDracoDecoderModule = async (runtime: GltfResourceRuntime): Promise<any
         return loadConfiguredDracoDecoderModule(runtime.dracoDecoder);
     }
 
-    dracoDecoderModulePromise ??= import('draco3dgltf').then((module) =>
-        module.createDecoderModule({})
-    );
+    dracoDecoderModulePromise ??= import('draco3dgltf')
+        .then((module) => module.createDecoderModule({}))
+        .catch((error) => {
+            // Remove failed promise from cache so subsequent calls can retry
+            dracoDecoderModulePromise = undefined;
+            throw error;
+        });
     try {
         return await dracoDecoderModulePromise;
     } catch (error) {
         return withDracoDecoderHint(error, runtime.dracoDecoder);
-    }
-};
-
-const accessorComponentCount = (type: GltfAccessorJson['type']): number => {
-    switch (type) {
-        case 'SCALAR':
-            return 1;
-        case 'VEC2':
-            return 2;
-        case 'VEC3':
-            return 3;
-        case 'VEC4':
-        case 'MAT2':
-            return 4;
-        case 'MAT3':
-            return 9;
-        case 'MAT4':
-            return 16;
     }
 };
 
@@ -302,22 +296,6 @@ const mapMorphTargetSemantic = (
             return 'normal';
         case 'TANGENT':
             return 'tangent';
-    }
-};
-
-const componentTypeByteSize = (
-    componentType: GltfAccessorJson['componentType']
-): 1 | 2 | 4 => {
-    switch (componentType) {
-        case 5120:
-        case 5121:
-            return 1;
-        case 5122:
-        case 5123:
-            return 2;
-        case 5125:
-        case 5126:
-            return 4;
     }
 };
 
@@ -772,6 +750,101 @@ const toSmallestIndexArray = (
     return max <= 65535 ? new Uint16Array(indices) : indices;
 };
 
+interface AttributeLayout {
+    readonly attribute: AttributeStream;
+    readonly integer: boolean;
+    readonly componentByteSize: number;
+    readonly byteLength: number;
+}
+
+const buildInterleavedIntegerVertexBuffer = (
+    vertexCount: number,
+    strideBytes: number,
+    attributeLayouts: readonly AttributeLayout[],
+    attributes: GltfMeshDefinition['attributes'][number][]
+): Uint8Array => {
+    const bytes = new Uint8Array(vertexCount * strideBytes);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let byteOffset = 0;
+
+    for (const layout of attributeLayouts) {
+        const { attribute, integer, componentByteSize, byteLength } = layout;
+        for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+            const baseOffset = vertex * strideBytes + byteOffset;
+            for (let component = 0; component < attribute.componentCount; component += 1) {
+                const value =
+                    attribute.values[vertex * attribute.componentCount + component] ?? 0;
+                const componentOffset = baseOffset + component * componentByteSize;
+                if (integer) {
+                    writeIntegerComponent(
+                        view,
+                        componentOffset,
+                        attribute.componentType,
+                        value
+                    );
+                } else {
+                    view.setFloat32(componentOffset, value, true);
+                }
+            }
+        }
+
+        attributes.push(
+            Object.freeze({
+                semantic: mapAttributeSemantic(attribute.semantic),
+                componentCount: attribute.componentCount as 1 | 2 | 3 | 4,
+                offset: byteOffset,
+                stride: strideBytes,
+                type: integer ? attribute.componentType : 5126,
+                normalized: false,
+                integer: integer || undefined,
+            })
+        );
+        byteOffset += byteLength;
+    }
+
+    return bytes;
+};
+
+const buildInterleavedFloatVertexBuffer = (
+    vertexCount: number,
+    attributeStreams: readonly AttributeStream[],
+    attributes: GltfMeshDefinition['attributes'][number][]
+): Float32Array => {
+    const strideComponents = attributeStreams.reduce(
+        (total, attribute) => total + attribute.componentCount,
+        0
+    );
+    const interleaved = new Float32Array(vertexCount * strideComponents);
+    let componentOffset = 0;
+
+    for (const attribute of attributeStreams) {
+        const offsetBytes = componentOffset * Float32Array.BYTES_PER_ELEMENT;
+        for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+            interleaved.set(
+                attribute.values.subarray(
+                    vertex * attribute.componentCount,
+                    vertex * attribute.componentCount + attribute.componentCount
+                ),
+                vertex * strideComponents + componentOffset
+            );
+        }
+
+        attributes.push(
+            Object.freeze({
+                semantic: mapAttributeSemantic(attribute.semantic),
+                componentCount: attribute.componentCount as 1 | 2 | 3 | 4,
+                offset: offsetBytes,
+                stride: strideComponents * Float32Array.BYTES_PER_ELEMENT,
+                type: 5126,
+                normalized: false,
+            })
+        );
+        componentOffset += attribute.componentCount;
+    }
+
+    return interleaved;
+};
+
 export const buildMeshDefinition = async (
     primitive: GltfPrimitiveJson,
     accessors: GltfAccessorRuntime,
@@ -800,83 +873,8 @@ export const buildMeshDefinition = async (
     const strideBytes = attributeLayouts.reduce((total, layout) => total + layout.byteLength, 0);
     const attributes: GltfMeshDefinition['attributes'][number][] = [];
     const vertices = hasIntegerAttributes
-        ? (() => {
-              const bytes = new Uint8Array(vertexCount * strideBytes);
-              const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-              let byteOffset = 0;
-
-              for (const layout of attributeLayouts) {
-                  const { attribute, integer, componentByteSize, byteLength } = layout;
-                  for (let vertex = 0; vertex < vertexCount; vertex += 1) {
-                      const baseOffset = vertex * strideBytes + byteOffset;
-                      for (let component = 0; component < attribute.componentCount; component += 1) {
-                          const value =
-                              attribute.values[vertex * attribute.componentCount + component] ?? 0;
-                          const componentOffset = baseOffset + component * componentByteSize;
-                          if (integer) {
-                              writeIntegerComponent(
-                                  view,
-                                  componentOffset,
-                                  attribute.componentType,
-                                  value
-                              );
-                          } else {
-                              view.setFloat32(componentOffset, value, true);
-                          }
-                      }
-                  }
-
-                  attributes.push(
-                      Object.freeze({
-                          semantic: mapAttributeSemantic(attribute.semantic),
-                          componentCount: attribute.componentCount as 1 | 2 | 3 | 4,
-                          offset: byteOffset,
-                          stride: strideBytes,
-                          type: integer ? attribute.componentType : 5126,
-                          normalized: false,
-                          integer: integer || undefined,
-                      })
-                  );
-                  byteOffset += byteLength;
-              }
-
-              return bytes;
-          })()
-        : (() => {
-              const strideComponents = attributeStreams.reduce(
-                  (total, attribute) => total + attribute.componentCount,
-                  0
-              );
-              const interleaved = new Float32Array(vertexCount * strideComponents);
-              let componentOffset = 0;
-
-              for (const attribute of attributeStreams) {
-                  const offsetBytes = componentOffset * Float32Array.BYTES_PER_ELEMENT;
-                  for (let vertex = 0; vertex < vertexCount; vertex += 1) {
-                      interleaved.set(
-                          attribute.values.subarray(
-                              vertex * attribute.componentCount,
-                              vertex * attribute.componentCount + attribute.componentCount
-                          ),
-                          vertex * strideComponents + componentOffset
-                      );
-                  }
-
-                  attributes.push(
-                      Object.freeze({
-                          semantic: mapAttributeSemantic(attribute.semantic),
-                          componentCount: attribute.componentCount as 1 | 2 | 3 | 4,
-                          offset: offsetBytes,
-                          stride: strideComponents * Float32Array.BYTES_PER_ELEMENT,
-                          type: 5126,
-                          normalized: false,
-                      })
-                  );
-                  componentOffset += attribute.componentCount;
-              }
-
-              return interleaved;
-          })();
+        ? buildInterleavedIntegerVertexBuffer(vertexCount, strideBytes, attributeLayouts, attributes)
+        : buildInterleavedFloatVertexBuffer(vertexCount, attributeStreams, attributes);
 
     const expandedIndices = expandPrimitiveIndices(
         resolved.topologyMode,
