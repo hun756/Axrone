@@ -81,12 +81,6 @@ const canRemoveLinearKeyframe = (
         const currentValue = values[currentOffset + componentIndex] ?? 0;
         const nextValue = values[nextOffset + componentIndex] ?? 0;
         const predicted = prevValue + (nextValue - prevValue) * alpha;
-        if (track.path === 'rotation') {
-            if (Math.abs(predicted - currentValue) > tolerance) {
-                return false;
-            }
-            continue;
-        }
         if (Math.abs(predicted - currentValue) > tolerance) {
             return false;
         }
