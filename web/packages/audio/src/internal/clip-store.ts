@@ -41,8 +41,8 @@ export class AudioClipStore<TSchema extends AudioAssetSchema = AudioAssetSchema>
     readonly #registeredClips = new Map<AudioClipId, AudioClipSelector<TSchema>>();
     readonly #clipCache = new Map<string, Promise<AudioClipRecord<TSchema>>>();
     readonly #bufferCacheKeys = new WeakMap<AudioBuffer, string>();
-    /** LRU order: most-recently-used key is at the end. */
-    readonly #lruOrder: string[] = [];
+    /** LRU order: most-recently-used key is at the end. Map insertion-order gives O(1) touch/evict. */
+    readonly #lruMap = new Map<string, true>();
 
     #bufferCacheSequence = 0;
 
@@ -102,7 +102,7 @@ export class AudioClipStore<TSchema extends AudioAssetSchema = AudioAssetSchema>
         if (useCache) {
             this.#clipCache.set(cacheKey, pending);
             this.#evictLruIfNeeded();
-            this.#lruOrder.push(cacheKey);
+            this.#lruMap.set(cacheKey, true);
         }
 
         try {
@@ -119,7 +119,7 @@ export class AudioClipStore<TSchema extends AudioAssetSchema = AudioAssetSchema>
     clear(): void {
         this.#registeredClips.clear();
         this.#clipCache.clear();
-        this.#lruOrder.length = 0;
+        this.#lruMap.clear();
     }
 
     #invalidate(selector: AudioClipSelector<TSchema>): void {
@@ -131,25 +131,23 @@ export class AudioClipStore<TSchema extends AudioAssetSchema = AudioAssetSchema>
     }
 
     #touchLru(cacheKey: string): void {
-        this.#removeLruEntry(cacheKey);
-        this.#lruOrder.push(cacheKey);
+        this.#lruMap.delete(cacheKey);
+        this.#lruMap.set(cacheKey, true);
     }
 
     #removeLruEntry(cacheKey: string): void {
-        const idx = this.#lruOrder.indexOf(cacheKey);
-        if (idx >= 0) {
-            this.#lruOrder.splice(idx, 1);
-        }
+        this.#lruMap.delete(cacheKey);
     }
 
     #evictLruIfNeeded(): void {
         if (this.#maxEntries <= 0) {
             return;
         }
-        while (this.#clipCache.size >= this.#maxEntries && this.#lruOrder.length > 0) {
-            const evictKey = this.#lruOrder.shift();
+        while (this.#clipCache.size >= this.#maxEntries && this.#lruMap.size > 0) {
+            const evictKey = this.#lruMap.keys().next().value;
             if (evictKey !== undefined) {
                 this.#clipCache.delete(evictKey);
+                this.#lruMap.delete(evictKey);
             }
         }
     }
