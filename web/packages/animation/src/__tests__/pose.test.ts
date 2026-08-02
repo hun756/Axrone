@@ -405,6 +405,32 @@ describe('blendWeightedFrames', () => {
         blendWeightedFrames(target, [frame1, frame2], [1, 1], rest);
         expect(target.curves.values[0]).toBeCloseTo(150, 5);
     });
+
+    it('sequential calls produce correct independent results', () => {
+        // blendWeightedFrames uses module-level scratch (blendReferenceRotation),
+        // so sequential calls must each produce correct results without interference.
+        const rest = new AnimationFrame(rig, curveLayout);
+        const frame1 = new AnimationFrame(rig, curveLayout);
+        const frame2 = new AnimationFrame(rig, curveLayout);
+        frame1.pose.translations[0] = 10;
+        frame2.pose.translations[0] = 30;
+
+        const targetA = new AnimationFrame(rig, curveLayout);
+        const targetB = new AnimationFrame(rig, curveLayout);
+
+        // First call: blend with weight [1, 0] -> should get frame1
+        blendWeightedFrames(targetA, [frame1, frame2], [1, 0], rest);
+        // Second call: blend with weight [0, 1] -> should get frame2
+        blendWeightedFrames(targetB, [frame1, frame2], [0, 1], rest);
+
+        expect(targetA.pose.translations[0]).toBeCloseTo(10, 5);
+        expect(targetB.pose.translations[0]).toBeCloseTo(30, 5);
+
+        // Third call: equal weights -> should get average
+        const targetC = new AnimationFrame(rig, curveLayout);
+        blendWeightedFrames(targetC, [frame1, frame2], [1, 1], rest);
+        expect(targetC.pose.translations[0]).toBeCloseTo(20, 5);
+    });
 });
 
 describe('applyAdditiveFrame', () => {
