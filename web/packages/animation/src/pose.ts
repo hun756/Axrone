@@ -417,6 +417,12 @@ export const blendWeightedFrames = (
     return target;
 };
 
+// Module-level scratch buffers for applyAdditiveFrame; not re-entrant, matching
+// the convention used by blendReferenceRotation and other hot-path helpers.
+const additiveInverseRest = new Float32Array(4);
+const additiveDeltaRotation = new Float32Array(4);
+const additiveScaledRotation = new Float32Array(4);
+
 export const applyAdditiveFrame = (
     target: AnimationFrame,
     base: AnimationFrame,
@@ -430,9 +436,9 @@ export const applyAdditiveFrame = (
     if (alpha <= 0) {
         return target;
     }
-    const inverseRest = new Float32Array(4);
-    const deltaRotation = new Float32Array(4);
-    const scaledRotation = new Float32Array(4);
+    const inverseRest = additiveInverseRest;
+    const deltaRotation = additiveDeltaRotation;
+    const scaledRotation = additiveScaledRotation;
 
     for (let boneIndex = 0; boneIndex < target.pose.boneCount; boneIndex += 1) {
         if (mask && !mask.has(boneIndex)) {
