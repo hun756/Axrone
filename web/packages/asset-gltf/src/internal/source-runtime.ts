@@ -17,6 +17,7 @@ import type {
     GltfRootJson,
     GltfTexturePayload,
 } from '../types';
+import { inferCompressedContainer } from './gltf-utils';
 
 const GLB_MAGIC = 0x46546c67;
 const GLB_JSON_CHUNK = 0x4e4f534a;
@@ -165,21 +166,6 @@ const parseDataUri = (
         mimeType,
         bytes: new TextEncoder().encode(decodeURIComponent(payload)),
     };
-};
-
-const inferCompressedContainer = (
-    mimeType: string | undefined,
-    uri: string | undefined
-): 'ktx2' | 'basisu' | undefined => {
-    const normalizedMime = mimeType?.toLowerCase();
-    const normalizedUri = uri?.toLowerCase();
-    if (normalizedMime === 'image/ktx2' || normalizedUri?.endsWith('.ktx2')) {
-        return 'ktx2';
-    }
-    if (normalizedMime === 'image/basis' || normalizedUri?.endsWith('.basis')) {
-        return 'basisu';
-    }
-    return undefined;
 };
 
 export const inferFormatFromSource = (source: AssetImportSource): 'gltf' | 'glb' | undefined => {

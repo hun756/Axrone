@@ -69,21 +69,6 @@ export const inferTextureFormat = (payload: GltfTexturePayload): TextureFormat |
     return undefined;
 };
 
-export const inferCompressedContainer = (
-    mimeType: string | undefined,
-    uri: string | undefined
-): 'ktx2' | 'basisu' | undefined => {
-    const normalizedMime = mimeType?.toLowerCase();
-    const normalizedUri = uri?.toLowerCase();
-    if (normalizedMime === 'image/ktx2' || normalizedUri?.endsWith('.ktx2')) {
-        return 'ktx2';
-    }
-    if (normalizedMime === 'image/basis' || normalizedUri?.endsWith('.basis')) {
-        return 'basisu';
-    }
-    return undefined;
-};
-
 export const createTextureTransform = (
     binding: GltfTextureBindingJson | undefined
 ): GltfTextureTransform | undefined => {
