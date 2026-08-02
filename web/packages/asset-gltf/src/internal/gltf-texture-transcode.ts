@@ -15,6 +15,7 @@ import type { TextureFormat } from '@axrone/render-webgl2';
 
 export class GltfTextureTranscoderRegistry {
     private readonly _transcoders = new Map<string, GltfTextureTranscoder>();
+    private _sortedCache: readonly GltfTextureTranscoder[] | undefined;
 
     constructor(transcoders: readonly GltfTextureTranscoder[] = EMPTY_ARRAY) {
         for (const transcoder of transcoders) {
@@ -24,21 +25,29 @@ export class GltfTextureTranscoderRegistry {
 
     register(transcoder: GltfTextureTranscoder): this {
         this._transcoders.set(transcoder.id, transcoder);
+        this._sortedCache = undefined;
         return this;
     }
 
     unregister(id: string): boolean {
-        return this._transcoders.delete(id);
+        const removed = this._transcoders.delete(id);
+        if (removed) {
+            this._sortedCache = undefined;
+        }
+        return removed;
     }
 
     list(): readonly GltfTextureTranscoder[] {
-        return Object.freeze(
-            [...this._transcoders.values()].sort(
-                (left, right) =>
-                    (right.priority ?? 0) - (left.priority ?? 0) ||
-                    left.id.localeCompare(right.id)
-            )
-        );
+        if (!this._sortedCache) {
+            this._sortedCache = Object.freeze(
+                [...this._transcoders.values()].sort(
+                    (left, right) =>
+                        (right.priority ?? 0) - (left.priority ?? 0) ||
+                        left.id.localeCompare(right.id)
+                )
+            );
+        }
+        return this._sortedCache;
     }
 
     resolve(request: Readonly<GltfTextureTranscodeRequest>): GltfTextureTranscoder | undefined {
