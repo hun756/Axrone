@@ -121,6 +121,7 @@ const buildTemplate = async (definition, engineVersion) => {
         define: {
             __AXRONE_TEMPLATE_VERSION__: JSON.stringify(engineVersion),
             __AXRONE_TEMPLATE_PROFILE_ID__: JSON.stringify(PROFILE_IDS[definition.profile]),
+            'process.env.NODE_ENV': JSON.stringify('production'),
         },
         resolve: {
             alias: createWorkspacePackageAliasEntries(workspaceDir),
