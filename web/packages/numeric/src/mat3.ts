@@ -78,7 +78,7 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
     }
 
     static fromArray(arr: ArrayLike<number>, offset: number = 0): Mat3 {
-        if (process.env.NODE_ENV === 'development') {
+        if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
             if (offset < 0) {
                 throw new RangeError('Offset cannot be negative');
             }

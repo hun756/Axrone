@@ -57,13 +57,13 @@ const fastClamp = (value: number, min: number, max: number): number =>
     value < min ? min : value > max ? max : value;
 
 const validateNumber = (value: unknown, context: string): void => {
-    if (process.env.NODE_ENV !== 'production' && !isFiniteNumber(value)) {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production' && !isFiniteNumber(value)) {
         throw new NumericRangeError(`${context} must be a finite number`);
     }
 };
 
 const validateBounds = (min: number, max: number): void => {
-    if (process.env.NODE_ENV !== 'production') {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
         validateNumber(min, 'Minimum bound');
         validateNumber(max, 'Maximum bound');
     }
