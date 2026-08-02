@@ -225,6 +225,22 @@ describe('AudioListenerComponent', () => {
             expect(comp.active).toBe(true);
             expect(comp.globalVolume).toBe(1);
         });
+
+        it('normalizes invalid enum strings during deserialize', () => {
+            const comp = new AudioListenerComponent();
+            comp.deserialize({
+                speakerMode: 'surround',
+                hrtfPlugin: 'unknown',
+                occlusionMode: 'simple',
+                reverbPreset: 'cathedral',
+                virtualVoiceBehavior: 'drop',
+            });
+            expect(comp.speakerMode).toBe('stereo');
+            expect(comp.hrtfPlugin).toBe('none');
+            expect(comp.occlusionMode).toBe('raycastDiffraction');
+            expect(comp.reverbPreset).toBe('off');
+            expect(comp.virtualVoiceBehavior).toBe('playSilent');
+        });
     });
 
     describe('clone', () => {
@@ -417,6 +433,48 @@ describe('AudioSourceComponent', () => {
             expect(comp.playbackState).toBe('playing');
             comp.syncState({ playbackState: 'paused' } as any);
             expect(comp.playbackState).toBe('paused');
+        });
+    });
+
+    describe('setter validation', () => {
+        it('rejects negative volume', () => {
+            const comp = new AudioSourceComponent({ volume: 1 });
+            comp.volume = -1;
+            expect(comp.volume).toBe(1);
+        });
+
+        it('rejects NaN volume', () => {
+            const comp = new AudioSourceComponent({ volume: 0.5 });
+            comp.volume = NaN;
+            expect(comp.volume).toBe(0.5);
+        });
+
+        it('rejects non-positive playbackRate', () => {
+            const comp = new AudioSourceComponent({ playbackRate: 1 });
+            comp.playbackRate = 0;
+            expect(comp.playbackRate).toBe(1);
+            comp.playbackRate = -1;
+            expect(comp.playbackRate).toBe(1);
+        });
+
+        it('rejects NaN detuneCents', () => {
+            const comp = new AudioSourceComponent({ detuneCents: 100 });
+            comp.detuneCents = NaN;
+            expect(comp.detuneCents).toBe(100);
+        });
+
+        it('clamps pan to [-1, 1]', () => {
+            const comp = new AudioSourceComponent({ pan: 0 });
+            comp.pan = 5;
+            expect(comp.pan).toBe(1);
+            comp.pan = -5;
+            expect(comp.pan).toBe(-1);
+        });
+
+        it('rejects NaN pan', () => {
+            const comp = new AudioSourceComponent({ pan: 0.5 });
+            comp.pan = NaN;
+            expect(comp.pan).toBe(0.5);
         });
     });
 });
