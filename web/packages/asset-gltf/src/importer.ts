@@ -1,6 +1,6 @@
 import { EMPTY_ARRAY, DEFAULT_SAMPLER_ID, DEFAULT_MATERIAL_KEY_SUFFIX, DEFAULT_MATERIAL_NAME, DEFAULT_DOCUMENT_NAME, isSupportedExtension } from './internal/gltf-constants';
 import type { AnimationClipMetadataIndex } from './internal/gltf-animation-types';
-import { maybeFreeze, sanitizeName, ensureArray } from './internal/gltf-utils';
+import { maybeFreeze, sanitizeName, ensureArray, accessorComponentCount } from './internal/gltf-utils';
 import { inferTextureFormat } from './internal/gltf-texture';
 import type {
     AssetImportDiagnostic,
@@ -24,6 +24,7 @@ import { buildMeshDefinition, collectPrimitiveDiagnostics } from './internal/mes
 import type {
     GltfAccessorJson,
     GltfAnimationClipAsset,
+    GltfAnimationJson,
     GltfAssetKind,
     GltfAssetSchema,
     GltfAssetSchemaLike,
@@ -32,10 +33,14 @@ import type {
     GltfImporter,
     GltfImporterOptions,
     GltfMaterialAsset,
+    GltfMaterialJson,
     GltfMeshAsset,
+    GltfMeshJson,
     GltfSkinAsset,
+    GltfSkinJson,
     GltfRootJson,
     GltfTextureAsset,
+    GltfTextureUsage,
 } from './types';
 
 import {
@@ -109,10 +114,6 @@ const collectExtensionDiagnostics = (root: GltfRootJson): readonly AssetImportDi
     );
 };
 
-const collectFeatureDiagnostics = (root: GltfRootJson): readonly AssetImportDiagnostic[] => {
-    return Object.freeze([]);
-};
-
 const createDocumentName = (
     normalized: NormalizedGltfSource,
     explicitName: string | undefined
@@ -124,27 +125,6 @@ const createDocumentName = (
             normalized.json.asset.generator,
         DEFAULT_DOCUMENT_NAME
     );
-
-
-const accessorTypeComponentCount = (type: GltfAccessorJson['type']): number => {
-    switch (type) {
-        case 'SCALAR':
-            return 1;
-        case 'VEC2':
-            return 2;
-        case 'VEC3':
-            return 3;
-        case 'VEC4':
-        case 'MAT2':
-            return 4;
-        case 'MAT3':
-            return 9;
-        case 'MAT4':
-            return 16;
-    }
-
-    throw new GltfSchemaError(`Unsupported accessor type: ${type}`);
-};
 
 const createSkinAsset = async (
     root: GltfRootJson,
@@ -272,7 +252,7 @@ const createAnimationClipAsset = async (
         const interpolation = sampler.interpolation ?? 'LINEAR';
         const keyframeCount = input.count;
         const sampleStride =
-            keyframeCount > 0 ? output.values.length / keyframeCount : accessorTypeComponentCount(
+            keyframeCount > 0 ? output.values.length / keyframeCount : accessorComponentCount(
                 root.accessors?.[sampler.output]?.type ?? 'SCALAR'
             );
 
@@ -335,7 +315,7 @@ const createAnimationClipAsset = async (
           )
         : undefined;
     const features =
-        clipMetadata?.features || exportedFeatures
+        (clipMetadata?.features || exportedFeatures)
             ? Object.freeze(
                   [
                       ...(clipMetadata?.features ?? []),
@@ -362,6 +342,362 @@ const createAnimationClipAsset = async (
 };
 
 export { GltfTextureTranscoderRegistry, createGltfTextureTranscodeStage, createPassthroughGltfTextureTranscoder };
+
+interface GltfImportContext<TSchema extends GltfAssetSchemaLike> {
+    readonly normalized: NormalizedGltfSource;
+    readonly runtime: GltfResourceRuntime;
+    readonly accessors: GltfAccessorRuntime;
+    readonly diagnostics: AssetImportDiagnostic[];
+    readonly animationManifest: ReturnType<typeof resolvePortableAnimationManifest>;
+    readonly textureUsageMap: Map<number, Set<GltfTextureUsage>>;
+    readonly clipMetadataSources: ReturnType<typeof resolvePortableAnimationClipMetadataSources>;
+    readonly createSubKey: (suffix: string) => string;
+    readonly freeze: boolean;
+    readonly materialShaderId: string;
+    readonly fallbackSamplerId: string;
+    readonly additional: AssetWriteInput<TSchema>[];
+}
+
+const resolveTextureAssets = async <TSchema extends GltfAssetSchemaLike>(
+    ctx: GltfImportContext<TSchema>,
+    textureKeys: readonly string[]
+): Promise<void> => {
+    const explicitTextures = ctx.normalized.json.textures ?? EMPTY_ARRAY;
+    for (let textureIndex = 0; textureIndex < explicitTextures.length; textureIndex += 1) {
+        const texture = explicitTextures[textureIndex]!;
+        const imageIndex = resolveTextureImageIndex(texture);
+        if (imageIndex === undefined) {
+            ctx.diagnostics.push({
+                level: 'warning',
+                code: 'gltf.texture.missing-source',
+                message: `Texture ${textureIndex} does not declare an image source`,
+            });
+            continue;
+        }
+
+        const payload = await ctx.runtime.resolveImage(imageIndex);
+        const sampler = createSamplerDefinition(
+            texture.sampler,
+            texture.sampler !== undefined
+                ? ctx.normalized.json.samplers?.[texture.sampler]
+                : undefined,
+            ctx.fallbackSamplerId
+        );
+        const usageHints = Object.freeze([
+            ...(ctx.textureUsageMap.get(textureIndex) ?? EMPTY_ARRAY),
+        ]);
+        const asset = maybeFreeze(
+            {
+                id: sanitizeName(texture.name, `Texture ${textureIndex}`),
+                textureIndex,
+                imageIndex,
+                sampler,
+                payload,
+                usageHints,
+                runtimeFormat: inferTextureFormat(payload),
+                transcode: Object.freeze({
+                    status: 'source',
+                    targetFormat: inferTextureFormat(payload),
+                }),
+            } satisfies GltfTextureAsset,
+            ctx.freeze
+        );
+
+        ctx.additional.push(
+            writeAsset<TSchema, 'gltf.texture'>('gltf.texture', textureKeys[textureIndex], asset.id, asset as TSchema['gltf.texture'])
+        );
+    }
+};
+
+const resolveMaterialAssets = <TSchema extends GltfAssetSchemaLike>(
+    ctx: GltfImportContext<TSchema>,
+    explicitMaterials: readonly GltfMaterialJson[],
+    materialKeys: readonly string[],
+    textureKeys: readonly string[],
+    defaultMaterialKey: string | undefined
+): void => {
+    const requiresDefaultMaterial = (ctx.normalized.json.meshes ?? EMPTY_ARRAY).some((mesh) =>
+        mesh.primitives.some((primitive) => primitive.material === undefined)
+    );
+    if (requiresDefaultMaterial && !defaultMaterialKey) {
+        return;
+    }
+
+    for (let materialIndex = 0; materialIndex < explicitMaterials.length; materialIndex += 1) {
+        const material = explicitMaterials[materialIndex]!;
+        const built = createMaterialDefinition(material, ctx.materialShaderId, textureKeys);
+        const key = materialKeys[materialIndex]!;
+        const asset = maybeFreeze(
+            {
+                id: sanitizeName(material.name, `Material ${materialIndex}`),
+                materialIndex,
+                definition: Object.freeze({
+                    ...built.definition,
+                    id: key,
+                }),
+                alphaMode: built.alphaMode,
+                alphaCutoff: built.alphaCutoff,
+                doubleSided: built.doubleSided,
+                unlit: built.unlit,
+                textures: built.textures,
+            } satisfies GltfMaterialAsset,
+            ctx.freeze
+        );
+
+        ctx.additional.push(
+            writeAsset<TSchema, 'gltf.material'>('gltf.material', key, asset.id, asset as TSchema['gltf.material'],
+                Object.values(asset.textures).map((binding) => binding.textureKey))
+        );
+    }
+};
+
+const resolveMeshAssets = async <TSchema extends GltfAssetSchemaLike>(
+    ctx: GltfImportContext<TSchema>,
+    explicitMeshes: readonly GltfMeshJson[],
+    materialKeys: readonly string[],
+    defaultMaterialKey: string | undefined,
+    meshKeysByMesh: string[][],
+    materialKeysByMesh: Array<Array<string | undefined>>
+): Promise<void> => {
+    for (let meshIndex = 0; meshIndex < explicitMeshes.length; meshIndex += 1) {
+        const mesh = explicitMeshes[meshIndex]!;
+        const primitiveKeys: string[] = [];
+        const primitiveMaterialKeys: Array<string | undefined> = [];
+
+        for (
+            let primitiveIndex = 0;
+            primitiveIndex < mesh.primitives.length;
+            primitiveIndex += 1
+        ) {
+            const primitive = mesh.primitives[primitiveIndex]!;
+            ctx.diagnostics.push(
+                ...collectPrimitiveDiagnostics(primitive, meshIndex, primitiveIndex)
+            );
+            const built = await buildMeshDefinition(primitive, ctx.accessors, ctx.runtime);
+            const key = String(
+                ctx.createSubKey(`mesh/${meshIndex}/primitive/${primitiveIndex}`)
+            );
+            const resolvedMaterialKey =
+                primitive.material !== undefined
+                    ? materialKeys[primitive.material]
+                    : defaultMaterialKey;
+            const meshAsset = maybeFreeze(
+                {
+                    id: sanitizeName(
+                        mesh.name,
+                        `${sanitizeName(mesh.name, `Mesh ${meshIndex}`)} Primitive ${primitiveIndex}`
+                    ),
+                    meshIndex,
+                    primitiveIndex,
+                    definition: Object.freeze({
+                        ...built.definition,
+                        id: key,
+                    }),
+                    ...(built.bounds ? { bounds: built.bounds } : {}),
+                    ...(resolvedMaterialKey ? { materialKey: resolvedMaterialKey } : {}),
+                    ...(primitive.extras ? { extras: primitive.extras } : {}),
+                } satisfies GltfMeshAsset,
+                ctx.freeze
+            );
+
+            ctx.additional.push(
+                writeAsset<TSchema, 'gltf.mesh'>('gltf.mesh', key, meshAsset.id, meshAsset as TSchema['gltf.mesh'],
+                    resolvedMaterialKey ? [resolvedMaterialKey] : undefined)
+            );
+            primitiveKeys.push(key);
+            primitiveMaterialKeys.push(resolvedMaterialKey);
+        }
+
+        meshKeysByMesh[meshIndex] = primitiveKeys;
+        materialKeysByMesh[meshIndex] = primitiveMaterialKeys;
+    }
+};
+
+const resolveSkinAssets = async <TSchema extends GltfAssetSchemaLike>(
+    ctx: GltfImportContext<TSchema>,
+    explicitSkins: readonly GltfSkinJson[],
+    skinKeys: readonly string[],
+    skinsByIndex: Array<GltfSkinAsset | undefined>
+): Promise<void> => {
+    for (let skinIndex = 0; skinIndex < explicitSkins.length; skinIndex += 1) {
+        const key = skinKeys[skinIndex]!;
+        const asset = await createSkinAsset(ctx.normalized.json, skinIndex, ctx.accessors, ctx.freeze);
+        skinsByIndex[skinIndex] = asset;
+        ctx.additional.push(
+            writeAsset<TSchema, 'gltf.skin'>('gltf.skin', key, asset.id, asset as TSchema['gltf.skin'])
+        );
+    }
+};
+
+const resolveAnimationAssets = async <TSchema extends GltfAssetSchemaLike>(
+    ctx: GltfImportContext<TSchema>,
+    explicitAnimations: readonly GltfAnimationJson[],
+    animationKeys: readonly string[],
+    animationsByIndex: Array<GltfAnimationClipAsset | undefined>
+): Promise<void> => {
+    for (let animationIndex = 0; animationIndex < explicitAnimations.length; animationIndex += 1) {
+        const key = animationKeys[animationIndex]!;
+        const asset = await createAnimationClipAsset(
+            ctx.normalized.json,
+            animationIndex,
+            ctx.accessors,
+            ctx.clipMetadataSources,
+            ctx.diagnostics,
+            ctx.freeze
+        );
+        animationsByIndex[animationIndex] = asset;
+        ctx.additional.push(
+            writeAsset<TSchema, 'gltf.animation'>('gltf.animation', key, asset.id, asset as TSchema['gltf.animation'])
+        );
+    }
+};
+
+const buildSceneAndDocument = <TSchema extends GltfAssetSchemaLike>(
+    ctx: GltfImportContext<TSchema>,
+    meshKeysByMesh: readonly (readonly string[])[],
+    materialKeysByMesh: readonly (readonly (string | undefined)[])[],
+    skinsByIndex: readonly (GltfSkinAsset | undefined)[],
+    skinKeys: readonly string[],
+    animationsByIndex: readonly (GltfAnimationClipAsset | undefined)[],
+    animationKeys: readonly string[],
+    defaultMaterialKey: string | undefined,
+    materialKeys: readonly string[],
+    textureKeys: readonly string[],
+    explicitMeshes: readonly GltfMeshJson[],
+    explicitMaterials: readonly GltfMaterialJson[]
+): {
+    readonly document: GltfDocumentAsset;
+    readonly sceneEntries: readonly GltfDocumentSceneAsset[];
+} => {
+    const scenes =
+        ctx.normalized.json.scenes && ctx.normalized.json.scenes.length > 0
+            ? ctx.normalized.json.scenes
+            : Object.freeze([
+                  Object.freeze({
+                      name: 'Scene 0',
+                      nodes: Object.freeze(
+                          ensureArray(ctx.normalized.json.nodes).map((_, index) => index)
+                      ),
+                  }),
+              ]);
+    const defaultSceneIndex = Math.min(
+        Math.max(ctx.normalized.json.scene ?? 0, 0),
+        Math.max(0, scenes.length - 1)
+    );
+    const sceneEntries: GltfDocumentSceneAsset[] = [];
+
+    for (let sceneIndex = 0; sceneIndex < scenes.length; sceneIndex += 1) {
+        const built = buildPrefabDefinition({
+            root: ctx.normalized.json,
+            sceneIndex,
+            defaultSceneIndex,
+            meshKeysByMesh,
+            materialKeysByMesh,
+            skinsByIndex,
+            skinKeysByIndex: skinKeys,
+            animationsByIndex,
+            animationKeysByIndex: animationKeys,
+            manifest: ctx.animationManifest,
+        });
+        ctx.diagnostics.push(...built.diagnostics);
+        const key = String(ctx.createSubKey(`scene/${sceneIndex}/prefab`));
+        const asset = maybeFreeze(
+            {
+                id: sanitizeName(scenes[sceneIndex]?.name, `Scene ${sceneIndex}`),
+                sceneIndex,
+                definition: Object.freeze({
+                    ...built.prefab,
+                    id: key,
+                }),
+                rootNodeIds: built.rootNodeIds,
+                nodeIds: built.nodeIds,
+                meshKeys: built.meshKeys,
+                skinKeys: built.skinKeys,
+                animationKeys: built.animationKeys,
+                materialKeys: built.materialKeys,
+                ...(built.animationController
+                    ? { animationController: built.animationController }
+                    : {}),
+            },
+            ctx.freeze
+        );
+
+        ctx.additional.push(
+            writeAsset<TSchema, 'gltf.prefab'>('gltf.prefab', key, asset.id, asset as TSchema['gltf.prefab'],
+                [...built.meshKeys, ...built.skinKeys, ...built.animationKeys, ...built.materialKeys])
+        );
+        sceneEntries.push(
+            maybeFreeze(
+                {
+                    sceneIndex,
+                    name: asset.id,
+                    prefabKey: key,
+                    rootNodeIds: built.rootNodeIds,
+                    ...(built.animationController
+                        ? { animationController: built.animationController }
+                        : {}),
+                } satisfies GltfDocumentSceneAsset,
+                ctx.freeze
+            )
+        );
+    }
+
+    const documentName = createDocumentName(ctx.normalized, undefined);
+    const document = maybeFreeze(
+        {
+            id: documentName,
+            uri: ctx.normalized.sourceUri,
+            name: documentName,
+            format: ctx.normalized.format,
+            version: ctx.normalized.json.asset.version,
+            ...(ctx.normalized.json.asset.generator
+                ? { generator: ctx.normalized.json.asset.generator }
+                : {}),
+            ...(ctx.normalized.json.asset.copyright
+                ? { copyright: ctx.normalized.json.asset.copyright }
+                : {}),
+            defaultScene: defaultSceneIndex,
+            scenes: Object.freeze(sceneEntries),
+            meshKeys: Object.freeze(meshKeysByMesh.flat()),
+            skinKeys: Object.freeze([...skinKeys]),
+            animationKeys: Object.freeze([...animationKeys]),
+            materialKeys: Object.freeze(
+                [
+                    ...(defaultMaterialKey ? [defaultMaterialKey] : EMPTY_ARRAY),
+                    ...materialKeys,
+                ].filter((value): value is string => Boolean(value))
+            ),
+            textureKeys: Object.freeze(textureKeys.filter(Boolean)),
+            extensionsUsed: Object.freeze([
+                ...(ctx.normalized.json.extensionsUsed ?? EMPTY_ARRAY),
+            ]),
+            extensionsRequired: Object.freeze([
+                ...(ctx.normalized.json.extensionsRequired ?? EMPTY_ARRAY),
+            ]),
+            stats: Object.freeze({
+                sceneCount: sceneEntries.length,
+                nodeCount: ensureArray(ctx.normalized.json.nodes).length,
+                cameraCount: ensureArray(ctx.normalized.json.cameras).length,
+                lightCount:
+                    ensureArray(ctx.normalized.json.extensions?.KHR_lights_punctual?.lights)
+                        .length,
+                meshCount: explicitMeshes.length,
+                primitiveCount: meshKeysByMesh.reduce(
+                    (total, entries) => total + entries.length,
+                    0
+                ),
+                materialCount:
+                    explicitMaterials.length + (defaultMaterialKey ? 1 : 0),
+                textureCount: textureKeys.length,
+                skinCount: ensureArray(ctx.normalized.json.skins).length,
+                animationCount: ensureArray(ctx.normalized.json.animations).length,
+            }),
+        } satisfies GltfDocumentAsset,
+        ctx.freeze
+    );
+
+    return { document, sceneEntries };
+};
 
 export const createGltfImporter = <
     TSchema extends GltfAssetSchemaLike = GltfAssetSchema,
@@ -416,7 +752,6 @@ export const createGltfImporter = <
             const accessors = new GltfAccessorRuntime(runtime);
             const diagnostics: AssetImportDiagnostic[] = [
                 ...collectExtensionDiagnostics(normalized.json),
-                ...collectFeatureDiagnostics(normalized.json),
             ];
             const animationManifest = resolvePortableAnimationManifest(normalized, diagnostics);
             const textureUsageMap = collectTextureUsages(normalized.json);
@@ -445,53 +780,27 @@ export const createGltfImporter = <
             const skinsByIndex: Array<GltfSkinAsset | undefined> = [];
             const animationsByIndex: Array<GltfAnimationClipAsset | undefined> = [];
             const additional: AssetWriteInput<TSchema>[] = [];
+
+            const ctx: GltfImportContext<TSchema> = {
+                normalized,
+                runtime,
+                accessors,
+                diagnostics,
+                animationManifest,
+                textureUsageMap,
+                clipMetadataSources,
+                createSubKey,
+                freeze,
+                materialShaderId,
+                fallbackSamplerId,
+                additional,
+            };
+
+            // Phase 1: Resolve texture assets
+            await resolveTextureAssets(ctx, textureKeys);
+
+            // Phase 2: Resolve default material and material assets
             let defaultMaterialKey: string | undefined;
-
-            for (let textureIndex = 0; textureIndex < explicitTextures.length; textureIndex += 1) {
-                const texture = explicitTextures[textureIndex]!;
-                const imageIndex = resolveTextureImageIndex(texture);
-                if (imageIndex === undefined) {
-                    diagnostics.push({
-                        level: 'warning',
-                        code: 'gltf.texture.missing-source',
-                        message: `Texture ${textureIndex} does not declare an image source`,
-                    });
-                    continue;
-                }
-
-                const payload = await runtime.resolveImage(imageIndex);
-                const sampler = createSamplerDefinition(
-                    texture.sampler,
-                    texture.sampler !== undefined
-                        ? normalized.json.samplers?.[texture.sampler]
-                        : undefined,
-                    fallbackSamplerId
-                );
-                const usageHints = Object.freeze([
-                    ...(textureUsageMap.get(textureIndex) ?? EMPTY_ARRAY),
-                ]);
-                const asset = maybeFreeze(
-                    {
-                        id: sanitizeName(texture.name, `Texture ${textureIndex}`),
-                        textureIndex,
-                        imageIndex,
-                        sampler,
-                        payload,
-                        usageHints,
-                        runtimeFormat: inferTextureFormat(payload),
-                        transcode: Object.freeze({
-                            status: 'source',
-                            targetFormat: inferTextureFormat(payload),
-                        }),
-                    } satisfies GltfTextureAsset,
-                    freeze
-                );
-
-                additional.push(
-                    writeAsset<TSchema, 'gltf.texture'>('gltf.texture', textureKeys[textureIndex], asset.id, asset as TSchema['gltf.texture'])
-                );
-            }
-
             const requiresDefaultMaterial = explicitMeshes.some((mesh) =>
                 mesh.primitives.some((primitive) => primitive.material === undefined)
             );
@@ -518,241 +827,36 @@ export const createGltfImporter = <
                     writeAsset<TSchema, 'gltf.material'>('gltf.material', defaultMaterialKey, asset.id, asset as TSchema['gltf.material'])
                 );
             }
+            resolveMaterialAssets(ctx, explicitMaterials, materialKeys, textureKeys, defaultMaterialKey);
 
-            for (let materialIndex = 0; materialIndex < explicitMaterials.length; materialIndex += 1) {
-                const material = explicitMaterials[materialIndex]!;
-                const built = createMaterialDefinition(material, materialShaderId, textureKeys);
-                const key = materialKeys[materialIndex]!;
-                const asset = maybeFreeze(
-                    {
-                        id: sanitizeName(material.name, `Material ${materialIndex}`),
-                        materialIndex,
-                        definition: Object.freeze({
-                            ...built.definition,
-                            id: key,
-                        }),
-                        alphaMode: built.alphaMode,
-                        alphaCutoff: built.alphaCutoff,
-                        doubleSided: built.doubleSided,
-                        unlit: built.unlit,
-                        textures: built.textures,
-                    } satisfies GltfMaterialAsset,
-                    freeze
-                );
+            // Phase 3: Resolve mesh assets
+            await resolveMeshAssets(ctx, explicitMeshes, materialKeys, defaultMaterialKey, meshKeysByMesh, materialKeysByMesh);
 
-                additional.push(
-                    writeAsset<TSchema, 'gltf.material'>('gltf.material', key, asset.id, asset as TSchema['gltf.material'],
-                        Object.values(asset.textures).map((binding) => binding.textureKey))
-                );
-            }
+            // Phase 4: Resolve skin assets
+            await resolveSkinAssets(ctx, explicitSkins, skinKeys, skinsByIndex);
 
-            for (let meshIndex = 0; meshIndex < explicitMeshes.length; meshIndex += 1) {
-                const mesh = explicitMeshes[meshIndex]!;
-                const primitiveKeys: string[] = [];
-                const primitiveMaterialKeys: Array<string | undefined> = [];
+            // Phase 5: Resolve animation assets
+            await resolveAnimationAssets(ctx, explicitAnimations, animationKeys, animationsByIndex);
 
-                for (
-                    let primitiveIndex = 0;
-                    primitiveIndex < mesh.primitives.length;
-                    primitiveIndex += 1
-                ) {
-                    const primitive = mesh.primitives[primitiveIndex]!;
-                    diagnostics.push(
-                        ...collectPrimitiveDiagnostics(primitive, meshIndex, primitiveIndex)
-                    );
-                    const built = await buildMeshDefinition(primitive, accessors, runtime);
-                    const key = String(
-                        createSubKey(`mesh/${meshIndex}/primitive/${primitiveIndex}`)
-                    );
-                    const materialKey =
-                        primitive.material !== undefined
-                            ? materialKeys[primitive.material]
-                            : defaultMaterialKey;
-                    const meshAsset = maybeFreeze(
-                        {
-                            id: sanitizeName(
-                                mesh.name,
-                                `${sanitizeName(mesh.name, `Mesh ${meshIndex}`)} Primitive ${primitiveIndex}`
-                            ),
-                            meshIndex,
-                            primitiveIndex,
-                            definition: Object.freeze({
-                                ...built.definition,
-                                id: key,
-                            }),
-                            ...(built.bounds ? { bounds: built.bounds } : {}),
-                            ...(materialKey ? { materialKey } : {}),
-                            ...(primitive.extras ? { extras: primitive.extras } : {}),
-                        } satisfies GltfMeshAsset,
-                        freeze
-                    );
-
-                    additional.push(
-                        writeAsset<TSchema, 'gltf.mesh'>('gltf.mesh', key, meshAsset.id, meshAsset as TSchema['gltf.mesh'],
-                            materialKey ? [materialKey] : undefined)
-                    );
-                    primitiveKeys.push(key);
-                    primitiveMaterialKeys.push(materialKey);
-                }
-
-                meshKeysByMesh[meshIndex] = primitiveKeys;
-                materialKeysByMesh[meshIndex] = primitiveMaterialKeys;
-            }
-
-            for (let skinIndex = 0; skinIndex < explicitSkins.length; skinIndex += 1) {
-                const key = skinKeys[skinIndex]!;
-                const asset = await createSkinAsset(normalized.json, skinIndex, accessors, freeze);
-                skinsByIndex[skinIndex] = asset;
-                additional.push(
-                    writeAsset<TSchema, 'gltf.skin'>('gltf.skin', key, asset.id, asset as TSchema['gltf.skin'])
-                );
-            }
-
-            for (let animationIndex = 0; animationIndex < explicitAnimations.length; animationIndex += 1) {
-                const key = animationKeys[animationIndex]!;
-                const asset = await createAnimationClipAsset(
-                    normalized.json,
-                    animationIndex,
-                    accessors,
-                    clipMetadataSources,
-                    diagnostics,
-                    freeze
-                );
-                animationsByIndex[animationIndex] = asset;
-                additional.push(
-                    writeAsset<TSchema, 'gltf.animation'>('gltf.animation', key, asset.id, asset as TSchema['gltf.animation'])
-                );
-            }
-
-            const scenes =
-                normalized.json.scenes && normalized.json.scenes.length > 0
-                    ? normalized.json.scenes
-                    : Object.freeze([
-                          Object.freeze({
-                              name: 'Scene 0',
-                              nodes: Object.freeze(
-                                  ensureArray(normalized.json.nodes).map((_, index) => index)
-                              ),
-                          }),
-                      ]);
-            const defaultSceneIndex = Math.min(
-                Math.max(normalized.json.scene ?? 0, 0),
-                Math.max(0, scenes.length - 1)
-            );
-            const sceneEntries: GltfDocumentSceneAsset[] = [];
-
-            for (let sceneIndex = 0; sceneIndex < scenes.length; sceneIndex += 1) {
-                const built = buildPrefabDefinition({
-                    root: normalized.json,
-                    sceneIndex,
-                    defaultSceneIndex,
-                    meshKeysByMesh,
-                    materialKeysByMesh,
-                    skinsByIndex,
-                    skinKeysByIndex: skinKeys,
-                    animationsByIndex,
-                    animationKeysByIndex: animationKeys,
-                    manifest: animationManifest,
-                });
-                diagnostics.push(...built.diagnostics);
-                const key = String(createSubKey(`scene/${sceneIndex}/prefab`));
-                const asset = maybeFreeze(
-                    {
-                        id: sanitizeName(scenes[sceneIndex]?.name, `Scene ${sceneIndex}`),
-                        sceneIndex,
-                        definition: Object.freeze({
-                            ...built.prefab,
-                            id: key,
-                        }),
-                        rootNodeIds: built.rootNodeIds,
-                        nodeIds: built.nodeIds,
-                        meshKeys: built.meshKeys,
-                        skinKeys: built.skinKeys,
-                        animationKeys: built.animationKeys,
-                        materialKeys: built.materialKeys,
-                        ...(built.animationController
-                            ? { animationController: built.animationController }
-                            : {}),
-                    },
-                    freeze
-                );
-
-                additional.push(
-                    writeAsset<TSchema, 'gltf.prefab'>('gltf.prefab', key, asset.id, asset as TSchema['gltf.prefab'],
-                        [...built.meshKeys, ...built.skinKeys, ...built.animationKeys, ...built.materialKeys])
-                );
-                sceneEntries.push(
-                    maybeFreeze(
-                        {
-                            sceneIndex,
-                            name: asset.id,
-                            prefabKey: key,
-                            rootNodeIds: built.rootNodeIds,
-                            ...(built.animationController
-                                ? { animationController: built.animationController }
-                                : {}),
-                        } satisfies GltfDocumentSceneAsset,
-                        freeze
-                    )
-                );
-            }
-
-            const document = maybeFreeze(
-                {
-                    id: createDocumentName(normalized, options.documentName),
-                    uri: normalized.sourceUri,
-                    name: createDocumentName(normalized, options.documentName),
-                    format: normalized.format,
-                    version: normalized.json.asset.version,
-                    ...(normalized.json.asset.generator
-                        ? { generator: normalized.json.asset.generator }
-                        : {}),
-                    ...(normalized.json.asset.copyright
-                        ? { copyright: normalized.json.asset.copyright }
-                        : {}),
-                    defaultScene: defaultSceneIndex,
-                    scenes: Object.freeze(sceneEntries),
-                    meshKeys: Object.freeze(meshKeysByMesh.flat()),
-                    skinKeys: Object.freeze([...skinKeys]),
-                    animationKeys: Object.freeze([...animationKeys]),
-                    materialKeys: Object.freeze(
-                        [
-                            ...(defaultMaterialKey ? [defaultMaterialKey] : EMPTY_ARRAY),
-                            ...materialKeys,
-                        ].filter((value): value is string => Boolean(value))
-                    ),
-                    textureKeys: Object.freeze(textureKeys.filter(Boolean)),
-                    extensionsUsed: Object.freeze([
-                        ...(normalized.json.extensionsUsed ?? EMPTY_ARRAY),
-                    ]),
-                    extensionsRequired: Object.freeze([
-                        ...(normalized.json.extensionsRequired ?? EMPTY_ARRAY),
-                    ]),
-                    stats: Object.freeze({
-                        sceneCount: sceneEntries.length,
-                        nodeCount: ensureArray(normalized.json.nodes).length,
-                        cameraCount: ensureArray(normalized.json.cameras).length,
-                        lightCount:
-                            ensureArray(normalized.json.extensions?.KHR_lights_punctual?.lights)
-                                .length,
-                        meshCount: explicitMeshes.length,
-                        primitiveCount: meshKeysByMesh.reduce(
-                            (total, entries) => total + entries.length,
-                            0
-                        ),
-                        materialCount:
-                            explicitMaterials.length + (defaultMaterialKey ? 1 : 0),
-                        textureCount: textureKeys.length,
-                        skinCount: ensureArray(normalized.json.skins).length,
-                        animationCount: ensureArray(normalized.json.animations).length,
-                    }),
-                } satisfies GltfDocumentAsset,
-                freeze
+            // Phase 6: Build scene prefabs and document
+            const { document, sceneEntries } = buildSceneAndDocument(
+                ctx,
+                meshKeysByMesh,
+                materialKeysByMesh,
+                skinsByIndex,
+                skinKeys,
+                animationsByIndex,
+                animationKeys,
+                defaultMaterialKey,
+                materialKeys,
+                textureKeys,
+                explicitMeshes,
+                explicitMaterials
             );
 
             return Object.freeze({
                 primary: writeAsset<TSchema, 'gltf.document'>('gltf.document', String(createSubKey('document')), document.name, document as TSchema['gltf.document'],
-                    [...document.textureKeys, ...document.materialKeys, ...document.meshKeys, ...document.skinKeys, ...document.animationKeys, ...document.scenes.map((scene) => scene.prefabKey)]),
+                    [...document.textureKeys, ...document.materialKeys, ...document.meshKeys, ...document.skinKeys, ...document.animationKeys, ...sceneEntries.map((scene) => scene.prefabKey)]),
                 additional: Object.freeze(additional),
                 diagnostics: Object.freeze(diagnostics),
             }) as AssetImportResult<TSchema>;
