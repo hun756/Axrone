@@ -54,7 +54,9 @@ export const encodeGltfValue = (value: unknown): GltfSerializedValue => {
         const encoded: Record<string, GltfSerializedValue> = {};
 
         for (const [key, entry] of Object.entries(value)) {
-            encoded[key] = encodeGltfValue(entry);
+            if (Object.hasOwn(value, key)) {
+                encoded[key] = encodeGltfValue(entry);
+            }
         }
 
         return encoded;
