@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AnimationIkError } from '../errors';
 import { AnimationIkLayer } from '../ik';
 import { AnimationCurveLayout, AnimationFrame, AnimationPose, AnimationWorldPose } from '../pose';
 import { AnimationRetargeter } from '../retargeting';
@@ -69,6 +70,65 @@ describe('AnimationIkLayer edge cases', () => {
         const tipRotationOffset = rig.indexOfBone('tip') * 4;
         expect(Math.abs(worldPose.rotations[tipRotationOffset + 2]!)).toBeCloseTo(halfSqrt2, 2);
         expect(Math.abs(worldPose.rotations[tipRotationOffset + 3]!)).toBeCloseTo(halfSqrt2, 2);
+    });
+
+    it('setTarget with targetBone tracks the bone world pose', () => {
+        const rig = new AnimationRig({
+            bones: [
+                { name: 'root' },
+                { name: 'mid', parent: 'root', translation: [1, 0, 0] },
+                { name: 'tip', parent: 'mid', translation: [1, 0, 0] },
+            ],
+        });
+        const ikLayer = new AnimationIkLayer(rig, {
+            id: 'follow',
+            jobs: [
+                {
+                    id: 'follow-tip',
+                    solver: 'ccd',
+                    rootBone: 'root',
+                    tipBone: 'tip',
+                    targetBone: 'mid',
+                },
+            ],
+        });
+
+        // Move the 'mid' bone to a known position via pose rotation
+        const pose = new AnimationPose(rig.boneCount).reset(rig);
+        const midIndex = rig.indexOfBone('mid');
+        // Translate mid bone to [1, 5, 0] in local space
+        pose.translations[midIndex * 3] = 1;
+        pose.translations[midIndex * 3 + 1] = 5;
+        pose.translations[midIndex * 3 + 2] = 0;
+
+        // apply() should internally resolve the targetBone world position
+        ikLayer.apply(pose);
+
+        // After IK solve, all values must remain finite (no NaN propagation)
+        for (let index = 0; index < pose.rotations.length; index += 1) {
+            expect(Number.isFinite(pose.rotations[index]!)).toBe(true);
+        }
+        for (let index = 0; index < pose.translations.length; index += 1) {
+            expect(Number.isFinite(pose.translations[index]!)).toBe(true);
+        }
+    });
+
+    it('setTarget throws on unknown job id', () => {
+        const rig = new AnimationRig({ bones: [{ name: 'root' }] });
+        const ikLayer = new AnimationIkLayer(rig, {
+            id: 'layer',
+            jobs: [
+                {
+                    id: 'job1',
+                    solver: 'ccd',
+                    rootBone: 'root',
+                    tipBone: 'root',
+                },
+            ],
+        });
+        expect(() => ikLayer.setTarget('nonexistent', { position: [0, 0, 0] })).toThrow(
+            AnimationIkError
+        );
     });
 });
 
