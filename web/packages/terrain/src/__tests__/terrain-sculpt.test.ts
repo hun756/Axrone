@@ -48,6 +48,13 @@ describe('terrain brush options', () => {
             }
         }
     });
+
+    it('accepts boundary values: strength 1, falloff 8, flattenTarget 0 and 1', () => {
+        expect(() => resolveTerrainBrushOptions({ strength: 1 })).not.toThrow();
+        expect(() => resolveTerrainBrushOptions({ falloff: 8 })).not.toThrow();
+        expect(() => resolveTerrainBrushOptions({ flattenTarget: 0 })).not.toThrow();
+        expect(() => resolveTerrainBrushOptions({ flattenTarget: 1 })).not.toThrow();
+    });
 });
 
 describe('applyTerrainBrushStamp', () => {
@@ -139,6 +146,52 @@ describe('applyTerrainBrushStamp', () => {
             expect((error as TerrainError).code).toBe(TerrainErrorCode.HEIGHTMAP_SIZE_MISMATCH);
         }
     });
+
+    it('returns false when stamp is centered outside the terrain footprint', () => {
+        const descriptor = createDescriptor();
+        const heights = new Float32Array(33 * 33);
+        const brush = resolveTerrainBrushOptions({ kind: 'raise', radius: 5, strength: 1 });
+
+        const changed = applyTerrainBrushStamp({
+            heights,
+            descriptor,
+            brush,
+            localX: 200,
+            localZ: 200,
+        });
+
+        expect(changed).toBe(false);
+        expect(heights.every((v) => v === 0)).toBe(true);
+    });
+
+    it('smooth uses pre-stamp snapshot for neighbor averaging', () => {
+        const descriptor = createDescriptor();
+        const heights = new Float32Array(33 * 33);
+        heights[16 * 33 + 16] = 1;
+        const brush = resolveTerrainBrushOptions({ kind: 'smooth', radius: 4, strength: 1 });
+
+        applyTerrainBrushStamp({ heights, descriptor, brush, localX: 0, localZ: 0 });
+
+        expect(heights[16 * 33 + 16]!).toBeLessThan(1);
+        expect(heights[16 * 33 + 16]!).toBeGreaterThan(0);
+    });
+
+    it('raise clamps at 1.0 and returns false on saturated heights', () => {
+        const descriptor = createDescriptor();
+        const heights = new Float32Array(33 * 33).fill(1);
+        const brush = resolveTerrainBrushOptions({ kind: 'raise', radius: 10, strength: 1 });
+
+        const changed = applyTerrainBrushStamp({
+            heights,
+            descriptor,
+            brush,
+            localX: 0,
+            localZ: 0,
+        });
+
+        expect(changed).toBe(false);
+        expect(heights.every((v) => v === 1)).toBe(true);
+    });
 });
 
 describe('raycastTerrainHeightmap', () => {
@@ -192,6 +245,78 @@ describe('raycastTerrainHeightmap', () => {
 
         expect(hit).toBeNull();
     });
+
+    it('returns null for a zero-length direction vector', () => {
+        const descriptor = createDescriptor();
+        const heightmap = TerrainHeightmap.createFlat(33, 0.5);
+
+        const hit = raycastTerrainHeightmap(heightmap, descriptor, {
+            origin: { x: 0, y: 50, z: 0 },
+            direction: { x: 0, y: 0, z: 0 },
+        });
+
+        expect(hit).toBeNull();
+    });
+
+    it('misses when ray starts below the terrain going upward', () => {
+        const descriptor = createDescriptor({ maxHeight: 10 });
+        const heightmap = TerrainHeightmap.createFlat(33, 0.5);
+
+        const hit = raycastTerrainHeightmap(heightmap, descriptor, {
+            origin: { x: 0, y: -1, z: 0 },
+            direction: { x: 0, y: 1, z: 0 },
+        });
+
+        expect(hit).toBeNull();
+    });
+
+    it('misses when ray is horizontal and above the terrain', () => {
+        const descriptor = createDescriptor({ maxHeight: 10 });
+        const heightmap = TerrainHeightmap.createFlat(33, 0.2);
+
+        const hit = raycastTerrainHeightmap(heightmap, descriptor, {
+            origin: { x: -50, y: 50, z: 0 },
+            direction: { x: 1, y: 0, z: 0 },
+        });
+
+        expect(hit).toBeNull();
+    });
+
+    it('misses when the hit is beyond maxDistance', () => {
+        const descriptor = createDescriptor({ maxHeight: 10 });
+        const heightmap = TerrainHeightmap.createFlat(33, 0.5);
+
+        const farHit = raycastTerrainHeightmap(heightmap, descriptor, {
+            origin: { x: 0, y: 50, z: 0 },
+            direction: { x: 0, y: -1, z: 0 },
+        });
+        expect(farHit).not.toBeNull();
+
+        const closeHit = raycastTerrainHeightmap(
+            heightmap,
+            descriptor,
+            {
+                origin: { x: 0, y: 50, z: 0 },
+                direction: { x: 0, y: -1, z: 0 },
+            },
+            1
+        );
+        expect(closeHit).toBeNull();
+    });
+
+    it('hits at the footprint edge', () => {
+        const descriptor = createDescriptor({ width: 64, length: 64, maxHeight: 10 });
+        const heightmap = TerrainHeightmap.createFlat(33, 0.5);
+
+        const hit = raycastTerrainHeightmap(heightmap, descriptor, {
+            origin: { x: 32, y: 50, z: 0 },
+            direction: { x: 0, y: -1, z: 0 },
+        });
+
+        expect(hit).not.toBeNull();
+        expect(hit!.point.x).toBeCloseTo(32, 0);
+        expect(hit!.point.y).toBeCloseTo(5, 1);
+    });
 });
 
 describe('terrain height codec', () => {
@@ -227,6 +352,48 @@ describe('terrain height codec', () => {
         } catch (error) {
             expect(error).toBeInstanceOf(TerrainError);
             expect((error as TerrainError).code).toBe(TerrainErrorCode.HEIGHTMAP_SIZE_MISMATCH);
+        }
+    });
+
+    it('clamps out-of-range values during encoding', () => {
+        const heights = new Float32Array(33 * 33);
+        heights[0] = -0.5;
+        heights[1] = 1.5;
+        heights[2] = 0.5;
+
+        const payload = encodeTerrainHeights(heights);
+        const decoded = decodeTerrainHeights(payload, 33);
+
+        expect(decoded[0]).toBeCloseTo(0, 4);
+        expect(decoded[1]).toBeCloseTo(1, 4);
+        expect(decoded[2]).toBeCloseTo(0.5, 4);
+    });
+
+    it('isTerrainHeightDataPayload returns false for non-strings', () => {
+        expect(isTerrainHeightDataPayload(42)).toBe(false);
+        expect(isTerrainHeightDataPayload(null)).toBe(false);
+        expect(isTerrainHeightDataPayload(undefined)).toBe(false);
+        expect(isTerrainHeightDataPayload({})).toBe(false);
+    });
+
+    it('decodeTerrainHeights rejects invalid resolution', () => {
+        const payload = encodeTerrainHeights(new Float32Array(33 * 33));
+        try {
+            decodeTerrainHeights(payload, 100 as never);
+            expect.unreachable('expected decode to throw');
+        } catch (error) {
+            expect(error).toBeInstanceOf(TerrainError);
+            expect((error as TerrainError).code).toBe(TerrainErrorCode.INVALID_RESOLUTION);
+        }
+    });
+
+    it('decodeTerrainHeights throws SOURCE_DECODE_FAILED on invalid base64', () => {
+        try {
+            decodeTerrainHeights('athf1:!!!invalid-base64!!!', 33);
+            expect.unreachable('expected decode to throw');
+        } catch (error) {
+            expect(error).toBeInstanceOf(TerrainError);
+            expect((error as TerrainError).code).toBe(TerrainErrorCode.SOURCE_DECODE_FAILED);
         }
     });
 });
