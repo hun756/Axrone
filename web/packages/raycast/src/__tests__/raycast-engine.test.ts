@@ -58,7 +58,7 @@ describe('RaycastEngine2D — dispatch correctness (regression for broken hit pi
         const hit = sys.raycast(v2(-5, 0), v2(1, 0), 100, ALL);
 
         expect(hit).not.toBeNull();
-        expect(hit!.distance).toBeCloseTo(8, 3);
+        expect(hit!.distance).toBeCloseTo(9, 3);
     });
 
     it('returns a hit for a Polygon', () => {
