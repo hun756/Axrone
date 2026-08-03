@@ -1,10 +1,20 @@
-import { describe, expect, it } from 'vitest';
 import {
+    createCircleShape,
+    createEllipseShape,
     createLinearGradientPaint,
+    createLineShape,
+    createPolygonShape,
+    createRadialGradientPaint,
     createRectangleShape,
+    createSolidPaint,
+    createTriangleShape,
     deserializeShape,
+    deserializePaint,
     sampleShapePaint,
+    serializePaint,
     serializeShape,
+    stringifyPaint,
+    stringifyShape,
 } from '../index';
 
 describe('@axrone/shapes-2d paint and serialization', () => {
@@ -57,5 +67,83 @@ describe('@axrone/shapes-2d paint and serialization', () => {
         const restoredSerialized = serializeShape(restored);
 
         expect(restoredSerialized).toEqual(serialized);
+    });
+
+    it('round-trips circle serialization', () => {
+        const shape = createCircleShape({ cx: 50, cy: 50, radius: 25, fill: '#ff0000' });
+        const serialized = serializeShape(shape);
+        const restored = deserializeShape(serialized);
+        expect(serializeShape(restored)).toEqual(serialized);
+    });
+
+    it('round-trips ellipse serialization', () => {
+        const shape = createEllipseShape({ cx: 0, cy: 0, radiusX: 20, radiusY: 10, fill: '#00ff00' });
+        const serialized = serializeShape(shape);
+        const restored = deserializeShape(serialized);
+        expect(serializeShape(restored)).toEqual(serialized);
+    });
+
+    it('round-trips triangle serialization', () => {
+        const shape = createTriangleShape({ a: [0, 0], b: [10, 0], c: [5, 10], fill: '#0000ff' });
+        const serialized = serializeShape(shape);
+        const restored = deserializeShape(serialized);
+        expect(serializeShape(restored)).toEqual(serialized);
+    });
+
+    it('round-trips line serialization', () => {
+        const shape = createLineShape({
+            start: [0, 0],
+            end: [100, 100],
+            stroke: { paint: '#333', width: 3 },
+        });
+        const serialized = serializeShape(shape);
+        const restored = deserializeShape(serialized);
+        expect(serializeShape(restored)).toEqual(serialized);
+    });
+
+    it('round-trips polygon serialization', () => {
+        const shape = createPolygonShape({
+            outer: { points: [[0, 0], [10, 0], [5, 10]] as readonly [number, number][] },
+            fill: '#abcdef',
+        });
+        const serialized = serializeShape(shape);
+        const restored = deserializeShape(serialized);
+        expect(serializeShape(restored)).toEqual(serialized);
+    });
+
+    it('round-trips gradient paint serialization', () => {
+        const linear = createLinearGradientPaint({
+            start: [0, 0],
+            end: [1, 1],
+            stops: [
+                { offset: 0, color: '#ff0000' },
+                { offset: 0.5, color: '#00ff00' },
+                { offset: 1, color: '#0000ff' },
+            ],
+            spread: 'repeat',
+            colorSpace: 'hsl',
+        });
+        const serialized = serializePaint(linear);
+        const restored = deserializePaint(serialized);
+        expect(restored.kind).toBe('linear-gradient');
+
+        const radial = createRadialGradientPaint({
+            center: [0.5, 0.5],
+            radius: 10,
+            stops: [{ offset: 0, color: '#fff' }, { offset: 1, color: '#000' }],
+        });
+        const radialSerialized = serializePaint(radial);
+        const radialRestored = deserializePaint(radialSerialized);
+        expect(radialRestored.kind).toBe('radial-gradient');
+    });
+
+    it('stringifyShape and stringifyPaint produce valid JSON', () => {
+        const shape = createRectangleShape({ x: 0, y: 0, width: 10, height: 5, fill: '#f00' });
+        const json = stringifyShape(shape);
+        expect(() => JSON.parse(json)).not.toThrow();
+
+        const paint = createSolidPaint('#00ff00');
+        const paintJson = stringifyPaint(paint);
+        expect(() => JSON.parse(paintJson)).not.toThrow();
     });
 });
