@@ -3,7 +3,9 @@ import { IslandSolver2D } from '@axrone/physics-2d';
 import { BodyManager2D } from '@axrone/physics-2d';
 import { ContactManager2D } from '@axrone/physics-2d';
 import { ConstraintManager2D } from '@axrone/physics-2d';
-import { BodyType } from '@axrone/physics-core';
+import { BodyType, SolverFlags } from '@axrone/physics-core';
+
+const GRAVITY = { x: 0, y: -10 };
 
 describe('IslandSolver2D', () => {
     let islandSolver: IslandSolver2D;
@@ -24,7 +26,7 @@ describe('IslandSolver2D', () => {
         });
 
         it('solves empty islands', () => {
-            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, true, 0)).not.toThrow();
+            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, true, SolverFlags.None, GRAVITY)).not.toThrow();
         });
 
         it('solves islands with dynamic bodies', () => {
@@ -36,7 +38,7 @@ describe('IslandSolver2D', () => {
 
             bodyManager.setMassData(bodyA, 1, 0.1, { x: 0, y: 0 });
 
-            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, true, 0)).not.toThrow();
+            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, true, SolverFlags.None, GRAVITY)).not.toThrow();
         });
 
         it('solves islands with multiple bodies', () => {
@@ -55,7 +57,7 @@ describe('IslandSolver2D', () => {
             bodyManager.setMassData(bodyA, 1, 0.1, { x: 0, y: 0 });
             bodyManager.setMassData(bodyB, 1, 0.1, { x: 0, y: 0 });
 
-            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, true, 0)).not.toThrow();
+            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, true, SolverFlags.None, GRAVITY)).not.toThrow();
         });
 
         it('handles sleep flag', () => {
@@ -67,7 +69,7 @@ describe('IslandSolver2D', () => {
 
             bodyManager.setMassData(bodyA, 1, 0.1, { x: 0, y: 0 });
 
-            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, false, 0)).not.toThrow();
+            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, false, SolverFlags.None, GRAVITY)).not.toThrow();
         });
 
         it('handles different iteration counts', () => {
@@ -79,9 +81,9 @@ describe('IslandSolver2D', () => {
 
             bodyManager.setMassData(bodyA, 1, 0.1, { x: 0, y: 0 });
 
-            expect(() => islandSolver.solveIslands(1 / 60, 4, 2, true, 0)).not.toThrow();
+            expect(() => islandSolver.solveIslands(1 / 60, 4, 2, true, SolverFlags.None, GRAVITY)).not.toThrow();
 
-            expect(() => islandSolver.solveIslands(1 / 60, 16, 6, true, 0)).not.toThrow();
+            expect(() => islandSolver.solveIslands(1 / 60, 16, 6, true, SolverFlags.None, GRAVITY)).not.toThrow();
         });
     });
 });
