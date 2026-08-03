@@ -42,6 +42,7 @@ export type AxroneGameData = {
     readonly componentStates: readonly AxroneGameDataComponentStates[];
     readonly cameraEntityId: string | null;
     readonly scripts: readonly AxroneGameDataScriptEntry[];
+    readonly uiAssets: Readonly<Record<string, unknown>>;
     readonly warnings: readonly string[];
 };
 

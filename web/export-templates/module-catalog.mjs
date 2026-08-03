@@ -47,6 +47,7 @@ const MODULES_3D = [
     '@axrone/lighting',
     '@axrone/terrain',
     '@axrone/ui-webgl2',
+    '@axrone/ui-webgl2/scene-host',
     '@axrone/audio',
     '@axrone/particle-system',
     '@axrone/scene-runtime-gltf',
@@ -86,6 +87,7 @@ export const TEMPLATE_DEFINITIONS = Object.freeze([
             { module: '@axrone/physics-3d', exports: ['Rigidbody3D', 'BoxCollider3D', 'CapsuleCollider3D', 'HingeJoint3D'] },
             { module: '@axrone/audio', exports: ['AudioSourceComponent', 'AudioListenerComponent'] },
             { module: '@axrone/scene-3d/support', exports: ['ParticleSystem'] },
+            { module: '@axrone/scene-runtime/scene-facade', exports: ['UIHost'] },
         ],
     },
     {
@@ -97,6 +99,7 @@ export const TEMPLATE_DEFINITIONS = Object.freeze([
             { module: '@axrone/physics-3d', exports: ['Rigidbody3D', 'BoxCollider3D', 'CapsuleCollider3D', 'HingeJoint3D'] },
             { module: '@axrone/audio', exports: ['AudioSourceComponent', 'AudioListenerComponent'] },
             { module: '@axrone/scene-3d/support', exports: ['ParticleSystem'] },
+            { module: '@axrone/scene-runtime/scene-facade', exports: ['UIHost'] },
         ],
     },
 ]);
