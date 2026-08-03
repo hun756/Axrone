@@ -894,4 +894,190 @@ describe('Tween System', () => {
             expect(elapsed).toBeLessThan(50);
         });
     });
+
+    describe('Public API Gaps', () => {
+        test('waitFor resolves immediately for already-completed tween', async () => {
+            const obj = { x: 0 };
+            const tw = to(obj, { x: 100 }, 100);
+            tw.start(0);
+            tw.update(100);
+            expect(tw.getStatus()).toBe('completed');
+
+            await waitFor(tw);
+        });
+
+        test('tween() with autoStart adds to TWEEN system', () => {
+            const obj = { x: 0 };
+            const tw = tween(obj, { to: { x: 100 }, duration: 100, autoStart: true });
+            expect(TWEEN.getActiveTweenCount()).toBeGreaterThanOrEqual(1);
+            tw.stop();
+            TWEEN.clear();
+        });
+
+        test('TweenConfig constructor applies all fields', () => {
+            const obj = { x: 0 };
+            let startFired = false;
+            const tw = tween(obj, {
+                from: { x: 10 },
+                to: { x: 200 },
+                duration: 500,
+                delay: 50,
+                easing: Easing.Quadratic.In,
+                repeat: 2,
+                yoyo: true,
+            });
+            tw.on('start', () => { startFired = true; });
+            expect(tw.getDuration()).toBe(500);
+            tw.start(0);
+            expect(startFired).toBe(true);
+            expect(tw.getStatus()).toBe('running');
+        });
+
+        test('dispose() full lifecycle', () => {
+            const obj = { x: 0 };
+            const tw = to(obj, { x: 100 }, 100);
+            tw.start(0);
+            tw.update(50);
+            expect(obj.x).toBeCloseTo(50, 0);
+            tw.dispose();
+            expect(tw.isPlaying()).toBe(false);
+            tw.update(100);
+            expect(obj.x).toBeCloseTo(50, 0);
+        });
+
+        test('chain via core.chain() auto-starts chained tweens on complete', () => {
+            const obj = { x: 0 };
+            const tw1 = to(obj, { x: 50 }, 50);
+            const tw2 = to(obj, { x: 100 }, 50);
+            tw1.chain(tw2);
+
+            tw1.start(0);
+            tw1.update(50);
+            expect(obj.x).toBe(50);
+            expect(tw2.isPlaying()).toBe(true);
+        });
+
+        test('spring with manual update reaches target', () => {
+            const spr = spring({ x: 0 }, { stiffness: 200, damping: 20 });
+            spr.setTarget({ x: 100 });
+            spr.start();
+
+            for (let i = 0; i < 200; i++) {
+                spr.updateManual(16);
+            }
+
+            const current = spr.getCurrent();
+            expect(current.x).toBeCloseTo(100, 0);
+        });
+
+        test('spring rest detection emits complete', () => {
+            const spr = spring(0, { stiffness: 10, damping: 8, precision: 0.1 });
+            let completed = false;
+            spr.onComplete(() => { completed = true; });
+            spr.setTarget({ value: 100 } as any);
+            spr.start();
+
+            for (let i = 0; i < 5000; i++) {
+                spr.updateManual(4);
+                if (completed) break;
+            }
+
+            expect(completed).toBe(true);
+        });
+
+        test('group remove prevents update', () => {
+            const obj = { x: 0 };
+            const tw = to(obj, { x: 100 }, 100);
+            const grp = group().add(tw);
+            grp.start(0);
+            grp.remove(tw);
+            grp.update(50);
+            expect(obj.x).toBe(0);
+        });
+
+        test('timeline getTotalDuration matches getDuration', () => {
+            const obj = { x: 0 };
+            const tw = to(obj, { x: 100 }, 100);
+            const tl = timeline().add(tw);
+            expect(tl.getDuration()).toBe(tl.getTotalDuration());
+        });
+
+        test('tween with zero duration completes immediately on first update', () => {
+            const obj = { x: 0 };
+            const tw = to(obj, { x: 100 }, 0);
+            let completed = false;
+            tw.on('complete', () => { completed = true; });
+            tw.start(0);
+            tw.update(0);
+            expect(obj.x).toBe(100);
+            expect(completed).toBe(true);
+            expect(tw.getStatus()).toBe('completed');
+        });
+
+        test('repeat event fires on each repeat', () => {
+            const obj = { x: 0 };
+            let repeatCount = 0;
+            const tw = to(obj, { x: 100 }, 100).repeat(3).on('repeat', () => repeatCount++);
+            tw.start(0);
+            tw.update(100);
+            expect(repeatCount).toBe(1);
+            tw.update(101);
+            tw.update(200);
+            expect(repeatCount).toBe(2);
+            tw.update(201);
+            tw.update(300);
+            expect(repeatCount).toBe(3);
+        });
+
+        test('pause and resume event', () => {
+            const obj = { x: 0 };
+            let pauseFired = false;
+            let resumeFired = false;
+            const tw = to(obj, { x: 100 }, 100)
+                .on('pause', () => { pauseFired = true; })
+                .on('resume', () => { resumeFired = true; });
+            tw.start(0);
+            tw.pause();
+            expect(pauseFired).toBe(true);
+            tw.resume();
+            expect(resumeFired).toBe(true);
+        });
+
+        test('stop event fires', () => {
+            const obj = { x: 0 };
+            let stopFired = false;
+            const tw = to(obj, { x: 100 }, 100).on('stop', () => { stopFired = true; });
+            tw.start(0);
+            tw.stop();
+            expect(stopFired).toBe(true);
+        });
+
+        test('off() without callback removes all listeners for event', () => {
+            const obj = { x: 0 };
+            let count = 0;
+            const tw = to(obj, { x: 100 }, 100)
+                .on('update', () => count++)
+                .on('update', () => count++);
+            tw.start(0);
+            tw.update(25);
+            expect(count).toBe(2);
+            tw.off('update');
+            tw.update(50);
+            expect(count).toBe(2);
+        });
+
+        test('nested object from() with typed arrays', () => {
+            const obj = { transform: { data: new Float32Array([10, 20, 30]) } };
+            const tw = from(
+                obj,
+                { transform: { data: new Float32Array([0, 0, 0]) } } as any,
+                100
+            );
+            tw.start(0);
+            tw.update(0);
+            expect(Array.from(obj.transform.data)).toEqual([0, 0, 0]);
+            tw.update(100);
+            expect(Array.from(obj.transform.data)).toEqual([10, 20, 30]);
+        });
+    });
 });
