@@ -18,6 +18,7 @@ import {
     validateTerrainFoliageLayers,
     type TerrainDescriptor,
     type TerrainFoliageLayer,
+    type TerrainFoliageSourceMesh,
 } from '../index';
 
 const createDescriptor = (overrides: Partial<TerrainDescriptor> = {}): TerrainDescriptor => ({
@@ -66,6 +67,15 @@ describe('validateTerrainFoliageLayers', () => {
             validateTerrainFoliageLayers([createLayer({ minScale: 2, maxScale: 1 })])
         ).toThrow(TerrainError);
         expect(() => validateTerrainFoliageLayers([createLayer({ maxSlopeDeg: 120 })])).toThrow(
+            TerrainError
+        );
+    });
+
+    it('rejects empty-string id and negative density', () => {
+        expect(() => validateTerrainFoliageLayers([createLayer({ id: '' })])).toThrow(
+            TerrainError
+        );
+        expect(() => validateTerrainFoliageLayers([createLayer({ density: -0.5 })])).toThrow(
             TerrainError
         );
     });
@@ -137,6 +147,38 @@ describe('applyTerrainFoliageDensityStamp', () => {
     });
 });
 
+describe('createTerrainFoliageDensityBuffer', () => {
+    it('creates an all-zero buffer of the correct length', () => {
+        const density = createTerrainFoliageDensityBuffer(64);
+        expect(density.length).toBe(64 * 64);
+        expect(density.every((v) => v === 0)).toBe(true);
+    });
+
+    it('rejects invalid resolutions', () => {
+        expect(() => createTerrainFoliageDensityBuffer(100 as never)).toThrow(TerrainError);
+    });
+});
+
+describe('sampleTerrainFoliageDensity', () => {
+    it('returns exact texel values at corners', () => {
+        const density = createTerrainFoliageDensityBuffer(64);
+        density[0] = 128;
+        density[63] = 255;
+
+        expect(sampleTerrainFoliageDensity(density, 64, 0, 0)).toBeCloseTo(128 / 255, 2);
+        expect(sampleTerrainFoliageDensity(density, 64, 1, 0)).toBeCloseTo(1, 2);
+    });
+
+    it('clamps sampling outside [0, 1] to edge texels', () => {
+        const density = createTerrainFoliageDensityBuffer(64);
+        density[0] = 200;
+
+        const inside = sampleTerrainFoliageDensity(density, 64, 0, 0);
+        const outside = sampleTerrainFoliageDensity(density, 64, -0.5, -0.5);
+        expect(outside).toBeCloseTo(inside, 5);
+    });
+});
+
 describe('foliage density codec', () => {
     it('round-trips painted buffers', () => {
         const density = createTerrainFoliageDensityBuffer(64);
@@ -165,6 +207,12 @@ describe('foliage density codec', () => {
         } catch (error) {
             expect((error as TerrainError).code).toBe(TerrainErrorCode.SPLAT_SIZE_MISMATCH);
         }
+    });
+
+    it('isTerrainFoliageDensityPayload returns false for non-strings', () => {
+        expect(isTerrainFoliageDensityPayload(42)).toBe(false);
+        expect(isTerrainFoliageDensityPayload(null)).toBe(false);
+        expect(isTerrainFoliageDensityPayload(undefined)).toBe(false);
     });
 });
 
@@ -280,6 +328,39 @@ describe('scatterTerrainFoliage', () => {
         expect(instances).toHaveLength(0);
         expect(Object.isFrozen(instances)).toBe(true);
     });
+
+    it('produces instances with scale within [minScale, maxScale]', () => {
+        const instances = scatterTerrainFoliage({
+            heightmap: TerrainHeightmap.createFlat(33, 0.5),
+            descriptor: createDescriptor(),
+            density: paintEverywhere(),
+            densityResolution: 64,
+            layer: createLayer({ minScale: 0.5, maxScale: 2.0 }),
+            seed: 99,
+        });
+
+        for (const instance of instances) {
+            expect(instance.scale).toBeGreaterThanOrEqual(0.5);
+            expect(instance.scale).toBeLessThanOrEqual(2.0);
+        }
+    });
+
+    it('respects the TERRAIN_MAX_FOLIAGE_INSTANCES cap', () => {
+        const descriptor = createDescriptor({ width: 512, length: 512 });
+        const highDensity = createTerrainFoliageDensityBuffer(64);
+        highDensity.fill(255);
+
+        const instances = scatterTerrainFoliage({
+            heightmap: TerrainHeightmap.createFlat(33, 0.5),
+            descriptor,
+            density: highDensity,
+            densityResolution: 64,
+            layer: createLayer({ density: 1 }),
+            seed: 42,
+        });
+
+        expect(instances.length).toBeLessThanOrEqual(TERRAIN_MAX_FOLIAGE_INSTANCES);
+    });
 });
 
 describe('buildTerrainFoliageBatchMesh', () => {
@@ -326,5 +407,58 @@ describe('buildTerrainFoliageBatchMesh', () => {
             expect(error).toBeInstanceOf(TerrainError);
             expect((error as TerrainError).code).toBe(TerrainErrorCode.VALIDATION_FAILED);
         }
+    });
+
+    it('createTerrainFoliageCardMesh produces 8 vertices and 12 indices', () => {
+        const card = createTerrainFoliageCardMesh();
+        expect(card.positions.length / 3).toBe(8);
+        expect(card.indices.length).toBe(12);
+        expect(card.normals.length).toBe(8 * 3);
+        expect(card.uvs.length).toBe(8 * 2);
+    });
+
+    it('card mesh normals are outward-facing for each quad plane', () => {
+        const card = createTerrainFoliageCardMesh();
+        const n0 = { x: card.normals[0]!, y: card.normals[1]!, z: card.normals[2]! };
+        const n4 = { x: card.normals[12]!, y: card.normals[13]!, z: card.normals[14]! };
+        expect(n0.z).toBe(1);
+        expect(n4.x).toBe(1);
+    });
+
+    it('rotates positions correctly by PI/2 around Y', () => {
+        const instances = [{ x: 0, y: 0, z: 0, rotationY: Math.PI / 2, scale: 1 }];
+        const mesh = buildTerrainFoliageBatchMesh(instances);
+
+        const card = createTerrainFoliageCardMesh();
+        const srcX = card.positions[0]!;
+        const srcZ = card.positions[2]!;
+
+        expect(mesh.positions[0]).toBeCloseTo(-srcZ, 5);
+        expect(mesh.positions[2]).toBeCloseTo(-srcX, 5);
+    });
+
+    it('expands a custom source mesh correctly', () => {
+        const source: TerrainFoliageSourceMesh = {
+            positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0]),
+            normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+            uvs: new Float32Array([0, 0, 1, 0, 1, 1]),
+            indices: new Uint32Array([0, 1, 2]),
+        };
+
+        const instances = [
+            { x: 10, y: 0, z: 20, rotationY: 0, scale: 1 },
+            { x: -5, y: 3, z: 7, rotationY: 0, scale: 2 },
+        ];
+
+        const mesh = buildTerrainFoliageBatchMesh(instances, source);
+        expect(mesh.vertexCount).toBe(6);
+        expect(mesh.triangleCount).toBe(2);
+        expect(mesh.positions[0]).toBeCloseTo(10);
+        expect(mesh.positions[1]).toBeCloseTo(0);
+        expect(mesh.positions[2]).toBeCloseTo(20);
+        expect(mesh.positions[3]).toBeCloseTo(11);
+        expect(mesh.positions[9]).toBeCloseTo(-5);
+        expect(mesh.positions[10]).toBeCloseTo(3);
+        expect(mesh.positions[12]).toBeCloseTo(-3);
     });
 });
