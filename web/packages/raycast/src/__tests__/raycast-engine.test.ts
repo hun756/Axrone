@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     createRaycastSystem2D,
     createRaycastSystem3D,
+    RaycastFlags,
     RaycastLayer,
 } from '../index';
 import { ShapeType } from '@axrone/physics-core';
@@ -126,5 +127,79 @@ describe('RaycastEngine3D — dispatch correctness', () => {
 
         expect(sys.raycast(v3(-5, 0, 0), v3(1, 0, 0), 100, DEFAULT)).toBeNull();
         expect(sys.raycast(v3(-5, 0, 0), v3(1, 0, 0), 100, STATIC)).not.toBeNull();
+    });
+
+    it('returns a hit for a 3D Capsule', () => {
+        const sys = createRaycastSystem3D();
+        sys.registerShape(bid(1), sid(12), ALL, ShapeType.Capsule, {
+            p0: { x: 4, y: -1, z: 0 },
+            p1: { x: 4, y: 1, z: 0 },
+            radius: 1,
+        });
+
+        const hit = sys.raycast(v3(-5, 0, 0), v3(1, 0, 0), 100, ALL);
+        expect(hit).not.toBeNull();
+        expect(hit!.distance).toBeCloseTo(8, 0);
+    });
+});
+
+// ── Direct engine tests ─────────────────────────────────────────────
+
+describe('RaycastSystem2D — predicate filtering', () => {
+    it('predicate can exclude specific shapes', () => {
+        const sys = createRaycastSystem2D();
+        sys.registerShape(bid(1), sid(10), ALL, ShapeType.Circle, { center: { x: 5, y: 0 }, radius: 1 });
+        sys.registerShape(bid(2), sid(11), ALL, ShapeType.Circle, { center: { x: 20, y: 0 }, radius: 1 });
+
+        const hit = sys.raycast(v2(-5, 0), v2(1, 0), 100, ALL, RaycastFlags.ClosestOnly, (_b, s) => s !== sid(10));
+        expect(hit).not.toBeNull();
+        expect(hit!.shapeId).toBe(sid(11));
+    });
+});
+
+describe('RaycastSystem2D — raycastSingle', () => {
+    it('returns the closest hit via raycastSingle', () => {
+        const sys = createRaycastSystem2D();
+        sys.registerShape(bid(1), sid(10), ALL, ShapeType.Circle, { center: { x: 5, y: 0 }, radius: 1 });
+
+        const hit = sys.raycast(v2(-5, 0), v2(1, 0), 100, ALL);
+        expect(hit).not.toBeNull();
+        expect(hit!.distance).toBeCloseTo(9, 5);
+    });
+});
+
+describe('RaycastSystem2D — unregisterShape', () => {
+    it('unregistered shape no longer receives hits', () => {
+        const sys = createRaycastSystem2D();
+        sys.registerShape(bid(1), sid(10), ALL, ShapeType.Circle, { center: { x: 5, y: 0 }, radius: 1 });
+        expect(sys.raycast(v2(-5, 0), v2(1, 0), 100, ALL)).not.toBeNull();
+
+        sys.unregisterShape(sid(10));
+        sys.clearCache(); // cache would otherwise return the stale hit
+        expect(sys.raycast(v2(-5, 0), v2(1, 0), 100, ALL)).toBeNull();
+    });
+});
+
+describe('RaycastSystem3D — predicate filtering', () => {
+    it('predicate can exclude specific shapes in 3D', () => {
+        const sys = createRaycastSystem3D();
+        sys.registerShape(bid(1), sid(10), ALL, ShapeType.Sphere, { center: { x: 5, y: 0, z: 0 }, radius: 1 });
+        sys.registerShape(bid(2), sid(11), ALL, ShapeType.Sphere, { center: { x: 20, y: 0, z: 0 }, radius: 1 });
+
+        const hit = sys.raycast(v3(-5, 0, 0), v3(1, 0, 0), 100, ALL, RaycastFlags.ClosestOnly, (_b, s) => s !== sid(10));
+        expect(hit).not.toBeNull();
+        expect(hit!.shapeId).toBe(sid(11));
+    });
+});
+
+describe('RaycastSystem3D — unregisterShape', () => {
+    it('unregistered shape no longer receives hits in 3D', () => {
+        const sys = createRaycastSystem3D();
+        sys.registerShape(bid(1), sid(10), ALL, ShapeType.Sphere, { center: { x: 5, y: 0, z: 0 }, radius: 1 });
+        expect(sys.raycast(v3(-5, 0, 0), v3(1, 0, 0), 100, ALL)).not.toBeNull();
+
+        sys.unregisterShape(sid(10));
+        sys.clearCache(); // cache would otherwise return the stale hit
+        expect(sys.raycast(v3(-5, 0, 0), v3(1, 0, 0), 100, ALL)).toBeNull();
     });
 });
