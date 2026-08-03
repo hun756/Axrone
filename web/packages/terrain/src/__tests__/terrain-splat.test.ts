@@ -131,6 +131,29 @@ describe('applyTerrainSplatBrushStamp', () => {
         expect(channelSumAt(splat, centerTexel)).toBe(255);
     });
 
+    it('preserves the 255-sum invariant after repeated full painting', () => {
+        const resolution = 64;
+        const splat = createTerrainSplatBuffer(resolution);
+        const descriptor = createDescriptor();
+        const brush = resolveTerrainBrushOptions({ radius: 30, strength: 1, falloff: 1 });
+
+        for (let stroke = 0; stroke < 50; stroke += 1) {
+            applyTerrainSplatBrushStamp({
+                splat,
+                resolution,
+                descriptor,
+                brush,
+                layerIndex: 3,
+                localX: 0,
+                localZ: 0,
+            });
+        }
+
+        for (let texel = 0; texel < resolution * resolution; texel += 1) {
+            expect(channelSumAt(splat, texel)).toBe(255);
+        }
+    });
+
     it('rejects out-of-range layer indices', () => {
         const resolution = 64;
         try {
@@ -140,6 +163,42 @@ describe('applyTerrainSplatBrushStamp', () => {
                 descriptor: createDescriptor(),
                 brush: resolveTerrainBrushOptions(),
                 layerIndex: TERRAIN_MAX_LAYERS,
+                localX: 0,
+                localZ: 0,
+            });
+            expect.unreachable('expected stamp to throw');
+        } catch (error) {
+            expect(error).toBeInstanceOf(TerrainError);
+            expect((error as TerrainError).code).toBe(TerrainErrorCode.VALIDATION_FAILED);
+        }
+    });
+
+    it('rejects negative layer indices', () => {
+        try {
+            applyTerrainSplatBrushStamp({
+                splat: createTerrainSplatBuffer(64),
+                resolution: 64,
+                descriptor: createDescriptor(),
+                brush: resolveTerrainBrushOptions(),
+                layerIndex: -1,
+                localX: 0,
+                localZ: 0,
+            });
+            expect.unreachable('expected stamp to throw');
+        } catch (error) {
+            expect(error).toBeInstanceOf(TerrainError);
+            expect((error as TerrainError).code).toBe(TerrainErrorCode.VALIDATION_FAILED);
+        }
+    });
+
+    it('rejects non-integer layer indices', () => {
+        try {
+            applyTerrainSplatBrushStamp({
+                splat: createTerrainSplatBuffer(64),
+                resolution: 64,
+                descriptor: createDescriptor(),
+                brush: resolveTerrainBrushOptions(),
+                layerIndex: 1.5,
                 localX: 0,
                 localZ: 0,
             });
@@ -188,6 +247,40 @@ describe('sampleTerrainSplatWeights', () => {
         expect(total).toBeCloseTo(1, 2);
         expect(weights[1]).toBeGreaterThan(0);
     });
+
+    it('returns exact texel weights at corners', () => {
+        const resolution = 64;
+        const splat = createTerrainSplatBuffer(resolution);
+
+        const corner = sampleTerrainSplatWeights(splat, resolution, 0, 0);
+        expect(corner[0]).toBeCloseTo(1, 2);
+        expect(corner[1]).toBeCloseTo(0, 2);
+
+        const oppositeCorner = sampleTerrainSplatWeights(splat, resolution, 1, 1);
+        expect(oppositeCorner[0]).toBeCloseTo(1, 2);
+    });
+
+    it('clamps sampling outside [0, 1] to edge texels', () => {
+        const resolution = 64;
+        const splat = createTerrainSplatBuffer(resolution);
+
+        const inside = sampleTerrainSplatWeights(splat, resolution, 0, 0);
+        const outside = sampleTerrainSplatWeights(splat, resolution, -1, -1);
+
+        expect(outside[0]).toBeCloseTo(inside[0], 5);
+        expect(outside[1]).toBeCloseTo(inside[1], 5);
+    });
+
+    it('returns [1, 0, 0, 0] for an unpainted default buffer', () => {
+        const resolution = 64;
+        const splat = createTerrainSplatBuffer(resolution);
+
+        const weights = sampleTerrainSplatWeights(splat, resolution, 0.5, 0.5);
+        expect(weights[0]).toBeCloseTo(1, 2);
+        expect(weights[1]).toBeCloseTo(0, 2);
+        expect(weights[2]).toBeCloseTo(0, 2);
+        expect(weights[3]).toBeCloseTo(0, 2);
+    });
 });
 
 describe('terrain splat codec', () => {
@@ -231,6 +324,22 @@ describe('terrain splat codec', () => {
             expect((error as TerrainError).code).toBe(TerrainErrorCode.SPLAT_SIZE_MISMATCH);
         }
     });
+
+    it('isTerrainSplatDataPayload returns false for non-strings', () => {
+        expect(isTerrainSplatDataPayload(42)).toBe(false);
+        expect(isTerrainSplatDataPayload(null)).toBe(false);
+        expect(isTerrainSplatDataPayload(undefined)).toBe(false);
+    });
+
+    it('decodeTerrainSplat throws SOURCE_DECODE_FAILED on invalid base64', () => {
+        try {
+            decodeTerrainSplat('atsp1:!!!invalid-base64!!!', 64);
+            expect.unreachable('expected decode to throw');
+        } catch (error) {
+            expect(error).toBeInstanceOf(TerrainError);
+            expect((error as TerrainError).code).toBe(TerrainErrorCode.SOURCE_DECODE_FAILED);
+        }
+    });
 });
 
 describe('validateTerrainLayers', () => {
@@ -257,6 +366,16 @@ describe('validateTerrainLayers', () => {
     it('rejects layers with invalid tiling', () => {
         try {
             validateTerrainLayers([createLayer({ tiling: 0 })]);
+            expect.unreachable('expected validation to throw');
+        } catch (error) {
+            expect(error).toBeInstanceOf(TerrainError);
+            expect((error as TerrainError).code).toBe(TerrainErrorCode.VALIDATION_FAILED);
+        }
+    });
+
+    it('rejects layers with an empty-string id', () => {
+        try {
+            validateTerrainLayers([createLayer({ id: '' })]);
             expect.unreachable('expected validation to throw');
         } catch (error) {
             expect(error).toBeInstanceOf(TerrainError);
