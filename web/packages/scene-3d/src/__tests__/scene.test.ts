@@ -1183,4 +1183,53 @@ void main() {
 
         scene.dispose();
     });
+
+    it('throws when creating actors after disposal', () => {
+        const canvas = document.createElement('canvas');
+        const scene = new Scene(createSceneOptions(scheduler, canvas));
+        scene.dispose();
+
+        expect(() => scene.createCameraActor({ name: 'Camera' })).toThrow();
+        expect(() =>
+            scene.createRenderableActor(
+                { name: 'Mesh' },
+                { meshId: 'mesh', materialId: 'material' }
+            )
+        ).toThrow();
+        expect(() =>
+            scene.createRenderableActors([
+                {
+                    actorConfig: { name: 'Batch' },
+                    rendererConfig: { meshId: 'mesh', materialId: 'material' },
+                },
+            ])
+        ).toThrow();
+    });
+
+    it('returns an empty array when batch-creating zero renderable actors', () => {
+        const canvas = document.createElement('canvas');
+        const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+        const created = scene.createRenderableActors([]);
+
+        expect(created).toEqual([]);
+
+        scene.dispose();
+    });
+
+    it('creates renderable actors from configs with omitted optional keys', () => {
+        const canvas = document.createElement('canvas');
+        const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+        const created = scene.createRenderableActors([{}, {}]);
+
+        expect(created).toHaveLength(2);
+        for (const instance of created) {
+            expect(instance.actor).toBeDefined();
+            expect(instance.transform).toBeDefined();
+            expect(instance.renderer).toBeDefined();
+        }
+
+        scene.dispose();
+    });
 });
