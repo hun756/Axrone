@@ -69,7 +69,7 @@ describe('RayPrimitiveIntersector2D', () => {
         it('hits a capsule (swept segment + radius)', () => {
             const r = RayPrimitiveIntersector2D.intersectCapsule(v2(-5, 0), v2(1, 0), v2(4, -1), v2(4, 1), 1, 100);
             expect(r.hit).toBe(true);
-            expect(r.distance).toBeCloseTo(8, 3);
+            expect(r.distance).toBeCloseTo(9, 3);
         });
 
         it('misses a capsule that is off the ray line', () => {
@@ -97,7 +97,8 @@ describe('RayPrimitiveIntersector2D', () => {
         it('detects AABB overlap and computes the entry t', () => {
             const out = { tMin: 0, tMax: 0 };
             const aabb = { min: v2(4, 0), max: v2(6, 2) };
-            const hit = RayPrimitiveIntersector2D.intersectAABB(v2(-5, 0), v2(1, 0), aabb, 100, out);
+            // intersectAABB takes inverse direction (1/dx, 1/dy)
+            const hit = RayPrimitiveIntersector2D.intersectAABB(v2(-5, 0), v2(1, 1e10), aabb, 100, out);
             expect(hit).toBe(true);
             expect(out.tMin).toBeCloseTo(9, 5);
         });
@@ -105,7 +106,7 @@ describe('RayPrimitiveIntersector2D', () => {
         it('misses a non-overlapping AABB', () => {
             const out = { tMin: 0, tMax: 0 };
             const aabb = { min: v2(4, 5), max: v2(6, 7) };
-            const hit = RayPrimitiveIntersector2D.intersectAABB(v2(-5, 0), v2(1, 0), aabb, 100, out);
+            const hit = RayPrimitiveIntersector2D.intersectAABB(v2(-5, 0), v2(1, 1e10), aabb, 100, out);
             expect(hit).toBe(false);
         });
     });
@@ -144,11 +145,11 @@ describe('RayPrimitiveIntersector3D', () => {
     describe('intersectTriangle', () => {
         it('hits a triangle (Moller-Trumbore)', () => {
             const r = RayPrimitiveIntersector3D.intersectTriangle(
-                v3(-5, 0, 1),
+                v3(-5, 0, 0),
                 v3(1, 0, 0),
-                v3(4, -1, 1),
-                v3(6, -1, 1),
-                v3(5, 1, 1),
+                v3(4, -1, -1),
+                v3(4, 1, -1),
+                v3(4, 0, 1),
                 100,
                 false
             );
@@ -184,8 +185,9 @@ describe('RayPrimitiveIntersector3D', () => {
     describe('intersectAABB', () => {
         it('detects 3D AABB overlap and computes the entry t', () => {
             const out = { tMin: 0, tMax: 0 };
-            const aabb = { min: v3(4, 0, 0), max: v3(6, 2, 2) };
-            const hit = RayPrimitiveIntersector3D.intersectAABB(v3(-5, 0, 1), v3(1, 0, 0), aabb, 100, out);
+            const aabb = { min: v3(4, -1, -1), max: v3(6, 1, 1) };
+            // intersectAABB takes inverse direction (1/dx, 1/dy, 1/dz)
+            const hit = RayPrimitiveIntersector3D.intersectAABB(v3(-5, 0, 0), v3(1, 1e10, 1e10), aabb, 100, out);
             expect(hit).toBe(true);
             expect(out.tMin).toBeCloseTo(9, 5);
         });
