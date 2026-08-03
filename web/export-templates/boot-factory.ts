@@ -266,27 +266,30 @@ export const createAxroneBoot =
         applyCameraSelection(scene, data.cameraEntityId);
 
         // UIHost initialization: resolve the scene-host binding module from the
-        // bundled module registry and wire every UIHost component to its .ui.json
-        // asset so the UI overlay renders on top of the 3D scene.
+        // __AXRONE_RUNTIME__ global (set by the generated export template entry)
+        // and wire every UIHost component to its .ui.json asset so the UI overlay
+        // renders on top of the 3D scene.
         const uiAssetContent = (data.uiAssets ?? {}) as Record<string, unknown>;
         if (Object.keys(uiAssetContent).length > 0) {
-            const allModules = (globalThis as Record<string, unknown>).__axrone_modules__ as
-                | Record<string, () => Record<string, unknown>>
+            const axroneRuntime = (globalThis as Record<string, unknown>).__AXRONE_RUNTIME__ as
+                | { readonly modules?: Record<string, unknown> }
                 | undefined;
-            const uiHostModuleFactory = allModules?.['@axrone/ui-webgl2/scene-host'];
-            if (typeof uiHostModuleFactory === 'function') {
-                const uiHostModule = uiHostModuleFactory() as Record<string, unknown>;
-                const bindUIHosts = uiHostModule['bindUIHostsToScene'];
-                if (typeof bindUIHosts === 'function') {
-                    (bindUIHosts as (options: Record<string, unknown>) => void)({
-                        scene,
-                        resolveAssetJson: (assetId: string) => uiAssetContent[assetId] ?? null,
-                        input: {
-                            target: container,
-                            keyboard: true,
-                        },
-                    });
-                }
+            const uiHostModule = axroneRuntime?.modules?.['@axrone/ui-webgl2/scene-host'] as
+                | Record<string, unknown>
+                | undefined;
+            const bindUIHosts = uiHostModule?.['bindUIHostsToScene'];
+            if (typeof bindUIHosts === 'function') {
+                (bindUIHosts as (options: Record<string, unknown>) => void)({
+                    scene,
+                    resolveAssetJson: (assetId: string) => {
+                        const asset = uiAssetContent[assetId];
+                        return asset ? JSON.stringify(asset) : null;
+                    },
+                    input: {
+                        target: container,
+                        keyboard: true,
+                    },
+                });
             }
         }
 
