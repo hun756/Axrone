@@ -141,4 +141,44 @@ describe('ContinuousSampler', () => {
             await sampler[Symbol.asyncDispose]();
         });
     });
+
+    describe('adaptation and state accumulation', () => {
+        it('setTargetFrameBudget should floor to minimum of 1', () => {
+            sampler = new ContinuousSampler({ onTick: tickFn });
+            sampler.setTargetFrameBudget(0);
+            expect(sampler.getState().targetFrameBudgetMs).toBe(1);
+        });
+
+        it('setTargetFrameBudget should accept negative values as 1', () => {
+            sampler = new ContinuousSampler({ onTick: tickFn });
+            sampler.setTargetFrameBudget(-10);
+            expect(sampler.getState().targetFrameBudgetMs).toBe(1);
+        });
+
+        it('should accumulate time after ticks', () => {
+            sampler = new ContinuousSampler({ onTick: tickFn });
+            sampler.start();
+            vi.advanceTimersByTime(30);
+            sampler.stop();
+            const state = sampler.getState();
+            expect(state.accumulatedTimeNs).toBeGreaterThan(0n);
+        });
+
+        it('getLastDurationMs should return >= 0 after a tick', () => {
+            sampler = new ContinuousSampler({ onTick: tickFn });
+            sampler.start();
+            vi.advanceTimersByTime(15);
+            sampler.stop();
+            expect(sampler.getLastDurationMs()).toBeGreaterThanOrEqual(0);
+        });
+
+        it('should track lastTickTimestampNs after first tick', () => {
+            sampler = new ContinuousSampler({ onTick: tickFn });
+            sampler.start();
+            vi.advanceTimersByTime(15);
+            sampler.stop();
+            const state = sampler.getState();
+            expect(state.lastTickTimestampNs).not.toBeNull();
+        });
+    });
 });
