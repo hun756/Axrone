@@ -1174,14 +1174,11 @@ describe('Buffer', () => {
 
 describe('BufferFactory', () => {
     let gl: WebGL2RenderingContext;
-    let factory: IBufferFactory & { dispose(): void; isDisposed: boolean };
+    let factory: IBufferFactory;
 
     beforeEach(() => {
         gl = createMockGL();
-        factory = createBufferFactory(gl) as IBufferFactory & {
-            dispose(): void;
-            isDisposed: boolean;
-        };
+        factory = createBufferFactory(gl);
     });
 
     describe('createBuffer', () => {
