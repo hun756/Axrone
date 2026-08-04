@@ -1,6 +1,9 @@
 import type { UIAsset, WidgetId } from '@axrone/ui/types';
 import { UIRuntime, deserializeUIAsset } from '@axrone/ui/runtime';
 import { UIHost, setSceneUIWidgetRefResolver } from '@axrone/scene-runtime/scene-facade';
+// Re-export UIHost so the module namespace (imported via __AXRONE_RUNTIME__.modules)
+// exposes the class for the boot-factory fallback discovery path.
+export { UIHost };
 import { attachUIOverlayToScene } from './scene';
 import { WebGL2UIRenderer } from './renderer';
 import { createUIWorldSurface } from './world-surface';
