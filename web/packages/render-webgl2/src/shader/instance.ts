@@ -434,6 +434,7 @@ export class ShaderInstance implements IShaderInstance {
     private readonly dirtyUniforms: Set<string> = new Set();
     private readonly dirtyBuffers: Set<string> = new Set();
     private readonly boundTextureUnits: Set<number> = new Set();
+    private readonly glBufferHandles: Map<string, WebGLBuffer> = new Map();
 
     private uniformUpdateCount = 0;
     private programBindCount = 0;
@@ -647,6 +648,12 @@ export class ShaderInstance implements IShaderInstance {
     dispose(): void {
         if (this.disposed) return;
         this.disposed = true;
+        if (this.gl) {
+            for (const glBuffer of this.glBufferHandles.values()) {
+                this.gl.deleteBuffer(glBuffer);
+            }
+        }
+        this.glBufferHandles.clear();
         this.uniforms.clear();
         this.textures.clear();
         this.uniformBuffers.clear();
@@ -768,11 +775,15 @@ export class ShaderInstance implements IShaderInstance {
             const binding = this.uniformBlockBindings.get(bufferName);
             const buffer = this.uniformBuffers.get(bufferName);
             if (binding === undefined || !buffer) continue;
-            const glBuffer = gl.createBuffer();
+            let glBuffer = this.glBufferHandles.get(bufferName);
             if (!glBuffer) {
-                throw new ShaderInstanceLifecycleError('OUT_OF_MEMORY', 'en', {
-                    reason: 'uniform-buffer-creation-failed',
-                });
+                glBuffer = gl.createBuffer();
+                if (!glBuffer) {
+                    throw new ShaderInstanceLifecycleError('OUT_OF_MEMORY', 'en', {
+                        reason: 'uniform-buffer-creation-failed',
+                    });
+                }
+                this.glBufferHandles.set(bufferName, glBuffer);
             }
             gl.bindBuffer(gl.UNIFORM_BUFFER, glBuffer);
             const source = buffer as unknown as { buffer?: ArrayBuffer; byteOffset?: number };
