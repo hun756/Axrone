@@ -157,7 +157,7 @@ const buildTemplate = async (definition, engineVersion) => {
         root: templatesRootDir,
         build: {
             emptyOutDir: false,
-            minify: 'esbuild',
+            minify: false,
             outDir,
             sourcemap: false,
             target: 'es2020',
