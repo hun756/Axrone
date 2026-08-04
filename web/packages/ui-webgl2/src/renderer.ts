@@ -126,209 +126,209 @@ const sliceImageCommand = (
     return slices;
 };
 
-const QUAD_VERTEX_SOURCE = `#version 300 es
-precision mediump float;
-layout(location = 0) in vec2 a_Unit;
-layout(location = 1) in vec4 a_Rect;
-layout(location = 2) in vec4 a_FillColor;
-layout(location = 3) in vec4 a_BorderColor;
-layout(location = 4) in vec4 a_Radius;
-layout(location = 5) in float a_BorderWidth;
-layout(location = 6) in vec3 a_TransformRow0;
-layout(location = 7) in vec3 a_TransformRow1;
-uniform vec2 u_Viewport;
-out vec2 v_Local;
-out vec2 v_Size;
-out vec4 v_FillColor;
-out vec4 v_BorderColor;
-out vec4 v_Radius;
-out float v_BorderWidth;
-void main() {
-    vec2 pixel = a_Rect.xy + a_Unit * a_Rect.zw;
-    pixel = vec2(
-        a_TransformRow0.x * pixel.x + a_TransformRow0.y * pixel.y + a_TransformRow0.z,
-        a_TransformRow1.x * pixel.x + a_TransformRow1.y * pixel.y + a_TransformRow1.z
-    );
-    vec2 ndc = vec2((pixel.x / u_Viewport.x) * 2.0 - 1.0, 1.0 - (pixel.y / u_Viewport.y) * 2.0);
-    gl_Position = vec4(ndc, 0.0, 1.0);
-    v_Local = a_Unit * a_Rect.zw;
-    v_Size = a_Rect.zw;
-    v_FillColor = a_FillColor;
-    v_BorderColor = a_BorderColor;
-    v_Radius = a_Radius;
-    v_BorderWidth = a_BorderWidth;
-}`;
+const QUAD_VERTEX_SOURCE = '#version 300 es\n'
+    + 'precision mediump float;\n'
+    + 'layout(location = 0) in vec2 a_Unit;\n'
+    + 'layout(location = 1) in vec4 a_Rect;\n'
+    + 'layout(location = 2) in vec4 a_FillColor;\n'
+    + 'layout(location = 3) in vec4 a_BorderColor;\n'
+    + 'layout(location = 4) in vec4 a_Radius;\n'
+    + 'layout(location = 5) in float a_BorderWidth;\n'
+    + 'layout(location = 6) in vec3 a_TransformRow0;\n'
+    + 'layout(location = 7) in vec3 a_TransformRow1;\n'
+    + 'uniform vec2 u_Viewport;\n'
+    + 'out vec2 v_Local;\n'
+    + 'out vec2 v_Size;\n'
+    + 'out vec4 v_FillColor;\n'
+    + 'out vec4 v_BorderColor;\n'
+    + 'out vec4 v_Radius;\n'
+    + 'out float v_BorderWidth;\n'
+    + 'void main() {\n'
+    + '    vec2 pixel = a_Rect.xy + a_Unit * a_Rect.zw;\n'
+    + '    pixel = vec2(\n'
+    + '        a_TransformRow0.x * pixel.x + a_TransformRow0.y * pixel.y + a_TransformRow0.z,\n'
+    + '        a_TransformRow1.x * pixel.x + a_TransformRow1.y * pixel.y + a_TransformRow1.z\n'
+    + '    );\n'
+    + '    vec2 ndc = vec2((pixel.x / u_Viewport.x) * 2.0 - 1.0, 1.0 - (pixel.y / u_Viewport.y) * 2.0);\n'
+    + '    gl_Position = vec4(ndc, 0.0, 1.0);\n'
+    + '    v_Local = a_Unit * a_Rect.zw;\n'
+    + '    v_Size = a_Rect.zw;\n'
+    + '    v_FillColor = a_FillColor;\n'
+    + '    v_BorderColor = a_BorderColor;\n'
+    + '    v_Radius = a_Radius;\n'
+    + '    v_BorderWidth = a_BorderWidth;\n'
+    + '}';
 
-const QUAD_FRAGMENT_SOURCE = `#version 300 es
-precision mediump float;
-in vec2 v_Local;
-in vec2 v_Size;
-in vec4 v_FillColor;
-in vec4 v_BorderColor;
-in vec4 v_Radius;
-in float v_BorderWidth;
-out vec4 o_Color;
-float selectRadius(vec2 local, vec2 size, vec4 radii) {
-    bool left = local.x <= size.x * 0.5;
-    bool top = local.y <= size.y * 0.5;
-    if (left && top) return radii.x;
-    if (!left && top) return radii.y;
-    if (!left && !top) return radii.z;
-    return radii.w;
-}
-float roundedRectSdf(vec2 local, vec2 size, vec4 radii) {
-    float radius = selectRadius(local, size, radii);
-    vec2 center = size * 0.5;
-    vec2 halfSize = max(center - vec2(radius), vec2(0.0));
-    vec2 delta = abs(local - center) - halfSize;
-    return length(max(delta, 0.0)) + min(max(delta.x, delta.y), 0.0) - radius;
-}
-void main() {
-    float outer = roundedRectSdf(v_Local, v_Size, v_Radius);
-    float aa = max(fwidth(outer), 0.75);
-    float outerAlpha = 1.0 - smoothstep(-aa, aa, outer);
-    vec4 color = v_FillColor;
-    if (v_BorderWidth > 0.0 && v_BorderColor.a > 0.0) {
-        vec2 innerSize = max(v_Size - vec2(v_BorderWidth * 2.0), vec2(0.0));
-        vec2 innerLocal = clamp(v_Local - vec2(v_BorderWidth), vec2(0.0), innerSize);
-        vec4 innerRadii = max(v_Radius - vec4(v_BorderWidth), vec4(0.0));
-        float inner = roundedRectSdf(innerLocal, innerSize, innerRadii);
-        float innerAlpha = innerSize.x <= 0.0 || innerSize.y <= 0.0 ? 0.0 : 1.0 - smoothstep(-aa, aa, inner);
-        float borderAlpha = max(0.0, outerAlpha - innerAlpha);
-        color = mix(v_BorderColor * borderAlpha, v_FillColor * innerAlpha, step(0.0001, innerAlpha));
-        color.a = borderAlpha * v_BorderColor.a + innerAlpha * v_FillColor.a;
-    } else {
-        color *= outerAlpha;
-    }
-    if (color.a <= 0.0) {
-        discard;
-    }
-    o_Color = color;
-}`;
+const QUAD_FRAGMENT_SOURCE = '#version 300 es\n'
+    + 'precision mediump float;\n'
+    + 'in vec2 v_Local;\n'
+    + 'in vec2 v_Size;\n'
+    + 'in vec4 v_FillColor;\n'
+    + 'in vec4 v_BorderColor;\n'
+    + 'in vec4 v_Radius;\n'
+    + 'in float v_BorderWidth;\n'
+    + 'out vec4 o_Color;\n'
+    + 'float selectRadius(vec2 local, vec2 size, vec4 radii) {\n'
+    + '    bool left = local.x <= size.x * 0.5;\n'
+    + '    bool top = local.y <= size.y * 0.5;\n'
+    + '    if (left && top) return radii.x;\n'
+    + '    if (!left && top) return radii.y;\n'
+    + '    if (!left && !top) return radii.z;\n'
+    + '    return radii.w;\n'
+    + '}\n'
+    + 'float roundedRectSdf(vec2 local, vec2 size, vec4 radii) {\n'
+    + '    float radius = selectRadius(local, size, radii);\n'
+    + '    vec2 center = size * 0.5;\n'
+    + '    vec2 halfSize = max(center - vec2(radius), vec2(0.0));\n'
+    + '    vec2 delta = abs(local - center) - halfSize;\n'
+    + '    return length(max(delta, 0.0)) + min(max(delta.x, delta.y), 0.0) - radius;\n'
+    + '}\n'
+    + 'void main() {\n'
+    + '    float outer = roundedRectSdf(v_Local, v_Size, v_Radius);\n'
+    + '    float aa = max(fwidth(outer), 0.75);\n'
+    + '    float outerAlpha = 1.0 - smoothstep(-aa, aa, outer);\n'
+    + '    vec4 color = v_FillColor;\n'
+    + '    if (v_BorderWidth > 0.0 && v_BorderColor.a > 0.0) {\n'
+    + '        vec2 innerSize = max(v_Size - vec2(v_BorderWidth * 2.0), vec2(0.0));\n'
+    + '        vec2 innerLocal = clamp(v_Local - vec2(v_BorderWidth), vec2(0.0), innerSize);\n'
+    + '        vec4 innerRadii = max(v_Radius - vec4(v_BorderWidth), vec4(0.0));\n'
+    + '        float inner = roundedRectSdf(innerLocal, innerSize, innerRadii);\n'
+    + '        float innerAlpha = innerSize.x <= 0.0 || innerSize.y <= 0.0 ? 0.0 : 1.0 - smoothstep(-aa, aa, inner);\n'
+    + '        float borderAlpha = max(0.0, outerAlpha - innerAlpha);\n'
+    + '        color = mix(v_BorderColor * borderAlpha, v_FillColor * innerAlpha, step(0.0001, innerAlpha));\n'
+    + '        color.a = borderAlpha * v_BorderColor.a + innerAlpha * v_FillColor.a;\n'
+    + '    } else {\n'
+    + '        color *= outerAlpha;\n'
+    + '    }\n'
+    + '    if (color.a <= 0.0) {\n'
+    + '        discard;\n'
+    + '    }\n'
+    + '    o_Color = color;\n'
+    + '}';
 
-const TEXT_VERTEX_SOURCE = `#version 300 es
-precision mediump float;
-layout(location = 0) in vec2 a_Unit;
-layout(location = 1) in vec4 a_Rect;
-layout(location = 2) in vec4 a_UvRect;
-layout(location = 3) in vec4 a_Color;
-layout(location = 4) in vec4 a_OutlineColor;
-layout(location = 5) in vec4 a_SdfParams;
-layout(location = 6) in vec3 a_TransformRow0;
-layout(location = 7) in vec3 a_TransformRow1;
-uniform vec2 u_Viewport;
-out vec2 v_Uv;
-out vec4 v_Color;
-out vec4 v_OutlineColor;
-out vec4 v_SdfParams;
-void main() {
-    vec2 pixel = a_Rect.xy + a_Unit * a_Rect.zw;
-    pixel = vec2(
-        a_TransformRow0.x * pixel.x + a_TransformRow0.y * pixel.y + a_TransformRow0.z,
-        a_TransformRow1.x * pixel.x + a_TransformRow1.y * pixel.y + a_TransformRow1.z
-    );
-    vec2 ndc = vec2((pixel.x / u_Viewport.x) * 2.0 - 1.0, 1.0 - (pixel.y / u_Viewport.y) * 2.0);
-    gl_Position = vec4(ndc, 0.0, 1.0);
-    v_Uv = a_UvRect.xy + a_Unit * a_UvRect.zw;
-    v_Color = a_Color;
-    v_OutlineColor = a_OutlineColor;
-    v_SdfParams = a_SdfParams;
-}`;
+const TEXT_VERTEX_SOURCE = '#version 300 es\n'
+    + 'precision mediump float;\n'
+    + 'layout(location = 0) in vec2 a_Unit;\n'
+    + 'layout(location = 1) in vec4 a_Rect;\n'
+    + 'layout(location = 2) in vec4 a_UvRect;\n'
+    + 'layout(location = 3) in vec4 a_Color;\n'
+    + 'layout(location = 4) in vec4 a_OutlineColor;\n'
+    + 'layout(location = 5) in vec4 a_SdfParams;\n'
+    + 'layout(location = 6) in vec3 a_TransformRow0;\n'
+    + 'layout(location = 7) in vec3 a_TransformRow1;\n'
+    + 'uniform vec2 u_Viewport;\n'
+    + 'out vec2 v_Uv;\n'
+    + 'out vec4 v_Color;\n'
+    + 'out vec4 v_OutlineColor;\n'
+    + 'out vec4 v_SdfParams;\n'
+    + 'void main() {\n'
+    + '    vec2 pixel = a_Rect.xy + a_Unit * a_Rect.zw;\n'
+    + '    pixel = vec2(\n'
+    + '        a_TransformRow0.x * pixel.x + a_TransformRow0.y * pixel.y + a_TransformRow0.z,\n'
+    + '        a_TransformRow1.x * pixel.x + a_TransformRow1.y * pixel.y + a_TransformRow1.z\n'
+    + '    );\n'
+    + '    vec2 ndc = vec2((pixel.x / u_Viewport.x) * 2.0 - 1.0, 1.0 - (pixel.y / u_Viewport.y) * 2.0);\n'
+    + '    gl_Position = vec4(ndc, 0.0, 1.0);\n'
+    + '    v_Uv = a_UvRect.xy + a_Unit * a_UvRect.zw;\n'
+    + '    v_Color = a_Color;\n'
+    + '    v_OutlineColor = a_OutlineColor;\n'
+    + '    v_SdfParams = a_SdfParams;\n'
+    + '}';
 
-const TEXT_FRAGMENT_SOURCE = `#version 300 es
-precision mediump float;
-uniform sampler2D u_Atlas;
-in vec2 v_Uv;
-in vec4 v_Color;
-in vec4 v_OutlineColor;
-in vec4 v_SdfParams;
-out vec4 o_Color;
-void main() {
-    float alpha = texture(u_Atlas, v_Uv).r;
-    vec4 color;
-    if (v_SdfParams.x > 0.5) {
-        float distanceRange = max(v_SdfParams.y, 1.0);
-        float smoothing = max(fwidth(alpha) * max(1.0, v_SdfParams.w) * distanceRange, 0.0001);
-        float fillAlpha = smoothstep(0.5 - smoothing, 0.5 + smoothing, alpha);
-        float outlineThreshold = 0.5 - (v_SdfParams.z / distanceRange);
-        float outlineAlpha = smoothstep(outlineThreshold - smoothing, outlineThreshold + smoothing, alpha);
-        vec4 fill = vec4(v_Color.rgb, v_Color.a * fillAlpha);
-        vec4 outline = vec4(v_OutlineColor.rgb, v_OutlineColor.a * max(0.0, outlineAlpha - fillAlpha));
-        color = fill + outline;
-    } else {
-        color = vec4(v_Color.rgb, v_Color.a * alpha);
-    }
-    if (color.a <= 0.0) {
-        discard;
-    }
-    o_Color = color;
-}`;
+const TEXT_FRAGMENT_SOURCE = '#version 300 es\n'
+    + 'precision mediump float;\n'
+    + 'uniform sampler2D u_Atlas;\n'
+    + 'in vec2 v_Uv;\n'
+    + 'in vec4 v_Color;\n'
+    + 'in vec4 v_OutlineColor;\n'
+    + 'in vec4 v_SdfParams;\n'
+    + 'out vec4 o_Color;\n'
+    + 'void main() {\n'
+    + '    float alpha = texture(u_Atlas, v_Uv).r;\n'
+    + '    vec4 color;\n'
+    + '    if (v_SdfParams.x > 0.5) {\n'
+    + '        float distanceRange = max(v_SdfParams.y, 1.0);\n'
+    + '        float smoothing = max(fwidth(alpha) * max(1.0, v_SdfParams.w) * distanceRange, 0.0001);\n'
+    + '        float fillAlpha = smoothstep(0.5 - smoothing, 0.5 + smoothing, alpha);\n'
+    + '        float outlineThreshold = 0.5 - (v_SdfParams.z / distanceRange);\n'
+    + '        float outlineAlpha = smoothstep(outlineThreshold - smoothing, outlineThreshold + smoothing, alpha);\n'
+    + '        vec4 fill = vec4(v_Color.rgb, v_Color.a * fillAlpha);\n'
+    + '        vec4 outline = vec4(v_OutlineColor.rgb, v_OutlineColor.a * max(0.0, outlineAlpha - fillAlpha));\n'
+    + '        color = fill + outline;\n'
+    + '    } else {\n'
+    + '        color = vec4(v_Color.rgb, v_Color.a * alpha);\n'
+    + '    }\n'
+    + '    if (color.a <= 0.0) {\n'
+    + '        discard;\n'
+    + '    }\n'
+    + '    o_Color = color;\n'
+    + '}';
 
-const IMAGE_VERTEX_SOURCE = `#version 300 es
-precision mediump float;
-layout(location = 0) in vec2 a_Unit;
-layout(location = 1) in vec4 a_Rect;
-layout(location = 2) in vec4 a_UvRect;
-layout(location = 3) in vec4 a_Tint;
-layout(location = 4) in vec4 a_Radius;
-layout(location = 5) in vec3 a_TransformRow0;
-layout(location = 6) in vec3 a_TransformRow1;
-uniform vec2 u_Viewport;
-out vec2 v_Local;
-out vec2 v_Size;
-out vec2 v_Uv;
-out vec4 v_Tint;
-out vec4 v_Radius;
-void main() {
-    vec2 pixel = a_Rect.xy + a_Unit * a_Rect.zw;
-    pixel = vec2(
-        a_TransformRow0.x * pixel.x + a_TransformRow0.y * pixel.y + a_TransformRow0.z,
-        a_TransformRow1.x * pixel.x + a_TransformRow1.y * pixel.y + a_TransformRow1.z
-    );
-    vec2 ndc = vec2((pixel.x / u_Viewport.x) * 2.0 - 1.0, 1.0 - (pixel.y / u_Viewport.y) * 2.0);
-    gl_Position = vec4(ndc, 0.0, 1.0);
-    v_Local = a_Unit * a_Rect.zw;
-    v_Size = a_Rect.zw;
-    v_Uv = a_UvRect.xy + a_Unit * a_UvRect.zw;
-    v_Tint = a_Tint;
-    v_Radius = a_Radius;
-}`;
+const IMAGE_VERTEX_SOURCE = '#version 300 es\n'
+    + 'precision mediump float;\n'
+    + 'layout(location = 0) in vec2 a_Unit;\n'
+    + 'layout(location = 1) in vec4 a_Rect;\n'
+    + 'layout(location = 2) in vec4 a_UvRect;\n'
+    + 'layout(location = 3) in vec4 a_Tint;\n'
+    + 'layout(location = 4) in vec4 a_Radius;\n'
+    + 'layout(location = 5) in vec3 a_TransformRow0;\n'
+    + 'layout(location = 6) in vec3 a_TransformRow1;\n'
+    + 'uniform vec2 u_Viewport;\n'
+    + 'out vec2 v_Local;\n'
+    + 'out vec2 v_Size;\n'
+    + 'out vec2 v_Uv;\n'
+    + 'out vec4 v_Tint;\n'
+    + 'out vec4 v_Radius;\n'
+    + 'void main() {\n'
+    + '    vec2 pixel = a_Rect.xy + a_Unit * a_Rect.zw;\n'
+    + '    pixel = vec2(\n'
+    + '        a_TransformRow0.x * pixel.x + a_TransformRow0.y * pixel.y + a_TransformRow0.z,\n'
+    + '        a_TransformRow1.x * pixel.x + a_TransformRow1.y * pixel.y + a_TransformRow1.z\n'
+    + '    );\n'
+    + '    vec2 ndc = vec2((pixel.x / u_Viewport.x) * 2.0 - 1.0, 1.0 - (pixel.y / u_Viewport.y) * 2.0);\n'
+    + '    gl_Position = vec4(ndc, 0.0, 1.0);\n'
+    + '    v_Local = a_Unit * a_Rect.zw;\n'
+    + '    v_Size = a_Rect.zw;\n'
+    + '    v_Uv = a_UvRect.xy + a_Unit * a_UvRect.zw;\n'
+    + '    v_Tint = a_Tint;\n'
+    + '    v_Radius = a_Radius;\n'
+    + '}';
 
-const IMAGE_FRAGMENT_SOURCE = `#version 300 es
-precision mediump float;
-uniform sampler2D u_Image;
-in vec2 v_Local;
-in vec2 v_Size;
-in vec2 v_Uv;
-in vec4 v_Tint;
-in vec4 v_Radius;
-out vec4 o_Color;
-float selectRadius(vec2 local, vec2 size, vec4 radii) {
-    bool left = local.x <= size.x * 0.5;
-    bool top = local.y <= size.y * 0.5;
-    if (left && top) return radii.x;
-    if (!left && top) return radii.y;
-    if (!left && !top) return radii.z;
-    return radii.w;
-}
-float roundedRectSdf(vec2 local, vec2 size, vec4 radii) {
-    float radius = selectRadius(local, size, radii);
-    vec2 center = size * 0.5;
-    vec2 halfSize = max(center - vec2(radius), vec2(0.0));
-    vec2 delta = abs(local - center) - halfSize;
-    return length(max(delta, 0.0)) + min(max(delta.x, delta.y), 0.0) - radius;
-}
-void main() {
-    float sdf = roundedRectSdf(v_Local, v_Size, v_Radius);
-    float aa = max(fwidth(sdf), 0.75);
-    float mask = 1.0 - smoothstep(-aa, aa, sdf);
-    vec4 color = texture(u_Image, v_Uv) * v_Tint;
-    color *= mask;
-    if (color.a <= 0.0) {
-        discard;
-    }
-    o_Color = color;
-}`;
+const IMAGE_FRAGMENT_SOURCE = '#version 300 es\n'
+    + 'precision mediump float;\n'
+    + 'uniform sampler2D u_Image;\n'
+    + 'in vec2 v_Local;\n'
+    + 'in vec2 v_Size;\n'
+    + 'in vec2 v_Uv;\n'
+    + 'in vec4 v_Tint;\n'
+    + 'in vec4 v_Radius;\n'
+    + 'out vec4 o_Color;\n'
+    + 'float selectRadius(vec2 local, vec2 size, vec4 radii) {\n'
+    + '    bool left = local.x <= size.x * 0.5;\n'
+    + '    bool top = local.y <= size.y * 0.5;\n'
+    + '    if (left && top) return radii.x;\n'
+    + '    if (!left && top) return radii.y;\n'
+    + '    if (!left && !top) return radii.z;\n'
+    + '    return radii.w;\n'
+    + '}\n'
+    + 'float roundedRectSdf(vec2 local, vec2 size, vec4 radii) {\n'
+    + '    float radius = selectRadius(local, size, radii);\n'
+    + '    vec2 center = size * 0.5;\n'
+    + '    vec2 halfSize = max(center - vec2(radius), vec2(0.0));\n'
+    + '    vec2 delta = abs(local - center) - halfSize;\n'
+    + '    return length(max(delta, 0.0)) + min(max(delta.x, delta.y), 0.0) - radius;\n'
+    + '}\n'
+    + 'void main() {\n'
+    + '    float sdf = roundedRectSdf(v_Local, v_Size, v_Radius);\n'
+    + '    float aa = max(fwidth(sdf), 0.75);\n'
+    + '    float mask = 1.0 - smoothstep(-aa, aa, sdf);\n'
+    + '    vec4 color = texture(u_Image, v_Uv) * v_Tint;\n'
+    + '    color *= mask;\n'
+    + '    if (color.a <= 0.0) {\n'
+    + '        discard;\n'
+    + '    }\n'
+    + '    o_Color = color;\n'
+    + '}';
 
 interface ClipState {
     readonly x: number;
@@ -632,17 +632,72 @@ const restoreGLState = (
     }
 };
 
+/**
+ * Restores newline separators in shader source that has been flattened
+ * by build-time minification (esbuild template literal transformation).
+ *
+ * When newlines are stripped, GLSL tokens merge across former line boundaries:
+ *   #version 300 esprecision mediump float;   (es + precision)
+ *   float;layout(location = 0) in vec2 ...    (float; + layout)
+ *
+ * This function detects and repairs such corruption by re-inserting
+ * newlines at statement boundaries. Uses split/join instead of regex
+ * to avoid esbuild transformation issues with replacement strings.
+ */
+const normalizeShaderSource = (source: string): string => {
+    // Fast path: if the first line is a valid #version directive, source is intact.
+    const firstNewline = source.indexOf('\n');
+    if (firstNewline > 0 && source.slice(0, firstNewline).trim().startsWith('#version')) {
+        return source;
+    }
+
+    // Corruption detected — rebuild newlines at GLSL statement boundaries.
+    // Uses split/join instead of regex to avoid esbuild transformation issues.
+    const parts: string[] = [];
+    for (const segment of source.split(/([;{}])/)) {
+        if (segment === ';') {
+            parts.push(';\n');
+        } else if (segment === '{') {
+            parts.push('{\n');
+        } else if (segment === '}') {
+            parts.push('\n}\n');
+        } else {
+            parts.push(segment);
+        }
+    }
+    let restored = parts.join('');
+
+    // Fix #version directive: ensure newline after 'es' before next token.
+    const versionEnd = restored.indexOf('es') + 2;
+    if (versionEnd > 2 && versionEnd < restored.length) {
+        const after = restored[versionEnd];
+        if (after !== '\n' && after !== ' ' && after !== '\t' && after !== '\r') {
+            restored = restored.slice(0, versionEnd) + '\n' + restored.slice(versionEnd);
+        }
+    }
+
+    return restored;
+};
+
 const createShader = (gl: WebGL2RenderingContext, type: number, source: string): WebGLShader => {
     const shader = gl.createShader(type);
     if (!shader) {
         throw new Error('Failed to create UI shader.');
     }
-    gl.shaderSource(shader, source);
+    const resolvedSource = normalizeShaderSource(source);
+    if (resolvedSource !== source) {
+        // eslint-disable-next-line no-console
+        console.warn('[WebGL2UIRenderer] Shader source was corrupted — newlines were restored. This indicates esbuild minification stripped newlines from the shader template literal.');
+    }
+    gl.shaderSource(shader, resolvedSource);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
         const message = gl.getShaderInfoLog(shader) ?? 'Unknown shader compile failure.';
         gl.deleteShader(shader);
-        throw new Error(message);
+        const stageLabel = type === gl.VERTEX_SHADER ? 'vertex' : 'fragment';
+        throw new Error(
+            `UI ${stageLabel} shader compilation failed: ${message}\nSource (first 200 chars): ${resolvedSource.slice(0, 200)}`
+        );
     }
     return shader;
 };
