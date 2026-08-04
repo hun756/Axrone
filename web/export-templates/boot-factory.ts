@@ -270,26 +270,78 @@ export const createAxroneBoot =
         // and wire every UIHost component to its .ui.json asset so the UI overlay
         // renders on top of the 3D scene.
         const uiAssetContent = (data.uiAssets ?? {}) as Record<string, unknown>;
-        if (Object.keys(uiAssetContent).length > 0) {
+        const uiAssetKeys = Object.keys(uiAssetContent);
+        console.log(`[Axrone Boot] UI assets: ${uiAssetKeys.length} found`, uiAssetKeys);
+
+        if (uiAssetKeys.length > 0) {
             const axroneRuntime = (globalThis as Record<string, unknown>).__AXRONE_RUNTIME__ as
                 | { readonly modules?: Record<string, unknown> }
                 | undefined;
+            console.log(`[Axrone Boot] __AXRONE_RUNTIME__:`, axroneRuntime ? 'present' : 'MISSING');
+
             const uiHostModule = axroneRuntime?.modules?.['@axrone/ui-webgl2/scene-host'] as
                 | Record<string, unknown>
                 | undefined;
+            console.log(`[Axrone Boot] ui-webgl2/scene-host module:`, uiHostModule ? 'found' : 'MISSING');
+
             const bindUIHosts = uiHostModule?.['bindUIHostsToScene'];
+            console.log(`[Axrone Boot] bindUIHostsToScene:`, typeof bindUIHosts === 'function' ? 'found' : 'MISSING');
+
             if (typeof bindUIHosts === 'function') {
-                (bindUIHosts as (options: Record<string, unknown>) => void)({
+                const resolveAssetJson = (assetId: string): string | null => {
+                    const asset = uiAssetContent[assetId];
+                    return asset ? JSON.stringify(asset) : null;
+                };
+
+                const bindingOptions = {
                     scene,
-                    resolveAssetJson: (assetId: string) => {
-                        const asset = uiAssetContent[assetId];
-                        return asset ? JSON.stringify(asset) : null;
-                    },
+                    resolveAssetJson,
                     input: {
                         target: container,
                         keyboard: true,
                     },
-                });
+                };
+
+                let bindingSucceeded = false;
+                try {
+                    const result = (bindUIHosts as (options: Record<string, unknown>) => { handles?: readonly unknown[] })(bindingOptions);
+                    console.log(`[Axrone Boot] bindUIHostsToScene result:`, result?.handles?.length ?? 0, 'handle(s)');
+                    bindingSucceeded = (result?.handles?.length ?? 0) > 0;
+                } catch (error) {
+                    console.error(`[Axrone Boot] bindUIHostsToScene threw:`, error);
+                }
+
+                // Fallback: if bindUIHostsToScene bound zero hosts (e.g., getAllInstances
+                // returned empty due to class identity mismatch in the bundle), walk actors
+                // directly and collect UIHost components via getComponent.
+                const UIHostClass = uiHostModule?.['UIHost'];
+                if (typeof UIHostClass === 'function') {
+                    const allInstances = (UIHostClass as { getAllInstances?: () => unknown[] }).getAllInstances?.() ?? [];
+                    console.log(`[Axrone Boot] UIHost.getAllInstances(): ${allInstances.length} instance(s)`);
+
+                    if (allInstances.length === 0 || !bindingSucceeded) {
+                        const hosts: unknown[] = [];
+                        for (const actor of scene.world.getAllActors()) {
+                            const uiHost = actor.getComponent(UIHostClass as never);
+                            if (uiHost) {
+                                hosts.push(uiHost);
+                            }
+                        }
+                        console.log(`[Axrone Boot] Fallback: found ${hosts.length} UIHost(s) via actor walk`);
+
+                        if (hosts.length > 0) {
+                            try {
+                                (bindUIHosts as (options: Record<string, unknown>) => void)({
+                                    ...bindingOptions,
+                                    hosts,
+                                });
+                                console.log(`[Axrone Boot] Fallback binding succeeded`);
+                            } catch (fallbackError) {
+                                console.error(`[Axrone Boot] Fallback binding also failed:`, fallbackError);
+                            }
+                        }
+                    }
+                }
             }
         }
 
