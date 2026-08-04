@@ -26,34 +26,34 @@ export interface UIWorldQuadRenderer extends Disposable {
     dispose(): void;
 }
 
-const VERTEX_SOURCE = `#version 300 es
-precision highp float;
-layout(location = 0) in vec2 a_Unit;
-uniform mat4 u_ViewProjection;
-uniform mat4 u_Model;
-uniform vec2 u_Size;
-out vec2 v_Uv;
-void main() {
-    // a_Unit spans 0..1; center the quad on the entity origin.
-    vec2 local = (a_Unit - 0.5) * u_Size;
-    // UI textures have a top-left origin, quad local Y points up.
-    v_Uv = vec2(a_Unit.x, 1.0 - a_Unit.y);
-    gl_Position = u_ViewProjection * u_Model * vec4(local, 0.0, 1.0);
-}`;
+const VERTEX_SOURCE = '#version 300 es\n'
+    + 'precision highp float;\n'
+    + 'layout(location = 0) in vec2 a_Unit;\n'
+    + 'uniform mat4 u_ViewProjection;\n'
+    + 'uniform mat4 u_Model;\n'
+    + 'uniform vec2 u_Size;\n'
+    + 'out vec2 v_Uv;\n'
+    + 'void main() {\n'
+    + '    // a_Unit spans 0..1; center the quad on the entity origin.\n'
+    + '    vec2 local = (a_Unit - 0.5) * u_Size;\n'
+    + '    // UI textures have a top-left origin, quad local Y points up.\n'
+    + '    v_Uv = vec2(a_Unit.x, 1.0 - a_Unit.y);\n'
+    + '    gl_Position = u_ViewProjection * u_Model * vec4(local, 0.0, 1.0);\n'
+    + '}';
 
-const FRAGMENT_SOURCE = `#version 300 es
-precision highp float;
-in vec2 v_Uv;
-uniform sampler2D u_Texture;
-uniform float u_Opacity;
-out vec4 fragColor;
-void main() {
-    vec4 sampled = texture(u_Texture, v_Uv);
-    fragColor = sampled * u_Opacity;
-    if (fragColor.a <= 0.0) {
-        discard;
-    }
-}`;
+const FRAGMENT_SOURCE = '#version 300 es\n'
+    + 'precision highp float;\n'
+    + 'in vec2 v_Uv;\n'
+    + 'uniform sampler2D u_Texture;\n'
+    + 'uniform float u_Opacity;\n'
+    + 'out vec4 fragColor;\n'
+    + 'void main() {\n'
+    + '    vec4 sampled = texture(u_Texture, v_Uv);\n'
+    + '    fragColor = sampled * u_Opacity;\n'
+    + '    if (fragColor.a <= 0.0) {\n'
+    + '        discard;\n'
+    + '    }\n'
+    + '}';
 
 const UNIT_QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
@@ -88,6 +88,46 @@ export function orientQuadTowardCamera(
     return result;
 }
 
+/**
+ * Restores newline separators in shader source that has been flattened
+ * by build-time minification (esbuild template literal transformation).
+ * See the identical function in renderer.ts for full rationale.
+ */
+const normalizeShaderSource = (source: string): string => {
+    // Fast path: if the first line is a valid #version directive, source is intact.
+    const firstNewline = source.indexOf('\n');
+    if (firstNewline > 0 && source.slice(0, firstNewline).trim().startsWith('#version')) {
+        return source;
+    }
+
+    // Corruption detected — rebuild newlines at GLSL statement boundaries.
+    // Uses split/join instead of regex to avoid esbuild transformation issues.
+    const parts: string[] = [];
+    for (const segment of source.split(/([;{}])/)) {
+        if (segment === ';') {
+            parts.push(';\n');
+        } else if (segment === '{') {
+            parts.push('{\n');
+        } else if (segment === '}') {
+            parts.push('\n}\n');
+        } else {
+            parts.push(segment);
+        }
+    }
+    let restored = parts.join('');
+
+    // Fix #version directive: ensure newline after 'es' before next token.
+    const versionEnd = restored.indexOf('es') + 2;
+    if (versionEnd > 2 && versionEnd < restored.length) {
+        const after = restored[versionEnd];
+        if (after !== '\n' && after !== ' ' && after !== '\t' && after !== '\r') {
+            restored = restored.slice(0, versionEnd) + '\n' + restored.slice(versionEnd);
+        }
+    }
+
+    return restored;
+};
+
 const compileShader = (
     gl: WebGL2RenderingContext,
     type: number,
@@ -97,7 +137,8 @@ const compileShader = (
     if (!shader) {
         throw new Error('Failed to create the world-space UI quad shader.');
     }
-    gl.shaderSource(shader, source);
+    const resolvedSource = normalizeShaderSource(source);
+    gl.shaderSource(shader, resolvedSource);
     gl.compileShader(shader);
     if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === false) {
         const log = gl.getShaderInfoLog(shader);
