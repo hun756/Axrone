@@ -38,6 +38,14 @@ export {
 } from './material-registry';
 export { FEATURE_TO_KEYWORD, resolveSurfaceFeatures } from './material-feature-keyword-map';
 export type {
+    SceneMaterialCloneEvent,
+    SceneMaterialKeywordChangeEvent,
+    SceneMaterialLifecycleEvent,
+    SceneMaterialTextureChangeEvent,
+    SceneMaterialUniformChangeEvent,
+} from './material-observables';
+export { SceneMaterialObservables } from './material-observables';
+export type {
     SceneMaterialTextureBinderResources,
     SceneMaterialTextureUniformSetter,
 } from './material-texture-binder';

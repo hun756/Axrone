@@ -15,6 +15,7 @@ import type {
     SceneUniformValue,
 } from './types';
 import { resolveSurfaceFeatures } from './material-feature-keyword-map';
+import type { SceneMaterialObservables } from './material-observables';
 
 export interface SceneMaterialTextureBinding {
     readonly textureId: string;
@@ -299,6 +300,11 @@ export class SceneMaterialRegistry {
     private readonly _definitions = new Map<string, SceneMaterialDefinition>();
     private readonly _handles = new Map<string, SceneMaterialHandle>();
     private readonly _textureSlots = new Map<string, readonly SceneMaterialTextureSlot[]>();
+    private readonly _observables: SceneMaterialObservables | null;
+
+    constructor(options?: { observables?: SceneMaterialObservables }) {
+        this._observables = options?.observables ?? null;
+    }
 
     get size(): number {
         return this._resources.size;
@@ -334,6 +340,7 @@ export class SceneMaterialRegistry {
         const handle = toHandle(resource);
         this._handles.set(resource.id, handle);
         this._textureSlots.set(resource.id, createTextureSlots(resource));
+        this._observables?._notifyMaterialCreated(resource.id);
         return handle;
     }
 
@@ -363,6 +370,7 @@ export class SceneMaterialRegistry {
             });
         }
 
+        this._observables?._notifyUniformChanged(id, resolvedName);
         return true;
     }
 
@@ -392,6 +400,7 @@ export class SceneMaterialRegistry {
                     uniforms: defUniforms,
                 });
             }
+            this._observables?._notifyUniformChanged(id, resolvedName);
         }
 
         return true;
@@ -425,6 +434,7 @@ export class SceneMaterialRegistry {
 
         this._handles.set(id, toHandle(material));
         this._textureSlots.set(id, createTextureSlots(material));
+        this._observables?._notifyTextureChanged(id, name);
 
         return true;
     }
@@ -435,6 +445,9 @@ export class SceneMaterialRegistry {
         this._definitions.delete(id);
         this._handles.delete(id);
         this._textureSlots.delete(id);
+        if (existed) {
+            this._observables?._notifyMaterialDeleted(id);
+        }
         return existed;
     }
 
@@ -488,6 +501,7 @@ export class SceneMaterialRegistry {
             }
         }
 
+        this._observables?._notifyMaterialCloned(sourceId, newId);
         return handle;
     }
 
@@ -505,6 +519,7 @@ export class SceneMaterialRegistry {
             return false;
         }
         material.keywords.set(keyword, { enabled, source: 'explicit' });
+        this._observables?._notifyKeywordChanged(id, keyword, enabled);
         return true;
     }
 
@@ -516,6 +531,7 @@ export class SceneMaterialRegistry {
         const entry = material.keywords.get(keyword);
         const current = entry?.enabled ?? false;
         material.keywords.set(keyword, { enabled: !current, source: 'explicit' });
+        this._observables?._notifyKeywordChanged(id, keyword, !current);
         return true;
     }
 
