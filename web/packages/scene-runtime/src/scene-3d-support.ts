@@ -31,6 +31,7 @@ export {
     normalizeSceneTextureBinding,
     SceneMaterialRegistry,
 } from './material-registry';
+export { FEATURE_TO_KEYWORD, resolveSurfaceFeatures } from './material-feature-keyword-map';
 export type {
     SceneMaterialTextureBinderResources,
     SceneMaterialTextureUniformSetter,

@@ -14,6 +14,7 @@ import type {
     SceneTextureBindingDefinition,
     SceneUniformValue,
 } from './types';
+import { resolveSurfaceFeatures } from './material-feature-keyword-map';
 
 export interface SceneMaterialTextureBinding {
     readonly textureId: string;
@@ -34,7 +35,7 @@ export interface SceneMaterialResource {
     readonly textureBindings: Map<string, SceneMaterialTextureBinding>;
     readonly surface: SceneMaterialSurfaceDefinition | null;
     readonly passes: readonly SceneMaterialPassDefinition[];
-    readonly keywords: Map<string, boolean>;
+    readonly keywords: Map<string, { enabled: boolean; source: 'auto' | 'explicit' }>;
 }
 
 const cloneSceneValue = <T>(value: T): T => decodeSceneValue(encodeSceneValue(value)) as T;
@@ -321,6 +322,15 @@ export class SceneMaterialRegistry {
 
         this._resources.set(resource.id, resource);
         this._definitions.set(resource.id, cloneSceneMaterialDefinition(definition));
+
+        // Auto-sync surface features to keywords
+        if (resource.surface?.features) {
+            const resolved = resolveSurfaceFeatures(resource.surface.features);
+            for (const [keyword, enabled] of Object.entries(resolved)) {
+                resource.keywords.set(keyword, { enabled, source: 'auto' });
+            }
+        }
+
         const handle = toHandle(resource);
         this._handles.set(resource.id, handle);
         this._textureSlots.set(resource.id, createTextureSlots(resource));
@@ -473,8 +483,8 @@ export class SceneMaterialRegistry {
 
         const clonedResource = this._resources.get(newId);
         if (clonedResource && source.keywords.size > 0) {
-            for (const [keyword, enabled] of source.keywords) {
-                clonedResource.keywords.set(keyword, enabled);
+            for (const [keyword, entry] of source.keywords) {
+                clonedResource.keywords.set(keyword, { enabled: entry.enabled, source: entry.source });
             }
         }
 
@@ -494,7 +504,7 @@ export class SceneMaterialRegistry {
         if (!material) {
             return false;
         }
-        material.keywords.set(keyword, enabled);
+        material.keywords.set(keyword, { enabled, source: 'explicit' });
         return true;
     }
 
@@ -503,8 +513,9 @@ export class SceneMaterialRegistry {
         if (!material) {
             return false;
         }
-        const current = material.keywords.get(keyword) ?? false;
-        material.keywords.set(keyword, !current);
+        const entry = material.keywords.get(keyword);
+        const current = entry?.enabled ?? false;
+        material.keywords.set(keyword, { enabled: !current, source: 'explicit' });
         return true;
     }
 
@@ -513,7 +524,7 @@ export class SceneMaterialRegistry {
         if (!material) {
             return null;
         }
-        return material.keywords.get(keyword) ?? false;
+        return material.keywords.get(keyword)?.enabled ?? false;
     }
 
     getEnabledKeywords(id: string): readonly string[] {
@@ -522,8 +533,8 @@ export class SceneMaterialRegistry {
             return Object.freeze([]);
         }
         const enabled: string[] = [];
-        for (const [keyword, value] of material.keywords) {
-            if (value) {
+        for (const [keyword, entry] of material.keywords) {
+            if (entry.enabled) {
                 enabled.push(keyword);
             }
         }
