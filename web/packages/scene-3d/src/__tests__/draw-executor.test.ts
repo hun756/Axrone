@@ -99,6 +99,8 @@ describe('SceneDrawExecutor', () => {
                     meshId: 'mesh',
                     materialId: 'material',
                     getUniformEntries: () => [['u_Instance', instanceUniform]] as const,
+                    forEachUniformEntry: (cb: (name: string, value: unknown) => void) =>
+                        cb('u_Instance', instanceUniform),
                 } as any,
             },
             {
