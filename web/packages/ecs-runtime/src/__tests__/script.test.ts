@@ -9,6 +9,7 @@ import {
     validateAllScripts,
     getScriptMetrics,
     clearScriptCaches,
+    clearScriptRegistry,
     __debugScriptSystem,
 } from '@axrone/ecs-runtime';
 import TestComponent from './components/TestComponent';
@@ -46,6 +47,16 @@ describe('Script Decorator System', () => {
 
     beforeEach(() => {
         clearScriptCaches();
+        clearScriptRegistry();
+        // Re-register file-level components whose @script() decorators
+        // fired at module load time. clearScriptRegistry() removes them
+        // from scriptRegistry; their metadata survives in componentMetadataMap.
+        for (const comp of [TestComponent, DependentComponent, DeprecatedComponent, ExperimentalComponent]) {
+            const meta = getComponentMetadata(comp);
+            if (meta) {
+                setComponentMetadata(comp, meta);
+            }
+        }
         // Clear mock calls between tests
         (console.error as any).mockClear();
         (console.warn as any).mockClear();
