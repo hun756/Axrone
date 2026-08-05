@@ -2,7 +2,9 @@ import { Vec4 } from '@axrone/numeric';
 import { describe, expect, it } from 'vitest';
 import {
     cloneSceneMaterialDefinition,
+    FEATURE_TO_KEYWORD,
     normalizeSceneTextureBinding,
+    resolveSurfaceFeatures,
     SceneMaterialRegistry,
 } from '@axrone/scene-3d';
 
@@ -509,6 +511,163 @@ describe('SceneMaterialRegistry', () => {
             const registry = new SceneMaterialRegistry();
             registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
             expect(registry.getUniform('mat/test', 'u_NonExistent')).toBeNull();
+        });
+    });
+
+    describe('surface feature to keyword bridge', () => {
+        it('FEATURE_TO_KEYWORD maps all 19 surface features', () => {
+            const featureKeys = Object.keys(FEATURE_TO_KEYWORD);
+            expect(featureKeys).toHaveLength(19);
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useVertexColor', 'VERTEX_COLOR');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('hasSecondUv', 'SECOND_UV');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useNormalMap', 'NORMAL_MAPPING');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useTwoSided', 'TWO_SIDED');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useAlbedoMap', 'ALBEDO_MAP');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('usePbrMap', 'PBR_MAP');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty(
+                'useMetallicRoughnessMap',
+                'METALLIC_ROUGHNESS_MAP'
+            );
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useOcclusionMap', 'OCCLUSION');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useEmissiveMap', 'EMISSION');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useClearcoat', 'CLEARCOAT');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useClearcoatMap', 'CLEARCOAT_MAP');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty(
+                'useClearcoatRoughnessMap',
+                'CLEARCOAT_ROUGHNESS_MAP'
+            );
+            expect(FEATURE_TO_KEYWORD).toHaveProperty(
+                'useClearcoatNormalMap',
+                'CLEARCOAT_NORMAL_MAP'
+            );
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useAlphaTest', 'ALPHA_TEST');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useAnisotropy', 'ANISOTROPY');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useSheen', 'SHEEN');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useSubsurface', 'SUBSURFACE');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useTransmission', 'TRANSMISSION');
+            expect(FEATURE_TO_KEYWORD).toHaveProperty('useIridescence', 'IRIDESCENCE');
+            expect(Object.isFrozen(FEATURE_TO_KEYWORD)).toBe(true);
+        });
+
+        it('resolveSurfaceFeatures maps true/false features and skips undefined', () => {
+            const result = resolveSurfaceFeatures({
+                useVertexColor: true,
+                useNormalMap: false,
+                useAlbedoMap: true,
+            });
+
+            expect(result['VERTEX_COLOR']).toBe(true);
+            expect(result['NORMAL_MAPPING']).toBe(false);
+            expect(result['ALBEDO_MAP']).toBe(true);
+            expect(result).not.toHaveProperty('SECOND_UV');
+            expect(result).not.toHaveProperty('PBR_MAP');
+            expect(Object.keys(result)).toHaveLength(3);
+        });
+
+        it('resolveSurfaceFeatures returns empty object for empty features', () => {
+            expect(resolveSurfaceFeatures({})).toEqual({});
+        });
+
+        it('auto-syncs surface features to keywords on create()', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({
+                id: 'mat/pbr',
+                shaderId: 'shader/pbr',
+                surface: {
+                    features: {
+                        useAlbedoMap: true,
+                        useNormalMap: true,
+                        usePbrMap: true,
+                        useOcclusionMap: false,
+                    },
+                },
+            });
+
+            expect(registry.getKeyword('mat/pbr', 'ALBEDO_MAP')).toBe(true);
+            expect(registry.getKeyword('mat/pbr', 'NORMAL_MAPPING')).toBe(true);
+            expect(registry.getKeyword('mat/pbr', 'PBR_MAP')).toBe(true);
+            expect(registry.getKeyword('mat/pbr', 'OCCLUSION')).toBe(false);
+            expect(registry.getKeyword('mat/pbr', 'EMISSION')).toBe(false);
+        });
+
+        it('materials without surface features have no auto-synced keywords', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/plain', shaderId: 'shader/basic' });
+
+            const enabled = registry.getEnabledKeywords('mat/plain');
+            expect(enabled).toEqual([]);
+        });
+
+        it('materials with surface but no features have no auto-synced keywords', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({
+                id: 'mat/surface-only',
+                shaderId: 'shader/basic',
+                surface: { shadingModel: 'lit' },
+            });
+
+            expect(registry.getEnabledKeywords('mat/surface-only')).toEqual([]);
+        });
+
+        it('explicit setKeyword overrides auto-synced keyword', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({
+                id: 'mat/override',
+                shaderId: 'shader/pbr',
+                surface: {
+                    features: {
+                        useAlbedoMap: true,
+                    },
+                },
+            });
+
+            expect(registry.getKeyword('mat/override', 'ALBEDO_MAP')).toBe(true);
+
+            registry.setKeyword('mat/override', 'ALBEDO_MAP', false);
+            expect(registry.getKeyword('mat/override', 'ALBEDO_MAP')).toBe(false);
+        });
+
+        it('clone copies auto-synced keywords with independence', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({
+                id: 'mat/source',
+                shaderId: 'shader/pbr',
+                surface: {
+                    features: {
+                        useClearcoat: true,
+                        useSheen: true,
+                    },
+                },
+            });
+
+            registry.clone('mat/source', 'mat/clone');
+
+            expect(registry.getKeyword('mat/clone', 'CLEARCOAT')).toBe(true);
+            expect(registry.getKeyword('mat/clone', 'SHEEN')).toBe(true);
+
+            registry.setKeyword('mat/clone', 'CLEARCOAT', false);
+            expect(registry.getKeyword('mat/source', 'CLEARCOAT')).toBe(true);
+            expect(registry.getKeyword('mat/clone', 'CLEARCOAT')).toBe(false);
+        });
+
+        it('auto-synced keywords appear in getEnabledKeywords', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({
+                id: 'mat/enabled',
+                shaderId: 'shader/pbr',
+                surface: {
+                    features: {
+                        useVertexColor: true,
+                        useTwoSided: true,
+                        useAlphaTest: false,
+                    },
+                },
+            });
+
+            const enabled = registry.getEnabledKeywords('mat/enabled');
+            expect(enabled).toContain('VERTEX_COLOR');
+            expect(enabled).toContain('TWO_SIDED');
+            expect(enabled).not.toContain('ALPHA_TEST');
         });
     });
 });
