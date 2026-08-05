@@ -341,7 +341,7 @@ export function getAllScripts(filter?: {
     experimental?: boolean;
 }): readonly ScriptRegistryEntry[] {
     return getCachedResult(
-        'getAllScripts',
+        `getAllScripts:${JSON.stringify(filter ?? {})}`,
         () => {
             let entries = Array.from(scriptRegistry.values());
 
@@ -467,6 +467,10 @@ export function getScriptMetrics(): {
 export function clearScriptCaches(): void {
     metricsCache.clear();
     performCleanup();
+}
+
+export function clearScriptRegistry(): void {
+    scriptRegistry.clear();
 }
 
 export function __debugScriptSystem(): {
