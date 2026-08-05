@@ -349,4 +349,166 @@ describe('SceneMaterialRegistry', () => {
         expect(registry.has('mat/clone')).toBe(false);
         expect(registry.has('mat/source')).toBe(true);
     });
+
+    describe('keywords', () => {
+        it('sets and gets keyword state', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            expect(registry.getKeyword('mat/test', 'EMISSIVE')).toBe(false);
+            expect(registry.setKeyword('mat/test', 'EMISSIVE', true)).toBe(true);
+            expect(registry.getKeyword('mat/test', 'EMISSIVE')).toBe(true);
+        });
+
+        it('toggles keyword state', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            expect(registry.toggleKeyword('mat/test', 'FOG')).toBe(true);
+            expect(registry.getKeyword('mat/test', 'FOG')).toBe(true);
+            expect(registry.toggleKeyword('mat/test', 'FOG')).toBe(true);
+            expect(registry.getKeyword('mat/test', 'FOG')).toBe(false);
+        });
+
+        it('returns enabled keywords as frozen array', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+            registry.setKeyword('mat/test', 'FOG', true);
+            registry.setKeyword('mat/test', 'EMISSIVE', true);
+            registry.setKeyword('mat/test', 'SHADOWS', false);
+
+            const enabled = registry.getEnabledKeywords('mat/test');
+            expect(enabled).toContain('FOG');
+            expect(enabled).toContain('EMISSIVE');
+            expect(enabled).not.toContain('SHADOWS');
+            expect(Object.isFrozen(enabled)).toBe(true);
+        });
+
+        it('returns null for keyword on unknown material', () => {
+            const registry = new SceneMaterialRegistry();
+            expect(registry.getKeyword('mat/nonexistent', 'FOG')).toBeNull();
+        });
+
+        it('returns false for setKeyword on unknown material', () => {
+            const registry = new SceneMaterialRegistry();
+            expect(registry.setKeyword('mat/nonexistent', 'FOG', true)).toBe(false);
+        });
+
+        it('copies keywords during clone', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/source', shaderId: 'shader/basic' });
+            registry.setKeyword('mat/source', 'FOG', true);
+            registry.setKeyword('mat/source', 'EMISSIVE', true);
+
+            registry.clone('mat/source', 'mat/clone');
+            expect(registry.getKeyword('mat/clone', 'FOG')).toBe(true);
+            expect(registry.getKeyword('mat/clone', 'EMISSIVE')).toBe(true);
+
+            // Independence: toggling clone doesn't affect source
+            registry.toggleKeyword('mat/clone', 'FOG');
+            expect(registry.getKeyword('mat/source', 'FOG')).toBe(true);
+            expect(registry.getKeyword('mat/clone', 'FOG')).toBe(false);
+        });
+    });
+
+    describe('property aliases', () => {
+        it('resolves alias in setUniform', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            registry.setUniform('mat/test', 'color', new Vec4(1, 0, 0, 1));
+            expect(registry.getUniform('mat/test', 'u_Color')).toEqual(new Vec4(1, 0, 0, 1));
+        });
+
+        it('resolves alias in getUniform', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            registry.setUniform('mat/test', 'u_Color', new Vec4(0, 1, 0, 1));
+            expect(registry.getUniform('mat/test', 'color')).toEqual(new Vec4(0, 1, 0, 1));
+        });
+
+        it('passes through unknown names unchanged', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            registry.setUniform('mat/test', 'u_Custom', 42);
+            expect(registry.getUniform('mat/test', 'u_Custom')).toBe(42);
+        });
+
+        it('alias and explicit name resolve to same uniform', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            registry.setUniform('mat/test', 'color', new Vec4(1, 0, 0, 1));
+            registry.setUniform('mat/test', 'u_Color', new Vec4(0, 0, 1, 1));
+
+            // Both resolve to u_Color, so last write wins
+            expect(registry.getUniform('mat/test', 'color')).toEqual(new Vec4(0, 0, 1, 1));
+            expect(registry.getUniform('mat/test', 'u_Color')).toEqual(new Vec4(0, 0, 1, 1));
+        });
+
+        it('resolves aliases in batch setUniforms', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            registry.setUniforms('mat/test', {
+                color: new Vec4(1, 0, 0, 1),
+                metallic: 0.5,
+                roughness: 0.3,
+            });
+
+            expect(registry.getUniform('mat/test', 'u_Color')).toEqual(new Vec4(1, 0, 0, 1));
+            expect(registry.getUniform('mat/test', 'u_Metallic')).toBe(0.5);
+            expect(registry.getUniform('mat/test', 'u_Roughness')).toBe(0.3);
+        });
+    });
+
+    describe('batch uniform operations', () => {
+        it('setUniforms applies multiple uniforms', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            expect(
+                registry.setUniforms('mat/test', {
+                    u_Color: new Vec4(1, 0, 0, 1),
+                    u_Metallic: 0.8,
+                    u_Roughness: 0.2,
+                })
+            ).toBe(true);
+
+            expect(registry.getUniform('mat/test', 'u_Color')).toEqual(new Vec4(1, 0, 0, 1));
+            expect(registry.getUniform('mat/test', 'u_Metallic')).toBe(0.8);
+            expect(registry.getUniform('mat/test', 'u_Roughness')).toBe(0.2);
+        });
+
+        it('setUniforms returns false for unknown material', () => {
+            const registry = new SceneMaterialRegistry();
+            expect(registry.setUniforms('mat/nonexistent', { u_Color: 1 })).toBe(false);
+        });
+
+        it('getUniforms returns all uniforms as frozen Record', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+            registry.setUniform('mat/test', 'u_Color', new Vec4(1, 0, 0, 1));
+            registry.setUniform('mat/test', 'u_Metallic', 0.5);
+
+            const uniforms = registry.getUniforms('mat/test');
+            expect(uniforms).not.toBeNull();
+            expect(Object.isFrozen(uniforms)).toBe(true);
+            expect(uniforms!['u_Color']).toEqual(new Vec4(1, 0, 0, 1));
+            expect(uniforms!['u_Metallic']).toBe(0.5);
+        });
+
+        it('getUniforms returns null for unknown material', () => {
+            const registry = new SceneMaterialRegistry();
+            expect(registry.getUniforms('mat/nonexistent')).toBeNull();
+        });
+
+        it('getUniform returns null for unset uniform', () => {
+            const registry = new SceneMaterialRegistry();
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+            expect(registry.getUniform('mat/test', 'u_NonExistent')).toBeNull();
+        });
+    });
 });
