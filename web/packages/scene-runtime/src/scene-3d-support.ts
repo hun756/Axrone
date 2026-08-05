@@ -18,7 +18,12 @@ export {
     SceneShaderRegistry,
 } from './shader-registry';
 export type { SceneShaderFactoryOptions } from './scene-shader-factory';
-export { SceneShaderFactory } from './scene-shader-factory';
+export {
+    generateSceneShaderVariantKey,
+    SceneShaderFactory,
+} from './scene-shader-factory';
+export type { SceneShaderVariantResolverDependencies } from './scene-shader-variant-resolver';
+export { SceneShaderVariantResolver } from './scene-shader-variant-resolver';
 
 export type {
     SceneMaterialResource,
