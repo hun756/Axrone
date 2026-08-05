@@ -1173,7 +1173,7 @@ describe('Vec3 Test Suite', () => {
 
             test('should generate uniform distribution within bounds', () => {
                 const v = new Vec3();
-                const samples = Array.from({ length: 1000 }, () =>
+                const samples = Array.from({ length: 5000 }, () =>
                     v.randomBox(0, 10, 0, 10, 0, 10)
                 );
 
@@ -1181,9 +1181,9 @@ describe('Vec3 Test Suite', () => {
                 const meanY = samples.reduce((sum, s) => sum + s.y, 0) / samples.length;
                 const meanZ = samples.reduce((sum, s) => sum + s.z, 0) / samples.length;
 
-                expect(meanX).toBeCloseTo(5, 0.3);
-                expect(meanY).toBeCloseTo(5, 0.3);
-                expect(meanZ).toBeCloseTo(5, 0.3);
+                expect(meanX).toBeCloseTo(5, 0.2);
+                expect(meanY).toBeCloseTo(5, 0.2);
+                expect(meanZ).toBeCloseTo(5, 0.2);
             });
 
             test('should handle negative bounds correctly', () => {
