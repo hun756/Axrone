@@ -18,7 +18,7 @@ let nextWorldHostSystemId = 1;
  * a UIRuntime so interactive widgets respond to input in builds. The Editor
  * preview calls its own equivalent; this covers the runtime/build path.
  */
-const registerBuiltinWidgetControllers = (runtime: UIRuntime<unknown>): void => {
+const registerBuiltinWidgetControllers = (runtime: UIRuntime<any>): void => {
     type RegistryEntry = Parameters<typeof runtime.registry.register>[0];
     runtime.registry.register(buttonFeedbackController as RegistryEntry);
     runtime.registry.register(sliderController as RegistryEntry);
