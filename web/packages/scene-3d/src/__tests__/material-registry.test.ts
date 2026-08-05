@@ -516,8 +516,7 @@ describe('SceneMaterialRegistry', () => {
 
     describe('surface feature to keyword bridge', () => {
         it('FEATURE_TO_KEYWORD maps all 19 surface features', () => {
-            const featureKeys = Object.keys(FEATURE_TO_KEYWORD);
-            expect(featureKeys).toHaveLength(19);
+            expect(Object.keys(FEATURE_TO_KEYWORD)).toHaveLength(19);
             expect(FEATURE_TO_KEYWORD).toHaveProperty('useVertexColor', 'VERTEX_COLOR');
             expect(FEATURE_TO_KEYWORD).toHaveProperty('hasSecondUv', 'SECOND_UV');
             expect(FEATURE_TO_KEYWORD).toHaveProperty('useNormalMap', 'NORMAL_MAPPING');
