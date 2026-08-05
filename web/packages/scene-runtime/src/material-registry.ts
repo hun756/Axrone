@@ -311,6 +311,14 @@ export class SceneMaterialRegistry {
     }
 
     create(definition: SceneMaterialDefinition): SceneMaterialHandle {
+        return this._createInternal(definition, false);
+    }
+
+    /** @internal — when suppressCreated is true, skips materialCreated notification (used by clone). */
+    private _createInternal(
+        definition: SceneMaterialDefinition,
+        suppressCreated: boolean
+    ): SceneMaterialHandle {
         const resource: SceneMaterialResource = {
             id: definition.id,
             shaderId: definition.shaderId,
@@ -340,7 +348,9 @@ export class SceneMaterialRegistry {
         const handle = toHandle(resource);
         this._handles.set(resource.id, handle);
         this._textureSlots.set(resource.id, createTextureSlots(resource));
-        this._observables?._notifyMaterialCreated(resource.id);
+        if (!suppressCreated) {
+            this._observables?._notifyMaterialCreated(resource.id);
+        }
         return handle;
     }
 
@@ -492,7 +502,7 @@ export class SceneMaterialRegistry {
                     : undefined,
         };
 
-        const handle = this.create(definition);
+        const handle = this._createInternal(definition, true);
 
         const clonedResource = this._resources.get(newId);
         if (clonedResource && source.keywords.size > 0) {
@@ -568,6 +578,11 @@ export class SceneMaterialRegistry {
     }
 
     clear(): void {
+        if (this._observables) {
+            for (const id of this._resources.keys()) {
+                this._observables._notifyMaterialDeleted(id);
+            }
+        }
         this._resources.clear();
         this._definitions.clear();
         this._handles.clear();
