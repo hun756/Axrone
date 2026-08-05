@@ -79,7 +79,6 @@ export const createPackageConfig = ({
                 commonjs(),
                 typescript({
                     tsconfig: packageTsconfigPath,
-                    clean: true,
                     useTsconfigDeclarationDir: false,
                     tsconfigOverride: {
                         compilerOptions: {
