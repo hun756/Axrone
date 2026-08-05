@@ -26,34 +26,34 @@ export interface UIWorldQuadRenderer extends Disposable {
     dispose(): void;
 }
 
-const VERTEX_SOURCE = '#version 300 es\n'
-    + 'precision highp float;\n'
-    + 'layout(location = 0) in vec2 a_Unit;\n'
-    + 'uniform mat4 u_ViewProjection;\n'
-    + 'uniform mat4 u_Model;\n'
-    + 'uniform vec2 u_Size;\n'
-    + 'out vec2 v_Uv;\n'
-    + 'void main() {\n'
-    + '    // a_Unit spans 0..1; center the quad on the entity origin.\n'
-    + '    vec2 local = (a_Unit - 0.5) * u_Size;\n'
-    + '    // UI textures have a top-left origin, quad local Y points up.\n'
-    + '    v_Uv = vec2(a_Unit.x, 1.0 - a_Unit.y);\n'
-    + '    gl_Position = u_ViewProjection * u_Model * vec4(local, 0.0, 1.0);\n'
-    + '}';
+const VERTEX_SOURCE = `#version 300 es
+precision highp float;
+layout(location = 0) in vec2 a_Unit;
+uniform mat4 u_ViewProjection;
+uniform mat4 u_Model;
+uniform vec2 u_Size;
+out vec2 v_Uv;
+void main() {
+    // a_Unit spans 0..1; center the quad on the entity origin.
+    vec2 local = (a_Unit - 0.5) * u_Size;
+    // UI textures have a top-left origin, quad local Y points up.
+    v_Uv = vec2(a_Unit.x, 1.0 - a_Unit.y);
+    gl_Position = u_ViewProjection * u_Model * vec4(local, 0.0, 1.0);
+}`;
 
-const FRAGMENT_SOURCE = '#version 300 es\n'
-    + 'precision highp float;\n'
-    + 'in vec2 v_Uv;\n'
-    + 'uniform sampler2D u_Texture;\n'
-    + 'uniform float u_Opacity;\n'
-    + 'out vec4 fragColor;\n'
-    + 'void main() {\n'
-    + '    vec4 sampled = texture(u_Texture, v_Uv);\n'
-    + '    fragColor = sampled * u_Opacity;\n'
-    + '    if (fragColor.a <= 0.0) {\n'
-    + '        discard;\n'
-    + '    }\n'
-    + '}';
+const FRAGMENT_SOURCE = `#version 300 es
+precision highp float;
+in vec2 v_Uv;
+uniform sampler2D u_Texture;
+uniform float u_Opacity;
+out vec4 fragColor;
+void main() {
+    vec4 sampled = texture(u_Texture, v_Uv);
+    fragColor = sampled * u_Opacity;
+    if (fragColor.a <= 0.0) {
+        discard;
+    }
+}`;
 
 const UNIT_QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
@@ -95,8 +95,10 @@ export function orientQuadTowardCamera(
  */
 const normalizeShaderSource = (source: string): string => {
     // Fast path: if the first line is a valid #version directive, source is intact.
+    // Uses a strict regex to reject corrupted lines like '#version 300 esprecision ...'
+    // where esbuild merged tokens across a stripped newline boundary.
     const firstNewline = source.indexOf('\n');
-    if (firstNewline > 0 && source.slice(0, firstNewline).trim().startsWith('#version')) {
+    if (firstNewline > 0 && /^#version\s+\d+\s+\w+$/.test(source.slice(0, firstNewline).trim())) {
         return source;
     }
 
