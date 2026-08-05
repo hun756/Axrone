@@ -73,13 +73,17 @@ export class SceneShaderRegistry {
         shaderId: string,
         variantKey: string,
         resource: SceneShaderResource
-    ): void {
+    ): boolean {
         let variants = this._variants.get(shaderId);
         if (!variants) {
             variants = new Map();
             this._variants.set(shaderId, variants);
         }
+        if (variants.has(variantKey)) {
+            return false;
+        }
         variants.set(variantKey, resource);
+        return true;
     }
 
     get(id: string): SceneShaderResource | undefined {
