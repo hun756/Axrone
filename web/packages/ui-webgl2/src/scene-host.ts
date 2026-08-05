@@ -1,5 +1,6 @@
 import type { UIAsset, WidgetId } from '@axrone/ui/types';
 import { UIRuntime, deserializeUIAsset } from '@axrone/ui/runtime';
+import { buttonFeedbackController, sliderController } from '@axrone/ui/controls';
 import { UIHost, setSceneUIWidgetRefResolver } from '@axrone/scene-runtime/scene-facade';
 // Re-export UIHost so the module namespace (imported via __AXRONE_RUNTIME__.modules)
 // exposes the class for the boot-factory fallback discovery path.
@@ -11,6 +12,17 @@ import { createUIWorldQuadRenderer, orientQuadTowardCamera } from './world-quad'
 import type { SceneUIOverlayHandle, SceneUIOverlayTarget } from './types';
 
 let nextWorldHostSystemId = 1;
+
+/**
+ * Registers the built-in widget controllers (button-feedback, slider-drag) on
+ * a UIRuntime so interactive widgets respond to input in builds. The Editor
+ * preview calls its own equivalent; this covers the runtime/build path.
+ */
+const registerBuiltinWidgetControllers = (runtime: UIRuntime<unknown>): void => {
+    type RegistryEntry = Parameters<typeof runtime.registry.register>[0];
+    runtime.registry.register(buttonFeedbackController as RegistryEntry);
+    runtime.registry.register(sliderController as RegistryEntry);
+};
 
 /**
  * Structural DOM-like event target used for UIHost input wiring.
@@ -345,6 +357,7 @@ export function bindUIHostToScene<TPayload = unknown>(
     }
 
     const runtime = new UIRuntime<TPayload>();
+    registerBuiltinWidgetControllers(runtime);
     runtime.loadFromAsset(asset);
 
     const overlay: SceneUIOverlayHandle<TPayload> = attachUIOverlayToScene<TPayload>(scene, {
@@ -458,6 +471,7 @@ export function bindUIHostToWorld<TPayload = unknown>(
     }
 
     const runtime = new UIRuntime<TPayload>();
+    registerBuiltinWidgetControllers(runtime);
     runtime.loadFromAsset(asset);
 
     const initialSize = resolveWorldSurfaceSize(host);
