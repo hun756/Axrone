@@ -129,6 +129,39 @@ export class SceneAssetFacade<
         return this._kernel.assets.getMaterialTextureBinding(materialId, uniformName);
     }
 
+    deleteMaterial(materialId: string): this {
+        this.assertNotDisposed();
+        if (!this._kernel.assets.deleteMaterial(materialId)) {
+            throw new SceneMaterialError(`Material '${materialId}' is not registered`);
+        }
+
+        return this;
+    }
+
+    cloneMaterial(sourceId: string, newId: string): SceneMaterialHandle {
+        this.assertNotDisposed();
+        try {
+            return this._kernel.assets.cloneMaterial(sourceId, newId);
+        } catch (error) {
+            if (error instanceof SceneMaterialError) {
+                throw error;
+            }
+
+            throw new SceneMaterialError(
+                `Failed to clone material '${sourceId}' as '${newId}'`,
+                error instanceof Error ? error : undefined
+            );
+        }
+    }
+
+    hasMaterial(materialId: string): boolean {
+        return this._kernel.assets.hasMaterial(materialId);
+    }
+
+    getMaterialIds(): readonly string[] {
+        return this._kernel.assets.getMaterialIds();
+    }
+
     registerRenderPass(definition: SceneRenderPassDefinition): SceneRenderPassHandle {
         this.assertNotDisposed();
         return this._kernel.assets.registerRenderPass(definition);

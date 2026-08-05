@@ -145,6 +145,33 @@ export class SceneAssetRuntime {
         return bindings.find((binding) => binding.uniformName === uniformName) ?? null;
     }
 
+    deleteMaterial(materialId: string): boolean {
+        return this.resources.materials.delete(materialId);
+    }
+
+    cloneMaterial(sourceId: string, newId: string): SceneMaterialHandle {
+        const source = this.resources.materials.get(sourceId);
+        if (!source) {
+            throw new SceneMaterialError(
+                `Cannot clone material '${sourceId}' because it is not registered`
+            );
+        }
+        if (!this.resources.shaders.get(source.shaderId)) {
+            throw new SceneMaterialError(
+                `Cannot clone material '${sourceId}' because shader '${source.shaderId}' is not registered`
+            );
+        }
+        return this.resources.materials.clone(sourceId, newId);
+    }
+
+    hasMaterial(materialId: string): boolean {
+        return this.resources.materials.has(materialId);
+    }
+
+    getMaterialIds(): readonly string[] {
+        return this.resources.materials.getMaterialIds();
+    }
+
     registerMesh(definition: SceneMeshDefinition): SceneMeshHandle {
         this._options.releaseBaseMesh(definition.id);
         const resource = this._meshFactory.create(definition);

@@ -357,6 +357,67 @@ export class SceneMaterialRegistry {
         return true;
     }
 
+    delete(id: string): boolean {
+        const existed = this._resources.has(id);
+        this._resources.delete(id);
+        this._definitions.delete(id);
+        this._handles.delete(id);
+        this._textureSlots.delete(id);
+        return existed;
+    }
+
+    clone(sourceId: string, newId: string): SceneMaterialHandle {
+        const source = this._resources.get(sourceId);
+        if (!source) {
+            throw new Error(`Material '${sourceId}' is not registered`);
+        }
+        if (this._resources.has(newId)) {
+            throw new Error(`Material '${newId}' is already registered`);
+        }
+
+        const definition: SceneMaterialDefinition = {
+            id: newId,
+            shaderId: source.shaderId,
+            uniforms:
+                source.uniforms.size > 0
+                    ? Object.fromEntries(
+                          [...source.uniforms.entries()].map(([k, v]) => [
+                              k,
+                              cloneSceneValue(v),
+                          ])
+                      )
+                    : undefined,
+            textures:
+                source.textureBindings.size > 0
+                    ? Object.fromEntries(
+                          [...source.textureBindings.entries()].map(([k, v]) => [
+                              k,
+                              {
+                                  textureId: v.textureId,
+                                  samplerId: v.samplerId ?? undefined,
+                                  unit: v.unit,
+                              },
+                          ])
+                      )
+                    : undefined,
+            surface: cloneSceneMaterialSurfaceDefinition(source.surface ?? undefined),
+            passes:
+                source.passes.length > 0
+                    ? cloneSceneMaterialPassDefinitions(source.passes)
+                    : undefined,
+        };
+
+        return this.create(definition);
+    }
+
+    has(id: string): boolean {
+        return this._resources.has(id);
+    }
+
+    getMaterialIds(): readonly string[] {
+        return Object.freeze([...this._resources.keys()]);
+    }
+
     getTextureSlots(id: string): readonly SceneMaterialTextureSlot[] {
         return this._textureSlots.get(id) ?? Object.freeze([]);
     }
