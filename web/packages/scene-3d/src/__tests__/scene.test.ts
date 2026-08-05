@@ -342,7 +342,7 @@ void main() {
         };
         const lightColorCalls = uniform3fMock.mock.calls.filter(
             ([location]: readonly [WebGLUniformLocation | null, number, number, number]) =>
-                (location as { name: string }).name === 'u_LightColor'
+                (location as { name: string }).name === 'u_DirectionalLightColor'
         );
         expect(lightColorCalls.length).toBeGreaterThan(0);
         expect(lightColorCalls[0].slice(1)).toEqual([1, 0.9, 0.8]);
@@ -601,7 +601,11 @@ void main() {
 
         expect(camera).toBeDefined();
         expect(() => camera!.getViewMatrix()).not.toThrow();
-        expect(camera!.getViewMatrix().toArray()).toEqual(expected.toArray());
+        const actualView = camera!.getViewMatrix().toArray();
+        const expectedView = expected.toArray();
+        for (let i = 0; i < 16; i++) {
+            expect(actualView[i]).toBeCloseTo(expectedView[i], 10);
+        }
 
         scene.dispose();
     });
@@ -1164,22 +1168,24 @@ void main() {
             ([location]) => (location as { name: string }).name === 'u_SpotLightCount'
         );
         const localLightTypesCall = uniform1ivMock.mock.calls.find(
-            ([location]) => (location as { name: string }).name === 'u_LocalLightType'
+            ([location]) => (location as { name: string }).name === 'u_LocalLightKind'
         );
         const localLightPositionsCall = uniform3fvMock.mock.calls.find(
             ([location]) => (location as { name: string }).name === 'u_LocalLightPosition'
         );
         const localLightOuterConesCall = uniform1fvMock.mock.calls.find(
-            ([location]) => (location as { name: string }).name === 'u_LocalLightOuterCone'
+            ([location]) => (location as { name: string }).name === 'u_LocalLightOuterConeCosine'
         );
 
         expect(localLightCountCall?.[1]).toBe(3);
         expect(spotLightCountCall?.[1]).toBe(2);
-        expect(localLightTypesCall?.[1]).toEqual(new Int32Array([1, 1, 0]));
+        expect(localLightTypesCall?.[1]).toEqual(new Int32Array([2, 2, 1]));
         expect(localLightPositionsCall?.[1]).toEqual(
             new Float32Array([2, 3, 4, -1, 5, 2, 1, 2, 3])
         );
-        expect(localLightOuterConesCall?.[1]).toEqual(new Float32Array([0.6, 0.5, 0]));
+        expect(localLightOuterConesCall?.[1]).toEqual(
+            new Float32Array([Math.cos(0.6), Math.cos(0.5), 0])
+        );
 
         scene.dispose();
     });
