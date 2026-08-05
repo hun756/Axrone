@@ -1,6 +1,8 @@
 import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import type { TextureFormat } from '@axrone/render-webgl2';
 import { SceneMaterialError } from './errors';
+import type { SceneMaterialObservables } from './material-observables';
+import type { SceneMaterialInstanceAdapter } from './scene-material-instance-adapter';
 import type {
     SceneMaterialDefinition,
     SceneMaterialHandle,
@@ -184,6 +186,16 @@ export class SceneAssetFacade<
 
     getMaterialEnabledKeywords(materialId: string): readonly string[] {
         return this._kernel.assets.getMaterialEnabledKeywords(materialId);
+    }
+
+    createMaterialAdapter(materialId: string): SceneMaterialInstanceAdapter | null {
+        this.assertNotDisposed();
+        return this._kernel.assets.createMaterialAdapter(materialId);
+    }
+
+    getMaterialObservables(): SceneMaterialObservables {
+        this.assertNotDisposed();
+        return this._kernel.assets.materialObservables;
     }
 
     setMaterialUniforms(

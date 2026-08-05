@@ -24,6 +24,12 @@ import { SceneMeshFactory } from './scene-mesh-factory';
 import type { SceneMeshResource } from './mesh-registry';
 import type { SceneShaderResource } from './shader-registry';
 import { SceneShaderFactory } from './scene-shader-factory';
+import { SceneMaterialObservables } from './material-observables';
+import {
+    SceneMaterialInstanceAdapter,
+    type SceneMaterialAdapterDependencies,
+    type SceneMaterialAdapterTextureEntry,
+} from './scene-material-instance-adapter';
 import {
     SceneResourceRuntime,
     type SceneResourceRuntimeSerializationResult,
@@ -58,6 +64,7 @@ export interface SceneAssetRuntimeOptions {
 
 export class SceneAssetRuntime {
     readonly resources: SceneResourceRuntime;
+    readonly materialObservables: SceneMaterialObservables;
 
     private readonly _geometryMeshBuilder = new SceneGeometryMeshBuilder();
     private readonly _meshFactory: SceneMeshFactory;
@@ -73,6 +80,8 @@ export class SceneAssetRuntime {
             textureManager: this._textureManager,
         });
 
+        this.materialObservables = new SceneMaterialObservables();
+
         const defaultSampler = this._textureManager.getDefaultSampler(
             FilterMode.LINEAR,
             WrapMode.REPEAT
@@ -81,6 +90,7 @@ export class SceneAssetRuntime {
             defaultPassId: _options.defaultPassId,
             defaultClearColor: _options.defaultClearColor,
             defaultSampler,
+            materialObservables: this.materialObservables,
         });
     }
 
@@ -186,6 +196,29 @@ export class SceneAssetRuntime {
 
     getMaterialEnabledKeywords(materialId: string): readonly string[] {
         return this.resources.materials.getEnabledKeywords(materialId);
+    }
+
+    createMaterialAdapter(materialId: string): SceneMaterialInstanceAdapter | null {
+        const material = this.resources.materials.get(materialId);
+        if (!material) {
+            return null;
+        }
+
+        const dependencies: SceneMaterialAdapterDependencies = {
+            resolveTextures: (id: string): readonly SceneMaterialAdapterTextureEntry[] => {
+                const bindings = this.resources.getMaterialTextureBindings(id);
+                return bindings.map((binding) => ({
+                    textureId: binding.textureId,
+                    samplerId: binding.samplerId,
+                    unit: binding.unit,
+                    nativeTexture: binding.nativeTexture,
+                    width: binding.width,
+                    height: binding.height,
+                }));
+            },
+        };
+
+        return new SceneMaterialInstanceAdapter(material, dependencies);
     }
 
     setMaterialUniforms(
@@ -483,6 +516,7 @@ export class SceneAssetRuntime {
 
     dispose(): void {
         this.clear();
+        this.materialObservables.dispose();
         this._textureManager.dispose();
     }
 

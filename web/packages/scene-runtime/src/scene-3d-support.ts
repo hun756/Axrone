@@ -46,6 +46,14 @@ export type {
 } from './material-observables';
 export { SceneMaterialObservables } from './material-observables';
 export type {
+    SceneMaterialAdapterDependencies,
+    SceneMaterialAdapterTextureEntry,
+} from './scene-material-instance-adapter';
+export {
+    convertSceneUniformValue,
+    SceneMaterialInstanceAdapter,
+} from './scene-material-instance-adapter';
+export type {
     SceneMaterialTextureBinderResources,
     SceneMaterialTextureUniformSetter,
 } from './material-texture-binder';
