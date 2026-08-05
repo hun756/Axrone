@@ -1,4 +1,5 @@
-import type { Vec2, Vec3, Vec4, Mat4, Quat } from '@axrone/numeric';
+import type { Vec2, Vec3, Mat4, Quat } from '@axrone/numeric';
+import { Vec4 } from '@axrone/numeric';
 import type { ShaderUniformValue } from '@axrone/render-webgl2/shader';
 import type { SceneMaterialResource } from './material-registry';
 import type { SceneUniformValue } from './types';
@@ -48,6 +49,10 @@ export function convertSceneUniformValue(
 
     if (Array.isArray(value)) {
         return new Float32Array(value);
+    }
+
+    if (value instanceof Vec4) {
+        return value;
     }
 
     if (isQuat(value)) {
