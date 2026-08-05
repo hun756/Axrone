@@ -162,6 +162,51 @@ export class SceneAssetFacade<
         return this._kernel.assets.getMaterialIds();
     }
 
+    setMaterialKeyword(materialId: string, keyword: string, enabled: boolean): this {
+        this.assertNotDisposed();
+        if (!this._kernel.assets.setMaterialKeyword(materialId, keyword, enabled)) {
+            throw new SceneMaterialError(`Material '${materialId}' is not registered`);
+        }
+        return this;
+    }
+
+    toggleMaterialKeyword(materialId: string, keyword: string): this {
+        this.assertNotDisposed();
+        if (!this._kernel.assets.toggleMaterialKeyword(materialId, keyword)) {
+            throw new SceneMaterialError(`Material '${materialId}' is not registered`);
+        }
+        return this;
+    }
+
+    getMaterialKeyword(materialId: string, keyword: string): boolean | null {
+        return this._kernel.assets.getMaterialKeyword(materialId, keyword);
+    }
+
+    getMaterialEnabledKeywords(materialId: string): readonly string[] {
+        return this._kernel.assets.getMaterialEnabledKeywords(materialId);
+    }
+
+    setMaterialUniforms(
+        materialId: string,
+        uniforms: Readonly<Record<string, SceneUniformValue>>
+    ): this {
+        this.assertNotDisposed();
+        if (!this._kernel.assets.setMaterialUniforms(materialId, uniforms)) {
+            throw new SceneMaterialError(`Material '${materialId}' is not registered`);
+        }
+        return this;
+    }
+
+    getMaterialUniform(materialId: string, name: string): SceneUniformValue | null {
+        return this._kernel.assets.getMaterialUniform(materialId, name);
+    }
+
+    getMaterialUniforms(
+        materialId: string
+    ): Readonly<Record<string, SceneUniformValue>> | null {
+        return this._kernel.assets.getMaterialUniforms(materialId);
+    }
+
     registerRenderPass(definition: SceneRenderPassDefinition): SceneRenderPassHandle {
         this.assertNotDisposed();
         return this._kernel.assets.registerRenderPass(definition);

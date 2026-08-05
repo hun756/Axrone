@@ -172,6 +172,39 @@ export class SceneAssetRuntime {
         return this.resources.materials.getMaterialIds();
     }
 
+    setMaterialKeyword(materialId: string, keyword: string, enabled: boolean): boolean {
+        return this.resources.materials.setKeyword(materialId, keyword, enabled);
+    }
+
+    toggleMaterialKeyword(materialId: string, keyword: string): boolean {
+        return this.resources.materials.toggleKeyword(materialId, keyword);
+    }
+
+    getMaterialKeyword(materialId: string, keyword: string): boolean | null {
+        return this.resources.materials.getKeyword(materialId, keyword);
+    }
+
+    getMaterialEnabledKeywords(materialId: string): readonly string[] {
+        return this.resources.materials.getEnabledKeywords(materialId);
+    }
+
+    setMaterialUniforms(
+        materialId: string,
+        uniforms: Readonly<Record<string, SceneUniformValue>>
+    ): boolean {
+        return this.resources.materials.setUniforms(materialId, uniforms);
+    }
+
+    getMaterialUniform(materialId: string, name: string): SceneUniformValue | null {
+        return this.resources.materials.getUniform(materialId, name);
+    }
+
+    getMaterialUniforms(
+        materialId: string
+    ): Readonly<Record<string, SceneUniformValue>> | null {
+        return this.resources.materials.getUniforms(materialId);
+    }
+
     registerMesh(definition: SceneMeshDefinition): SceneMeshHandle {
         this._options.releaseBaseMesh(definition.id);
         const resource = this._meshFactory.create(definition);

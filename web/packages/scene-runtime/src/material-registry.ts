@@ -34,6 +34,7 @@ export interface SceneMaterialResource {
     readonly textureBindings: Map<string, SceneMaterialTextureBinding>;
     readonly surface: SceneMaterialSurfaceDefinition | null;
     readonly passes: readonly SceneMaterialPassDefinition[];
+    readonly keywords: Map<string, boolean>;
 }
 
 const cloneSceneValue = <T>(value: T): T => decodeSceneValue(encodeSceneValue(value)) as T;
@@ -272,6 +273,26 @@ export const resolveSceneMaterialPass = (
     return passes.find((pass) => pass.id === materialPassId) ?? null;
 };
 
+/**
+ * Property aliases for common uniform names.
+ * Mirrors MaterialInstance's alias table in render-webgl2.
+ * Note: These aliases target engine built-in shader conventions and may not
+ * apply to glTF-loaded materials which use different uniform naming.
+ */
+const SCENE_MATERIAL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+    mainTexture: 'u_MainTexture',
+    color: 'u_Color',
+    tint: 'u_Color',
+    albedo: 'u_AlbedoColor',
+    emission: 'u_EmissionColor',
+    metallic: 'u_Metallic',
+    roughness: 'u_Roughness',
+    normalScale: 'u_NormalScale',
+    emissionIntensity: 'u_EmissionIntensity',
+});
+
+const resolveAlias = (name: string): string => SCENE_MATERIAL_ALIASES[name] ?? name;
+
 export class SceneMaterialRegistry {
     private readonly _resources = new Map<string, SceneMaterialResource>();
     private readonly _definitions = new Map<string, SceneMaterialDefinition>();
@@ -295,6 +316,7 @@ export class SceneMaterialRegistry {
             ),
             surface: cloneSceneMaterialSurfaceDefinition(definition.surface) ?? null,
             passes: cloneSceneMaterialPassDefinitions(definition.passes) ?? Object.freeze([]),
+            keywords: new Map(),
         };
 
         this._resources.set(resource.id, resource);
@@ -319,11 +341,12 @@ export class SceneMaterialRegistry {
             return false;
         }
 
-        material.uniforms.set(name, value);
+        const resolvedName = resolveAlias(name);
+        material.uniforms.set(resolvedName, value);
         const definition = this._definitions.get(id);
         if (definition) {
             const uniforms = { ...(definition.uniforms ?? {}) };
-            uniforms[name] = cloneSceneValue(value);
+            uniforms[resolvedName] = cloneSceneValue(value);
             this._definitions.set(id, {
                 ...definition,
                 uniforms,
@@ -331,6 +354,45 @@ export class SceneMaterialRegistry {
         }
 
         return true;
+    }
+
+    getUniform(id: string, name: string): SceneUniformValue | null {
+        const material = this._resources.get(id);
+        if (!material) {
+            return null;
+        }
+        return material.uniforms.get(resolveAlias(name)) ?? null;
+    }
+
+    setUniforms(id: string, uniforms: Readonly<Record<string, SceneUniformValue>>): boolean {
+        const material = this._resources.get(id);
+        if (!material) {
+            return false;
+        }
+
+        for (const [name, value] of Object.entries(uniforms)) {
+            const resolvedName = resolveAlias(name);
+            material.uniforms.set(resolvedName, value);
+            const definition = this._definitions.get(id);
+            if (definition) {
+                const defUniforms = { ...(definition.uniforms ?? {}) };
+                defUniforms[resolvedName] = cloneSceneValue(value);
+                this._definitions.set(id, {
+                    ...definition,
+                    uniforms: defUniforms,
+                });
+            }
+        }
+
+        return true;
+    }
+
+    getUniforms(id: string): Readonly<Record<string, SceneUniformValue>> | null {
+        const material = this._resources.get(id);
+        if (!material) {
+            return null;
+        }
+        return Object.freeze(Object.fromEntries(material.uniforms));
     }
 
     setTexture(id: string, name: string, binding: SceneTextureBindingDefinition): boolean {
@@ -407,7 +469,16 @@ export class SceneMaterialRegistry {
                     : undefined,
         };
 
-        return this.create(definition);
+        const handle = this.create(definition);
+
+        const clonedResource = this._resources.get(newId);
+        if (clonedResource && source.keywords.size > 0) {
+            for (const [keyword, enabled] of source.keywords) {
+                clonedResource.keywords.set(keyword, enabled);
+            }
+        }
+
+        return handle;
     }
 
     has(id: string): boolean {
@@ -416,6 +487,47 @@ export class SceneMaterialRegistry {
 
     getMaterialIds(): readonly string[] {
         return Object.freeze([...this._resources.keys()]);
+    }
+
+    setKeyword(id: string, keyword: string, enabled: boolean): boolean {
+        const material = this._resources.get(id);
+        if (!material) {
+            return false;
+        }
+        material.keywords.set(keyword, enabled);
+        return true;
+    }
+
+    toggleKeyword(id: string, keyword: string): boolean {
+        const material = this._resources.get(id);
+        if (!material) {
+            return false;
+        }
+        const current = material.keywords.get(keyword) ?? false;
+        material.keywords.set(keyword, !current);
+        return true;
+    }
+
+    getKeyword(id: string, keyword: string): boolean | null {
+        const material = this._resources.get(id);
+        if (!material) {
+            return null;
+        }
+        return material.keywords.get(keyword) ?? false;
+    }
+
+    getEnabledKeywords(id: string): readonly string[] {
+        const material = this._resources.get(id);
+        if (!material) {
+            return Object.freeze([]);
+        }
+        const enabled: string[] = [];
+        for (const [keyword, value] of material.keywords) {
+            if (value) {
+                enabled.push(keyword);
+            }
+        }
+        return Object.freeze(enabled);
     }
 
     getTextureSlots(id: string): readonly SceneMaterialTextureSlot[] {
