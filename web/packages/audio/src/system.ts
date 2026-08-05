@@ -601,7 +601,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         this.#assertNotDisposed();
         const snapshot = Object.freeze({
             version: 1,
-            status: this.#status,
+            status: this.#status as Exclude<AudioSystemStatus, 'disposed'>,
             capturedAtEpochMs: Date.now(),
             activeListenerId: this.#listeners.activeListenerId,
             buses: Object.freeze(this.listBuses()),
