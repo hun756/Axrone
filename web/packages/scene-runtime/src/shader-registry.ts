@@ -41,9 +41,18 @@ export const cloneSceneShaderDefinition = (
 export class SceneShaderRegistry {
     private readonly _resources = new Map<string, SceneShaderResource>();
     private readonly _definitions = new Map<string, SceneShaderDefinition>();
+    private readonly _variants = new Map<string, Map<string, SceneShaderResource>>();
 
     get size(): number {
         return this._resources.size;
+    }
+
+    get variantCount(): number {
+        let count = 0;
+        for (const variants of this._variants.values()) {
+            count += variants.size;
+        }
+        return count;
     }
 
     register(
@@ -60,8 +69,30 @@ export class SceneShaderRegistry {
         };
     }
 
+    registerVariant(
+        shaderId: string,
+        variantKey: string,
+        resource: SceneShaderResource
+    ): void {
+        let variants = this._variants.get(shaderId);
+        if (!variants) {
+            variants = new Map();
+            this._variants.set(shaderId, variants);
+        }
+        variants.set(variantKey, resource);
+    }
+
     get(id: string): SceneShaderResource | undefined {
         return this._resources.get(id);
+    }
+
+    getVariant(shaderId: string, variantKey: string): SceneShaderResource | undefined {
+        return this._variants.get(shaderId)?.get(variantKey);
+    }
+
+    getDefinition(id: string): SceneShaderDefinition | undefined {
+        const definition = this._definitions.get(id);
+        return definition ? cloneSceneShaderDefinition(definition) : undefined;
     }
 
     getHandle(id: string): SceneShaderHandle | null {
@@ -83,6 +114,15 @@ export class SceneShaderRegistry {
         const resources = [...this._resources.values()];
         this._resources.clear();
         this._definitions.clear();
+        this._variants.clear();
         return resources;
+    }
+
+    clearVariants(): void {
+        this._variants.clear();
+    }
+
+    clearVariantsForShader(shaderId: string): boolean {
+        return this._variants.delete(shaderId);
     }
 }
