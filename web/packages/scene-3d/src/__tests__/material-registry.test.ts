@@ -1,10 +1,11 @@
 import { Vec4 } from '@axrone/numeric';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
     cloneSceneMaterialDefinition,
     FEATURE_TO_KEYWORD,
     normalizeSceneTextureBinding,
     resolveSurfaceFeatures,
+    SceneMaterialObservables,
     SceneMaterialRegistry,
 } from '@axrone/scene-3d';
 
@@ -667,6 +668,221 @@ describe('SceneMaterialRegistry', () => {
             expect(enabled).toContain('VERTEX_COLOR');
             expect(enabled).toContain('TWO_SIDED');
             expect(enabled).not.toContain('ALPHA_TEST');
+        });
+    });
+
+    describe('material observables integration', () => {
+        it('fires materialCreated on create', () => {
+            const observables = new SceneMaterialObservables();
+            const registry = new SceneMaterialRegistry({ observables });
+            const callback = vi.fn();
+            observables.materialCreated.addObserver(callback);
+
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            expect(callback).toHaveBeenCalledWith(
+                expect.objectContaining({ materialId: 'mat/test' }),
+                expect.anything()
+            );
+        });
+
+        it('fires materialDeleted on delete', () => {
+            const observables = new SceneMaterialObservables();
+            const registry = new SceneMaterialRegistry({ observables });
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            const callback = vi.fn();
+            observables.materialDeleted.addObserver(callback);
+
+            registry.delete('mat/test');
+
+            expect(callback).toHaveBeenCalledWith(
+                expect.objectContaining({ materialId: 'mat/test' }),
+                expect.anything()
+            );
+        });
+
+        it('does not fire materialDeleted when deleting unknown material', () => {
+            const observables = new SceneMaterialObservables();
+            const registry = new SceneMaterialRegistry({ observables });
+            const callback = vi.fn();
+            observables.materialDeleted.addObserver(callback);
+
+            registry.delete('mat/nonexistent');
+
+            expect(callback).not.toHaveBeenCalled();
+        });
+
+        it('fires materialCloned on clone', () => {
+            const observables = new SceneMaterialObservables();
+            const registry = new SceneMaterialRegistry({ observables });
+            registry.create({ id: 'mat/source', shaderId: 'shader/basic' });
+
+            const callback = vi.fn();
+            observables.materialCloned.addObserver(callback);
+
+            registry.clone('mat/source', 'mat/clone');
+
+            expect(callback).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sourceId: 'mat/source',
+                    cloneId: 'mat/clone',
+                }),
+                expect.anything()
+            );
+        });
+
+        it('fires uniformChanged on setUniform', () => {
+            const observables = new SceneMaterialObservables();
+            const registry = new SceneMaterialRegistry({ observables });
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            const callback = vi.fn();
+            observables.uniformChanged.addObserver(callback);
+
+            registry.setUniform('mat/test', 'u_Color', new Vec4(1, 0, 0, 1));
+
+            expect(callback).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    materialId: 'mat/test',
+                    uniformName: 'u_Color',
+                }),
+                expect.anything()
+            );
+        });
+
+        it('fires keywordChanged on setKeyword', () => {
+            const observables = new SceneMaterialObservables();
+            const registry = new SceneMaterialRegistry({ observables });
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            const callback = vi.fn();
+            observables.keywordChanged.addObserver(callback);
+
+            registry.setKeyword('mat/test', 'FOG', true);
+
+            expect(callback).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    materialId: 'mat/test',
+                    keyword: 'FOG',
+                    enabled: true,
+                }),
+                expect.anything()
+            );
+        });
+
+        it('fires keywordChanged on toggleKeyword', () => {
+            const observables = new SceneMaterialObservables();
+            const registry = new SceneMaterialRegistry({ observables });
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            const callback = vi.fn();
+            observables.keywordChanged.addObserver(callback);
+
+            registry.toggleKeyword('mat/test', 'FOG');
+
+            expect(callback).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    materialId: 'mat/test',
+                    keyword: 'FOG',
+                    enabled: true,
+                }),
+                expect.anything()
+            );
+        });
+
+        it('fires textureChanged on setTexture', () => {
+            const observables = new SceneMaterialObservables();
+            const registry = new SceneMaterialRegistry({ observables });
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            const callback = vi.fn();
+            observables.textureChanged.addObserver(callback);
+
+            registry.setTexture('mat/test', 'u_MainTex', { textureId: 'checker' });
+
+            expect(callback).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    materialId: 'mat/test',
+                    slotName: 'u_MainTex',
+                }),
+                expect.anything()
+            );
+        });
+
+        it('no events fire when observables are not provided', () => {
+            const registry = new SceneMaterialRegistry();
+
+            expect(() =>
+                registry.create({ id: 'mat/test', shaderId: 'shader/basic' })
+            ).not.toThrow();
+            expect(() => registry.delete('mat/test')).not.toThrow();
+        });
+
+        it('clone fires materialCloned but NOT materialCreated', () => {
+            const observables = new SceneMaterialObservables();
+            const registry = new SceneMaterialRegistry({ observables });
+            registry.create({ id: 'mat/source', shaderId: 'shader/basic' });
+
+            const createdCallback = vi.fn();
+            const clonedCallback = vi.fn();
+            observables.materialCreated.addObserver(createdCallback);
+            observables.materialCloned.addObserver(clonedCallback);
+
+            registry.clone('mat/source', 'mat/clone');
+
+            expect(clonedCallback).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sourceId: 'mat/source',
+                    cloneId: 'mat/clone',
+                }),
+                expect.anything()
+            );
+            expect(createdCallback).not.toHaveBeenCalled();
+        });
+
+        it('clear fires materialDeleted for each registered material', () => {
+            const observables = new SceneMaterialObservables();
+            const registry = new SceneMaterialRegistry({ observables });
+            registry.create({ id: 'mat/a', shaderId: 'shader/basic' });
+            registry.create({ id: 'mat/b', shaderId: 'shader/basic' });
+            registry.create({ id: 'mat/c', shaderId: 'shader/basic' });
+
+            const callback = vi.fn();
+            observables.materialDeleted.addObserver(callback);
+
+            registry.clear();
+
+            expect(callback).toHaveBeenCalledTimes(3);
+            const deletedIds = callback.mock.calls.map(
+                (call: unknown[]) => (call[0] as { materialId: string }).materialId
+            );
+            expect(deletedIds).toContain('mat/a');
+            expect(deletedIds).toContain('mat/b');
+            expect(deletedIds).toContain('mat/c');
+        });
+
+        it('setUniforms fires uniformChanged for each uniform', () => {
+            const observables = new SceneMaterialObservables();
+            const registry = new SceneMaterialRegistry({ observables });
+            registry.create({ id: 'mat/test', shaderId: 'shader/basic' });
+
+            const callback = vi.fn();
+            observables.uniformChanged.addObserver(callback);
+
+            registry.setUniforms('mat/test', {
+                u_Color: new Vec4(1, 0, 0, 1),
+                u_Metallic: 0.5,
+                u_Roughness: 0.8,
+            });
+
+            expect(callback).toHaveBeenCalledTimes(3);
+            const changedNames = callback.mock.calls.map(
+                (call: unknown[]) => (call[0] as { uniformName: string }).uniformName
+            );
+            expect(changedNames).toContain('u_Color');
+            expect(changedNames).toContain('u_Metallic');
+            expect(changedNames).toContain('u_Roughness');
         });
     });
 });
