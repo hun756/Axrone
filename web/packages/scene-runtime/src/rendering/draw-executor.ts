@@ -20,6 +20,7 @@ import type {
 import type { SceneSkinningUniformBinder } from '../skinning-uniform-binder';
 import type { SceneUniformWriteTarget } from '../uniform-writer';
 import type { SceneUniformValue } from '../types';
+import type { SceneShaderVariantResolver } from '../scene-shader-variant-resolver';
 
 export interface SceneDrawExecutorContext {
     readonly renderPass: SceneRenderPassResource;
@@ -72,6 +73,7 @@ interface SceneDrawExecutorDependencies {
     readonly uniformWriter: SceneUniformWriteTarget;
     readonly textureUniformSetter: SceneMaterialTextureUniformSetter;
     readonly applyMissingVertexAttributeDefaults: (mesh: SceneMeshResource) => void;
+    readonly variantResolver?: SceneShaderVariantResolver;
 }
 
 export class SceneDrawExecutor {
@@ -103,7 +105,7 @@ export class SceneDrawExecutor {
 
         frameState.markActiveRenderer(item.renderer.id);
 
-        const shader = this._dependencies.resources.shaders.get(material.shaderId);
+        const shader = this._resolveShader(material);
         if (!shader) {
             return;
         }
@@ -169,5 +171,27 @@ export class SceneDrawExecutor {
             vertexCount: mesh.vertexCount,
         });
         this._dependencies.materialTextureBinder.unbind();
+    }
+
+    private _resolveShader(
+        material: SceneMaterialResource
+    ): SceneShaderResource | undefined {
+        const resolver = this._dependencies.variantResolver;
+        if (!resolver || material.keywords.size === 0) {
+            return this._dependencies.resources.shaders.get(material.shaderId);
+        }
+
+        const enabledKeywords: string[] = [];
+        for (const [keyword, entry] of material.keywords) {
+            if (entry.enabled) {
+                enabledKeywords.push(keyword);
+            }
+        }
+
+        if (enabledKeywords.length === 0) {
+            return this._dependencies.resources.shaders.get(material.shaderId);
+        }
+
+        return resolver.resolve(material.shaderId, enabledKeywords);
     }
 }
