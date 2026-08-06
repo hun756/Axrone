@@ -692,6 +692,7 @@ void main() {
     });
 
     it('animates prefab-scoped nodes without leaking across instances', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         const canvas = document.createElement('canvas');
         const scene = new Scene(createSceneOptions(scheduler, canvas));
 
