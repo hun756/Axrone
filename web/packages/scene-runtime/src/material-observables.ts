@@ -36,6 +36,8 @@ export class SceneMaterialObservables {
     readonly keywordChanged: IObservableSubject<SceneMaterialKeywordChangeEvent>;
     readonly textureChanged: IObservableSubject<SceneMaterialTextureChangeEvent>;
 
+    private _disposed = false;
+
     constructor() {
         this.materialCreated = createSubject<SceneMaterialLifecycleEvent>();
         this.materialDeleted = createSubject<SceneMaterialLifecycleEvent>();
@@ -46,6 +48,7 @@ export class SceneMaterialObservables {
     }
 
     dispose(): void {
+        this._disposed = true;
         this.materialCreated.dispose();
         this.materialDeleted.dispose();
         this.materialCloned.dispose();
@@ -56,6 +59,7 @@ export class SceneMaterialObservables {
 
     /** @internal */
     _notifyMaterialCreated(materialId: string): void {
+        if (this._disposed) { return; }
         void this.materialCreated.notify({ materialId }).catch((error) => {
             console.error('Failed to notify materialCreated:', error);
         });
@@ -63,6 +67,7 @@ export class SceneMaterialObservables {
 
     /** @internal */
     _notifyMaterialDeleted(materialId: string): void {
+        if (this._disposed) { return; }
         void this.materialDeleted.notify({ materialId }).catch((error) => {
             console.error('Failed to notify materialDeleted:', error);
         });
@@ -70,6 +75,7 @@ export class SceneMaterialObservables {
 
     /** @internal */
     _notifyMaterialCloned(sourceId: string, cloneId: string): void {
+        if (this._disposed) { return; }
         void this.materialCloned.notify({ sourceId, cloneId }).catch((error) => {
             console.error('Failed to notify materialCloned:', error);
         });
@@ -77,6 +83,7 @@ export class SceneMaterialObservables {
 
     /** @internal */
     _notifyUniformChanged(materialId: string, uniformName: string): void {
+        if (this._disposed) { return; }
         void this.uniformChanged.notify({ materialId, uniformName }).catch((error) => {
             console.error('Failed to notify uniformChanged:', error);
         });
@@ -84,6 +91,7 @@ export class SceneMaterialObservables {
 
     /** @internal */
     _notifyKeywordChanged(materialId: string, keyword: string, enabled: boolean): void {
+        if (this._disposed) { return; }
         void this.keywordChanged
             .notify({ materialId, keyword, enabled })
             .catch((error) => {
@@ -93,6 +101,7 @@ export class SceneMaterialObservables {
 
     /** @internal */
     _notifyTextureChanged(materialId: string, slotName: string): void {
+        if (this._disposed) { return; }
         void this.textureChanged.notify({ materialId, slotName }).catch((error) => {
             console.error('Failed to notify textureChanged:', error);
         });
