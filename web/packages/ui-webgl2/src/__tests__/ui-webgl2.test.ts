@@ -265,7 +265,6 @@ const createMockWebGL2Context = () => {
         R8: 0x8229,
         RED: 0x1903,
         UNSIGNED_BYTE: 0x1401,
-        UNPACK_ALIGNMENT: 0x0cf5,
         createShader: vi.fn(() => makeHandle('shader')),
         shaderSource: vi.fn(),
         compileShader: vi.fn(),
@@ -349,7 +348,6 @@ const createMockWebGL2Context = () => {
         // World-space UI surface + quad pass surface area.
         COLOR_ATTACHMENT0: 0x8ce0,
         DEPTH_WRITEMASK: 0x0b98,
-        TRIANGLE_STRIP: 0x0005,
         createFramebuffer: vi.fn(() => makeHandle('framebuffer')),
         deleteFramebuffer: vi.fn(),
         framebufferTexture2D: vi.fn(),
