@@ -72,6 +72,8 @@ describe('SceneComponentCatalog', () => {
     });
 
     it('overwrites previous registration for same scriptName', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
         @script({ scriptName: 'Shared' })
         class First extends Component {}
 
