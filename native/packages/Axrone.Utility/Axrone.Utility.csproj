@@ -36,8 +36,6 @@
     <NoWarn>$(NoWarn);CA1024</NoWarn>
     <!-- CA1034: Nested types — RAII scope structs are intentional design -->
     <NoWarn>$(NoWarn);CA1034</NoWarn>
-    <!-- CA1810: Static constructor — needed for IInitializable dispatch in OptimizedSingleton -->
-    <NoWarn>$(NoWarn);CA1810</NoWarn>
     <!-- CA1508: Dead code — false positive on lock-protected static fields -->
     <NoWarn>$(NoWarn);CA1508</NoWarn>
   </PropertyGroup>

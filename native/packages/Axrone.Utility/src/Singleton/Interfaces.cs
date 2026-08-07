@@ -33,15 +33,6 @@ public interface IValueInitializable
     void Initialize();
 }
 
-/// <summary>
-/// Abstraction over singleton access — enables DI and testing.
-/// </summary>
-/// <typeparam name="T">The singleton value type.</typeparam>
-public interface ISingleton<out T> where T : class
-{
-    T GetInstance();
-}
-
 /// <summary>Keyed identity — for multiton types that receive their key at construction.</summary>
 /// <typeparam name="TKey">The key type.</typeparam>
 public interface IKeyed<TKey>
