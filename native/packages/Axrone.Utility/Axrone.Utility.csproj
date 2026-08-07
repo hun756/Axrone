@@ -38,4 +38,8 @@
     <InternalsVisibleTo Include="Axrone.Utility.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+
 </Project>
