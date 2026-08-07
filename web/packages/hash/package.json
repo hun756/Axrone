@@ -20,5 +20,8 @@
         "clean": "rimraf dist",
         "test": "vitest run"
     },
+    "dependencies": {
+        "@axrone/utility": "^0.0.1"
+    },
     "license": "ISC"
 }

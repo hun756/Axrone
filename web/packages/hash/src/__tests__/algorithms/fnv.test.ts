@@ -208,6 +208,137 @@ describe('FNV-1a 32-bit', () => {
         });
     });
 
+    describe('updateI8/I16/U8/U16', () => {
+        it('updateI8 delegates to updateI32', () => {
+            const a = new Fnv1a32();
+            a.updateI8(42);
+            const b = new Fnv1a32();
+            b.updateI32(42);
+            expect(a.digest()).toBe(b.digest());
+        });
+
+        it('updateI16 delegates to updateI32', () => {
+            const a = new Fnv1a32();
+            a.updateI16(1000);
+            const b = new Fnv1a32();
+            b.updateI32(1000);
+            expect(a.digest()).toBe(b.digest());
+        });
+
+        it('updateU8 masks to 8 bits then delegates to updateU32', () => {
+            const a = new Fnv1a32();
+            a.updateU8(0xff);
+            const b = new Fnv1a32();
+            b.updateU32(0xff);
+            expect(a.digest()).toBe(b.digest());
+        });
+
+        it('updateU16 masks to 16 bits then delegates to updateU32', () => {
+            const a = new Fnv1a32();
+            a.updateU16(0xabcd);
+            const b = new Fnv1a32();
+            b.updateU32(0xabcd);
+            expect(a.digest()).toBe(b.digest());
+        });
+    });
+
+    describe('updateBoolean', () => {
+        it('true and false produce different hashes', () => {
+            const a = new Fnv1a32();
+            a.updateBoolean(true);
+            const b = new Fnv1a32();
+            b.updateBoolean(false);
+            expect(a.digest()).not.toBe(b.digest());
+        });
+
+        it('tracks byteLength (1 byte per boolean)', () => {
+            const h = new Fnv1a32();
+            h.updateBoolean(true).updateBoolean(false);
+            expect(h.byteLength).toBe(2);
+        });
+
+        it('matches single-byte updateBytes for true=1, false=0', () => {
+            const a = new Fnv1a32();
+            a.updateBoolean(true);
+            const b = new Fnv1a32();
+            b.updateBytes(new Uint8Array([1]));
+            expect(a.digest()).toBe(b.digest());
+        });
+    });
+
+    describe('updateHash with bigint', () => {
+        it('bigint path processes 8 bytes', () => {
+            const h = new Fnv1a32();
+            h.updateHash(0x0102030405060708n);
+            expect(h.byteLength).toBe(8);
+        });
+
+        it('bigint is consistent', () => {
+            const a = new Fnv1a32();
+            a.updateHash(0xdeadbeefcafebaben);
+            const b = new Fnv1a32();
+            b.updateHash(0xdeadbeefcafebaben);
+            expect(a.digest()).toBe(b.digest());
+        });
+
+        it('number path delegates to updateU32', () => {
+            const a = new Fnv1a32();
+            a.updateHash(0xdeadbeef as any);
+            const b = new Fnv1a32();
+            b.updateU32(0xdeadbeef);
+            expect(a.digest()).toBe(b.digest());
+        });
+    });
+
+    describe('updateHashable', () => {
+        it('delegates to hashInto', () => {
+            const hashable = {
+                hashInto(hasher: any) { hasher.updateString('custom'); },
+            };
+            const a = new Fnv1a32();
+            a.updateHashable(hashable);
+            const b = new Fnv1a32();
+            b.updateString('custom');
+            expect(a.digest()).toBe(b.digest());
+        });
+    });
+
+    describe('digestBase64', () => {
+        it('returns valid base64 string', () => {
+            const h = new Fnv1a32();
+            h.updateString('hello');
+            const b64 = h.digestBase64();
+            expect(typeof b64).toBe('string');
+            expect(b64.length).toBeGreaterThan(0);
+            // base64 of 4 bytes = 8 chars (with padding)
+            expect(b64).toMatch(/^[A-Za-z0-9+/]+=*$/);
+        });
+
+        it('matches manual base64 of digestBytes', () => {
+            const h = new Fnv1a32();
+            h.updateString('test');
+            const bytes = h.digestBytes();
+            const expected = btoa(String.fromCharCode(...bytes));
+            // Re-create since digest finalizes
+            const h2 = new Fnv1a32();
+            h2.updateString('test');
+            expect(h2.digestBase64()).toBe(expected);
+        });
+    });
+
+    describe('metadata', () => {
+        it('has correct metadata properties', () => {
+            const h = new Fnv1a32();
+            expect(h.metadata.name).toBe('fnv1a-32');
+            expect(h.metadata.outputSize).toBe(32);
+            expect(h.metadata.blockSize).toBe(1);
+            expect(h.metadata.seedable).toBe(true);
+            expect(h.metadata.keyed).toBe(false);
+            expect(h.metadata.cryptographicallySecure).toBe(false);
+            expect(h.metadata.category).toBe('non-crypto');
+        });
+    });
+
     describe('finalized state', () => {
         it('rejects updates after digest', () => {
             const h = new Fnv1a32();
@@ -215,6 +346,31 @@ describe('FNV-1a 32-bit', () => {
             h.digest();
             expect(() => h.updateString('b')).toThrow(/cannot update/);
             expect(() => h.updateBytes(new Uint8Array([1]))).toThrow(/cannot update/);
+        });
+
+        it('rejects updateBoolean after digest', () => {
+            const h = new Fnv1a32();
+            h.digest();
+            expect(() => h.updateBoolean(true)).toThrow(/cannot update/);
+        });
+
+        it('rejects updateI32 after digest', () => {
+            const h = new Fnv1a32();
+            h.digest();
+            expect(() => h.updateI32(42)).toThrow(/cannot update/);
+        });
+
+        it('rejects updateHash after digest', () => {
+            const h = new Fnv1a32();
+            h.digest();
+            expect(() => h.updateHash(42 as any)).toThrow(/cannot update/);
+        });
+
+        it('finalized property reflects state', () => {
+            const h = new Fnv1a32();
+            expect(h.finalized).toBe(false);
+            h.digest();
+            expect(h.finalized).toBe(true);
         });
     });
 
@@ -258,6 +414,45 @@ describe('FNV-1 32-bit (legacy)', () => {
         const h2 = new Fnv1_32();
         h2.updateBytes(input);
         expect(h1.digest()).not.toBe(h2.digest());
+    });
+
+    it('reset clears state', () => {
+        const h = new Fnv1_32();
+        h.updateBytes(enc.encode('partial'));
+        h.reset();
+        h.updateBytes(enc.encode('a'));
+        expect(h.digest()).toBe(0x050c5d7e);
+    });
+
+    it('clone creates independent copy', () => {
+        const h1 = new Fnv1_32();
+        h1.updateBytes(enc.encode('hello'));
+        const h2 = h1.clone();
+        h1.updateBytes(enc.encode('world'));
+        expect(h1.digest()).not.toBe(h2.digest());
+    });
+
+    it('rejects updates after digest', () => {
+        const h = new Fnv1_32();
+        h.updateString('a');
+        h.digest();
+        expect(() => h.updateString('b')).toThrow(/cannot update/);
+    });
+
+    it('digest variants', () => {
+        const h = new Fnv1_32();
+        h.updateString('hello');
+        expect(h.digestBytes()).toBeInstanceOf(Uint8Array);
+        expect(h.digestBytes().length).toBe(4);
+        expect(h.digestHex()).toMatch(/^[0-9a-f]{8}$/);
+        expect(h.digestHex(true)).toMatch(/^[0-9A-F]{8}$/);
+        expect(typeof h.digestBigInt()).toBe('bigint');
+        expect(typeof h.digestBase64()).toBe('string');
+    });
+
+    it('metadata has correct name', () => {
+        const h = new Fnv1_32();
+        expect(h.metadata.name).toBe('fnv1-32');
     });
 });
 
@@ -307,5 +502,93 @@ describe('FNV-1a 64-bit', () => {
         const h = new Fnv1a64();
         h.updateBytes(enc.encode('a'));
         expect(h.digestHex()).toMatch(/^[0-9a-f]{16}$/);
+    });
+
+    it('reset clears state', () => {
+        const h = new Fnv1a64();
+        h.updateBytes(enc.encode('partial'));
+        h.reset();
+        h.updateBytes(enc.encode('a'));
+        expect((h.digest() as unknown as bigint)).toBe(0xaf63dc4c8601ec8cn);
+    });
+
+    it('clone creates independent copy', () => {
+        const h1 = new Fnv1a64();
+        h1.updateBytes(enc.encode('hello'));
+        const h2 = h1.clone();
+        h1.updateBytes(enc.encode('world'));
+        expect((h1.digest() as unknown as bigint)).not.toBe((h2.digest() as unknown as bigint));
+    });
+
+    it('rejects updates after digest', () => {
+        const h = new Fnv1a64();
+        h.updateString('a');
+        h.digest();
+        expect(() => h.updateString('b')).toThrow(/cannot update/);
+        expect(() => h.updateBoolean(true)).toThrow(/cannot update/);
+        expect(() => h.updateBytes(enc.encode('x'))).toThrow(/cannot update/);
+    });
+
+    it('updateString produces consistent results', () => {
+        const a = new Fnv1a64();
+        a.updateString('hello');
+        const b = new Fnv1a64();
+        b.updateString('hello');
+        expect((a.digest() as unknown as bigint)).toBe((b.digest() as unknown as bigint));
+    });
+
+    it('updateBoolean produces different hashes for true vs false', () => {
+        const a = new Fnv1a64();
+        a.updateBoolean(true);
+        const b = new Fnv1a64();
+        b.updateBoolean(false);
+        expect((a.digest() as unknown as bigint)).not.toBe((b.digest() as unknown as bigint));
+    });
+
+    it('updateAny dispatches correctly', () => {
+        const a = new Fnv1a64();
+        a.updateAny('hello');
+        const b = new Fnv1a64();
+        b.updateString('hello');
+        expect((a.digest() as unknown as bigint)).toBe((b.digest() as unknown as bigint));
+    });
+
+    it('digestBase64 returns valid base64', () => {
+        const h = new Fnv1a64();
+        h.updateBytes(enc.encode('a'));
+        const b64 = h.digestBase64();
+        expect(typeof b64).toBe('string');
+        expect(b64.length).toBeGreaterThan(0);
+    });
+
+    it('digestBigInt returns bigint', () => {
+        const h = new Fnv1a64();
+        h.updateBytes(enc.encode('a'));
+        expect(typeof h.digestBigInt()).toBe('bigint');
+    });
+
+    it('updateHashable delegates to hashInto', () => {
+        const hashable = { hashInto(hasher: any) { hasher.updateString('x'); } };
+        const a = new Fnv1a64();
+        a.updateHashable(hashable);
+        const b = new Fnv1a64();
+        b.updateString('x');
+        expect((a.digest() as unknown as bigint)).toBe((b.digest() as unknown as bigint));
+    });
+
+    it('metadata has correct properties', () => {
+        const h = new Fnv1a64();
+        expect(h.metadata.name).toBe('fnv1a-64');
+        expect(h.metadata.outputSize).toBe(64);
+        expect(h.metadata.cryptographicallySecure).toBe(false);
+    });
+
+    it('byteLength tracking', () => {
+        const h = new Fnv1a64();
+        expect(h.byteLength).toBe(0);
+        h.updateBytes(enc.encode('hello'));
+        expect(h.byteLength).toBe(5);
+        h.updateBoolean(true);
+        expect(h.byteLength).toBe(6);
     });
 });

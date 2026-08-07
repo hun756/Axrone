@@ -247,5 +247,6 @@ export class MeshManager {
             mesh.indexBuffer?.dispose();
         }
         this.meshCache.clear();
+        this.bufferFactory.dispose();
     }
 }

@@ -41,7 +41,7 @@
         "format:check": "prettier --check \"src/**/*.ts\" --config ../../.prettierrc"
     },
     "dependencies": {
-        "@axrone/utility": "workspace:*"
+        "@axrone/utility": "^0.0.1"
     },
     "files": [
         "dist"

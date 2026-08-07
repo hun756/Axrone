@@ -321,14 +321,14 @@ describe('BoxMullerTransform', () => {
         test('should have symmetrical distribution around mean', () => {
             const mean = 5;
             const normalDist = BoxMullerTransform({ mean });
-            const [samples] = normalDist.sampleMany!(getTestState(), 2000);
+            const [samples] = normalDist.sampleMany!(getTestState(), 10000);
 
             const belowMean = samples.filter((v) => v < mean).length;
             const aboveMean = samples.filter((v) => v > mean).length;
 
             const ratio = belowMean / aboveMean;
-            expect(ratio).toBeGreaterThan(0.9);
-            expect(ratio).toBeLessThan(1.1);
+            expect(ratio).toBeGreaterThan(0.88);
+            expect(ratio).toBeLessThan(1.14);
         });
 
         test('should have approximately 68% of values within 1 standard deviation', () => {

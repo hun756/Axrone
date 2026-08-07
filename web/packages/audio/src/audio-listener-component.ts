@@ -9,6 +9,8 @@ import {
     DEFAULT_LISTENER_UP,
     clamp,
     cloneMetadata,
+    normalizeDspBuffer,
+    normalizeSampleRate,
     normalizeVector3,
 } from './internal/shared';
 import { cloneAudioVector3, normalizeAudioListenerId } from './reference';
@@ -140,13 +142,11 @@ export class AudioListenerComponent extends Component<AudioListenerComponentConf
     }
 
     private static _normalizeSampleRate(value: unknown): number {
-        const allowed = [22050, 44100, 48000, 96000];
-        return typeof value === 'number' && allowed.includes(value) ? value : 48000;
+        return typeof value === 'number' ? normalizeSampleRate(value) : 48000;
     }
 
     private static _normalizeDspBuffer(value: unknown): number {
-        const allowed = [128, 256, 512, 1024, 2048, 4096];
-        return typeof value === 'number' && allowed.includes(value) ? value : 1024;
+        return typeof value === 'number' ? normalizeDspBuffer(value) : 1024;
     }
 
     private static _normalizeHrtf(value: unknown): AudioHrtfPlugin {
@@ -362,43 +362,7 @@ export class AudioListenerComponent extends Component<AudioListenerComponentConf
     /* ---- descriptor / serialization ---- */
 
     toDescriptor(): AudioListenerDescriptor {
-        const transform = this._useTransform ? (this.transform as Transform | undefined) : undefined;
-        if (transform) {
-            const position = cloneAudioVector3(transform.worldPosition);
-            const forward = cloneAudioVector3(
-                transform.worldRotation.rotateVector(Vec3.BACK, Vec3.create()) as AudioVector3
-            );
-            const up = cloneAudioVector3(
-                transform.worldRotation.rotateVector(Vec3.UP, Vec3.create()) as AudioVector3
-            );
-            return {
-                id: this._listenerId,
-                active: this._active,
-                enabled: this.enabled,
-                position,
-                forward,
-                up,
-                globalVolume: this._globalVolume,
-                dopplerFactor: this._dopplerFactor,
-                speakerMode: this._speakerMode,
-                sampleRate: this._sampleRate,
-                dspBufferSize: this._dspBufferSize,
-                realVoices: this._realVoices,
-                virtualVoices: this._virtualVoices,
-                virtualVoiceBehavior: this._virtualVoiceBehavior,
-                hrtfPlugin: this._hrtfPlugin,
-                occlusionMode: this._occlusionMode,
-                occlusionLayers: [...this._occlusionLayers],
-                reverbPreset: this._reverbPreset,
-                reverbLevel: this._reverbLevel,
-                ambientClipId: this._ambientClipId,
-                ambientVolume: this._ambientVolume,
-                followCamera: this._followCamera,
-                metadata: this._metadata,
-            };
-        }
-
-        return {
+        const base: AudioListenerDescriptor = {
             id: this._listenerId,
             active: this._active,
             enabled: this.enabled,
@@ -422,6 +386,22 @@ export class AudioListenerComponent extends Component<AudioListenerComponentConf
             ambientVolume: this._ambientVolume,
             followCamera: this._followCamera,
             metadata: this._metadata,
+        };
+
+        const transform = this._useTransform ? (this.transform as Transform | undefined) : undefined;
+        if (!transform) {
+            return base;
+        }
+
+        return {
+            ...base,
+            position: cloneAudioVector3(transform.worldPosition),
+            forward: cloneAudioVector3(
+                transform.worldRotation.rotateVector(Vec3.BACK, Vec3.create()) as AudioVector3
+            ),
+            up: cloneAudioVector3(
+                transform.worldRotation.rotateVector(Vec3.UP, Vec3.create()) as AudioVector3
+            ),
         };
     }
 
@@ -464,16 +444,16 @@ export class AudioListenerComponent extends Component<AudioListenerComponentConf
         if (typeof data.useTransform === 'boolean') this.useTransform = data.useTransform;
         if (typeof data.globalVolume === 'number') this.globalVolume = data.globalVolume;
         if (typeof data.dopplerFactor === 'number') this.dopplerFactor = data.dopplerFactor;
-        if (typeof data.speakerMode === 'string') this.speakerMode = data.speakerMode as AudioSpeakerMode;
+        if (typeof data.speakerMode === 'string') this.speakerMode = AudioListenerComponent._normalizeSpeakerMode(data.speakerMode);
         if (typeof data.sampleRate === 'number') this.sampleRate = data.sampleRate;
         if (typeof data.dspBufferSize === 'number') this.dspBufferSize = data.dspBufferSize;
         if (typeof data.realVoices === 'number') this.realVoices = data.realVoices;
         if (typeof data.virtualVoices === 'number') this.virtualVoices = data.virtualVoices;
-        if (typeof data.virtualVoiceBehavior === 'string') this.virtualVoiceBehavior = data.virtualVoiceBehavior as AudioVirtualVoiceBehavior;
-        if (typeof data.hrtfPlugin === 'string') this.hrtfPlugin = data.hrtfPlugin as AudioHrtfPlugin;
-        if (typeof data.occlusionMode === 'string') this.occlusionMode = data.occlusionMode as AudioOcclusionMode;
+        if (typeof data.virtualVoiceBehavior === 'string') this.virtualVoiceBehavior = AudioListenerComponent._normalizeVirtualBehavior(data.virtualVoiceBehavior);
+        if (typeof data.hrtfPlugin === 'string') this.hrtfPlugin = AudioListenerComponent._normalizeHrtf(data.hrtfPlugin);
+        if (typeof data.occlusionMode === 'string') this.occlusionMode = AudioListenerComponent._normalizeOcclusion(data.occlusionMode);
         if (Array.isArray(data.occlusionLayers)) this.occlusionLayers = data.occlusionLayers;
-        if (typeof data.reverbPreset === 'string') this.reverbPreset = data.reverbPreset as AudioReverbPreset;
+        if (typeof data.reverbPreset === 'string') this.reverbPreset = AudioListenerComponent._normalizeReverb(data.reverbPreset);
         if (typeof data.reverbLevel === 'number') this.reverbLevel = data.reverbLevel;
         if (typeof data.ambientClipId === 'string') this.ambientClipId = data.ambientClipId;
         if (typeof data.ambientVolume === 'number') this.ambientVolume = data.ambientVolume;

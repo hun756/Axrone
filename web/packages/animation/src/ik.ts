@@ -45,6 +45,8 @@ export class AnimationIkLayer {
     private readonly _scratchQuaternionB = new Float32Array(4);
     private readonly _scratchQuaternionC = new Float32Array(4);
     private readonly _scratchVectors = new Float32Array(24);
+    private readonly _fabrikPositions: Float32Array;
+    private readonly _fabrikLengths: Float32Array;
 
     constructor(private readonly _rig: AnimationRig, definition: AnimationIkLayerDefinition) {
         if (!definition || typeof definition.id !== 'string' || definition.id.length === 0) {
@@ -53,6 +55,25 @@ export class AnimationIkLayer {
         this.id = definition.id;
         this.weight = definition.weight ?? 1;
         this._worldPose = new AnimationWorldPose(_rig.boneCount);
+        // Pre-allocate FABRIK scratch buffers sized to the longest chain, matching
+        // the CCD solver's approach of using instance-level scratch arrays.
+        let maxFabrikChain = 0;
+        for (const jobDefinition of definition.jobs) {
+            if (jobDefinition.solver === 'fabrik') {
+                const root = _rig.indexOfBone(jobDefinition.rootBone);
+                const tip = _rig.indexOfBone(jobDefinition.tipBone);
+                let length = 0;
+                let current = tip;
+                while (current >= 0) {
+                    length += 1;
+                    if (current === root) break;
+                    current = _rig.parentIndices[current]!;
+                }
+                if (length > maxFabrikChain) maxFabrikChain = length;
+            }
+        }
+        this._fabrikPositions = new Float32Array(maxFabrikChain * 3);
+        this._fabrikLengths = new Float32Array(Math.max(0, maxFabrikChain - 1));
         this.jobs = Object.freeze(
             definition.jobs.map((jobDefinition) => {
                 const rootIndex = _rig.indexOfBone(jobDefinition.rootBone);
@@ -202,8 +223,8 @@ export class AnimationIkLayer {
         this._resolveTarget(job, pose);
         this._worldPose.update(this._rig, pose);
         const chainLength = job.chain.length;
-        const positions = new Float32Array(chainLength * 3);
-        const lengths = new Float32Array(Math.max(0, chainLength - 1));
+        const positions = this._fabrikPositions;
+        const lengths = this._fabrikLengths;
         let totalLength = 0;
 
         for (let index = 0; index < chainLength; index += 1) {

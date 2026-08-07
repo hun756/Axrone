@@ -4,7 +4,7 @@ import type { Transform } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
 import { toAudioClipSelector } from './asset';
-import { cloneMetadata, isFiniteNumber } from './internal/shared';
+import { clamp, cloneMetadata, isFiniteNumber } from './internal/shared';
 import { cloneSpatialization } from './internal/spatial';
 import {
     MASTER_AUDIO_BUS_ID,
@@ -120,7 +120,7 @@ export class AudioSourceComponent<
     }
 
     set volume(value: number) {
-        this._volume = value;
+        this._volume = isFiniteNumber(value) && value >= 0 ? value : this._volume;
     }
 
     get muted(): boolean {
@@ -155,7 +155,7 @@ export class AudioSourceComponent<
     }
 
     set playbackRate(value: number) {
-        this._playbackRate = value;
+        this._playbackRate = isFiniteNumber(value) && value > 0 ? value : this._playbackRate;
     }
 
     get detuneCents(): number {
@@ -163,7 +163,7 @@ export class AudioSourceComponent<
     }
 
     set detuneCents(value: number) {
-        this._detuneCents = value;
+        this._detuneCents = isFiniteNumber(value) ? value : this._detuneCents;
     }
 
     get pan(): number {
@@ -171,7 +171,7 @@ export class AudioSourceComponent<
     }
 
     set pan(value: number) {
-        this._pan = value;
+        this._pan = isFiniteNumber(value) ? clamp(value, -1, 1) : this._pan;
     }
 
     get spatial(): AudioSpatialization | undefined {

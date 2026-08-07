@@ -200,5 +200,35 @@ describe('WallClock', () => {
             await clock[Symbol.asyncDispose]();
             expect(() => clock.now()).toThrow(ClockError);
         });
+
+        it('should throw on start() after dispose', async () => {
+            await clock[Symbol.asyncDispose]();
+            expect(() => clock.start()).toThrow(ClockError);
+        });
+
+        it('should throw on stop() after dispose', async () => {
+            await clock[Symbol.asyncDispose]();
+            expect(() => clock.stop()).toThrow(ClockError);
+        });
+
+        it('should throw on pause() after dispose', async () => {
+            await clock[Symbol.asyncDispose]();
+            expect(() => clock.pause()).toThrow(ClockError);
+        });
+
+        it('should throw on resume() after dispose', async () => {
+            await clock[Symbol.asyncDispose]();
+            expect(() => clock.resume()).toThrow(ClockError);
+        });
+
+        it('should throw on sample() after dispose', async () => {
+            await clock[Symbol.asyncDispose]();
+            expect(() => clock.sample()).toThrow(ClockError);
+        });
+
+        it('should allow multiple dispose calls', async () => {
+            await clock[Symbol.asyncDispose]();
+            await expect(clock[Symbol.asyncDispose]()).resolves.toBeUndefined();
+        });
     });
 });

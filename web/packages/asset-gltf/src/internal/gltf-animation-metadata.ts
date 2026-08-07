@@ -117,13 +117,22 @@ export const resolvePortableAnimationManifest = (
         return undefined;
     }
 
-    const resources = [...new Map([...normalized.resources.values()].map((resource) => [resource.uri, resource])).values()];
+    // Deduplicate resources by URI inline during candidate search
+    const seenUris = new Set<string>();
+    const uniqueResources = [...normalized.resources.values()].filter((resource) => {
+        if (seenUris.has(resource.uri)) {
+            return false;
+        }
+        seenUris.add(resource.uri);
+        return true;
+    });
+
     const candidates = collectAnimationManifestResourceCandidates(normalized);
     const candidate =
         candidates
-            .map((name) => resources.find((resource) => basenameOfUri(resource.uri) === name))
-            .find((resource): resource is (typeof resources)[number] => Boolean(resource)) ??
-        resources.find((resource) => {
+            .map((name) => uniqueResources.find((resource) => basenameOfUri(resource.uri) === name))
+            .find((resource): resource is (typeof uniqueResources)[number] => Boolean(resource)) ??
+        uniqueResources.find((resource) => {
             const name = basenameOfUri(resource.uri)?.toLowerCase();
             return Boolean(
                 name &&
@@ -848,6 +857,9 @@ export const findAnimationTrackFrameIndex = (times: Float32Array, time: number):
         return mid;
     }
 
+    // Unreachable in normal cases — the loop above should always find a match
+    // since we've already handled edge cases (time <= first, time >= last).
+    // Kept as a safety net for floating-point edge cases.
     return Math.max(0, Math.min(lastIndex - 1, low));
 };
 

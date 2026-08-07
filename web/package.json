@@ -9,7 +9,9 @@
     ],
     "scripts": {
         "bootstrap": "lerna bootstrap --use-workspaces",
-        "build": "lerna run build --stream",
+        "build": "lerna run build --stream --concurrency=3",
+        "build:clean": "node ./scripts/clean-build-cache.mjs && lerna run build --stream --concurrency=3 --skip-nx-cache",
+        "build:export-templates": "node ./scripts/build-export-templates.mjs",
         "clean": "lerna run clean && lerna clean --yes && rimraf node_modules",
         "examples:dev": "vite --config vite.examples.config.ts",
         "examples:build": "vite build --config vite.examples.config.ts",

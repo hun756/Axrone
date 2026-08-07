@@ -80,3 +80,109 @@ describe('reflectShaderEffect', () => {
         expect(() => JSON.stringify(reflection)).not.toThrow();
     });
 });
+
+describe('reflectShaderEffect — edge cases', () => {
+    it('returns empty arrays when optional fields are absent', () => {
+        const minimal = defineShaderEffect({
+            id: 'minimal-reflect',
+            vertex: vtxStage(glsl`gl_Position = vec4(0.0);`),
+            fragment: fragStage(glsl`o_Color = vec4(1.0);`),
+        });
+        const r = reflectShaderEffect(minimal);
+        expect(r.attributes).toEqual([]);
+        expect(r.varyings).toEqual([]);
+        expect(r.uniforms).toEqual([]);
+        expect(r.keywords).toEqual([]);
+        expect(r.techniques).toEqual([]);
+        expect(r.defaultTechnique).toBeUndefined();
+    });
+
+    it('reflects uniform arrayLength and hasDefault', () => {
+        const withArray = defineShaderEffect({
+            id: 'array-reflect',
+            properties: [
+                prop('u_Joints', 'mat4', 'object', undefined, { arrayLength: 32 }),
+                prop('u_NoDefault', 'float', 'material'),
+            ],
+            vertex: vtxStage(glsl`gl_Position = vec4(0.0);`),
+            fragment: fragStage(glsl`o_Color = vec4(1.0);`),
+        });
+        const r = reflectShaderEffect(withArray);
+        const joints = r.uniforms.find((u) => u.name === 'u_Joints');
+        expect(joints?.arrayLength).toBe(32);
+        expect(joints?.hasDefault).toBe(false);
+
+        const noDefault = r.uniforms.find((u) => u.name === 'u_NoDefault');
+        expect(noDefault?.hasDefault).toBe(false);
+    });
+
+    it('reflects uniform hasDefault as true when defaultValue is present', () => {
+        const r = reflectShaderEffect(effect);
+        const tint = r.uniforms.find((u) => u.name === 'u_Tint');
+        expect(tint?.hasDefault).toBe(true);
+    });
+
+    it('reflects uniform inspector and inspectorGroup', () => {
+        const r = reflectShaderEffect(effect);
+        const tint = r.uniforms.find((u) => u.name === 'u_Tint');
+        expect(tint?.inspector?.control).toBe('color');
+        expect(tint?.inspectorGroup).toBe('Surface');
+    });
+
+    it('reflects stage counts correctly', () => {
+        const r = reflectShaderEffect(effect);
+        expect(r.stages.vertex.mainLineCount).toBeGreaterThan(0);
+        expect(r.stages.fragment.outputCount).toBe(1);
+        expect(r.stages.fragment.inputCount).toBe(0);
+    });
+
+    it('reflects technique label', () => {
+        const withLabel = defineShaderEffect({
+            id: 'label-reflect',
+            techniques: [
+                technique('fwd', [pass('lit')], 'Forward Render'),
+            ],
+            vertex: vtxStage(glsl`gl_Position = vec4(0.0);`),
+            fragment: fragStage(glsl`o_Color = vec4(1.0);`),
+        });
+        const r = reflectShaderEffect(withLabel);
+        expect(r.techniques[0]?.label).toBe('Forward Render');
+    });
+
+    it('reflects pass with vertex stage', () => {
+        const withVtxPass = defineShaderEffect({
+            id: 'pass-reflect',
+            techniques: [
+                technique('t', [
+                    pass('p', {
+                        vertex: vtxStage(glsl`gl_Position = vec4(0.0);`),
+                        renderState: { depthTest: true, cull: false, blend: true },
+                    }),
+                ]),
+            ],
+            vertex: vtxStage(glsl`gl_Position = vec4(0.0);`),
+            fragment: fragStage(glsl`o_Color = vec4(1.0);`),
+        });
+        const r = reflectShaderEffect(withVtxPass);
+        const p = r.techniques[0]?.passes[0];
+        expect(p?.hasVertexStage).toBe(true);
+        expect(p?.hasFragmentStage).toBe(false);
+        expect(p?.depthTest).toBe(true);
+        expect(p?.cull).toBe(false);
+        expect(p?.blend).toBe(true);
+    });
+
+    it('classifies keyword with no options as toggle', () => {
+        const r = reflectShaderEffect(effect);
+        const fog = r.keywords.find((k) => k.name === 'USE_FOG');
+        expect(fog?.kind).toBe('toggle');
+        expect(fog?.options).toBeUndefined();
+    });
+
+    it('classifies keyword with options as enum', () => {
+        const r = reflectShaderEffect(effect);
+        const quality = r.keywords.find((k) => k.name === 'QUALITY');
+        expect(quality?.kind).toBe('enum');
+        expect(quality?.options).toEqual(['LOW', 'HIGH']);
+    });
+});

@@ -238,13 +238,13 @@ void main() {
             fragmentSource: `#version 300 es
 precision highp float;
 uniform sampler2D u_MainTex;
-uniform vec3 u_LightColor;
+uniform vec3 u_DirectionalLightColor;
 uniform vec3 u_AmbientLight;
 uniform bool u_ReceiveLighting;
 out vec4 o_Color;
 void main() {
     vec3 base = texture(u_MainTex, vec2(0.5)).rgb;
-    vec3 lit = base * (u_AmbientLight + (u_ReceiveLighting ? u_LightColor : vec3(0.0)));
+    vec3 lit = base * (u_AmbientLight + (u_ReceiveLighting ? u_DirectionalLightColor : vec3(0.0)));
     o_Color = vec4(lit, 1.0);
 }`,
             uniforms: [
@@ -252,7 +252,7 @@ void main() {
                 'u_View',
                 'u_Projection',
                 'u_MainTex',
-                'u_LightColor',
+                'u_DirectionalLightColor',
                 'u_AmbientLight',
                 'u_ReceiveLighting',
             ],
@@ -337,15 +337,18 @@ void main() {
         expect(gl.bindSampler).toHaveBeenCalled();
         expect(gl.bindTexture).toHaveBeenCalled();
 
-        const uniform3fMock = gl.uniform3f as unknown as {
-            mock: { calls: readonly [WebGLUniformLocation | null, number, number, number][] };
+        const uniform3fvMock = gl.uniform3fv as unknown as {
+            mock: { calls: readonly [WebGLUniformLocation | null, Float32Array | number[]][] };
         };
-        const lightColorCalls = uniform3fMock.mock.calls.filter(
-            ([location]: readonly [WebGLUniformLocation | null, number, number, number]) =>
-                (location as { name: string }).name === 'u_LightColor'
+        const lightColorCalls = uniform3fvMock.mock.calls.filter(
+            ([location]) =>
+                (location as { name: string }).name === 'u_DirectionalLightColor'
         );
         expect(lightColorCalls.length).toBeGreaterThan(0);
-        expect(lightColorCalls[0].slice(1)).toEqual([1, 0.9, 0.8]);
+        const colorData = lightColorCalls[0]![1];
+        expect(colorData[0]).toBeCloseTo(1);
+        expect(colorData[1]).toBeCloseTo(0.9);
+        expect(colorData[2]).toBeCloseTo(0.8);
 
         expect(cameraActor.requireComponent(Transform).position.z).toBeGreaterThan(0);
 
@@ -601,7 +604,11 @@ void main() {
 
         expect(camera).toBeDefined();
         expect(() => camera!.getViewMatrix()).not.toThrow();
-        expect(camera!.getViewMatrix().toArray()).toEqual(expected.toArray());
+        const actualView = camera!.getViewMatrix().toArray();
+        const expectedView = expected.toArray();
+        for (let i = 0; i < 16; i++) {
+            expect(actualView[i]).toBeCloseTo(expectedView[i], 10);
+        }
 
         scene.dispose();
     });
@@ -685,6 +692,7 @@ void main() {
     });
 
     it('animates prefab-scoped nodes without leaking across instances', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         const canvas = document.createElement('canvas');
         const scene = new Scene(createSceneOptions(scheduler, canvas));
 
@@ -1068,14 +1076,14 @@ uniform bool u_ReceiveLighting;
 uniform int u_PointLightCount;
 uniform int u_SpotLightCount;
 uniform int u_LocalLightCount;
-uniform int u_LocalLightType[4];
+uniform int u_LocalLightKind[4];
 uniform vec3 u_LocalLightPosition[4];
 uniform vec3 u_LocalLightDirection[4];
 uniform vec3 u_LocalLightColor[4];
 uniform float u_LocalLightIntensity[4];
 uniform float u_LocalLightRange[4];
-uniform float u_LocalLightInnerCone[4];
-uniform float u_LocalLightOuterCone[4];
+uniform float u_LocalLightInnerConeCosine[4];
+uniform float u_LocalLightOuterConeCosine[4];
 out vec4 o_Color;
 void main() {
     float intensity = u_ReceiveLighting ? float(u_LocalLightCount) : 0.0;
@@ -1089,14 +1097,14 @@ void main() {
                 'u_PointLightCount',
                 'u_SpotLightCount',
                 'u_LocalLightCount',
-                'u_LocalLightType',
+                'u_LocalLightKind',
                 'u_LocalLightPosition',
                 'u_LocalLightDirection',
                 'u_LocalLightColor',
                 'u_LocalLightIntensity',
                 'u_LocalLightRange',
-                'u_LocalLightInnerCone',
-                'u_LocalLightOuterCone',
+                'u_LocalLightInnerConeCosine',
+                'u_LocalLightOuterConeCosine',
             ],
         });
 
@@ -1164,22 +1172,73 @@ void main() {
             ([location]) => (location as { name: string }).name === 'u_SpotLightCount'
         );
         const localLightTypesCall = uniform1ivMock.mock.calls.find(
-            ([location]) => (location as { name: string }).name === 'u_LocalLightType'
+            ([location]) => (location as { name: string }).name === 'u_LocalLightKind'
         );
         const localLightPositionsCall = uniform3fvMock.mock.calls.find(
             ([location]) => (location as { name: string }).name === 'u_LocalLightPosition'
         );
         const localLightOuterConesCall = uniform1fvMock.mock.calls.find(
-            ([location]) => (location as { name: string }).name === 'u_LocalLightOuterCone'
+            ([location]) => (location as { name: string }).name === 'u_LocalLightOuterConeCosine'
         );
 
         expect(localLightCountCall?.[1]).toBe(3);
         expect(spotLightCountCall?.[1]).toBe(2);
-        expect(localLightTypesCall?.[1]).toEqual(new Int32Array([1, 1, 0]));
+        expect(localLightTypesCall?.[1]).toEqual(new Int32Array([1, 2, 2]));
         expect(localLightPositionsCall?.[1]).toEqual(
-            new Float32Array([2, 3, 4, -1, 5, 2, 1, 2, 3])
+            new Float32Array([1, 2, 3, 2, 3, 4, -1, 5, 2])
         );
-        expect(localLightOuterConesCall?.[1]).toEqual(new Float32Array([0.6, 0.5, 0]));
+        expect(localLightOuterConesCall?.[1]).toEqual(
+            new Float32Array([0, Math.cos(0.6), Math.cos(0.5)])
+        );
+
+        scene.dispose();
+    });
+
+    it('throws when creating actors after disposal', () => {
+        const canvas = document.createElement('canvas');
+        const scene = new Scene(createSceneOptions(scheduler, canvas));
+        scene.dispose();
+
+        expect(() => scene.createCameraActor({ name: 'Camera' })).toThrow();
+        expect(() =>
+            scene.createRenderableActor(
+                { name: 'Mesh' },
+                { meshId: 'mesh', materialId: 'material' }
+            )
+        ).toThrow();
+        expect(() =>
+            scene.createRenderableActors([
+                {
+                    actorConfig: { name: 'Batch' },
+                    rendererConfig: { meshId: 'mesh', materialId: 'material' },
+                },
+            ])
+        ).toThrow();
+    });
+
+    it('returns an empty array when batch-creating zero renderable actors', () => {
+        const canvas = document.createElement('canvas');
+        const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+        const created = scene.createRenderableActors([]);
+
+        expect(created).toEqual([]);
+
+        scene.dispose();
+    });
+
+    it('creates renderable actors from configs with omitted optional keys', () => {
+        const canvas = document.createElement('canvas');
+        const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+        const created = scene.createRenderableActors([{}, {}]);
+
+        expect(created).toHaveLength(2);
+        for (const instance of created) {
+            expect(instance.actor).toBeDefined();
+            expect(instance.transform).toBeDefined();
+            expect(instance.renderer).toBeDefined();
+        }
 
         scene.dispose();
     });

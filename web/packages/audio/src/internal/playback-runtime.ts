@@ -1,4 +1,4 @@
-import { syncPlaybackSpatialState } from './spatial';
+import { configureDefaultPanner, syncPlaybackSpatialState } from './spatial';
 import type {
     InternalListener,
     InternalPlayback,
@@ -46,10 +46,7 @@ export class AudioPlaybackRuntime<TSchema extends AudioAssetSchema = AudioAssetS
 
         if (source.spatial?.mode === '3d') {
             const panner = this.context.createPanner();
-            panner.distanceModel = 'inverse';
-            panner.refDistance = 1;
-            panner.maxDistance = 1000000;
-            panner.rolloffFactor = 0;
+            configureDefaultPanner(panner);
             attenuationNode.connect(panner);
             outputNode = panner;
             spatialNode = panner;

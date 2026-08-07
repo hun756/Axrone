@@ -136,6 +136,46 @@ const resolveCull = (definition: SceneShaderDefinition): boolean =>
 const resolveBlend = (definition: SceneShaderDefinition): boolean =>
     definition.blend ?? definition.effect?.renderState?.blend ?? false;
 
+const KEYWORD_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
+
+const injectKeywordDefines = (source: string, keywords: readonly string[]): string => {
+    if (keywords.length === 0) {
+        return source;
+    }
+
+    const validKeywords: string[] = [];
+    for (const keyword of keywords) {
+        if (KEYWORD_PATTERN.test(keyword)) {
+            validKeywords.push(keyword);
+        }
+    }
+
+    if (validKeywords.length === 0) {
+        return source;
+    }
+
+    const defines = validKeywords.map((keyword) => `#define ${keyword}`).join('\n');
+    const versionMatch = source.match(/^(\s*#version\s+[^\n]+\n)/);
+
+    if (versionMatch) {
+        const insertPos = versionMatch[0].length;
+        return source.slice(0, insertPos) + defines + '\n' + source.slice(insertPos);
+    }
+
+    return defines + '\n' + source;
+};
+
+export const generateSceneShaderVariantKey = (
+    shaderId: string,
+    enabledKeywords: readonly string[]
+): string => {
+    if (enabledKeywords.length === 0) {
+        return shaderId;
+    }
+    const sorted = [...enabledKeywords].sort();
+    return `${shaderId}:${sorted.join(',')}`;
+};
+
 export interface SceneShaderFactoryOptions {
     readonly gl: WebGL2RenderingContext;
     readonly enableCache?: boolean;
@@ -218,6 +258,68 @@ export class SceneShaderFactory {
         }
 
         return this._buildResource(definition, entry, attributeNames);
+    }
+
+    createVariant(
+        definition: SceneShaderDefinition,
+        enabledKeywords: readonly string[]
+    ): SceneShaderResource {
+        if (enabledKeywords.length === 0) {
+            return this.create(definition);
+        }
+
+        const resolved = this._resolveSources(definition);
+        const variantVertex = injectKeywordDefines(resolved.vertexSource, enabledKeywords);
+        const variantFragment = injectKeywordDefines(resolved.fragmentSource, enabledKeywords);
+        const attributeNames = this._resolveAttributeNames(definition);
+
+        const variantUniformNames = Array.from(
+            new Set(
+                definition.uniforms ??
+                    extractUniformNames(variantVertex, variantFragment)
+            )
+        );
+
+        const cacheKey = this._cacheEnabled
+            ? this._buildCacheKey(variantVertex, variantFragment, attributeNames)
+            : null;
+
+        if (cacheKey !== null) {
+            const cached = this._cache.get(cacheKey);
+            if (cached) {
+                cached.refcount += 1;
+                this._cacheHits += 1;
+                return this._buildVariantResource(
+                    definition,
+                    enabledKeywords,
+                    cached,
+                    attributeNames
+                );
+            }
+        }
+
+        this._cacheMisses += 1;
+
+        const entry = this._compileAndReflect(
+            generateSceneShaderVariantKey(definition.id, enabledKeywords),
+            variantVertex,
+            variantFragment,
+            attributeNames,
+            variantUniformNames
+        );
+
+        if (cacheKey !== null) {
+            entry.refcount = 1;
+            this._cache.set(cacheKey, entry);
+            this._programToKey.set(entry.program, cacheKey);
+        }
+
+        return this._buildVariantResource(
+            definition,
+            enabledKeywords,
+            entry,
+            attributeNames
+        );
     }
 
     async createBatch(
@@ -598,6 +700,25 @@ export class SceneShaderFactory {
     ): SceneShaderResource {
         return {
             id: definition.id,
+            program: entry.program,
+            uniformLocations: entry.uniformLocations,
+            uniformTypes: entry.uniformTypes,
+            uniformNames: entry.uniformNames,
+            attributeNames,
+            depthTest: resolveDepthTest(definition),
+            cull: resolveCull(definition),
+            blend: resolveBlend(definition),
+        };
+    }
+
+    private _buildVariantResource(
+        definition: SceneShaderDefinition,
+        enabledKeywords: readonly string[],
+        entry: CachedProgramEntry,
+        attributeNames: Record<SceneMeshSemantic, string>
+    ): SceneShaderResource {
+        return {
+            id: generateSceneShaderVariantKey(definition.id, enabledKeywords),
             program: entry.program,
             uniformLocations: entry.uniformLocations,
             uniformTypes: entry.uniformTypes,

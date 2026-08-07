@@ -14,6 +14,11 @@ import {
     getCoreSceneBuiltInRegistrySource,
 } from './scene-core-registry';
 import {
+    SCENE_UI_BUILT_IN_MANIFEST,
+    UI_SCENE_BUILT_IN_MANIFESTS,
+    getUISceneBuiltInRegistrySource,
+} from './scene-ui-registry';
+import {
     createSceneBuiltInManifest,
     createSceneRegistryFromBuiltInManifestsWithSource,
     createSceneRegistryWithSource,
@@ -34,6 +39,7 @@ const SCENE_2D_ONLY_BUILT_IN_REGISTRY_SOURCE: SceneBuiltInRegistrySource = Objec
 const SCENE_2D_BUILT_IN_REGISTRY_SOURCE: SceneBuiltInRegistrySource = Object.freeze({
     ...getCoreSceneBuiltInRegistrySource(),
     ...getAnimationSceneBuiltInRegistrySource(),
+    ...getUISceneBuiltInRegistrySource(),
     ...SCENE_2D_ONLY_BUILT_IN_REGISTRY_SOURCE,
 });
 
@@ -45,6 +51,7 @@ export const SCENE_2D_BUILT_IN_MANIFEST = createSceneBuiltInManifest({
 export const DEFAULT_SCENE_2D_BUILT_IN_MANIFESTS = Object.freeze([
     ...CORE_SCENE_BUILT_IN_MANIFESTS,
     ...ANIMATION_SCENE_BUILT_IN_MANIFESTS,
+    ...UI_SCENE_BUILT_IN_MANIFESTS,
     SCENE_2D_BUILT_IN_MANIFEST,
 ]) as readonly SceneBuiltInManifest[];
 
@@ -70,4 +77,4 @@ export const create2DSceneRegistryFromBuiltInManifests = <
         }
     );
 
-export { SCENE_ANIMATION_BUILT_IN_MANIFEST, SCENE_CORE_BUILT_IN_MANIFEST };
+export { SCENE_ANIMATION_BUILT_IN_MANIFEST, SCENE_CORE_BUILT_IN_MANIFEST, SCENE_UI_BUILT_IN_MANIFEST };

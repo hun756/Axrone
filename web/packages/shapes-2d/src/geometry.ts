@@ -99,7 +99,7 @@ const buildPolygonMesh = (polygon: PolygonShape): ShapeMesh2D => {
     }
 
     const outerOffset = outer.length;
-    const allPositions = new Float32Array(outerOffset);
+    let allPositions = new Float32Array(outerOffset);
     allPositions.set(outer, 0);
     const indices: number[] = [];
     const holeOffset: number[] = [];
@@ -110,7 +110,7 @@ const buildPolygonMesh = (polygon: PolygonShape): ShapeMesh2D => {
         const newPositions = new Float32Array(allPositions.length + hole.length);
         newPositions.set(allPositions, 0);
         newPositions.set(hole, allPositions.length);
-        allPositions.set(newPositions);
+        allPositions = newPositions;
         holeOffset.push(runningOffset);
         runningOffset += hole.length;
     }

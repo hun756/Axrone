@@ -14,6 +14,8 @@ import type {
     SceneTextureBindingDefinition,
     SceneUniformValue,
 } from './types';
+import { resolveSurfaceFeatures } from './material-feature-keyword-map';
+import type { SceneMaterialObservables } from './material-observables';
 
 export interface SceneMaterialTextureBinding {
     readonly textureId: string;
@@ -34,6 +36,7 @@ export interface SceneMaterialResource {
     readonly textureBindings: Map<string, SceneMaterialTextureBinding>;
     readonly surface: SceneMaterialSurfaceDefinition | null;
     readonly passes: readonly SceneMaterialPassDefinition[];
+    readonly keywords: Map<string, { enabled: boolean; source: 'auto' | 'explicit' }>;
 }
 
 const cloneSceneValue = <T>(value: T): T => decodeSceneValue(encodeSceneValue(value)) as T;
@@ -272,17 +275,50 @@ export const resolveSceneMaterialPass = (
     return passes.find((pass) => pass.id === materialPassId) ?? null;
 };
 
+/**
+ * Property aliases for common uniform names.
+ * Mirrors MaterialInstance's alias table in render-webgl2.
+ * Note: These aliases target engine built-in shader conventions and may not
+ * apply to glTF-loaded materials which use different uniform naming.
+ */
+const SCENE_MATERIAL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+    mainTexture: 'u_MainTexture',
+    color: 'u_Color',
+    tint: 'u_Color',
+    albedo: 'u_AlbedoColor',
+    emission: 'u_EmissionColor',
+    metallic: 'u_Metallic',
+    roughness: 'u_Roughness',
+    normalScale: 'u_NormalScale',
+    emissionIntensity: 'u_EmissionIntensity',
+});
+
+const resolveAlias = (name: string): string => SCENE_MATERIAL_ALIASES[name] ?? name;
+
 export class SceneMaterialRegistry {
     private readonly _resources = new Map<string, SceneMaterialResource>();
     private readonly _definitions = new Map<string, SceneMaterialDefinition>();
     private readonly _handles = new Map<string, SceneMaterialHandle>();
     private readonly _textureSlots = new Map<string, readonly SceneMaterialTextureSlot[]>();
+    private readonly _observables: SceneMaterialObservables | null;
+
+    constructor(options?: { observables?: SceneMaterialObservables }) {
+        this._observables = options?.observables ?? null;
+    }
 
     get size(): number {
         return this._resources.size;
     }
 
     create(definition: SceneMaterialDefinition): SceneMaterialHandle {
+        return this._createInternal(definition, false);
+    }
+
+    /** @internal — when suppressCreated is true, skips materialCreated notification (used by clone). */
+    private _createInternal(
+        definition: SceneMaterialDefinition,
+        suppressCreated: boolean
+    ): SceneMaterialHandle {
         const resource: SceneMaterialResource = {
             id: definition.id,
             shaderId: definition.shaderId,
@@ -295,13 +331,26 @@ export class SceneMaterialRegistry {
             ),
             surface: cloneSceneMaterialSurfaceDefinition(definition.surface) ?? null,
             passes: cloneSceneMaterialPassDefinitions(definition.passes) ?? Object.freeze([]),
+            keywords: new Map(),
         };
 
         this._resources.set(resource.id, resource);
         this._definitions.set(resource.id, cloneSceneMaterialDefinition(definition));
+
+        // Auto-sync surface features to keywords
+        if (resource.surface?.features) {
+            const resolved = resolveSurfaceFeatures(resource.surface.features);
+            for (const [keyword, enabled] of Object.entries(resolved)) {
+                resource.keywords.set(keyword, { enabled, source: 'auto' });
+            }
+        }
+
         const handle = toHandle(resource);
         this._handles.set(resource.id, handle);
         this._textureSlots.set(resource.id, createTextureSlots(resource));
+        if (!suppressCreated) {
+            this._observables?._notifyMaterialCreated(resource.id);
+        }
         return handle;
     }
 
@@ -319,18 +368,60 @@ export class SceneMaterialRegistry {
             return false;
         }
 
-        material.uniforms.set(name, value);
+        const resolvedName = resolveAlias(name);
+        material.uniforms.set(resolvedName, value);
         const definition = this._definitions.get(id);
         if (definition) {
             const uniforms = { ...(definition.uniforms ?? {}) };
-            uniforms[name] = cloneSceneValue(value);
+            uniforms[resolvedName] = cloneSceneValue(value);
             this._definitions.set(id, {
                 ...definition,
                 uniforms,
             });
         }
 
+        this._observables?._notifyUniformChanged(id, resolvedName);
         return true;
+    }
+
+    getUniform(id: string, name: string): SceneUniformValue | null {
+        const material = this._resources.get(id);
+        if (!material) {
+            return null;
+        }
+        return material.uniforms.get(resolveAlias(name)) ?? null;
+    }
+
+    setUniforms(id: string, uniforms: Readonly<Record<string, SceneUniformValue>>): boolean {
+        const material = this._resources.get(id);
+        if (!material) {
+            return false;
+        }
+
+        for (const [name, value] of Object.entries(uniforms)) {
+            const resolvedName = resolveAlias(name);
+            material.uniforms.set(resolvedName, value);
+            const definition = this._definitions.get(id);
+            if (definition) {
+                const defUniforms = { ...(definition.uniforms ?? {}) };
+                defUniforms[resolvedName] = cloneSceneValue(value);
+                this._definitions.set(id, {
+                    ...definition,
+                    uniforms: defUniforms,
+                });
+            }
+            this._observables?._notifyUniformChanged(id, resolvedName);
+        }
+
+        return true;
+    }
+
+    getUniforms(id: string): Readonly<Record<string, SceneUniformValue>> | null {
+        const material = this._resources.get(id);
+        if (!material) {
+            return null;
+        }
+        return Object.freeze(Object.fromEntries(material.uniforms));
     }
 
     setTexture(id: string, name: string, binding: SceneTextureBindingDefinition): boolean {
@@ -353,8 +444,127 @@ export class SceneMaterialRegistry {
 
         this._handles.set(id, toHandle(material));
         this._textureSlots.set(id, createTextureSlots(material));
+        this._observables?._notifyTextureChanged(id, name);
 
         return true;
+    }
+
+    delete(id: string): boolean {
+        const existed = this._resources.has(id);
+        this._resources.delete(id);
+        this._definitions.delete(id);
+        this._handles.delete(id);
+        this._textureSlots.delete(id);
+        if (existed) {
+            this._observables?._notifyMaterialDeleted(id);
+        }
+        return existed;
+    }
+
+    clone(sourceId: string, newId: string): SceneMaterialHandle {
+        const source = this._resources.get(sourceId);
+        if (!source) {
+            throw new Error(`Material '${sourceId}' is not registered`);
+        }
+        if (this._resources.has(newId)) {
+            throw new Error(`Material '${newId}' is already registered`);
+        }
+
+        const definition: SceneMaterialDefinition = {
+            id: newId,
+            shaderId: source.shaderId,
+            uniforms:
+                source.uniforms.size > 0
+                    ? Object.fromEntries(
+                          [...source.uniforms.entries()].map(([k, v]) => [
+                              k,
+                              cloneSceneValue(v),
+                          ])
+                      )
+                    : undefined,
+            textures:
+                source.textureBindings.size > 0
+                    ? Object.fromEntries(
+                          [...source.textureBindings.entries()].map(([k, v]) => [
+                              k,
+                              {
+                                  textureId: v.textureId,
+                                  samplerId: v.samplerId ?? undefined,
+                                  unit: v.unit,
+                              },
+                          ])
+                      )
+                    : undefined,
+            surface: cloneSceneMaterialSurfaceDefinition(source.surface ?? undefined),
+            passes:
+                source.passes.length > 0
+                    ? cloneSceneMaterialPassDefinitions(source.passes)
+                    : undefined,
+        };
+
+        const handle = this._createInternal(definition, true);
+
+        const clonedResource = this._resources.get(newId);
+        if (clonedResource && source.keywords.size > 0) {
+            for (const [keyword, entry] of source.keywords) {
+                clonedResource.keywords.set(keyword, { enabled: entry.enabled, source: entry.source });
+            }
+        }
+
+        this._observables?._notifyMaterialCloned(sourceId, newId);
+        return handle;
+    }
+
+    has(id: string): boolean {
+        return this._resources.has(id);
+    }
+
+    getMaterialIds(): readonly string[] {
+        return Object.freeze([...this._resources.keys()]);
+    }
+
+    setKeyword(id: string, keyword: string, enabled: boolean): boolean {
+        const material = this._resources.get(id);
+        if (!material) {
+            return false;
+        }
+        material.keywords.set(keyword, { enabled, source: 'explicit' });
+        this._observables?._notifyKeywordChanged(id, keyword, enabled);
+        return true;
+    }
+
+    toggleKeyword(id: string, keyword: string): boolean {
+        const material = this._resources.get(id);
+        if (!material) {
+            return false;
+        }
+        const entry = material.keywords.get(keyword);
+        const current = entry?.enabled ?? false;
+        material.keywords.set(keyword, { enabled: !current, source: 'explicit' });
+        this._observables?._notifyKeywordChanged(id, keyword, !current);
+        return true;
+    }
+
+    getKeyword(id: string, keyword: string): boolean | null {
+        const material = this._resources.get(id);
+        if (!material) {
+            return null;
+        }
+        return material.keywords.get(keyword)?.enabled ?? false;
+    }
+
+    getEnabledKeywords(id: string): readonly string[] {
+        const material = this._resources.get(id);
+        if (!material) {
+            return Object.freeze([]);
+        }
+        const enabled: string[] = [];
+        for (const [keyword, entry] of material.keywords) {
+            if (entry.enabled) {
+                enabled.push(keyword);
+            }
+        }
+        return Object.freeze(enabled);
     }
 
     getTextureSlots(id: string): readonly SceneMaterialTextureSlot[] {
@@ -368,6 +578,11 @@ export class SceneMaterialRegistry {
     }
 
     clear(): void {
+        if (this._observables) {
+            for (const id of this._resources.keys()) {
+                this._observables._notifyMaterialDeleted(id);
+            }
+        }
         this._resources.clear();
         this._definitions.clear();
         this._handles.clear();

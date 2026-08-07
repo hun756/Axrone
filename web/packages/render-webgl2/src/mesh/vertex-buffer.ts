@@ -95,6 +95,7 @@ export class WebGLVertexBuffer implements IVertexBuffer {
     public dispose(): void {
         if (!this._isDisposed) {
             this.buffer.dispose();
+            this.bufferFactory.dispose();
             this._isDisposed = true;
         }
     }

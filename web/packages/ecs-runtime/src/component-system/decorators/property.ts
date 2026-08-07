@@ -9,7 +9,8 @@ export type PropertyTypeId =
     | 'vec3'
     | 'entity'
     | 'transform'
-    | 'component';
+    | 'component'
+    | 'ui-widget';
 
 export type PropertyTypeReference = PropertyTypeId | string | Function;
 

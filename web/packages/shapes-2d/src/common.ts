@@ -348,7 +348,7 @@ export const isSimplePolygon = (points: ArrayLike<number>): boolean => {
             const b1 = j * 2;
             const b2 = ((j + 1) % count) * 2;
             if (i === 0 && j === count - 1) continue;
-            if (i === j + 1) continue;
+            if (j === i + 1) continue;
             if (
                 segmentsIntersect(
                     points[a1] as number,

@@ -2,6 +2,7 @@ import type { BytesLike } from '../../../../types';
 import { asHash256, asSeed32, type Hash256, type Hash512, type Hash128, type Seed32, type HashAlgorithmMetadata } from '../../types';
 import type { IHasher } from '../../interfaces';
 import { HashCryptoUnavailableError, HashCryptoOperationError } from '../../errors';
+import { encode } from '@axrone/utility';
 
 const _HEX = '0123456789abcdef';
 
@@ -250,10 +251,7 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> implements
     }
 
     digestBase64(): string {
-        const bytes = this.digestBytes();
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-        return typeof btoa !== 'undefined' ? btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
+        return encode(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {

@@ -8,6 +8,7 @@ export {
     validateAllScripts,
     getScriptMetrics,
     clearScriptCaches,
+    clearScriptRegistry,
     __debugScriptSystem,
 } from './script';
 

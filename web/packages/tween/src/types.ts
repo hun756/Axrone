@@ -104,6 +104,7 @@ export interface ITween<T> {
     isPlaying(): boolean;
     getStatus(): TweenStatus;
     getDuration(): number;
+    getTotalDuration(): number;
     from(properties: DeepPartial<T>): this;
     to(properties: DeepPartial<T>, duration?: number): this;
     duration(ms: number): this;

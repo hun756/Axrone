@@ -1,31 +1,11 @@
 import { AnimationValidationError } from './errors';
+import { getTrackComponentCount } from './internal';
+import { ANIMATION_EPSILON } from './math';
 import type {
     AnimationClipCompressionDefinition,
     AnimationClipDefinition,
     AnimationTrackDefinition,
 } from './types';
-
-const getTrackComponentCount = (track: AnimationTrackDefinition): number => {
-    if (typeof track.valueComponentCount === 'number' && Number.isFinite(track.valueComponentCount)) {
-        return track.valueComponentCount;
-    }
-    switch (track.path) {
-        case 'translation':
-        case 'scale':
-            return 3;
-        case 'rotation':
-            return 4;
-        case 'weights': {
-            const keyframeCount = track.keyframeCount ?? track.times.length;
-            if (keyframeCount <= 0) {
-                return 0;
-            }
-            return Math.max(1, Math.trunc(track.values.length / keyframeCount));
-        }
-        default:
-            return 0;
-    }
-};
 
 const getTolerance = (
     track: AnimationTrackDefinition,
@@ -64,7 +44,9 @@ const canRemoveLinearKeyframe = (
     const currentTime = times[index] ?? 0;
     const nextTime = times[index + 1] ?? currentTime;
     const span = nextTime - prevTime;
-    if (span <= Number.EPSILON) {
+    // Number.EPSILON (~2.2e-16) is far below meaningful animation time deltas;
+    // use the animation-scale epsilon so degenerate spans are actually caught.
+    if (span <= ANIMATION_EPSILON) {
         return false;
     }
 
@@ -78,12 +60,6 @@ const canRemoveLinearKeyframe = (
         const currentValue = values[currentOffset + componentIndex] ?? 0;
         const nextValue = values[nextOffset + componentIndex] ?? 0;
         const predicted = prevValue + (nextValue - prevValue) * alpha;
-        if (track.path === 'rotation') {
-            if (Math.abs(predicted - currentValue) > tolerance) {
-                return false;
-            }
-            continue;
-        }
         if (Math.abs(predicted - currentValue) > tolerance) {
             return false;
         }

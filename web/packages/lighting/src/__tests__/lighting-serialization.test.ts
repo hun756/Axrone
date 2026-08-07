@@ -157,4 +157,137 @@ describe('lighting serialization', () => {
         expect(error?.code).toBe('lighting.serialize.partial');
         expect(error?.details?.issueCount).toBe(1);
     });
+
+    it('reports non-finite environment values as issues', () => {
+        const result = safeDeserializeLightingRig({
+            environment: {
+                exposure: NaN,
+                gamma: Infinity,
+                ambient: 'not-a-tuple',
+                sky: [1, 2],
+                ground: [0, 0, 0],
+            },
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            const paths = result.issues.map((i) => i.path);
+            expect(paths).toContain('$.environment.ambient');
+            expect(paths).toContain('$.environment.sky');
+            expect(paths).toContain('$.environment.exposure');
+            expect(paths).toContain('$.environment.gamma');
+        }
+    });
+
+    it('handles non-object light entries gracefully', () => {
+        const result = safeDeserializeLightingRig({
+            lights: [null, 42, 'string', undefined],
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value.size).toBe(0);
+            expect(result.issues.length).toBe(4);
+        }
+    });
+
+    it('reports missing kind field on light entries', () => {
+        const result = safeDeserializeLightingRig({
+            lights: [{ id: 'no-kind' }],
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value.size).toBe(0);
+            expect(result.issues.length).toBe(1);
+            expect(result.issues[0]!.path).toBe('$.lights[0].kind');
+            expect(result.issues[0]!.code).toBe('lighting.parse.kind');
+        }
+    });
+
+    it('reports invalid field types on light entries', () => {
+        const result = safeDeserializeLightingRig({
+            lights: [
+                {
+                    kind: LightKind.Point,
+                    id: 42,
+                    color: 'red',
+                    intensity: 'high',
+                    priority: true,
+                    metadata: { fn: () => true },
+                },
+            ],
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value.size).toBe(0);
+            expect(result.issues.length).toBeGreaterThan(0);
+        }
+    });
+
+    it('handles non-array lights field', () => {
+        const result = safeDeserializeLightingRig({
+            lights: 'not-an-array',
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value.size).toBe(0);
+            const lightsIssue = result.issues.find((i) => i.path === '$.lights');
+            expect(lightsIssue).toBeDefined();
+            expect(lightsIssue?.code).toBe('lighting.parse.lights');
+        }
+    });
+
+    it('handles empty lights array', () => {
+        const result = safeDeserializeLightingRig({
+            lights: [],
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value.size).toBe(0);
+            expect(result.issues).toHaveLength(0);
+        }
+    });
+
+    it('preserves metadata deep-clone integrity through round-trip', () => {
+        const rig = new LightingRig({ id: 'meta-rig' });
+        const originalMeta = { tags: ['key', 'fill'], nested: { weight: 0.8 } };
+
+        rig.addDirectional({
+            id: 'sun',
+            direction: [0, -1, 0],
+            metadata: originalMeta,
+        });
+
+        const doc = serializeLightingRig(rig);
+        const parsed = deserializeLightingRig(doc);
+        const parsedSun = parsed.get('sun');
+
+        expect(parsedSun?.metadata).toEqual(originalMeta);
+        expect(parsedSun?.metadata).not.toBe(originalMeta);
+
+        originalMeta.tags.push('mutated');
+        expect(parsedSun?.metadata).toEqual({ tags: ['key', 'fill'], nested: { weight: 0.8 } });
+    });
+
+    it('verifies exact issue codes for each error path', () => {
+        const result = safeDeserializeLightingRig({
+            version: 'bad',
+            rigId: 42,
+            environment: 42,
+            lights: [{ kind: 'unknown' }],
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            const codes = result.issues.map((i) => i.code);
+            expect(codes).toContain('lighting.parse.version');
+            expect(codes).toContain('lighting.parse.rig-id');
+            expect(codes).toContain('lighting.parse.environment');
+            expect(codes).toContain('lighting.parse.kind');
+        }
+    });
 });

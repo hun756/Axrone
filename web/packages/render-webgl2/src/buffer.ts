@@ -80,7 +80,7 @@ export interface IBufferPool<T extends BufferSource> extends IDisposable {
     readonly acquire: (data: T, usage?: GLBufferUsage) => IBuffer;
 }
 
-export interface IBufferFactory {
+export interface IBufferFactory extends IDisposable {
     readonly createBuffer: (target: GLBufferTarget, options?: BufferOptions) => IBuffer;
     readonly createArrayBuffer: (options?: BufferOptions) => IBuffer;
     readonly createElementArrayBuffer: (options?: BufferOptions) => IBuffer;
@@ -756,7 +756,7 @@ export const calculatePadding = (offset: number, alignment: number): number => {
     return remainder === 0 ? 0 : alignment - remainder;
 };
 
-export const createBufferFactory = (gl: WebGL2RenderingContext): IBufferFactory & IDisposable => {
+export const createBufferFactory = (gl: WebGL2RenderingContext): IBufferFactory => {
     return new BufferFactory(gl);
 };
 

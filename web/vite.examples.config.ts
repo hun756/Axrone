@@ -87,7 +87,7 @@ export default defineConfig({
         rollupOptions: {
             input: {
                 index: path.resolve(workspaceDir, 'examples/index.html'),
-                'engine-benchmark': path.resolve(workspaceDir, 'examples/engine-benchmark.html'),
+                'engine-benchmark': path.resolve(workspaceDir, 'examples/legacy/engine-benchmark.html'),
                 'playable-2d': path.resolve(workspaceDir, 'examples/playable-2d/index.html'),
             },
             output: {

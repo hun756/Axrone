@@ -476,4 +476,131 @@ describe('@axrone/ui runtime', () => {
         expect(restored.getWidgetCount()).toBe(1);
         expect(restoredFrame.commands.some((command) => command.kind === 'custom')).toBe(true);
     });
+
+    it('positions an absolute widget with a point anchor and pivot', () => {
+        const runtime = new UIRuntime({ width: 400, height: 200 });
+        const widget = runtime.createWidget({
+            layout: {
+                position: 'absolute',
+                width: 100,
+                height: 50,
+                anchor: { x: 0.5, y: 0.5, pivotX: 0.5, pivotY: 0.5 },
+            },
+        });
+        runtime.appendChild(runtime.root, widget);
+        runtime.commit();
+
+        const box = runtime.getLayoutBox(widget);
+        // Centered: (400*0.5 - 100*0.5, 200*0.5 - 50*0.5) = (150, 75)
+        expect(box.x).toBeCloseTo(150);
+        expect(box.y).toBeCloseTo(75);
+        expect(box.width).toBeCloseTo(100);
+        expect(box.height).toBeCloseTo(50);
+    });
+
+    it('stretches an absolute widget between min/max anchors', () => {
+        const runtime = new UIRuntime({ width: 400, height: 200 });
+        const widget = runtime.createWidget({
+            layout: {
+                position: 'absolute',
+                width: 100,
+                height: 50,
+                anchor: { x: 0.25, y: 0, maxX: 0.75, maxY: 1, offsetX: 10, offsetY: 5 },
+            },
+        });
+        runtime.appendChild(runtime.root, widget);
+        runtime.commit();
+
+        const box = runtime.getLayoutBox(widget);
+        // Horizontal: anchor region [100, 300], symmetric inset 10 -> x=110, w=180
+        expect(box.x).toBeCloseTo(110);
+        expect(box.width).toBeCloseTo(180);
+        // Vertical: anchor region [0, 200], symmetric inset 5 -> y=5, h=190
+        expect(box.y).toBeCloseTo(5);
+        expect(box.height).toBeCloseTo(190);
+    });
+
+    it('normalizes anchor presets with matching min/max bounds', () => {
+        const runtime = new UIRuntime({ width: 400, height: 200 });
+        const centered = runtime.createWidget({
+            layout: { position: 'absolute', width: 40, height: 40, anchor: 'center' },
+        });
+        const stretched = runtime.createWidget({
+            layout: { position: 'absolute', width: 'content', height: 'content', anchor: 'stretch' },
+        });
+        runtime.appendChild(runtime.root, centered);
+        runtime.appendChild(runtime.root, stretched);
+        runtime.commit();
+
+        const centeredBox = runtime.getLayoutBox(centered);
+        expect(centeredBox.x).toBeCloseTo(180); // 400*0.5 - 40*0.5
+        expect(centeredBox.y).toBeCloseTo(80); // 200*0.5 - 40*0.5
+
+        const stretchedBox = runtime.getLayoutBox(stretched);
+        expect(stretchedBox.x).toBeCloseTo(0);
+        expect(stretchedBox.width).toBeCloseTo(400);
+        expect(stretchedBox.height).toBeCloseTo(200);
+    });
+
+    it('wraps flow children onto multiple lines when flexWrap is enabled', () => {
+        const runtime = new UIRuntime({ width: 400, height: 300 });
+        const container = runtime.createWidget({
+            layout: {
+                width: 200,
+                height: 300,
+                display: 'stack',
+                direction: 'row',
+                flexWrap: 'wrap',
+                gap: 10,
+            },
+        });
+        // Three 90px children in a 200px container with 10px gap:
+        // line 1 = child0 + child1 (90 + 10 + 90 = 190 <= 200), line 2 = child2.
+        const children = [0, 1, 2].map(() =>
+            runtime.createWidget({ layout: { width: 90, height: 40 } })
+        );
+        runtime.appendChild(runtime.root, container);
+        for (const child of children) {
+            runtime.appendChild(container, child);
+        }
+        runtime.commit();
+
+        const box0 = runtime.getLayoutBox(children[0]);
+        const box1 = runtime.getLayoutBox(children[1]);
+        const box2 = runtime.getLayoutBox(children[2]);
+
+        // First two share the first line.
+        expect(box0.y).toBeCloseTo(box1.y);
+        expect(box1.x).toBeCloseTo(box0.x + 90 + 10);
+        // Third wraps to a second line below.
+        expect(box2.y).toBeCloseTo(box0.y + 40 + 10);
+        expect(box2.x).toBeCloseTo(box0.x);
+    });
+
+    it('reverses line order with wrap-reverse', () => {
+        const runtime = new UIRuntime({ width: 400, height: 300 });
+        const container = runtime.createWidget({
+            layout: {
+                width: 200,
+                height: 300,
+                display: 'stack',
+                direction: 'row',
+                flexWrap: 'wrap-reverse',
+                gap: 10,
+            },
+        });
+        const children = [0, 1, 2].map(() =>
+            runtime.createWidget({ layout: { width: 90, height: 40 } })
+        );
+        runtime.appendChild(runtime.root, container);
+        for (const child of children) {
+            runtime.appendChild(container, child);
+        }
+        runtime.commit();
+
+        const box0 = runtime.getLayoutBox(children[0]);
+        const box2 = runtime.getLayoutBox(children[2]);
+        // With wrap-reverse the first line of children is placed below the second.
+        expect(box0.y).toBeGreaterThan(box2.y);
+    });
 });

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { StructState } from '../hash/struct';
+import { createHasher } from '../hash/factory';
 import { Fnv1a32, XxHash32, Murmur3_32, Djb2, Crc32 } from '../hash/algorithms';
-import { structHash, fieldNumber, fieldU32, fieldBoolean } from '../hash/struct';
 import type { IHasher } from '../hash/interfaces';
-import type { Hash32, HashValue } from '../hash/types';
+import type { HashValue } from '../hash/types';
 
 interface Vec2 { x: number; y: number }
 interface Vec3 { x: number; y: number; z: number }
@@ -26,14 +27,42 @@ const hashColor = (v: Color, ctor: new (...args: any[]) => IHasher<HashValue>): 
     return (h.digest() as unknown as number) >>> 0;
 };
 
-describe('integration: hashable types via structHash', () => {
-    it('structHash produces consistent results across algorithms', () => {
-        const v: Vec3 = { x: 1, y: 2, z: 3 };
-        const viaStruct = structHash(v, fieldNumber('x'), fieldNumber('y'), fieldNumber('z'));
-        const viaFnv = hashVec3(v, Fnv1a32);
-        // structHash uses FNV-1a + fmix32, may or may not equal direct FNV
+interface HashableVec3 { x: number; y: number; z: number; hashInto(h: IHasher<any>): void }
+
+const makeHashableVec3 = (x: number, y: number, z: number): HashableVec3 => ({
+    x, y, z,
+    hashInto(h: IHasher<any>) { h.updateF32(this.x).updateF32(this.y).updateF32(this.z); },
+});
+
+describe('integration: hashable types via StructState', () => {
+    it('StructState produces consistent results for hashable objects', () => {
+        const hashInto = function (this: HashableVec3, h: IHasher<any>) {
+            h.updateF32(this.x).updateF32(this.y).updateF32(this.z);
+        };
+        const v: HashableVec3 = { x: 1, y: 2, z: 3, hashInto };
+        const s = new StructState();
+        s.mixStruct(v);
+        const viaStruct = s.digest();
         expect(viaStruct).toBeGreaterThanOrEqual(0);
-        expect(viaFnv).toBeGreaterThanOrEqual(0);
+        expect(viaStruct).toBeLessThan(0x100000000);
+        // same fields → same hash
+        const v2: HashableVec3 = { x: 1, y: 2, z: 3, hashInto };
+        const s2 = new StructState();
+        s2.mixStruct(v2);
+        expect(s2.digest()).toBe(viaStruct);
+    });
+
+    it('StructState different fields produce different hash', () => {
+        const hashInto = function (this: HashableVec3, h: IHasher<any>) {
+            h.updateF32(this.x).updateF32(this.y).updateF32(this.z);
+        };
+        const a: HashableVec3 = { x: 1, y: 2, z: 3, hashInto };
+        const b: HashableVec3 = { x: 1, y: 2, z: 4, hashInto };
+        const sa = new StructState();
+        sa.mixStruct(a);
+        const sb = new StructState();
+        sb.mixStruct(b);
+        expect(sa.digest()).not.toBe(sb.digest());
     });
 });
 

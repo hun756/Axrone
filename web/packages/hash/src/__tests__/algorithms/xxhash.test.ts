@@ -96,6 +96,80 @@ describe('xxHash32', () => {
             b.updateBytes(enc.encode('Hello, world!'));
             expect(a.digest()).toBe(b.digest());
         });
+
+        it('updateBoolean produces different hashes', () => {
+            const a = new XxHash32();
+            a.updateBoolean(true);
+            const b = new XxHash32();
+            b.updateBoolean(false);
+            expect(a.digest()).not.toBe(b.digest());
+        });
+
+        it('updateI8/I16/U8/U16 delegate correctly', () => {
+            const a = new XxHash32();
+            a.updateI8(42);
+            const b = new XxHash32();
+            b.updateI32(42);
+            expect(a.digest()).toBe(b.digest());
+
+            const c = new XxHash32();
+            c.updateU8(0xff);
+            const d = new XxHash32();
+            d.updateU32(0xff);
+            expect(c.digest()).toBe(d.digest());
+
+            const e = new XxHash32();
+            e.updateU16(0xabcd);
+            const f = new XxHash32();
+            f.updateU32(0xabcd);
+            expect(e.digest()).toBe(f.digest());
+        });
+
+        it('updateHashable delegates to hashInto', () => {
+            const hashable = { hashInto(h: any) { h.updateString('x'); } };
+            const a = new XxHash32();
+            a.updateHashable(hashable);
+            const b = new XxHash32();
+            b.updateString('x');
+            expect(a.digest()).toBe(b.digest());
+        });
+
+        it('digestBase64 returns valid base64', () => {
+            const h = new XxHash32();
+            h.updateString('test');
+            const b64 = h.digestBase64();
+            expect(typeof b64).toBe('string');
+            expect(b64.length).toBeGreaterThan(0);
+        });
+
+        it('large input (>= 16 bytes) exercises main loop', () => {
+            const data = enc.encode('abcdefghijklmnop'); // exactly 16 bytes
+            const h = new XxHash32();
+            h.updateBytes(data);
+            const v = h.digest();
+            expect(typeof v).toBe('number');
+            expect(v).toBeGreaterThanOrEqual(0);
+        });
+
+        it('large input (32 bytes) exercises main loop fully', () => {
+            const data = new Uint8Array(32);
+            for (let i = 0; i < 32; i++) data[i] = i;
+            const h = new XxHash32();
+            h.updateBytes(data);
+            const v = h.digest();
+            expect(typeof v).toBe('number');
+            // Deterministic
+            const h2 = new XxHash32();
+            h2.updateBytes(data);
+            expect(h2.digest()).toBe(v);
+        });
+
+        it('metadata is correct', () => {
+            const h = new XxHash32();
+            expect(h.metadata.name).toBe('xxhash32');
+            expect(h.metadata.outputSize).toBe(32);
+            expect(h.metadata.blockSize).toBe(16);
+        });
     });
 });
 
@@ -169,6 +243,42 @@ describe('xxHash64', () => {
             h.updateString('a');
             h.digest();
             expect(() => h.updateString('b')).toThrow();
+        });
+
+        it('clone creates independent copy', () => {
+            const h1 = new XxHash64();
+            h1.updateBytes(enc.encode('hello'));
+            const h2 = h1.clone();
+            h1.updateBytes(enc.encode('world'));
+            expect((h1.digest() as unknown as bigint)).not.toBe((h2.digest() as unknown as bigint));
+        });
+
+        it('byteLength tracking', () => {
+            const h = new XxHash64();
+            expect(h.byteLength).toBe(0);
+            h.updateBytes(enc.encode('hello'));
+            expect(h.byteLength).toBe(5);
+        });
+
+        it('digestBase64 returns valid base64', () => {
+            const h = new XxHash64();
+            h.updateString('test');
+            const b64 = h.digestBase64();
+            expect(typeof b64).toBe('string');
+            expect(b64.length).toBeGreaterThan(0);
+        });
+
+        it('digestBigInt returns bigint', () => {
+            const h = new XxHash64();
+            h.updateString('test');
+            expect(typeof h.digestBigInt()).toBe('bigint');
+        });
+
+        it('metadata is correct', () => {
+            const h = new XxHash64();
+            expect(h.metadata.name).toBe('xxhash64');
+            expect(h.metadata.outputSize).toBe(64);
+            expect(h.metadata.blockSize).toBe(32);
         });
     });
 });

@@ -45,17 +45,17 @@ describe('SceneLightingCollector', () => {
 
         expect(second).toBe(first);
         expect(second.localLightPositions).toBe(first.localLightPositions);
-        expect(second.localLightTypes).toBe(first.localLightTypes);
-        expect(second.ambient.x).toBeCloseTo(0.15);
-        expect(second.ambient.y).toBeCloseTo(0.24);
-        expect(second.ambient.z).toBeCloseTo(0.33);
-        expect(second.pointCount).toBe(1);
-        expect(second.spotCount).toBe(1);
-        expect(second.localLightCount).toBe(2);
-        expect([...second.localLightTypes.slice(0, 2)]).toEqual([0, 1]);
-        expect([...second.localLightPositions.slice(0, 6)]).toEqual([1, 2, 3, -1, 5, 2]);
-        expect(second.pointLightRange).toBe(9);
-        expect(second.spotLightOuterCone).toBe(0.5);
+        expect(second.localLightKinds).toBe(first.localLightKinds);
+        expect(second.environment.ambient.x).toBeCloseTo(0.1);
+        expect(second.environment.ambient.y).toBeCloseTo(0.2);
+        expect(second.environment.ambient.z).toBeCloseTo(0.3);
+        expect(second.stats.selectedPointCount).toBe(1);
+        expect(second.stats.selectedSpotCount).toBe(1);
+        expect(second.stats.selectedLocalLightCount).toBe(2);
+        expect([...second.localLightKinds.slice(0, 2)]).toEqual([2, 1]);
+        expect([...second.localLightPositions.slice(0, 6)]).toEqual([-1, 5, 2, 1, 2, 3]);
+        expect(second.pointRanges[0]).toBe(9);
+        expect(second.spotOuterConeCosines[0]).toBeCloseTo(Math.cos(0.5));
     });
 
     it('prefers primary directional lights over fallback directional lights', () => {
@@ -78,9 +78,9 @@ describe('SceneLightingCollector', () => {
 
         const lighting = collector.collect(world.getAllActors(), Vec3.ZERO);
 
-        expect(lighting.hasDirectional).toBe(true);
-        expect(lighting.directionalColor.x).toBe(0);
-        expect(lighting.directionalColor.y).toBe(1);
-        expect(lighting.directionalIntensity).toBe(4);
+        expect(lighting.stats.selectedDirectionalCount).toBe(1);
+        expect(lighting.directionalColors[0]).toBe(0);
+        expect(lighting.directionalColors[1]).toBe(1);
+        expect(lighting.directionalIntensities[0]).toBe(4);
     });
 });

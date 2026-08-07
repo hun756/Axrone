@@ -13,6 +13,7 @@ export * from './message-catalog';
 // Submodules
 export * from './clone/index';
 export * from './comparer/index';
+export * from './base64/index';
 
 // Singleton (selective exports to avoid conflicts with result.ts and types.ts)
 export {

@@ -107,6 +107,47 @@ describe('DJB2a', () => {
         h.updateString('test');
         expect(typeof h.digest()).toBe('number');
     });
+
+    it('reset clears state', () => {
+        const h = new Djb2a();
+        h.updateBytes(enc.encode('partial'));
+        h.reset();
+        h.updateBytes(enc.encode('a'));
+        expect(h.digest()).toBe(180708);
+    });
+
+    it('clone creates independent copy', () => {
+        const h1 = new Djb2a();
+        h1.updateBytes(enc.encode('a'));
+        const h2 = h1.clone();
+        h1.updateBytes(enc.encode('b'));
+        expect(h1.digest()).not.toBe(h2.digest());
+    });
+
+    it('rejects updates after digest', () => {
+        const h = new Djb2a();
+        h.updateString('a');
+        h.digest();
+        expect(() => h.updateString('b')).toThrow();
+    });
+
+    it('digestBytes returns 4 bytes', () => {
+        const h = new Djb2a();
+        h.updateString('test');
+        expect(h.digestBytes().length).toBe(4);
+    });
+
+    it('digestHex returns 8-char hex', () => {
+        const h = new Djb2a();
+        h.updateString('test');
+        expect(h.digestHex()).toMatch(/^[0-9a-f]{8}$/);
+    });
+
+    it('byteLength tracking', () => {
+        const h = new Djb2a();
+        h.updateBytes(enc.encode('hello'));
+        expect(h.byteLength).toBe(5);
+    });
 });
 
 describe('SDBM', () => {
@@ -122,6 +163,14 @@ describe('SDBM', () => {
         const v = h.digest() as unknown as number;
         expect(v >>> 0).toBe(v >>> 0);
         expect(v).not.toBe(0);
+    });
+
+    it('produces specific known value for "a" (97)', () => {
+        // SDBM: h = c + (h << 6) + (h << 16) - h
+        // For 'a' (97): 97 + 0 + 0 - 0 = 97
+        const h = new Sdbm();
+        h.updateBytes(enc.encode('a'));
+        expect(h.digest()).toBe(97);
     });
 
     it('produces different output from Djb2', () => {
@@ -142,5 +191,36 @@ describe('SDBM', () => {
         expect(h1.digest()).toBe(h2.digest());
         const h3 = h1.clone();
         expect(h3.digest()).toBe(h1.digest());
+    });
+
+    it('byteLength tracking', () => {
+        const h = new Sdbm();
+        h.updateBytes(enc.encode('hello'));
+        expect(h.byteLength).toBe(5);
+    });
+
+    it('rejects updates after digest', () => {
+        const h = new Sdbm();
+        h.updateString('a');
+        h.digest();
+        expect(() => h.updateString('b')).toThrow();
+    });
+
+    it('digest variants', () => {
+        const h = new Sdbm();
+        h.updateString('test');
+        expect(h.digestBytes()).toBeInstanceOf(Uint8Array);
+        expect(h.digestBytes().length).toBe(4);
+        expect(h.digestHex()).toMatch(/^[0-9a-f]{8}$/);
+        expect(typeof h.digestBigInt()).toBe('bigint');
+    });
+
+    it('incremental update matches single update', () => {
+        const a = new Sdbm();
+        a.updateBytes(enc.encode('hel'));
+        a.updateBytes(enc.encode('lo'));
+        const b = new Sdbm();
+        b.updateBytes(enc.encode('hello'));
+        expect(a.digest()).toBe(b.digest());
     });
 });

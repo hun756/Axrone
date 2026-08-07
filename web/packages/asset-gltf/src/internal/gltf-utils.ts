@@ -1,5 +1,6 @@
 import { deepFreeze, isPlainObject } from '@axrone/utility';
 import { EMPTY_ARRAY } from './gltf-constants';
+import type { GltfAccessorJson } from '../types';
 
 export const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);
@@ -100,3 +101,52 @@ export const sortedEntries = <K, V>(map: ReadonlyMap<K, V>, compareFn?: (a: K, b
 
 export const isNonNullable = <T>(value: T): value is NonNullable<T> =>
     value !== null && value !== undefined;
+
+export const componentTypeByteSize = (
+    componentType: GltfAccessorJson['componentType']
+): 1 | 2 | 4 => {
+    switch (componentType) {
+        case 5120:
+        case 5121:
+            return 1;
+        case 5122:
+        case 5123:
+            return 2;
+        case 5125:
+        case 5126:
+            return 4;
+    }
+};
+
+export const accessorComponentCount = (type: GltfAccessorJson['type']): number => {
+    switch (type) {
+        case 'SCALAR':
+            return 1;
+        case 'VEC2':
+            return 2;
+        case 'VEC3':
+            return 3;
+        case 'VEC4':
+        case 'MAT2':
+            return 4;
+        case 'MAT3':
+            return 9;
+        case 'MAT4':
+            return 16;
+    }
+};
+
+export const inferCompressedContainer = (
+    mimeType: string | undefined,
+    uri: string | undefined
+): 'ktx2' | 'basisu' | undefined => {
+    const normalizedMime = mimeType?.toLowerCase();
+    const normalizedUri = uri?.toLowerCase();
+    if (normalizedMime === 'image/ktx2' || normalizedUri?.endsWith('.ktx2')) {
+        return 'ktx2';
+    }
+    if (normalizedMime === 'image/basis' || normalizedUri?.endsWith('.basis')) {
+        return 'basisu';
+    }
+    return undefined;
+};

@@ -1,5 +1,3 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`Numeric Clamp Utility > Error Objects > NumericRangeError has correct structure 1`] = `[NumericRangeError: Value must be a finite number]`;
-
-exports[`Numeric Clamp Utility Error Objects NumericRangeError has correct structure 1`] = `[NumericRangeError: Value must be a finite number]`;

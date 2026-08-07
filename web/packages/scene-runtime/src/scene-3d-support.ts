@@ -18,7 +18,12 @@ export {
     SceneShaderRegistry,
 } from './shader-registry';
 export type { SceneShaderFactoryOptions } from './scene-shader-factory';
-export { SceneShaderFactory } from './scene-shader-factory';
+export {
+    generateSceneShaderVariantKey,
+    SceneShaderFactory,
+} from './scene-shader-factory';
+export type { SceneShaderVariantResolverDependencies } from './scene-shader-variant-resolver';
+export { SceneShaderVariantResolver } from './scene-shader-variant-resolver';
 
 export type {
     SceneMaterialResource,
@@ -31,6 +36,23 @@ export {
     normalizeSceneTextureBinding,
     SceneMaterialRegistry,
 } from './material-registry';
+export { FEATURE_TO_KEYWORD, resolveSurfaceFeatures } from './material-feature-keyword-map';
+export type {
+    SceneMaterialCloneEvent,
+    SceneMaterialKeywordChangeEvent,
+    SceneMaterialLifecycleEvent,
+    SceneMaterialTextureChangeEvent,
+    SceneMaterialUniformChangeEvent,
+} from './material-observables';
+export { SceneMaterialObservables } from './material-observables';
+export type {
+    SceneMaterialAdapterDependencies,
+    SceneMaterialAdapterTextureEntry,
+} from './scene-material-instance-adapter';
+export {
+    convertSceneUniformValue,
+    SceneMaterialInstanceAdapter,
+} from './scene-material-instance-adapter';
 export type {
     SceneMaterialTextureBinderResources,
     SceneMaterialTextureUniformSetter,
@@ -151,6 +173,16 @@ export type { PointLightConfig } from './components/point-light';
 export { PointLight } from './components/point-light';
 export type { SpotLightConfig } from './components/spot-light';
 export { SpotLight } from './components/spot-light';
+export type { TerrainConfig } from './components/terrain';
+export { Terrain } from './components/terrain';
+export {
+    DEFAULT_TERRAIN_SPLAT_SHADER_ID,
+    createTerrainSplatShaderDefinition,
+} from './terrain-splat-shader';
+export {
+    DEFAULT_TERRAIN_FOLIAGE_SHADER_ID,
+    createTerrainFoliageShaderDefinition,
+} from './terrain-foliage-shader';
 export type { AreaLightConfig, AreaLightShape } from './components/area-light';
 export { AreaLight } from './components/area-light';
 export type {

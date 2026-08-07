@@ -3,10 +3,13 @@ import {
     GLTF_PBR_SHADER_EFFECT,
     GLTF_UNLIT_SHADER_EFFECT,
     createGltfPbrShaderDefinition,
+    createGltfRuntimeMaterialPasses,
     createGltfRuntimeSurfaceDefinition,
+    createGltfRuntimeSurfaceFeatures,
     createGltfUnlitShaderDefinition,
     resolveGltfRuntimeShaderId,
 } from '@axrone/scene-runtime-gltf';
+import { GLTF_TOON_SHADER_EFFECT, resolveGltfShaderDefinition } from '../internal/runtime-shaders';
 
 describe('scene-runtime glTF shader effects', () => {
     it('builds the built-in unlit shader from structured effect metadata', () => {
@@ -132,6 +135,196 @@ describe('scene-runtime glTF shader effects', () => {
                 useAlphaTest: true,
                 hasSecondUv: true,
             },
+        });
+    });
+
+    describe('createGltfRuntimeSurfaceFeatures', () => {
+        it('disables all PBR-specific features for unlit shaders', () => {
+            const features = createGltfRuntimeSurfaceFeatures('gltf/unlit', {
+                _NormalTexture_TexCoord: 0,
+                _MetallicRoughnessTexture_TexCoord: 0,
+                _ClearcoatFactor: 1,
+                _ClearcoatTexture_TexCoord: 0,
+            });
+
+            expect(features.useNormalMap).toBe(false);
+            expect(features.useMetallicRoughnessMap).toBe(false);
+            expect(features.useOcclusionMap).toBe(false);
+            expect(features.useEmissiveMap).toBe(false);
+            expect(features.useClearcoat).toBe(false);
+            expect(features.useClearcoatMap).toBe(false);
+            expect(features.useClearcoatRoughnessMap).toBe(false);
+            expect(features.useClearcoatNormalMap).toBe(false);
+            expect(features.useAnisotropy).toBe(false);
+            expect(features.useSheen).toBe(false);
+            expect(features.useSubsurface).toBe(false);
+            expect(features.useTransmission).toBe(false);
+            expect(features.useIridescence).toBe(false);
+        });
+
+        it('enables anisotropy, sheen, subsurface, transmission, and iridescence flags', () => {
+            const features = createGltfRuntimeSurfaceFeatures('gltf/pbr', {
+                _AnisotropyFactor: 0.8,
+                _SheenFactor: 0.5,
+                _SubsurfaceFactor: 0.3,
+                _TransmissionFactor: 0.9,
+                _IridescenceFactor: 0.6,
+            });
+
+            expect(features.useAnisotropy).toBe(true);
+            expect(features.useSheen).toBe(true);
+            expect(features.useSubsurface).toBe(true);
+            expect(features.useTransmission).toBe(true);
+            expect(features.useIridescence).toBe(true);
+        });
+
+        it('sets hasSecondUv when any texture uses texCoord 1', () => {
+            const features = createGltfRuntimeSurfaceFeatures('gltf/pbr', {
+                _EmissiveTexture_TexCoord: 1,
+            });
+
+            expect(features.hasSecondUv).toBe(true);
+        });
+
+        it('enables useAlphaTest only for MASK mode (0.5 <= AlphaMode < 1.5)', () => {
+            const maskFeatures = createGltfRuntimeSurfaceFeatures('gltf/pbr', { _AlphaMode: 1 });
+            expect(maskFeatures.useAlphaTest).toBe(true);
+
+            const opaqueFeatures = createGltfRuntimeSurfaceFeatures('gltf/pbr', { _AlphaMode: 0 });
+            expect(opaqueFeatures.useAlphaTest).toBe(false);
+
+            const blendFeatures = createGltfRuntimeSurfaceFeatures('gltf/pbr', { _AlphaMode: 2 });
+            expect(blendFeatures.useAlphaTest).toBe(false);
+        });
+    });
+
+    describe('createGltfRuntimeMaterialPasses', () => {
+        it('produces 3 passes for opaque mode with depthWrite true', () => {
+            const passes = createGltfRuntimeMaterialPasses({ _AlphaMode: 0 });
+
+            expect(passes).toHaveLength(3);
+            expect(passes.map((p) => p.id)).toEqual(['main', 'forward-add', 'shadow-caster']);
+
+            const mainPass = passes[0];
+            expect(mainPass.depthStencilState.depthWrite).toBe(true);
+            expect(mainPass.blendState.targets[0].blend).toBe(false);
+            expect(mainPass.rasterizerState.cullMode).toBe('back');
+        });
+
+        it('enables blend for BLEND mode with correct factors', () => {
+            const passes = createGltfRuntimeMaterialPasses({ _AlphaMode: 2 });
+
+            const mainPass = passes[0];
+            expect(mainPass.depthStencilState.depthWrite).toBe(false);
+            expect(mainPass.blendState.targets[0].blend).toBe(true);
+            expect(mainPass.blendState.targets[0].srcColorFactor).toBe('src-alpha');
+            expect(mainPass.blendState.targets[0].dstColorFactor).toBe('one-minus-src-alpha');
+        });
+
+        it('sets shadow-caster priority to 1 for MASK mode', () => {
+            const passes = createGltfRuntimeMaterialPasses({ _AlphaMode: 1 });
+
+            const shadowPass = passes[2];
+            expect(shadowPass.id).toBe('shadow-caster');
+            expect((shadowPass as any).priority).toBe(1);
+        });
+
+        it('sets cullMode to none for double-sided materials', () => {
+            const passes = createGltfRuntimeMaterialPasses({ _DoubleSided: 1 });
+
+            expect(passes[0].rasterizerState.cullMode).toBe('none');
+        });
+
+        it('returns a frozen array', () => {
+            const passes = createGltfRuntimeMaterialPasses();
+
+            expect(Object.isFrozen(passes)).toBe(true);
+        });
+    });
+
+    describe('resolveGltfShaderDefinition', () => {
+        it('returns PBR definition for gltf/pbr base ID', () => {
+            const result = resolveGltfShaderDefinition('gltf/pbr');
+
+            expect(result).toBeDefined();
+            expect(result!.effect?.id).toBe('gltf/pbr');
+        });
+
+        it('returns PBR blend variant with correct cull/blend state', () => {
+            const result = resolveGltfShaderDefinition('gltf/pbr/blend');
+
+            expect(result).toBeDefined();
+            expect(result!.blend).toBe(true);
+            expect(result!.cull).toBe(true);
+        });
+
+        it('returns unlit definition for gltf/unlit base ID', () => {
+            const result = resolveGltfShaderDefinition('gltf/unlit');
+
+            expect(result).toBeDefined();
+            expect(result!.effect?.id).toBe('gltf/unlit');
+        });
+
+        it('delegates to custom resolveShaderDefinition callback', () => {
+            const customDef = { id: 'custom/shader', effect: { id: 'custom/effect' } } as any;
+            const callback = (id: string) => (id === 'custom/shader' ? customDef : undefined);
+
+            const result = resolveGltfShaderDefinition('custom/shader', callback);
+
+            expect(result).toBe(customDef);
+        });
+
+        it('returns undefined for unknown shader with no callback', () => {
+            const result = resolveGltfShaderDefinition('unknown/shader');
+
+            expect(result).toBeUndefined();
+        });
+    });
+
+    describe('GLTF_TOON_SHADER_EFFECT', () => {
+        it('has the correct effect id', () => {
+            expect(GLTF_TOON_SHADER_EFFECT.id).toBe('gltf/toon');
+        });
+
+        it('contains toon-specific properties', () => {
+            const propertyNames = GLTF_TOON_SHADER_EFFECT.properties?.map((p) => p.name) ?? [];
+
+            expect(propertyNames).toContain('_ShadowColor');
+            expect(propertyNames).toContain('_RimColor');
+            expect(propertyNames).toContain('_OutlineWidth');
+        });
+
+        it('contains toon shading logic in fragment main', () => {
+            const fragmentLines = GLTF_TOON_SHADER_EFFECT.fragment?.main ?? [];
+            const joined = fragmentLines.join('\n');
+
+            expect(joined).toContain('_ShadowColor');
+            expect(joined).toContain('toonShade');
+        });
+    });
+
+    describe('createGltfUnlitShaderDefinition with variant uniforms', () => {
+        it('creates blend variant with blend enabled', () => {
+            const variant = createGltfUnlitShaderDefinition('gltf/unlit/blend', { _AlphaMode: 2 });
+
+            expect(variant.blend).toBe(true);
+        });
+
+        it('creates double-sided variant with cull disabled', () => {
+            const variant = createGltfUnlitShaderDefinition('gltf/unlit/double-sided', {
+                _DoubleSided: 1,
+            });
+
+            expect(variant.cull).toBe(false);
+        });
+    });
+
+    describe('createGltfPbrShaderDefinition with custom ID', () => {
+        it('generates a definition with the custom ID', () => {
+            const custom = createGltfPbrShaderDefinition('gltf/pbr/custom');
+
+            expect(custom.id).toBe('gltf/pbr/custom');
+            expect(custom.effect?.id).toBe('gltf/pbr/custom');
         });
     });
 });

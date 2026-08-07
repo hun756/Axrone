@@ -43,7 +43,8 @@ import type {
     StaticFontFaceAsset,
 } from './types';
 
-export const AXRONE_DEFAULT_UI_FONT_FAMILY = 'Roboto, "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+export const AXRONE_DEFAULT_UI_FONT_FAMILY = 'Geist';
+export const AXRONE_DEFAULT_UI_FONT_CSS_FAMILY = 'Geist, "Segoe UI", "Helvetica Neue", Arial, sans-serif';
 
 export interface SystemFontFaceAssetOptions {
     readonly family: string;
@@ -458,6 +459,8 @@ export class FontRegistry implements Disposable {
             rasterSize: raster.rasterSize,
             width: raster.width,
             height: raster.height,
+            originX: raster.originX,
+            originY: raster.originY,
             data: raster.data ?? null,
             format: raster.format,
             rowStride: raster.rowStride,
@@ -507,10 +510,11 @@ export const createSystemFontFaceAsset = (options: SystemFontFaceAssetOptions): 
 
 export const createDefaultUIFontAsset = (
     family = AXRONE_DEFAULT_UI_FONT_FAMILY,
+    cssFamily = family === AXRONE_DEFAULT_UI_FONT_FAMILY ? AXRONE_DEFAULT_UI_FONT_CSS_FAMILY : family,
 ): DynamicFontFaceAsset =>
     createSystemFontFaceAsset({
         family,
-        cssFamily: family,
+        cssFamily,
     });
 
 export const ensureSystemUIFont = (
@@ -532,7 +536,8 @@ export const ensureSystemUIFont = (
 export const ensureDefaultUIFont = (
     fonts: Pick<FontRegistry, 'getDefaultFamily' | 'registerFace' | 'resolveFace'>,
     family = AXRONE_DEFAULT_UI_FONT_FAMILY,
-): string => ensureSystemUIFont(fonts, family, family);
+    cssFamily = family === AXRONE_DEFAULT_UI_FONT_FAMILY ? AXRONE_DEFAULT_UI_FONT_CSS_FAMILY : family,
+): string => ensureSystemUIFont(fonts, family, cssFamily);
 
 export type {
     DynamicFontFaceAsset,

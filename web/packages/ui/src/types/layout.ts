@@ -4,6 +4,7 @@ import type {
     Axis,
     ColorHexString,
     DisplayMode,
+    FlexWrapMode,
     JustifyMode,
     LengthKind,
     PositionMode,
@@ -28,6 +29,8 @@ export interface CornerRadii {
 export interface Anchor {
     readonly x: number;
     readonly y: number;
+    readonly maxX: number;
+    readonly maxY: number;
     readonly pivotX: number;
     readonly pivotY: number;
     readonly offsetX: number;
@@ -78,7 +81,7 @@ export type AnchorPreset =
 
 export type AnchorInput =
     | AnchorPreset
-    | Readonly<Partial<Pick<Anchor, 'x' | 'y' | 'pivotX' | 'pivotY' | 'offsetX' | 'offsetY' | 'stretch'>>>;
+    | Readonly<Partial<Pick<Anchor, 'x' | 'y' | 'maxX' | 'maxY' | 'pivotX' | 'pivotY' | 'offsetX' | 'offsetY' | 'stretch'>>>;
 
 export interface ResolvedLength {
     readonly kind: LengthKind;
@@ -105,6 +108,7 @@ export interface ResolvedLayout {
     readonly alignItems: AlignMode;
     readonly alignSelf: AlignSelfMode;
     readonly justifyContent: JustifyMode;
+    readonly flexWrap: FlexWrapMode;
     readonly position: PositionMode;
     readonly insetTop?: ResolvedLength;
     readonly insetRight?: ResolvedLength;
@@ -144,6 +148,7 @@ export interface WidgetLayoutInput {
     readonly alignItems?: AlignMode;
     readonly alignSelf?: AlignSelfMode;
     readonly justifyContent?: JustifyMode;
+    readonly flexWrap?: FlexWrapMode;
     readonly position?: PositionMode;
     readonly inset?: Readonly<Partial<Record<'top' | 'right' | 'bottom' | 'left', UILengthInput>>>;
     readonly anchor?: AnchorInput;

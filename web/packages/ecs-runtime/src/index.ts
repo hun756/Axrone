@@ -14,6 +14,7 @@ export {
     setComponentPropertyMetadata,
     validateAllScripts,
     clearScriptCaches,
+    clearScriptRegistry,
     clearComponentPropertyMetadataCaches,
     __debugScriptSystem,
 } from './component-system/decorators';

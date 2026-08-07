@@ -3,6 +3,8 @@ import {
     type AnimationMotionBuilder,
     validateAnimationMotionDefinition,
 } from './blend-graph';
+import { assertNever } from './errors';
+import { freezeTuple3, freezeTuple4, isFiniteNumber, spreadIfFinite, spreadIfNonEmptyString } from './internal';
 import type {
     AnimationConditionDefinition,
     AnimationControllerDefinition,
@@ -46,9 +48,6 @@ type AnimationControllerInput =
 
 const VALID_LAYER_MODES = new Set<AnimationLayerBlendMode>(['override', 'additive']);
 
-const isFiniteNumber = (value: unknown): value is number =>
-    typeof value === 'number' && Number.isFinite(value);
-
 const pushDiagnostic = (
     diagnostics: AnimationControllerGraphDiagnostic[],
     code: string,
@@ -80,7 +79,7 @@ const cloneCondition = (condition: AnimationConditionDefinition): AnimationCondi
                 parameter: condition.parameter,
             });
         default:
-            return condition;
+            return assertNever(condition, 'Unsupported transition condition kind');
     }
 };
 
@@ -92,11 +91,20 @@ const cloneRigDefinition = (rig: AnimationRigDefinition): AnimationRigDefinition
                 Object.freeze({
                     name: bone.name,
                     ...(bone.parent !== undefined ? { parent: bone.parent } : {}),
-                    ...(bone.translation ? { translation: Object.freeze([...bone.translation]) as readonly [number, number, number] } : {}),
-                    ...(bone.rotation
-                        ? { rotation: Object.freeze([...bone.rotation]) as readonly [number, number, number, number] }
+                    ...(bone.translation
+                        ? { translation: freezeTuple3(bone.translation[0], bone.translation[1], bone.translation[2]) }
                         : {}),
-                    ...(bone.scale ? { scale: Object.freeze([...bone.scale]) as readonly [number, number, number] } : {}),
+                    ...(bone.rotation
+                        ? {
+                              rotation: freezeTuple4(
+                                  bone.rotation[0],
+                                  bone.rotation[1],
+                                  bone.rotation[2],
+                                  bone.rotation[3]
+                              ),
+                          }
+                        : {}),
+                    ...(bone.scale ? { scale: freezeTuple3(bone.scale[0], bone.scale[1], bone.scale[2]) } : {}),
                     ...(bone.inverseBindMatrix
                         ? {
                               inverseBindMatrix:
@@ -127,11 +135,11 @@ const cloneRootMotionDefinition = (
         ...(typeof rootMotion.consume === 'boolean' ? { consume: rootMotion.consume } : {}),
         ...(rootMotion.projectTranslationAxes
             ? {
-                  projectTranslationAxes: Object.freeze([
+                  projectTranslationAxes: freezeTuple3(
                       rootMotion.projectTranslationAxes[0],
                       rootMotion.projectTranslationAxes[1],
-                      rootMotion.projectTranslationAxes[2],
-                  ]) as readonly [boolean, boolean, boolean],
+                      rootMotion.projectTranslationAxes[2]
+                  ),
               }
             : {}),
         ...(typeof rootMotion.extractRotation === 'boolean'
@@ -144,25 +152,21 @@ const cloneClipDefinition = (
 ): AnimationControllerDefinition['clips'][number] =>
     Object.freeze({
         id: clip.id,
-        ...(isFiniteNumber(clip.duration) ? { duration: clip.duration } : {}),
+        ...spreadIfFinite('duration', clip.duration),
         tracks: Object.freeze(
             clip.tracks.map((track) =>
                 Object.freeze({
                     target: track.target,
                     path: track.path,
-                    ...(typeof track.interpolation === 'string'
-                        ? { interpolation: track.interpolation }
-                        : {}),
+                    ...spreadIfNonEmptyString('interpolation', track.interpolation),
                     times: track.times instanceof Float32Array ? new Float32Array(track.times) : [...track.times],
                     values:
                         track.values instanceof Float32Array
                             ? new Float32Array(track.values)
                             : [...track.values],
-                    ...(isFiniteNumber(track.keyframeCount) ? { keyframeCount: track.keyframeCount } : {}),
-                    ...(isFiniteNumber(track.sampleStride) ? { sampleStride: track.sampleStride } : {}),
-                    ...(isFiniteNumber(track.valueComponentCount)
-                        ? { valueComponentCount: track.valueComponentCount }
-                        : {}),
+                    ...spreadIfFinite('keyframeCount', track.keyframeCount),
+                    ...spreadIfFinite('sampleStride', track.sampleStride),
+                    ...spreadIfFinite('valueComponentCount', track.valueComponentCount),
                 })
             )
         ),
@@ -171,7 +175,7 @@ const cloneClipDefinition = (
                   events: Object.freeze(
                       clip.events.map((event) =>
                           Object.freeze({
-                              ...(typeof event.id === 'string' ? { id: event.id } : {}),
+                              ...spreadIfNonEmptyString('id', event.id),
                               name: event.name,
                               time: event.time,
                               ...(event.payload ? { payload: Object.freeze({ ...event.payload }) } : {}),
@@ -191,11 +195,11 @@ const cloneClipDefinition = (
                               endTime: contact.endTime,
                               ...(contact.lockTranslationAxes
                                   ? {
-                                        lockTranslationAxes: Object.freeze([
+                                        lockTranslationAxes: freezeTuple3(
                                             contact.lockTranslationAxes[0],
                                             contact.lockTranslationAxes[1],
-                                            contact.lockTranslationAxes[2],
-                                        ]) as readonly [boolean, boolean, boolean],
+                                            contact.lockTranslationAxes[2]
+                                        ),
                                     }
                                   : {}),
                               ...(contact.metadata
@@ -215,24 +219,24 @@ const cloneClipDefinition = (
                               time: feature.time,
                               ...(feature.trajectoryPosition
                                   ? {
-                                        trajectoryPosition: Object.freeze([
+                                        trajectoryPosition: freezeTuple3(
                                             feature.trajectoryPosition[0],
                                             feature.trajectoryPosition[1],
-                                            feature.trajectoryPosition[2],
-                                        ]) as readonly [number, number, number],
+                                            feature.trajectoryPosition[2]
+                                        ),
                                     }
                                   : {}),
                               ...(feature.facingDirection
                                   ? {
-                                        facingDirection: Object.freeze([
+                                        facingDirection: freezeTuple3(
                                             feature.facingDirection[0],
                                             feature.facingDirection[1],
-                                            feature.facingDirection[2],
-                                        ]) as readonly [number, number, number],
+                                            feature.facingDirection[2]
+                                        ),
                                     }
                                   : {}),
                               ...(feature.tags ? { tags: Object.freeze([...feature.tags]) } : {}),
-                              ...(isFiniteNumber(feature.costBias) ? { costBias: feature.costBias } : {}),
+                              ...spreadIfFinite('costBias', feature.costBias),
                           })
                       )
                   ),
@@ -307,12 +311,12 @@ export class AnimationTransitionBuilder {
     build(): AnimationTransitionDefinition {
         return buildAnimationTransitionDefinition({
             to: this.to,
-            ...(isFiniteNumber(this._duration) ? { duration: this._duration } : {}),
-            ...(isFiniteNumber(this._offset) ? { offset: this._offset } : {}),
-            ...(isFiniteNumber(this._exitTime) ? { exitTime: this._exitTime } : {}),
+            ...spreadIfFinite('duration', this._duration),
+            ...spreadIfFinite('offset', this._offset),
+            ...spreadIfFinite('exitTime', this._exitTime),
             ...(typeof this._fixedDuration === 'boolean' ? { fixedDuration: this._fixedDuration } : {}),
             ...(typeof this._canInterrupt === 'boolean' ? { canInterrupt: this._canInterrupt } : {}),
-            ...(isFiniteNumber(this._priority) ? { priority: this._priority } : {}),
+            ...spreadIfFinite('priority', this._priority),
             ...(this._conditions.length > 0 ? { conditions: Object.freeze([...this._conditions]) } : {}),
         });
     }
@@ -361,7 +365,7 @@ export class AnimationStateBuilder {
         return Object.freeze({
             id: this.id,
             motion: buildAnimationMotionDefinition(this._motion),
-            ...(isFiniteNumber(this._speed) ? { speed: this._speed } : {}),
+            ...spreadIfFinite('speed', this._speed),
             ...(typeof this._loop === 'boolean' ? { loop: this._loop } : {}),
             ...(this._transitions.length > 0
                 ? { transitions: Object.freeze(this._transitions.map(buildAnimationTransitionDefinition)) }
@@ -450,7 +454,7 @@ export class AnimationIkLayerBuilder {
     build(): AnimationIkLayerDefinition {
         return buildAnimationIkLayerDefinition({
             id: this.id,
-            ...(isFiniteNumber(this._weight) ? { weight: this._weight } : {}),
+            ...spreadIfFinite('weight', this._weight),
             jobs: Object.freeze(this._jobs.map((job) => Object.freeze({ ...job }))),
         });
     }
@@ -498,7 +502,7 @@ export class AnimationLayerBuilder {
     build(): AnimationLayerDefinition {
         return Object.freeze({
             id: this.id,
-            ...(isFiniteNumber(this._weight) ? { weight: this._weight } : {}),
+            ...spreadIfFinite('weight', this._weight),
             ...(this._mode ? { mode: this._mode } : {}),
             ...(this._boneMask ? { boneMask: Object.freeze([...this._boneMask]) } : {}),
             stateMachine: buildAnimationStateMachineDefinition(this._stateMachine),
@@ -605,16 +609,16 @@ export const buildAnimationTransitionDefinition = (
         ? transition.build()
         : Object.freeze({
               to: transition.to,
-              ...(isFiniteNumber(transition.duration) ? { duration: transition.duration } : {}),
-              ...(isFiniteNumber(transition.offset) ? { offset: transition.offset } : {}),
-              ...(isFiniteNumber(transition.exitTime) ? { exitTime: transition.exitTime } : {}),
+              ...spreadIfFinite('duration', transition.duration),
+              ...spreadIfFinite('offset', transition.offset),
+              ...spreadIfFinite('exitTime', transition.exitTime),
               ...(typeof transition.fixedDuration === 'boolean'
                   ? { fixedDuration: transition.fixedDuration }
                   : {}),
               ...(typeof transition.canInterrupt === 'boolean'
                   ? { canInterrupt: transition.canInterrupt }
                   : {}),
-              ...(isFiniteNumber(transition.priority) ? { priority: transition.priority } : {}),
+              ...spreadIfFinite('priority', transition.priority),
               ...(transition.conditions
                   ? { conditions: Object.freeze(transition.conditions.map(cloneCondition)) }
                   : {}),
@@ -626,7 +630,7 @@ export const buildAnimationStateDefinition = (state: AnimationStateInput): Anima
         : Object.freeze({
               id: state.id,
               motion: buildAnimationMotionDefinition(state.motion),
-              ...(isFiniteNumber(state.speed) ? { speed: state.speed } : {}),
+              ...spreadIfFinite('speed', state.speed),
               ...(typeof state.loop === 'boolean' ? { loop: state.loop } : {}),
               ...(state.transitions
                   ? {
@@ -661,7 +665,7 @@ export const buildAnimationIkLayerDefinition = (
         ? layer.build()
         : Object.freeze({
               id: layer.id,
-              ...(isFiniteNumber(layer.weight) ? { weight: layer.weight } : {}),
+              ...spreadIfFinite('weight', layer.weight),
               jobs: Object.freeze(layer.jobs.map((job) => Object.freeze({ ...job }))),
           });
 
@@ -670,7 +674,7 @@ export const buildAnimationLayerDefinition = (layer: AnimationLayerInput): Anima
         ? layer.build()
         : Object.freeze({
               id: layer.id,
-              ...(isFiniteNumber(layer.weight) ? { weight: layer.weight } : {}),
+              ...spreadIfFinite('weight', layer.weight),
               ...(layer.mode ? { mode: layer.mode } : {}),
               ...(layer.boneMask ? { boneMask: Object.freeze([...layer.boneMask]) } : {}),
               stateMachine: buildAnimationStateMachineDefinition(layer.stateMachine),

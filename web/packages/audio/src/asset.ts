@@ -1,4 +1,5 @@
 import type { AssetRecord } from '@axrone/asset-core';
+import { isObject } from './internal/shared';
 import {
     isAudioClipAssetRecord,
     normalizeAudioClipId,
@@ -12,9 +13,6 @@ import type {
     AudioInlineClipSelector,
     AudioRegisteredClipSelector,
 } from './types';
-
-const isObject = (value: unknown): value is Record<PropertyKey, unknown> =>
-    typeof value === 'object' && value !== null;
 
 const hasFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);

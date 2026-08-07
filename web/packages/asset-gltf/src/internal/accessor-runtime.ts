@@ -1,6 +1,7 @@
 import { GltfAccessorError } from '../errors';
 import type { GltfAccessorJson, GltfBufferViewJson } from '../types';
 import { GltfResourceRuntime } from './source-runtime';
+import { componentTypeByteSize, accessorComponentCount } from './gltf-utils';
 
 export interface DecodedAccessor {
     readonly count: number;
@@ -11,40 +12,6 @@ export interface DecodedAccessor {
     readonly min?: readonly number[];
     readonly max?: readonly number[];
 }
-
-const componentTypeByteSize = (
-    componentType: GltfAccessorJson['componentType']
-): 1 | 2 | 4 => {
-    switch (componentType) {
-        case 5120:
-        case 5121:
-            return 1;
-        case 5122:
-        case 5123:
-            return 2;
-        case 5125:
-        case 5126:
-            return 4;
-    }
-};
-
-const accessorComponentCount = (type: GltfAccessorJson['type']): number => {
-    switch (type) {
-        case 'SCALAR':
-            return 1;
-        case 'VEC2':
-            return 2;
-        case 'VEC3':
-            return 3;
-        case 'VEC4':
-        case 'MAT2':
-            return 4;
-        case 'MAT3':
-            return 9;
-        case 'MAT4':
-            return 16;
-    }
-};
 
 const resolveBufferViewStride = (bufferView: GltfBufferViewJson): number | undefined =>
     bufferView.byteStride ?? bufferView.extensions?.EXT_meshopt_compression?.byteStride;

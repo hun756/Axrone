@@ -1,5 +1,14 @@
 import type { AssetDisposerMap } from '@axrone/asset-core';
-import type { GltfAssetSchema, GltfTextureAsset, GltfDocumentAsset, GltfPrefabAsset } from './types';
+import type {
+    GltfAssetSchema,
+    GltfTextureAsset,
+    GltfDocumentAsset,
+    GltfPrefabAsset,
+    GltfMeshAsset,
+    GltfSkinAsset,
+    GltfAnimationClipAsset,
+    GltfMaterialAsset,
+} from './types';
 
 /**
  * Disposes resources held by a `gltf.texture` asset.
@@ -38,6 +47,38 @@ function disposeGltfPrefab(_data: GltfPrefabAsset): void {
 }
 
 /**
+ * No-op disposer for `gltf.mesh` assets.
+ * Mesh definitions are serializable JSON trees.
+ */
+function disposeGltfMesh(_data: GltfMeshAsset): void {
+    // Serializable JSON — no GPU or native resources to release.
+}
+
+/**
+ * No-op disposer for `gltf.skin` assets.
+ * Skin definitions are serializable JSON trees.
+ */
+function disposeGltfSkin(_data: GltfSkinAsset): void {
+    // Serializable JSON — no GPU or native resources to release.
+}
+
+/**
+ * No-op disposer for `gltf.animation` assets.
+ * Animation clip definitions are serializable JSON trees.
+ */
+function disposeGltfAnimation(_data: GltfAnimationClipAsset): void {
+    // Serializable JSON — no GPU or native resources to release.
+}
+
+/**
+ * No-op disposer for `gltf.material` assets.
+ * Material definitions are serializable JSON trees.
+ */
+function disposeGltfMaterial(_data: GltfMaterialAsset): void {
+    // Serializable JSON — no GPU or native resources to release.
+}
+
+/**
  * Creates an {@link AssetDisposerMap} for all glTF asset kinds.
  *
  * Pass the result to `AssetDatabase` via `options.disposers` to ensure that
@@ -55,6 +96,10 @@ export function createGltfAssetDisposers(): AssetDisposerMap<GltfAssetSchema> {
     return {
         'gltf.document': disposeGltfDocument,
         'gltf.prefab': disposeGltfPrefab,
+        'gltf.mesh': disposeGltfMesh,
+        'gltf.skin': disposeGltfSkin,
+        'gltf.animation': disposeGltfAnimation,
+        'gltf.material': disposeGltfMaterial,
         'gltf.texture': disposeGltfTexture,
     } as AssetDisposerMap<GltfAssetSchema>;
 }

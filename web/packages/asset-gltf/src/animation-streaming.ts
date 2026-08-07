@@ -14,6 +14,7 @@ import {
     type PortableAnimationClipManifestEntry,
 } from './animation-manifest';
 import type { GltfPackageResourceInput } from './types';
+import { basenameOfUri } from './internal/source-runtime';
 
 export const DEFAULT_ANIMATION_STREAMING_CHUNK_MIME_TYPE =
     'application/vnd.axrone.animation.clip-chunk+json';
@@ -77,13 +78,8 @@ const sanitizeIdSegment = (value: string): string => {
     return sanitized.length > 0 ? sanitized : 'clip';
 };
 
-const basenameOfUri = (value: string): string => {
-    const slashIndex = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
-    return slashIndex >= 0 ? value.slice(slashIndex + 1) : value;
-};
-
 const splitExtension = (value: string): readonly [string, string] => {
-    const basename = basenameOfUri(value);
+    const basename = basenameOfUri(value) ?? value;
     const extensionIndex = basename.lastIndexOf('.');
     if (extensionIndex <= 0) {
         return [value, ''];
@@ -112,7 +108,7 @@ const resolveChunkCatalogId = (
     if (typeof fallbackCatalogId === 'string' && fallbackCatalogId.length > 0) {
         return fallbackCatalogId;
     }
-    return `${sanitizeIdSegment(basenameOfUri(resolveChunkStem(clipId, sourceUri)))}-stream`;
+    return `${sanitizeIdSegment(basenameOfUri(resolveChunkStem(clipId, sourceUri)) ?? '')}-stream`;
 };
 
 const createChunkUri = (sourceUri: string, chunkIndex: number): string => {
@@ -149,7 +145,7 @@ const getTrackValueComponentCount = (
 };
 
 const toFloat32Array = (value: readonly number[] | Float32Array): Float32Array =>
-    value instanceof Float32Array ? new Float32Array(value) : Float32Array.from(value);
+    value instanceof Float32Array ? value : Float32Array.from(value);
 
 const inferClipDuration = (clip: PortableAnimationStreamingClipSource): number => {
     let duration = isFiniteNumber(clip.duration) ? Math.max(0, clip.duration) : 0;
@@ -187,7 +183,7 @@ const createChunkRangesFromDuration = (
         }
         ranges.push(
             Object.freeze({
-                id: `${sanitizeIdSegment(basenameOfUri(defaultStem))}-0`,
+                id: `${sanitizeIdSegment(basenameOfUri(defaultStem) ?? '')}-0`,
                 uri: createChunkUri(sourceUri, 0),
                 startTime: 0,
                 endTime: 0,
@@ -207,7 +203,7 @@ const createChunkRangesFromDuration = (
         }
         ranges.push(
             Object.freeze({
-                id: `${sanitizeIdSegment(basenameOfUri(defaultStem))}-${chunkIndex}`,
+                id: `${sanitizeIdSegment(basenameOfUri(defaultStem) ?? '')}-${chunkIndex}`,
                 uri: createChunkUri(sourceUri, chunkIndex),
                 startTime,
                 endTime,
@@ -247,7 +243,7 @@ const normalizeChunkRanges = (
               const id =
                   typeof entry.id === 'string' && entry.id.length > 0
                       ? entry.id
-                      : `${sanitizeIdSegment(basenameOfUri(defaultStem))}-${index}`;
+                      : `${sanitizeIdSegment(basenameOfUri(defaultStem) ?? '')}-${index}`;
               const uri =
                   typeof entry.uri === 'string' && entry.uri.length > 0
                       ? entry.uri

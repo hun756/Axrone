@@ -3,6 +3,7 @@ import { float32ToBits, float64ToBitsPair, readU32LE, rotl32, writeU32LE } from 
 import { fmix32, murmur3Scramble } from '../mixers';
 import { asHash32, asHash64, asSeed32, type Hash32, type Hash64, type HashValue, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
+import { encode } from '@axrone/utility';
 
 const MURMUR3_METADATA: HashAlgorithmMetadata = {
     name: 'murmur3-32',
@@ -204,10 +205,7 @@ export class Murmur3_32 implements IHasher<Hash32> {
     }
 
     digestBase64(): string {
-        const bytes = this.digestBytes();
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-        return typeof btoa !== 'undefined' ? btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
+        return encode(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
@@ -401,10 +399,7 @@ export class Murmur2_64 implements IHasher<import('../types').Hash64> {
     }
 
     digestBase64(): string {
-        const bytes = this.digestBytes();
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-        return typeof btoa !== 'undefined' ? btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
+        return encode(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {

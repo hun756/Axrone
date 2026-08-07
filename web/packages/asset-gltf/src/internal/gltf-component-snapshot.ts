@@ -162,6 +162,13 @@ export type GltfPrefabDefinition = {
     readonly actors: readonly GltfActorSnapshot[];
 };
 
+/**
+ * Prefab build context and result types.
+ *
+ * These are defined here (rather than in `gltf-prefab.ts`) to avoid circular
+ * dependencies between the prefab builder and other modules that need to
+ * reference these types (e.g., animation controller, snapshot visitors).
+ */
 export type PrefabBuildContext = {
     readonly root: import('../types').GltfRootJson;
     readonly sceneIndex: number;

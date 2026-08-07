@@ -1,4 +1,5 @@
 import { AnimationClip } from './clip';
+import { freezeTuple3 } from './internal';
 import type {
     AnimationClipDefinition,
     AnimationMotionFeatureDefinition,
@@ -91,20 +92,20 @@ export class AnimationMotionMatchDatabase {
                         tags: normalizeTags([...(metadata.tags ?? EMPTY_TAGS), ...(feature.tags ?? EMPTY_TAGS)]),
                         ...(feature.trajectoryPosition
                             ? {
-                                  trajectoryPosition: Object.freeze([
+                                  trajectoryPosition: freezeTuple3(
                                       feature.trajectoryPosition[0],
                                       feature.trajectoryPosition[1],
-                                      feature.trajectoryPosition[2],
-                                  ]) as readonly [number, number, number],
+                                      feature.trajectoryPosition[2]
+                                  ),
                               }
                             : {}),
                         ...(feature.facingDirection
                             ? {
-                                  facingDirection: Object.freeze([
+                                  facingDirection: freezeTuple3(
                                       feature.facingDirection[0],
                                       feature.facingDirection[1],
-                                      feature.facingDirection[2],
-                                  ]) as readonly [number, number, number],
+                                      feature.facingDirection[2]
+                                  ),
                               }
                             : {}),
                         costBias:

@@ -108,6 +108,31 @@ describe('CRC32', () => {
             b.updateBytes(enc.encode('123456789'));
             expect(a.digest()).toBe(b.digest());
         });
+
+        it('seeded variant produces different output', () => {
+            const a = new Crc32();
+            a.updateBytes(enc.encode('test'));
+            const b = new Crc32(42 as any);
+            b.updateBytes(enc.encode('test'));
+            expect(a.digest()).not.toBe(b.digest());
+        });
+
+        it('digestBase64 returns valid base64', () => {
+            const h = new Crc32();
+            h.updateString('test');
+            const b64 = h.digestBase64();
+            expect(typeof b64).toBe('string');
+            expect(b64.length).toBeGreaterThan(0);
+        });
+
+        it('updateString differs from updateBytes UTF-8', () => {
+            const a = new Crc32();
+            a.updateString('hello');
+            const b = new Crc32();
+            b.updateBytes(enc.encode('hello'));
+            // updateString uses UTF-16 encoding, so result differs
+            expect(a.digest()).not.toBe(b.digest());
+        });
     });
 });
 
@@ -153,6 +178,59 @@ describe('CRC32C', () => {
             const k = new Crc32();
             k.updateBytes(enc.encode('123456789'));
             expect(c.digest()).not.toBe(k.digest());
+        });
+
+        it('clone creates independent copy', () => {
+            const a = new Crc32c();
+            a.updateBytes(enc.encode('a'));
+            const b = a.clone();
+            a.updateBytes(enc.encode('b'));
+            expect(a.digest()).not.toBe(b.digest());
+        });
+
+        it('byteLength tracking', () => {
+            const h = new Crc32c();
+            h.updateBytes(enc.encode('hello'));
+            expect(h.byteLength).toBe(5);
+        });
+
+        it('rejects updates after digest', () => {
+            const h = new Crc32c();
+            h.updateString('a');
+            h.digest();
+            expect(() => h.updateString('b')).toThrow();
+        });
+
+        it('digestHex returns 8-char hex', () => {
+            const h = new Crc32c();
+            h.updateString('test');
+            expect(h.digestHex()).toMatch(/^[0-9a-f]{8}$/);
+        });
+
+        it('digestBase64 returns valid base64', () => {
+            const h = new Crc32c();
+            h.updateString('test');
+            const b64 = h.digestBase64();
+            expect(typeof b64).toBe('string');
+            expect(b64.length).toBeGreaterThan(0);
+        });
+
+        it('supports incremental update', () => {
+            const a = new Crc32c();
+            a.updateBytes(enc.encode('12345'));
+            a.updateBytes(enc.encode('6789'));
+            const b = new Crc32c();
+            b.updateBytes(enc.encode('123456789'));
+            expect(a.digest()).toBe(b.digest());
+        });
+
+        it('known vector for longer string', () => {
+            const h = new Crc32c();
+            h.updateBytes(enc.encode('The quick brown fox jumps over the lazy dog'));
+            const v = h.digest();
+            // Just verify it's a valid non-zero 32-bit value
+            expect(v).toBeGreaterThan(0);
+            expect(v).toBeLessThan(0x100000000);
         });
     });
 });

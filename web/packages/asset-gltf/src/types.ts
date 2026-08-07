@@ -18,6 +18,7 @@ import type {
     AssetKind,
     AssetSchema,
 } from './asset-contract';
+import type { GltfTextureTranscoderRegistry } from './internal/gltf-texture-transcode';
 import type {
     GltfMaterialDefinition,
     GltfMeshDefinition,
@@ -262,16 +263,6 @@ export interface GltfPrefabAsset {
     readonly animationController?: GltfAnimationControllerMetadata;
 }
 
-export interface GltfAssetSchema extends AssetSchema {
-    readonly 'gltf.document': GltfDocumentAsset;
-    readonly 'gltf.prefab': GltfPrefabAsset;
-    readonly 'gltf.mesh': GltfMeshAsset;
-    readonly 'gltf.skin': GltfSkinAsset;
-    readonly 'gltf.animation': GltfAnimationClipAsset;
-    readonly 'gltf.material': GltfMaterialAsset;
-    readonly 'gltf.texture': GltfTextureAsset;
-}
-
 export interface GltfAssetSchemaLike extends AssetSchema {
     readonly 'gltf.document': GltfDocumentAsset;
     readonly 'gltf.prefab': GltfPrefabAsset;
@@ -281,6 +272,13 @@ export interface GltfAssetSchemaLike extends AssetSchema {
     readonly 'gltf.material': GltfMaterialAsset;
     readonly 'gltf.texture': GltfTextureAsset;
 }
+
+/**
+ * Default concrete asset schema for glTF imports.
+ * Alias for {@link GltfAssetSchemaLike} — consumers can extend the base interface
+ * to add custom asset kinds.
+ */
+export type GltfAssetSchema = GltfAssetSchemaLike;
 
 export interface GltfPackageResourceInput {
     readonly uri: string;
@@ -669,18 +667,12 @@ export interface GltfRootJson {
     readonly extensionsRequired?: readonly string[];
 }
 
-export declare class GltfTextureTranscoderRegistry {
-    constructor(transcoders?: readonly GltfTextureTranscoder[]);
-    register(transcoder: GltfTextureTranscoder): this;
-    unregister(id: string): boolean;
-    list(): readonly GltfTextureTranscoder[];
-    resolve(
-        request: Readonly<GltfTextureTranscodeRequest>
-    ): GltfTextureTranscoder | undefined;
-    transcode(
-        request: Readonly<GltfTextureTranscodeRequest>
-    ): Promise<GltfTextureTranscodeResult | undefined>;
-}
+/**
+ * Registry for glTF texture transcoders.
+ * Re-exported from `./internal/gltf-texture-transcode` — this type declaration
+ * exists only for public API surface and must be kept in sync with the implementation.
+ */
+export type { GltfTextureTranscoderRegistry };
 
 export type GltfImporter<TSchema extends GltfAssetSchemaLike = GltfAssetSchemaLike> = AssetImporter<
     TSchema
