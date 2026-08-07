@@ -7,6 +7,8 @@ const testDir = path.dirname(fileURLToPath(import.meta.url));
 const gltfDir = path.resolve(testDir, '../../../packages/asset-gltf/src');
 const sceneRuntimeGltfDir = path.resolve(testDir, '../../../packages/scene-runtime-gltf/src');
 const allowedAdapterImportFiles = new Set([
+    'internal/runtime-scene-assets.ts',
+    'internal/runtime-shaders.ts',
     'scene-definition-adapter.ts',
     'scene-runtime-adapter.ts',
     'scene-snapshot-adapter.ts',

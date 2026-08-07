@@ -1,3 +1,5 @@
+import { assertNever } from './errors';
+import { freezeTuple2, isFiniteNumber, spreadIfFinite } from './internal';
 import type {
     AnimationBlendTreeAdditiveDefinition,
     AnimationBlendTreeDefinition,
@@ -22,17 +24,14 @@ export interface AnimationMotionBuilder {
 
 type AnimationMotionInput = AnimationMotionDefinition | AnimationMotionBuilder;
 
-const isFiniteNumber = (value: unknown): value is number =>
-    typeof value === 'number' && Number.isFinite(value);
-
 const freezeMotionDefinition = (motion: AnimationMotionDefinition): AnimationMotionDefinition => {
     switch (motion.kind) {
         case 'clip':
             return Object.freeze({
                 kind: 'clip',
                 clipId: motion.clipId,
-                ...(isFiniteNumber(motion.timeScale) ? { timeScale: motion.timeScale } : {}),
-                ...(isFiniteNumber(motion.cycleOffset) ? { cycleOffset: motion.cycleOffset } : {}),
+                ...spreadIfFinite('timeScale', motion.timeScale),
+                ...spreadIfFinite('cycleOffset', motion.cycleOffset),
             } satisfies AnimationMotionClipDefinition);
         case 'blend1d':
             return Object.freeze({
@@ -55,7 +54,7 @@ const freezeMotionDefinition = (motion: AnimationMotionDefinition): AnimationMot
                 children: Object.freeze(
                     motion.children.map((child) =>
                         Object.freeze({
-                            position: Object.freeze([child.position[0], child.position[1]]) as readonly [number, number],
+                            position: freezeTuple2(child.position[0], child.position[1]),
                             motion: freezeMotionDefinition(child.motion),
                         })
                     )
@@ -69,7 +68,7 @@ const freezeMotionDefinition = (motion: AnimationMotionDefinition): AnimationMot
                         Object.freeze({
                             motion: freezeMotionDefinition(child.motion),
                             ...(typeof child.parameter === 'string' ? { parameter: child.parameter } : {}),
-                            ...(isFiniteNumber(child.weight) ? { weight: child.weight } : {}),
+                            ...spreadIfFinite('weight', child.weight),
                         })
                     )
                 ),
@@ -80,10 +79,10 @@ const freezeMotionDefinition = (motion: AnimationMotionDefinition): AnimationMot
                 base: freezeMotionDefinition(motion.base),
                 additive: freezeMotionDefinition(motion.additive),
                 ...(typeof motion.parameter === 'string' ? { parameter: motion.parameter } : {}),
-                ...(isFiniteNumber(motion.weight) ? { weight: motion.weight } : {}),
+                ...spreadIfFinite('weight', motion.weight),
             } satisfies AnimationBlendTreeAdditiveDefinition);
         default:
-            return motion;
+            return assertNever(motion, 'Unsupported motion kind');
     }
 };
 
@@ -111,8 +110,8 @@ export class AnimationClipMotionBuilder implements AnimationMotionBuilder {
         return freezeMotionDefinition({
             kind: 'clip',
             clipId: this._clipId,
-            ...(isFiniteNumber(this._timeScale) ? { timeScale: this._timeScale } : {}),
-            ...(isFiniteNumber(this._cycleOffset) ? { cycleOffset: this._cycleOffset } : {}),
+            ...spreadIfFinite('timeScale', this._timeScale),
+            ...spreadIfFinite('cycleOffset', this._cycleOffset),
         });
     }
 }
@@ -166,7 +165,7 @@ export class AnimationBlend2DGraphBuilder implements AnimationMotionBuilder {
             children: Object.freeze(
                 this._children.map((child) =>
                     Object.freeze({
-                        position: Object.freeze([child.x, child.y]) as readonly [number, number],
+                        position: freezeTuple2(child.x, child.y),
                         motion: toMotionDefinition(child.motion),
                     })
                 )
@@ -198,7 +197,7 @@ export class AnimationDirectBlendGraphBuilder implements AnimationMotionBuilder 
                     Object.freeze({
                         motion: toMotionDefinition(child.motion),
                         ...(typeof child.parameter === 'string' ? { parameter: child.parameter } : {}),
-                        ...(isFiniteNumber(child.weight) ? { weight: child.weight } : {}),
+                        ...spreadIfFinite('weight', child.weight),
                     })
                 )
             ),
@@ -231,7 +230,7 @@ export class AnimationAdditiveBlendGraphBuilder implements AnimationMotionBuilde
             base: toMotionDefinition(this._base),
             additive: toMotionDefinition(this._additive),
             ...(typeof this._parameter === 'string' ? { parameter: this._parameter } : {}),
-            ...(isFiniteNumber(this._weight) ? { weight: this._weight } : {}),
+            ...spreadIfFinite('weight', this._weight),
         });
     }
 }

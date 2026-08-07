@@ -1,11 +1,41 @@
 export * from './interfaces';
 export * from './utils';
+export * from './errors';
+export * from './uniform-cache';
+export * from './pool';
 
 export { WebGLShaderCompiler } from './compiler';
 export { ShaderManager } from './manager';
 
 export { ShaderInstance } from './instance';
 export { MaterialInstance } from './material';
+
+export {
+    ShaderInstanceManager,
+} from './shader-instance';
+export type {
+    ShaderInstanceManagerOptions,
+    ShaderInstanceManagerStats,
+    BorrowedShaderInstance,
+} from './shader-instance';
+export type {
+    ShaderInstancePoolOptions,
+    ShaderInstancePoolStats,
+} from './pool';
+export type {
+    UniformDescriptorLite,
+    UniformValueDescriptor,
+    UniformScalarValue,
+} from './uniform-cache';
+
+export type {
+    ShaderSourceOptimizationOptions,
+    ShaderSourceOptimizationResult,
+} from './source-optimizer';
+export {
+    optimizeShaderSource,
+    optimizeShaderSources,
+} from './source-optimizer';
 
 export {
     generateVersionDirective,

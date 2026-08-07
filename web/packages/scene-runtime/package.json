@@ -14,6 +14,16 @@
             "import": "./dist/index.mjs",
             "require": "./dist/index.js"
         },
+        "./types": {
+            "types": "./dist/types.d.ts",
+            "import": "./dist/types.mjs",
+            "require": "./dist/types.js"
+        },
+        "./errors": {
+            "types": "./dist/errors.d.ts",
+            "import": "./dist/errors.mjs",
+            "require": "./dist/errors.js"
+        },
         "./scene-registry": {
             "types": "./dist/scene-registry.d.ts",
             "import": "./dist/scene-registry.mjs",
@@ -23,6 +33,36 @@
             "types": "./dist/scene-profile.d.ts",
             "import": "./dist/scene-profile.mjs",
             "require": "./dist/scene-profile.js"
+        },
+        "./scene-profile-contract": {
+            "types": "./dist/scene-profile-contract.d.ts",
+            "import": "./dist/scene-profile-contract.mjs",
+            "require": "./dist/scene-profile-contract.js"
+        },
+        "./scene-manifest-profile": {
+            "types": "./dist/scene-manifest-profile.d.ts",
+            "import": "./dist/scene-manifest-profile.mjs",
+            "require": "./dist/scene-manifest-profile.js"
+        },
+        "./scene-core-profile": {
+            "types": "./dist/scene-core-profile.d.ts",
+            "import": "./dist/scene-core-profile.mjs",
+            "require": "./dist/scene-core-profile.js"
+        },
+        "./scene-2d-profile": {
+            "types": "./dist/scene-2d-profile.d.ts",
+            "import": "./dist/scene-2d-profile.mjs",
+            "require": "./dist/scene-2d-profile.js"
+        },
+        "./scene-3d-profile": {
+            "types": "./dist/scene-3d-profile.d.ts",
+            "import": "./dist/scene-3d-profile.mjs",
+            "require": "./dist/scene-3d-profile.js"
+        },
+        "./scene-full-profile": {
+            "types": "./dist/scene-full-profile.d.ts",
+            "import": "./dist/scene-full-profile.mjs",
+            "require": "./dist/scene-full-profile.js"
         },
         "./scene-facade": {
             "types": "./dist/scene-facade.d.ts",
@@ -39,6 +79,11 @@
             "import": "./dist/scene-2d-support.mjs",
             "require": "./dist/scene-2d-support.js"
         },
+        "./rendering": {
+            "types": "./dist/rendering.d.ts",
+            "import": "./dist/rendering.mjs",
+            "require": "./dist/rendering.js"
+        },
         "./scene-3d-support": {
             "types": "./dist/scene-3d-support.d.ts",
             "import": "./dist/scene-3d-support.mjs",
@@ -46,7 +91,7 @@
         }
     },
     "scripts": {
-        "build": "rollup -c rollup.config.mjs",
+        "build": "node --max-old-space-size=8192 ../../node_modules/rollup/dist/bin/rollup -c rollup.config.mjs",
         "clean": "rimraf dist",
         "test": "vitest run"
     },
@@ -58,10 +103,13 @@
         "@axrone/geometry": "^0.1.0",
         "@axrone/lighting": "^0.1.0",
         "@axrone/numeric": "^0.0.1",
+        "@axrone/observer": "^0.1.0",
         "@axrone/render-2d": "^0.1.0",
         "@axrone/render-core": "^0.1.0",
         "@axrone/random": "^0.0.1",
         "@axrone/render-webgl2": "^0.1.0",
+        "@axrone/scene-prefab": "^0.1.0",
+        "@axrone/terrain": "^0.1.0",
         "@axrone/utility": "^0.0.1"
     }
 }

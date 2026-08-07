@@ -255,6 +255,9 @@ export interface GameLoopOptions<TState> {
     readonly retry?: GameLoopRetryPolicy<TState>;
     readonly locale?: string;
     readonly messageResolver?: GameLoopMessageResolver;
+    /** When true, automatically pauses the loop when the document becomes hidden
+     *  and resumes when it becomes visible again. Default: false. */
+    readonly pauseWhenHidden?: boolean;
     readonly onError?: (
         error: GameLoopSystemError,
         failure: Readonly<GameLoopFailureContext<TState>>

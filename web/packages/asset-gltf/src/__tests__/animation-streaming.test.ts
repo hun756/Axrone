@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeAnimationClipStreamingChunkPayload } from '@axrone/animation';
+import { decodeAnimationClipStreamingChunkPayload } from '@axrone/animation/streaming-chunk';
 import {
     createPortableAnimationManifestResource,
     createPortableAnimationStreamingClipBundle,

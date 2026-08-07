@@ -901,7 +901,7 @@ export class Framebuffer implements IFramebuffer {
     #height: number;
     #label: string | null;
     #isDisposed: boolean = false;
-    #colorAttachments: ITexture[] = [];
+    #colorAttachments: (ITexture | null)[] = [];
     #depthAttachment: ITexture | IRenderbuffer | null = null;
     #stencilAttachment: ITexture | IRenderbuffer | null = null;
     #depthStencilAttachment: ITexture | IRenderbuffer | null = null;
@@ -928,7 +928,7 @@ export class Framebuffer implements IFramebuffer {
     }
 
     public get colorAttachments(): readonly ITexture[] {
-        return [...this.#colorAttachments];
+        return this.#colorAttachments.filter((t): t is ITexture => t !== null);
     }
 
     public get depthAttachment(): ITexture | IRenderbuffer | null {
@@ -1124,7 +1124,7 @@ export class Framebuffer implements IFramebuffer {
         this.#height = height;
 
         for (const texture of this.#colorAttachments) {
-            if (!texture.isDisposed) {
+            if (texture && !texture.isDisposed) {
                 texture.resize(width, height);
             }
         }
@@ -1273,10 +1273,10 @@ export class Framebuffer implements IFramebuffer {
             const index = attachment - gl.COLOR_ATTACHMENT0;
 
             while (this.#colorAttachments.length <= index) {
-                this.#colorAttachments.push(null as any);
+                this.#colorAttachments.push(null);
             }
 
-            this.#colorAttachments[index] = resource as ITexture;
+            this.#colorAttachments[index] = resource as ITexture | null;
         } else if (attachment === gl.DEPTH_ATTACHMENT) {
             this.#depthAttachment = resource;
         } else if (attachment === gl.STENCIL_ATTACHMENT) {

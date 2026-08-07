@@ -14,6 +14,8 @@ let SpriteAnimator: typeof import('@axrone/scene-2d').SpriteAnimator;
 let SpriteMask: typeof import('@axrone/scene-2d').SpriteMask;
 let SpriteRenderer: typeof import('@axrone/scene-2d').SpriteRenderer;
 let SceneCapabilityError: typeof import('@axrone/scene-2d').SceneCapabilityError;
+let SceneError: typeof import('@axrone/scene-2d').SceneError;
+let SceneLifecycleError: typeof import('@axrone/scene-2d').SceneLifecycleError;
 let createSpriteAtlas: typeof import('@axrone/scene-2d').createSpriteAtlas;
 let get2DSceneRuntimeProfile: typeof import('@axrone/scene-2d').get2DSceneRuntimeProfile;
 let getCoreSceneRuntimeProfile: typeof import('@axrone/scene-2d').getCoreSceneRuntimeProfile;
@@ -31,6 +33,8 @@ describe('Scene2D', () => {
         SpriteMask = sceneModule.SpriteMask;
         SpriteRenderer = sceneModule.SpriteRenderer;
         SceneCapabilityError = sceneModule.SceneCapabilityError;
+        SceneError = sceneModule.SceneError;
+        SceneLifecycleError = sceneModule.SceneLifecycleError;
         createSpriteAtlas = sceneModule.createSpriteAtlas;
         get2DSceneRuntimeProfile = sceneModule.get2DSceneRuntimeProfile;
         getCoreSceneRuntimeProfile = sceneModule.getCoreSceneRuntimeProfile;
@@ -74,7 +78,7 @@ describe('Scene2D', () => {
         const sprite = spriteActor.getComponent(SpriteRenderer);
 
         expect(camera?.orthographic).toBe(true);
-        expect(camera?.near).toBe(-1000);
+        expect(camera?.near).toBe(0.1);
         expect(camera?.far).toBe(1000);
         expect(cameraTransform?.position.z).toBe(1);
         expect(sprite?.textureId).toBe('hero');
@@ -228,6 +232,56 @@ describe('Scene2D', () => {
         scene.dispose();
     });
 
+    it('enforces transparent sprite budgets through the 2d facade render planning surface', async () => {
+        const canvas = document.createElement('canvas');
+        const scene = new Scene2D({
+            ...createSceneOptions(scheduler, canvas),
+            renderPlanning: {
+                maxTransparentPrimitives: 1,
+            },
+        });
+        const gl = scene.gl as any;
+
+        await scene.registerTexture({
+            id: 'hero',
+            source: {
+                kind: 'data',
+                width: 1,
+                height: 1,
+                channels: 4,
+                data: [255, 255, 255, 255],
+            },
+            generateMipmaps: false,
+        });
+
+        scene.createCameraActor({ name: 'Camera' }, { primary: true });
+        scene.createSpriteActor(
+            { name: 'HeroA' },
+            { textureId: 'hero', size: [1, 1], renderOrder: 0 }
+        );
+        scene.createSpriteActor(
+            { name: 'HeroB' },
+            { textureId: 'hero', size: [2, 1], renderOrder: 1 }
+        );
+
+        scene.start(0);
+        scheduler.flush(16);
+
+        expect(gl.drawElements).toHaveBeenCalledTimes(1);
+        expect(scene.renderStats.drawCalls).toBe(1);
+        expect(scene.renderStats.trianglesSubmitted).toBe(2);
+        expect(scene.renderStats.planning.transparentCount).toBe(1);
+        expect(scene.renderStats.planning.meshTransparentCount).toBe(0);
+        expect(scene.renderStats.planning.spriteTransparentCount).toBe(1);
+        expect(scene.renderStats.planning.spriteBatchCount).toBe(1);
+        expect(scene.renderStats.planning.skippedSpriteCount).toBe(1);
+        expect(scene.renderStats.planning.warnings).toEqual([
+            'transparent primitive budget exceeded at 1; skipped 1 sprite submissions',
+        ]);
+
+        scene.dispose();
+    });
+
     it('throws capability errors when sprite helpers are used outside the 2d profile', () => {
         const canvas = document.createElement('canvas');
         const scene = new Scene2D({
@@ -242,5 +296,60 @@ describe('Scene2D', () => {
         } finally {
             scene.dispose();
         }
+    });
+
+    it('throws SceneLifecycleError when creating actors after dispose', () => {
+        const canvas = document.createElement('canvas');
+        const scene = new Scene2D(createSceneOptions(scheduler, canvas));
+        scene.dispose();
+
+        expect(() => scene.createCameraActor({ name: 'Camera' })).toThrow(
+            SceneLifecycleError
+        );
+        expect(() => scene.createSpriteActor({ name: 'Sprite' })).toThrow(
+            SceneLifecycleError
+        );
+        expect(() =>
+            scene.createAnimatedSpriteActor({ name: 'Animated' })
+        ).toThrow(SceneLifecycleError);
+        expect(() => scene.createMaskActor({ name: 'Mask' })).toThrow(
+            SceneLifecycleError
+        );
+    });
+
+    it('throws SceneCapabilityError for mask and animated sprite under core profile', () => {
+        const canvas = document.createElement('canvas');
+        const scene = new Scene2D({
+            ...createSceneOptions(scheduler, canvas),
+            profile: getCoreSceneRuntimeProfile(),
+        });
+
+        try {
+            expect(() => scene.createMaskActor({ name: 'Mask' })).toThrow(
+                SceneCapabilityError
+            );
+            expect(() =>
+                scene.createAnimatedSpriteActor({ name: 'Animated' })
+            ).toThrow(SceneCapabilityError);
+        } finally {
+            scene.dispose();
+        }
+    });
+
+    it('re-exports error classes from the errors entry point', async () => {
+        const errors = await import('@axrone/scene-2d/errors');
+
+        expect(errors.SceneCanvasError).toBeDefined();
+        expect(errors.SceneCapabilityError).toBeDefined();
+        expect(errors.SceneError).toBeDefined();
+        expect(errors.SceneLifecycleError).toBeDefined();
+        expect(errors.ScenePrefabConflictError).toBeDefined();
+        expect(errors.ScenePrefabError).toBeDefined();
+        expect(errors.ScenePrefabResolutionError).toBeDefined();
+        expect(errors.ScenePrefabValidationError).toBeDefined();
+
+        expect(() => {
+            throw new errors.SceneError('test');
+        }).toThrowError(SceneError);
     });
 });

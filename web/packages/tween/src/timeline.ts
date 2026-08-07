@@ -1,5 +1,4 @@
 import { EventEmitter } from '@axrone/event';
-import { TweenCore } from './core';
 import { ITimeline, IGroupable, TimelineOptions, TimelineEventMap, VoidCallback } from './types';
 
 let _nextId = 0;
@@ -53,8 +52,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         const { offset = 0, position } = options;
 
         const startPosition = position !== undefined ? position : this._duration + offset;
-        const duration =
-            tween instanceof TweenCore ? tween.getDuration() * ((tween as any)._repeat + 1) : 0;
+        const duration = tween.getTotalDuration();
         const endPosition = startPosition + duration;
 
         this._timelineItems.push({
@@ -156,7 +154,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         }
 
         for (const item of this._timelineItems) {
-            if ((item.target as any)._status === 'paused') {
+            if (item.target.getStatus() === 'paused') {
                 item.target.resume();
             }
         }
@@ -203,6 +201,10 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
     }
 
     getDuration(): number {
+        return this._duration;
+    }
+
+    getTotalDuration(): number {
         return this._duration;
     }
 

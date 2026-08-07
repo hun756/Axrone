@@ -1330,15 +1330,46 @@ describe('glTF importer', () => {
         expect(receipt.diagnostics).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({
-                    code: 'gltf.extension.unsupported',
-                    level: 'warning',
-                }),
-                expect.objectContaining({
                     code: 'gltf.mesh.attribute.unsupported',
                     level: 'warning',
                 }),
             ])
         );
+    });
+
+    it('imports KHR_materials_clearcoat materials into clearcoat uniforms', async () => {
+        const database = new AssetDatabase<GltfAssetSchema>({
+            importers: [createGltfImporter()],
+        });
+
+        const json = createTriangleJson();
+        json.extensionsUsed = ['KHR_materials_clearcoat'];
+        json.extensionsRequired = ['KHR_materials_clearcoat'];
+        json.materials = [
+            {
+                ...(json.materials?.[0] ?? {}),
+                extensions: {
+                    ...(json.materials?.[0]?.extensions ?? {}),
+                    KHR_materials_clearcoat: {
+                        clearcoatFactor: 0.72,
+                        clearcoatRoughnessFactor: 0.18,
+                    },
+                },
+            },
+        ];
+
+        const receipt = await database.import({
+            kind: 'bytes',
+            data: createGlb(json, createBinaryBlob()),
+            uri: 'models/clearcoat-triangle.glb',
+            mimeType: 'model/gltf-binary',
+        });
+
+        const material = receipt.assets.find((entry) => entry.kind === 'gltf.material');
+        expect(material?.data.definition.uniforms).toMatchObject({
+            _ClearcoatFactor: 0.72,
+            _ClearcoatRoughnessFactor: 0.18,
+        });
     });
 
     it('fails fast for unsupported required glTF extensions', async () => {
@@ -1351,12 +1382,12 @@ describe('glTF importer', () => {
                 kind: 'text',
                 data: JSON.stringify({
                     ...createTriangleJson(),
-                    extensionsRequired: ['KHR_materials_clearcoat'],
+                    extensionsRequired: ['KHR_materials_specular'],
                 } satisfies GltfRootJson),
                 uri: 'models/unsupported-required.gltf',
                 mimeType: 'model/gltf+json',
             })
-        ).rejects.toThrow('Unsupported required glTF extensions: KHR_materials_clearcoat');
+        ).rejects.toThrow('Unsupported required glTF extensions: KHR_materials_specular');
     });
 
     it('imports glTF cameras into prefab snapshots and marks the default scene camera as primary', async () => {

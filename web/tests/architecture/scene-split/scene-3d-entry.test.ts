@@ -12,6 +12,7 @@ describe('scene-3d entry', () => {
         expect(scene3D.Scene).toBeDefined();
         expect(scene3D.Camera).toBeDefined();
         expect(scene3D.MeshRenderer).toBeDefined();
+        expect(scene3D.Terrain).toBeDefined();
         expect(scene3D.Scene3DActorRuntime).toBeDefined();
         expect(scene3D.SceneAssetFacade).toBeDefined();
         expect(scene3D.SceneLifecycleFacade).toBeDefined();
@@ -20,6 +21,8 @@ describe('scene-3d entry', () => {
         expect(scene3D.SceneRuntimeKernel).toBeDefined();
         expect(scene3D.SceneAssetRuntime).toBeDefined();
         expect(scene3D.createUnlitColorShaderDefinition).toBeDefined();
+        expect(scene3D.createTerrainSplatShaderDefinition).toBeDefined();
+        expect(scene3D.createTerrainFoliageShaderDefinition).toBeDefined();
         expect(scene3D.SCENE_3D_BUILT_IN_MANIFEST).toBeDefined();
         expect(scene3D.get3DSceneRuntimeProfile).toBeDefined();
     });

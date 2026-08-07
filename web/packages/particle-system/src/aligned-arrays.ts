@@ -246,7 +246,9 @@ abstract class BaseAlignedVectorArray<TComponents extends ComponentCount, TArray
         this._alignment = alignment;
 
         const bytesPerElement = ArrayConstructor.BYTES_PER_ELEMENT;
-        const totalSize = capacity * componentCount * bytesPerElement;
+        const componentSize = capacity * bytesPerElement;
+        const alignedComponentSize = calculateAlignedSize(componentSize, alignment);
+        const totalSize = alignedComponentSize * componentCount;
         const paddedSize = calculateAlignedSize(totalSize, alignment);
 
         this._buffer = createAlignedBuffer(paddedSize, alignment);
@@ -418,7 +420,9 @@ abstract class BaseAlignedVectorArray<TComponents extends ComponentCount, TArray
         this._capacity = newCapacity;
 
         const bytesPerElement = this._ArrayConstructor.BYTES_PER_ELEMENT;
-        const totalSize = newCapacity * this._componentCount * bytesPerElement;
+        const componentSize = newCapacity * bytesPerElement;
+        const alignedComponentSize = calculateAlignedSize(componentSize, this._alignment);
+        const totalSize = alignedComponentSize * this._componentCount;
         const paddedSize = calculateAlignedSize(totalSize, this._alignment);
 
         this._buffer = createAlignedBuffer(paddedSize, this._alignment);
@@ -450,7 +454,6 @@ abstract class BaseAlignedVectorArray<TComponents extends ComponentCount, TArray
 
         const sliced = new (this.constructor as any)(
             length,
-            this._componentCount,
             this._ArrayConstructor,
             this._alignment
         ) as IAlignedVectorArray<TComponents, TArray>;

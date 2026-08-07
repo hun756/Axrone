@@ -93,6 +93,13 @@ export type {
 export { SceneSnapshotRuntime } from './scene-snapshot-runtime';
 
 export type {
+	AnimatorConfig,
+	AnimatorClipConfig,
+	AnimatorTrackConfig,
+} from './components/animator';
+export { Animator } from './components/animator';
+
+export type {
 	CompiledRenderShaderEffect,
 	RenderShaderAttributeDefinition,
 	RenderShaderEffectDefinition,
@@ -106,11 +113,11 @@ export type {
 	RenderShaderStageDefinition,
 	RenderShaderStageName,
 	RenderShaderValueType,
-} from '@axrone/render-core';
+} from '@axrone/render-core/shader-effect';
 export {
 	cloneRenderShaderEffectDefinition,
 	compileRenderShaderEffect,
-} from '@axrone/render-core';
+} from '@axrone/render-core/shader-effect';
 export type { SceneShaderDefinitionFromEffectOptions } from './shader-effect';
 export { createSceneShaderDefinitionFromEffect } from './shader-effect';
 export type {
@@ -122,30 +129,8 @@ export {
 	createSceneMaterialInspectorControls,
 	createSceneMaterialInspectorSections,
 } from './material-inspector';
-export type {
-	ResolveScenePrefabOptions,
-	ScenePrefabWorkflowOptions,
-} from './scene-prefab-workflow';
-export {
-	createScenePrefabWorkflow,
-	resolveScenePrefab,
-	ScenePrefabWorkflow,
-} from './scene-prefab-workflow';
-export {
-	applyScenePrefabOverrides,
-} from './scene-prefab-operations';
-export {
-	diffScenePrefabDefinitions,
-	mergeScenePrefabDefinitions,
-} from './scene-prefab-diff';
-export {
-	createScenePrefabComponentSelector,
-	createScenePrefabScopedNodeId,
-	findScenePrefabComponentIndex,
-	getScenePrefabComponentSelectorKey,
-	hasScenePrefabComposition,
-	serializeScenePrefabPropertyPath,
-} from './scene-prefab-internals';
+// Prefab functions and workflow moved to @axrone/scene-prefab.
+// Use the ./prefab subpath or import from @axrone/scene-prefab directly.
 
 export type {
 	SceneBuiltInRegistry,
@@ -202,6 +187,9 @@ export type {
 	ScenePrefabResolutionResult,
 	ScenePrefabResolver,
 	SceneRegistry,
+	SceneRenderPlanningOptions,
+	SceneRenderPipelineSettings,
+	SceneRenderPlanningStats,
 	SceneRenderPassDefinition,
 	SceneRenderPassHandle,
 	SceneRenderStats,
@@ -230,4 +218,5 @@ export {
 	ScenePrefabError,
 	ScenePrefabResolutionError,
 	ScenePrefabValidationError,
+	SceneShaderError,
 } from './errors';

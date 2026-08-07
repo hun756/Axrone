@@ -1,0 +1,21 @@
+{
+    "$schema": "./node_modules/nx/schemas/nx-schema.json",
+    "tasksRunnerOptions": {
+        "default": {
+            "runner": "nx/tasks-runners/default",
+            "options": {
+                "cacheableOperations": ["build", "lint"],
+                "cacheDirectory": ".nx/cache"
+            }
+        }
+    },
+    "targetDefaults": {
+        "build": {
+            "outputs": ["{projectRoot}/dist"],
+            "dependsOn": ["^build"]
+        },
+        "lint": {
+            "dependsOn": []
+        }
+    }
+}

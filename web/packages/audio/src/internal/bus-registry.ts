@@ -294,7 +294,7 @@ export class AudioBusRegistry {
     #connect(bus: InternalBus): void {
         disconnectNode(bus.outputNode);
         const parent = bus.parentId ? this.#buses.get(bus.parentId) : undefined;
-        bus.outputNode.connect(parent?.gainNode ?? this.#destination);
+        bus.outputNode.connect(parent?.outputNode ?? this.#destination);
         this.#applyState(bus);
     }
 

@@ -1,4 +1,5 @@
 import { AnimationValidationError } from './errors';
+import { getTrackComponentCount, isFiniteNumber } from './internal';
 import { isRecord } from '@axrone/utility';
 import type { AnimationClipDefinition, AnimationTrackDefinition } from './types';
 
@@ -28,9 +29,6 @@ interface AnimationTrackSampleFrame {
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
 
-const isFiniteNumber = (value: unknown): value is number =>
-    typeof value === 'number' && Number.isFinite(value);
-
 const toReadonlyNumberArray = (
     value: readonly number[] | Float32Array
 ): readonly number[] | Float32Array => (value instanceof Float32Array ? new Float32Array(value) : [...value]);
@@ -49,28 +47,6 @@ const getTrackSampleStride = (track: AnimationTrackDefinition): number => {
     }
     const valueLength = track.values.length;
     return Math.trunc(valueLength / keyframeCount);
-};
-
-const getTrackComponentCount = (track: AnimationTrackDefinition): number => {
-    if (typeof track.valueComponentCount === 'number' && Number.isFinite(track.valueComponentCount)) {
-        return Math.trunc(track.valueComponentCount);
-    }
-    switch (track.path) {
-        case 'translation':
-        case 'scale':
-            return 3;
-        case 'rotation':
-            return 4;
-        case 'weights': {
-            const stride = getTrackSampleStride(track);
-            if (track.interpolation === 'CUBICSPLINE') {
-                return Math.trunc(stride / 3);
-            }
-            return stride;
-        }
-        default:
-            return 0;
-    }
 };
 
 const normalizeTrackDefinition = (track: AnimationTrackDefinition): AnimationTrackDefinition => {

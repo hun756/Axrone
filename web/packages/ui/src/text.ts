@@ -1,5 +1,5 @@
 import { DisposedUIError } from './errors';
-import { FontRegistry } from './font';
+import { FontRegistry, ensureDefaultUIFont } from './font';
 import { LruCache, createCacheKey, createGraphemeSegments, detectDirection, isWhitespace } from './text/internals';
 import type {
     FontFaceId,
@@ -61,12 +61,21 @@ export class TextLayoutEngine implements Disposable {
         this.ensureActive();
         const maxWidth = constraints.width === undefined ? Number.POSITIVE_INFINITY : Math.max(0, constraints.width);
         const maxHeight = constraints.height === undefined ? Number.POSITIVE_INFINITY : Math.max(0, constraints.height);
-        const faceId = this.fonts.resolveFace({
+        let faceId = this.fonts.resolveFace({
             family: block.family,
             weight: block.weight as TextBlockInput['weight'],
             style: block.style,
             locale: block.locale,
         });
+        if (faceId === null && block.family.trim().length > 0) {
+            ensureDefaultUIFont(this.fonts, block.family);
+            faceId = this.fonts.resolveFace({
+                family: block.family,
+                weight: block.weight as TextBlockInput['weight'],
+                style: block.style,
+                locale: block.locale,
+            });
+        }
         const cacheKey = createCacheKey(block, faceId, maxWidth, maxHeight);
         const cached = this.cache.get(cacheKey);
         if (cached) {
@@ -149,6 +158,9 @@ export class TextLayoutEngine implements Disposable {
         for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
             const line = lines[lineIndex];
             const y = lineIndex * computedLineHeight;
+            // Baseline sits ascent below the line top, vertically centering the
+            // font box when the line height exceeds ascent + descent.
+            const baselineY = y + ascent + Math.max(0, computedLineHeight - (ascent + descent)) / 2;
             const isLastLine = lineIndex === lines.length - 1;
             const justify = block.align === 'justify' && Number.isFinite(maxWidth) && !isLastLine && line.gapCount > 0;
             const x = this.resolveLineOffset(block.align, direction, targetWidth, line.width);
@@ -161,14 +173,20 @@ export class TextLayoutEngine implements Disposable {
                 const clusterGap = justify && cluster.whitespace ? extraGap : 0;
                 const clusterWidth = cluster.width + clusterGap;
                 for (const glyph of cluster.glyphs) {
+                    // Position the atlas bitmap so its pen origin lands on the
+                    // pen position: left edge = penX - originX, top edge =
+                    // baseline - originY. The quad must use the bitmap's own
+                    // dimensions or the sprite gets squeezed into the ink box.
+                    const entry = glyph.atlasEntry;
+                    const penX = x + cursorX + gapCursor;
                     glyphs.push({
                         codePoint: glyph.codePoint,
                         clusterIndex,
-                        x: x + cursorX + gapCursor,
-                        y,
+                        x: entry ? penX - entry.originX : penX,
+                        y: entry ? baselineY - entry.originY : y,
                         advance: glyph.advance,
-                        width: glyph.width,
-                        height: glyph.height,
+                        width: entry ? entry.width : glyph.width,
+                        height: entry ? entry.height : glyph.height,
                         line: lineIndex,
                         text: cluster.text,
                         atlasEntry: glyph.atlasEntry,

@@ -1,20 +1,27 @@
+import type { BoundingSphere } from '@axrone/geometry';
 import type { Mat4, Quat, Vec2, Vec3, Vec4 } from '@axrone/numeric';
 import type { Actor, ActorConfig } from '@axrone/ecs-runtime';
 import type { World } from '@axrone/ecs-runtime';
 import type { ComponentConstructor, ComponentRegistry } from '@axrone/ecs-runtime';
 import type { System, SystemQuery } from '@axrone/ecs-runtime';
 import type { GameLoopScheduler, GameLoopStatus } from '@axrone/game-loop';
-import type { RenderShaderEffectDefinition } from '@axrone/render-core';
+import type { RenderShaderEffectDefinition } from '@axrone/render-core/shader-effect';
+import type {
+    AnyPostProcessEffect,
+    RenderHdrSettings,
+    RenderTonemappingSettings,
+} from '@axrone/render-core/types';
 import type { Camera } from './components/camera';
 import type { Animator } from './components/animator';
 import type { DirectionalLight } from './components/directional-light';
 import type { FollowCameraController } from './components/follow-camera-controller';
 import type { MeshRenderer } from './components/mesh-renderer';
 import type { OrbitCameraController } from './components/orbit-camera-controller';
-import type { PrefabNodeBinding } from './components/prefab-node-binding';
+import type { PrefabNodeBinding } from '@axrone/scene-prefab';
 import type { PointLight } from './components/point-light';
 import type { SpriteRenderer } from './components/sprite-renderer';
 import type { SpotLight } from './components/spot-light';
+import type { Terrain } from './components/terrain';
 import type { Hierarchy } from '@axrone/ecs-runtime';
 import type { Transform } from '@axrone/ecs-runtime';
 import type { ColorSpace, FilterMode, TextureFormat, WrapMode } from '@axrone/render-webgl2';
@@ -46,13 +53,49 @@ export type SceneUniformValue =
     | Quat
     | Mat4;
 
-export type SceneSerializedValue =
-    | string
-    | number
-    | boolean
-    | null
-    | readonly SceneSerializedValue[]
-    | { readonly [key: string]: SceneSerializedValue };
+import type {
+    SceneSerializedValue,
+    ScenePrefabDefinition,
+    ScenePrefabInstantiateOptions,
+    ScenePrefabOverrideOperation,
+    ScenePrefabResolver,
+} from '@axrone/scene-prefab';
+export type {
+    SceneSerializedValue,
+    ScenePrefabId,
+    ScenePrefabNodeId,
+    ScenePrefabInstanceId,
+    ScenePrefabComponentId,
+    ScenePrefabPropertyPathSegment,
+    ScenePrefabPropertyPath,
+    ScenePrefabPropertyPathString,
+    ScenePrefabNodeSource,
+    ScenePrefabMetadata,
+    ScenePrefabComponentSelector,
+    ScenePrefabActorField,
+    ScenePrefabActorFieldValue,
+    SceneComponentSnapshot,
+    SceneActorSnapshot,
+    ScenePrefabReference,
+    ScenePrefabOverrideOperation,
+    ScenePrefabNestedInstance,
+    ScenePrefabDefinition,
+    ScenePrefabConflictPolicy,
+    ScenePrefabConflictResolution,
+    ScenePrefabConflictBaseValue,
+    ScenePrefabConflict,
+    ScenePrefabConflictResolver,
+    ScenePrefabMergeOptions,
+    ScenePrefabDiffResult,
+    ScenePrefabMergeResult,
+    ScenePrefabMergeDefinitionResult,
+    ScenePrefabResolvedDefinition,
+    ScenePrefabResolveOptions,
+    ScenePrefabResolutionResult,
+    ScenePrefabRegistrySource,
+    ScenePrefabResolver,
+    ScenePrefabInstantiateOptions,
+} from '@axrone/scene-prefab';
 
 export interface SceneVertexAttribute {
     readonly semantic: SceneMeshSemantic;
@@ -79,6 +122,7 @@ export interface SceneMeshDefinition {
     readonly id: string;
     readonly vertices: BufferSource;
     readonly attributes: readonly SceneVertexAttribute[];
+    readonly bounds?: BoundingSphere;
     readonly morphTargets?: readonly SceneMorphTargetDefinition[];
     readonly indices?: Uint8Array | Uint16Array | Uint32Array;
     readonly vertexCount?: number;
@@ -160,7 +204,7 @@ export type SceneTextureBindingDefinition =
           readonly unit?: number;
       };
 
-export type SceneMaterialShadingModel = 'unlit' | 'pbr';
+export type SceneMaterialShadingModel = 'unlit' | 'pbr' | 'toon';
 export type SceneMaterialAlphaMode = 'opaque' | 'mask' | 'blend';
 export type SceneMaterialUvSet = 0 | 1;
 
@@ -174,7 +218,16 @@ export interface SceneMaterialSurfaceFeaturesDefinition {
     readonly useMetallicRoughnessMap?: boolean;
     readonly useOcclusionMap?: boolean;
     readonly useEmissiveMap?: boolean;
+    readonly useClearcoat?: boolean;
+    readonly useClearcoatMap?: boolean;
+    readonly useClearcoatRoughnessMap?: boolean;
+    readonly useClearcoatNormalMap?: boolean;
     readonly useAlphaTest?: boolean;
+    readonly useAnisotropy?: boolean;
+    readonly useSheen?: boolean;
+    readonly useSubsurface?: boolean;
+    readonly useTransmission?: boolean;
+    readonly useIridescence?: boolean;
 }
 
 export interface SceneMaterialSurfaceTextureBindingDefinition {
@@ -200,15 +253,35 @@ export interface SceneMaterialSurfaceDefinition {
     readonly occlusion?: number;
     readonly roughness?: number;
     readonly metallic?: number;
+    readonly clearcoat?: number;
+    readonly clearcoatRoughness?: number;
+    readonly clearcoatNormalScale?: number;
     readonly specularIntensity?: number;
     readonly emissive?: readonly [number, number, number];
     readonly emissiveScale?: readonly [number, number, number];
+    readonly sheenFactor?: number;
+    readonly sheenColor?: readonly [number, number, number];
+    readonly sheenRoughness?: number;
+    readonly anisotropy?: number;
+    readonly anisotropyRotation?: number;
+    readonly subsurfaceFactor?: number;
+    readonly subsurfaceColor?: readonly [number, number, number];
+    readonly subsurfaceThickness?: number;
+    readonly transmissionFactor?: number;
+    readonly ior?: number;
+    readonly thickness?: number;
+    readonly iridescenceFactor?: number;
+    readonly iridescenceIor?: number;
+    readonly iridescenceThickness?: number;
     readonly albedoMap?: SceneMaterialSurfaceTextureBindingDefinition;
     readonly normalMap?: SceneMaterialSurfaceTextureBindingDefinition;
     readonly pbrMap?: SceneMaterialSurfaceTextureBindingDefinition;
     readonly metallicRoughnessMap?: SceneMaterialSurfaceTextureBindingDefinition;
     readonly occlusionMap?: SceneMaterialSurfaceTextureBindingDefinition;
     readonly emissiveMap?: SceneMaterialSurfaceTextureBindingDefinition;
+    readonly clearcoatMap?: SceneMaterialSurfaceTextureBindingDefinition;
+    readonly clearcoatRoughnessMap?: SceneMaterialSurfaceTextureBindingDefinition;
+    readonly clearcoatNormalMap?: SceneMaterialSurfaceTextureBindingDefinition;
 }
 
 export type SceneMaterialPassPrimitive = 'triangle-list' | 'line-list' | 'point-list';
@@ -378,6 +451,8 @@ export interface SceneOptions<R extends ComponentRegistry = Record<string, never
     extends SceneCanvasOptions {
     readonly registry?: R;
     readonly profile?: SceneRuntimeProfile<R>;
+    readonly renderPlanning?: SceneRenderPlanningOptions;
+    readonly renderPipeline?: SceneRenderPipelineSettings;
     readonly worldConfig?: {
         readonly maxEntities?: number;
         readonly enableMetrics?: boolean;
@@ -452,242 +527,8 @@ export interface SceneRenderPassHandle {
     readonly enabled: boolean;
 }
 
-type ScenePrefabBrand<TValue extends string, TBrand extends string> = TValue & {
-    readonly __scenePrefabBrand: TBrand;
-};
-
-export type ScenePrefabId = ScenePrefabBrand<string, 'ScenePrefabId'>;
-export type ScenePrefabNodeId = ScenePrefabBrand<string, 'ScenePrefabNodeId'>;
-export type ScenePrefabInstanceId = ScenePrefabBrand<string, 'ScenePrefabInstanceId'>;
-export type ScenePrefabComponentId = ScenePrefabBrand<string, 'ScenePrefabComponentId'>;
-export type ScenePrefabPropertyPathSegment = string | number;
-export type ScenePrefabPropertyPath = readonly ScenePrefabPropertyPathSegment[];
-export type ScenePrefabPropertyPathToken<
-    TSegment extends ScenePrefabPropertyPathSegment,
-> = TSegment extends number ? `[${TSegment}]` : TSegment;
-export type ScenePrefabPropertyPathString<
-    TSegments extends ScenePrefabPropertyPath = ScenePrefabPropertyPath,
-> = TSegments extends readonly [
-    infer THead extends ScenePrefabPropertyPathSegment,
-    ...infer TTail extends readonly ScenePrefabPropertyPathSegment[],
-]
-    ? `${ScenePrefabPropertyPathToken<THead>}${TTail['length'] extends 0
-          ? ''
-          : `.${ScenePrefabPropertyPathString<TTail>}`}`
-    : '';
-
-export interface ScenePrefabNodeSource {
-    readonly prefabId: string;
-    readonly nodeId: string;
-    readonly instancePath?: readonly string[];
-    readonly lineage?: readonly string[];
-}
-
-export interface ScenePrefabMetadata {
-    readonly revision?: string;
-    readonly locale?: string;
-    readonly updatedAt?: string;
-    readonly timeZone?: string;
-    readonly tags?: readonly string[];
-}
-
-export type ScenePrefabComponentSelector =
-    | {
-          readonly kind: 'id';
-          readonly componentId: string;
-          readonly type?: string;
-      }
-    | {
-          readonly kind: 'type';
-          readonly type: string;
-          readonly occurrence?: number;
-      };
-
-export type ScenePrefabActorField =
-    | 'name'
-    | 'layer'
-    | 'tag'
-    | 'active'
-    | 'persistent'
-    | 'pooled';
-
-export type ScenePrefabActorFieldValue<
-    TField extends ScenePrefabActorField = ScenePrefabActorField,
-> = TField extends 'name' | 'tag'
-    ? string
-    : TField extends 'layer'
-      ? number
-      : boolean;
-
-export interface SceneComponentSnapshot {
-    readonly id?: string;
-    readonly type: string;
-    readonly data: SceneSerializedValue;
-}
-
-export interface SceneActorSnapshot {
-    readonly nodeId?: string;
-    readonly parentNodeId?: string | null;
-    readonly name: string;
-    readonly layer: number;
-    readonly tag: string;
-    readonly active: boolean;
-    readonly persistent: boolean;
-    readonly pooled: boolean;
-    readonly source?: ScenePrefabNodeSource;
-    readonly components: readonly SceneComponentSnapshot[];
-}
-
-export type ScenePrefabReference =
-    | {
-          readonly kind: 'inline';
-          readonly prefab: ScenePrefabDefinition;
-      }
-    | {
-          readonly kind: 'registry';
-          readonly prefabId: string;
-          readonly revision?: string;
-      };
-
-export type ScenePrefabOverrideOperation =
-    | {
-          readonly kind: 'add-actor';
-          readonly actor: SceneActorSnapshot;
-          readonly afterNodeId?: string;
-      }
-    | {
-          readonly kind: 'remove-actor';
-          readonly nodeId: string;
-      }
-    | {
-          readonly kind: 'reparent-actor';
-          readonly nodeId: string;
-          readonly parentNodeId?: string | null;
-      }
-    | {
-          readonly kind: 'set-actor-field';
-          readonly nodeId: string;
-          readonly field: ScenePrefabActorField;
-          readonly value: ScenePrefabActorFieldValue;
-      }
-    | {
-          readonly kind: 'add-component';
-          readonly nodeId: string;
-          readonly component: SceneComponentSnapshot;
-          readonly index?: number;
-      }
-    | {
-          readonly kind: 'remove-component';
-          readonly nodeId: string;
-          readonly selector: ScenePrefabComponentSelector;
-      }
-    | {
-          readonly kind: 'replace-component';
-          readonly nodeId: string;
-          readonly selector: ScenePrefabComponentSelector;
-          readonly component: SceneComponentSnapshot;
-      }
-    | {
-          readonly kind: 'set-component-property';
-          readonly nodeId: string;
-          readonly selector: ScenePrefabComponentSelector;
-          readonly path: ScenePrefabPropertyPath;
-          readonly value: SceneSerializedValue;
-      }
-    | {
-          readonly kind: 'unset-component-property';
-          readonly nodeId: string;
-          readonly selector: ScenePrefabComponentSelector;
-          readonly path: ScenePrefabPropertyPath;
-      };
-
-export interface ScenePrefabNestedInstance {
-    readonly instanceId: string;
-    readonly reference: ScenePrefabReference;
-    readonly parentNodeId?: string | null;
-    readonly namePrefix?: string;
-    readonly overrides?: readonly ScenePrefabOverrideOperation[];
-}
-
-export interface ScenePrefabDefinition {
-    readonly id: string;
-    readonly kind?: 'prefab' | 'variant' | 'resolved';
-    readonly actors: readonly SceneActorSnapshot[];
-    readonly base?: ScenePrefabReference;
-    readonly nested?: readonly ScenePrefabNestedInstance[];
-    readonly overrides?: readonly ScenePrefabOverrideOperation[];
-    readonly metadata?: ScenePrefabMetadata;
-}
-
-export type ScenePrefabConflictPolicy = 'manual' | 'prefer-local' | 'prefer-incoming' | 'prefer-base';
-export type ScenePrefabConflictResolution = 'local' | 'incoming' | 'base';
-export type ScenePrefabConflictBaseValue =
-    | SceneSerializedValue
-    | SceneActorSnapshot
-    | SceneComponentSnapshot
-    | ScenePrefabActorFieldValue
-    | null;
-
-export interface ScenePrefabConflict {
-    readonly key: string;
-    readonly local: ScenePrefabOverrideOperation;
-    readonly incoming: ScenePrefabOverrideOperation;
-    readonly baseValue: ScenePrefabConflictBaseValue;
-}
-
-export type ScenePrefabConflictResolver = (
-    conflict: ScenePrefabConflict
-) => ScenePrefabConflictResolution;
-
-export interface ScenePrefabMergeOptions {
-    readonly conflictPolicy?: ScenePrefabConflictPolicy;
-    readonly conflictResolver?: ScenePrefabConflictResolver;
-}
-
-export interface ScenePrefabDiffResult {
-    readonly basePrefabId: string;
-    readonly targetPrefabId: string;
-    readonly overrides: readonly ScenePrefabOverrideOperation[];
-}
-
-export interface ScenePrefabMergeResult {
-    readonly overrides: readonly ScenePrefabOverrideOperation[];
-    readonly conflicts: readonly ScenePrefabConflict[];
-    readonly resolved: boolean;
-}
-
-export interface ScenePrefabMergeDefinitionResult extends ScenePrefabMergeResult {
-    readonly definition: ScenePrefabDefinition;
-}
-
-export interface ScenePrefabResolvedDefinition extends ScenePrefabDefinition {
-    readonly kind: 'resolved';
-    readonly base?: undefined;
-    readonly nested?: undefined;
-    readonly overrides?: undefined;
-    readonly lineage: readonly string[];
-}
-
-export interface ScenePrefabResolveOptions {
-    readonly liveOverrides?: readonly ScenePrefabOverrideOperation[];
-}
-
-export interface ScenePrefabResolutionResult {
-    readonly definition: ScenePrefabResolvedDefinition;
-    readonly conflicts: readonly ScenePrefabConflict[];
-    readonly cacheHit: boolean;
-}
-
-export interface ScenePrefabRegistrySource {
-    getPrefab(prefabId: string): ScenePrefabDefinition | undefined;
-}
-
-export interface ScenePrefabResolver {
-    resolvePrefab(
-        prefab: ScenePrefabDefinition | ScenePrefabReference,
-        options?: ScenePrefabResolveOptions
-    ): ScenePrefabResolutionResult;
-}
+// Prefab types moved to @axrone/scene-prefab
+// (ScenePrefabDefinition, SceneSerializedValue, etc. are imported above)
 
 export interface SceneSnapshot {
     readonly version: 1;
@@ -698,16 +539,6 @@ export interface SceneSnapshot {
     readonly textures: readonly SceneTextureDefinition[];
     readonly samplers: readonly SceneSamplerDefinition[];
     readonly renderPasses: readonly SceneRenderPassDefinition[];
-}
-
-export interface ScenePrefabInstantiateOptions {
-    readonly namePrefix?: string;
-    readonly componentArgsResolver?: (
-        componentName: string,
-        data: SceneSerializedValue
-    ) => readonly unknown[] | undefined;
-    readonly prefabResolver?: ScenePrefabResolver;
-    readonly liveOverrides?: readonly ScenePrefabOverrideOperation[];
 }
 
 export interface SceneSnapshotLoadOptions extends ScenePrefabInstantiateOptions {
@@ -727,8 +558,10 @@ export type SceneBuiltInRegistry = {
     readonly DirectionalLight: typeof DirectionalLight;
     readonly PointLight: typeof PointLight;
     readonly SpotLight: typeof SpotLight;
+    readonly Terrain: typeof Terrain;
     readonly OrbitCameraController: typeof OrbitCameraController;
     readonly FollowCameraController: typeof FollowCameraController;
+    readonly UIHost: typeof import('./components/ui-host').UIHost;
 };
 
 export type SceneRegistry<R extends ComponentRegistry = Record<string, never>> = R &
@@ -738,10 +571,33 @@ export interface SceneLoopState {
     readonly sceneId: string;
 }
 
+export interface SceneRenderPlanningOptions {
+    readonly maxTransparentPrimitives?: number;
+}
+
+export interface SceneRenderPipelineSettings {
+    readonly hdr?: boolean | Partial<RenderHdrSettings>;
+    readonly tonemapping?: Partial<RenderTonemappingSettings>;
+    readonly postProcess?: readonly AnyPostProcessEffect[];
+    readonly maxPostProcessPasses?: number;
+}
+
+export interface SceneRenderPlanningStats {
+    readonly passCount: number;
+    readonly opaqueCount: number;
+    readonly transparentCount: number;
+    readonly meshTransparentCount: number;
+    readonly spriteTransparentCount: number;
+    readonly spriteBatchCount: number;
+    readonly skippedSpriteCount: number;
+    readonly warnings: readonly string[];
+}
+
 export interface SceneRenderStats {
     readonly frame: number;
     readonly drawCalls: number;
     readonly trianglesSubmitted: number;
+    readonly planning: SceneRenderPlanningStats;
 }
 
 export interface SceneActorFactory<R extends ComponentRegistry = Record<string, never>> {

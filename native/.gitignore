@@ -1,0 +1,23 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+.vs/
+
+## Build artifacts
+artifacts/
+publish/
+
+## NuGet
+*.nupkg
+*.snupkg
+
+## IDE
+.idea/
+*.sln.docstates
+
+## OS
+Thumbs.db
+.DS_Store

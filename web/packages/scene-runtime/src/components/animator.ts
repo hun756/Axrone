@@ -1,33 +1,38 @@
+import { AnimationController } from '@axrone/animation/controller';
+import type { AnimationFrame } from '@axrone/animation/pose';
 import {
-    AnimationController,
+    AnimationClipStreamingScheduler,
+    type AnimationClipStreamingRequest,
+    type AnimationStreamingSnapshot,
+} from '@axrone/animation/streaming';
+import {
     applyAnimationClipStreamingChunkDefinition,
     decodeAnimationClipStreamingChunkPayload,
-    type AnimationClipDefinition,
-    type AnimationControllerEvent,
     type AnimationClipStreamingChunkApplicationOptions,
     type AnimationClipStreamingChunkPayload,
-    type AnimationStreamingSnapshot,
-    type AnimationClipEventDefinition,
-    type AnimationClipStreamingDefinition,
-    type AnimationClipStreamingRequest,
-    type AnimationFrame,
-    type AnimationFootContactDefinition,
-    type AnimationLayerDefinition,
-    type AnimationMotionFeatureDefinition,
-    type AnimationParameterDefinition,
-    type AnimationClipCompressionDefinition,
-    AnimationClipStreamingScheduler,
-    type AnimationRootMotionDefinition,
-    type AnimationRootMotionDelta,
-    type AnimationTrackDefinition,
-} from '@axrone/animation';
+} from '@axrone/animation/streaming-chunk';
+import type {
+    AnimationClipCompressionDefinition,
+    AnimationClipDefinition,
+    AnimationClipEventDefinition,
+    AnimationClipStreamingDefinition,
+    AnimationControllerEvent,
+    AnimationFootContactDefinition,
+    AnimationLayerDefinition,
+    AnimationMotionDefinition,
+    AnimationMotionFeatureDefinition,
+    AnimationParameterDefinition,
+    AnimationRootMotionDefinition,
+    AnimationRootMotionDelta,
+    AnimationTrackDefinition,
+} from '@axrone/animation/types';
 import { Quat, Vec3 } from '@axrone/numeric';
 import { cloneSerializable, isRecord } from '@axrone/utility';
 import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
 import { MeshRenderer } from './mesh-renderer';
-import { PrefabNodeBinding } from './prefab-node-binding';
+import { PrefabNodeBinding } from '@axrone/scene-prefab';
 
 export interface AnimatorTrackConfig {
     readonly targetNodeId?: string;
@@ -181,6 +186,8 @@ export class Animator extends Component {
     private _cullingMode: AnimatorCullingMode;
     private readonly _tempVec3 = new Vec3();
     private readonly _tempQuat = new Quat();
+    private _stepAnimationWarned = false;
+    private _cullingModeWarned = false;
 
     constructor(config: AnimatorConfig = {}) {
         super();
@@ -497,14 +504,23 @@ export class Animator extends Component {
         if (this._playOnStart && this._currentClipId) {
             this._playing = true;
         }
+
         const controller = this._ensureController();
         if (!controller) {
+            console.warn(
+                `[Animator] start: _ensureController returned null. ` +
+                `Animation will NOT play on start. clipDefinitions=${this._clipDefinitions.length}`,
+            );
             return;
         }
         if (this._currentClipId) {
             try {
-                controller.play(this._currentClipId);
-            } catch {}
+                controller.play(this._resolveStateIdForClip(this._currentClipId));
+            } catch (e) {
+                console.error(
+                    `[Animator] start: controller.play("${this._currentClipId}") threw: ${e instanceof Error ? e.message : String(e)}`,
+                );
+            }
         }
         if (this._time > 0) {
             controller.seek(this._time);
@@ -580,8 +596,8 @@ export class Animator extends Component {
             updateMode: this._updateMode,
             cullingMode: this._cullingMode,
             profile: controller?.profile ?? null,
-            pendingEvents: controller?.events ?? [],
-            activeClips: controller?.activeClips ?? [],
+            pendingEvents: [...(controller?.events ?? [])],
+            activeClips: [...(controller?.activeClips ?? [])],
             streaming: this._streamingSnapshot,
             pendingStreamingRequests: this._pendingStreamingRequests,
         };
@@ -665,6 +681,21 @@ export class Animator extends Component {
 
         this._rebuildTargetMap(instanceId);
         if (this._clipDefinitions.length === 0 || this._resolvedTargets.size === 0) {
+            console.warn(
+                `[Animator] _ensureController: Cannot build AnimationController. ` +
+                `clipDefinitions=${this._clipDefinitions.length}, resolvedTargets=${this._resolvedTargets.size}. ` +
+                `instanceId=${instanceId ?? 'null'}. ` +
+                `Animation will NOT play.`,
+            );
+            if (this._clipDefinitions.length > 0 && this._resolvedTargets.size === 0) {
+                const requiredNodeIds = this._getRequiredTargetNodeIds();
+                console.warn(
+                    `[Animator] _ensureController: Clips reference ${requiredNodeIds.length} target node(s) ` +
+                    `[${requiredNodeIds.slice(0, 10).join(', ')}${requiredNodeIds.length > 10 ? '...' : ''}] ` +
+                    `but no PrefabNodeBinding matches were found in the actor hierarchy. ` +
+                    `Verify that imported GLB bone nodes exist as scene entities with correct PrefabNodeBinding.nodeId.`,
+                );
+            }
             this._controller = null;
             this._controllerDirty = this._clipDefinitions.length > 0;
             return null;
@@ -675,6 +706,16 @@ export class Animator extends Component {
                 (targetNodeId) => !this._resolvedTargets.has(targetNodeId)
             )
         ) {
+            const missingTargets = this._getRequiredRigTargetNodeIds().filter(
+                (id) => !this._resolvedTargets.has(id)
+            );
+            const availableTargets = [...this._resolvedTargets.keys()].slice(0, 15).join(', ');
+            console.warn(
+                `[Animator] _ensureController: ${missingTargets.length} required rig target(s) not resolved: ` +
+                `[${missingTargets.slice(0, 10).join(', ')}${missingTargets.length > 10 ? '...' : ''}]. ` +
+                `Available targets: [${availableTargets}${this._resolvedTargets.size > 15 ? '...' : ''}]. ` +
+                `Controller will NOT be created.`,
+            );
             this._controller = null;
             this._controllerDirty = true;
             return null;
@@ -719,8 +760,12 @@ export class Animator extends Component {
         });
         if (this._currentClipId) {
             try {
-                this._controller.play(this._currentClipId);
-            } catch {}
+                this._controller.play(this._resolveStateIdForClip(this._currentClipId));
+            } catch (e) {
+                console.error(
+                    `[Animator] _ensureController: controller.play("${this._currentClipId}") threw: ${e instanceof Error ? e.message : String(e)}`,
+                );
+            }
         }
         if (this._time > 0) {
             this._controller.seek(this._time);
@@ -810,11 +855,48 @@ export class Animator extends Component {
         ]);
     }
 
+    private _resolveStateIdForClip(clipId: string): string {
+        for (const layer of this._layerDefinitions ?? []) {
+            for (const state of layer.stateMachine.states) {
+                if (this._motionContainsClip(state.motion, clipId)) {
+                    return state.id;
+                }
+            }
+        }
+        return clipId;
+    }
+
+    private _motionContainsClip(motion: AnimationMotionDefinition, clipId: string): boolean {
+        if (motion.kind === 'clip') {
+            return motion.clipId === clipId;
+        }
+        switch (motion.kind) {
+            case 'blend1d':
+            case 'blend2d':
+            case 'direct':
+                return motion.children.some((child) => this._motionContainsClip(child.motion, clipId));
+            case 'additive':
+                return (
+                    this._motionContainsClip(motion.base, clipId) ||
+                    this._motionContainsClip(motion.additive, clipId)
+                );
+        }
+    }
+
     private _stepAnimation(deltaTime: number): void {
         const controller = this._ensureController();
         if (!controller || !this._playing) {
+            if (!controller && this._playing && !this._stepAnimationWarned) {
+                this._stepAnimationWarned = true;
+                console.warn(
+                    `[Animator] _stepAnimation: playing=true but controller is null. ` +
+                    `clipDefinitions=${this._clipDefinitions.length}, resolvedTargets=${this._resolvedTargets.size}. ` +
+                    `Animation cannot proceed. (This warning will not repeat.)`,
+                );
+            }
             return;
         }
+        this._stepAnimationWarned = false;
 
         const evaluationMode = this._resolveEvaluationMode();
         if (evaluationMode === 'skip') {
@@ -850,7 +932,17 @@ export class Animator extends Component {
             return 'apply';
         }
 
-        return this._cullingMode === 'Cull Completely' ? 'skip' : 'update-only';
+        const mode = this._cullingMode === 'Cull Completely' ? 'skip' : 'update-only';
+        if (!this._cullingModeWarned) {
+            this._cullingModeWarned = true;
+            console.warn(
+                `[Animator] _resolveEvaluationMode: No visible renderer in hierarchy. ` +
+                `cullingMode="${this._cullingMode}", evaluationMode="${mode}". ` +
+                `Animation transforms will NOT be applied. ` +
+                `Set cullingMode to "Always Animate" or ensure a visible MeshRenderer exists. (This warning will not repeat.)`,
+            );
+        }
+        return mode;
     }
 
     private _hasVisibleRendererInHierarchy(): boolean {
@@ -1117,6 +1209,29 @@ export class Animator extends Component {
                     parentNodeId,
                 })
             );
+        }
+
+        if (this._clipDefinitions.length > 0 && this._resolvedTargets.size === 0) {
+            const requiredTargets = this._getRequiredTargetNodeIds();
+            console.warn(
+                `[Animator] _rebuildTargetMap: Resolved 0 targets from actor hierarchy ` +
+                `(rootActor=${rootActor ? 'exists' : 'null'}, allActors=${Array.isArray(allActors) ? allActors.length : 0}). ` +
+                `Clips require ${requiredTargets.length} target(s): ` +
+                `[${requiredTargets.slice(0, 10).join(', ')}${requiredTargets.length > 10 ? '...' : ''}]. ` +
+                `instanceId=${instanceId ?? 'null'}.`,
+            );
+        } else if (this._clipDefinitions.length > 0) {
+            const requiredTargets = this._getRequiredRigTargetNodeIds();
+            const resolvedTargetIds = [...this._resolvedTargets.keys()];
+            const unresolved = requiredTargets.filter((id) => !this._resolvedTargets.has(id));
+            if (unresolved.length > 0) {
+                console.warn(
+                    `[Animator] _rebuildTargetMap: Resolved ${this._resolvedTargets.size} target(s) ` +
+                    `[${resolvedTargetIds.slice(0, 10).join(', ')}${resolvedTargetIds.length > 10 ? '...' : ''}], ` +
+                    `but ${unresolved.length} required rig target(s) are missing: ` +
+                    `[${unresolved.slice(0, 10).join(', ')}${unresolved.length > 10 ? '...' : ''}].`,
+                );
+            }
         }
     }
 

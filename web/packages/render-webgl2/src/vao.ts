@@ -351,15 +351,15 @@ class BufferAllocator {
     }
 
     releaseVertexBuffer(id: ResourceID): void {
+        const buffer = this.vertexPool.getResource(id);
         if (this.vertexPool.release(id)) {
-            const buffer = this.vertexPool.getResource(id);
             if (buffer && !buffer.isDisposed) buffer.dispose();
         }
     }
 
     releaseIndexBuffer(id: ResourceID): void {
+        const buffer = this.indexPool.getResource(id);
         if (this.indexPool.release(id)) {
-            const buffer = this.indexPool.getResource(id);
             if (buffer && !buffer.isDisposed) buffer.dispose();
         }
     }
@@ -371,6 +371,7 @@ class BufferAllocator {
         for (const buffer of this.indexPool.dispose()) {
             if (buffer && !buffer.isDisposed) buffer.dispose();
         }
+        this.factory.dispose();
     }
 }
 
@@ -549,8 +550,8 @@ class VAORegistry {
     }
 
     release(id: ResourceID): void {
+        const vao = this.registry.getResource(id);
         if (this.registry.release(id)) {
-            const vao = this.registry.acquire(id);
             if (vao) vao.dispose();
         }
     }

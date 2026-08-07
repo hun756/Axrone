@@ -13,6 +13,31 @@
             "types": "./dist/index.d.ts",
             "import": "./dist/index.mjs",
             "require": "./dist/index.js"
+        },
+        "./facade": {
+            "types": "./dist/facade.d.ts",
+            "import": "./dist/facade.mjs",
+            "require": "./dist/facade.js"
+        },
+        "./support": {
+            "types": "./dist/support.d.ts",
+            "import": "./dist/support.mjs",
+            "require": "./dist/support.js"
+        },
+        "./profile": {
+            "types": "./dist/profile.d.ts",
+            "import": "./dist/profile.mjs",
+            "require": "./dist/profile.js"
+        },
+        "./types": {
+            "types": "./dist/types.d.ts",
+            "import": "./dist/types.mjs",
+            "require": "./dist/types.js"
+        },
+        "./errors": {
+            "types": "./dist/errors.d.ts",
+            "import": "./dist/errors.mjs",
+            "require": "./dist/errors.js"
         }
     },
     "scripts": {

@@ -1,6 +1,5 @@
 import type { AssetImportSource } from '../asset-contract';
-import { isPlainObject } from '@axrone/utility';
-import { MeshoptDecoder } from 'meshoptimizer';
+import { isPlainObject, decode as decodeBase64 } from '@axrone/utility';
 import {
     GltfContainerError,
     GltfResourceError,
@@ -18,11 +17,21 @@ import type {
     GltfRootJson,
     GltfTexturePayload,
 } from '../types';
+import { inferCompressedContainer } from './gltf-utils';
 
 const GLB_MAGIC = 0x46546c67;
 const GLB_JSON_CHUNK = 0x4e4f534a;
 const GLB_BIN_CHUNK = 0x004e4942;
 const EMPTY_ARRAY = Object.freeze([]) as readonly never[];
+
+/** Lazy-loaded MeshoptDecoder module (dynamic import for tree-shaking). */
+let _meshoptModule: typeof import('meshoptimizer') | undefined;
+async function loadMeshoptDecoder(): Promise<typeof import('meshoptimizer').MeshoptDecoder> {
+    if (!_meshoptModule) {
+        _meshoptModule = await import('meshoptimizer');
+    }
+    return _meshoptModule.MeshoptDecoder;
+}
 
 export interface NormalizedGltfSource {
     readonly format: 'gltf' | 'glb';
@@ -147,14 +156,9 @@ const parseDataUri = (
 
     const [, mimeType, base64Flag, payload] = match;
     if (base64Flag) {
-        const decoded = atob(payload);
-        const bytes = new Uint8Array(decoded.length);
-        for (let index = 0; index < decoded.length; index += 1) {
-            bytes[index] = decoded.charCodeAt(index);
-        }
         return {
             mimeType,
-            bytes,
+            bytes: decodeBase64(payload),
         };
     }
 
@@ -162,21 +166,6 @@ const parseDataUri = (
         mimeType,
         bytes: new TextEncoder().encode(decodeURIComponent(payload)),
     };
-};
-
-const inferCompressedContainer = (
-    mimeType: string | undefined,
-    uri: string | undefined
-): 'ktx2' | 'basisu' | undefined => {
-    const normalizedMime = mimeType?.toLowerCase();
-    const normalizedUri = uri?.toLowerCase();
-    if (normalizedMime === 'image/ktx2' || normalizedUri?.endsWith('.ktx2')) {
-        return 'ktx2';
-    }
-    if (normalizedMime === 'image/basis' || normalizedUri?.endsWith('.basis')) {
-        return 'basisu';
-    }
-    return undefined;
 };
 
 export const inferFormatFromSource = (source: AssetImportSource): 'gltf' | 'glb' | undefined => {
@@ -559,6 +548,8 @@ export class GltfResourceRuntime {
                 `bufferView ${index} EXT_meshopt_compression byteLength must equal byteStride * count`
             );
         }
+
+        const MeshoptDecoder = await loadMeshoptDecoder();
 
         if (!MeshoptDecoder.supported) {
             throw new GltfResourceError(

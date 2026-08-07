@@ -13,7 +13,7 @@ import type {
     WidgetRole,
 } from './foundation';
 import type { DeepReadonlyPartial } from '@axrone/utility';
-import type { ColorInput, CornerInput, CornerRadii, ReadonlyColor, WidgetLayoutInput } from './layout';
+import type { ColorInput, CornerInput, CornerRadii, EdgeInsets, ReadonlyColor, WidgetLayoutInput } from './layout';
 
 export interface WidgetStyleInput {
     readonly visible?: boolean;
@@ -91,14 +91,24 @@ export interface UIImageMaterialSource {
 
 export type UIImageSource = UIImageTextureSource | UIImageMaterialSource;
 
+export interface UIImageBorderInput {
+    readonly left?: number;
+    readonly top?: number;
+    readonly right?: number;
+    readonly bottom?: number;
+}
+
 export interface WidgetImageInput {
     readonly source: UIImageSource;
+    readonly material?: string;
     readonly fit?: UIImageFitMode;
     readonly alignX?: number;
     readonly alignY?: number;
     readonly sampling?: UIImageSamplingMode;
     readonly tint?: ColorInput;
     readonly uvRect?: Readonly<Partial<UVRect>>;
+    readonly border?: UIImageBorderInput | number;
+    readonly fillCenter?: boolean;
 }
 
 export interface ResolvedTextBlock {
@@ -140,12 +150,15 @@ export interface ResolvedTextBlock {
 
 export interface ResolvedWidgetImage {
     readonly source: UIImageSource;
+    readonly material: string;
     readonly fit: UIImageFitMode;
     readonly alignX: number;
     readonly alignY: number;
     readonly sampling: UIImageSamplingMode;
     readonly tint: ReadonlyColor;
     readonly uvRect: UVRect;
+    readonly border: EdgeInsets;
+    readonly fillCenter: boolean;
 }
 
 export interface WidgetFocusPolicyInput {

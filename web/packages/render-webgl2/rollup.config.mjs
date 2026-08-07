@@ -30,11 +30,6 @@ export default [
     }),
     ...createPackageConfig({
         packageDir,
-        inputRelativePath: 'src/material/index.ts',
-        outputBasename: 'material',
-    }),
-    ...createPackageConfig({
-        packageDir,
         inputRelativePath: 'src/mesh/index.ts',
         outputBasename: 'mesh',
     }),
@@ -42,5 +37,10 @@ export default [
         packageDir,
         inputRelativePath: 'src/batch/index.ts',
         outputBasename: 'batch',
+    }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/pipeline.ts',
+        outputBasename: 'pipeline',
     }),
 ];

@@ -28,6 +28,11 @@
             "types": "./dist/scene/index.d.ts",
             "import": "./dist/scene/index.mjs",
             "require": "./dist/scene/index.js"
+        },
+        "./scene-host": {
+            "types": "./dist/scene-host/index.d.ts",
+            "import": "./dist/scene-host/index.mjs",
+            "require": "./dist/scene-host/index.js"
         }
     },
     "scripts": {

@@ -370,7 +370,11 @@ export class ShapeManager2D implements Disposable {
             restitution?: Restitution;
             density?: Density;
             isSensor?: boolean;
-            filter?: any;
+            filter?: {
+                readonly categoryBits: CollisionFilter;
+                readonly maskBits: CollisionFilter;
+                readonly groupIndex: number;
+            };
             userData?: unknown;
         }
     ): void {

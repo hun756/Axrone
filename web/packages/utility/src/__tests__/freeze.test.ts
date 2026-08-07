@@ -38,4 +38,35 @@ describe('deepFreeze', () => {
         expect(Object.isFrozen(value.nested)).toBe(true);
         expect(value.self).toBe(value);
     });
+
+    it('returns primitives as-is without freezing', () => {
+        expect(deepFreeze(42)).toBe(42);
+        expect(deepFreeze('str')).toBe('str');
+        expect(deepFreeze(null)).toBeNull();
+        expect(deepFreeze(undefined)).toBeUndefined();
+        expect(deepFreeze(true)).toBe(true);
+    });
+
+    it('skips freezing typed arrays (buffer-like)', () => {
+        const arr = new Uint8Array([1, 2, 3]);
+        const result = deepFreeze(arr);
+        expect(Object.isFrozen(result)).toBe(false);
+        expect(result).toBe(arr);
+    });
+
+    it('skips freezing DataView (buffer-like)', () => {
+        const buf = new ArrayBuffer(8);
+        const view = new DataView(buf);
+        const result = deepFreeze(view);
+        expect(Object.isFrozen(result)).toBe(false);
+        expect(result).toBe(view);
+    });
+
+    it('skips freezing SharedArrayBuffer when available', () => {
+        if (typeof SharedArrayBuffer === 'undefined') return;
+        const sab = new SharedArrayBuffer(8);
+        const result = deepFreeze(sab);
+        expect(Object.isFrozen(result)).toBe(false);
+        expect(result).toBe(sab);
+    });
 });

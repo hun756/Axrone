@@ -38,7 +38,7 @@ const DEFAULT_TIME_SCALE = 1;
 const DEFAULT_RETRY_ATTEMPTS = 0;
 const DEFAULT_ERROR_POLICY: GameLoopErrorPolicy = 'continue';
 const DEFAULT_LOCALE = 'en';
-const EPSILON = 1e-7;
+const TIME_STEP_EPSILON = 1e-7;
 const SNAPSHOT_VERSION = 1 as const;
 
 type Mutable<T> = {
@@ -180,6 +180,8 @@ export class GameLoop<TState> implements GameLoopController<TState> {
     private _maxSubSteps: number;
     private _timeScale: number;
     private _disposed = false;
+    private _pauseWhenHiddenEnabled = false;
+    private _visibilityHandler: (() => void) | undefined;
     private readonly _beforeUpdateContext: Mutable<BeforeUpdateContext<TState>>;
     private readonly _fixedUpdateContext: Mutable<FixedUpdateContext<TState>>;
     private readonly _updateContext: Mutable<UpdateContext<TState>>;
@@ -321,6 +323,12 @@ export class GameLoop<TState> implements GameLoopController<TState> {
             for (const system of options.systems) {
                 this.addSystem(system);
             }
+        }
+
+        if (options.pauseWhenHidden && typeof document !== 'undefined') {
+            this._pauseWhenHiddenEnabled = true;
+            this._visibilityHandler = () => this._handleVisibilityChange();
+            document.addEventListener('visibilitychange', this._visibilityHandler);
         }
 
         if (options.autoStart) {
@@ -492,6 +500,11 @@ export class GameLoop<TState> implements GameLoopController<TState> {
             return;
         }
 
+        if (this._visibilityHandler && typeof document !== 'undefined') {
+            document.removeEventListener('visibilitychange', this._visibilityHandler);
+            this._visibilityHandler = undefined;
+        }
+
         let firstError: Error | undefined;
 
         try {
@@ -568,7 +581,7 @@ export class GameLoop<TState> implements GameLoopController<TState> {
 
         while (
             this._status === 'running' &&
-            this._accumulator + EPSILON >= this._fixedDelta &&
+            this._accumulator + TIME_STEP_EPSILON >= this._fixedDelta &&
             fixedSteps < this._maxSubSteps
         ) {
             this._accumulator = Math.max(0, this._accumulator - this._fixedDelta);
@@ -591,7 +604,7 @@ export class GameLoop<TState> implements GameLoopController<TState> {
 
         let droppedDelta = 0;
 
-        if (this._accumulator + EPSILON >= this._fixedDelta) {
+        if (this._accumulator + TIME_STEP_EPSILON >= this._fixedDelta) {
             const remainder = this._accumulator % this._fixedDelta;
             droppedDelta = this._accumulator - remainder;
             this._accumulator = remainder;
@@ -865,6 +878,22 @@ export class GameLoop<TState> implements GameLoopController<TState> {
         return (
             this._messageResolver?.(descriptor, this._locale) ?? defaultMessageResolver(descriptor)
         );
+    }
+
+    private _handleVisibilityChange(): void {
+        if (!this._pauseWhenHiddenEnabled || this._disposed) return;
+
+        if (typeof document === 'undefined') return;
+
+        if (document.hidden) {
+            if (this._status === 'running') {
+                this.pause();
+            }
+        } else {
+            if (this._status === 'paused') {
+                this.resume();
+            }
+        }
     }
 }
 

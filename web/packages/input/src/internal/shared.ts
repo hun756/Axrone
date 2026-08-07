@@ -20,12 +20,13 @@ import type {
     InputVector2,
     InputVector2State,
 } from '../types';
+import { EPSILON as NUMERIC_EPSILON } from '@axrone/numeric';
 import { isRecord } from '@axrone/utility';
 
 export { isRecord };
+export { NUMERIC_EPSILON as EPSILON };
 
 export const INPUT_SNAPSHOT_VERSION = 1 as const;
-export const EPSILON = 1e-6;
 export const EMPTY_MODIFIERS = Object.freeze([]) as readonly InputModifierKey[];
 export const EMPTY_PROCESSORS = Object.freeze([]) as readonly InputProcessor[];
 const MODIFIER_ORDER = Object.freeze(['shift', 'ctrl', 'alt', 'meta'] as const);
@@ -492,7 +493,7 @@ export const applyVectorProcessors = (
                 break;
             case 'normalize-vector2': {
                 const length = magnitude(nextX, nextY);
-                if (length > EPSILON) {
+                if (length > NUMERIC_EPSILON) {
                     nextX /= length;
                     nextY /= length;
                 }
@@ -500,12 +501,12 @@ export const applyVectorProcessors = (
             }
             case 'clamp-magnitude': {
                 const length = magnitude(nextX, nextY);
-                if (length <= EPSILON) {
+                if (length <= NUMERIC_EPSILON) {
                     break;
                 }
 
                 const clamped = clamp(length, processor.min, processor.max);
-                if (Math.abs(clamped - length) > EPSILON) {
+                if (Math.abs(clamped - length) > NUMERIC_EPSILON) {
                     const ratio = clamped / length;
                     nextX *= ratio;
                     nextY *= ratio;

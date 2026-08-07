@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import * as ecsWorldSupport from '@axrone/ecs-world-support';
+import * as ecsWorldSupport from '@axrone/ecs-runtime/support';
 
-describe('ecs-world-support entry', () => {
+describe('ecs-runtime support subpath entry', () => {
     it('surfaces world support ownership without leaking world orchestration', () => {
         expect(ecsWorldSupport.ActorRegistry).toBeDefined();
         expect(ecsWorldSupport.SingletonRegistry).toBeDefined();

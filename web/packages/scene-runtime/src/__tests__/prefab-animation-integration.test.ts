@@ -1,4 +1,4 @@
-import { encodeAnimationClipStreamingChunkPayload } from '@axrone/animation';
+import { encodeAnimationClipStreamingChunkPayload } from '@axrone/animation/streaming-chunk';
 import { World, Transform } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
 import { describe, expect, it, vi } from 'vitest';
@@ -562,6 +562,7 @@ describe('scene-runtime prefab animation integration', () => {
     });
 
     it('skips animator advancement completely when cull completely has no visible renderer', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         const harness = createPrefabHarness();
         const prefab = createAnimatedRigPrefab({
             clips: [
@@ -610,6 +611,7 @@ describe('scene-runtime prefab animation integration', () => {
     });
 
     it('continues animator time without writing transforms when cull update transforms has no visible renderer', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         const harness = createPrefabHarness();
         const prefab = createAnimatedRigPrefab({
             clips: [
@@ -658,6 +660,8 @@ describe('scene-runtime prefab animation integration', () => {
     });
 
     it('refreshes cached joint world matrices before computing the skin palette', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'error').mockImplementation(() => {});
         const harness = createPrefabHarness();
         const prefab = createAnimatedRigPrefab({
             clips: [],

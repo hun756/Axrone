@@ -1,6 +1,7 @@
 import { createGameLoop } from '@axrone/game-loop';
 import { describe, expect, it, vi } from 'vitest';
-import type { GlyphAtlasEntry, TextLayoutResult, UIFrame, UIFrameMetrics, WidgetId } from '@axrone/ui';
+import type { GlyphAtlasEntry, TextLayoutResult, UIAsset, UIFrame, UIFrameMetrics, WidgetId } from '@axrone/ui/types';
+import { UIHost, createLazySceneUIWidgetRef } from '@axrone/scene-runtime/scene-facade';
 import {
     WebGL2UIRenderer,
     attachUIOverlayToScene,
@@ -8,6 +9,65 @@ import {
     createManagedWebGL2UIOverlayRenderPipelineBackend,
     createUIOverlayRenderPipelineBackend,
 } from '../index';
+import {
+    bindUIHostToScene,
+    bindUIHostToWorld,
+    bindUIHostsToScene,
+    getUIHostBinding,
+    getUIHostRuntime,
+    resolveUIWidgetRef,
+} from '../scene-host';
+import { orientQuadTowardCamera } from '../world-quad';
+import { dispatchWorldPointerToUIRuntime, intersectRayWithUIQuad } from '../world-input';
+
+/** Column-major identity with an optional translation. */
+const columnMajorIdentity = (tx = 0, ty = 0, tz = 0): Float32Array =>
+    new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, tx, ty, tz, 1]);
+
+/** Minimal structural scene target shared by the UIHost binding suites. */
+const createSceneTarget = () => {
+    const gl = createMockWebGL2Context();
+    const loop = createGameLoop({
+        state: { sceneId: 'scene:ui-host' },
+        autoStart: false,
+    });
+    return {
+        gl,
+        canvas: { width: 320, height: 180 } as HTMLCanvasElement,
+        loop,
+    };
+};
+
+/** HUD asset with one interactive button filling the top-left 100x100. */
+const createHostAsset = (): UIAsset => ({
+    id: 'ui.hud',
+    name: 'HUD',
+    version: 1,
+    canvas: {
+        referenceWidth: 320,
+        referenceHeight: 180,
+        scaleMode: 'fill',
+        matchBias: 0.5,
+    },
+    bindings: { button: 'hud-button' },
+    root: {
+        role: 'root',
+        enabled: true,
+        interactive: false,
+        layout: { display: 'overlay', width: '100%', height: '100%' },
+        children: [
+            {
+                role: 'button',
+                key: 'hud-button',
+                enabled: true,
+                interactive: true,
+                layout: { width: 100, height: 100 },
+                style: { background: '#112233ff' },
+                children: [],
+            },
+        ],
+    } as never,
+});
 
 const createMetrics = (): UIFrameMetrics => ({
     widgetCount: 2,
@@ -157,6 +217,7 @@ const createMockWebGL2Context = () => {
         textureBindings: new Map<number, WebGLTexture | null>(),
         samplerBindings: new Map<number, WebGLSampler | null>(),
         blendFunc: [0x0302, 0x0303, 0x0302, 0x0303] as [number, number, number, number],
+        depthMask: true,
     };
     return {
         VERTEX_SHADER: 0x8b31,
@@ -204,7 +265,6 @@ const createMockWebGL2Context = () => {
         R8: 0x8229,
         RED: 0x1903,
         UNSIGNED_BYTE: 0x1401,
-        UNPACK_ALIGNMENT: 0x0cf5,
         createShader: vi.fn(() => makeHandle('shader')),
         shaderSource: vi.fn(),
         compileShader: vi.fn(),
@@ -285,8 +345,26 @@ const createMockWebGL2Context = () => {
         bindFramebuffer: vi.fn((_target, framebuffer) => {
             state.framebuffer = framebuffer as WebGLFramebuffer | null;
         }),
+        // World-space UI surface + quad pass surface area.
+        COLOR_ATTACHMENT0: 0x8ce0,
+        DEPTH_WRITEMASK: 0x0b98,
+        createFramebuffer: vi.fn(() => makeHandle('framebuffer')),
+        deleteFramebuffer: vi.fn(),
+        framebufferTexture2D: vi.fn(),
+        checkFramebufferStatus: vi.fn(() => 0x8cd5),
+        isTexture: vi.fn(() => true),
+        drawArrays: vi.fn(),
+        depthMask: vi.fn((flag: boolean) => {
+            state.depthMask = flag;
+        }),
+        clearColor: vi.fn(),
+        clear: vi.fn(),
+        uniform1f: vi.fn(),
+        uniformMatrix4fv: vi.fn(),
         getParameter: vi.fn((parameter) => {
             switch (parameter) {
+                case 0x0b98:
+                    return state.depthMask;
                 case 0x0ba2:
                     return state.viewport;
                 case 0x0c10:
@@ -405,6 +483,34 @@ describe('@axrone/ui-webgl2', () => {
         expect(gl.getParameter(gl.BLEND_DST_RGB)).toBe(gl.SRC_ALPHA);
         expect(gl.getParameter(gl.BLEND_SRC_ALPHA)).toBe(gl.ONE_MINUS_SRC_ALPHA);
         expect(gl.getParameter(gl.BLEND_DST_ALPHA)).toBe(gl.SRC_ALPHA);
+    });
+
+    it('renders into an offscreen framebuffer and restores the previous binding', () => {
+        const gl = createMockWebGL2Context();
+        const previousFramebuffer = { id: 'previous-framebuffer' } as unknown as WebGLFramebuffer;
+        const offscreen = { id: 'offscreen-framebuffer' } as unknown as WebGLFramebuffer;
+        const renderer = new WebGL2UIRenderer({ gl });
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer);
+        renderer.render(createFrame(), { framebuffer: offscreen });
+
+        // The UI must have been drawn against the offscreen target...
+        expect(gl.bindFramebuffer).toHaveBeenCalledWith(gl.FRAMEBUFFER, offscreen);
+        // ...and the scene's binding restored on the way out.
+        expect(gl.getParameter(gl.FRAMEBUFFER_BINDING)).toBe(previousFramebuffer);
+    });
+
+    it('draws to the default framebuffer when the render options omit a target', () => {
+        const gl = createMockWebGL2Context();
+        const previousFramebuffer = { id: 'previous-framebuffer' } as unknown as WebGLFramebuffer;
+        const renderer = new WebGL2UIRenderer({ gl });
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer);
+        renderer.render(createFrame());
+
+        // No target override: the binding is left untouched during the pass.
+        expect(gl.bindFramebuffer).not.toHaveBeenCalledWith(gl.FRAMEBUFFER, null);
+        expect(gl.getParameter(gl.FRAMEBUFFER_BINDING)).toBe(previousFramebuffer);
     });
 
     it('decorates the pipeline backend and renders UI after the base backend ends the frame', async () => {
@@ -901,5 +1007,434 @@ describe('@axrone/ui-webgl2', () => {
 
         expect(gl.texSubImage2D).toHaveBeenCalledTimes(2);
         expect(renderer.getStats().uploadedGlyphCount).toBe(2);
+    });
+});
+
+describe('scene-host UIHost binding', () => {
+    const createInputTarget = () => {
+        const listeners = new Map<string, Set<(event: unknown) => void>>();
+        return {
+            addEventListener: vi.fn((type: string, listener: (event: never) => void) => {
+                const bucket = listeners.get(type) ?? new Set();
+                bucket.add(listener as (event: unknown) => void);
+                listeners.set(type, bucket);
+            }),
+            removeEventListener: vi.fn((type: string, listener: (event: never) => void) => {
+                listeners.get(type)?.delete(listener as (event: unknown) => void);
+            }),
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 320, height: 180 }),
+            emit(type: string, event: unknown) {
+                for (const listener of listeners.get(type) ?? []) {
+                    listener(event);
+                }
+            },
+            listenerCount(type: string) {
+                return listeners.get(type)?.size ?? 0;
+            },
+        };
+    };
+
+    it('wires pointer input with coordinate mapping when receiveInput is enabled', () => {
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        const host = new UIHost({ assetId: 'ui.hud', receiveInput: true });
+        const resolveAsset = vi.fn(() => createHostAsset());
+
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset,
+            input: { target },
+        });
+
+        expect(handle).not.toBeNull();
+        expect(resolveAsset).toHaveBeenCalledWith('ui.hud');
+        expect(target.listenerCount('pointerdown')).toBe(1);
+        expect(target.listenerCount('pointermove')).toBe(1);
+        expect(target.listenerCount('keydown')).toBe(0);
+
+        const pointerDown = vi.fn(() => true);
+        const button = handle!.runtime.getBoundWidget('button');
+        expect(button).not.toBeNull();
+        handle!.runtime.updateWidget(button!, { handlers: { pointerDown } });
+        handle!.render(320, 180);
+
+        // CSS rect is 320x180 and framebuffer is 320x180 => 1:1 mapping
+        target.emit('pointerdown', { clientX: 40, clientY: 40 });
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        target.emit('pointerdown', { clientX: 200, clientY: 150 });
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        handle!.dispose();
+        expect(target.listenerCount('pointerdown')).toBe(0);
+        expect(target.listenerCount('pointermove')).toBe(0);
+    });
+
+    it('maps CSS-scaled client coordinates into framebuffer pixels', () => {
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        // CSS size is half the framebuffer: 160x90 vs 320x180 => 2x scale
+        target.getBoundingClientRect = () => ({ left: 0, top: 0, width: 160, height: 90 });
+        const host = new UIHost({ assetId: 'ui.hud', receiveInput: true });
+
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset: () => createHostAsset(),
+            input: { target },
+        });
+        expect(handle).not.toBeNull();
+
+        const pointerDown = vi.fn(() => true);
+        handle!.runtime.updateWidget(handle!.runtime.getBoundWidget('button')!, {
+            handlers: { pointerDown },
+        });
+        handle!.render(320, 180);
+
+        // client (40, 40) -> framebuffer (80, 80): inside the 100x100 button
+        target.emit('pointerdown', { clientX: 40, clientY: 40 });
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        // client (70, 70) -> framebuffer (140, 140): outside the button
+        target.emit('pointerdown', { clientX: 70, clientY: 70 });
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        handle!.dispose();
+    });
+
+    it('does not attach input listeners when receiveInput is false', () => {
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        const host = new UIHost({ assetId: 'ui.hud', receiveInput: false });
+
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset: () => createHostAsset(),
+            input: { target },
+        });
+
+        expect(handle).not.toBeNull();
+        expect(target.addEventListener).not.toHaveBeenCalled();
+        handle!.dispose();
+    });
+
+    it('prefers resolveAsset over resolveAssetJson when both are provided', () => {
+        const scene = createSceneTarget();
+        const host = new UIHost({ assetId: 'ui.hud' });
+        const resolveAsset = vi.fn(() => createHostAsset());
+        const resolveAssetJson = vi.fn(() => JSON.stringify(createHostAsset()));
+
+        const handle = bindUIHostToScene({ scene, host, resolveAsset, resolveAssetJson });
+
+        expect(handle).not.toBeNull();
+        expect(resolveAsset).toHaveBeenCalledTimes(1);
+        expect(resolveAssetJson).not.toHaveBeenCalled();
+        handle!.dispose();
+    });
+
+    it('binds multiple hosts, skipping unresolvable ones, and disposes them together', () => {
+        const scene = createSceneTarget();
+        const bindable = new UIHost({ assetId: 'ui.hud' });
+        const emptyAssetId = new UIHost({ assetId: '' });
+        const unresolvable = new UIHost({ assetId: 'ui.missing' });
+
+        const bindings = bindUIHostsToScene({
+            scene,
+            hosts: [bindable, emptyAssetId, unresolvable],
+            resolveAsset: (assetId) => (assetId === 'ui.hud' ? createHostAsset() : null),
+        });
+
+        expect(bindings.handles).toHaveLength(1);
+        expect(bindings.handles[0].asset.id).toBe('ui.hud');
+
+        bindings.dispose();
+        expect(() => bindings.dispose()).not.toThrow();
+    });
+
+    it('registers bound hosts so getUIHostRuntime resolves the live runtime', () => {
+        const scene = createSceneTarget();
+        const host = new UIHost({ assetId: 'ui.hud' });
+
+        expect(getUIHostRuntime(host)).toBeNull();
+
+        const handle = bindUIHostToScene({ scene, host, resolveAsset: () => createHostAsset() });
+        expect(handle).not.toBeNull();
+        expect(getUIHostBinding(host)).toBe(handle);
+        expect(getUIHostRuntime(host)).toBe(handle!.runtime);
+
+        handle!.dispose();
+        expect(getUIHostBinding(host)).toBeNull();
+        expect(getUIHostRuntime(host)).toBeNull();
+    });
+
+    it('resolves UIWidgetRefs that mutate the bound widget and go inert on dispose', () => {
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        const host = new UIHost({ assetId: 'ui.hud', receiveInput: true });
+
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset: () => createHostAsset(),
+            input: { target },
+        });
+        expect(handle).not.toBeNull();
+
+        expect(resolveUIWidgetRef(host, 'missing-key')).toBeNull();
+
+        const ref = resolveUIWidgetRef(host, 'button');
+        expect(ref).not.toBeNull();
+        expect(ref!.isValid()).toBe(true);
+        expect(ref!.widgetId).toBe(handle!.runtime.getBoundWidget('button'));
+
+        // Mutations through the ref reach the live runtime: attach a handler
+        // and confirm the real input path invokes it.
+        const pointerDown = vi.fn(() => true);
+        expect(ref!.setHandlers({ pointerDown })).toBe(true);
+        expect(ref!.setStyle({ background: '#ff0000ff' })).toBe(true);
+        handle!.render(320, 180);
+        target.emit('pointerdown', { clientX: 40, clientY: 40 });
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        handle!.dispose();
+        expect(ref!.isValid()).toBe(false);
+        expect(ref!.setText('gone')).toBe(false);
+    });
+
+    it('lazily resolves scene-runtime ui-widget refs once the host is bound', () => {
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        const host = new UIHost({ assetId: 'ui.hud', receiveInput: true });
+
+        // Created before any binding exists — exactly how hydrated script
+        // properties behave when scripts instantiate before bindUIHostsToScene.
+        const lazyRef = createLazySceneUIWidgetRef(() => host, 'button');
+        expect(lazyRef.isValid()).toBe(false);
+        expect(lazyRef.setText('early')).toBe(false);
+
+        const bindings = bindUIHostsToScene({
+            scene,
+            hosts: [host],
+            resolveAsset: () => createHostAsset(),
+            input: { target },
+        });
+        expect(bindings.handles).toHaveLength(1);
+
+        expect(lazyRef.isValid()).toBe(true);
+        const pointerDown = vi.fn(() => true);
+        expect(lazyRef.setHandlers({ pointerDown })).toBe(true);
+        bindings.handles[0].render(320, 180);
+        target.emit('pointerdown', { clientX: 40, clientY: 40 });
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        bindings.dispose();
+        expect(lazyRef.isValid()).toBe(false);
+    });
+});
+
+describe('world-space UIHost binding', () => {
+    const worldSources = () => ({
+        viewProjection: () => columnMajorIdentity(),
+        entityWorldMatrix: () => columnMajorIdentity(0, 0, -3),
+        cameraWorldMatrix: () => columnMajorIdentity(0, 0, 5),
+    });
+
+    it('binds a world-space host, registers it, and drives the quad every frame', () => {
+        const scene = createSceneTarget();
+        const host = new UIHost({
+            assetId: 'ui.hud',
+            renderMode: 'world-space',
+            worldWidth: 1.2,
+            worldHeight: 0.4,
+        });
+
+        const handle = bindUIHostToWorld({
+            scene,
+            host,
+            resolveAsset: () => createHostAsset(),
+            world: worldSources(),
+        });
+
+        expect(handle).not.toBeNull();
+        // The registry must work in world-space too, so @property('ui-widget')
+        // references keep resolving.
+        expect(getUIHostRuntime(host)).toBe(handle!.runtime);
+        expect(handle!.runtime.getBoundWidget('button')).not.toBeNull();
+
+        // A frame tick renders UI into the surface and then draws the quad.
+        const drawCallsBefore = (scene.gl.drawArrays as unknown as { mock: { calls: unknown[] } })
+            .mock.calls.length;
+        handle!.render(0, 0);
+        const drawCallsAfter = (scene.gl.drawArrays as unknown as { mock: { calls: unknown[] } })
+            .mock.calls.length;
+        expect(drawCallsAfter).toBeGreaterThan(drawCallsBefore);
+
+        handle!.dispose();
+        expect(getUIHostBinding(host)).toBeNull();
+        // Idempotent dispose keeps the loop clean.
+        expect(() => handle!.dispose()).not.toThrow();
+    });
+
+    it('routes hosts by render mode and skips world hosts without matrix sources', () => {
+        const scene = createSceneTarget();
+        const screenHost = new UIHost({ assetId: 'ui.hud', renderMode: 'screen-overlay' });
+        const worldHost = new UIHost({ assetId: 'ui.hud', renderMode: 'world-space' });
+
+        // No `world` option: the world-space host is skipped, the overlay binds.
+        const withoutWorld = bindUIHostsToScene({
+            scene,
+            hosts: [screenHost, worldHost],
+            resolveAsset: () => createHostAsset(),
+        });
+        expect(withoutWorld.handles).toHaveLength(1);
+        expect(getUIHostBinding(worldHost)).toBeNull();
+        withoutWorld.dispose();
+
+        const withWorld = bindUIHostsToScene({
+            scene,
+            hosts: [screenHost, worldHost],
+            resolveAsset: () => createHostAsset(),
+            world: worldSources(),
+        });
+        expect(withWorld.handles).toHaveLength(2);
+        expect(getUIHostBinding(worldHost)).not.toBeNull();
+        withWorld.dispose();
+        expect(getUIHostBinding(worldHost)).toBeNull();
+    });
+
+    it('returns null for a world host without an asset', () => {
+        const scene = createSceneTarget();
+        const host = new UIHost({ renderMode: 'world-space' });
+
+        expect(
+            bindUIHostToWorld({
+                scene,
+                host,
+                resolveAsset: () => createHostAsset(),
+                world: worldSources(),
+            })
+        ).toBeNull();
+    });
+});
+
+describe('orientQuadTowardCamera', () => {
+    it('adopts the camera rotation while keeping the entity position', () => {
+        const model = columnMajorIdentity(2, 3, 4);
+        // Camera rotated 90 degrees about Y, positioned elsewhere.
+        const cameraWorld = new Float32Array([
+            0, 0, -1, 0,
+            0, 1, 0, 0,
+            1, 0, 0, 0,
+            9, 9, 9, 1,
+        ]);
+
+        const result = orientQuadTowardCamera(model, cameraWorld);
+
+        // Rotation basis comes from the camera...
+        expect(result[0]).toBeCloseTo(0);
+        expect(result[2]).toBeCloseTo(-1);
+        expect(result[8]).toBeCloseTo(1);
+        // ...translation stays on the entity.
+        expect(result[12]).toBe(2);
+        expect(result[13]).toBe(3);
+        expect(result[14]).toBe(4);
+        expect(result[15]).toBe(1);
+    });
+
+    it('preserves the entity scale rather than inheriting the camera scale', () => {
+        // Entity scaled 3x on X, camera scaled 2x on X.
+        const model = new Float32Array([3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+        const cameraWorld = new Float32Array([2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+
+        const result = orientQuadTowardCamera(model, cameraWorld);
+
+        expect(Math.hypot(result[0], result[1], result[2])).toBeCloseTo(3);
+    });
+
+    it('keeps the billboarded quad facing a camera-aligned ray', () => {
+        // A quad turned away from the camera still gets hit once billboarded.
+        const turnedAway = new Float32Array([
+            0, 0, -1, 0,
+            0, 1, 0, 0,
+            1, 0, 0, 0,
+            0, 0, 0, 1,
+        ]);
+        const cameraWorld = columnMajorIdentity(0, 0, 6);
+        const ray = { origin: [0, 0, 6] as const, direction: [0, 0, -1] as const };
+
+        expect(intersectRayWithUIQuad(ray, turnedAway, 2, 1)).toBeNull();
+
+        const billboarded = orientQuadTowardCamera(turnedAway, cameraWorld);
+        const hit = intersectRayWithUIQuad(ray, billboarded, 2, 1);
+
+        expect(hit).not.toBeNull();
+        expect(hit!.u).toBeCloseTo(0.5);
+        expect(hit!.v).toBeCloseTo(0.5);
+    });
+});
+
+describe('dispatchWorldPointerToUIRuntime', () => {
+    it('forwards a quad hit as a canvas-space pointer event', () => {
+        const scene = createSceneTarget();
+        const host = new UIHost({ assetId: 'ui.hud' });
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset: () => createHostAsset(),
+        });
+        const runtime = handle!.runtime;
+        handle!.render(320, 180);
+
+        const pointerDown = vi.fn(() => true);
+        const widget = runtime.getBoundWidget('button')!;
+        runtime.updateWidget(widget, { handlers: { pointerDown } });
+
+        // The asset's button occupies the top-left 100x100 of a 320x180 canvas,
+        // so a hit at 10% / 10% lands inside it.
+        const handled = dispatchWorldPointerToUIRuntime(
+            runtime,
+            { u: 0.1, v: 0.1, distance: 4 },
+            { phase: 'down' },
+            320,
+            180
+        );
+
+        expect(handled).toBe(true);
+        expect(pointerDown).toHaveBeenCalledTimes(1);
+
+        handle!.dispose();
+    });
+
+    it('sends a leave when the pointer slides off the quad', () => {
+        const scene = createSceneTarget();
+        const host = new UIHost({ assetId: 'ui.hud' });
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset: () => createHostAsset(),
+        });
+        const runtime = handle!.runtime;
+        handle!.render(320, 180);
+
+        const pointerLeave = vi.fn(() => true);
+        const widget = runtime.getBoundWidget('button')!;
+        runtime.updateWidget(widget, { handlers: { pointerLeave } });
+
+        // Hover the widget, then miss the quad entirely.
+        dispatchWorldPointerToUIRuntime(runtime, { u: 0.1, v: 0.1, distance: 4 }, { phase: 'move' }, 320, 180);
+        const missed = dispatchWorldPointerToUIRuntime(runtime, null, { phase: 'move' }, 320, 180);
+
+        expect(missed).toBe(false);
+        expect(pointerLeave).toHaveBeenCalled();
+
+        handle!.dispose();
+    });
+
+    it('is a no-op without a runtime', () => {
+        expect(
+            dispatchWorldPointerToUIRuntime(null, { u: 0.5, v: 0.5, distance: 1 }, { phase: 'down' }, 320, 180)
+        ).toBe(false);
     });
 });

@@ -24,6 +24,85 @@ export {
     createShaderEffectJsonImporter,
     normalizeShaderEffectJsonSource,
 } from './shader-effect-importer';
+export {
+    attr,
+    createShaderEffectModuleImporter,
+    defineShaderEffect,
+    fragStage,
+    glsl,
+    prop,
+    serializeShaderEffectToJson,
+    toShaderEffectSource,
+    varying,
+    vtxStage,
+    type DefineShaderEffectInput,
+    type ShaderEffectGlslBlock,
+    type ShaderEffectPropertyOptions,
+    type ShaderEffectStageOptions,
+} from './authoring';
+export {
+    enumProp,
+    extend,
+    keyword,
+    library,
+    pass,
+    rangeProp,
+    reflect,
+    technique,
+    toggleProp,
+    type RenderShaderPassDefinitionInput,
+} from './authoring';
+export {
+    type ShaderDiagnostic,
+    type ShaderDiagnosticLocation,
+    type ShaderDiagnosticSeverity,
+    type ShaderDiagnosticSink,
+    createDiagnosticSink,
+    formatShaderDiagnostic,
+} from './diagnostics';
+export {
+    type ShaderPreprocessOptions,
+    type ShaderPreprocessResult,
+    ShaderPreprocessError,
+    preprocessGLSL,
+} from './preprocessor';
+export {
+    type ShaderIncludeOptions,
+    type ShaderIncludeResult,
+    type ShaderLibraryEntry,
+    clearShaderLibraries,
+    defineShaderLibrary,
+    expandShaderIncludes,
+    getShaderLibrary,
+    hasShaderLibrary,
+    listShaderLibraries,
+    registerShaderLibrary,
+    resolveShaderLibraries,
+} from './library';
+export {
+    type BuildShaderVariantOptions,
+    type ShaderDefineMap,
+    type ShaderKeywordSelection,
+    type ShaderVariant,
+    buildShaderVariant,
+    buildShaderVariants,
+    defaultShaderKeywordSelection,
+    enumerateShaderVariants,
+    selectionToShaderDefines,
+    shaderVariantCount,
+    shaderVariantKey,
+} from './variants';
+export { extendShaderEffect, type PartialShaderEffectOverride } from './compose';
+export {
+    type ShaderAttributeReflection,
+    type ShaderEffectReflection,
+    type ShaderKeywordReflection,
+    type ShaderStageReflection,
+    type ShaderTechniquePassReflection,
+    type ShaderTechniqueReflection,
+    type ShaderUniformReflection,
+    reflectShaderEffect,
+} from './reflection';
 
 export type {
     CompiledRenderShaderEffect,
@@ -39,10 +118,10 @@ export type {
     RenderShaderStageDefinition,
     RenderShaderStageName,
     RenderShaderValueType,
-} from '@axrone/render-core';
+} from '@axrone/render-core/shader-effect';
 export {
     cloneRenderShaderEffectDefinition,
     compileRenderShaderEffect,
-} from '@axrone/render-core';
+} from '@axrone/render-core/shader-effect';
 
 export * from '@axrone/asset-core';

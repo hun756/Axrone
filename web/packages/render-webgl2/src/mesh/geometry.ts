@@ -1,5 +1,4 @@
 import { Vec3 } from '@axrone/numeric';
-import { IBuffer, IBufferFactory, createBufferFactory } from '../buffer';
 import {
     IGeometry,
     IVertexBuffer,

@@ -1,7 +1,7 @@
 import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import { type ActorConfig } from '@axrone/ecs-runtime';
 import type { SceneOptions } from '@axrone/scene-runtime';
-import { get2DSceneRuntimeProfile } from '@axrone/scene-runtime/scene-profile';
+import { get2DSceneRuntimeProfile } from '@axrone/scene-runtime/scene-2d-profile';
 import { SceneAssetFacade } from '@axrone/scene-runtime/scene-facade';
 import { type CameraConfig } from '@axrone/scene-runtime/scene-facade';
 import {

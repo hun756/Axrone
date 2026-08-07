@@ -13,6 +13,16 @@
             "types": "./dist/index.d.ts",
             "import": "./dist/index.mjs",
             "require": "./dist/index.js"
+        },
+        "./capabilities": {
+            "types": "./dist/capabilities.d.ts",
+            "import": "./dist/capabilities.mjs",
+            "require": "./dist/capabilities.js"
+        },
+        "./profile": {
+            "types": "./dist/profile.d.ts",
+            "import": "./dist/profile.mjs",
+            "require": "./dist/profile.js"
         }
     },
     "scripts": {
@@ -23,12 +33,15 @@
     "dependencies": {
         "@axrone/asset-core": "^0.1.0",
         "@axrone/asset-gltf": "^0.1.0",
-        "@axrone/input-core": "^0.1.0",
+        "@axrone/asset-ui": "^0.1.0",
+        "@axrone/input": "^0.1.0",
         "@axrone/physics-3d": "^0.1.0",
         "@axrone/physics-core": "^0.1.0",
         "@axrone/render-3d": "^0.1.0",
         "@axrone/render-webgl2": "^0.1.0",
         "@axrone/scene-3d": "^0.1.0",
-        "@axrone/scene-runtime": "^0.1.0"
+        "@axrone/scene-runtime": "^0.1.0",
+        "@axrone/ui": "^0.0.1",
+        "@axrone/ui-webgl2": "^0.0.1"
     }
 }

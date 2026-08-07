@@ -1,109 +1,8 @@
-import { clamp as numericClamp, Mat4, Quat, Vec3 } from '@axrone/numeric';
+
+import { clamp as numericClamp, Mat4 } from '@axrone/numeric';
 import { ObjectPool } from '@axrone/memory';
 
 export const ANIMATION_EPSILON = 1e-6;
-
-const createObjectPool = <T extends {}>(
-    name: string,
-    factory: () => T,
-    resetHandler: (value: T) => void
-): ObjectPool<T> =>
-    new ObjectPool<T>({
-        initialCapacity: 16,
-        maxCapacity: 512,
-        minFree: 8,
-        expansionStrategy: 'multiplicative',
-        expansionFactor: 1.5,
-        allocationStrategy: 'least-recently-used',
-        evictionPolicy: 'lru',
-        resetOnRecycle: true,
-        preallocate: false,
-        autoExpand: true,
-        enableMetrics: false,
-        name,
-        factory,
-        resetHandler,
-    });
-
-const setMat4Identity = (value: Mat4): void => {
-    const data = value.data as unknown as number[];
-    data[0] = 1;
-    data[1] = 0;
-    data[2] = 0;
-    data[3] = 0;
-    data[4] = 0;
-    data[5] = 1;
-    data[6] = 0;
-    data[7] = 0;
-    data[8] = 0;
-    data[9] = 0;
-    data[10] = 1;
-    data[11] = 0;
-    data[12] = 0;
-    data[13] = 0;
-    data[14] = 0;
-    data[15] = 1;
-};
-
-const vec3Pool = createObjectPool('AnimationVec3Pool', () => new Vec3(), (value) => {
-    value.x = 0;
-    value.y = 0;
-    value.z = 0;
-});
-
-const quatPool = createObjectPool('AnimationQuatPool', () => new Quat(), (value) => {
-    value.x = 0;
-    value.y = 0;
-    value.z = 0;
-    value.w = 1;
-});
-
-const mat4Pool = createObjectPool('AnimationMat4Pool', () => new Mat4(), (value) => {
-    setMat4Identity(value);
-});
-
-const loadVec3 = (source: ArrayLike<number>, offset: number, out: Vec3): Vec3 => {
-    out.x = Number(source[offset] ?? 0);
-    out.y = Number(source[offset + 1] ?? 0);
-    out.z = Number(source[offset + 2] ?? 0);
-    return out;
-};
-
-const writeVec3 = (target: Float32Array, offset: number, value: Readonly<Vec3>): void => {
-    target[offset] = value.x;
-    target[offset + 1] = value.y;
-    target[offset + 2] = value.z;
-};
-
-const loadQuat = (source: ArrayLike<number>, offset: number, out: Quat): Quat => {
-    out.x = Number(source[offset] ?? 0);
-    out.y = Number(source[offset + 1] ?? 0);
-    out.z = Number(source[offset + 2] ?? 0);
-    out.w = Number(source[offset + 3] ?? 1);
-    return out;
-};
-
-const writeQuat = (target: Float32Array, offset: number, value: Readonly<Quat>): void => {
-    target[offset] = value.x;
-    target[offset + 1] = value.y;
-    target[offset + 2] = value.z;
-    target[offset + 3] = value.w;
-};
-
-const loadMat4 = (source: ArrayLike<number>, offset: number, out: Mat4): Mat4 => {
-    const data = out.data as unknown as number[];
-    for (let index = 0; index < 16; index += 1) {
-        data[index] = Number(source[offset + index] ?? (index % 5 === 0 ? 1 : 0));
-    }
-    return out;
-};
-
-const writeMat4 = (target: Float32Array, offset: number, value: Mat4): void => {
-    const data = value.data;
-    for (let index = 0; index < 16; index += 1) {
-        target[offset + index] = Number(data[index] ?? (index % 5 === 0 ? 1 : 0));
-    }
-};
 
 export const clamp = (value: number, min: number, max: number): number =>
     numericClamp(value, min, max);
@@ -142,17 +41,9 @@ export const vec3Add = (
     right: ArrayLike<number>,
     rightOffset: number
 ): void => {
-    const leftVector = vec3Pool.acquire();
-    const rightVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Vec3.add(loadVec3(left, leftOffset, leftVector), loadVec3(right, rightOffset, rightVector), resultVector);
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(rightVector);
-        vec3Pool.release(leftVector);
-    }
+    target[targetOffset] = left[leftOffset] + right[rightOffset];
+    target[targetOffset + 1] = left[leftOffset + 1] + right[rightOffset + 1];
+    target[targetOffset + 2] = left[leftOffset + 2] + right[rightOffset + 2];
 };
 
 export const vec3Subtract = (
@@ -163,21 +54,9 @@ export const vec3Subtract = (
     right: ArrayLike<number>,
     rightOffset: number
 ): void => {
-    const leftVector = vec3Pool.acquire();
-    const rightVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Vec3.subtract(
-            loadVec3(left, leftOffset, leftVector),
-            loadVec3(right, rightOffset, rightVector),
-            resultVector
-        );
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(rightVector);
-        vec3Pool.release(leftVector);
-    }
+    target[targetOffset] = left[leftOffset] - right[rightOffset];
+    target[targetOffset + 1] = left[leftOffset + 1] - right[rightOffset + 1];
+    target[targetOffset + 2] = left[leftOffset + 2] - right[rightOffset + 2];
 };
 
 export const vec3Multiply = (
@@ -188,21 +67,9 @@ export const vec3Multiply = (
     right: ArrayLike<number>,
     rightOffset: number
 ): void => {
-    const leftVector = vec3Pool.acquire();
-    const rightVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Vec3.multiply(
-            loadVec3(left, leftOffset, leftVector),
-            loadVec3(right, rightOffset, rightVector),
-            resultVector
-        );
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(rightVector);
-        vec3Pool.release(leftVector);
-    }
+    target[targetOffset] = left[leftOffset] * right[rightOffset];
+    target[targetOffset + 1] = left[leftOffset + 1] * right[rightOffset + 1];
+    target[targetOffset + 2] = left[leftOffset + 2] * right[rightOffset + 2];
 };
 
 export const vec3Scale = (
@@ -212,15 +79,9 @@ export const vec3Scale = (
     sourceOffset: number,
     scalar: number
 ): void => {
-    const sourceVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Vec3.multiplyScalar(loadVec3(source, sourceOffset, sourceVector), scalar, resultVector);
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(sourceVector);
-    }
+    target[targetOffset] = source[sourceOffset] * scalar;
+    target[targetOffset + 1] = source[sourceOffset + 1] * scalar;
+    target[targetOffset + 2] = source[sourceOffset + 2] * scalar;
 };
 
 export const vec3Lerp = (
@@ -232,22 +93,10 @@ export const vec3Lerp = (
     rightOffset: number,
     alpha: number
 ): void => {
-    const leftVector = vec3Pool.acquire();
-    const rightVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Vec3.lerp(
-            loadVec3(left, leftOffset, leftVector),
-            loadVec3(right, rightOffset, rightVector),
-            alpha,
-            resultVector
-        );
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(rightVector);
-        vec3Pool.release(leftVector);
-    }
+    const invAlpha = 1 - alpha;
+    target[targetOffset] = left[leftOffset] * invAlpha + right[rightOffset] * alpha;
+    target[targetOffset + 1] = left[leftOffset + 1] * invAlpha + right[rightOffset + 1] * alpha;
+    target[targetOffset + 2] = left[leftOffset + 2] * invAlpha + right[rightOffset + 2] * alpha;
 };
 
 export const vec3Dot = (
@@ -256,14 +105,11 @@ export const vec3Dot = (
     right: ArrayLike<number>,
     rightOffset: number
 ): number => {
-    const leftVector = vec3Pool.acquire();
-    const rightVector = vec3Pool.acquire();
-    try {
-        return Vec3.dot(loadVec3(left, leftOffset, leftVector), loadVec3(right, rightOffset, rightVector));
-    } finally {
-        vec3Pool.release(rightVector);
-        vec3Pool.release(leftVector);
-    }
+    return (
+        left[leftOffset] * right[rightOffset] +
+        left[leftOffset + 1] * right[rightOffset + 1] +
+        left[leftOffset + 2] * right[rightOffset + 2]
+    );
 };
 
 export const vec3Cross = (
@@ -274,40 +120,26 @@ export const vec3Cross = (
     right: ArrayLike<number>,
     rightOffset: number
 ): void => {
-    const leftVector = vec3Pool.acquire();
-    const rightVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Vec3.cross(
-            loadVec3(left, leftOffset, leftVector),
-            loadVec3(right, rightOffset, rightVector),
-            resultVector
-        );
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(rightVector);
-        vec3Pool.release(leftVector);
-    }
+    const lx = left[leftOffset];
+    const ly = left[leftOffset + 1];
+    const lz = left[leftOffset + 2];
+    const rx = right[rightOffset];
+    const ry = right[rightOffset + 1];
+    const rz = right[rightOffset + 2];
+    target[targetOffset] = ly * rz - lz * ry;
+    target[targetOffset + 1] = lz * rx - lx * rz;
+    target[targetOffset + 2] = lx * ry - ly * rx;
 };
 
 export const vec3LengthSquared = (source: ArrayLike<number>, offset: number): number => {
-    const sourceVector = vec3Pool.acquire();
-    try {
-        return Vec3.lengthSquared(loadVec3(source, offset, sourceVector));
-    } finally {
-        vec3Pool.release(sourceVector);
-    }
+    const x = Number(source[offset] ?? 0);
+    const y = Number(source[offset + 1] ?? 0);
+    const z = Number(source[offset + 2] ?? 0);
+    return x * x + y * y + z * z;
 };
 
-export const vec3Length = (source: ArrayLike<number>, offset: number): number => {
-    const sourceVector = vec3Pool.acquire();
-    try {
-        return Vec3.len(loadVec3(source, offset, sourceVector));
-    } finally {
-        vec3Pool.release(sourceVector);
-    }
-};
+export const vec3Length = (source: ArrayLike<number>, offset: number): number =>
+    Math.sqrt(vec3LengthSquared(source, offset));
 
 export const vec3Normalize = (
     target: Float32Array,
@@ -318,22 +150,20 @@ export const vec3Normalize = (
     fallbackY = 0,
     fallbackZ = 0
 ): void => {
-    const sourceVector = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        loadVec3(source, sourceOffset, sourceVector);
-        if (Vec3.len(sourceVector) <= ANIMATION_EPSILON) {
-            resultVector.x = fallbackX;
-            resultVector.y = fallbackY;
-            resultVector.z = fallbackZ;
-        } else {
-            Vec3.normalize(sourceVector, resultVector);
-        }
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(sourceVector);
+    const x = Number(source[sourceOffset] ?? 0);
+    const y = Number(source[sourceOffset + 1] ?? 0);
+    const z = Number(source[sourceOffset + 2] ?? 0);
+    const length = Math.sqrt(x * x + y * y + z * z);
+    if (length <= ANIMATION_EPSILON) {
+        target[targetOffset] = fallbackX;
+        target[targetOffset + 1] = fallbackY;
+        target[targetOffset + 2] = fallbackZ;
+        return;
     }
+    const invLength = 1 / length;
+    target[targetOffset] = x * invLength;
+    target[targetOffset + 1] = y * invLength;
+    target[targetOffset + 2] = z * invLength;
 };
 
 export const quatIdentity = (target: Float32Array, offset: number): void => {
@@ -361,23 +191,20 @@ export const quatNormalize = (
     source: ArrayLike<number>,
     sourceOffset: number
 ): void => {
-    const sourceQuaternion = quatPool.acquire();
-    const resultQuaternion = quatPool.acquire();
-    try {
-        loadQuat(source, sourceOffset, sourceQuaternion);
-        if (Quat.lengthSquared(sourceQuaternion) <= ANIMATION_EPSILON) {
-            resultQuaternion.x = 0;
-            resultQuaternion.y = 0;
-            resultQuaternion.z = 0;
-            resultQuaternion.w = 1;
-        } else {
-            Quat.normalize(sourceQuaternion, resultQuaternion);
-        }
-        writeQuat(target, targetOffset, resultQuaternion);
-    } finally {
-        quatPool.release(resultQuaternion);
-        quatPool.release(sourceQuaternion);
+    const x = Number(source[sourceOffset] ?? 0);
+    const y = Number(source[sourceOffset + 1] ?? 0);
+    const z = Number(source[sourceOffset + 2] ?? 0);
+    const w = Number(source[sourceOffset + 3] ?? 1);
+    const lengthSquared = x * x + y * y + z * z + w * w;
+    if (lengthSquared <= ANIMATION_EPSILON) {
+        quatIdentity(target, targetOffset);
+        return;
     }
+    const invLength = 1 / Math.sqrt(lengthSquared);
+    target[targetOffset] = x * invLength;
+    target[targetOffset + 1] = y * invLength;
+    target[targetOffset + 2] = z * invLength;
+    target[targetOffset + 3] = w * invLength;
 };
 
 export const quatDot = (
@@ -385,15 +212,63 @@ export const quatDot = (
     leftOffset: number,
     right: ArrayLike<number>,
     rightOffset: number
-): number => {
-    const leftQuaternion = quatPool.acquire();
-    const rightQuaternion = quatPool.acquire();
-    try {
-        return Quat.dot(loadQuat(left, leftOffset, leftQuaternion), loadQuat(right, rightOffset, rightQuaternion));
-    } finally {
-        quatPool.release(rightQuaternion);
-        quatPool.release(leftQuaternion);
+): number =>
+    Number(left[leftOffset] ?? 0) * Number(right[rightOffset] ?? 0) +
+    Number(left[leftOffset + 1] ?? 0) * Number(right[rightOffset + 1] ?? 0) +
+    Number(left[leftOffset + 2] ?? 0) * Number(right[rightOffset + 2] ?? 0) +
+    Number(left[leftOffset + 3] ?? 1) * Number(right[rightOffset + 3] ?? 1);
+
+/**
+ * Shared sign-corrected weighted quaternion accumulation core used by pose
+ * blending and root-motion delta blending. When `isFirst` is true the source
+ * also becomes the hemisphere reference for subsequent contributions.
+ */
+export const quatAccumulateWeighted = (
+    accumulator: Float32Array,
+    accumulatorOffset: number,
+    reference: Float32Array,
+    referenceOffset: number,
+    source: ArrayLike<number>,
+    sourceOffset: number,
+    weight: number,
+    isFirst: boolean
+): void => {
+    const sign =
+        !isFirst && quatDot(reference, referenceOffset, source, sourceOffset) < 0 ? -1 : 1;
+    if (isFirst) {
+        accumulator[accumulatorOffset] = 0;
+        accumulator[accumulatorOffset + 1] = 0;
+        accumulator[accumulatorOffset + 2] = 0;
+        accumulator[accumulatorOffset + 3] = 0;
+        quatCopy(reference, referenceOffset, source, sourceOffset);
     }
+    accumulator[accumulatorOffset] += Number(source[sourceOffset] ?? 0) * weight * sign;
+    accumulator[accumulatorOffset + 1] += Number(source[sourceOffset + 1] ?? 0) * weight * sign;
+    accumulator[accumulatorOffset + 2] += Number(source[sourceOffset + 2] ?? 0) * weight * sign;
+    accumulator[accumulatorOffset + 3] += Number(source[sourceOffset + 3] ?? 1) * weight * sign;
+};
+
+/**
+ * Finalizes a {@link quatAccumulateWeighted} run: divides by the total weight
+ * and renormalizes, falling back to identity for non-positive totals.
+ */
+export const quatFinalizeWeighted = (
+    target: Float32Array,
+    targetOffset: number,
+    accumulator: ArrayLike<number>,
+    accumulatorOffset: number,
+    totalWeight: number
+): void => {
+    if (totalWeight <= 0) {
+        quatIdentity(target, targetOffset);
+        return;
+    }
+    const invWeight = 1 / totalWeight;
+    target[targetOffset] = Number(accumulator[accumulatorOffset] ?? 0) * invWeight;
+    target[targetOffset + 1] = Number(accumulator[accumulatorOffset + 1] ?? 0) * invWeight;
+    target[targetOffset + 2] = Number(accumulator[accumulatorOffset + 2] ?? 0) * invWeight;
+    target[targetOffset + 3] = Number(accumulator[accumulatorOffset + 3] ?? 0) * invWeight;
+    quatNormalize(target, targetOffset, target, targetOffset);
 };
 
 export const quatMultiply = (
@@ -404,21 +279,18 @@ export const quatMultiply = (
     right: ArrayLike<number>,
     rightOffset: number
 ): void => {
-    const leftQuaternion = quatPool.acquire();
-    const rightQuaternion = quatPool.acquire();
-    const resultQuaternion = quatPool.acquire();
-    try {
-        Quat.multiply(
-            loadQuat(left, leftOffset, leftQuaternion),
-            loadQuat(right, rightOffset, rightQuaternion),
-            resultQuaternion
-        );
-        writeQuat(target, targetOffset, resultQuaternion);
-    } finally {
-        quatPool.release(resultQuaternion);
-        quatPool.release(rightQuaternion);
-        quatPool.release(leftQuaternion);
-    }
+    const ax = Number(left[leftOffset] ?? 0);
+    const ay = Number(left[leftOffset + 1] ?? 0);
+    const az = Number(left[leftOffset + 2] ?? 0);
+    const aw = Number(left[leftOffset + 3] ?? 1);
+    const bx = Number(right[rightOffset] ?? 0);
+    const by = Number(right[rightOffset + 1] ?? 0);
+    const bz = Number(right[rightOffset + 2] ?? 0);
+    const bw = Number(right[rightOffset + 3] ?? 1);
+    target[targetOffset] = ax * bw + aw * bx + ay * bz - az * by;
+    target[targetOffset + 1] = ay * bw + aw * by + az * bx - ax * bz;
+    target[targetOffset + 2] = az * bw + aw * bz + ax * by - ay * bx;
+    target[targetOffset + 3] = aw * bw - ax * bx - ay * by - az * bz;
 };
 
 export const quatInvert = (
@@ -427,23 +299,20 @@ export const quatInvert = (
     source: ArrayLike<number>,
     sourceOffset: number
 ): void => {
-    const sourceQuaternion = quatPool.acquire();
-    const resultQuaternion = quatPool.acquire();
-    try {
-        loadQuat(source, sourceOffset, sourceQuaternion);
-        if (Quat.lengthSquared(sourceQuaternion) <= ANIMATION_EPSILON) {
-            resultQuaternion.x = 0;
-            resultQuaternion.y = 0;
-            resultQuaternion.z = 0;
-            resultQuaternion.w = 1;
-        } else {
-            Quat.inverse(sourceQuaternion, resultQuaternion);
-        }
-        writeQuat(target, targetOffset, resultQuaternion);
-    } finally {
-        quatPool.release(resultQuaternion);
-        quatPool.release(sourceQuaternion);
+    const x = Number(source[sourceOffset] ?? 0);
+    const y = Number(source[sourceOffset + 1] ?? 0);
+    const z = Number(source[sourceOffset + 2] ?? 0);
+    const w = Number(source[sourceOffset + 3] ?? 1);
+    const lengthSquared = x * x + y * y + z * z + w * w;
+    if (lengthSquared <= ANIMATION_EPSILON) {
+        quatIdentity(target, targetOffset);
+        return;
     }
+    const invLengthSquared = 1 / lengthSquared;
+    target[targetOffset] = -x * invLengthSquared;
+    target[targetOffset + 1] = -y * invLengthSquared;
+    target[targetOffset + 2] = -z * invLengthSquared;
+    target[targetOffset + 3] = w * invLengthSquared;
 };
 
 export const quatSlerp = (
@@ -455,30 +324,51 @@ export const quatSlerp = (
     rightOffset: number,
     alpha: number
 ): void => {
-    const leftQuaternion = quatPool.acquire();
-    const rightQuaternion = quatPool.acquire();
-    const resultQuaternion = quatPool.acquire();
-    try {
-        Quat.slerp(
-            loadQuat(left, leftOffset, leftQuaternion),
-            loadQuat(right, rightOffset, rightQuaternion),
-            alpha,
-            resultQuaternion
-        );
-        if (Quat.lengthSquared(resultQuaternion) <= ANIMATION_EPSILON) {
-            resultQuaternion.x = 0;
-            resultQuaternion.y = 0;
-            resultQuaternion.z = 0;
-            resultQuaternion.w = 1;
-        } else {
-            Quat.normalize(resultQuaternion, resultQuaternion);
-        }
-        writeQuat(target, targetOffset, resultQuaternion);
-    } finally {
-        quatPool.release(resultQuaternion);
-        quatPool.release(rightQuaternion);
-        quatPool.release(leftQuaternion);
+    const t = alpha < 0 ? 0 : alpha > 1 ? 1 : alpha;
+    const ax = Number(left[leftOffset] ?? 0);
+    const ay = Number(left[leftOffset + 1] ?? 0);
+    const az = Number(left[leftOffset + 2] ?? 0);
+    const aw = Number(left[leftOffset + 3] ?? 1);
+    let bx = Number(right[rightOffset] ?? 0);
+    let by = Number(right[rightOffset + 1] ?? 0);
+    let bz = Number(right[rightOffset + 2] ?? 0);
+    let bw = Number(right[rightOffset + 3] ?? 1);
+
+    let dot = ax * bx + ay * by + az * bz + aw * bw;
+    if (dot < 0) {
+        dot = -dot;
+        bx = -bx;
+        by = -by;
+        bz = -bz;
+        bw = -bw;
     }
+
+    let scale0: number;
+    let scale1: number;
+    if (dot > 0.9995) {
+        scale0 = 1 - t;
+        scale1 = t;
+    } else {
+        const theta = Math.acos(dot);
+        const sinTheta = Math.sin(theta);
+        scale0 = Math.sin((1 - t) * theta) / sinTheta;
+        scale1 = Math.sin(t * theta) / sinTheta;
+    }
+
+    const x = scale0 * ax + scale1 * bx;
+    const y = scale0 * ay + scale1 * by;
+    const z = scale0 * az + scale1 * bz;
+    const w = scale0 * aw + scale1 * bw;
+    const lengthSquared = x * x + y * y + z * z + w * w;
+    if (lengthSquared <= ANIMATION_EPSILON) {
+        quatIdentity(target, targetOffset);
+        return;
+    }
+    const invLength = 1 / Math.sqrt(lengthSquared);
+    target[targetOffset] = x * invLength;
+    target[targetOffset + 1] = y * invLength;
+    target[targetOffset + 2] = z * invLength;
+    target[targetOffset + 3] = w * invLength;
 };
 
 export const quatApplyToVec3 = (
@@ -489,21 +379,21 @@ export const quatApplyToVec3 = (
     vector: ArrayLike<number>,
     vectorOffset: number
 ): void => {
-    const quaternionValue = quatPool.acquire();
-    const vectorValue = vec3Pool.acquire();
-    const resultVector = vec3Pool.acquire();
-    try {
-        Quat.rotateVector(
-            loadQuat(quaternion, quaternionOffset, quaternionValue),
-            loadVec3(vector, vectorOffset, vectorValue),
-            resultVector
-        );
-        writeVec3(target, targetOffset, resultVector);
-    } finally {
-        vec3Pool.release(resultVector);
-        vec3Pool.release(vectorValue);
-        quatPool.release(quaternionValue);
-    }
+    const qx = Number(quaternion[quaternionOffset] ?? 0);
+    const qy = Number(quaternion[quaternionOffset + 1] ?? 0);
+    const qz = Number(quaternion[quaternionOffset + 2] ?? 0);
+    const qw = Number(quaternion[quaternionOffset + 3] ?? 1);
+    const vx = Number(vector[vectorOffset] ?? 0);
+    const vy = Number(vector[vectorOffset + 1] ?? 0);
+    const vz = Number(vector[vectorOffset + 2] ?? 0);
+
+    // t = 2 * cross(q.xyz, v); v' = v + q.w * t + cross(q.xyz, t)
+    const tx = 2 * (qy * vz - qz * vy);
+    const ty = 2 * (qz * vx - qx * vz);
+    const tz = 2 * (qx * vy - qy * vx);
+    target[targetOffset] = vx + qw * tx + qy * tz - qz * ty;
+    target[targetOffset + 1] = vy + qw * ty + qz * tx - qx * tz;
+    target[targetOffset + 2] = vz + qw * tz + qx * ty - qy * tx;
 };
 
 export const quatFromTo = (
@@ -515,68 +405,89 @@ export const quatFromTo = (
     toOffset: number,
     scratch: Float32Array
 ): void => {
-    const fromVector = vec3Pool.acquire();
-    const toVector = vec3Pool.acquire();
-    const axisVector = vec3Pool.acquire();
-    const resultQuaternion = quatPool.acquire();
-    try {
-        loadVec3(from, fromOffset, fromVector);
-        loadVec3(to, toOffset, toVector);
-        if (Vec3.len(fromVector) <= ANIMATION_EPSILON || Vec3.len(toVector) <= ANIMATION_EPSILON) {
-            quatIdentity(target, targetOffset);
-            return;
-        }
+    let fx = Number(from[fromOffset] ?? 0);
+    let fy = Number(from[fromOffset + 1] ?? 0);
+    let fz = Number(from[fromOffset + 2] ?? 0);
+    let tx = Number(to[toOffset] ?? 0);
+    let ty = Number(to[toOffset + 1] ?? 0);
+    let tz = Number(to[toOffset + 2] ?? 0);
 
-        Vec3.normalize(fromVector, fromVector);
-        Vec3.normalize(toVector, toVector);
-        const dot = numericClamp(Vec3.dot(fromVector, toVector), -1, 1);
-        if (dot >= 1 - ANIMATION_EPSILON) {
-            quatIdentity(target, targetOffset);
-            return;
-        }
+    const fromLength = Math.sqrt(fx * fx + fy * fy + fz * fz);
+    const toLength = Math.sqrt(tx * tx + ty * ty + tz * tz);
+    if (fromLength <= ANIMATION_EPSILON || toLength <= ANIMATION_EPSILON) {
+        quatIdentity(target, targetOffset);
+        return;
+    }
 
-        if (dot <= -1 + ANIMATION_EPSILON) {
-            if (Math.abs(fromVector.x) > Math.abs(fromVector.z)) {
-                axisVector.x = -fromVector.y;
-                axisVector.y = fromVector.x;
-                axisVector.z = 0;
-            } else {
-                axisVector.x = 0;
-                axisVector.y = -fromVector.z;
-                axisVector.z = fromVector.y;
-            }
+    const invFromLength = 1 / fromLength;
+    fx *= invFromLength;
+    fy *= invFromLength;
+    fz *= invFromLength;
+    const invToLength = 1 / toLength;
+    tx *= invToLength;
+    ty *= invToLength;
+    tz *= invToLength;
+
+    const dot = numericClamp(fx * tx + fy * ty + fz * tz, -1, 1);
+    if (dot >= 1 - ANIMATION_EPSILON) {
+        quatIdentity(target, targetOffset);
+        return;
+    }
+
+    let axisX: number;
+    let axisY: number;
+    let axisZ: number;
+    if (dot <= -1 + ANIMATION_EPSILON) {
+        if (Math.abs(fx) > Math.abs(fz)) {
+            axisX = -fy;
+            axisY = fx;
+            axisZ = 0;
         } else {
-            Vec3.cross(fromVector, toVector, axisVector);
+            axisX = 0;
+            axisY = -fz;
+            axisZ = fy;
         }
+    } else {
+        axisX = fy * tz - fz * ty;
+        axisY = fz * tx - fx * tz;
+        axisZ = fx * ty - fy * tx;
+    }
 
-        if (Vec3.len(axisVector) <= ANIMATION_EPSILON) {
-            axisVector.x = 1;
-            axisVector.y = 0;
-            axisVector.z = 0;
-        } else {
-            Vec3.normalize(axisVector, axisVector);
-        }
+    const axisLength = Math.sqrt(axisX * axisX + axisY * axisY + axisZ * axisZ);
+    if (axisLength <= ANIMATION_EPSILON) {
+        axisX = 1;
+        axisY = 0;
+        axisZ = 0;
+    } else {
+        const invAxisLength = 1 / axisLength;
+        axisX *= invAxisLength;
+        axisY *= invAxisLength;
+        axisZ *= invAxisLength;
+    }
 
-        Quat.fromAxisAngle(axisVector, dot <= -1 + ANIMATION_EPSILON ? Math.PI : Math.acos(dot), resultQuaternion);
-        Quat.normalize(resultQuaternion, resultQuaternion);
-        writeQuat(target, targetOffset, resultQuaternion);
+    const angle = dot <= -1 + ANIMATION_EPSILON ? Math.PI : Math.acos(dot);
+    const halfAngle = angle * 0.5;
+    const sinHalfAngle = Math.sin(halfAngle);
+    const qx = axisX * sinHalfAngle;
+    const qy = axisY * sinHalfAngle;
+    const qz = axisZ * sinHalfAngle;
+    const qw = Math.cos(halfAngle);
+    const invQuatLength = 1 / Math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw);
+    target[targetOffset] = qx * invQuatLength;
+    target[targetOffset + 1] = qy * invQuatLength;
+    target[targetOffset + 2] = qz * invQuatLength;
+    target[targetOffset + 3] = qw * invQuatLength;
 
-        if (scratch.length >= 9) {
-            scratch[0] = fromVector.x;
-            scratch[1] = fromVector.y;
-            scratch[2] = fromVector.z;
-            scratch[3] = toVector.x;
-            scratch[4] = toVector.y;
-            scratch[5] = toVector.z;
-            scratch[6] = axisVector.x;
-            scratch[7] = axisVector.y;
-            scratch[8] = axisVector.z;
-        }
-    } finally {
-        quatPool.release(resultQuaternion);
-        vec3Pool.release(axisVector);
-        vec3Pool.release(toVector);
-        vec3Pool.release(fromVector);
+    if (scratch.length >= 9) {
+        scratch[0] = fx;
+        scratch[1] = fy;
+        scratch[2] = fz;
+        scratch[3] = tx;
+        scratch[4] = ty;
+        scratch[5] = tz;
+        scratch[6] = axisX;
+        scratch[7] = axisY;
+        scratch[8] = axisZ;
     }
 };
 
@@ -590,41 +501,60 @@ export const composeMatrix = (
     scale: ArrayLike<number>,
     scaleOffset: number
 ): void => {
-    const translationVector = vec3Pool.acquire();
-    const scaleVector = vec3Pool.acquire();
-    const rotationQuaternion = quatPool.acquire();
-    const translationMatrix = mat4Pool.acquire();
-    const rotationMatrix = mat4Pool.acquire();
-    const scaleMatrix = mat4Pool.acquire();
-    const resultMatrix = mat4Pool.acquire();
-    try {
-        loadVec3(translation, translationOffset, translationVector);
-        loadVec3(scale, scaleOffset, scaleVector);
-        loadQuat(rotation, rotationOffset, rotationQuaternion);
-        if (Quat.lengthSquared(rotationQuaternion) <= ANIMATION_EPSILON) {
-            rotationQuaternion.x = 0;
-            rotationQuaternion.y = 0;
-            rotationQuaternion.z = 0;
-            rotationQuaternion.w = 1;
-        } else {
-            Quat.normalize(rotationQuaternion, rotationQuaternion);
-        }
+    const tx = Number(translation[translationOffset] ?? 0);
+    const ty = Number(translation[translationOffset + 1] ?? 0);
+    const tz = Number(translation[translationOffset + 2] ?? 0);
+    const sx = Number(scale[scaleOffset] ?? 1);
+    const sy = Number(scale[scaleOffset + 1] ?? 1);
+    const sz = Number(scale[scaleOffset + 2] ?? 1);
+    let qx = Number(rotation[rotationOffset] ?? 0);
+    let qy = Number(rotation[rotationOffset + 1] ?? 0);
+    let qz = Number(rotation[rotationOffset + 2] ?? 0);
+    let qw = Number(rotation[rotationOffset + 3] ?? 1);
 
-        Mat4.translate(translationVector, translationMatrix);
-        Mat4.fromQuaternion(rotationQuaternion, rotationMatrix);
-        Mat4.scale(scaleVector, scaleMatrix);
-        Mat4.multiply(translationMatrix, rotationMatrix, resultMatrix);
-        Mat4.multiply(resultMatrix, scaleMatrix, resultMatrix);
-        writeMat4(target, targetOffset, resultMatrix);
-    } finally {
-        mat4Pool.release(resultMatrix);
-        mat4Pool.release(scaleMatrix);
-        mat4Pool.release(rotationMatrix);
-        mat4Pool.release(translationMatrix);
-        quatPool.release(rotationQuaternion);
-        vec3Pool.release(scaleVector);
-        vec3Pool.release(translationVector);
+    const lengthSquared = qx * qx + qy * qy + qz * qz + qw * qw;
+    if (lengthSquared <= ANIMATION_EPSILON) {
+        qx = 0;
+        qy = 0;
+        qz = 0;
+        qw = 1;
+    } else {
+        const invLength = 1 / Math.sqrt(lengthSquared);
+        qx *= invLength;
+        qy *= invLength;
+        qz *= invLength;
+        qw *= invLength;
     }
+
+    const x2 = qx + qx;
+    const y2 = qy + qy;
+    const z2 = qz + qz;
+    const xx = qx * x2;
+    const xy = qx * y2;
+    const xz = qx * z2;
+    const yy = qy * y2;
+    const yz = qy * z2;
+    const zz = qz * z2;
+    const wx = qw * x2;
+    const wy = qw * y2;
+    const wz = qw * z2;
+
+    target[targetOffset] = (1 - (yy + zz)) * sx;
+    target[targetOffset + 1] = (xy - wz) * sy;
+    target[targetOffset + 2] = (xz + wy) * sz;
+    target[targetOffset + 3] = tx;
+    target[targetOffset + 4] = (xy + wz) * sx;
+    target[targetOffset + 5] = (1 - (xx + zz)) * sy;
+    target[targetOffset + 6] = (yz - wx) * sz;
+    target[targetOffset + 7] = ty;
+    target[targetOffset + 8] = (xz - wy) * sx;
+    target[targetOffset + 9] = (yz + wx) * sy;
+    target[targetOffset + 10] = (1 - (xx + yy)) * sz;
+    target[targetOffset + 11] = tz;
+    target[targetOffset + 12] = 0;
+    target[targetOffset + 13] = 0;
+    target[targetOffset + 14] = 0;
+    target[targetOffset + 15] = 1;
 };
 
 export const mat4Multiply = (
@@ -635,18 +565,110 @@ export const mat4Multiply = (
     right: ArrayLike<number>,
     rightOffset: number
 ): void => {
-    const leftMatrix = mat4Pool.acquire();
-    const rightMatrix = mat4Pool.acquire();
-    const resultMatrix = mat4Pool.acquire();
-    try {
-        Mat4.multiply(loadMat4(left, leftOffset, leftMatrix), loadMat4(right, rightOffset, rightMatrix), resultMatrix);
-        writeMat4(target, targetOffset, resultMatrix);
-    } finally {
-        mat4Pool.release(resultMatrix);
-        mat4Pool.release(rightMatrix);
-        mat4Pool.release(leftMatrix);
+    const a00 = Number(left[leftOffset] ?? 1);
+    const a01 = Number(left[leftOffset + 1] ?? 0);
+    const a02 = Number(left[leftOffset + 2] ?? 0);
+    const a03 = Number(left[leftOffset + 3] ?? 0);
+    const a10 = Number(left[leftOffset + 4] ?? 0);
+    const a11 = Number(left[leftOffset + 5] ?? 1);
+    const a12 = Number(left[leftOffset + 6] ?? 0);
+    const a13 = Number(left[leftOffset + 7] ?? 0);
+    const a20 = Number(left[leftOffset + 8] ?? 0);
+    const a21 = Number(left[leftOffset + 9] ?? 0);
+    const a22 = Number(left[leftOffset + 10] ?? 1);
+    const a23 = Number(left[leftOffset + 11] ?? 0);
+    const a30 = Number(left[leftOffset + 12] ?? 0);
+    const a31 = Number(left[leftOffset + 13] ?? 0);
+    const a32 = Number(left[leftOffset + 14] ?? 0);
+    const a33 = Number(left[leftOffset + 15] ?? 1);
+    const b00 = Number(right[rightOffset] ?? 1);
+    const b01 = Number(right[rightOffset + 1] ?? 0);
+    const b02 = Number(right[rightOffset + 2] ?? 0);
+    const b03 = Number(right[rightOffset + 3] ?? 0);
+    const b10 = Number(right[rightOffset + 4] ?? 0);
+    const b11 = Number(right[rightOffset + 5] ?? 1);
+    const b12 = Number(right[rightOffset + 6] ?? 0);
+    const b13 = Number(right[rightOffset + 7] ?? 0);
+    const b20 = Number(right[rightOffset + 8] ?? 0);
+    const b21 = Number(right[rightOffset + 9] ?? 0);
+    const b22 = Number(right[rightOffset + 10] ?? 1);
+    const b23 = Number(right[rightOffset + 11] ?? 0);
+    const b30 = Number(right[rightOffset + 12] ?? 0);
+    const b31 = Number(right[rightOffset + 13] ?? 0);
+    const b32 = Number(right[rightOffset + 14] ?? 0);
+    const b33 = Number(right[rightOffset + 15] ?? 1);
+
+    target[targetOffset] = a00 * b00 + a01 * b10 + a02 * b20 + a03 * b30;
+    target[targetOffset + 1] = a00 * b01 + a01 * b11 + a02 * b21 + a03 * b31;
+    target[targetOffset + 2] = a00 * b02 + a01 * b12 + a02 * b22 + a03 * b32;
+    target[targetOffset + 3] = a00 * b03 + a01 * b13 + a02 * b23 + a03 * b33;
+    target[targetOffset + 4] = a10 * b00 + a11 * b10 + a12 * b20 + a13 * b30;
+    target[targetOffset + 5] = a10 * b01 + a11 * b11 + a12 * b21 + a13 * b31;
+    target[targetOffset + 6] = a10 * b02 + a11 * b12 + a12 * b22 + a13 * b32;
+    target[targetOffset + 7] = a10 * b03 + a11 * b13 + a12 * b23 + a13 * b33;
+    target[targetOffset + 8] = a20 * b00 + a21 * b10 + a22 * b20 + a23 * b30;
+    target[targetOffset + 9] = a20 * b01 + a21 * b11 + a22 * b21 + a23 * b31;
+    target[targetOffset + 10] = a20 * b02 + a21 * b12 + a22 * b22 + a23 * b32;
+    target[targetOffset + 11] = a20 * b03 + a21 * b13 + a22 * b23 + a23 * b33;
+    target[targetOffset + 12] = a30 * b00 + a31 * b10 + a32 * b20 + a33 * b30;
+    target[targetOffset + 13] = a30 * b01 + a31 * b11 + a32 * b21 + a33 * b31;
+    target[targetOffset + 14] = a30 * b02 + a31 * b12 + a32 * b22 + a33 * b32;
+    target[targetOffset + 15] = a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33;
+};
+
+const setMat4Identity = (value: Mat4): void => {
+    const data = value.data;
+    data[0] = 1;
+    data[1] = 0;
+    data[2] = 0;
+    data[3] = 0;
+    data[4] = 0;
+    data[5] = 1;
+    data[6] = 0;
+    data[7] = 0;
+    data[8] = 0;
+    data[9] = 0;
+    data[10] = 1;
+    data[11] = 0;
+    data[12] = 0;
+    data[13] = 0;
+    data[14] = 0;
+    data[15] = 1;
+};
+
+const loadMat4 = (source: ArrayLike<number>, offset: number, out: Mat4): Mat4 => {
+    const data = out.data;
+    for (let index = 0; index < 16; index += 1) {
+        data[index] = Number(source[offset + index] ?? (index % 5 === 0 ? 1 : 0));
+    }
+    return out;
+};
+
+const writeMat4 = (target: Float32Array, offset: number, value: Mat4): void => {
+    const data = value.data;
+    for (let index = 0; index < 16; index += 1) {
+        target[offset + index] = Number(data[index] ?? (index % 5 === 0 ? 1 : 0));
     }
 };
+
+const mat4Pool = new ObjectPool<Mat4>({
+    initialCapacity: 2,
+    maxCapacity: 8,
+    minFree: 0,
+    expansionStrategy: 'multiplicative',
+    expansionFactor: 1.5,
+    allocationStrategy: 'least-recently-used',
+    evictionPolicy: 'lru',
+    resetOnRecycle: true,
+    preallocate: false,
+    autoExpand: true,
+    enableMetrics: false,
+    name: 'AnimationMat4Pool',
+    factory: () => new Mat4(),
+    resetHandler: (value) => {
+        setMat4Identity(value);
+    },
+});
 
 export const mat4Invert = (
     target: Float32Array,

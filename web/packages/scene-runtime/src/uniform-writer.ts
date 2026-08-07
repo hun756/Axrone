@@ -203,6 +203,10 @@ export class SceneUniformWriter implements SceneUniformWriteTarget {
         uniformType: number | undefined,
         value: Float32Array
     ): void {
+        if (value.length === 0) {
+            return;
+        }
+
         switch (uniformType) {
             case this._gl.FLOAT:
                 this._gl.uniform1fv(location, value);
@@ -211,12 +215,15 @@ export class SceneUniformWriter implements SceneUniformWriteTarget {
                 this._gl.uniformMatrix4fv(location, false, this._toMatrixArrayData(value));
                 return;
             case this._gl.FLOAT_VEC4:
+                if (value.length % 4 !== 0) { return; }
                 this._gl.uniform4fv(location, value);
                 return;
             case this._gl.FLOAT_VEC3:
+                if (value.length % 3 !== 0) { return; }
                 this._gl.uniform3fv(location, value);
                 return;
             case this._gl.FLOAT_VEC2:
+                if (value.length % 2 !== 0) { return; }
                 this._gl.uniform2fv(location, value);
                 return;
         }
@@ -245,6 +252,10 @@ export class SceneUniformWriter implements SceneUniformWriteTarget {
         uniformType: number | undefined,
         value: Int32Array
     ): void {
+        if (value.length === 0) {
+            return;
+        }
+
         switch (uniformType) {
             case this._gl.INT:
             case this._gl.BOOL:
@@ -295,6 +306,10 @@ export class SceneUniformWriter implements SceneUniformWriteTarget {
         uniformType: number | undefined,
         value: Uint32Array
     ): void {
+        if (value.length === 0) {
+            return;
+        }
+
         switch (uniformType) {
             case this._gl.UNSIGNED_INT:
                 this._gl.uniform1uiv(location, value);
@@ -331,6 +346,10 @@ export class SceneUniformWriter implements SceneUniformWriteTarget {
         uniformType: number | undefined,
         value: readonly number[]
     ): void {
+        if (value.length === 0) {
+            return;
+        }
+
         if (uniformType === this._gl.FLOAT_MAT4 && value.length % 16 === 0) {
             this._gl.uniformMatrix4fv(location, false, this._toMatrixArrayData(value));
             return;

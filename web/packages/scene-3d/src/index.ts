@@ -6,20 +6,24 @@ export type {
 	SceneManifestRuntimeProfileOptions,
 	SceneRuntimeProfile,
 	SceneRuntimeProfileContext,
-} from '@axrone/scene-runtime/scene-profile';
+} from './types';
 export {
-	CORE_SCENE_RUNTIME_PROFILE_ID,
 	DEFAULT_SCENE_RUNTIME_PROFILE_ID,
-	SCENE_2D_RUNTIME_PROFILE_ID,
 	SCENE_3D_RUNTIME_PROFILE_ID,
 	createSceneManifestRuntimeProfile,
 	createSceneRuntimeProfile,
-	get2DSceneRuntimeProfile,
 	get3DSceneRuntimeProfile,
-	getCoreSceneRuntimeProfile,
 	getDefaultSceneRuntimeProfile,
 	resolveSceneRegistryFromProfile,
-} from '@axrone/scene-runtime/scene-profile';
+} from './profile';
+export {
+	CORE_SCENE_RUNTIME_PROFILE_ID,
+	getCoreSceneRuntimeProfile,
+} from '@axrone/scene-runtime/scene-core-profile';
+export {
+	SCENE_2D_RUNTIME_PROFILE_ID,
+	get2DSceneRuntimeProfile,
+} from '@axrone/scene-runtime/scene-2d-profile';
 
 export type {
 	Scene3DActorRuntimeOptions,

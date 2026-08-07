@@ -4,25 +4,10 @@ import {
     getComponentMetadata,
     getComponentPropertyMetadata,
     getComponentPropertyMetadataByKey,
-    property,
-    script,
 } from '@axrone/ecs-runtime';
 import { describe, expect, test } from 'vitest';
-
-@script({ allowMultiple: true })
-class RepeatableScriptComponent extends Component {
-    @property({ label: 'Speed', defaultValue: 5, min: 0, step: 0.5 })
-    public speed: number = 5;
-
-    @property({ type: Transform, description: 'Target transform reference' })
-    public targetTransform: Transform | null = null;
-}
-
-@script()
-class DerivedRepeatableScriptComponent extends RepeatableScriptComponent {
-    @property({ label: 'Enabled', defaultValue: true })
-    public enabledFlag: boolean = true;
-}
+import RepeatableScriptComponent from './components/RepeatableScriptComponent';
+import DerivedRepeatableScriptComponent from './components/DerivedRepeatableScriptComponent';
 
 describe('Component Property Decorator', () => {
     test('surfaces allowMultiple through script metadata', () => {

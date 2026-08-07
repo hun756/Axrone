@@ -7,10 +7,9 @@ describe('SceneShaderFactory', () => {
     it('creates linked shader resources with inferred uniforms and attribute bindings', () => {
         const canvas = document.createElement('canvas');
         const gl = createMockGL(canvas) as ReturnType<typeof createMockGL> & {
-            ACTIVE_UNIFORMS: number;
             getActiveUniform: ReturnType<typeof vi.fn>;
         };
-        gl.ACTIVE_UNIFORMS = 2;
+        Object.defineProperty(gl, 'ACTIVE_UNIFORMS', { value: 2, configurable: true });
         gl.getProgramParameter = vi.fn((_: unknown, parameter: number) =>
             parameter === gl.ACTIVE_UNIFORMS ? 2 : true
         ) as any;

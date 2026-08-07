@@ -5,6 +5,8 @@ import {
     normalizeAttenuation,
 } from '../internal/spatial';
 import { hasOwnKeys, withRetry } from '../internal/shared';
+import { AudioClipStore } from '../internal/clip-store';
+import { FakeAudioContext, FakeAudioBuffer, installFakeAudioGlobals } from './helpers/fake-audio-context';
 
 describe('audio internal helpers', () => {
     it('clones spatialization payloads without retaining nested references', () => {
@@ -83,5 +85,102 @@ describe('audio internal helpers', () => {
         expect(attempts).toBe(3);
         expect(hasOwnKeys({ volume: 1 })).toBe(true);
         expect(hasOwnKeys({})).toBe(false);
+    });
+});
+
+describe('AudioClipStore LRU eviction', () => {
+    it('evicts least-recently-used entries when maxEntries is exceeded', async () => {
+        installFakeAudioGlobals();
+        const context = new FakeAudioContext();
+        const store = new AudioClipStore({
+            context: context as unknown as AudioContext,
+            maxEntries: 2,
+        });
+
+        // Register 3 inline clips
+        store.register('clip-a', {
+            kind: 'inline',
+            clip: { kind: 'buffer', buffer: new FakeAudioBuffer(1, 48000, 48000) as unknown as AudioBuffer },
+        });
+        store.register('clip-b', {
+            kind: 'inline',
+            clip: { kind: 'buffer', buffer: new FakeAudioBuffer(1, 48000, 48000) as unknown as AudioBuffer },
+        });
+        store.register('clip-c', {
+            kind: 'inline',
+            clip: { kind: 'buffer', buffer: new FakeAudioBuffer(1, 48000, 48000) as unknown as AudioBuffer },
+        });
+
+        // Resolve first two to fill cache
+        const resolvedA = await store.resolve({ kind: 'registered', clipId: 'clip-a' });
+        const resolvedB = await store.resolve({ kind: 'registered', clipId: 'clip-b' });
+        expect(resolvedA).toBeDefined();
+        expect(resolvedB).toBeDefined();
+
+        // Resolve third — should evict clip-a (LRU)
+        const resolvedC = await store.resolve({ kind: 'registered', clipId: 'clip-c' });
+        expect(resolvedC).toBeDefined();
+
+        // Re-resolve clip-a — should still work (re-decoded from registered selector)
+        const resolvedA2 = await store.resolve({ kind: 'registered', clipId: 'clip-a' });
+        expect(resolvedA2).toBeDefined();
+    });
+
+    it('does not evict when maxEntries is 0 (unlimited)', async () => {
+        installFakeAudioGlobals();
+        const context = new FakeAudioContext();
+        const store = new AudioClipStore({
+            context: context as unknown as AudioContext,
+            maxEntries: 0,
+        });
+
+        for (let i = 0; i < 10; i++) {
+            store.register(`clip-${i}`, {
+                kind: 'inline',
+                clip: { kind: 'buffer', buffer: new FakeAudioBuffer(1, 48000, 48000) as unknown as AudioBuffer },
+            });
+        }
+
+        // All 10 should resolve without eviction issues
+        for (let i = 0; i < 10; i++) {
+            const resolved = await store.resolve({ kind: 'registered', clipId: `clip-${i}` });
+            expect(resolved).toBeDefined();
+        }
+    });
+
+    it('promotes recently-used entries in LRU order', async () => {
+        installFakeAudioGlobals();
+        const context = new FakeAudioContext();
+        const store = new AudioClipStore({
+            context: context as unknown as AudioContext,
+            maxEntries: 2,
+        });
+
+        store.register('clip-x', {
+            kind: 'inline',
+            clip: { kind: 'buffer', buffer: new FakeAudioBuffer(1, 48000, 48000) as unknown as AudioBuffer },
+        });
+        store.register('clip-y', {
+            kind: 'inline',
+            clip: { kind: 'buffer', buffer: new FakeAudioBuffer(1, 48000, 48000) as unknown as AudioBuffer },
+        });
+        store.register('clip-z', {
+            kind: 'inline',
+            clip: { kind: 'buffer', buffer: new FakeAudioBuffer(1, 48000, 48000) as unknown as AudioBuffer },
+        });
+
+        // Fill cache with x and y
+        await store.resolve({ kind: 'registered', clipId: 'clip-x' });
+        await store.resolve({ kind: 'registered', clipId: 'clip-y' });
+
+        // Touch x again (promote it in LRU)
+        await store.resolve({ kind: 'registered', clipId: 'clip-x' });
+
+        // Resolve z — should evict y (LRU), not x
+        await store.resolve({ kind: 'registered', clipId: 'clip-z' });
+
+        // x should still be cached (was recently touched)
+        const xAgain = await store.resolve({ kind: 'registered', clipId: 'clip-x' });
+        expect(xAgain).toBeDefined();
     });
 });

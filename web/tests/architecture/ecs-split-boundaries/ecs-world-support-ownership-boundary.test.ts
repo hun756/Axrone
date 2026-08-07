@@ -4,9 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
-const ecsWorldSupportSrcDir = path.resolve(testDir, '../../../packages/ecs-world-support/src');
+const ecsWorldSupportSrcDir = path.resolve(testDir, '../../../packages/ecs-runtime/src/support');
+// Support is a leaf module inside ecs-runtime: it must not reach any
+// @axrone/ecs or @axrone/core package surface, the component-system runtime
+// internals, or the sibling storage/query modules.
 const disallowedImportPattern =
-    /(?:from ['"]|import\(['"])(?:[^'"]*@axrone\/(?:ecs(?!-world-support)|core)|[^'"]*core\/src\/(?:component-system|event|observer)|[^'"]*ecs\/src\/component-system)(?:\/[^'"]*)?['"]/g;
+    /(?:from ['"]|import\(['"])(?:[^'"]*@axrone\/(?:ecs|core)|[^'"]*component-system|(?:\.\.\/)+(?:storage|query))(?:\/[^'"]*)?['"]/g;
 
 const collectTypeScriptFiles = (dirPath: string): readonly string[] => {
     const files: string[] = [];
@@ -35,8 +38,8 @@ const collectTypeScriptFiles = (dirPath: string): readonly string[] => {
     return files;
 };
 
-describe('ecs-world-support ownership boundary', () => {
-    it('keeps world support ownership off ecs and core internals', () => {
+describe('ecs-runtime support module boundary', () => {
+    it('keeps support-owned sources off runtime internals and sibling modules', () => {
         const violatingFiles = collectTypeScriptFiles(ecsWorldSupportSrcDir)
             .filter((filePath) => {
                 const content = fs.readFileSync(filePath, 'utf8');

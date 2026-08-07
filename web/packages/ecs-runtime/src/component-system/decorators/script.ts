@@ -236,6 +236,21 @@ export function script<T extends ComponentType>(
 
             componentMetadataMap.set(target, metadata);
 
+            const existingEntry = scriptRegistry.get(metadata.scriptName);
+            if (
+                existingEntry &&
+                existingEntry.componentType !== target &&
+                existingEntry.componentType.name !== target.name &&
+                typeof process !== 'undefined' &&
+                process.env?.NODE_ENV !== 'production'
+            ) {
+                console.warn(
+                    `@script: scriptName '${metadata.scriptName}' is declared by both ` +
+                        `'${existingEntry.componentType.name}' and '${target.name}'. Each @script component ` +
+                        'should have a unique scriptName so it can be serialized and resolved unambiguously.',
+                );
+            }
+
             const registryEntry: ScriptRegistryEntry = {
                 metadata,
                 componentType: target,
@@ -326,7 +341,7 @@ export function getAllScripts(filter?: {
     experimental?: boolean;
 }): readonly ScriptRegistryEntry[] {
     return getCachedResult(
-        'getAllScripts',
+        `getAllScripts:${JSON.stringify(filter ?? {})}`,
         () => {
             let entries = Array.from(scriptRegistry.values());
 
@@ -452,6 +467,10 @@ export function getScriptMetrics(): {
 export function clearScriptCaches(): void {
     metricsCache.clear();
     performCleanup();
+}
+
+export function clearScriptRegistry(): void {
+    scriptRegistry.clear();
 }
 
 export function __debugScriptSystem(): {

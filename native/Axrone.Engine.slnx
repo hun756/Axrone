@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/packages/">
+    <Project Path="packages/Axrone.Utility/Axrone.Utility.csproj" />
+    <Project Path="packages/Axrone.Utility/tests/Axrone.Utility.Tests.csproj" />
+  </Folder>
+</Solution>

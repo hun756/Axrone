@@ -1,22 +1,24 @@
 import { Hierarchy } from '@axrone/ecs-runtime';
-import { Actor, type ActorConfig } from '@axrone/ecs-runtime';
+import { Actor, type ActorConfig, type ActorLayer, type ActorTag } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import type { ComponentConstructor } from '@axrone/ecs-runtime';
 import { Transform, getComponentPropertyMetadata } from '@axrone/ecs-runtime';
 import type { PropertyMetadata, PropertyTypeId, PropertyTypeReference } from '@axrone/ecs-runtime';
 import { Vec2, Vec3 } from '@axrone/numeric';
-import { PrefabNodeBinding } from './components/prefab-node-binding';
+import { PrefabNodeBinding } from '@axrone/scene-prefab';
 import type { SceneComponentTypeResolver } from './component-catalog';
 import { SceneLifecycleError } from './errors';
-import { hasScenePrefabComposition } from './scene-prefab-internals';
-import { resolveScenePrefab } from './scene-prefab-workflow';
+import { hasScenePrefabComposition } from '@axrone/scene-prefab';
+import { resolveScenePrefab } from '@axrone/scene-prefab';
 import { decodeSceneValue, encodeSceneValue } from './serialization';
+import { UIHost } from './components/ui-host';
+import { createLazySceneUIWidgetRef } from './ui-widget-ref';
 import type {
     SceneActorSnapshot,
     SceneComponentSnapshot,
     ScenePrefabDefinition,
-    ScenePrefabInstantiateOptions,
-} from './types';
+} from '@axrone/scene-prefab';
+import type { ScenePrefabInstantiateOptions } from './types';
 
 interface ScenePrefabHost {
     readonly componentCatalog: SceneComponentTypeResolver;
@@ -190,6 +192,10 @@ const normalizePropertyTypeId = (
         if (name === 'vec3') {
             return 'vec3';
         }
+
+        if (type.prototype instanceof Component) {
+            return 'component';
+        }
     }
 
     if (typeof type !== 'string') {
@@ -215,6 +221,10 @@ const normalizePropertyTypeId = (
             return 'entity';
         case 'transform':
             return 'transform';
+        case 'component':
+            return 'component';
+        case 'ui-widget':
+            return 'ui-widget';
         default:
             return undefined;
     }
@@ -268,8 +278,8 @@ export class ScenePrefabRuntime {
         for (const actorSnapshot of resolvedPrefab.actors) {
             const actor = this._host.createActor({
                 name: `${options.namePrefix ?? ''}${actorSnapshot.name}`,
-                layer: actorSnapshot.layer as any,
-                tag: actorSnapshot.tag as any,
+                layer: actorSnapshot.layer as unknown as ActorLayer,
+                tag: actorSnapshot.tag as unknown as ActorTag,
                 active: false,
                 persistent: actorSnapshot.persistent,
                 pooled: actorSnapshot.pooled,
@@ -308,16 +318,33 @@ export class ScenePrefabRuntime {
             }
         }
 
+        // Pass 1: add every component across all actors first, so that
+        // component references can resolve against fully-populated actors in
+        // pass 2 regardless of actor/component ordering.
+        const pendingComponentData: Array<{
+            readonly component: Component;
+            readonly snapshot: SceneComponentSnapshot;
+        }> = [];
         for (const pendingHydration of pendingComponentHydration) {
             for (const componentSnapshot of pendingHydration.components) {
-                this._hydrateComponent(
+                const component = this._instantiateComponent(
                     pendingHydration.actor,
                     componentSnapshot,
                     options,
-                    createdByNodeId,
-                    createdActors,
                 );
+                pendingComponentData.push({ component, snapshot: componentSnapshot });
             }
+        }
+
+        // Pass 2: normalize and apply component data, resolving entity /
+        // transform / component references now that all components exist.
+        for (const pending of pendingComponentData) {
+            this._applyComponentData(
+                pending.component,
+                pending.snapshot,
+                createdByNodeId,
+                createdActors,
+            );
         }
 
         for (let index = 0; index < resolvedPrefab.actors.length; index += 1) {
@@ -401,13 +428,11 @@ export class ScenePrefabRuntime {
         return prefab;
     }
 
-    private _hydrateComponent(
+    private _instantiateComponent(
         actor: Actor,
         snapshot: SceneComponentSnapshot,
         options: ScenePrefabInstantiateOptions,
-        createdByNodeId: ReadonlyMap<string, Actor>,
-        createdActors: readonly Actor[]
-    ): void {
+    ): Component {
         const componentType = this._host.componentCatalog.get(snapshot.type);
         if (!componentType) {
             throw new SceneLifecycleError(
@@ -418,13 +443,23 @@ export class ScenePrefabRuntime {
         const existingComponent = actor
             .getAllComponents()
             .find((component) => component.constructor === componentType);
-        const component =
+
+        return (
             existingComponent ??
             actor.addComponent(
                 componentType as new (...args: any[]) => Component,
                 ...(options.componentArgsResolver?.(snapshot.type, snapshot.data) ?? [])
-            );
+            )
+        );
+    }
 
+    private _applyComponentData(
+        component: Component,
+        snapshot: SceneComponentSnapshot,
+        createdByNodeId: ReadonlyMap<string, Actor>,
+        createdActors: readonly Actor[]
+    ): void {
+        const componentType = component.constructor as ComponentConstructor;
         const decoded = decodeSceneValue(snapshot.data);
         const normalized =
             decoded && typeof decoded === 'object' && !Array.isArray(decoded)
@@ -587,6 +622,33 @@ export class ScenePrefabRuntime {
             case 'transform': {
                 const targetActor = this._resolveActorReference(value, createdByNodeId, createdActors);
                 return targetActor?.getComponent(Transform) ?? null;
+            }
+            case 'component': {
+                const componentType = metadata.type;
+                if (typeof componentType !== 'function') {
+                    return null;
+                }
+                const targetActor = this._resolveActorReference(value, createdByNodeId, createdActors);
+                return targetActor?.getComponent(componentType as ComponentConstructor) ?? null;
+            }
+            case 'ui-widget': {
+                const objectValue = asRecord(value);
+                const hostEntityId = asString(objectValue.hostEntityId);
+                const widgetKey = asString(objectValue.widgetKey);
+                if (!hostEntityId || !widgetKey) {
+                    return null;
+                }
+                // UIHost bindings are established after hydration, so the ref
+                // resolves lazily through the injected resolver on first use.
+                return createLazySceneUIWidgetRef(
+                    () =>
+                        this._resolveActorReference(
+                            hostEntityId,
+                            createdByNodeId,
+                            createdActors,
+                        )?.getComponent(UIHost) ?? null,
+                    widgetKey,
+                );
             }
             default:
                 return value;

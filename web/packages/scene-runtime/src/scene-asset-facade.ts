@@ -1,6 +1,8 @@
 import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import type { TextureFormat } from '@axrone/render-webgl2';
 import { SceneMaterialError } from './errors';
+import type { SceneMaterialObservables } from './material-observables';
+import type { SceneMaterialInstanceAdapter } from './scene-material-instance-adapter';
 import type {
     SceneMaterialDefinition,
     SceneMaterialHandle,
@@ -127,6 +129,94 @@ export class SceneAssetFacade<
         uniformName?: string
     ): SceneMaterialTextureBindingHandle | null {
         return this._kernel.assets.getMaterialTextureBinding(materialId, uniformName);
+    }
+
+    deleteMaterial(materialId: string): this {
+        this.assertNotDisposed();
+        if (!this._kernel.assets.deleteMaterial(materialId)) {
+            throw new SceneMaterialError(`Material '${materialId}' is not registered`);
+        }
+
+        return this;
+    }
+
+    cloneMaterial(sourceId: string, newId: string): SceneMaterialHandle {
+        this.assertNotDisposed();
+        try {
+            return this._kernel.assets.cloneMaterial(sourceId, newId);
+        } catch (error) {
+            if (error instanceof SceneMaterialError) {
+                throw error;
+            }
+
+            throw new SceneMaterialError(
+                `Failed to clone material '${sourceId}' as '${newId}'`,
+                error instanceof Error ? error : undefined
+            );
+        }
+    }
+
+    hasMaterial(materialId: string): boolean {
+        return this._kernel.assets.hasMaterial(materialId);
+    }
+
+    getMaterialIds(): readonly string[] {
+        return this._kernel.assets.getMaterialIds();
+    }
+
+    setMaterialKeyword(materialId: string, keyword: string, enabled: boolean): this {
+        this.assertNotDisposed();
+        if (!this._kernel.assets.setMaterialKeyword(materialId, keyword, enabled)) {
+            throw new SceneMaterialError(`Material '${materialId}' is not registered`);
+        }
+        return this;
+    }
+
+    toggleMaterialKeyword(materialId: string, keyword: string): this {
+        this.assertNotDisposed();
+        if (!this._kernel.assets.toggleMaterialKeyword(materialId, keyword)) {
+            throw new SceneMaterialError(`Material '${materialId}' is not registered`);
+        }
+        return this;
+    }
+
+    getMaterialKeyword(materialId: string, keyword: string): boolean | null {
+        return this._kernel.assets.getMaterialKeyword(materialId, keyword);
+    }
+
+    getMaterialEnabledKeywords(materialId: string): readonly string[] {
+        return this._kernel.assets.getMaterialEnabledKeywords(materialId);
+    }
+
+    createMaterialAdapter(materialId: string): SceneMaterialInstanceAdapter | null {
+        this.assertNotDisposed();
+        return this._kernel.assets.createMaterialAdapter(materialId);
+    }
+
+    getMaterialObservables(): SceneMaterialObservables {
+        this.assertNotDisposed();
+        return this._kernel.assets.materialObservables;
+    }
+
+    setMaterialUniforms(
+        materialId: string,
+        uniforms: Readonly<Record<string, SceneUniformValue>>
+    ): this {
+        this.assertNotDisposed();
+        if (!this._kernel.assets.setMaterialUniforms(materialId, uniforms)) {
+            throw new SceneMaterialError(`Material '${materialId}' is not registered`);
+        }
+        return this;
+    }
+
+    getMaterialUniform(materialId: string, name: string): SceneUniformValue | null {
+        return this._kernel.assets.getMaterialUniform(materialId, name);
+    }
+
+    getMaterialUniforms(
+        materialId: string
+    ): Readonly<Record<string, SceneUniformValue>> | null {
+        return this._kernel.assets.getMaterialUniforms(materialId);
     }
 
     registerRenderPass(definition: SceneRenderPassDefinition): SceneRenderPassHandle {

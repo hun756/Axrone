@@ -1,7 +1,7 @@
 import {
     compileRenderShaderEffect,
     type RenderShaderEffectDefinition,
-} from '@axrone/render-core';
+} from '@axrone/render-core/shader-effect';
 
 export const RENDER_2D_DEFAULT_SPRITE_SHADER_ID = 'Render2D/Sprite';
 

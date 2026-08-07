@@ -1,3 +1,4 @@
+import type { Camera3D, CameraFrustum } from '@axrone/geometry';
 import type { Mat4, Vec3, Vec4 } from '@axrone/numeric';
 import type { IDisposable } from './disposable';
 
@@ -215,6 +216,8 @@ export interface RenderCameraState {
     readonly viewMatrix: Mat4;
     readonly projectionMatrix: Mat4;
     readonly viewProjectionMatrix?: Mat4;
+    readonly camera3D?: Readonly<Camera3D>;
+    readonly frustum?: Readonly<CameraFrustum>;
     readonly position: RenderVector3Like;
     readonly near: number;
     readonly far: number;
@@ -662,10 +665,16 @@ export interface RenderTonemapPassMetadata {
     readonly source: RenderResourceName;
     readonly target: RenderResourceName<'post' | 'frame'>;
     readonly mode: RenderTonemappingMode;
+    readonly gamma: number;
+    readonly contrast: number;
+    readonly saturation: number;
+    readonly shoulderStrength: number;
+    readonly toeStrength: number;
     readonly hdr: boolean;
     readonly colorSpace: RenderOutputColorSpace;
     readonly exposure: RenderExposureSettings | null;
-    readonly exposureHistory: RenderResourceName<'history'> | null;
+    readonly exposureHistorySource: RenderResourceName<'history'> | null;
+    readonly exposureHistoryTarget: RenderResourceName<'history'> | null;
 }
 
 export interface RenderPresentPassMetadata {

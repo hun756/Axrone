@@ -3,8 +3,8 @@ import type {
     RenderFrameResult,
     RenderPipelineBackend,
     ResolvedRenderPass,
-} from '@axrone/render-core';
-import { renderUIFrame } from '@axrone/ui';
+} from '@axrone/render-core/types';
+import { renderUIFrame } from '@axrone/ui/render';
 import { WebGL2UIRenderer } from './renderer';
 import type {
     ManagedUIOverlayRenderPipelineBackend,

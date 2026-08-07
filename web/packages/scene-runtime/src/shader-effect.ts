@@ -2,7 +2,7 @@ import {
     cloneRenderShaderEffectDefinition,
     compileRenderShaderEffect,
     type RenderShaderEffectDefinition,
-} from '@axrone/render-core';
+} from '@axrone/render-core/shader-effect';
 import type { SceneMeshSemantic, SceneShaderDefinition } from './types';
 
 export interface SceneShaderDefinitionFromEffectOptions {

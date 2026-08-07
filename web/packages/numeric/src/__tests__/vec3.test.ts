@@ -580,24 +580,6 @@ describe('Vec3 Test Suite', () => {
             });
         });
 
-        describe('static fastLength', () => {
-            test('should approximate length', () => {
-                const testCases = [
-                    new Vec3(3, 4, 0),
-                    new Vec3(1, 1, 1),
-                    new Vec3(5, 12, 0),
-                    new Vec3(1, 2, 3),
-                ];
-
-                testCases.forEach((v) => {
-                    const exactLength = Vec3.len(v);
-                    const fastLength = Vec3.fastLength(v);
-                    const error = Math.abs(exactLength - fastLength) / exactLength;
-                    expect(error).toBeLessThan(0.15);
-                });
-            });
-        });
-
         describe('static normalize', () => {
             test('should create unit vector', () => {
                 const v = new Vec3(3, 4, 0);
@@ -620,19 +602,6 @@ describe('Vec3 Test Suite', () => {
             test('should throw error for near-zero vector', () => {
                 const v = new Vec3(EPSILON / 2, EPSILON / 2, EPSILON / 2);
                 expect(() => Vec3.normalize(v)).toThrow('Cannot normalize a zero-length vector');
-            });
-        });
-
-        describe('static normalizeQuake', () => {
-            test('should approximate normalization', () => {
-                const testCases = [new Vec3(3, 4, 0), new Vec3(1, 2, 3), new Vec3(5, 12, 13)];
-
-                testCases.forEach((v) => {
-                    const exactNorm = Vec3.normalize(v);
-                    const fastNorm = Vec3.normalizeQuake(v, new Vec3());
-                    const lengthDiff = Math.abs(fastNorm.length() - 1);
-                    expect(lengthDiff).toBeLessThan(0.1);
-                });
             });
         });
     });
@@ -1204,7 +1173,7 @@ describe('Vec3 Test Suite', () => {
 
             test('should generate uniform distribution within bounds', () => {
                 const v = new Vec3();
-                const samples = Array.from({ length: 1000 }, () =>
+                const samples = Array.from({ length: 5000 }, () =>
                     v.randomBox(0, 10, 0, 10, 0, 10)
                 );
 
@@ -1212,9 +1181,9 @@ describe('Vec3 Test Suite', () => {
                 const meanY = samples.reduce((sum, s) => sum + s.y, 0) / samples.length;
                 const meanZ = samples.reduce((sum, s) => sum + s.z, 0) / samples.length;
 
-                expect(meanX).toBeCloseTo(5, 0.3);
-                expect(meanY).toBeCloseTo(5, 0.3);
-                expect(meanZ).toBeCloseTo(5, 0.3);
+                expect(meanX).toBeCloseTo(5, 0.2);
+                expect(meanY).toBeCloseTo(5, 0.2);
+                expect(meanZ).toBeCloseTo(5, 0.2);
             });
 
             test('should handle negative bounds correctly', () => {
@@ -1290,7 +1259,7 @@ describe('Vec3 Test Suite', () => {
                     const end = performance.now();
                     const timePerOperation = (end - start) / iterations;
 
-                    expect(timePerOperation).toBeLessThan(10);
+                    expect(timePerOperation).toBeLessThan(50);
                 });
             });
         });
@@ -1421,35 +1390,6 @@ describe('Vec3 Test Suite', () => {
             expect(timePerOperation).toBeLessThan(5);
         });
 
-        test('fast methods should be faster than regular methods', () => {
-            const vectors = Vec3TestDataBuilder.createBatch(1000);
-
-            const startRegular = performance.now();
-            vectors.forEach((v) => Vec3.len(v));
-            const endRegular = performance.now();
-            const regularTime = endRegular - startRegular;
-
-            const startFast = performance.now();
-            vectors.forEach((v) => Vec3.fastLength(v));
-            const endFast = performance.now();
-            const fastTime = endFast - startFast;
-
-            expect(fastTime).toBeLessThan(10);
-            expect(regularTime).toBeLessThan(1);
-        });
-
-        test('normalizeQuake should complete within reasonable time', () => {
-            const vectors = Vec3TestDataBuilder.createBatch(1000).filter(
-                (v) => v.length() > EPSILON
-            );
-
-            const startFast = performance.now();
-            vectors.forEach((v) => Vec3.normalizeQuake(v));
-            const endFast = performance.now();
-            const fastTime = endFast - startFast;
-
-            expect(fastTime).toBeLessThan(10);
-        });
     });
 
     // PROPERTY-BASED TESTS

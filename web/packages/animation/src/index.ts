@@ -8,6 +8,7 @@ export * from './grounding';
 export * from './ik';
 export * from './motion-matching';
 export * from './optimization';
+export * from './parameters';
 export * from './pose';
 export * from './retargeting';
 export * from './rig';

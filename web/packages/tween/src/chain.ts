@@ -27,6 +27,10 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
         return this._status;
     }
 
+    getTotalDuration(): number {
+        return this._tweens.reduce((sum, tween) => sum + tween.getTotalDuration(), 0);
+    }
+
     add(tween: IGroupable): this {
         this._tweens.push(tween);
         return this;

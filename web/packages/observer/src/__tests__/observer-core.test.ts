@@ -8,6 +8,7 @@ import {
     ObserverOptions,
     SubjectOptions,
     IObservableSubject,
+    ObserverConfig,
 } from '@axrone/observer';
 
 describe('Observer Library - Core Functionality', () => {
@@ -458,6 +459,40 @@ describe('Observer Library - Core Functionality', () => {
 
             expect(end - start).toBeLessThan(1000);
             expect(observer).toHaveBeenCalledTimes(100);
+        });
+    });
+
+    describe('ObserverConfig injectable error handler', () => {
+        it('allows overriding the global error handler', () => {
+            const config = ObserverConfig.getInstance();
+            const customErrors: Array<{ error: Error; context: unknown }> = [];
+
+            config.setGlobalErrorHandler((error, context) => {
+                customErrors.push({ error, context });
+            });
+
+            const cfg = config.getConfig();
+            // Simulate an error through the handler
+            cfg.globalErrorHandler(new Error('test-error'), { subject: 'test' });
+
+            expect(customErrors).toHaveLength(1);
+            expect(customErrors[0].error.message).toBe('test-error');
+            expect(customErrors[0].context).toEqual({ subject: 'test' });
+
+            // Restore default handler
+            config.setGlobalErrorHandler((error, context) => {
+                console.error('Observer Error:', error, context);
+            });
+        });
+
+        it('can disable and re-enable global error handling', () => {
+            const config = ObserverConfig.getInstance();
+
+            config.enableGlobalErrorHandling(false);
+            expect(config.getConfig().enableGlobalErrorHandling).toBe(false);
+
+            config.enableGlobalErrorHandling(true);
+            expect(config.getConfig().enableGlobalErrorHandling).toBe(true);
         });
     });
 });

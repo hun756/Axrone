@@ -8,16 +8,27 @@ import {
     distanceSquared,
     distanceToSegmentSquared,
     expandBounds,
+    float32ToPoints,
     normalizeContourOrientation,
     pointInConvexPolygon,
     pointInBounds,
+    pointInPolygon,
+    pointInPolygonWithHoles,
+    pointToPolygonEdgeDistance,
+    pointsToFloat32,
+    polygonAbsoluteArea,
+    polygonBounds,
+    polygonCentroid,
+    polygonPerimeter,
     polygonSignedArea,
     toIndexArray,
+    triangulateEarClipping,
 } from './common';
 import type {
     CircleShape,
     EllipseShape,
     LineShape,
+    PolygonShape,
     RectangleShape,
     Shape2D,
     ShapeApproximationOptions,
@@ -65,6 +76,51 @@ const buildConvexFanMesh = (contour: Float32Array): ShapeMesh2D => {
     }
 
     return createMesh(contour.slice(), indices);
+};
+
+const polygonRingToFloat32 = (ring: ReadonlyArray<Readonly<IVec2Like>>): Float32Array => {
+    const buffer = new Float32Array(ring.length * 2);
+    for (let i = 0; i < ring.length; i++) {
+        buffer[i * 2] = (ring[i] as Readonly<IVec2Like>).x;
+        buffer[i * 2 + 1] = (ring[i] as Readonly<IVec2Like>).y;
+    }
+    return buffer;
+};
+
+const buildPolygonMesh = (polygon: PolygonShape): ShapeMesh2D => {
+    const outer = polygonRingToFloat32(polygon.outer.points);
+
+    if (polygon.holes.length === 0) {
+        if (polygon.convex) {
+            return buildConvexFanMesh(outer);
+        }
+        const indices = triangulateEarClipping(outer);
+        return createMesh(outer, Array.from(indices as ArrayLike<number>));
+    }
+
+    const outerOffset = outer.length;
+    let allPositions = new Float32Array(outerOffset);
+    allPositions.set(outer, 0);
+    const indices: number[] = [];
+    const holeOffset: number[] = [];
+    let runningOffset = outerOffset;
+
+    for (let h = 0; h < polygon.holes.length; h++) {
+        const hole = polygonRingToFloat32(polygon.holes[h]!.points);
+        const newPositions = new Float32Array(allPositions.length + hole.length);
+        newPositions.set(allPositions, 0);
+        newPositions.set(hole, allPositions.length);
+        allPositions = newPositions;
+        holeOffset.push(runningOffset);
+        runningOffset += hole.length;
+    }
+
+    const outerCount = outer.length / 2;
+    for (let i = 1; i < outerCount - 1; i++) {
+        indices.push(0, i, i + 1);
+    }
+
+    return createMesh(allPositions, indices);
 };
 
 const buildRingMesh = (outer: Float32Array, inner: Float32Array | null): ShapeMesh2D => {
@@ -234,6 +290,8 @@ export const getShapeContour = (
             return createTriangleContour(shape);
         case 'line':
             return new Float32Array([shape.start.x, shape.start.y, shape.end.x, shape.end.y]);
+        case 'polygon':
+            return polygonRingToFloat32(shape.outer.points);
     }
 };
 
@@ -264,6 +322,8 @@ export const getGeometryBounds = (shape: Shape2D): ShapeBounds => {
             );
         case 'line':
             return createBounds(shape.start.x, shape.start.y, shape.end.x, shape.end.y);
+        case 'polygon':
+            return polygonBounds(polygonRingToFloat32(shape.outer.points));
     }
 };
 
@@ -277,6 +337,7 @@ export const getShapeBounds = (
     }
 
     const { outer } = getStrokeOffsets(shape.stroke);
+
     if (outer <= EPSILON) {
         return geometryBounds;
     }
@@ -288,7 +349,8 @@ export const getShapeBounds = (
             return expandBounds(geometryBounds, outer);
         case 'line':
             return expandBounds(geometryBounds, shape.stroke.width * 0.5);
-        case 'triangle': {
+        case 'triangle':
+        case 'polygon': {
             const contour = getShapeContour(shape, options);
             return getContourBounds(offsetConvexContour(contour, outer));
         }
@@ -313,6 +375,14 @@ export const getShapeArea = (shape: Shape2D): number => {
             );
         case 'line':
             return 0;
+        case 'polygon': {
+            const outer = polygonRingToFloat32(shape.outer.points);
+            let area = polygonAbsoluteArea(outer);
+            for (const hole of shape.holes) {
+                area -= polygonAbsoluteArea(polygonRingToFloat32(hole.points));
+            }
+            return Math.max(0, area);
+        }
     }
 };
 
@@ -335,6 +405,13 @@ export const getShapePerimeter = (shape: Shape2D): number => {
             );
         case 'line':
             return distance(shape.start.x, shape.start.y, shape.end.x, shape.end.y);
+        case 'polygon': {
+            let perimeter = polygonPerimeter(polygonRingToFloat32(shape.outer.points));
+            for (const hole of shape.holes) {
+                perimeter += polygonPerimeter(polygonRingToFloat32(hole.points));
+            }
+            return perimeter;
+        }
     }
 };
 
@@ -358,6 +435,8 @@ export const getShapeCentroid = (shape: Shape2D): Readonly<IVec2Like> => {
                 x: (shape.start.x + shape.end.x) * 0.5,
                 y: (shape.start.y + shape.end.y) * 0.5,
             });
+        case 'polygon':
+            return polygonCentroid(polygonRingToFloat32(shape.outer.points));
     }
 };
 
@@ -397,6 +476,18 @@ export const containsGeometryPoint = (
             return containsPointInTriangle(shape, point);
         case 'line':
             return false;
+        case 'polygon': {
+            const outer = polygonRingToFloat32(shape.outer.points);
+            if (!pointInPolygon(outer, point)) {
+                return false;
+            }
+            for (const hole of shape.holes) {
+                if (pointInPolygon(polygonRingToFloat32(hole.points), point)) {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 };
 
@@ -441,6 +532,8 @@ export const containsStrokePoint = (
 
     return !pointInConvexPolygon(innerContour, point);
 };
+
+export { float32ToPoints, pointsToFloat32, pointInPolygonWithHoles, pointToPolygonEdgeDistance };
 
 const buildLineStrokeMesh = (shape: LineShape): ShapeMesh2D | null => {
     if (!shape.stroke) {
@@ -493,6 +586,10 @@ export const buildFillMeshInternal = (
         return null;
     }
 
+    if (shape.kind === 'polygon') {
+        return buildPolygonMesh(shape);
+    }
+
     return buildConvexFanMesh(getShapeContour(shape, options));
 };
 
@@ -506,6 +603,18 @@ export const buildStrokeMeshInternal = (
 
     if (shape.kind === 'line') {
         return buildLineStrokeMesh(shape);
+    }
+
+    if (shape.kind === 'polygon') {
+        const outerRing = polygonRingToFloat32(shape.outer.points);
+        const { outer, inner } = getStrokeOffsets(shape.stroke);
+        const outerContour =
+            outer <= EPSILON ? outerRing : offsetConvexContour(outerRing, outer);
+        const innerContour =
+            inner <= EPSILON || shape.holes.length === 0
+                ? null
+                : offsetConvexContour(outerRing, -inner);
+        return buildRingMesh(outerContour, isValidContour(innerContour) ? innerContour : null);
     }
 
     const contour = getShapeContour(shape, options);

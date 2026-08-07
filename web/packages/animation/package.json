@@ -54,10 +54,25 @@
             "import": "./dist/controller.mjs",
             "require": "./dist/controller.js"
         },
+        "./streaming": {
+            "types": "./dist/streaming.d.ts",
+            "import": "./dist/streaming.mjs",
+            "require": "./dist/streaming.js"
+        },
+        "./streaming-chunk": {
+            "types": "./dist/streaming-chunk.d.ts",
+            "import": "./dist/streaming-chunk.mjs",
+            "require": "./dist/streaming-chunk.js"
+        },
         "./pose": {
             "types": "./dist/pose.d.ts",
             "import": "./dist/pose.mjs",
             "require": "./dist/pose.js"
+        },
+        "./parameters": {
+            "types": "./dist/parameters.d.ts",
+            "import": "./dist/parameters.mjs",
+            "require": "./dist/parameters.js"
         },
         "./rig": {
             "types": "./dist/rig.d.ts",
@@ -71,7 +86,7 @@
         }
     },
     "scripts": {
-        "build": "rollup -c rollup.config.mjs",
+        "build": "node --max-old-space-size=8192 ../../node_modules/rollup/dist/bin/rollup -c rollup.config.mjs",
         "clean": "rimraf dist",
         "test": "vitest run"
     },

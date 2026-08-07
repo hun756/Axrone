@@ -1,5 +1,6 @@
 import type { GameLoopSystem } from '@axrone/game-loop';
-import { renderUIFrame } from '@axrone/ui';
+import { renderUIFrame } from '@axrone/ui/render';
+import type { UIImageSource } from '@axrone/ui/types';
 import { WebGL2UIRenderer } from './renderer';
 import type {
     SceneUIOverlayHandle,
@@ -10,7 +11,6 @@ import type {
     WebGL2UIResolveImageResourceContext,
     WebGL2UIResolvedImageResource,
 } from './types';
-import type { UIImageSource } from '@axrone/ui';
 
 let nextSceneOverlayId = 1;
 

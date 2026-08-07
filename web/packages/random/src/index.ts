@@ -25,5 +25,15 @@ export const createRandom = (
     return new Random(seed, engineType);
 };
 
-export const rand = new Random();
+/** Lazy global `rand` instance — created on first access for tree-shaking. */
+let _lazyRand: Random | undefined;
+export const rand: Random = new Proxy({} as Random, {
+    get(_target, prop, receiver) {
+        if (!_lazyRand) {
+            _lazyRand = new Random();
+        }
+        const value = Reflect.get(_lazyRand, prop, _lazyRand);
+        return typeof value === 'function' ? value.bind(_lazyRand) : value;
+    },
+});
 export default rand;

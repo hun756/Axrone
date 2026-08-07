@@ -1,3 +1,17 @@
+export const INPUT_CAPABILITY_ID = 'input';
+export const INPUT_CAPABILITY_PACKAGE = '@axrone/input';
+export const INPUT_OWNER_PACKAGE = '@axrone/input';
+
+const INPUT_CAPABILITY = Object.freeze({
+    id: INPUT_CAPABILITY_ID,
+    packageName: INPUT_CAPABILITY_PACKAGE,
+    ownerPackage: INPUT_OWNER_PACKAGE,
+});
+
+export type InputCapability = typeof INPUT_CAPABILITY;
+
+export const getInputCapability = (): InputCapability => INPUT_CAPABILITY;
+
 export type {
     GamepadAxisControlPath,
     GamepadButtonControlPath,

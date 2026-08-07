@@ -45,7 +45,7 @@ export class Scene2DActorRuntime<R extends ComponentRegistry = Record<string, ne
             orthographic: isOrthographic,
             ...(isOrthographic
                 ? {
-                      near: cameraConfig.near ?? -1000,
+                      near: cameraConfig.near ?? 0.1,
                       far: cameraConfig.far ?? 1000,
                   }
                 : {}),

@@ -199,6 +199,7 @@ export class WebGLIndexBuffer implements IIndexBuffer {
             this.buffer.dispose();
             this.buffer = null;
         }
+        this.bufferFactory.dispose();
         this._count = 0;
     }
 }

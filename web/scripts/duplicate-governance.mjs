@@ -15,6 +15,7 @@ const jscpdIgnoreGlobs = [
     '**/*.d.ts',
     '**/*.test.ts',
     '**/*.spec.ts',
+    '**/vitest.config.ts',
 ];
 const approvedCrossPackageDebt = [
     {
@@ -32,6 +33,14 @@ const approvedCrossPackageDebt = [
         ],
         maxLines: 40,
         reason: 'Pending extraction of shared scene/gltf texture source and binding contracts.',
+    },
+    {
+        files: [
+            'packages/physics-2d/src/core/broadphase.ts',
+            'packages/physics-3d/src/core/broadphase-3d.ts',
+        ],
+        maxLines: 110,
+        reason: 'Approved debt: DynamicAABBTree2D/3D simulation kernels stay per-dimension packages; the raycast subsystem extraction (@axrone/raycast, plan 2.2) confirmed these are distinct simulation trees, consolidation deferred.',
     },
 ];
 

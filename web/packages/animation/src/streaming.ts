@@ -1,4 +1,5 @@
 import { AnimationClip } from './clip';
+import { clamp } from './math';
 import type { AnimationControllerClipActivity } from './types';
 
 export type AnimationClipStreamingChunkStatus = 'idle' | 'requested' | 'loaded' | 'failed';
@@ -77,6 +78,9 @@ interface AnimationStreamingChunkState {
     requestCount: number;
     lastRequestReason?: AnimationClipStreamingRequestReason;
     error?: string;
+    previousActive: boolean;
+    previousWithinPreloadWindow: boolean;
+    previousWeight: number;
 }
 
 interface AnimationClipStreamingRecord {
@@ -93,9 +97,6 @@ const EMPTY_SNAPSHOT: AnimationStreamingSnapshot = Object.freeze({
     pendingRequests: Object.freeze([]),
     clips: Object.freeze([]),
 });
-
-const clamp = (value: number, min: number, max: number): number =>
-    Math.max(min, Math.min(max, value));
 
 const toChunkId = (clipId: string, chunkId: string | undefined, index: number): string =>
     typeof chunkId === 'string' && chunkId.length > 0 ? chunkId : `${clipId}:chunk:${index}`;
@@ -202,18 +203,18 @@ const buildStreamingRecord = (clip: AnimationClip): AnimationClipStreamingRecord
 
     const chunks = streaming.catalog?.chunks.length
         ? Object.freeze(
-              streaming.catalog.chunks.map((chunk, index) =>
-                  Object.freeze({
-                      id: toChunkId(clip.id, chunk.id, index),
-                      uri: chunk.uri,
-                      startTime: chunk.startTime,
-                      endTime: chunk.endTime,
-                      ...(typeof chunk.mimeType === 'string' ? { mimeType: chunk.mimeType } : {}),
-                      ...(typeof chunk.byteOffset === 'number' ? { byteOffset: chunk.byteOffset } : {}),
-                      ...(typeof chunk.byteLength === 'number' ? { byteLength: chunk.byteLength } : {}),
-                  })
-              )
-          )
+            streaming.catalog.chunks.map((chunk, index) =>
+                Object.freeze({
+                    id: toChunkId(clip.id, chunk.id, index),
+                    uri: chunk.uri,
+                    startTime: chunk.startTime,
+                    endTime: chunk.endTime,
+                    ...(typeof chunk.mimeType === 'string' ? { mimeType: chunk.mimeType } : {}),
+                    ...(typeof chunk.byteOffset === 'number' ? { byteOffset: chunk.byteOffset } : {}),
+                    ...(typeof chunk.byteLength === 'number' ? { byteLength: chunk.byteLength } : {}),
+                })
+            )
+        )
         : buildVirtualStreamingChunks(clip);
 
     if (chunks.length === 0) {
@@ -242,6 +243,9 @@ const buildStreamingRecord = (clip: AnimationClip): AnimationClipStreamingRecord
                     withinPreloadWindow: false,
                     weight: 0,
                     requestCount: 0,
+                    previousActive: false,
+                    previousWithinPreloadWindow: false,
+                    previousWeight: 0,
                 },
             ])
         ),
@@ -253,6 +257,8 @@ const freezeArray = <T>(items: readonly T[]): readonly T[] => Object.freeze([...
 export class AnimationClipStreamingScheduler {
     private readonly _records = new Map<string, AnimationClipStreamingRecord>();
     private _snapshot: AnimationStreamingSnapshot = EMPTY_SNAPSHOT;
+    private _hasSnapshot = false;
+    private _dirty = false;
 
     constructor(clips: Iterable<AnimationClip> | ReadonlyMap<string, AnimationClip>) {
         const mapLike = clips as ReadonlyMap<string, AnimationClip>;
@@ -279,6 +285,9 @@ export class AnimationClipStreamingScheduler {
 
         for (const record of this._records.values()) {
             for (const state of record.chunkStates.values()) {
+                state.previousActive = state.active;
+                state.previousWithinPreloadWindow = state.withinPreloadWindow;
+                state.previousWeight = state.weight;
                 state.active = false;
                 state.withinPreloadWindow = false;
                 state.weight = 0;
@@ -350,6 +359,30 @@ export class AnimationClipStreamingScheduler {
                 left.startTime - right.startTime ||
                 left.clipId.localeCompare(right.clipId)
         );
+
+        let changed =
+            this._dirty ||
+            !this._hasSnapshot ||
+            pendingRequests.length !== this._snapshot.pendingRequests.length;
+        if (!changed) {
+            outer: for (const record of this._records.values()) {
+                for (const state of record.chunkStates.values()) {
+                    if (
+                        state.active !== state.previousActive ||
+                        state.withinPreloadWindow !== state.previousWithinPreloadWindow ||
+                        state.weight !== state.previousWeight
+                    ) {
+                        changed = true;
+                        break outer;
+                    }
+                }
+            }
+        }
+        if (!changed) {
+            return this._snapshot;
+        }
+        this._dirty = false;
+        this._hasSnapshot = true;
 
         const snapshots = [...this._records.values()]
             .map((record) => {
@@ -426,6 +459,7 @@ export class AnimationClipStreamingScheduler {
         }
         state.status = 'requested';
         state.error = undefined;
+        this._dirty = true;
         return true;
     }
 
@@ -436,6 +470,7 @@ export class AnimationClipStreamingScheduler {
         }
         state.status = 'loaded';
         state.error = undefined;
+        this._dirty = true;
         return true;
     }
 
@@ -446,6 +481,7 @@ export class AnimationClipStreamingScheduler {
         }
         state.status = 'failed';
         state.error = typeof error === 'string' && error.length > 0 ? error : 'failed';
+        this._dirty = true;
         return true;
     }
 
@@ -461,9 +497,14 @@ export class AnimationClipStreamingScheduler {
                 state.requestCount = 0;
                 state.lastRequestReason = undefined;
                 state.error = undefined;
+                state.previousActive = false;
+                state.previousWithinPreloadWindow = false;
+                state.previousWeight = 0;
             }
         }
         this._snapshot = EMPTY_SNAPSHOT;
+        this._hasSnapshot = false;
+        this._dirty = true;
     }
 
     private _resolveChunkState(clipId: string, chunkIdOrUri: string): AnimationStreamingChunkState | undefined {

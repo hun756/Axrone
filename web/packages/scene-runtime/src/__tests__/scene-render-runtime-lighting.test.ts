@@ -7,8 +7,8 @@ import { MeshRenderer } from '../components/mesh-renderer';
 import { PointLight } from '../components/point-light';
 import type { SceneMaterialResource } from '../material-registry';
 import type { SceneMeshResource } from '../mesh-registry';
-import type { SceneRenderPassResource } from '../render-pass-registry';
-import { SceneRenderRuntime } from '../scene-render-runtime';
+import type { SceneRenderPassResource } from '../rendering/render-pass-registry';
+import { SceneRenderRuntime } from '../rendering/scene-render-runtime';
 import { createSceneRegistry } from '../scene-registry';
 import type { SceneResourceRuntime } from '../scene-resource-runtime';
 import type { SceneShaderResource } from '../shader-registry';
@@ -29,6 +29,9 @@ const createMockGL = () => {
         POINTS: 0x0000,
         COLOR_BUFFER_BIT: 0x4000,
         DEPTH_BUFFER_BIT: 0x0100,
+        FRAMEBUFFER: 0x8d40,
+        READ_FRAMEBUFFER: 0x8ca8,
+        DRAW_FRAMEBUFFER: 0x8ca9,
         DEPTH_TEST: 0x0b71,
         CULL_FACE: 0x0b44,
         BLEND: 0x0be2,
@@ -52,14 +55,34 @@ const createMockGL = () => {
         POLYGON_OFFSET_FILL: 0x8037,
         SAMPLE_ALPHA_TO_COVERAGE: 0x809e,
         RASTERIZER_DISCARD: 0x8c89,
+        TEXTURE_MIN_FILTER: 0x2801,
+        TEXTURE_MAG_FILTER: 0x2800,
+        TEXTURE_WRAP_S: 0x2802,
+        TEXTURE_WRAP_T: 0x2803,
+        TEXTURE_WRAP_R: 0x8072,
+        CLAMP_TO_EDGE: 0x812f,
+        NEAREST: 0x2600,
         NONE: 0,
         LESS: 0x0201,
         TEXTURE0: 0x84c0,
         TEXTURE_2D: 0x0de1,
+        RGBA8: 0x8058,
+        RGBA: 0x1908,
+        UNSIGNED_BYTE: 0x1401,
+        DEPTH_COMPONENT24: 0x81a6,
+        DEPTH_COMPONENT: 0x1902,
+        UNSIGNED_INT: 0x1405,
         viewport: vi.fn(),
         clearColor: vi.fn(),
         clearDepth: vi.fn(),
         clear: vi.fn(),
+        createTexture: vi.fn(() => ({} as WebGLTexture)),
+        deleteTexture: vi.fn(),
+        bindTexture: vi.fn(),
+        texParameteri: vi.fn(),
+        texStorage2D: vi.fn(),
+        texStorage3D: vi.fn(),
+        bindFramebuffer: vi.fn(),
         enable: vi.fn(),
         disable: vi.fn(),
         frontFace: vi.fn(),
@@ -81,7 +104,6 @@ const createMockGL = () => {
         bufferData: vi.fn(),
         bindSampler: vi.fn(),
         activeTexture: vi.fn(),
-        bindTexture: vi.fn(),
         uniformMatrix4fv: vi.fn((location: WebGLUniformLocation, _transpose: boolean, value: Float32Array) => {
             uniformWrites.set((location as { name: string }).name, Array.from(value));
         }),
@@ -115,7 +137,11 @@ const createMockGL = () => {
 
 const createSceneShader = (
     gl: WebGL2RenderingContext,
-    uniformNames: readonly string[]
+    uniformNames: readonly string[],
+    options: {
+        readonly id?: string;
+        readonly blend?: boolean;
+    } = {}
 ): SceneShaderResource => {
     const locationEntries = uniformNames.map((name) => [
         name,
@@ -123,7 +149,7 @@ const createSceneShader = (
     ] as const);
 
     return {
-        id: 'shader',
+        id: options.id ?? 'shader',
         program: {} as WebGLProgram,
         uniformLocations: new Map(locationEntries),
         uniformTypes: new Map([
@@ -138,7 +164,7 @@ const createSceneShader = (
         attributeNames: { position: 'a_Position' },
         depthTest: false,
         cull: false,
-        blend: false,
+        blend: options.blend ?? false,
     };
 };
 
@@ -304,5 +330,191 @@ describe('SceneRenderRuntime lighting integration', () => {
         expect((gl.drawArrays as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(1);
         expect(runtime.stats.drawCalls).toBe(1);
         expect(runtime.stats.trianglesSubmitted).toBe(1);
+        expect(runtime.stats.planning.passCount).toBeGreaterThan(0);
+        expect(runtime.stats.planning.opaqueCount).toBe(1);
+        expect(runtime.stats.planning.transparentCount).toBe(0);
+    });
+
+    it('enforces transparent primitive budgets through render-core planning before execution', () => {
+        const { gl } = createMockGL();
+        const world = new World(createSceneRegistry());
+
+        const cameraActor = new Actor(world);
+        cameraActor.addComponent(Camera, { primary: true });
+        cameraActor.requireComponent(Transform);
+
+        const opaqueActor = new Actor(world);
+        opaqueActor.addComponent(MeshRenderer, {
+            meshId: 'mesh',
+            materialId: 'opaque-material',
+            passId: 'main',
+            receiveLighting: false,
+        });
+        opaqueActor.requireComponent(Transform);
+
+        const transparentActorA = new Actor(world);
+        transparentActorA.addComponent(MeshRenderer, {
+            meshId: 'mesh',
+            materialId: 'transparent-material-a',
+            passId: 'main',
+            receiveLighting: false,
+        });
+        transparentActorA.requireComponent(Transform);
+
+        const transparentActorB = new Actor(world);
+        transparentActorB.addComponent(MeshRenderer, {
+            meshId: 'mesh',
+            materialId: 'transparent-material-b',
+            passId: 'main',
+            receiveLighting: false,
+        });
+        transparentActorB.requireComponent(Transform);
+
+        const mesh: SceneMeshResource = {
+            id: 'mesh',
+            vertexArray: {} as WebGLVertexArrayObject,
+            vertexBuffer: {} as WebGLBuffer,
+            indexBuffer: null,
+            vertexCount: 3,
+            indexCount: 0,
+            indexType: null,
+            topology: 'triangles',
+            mode: gl.TRIANGLES,
+            attributes: new Set(['position']),
+        };
+        const meshDefinition: SceneMeshDefinition = {
+            id: 'mesh',
+            vertices: new Float32Array([
+                0, 0, 0,
+                1, 0, 0,
+                0, 1, 0,
+            ]),
+            attributes: [
+                {
+                    semantic: 'position',
+                    componentCount: 3,
+                    offset: 0,
+                    stride: 12,
+                },
+            ],
+            vertexCount: 3,
+            topology: 'triangles',
+        };
+        const opaqueShader = createSceneShader(gl, [], {
+            id: 'opaque-shader',
+            blend: false,
+        });
+        const transparentShader = createSceneShader(gl, [], {
+            id: 'transparent-shader',
+            blend: true,
+        });
+        const opaqueMaterial: SceneMaterialResource = {
+            id: 'opaque-material',
+            shaderId: opaqueShader.id,
+            uniforms: new Map(),
+            textureBindings: new Map(),
+            surface: {
+                shadingModel: 'unlit',
+                alphaMode: 'opaque',
+            },
+            passes: Object.freeze([]),
+        };
+        const transparentMaterialA: SceneMaterialResource = {
+            id: 'transparent-material-a',
+            shaderId: transparentShader.id,
+            uniforms: new Map(),
+            textureBindings: new Map(),
+            surface: {
+                shadingModel: 'unlit',
+                alphaMode: 'blend',
+            },
+            passes: Object.freeze([]),
+        };
+        const transparentMaterialB: SceneMaterialResource = {
+            id: 'transparent-material-b',
+            shaderId: transparentShader.id,
+            uniforms: new Map(),
+            textureBindings: new Map(),
+            surface: {
+                shadingModel: 'unlit',
+                alphaMode: 'blend',
+            },
+            passes: Object.freeze([]),
+        };
+        const renderPass: SceneRenderPassResource = {
+            id: 'main',
+            order: 0,
+            rendererPassId: 'main',
+            materialPassId: null,
+            enabled: true,
+            clearFlags: [],
+            clearColor: null,
+            clearDepth: null,
+        };
+        const materials = new Map([
+            [opaqueMaterial.id, opaqueMaterial],
+            [transparentMaterialA.id, transparentMaterialA],
+            [transparentMaterialB.id, transparentMaterialB],
+        ]);
+        const shaders = new Map([
+            [opaqueShader.id, opaqueShader],
+            [transparentShader.id, transparentShader],
+        ]);
+        const resources = {
+            materials: {
+                get: (id: string) => materials.get(id),
+                getTextureSlots: () => Object.freeze([]),
+            },
+            meshes: {
+                get: (id: string) => (id === mesh.id ? mesh : undefined),
+                getDefinition: (id: string) => (id === mesh.id ? meshDefinition : undefined),
+            },
+            shaders: {
+                get: (id: string) => shaders.get(id),
+            },
+            textures: {
+                get: () => undefined,
+            },
+            renderPasses: {
+                getEnabledResources: () => [renderPass],
+            },
+            resolveSampler: () => ({
+                bind: vi.fn(),
+                nativeHandle: null,
+            }),
+        } as unknown as SceneResourceRuntime;
+        const runtime = new SceneRenderRuntime({
+            gl,
+            resources,
+            ambientLight: Vec3.ZERO.clone(),
+            skyLight: Vec3.ZERO.clone(),
+            groundLight: Vec3.ZERO.clone(),
+            defaultClearColor: new Vec4(0, 0, 0, 1),
+            planning: {
+                maxTransparentPrimitives: 1,
+            },
+            getActors: () => world.getAllActors(),
+            createMeshResource: vi.fn(() => mesh),
+            disposeMesh: vi.fn(),
+            applyMissingVertexAttributeDefaults: vi.fn(),
+        });
+
+        runtime.render({
+            frame: 2,
+            elapsedSeconds: 2,
+            deltaSeconds: 1 / 60,
+            viewportWidth: 640,
+            viewportHeight: 360,
+        });
+
+        expect((gl.drawArrays as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(2);
+        expect(runtime.stats.drawCalls).toBe(2);
+        expect(runtime.stats.trianglesSubmitted).toBe(2);
+        expect(runtime.stats.planning.opaqueCount).toBe(1);
+        expect(runtime.stats.planning.transparentCount).toBe(1);
+        expect(runtime.stats.planning.warnings).toEqual([
+            'transparent primitive budget exceeded at 1',
+        ]);
+        expect(runtime.stats.planning.passCount).toBeGreaterThan(0);
     });
 });

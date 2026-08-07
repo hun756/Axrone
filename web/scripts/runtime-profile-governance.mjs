@@ -108,22 +108,29 @@ const runtimeProfileBudgets = [
     {
         packageDir: 'runtime-profile-core',
         packageName: '@axrone/runtime-profile-core',
-        expectedDependencies: ['@axrone/input-core', '@axrone/scene-runtime'],
+        expectedDependencies: ['@axrone/input', '@axrone/scene-runtime'],
         maxEntryBytes: 2048,
         maxStartupMs: 80,
-        maxHeapDeltaKb: 6144,
+        // Raised from 6144 KB: the cold-import heap cost of scene-runtime grew
+        // with the direct-GL guard + context-loss recovery runtime (2026-07).
+        // Raised again to 10240 KB after the ecs micro-package merge (plan 2.1):
+        // storage/query/support sources are now inlined into the ecs-runtime
+        // entry bundle instead of loading as separate external chunks
+        // (measured median ~8.9 MB across repeated runs).
+        maxHeapDeltaKb: 10240,
     },
     {
         packageDir: 'runtime-profile-2d',
         packageName: '@axrone/runtime-profile-2d',
         expectedDependencies: [
             '@axrone/asset-2d',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/physics-2d',
             '@axrone/physics-core',
             '@axrone/render-2d',
             '@axrone/scene-2d',
             '@axrone/scene-runtime',
+            '@axrone/ui',
         ],
         maxEntryBytes: 2048,
         maxStartupMs: 200,
@@ -135,13 +142,16 @@ const runtimeProfileBudgets = [
         expectedDependencies: [
             '@axrone/asset-core',
             '@axrone/asset-gltf',
-            '@axrone/input-core',
+            '@axrone/asset-ui',
+            '@axrone/input',
             '@axrone/physics-3d',
             '@axrone/physics-core',
             '@axrone/render-3d',
             '@axrone/render-webgl2',
             '@axrone/scene-3d',
             '@axrone/scene-runtime',
+            '@axrone/ui',
+            '@axrone/ui-webgl2',
         ],
         maxEntryBytes: 2048,
         maxStartupMs: 320,
@@ -154,16 +164,23 @@ const runtimeProfileBudgets = [
             '@axrone/asset-2d',
             '@axrone/asset-core',
             '@axrone/asset-gltf',
-            '@axrone/input-core',
+            '@axrone/asset-ui',
+            '@axrone/input',
             '@axrone/physics-2d',
             '@axrone/physics-3d',
             '@axrone/physics-core',
             '@axrone/render-2d',
             '@axrone/render-3d',
             '@axrone/render-webgl2',
+            // The full profile composes the 2d/3d profiles for its combined
+            // capability list (see runtime-profile-full/src/capabilities.ts).
+            '@axrone/runtime-profile-2d',
+            '@axrone/runtime-profile-3d',
             '@axrone/scene-2d',
             '@axrone/scene-3d',
             '@axrone/scene-runtime',
+            '@axrone/ui',
+            '@axrone/ui-webgl2',
         ],
         maxEntryBytes: 4096,
         maxStartupMs: 400,

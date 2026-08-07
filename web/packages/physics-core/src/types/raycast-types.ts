@@ -4,7 +4,11 @@ import type { BodyId, ShapeId } from './primitives';
 export type RaycastId = number & { readonly __raycastIdBrand: unique symbol };
 export type LayerMask = number & { readonly __layerMaskBrand: unique symbol };
 
-export const enum RaycastFlags {
+// NOTE: These are intentionally regular (non-const) enums. `const enum`
+// values are erased by isolatedModules transpilers (esbuild/vitest/rollup
+// per-file transforms), which turns cross-package re-exports like
+// `RaycastLayer.All` into `undefined` at runtime.
+export enum RaycastFlags {
     None = 0,
     ClosestOnly = 1 << 0,
     AllHits = 1 << 1,
@@ -16,7 +20,7 @@ export const enum RaycastFlags {
     IncludeInactive = 1 << 7,
 }
 
-export const enum RaycastLayer {
+export enum RaycastLayer {
     Default = 1 << 0,
     Static = 1 << 1,
     Dynamic = 1 << 2,
@@ -98,7 +102,7 @@ export interface IRaycastResult3D {
     readonly hasHit: boolean;
 }
 
-export const enum RayIntersectionType {
+export enum RayIntersectionType {
     None = 0,
     Entry = 1,
     Exit = 2,

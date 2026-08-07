@@ -2,6 +2,7 @@ import type {
     GltfActorSnapshot,
     GltfComponentSnapshot,
     GltfMaterialDefinition,
+    GltfMeshBounds,
     GltfMeshDefinition,
     GltfPrefabDefinition,
     GltfSamplerDefinition,
@@ -13,6 +14,7 @@ import type {
     SceneMeshDefinition,
     ScenePrefabDefinition,
     SceneSamplerDefinition,
+    SceneSerializedValue,
     SceneShaderDefinition,
     SceneTextureDefinition,
 } from '@axrone/scene-runtime';
@@ -21,6 +23,12 @@ const adaptGltfComponentSnapshotToScene = (
     component: GltfComponentSnapshot
 ): ScenePrefabDefinition['actors'][number]['components'][number] => ({
     ...component,
+    // Gltf component payloads are plain JSON-compatible records; the scene
+    // contract types them as SceneSerializedValue (index-signature JSON).
+    // The structural conversion is safe and stays until the shared
+    // scene/gltf serialized-value contract extraction lands
+    // (duplicate-governance approved debt).
+    data: component.data as unknown as SceneSerializedValue,
 });
 
 const adaptGltfActorSnapshotToScene = (
@@ -37,12 +45,37 @@ export const adaptGltfPrefabDefinitionToScene = (
     actors: definition.actors.map(adaptGltfActorSnapshotToScene),
 });
 
+const adaptGltfMeshBoundsToScene = (
+    bounds: Readonly<GltfMeshBounds> | undefined
+): SceneMeshDefinition['bounds'] | undefined => {
+    if (!bounds) {
+        return undefined;
+    }
+
+    const centerX = (bounds.min[0] + bounds.max[0]) * 0.5;
+    const centerY = (bounds.min[1] + bounds.max[1]) * 0.5;
+    const centerZ = (bounds.min[2] + bounds.max[2]) * 0.5;
+    const radius = Math.hypot(
+        bounds.max[0] - centerX,
+        bounds.max[1] - centerY,
+        bounds.max[2] - centerZ
+    );
+
+    return {
+        kind: 'sphere',
+        center: [centerX, centerY, centerZ],
+        radius,
+    };
+};
+
 export const adaptGltfMeshDefinitionToScene = (
     definition: GltfMeshDefinition,
-    id: string
+    id: string,
+    bounds?: Readonly<GltfMeshBounds>
 ): SceneMeshDefinition => ({
     ...definition,
     id,
+    ...(adaptGltfMeshBoundsToScene(bounds) ? { bounds: adaptGltfMeshBoundsToScene(bounds) } : {}),
     attributes: [...definition.attributes],
     morphTargets: definition.morphTargets
         ? definition.morphTargets.map((target) => ({

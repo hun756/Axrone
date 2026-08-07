@@ -4,16 +4,16 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
     RUNTIME_PROFILE_CORE_CAPABILITY_PACKAGES,
-} from '@axrone/runtime-profile-core';
+} from '@axrone/runtime-profile-core/capabilities';
 import {
     RUNTIME_PROFILE_2D_CAPABILITY_PACKAGES,
-} from '@axrone/runtime-profile-2d';
+} from '@axrone/runtime-profile-2d/capabilities';
 import {
     RUNTIME_PROFILE_3D_CAPABILITY_PACKAGES,
-} from '@axrone/runtime-profile-3d';
+} from '@axrone/runtime-profile-3d/capabilities';
 import {
     RUNTIME_PROFILE_FULL_CAPABILITY_PACKAGES,
-} from '@axrone/runtime-profile-full';
+} from '@axrone/runtime-profile-full/capabilities';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const packagesDir = path.resolve(testDir, '../../../packages');
@@ -33,10 +33,10 @@ describe('runtime profile capability graph', () => {
     it('keeps runtime-profile-core aligned with the cross-cutting scene-runtime/input capability seam', () => {
         expect(RUNTIME_PROFILE_CORE_CAPABILITY_PACKAGES).toEqual([
             '@axrone/scene-runtime',
-            '@axrone/input-core',
+            '@axrone/input',
         ]);
         expect(readDependencyKeys('runtime-profile-core')).toEqual([
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/scene-runtime',
         ]);
     });
@@ -45,20 +45,22 @@ describe('runtime profile capability graph', () => {
         expect(RUNTIME_PROFILE_2D_CAPABILITY_PACKAGES).toEqual([
             '@axrone/scene-runtime',
             '@axrone/scene-2d',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/asset-2d',
             '@axrone/render-2d',
             '@axrone/physics-core',
             '@axrone/physics-2d',
+            '@axrone/ui',
         ]);
         expect(readDependencyKeys('runtime-profile-2d')).toEqual([
             '@axrone/asset-2d',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/physics-2d',
             '@axrone/physics-core',
             '@axrone/render-2d',
             '@axrone/scene-2d',
             '@axrone/scene-runtime',
+            '@axrone/ui',
         ]);
         expect(RUNTIME_PROFILE_2D_CAPABILITY_PACKAGES).not.toContain('@axrone/asset-gltf');
         expect(RUNTIME_PROFILE_2D_CAPABILITY_PACKAGES).not.toContain('@axrone/render-3d');
@@ -70,24 +72,30 @@ describe('runtime profile capability graph', () => {
         expect(RUNTIME_PROFILE_3D_CAPABILITY_PACKAGES).toEqual([
             '@axrone/scene-runtime',
             '@axrone/scene-3d',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/asset-core',
             '@axrone/asset-gltf',
+            '@axrone/asset-ui',
             '@axrone/render-3d',
             '@axrone/render-webgl2',
             '@axrone/physics-core',
             '@axrone/physics-3d',
+            '@axrone/ui',
+            '@axrone/ui-webgl2',
         ]);
         expect(readDependencyKeys('runtime-profile-3d')).toEqual([
             '@axrone/asset-core',
             '@axrone/asset-gltf',
-            '@axrone/input-core',
+            '@axrone/asset-ui',
+            '@axrone/input',
             '@axrone/physics-3d',
             '@axrone/physics-core',
             '@axrone/render-3d',
             '@axrone/render-webgl2',
             '@axrone/scene-3d',
             '@axrone/scene-runtime',
+            '@axrone/ui',
+            '@axrone/ui-webgl2',
         ]);
         expect(RUNTIME_PROFILE_3D_CAPABILITY_PACKAGES).not.toContain('@axrone/asset-2d');
         expect(RUNTIME_PROFILE_3D_CAPABILITY_PACKAGES).not.toContain('@axrone/render-2d');
@@ -98,32 +106,40 @@ describe('runtime profile capability graph', () => {
         expect(RUNTIME_PROFILE_FULL_CAPABILITY_PACKAGES).toEqual([
             '@axrone/scene-runtime',
             '@axrone/scene-2d',
-            '@axrone/input-core',
+            '@axrone/input',
             '@axrone/asset-2d',
             '@axrone/render-2d',
             '@axrone/physics-core',
             '@axrone/physics-2d',
+            '@axrone/ui',
             '@axrone/scene-3d',
             '@axrone/asset-core',
             '@axrone/asset-gltf',
+            '@axrone/asset-ui',
             '@axrone/render-3d',
             '@axrone/render-webgl2',
             '@axrone/physics-3d',
+            '@axrone/ui-webgl2',
         ]);
         expect(readDependencyKeys('runtime-profile-full')).toEqual([
             '@axrone/asset-2d',
             '@axrone/asset-core',
             '@axrone/asset-gltf',
-            '@axrone/input-core',
+            '@axrone/asset-ui',
+            '@axrone/input',
             '@axrone/physics-2d',
             '@axrone/physics-3d',
             '@axrone/physics-core',
             '@axrone/render-2d',
             '@axrone/render-3d',
             '@axrone/render-webgl2',
+            '@axrone/runtime-profile-2d',
+            '@axrone/runtime-profile-3d',
             '@axrone/scene-2d',
             '@axrone/scene-3d',
             '@axrone/scene-runtime',
+            '@axrone/ui',
+            '@axrone/ui-webgl2',
         ]);
     });
 });

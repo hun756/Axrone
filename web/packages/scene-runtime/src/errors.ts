@@ -55,30 +55,11 @@ export class SceneCapabilityError extends SceneError {
     }
 }
 
-export class ScenePrefabError extends SceneError {
-    constructor(message: string, code = 'SCENE_PREFAB_ERROR', cause?: unknown) {
-        super(message, code, cause);
-        this.name = 'ScenePrefabError';
-    }
-}
-
-export class ScenePrefabValidationError extends ScenePrefabError {
-    constructor(message: string, cause?: unknown) {
-        super(message, 'SCENE_PREFAB_VALIDATION_ERROR', cause);
-        this.name = 'ScenePrefabValidationError';
-    }
-}
-
-export class ScenePrefabResolutionError extends ScenePrefabError {
-    constructor(message: string, cause?: unknown) {
-        super(message, 'SCENE_PREFAB_RESOLUTION_ERROR', cause);
-        this.name = 'ScenePrefabResolutionError';
-    }
-}
-
-export class ScenePrefabConflictError extends ScenePrefabError {
-    constructor(message: string, cause?: unknown) {
-        super(message, 'SCENE_PREFAB_CONFLICT_ERROR', cause);
-        this.name = 'ScenePrefabConflictError';
-    }
-}
+// Prefab error classes moved to @axrone/scene-prefab.
+// Re-exported here for backward compatibility within scene-runtime.
+export {
+    ScenePrefabError,
+    ScenePrefabValidationError,
+    ScenePrefabResolutionError,
+    ScenePrefabConflictError,
+} from '@axrone/scene-prefab';

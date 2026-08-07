@@ -13,6 +13,16 @@
             "types": "./dist/index.d.ts",
             "import": "./dist/index.mjs",
             "require": "./dist/index.js"
+        },
+        "./capabilities": {
+            "types": "./dist/capabilities.d.ts",
+            "import": "./dist/capabilities.mjs",
+            "require": "./dist/capabilities.js"
+        },
+        "./profile": {
+            "types": "./dist/profile.d.ts",
+            "import": "./dist/profile.mjs",
+            "require": "./dist/profile.js"
         }
     },
     "scripts": {
@@ -21,7 +31,7 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@axrone/input-core": "^0.1.0",
+        "@axrone/input": "^0.1.0",
         "@axrone/scene-runtime": "^0.1.0"
     }
 }

@@ -1,8 +1,9 @@
 import { Vec4 } from '@axrone/numeric';
 import type { ITextureSampler } from '@axrone/render-webgl2';
 import { SceneMaterialRegistry } from './material-registry';
+import type { SceneMaterialObservables } from './material-observables';
 import { SceneMeshRegistry, type SceneMeshResource } from './mesh-registry';
-import { SceneRenderPassRegistry } from './render-pass-registry';
+import { SceneRenderPassRegistry } from './rendering/render-pass-registry';
 import { SceneSamplerRegistry, type SceneSamplerResource } from './sampler-registry';
 import { SceneShaderRegistry, type SceneShaderResource } from './shader-registry';
 import { SceneTextureRegistry, type SceneTextureResource } from './texture-registry';
@@ -20,6 +21,7 @@ export interface SceneResourceRuntimeOptions {
     readonly defaultPassId: string;
     readonly defaultClearColor: Vec4;
     readonly defaultSampler: ITextureSampler;
+    readonly materialObservables?: SceneMaterialObservables;
 }
 
 export interface SceneResourceRuntimeSerializationResult {
@@ -40,7 +42,7 @@ export interface SceneResourceRuntimeClearCallbacks {
 
 export class SceneResourceRuntime {
     readonly shaders = new SceneShaderRegistry();
-    readonly materials = new SceneMaterialRegistry();
+    readonly materials: SceneMaterialRegistry;
     readonly meshes = new SceneMeshRegistry();
     readonly samplers: SceneSamplerRegistry;
     readonly textures = new SceneTextureRegistry();
@@ -50,6 +52,9 @@ export class SceneResourceRuntime {
 
     constructor(options: SceneResourceRuntimeOptions) {
         this._defaultSampler = options.defaultSampler;
+        this.materials = new SceneMaterialRegistry({
+            observables: options.materialObservables,
+        });
         this.samplers = new SceneSamplerRegistry();
         this.renderPasses = new SceneRenderPassRegistry({
             defaultPassId: options.defaultPassId,

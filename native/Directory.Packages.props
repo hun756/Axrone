@@ -1,0 +1,27 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <PropertyGroup Label="CentralizedPackageVersions">
+    <BenchmarkDotNetVersion>0.14.0</BenchmarkDotNetVersion>
+    <FluentAssertionsVersion>8.3.0</FluentAssertionsVersion>
+    <XunitVersion>2.9.3</XunitVersion>
+    <XunitRunnerVersion>2.8.2</XunitRunnerVersion>
+    <CoverletVersion>6.0.4</CoverletVersion>
+  </PropertyGroup>
+
+  <ItemGroup Label="TestDependencies">
+    <PackageVersion Include="xunit" Version="$(XunitVersion)" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="$(XunitRunnerVersion)" />
+    <PackageVersion Include="FluentAssertions" Version="$(FluentAssertionsVersion)" />
+    <PackageVersion Include="coverlet.collector" Version="$(CoverletVersion)" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="PerformanceDependencies">
+    <PackageVersion Include="BenchmarkDotNet" Version="$(BenchmarkDotNetVersion)" />
+  </ItemGroup>
+
+</Project>

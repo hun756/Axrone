@@ -1,4 +1,4 @@
-import type { Mat4 } from '@axrone/numeric';
+import { Vec3, type Mat4 } from '@axrone/numeric';
 import { ReusableList, SortableRenderList, StringKeyCache } from './memory';
 import type {
     ReadonlyRenderList,
@@ -30,9 +30,11 @@ const getX = (value: RenderVec3Ref): number => (Array.isArray(value) ? value[0] 
 const getY = (value: RenderVec3Ref): number => (Array.isArray(value) ? value[1] : asObjectVec3(value).y);
 const getZ = (value: RenderVec3Ref): number => (Array.isArray(value) ? value[2] : asObjectVec3(value).z);
 
-const getTranslationX = (matrix: Mat4): number => matrix.data[12];
-const getTranslationY = (matrix: Mat4): number => matrix.data[13];
-const getTranslationZ = (matrix: Mat4): number => matrix.data[14];
+const getTranslationX = (matrix: Mat4): number => matrix.data[3];
+const getTranslationY = (matrix: Mat4): number => matrix.data[7];
+const getTranslationZ = (matrix: Mat4): number => matrix.data[11];
+
+const resolveCameraFrustum = (camera: RenderCameraState) => camera.frustum ?? camera.camera3D?.frustum;
 
 const layerVisible = (cameraMask: number, primitiveMask: number | undefined): boolean =>
     primitiveMask === undefined || primitiveMask === 0 || (cameraMask & primitiveMask) !== 0;
@@ -110,6 +112,13 @@ const renderQueueFor = (primitive: RenderPrimitiveInstance): number => {
 
 export class RenderFrameClassifier {
     private readonly _strings = new StringKeyCache();
+    private readonly _primitiveFrustumMin = new Vec3();
+    private readonly _primitiveFrustumMax = new Vec3();
+    private readonly _primitiveFrustumBounds = {
+        kind: 'aabb' as const,
+        min: this._primitiveFrustumMin,
+        max: this._primitiveFrustumMax,
+    };
     private readonly _opaque = new SortableRenderList<RenderPrimitiveInstance>(256);
     private readonly _transparent = new SortableRenderList<RenderPrimitiveInstance>(128);
     private readonly _shadowCasters = new SortableRenderList<RenderPrimitiveInstance>(256);
@@ -183,12 +192,17 @@ export class RenderFrameClassifier {
 
     private _classifyPrimitives(input: RenderFrameInput, warnings: ReusableList<string>): void {
         const cameraMask = input.camera.layerMask ?? -1;
+        const frustum = resolveCameraFrustum(input.camera);
         for (const primitive of input.primitives) {
             if (primitive.visible === false) {
                 continue;
             }
 
             if (!layerVisible(cameraMask, primitive.layerMask)) {
+                continue;
+            }
+
+            if (frustum && primitive.bounds && !this._intersectsCameraFrustum(primitive, frustum)) {
                 continue;
             }
 
@@ -225,6 +239,50 @@ export class RenderFrameClassifier {
         this._opaque.sort(OPAQUE_SORT);
         this._transparent.sort(TRANSPARENT_SORT);
         this._shadowCasters.sort(OPAQUE_SORT);
+    }
+
+    private _intersectsCameraFrustum(
+        primitive: RenderPrimitiveInstance,
+        frustum: NonNullable<ReturnType<typeof resolveCameraFrustum>>
+    ): boolean {
+        const bounds = primitive.bounds;
+        if (!bounds) {
+            return true;
+        }
+
+        const localCenterX = getX(bounds.center);
+        const localCenterY = getY(bounds.center);
+        const localCenterZ = getZ(bounds.center);
+        const extentX = getX(bounds.extents);
+        const extentY = getY(bounds.extents);
+        const extentZ = getZ(bounds.extents);
+
+        // The supplied bounds are expressed in the primitive's local mesh space. Transform the
+        // center into world space with the (row-major) world matrix, and grow the extents by the
+        // matrix's largest axis scale, before frustum testing. Skipping this culls objects that
+        // sit far from the world origin as soon as the camera moves away with them, because their
+        // untransformed bounds remain near the origin and fall outside the frustum.
+        const m = primitive.worldMatrix.data;
+        const centerX = m[0]! * localCenterX + m[1]! * localCenterY + m[2]! * localCenterZ + m[3]!;
+        const centerY = m[4]! * localCenterX + m[5]! * localCenterY + m[6]! * localCenterZ + m[7]!;
+        const centerZ = m[8]! * localCenterX + m[9]! * localCenterY + m[10]! * localCenterZ + m[11]!;
+
+        const scaleX = Math.hypot(m[0]!, m[4]!, m[8]!);
+        const scaleY = Math.hypot(m[1]!, m[5]!, m[9]!);
+        const scaleZ = Math.hypot(m[2]!, m[6]!, m[10]!);
+        const maxScale = Math.max(scaleX, scaleY, scaleZ, 1e-6);
+        const worldExtentX = extentX * maxScale;
+        const worldExtentY = extentY * maxScale;
+        const worldExtentZ = extentZ * maxScale;
+
+        this._primitiveFrustumMin.x = centerX - worldExtentX;
+        this._primitiveFrustumMin.y = centerY - worldExtentY;
+        this._primitiveFrustumMin.z = centerZ - worldExtentZ;
+        this._primitiveFrustumMax.x = centerX + worldExtentX;
+        this._primitiveFrustumMax.y = centerY + worldExtentY;
+        this._primitiveFrustumMax.z = centerZ + worldExtentZ;
+
+        return frustum.intersectsAabb(this._primitiveFrustumBounds);
     }
 
     private _classifyLights(input: RenderFrameInput): void {

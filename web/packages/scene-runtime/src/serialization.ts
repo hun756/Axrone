@@ -1,10 +1,45 @@
+import type { BoundingSphere } from '@axrone/geometry';
 import { Mat4, Quat, Vec2, Vec3, Vec4 } from '@axrone/numeric';
+import { cloneSceneMeshBounds } from './scene-mesh-bounds';
 import type {
     SceneMorphTargetDefinition,
     SceneMeshDefinition,
     SceneSerializedValue,
     SceneTextureBindingDefinition,
 } from './types';
+
+type BoundingSphereCenter = Readonly<BoundingSphere>['center'];
+type SerializedSphereBounds = {
+    readonly kind: 'sphere';
+    readonly center: readonly SceneSerializedValue[];
+    readonly radius: SceneSerializedValue;
+};
+
+/**
+ * Rounds a Float32 value to 6 significant decimal digits before JSON
+ * serialization. Float32 has ~7 significant digits; when spread into a JS
+ * number (Float64) the extra digits are representation noise, not meaningful
+ * data. Rounding cuts per-value text from ~18 chars to ~8 chars on average,
+ * reducing animation keyframe and vertex data JSON by ~55%.
+ */
+const roundFloat32ForJson = (value: number): number => {
+    if (value === 0 || !Number.isFinite(value)) return value;
+    const magnitude = Math.pow(10, 5 - Math.floor(Math.log10(Math.abs(value))));
+    if (!Number.isFinite(magnitude)) return value;
+    return Math.round(value * magnitude) / magnitude;
+};
+
+const isBoundingSphereCenterTuple = (center: BoundingSphereCenter): center is readonly [number, number, number] =>
+    Array.isArray(center);
+
+const isSerializedSphereBounds = (value: SceneSerializedValue | undefined): value is SerializedSphereBounds => {
+    if (value === null || value === undefined || Array.isArray(value) || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Record<string, SceneSerializedValue>;
+    return candidate.kind === 'sphere' && Array.isArray(candidate.center);
+};
 
 const cloneMorphTargets = (
     morphTargets: readonly SceneMorphTargetDefinition[] | undefined
@@ -56,8 +91,14 @@ export const encodeSceneValue = (value: unknown): SceneSerializedValue => {
         return { $type: 'Mat4', value: [...value.data] };
     }
 
+    if (value instanceof Float32Array) {
+        return {
+            $type: 'Float32Array',
+            value: Array.from(value, roundFloat32ForJson),
+        };
+    }
+
     if (
-        value instanceof Float32Array ||
         value instanceof Int32Array ||
         value instanceof Uint32Array ||
         value instanceof Uint16Array ||
@@ -130,6 +171,9 @@ export const decodeSceneValue = (value: SceneSerializedValue): unknown => {
             case 'Uint8Array':
                 return new Uint8Array(encodedValue.map((entry) => Number(entry)));
             default:
+                console.warn(
+                    `[scene-runtime] Unknown serialized type '$type=${encodedType}', falling back to raw array decode`
+                );
                 return encodedValue.map((entry) => decodeSceneValue(entry as SceneSerializedValue));
         }
     }
@@ -164,6 +208,7 @@ export const cloneMeshDefinition = (definition: SceneMeshDefinition): SceneMeshD
         ...definition,
         vertices,
         indices,
+        ...(definition.bounds ? { bounds: cloneSceneMeshBounds(definition.bounds) } : {}),
         attributes: definition.attributes.map((attribute) => ({ ...attribute })),
         ...(definition.morphTargets
             ? { morphTargets: cloneMorphTargets(definition.morphTargets) }
@@ -202,6 +247,19 @@ export const serializeMeshDefinition = (definition: SceneMeshDefinition): SceneS
                       values: [...attribute.values],
                   })),
               }))
+            : null,
+        bounds: definition.bounds
+            ? {
+                  kind: 'sphere',
+                  center: isBoundingSphereCenterTuple(definition.bounds.center)
+                      ? [...definition.bounds.center]
+                      : [
+                            definition.bounds.center.x,
+                            definition.bounds.center.y,
+                            definition.bounds.center.z,
+                        ],
+                  radius: definition.bounds.radius,
+              }
             : null,
         vertexCount: definition.vertexCount ?? null,
         topology: definition.topology ?? 'triangles',
@@ -249,6 +307,17 @@ export const deserializeMeshDefinition = (value: SceneSerializedValue): SceneMes
         id: String(objectValue.id),
         vertices,
         indices,
+        bounds: isSerializedSphereBounds(objectValue.bounds)
+            ? {
+                  kind: 'sphere' as const,
+                  center: [
+                      Number(objectValue.bounds.center[0]),
+                      Number(objectValue.bounds.center[1]),
+                      Number(objectValue.bounds.center[2]),
+                  ] as const,
+                  radius: Number(objectValue.bounds.radius),
+              }
+            : undefined,
         morphTargets: Array.isArray(objectValue.morphTargets)
             ? Object.freeze(
                   objectValue.morphTargets.map((target: SceneSerializedValue) => {

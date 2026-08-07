@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as renderCore from '@axrone/render-core';
+import * as renderCorePlanner from '@axrone/render-core/planner';
+import * as renderCorePipeline from '@axrone/render-core/pipeline';
+import * as renderCoreShaderEffect from '@axrone/render-core/shader-effect';
 
 describe('render-core entry', () => {
     it('surfaces render pipeline planning primitives without leaking backend-specific texture APIs', () => {
@@ -9,5 +12,17 @@ describe('render-core entry', () => {
         expect(renderCore.createRenderPassGraph).toBeDefined();
         expect('TextureFormat' in renderCore).toBe(false);
         expect('TextureFormatInfo' in renderCore).toBe(false);
+
+        expect(renderCorePipeline.RenderPipeline).toBeDefined();
+        expect(renderCorePipeline.createRenderPipeline).toBeDefined();
+        expect('compileRenderShaderEffect' in renderCorePipeline).toBe(false);
+
+        expect(renderCorePlanner.RenderFrameClassifier).toBeDefined();
+        expect(renderCorePlanner.RenderPassPlanner).toBeDefined();
+        expect('RenderPipeline' in renderCorePlanner).toBe(false);
+
+        expect(renderCoreShaderEffect.compileRenderShaderEffect).toBeDefined();
+        expect(renderCoreShaderEffect.cloneRenderShaderEffectDefinition).toBeDefined();
+        expect('RenderPipeline' in renderCoreShaderEffect).toBe(false);
     });
 });

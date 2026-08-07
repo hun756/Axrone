@@ -104,6 +104,7 @@ export interface ITween<T> {
     isPlaying(): boolean;
     getStatus(): TweenStatus;
     getDuration(): number;
+    getTotalDuration(): number;
     from(properties: DeepPartial<T>): this;
     to(properties: DeepPartial<T>, duration?: number): this;
     duration(ms: number): this;
@@ -127,6 +128,8 @@ export interface ITween<T> {
 export interface IGroupable {
     id: number;
     isPlaying(): boolean;
+    getStatus(): 'idle' | 'running' | 'paused' | 'completed';
+    getTotalDuration(): number;
     start(time?: number): this;
     stop(): this;
     pause(): this;

@@ -7,9 +7,9 @@ import type {
 } from '../types/core';
 import type { QueryResult } from '../types/system';
 import type { EventKey } from '@axrone/event';
-import { OptimizedQueryCache } from '@axrone/ecs-query/query-cache';
-import { WorldQueryRuntime } from '@axrone/ecs-query/world-query-runtime';
-import { WorldStorageRuntime } from '@axrone/ecs-storage/world-storage-runtime';
+import { OptimizedQueryCache } from '../../query/query-cache';
+import { WorldQueryRuntime } from '../../query/world-query-runtime';
+import { WorldStorageRuntime } from '../../storage/world-storage-runtime';
 import type { ECSObservables } from '../observers/ecs-observer';
 import { getComponentMetadata } from '../decorators/script';
 import type { ECSEventMap } from '../types/events';

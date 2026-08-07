@@ -7,7 +7,7 @@ import type {
     AnimationMotionFeatureDefinition,
     AnimationParameterDefinition,
     AnimationRootMotionDefinition,
-} from '@axrone/animation';
+} from '@axrone/animation/types';
 import type { FilterMode, TextureFormat, WrapMode } from '@axrone/render-webgl2';
 import type {
     AssetCustomSource,
@@ -18,6 +18,7 @@ import type {
     AssetKind,
     AssetSchema,
 } from './asset-contract';
+import type { GltfTextureTranscoderRegistry } from './internal/gltf-texture-transcode';
 import type {
     GltfMaterialDefinition,
     GltfMeshDefinition,
@@ -152,7 +153,10 @@ export type GltfTextureUsage =
     | 'metallicRoughness'
     | 'normal'
     | 'occlusion'
-    | 'emissive';
+    | 'emissive'
+    | 'clearcoat'
+    | 'clearcoatRoughness'
+    | 'clearcoatNormal';
 
 export interface GltfTextureTransform {
     readonly offset: readonly [number, number];
@@ -259,16 +263,6 @@ export interface GltfPrefabAsset {
     readonly animationController?: GltfAnimationControllerMetadata;
 }
 
-export interface GltfAssetSchema extends AssetSchema {
-    readonly 'gltf.document': GltfDocumentAsset;
-    readonly 'gltf.prefab': GltfPrefabAsset;
-    readonly 'gltf.mesh': GltfMeshAsset;
-    readonly 'gltf.skin': GltfSkinAsset;
-    readonly 'gltf.animation': GltfAnimationClipAsset;
-    readonly 'gltf.material': GltfMaterialAsset;
-    readonly 'gltf.texture': GltfTextureAsset;
-}
-
 export interface GltfAssetSchemaLike extends AssetSchema {
     readonly 'gltf.document': GltfDocumentAsset;
     readonly 'gltf.prefab': GltfPrefabAsset;
@@ -278,6 +272,13 @@ export interface GltfAssetSchemaLike extends AssetSchema {
     readonly 'gltf.material': GltfMaterialAsset;
     readonly 'gltf.texture': GltfTextureAsset;
 }
+
+/**
+ * Default concrete asset schema for glTF imports.
+ * Alias for {@link GltfAssetSchemaLike} — consumers can extend the base interface
+ * to add custom asset kinds.
+ */
+export type GltfAssetSchema = GltfAssetSchemaLike;
 
 export interface GltfPackageResourceInput {
     readonly uri: string;
@@ -554,6 +555,14 @@ export interface GltfPbrMetallicRoughnessJson {
     readonly metallicRoughnessTexture?: GltfTextureBindingJson;
 }
 
+export interface GltfMaterialClearcoatJson {
+	readonly clearcoatFactor?: number;
+	readonly clearcoatTexture?: GltfTextureBindingJson;
+	readonly clearcoatRoughnessFactor?: number;
+	readonly clearcoatRoughnessTexture?: GltfTextureBindingJson;
+	readonly clearcoatNormalTexture?: GltfTextureBindingJson;
+}
+
 export interface GltfMaterialJson {
     readonly name?: string;
     readonly pbrMetallicRoughness?: GltfPbrMetallicRoughnessJson;
@@ -565,6 +574,7 @@ export interface GltfMaterialJson {
     readonly alphaCutoff?: number;
     readonly doubleSided?: boolean;
     readonly extensions?: {
+        readonly KHR_materials_clearcoat?: GltfMaterialClearcoatJson;
         readonly KHR_materials_emissive_strength?: {
             readonly emissiveStrength?: number;
         };
@@ -657,18 +667,12 @@ export interface GltfRootJson {
     readonly extensionsRequired?: readonly string[];
 }
 
-export declare class GltfTextureTranscoderRegistry {
-    constructor(transcoders?: readonly GltfTextureTranscoder[]);
-    register(transcoder: GltfTextureTranscoder): this;
-    unregister(id: string): boolean;
-    list(): readonly GltfTextureTranscoder[];
-    resolve(
-        request: Readonly<GltfTextureTranscodeRequest>
-    ): GltfTextureTranscoder | undefined;
-    transcode(
-        request: Readonly<GltfTextureTranscodeRequest>
-    ): Promise<GltfTextureTranscodeResult | undefined>;
-}
+/**
+ * Registry for glTF texture transcoders.
+ * Re-exported from `./internal/gltf-texture-transcode` — this type declaration
+ * exists only for public API surface and must be kept in sync with the implementation.
+ */
+export type { GltfTextureTranscoderRegistry };
 
 export type GltfImporter<TSchema extends GltfAssetSchemaLike = GltfAssetSchemaLike> = AssetImporter<
     TSchema

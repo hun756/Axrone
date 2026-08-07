@@ -17,21 +17,30 @@ export class BoxCollider3D extends Collider3D {
     }
 
     protected override _createShape(): void {
-        if (!this._shapeManager || !this._rigidbody) return;
+        if (!this._rigidbody) return;
         const def: IBoxShapeDef3D = {
             center: this._center,
             halfExtents: { x: this._size.x * 0.5, y: this._size.y * 0.5, z: this._size.z * 0.5 },
         };
-        this._shapeId = this._shapeManager.createBox(
-            this._rigidbody.bodyId,
-            def,
-            this._getMaterial(),
-            this._getFilter()
-        );
+        if (this._world) {
+            this._shapeId = this._world.createBoxShape(
+                this._rigidbody.bodyId,
+                def,
+                this._getMaterial(),
+                this._getFilter(),
+                { isSensor: this.isTrigger }
+            );
+            return;
+        }
+
+        if (!this._shapeManager) return;
+        this._shapeId = this._shapeManager.createBox(this._rigidbody.bodyId, def, this._getMaterial(), this._getFilter());
     }
 
     protected override _updateShape(): void {
         if (this._shapeId === INVALID_SHAPE_ID) return;
+        this._destroyCurrentShape();
+        this._createShape();
     }
 
     protected override _calculateBounds(): void {

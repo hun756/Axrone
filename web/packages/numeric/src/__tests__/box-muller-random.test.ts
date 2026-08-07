@@ -1,5 +1,5 @@
 import { vi, describe, test, expect, beforeEach, afterEach } from 'vitest';
-import { createDefaultRandomGenerator, DefaultRandomGenerator } from '../box-muller';
+import { DefaultRandomGenerator } from '../box-muller';
 
 describe('DefaultRandomGenerator', () => {
     test('getInstance should return the same instance (singleton)', () => {
@@ -19,7 +19,7 @@ describe('DefaultRandomGenerator', () => {
 
         try {
             mockRandom.mockReturnValue(0.123);
-            const generator = new DefaultRandomGenerator();
+            const generator = DefaultRandomGenerator.getInstance();
             const result = generator.float();
             expect(result).toBe(0.123);
 
@@ -38,7 +38,7 @@ describe('DefaultRandomGenerator', () => {
         try {
             const min = 5;
             const max = 15;
-            const generator = new DefaultRandomGenerator();
+            const generator = DefaultRandomGenerator.getInstance();
 
             mockRandom.mockReturnValue(0);
             expect(generator.floatBetween(min, max)).toBe(min);
@@ -64,7 +64,7 @@ describe('DefaultRandomGenerator', () => {
         try {
             const min = 1;
             const max = 10;
-            const generator = new DefaultRandomGenerator();
+            const generator = DefaultRandomGenerator.getInstance();
 
             mockRandom.mockReturnValue(0);
             expect(generator.int(min, max)).toBe(min);
@@ -80,14 +80,5 @@ describe('DefaultRandomGenerator', () => {
         } finally {
             Math.random = originalMathRandom;
         }
-    });
-
-    test('createDefaultRandomGenerator should return a new instance each time', () => {
-        const generator1 = createDefaultRandomGenerator();
-        const generator2 = createDefaultRandomGenerator();
-
-        expect(generator1).toBeInstanceOf(DefaultRandomGenerator);
-        expect(generator2).toBeInstanceOf(DefaultRandomGenerator);
-        expect(generator1).not.toBe(generator2);
     });
 });

@@ -5,12 +5,11 @@ import type {
     SizeLike,
     UIImageSource,
     UIFrame,
-    UIFrameProducer,
-    UIFrameSink,
-} from '@axrone/ui';
+} from '@axrone/ui/types';
+import type { UIFrameProducer, UIFrameSink } from '@axrone/ui/render';
 import type {
     RenderPipelineBackend,
-} from '@axrone/render-core';
+} from '@axrone/render-core/types';
 import type { GameLoop } from '@axrone/game-loop';
 import type {
     SceneMaterialTextureBindingHandle,
@@ -55,6 +54,16 @@ export interface WebGL2UIResolveImageResourceContext<TPayload = unknown> {
     readonly gl: WebGL2RenderingContext;
     readonly frame: Readonly<UIFrame<TPayload>>;
     readonly command: ImageRenderCommand;
+}
+
+/** Per-render overrides for a single {@link UIFrame} submission. */
+export interface WebGL2UIRenderOptions {
+    /**
+     * Framebuffer the UI frame is drawn into. Omitted or null draws to the
+     * default framebuffer; supply an offscreen FBO to render UI into a texture
+     * (world-space UI). The previous binding is always restored afterwards.
+     */
+    readonly framebuffer?: WebGLFramebuffer | null;
 }
 
 export interface WebGL2UIResolvedTextureImage {

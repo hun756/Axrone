@@ -78,14 +78,13 @@ export const FNV_PRIME = 16777619;
 export const FNV_OFFSET_BASIS = 2166136261;
 
 const fnvHash = (data: string): number => {
-    let hash = FNV_OFFSET_BASIS;
-
+    let h = FNV_OFFSET_BASIS;
     for (let i = 0; i < data.length; i++) {
-        hash ^= data.charCodeAt(i);
-        hash = Math.imul(hash, FNV_PRIME);
+        const c = data.charCodeAt(i);
+        h = Math.imul(h ^ (c & 0xff), FNV_PRIME) >>> 0;
+        h = Math.imul(h ^ ((c >>> 8) & 0xff), FNV_PRIME) >>> 0;
     }
-
-    return hash >>> 0;
+    return h;
 };
 
 export function isEquatable(obj: unknown): obj is Equatable {

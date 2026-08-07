@@ -18,7 +18,12 @@ export {
     SceneShaderRegistry,
 } from './shader-registry';
 export type { SceneShaderFactoryOptions } from './scene-shader-factory';
-export { SceneShaderFactory } from './scene-shader-factory';
+export {
+    generateSceneShaderVariantKey,
+    SceneShaderFactory,
+} from './scene-shader-factory';
+export type { SceneShaderVariantResolverDependencies } from './scene-shader-variant-resolver';
+export { SceneShaderVariantResolver } from './scene-shader-variant-resolver';
 
 export type {
     SceneMaterialResource,
@@ -31,6 +36,23 @@ export {
     normalizeSceneTextureBinding,
     SceneMaterialRegistry,
 } from './material-registry';
+export { FEATURE_TO_KEYWORD, resolveSurfaceFeatures } from './material-feature-keyword-map';
+export type {
+    SceneMaterialCloneEvent,
+    SceneMaterialKeywordChangeEvent,
+    SceneMaterialLifecycleEvent,
+    SceneMaterialTextureChangeEvent,
+    SceneMaterialUniformChangeEvent,
+} from './material-observables';
+export { SceneMaterialObservables } from './material-observables';
+export type {
+    SceneMaterialAdapterDependencies,
+    SceneMaterialAdapterTextureEntry,
+} from './scene-material-instance-adapter';
+export {
+    convertSceneUniformValue,
+    SceneMaterialInstanceAdapter,
+} from './scene-material-instance-adapter';
 export type {
     SceneMaterialTextureBinderResources,
     SceneMaterialTextureUniformSetter,
@@ -62,13 +84,13 @@ export { SceneFrameUniformBinder } from './frame-uniform-binder';
 export type { SceneLoopBridgeHost } from './loop-bridge';
 export { createSceneLoopSystems } from './loop-bridge';
 
-export { SceneDrawExecutionContextCache } from './draw-execution-context';
-export type { SceneDrawExecutorContext } from './draw-executor';
-export { SceneDrawExecutor } from './draw-executor';
-export { SceneRenderFrameState } from './render-frame-state';
-export { SceneRenderPassPreparer } from './render-pass-preparer';
-export type { SceneRenderItem } from './render-item-collector';
-export { SceneRenderItemCollector } from './render-item-collector';
+export { SceneDrawExecutionContextCache } from './rendering/draw-execution-context';
+export type { SceneDrawExecutorContext } from './rendering/draw-executor';
+export { SceneDrawExecutor } from './rendering/draw-executor';
+export { SceneRenderFrameState } from './rendering/render-frame-state';
+export { SceneRenderPassPreparer } from './rendering/render-pass-preparer';
+export type { SceneRenderItem } from './rendering/render-item-collector';
+export { SceneRenderItemCollector } from './rendering/render-item-collector';
 
 export type {
     SceneMorphMeshRegistry,
@@ -82,7 +104,7 @@ export type {
     SceneResourceRuntimeSerializationResult,
 } from './scene-resource-runtime';
 export { SceneResourceRuntime } from './scene-resource-runtime';
-export { SceneRenderStateApplier } from './render-state-applier';
+export { SceneRenderStateApplier } from './rendering/render-state-applier';
 export type { SceneUniformWriteTarget } from './uniform-writer';
 export { SceneUniformWriter } from './uniform-writer';
 export type { SceneSkinningUniformSource } from './skinning-uniform-binder';
@@ -121,17 +143,17 @@ export {
 export type {
     SceneRenderPassResource,
     SceneRenderPassRegistryOptions,
-} from './render-pass-registry';
+} from './rendering/render-pass-registry';
 export {
     cloneSceneRenderPassDefinition,
     SceneRenderPassRegistry,
-} from './render-pass-registry';
+} from './rendering/render-pass-registry';
 
 export type {
     SceneRenderRuntimeOptions,
     SceneRenderRuntimeParams,
-} from './scene-render-runtime';
-export { SceneRenderRuntime } from './scene-render-runtime';
+} from './rendering/scene-render-runtime';
+export { SceneRenderRuntime } from './rendering/scene-render-runtime';
 
 export type { DirectionalLightConfig } from './components/directional-light';
 export { DirectionalLight } from './components/directional-light';
@@ -143,13 +165,82 @@ export type {
     MeshRendererSkinConfig,
 } from './components/mesh-renderer';
 export { MeshRenderer } from './components/mesh-renderer';
-export type { PrefabNodeBindingConfig } from './components/prefab-node-binding';
-export { PrefabNodeBinding } from './components/prefab-node-binding';
+export type { PrefabNodeBindingConfig } from '@axrone/scene-prefab';
+export { PrefabNodeBinding } from '@axrone/scene-prefab';
 export type { OrbitCameraControllerConfig } from './components/orbit-camera-controller';
 export { OrbitCameraController } from './components/orbit-camera-controller';
 export type { PointLightConfig } from './components/point-light';
 export { PointLight } from './components/point-light';
 export type { SpotLightConfig } from './components/spot-light';
 export { SpotLight } from './components/spot-light';
+export type { TerrainConfig } from './components/terrain';
+export { Terrain } from './components/terrain';
+export {
+    DEFAULT_TERRAIN_SPLAT_SHADER_ID,
+    createTerrainSplatShaderDefinition,
+} from './terrain-splat-shader';
+export {
+    DEFAULT_TERRAIN_FOLIAGE_SHADER_ID,
+    createTerrainFoliageShaderDefinition,
+} from './terrain-foliage-shader';
+export type { AreaLightConfig, AreaLightShape } from './components/area-light';
+export { AreaLight } from './components/area-light';
+export type {
+    TrailRendererConfig,
+    TrailRendererGradientStop,
+    TrailTextureMode,
+    TrailAlignment,
+} from './components/trail-renderer';
+export { TrailRenderer } from './components/trail-renderer';
+export type {
+    LineRendererConfig,
+    LineRendererGradientStop,
+    LineTextureMode,
+    LineAlignment,
+} from './components/line-renderer';
+export { LineRenderer } from './components/line-renderer';
+export type { LODGroupConfig, LODLevel, LODLevelConfig } from './components/lod-group';
+export { LODGroup } from './components/lod-group';
+export type {
+    ReflectionProbeConfig,
+    ReflectionProbeMode,
+    ReflectionProbeShape,
+    ReflectionProbeRefreshMode,
+    ReflectionProbeTimeSlicingMode,
+    ReflectionProbeClearFlags,
+} from './components/reflection-probe';
+export { ReflectionProbe } from './components/reflection-probe';
+export type {
+    BillboardRendererConfig,
+    BillboardMode,
+} from './components/billboard-renderer';
+export { BillboardRenderer } from './components/billboard-renderer';
+export type {
+    NavMeshAgentConfig,
+    NavMeshAgentPathStatus,
+    NavMeshAgentObstacleAvoidanceQuality,
+    NavMeshPath,
+} from './components/navmesh-agent';
+export { NavMeshAgent } from './components/navmesh-agent';
+export type {
+    ParticleSystemConfig,
+    ParticleRenderData,
+    ParticleBurst,
+    ParticleShapeType,
+    ParticleSimulationSpace,
+    ParticleRenderMode,
+    ParticleBlendMode,
+    ParticleSpriteMode,
+    ParticleStopAction,
+    ParticleColorMode,
+} from './components/particle-system';
+export { ParticleSystem } from './components/particle-system';
+export { createParticleShaderDefinition, DEFAULT_SCENE_PARTICLE_SHADER_ID } from './particle-shader';
+export type {
+    SceneParticleBatchRuntimeOptions,
+    SceneParticleBatchRuntimeRenderParams,
+    SceneParticleBatchRuntimeRenderStats,
+} from './rendering/particle-batch-runtime';
+export { SceneParticleBatchRuntime } from './rendering/particle-batch-runtime';
 
 export { decodeSceneValue, encodeSceneValue } from './serialization';
