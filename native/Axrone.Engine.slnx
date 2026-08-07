@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Core/">
+    <Project Path="src/Core/Utility/Axrone.Utility.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/Core/">
+    <Project Path="tests/Core/Utility.Tests/Axrone.Utility.Tests.csproj" />
+  </Folder>
+</Solution>
