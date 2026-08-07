@@ -20,6 +20,10 @@ function makeSystemWithTargetSphere() {
     return sys;
 }
 
+function makeEmptySystem() {
+    return createRaycastSystem3D();
+}
+
 describe('ContinuousRaycast3D.sweepTest', () => {
     it('detects a swept collision and reports a normalized contact normal', () => {
         const sys = makeSystemWithTargetSphere();
@@ -103,6 +107,91 @@ describe('ShapeCaster3D.sphereCast', () => {
             layerMask: ALL,
             radius: 1,
         });
+
+        expect(hit).toBeNull();
+    });
+});
+
+// ── predictiveRaycast ───────────────────────────────────────────────
+
+describe('ContinuousRaycast3D.predictiveRaycast', () => {
+    it('returns null when no shapes are registered', () => {
+        const sys = makeEmptySystem();
+        const cr = createContinuousRaycast3D(sys);
+
+        const hit = cr.predictiveRaycast(
+            { x: 0, y: 0, z: 0 },
+            { x: 1, y: 0, z: 0 },
+            { x: 10, y: 0, z: 0 },
+            { x: 0, y: 0, z: 0 },
+            ALL,
+            5,
+            0.1
+        );
+
+        expect(hit).toBeNull();
+    });
+
+    it('returns null when target moves away faster than ray can reach', () => {
+        // Use empty system — no shapes to hit regardless of target motion
+        const sys = makeEmptySystem();
+        const cr = createContinuousRaycast3D(sys);
+
+        const hit = cr.predictiveRaycast(
+            { x: 0, y: 0, z: 0 },
+            { x: 0, y: 0, z: 0 },
+            { x: 100, y: 0, z: 0 },
+            { x: 1000, y: 0, z: 0 },
+            ALL,
+            1,
+            0.1
+        );
+
+        expect(hit).toBeNull();
+    });
+});
+
+// ── linearSweep ─────────────────────────────────────────────────────
+
+describe('ContinuousRaycast3D.linearSweep', () => {
+    it('detects a hit along the sweep path', () => {
+        const sys = makeSystemWithTargetSphere();
+        const cr = createContinuousRaycast3D(sys);
+
+        const hit = cr.linearSweep(
+            { x: -5, y: 0, z: 0 },
+            { x: 10, y: 0, z: 0 },
+            ALL,
+            0.5
+        );
+
+        expect(hit).not.toBeNull();
+    });
+
+    it('returns null when sweep path misses all shapes', () => {
+        const sys = makeSystemWithTargetSphere();
+        const cr = createContinuousRaycast3D(sys);
+
+        const hit = cr.linearSweep(
+            { x: -5, y: 50, z: 0 },
+            { x: 10, y: 50, z: 0 },
+            ALL,
+            0.5
+        );
+
+        expect(hit).toBeNull();
+    });
+
+    it('returns null for zero-length sweep', () => {
+        const sys = makeSystemWithTargetSphere();
+        const cr = createContinuousRaycast3D(sys);
+
+        const hit = cr.linearSweep(
+            { x: 5, y: 0, z: 0 },
+            { x: 5, y: 0, z: 0 },
+            ALL,
+            0.1
+        );
 
         expect(hit).toBeNull();
     });

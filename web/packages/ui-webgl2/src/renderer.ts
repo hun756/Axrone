@@ -1,8 +1,10 @@
 import type {
     CustomRenderCommand,
+    EdgeInsets,
     FontGlyphBitmapFormat,
     GlyphAtlasEntry,
     ImageRenderCommand,
+    CornerRadii,
     QuadRenderCommand,
     RectLike,
     TextGlyphPlacement,
@@ -17,11 +19,112 @@ import type {
     WebGL2UIResolvedImageResource,
     WebGL2UIRendererOptions,
     WebGL2UIRendererStatistics,
+    WebGL2UIRenderOptions,
 } from './types';
 
 const QUAD_FLOATS_PER_INSTANCE = 23;
 const IMAGE_FLOATS_PER_INSTANCE = 22;
 const TEXT_FLOATS_PER_INSTANCE = 26;
+
+type SliceSpan = {
+    readonly offset: number;
+    readonly size: number;
+    readonly uvOffset: number;
+    readonly uvSize: number;
+};
+
+const resolveSliceSpans = (
+    extent: number,
+    startBorder: number,
+    endBorder: number,
+    sourceExtent: number,
+    uvOffset: number,
+    uvExtent: number
+): readonly SliceSpan[] => {
+    const totalBorder = startBorder + endBorder;
+    const scale = totalBorder > extent && totalBorder > 0 ? extent / totalBorder : 1;
+    const start = startBorder * scale;
+    const end = endBorder * scale;
+    const startUv = sourceExtent > 0 ? startBorder / sourceExtent : 0;
+    const endUv = sourceExtent > 0 ? endBorder / sourceExtent : 0;
+    return [
+        { offset: 0, size: start, uvOffset, uvSize: startUv },
+        {
+            offset: start,
+            size: Math.max(0, extent - start - end),
+            uvOffset: uvOffset + startUv,
+            uvSize: Math.max(0, uvExtent - startUv - endUv),
+        },
+        {
+            offset: extent - end,
+            size: end,
+            uvOffset: uvOffset + uvExtent - endUv,
+            uvSize: endUv,
+        },
+    ];
+};
+
+const ZERO_RADII: CornerRadii = Object.freeze({
+    topLeft: 0,
+    topRight: 0,
+    bottomRight: 0,
+    bottomLeft: 0,
+});
+
+const sliceImageCommand = (
+    command: ImageRenderCommand,
+    border: EdgeInsets
+): readonly ImageRenderCommand[] => {
+    const columns = resolveSliceSpans(
+        command.width,
+        border.left,
+        border.right,
+        Math.max(1, command.source.width),
+        command.uvRect.x,
+        command.uvRect.width
+    );
+    const rows = resolveSliceSpans(
+        command.height,
+        border.top,
+        border.bottom,
+        Math.max(1, command.source.height),
+        command.uvRect.y,
+        command.uvRect.height
+    );
+    const fillCenter = command.fillCenter !== false;
+    const slices: ImageRenderCommand[] = [];
+    for (let row = 0; row < rows.length; row += 1) {
+        for (let column = 0; column < columns.length; column += 1) {
+            if (row === 1 && column === 1 && !fillCenter) {
+                continue;
+            }
+            const horizontal = columns[column];
+            const vertical = rows[row];
+            if (horizontal.size <= 0 || vertical.size <= 0) {
+                continue;
+            }
+            if (horizontal.uvSize <= 0 || vertical.uvSize <= 0) {
+                continue;
+            }
+            slices.push({
+                ...command,
+                x: command.x + horizontal.offset,
+                y: command.y + vertical.offset,
+                width: horizontal.size,
+                height: vertical.size,
+                uvRect: {
+                    x: horizontal.uvOffset,
+                    y: vertical.uvOffset,
+                    width: horizontal.uvSize,
+                    height: vertical.uvSize,
+                },
+                radius: ZERO_RADII,
+                border: undefined,
+            });
+        }
+    }
+    return slices;
+};
 
 const QUAD_VERTEX_SOURCE = `#version 300 es
 precision mediump float;
@@ -529,17 +632,74 @@ const restoreGLState = (
     }
 };
 
+/**
+ * Restores newline separators in shader source that has been flattened
+ * by build-time minification (esbuild template literal transformation).
+ *
+ * When newlines are stripped, GLSL tokens merge across former line boundaries:
+ *   #version 300 esprecision mediump float;   (es + precision)
+ *   float;layout(location = 0) in vec2 ...    (float; + layout)
+ *
+ * This function detects and repairs such corruption by re-inserting
+ * newlines at statement boundaries. Uses split/join instead of regex
+ * to avoid esbuild transformation issues with replacement strings.
+ */
+const normalizeShaderSource = (source: string): string => {
+    // Fast path: if the first line is a valid #version directive, source is intact.
+    // Uses a strict regex to reject corrupted lines like '#version 300 esprecision ...'
+    // where esbuild merged tokens across a stripped newline boundary.
+    const firstNewline = source.indexOf('\n');
+    if (firstNewline > 0 && /^#version\s+\d+\s+\w+$/.test(source.slice(0, firstNewline).trim())) {
+        return source;
+    }
+
+    // Corruption detected — rebuild newlines at GLSL statement boundaries.
+    // Uses split/join instead of regex to avoid esbuild transformation issues.
+    const parts: string[] = [];
+    for (const segment of source.split(/([;{}])/)) {
+        if (segment === ';') {
+            parts.push(';\n');
+        } else if (segment === '{') {
+            parts.push('{\n');
+        } else if (segment === '}') {
+            parts.push('\n}\n');
+        } else {
+            parts.push(segment);
+        }
+    }
+    let restored = parts.join('');
+
+    // Fix #version directive: ensure newline after 'es' before next token.
+    const versionEnd = restored.indexOf('es') + 2;
+    if (versionEnd > 2 && versionEnd < restored.length) {
+        const after = restored[versionEnd];
+        if (after !== '\n' && after !== ' ' && after !== '\t' && after !== '\r') {
+            restored = restored.slice(0, versionEnd) + '\n' + restored.slice(versionEnd);
+        }
+    }
+
+    return restored;
+};
+
 const createShader = (gl: WebGL2RenderingContext, type: number, source: string): WebGLShader => {
     const shader = gl.createShader(type);
     if (!shader) {
         throw new Error('Failed to create UI shader.');
     }
-    gl.shaderSource(shader, source);
+    const resolvedSource = normalizeShaderSource(source);
+    if (resolvedSource !== source) {
+        // eslint-disable-next-line no-console
+        console.warn('[WebGL2UIRenderer] Shader source was corrupted — newlines were restored. This indicates esbuild minification stripped newlines from the shader template literal.');
+    }
+    gl.shaderSource(shader, resolvedSource);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
         const message = gl.getShaderInfoLog(shader) ?? 'Unknown shader compile failure.';
         gl.deleteShader(shader);
-        throw new Error(message);
+        const stageLabel = type === gl.VERTEX_SHADER ? 'vertex' : 'fragment';
+        throw new Error(
+            `UI ${stageLabel} shader compilation failed: ${message}\nSource (first 200 chars): ${resolvedSource.slice(0, 200)}`
+        );
     }
     return shader;
 };
@@ -658,7 +818,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         };
     }
 
-    render(frame: Readonly<UIFrame<TPayload>>): void {
+    render(frame: Readonly<UIFrame<TPayload>>, options?: WebGL2UIRenderOptions): void {
         this.ensureActive();
         const previousState = captureGLState(this.gl);
         this.currentFrame = frame as UIFrame<TPayload>;
@@ -680,6 +840,11 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.activeTextPageKey = null;
 
         try {
+            if (options && 'framebuffer' in options) {
+                // Offscreen target (world-space UI). captureGLState/restoreGLState
+                // already round-trip the framebuffer binding.
+                this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, options.framebuffer ?? null);
+            }
             this.prepareFrame(frame.viewportWidth, frame.viewportHeight);
 
             for (const command of frame.commands) {
@@ -902,6 +1067,20 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     }
 
     private pushImageCommand(command: ImageRenderCommand, frame: Readonly<UIFrame<TPayload>>): void {
+        const border = command.border;
+        if (
+            border &&
+            (border.left > 0 || border.top > 0 || border.right > 0 || border.bottom > 0)
+        ) {
+            for (const slice of sliceImageCommand(command, border)) {
+                this.pushImageQuad(slice, frame);
+            }
+            return;
+        }
+        this.pushImageQuad(command, frame);
+    }
+
+    private pushImageQuad(command: ImageRenderCommand, frame: Readonly<UIFrame<TPayload>>): void {
         const resource = this.resolveImageResource?.(command.source, {
             gl: this.gl,
             frame,
@@ -934,7 +1113,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         const base = this.imageCount * IMAGE_FLOATS_PER_INSTANCE;
         if (base + IMAGE_FLOATS_PER_INSTANCE > this.imageBatch.length) {
             this.flushImageBatch(frame.viewportHeight);
-            return this.pushImageCommand(command, frame);
+            return this.pushImageQuad(command, frame);
         }
         this.activeImageTexture = resource.texture;
         this.activeImageSampler = resource.sampler ?? null;

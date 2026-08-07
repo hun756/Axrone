@@ -8,6 +8,7 @@ export const enum UIErrorCode {
     Disposed = 'UI_DISPOSED',
     DuplicateController = 'UI_DUPLICATE_CONTROLLER',
     InvalidSnapshot = 'UI_INVALID_SNAPSHOT',
+    InvalidAsset = 'UI_INVALID_ASSET',
 }
 
 export class UIError extends Error {
@@ -61,5 +62,12 @@ export class DisposedUIError extends UIError {
     constructor(target: string) {
         super(UIErrorCode.Disposed, `${target} has already been disposed.`, { target });
         this.name = 'DisposedUIError';
+    }
+}
+
+export class InvalidUIAssetError extends UIError {
+    constructor(message: string, details?: unknown) {
+        super(UIErrorCode.InvalidAsset, message, details);
+        this.name = 'InvalidUIAssetError';
     }
 }

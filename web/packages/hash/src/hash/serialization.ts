@@ -1,6 +1,7 @@
 import type { Hash32, Hash64, Hash128, Hash256, Hash512, HashValue } from './types';
 import { asHash32, asHash64, asHash128 } from './types';
 import { HashSerializationError, HashDeserializationError } from './errors';
+import { encode, decode } from '@axrone/utility';
 
 const HEX_CHARS = '0123456789abcdef';
 const HEX_REV: number[] = new Array(256).fill(-1);
@@ -108,31 +109,12 @@ export function hexToHash128(input: string): Hash128 {
     return asHash128(h);
 }
 
-const B64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-const B64_REV: number[] = new Array(256).fill(-1);
-for (let i = 0; i < B64_CHARS.length; i++) B64_REV[B64_CHARS.charCodeAt(i)] = i;
-
-function _btoa(s: string): string {
-    if (typeof btoa !== 'undefined') return btoa(s);
-    return Buffer.from(s, 'binary').toString('base64');
-}
-
-function _atob(s: string): string {
-    if (typeof atob !== 'undefined') return atob(s);
-    return Buffer.from(s, 'base64').toString('binary');
-}
-
 export function bytesToBase64(bytes: Uint8Array): string {
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-    return _btoa(binary);
+    return encode(bytes);
 }
 
 export function base64ToBytes(input: string): Uint8Array {
-    const binary = _atob(input);
-    const out = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-    return out;
+    return decode(input);
 }
 
 export function hash32ToBase64(value: Hash32): string {

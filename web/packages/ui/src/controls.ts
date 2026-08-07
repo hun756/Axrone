@@ -6,6 +6,8 @@ export * from './controls/button';
 export * from './controls/toggle';
 export * from './controls/progress-bar';
 export * from './controls/slider';
+export * from './controls/slider-controller';
+export * from './controls/button-controller';
 export * from './controls/edit-box';
 export * from './controls/scroll-view';
 export * from './controls/page-view';

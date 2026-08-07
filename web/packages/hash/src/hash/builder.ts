@@ -107,6 +107,5 @@ export const HashBuilderFactory = {
     fnv1a32: () => new HashBuilder('fnv1a-32'),
     xxhash32: () => new HashBuilder('xxhash32'),
     xxhash64: () => new HashBuilder('xxhash64'),
-    cyrb53: () => new HashBuilder('cyrb53'),
     sha256: () => new HashBuilder('sha-256'),
 };

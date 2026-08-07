@@ -2,6 +2,7 @@ import type { BytesLike } from '../../../types';
 import { float32ToBits, float64ToBitsPair, writeU32LE } from '../bits';
 import { asHash32, asHash64, asSeed32, type Hash32, type Hash64, type HashValue, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
+import { encode } from '@axrone/utility';
 
 const FNV_METADATA: HashAlgorithmMetadata = {
     name: 'fnv1a-32',
@@ -133,10 +134,7 @@ abstract class Fnv1a32Base implements IHasher<Hash32> {
     }
 
     digestBase64(): string {
-        const bytes = this.digestBytes();
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-        return typeof btoa !== 'undefined' ? btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
+        return encode(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
@@ -392,10 +390,7 @@ export class Fnv1a64 implements IHasher<Hash64> {
     }
 
     digestBase64(): string {
-        const bytes = this.digestBytes();
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-        return typeof btoa !== 'undefined' ? btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
+        return encode(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {

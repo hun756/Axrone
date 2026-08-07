@@ -211,7 +211,7 @@ const scenarios = options.workloads.flatMap((workload) =>
     )
 );
 
-const benchmarkPageUrl = (baseUrl) => `${baseUrl.replace(/\/$/, '')}/engine-benchmark.html`;
+const benchmarkPageUrl = (baseUrl) => `${baseUrl.replace(/\/$/, '')}/legacy/engine-benchmark.html`;
 
 const startExamplesServer = async () => {
     if (!fs.existsSync(viteBinPath)) {

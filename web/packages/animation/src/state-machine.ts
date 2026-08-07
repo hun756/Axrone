@@ -8,7 +8,7 @@ import {
     type AnimationMotionEvaluationContext,
 } from './blend-tree';
 import { collectMotionEvents } from './blend-tree';
-import { AnimationStateMachineError, AnimationValidationError } from './errors';
+import { assertNever, AnimationStateMachineError, AnimationValidationError } from './errors';
 import { AnimationParameterStore } from './parameters';
 import { blendFrame, type AnimationFrame } from './pose';
 import { quatIdentity, quatSlerp } from './math';
@@ -58,6 +58,7 @@ export interface AnimationTransitionRuntime {
     targetNormalizedTime: number;
     previousTargetNormalizedTime: number;
     complete: boolean;
+    canInterrupt?: boolean;
 }
 
 export interface AnimationLayerRuntime {
@@ -98,7 +99,9 @@ const evaluateCondition = (
                 case '!=':
                     return numericValue !== condition.value;
                 default:
-                    return false;
+                    throw new AnimationStateMachineError(
+                        `Unsupported transition operator '${String(condition.operator)}'`
+                    );
             }
         }
         case 'bool':
@@ -106,7 +109,7 @@ const evaluateCondition = (
         case 'trigger':
             return parameters.get(condition.parameter) === true;
         default:
-            return false;
+            return assertNever(condition, 'Unsupported transition condition kind');
     }
 };
 
@@ -139,14 +142,28 @@ const resolveTransitionCandidate = (
     stateIndex: number,
     previousNormalizedTime: number,
     currentNormalizedTime: number,
-    parameters: AnimationParameterStore
+    parameters: AnimationParameterStore,
+    excludeTargetIndex?: number
 ): AnimationCompiledTransition | undefined => {
     const state = machine.states[stateIndex]!;
-    const candidates = [...machine.anyStateTransitions, ...state.transitions].sort(
-        (left, right) => right.priority - left.priority
-    );
-    for (let index = 0; index < candidates.length; index += 1) {
-        const transition = candidates[index]!;
+    const anyStateTransitions = machine.anyStateTransitions;
+    const stateTransitions = state.transitions;
+    let anyIndex = 0;
+    let stateIndexCursor = 0;
+    while (anyIndex < anyStateTransitions.length || stateIndexCursor < stateTransitions.length) {
+        const anyCandidate = anyStateTransitions[anyIndex];
+        const stateCandidate = stateTransitions[stateIndexCursor];
+        let transition: AnimationCompiledTransition;
+        if (anyCandidate && (!stateCandidate || anyCandidate.priority >= stateCandidate.priority)) {
+            transition = anyCandidate;
+            anyIndex += 1;
+        } else {
+            transition = stateCandidate!;
+            stateIndexCursor += 1;
+        }
+        if (excludeTargetIndex !== undefined && transition.targetStateIndex === excludeTargetIndex) {
+            continue;
+        }
         if (
             transition.exitTime !== undefined &&
             !crossedExitTime(previousNormalizedTime, currentNormalizedTime, transition.exitTime, state.loop)
@@ -276,7 +293,8 @@ export const crossFadeLayerState = (
     runtime: AnimationLayerRuntime,
     stateId: string,
     durationSeconds: number,
-    offset: number = 0
+    offset: number = 0,
+    canInterrupt: boolean = false
 ): void => {
     const stateIndex = machine.stateIndexById.get(stateId);
     if (stateIndex === undefined) {
@@ -293,6 +311,7 @@ export const crossFadeLayerState = (
         targetNormalizedTime: offset,
         previousTargetNormalizedTime: offset,
         complete: false,
+        canInterrupt,
     };
 };
 
@@ -324,6 +343,50 @@ export const updateLayerRuntime = (
         }
         transition.progress = Math.min(1, transition.progress + deltaSeconds / transition.durationSeconds);
         transition.complete = transition.progress >= 1;
+        if (transition.complete || transition.canInterrupt !== true) {
+            return;
+        }
+
+        const interrupter = resolveTransitionCandidate(
+            machine,
+            transition.sourceStateIndex,
+            transition.previousSourceNormalizedTime,
+            transition.sourceNormalizedTime,
+            parameters,
+            transition.targetStateIndex
+        );
+        if (!interrupter) {
+            return;
+        }
+
+        consumeTransitionTriggers(interrupter, parameters);
+        const interruptFromTarget = transition.progress >= 0.5;
+        const interruptSourceStateIndex = interruptFromTarget
+            ? transition.targetStateIndex
+            : transition.sourceStateIndex;
+        const interruptSourceNormalizedTime = interruptFromTarget
+            ? transition.targetNormalizedTime
+            : transition.sourceNormalizedTime;
+        const interruptSourceDuration = resolveStateDurationSeconds(
+            machine.states[interruptSourceStateIndex]!,
+            parameters
+        );
+        const interruptDuration = interrupter.fixedDuration
+            ? interrupter.duration
+            : interrupter.duration * interruptSourceDuration;
+        runtime.transition = {
+            sourceStateIndex: interruptSourceStateIndex,
+            targetStateIndex: interrupter.targetStateIndex,
+            durationSeconds: Math.max(0, interruptDuration),
+            progress: 0,
+            previousProgress: 0,
+            sourceNormalizedTime: interruptSourceNormalizedTime,
+            previousSourceNormalizedTime: interruptSourceNormalizedTime,
+            targetNormalizedTime: interrupter.offset,
+            previousTargetNormalizedTime: interrupter.offset,
+            complete: false,
+            canInterrupt: interrupter.canInterrupt,
+        };
         return;
     }
 
@@ -360,6 +423,7 @@ export const updateLayerRuntime = (
         targetNormalizedTime: candidate.offset,
         previousTargetNormalizedTime: candidate.offset,
         complete: false,
+        canInterrupt: candidate.canInterrupt,
     };
 }
 
@@ -400,6 +464,11 @@ export const evaluateLayerRuntime = (
     return blendFrame(out, sourceFrame, targetFrame, runtime.transition.progress);
 };
 
+const layerRootDeltaSourceTranslation = new Float32Array(3);
+const layerRootDeltaTargetTranslation = new Float32Array(3);
+const layerRootDeltaSourceRotation = new Float32Array(4);
+const layerRootDeltaTargetRotation = new Float32Array(4);
+
 export const extractLayerRootDelta = (
     machine: AnimationCompiledStateMachine,
     runtime: AnimationLayerRuntime,
@@ -429,10 +498,10 @@ export const extractLayerRootDelta = (
         return;
     }
 
-    const sourceTranslation = new Float32Array(3);
-    const targetTranslation = new Float32Array(3);
-    const sourceRotation = new Float32Array(4);
-    const targetRotation = new Float32Array(4);
+    const sourceTranslation = layerRootDeltaSourceTranslation;
+    const targetTranslation = layerRootDeltaTargetTranslation;
+    const sourceRotation = layerRootDeltaSourceRotation;
+    const targetRotation = layerRootDeltaTargetRotation;
     const sourceState = machine.states[runtime.transition.sourceStateIndex]!;
     const targetState = machine.states[runtime.transition.targetStateIndex]!;
 

@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ProfileTimerTree, Profiler, profile, CORE_PROFILE_ID } from '../profile';
 import type { FlameGraphNode } from '../core/flame-graph';
+import { FlameGraphBuilder } from '../core/flame-graph';
+import { LogBoundedHistogram } from '../core/metrics-collector';
+import { MonotonicClock } from '../core/clock';
+import { MemoryTracker } from '../core/memory-tracker';
 import { Ok, Err } from '@axrone/utility';
 import { ProfilerStartupError } from '../errors';
 
@@ -262,5 +266,162 @@ describe('profile() function', () => {
 describe('CORE_PROFILE_ID', () => {
     it('should be 0', () => {
         expect(CORE_PROFILE_ID).toBe(0);
+    });
+});
+
+describe('ProfileTimerTree -- additional coverage', () => {
+    let tree: ProfileTimerTree;
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        tree = new ProfileTimerTree();
+    });
+
+    afterEach(() => {
+        tree.dispose();
+        vi.useRealTimers();
+    });
+
+    it('should return sampled metrics for an active timer', () => {
+        const id = tree.addTimer('active-timer');
+        vi.advanceTimersByTime(50);
+        const metrics = tree.getSampledMetrics(id);
+        expect(metrics).toBeDefined();
+        expect(metrics!.timerId).toBe(id);
+        expect(metrics!.name).toBe('active-timer');
+        expect(metrics!.durationMs).toBeGreaterThanOrEqual(0);
+        expect(metrics!.state).toBe('active');
+    });
+
+    it('should return paused state for a paused timer', () => {
+        const id = tree.addTimer('paused-timer');
+        tree.pauseTimer(id);
+        const metrics = tree.getSampledMetrics(id);
+        expect(metrics).toBeDefined();
+        expect(metrics!.state).toBe('paused');
+    });
+
+    it('should return LogBoundedHistogram from getMetrics()', () => {
+        const metrics = tree.getMetrics();
+        expect(metrics).toBeInstanceOf(LogBoundedHistogram);
+    });
+
+    it('should return FlameGraphBuilder from getFlameGraphBuilder()', () => {
+        const builder = tree.getFlameGraphBuilder();
+        expect(builder).toBeInstanceOf(FlameGraphBuilder);
+    });
+
+    it('should return MonotonicClock from getClock()', () => {
+        const clock = tree.getClock();
+        expect(clock).toBeInstanceOf(MonotonicClock);
+    });
+
+    it('should return frozen overhead metrics', () => {
+        tree.addTimer('overhead');
+        const overhead = tree.getOverheadMetrics();
+        expect(Object.isFrozen(overhead)).toBe(true);
+    });
+
+    it('should wrap timer ID to 1 when exceeding MAX_PROFILE_ID', () => {
+        // Access private static field to set near boundary
+        const MAX_PROFILE_ID = 2 ** 31 - 1;
+        // Set nextTimerId past the max; the post-increment returns the overflowed value,
+        // then the guard resets nextTimerId to 1 for the *following* call.
+        (ProfileTimerTree as unknown as Record<string, number>).nextTimerId = MAX_PROFILE_ID + 1;
+        const id1 = tree.addTimer('at-overflow');
+        expect(id1).toBe(MAX_PROFILE_ID + 1);
+        // After overflow, nextTimerId should have been reset to 1
+        const id2 = tree.addTimer('after-overflow');
+        expect(id2).toBe(1);
+        // Restore to a safe value
+        (ProfileTimerTree as unknown as Record<string, number>).nextTimerId = 1000;
+    });
+});
+
+describe('Profiler -- additional coverage', () => {
+    let profiler: Profiler;
+
+    afterEach(async () => {
+        if (profiler) await profiler[Symbol.asyncDispose]();
+    });
+
+    it('should return frozen getResult()', () => {
+        profiler = new Profiler();
+        const id = profiler.addTimer('frozen-test');
+        profiler.endTimer(id);
+        const result = profiler.getResult();
+        expect(Object.isFrozen(result)).toBe(true);
+    });
+
+    it('should include histogram buckets in getResult()', () => {
+        profiler = new Profiler();
+        const id = profiler.addTimer('histogram-test');
+        profiler.endTimer(id);
+        const result = profiler.getResult();
+        expect(Array.isArray(result.metrics.histogramBuckets)).toBe(true);
+        expect(result.metrics.totalDurationMs).toBeDefined();
+    });
+
+    it('should be idempotent on double dispose', () => {
+        profiler = new Profiler();
+        profiler.dispose();
+        expect(() => profiler.dispose()).not.toThrow();
+    });
+
+    it('should support Symbol.asyncDispose', async () => {
+        profiler = new Profiler();
+        await expect(profiler[Symbol.asyncDispose]()).resolves.toBeUndefined();
+    });
+
+    it('should be idempotent on double async dispose', async () => {
+        profiler = new Profiler();
+        await profiler[Symbol.asyncDispose]();
+        await expect(profiler[Symbol.asyncDispose]()).resolves.toBeUndefined();
+    });
+
+    it('should return MemoryTracker for non-OnDemand modes', () => {
+        profiler = new Profiler({ mode: 'Sampled' });
+        // MemoryTracker may or may not be available depending on environment
+        const tracker = profiler.getMemoryTracker();
+        if (tracker !== undefined) {
+            expect(tracker).toBeInstanceOf(MemoryTracker);
+        }
+    });
+
+    it('should return undefined MemoryTracker for OnDemand mode', () => {
+        profiler = new Profiler({ mode: 'OnDemand' });
+        expect(profiler.getMemoryTracker()).toBeUndefined();
+    });
+
+    it('should return overhead metrics via Profiler', () => {
+        profiler = new Profiler();
+        const id = profiler.addTimer('overhead');
+        profiler.endTimer(id);
+        const overhead = profiler.getOverheadMetrics();
+        expect(overhead.timerCount).toBeGreaterThanOrEqual(1);
+        expect(Object.isFrozen(overhead)).toBe(true);
+    });
+
+    it('should record parentId in addMarker payload', () => {
+        profiler = new Profiler();
+        profiler.addMarker('child-marker', 42);
+        const events = profiler.getTimelineRecorder().getEvents();
+        const markerEvent = events.find((e) => e.payload.marker === 'child-marker');
+        expect(markerEvent).toBeDefined();
+        expect(markerEvent!.payload.parentId).toBe(42);
+    });
+
+    it('should return TimelineRecorder from getTimelineRecorder()', () => {
+        profiler = new Profiler();
+        const recorder = profiler.getTimelineRecorder();
+        expect(recorder).toBeDefined();
+        expect(typeof recorder.getEvents).toBe('function');
+    });
+
+    it('should increment totalSamples on each getResult() call', () => {
+        profiler = new Profiler();
+        const r1 = profiler.getResult();
+        const r2 = profiler.getResult();
+        expect(r2.totalSamples).toBe(r1.totalSamples + 1n);
     });
 });

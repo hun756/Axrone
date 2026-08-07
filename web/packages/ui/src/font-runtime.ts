@@ -156,6 +156,8 @@ class BrowserDynamicFontFaceRuntime implements DynamicFontFaceRuntime {
                 rasterSize,
                 width: 1,
                 height: 1,
+                originX: 0,
+                originY: 0,
             };
         }
         const padding = Math.max(2, Math.ceil(rasterSize * 0.125));
@@ -196,6 +198,8 @@ class BrowserDynamicFontFaceRuntime implements DynamicFontFaceRuntime {
             rasterSize,
             width,
             height,
+            originX,
+            originY,
             data: alpha,
             format: 'alpha8',
             rowStride: width,
@@ -337,6 +341,8 @@ class BrowserSystemFontFaceRuntime implements DynamicFontFaceRuntime {
                 rasterSize,
                 width: 1,
                 height: 1,
+                originX: 0,
+                originY: 0,
             };
         }
 
@@ -372,6 +378,8 @@ class BrowserSystemFontFaceRuntime implements DynamicFontFaceRuntime {
             rasterSize,
             width,
             height,
+            originX,
+            originY,
             data: alpha,
             format: 'alpha8',
             rowStride: width,

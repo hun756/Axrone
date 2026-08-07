@@ -254,5 +254,36 @@ describe('VirtualClock', () => {
             await clock[Symbol.asyncDispose]();
             expect(() => clock.sample()).toThrow(ClockError);
         });
+
+        it('should throw on disposed stop', async () => {
+            await clock[Symbol.asyncDispose]();
+            expect(() => clock.stop()).toThrow(ClockError);
+        });
+
+        it('should throw on disposed pause', async () => {
+            await clock[Symbol.asyncDispose]();
+            expect(() => clock.pause()).toThrow(ClockError);
+        });
+
+        it('should throw on disposed resume', async () => {
+            await clock[Symbol.asyncDispose]();
+            expect(() => clock.resume()).toThrow(ClockError);
+        });
+
+        it('should throw on disposed elapsed (indirect via now())', async () => {
+            await clock[Symbol.asyncDispose]();
+            expect(() => clock.elapsed()).toThrow(ClockError);
+        });
+
+        it('should throw on disposed elapsedSince (indirect via now())', async () => {
+            await clock[Symbol.asyncDispose]();
+            const point = { clockId: 'test-virtual' as string, timestampNs: 0n };
+            expect(() => clock.elapsedSince(point)).toThrow(ClockError);
+        });
+
+        it('should throw on disposed getMetrics (indirect via now())', async () => {
+            await clock[Symbol.asyncDispose]();
+            expect(() => clock.getMetrics()).toThrow(ClockError);
+        });
     });
 });

@@ -6,11 +6,17 @@ import { MeshRenderer } from './components/mesh-renderer';
 import { OrbitCameraController } from './components/orbit-camera-controller';
 import { PointLight } from './components/point-light';
 import { SpotLight } from './components/spot-light';
+import { Terrain } from './components/terrain';
 import {
     CORE_SCENE_BUILT_IN_MANIFESTS,
     SCENE_CORE_BUILT_IN_MANIFEST,
     getCoreSceneBuiltInRegistrySource,
 } from './scene-core-registry';
+import {
+    SCENE_UI_BUILT_IN_MANIFEST,
+    UI_SCENE_BUILT_IN_MANIFESTS,
+    getUISceneBuiltInRegistrySource,
+} from './scene-ui-registry';
 import {
     createSceneBuiltInManifest,
     createSceneRegistryFromBuiltInManifestsWithSource,
@@ -28,12 +34,14 @@ const SCENE_3D_ONLY_BUILT_IN_REGISTRY_SOURCE: SceneBuiltInRegistrySource = Objec
     DirectionalLight,
     PointLight,
     SpotLight,
+    Terrain,
     OrbitCameraController,
     FollowCameraController,
 });
 
 const SCENE_3D_BUILT_IN_REGISTRY_SOURCE: SceneBuiltInRegistrySource = Object.freeze({
     ...getCoreSceneBuiltInRegistrySource(),
+    ...getUISceneBuiltInRegistrySource(),
     ...SCENE_3D_ONLY_BUILT_IN_REGISTRY_SOURCE,
 });
 
@@ -45,6 +53,7 @@ export const SCENE_3D_BUILT_IN_MANIFEST = createSceneBuiltInManifest({
         'DirectionalLight',
         'PointLight',
         'SpotLight',
+        'Terrain',
         'OrbitCameraController',
         'FollowCameraController',
     ] as const,
@@ -52,6 +61,7 @@ export const SCENE_3D_BUILT_IN_MANIFEST = createSceneBuiltInManifest({
 
 export const DEFAULT_SCENE_3D_BUILT_IN_MANIFESTS = Object.freeze([
     ...CORE_SCENE_BUILT_IN_MANIFESTS,
+    ...UI_SCENE_BUILT_IN_MANIFESTS,
     SCENE_3D_BUILT_IN_MANIFEST,
 ]) as readonly SceneBuiltInManifest[];
 
@@ -77,4 +87,4 @@ export const create3DSceneRegistryFromBuiltInManifests = <
         }
     );
 
-export { SCENE_CORE_BUILT_IN_MANIFEST };
+export { SCENE_CORE_BUILT_IN_MANIFEST, SCENE_UI_BUILT_IN_MANIFEST };

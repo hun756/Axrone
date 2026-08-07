@@ -68,6 +68,8 @@ export class BatchGroup implements IBatchGroup {
             initialData: new Float32Array(maxInstances * 4),
             usage: isDynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW,
         });
+
+        bufferFactory.dispose();
     }
 
     get instances(): readonly IBatchable[] {

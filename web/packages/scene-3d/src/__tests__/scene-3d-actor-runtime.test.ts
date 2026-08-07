@@ -82,4 +82,66 @@ describe('Scene3DActorRuntime', () => {
             ])
         ).toThrow(SceneCapabilityError);
     });
+
+    it('creates camera and renderable actors with default empty configs', () => {
+        const runtime = create3DActorRuntime();
+
+        const cameraActor = runtime.createCameraActor();
+        const renderableActor = runtime.createRenderableActor();
+
+        expect(cameraActor).toBeDefined();
+        expect(cameraActor.getComponent(Camera)).toBeDefined();
+        expect(renderableActor).toBeDefined();
+        expect(renderableActor.getComponent(MeshRenderer)).toBeDefined();
+    });
+
+    it('returns an empty array when batch-creating zero renderable actors', () => {
+        const runtime = create3DActorRuntime();
+
+        const created = runtime.createRenderableActors([]);
+
+        expect(created).toEqual([]);
+    });
+
+    it('accumulates resolveHotRefsMs across multiple batch calls', () => {
+        const runtime = create3DActorRuntime();
+        const profiling: Record<string, number> = {};
+
+        runtime.createRenderableActors(
+            [
+                {
+                    actorConfig: { name: 'A' },
+                    rendererConfig: { meshId: 'm', materialId: 'mat' },
+                },
+            ],
+            profiling
+        );
+        runtime.createRenderableActors(
+            [
+                {
+                    actorConfig: { name: 'B' },
+                    rendererConfig: { meshId: 'm2', materialId: 'mat2' },
+                },
+            ],
+            profiling
+        );
+
+        expect(typeof profiling.resolveHotRefsMs).toBe('number');
+        expect(profiling.resolveHotRefsMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('returns hot transform and renderer references that match actor components', () => {
+        const runtime = create3DActorRuntime();
+
+        const [instance] = runtime.createRenderableActors([
+            {
+                actorConfig: { name: 'Ref' },
+                rendererConfig: { meshId: 'mesh-ref', materialId: 'mat-ref' },
+            },
+        ]);
+
+        expect(instance).toBeDefined();
+        expect(instance!.transform).toBe(instance!.actor.getComponent(Transform));
+        expect(instance!.renderer).toBe(instance!.actor.getComponent(MeshRenderer));
+    });
 });

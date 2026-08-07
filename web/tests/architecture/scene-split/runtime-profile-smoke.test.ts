@@ -62,10 +62,14 @@ describe('runtime profile smoke', () => {
 
         expect(scene3DRegistry.Camera).toBeDefined();
         expect(scene3DRegistry.MeshRenderer).toBeDefined();
+        expect(scene3DRegistry.Terrain).toBeDefined();
         expect('Animator' in scene3DRegistry).toBe(false);
+        expect('Terrain' in scene2DRegistry).toBe(false);
+        expect('Terrain' in coreRegistry).toBe(false);
 
         expect(fullRegistry.Camera).toBeDefined();
         expect(fullRegistry.MeshRenderer).toBeDefined();
+        expect(fullRegistry.Terrain).toBeDefined();
         expect(fullRegistry.Animator).toBeDefined();
         expect(fullRegistry.DirectionalLight).toBeDefined();
     });
@@ -104,10 +108,11 @@ describe('runtime profile smoke', () => {
                 expect.arrayContaining(['Hierarchy', 'Transform', 'PrefabNodeBinding', 'Camera', 'Animator'])
             );
             expect(scene2D.getRegisteredComponentNames()).not.toContain('MeshRenderer');
+            expect(scene2D.getRegisteredComponentNames()).not.toContain('Terrain');
             expect(() => scene2D.createActor({ name: 'Scene2D Actor' })).not.toThrow();
 
             expect(scene3D.getRegisteredComponentNames()).toEqual(
-                expect.arrayContaining(['Hierarchy', 'Transform', 'PrefabNodeBinding', 'Camera', 'MeshRenderer'])
+                expect.arrayContaining(['Hierarchy', 'Transform', 'PrefabNodeBinding', 'Camera', 'MeshRenderer', 'Terrain'])
             );
             expect(scene3D.getRegisteredComponentNames()).not.toContain('Animator');
             expect(() => scene3D.createCameraActor({ name: 'Scene3D Camera' })).not.toThrow();

@@ -20,6 +20,11 @@ import {
     get3DSceneBuiltInRegistrySource,
 } from './scene-3d-registry';
 import {
+    SCENE_UI_BUILT_IN_MANIFEST,
+    UI_SCENE_BUILT_IN_MANIFESTS,
+    getUISceneBuiltInRegistrySource,
+} from './scene-ui-registry';
+import {
     createSceneBuiltInManifest,
     createSceneRegistryFromBuiltInManifestsWithSource,
     createSceneRegistryWithSource,
@@ -35,6 +40,7 @@ import type { SceneBuiltInRegistry, SceneRegistry } from './types';
 const DEFAULT_SCENE_BUILT_IN_REGISTRY: SceneBuiltInRegistry = Object.freeze({
     ...getCoreSceneBuiltInRegistrySource(),
     ...getAnimationSceneBuiltInRegistrySource(),
+    ...getUISceneBuiltInRegistrySource(),
     ...get2DSceneBuiltInRegistrySource(),
     ...get3DSceneBuiltInRegistrySource(),
 }) as SceneBuiltInRegistry;
@@ -51,6 +57,7 @@ export { createSceneBuiltInManifest, resolveSceneBuiltInComponents };
 export {
     SCENE_ANIMATION_BUILT_IN_MANIFEST,
     SCENE_CORE_BUILT_IN_MANIFEST,
+    SCENE_UI_BUILT_IN_MANIFEST,
     SCENE_2D_BUILT_IN_MANIFEST,
     SCENE_3D_BUILT_IN_MANIFEST,
 };
@@ -58,6 +65,7 @@ export {
 export const DEFAULT_SCENE_BUILT_IN_MANIFESTS = Object.freeze([
     ...CORE_SCENE_BUILT_IN_MANIFESTS,
     ...ANIMATION_SCENE_BUILT_IN_MANIFESTS,
+    ...UI_SCENE_BUILT_IN_MANIFESTS,
     SCENE_3D_BUILT_IN_MANIFEST,
 ]) as readonly SceneBuiltInManifest[];
 

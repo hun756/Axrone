@@ -1,6 +1,6 @@
 import { World, WorldError, EntityError, ComponentError } from '@axrone/ecs-runtime/world';
 import { Component, script, Transform } from '@axrone/ecs-runtime';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SingletonComponent from './components/SingletonComponent';
 import DynamicSingletonComponent from './components/DynamicSingletonComponent';
 
@@ -429,6 +429,277 @@ describe('World', () => {
         it('should handle multiple clear calls', () => {
             world.clear();
             expect(() => world.clear()).not.toThrow();
+        });
+    });
+
+    // ─── createEntityWithComponents ─────────────────────────────────
+
+    describe('createEntityWithComponents', () => {
+        it('creates entity with initial components', () => {
+            const entity = world.createEntityWithComponents({
+                TestComponent: new TestComponent(42),
+            });
+
+            expect(entity).toBeDefined();
+            expect(world.hasComponent(entity, 'TestComponent')).toBe(true);
+            expect((world.getComponent(entity, 'TestComponent') as TestComponent).value).toBe(42);
+        });
+
+        it('validates component names', () => {
+            expect(() =>
+                world.createEntityWithComponents({ NonExistent: {} } as any)
+            ).toThrow(WorldError);
+        });
+    });
+
+    // ─── batchStructureChanges ──────────────────────────────────────
+
+    describe('batchStructureChanges', () => {
+        it('defers cache invalidation until batch completes', () => {
+            const result = world.batchStructureChanges(() => {
+                const entity = world.createEntity();
+                world.addComponent(entity, 'TestComponent');
+                return entity;
+            });
+
+            expect(result).toBeDefined();
+            // Query should work after batch completes
+            expect(world.query('TestComponent')).toHaveLength(1);
+        });
+
+        it('handles nested batches', () => {
+            world.batchStructureChanges(() => {
+                world.batchStructureChanges(() => {
+                    const entity = world.createEntity();
+                    world.addComponent(entity, 'TestComponent');
+                });
+                // Inner batch shouldn't have invalidated yet
+            });
+
+            // Outer batch completion invalidates
+            expect(world.query('TestComponent')).toHaveLength(1);
+        });
+
+        it('returns the callback result', () => {
+            const result = world.batchStructureChanges(() => 42);
+            expect(result).toBe(42);
+        });
+    });
+
+    // ─── Actor registry ─────────────────────────────────────────────
+
+    describe('actor registry', () => {
+        it('registerActor throws EntityError for null actor', () => {
+            const entity = world.createEntity();
+            expect(() => world.registerActor(entity, null as any)).toThrow(EntityError);
+        });
+
+        it('getActor returns registered actor', () => {
+            const entity = world.createEntity();
+            const mockActor = { name: 'Test' } as any;
+            world.registerActor(entity, mockActor);
+
+            expect(world.getActor(entity)).toBe(mockActor);
+        });
+
+        it('getActor returns undefined for unknown entity', () => {
+            expect(world.getActor(999 as any)).toBeUndefined();
+        });
+
+        it('getAllActors returns all registered actors', () => {
+            const e1 = world.createEntity();
+            const e2 = world.createEntity();
+            const a1 = { name: 'A1' } as any;
+            const a2 = { name: 'A2' } as any;
+
+            world.registerActor(e1, a1);
+            world.registerActor(e2, a2);
+
+            const all = world.getAllActors();
+            expect(all).toHaveLength(2);
+            expect(all).toContain(a1);
+            expect(all).toContain(a2);
+        });
+
+        it('unregisterActor on disposed world is a no-op', () => {
+            const entity = world.createEntity();
+            world.clear();
+
+            expect(() => world.unregisterActor(entity)).not.toThrow();
+        });
+    });
+
+    // ─── registerComponentType ──────────────────────────────────────
+
+    describe('registerComponentType', () => {
+        it('dynamically registers a new component type', () => {
+            class NewComp extends Component {}
+            world.registerComponentType(NewComp);
+
+            expect(world.isComponentRegistered('NewComp')).toBe(true);
+        });
+
+        it('is idempotent for same constructor', () => {
+            class IdemComp extends Component {}
+            world.registerComponentType(IdemComp);
+            expect(() => world.registerComponentType(IdemComp)).not.toThrow();
+        });
+
+        it('throws for different constructor with same name', () => {
+            class DupComp extends Component {}
+            world.registerComponentType(DupComp);
+
+            class DupComp2 extends Component {}
+            Object.defineProperty(DupComp2, 'name', { value: 'DupComp' });
+
+            expect(() => world.registerComponentType(DupComp2)).toThrow(WorldError);
+        });
+
+        it('throws for anonymous constructor', () => {
+            const Anon = class extends Component {};
+            Object.defineProperty(Anon, 'name', { value: '' });
+
+            expect(() => world.registerComponentType(Anon as any)).toThrow(WorldError);
+        });
+    });
+
+    // ─── isComponentRegistered / getRegisteredComponentNames ────────
+
+    describe('component registration queries', () => {
+        it('isComponentRegistered by string name', () => {
+            expect(world.isComponentRegistered('TestComponent')).toBe(true);
+            expect(world.isComponentRegistered('NonExistent')).toBe(false);
+        });
+
+        it('isComponentRegistered by constructor', () => {
+            expect(world.isComponentRegistered(TestComponent)).toBe(true);
+        });
+
+        it('getRegisteredComponentNames returns current registry keys', () => {
+            const names = world.getRegisteredComponentNames();
+            expect(names).toContain('Transform');
+            expect(names).toContain('TestComponent');
+            expect(names).toContain('AnotherComponent');
+        });
+    });
+
+    // ─── Event system extensions ────────────────────────────────────
+
+    describe('event system extensions', () => {
+        it('once fires handler exactly once', () => {
+            const handler = vi.fn();
+            world.once('EntityCreated' as any, handler);
+
+            const entity = world.createEntity();
+            const actor = { name: 'OnceActor' } as any;
+            world.registerActor(entity, actor);
+
+            expect(handler).toHaveBeenCalledTimes(1);
+
+            // Second registration should not trigger handler
+            const entity2 = world.createEntity();
+            world.registerActor(entity2, { name: 'Another' } as any);
+            expect(handler).toHaveBeenCalledTimes(1);
+        });
+
+        it('emitSync returns boolean', () => {
+            const result = world.emitSync('EntityCreated' as any, { entity: 0, actor: null });
+            expect(typeof result).toBe('boolean');
+        });
+
+        it('off unsubscribes from events', () => {
+            const handler = vi.fn();
+            world.on('EntityCreated' as any, handler);
+
+            const entity = world.createEntity();
+            world.registerActor(entity, { name: 'A' } as any);
+            expect(handler).toHaveBeenCalledTimes(1);
+
+            world.off('EntityCreated' as any, handler);
+
+            const entity2 = world.createEntity();
+            world.registerActor(entity2, { name: 'B' } as any);
+            expect(handler).toHaveBeenCalledTimes(1); // not called again
+        });
+
+        it('pauseEvents / resumeEvents / drainEvents do not throw', () => {
+            expect(() => world.pauseEvents()).not.toThrow();
+            expect(() => world.resumeEvents()).not.toThrow();
+            expect(() => world.drainEvents()).not.toThrow();
+        });
+
+        it('getEventMetrics returns metrics for an event', () => {
+            const metrics = world.getEventMetrics('EntityCreated' as any);
+            // May be undefined or an object - just verify it doesn't throw
+            expect(metrics === undefined || typeof metrics === 'object').toBe(true);
+        });
+
+        it('getAllEventMetrics returns an object', () => {
+            const metrics = world.getAllEventMetrics();
+            expect(typeof metrics).toBe('object');
+        });
+    });
+
+    // ─── Observables ────────────────────────────────────────────────
+
+    describe('observables', () => {
+        it('getObservables returns ECSObservables instance', () => {
+            const observables = world.getObservables();
+            expect(observables).toBeDefined();
+        });
+
+        it('observeEntityLifecycle returns an observable', () => {
+            const observable = world.observeEntityLifecycle();
+            expect(observable).toBeDefined();
+            expect(observable.all).toBeDefined();
+        });
+
+        it('observeComponent returns an observable for a component', () => {
+            const observable = world.observeComponent('TestComponent');
+            expect(observable).toBeDefined();
+            expect(observable.added).toBeDefined();
+            expect(observable.removed).toBeDefined();
+        });
+    });
+
+    // ─── getDebugInfo / toString ────────────────────────────────────
+
+    describe('debug and string output', () => {
+        it('getDebugInfo returns complete debug snapshot', () => {
+            world.createEntity();
+            const debug = world.getDebugInfo();
+
+            expect(debug).toHaveProperty('state', 'ready');
+            expect(debug).toHaveProperty('entityCount', 1);
+            expect(debug).toHaveProperty('archetypeCount');
+            expect(debug).toHaveProperty('componentTypes');
+            expect(debug).toHaveProperty('creationTime');
+            expect(debug).toHaveProperty('config');
+            expect(debug).toHaveProperty('archetypes');
+            expect(debug).toHaveProperty('queryCache');
+        });
+
+        it('toString returns correct format', () => {
+            world.createEntity();
+            const str = world.toString();
+
+            expect(str).toContain('World');
+            expect(str).toContain('ready');
+            expect(str).toContain('Entities: 1');
+        });
+    });
+
+    // ─── Validation disabled ────────────────────────────────────────
+
+    describe('validation disabled', () => {
+        it('getComponent skips validation when enableValidation: false', () => {
+            const noValidationWorld = new World(registry, { enableValidation: false });
+
+            // Should not throw even with invalid entity
+            const result = noValidationWorld.getComponent(999 as any, 'TestComponent');
+            expect(result).toBeUndefined();
+
+            noValidationWorld.clear();
         });
     });
 });

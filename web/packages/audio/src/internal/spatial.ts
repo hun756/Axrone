@@ -198,6 +198,13 @@ export const syncAudioListenerToContext = (
     }).setOrientation?.(forward.x, forward.y, forward.z, up.x, up.y, up.z);
 };
 
+export const configureDefaultPanner = (panner: PannerNode): void => {
+    panner.distanceModel = 'inverse';
+    panner.refDistance = 1;
+    panner.maxDistance = 1000000;
+    panner.rolloffFactor = 0;
+};
+
 export const applyPannerState = (
     panner: PannerNode,
     spatial: Audio3DSpatialization,
@@ -205,10 +212,7 @@ export const applyPannerState = (
     orientation: AudioVector3
 ): void => {
     panner.panningModel = spatial.panningModel ?? 'HRTF';
-    panner.distanceModel = 'inverse';
-    panner.refDistance = 1;
-    panner.maxDistance = 1000000;
-    panner.rolloffFactor = 0;
+    configureDefaultPanner(panner);
     panner.coneInnerAngle = spatial.coneInnerAngle ?? 360;
     panner.coneOuterAngle = spatial.coneOuterAngle ?? 360;
     panner.coneOuterGain = spatial.coneOuterGain ?? 0;

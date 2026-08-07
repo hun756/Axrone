@@ -1,5 +1,6 @@
 import {
     DisposedUIError,
+    InvalidUIAssetError,
     UIError,
     UIErrorCode,
     WidgetNotFoundError,
@@ -7,6 +8,12 @@ import {
 } from './errors';
 import { FontRegistry, ensureDefaultUIFont } from './font';
 import { UILayoutEngine, compileLayoutInput } from './layout';
+import {
+    type CanvasScaleResult,
+    resolveCanvasScale,
+    canvasScaleToTransform,
+    mapViewportPointToCanvas,
+} from './layout/canvas-scaler';
 import { NodeFlag } from './runtime/node-flags';
 import {
     type StoredWidgetRecord,
@@ -16,6 +23,21 @@ import {
     compileWidgetText,
     normalizeWidgetRecord,
 } from './runtime/records';
+import {
+    type UIInputDispatchHost,
+    dispatchKeyEvent,
+    dispatchPointerEvent,
+    dispatchTextEvent,
+    moveFocusDirectional,
+    moveFocusLinear,
+} from './runtime/runtime-input';
+import {
+    buildCaretCommand,
+    buildLineDecorationCommands,
+    buildSelectionCommands,
+    measureImageContent,
+    resolveImageCommand,
+} from './runtime/runtime-frame';
 import {
     EMPTY_FOCUS_INPUT,
     EMPTY_LAYOUT_INPUT,
@@ -37,7 +59,6 @@ import { TextLayoutEngine } from './text';
 import { WidgetRegistry } from './widget';
 import type {
     ColorInput,
-    CornerRadii,
     CustomRenderCommand,
     FocusMoveDirection,
     FontRegistryOptions,
@@ -50,6 +71,7 @@ import type {
     ResolvedLayout,
     ResolvedTextBlock,
     ResolvedWidgetStyle,
+    RectLike,
     SizeLike,
     TextLayoutResult,
     TextRenderCommand,
@@ -63,6 +85,8 @@ import type {
     WidgetEventContext,
     WidgetEventHandlers,
     WidgetFocusChangeEvent,
+    UIAsset,
+    UICanvasConfig,
     WidgetId,
     WidgetKey,
     WidgetLayoutInput,
@@ -131,6 +155,23 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private viewportHeight: number;
     private locale: string;
     private lastLayoutPasses = 0;
+    private canvasConfig: UICanvasConfig | null = null;
+    private lastViewport: { readonly width: number; readonly height: number } | null = null;
+    private readonly bindingTable = new Map<string, WidgetId>();
+
+    private readonly inputHost: UIInputDispatchHost = {
+        getPressed: () => this.pressed,
+        setPressed: (widget) => {
+            this.pressed = widget;
+        },
+        getFocused: () => this.focused,
+        hitTest: (x, y) => this.hitTest(x, y),
+        updateHover: (target, event) => this.updateHover(target, event),
+        bubbleEvent: (index, event) => this.bubbleEvent(index, event),
+        isFocusable: (index) => this.isFocusable(index),
+        setFocus: (widget, reason) => this.setFocus(widget, reason),
+        moveFocus: (direction) => this.moveFocus(direction),
+    };
 
     constructor(options: UIRuntimeOptions<TPayload> = {}) {
         this.locale = options.locale ?? 'en';
@@ -182,6 +223,80 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
 
     get height(): number {
         return this.viewportHeight;
+    }
+
+    /** Returns the currently loaded canvas configuration, or null if no UIAsset is loaded. */
+    getCanvasConfig(): UICanvasConfig | null {
+        return this.canvasConfig;
+    }
+
+    /**
+     * Loads a UIAsset into this runtime.
+     * Sets the viewport to the asset's reference resolution, restores the widget tree,
+     * stores the canvas configuration for later use during commit(), and resolves the
+     * asset's named bindings against restored widget keys.
+     */
+    loadFromAsset(asset: UIAsset): this {
+        this.ensureActive();
+        this.canvasConfig = asset.canvas;
+        this.lastViewport = null;
+        this.setViewport(asset.canvas.referenceWidth, asset.canvas.referenceHeight);
+        this.restore({
+            viewportWidth: asset.canvas.referenceWidth,
+            viewportHeight: asset.canvas.referenceHeight,
+            locale: this.locale,
+            root: asset.root,
+        });
+        this.rebuildBindingTable(asset.bindings);
+        this.remountControllers();
+        return this;
+    }
+
+    /**
+     * Re-runs controller `mount` hooks after the binding table exists.
+     *
+     * Widgets are created before bindings are resolved, so a controller that
+     * reaches sibling widgets through `getBoundWidget` (a slider syncing its
+     * fill and handle, for example) cannot do so during the initial mount.
+     * Replaying `mount` once the table is ready gives controllers a chance to
+     * push their authored state into the tree before the first layout pass, so
+     * `mount` implementations must be idempotent.
+     */
+    private remountControllers(): void {
+        for (let index = 0; index < this.records.length; index += 1) {
+            const record = this.records[index];
+            if (!record?.controller) {
+                continue;
+            }
+            const controller = this.registry.resolve(record.controller);
+            controller?.mount?.(this.createControllerContext(index));
+        }
+    }
+
+    /**
+     * Resolves a named binding (declared in the loaded UIAsset) to the widget it targets.
+     * Returns null when no asset is loaded or the binding name is unknown.
+     */
+    getBoundWidget(name: string): WidgetId | null {
+        this.ensureActive();
+        return this.bindingTable.get(name) ?? null;
+    }
+
+    /** Returns the full binding-name to widget table resolved by the last loadFromAsset(). */
+    getBindingTable(): ReadonlyMap<string, WidgetId> {
+        this.ensureActive();
+        return this.bindingTable;
+    }
+
+    /**
+     * Returns the controller state of a widget, or null when it has no
+     * controller. Lets callers read live control values (a slider's value, a
+     * toggle's checked flag) without reaching into runtime internals.
+     */
+    getWidgetState<TState = unknown>(widget: WidgetId): TState | null {
+        this.ensureActive();
+        const index = this.requireWidget(widget);
+        return (this.states[index] as TState | undefined) ?? null;
     }
 
     setViewport(width: number, height: number): this {
@@ -328,6 +443,8 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         for (const child of children) {
             this.removeWidget(child);
         }
+        this.bindingTable.clear();
+        this.lastViewport = null;
         return this;
     }
 
@@ -391,15 +508,108 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         return this.renderFrame();
     }
 
+    /**
+     * Commits the UI frame targeting a specific actual viewport size.
+     * When a canvas config is loaded (via loadFromAsset), layout is computed at the
+     * reference resolution and then a scale transform is applied to all render commands
+     * to map them into the actual viewport.
+     *
+     * When no canvas config is loaded, this behaves identically to commit(viewport).
+     */
+    commitToViewport(actualWidth: number, actualHeight: number): UIFrame<TPayload> {
+        this.ensureActive();
+        this.lastViewport = { width: actualWidth, height: actualHeight };
+        if (!this.canvasConfig) {
+            return this.commit({ width: actualWidth, height: actualHeight });
+        }
+        // Ensure layout is computed at reference resolution
+        if (this.layoutDirty) {
+            this.layoutEngine.compute(
+                {
+                    root: this.rootId,
+                    getLayout: (node) => this.layouts[node as number]!,
+                    getFirstChild: (node) => {
+                        const child = this.firstChild[node as number];
+                        return child === 0 ? null : (child as WidgetId);
+                    },
+                    getNextSibling: (node) => {
+                        const sibling = this.nextSibling[node as number];
+                        return sibling === 0 ? null : (sibling as WidgetId);
+                    },
+                    measureContent: (node, constraints) => this.measureContent(node as number, constraints),
+                    setBox: (node, box) => this.writeBox(node as number, box),
+                    isVisible: (node) => this.isVisible(node as number),
+                },
+                { width: this.viewportWidth, height: this.viewportHeight }
+            );
+            this.layoutDirty = false;
+            this.lastLayoutPasses = this.layoutEngine.getLayoutPassCount();
+        }
+        // Render frame at reference resolution
+        const frame = this.renderFrame();
+        // Compute canvas scale from reference to actual viewport
+        const scaleResult = resolveCanvasScale(this.canvasConfig, actualWidth, actualHeight);
+        const transform = canvasScaleToTransform(scaleResult);
+        // Commands keep their reference-resolution geometry; the canvas scale is
+        // carried by `transform` and applied once by the renderer. Pre-scaling the
+        // geometry here as well would double-apply the scale. Clip rects are the
+        // exception: they feed the scissor test, which operates in viewport space.
+        const scaledCommands = frame.commands.map((command) => {
+            switch (command.kind) {
+                case 'quad':
+                case 'text':
+                case 'image':
+                    return {
+                        ...command,
+                        clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
+                        transform,
+                    };
+                case 'custom':
+                    return {
+                        ...command,
+                        clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
+                    };
+                default:
+                    return command;
+            }
+        });
+        return {
+            viewportWidth: actualWidth,
+            viewportHeight: actualHeight,
+            commands: scaledCommands,
+            metrics: frame.metrics,
+        };
+    }
+
+    /**
+     * Dispatches an input event whose pointer coordinates are expressed in actual
+     * viewport (screen) pixels. When a canvas config is loaded and a commitToViewport()
+     * has been performed, pointer coordinates are mapped back into the reference
+     * canvas space before hit-testing. Non-pointer events pass through unchanged.
+     */
+    dispatchViewportInput(event: Readonly<UIInputEvent>): boolean {
+        this.ensureActive();
+        if (event.type !== 'pointer' || !this.canvasConfig || !this.lastViewport) {
+            return this.dispatchInput(event);
+        }
+        const scale = resolveCanvasScale(
+            this.canvasConfig,
+            this.lastViewport.width,
+            this.lastViewport.height
+        );
+        const mapped = mapViewportPointToCanvas(scale, event.x, event.y);
+        return this.dispatchInput({ ...event, x: mapped.x, y: mapped.y });
+    }
+
     dispatchInput(event: Readonly<UIInputEvent>): boolean {
         this.ensureActive();
         switch (event.type) {
             case 'pointer':
-                return this.dispatchPointer(event);
+                return dispatchPointerEvent(this.inputHost, event);
             case 'key':
-                return this.dispatchKey(event);
+                return dispatchKeyEvent(this.inputHost, event);
             case 'text':
-                return this.dispatchText(event);
+                return dispatchTextEvent(this.inputHost, event);
             case 'focus':
                 if (!event.focused && this.focused) {
                     this.setFocus(null, 'window');
@@ -447,9 +657,10 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         const targetList = scoped.length > 0 ? scoped : candidates;
         let next: WidgetId | null = null;
         if (direction === 'forward' || direction === 'backward') {
-            next = this.moveFocusLinear(targetList, direction, scopeRoot as number);
+            const cycle = this.focuses[scopeRoot as number]?.cycle ?? false;
+            next = moveFocusLinear(targetList, direction, this.focused, cycle);
         } else {
-            next = this.moveFocusDirectional(targetList, direction);
+            next = moveFocusDirectional(targetList, direction, this.focused, (index) => this.readBox(index));
         }
         if (next) {
             this.setFocus(next, 'navigation', direction);
@@ -513,6 +724,50 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private ensureActive(): void {
         if (this.disposed) {
             throw new DisposedUIError('UIRuntime');
+        }
+    }
+
+    /**
+     * Resolves asset bindings (binding name -> widget key) against the restored
+     * widget tree. Ambiguous keys (shared by multiple widgets) and missing keys
+     * are treated as malformed asset data.
+     */
+    private rebuildBindingTable(bindings: UIAsset['bindings']): void {
+        this.bindingTable.clear();
+        if (!bindings) {
+            return;
+        }
+        const widgetsByKey = new Map<WidgetKey, WidgetId>();
+        const duplicateKeys = new Set<WidgetKey>();
+        for (let index = 0; index < this.records.length; index += 1) {
+            const record = this.records[index];
+            if (!record || record.key === undefined || record.key === null) {
+                continue;
+            }
+            if (widgetsByKey.has(record.key)) {
+                duplicateKeys.add(record.key);
+            } else {
+                widgetsByKey.set(record.key, index as WidgetId);
+            }
+        }
+        for (const [name, key] of Object.entries(bindings)) {
+            if (key === null) {
+                continue;
+            }
+            if (duplicateKeys.has(key)) {
+                throw new InvalidUIAssetError(
+                    `Binding "${name}" is ambiguous: multiple widgets share the key "${String(key)}".`,
+                    { name, key }
+                );
+            }
+            const widget = widgetsByKey.get(key);
+            if (widget === undefined) {
+                throw new InvalidUIAssetError(
+                    `Binding "${name}" refers to a widget key "${String(key)}" that does not exist in the asset tree.`,
+                    { name, key }
+                );
+            }
+            this.bindingTable.set(name, widget);
         }
     }
 
@@ -735,7 +990,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         let measuredWidth = 0;
         let measuredHeight = 0;
         if (image) {
-            const imageSize = this.measureImageContent(image, constraints);
+            const imageSize = measureImageContent(image, constraints);
             measuredWidth = Math.max(measuredWidth, imageSize.width);
             measuredHeight = Math.max(measuredHeight, imageSize.height);
         }
@@ -754,44 +1009,6 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             measuredHeight = Math.max(measuredHeight, this.textLayouts[index]!.height);
         }
         return { width: measuredWidth, height: measuredHeight };
-    }
-
-    private measureImageContent(image: ResolvedWidgetImage, constraints: Readonly<SizeLike>): SizeLike {
-        const intrinsicWidth = image.source.width;
-        const intrinsicHeight = image.source.height;
-        const maxWidth = Number.isFinite(constraints.width) ? Math.max(0, constraints.width) : Number.POSITIVE_INFINITY;
-        const maxHeight = Number.isFinite(constraints.height) ? Math.max(0, constraints.height) : Number.POSITIVE_INFINITY;
-        if (!Number.isFinite(maxWidth) && !Number.isFinite(maxHeight)) {
-            return { width: intrinsicWidth, height: intrinsicHeight };
-        }
-        if (image.fit === 'fill') {
-            return {
-                width: Number.isFinite(maxWidth) ? maxWidth : intrinsicWidth,
-                height: Number.isFinite(maxHeight) ? maxHeight : intrinsicHeight,
-            };
-        }
-        const widthScale = Number.isFinite(maxWidth) ? maxWidth / intrinsicWidth : Number.POSITIVE_INFINITY;
-        const heightScale = Number.isFinite(maxHeight) ? maxHeight / intrinsicHeight : Number.POSITIVE_INFINITY;
-        if (image.fit === 'none') {
-            return {
-                width: Number.isFinite(maxWidth) ? Math.min(intrinsicWidth, maxWidth) : intrinsicWidth,
-                height: Number.isFinite(maxHeight) ? Math.min(intrinsicHeight, maxHeight) : intrinsicHeight,
-            };
-        }
-        const containScale = Math.min(widthScale, heightScale);
-        const coverScale = Math.max(widthScale, heightScale);
-        const scale = image.fit === 'cover'
-            ? coverScale
-            : image.fit === 'scale-down'
-              ? Math.min(1, containScale)
-              : containScale;
-        if (!Number.isFinite(scale) || scale <= 0) {
-            return { width: intrinsicWidth, height: intrinsicHeight };
-        }
-        return {
-            width: intrinsicWidth * scale,
-            height: intrinsicHeight * scale,
-        };
     }
 
     private writeBox(index: number, box: LayoutBox): void {
@@ -857,7 +1074,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             }
             const image = this.images[index];
             if (image) {
-                const imageCommand = this.resolveImageCommand(index, box, image, style, nextClip, zIndex);
+                const imageCommand = resolveImageCommand(index, box, image, style, nextClip, zIndex);
                 if (imageCommand) {
                     imageCommandCount += 1;
                     commands.push(imageCommand);
@@ -867,7 +1084,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             if (textLayout) {
                 const textStyle = this.texts[index]!;
                 if (textStyle.selectionColor.a > 0) {
-                    for (const quad of this.buildSelectionCommands(index, box, textStyle, textLayout, nextClip, zIndex, style.opacity)) {
+                    for (const quad of buildSelectionCommands(index, box, textStyle, textLayout, nextClip, zIndex, style.opacity)) {
                         commands.push(quad);
                     }
                 }
@@ -891,7 +1108,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
                         glyphCount += textLayout.glyphs.length;
                         commands.push(shadowCommand);
                     }
-                    for (const quad of this.buildLineDecorationCommands(index, box, textStyle, textLayout, nextClip, zIndex, style.opacity)) {
+                    for (const quad of buildLineDecorationCommands(index, box, textStyle, textLayout, nextClip, zIndex, style.opacity)) {
                         commands.push(quad);
                     }
                     const textCommand: TextRenderCommand = {
@@ -912,7 +1129,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
                     glyphCount += textLayout.glyphs.length;
                     commands.push(textCommand);
                 }
-                const caretCommand = this.buildCaretCommand(index, box, textStyle, textLayout, nextClip, zIndex, style.opacity);
+                const caretCommand = buildCaretCommand(index, box, textStyle, textLayout, nextClip, zIndex, style.opacity);
                 if (caretCommand) {
                     commands.push(caretCommand);
                 }
@@ -980,251 +1197,6 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             this.textLayoutWidths[index] = width;
         }
         return this.textLayouts[index];
-    }
-
-    private resolveImageCommand(
-        index: number,
-        box: LayoutBox,
-        image: ResolvedWidgetImage,
-        style: ResolvedWidgetStyle,
-        clip: LayoutBox | null,
-        zIndex: number
-    ): ImageRenderCommand | null {
-        const containerWidth = box.contentWidth;
-        const containerHeight = box.contentHeight;
-        if (containerWidth <= 0 || containerHeight <= 0) {
-            return null;
-        }
-        const intrinsicWidth = image.source.width;
-        const intrinsicHeight = image.source.height;
-        let renderWidth = containerWidth;
-        let renderHeight = containerHeight;
-        if (image.fit === 'none') {
-            renderWidth = intrinsicWidth;
-            renderHeight = intrinsicHeight;
-        } else if (image.fit !== 'fill') {
-            const containScale = Math.min(containerWidth / intrinsicWidth, containerHeight / intrinsicHeight);
-            const coverScale = Math.max(containerWidth / intrinsicWidth, containerHeight / intrinsicHeight);
-            const scale = image.fit === 'cover'
-                ? coverScale
-                : image.fit === 'scale-down'
-                  ? Math.min(1, containScale)
-                  : containScale;
-            renderWidth = intrinsicWidth * scale;
-            renderHeight = intrinsicHeight * scale;
-        }
-        return {
-            kind: 'image',
-            widget: index as WidgetId,
-            source: image.source,
-            x: box.contentX + (containerWidth - renderWidth) * image.alignX,
-            y: box.contentY + (containerHeight - renderHeight) * image.alignY,
-            width: renderWidth,
-            height: renderHeight,
-            zIndex,
-            tint: image.tint,
-            opacity: style.opacity,
-            sampling: image.sampling,
-            radius: style.radius,
-            clip,
-            uvRect: image.uvRect,
-        };
-    }
-
-    private buildSelectionCommands(
-        index: number,
-        box: LayoutBox,
-        text: ResolvedTextBlock,
-        layout: TextLayoutResult,
-        clip: LayoutBox | null,
-        zIndex: number,
-        opacity: number
-    ): QuadRenderCommand[] {
-        if (text.selectionStart === null || text.selectionEnd === null || text.selectionStart === text.selectionEnd) {
-            return [];
-        }
-        const start = Math.min(text.selectionStart, text.selectionEnd);
-        const end = Math.max(text.selectionStart, text.selectionEnd);
-        const selected = layout.clusters.filter((cluster) => cluster.index >= start && cluster.index < end);
-        const perLine = new Map<number, { x0: number; x1: number; y: number; height: number }>();
-        for (const cluster of selected) {
-            const current = perLine.get(cluster.line);
-            const x0 = cluster.x;
-            const x1 = cluster.x + cluster.width;
-            if (!current) {
-                perLine.set(cluster.line, { x0, x1, y: cluster.y, height: cluster.height });
-                continue;
-            }
-            current.x0 = Math.min(current.x0, x0);
-            current.x1 = Math.max(current.x1, x1);
-        }
-        return [...perLine.values()].map((line) => ({
-            kind: 'quad' as const,
-            widget: index as WidgetId,
-            x: box.contentX + line.x0,
-            y: box.contentY + line.y,
-            width: Math.max(1, line.x1 - line.x0),
-            height: line.height,
-            zIndex,
-            color: text.selectionColor,
-            borderColor: TRANSPARENT,
-            borderWidth: 0,
-            radius: { topLeft: 2, topRight: 2, bottomRight: 2, bottomLeft: 2 },
-            opacity,
-            clip,
-        }));
-    }
-
-    private buildLineDecorationCommands(
-        index: number,
-        box: LayoutBox,
-        text: ResolvedTextBlock,
-        layout: TextLayoutResult,
-        clip: LayoutBox | null,
-        zIndex: number,
-        opacity: number
-    ): QuadRenderCommand[] {
-        const commands: QuadRenderCommand[] = [];
-        for (const line of layout.lines) {
-            if (line.width <= 0) {
-                continue;
-            }
-            if (text.underline && text.underlineColor.a > 0) {
-                commands.push({
-                    kind: 'quad',
-                    widget: index as WidgetId,
-                    x: box.contentX + line.x,
-                    y: box.contentY + line.y + layout.baseline + text.underlineOffset,
-                    width: Math.max(1, line.width),
-                    height: text.underlineThickness,
-                    zIndex,
-                    color: text.underlineColor,
-                    borderColor: TRANSPARENT,
-                    borderWidth: 0,
-                    radius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
-                    opacity,
-                    clip,
-                });
-            }
-            if (text.strikeThrough && text.strikeThroughColor.a > 0) {
-                commands.push({
-                    kind: 'quad',
-                    widget: index as WidgetId,
-                    x: box.contentX + line.x,
-                    y: box.contentY + line.y + line.ascent * 0.55,
-                    width: Math.max(1, line.width),
-                    height: text.strikeThroughThickness,
-                    zIndex,
-                    color: text.strikeThroughColor,
-                    borderColor: TRANSPARENT,
-                    borderWidth: 0,
-                    radius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
-                    opacity,
-                    clip,
-                });
-            }
-        }
-        return commands;
-    }
-
-    private buildCaretCommand(
-        index: number,
-        box: LayoutBox,
-        text: ResolvedTextBlock,
-        layout: TextLayoutResult,
-        clip: LayoutBox | null,
-        zIndex: number,
-        opacity: number
-    ): QuadRenderCommand | null {
-        if (text.caretIndex === null || text.caretColor.a <= 0) {
-            return null;
-        }
-        const exact = layout.carets.find((caret) => caret.index === text.caretIndex);
-        const fallback = exact ?? layout.carets.filter((caret) => caret.index <= text.caretIndex!).at(-1) ?? layout.carets[0];
-        if (!fallback) {
-            return null;
-        }
-        const caretHeight = Math.max(1, fallback.height - text.caretInset * 2);
-        return {
-            kind: 'quad',
-            widget: index as WidgetId,
-            x: box.contentX + fallback.x - text.caretWidth * 0.5,
-            y: box.contentY + fallback.y + text.caretInset,
-            width: text.caretWidth,
-            height: caretHeight,
-            zIndex,
-            color: text.caretColor,
-            borderColor: TRANSPARENT,
-            borderWidth: 0,
-            radius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
-            opacity,
-            clip,
-        };
-    }
-
-    private dispatchPointer(event: Readonly<UIPointerEvent>): boolean {
-        const target = this.hitTest(event.x, event.y);
-        if (event.phase === 'move') {
-            this.updateHover(target, event);
-            if (this.pressed) {
-                if (target && this.pressed !== target) {
-                    return this.bubbleEvent(this.pressed as number, event) || this.bubbleEvent(target as number, event);
-                }
-                return this.bubbleEvent((target ?? this.pressed) as number, event);
-            }
-            if (target) {
-                return this.bubbleEvent(target as number, event);
-            }
-            return false;
-        }
-        if (event.phase === 'down') {
-            this.pressed = target;
-            if (target) {
-                if (this.isFocusable(target as number)) {
-                    this.setFocus(target, 'pointer');
-                }
-                return this.bubbleEvent(target as number, event);
-            }
-            return false;
-        }
-        if (event.phase === 'up') {
-            const resolved = target ?? this.pressed;
-            this.pressed = null;
-            return resolved ? this.bubbleEvent(resolved as number, event) : false;
-        }
-        if (event.phase === 'wheel') {
-            return target ? this.bubbleEvent(target as number, event) : false;
-        }
-        return false;
-    }
-
-    private dispatchKey(event: Readonly<UIKeyEvent>): boolean {
-        if (this.focused && this.bubbleEvent(this.focused as number, event)) {
-            return true;
-        }
-        if (event.phase === 'down') {
-            if (event.key === 'Tab') {
-                const direction: FocusMoveDirection = event.shiftKey ? 'backward' : 'forward';
-                return this.moveFocus(direction) !== null;
-            }
-            if (event.key === 'ArrowLeft') {
-                return this.moveFocus('left') !== null;
-            }
-            if (event.key === 'ArrowRight') {
-                return this.moveFocus('right') !== null;
-            }
-            if (event.key === 'ArrowUp') {
-                return this.moveFocus('up') !== null;
-            }
-            if (event.key === 'ArrowDown') {
-                return this.moveFocus('down') !== null;
-            }
-        }
-        return false;
-    }
-
-    private dispatchText(event: Readonly<UITextInputEvent>): boolean {
-        return this.focused ? this.bubbleEvent(this.focused as number, event) : false;
     }
 
     private hitTest(x: number, y: number): WidgetId | null {
@@ -1437,66 +1409,6 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         return this.rootId;
     }
 
-    private moveFocusLinear(candidates: readonly WidgetId[], direction: FocusMoveDirection, scopeRoot: number): WidgetId | null {
-        if (candidates.length === 0) {
-            return null;
-        }
-        if (!this.focused) {
-            return direction === 'backward' ? candidates[candidates.length - 1] : candidates[0];
-        }
-        const currentIndex = candidates.findIndex((candidate) => candidate === this.focused);
-        const cycle = this.focuses[scopeRoot]?.cycle ?? false;
-        if (currentIndex === -1) {
-            return direction === 'backward' ? candidates[candidates.length - 1] : candidates[0];
-        }
-        const nextIndex = direction === 'backward' ? currentIndex - 1 : currentIndex + 1;
-        if (nextIndex >= 0 && nextIndex < candidates.length) {
-            return candidates[nextIndex];
-        }
-        return cycle ? (direction === 'backward' ? candidates[candidates.length - 1] : candidates[0]) : null;
-    }
-
-    private moveFocusDirectional(candidates: readonly WidgetId[], direction: Exclude<FocusMoveDirection, 'forward' | 'backward'>): WidgetId | null {
-        if (candidates.length === 0) {
-            return null;
-        }
-        const current = this.focused ? (this.focused as number) : candidates[0] as number;
-        const origin = this.readBox(current);
-        const originCenterX = origin.x + origin.width / 2;
-        const originCenterY = origin.y + origin.height / 2;
-        let best: { id: WidgetId; score: number } | null = null;
-        for (const candidate of candidates) {
-            const index = candidate as number;
-            if (index === current) {
-                continue;
-            }
-            const box = this.readBox(index);
-            const centerX = box.x + box.width / 2;
-            const centerY = box.y + box.height / 2;
-            const deltaX = centerX - originCenterX;
-            const deltaY = centerY - originCenterY;
-            if (direction === 'left' && deltaX >= 0) {
-                continue;
-            }
-            if (direction === 'right' && deltaX <= 0) {
-                continue;
-            }
-            if (direction === 'up' && deltaY >= 0) {
-                continue;
-            }
-            if (direction === 'down' && deltaY <= 0) {
-                continue;
-            }
-            const primary = direction === 'left' || direction === 'right' ? Math.abs(deltaX) : Math.abs(deltaY);
-            const secondary = direction === 'left' || direction === 'right' ? Math.abs(deltaY) : Math.abs(deltaX);
-            const score = primary * primary + secondary * secondary * 0.25;
-            if (!best || score < best.score) {
-                best = { id: candidate, score };
-            }
-        }
-        return best?.id ?? null;
-    }
-
     private snapshotNode(index: number): WidgetSnapshot {
         const record = this.records[index]!;
         const children: WidgetSnapshot[] = [];
@@ -1584,6 +1496,20 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     }
 }
 
+// ─── Canvas-scale helpers (module-private) ──────────────────────────────────
+
+function scaleClipRect(
+    rect: RectLike,
+    scale: CanvasScaleResult
+): RectLike {
+    return {
+        x: rect.x * scale.scaleX + scale.offsetX,
+        y: rect.y * scale.scaleY + scale.offsetY,
+        width: rect.width * scale.scaleX,
+        height: rect.height * scale.scaleY,
+    };
+}
+
 export type {
     ColorInput,
     FocusMoveDirection,
@@ -1603,3 +1529,6 @@ export type {
     WidgetStyleInput,
     UIRuntimeSnapshot,
 };
+
+export { serializeUIAsset, deserializeUIAsset, validateUIAsset } from './runtime/ui-asset-io';
+export type { UIAsset, UICanvasConfig, UICanvasScaleMode, UISafeAreaInset } from './types/ui-asset';

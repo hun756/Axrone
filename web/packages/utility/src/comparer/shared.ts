@@ -1,7 +1,5 @@
 export type CompareResult = -1 | 0 | 1;
 
-import { Fnv1a32 } from '@axrone/hash';
-
 export type Comparable<T extends string> = number & { readonly __brand: T };
 export type OrderKey = Comparable<'OrderKey'>;
 
@@ -80,9 +78,13 @@ export const FNV_PRIME = 16777619;
 export const FNV_OFFSET_BASIS = 2166136261;
 
 const fnvHash = (data: string): number => {
-    const h = new Fnv1a32();
-    h.updateString(data);
-    return h.digest() as unknown as number;
+    let h = FNV_OFFSET_BASIS;
+    for (let i = 0; i < data.length; i++) {
+        const c = data.charCodeAt(i);
+        h = Math.imul(h ^ (c & 0xff), FNV_PRIME) >>> 0;
+        h = Math.imul(h ^ ((c >>> 8) & 0xff), FNV_PRIME) >>> 0;
+    }
+    return h;
 };
 
 export function isEquatable(obj: unknown): obj is Equatable {

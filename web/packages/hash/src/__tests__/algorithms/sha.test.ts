@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Sha1, Sha256, Sha384, Sha512 } from '../../hash/algorithms';
+import { isWebCryptoAvailable } from '../../hash/algorithms/crypto/sha';
 
 const enc = new TextEncoder();
 const hexFromBytes = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
@@ -45,6 +46,82 @@ describe('SHA-1', () => {
         await (h as any).digestAsync();
         expect(() => h.updateString('b')).toThrow();
     });
+
+    it('reset clears state', async () => {
+        const h = new Sha1();
+        h.updateBytes(enc.encode('partial'));
+        h.reset();
+        h.updateBytes(enc.encode('abc'));
+        await (h as any).digestAsync();
+        expect(h.digestHex()).toBe('a9993e364706816aba3e25717850c26c9cd0d89d');
+    });
+
+    it('clone creates independent copy', async () => {
+        const h1 = new Sha1();
+        h1.updateBytes(enc.encode('abc'));
+        const h2 = h1.clone();
+        h1.updateBytes(enc.encode('def'));
+        await (h1 as any).digestAsync();
+        await (h2 as any).digestAsync();
+        expect(h1.digestHex()).not.toBe(h2.digestHex());
+    });
+
+    it('updateBoolean tracks data', async () => {
+        const a = new Sha256();
+        a.updateBoolean(true);
+        const b = new Sha256();
+        b.updateBoolean(false);
+        await (a as any).digestAsync();
+        await (b as any).digestAsync();
+        expect(a.digestHex()).not.toBe(b.digestHex());
+    });
+
+    it('updateU32 writes 4 bytes LE', async () => {
+        const a = new Sha256();
+        a.updateU32(0x61626300); // LE bytes: 00 63 62 61
+        await (a as any).digestAsync();
+        expect(a.byteLength).toBe(4);
+    });
+
+    it('updateAny dispatches correctly', async () => {
+        const a = new Sha256();
+        a.updateAny('abc');
+        const b = new Sha256();
+        b.updateString('abc');
+        await (a as any).digestAsync();
+        await (b as any).digestAsync();
+        expect(a.digestHex()).toBe(b.digestHex());
+    });
+
+    it('digestBase64 returns valid base64', async () => {
+        const h = new Sha256();
+        h.updateBytes(enc.encode('abc'));
+        await (h as any).digestAsync();
+        const b64 = h.digestBase64();
+        expect(typeof b64).toBe('string');
+        expect(b64.length).toBeGreaterThan(0);
+    });
+
+    it('digestBigInt returns bigint', async () => {
+        const h = new Sha256();
+        h.updateBytes(enc.encode('abc'));
+        await (h as any).digestAsync();
+        expect(typeof h.digestBigInt()).toBe('bigint');
+    });
+
+    it('digestAsync caches result', async () => {
+        const h = new Sha256();
+        h.updateBytes(enc.encode('abc'));
+        const r1 = await (h as any).digestAsync();
+        const r2 = await (h as any).digestAsync();
+        expect(r1).toBe(r2);
+    });
+
+    it('digestBytes throws before digestAsync', () => {
+        const h = new Sha256();
+        h.updateBytes(enc.encode('abc'));
+        expect(() => h.digestBytes()).toThrow(/digestAsync/);
+    });
 });
 
 describe('SHA-256', () => {
@@ -76,6 +153,39 @@ describe('SHA-256', () => {
         await (h as any).digestAsync();
         expect(h.digestBytes().length).toBe(32);
     });
+
+    it('reset clears state', async () => {
+        const h = new Sha256();
+        h.updateBytes(enc.encode('partial'));
+        h.reset();
+        h.updateBytes(enc.encode('abc'));
+        await (h as any).digestAsync();
+        expect(h.digestHex()).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+    });
+
+    it('clone creates independent copy', async () => {
+        const h1 = new Sha256();
+        h1.updateBytes(enc.encode('abc'));
+        const h2 = h1.clone();
+        h1.updateBytes(enc.encode('xyz'));
+        await (h1 as any).digestAsync();
+        await (h2 as any).digestAsync();
+        expect(h1.digestHex()).not.toBe(h2.digestHex());
+    });
+
+    it('byteLength tracking', () => {
+        const h = new Sha256();
+        expect(h.byteLength).toBe(0);
+        h.updateBytes(enc.encode('hello'));
+        expect(h.byteLength).toBe(5);
+    });
+
+    it('metadata is correct', () => {
+        const h = new Sha256();
+        expect(h.metadata.name).toBe('sha-256');
+        expect(h.metadata.outputSize).toBe(256);
+        expect(h.metadata.cryptographicallySecure).toBe(true);
+    });
 });
 
 describe('SHA-384', () => {
@@ -103,6 +213,27 @@ describe('SHA-384', () => {
         await (h as any).digestAsync();
         expect(h.digestBytes().length).toBe(48);
     });
+
+    it('reset clears state', async () => {
+        const h = new Sha384();
+        h.updateBytes(enc.encode('partial'));
+        h.reset();
+        h.updateBytes(enc.encode('abc'));
+        await (h as any).digestAsync();
+        expect(h.digestHex()).toBe(
+            'cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7'
+        );
+    });
+
+    it('clone creates independent copy', async () => {
+        const h1 = new Sha384();
+        h1.updateBytes(enc.encode('abc'));
+        const h2 = h1.clone();
+        h1.updateBytes(enc.encode('xyz'));
+        await (h1 as any).digestAsync();
+        await (h2 as any).digestAsync();
+        expect(h1.digestHex()).not.toBe(h2.digestHex());
+    });
 });
 
 describe('SHA-512', () => {
@@ -129,5 +260,82 @@ describe('SHA-512', () => {
         h.updateString('a');
         await (h as any).digestAsync();
         expect(h.digestBytes().length).toBe(64);
+    });
+
+    it('reset clears state', async () => {
+        const h = new Sha512();
+        h.updateBytes(enc.encode('partial'));
+        h.reset();
+        h.updateBytes(enc.encode('abc'));
+        await (h as any).digestAsync();
+        expect(h.digestHex()).toBe(
+            'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f'
+        );
+    });
+
+    it('clone creates independent copy', async () => {
+        const h1 = new Sha512();
+        h1.updateBytes(enc.encode('abc'));
+        const h2 = h1.clone();
+        h1.updateBytes(enc.encode('xyz'));
+        await (h1 as any).digestAsync();
+        await (h2 as any).digestAsync();
+        expect(h1.digestHex()).not.toBe(h2.digestHex());
+    });
+});
+
+describe('isWebCryptoAvailable', () => {
+    it('returns boolean', () => {
+        expect(typeof isWebCryptoAvailable()).toBe('boolean');
+    });
+
+    it('returns true in Node.js >= 15+ environment', () => {
+        // In Node.js with WebCrypto, this should be true
+        expect(isWebCryptoAvailable()).toBe(true);
+    });
+});
+
+describe('SHA finalized state', () => {
+    it('rejects updateBoolean after digestAsync', async () => {
+        const h = new Sha256();
+        h.updateBytes(enc.encode('abc'));
+        await (h as any).digestAsync();
+        expect(() => h.updateBoolean(true)).toThrow();
+    });
+
+    it('rejects updateI32 after digestAsync', async () => {
+        const h = new Sha256();
+        h.updateBytes(enc.encode('abc'));
+        await (h as any).digestAsync();
+        expect(() => h.updateI32(42)).toThrow();
+    });
+
+    it('rejects updateF32 after digestAsync', async () => {
+        const h = new Sha256();
+        h.updateBytes(enc.encode('abc'));
+        await (h as any).digestAsync();
+        expect(() => h.updateF32(1.5)).toThrow();
+    });
+
+    it('rejects updateF64 after digestAsync', async () => {
+        const h = new Sha256();
+        h.updateBytes(enc.encode('abc'));
+        await (h as any).digestAsync();
+        expect(() => h.updateF64(3.14)).toThrow();
+    });
+
+    it('rejects updateU32 after digestAsync', async () => {
+        const h = new Sha256();
+        h.updateBytes(enc.encode('abc'));
+        await (h as any).digestAsync();
+        expect(() => h.updateU32(42)).toThrow();
+    });
+
+    it('finalized property reflects state', async () => {
+        const h = new Sha256();
+        expect(h.finalized).toBe(false);
+        h.updateBytes(enc.encode('abc'));
+        await (h as any).digestAsync();
+        expect(h.finalized).toBe(true);
     });
 });

@@ -47,7 +47,7 @@ export const decomposeNodeTransform = (node: GltfNodeJson): DecomposedTransform 
         return Object.freeze({
             position: Object.freeze([m[12], m[13], m[14]]) as Vec3Tuple,
             rotation: Object.freeze([x, y, z, w]) as QuatTuple,
-            scale: Object.freeze([sx || 1, sy || 1, sz || 1]) as Vec3Tuple,
+            scale: Object.freeze([sx === 0 ? 0 : sx, sy === 0 ? 0 : sy, sz === 0 ? 0 : sz]) as Vec3Tuple,
         });
     }
 

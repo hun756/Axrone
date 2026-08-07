@@ -21,6 +21,7 @@ import type { PrefabNodeBinding } from '@axrone/scene-prefab';
 import type { PointLight } from './components/point-light';
 import type { SpriteRenderer } from './components/sprite-renderer';
 import type { SpotLight } from './components/spot-light';
+import type { Terrain } from './components/terrain';
 import type { Hierarchy } from '@axrone/ecs-runtime';
 import type { Transform } from '@axrone/ecs-runtime';
 import type { ColorSpace, FilterMode, TextureFormat, WrapMode } from '@axrone/render-webgl2';
@@ -557,8 +558,10 @@ export type SceneBuiltInRegistry = {
     readonly DirectionalLight: typeof DirectionalLight;
     readonly PointLight: typeof PointLight;
     readonly SpotLight: typeof SpotLight;
+    readonly Terrain: typeof Terrain;
     readonly OrbitCameraController: typeof OrbitCameraController;
     readonly FollowCameraController: typeof FollowCameraController;
+    readonly UIHost: typeof import('./components/ui-host').UIHost;
 };
 
 export type SceneRegistry<R extends ComponentRegistry = Record<string, never>> = R &

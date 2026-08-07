@@ -1,7 +1,8 @@
 import { Actor, ActorError, ComponentError } from '@axrone/ecs-runtime/actor';
-import { Component, Transform, World } from '@axrone/ecs-runtime';
+import { Component, Transform, World, script } from '@axrone/ecs-runtime';
 import { createActor } from './factory-helpers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Hierarchy } from '../component-system/components/hierarchy';
 
 class TestComponent extends Component {
     value: number = 0;
@@ -597,6 +598,245 @@ describe('Actor', () => {
             }).toThrow(ComponentError);
 
             limitedActor.destroy();
+        });
+    });
+
+    // ─── fixedUpdate ─────────────────────────────────────────────────
+
+    describe('fixedUpdate', () => {
+        it('calls fixedUpdate on enabled components of active actor', () => {
+            const fixedUpdateSpy = vi.fn();
+            class FixedComp extends Component {
+                fixedUpdate(dt: number) { fixedUpdateSpy(dt); }
+            }
+            world.registerComponentType(FixedComp);
+
+            const comp = actor.addComponent(FixedComp);
+            actor.fixedUpdate(0.02);
+
+            expect(fixedUpdateSpy).toHaveBeenCalledWith(0.02);
+        });
+
+        it('skips inactive actors', () => {
+            const fixedUpdateSpy = vi.fn();
+            class FixedComp2 extends Component {
+                fixedUpdate(dt: number) { fixedUpdateSpy(dt); }
+            }
+            world.registerComponentType(FixedComp2);
+
+            actor.addComponent(FixedComp2);
+            actor.active = false;
+            actor.fixedUpdate(0.02);
+
+            expect(fixedUpdateSpy).not.toHaveBeenCalled();
+        });
+
+        it('skips destroyed actors', () => {
+            const fixedUpdateSpy = vi.fn();
+            class FixedComp3 extends Component {
+                fixedUpdate(dt: number) { fixedUpdateSpy(dt); }
+            }
+            world.registerComponentType(FixedComp3);
+
+            actor.addComponent(FixedComp3);
+            actor.destroy();
+            actor.fixedUpdate(0.02);
+
+            expect(fixedUpdateSpy).not.toHaveBeenCalled();
+        });
+    });
+
+    // ─── lateUpdate ──────────────────────────────────────────────────
+
+    describe('lateUpdate', () => {
+        it('calls lateUpdate on enabled components', () => {
+            const lateUpdateSpy = vi.fn();
+            class LateComp extends Component {
+                lateUpdate(dt: number) { lateUpdateSpy(dt); }
+            }
+            world.registerComponentType(LateComp);
+
+            actor.addComponent(LateComp);
+            actor.lateUpdate(0.016);
+
+            expect(lateUpdateSpy).toHaveBeenCalledWith(0.016);
+        });
+
+        it('skips inactive actors', () => {
+            const lateUpdateSpy = vi.fn();
+            class LateComp2 extends Component {
+                lateUpdate(dt: number) { lateUpdateSpy(dt); }
+            }
+            world.registerComponentType(LateComp2);
+
+            actor.addComponent(LateComp2);
+            actor.active = false;
+            actor.lateUpdate(0.016);
+
+            expect(lateUpdateSpy).not.toHaveBeenCalled();
+        });
+    });
+
+    // ─── Hierarchy delegation ────────────────────────────────────────
+
+    describe('hierarchy delegation', () => {
+        it('setParent delegates to Hierarchy component', () => {
+            const childActor = createActor(world);
+            actor.setParent(childActor);
+
+            // Verify through the parent getter
+            expect(actor.parent).toBe(childActor);
+
+            childActor.destroy();
+        });
+
+        it('setParent with undefined removes parent', () => {
+            const parentActor = createActor(world);
+            actor.setParent(parentActor);
+            expect(actor.parent).toBe(parentActor);
+
+            actor.setParent(undefined);
+            expect(actor.parent).toBeUndefined();
+
+            parentActor.destroy();
+        });
+
+        it('parent getter returns undefined when no hierarchy', () => {
+            // Default actor has Hierarchy, so parent should be undefined (no parent set)
+            expect(actor.parent).toBeUndefined();
+        });
+
+        it('children getter returns array', () => {
+            expect(Array.isArray(actor.children)).toBe(true);
+        });
+    });
+
+    // ─── addComponent edge cases ─────────────────────────────────────
+
+    describe('addComponent edge cases', () => {
+        it('throws ComponentError for invalid component type', () => {
+            expect(() => actor.addComponent(null as any)).toThrow(ComponentError);
+        });
+
+        it('throws ComponentError on destroyed actor', () => {
+            actor.destroy();
+            expect(() => actor.addComponent(TestComponent)).toThrow(ActorError);
+        });
+    });
+
+    // ─── removeComponent with dependents ─────────────────────────────
+
+    describe('removeComponent with dependents', () => {
+        it('throws ComponentError when other components depend on it', () => {
+            @script({ dependencies: [TestComponent] })
+            class DependsOnTest extends Component {
+                data = 0;
+            }
+            world.registerComponentType(DependsOnTest);
+
+            actor.addComponent(TestComponent, 100, 'dep');
+            actor.addComponent(DependsOnTest);
+
+            expect(() => actor.removeComponent(TestComponent)).toThrow(ComponentError);
+        });
+    });
+
+    // ─── destroy sequence ────────────────────────────────────────────
+
+    describe('destroy sequence', () => {
+        it('calls onDestroy on components', () => {
+            const onDestroySpy = vi.fn();
+            class DestroyComp extends Component {
+                onDestroy() { onDestroySpy(); }
+            }
+            world.registerComponentType(DestroyComp);
+
+            actor.addComponent(DestroyComp);
+            actor.destroy();
+
+            expect(onDestroySpy).toHaveBeenCalled();
+        });
+
+        it('runs cleanup tasks', () => {
+            const cleanup = vi.fn();
+            actor.addCleanupTask(cleanup);
+            actor.destroy();
+
+            expect(cleanup).toHaveBeenCalled();
+        });
+
+        it('unregisters actor and destroys entity', () => {
+            const entity = actor.entity;
+            actor.destroy();
+
+            expect(world.getActor(entity)).toBeUndefined();
+        });
+    });
+
+    // ─── destroy(immediate) ──────────────────────────────────────────
+
+    describe('destroy(immediate)', () => {
+        it('emits destroying event with immediate flag', () => {
+            const mockEventBus = {
+                emit: vi.fn(),
+                on: vi.fn().mockReturnValue(() => {}),
+            };
+            (actor as any)._eventBus = mockEventBus;
+
+            actor.destroy(true);
+
+            expect(mockEventBus.emit).toHaveBeenCalledWith(
+                'actor:destroying',
+                expect.objectContaining({ immediate: true })
+            );
+        });
+    });
+
+    // ─── Property setters on destroyed actor ─────────────────────────
+
+    describe('property setters on destroyed actor', () => {
+        it('name setter throws ActorError', () => {
+            actor.destroy();
+            expect(() => { actor.name = 'New'; }).toThrow(ActorError);
+        });
+
+        it('layer setter throws ActorError', () => {
+            actor.destroy();
+            expect(() => { actor.layer = 5; }).toThrow(ActorError);
+        });
+
+        it('tag setter throws ActorError', () => {
+            actor.destroy();
+            expect(() => { actor.tag = 'new'; }).toThrow(ActorError);
+        });
+    });
+
+    // ─── on() without event bus ──────────────────────────────────────
+
+    describe('on() without event bus', () => {
+        it('returns no-op disposer and warns', () => {
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            (actor as any)._eventBus = null;
+
+            const dispose = actor.on('test', () => {});
+            expect(typeof dispose).toBe('function');
+            expect(() => dispose()).not.toThrow();
+            expect(warnSpy).toHaveBeenCalled();
+
+            warnSpy.mockRestore();
+        });
+    });
+
+    // ─── toString ────────────────────────────────────────────────────
+
+    describe('toString', () => {
+        it('includes actor id, component names, and state', () => {
+            actor.addComponent(TestComponent, 10, 'test');
+            const str = actor.toString();
+
+            expect(str).toContain(actor.id);
+            expect(str).toContain('TestComponent');
+            expect(str).toContain('active');
         });
     });
 });

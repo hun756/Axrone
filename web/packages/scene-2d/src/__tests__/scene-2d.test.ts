@@ -14,6 +14,8 @@ let SpriteAnimator: typeof import('@axrone/scene-2d').SpriteAnimator;
 let SpriteMask: typeof import('@axrone/scene-2d').SpriteMask;
 let SpriteRenderer: typeof import('@axrone/scene-2d').SpriteRenderer;
 let SceneCapabilityError: typeof import('@axrone/scene-2d').SceneCapabilityError;
+let SceneError: typeof import('@axrone/scene-2d').SceneError;
+let SceneLifecycleError: typeof import('@axrone/scene-2d').SceneLifecycleError;
 let createSpriteAtlas: typeof import('@axrone/scene-2d').createSpriteAtlas;
 let get2DSceneRuntimeProfile: typeof import('@axrone/scene-2d').get2DSceneRuntimeProfile;
 let getCoreSceneRuntimeProfile: typeof import('@axrone/scene-2d').getCoreSceneRuntimeProfile;
@@ -31,6 +33,8 @@ describe('Scene2D', () => {
         SpriteMask = sceneModule.SpriteMask;
         SpriteRenderer = sceneModule.SpriteRenderer;
         SceneCapabilityError = sceneModule.SceneCapabilityError;
+        SceneError = sceneModule.SceneError;
+        SceneLifecycleError = sceneModule.SceneLifecycleError;
         createSpriteAtlas = sceneModule.createSpriteAtlas;
         get2DSceneRuntimeProfile = sceneModule.get2DSceneRuntimeProfile;
         getCoreSceneRuntimeProfile = sceneModule.getCoreSceneRuntimeProfile;
@@ -292,5 +296,60 @@ describe('Scene2D', () => {
         } finally {
             scene.dispose();
         }
+    });
+
+    it('throws SceneLifecycleError when creating actors after dispose', () => {
+        const canvas = document.createElement('canvas');
+        const scene = new Scene2D(createSceneOptions(scheduler, canvas));
+        scene.dispose();
+
+        expect(() => scene.createCameraActor({ name: 'Camera' })).toThrow(
+            SceneLifecycleError
+        );
+        expect(() => scene.createSpriteActor({ name: 'Sprite' })).toThrow(
+            SceneLifecycleError
+        );
+        expect(() =>
+            scene.createAnimatedSpriteActor({ name: 'Animated' })
+        ).toThrow(SceneLifecycleError);
+        expect(() => scene.createMaskActor({ name: 'Mask' })).toThrow(
+            SceneLifecycleError
+        );
+    });
+
+    it('throws SceneCapabilityError for mask and animated sprite under core profile', () => {
+        const canvas = document.createElement('canvas');
+        const scene = new Scene2D({
+            ...createSceneOptions(scheduler, canvas),
+            profile: getCoreSceneRuntimeProfile(),
+        });
+
+        try {
+            expect(() => scene.createMaskActor({ name: 'Mask' })).toThrow(
+                SceneCapabilityError
+            );
+            expect(() =>
+                scene.createAnimatedSpriteActor({ name: 'Animated' })
+            ).toThrow(SceneCapabilityError);
+        } finally {
+            scene.dispose();
+        }
+    });
+
+    it('re-exports error classes from the errors entry point', async () => {
+        const errors = await import('@axrone/scene-2d/errors');
+
+        expect(errors.SceneCanvasError).toBeDefined();
+        expect(errors.SceneCapabilityError).toBeDefined();
+        expect(errors.SceneError).toBeDefined();
+        expect(errors.SceneLifecycleError).toBeDefined();
+        expect(errors.ScenePrefabConflictError).toBeDefined();
+        expect(errors.ScenePrefabError).toBeDefined();
+        expect(errors.ScenePrefabResolutionError).toBeDefined();
+        expect(errors.ScenePrefabValidationError).toBeDefined();
+
+        expect(() => {
+            throw new errors.SceneError('test');
+        }).toThrowError(SceneError);
     });
 });

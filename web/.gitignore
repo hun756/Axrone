@@ -134,6 +134,9 @@ dist
 playwright-report/
 test-results/
 
+# Nx task runner cache and workspace data
+.nx/
+
 # yarn v2
 .yarn/cache
 .yarn/unplugged

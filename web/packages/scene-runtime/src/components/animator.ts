@@ -19,6 +19,7 @@ import type {
     AnimationControllerEvent,
     AnimationFootContactDefinition,
     AnimationLayerDefinition,
+    AnimationMotionDefinition,
     AnimationMotionFeatureDefinition,
     AnimationParameterDefinition,
     AnimationRootMotionDefinition,
@@ -514,7 +515,7 @@ export class Animator extends Component {
         }
         if (this._currentClipId) {
             try {
-                controller.play(this._currentClipId);
+                controller.play(this._resolveStateIdForClip(this._currentClipId));
             } catch (e) {
                 console.error(
                     `[Animator] start: controller.play("${this._currentClipId}") threw: ${e instanceof Error ? e.message : String(e)}`,
@@ -595,8 +596,8 @@ export class Animator extends Component {
             updateMode: this._updateMode,
             cullingMode: this._cullingMode,
             profile: controller?.profile ?? null,
-            pendingEvents: controller?.events ?? [],
-            activeClips: controller?.activeClips ?? [],
+            pendingEvents: [...(controller?.events ?? [])],
+            activeClips: [...(controller?.activeClips ?? [])],
             streaming: this._streamingSnapshot,
             pendingStreamingRequests: this._pendingStreamingRequests,
         };
@@ -759,7 +760,7 @@ export class Animator extends Component {
         });
         if (this._currentClipId) {
             try {
-                this._controller.play(this._currentClipId);
+                this._controller.play(this._resolveStateIdForClip(this._currentClipId));
             } catch (e) {
                 console.error(
                     `[Animator] _ensureController: controller.play("${this._currentClipId}") threw: ${e instanceof Error ? e.message : String(e)}`,
@@ -852,6 +853,34 @@ export class Animator extends Component {
                 },
             } satisfies AnimationLayerDefinition),
         ]);
+    }
+
+    private _resolveStateIdForClip(clipId: string): string {
+        for (const layer of this._layerDefinitions ?? []) {
+            for (const state of layer.stateMachine.states) {
+                if (this._motionContainsClip(state.motion, clipId)) {
+                    return state.id;
+                }
+            }
+        }
+        return clipId;
+    }
+
+    private _motionContainsClip(motion: AnimationMotionDefinition, clipId: string): boolean {
+        if (motion.kind === 'clip') {
+            return motion.clipId === clipId;
+        }
+        switch (motion.kind) {
+            case 'blend1d':
+            case 'blend2d':
+            case 'direct':
+                return motion.children.some((child) => this._motionContainsClip(child.motion, clipId));
+            case 'additive':
+                return (
+                    this._motionContainsClip(motion.base, clipId) ||
+                    this._motionContainsClip(motion.additive, clipId)
+                );
+        }
     }
 
     private _stepAnimation(deltaTime: number): void {

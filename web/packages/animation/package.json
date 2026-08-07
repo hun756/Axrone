@@ -69,6 +69,11 @@
             "import": "./dist/pose.mjs",
             "require": "./dist/pose.js"
         },
+        "./parameters": {
+            "types": "./dist/parameters.d.ts",
+            "import": "./dist/parameters.mjs",
+            "require": "./dist/parameters.js"
+        },
         "./rig": {
             "types": "./dist/rig.d.ts",
             "import": "./dist/rig.mjs",
@@ -81,7 +86,7 @@
         }
     },
     "scripts": {
-        "build": "rollup -c rollup.config.mjs",
+        "build": "node --max-old-space-size=8192 ../../node_modules/rollup/dist/bin/rollup -c rollup.config.mjs",
         "clean": "rimraf dist",
         "test": "vitest run"
     },

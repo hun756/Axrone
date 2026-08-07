@@ -10,6 +10,7 @@ import {
     murmur3Scramble,
     xorshift32,
     xorshift64,
+    xoshiro128Plus,
 } from '../hash/mixers';
 
 const U32 = (n: number): number => n >>> 0;
@@ -187,6 +188,48 @@ describe('hash/mixers — finalizers and state mixers', () => {
                 expect(result).toBeGreaterThanOrEqual(0n);
                 expect(result).toBeLessThanOrEqual(0xffffffffffffffffn);
             }
+        });
+    });
+
+    describe('xoshiro128Plus', () => {
+        it('returns a 4-tuple of numbers', () => {
+            const result = xoshiro128Plus(1, 2, 3, 4);
+            expect(result).toHaveLength(4);
+            for (const v of result) {
+                expect(typeof v).toBe('number');
+            }
+        });
+
+        it('is deterministic', () => {
+            const a = xoshiro128Plus(0x12345678, 0x9abcdef0, 0xdeadbeef, 0xcafebabe);
+            const b = xoshiro128Plus(0x12345678, 0x9abcdef0, 0xdeadbeef, 0xcafebabe);
+            expect(a).toEqual(b);
+        });
+
+        it('advances state (different outputs on repeated calls)', () => {
+            let s = xoshiro128Plus(1, 2, 3, 4);
+            const seen = new Set<string>();
+            seen.add(s.join(','));
+            for (let i = 0; i < 10; i++) {
+                s = xoshiro128Plus(s[0], s[1], s[2], s[3]);
+                seen.add(s.join(','));
+            }
+            // All 11 states should be unique
+            expect(seen.size).toBe(11);
+        });
+
+        it('returns 32-bit unsigned values', () => {
+            const [s0, s1, s2, s3] = xoshiro128Plus(100, 200, 300, 400);
+            for (const v of [s0, s1, s2, s3]) {
+                expect(v).toBeGreaterThanOrEqual(0);
+                expect(v).toBeLessThanOrEqual(0xffffffff);
+            }
+        });
+
+        it('different initial states produce different outputs', () => {
+            const a = xoshiro128Plus(1, 2, 3, 4);
+            const b = xoshiro128Plus(5, 6, 7, 8);
+            expect(a).not.toEqual(b);
         });
     });
 });

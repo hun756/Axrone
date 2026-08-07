@@ -204,6 +204,10 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         return this._duration;
     }
 
+    getTotalDuration(): number {
+        return this._duration;
+    }
+
     setTimeScale(scale: number): this {
         this._timeScale = scale;
         return this;

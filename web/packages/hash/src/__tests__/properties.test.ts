@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Fnv1a32, XxHash32, Murmur3_32, Djb2, Cyrb53 } from '../hash/algorithms';
+import { Fnv1a32, XxHash32, Murmur3_32, Djb2 } from '../hash/algorithms';
 
 const enc = new TextEncoder();
 

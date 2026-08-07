@@ -60,8 +60,8 @@ export const isAudioClipAssetRecord = <TSchema extends AudioAssetSchema = AudioA
 export const cloneAudioVector3 = (value: AudioVector3 | undefined, fallback?: AudioVector3): AudioVector3 => {
     const source = value ?? fallback ?? { x: 0, y: 0, z: 0 };
     return {
-        x: Number(source.x) || 0,
-        y: Number(source.y) || 0,
-        z: Number(source.z) || 0,
+        x: Number.isFinite(source.x) ? source.x : 0,
+        y: Number.isFinite(source.y) ? source.y : 0,
+        z: Number.isFinite(source.z) ? source.z : 0,
     };
 };

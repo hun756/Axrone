@@ -21,4 +21,9 @@ export default [
         inputRelativePath: 'src/scene.ts',
         outputBasename: 'scene/index',
     }),
+    ...createPackageConfig({
+        packageDir,
+        inputRelativePath: 'src/scene-host.ts',
+        outputBasename: 'scene-host/index',
+    }),
 ];

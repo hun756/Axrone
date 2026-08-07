@@ -227,7 +227,15 @@ export class ConstraintSolver2D {
         const effectiveMass = 1 / totalInvMass;
         const previousImpulse = jacobian.impulse;
         const uncappedImpulse = previousImpulse - effectiveMass * (velocityAlongJacobian + jacobian.bias + softness * previousImpulse);
-        jacobian.impulse = clamp(uncappedImpulse, jacobian.lowerLimit, jacobian.upperLimit);
+        let clampedImpulse = uncappedImpulse;
+        if (isFinite(jacobian.lowerLimit) && isFinite(jacobian.upperLimit)) {
+            clampedImpulse = clamp(uncappedImpulse, jacobian.lowerLimit, jacobian.upperLimit);
+        } else if (isFinite(jacobian.lowerLimit)) {
+            clampedImpulse = Math.max(uncappedImpulse, jacobian.lowerLimit);
+        } else if (isFinite(jacobian.upperLimit)) {
+            clampedImpulse = Math.min(uncappedImpulse, jacobian.upperLimit);
+        }
+        jacobian.impulse = clampedImpulse;
         const deltaImpulse = jacobian.impulse - previousImpulse;
 
         if (Math.abs(deltaImpulse) <= SOLVER_EPSILON) {

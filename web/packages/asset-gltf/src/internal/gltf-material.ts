@@ -95,18 +95,20 @@ export const createDefaultMaterialDefinition = (
         textures: Object.freeze({}),
     });
 
-export const createMaterialDefinition = (
-    material: GltfMaterialJson,
-    shaderId: string,
-    textureKeys: readonly string[]
-): {
+export interface MaterialDefinitionResult {
     readonly definition: GltfMaterialDefinition;
     readonly textures: Readonly<Record<GltfTextureUsage, GltfMaterialTextureBinding>>;
     readonly alphaMode: GltfMaterialAlphaMode;
     readonly alphaCutoff: number;
     readonly doubleSided: boolean;
     readonly unlit: boolean;
-} => {
+}
+
+export const createMaterialDefinition = (
+    material: GltfMaterialJson,
+    shaderId: string,
+    textureKeys: readonly string[]
+): MaterialDefinitionResult => {
     const emissiveStrength =
         material.extensions?.KHR_materials_emissive_strength?.emissiveStrength ?? 1;
     const clearcoat = material.extensions?.KHR_materials_clearcoat;

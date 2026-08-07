@@ -503,7 +503,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         });
         try {
             source.active.sourceNode.stop();
-        } catch {}
+        } catch { /* stop() throws if already stopped -- expected during pause */ }
     }
 
     async resumeSource(id: AudioSourceId | string): Promise<AudioPlaybackHandle> {
@@ -559,7 +559,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
             } else {
                 source.active.sourceNode.stop();
             }
-        } catch {}
+        } catch { /* stop() throws if already stopped -- expected during stop */ }
     }
 
     captureMixerSnapshot(id?: string): AudioMixerSnapshot {
@@ -601,7 +601,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         this.#assertNotDisposed();
         const snapshot = Object.freeze({
             version: 1,
-            status: this.#status === 'disposed' ? 'idle' : this.#status,
+            status: this.#status as Exclude<AudioSystemStatus, 'disposed'>,
             capturedAtEpochMs: Date.now(),
             activeListenerId: this.#listeners.activeListenerId,
             buses: Object.freeze(this.listBuses()),
@@ -792,7 +792,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         if (this.#ownsContext) {
             try {
                 await this.context.close();
-            } catch {}
+            } catch { /* close() throws if already closed -- expected during dispose */ }
         }
     }
 

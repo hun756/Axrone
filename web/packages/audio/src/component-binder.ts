@@ -47,7 +47,11 @@ export class AudioComponentBinder<TSchema extends AudioAssetSchema = AudioAssetS
             source.syncState(state);
             const commands = source.consumeCommands();
             for (const command of commands) {
-                await this.#dispatchSourceCommand(source, command);
+                try {
+                    await this.#dispatchSourceCommand(source, command);
+                } catch {
+                    // command failed; source state is already synced from upsertSource
+                }
             }
         }
 
@@ -59,23 +63,21 @@ export class AudioComponentBinder<TSchema extends AudioAssetSchema = AudioAssetS
         command: AudioSourceComponentCommand<TSchema>
     ): Promise<void> {
         switch (command.kind) {
-            case 'play':
-                component.syncState(
-                    await this.system
-                        .playSource(component.sourceId, command.request)
-                        .then(() => this.system.getSource(component.sourceId)!)
-                );
+            case 'play': {
+                await this.system.playSource(component.sourceId, command.request);
+                const state = this.system.getSource(component.sourceId);
+                if (state) component.syncState(state);
                 break;
+            }
             case 'pause':
                 this.system.pauseSource(component.sourceId);
                 break;
-            case 'resume':
-                component.syncState(
-                    await this.system
-                        .resumeSource(component.sourceId)
-                        .then(() => this.system.getSource(component.sourceId)!)
-                );
+            case 'resume': {
+                await this.system.resumeSource(component.sourceId);
+                const state = this.system.getSource(component.sourceId);
+                if (state) component.syncState(state);
                 break;
+            }
             case 'stop':
                 this.system.stopSource(component.sourceId, command.options);
                 break;
