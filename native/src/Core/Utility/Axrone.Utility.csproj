@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Utility</RootNamespace>
+    <AssemblyName>Axrone.Utility</AssemblyName>
+    <Description>Core utility types for the Axrone engine: Result monad, disposable patterns, deep clone, floating-point comparison, Base64, singleton lifecycle, and message catalogs.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1724: Type name conflicts with namespace — intentional module naming -->
+    <NoWarn>$(NoWarn);CA1724</NoWarn>
+    <!-- CA1031: Catching general exceptions — intentional for Try pattern -->
+    <NoWarn>$(NoWarn);CA1031</NoWarn>
+    <!-- CA1002: Don't use List&lt;T&gt; — too strict for utility library -->
+    <NoWarn>$(NoWarn);CA1002</NoWarn>
+    <!-- CA1055/CA1054/CA1056/CA1057: URI return types — too strict for Base64 -->
+    <NoWarn>$(NoWarn);CA1055;CA1054;CA1056;CA1057</NoWarn>
+    <!-- CA1716: Reserved keyword conflict — OrElse is intentional Result API -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
+    <!-- CA1000: Static members on generic types — intentional for Singleton.FromValue -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1815: Struct Equals/GetHashCode — DisposalTracker is a lightweight tracker -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1067: Override Equals on IEquatable base — abstract class, subclasses override -->
+    <NoWarn>$(NoWarn);CA1067</NoWarn>
+    <!-- IL2091: Trim warning on Lazy&lt;T&gt; generic constraint — factory-based, safe -->
+    <NoWarn>$(NoWarn);IL2091</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Utility.Tests" />
+  </ItemGroup>
+
+</Project>
