@@ -346,7 +346,7 @@ export class SceneTextureFactory {
         }
 
         const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-        const blob = new Blob([data], { type: mimeType });
+        const blob = new Blob([data as BlobPart], { type: mimeType });
         const canCreateObjectUrl =
             typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function';
         const objectUrl = canCreateObjectUrl
@@ -375,7 +375,7 @@ export class SceneTextureFactory {
 
         const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
         if (typeof createImageBitmap === 'function') {
-            return await createImageBitmap(new Blob([data], { type: mimeType }));
+            return await createImageBitmap(new Blob([data as BlobPart], { type: mimeType }));
         }
 
         return await this._loadImageFromBytes(data, mimeType, uri);
