@@ -60,22 +60,31 @@ internal static class SingletonAttributeCache<T> where T : class
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void EnsureRead()
     {
-        if (Volatile.Read(ref _read) != 0) return;
+        var state = Volatile.Read(ref _read);
+        if (state == 2) return;
 
-        var rawAttrs = typeof(T).GetCustomAttributes(typeof(SingletonAttribute), inherit: false);
-        var attr = rawAttrs.Length > 0 ? (SingletonAttribute)rawAttrs[0] : null;
-
-        _attribute = attr;
-        _lifetime = attr?.Lifetime ?? SingletonLifetime.Singleton;
-        _threadSafety = attr?.ThreadSafety ?? SingletonThreadSafety.ExecutionAndPublication;
-        _pinned = attr?.Pinned ?? false;
-        _monitored = attr?.Monitored ?? false;
-
-        if (attr is not null && typeof(ISingletonLifecycle).IsAssignableFrom(typeof(T)))
+        if (state == 0 && Interlocked.CompareExchange(ref _read, 1, 0) == 0)
         {
-            _isEager = attr.Lifetime == SingletonLifetime.Singleton;
+            var rawAttrs = typeof(T).GetCustomAttributes(typeof(SingletonAttribute), inherit: false);
+            var attr = rawAttrs.Length > 0 ? (SingletonAttribute)rawAttrs[0] : null;
+
+            _attribute = attr;
+            _lifetime = attr?.Lifetime ?? SingletonLifetime.Singleton;
+            _threadSafety = attr?.ThreadSafety ?? SingletonThreadSafety.ExecutionAndPublication;
+            _pinned = attr?.Pinned ?? false;
+            _monitored = attr?.Monitored ?? false;
+
+            if (attr is not null && typeof(ISingletonLifecycle).IsAssignableFrom(typeof(T)))
+            {
+                _isEager = attr.Lifetime == SingletonLifetime.Singleton;
+            }
+
+            Volatile.Write(ref _read, 2);
+            return;
         }
 
-        Volatile.Write(ref _read, 1);
+        SpinWait spinner = default;
+        while (Volatile.Read(ref _read) != 2)
+            spinner.SpinOnce();
     }
 }
