@@ -5,7 +5,7 @@ namespace Axrone.Utility.Singleton.Internal;
 /// Uses an <see cref="int"/> depth counter (not bool) to support nested singleton creation.
 /// </summary>
 [StructLayout(LayoutKind.Auto)]
-public static class NestingContext
+internal static class NestingContext
 {
     [ThreadStatic]
     private static int _depth;
@@ -33,7 +33,7 @@ public static class NestingContext
     }
 
     /// <summary>RAII scope — decrements nesting depth on dispose.</summary>
-    public readonly struct NestingScope : IDisposable
+    internal readonly struct NestingScope : IDisposable
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Dispose() => ExitScope();

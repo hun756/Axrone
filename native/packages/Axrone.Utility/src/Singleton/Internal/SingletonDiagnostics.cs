@@ -1,3 +1,5 @@
+using Axrone.Utility.Singleton;
+
 namespace Axrone.Utility.Singleton.Internal;
 
 /// <summary>
@@ -87,18 +89,4 @@ internal static class SingletonDiagnostics
         System.Diagnostics.Debug.WriteLine(
             $"[SingletonShutdown] Error disposing {type.Name}: {exception.Message}");
     }
-}
-
-/// <summary>Diagnostic metrics snapshot for a monitored singleton.</summary>
-[StructLayout(LayoutKind.Auto)]
-public readonly record struct SingletonMetrics(
-    string TypeName,
-    double CreationTimeMs,
-    double TotalAccessTimeMs,
-    long AccessCount,
-    bool IsCreated)
-{
-    /// <summary>Average access duration in milliseconds.</summary>
-    public double AverageAccessTimeMs =>
-        AccessCount > 0 ? TotalAccessTimeMs / AccessCount : 0;
 }

@@ -25,7 +25,6 @@ namespace Axrone.Utility.Singleton;
 /// await Singleton.ShutdownAsync();
 /// </code>
 /// </example>
-[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.NonPublicConstructors)]
 [SkipLocalsInit]
 public static class Singleton
 {
