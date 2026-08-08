@@ -1,39 +1,38 @@
 namespace Axrone.Utility.Singleton;
 
-/// <summary>Synchronous lifecycle hook — called once after singleton creation.</summary>
-public interface IInitializable
-{
-    void Initialize();
-}
-
-/// <summary>Async lifecycle hook — called once after singleton creation.</summary>
-public interface IAsyncInitializable
-{
-    Task InitializeAsync();
-}
-
 /// <summary>
-/// Marker interface — types implementing this are eagerly initialized at module load time
-/// via <c>[ModuleInitializer]</c>.
+/// Unified lifecycle contract for singleton types. All methods are optional via default interface methods —
+/// implement only the hooks your type needs.
 /// </summary>
+/// <remarks>
+/// Replaces the separate <c>IInitializable</c>, <c>IAsyncInitializable</c>, and <c>IEagerSingleton</c> interfaces
+/// with a single coherent contract. The subsystem dispatches to these methods during singleton creation.
+/// </remarks>
 /// <example>
 /// <code>
-/// public sealed class AudioSystem : SingletonBase&lt;AudioSystem&gt;, IEagerSingleton
+/// public sealed class AudioSystem : SingletonBase&lt;AudioSystem&gt;, ISingletonLifecycle
 /// {
-///     protected override void OnCreated() { /* init audio device at startup */ }
+///     void ISingletonLifecycle.Initialize() { /* sync init */ }
+///     bool ISingletonLifecycle.IsEager =&gt; true; /* init at startup */
 /// }
 /// </code>
 /// </example>
-[SuppressMessage("Design", "CA1040:Avoid empty interfaces", Justification = "Marker interface for eager initialization dispatch.")]
-public interface IEagerSingleton { }
-
-/// <summary>Value-type lifecycle hook for <see cref="ValueSingleton{T}"/>.</summary>
-public interface IValueInitializable
+public interface ISingletonLifecycle
 {
-    void Initialize();
+    /// <summary>Called once after construction, before the instance is published.</summary>
+    void Initialize() { }
+
+    /// <summary>Called once after <see cref="Initialize"/> for async setup (device handles, file loads).</summary>
+    ValueTask InitializeAsync() => default;
+
+    /// <summary>
+    /// When <see langword="true"/>, the subsystem eagerly creates this instance at startup
+    /// rather than waiting for first access.
+    /// </summary>
+    bool IsEager => false;
 }
 
-/// <summary>Keyed identity — for multiton types that receive their key at construction.</summary>
+/// <summary>Keyed identity — for multiton/keyed types that receive their key at construction.</summary>
 /// <typeparam name="TKey">The key type.</typeparam>
 public interface IKeyed<TKey>
 {
