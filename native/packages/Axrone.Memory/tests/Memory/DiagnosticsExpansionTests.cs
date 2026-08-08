@@ -248,9 +248,12 @@ public sealed class DiagnosticsExpansionTests
         diag.TotalMemory.Should().Be(0);
         diag.MaxMemory.Should().Be(0);
         diag.WastedMemory.Should().Be(0);
-        diag.BucketCount.Should().Be(0);
-        diag.ActiveBuffers.Should().Be(0);
-        diag.PooledBuffers.Should().Be(0);
+        diag.BucketInfo.Should().NotBeNull();
+        diag.BucketInfo.Count.Should().Be(0);
+
+        var metrics = pool.GetMetrics();
+        metrics.ActiveBuffers.Should().Be(0);
+        metrics.PooledBuffers.Should().Be(0);
     }
 
     [Fact]
@@ -275,10 +278,11 @@ public sealed class DiagnosticsExpansionTests
         // Act
         var owner = pool.Rent(64);
         var diag = pool.GetDiagnostics();
+        var metrics = pool.GetMetrics();
 
         // Assert
-        diag.ActiveBuffers.Should().Be(1);
-        diag.BucketCount.Should().BeGreaterThanOrEqualTo(1);
+        metrics.ActiveBuffers.Should().Be(1);
+        diag.BucketInfo.Count.Should().BeGreaterThanOrEqualTo(1);
 
         // Cleanup
         owner.Dispose();
@@ -293,11 +297,11 @@ public sealed class DiagnosticsExpansionTests
         // Act
         var owner = pool.Rent(64);
         owner.Dispose();
-        var diag = pool.GetDiagnostics();
+        var metrics = pool.GetMetrics();
 
         // Assert
-        diag.ActiveBuffers.Should().Be(0);
-        diag.PooledBuffers.Should().Be(1);
+        metrics.ActiveBuffers.Should().Be(0);
+        metrics.PooledBuffers.Should().Be(1);
     }
 
     [Fact]
@@ -332,11 +336,12 @@ public sealed class DiagnosticsExpansionTests
         owner1.Dispose();
 
         var diag = pool.GetDiagnostics();
+        var metrics = pool.GetMetrics();
 
         // Assert
-        diag.ActiveBuffers.Should().Be(1);
-        diag.PooledBuffers.Should().Be(1);
-        diag.BucketCount.Should().BeGreaterThanOrEqualTo(2);
+        metrics.ActiveBuffers.Should().Be(1);
+        metrics.PooledBuffers.Should().Be(1);
+        diag.BucketInfo.Count.Should().BeGreaterThanOrEqualTo(2);
         diag.TotalMemory.Should().BeGreaterThan(0);
 
         // Cleanup
@@ -357,11 +362,12 @@ public sealed class DiagnosticsExpansionTests
         }
 
         var diag = pool.GetDiagnostics();
+        var metrics = pool.GetMetrics();
 
         // Assert — all returned, none active (sequential reuse = 1 pooled buffer)
-        diag.ActiveBuffers.Should().Be(0);
-        diag.PooledBuffers.Should().Be(1);
-        diag.BucketCount.Should().BeGreaterThanOrEqualTo(1);
+        metrics.ActiveBuffers.Should().Be(0);
+        metrics.PooledBuffers.Should().Be(1);
+        diag.BucketInfo.Count.Should().BeGreaterThanOrEqualTo(1);
     }
 
     [Fact]
@@ -564,9 +570,8 @@ public sealed class DiagnosticsExpansionTests
         var metrics = pool.GetMetrics();
         var diag = pool.GetDiagnostics();
 
-        // Assert — both APIs should report the same active/pooled counts
-        diag.ActiveBuffers.Should().Be(metrics.ActiveBuffers);
-        diag.PooledBuffers.Should().Be(metrics.PooledBuffers);
+        // Assert — both APIs should report consistent state
+        diag.BucketInfo.Count.Should().Be((int)metrics.BucketCount);
 
         // Cleanup
         owner2.Dispose();
@@ -588,7 +593,7 @@ public sealed class DiagnosticsExpansionTests
         var diag = pool.GetDiagnostics();
 
         // Assert
-        ((long)diag.BucketCount).Should().Be(metrics.BucketCount);
+        ((long)diag.BucketInfo.Count).Should().Be(metrics.BucketCount);
     }
 
     [Fact]
@@ -603,9 +608,9 @@ public sealed class DiagnosticsExpansionTests
         pool.ResetStatistics();
         var diag = pool.GetDiagnostics();
 
-        // Assert — diagnostics should still show the pooled buffer
+        // Assert — diagnostics should still show pool state
         // (ResetStatistics clears counters, but physical pool state remains)
-        diag.PooledBuffers.Should().BeGreaterThanOrEqualTo(0);
-        diag.BucketCount.Should().BeGreaterThanOrEqualTo(0);
+        diag.BucketInfo.Count.Should().BeGreaterThanOrEqualTo(0);
+        diag.Runtime.Should().BeGreaterThan(TimeSpan.Zero);
     }
 }
