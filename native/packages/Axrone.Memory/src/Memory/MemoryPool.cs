@@ -93,7 +93,8 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
                 _ =>
                 {
                     if (Volatile.Read(ref _isDisposed) != 0) return;
-                    Trim(trimPressure);
+                    try { Trim(trimPressure); }
+                    catch (ObjectDisposedException) { }
                 },
                 null,
                 options.TrimInterval,
