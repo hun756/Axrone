@@ -59,6 +59,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
     public MemoryPool(MemoryPoolOptions<T> options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        options.Validate();
 
         _maxBufferSize = Math.Max(16, options.MaxBufferSize);
         _minBufferSize = Math.Max(1, Math.Min(options.MinBufferSize, _maxBufferSize));

@@ -73,18 +73,21 @@ public sealed class MemoryPoolOptions<T>
 
     public MemoryPoolOptions<T> WithDefaultBufferSize(int size)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(size, 0);
         DefaultBufferSize = size;
         return this;
     }
 
     public MemoryPoolOptions<T> WithMaxBufferSize(int size)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(size, 0);
         MaxBufferSize = size;
         return this;
     }
 
     public MemoryPoolOptions<T> WithMinBufferSize(int size)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(size, 0);
         MinBufferSize = size;
         return this;
     }
@@ -97,6 +100,7 @@ public sealed class MemoryPoolOptions<T>
 
     public MemoryPoolOptions<T> WithMaxBuffersPerBucket(int count)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(count, 0);
         MaxBuffersPerBucket = count;
         return this;
     }
@@ -109,6 +113,7 @@ public sealed class MemoryPoolOptions<T>
 
     public MemoryPoolOptions<T> WithChunkSize(int size)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(size, 0);
         ChunkSize = size;
         return this;
     }
@@ -152,6 +157,7 @@ public sealed class MemoryPoolOptions<T>
     /// <summary>Sets the maximum total memory the pool may manage.</summary>
     public MemoryPoolOptions<T> WithMaxMemory(long maxBytes)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(maxBytes, 0);
         MaxTotalMemory = maxBytes;
         return this;
     }
@@ -182,13 +188,15 @@ public sealed class MemoryPoolOptions<T>
     /// <param name="size">Number of buffers each thread can cache locally.</param>
     public MemoryPoolOptions<T> WithTlsCacheSize(int size)
     {
-        TlsCacheSize = Math.Max(0, size);
+        ArgumentOutOfRangeException.ThrowIfNegative(size);
+        TlsCacheSize = size;
         return this;
     }
 
     /// <summary>Sets the number of buffers to pre-allocate on pool creation.</summary>
     public MemoryPoolOptions<T> WithPreallocation(int count)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
         PreallocationCount = count;
         return this;
     }
@@ -226,5 +234,38 @@ public sealed class MemoryPoolOptions<T>
             OverAllocationFactor = OverAllocationFactor,
             CustomBucketSizes = [.. CustomBucketSizes],
         };
+    }
+
+    /// <summary>Validates all options and throws if any are invalid.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">A property value is out of valid range.</exception>
+    /// <exception cref="InvalidOperationException">Cross-property invariants are violated.</exception>
+    internal void Validate()
+    {
+        if (MinBufferSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(MinBufferSize));
+        if (MaxBufferSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(MaxBufferSize));
+        if (DefaultBufferSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(DefaultBufferSize));
+        if (MinBufferSize > MaxBufferSize)
+            throw new InvalidOperationException("MinBufferSize cannot exceed MaxBufferSize.");
+        if (DefaultBufferSize < MinBufferSize || DefaultBufferSize > MaxBufferSize)
+            throw new InvalidOperationException("DefaultBufferSize must be between MinBufferSize and MaxBufferSize.");
+        if (MaxBuffersPerBucket <= 0)
+            throw new ArgumentOutOfRangeException(nameof(MaxBuffersPerBucket));
+        if (TlsCacheSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(TlsCacheSize));
+        if (MaxTotalMemory <= 0)
+            throw new ArgumentOutOfRangeException(nameof(MaxTotalMemory));
+        if (ChunkSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(ChunkSize));
+        if (PreallocationCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(PreallocationCount));
+        if (MemoryGuardPadding < 0)
+            throw new ArgumentOutOfRangeException(nameof(MemoryGuardPadding));
+        if (OverAllocationFactor <= 0)
+            throw new ArgumentOutOfRangeException(nameof(OverAllocationFactor));
+        if (BatchOperationSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(BatchOperationSize));
     }
 }
