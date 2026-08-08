@@ -237,6 +237,17 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         var newBuffer = new MemoryPoolBuffer(this, array, bufferSize);
         UpdateMaxMemory(Interlocked.Read(ref _totalAllocated));
 
+        if (Volatile.Read(ref _isDisposed) != 0)
+        {
+            Interlocked.Decrement(ref _activeBuffers);
+            Interlocked.Decrement(ref _totalRentedBuffers);
+            Interlocked.Decrement(ref _totalAllocations);
+            Interlocked.Add(ref _totalAllocationSize, -bufferSize);
+            Interlocked.Add(ref _totalAllocated, -allocBytes);
+            memoryOwner = null;
+            return false;
+        }
+
         if ((_flags & MemoryPoolFlags.ZeroMemory) != 0 || _clearMode == ClearMode.OnRent || _clearMode == ClearMode.Always)
             newBuffer.Clear();
 
