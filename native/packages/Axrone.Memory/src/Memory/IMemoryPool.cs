@@ -44,6 +44,10 @@ public interface IMemoryPool<T> : IDisposable
     /// <returns>A <see cref="MemoryPoolMetrics"/> snapshot.</returns>
     MemoryPoolMetrics GetMetrics();
 
+    /// <summary>Gets a comprehensive diagnostic snapshot of the pool's internal state.</summary>
+    /// <returns>A <see cref="MemoryPoolDiagnostics"/> snapshot.</returns>
+    MemoryPoolDiagnostics GetDiagnostics();
+
     /// <summary>Removes a fraction of idle buffers from the pool.</summary>
     /// <param name="pressure">Fraction to remove: 0.0 removes none, 1.0 removes all.</param>
     void Trim(double pressure = 0.5);
