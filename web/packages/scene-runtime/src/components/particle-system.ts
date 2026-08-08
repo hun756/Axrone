@@ -1457,7 +1457,19 @@ export class ParticleSystem extends Component {
             this._emitBursts();
         }
 
-        this._integrate(dt);
+        // Lightweight aging only — core modules handle all physics
+        let aliveCount = 0;
+        for (let i = 0; i < this._maxParticles; i++) {
+            if (this._ages[i]! >= this._lifetimes[i]!) {
+                continue;
+            }
+            this._ages[i]! += dt;
+            if (this._ages[i]! >= this._lifetimes[i]!) {
+                continue;
+            }
+            aliveCount++;
+        }
+        this._aliveCount = aliveCount;
 
         const coreData = core.getParticles();
         const newCoreCount = coreData.count;
@@ -1472,11 +1484,12 @@ export class ParticleSystem extends Component {
                 const i3 = idx * 3;
                 const r = this._startColorRgb[0], g = this._startColorRgb[1], b = this._startColorRgb[2];
                 const packed = ((Math.round(r * 255) & 0xff) << 24) | ((Math.round(g * 255) & 0xff) << 16) | ((Math.round(b * 255) & 0xff) << 8) | 255;
+                const initialSize = this._startSize * (this._sizeMultipliers[idx] ?? 1);
                 buffer.addParticle(
                     { x: this._positions[i3], y: this._positions[i3 + 1], z: this._positions[i3 + 2] },
                     { x: this._velocities[i3], y: this._velocities[i3 + 1], z: this._velocities[i3 + 2] },
                     lt - age,
-                    this._renderSizes[idx] || this._startSize,
+                    initialSize,
                     packed,
                 );
             }
