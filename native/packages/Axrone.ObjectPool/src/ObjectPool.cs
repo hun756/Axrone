@@ -1155,6 +1155,27 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         ThrowIfDisposed();
 
+        DateTime now = DateTime.UtcNow;
+        Guid instanceId = Guid.Empty;
+        TimeSpan rentDuration = TimeSpan.Zero;
+
+        if (_configuration.TrackLeaks)
+        {
+            if (_rentReverseLookup.TryGetValue(item, out var trackingInfo))
+            {
+                instanceId = trackingInfo.InstanceId;
+                rentDuration = now - trackingInfo.RentTime;
+                _rentTracking.TryRemove(trackingInfo.RentId, out _);
+                _rentReverseLookup.Remove(item);
+            }
+        }
+
+        Stopwatch? resetSw = null;
+        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+        {
+            resetSw = Stopwatch.StartNew();
+        }
+
         try
         {
             if (_handler.ResetAsync is not null)
@@ -1177,24 +1198,99 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
             _handler.OnReturn?.Invoke(item);
         }
-        catch
+        catch (Exception ex)
         {
+            Interlocked.Increment(ref _metrics.RecycleFailureCount);
+            _metrics.LastException = ex;
             _handler.OnDispose?.Invoke(item);
             Interlocked.Decrement(ref _count);
             Interlocked.Decrement(ref _rented);
             return;
         }
+        finally
+        {
+            if (resetSw is not null)
+            {
+                resetSw.Stop();
+                RecordResetTime(resetSw.Elapsed);
+            }
+        }
 
         Interlocked.Decrement(ref _rented);
         Interlocked.Increment(ref _metrics.TotalReturned);
 
-        DateTime now = DateTime.UtcNow;
-        var pooledItem = new PooledItem(item, now, _generation, 0, Guid.Empty);
+        if (rentDuration > TimeSpan.Zero)
+        {
+            RecordRentDuration(item, rentDuration);
+        }
+
+        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && instanceId != Guid.Empty)
+        {
+            if (_objectInfo.TryGetValue(instanceId, out var info))
+            {
+                _objectInfo[instanceId] = new PoolObjectInfo<T>
+                {
+                    Instance = info.Instance,
+                    CreationTime = info.CreationTime,
+                    Generation = info.Generation,
+                    RentCount = info.RentCount + 1,
+                    TotalRentTime = info.TotalRentTime + rentDuration,
+                    IsPoolable = info.IsPoolable,
+                    IsActive = false,
+                    Id = info.Id,
+                };
+            }
+        }
+
+        if (_handler.Validator is not null && !_handler.Validator(item))
+        {
+            Interlocked.Increment(ref _metrics.FailedValidationCount);
+            try
+            {
+                _handler.OnDispose?.Invoke(item);
+                if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+                {
+                    _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
+                    {
+                        Instance = item, CreationTime = now, Generation = _generation,
+                        RentCount = 0, TotalRentTime = TimeSpan.Zero,
+                        IsPoolable = item is IPoolable, IsActive = false, Id = instanceId,
+                    });
+                    _objectInfo.TryRemove(instanceId, out _);
+                }
+            }
+            catch { Interlocked.Increment(ref _metrics.DisposeFailureCount); }
+            Interlocked.Increment(ref _metrics.TotalDestroyed);
+            Interlocked.Decrement(ref _count);
+            return;
+        }
+
+        var pooledItem = new PooledItem(item, now, _generation, 0, instanceId);
+
+        if (_configuration.Strategy == PoolingStrategy.ThreadLocal && _threadLocalStorage is not null)
+        {
+            var localQueue = _threadLocalStorage.Value!;
+            localQueue.Enqueue(pooledItem);
+            return;
+        }
+
+        if (_configuration.Strategy == PoolingStrategy.ThreadLocalWithPartitioning
+            || _configuration.Strategy == PoolingStrategy.ShardedByThread)
+        {
+            int threadId = Environment.CurrentManagedThreadId;
+            int shardIndex = Math.Abs(threadId % _shards.Length);
+            ref var shard = ref _shards[shardIndex];
+            shard.Enqueue(pooledItem);
+            return;
+        }
 
         if (_configuration.Strategy == PoolingStrategy.BoundedChannel && _channel is not null)
         {
             try
             {
+                if (_channel.Writer.TryWrite(pooledItem))
+                    return;
+
                 await _channel.Writer.WriteAsync(pooledItem, cancellationToken).ConfigureAwait(false);
                 return;
             }
@@ -1204,7 +1300,33 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             }
         }
 
-        _items.Enqueue(pooledItem);
+        if (Count < _configuration.MaximumCapacity || _configuration.AllowPoolExpansion)
+        {
+            _items.Enqueue(pooledItem);
+        }
+        else
+        {
+            try
+            {
+                _handler.OnDispose?.Invoke(item);
+                if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+                {
+                    _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
+                    {
+                        Instance = item, CreationTime = now, Generation = _generation,
+                        RentCount = 0, TotalRentTime = TimeSpan.Zero,
+                        IsPoolable = item is IPoolable, IsActive = false, Id = instanceId,
+                    });
+                    _objectInfo.TryRemove(instanceId, out _);
+                }
+            }
+            catch
+            {
+                Interlocked.Increment(ref _metrics.DisposeFailureCount);
+            }
+            Interlocked.Increment(ref _metrics.TotalDestroyed);
+            Interlocked.Decrement(ref _count);
+        }
     }
 
     public bool TryRent([NotNullWhen(true)] out T? item)
