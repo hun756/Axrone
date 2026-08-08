@@ -60,11 +60,12 @@ internal static class SingletonProvider<T> where T : class, new()
         if (Volatile.Read(ref _initializationState) != NotInitialized) return false;
 
         Volatile.Write(ref _registered, instance);
-        if (Interlocked.CompareExchange(ref _initializationState, Initialized, NotInitialized) == NotInitialized)
+        if (Interlocked.CompareExchange(ref _initializationState, Initializing, NotInitialized) == NotInitialized)
         {
             Volatile.Write(ref _instance, instance);
             SingletonRegistryInternal.Register(instance);
             SingletonShutdownRegistry.Register(instance);
+            Volatile.Write(ref _initializationState, Initialized);
             return true;
         }
 

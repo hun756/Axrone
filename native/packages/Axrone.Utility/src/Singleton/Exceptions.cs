@@ -4,7 +4,6 @@ namespace Axrone.Utility.Singleton;
 /// Thrown when a singleton instance cannot be created — factory returned null,
 /// constructor threw, or initialization failed.
 /// </summary>
-[Serializable]
 public sealed class SingletonCreationException : Exception
 {
     /// <summary>The type that failed to initialize.</summary>

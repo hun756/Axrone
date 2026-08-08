@@ -1,9 +1,9 @@
 namespace Axrone.Utility.Singleton.Internal;
 
 /// <summary>
-/// Factory-based singleton storage using <see cref="StrongBox{T}"/> for stable ref access.
-/// <see cref="StrongBox{T}"/> provides a heap-allocated mutable cell whose <c>.Value</c> field
-/// can be used with <see cref="Volatile"/> without the <c>volatile</c> keyword.
+/// Factory-based singleton storage with lock-based double-checked initialization.
+/// Fast path: single <see cref="Volatile"/> read for the initialized case.
+/// Slow path: <c>lock</c> + re-check + factory invocation.
 /// Dispatches <see cref="ISingletonLifecycle"/> hooks and registers with the shutdown registry.
 /// </summary>
 [SkipLocalsInit]

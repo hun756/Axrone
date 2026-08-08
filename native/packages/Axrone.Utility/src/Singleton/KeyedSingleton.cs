@@ -60,10 +60,16 @@ public abstract class KeyedSingleton<TSelf, TKey> : IDisposable
     /// <summary>Remove and dispose all keyed instances.</summary>
     public static void Clear()
     {
-        var snapshot = _instances.Values;
-        _instances.Clear();
+        var keys = _instances.Keys;
+        var toDispose = new List<TSelf>(keys.Count);
 
-        foreach (var instance in snapshot)
+        foreach (var key in keys)
+        {
+            if (_instances.TryRemove(key, out var instance))
+                toDispose.Add(instance);
+        }
+
+        foreach (var instance in toDispose)
         {
             if (instance is IDisposable disp)
                 disp.Dispose();

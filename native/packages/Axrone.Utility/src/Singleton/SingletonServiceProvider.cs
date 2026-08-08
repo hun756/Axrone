@@ -13,7 +13,7 @@ public sealed class SingletonServiceProvider : IDisposable
 
     private readonly ConcurrentDictionary<Type, object> _services = new();
     private readonly ConcurrentDictionary<(Type, string), object> _namedServices = new();
-    private bool _disposed;
+    private int _disposed;
 
     private SingletonServiceProvider() { }
 
@@ -122,13 +122,12 @@ public sealed class SingletonServiceProvider : IDisposable
     [MethodImpl(MethodImplOptions.NoInlining)]
     private void ThrowIfDisposed()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         foreach (var service in _services.Values)
             if (service is IDisposable disp) disp.Dispose();
