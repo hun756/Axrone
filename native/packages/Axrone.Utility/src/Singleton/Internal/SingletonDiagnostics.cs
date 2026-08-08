@@ -10,7 +10,15 @@ namespace Axrone.Utility.Singleton.Internal;
 [SkipLocalsInit]
 internal static class SingletonDiagnostics
 {
-    private static readonly Dictionary<Type, SingletonMetrics> _metrics = [];
+    private sealed class MetricsEntry
+    {
+        public double CreationTimeMs;
+        public long AccessCount;
+        public bool IsCreated;
+        public string TypeName = "";
+    }
+
+    private static readonly ConcurrentDictionary<Type, MetricsEntry> _entries = new();
     private static readonly Dictionary<Type, long> _creationTimes = [];
     private static readonly object _lock = new();
 
@@ -32,55 +40,52 @@ internal static class SingletonDiagnostics
             if (_creationTimes.Remove(typeof(T), out var start))
             {
                 var elapsed = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
-                if (_metrics.TryGetValue(typeof(T), out var existing))
-                {
-                    _metrics[typeof(T)] = existing with { CreationTimeMs = elapsed, IsCreated = true };
-                }
-                else
-                {
-                    _metrics[typeof(T)] = new SingletonMetrics(typeof(T).Name, elapsed, 0, 0, true);
-                }
+                var entry = _entries.GetOrAdd(typeof(T), static t => new MetricsEntry { TypeName = t.Name });
+                entry.CreationTimeMs = elapsed;
+                entry.IsCreated = true;
+                entry.TypeName = typeof(T).Name;
             }
         }
     }
 
-    /// <summary>Record a single access to the singleton.</summary>
+    /// <summary>Record a single access to the singleton — lock-free hot path.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void RecordAccess<T>() where T : class
     {
         if (!SingletonAttributeCache<T>.Monitored) return;
-        lock (_lock)
-        {
-            if (_metrics.TryGetValue(typeof(T), out var existing))
-            {
-                _metrics[typeof(T)] = existing with { AccessCount = existing.AccessCount + 1 };
-            }
-            else
-            {
-                _metrics[typeof(T)] = new SingletonMetrics(typeof(T).Name, 0, 0, 1, false);
-            }
-        }
+
+        if (_entries.TryGetValue(typeof(T), out var entry))
+            Interlocked.Increment(ref entry.AccessCount);
     }
 
     /// <summary>Get metrics snapshot for a monitored singleton type.</summary>
     public static SingletonMetrics GetMetrics<T>() where T : class
     {
-        lock (_lock)
-        {
-            return _metrics.TryGetValue(typeof(T), out var m) ? m : default;
-        }
+        if (!_entries.TryGetValue(typeof(T), out var entry))
+            return default;
+
+        return new SingletonMetrics(
+            entry.TypeName,
+            entry.CreationTimeMs,
+            0,
+            Interlocked.Read(ref entry.AccessCount),
+            entry.IsCreated);
     }
 
     /// <summary>Get metrics for all monitored types.</summary>
     public static Dictionary<string, SingletonMetrics> GetAllMetrics()
     {
-        lock (_lock)
+        var result = new Dictionary<string, SingletonMetrics>(_entries.Count);
+        foreach (var (type, entry) in _entries)
         {
-            var result = new Dictionary<string, SingletonMetrics>(_metrics.Count);
-            foreach (var (type, metrics) in _metrics)
-                result[type.Name] = metrics;
-            return result;
+            result[type.Name] = new SingletonMetrics(
+                entry.TypeName,
+                entry.CreationTimeMs,
+                0,
+                Interlocked.Read(ref entry.AccessCount),
+                entry.IsCreated);
         }
+        return result;
     }
 
     /// <summary>Record a shutdown error for diagnostics.</summary>
@@ -89,4 +94,5 @@ internal static class SingletonDiagnostics
         System.Diagnostics.Debug.WriteLine(
             $"[SingletonShutdown] Error disposing {type.Name}: {exception.Message}");
     }
+
 }

@@ -22,7 +22,7 @@ internal static class SingletonProvider<T> where T : class, new()
 
     // ── ThreadStatic storage ─────────────────────────────────────────
     [ThreadStatic]
-    private static StrongBox<T?>? _tsBox;
+    private static T? _tsInstance;
 
     // ── Weak storage ─────────────────────────────────────────────────
     private static WeakReference<T>? _weakRef;
@@ -157,11 +157,11 @@ internal static class SingletonProvider<T> where T : class, new()
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static T GetThreadStaticInstance()
     {
-        var box = _tsBox;
-        if (box is not null && Volatile.Read(ref box.Value) is not null)
+        var instance = _tsInstance;
+        if (instance is not null)
         {
             SingletonDiagnostics.RecordAccess<T>();
-            return Volatile.Read(ref box.Value)!;
+            return instance;
         }
 
         return CreateThreadStaticInstance();
@@ -185,8 +185,7 @@ internal static class SingletonProvider<T> where T : class, new()
                 $"Failed to create thread-static instance of type {typeof(T).FullName}", typeof(T), ex);
         }
 
-        var box = new StrongBox<T?>(newInstance);
-        _tsBox = box;
+        _tsInstance = newInstance;
         SingletonShutdownRegistry.Register(newInstance);
         return newInstance;
     }
