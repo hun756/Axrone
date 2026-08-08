@@ -1,14 +1,15 @@
 namespace Axrone.Utility.Singleton.Internal;
 
 /// <summary>
-/// Lock-free singleton storage using <see cref="Interlocked"/> + <see cref="Volatile"/>.
+/// Lock-free singleton storage with thread-safety strategy dispatch.
+/// Routes to CAS, ThreadStatic, or Weak storage based on <see cref="SingletonAttributeCache{T}"/>.
 /// Fast path: single volatile read for the initialized case.
 /// Slow path: compare-exchange for first-time creation, <see cref="SpinWait"/> for contention.
-/// Dispatches <see cref="ISingletonLifecycle"/> hooks and registers with the shutdown registry.
 /// </summary>
 [SkipLocalsInit]
 internal static class SingletonProvider<T> where T : class, new()
 {
+    // ── Standard (CAS) storage ───────────────────────────────────────
     private static T? _instance;
     private static int _initializationState;
 
@@ -16,18 +17,105 @@ internal static class SingletonProvider<T> where T : class, new()
     private const int Initializing = 1;
     private const int Initialized = 2;
 
+    // ── Pre-registered instance (from Singleton.Register<T>) ─────────
+    private static T? _registered;
+
+    // ── ThreadStatic storage ─────────────────────────────────────────
+    [ThreadStatic]
+    private static StrongBox<T?>? _tsBox;
+
+    // ── Weak storage ─────────────────────────────────────────────────
+    private static WeakReference<T>? _weakRef;
+    private static readonly object _weakLock = new();
+
+    /// <summary>Get the singleton instance, dispatching by thread-safety strategy.</summary>
     public static T Instance
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        get
+        get => SingletonAttributeCache<T>.ThreadSafety switch
         {
-            var instance = Volatile.Read(ref _instance);
-            if (instance is not null)
-            {
-                SingletonDiagnostics.RecordAccess<T>();
-                return instance;
-            }
+            SingletonThreadSafety.ThreadStatic => GetThreadStaticInstance(),
+            SingletonThreadSafety.Weak => GetWeakInstance(),
+            _ => GetStandardInstance(),
+        };
+    }
 
+    /// <summary>Whether the standard singleton has been initialized.</summary>
+    public static bool IsInitialized
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Volatile.Read(ref _initializationState) == Initialized;
+    }
+
+    /// <summary>Force initialization. Safe to call multiple times.</summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void WarmUp() => _ = Instance;
+
+    /// <summary>
+    /// Pre-register an instance. Only succeeds if the provider has not yet created one.
+    /// Returns <see langword="true"/> if the instance was accepted.
+    /// </summary>
+    public static bool TryRegister(T instance)
+    {
+        if (Volatile.Read(ref _initializationState) != NotInitialized) return false;
+
+        Volatile.Write(ref _registered, instance);
+        if (Interlocked.CompareExchange(ref _initializationState, Initialized, NotInitialized) == NotInitialized)
+        {
+            Volatile.Write(ref _instance, instance);
+            SingletonRegistryInternal.Register(instance);
+            SingletonShutdownRegistry.Register(instance);
+            return true;
+        }
+
+        Volatile.Write(ref _registered, null);
+        return false;
+    }
+
+    /// <summary>Try to get an already-created instance without triggering creation.</summary>
+    public static bool TryGet([NotNullWhen(true)] out T? instance)
+    {
+        if (Volatile.Read(ref _initializationState) == Initialized)
+        {
+            instance = Volatile.Read(ref _instance)!;
+            return true;
+        }
+
+        instance = default;
+        return false;
+    }
+
+    // ── Standard (CAS) path ──────────────────────────────────────────
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static T GetStandardInstance()
+    {
+        var registered = Volatile.Read(ref _registered);
+        if (registered is not null) return registered;
+
+        var instance = Volatile.Read(ref _instance);
+        if (instance is not null)
+        {
+            SingletonDiagnostics.RecordAccess<T>();
+            return instance;
+        }
+
+        if (SingletonRegistryInternal.TryGet(out T? preRegistered))
+        {
+            Volatile.Write(ref _instance, preRegistered);
+            Interlocked.Exchange(ref _initializationState, Initialized);
+            SingletonDiagnostics.RecordAccess<T>();
+            return preRegistered;
+        }
+
+        return CreateStandardSlow();
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static T CreateStandardSlow()
+    {
+        while (true)
+        {
             if (Interlocked.CompareExchange(ref _initializationState, Initializing, NotInitialized) == NotInitialized)
             {
                 T newInstance;
@@ -53,25 +141,101 @@ internal static class SingletonProvider<T> where T : class, new()
             }
 
             SpinWait spinner = default;
-            while (Volatile.Read(ref _initializationState) != Initialized)
+            while (Volatile.Read(ref _initializationState) == Initializing)
                 spinner.SpinOnce();
 
-            var result = Volatile.Read(ref _instance)!;
-            SingletonDiagnostics.RecordAccess<T>();
-            return result;
+            if (Volatile.Read(ref _initializationState) == Initialized)
+            {
+                SingletonDiagnostics.RecordAccess<T>();
+                return Volatile.Read(ref _instance)!;
+            }
         }
     }
 
-    /// <summary>Whether the singleton has been initialized.</summary>
-    public static bool IsInitialized
+    // ── ThreadStatic path ────────────────────────────────────────────
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static T GetThreadStaticInstance()
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => Volatile.Read(ref _initializationState) == Initialized;
+        var box = _tsBox;
+        if (box is not null && Volatile.Read(ref box.Value) is not null)
+        {
+            SingletonDiagnostics.RecordAccess<T>();
+            return Volatile.Read(ref box.Value)!;
+        }
+
+        return CreateThreadStaticInstance();
     }
 
-    /// <summary>Force initialization. Safe to call multiple times.</summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void WarmUp() => _ = Instance;
+    private static T CreateThreadStaticInstance()
+    {
+        T newInstance;
+        try
+        {
+            SingletonDiagnostics.RecordCreationStart<T>();
+            using (NestingContext.EnterScope())
+                newInstance = new T();
+            PerformInitialization(newInstance);
+            SingletonDiagnostics.RecordCreationEnd<T>();
+        }
+        catch (Exception ex) when (ex is not SingletonCreationException)
+        {
+            throw new SingletonCreationException(
+                $"Failed to create thread-static instance of type {typeof(T).FullName}", typeof(T), ex);
+        }
+
+        var box = new StrongBox<T?>(newInstance);
+        _tsBox = box;
+        SingletonShutdownRegistry.Register(newInstance);
+        return newInstance;
+    }
+
+    // ── Weak path ────────────────────────────────────────────────────
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static T GetWeakInstance()
+    {
+        var weak = Volatile.Read(ref _weakRef);
+        if (weak is not null && weak.TryGetTarget(out var existing))
+        {
+            SingletonDiagnostics.RecordAccess<T>();
+            return existing;
+        }
+
+        return CreateWeakInstance();
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static T CreateWeakInstance()
+    {
+        lock (_weakLock)
+        {
+            if (_weakRef is not null && _weakRef.TryGetTarget(out var existing))
+                return existing;
+
+            T newInstance;
+            try
+            {
+                SingletonDiagnostics.RecordCreationStart<T>();
+                using (NestingContext.EnterScope())
+                    newInstance = new T();
+                PerformInitialization(newInstance);
+                SingletonDiagnostics.RecordCreationEnd<T>();
+            }
+            catch (Exception ex) when (ex is not SingletonCreationException)
+            {
+                throw new SingletonCreationException(
+                    $"Failed to create weak-referenced instance of type {typeof(T).FullName}", typeof(T), ex);
+            }
+
+            Volatile.Write(ref _weakRef, new WeakReference<T>(newInstance));
+            SingletonShutdownRegistry.Register(newInstance);
+            return newInstance;
+        }
+    }
+
+    // ── Shared helpers ───────────────────────────────────────────────
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static T CreateInstanceInternal()
@@ -102,7 +266,6 @@ internal static class SingletonProvider<T> where T : class, new()
 
     /// <summary>
     /// Eager initialization hook. Checks <see cref="SingletonAttributeCache{T}"/> for the eager flag.
-    /// Call from a non-generic <c>[ModuleInitializer]</c> or from <c>Singleton.WarmUp</c>.
     /// </summary>
     internal static void EnsurePreInitialized()
     {
