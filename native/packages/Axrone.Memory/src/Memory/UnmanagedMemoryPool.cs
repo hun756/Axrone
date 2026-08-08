@@ -293,7 +293,8 @@ public sealed class UnmanagedMemoryPool : IDisposable
             return _minBufferSize;
         if (BitOperations.IsPow2(value))
             return value;
-        return (int)BitOperations.RoundUpToPowerOf2((uint)value);
+        uint result = BitOperations.RoundUpToPowerOf2((uint)value);
+        return result > (uint)int.MaxValue ? int.MaxValue : (int)result;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -323,25 +324,27 @@ public sealed class UnmanagedMemoryPool : IDisposable
         switch (_allocationStrategy)
         {
             case AllocationStrategy.PowerOfTwo:
-                for (int size = _minBufferSize; size <= _maxBufferSize; size *= 2)
+                for (int size = _minBufferSize; size <= _maxBufferSize; size = size > _maxBufferSize / 2 ? _maxBufferSize + 1 : size * 2)
                     _bucketSizes.Add(size);
                 break;
 
             case AllocationStrategy.Fibonacci:
-                int a = _minBufferSize, b = a;
-                _bucketSizes.Add(a);
-                while (b <= _maxBufferSize)
+                int fa = _minBufferSize, fb = fa;
+                _bucketSizes.Add(fa);
+                while (fb <= _maxBufferSize)
                 {
-                    int next = a + b;
-                    a = b;
-                    b = next;
-                    if (b > _maxBufferSize) break;
-                    _bucketSizes.Add(b);
+                    long nextLong = (long)fa + fb;
+                    if (nextLong > int.MaxValue) break;
+                    int next = (int)nextLong;
+                    fa = fb;
+                    fb = next;
+                    if (fb > _maxBufferSize) break;
+                    _bucketSizes.Add(fb);
                 }
                 break;
 
             case AllocationStrategy.Chunked:
-                for (int size = _minBufferSize; size <= _maxBufferSize; size += _chunkSize)
+                for (int size = _minBufferSize; size <= _maxBufferSize; size = size > _maxBufferSize - _chunkSize ? _maxBufferSize + 1 : size + _chunkSize)
                     _bucketSizes.Add(size);
                 break;
 
