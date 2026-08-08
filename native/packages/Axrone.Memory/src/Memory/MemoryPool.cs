@@ -12,6 +12,8 @@ public sealed class MemoryPool<T> : IDisposable
     private readonly int _minBufferSize;
     private readonly ClearMode _clearMode;
     private readonly int _maxBuffersPerBucket;
+    private readonly AllocationStrategy _strategy;
+    private readonly int _chunkSize;
     private readonly ConcurrentDictionary<int, ConcurrentQueue<MemoryPoolBuffer>> _buckets;
     private int _isDisposed;
 
@@ -29,6 +31,8 @@ public sealed class MemoryPool<T> : IDisposable
         _defaultBufferSize = Math.Max(_minBufferSize, Math.Min(options.DefaultBufferSize, _maxBufferSize));
         _clearMode = options.ClearMode;
         _maxBuffersPerBucket = Math.Max(1, options.MaxBuffersPerBucket);
+        _strategy = options.AllocationStrategy;
+        _chunkSize = Math.Max(16, options.ChunkSize);
         _buckets = new ConcurrentDictionary<int, ConcurrentQueue<MemoryPoolBuffer>>();
         _bucketSizes = GenerateBucketSizes();
     }
@@ -151,14 +155,51 @@ public sealed class MemoryPool<T> : IDisposable
     private int[] GenerateBucketSizes()
     {
         var sizes = new List<int>();
-        for (int size = _minBufferSize; size <= _maxBufferSize; size *= 2)
+
+        switch (_strategy)
         {
-            sizes.Add(size);
-            if (size > _maxBufferSize / 2) break;
+            case AllocationStrategy.PowerOfTwo:
+                for (int size = _minBufferSize; size <= _maxBufferSize; size *= 2)
+                {
+                    sizes.Add(size);
+                    if (size > _maxBufferSize / 2) break;
+                }
+                break;
+
+            case AllocationStrategy.Fibonacci:
+                int a = _minBufferSize, b = _minBufferSize;
+                sizes.Add(a);
+                while (b <= _maxBufferSize)
+                {
+                    int next = a + b;
+                    a = b;
+                    b = next;
+                    if (b > _maxBufferSize) break;
+                    sizes.Add(b);
+                }
+                break;
+
+            case AllocationStrategy.Chunked:
+                int chunkStart = Math.Max(_minBufferSize, _chunkSize);
+                for (int size = chunkStart; size <= _maxBufferSize; size += _chunkSize)
+                {
+                    sizes.Add(size);
+                }
+                if (sizes.Count == 0 || sizes[0] != _minBufferSize)
+                    sizes.Insert(0, _minBufferSize);
+                break;
+
+            case AllocationStrategy.Exact:
+                sizes.Add(_minBufferSize);
+                if (_defaultBufferSize != _minBufferSize && _defaultBufferSize != _maxBufferSize)
+                    sizes.Add(_defaultBufferSize);
+                if (_maxBufferSize != _minBufferSize)
+                    sizes.Add(_maxBufferSize);
+                break;
         }
 
         sizes.Sort();
-        return sizes.ToArray();
+        return sizes.Distinct().ToArray();
     }
 
     private sealed class MemoryPoolBuffer : IMemoryOwner<T>

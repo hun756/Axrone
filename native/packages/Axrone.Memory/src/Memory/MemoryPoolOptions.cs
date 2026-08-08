@@ -21,6 +21,12 @@ public sealed class MemoryPoolOptions<T>
     /// <summary>Maximum number of idle buffers per bucket. Default: 32.</summary>
     public int MaxBuffersPerBucket { get; set; } = 32;
 
+    /// <summary>Bucket sizing strategy. Default: <see cref="AllocationStrategy.PowerOfTwo"/>.</summary>
+    public AllocationStrategy AllocationStrategy { get; set; } = AllocationStrategy.PowerOfTwo;
+
+    /// <summary>Chunk size for <see cref="AllocationStrategy.Chunked"/>. Default: 128.</summary>
+    public int ChunkSize { get; set; } = 128;
+
     public MemoryPoolOptions<T> WithDefaultBufferSize(int size)
     {
         DefaultBufferSize = size;
@@ -51,6 +57,18 @@ public sealed class MemoryPoolOptions<T>
         return this;
     }
 
+    public MemoryPoolOptions<T> WithAllocationStrategy(AllocationStrategy strategy)
+    {
+        AllocationStrategy = strategy;
+        return this;
+    }
+
+    public MemoryPoolOptions<T> WithChunkSize(int size)
+    {
+        ChunkSize = size;
+        return this;
+    }
+
     /// <summary>Creates a shallow copy of this options instance.</summary>
     public MemoryPoolOptions<T> Clone()
     {
@@ -61,6 +79,8 @@ public sealed class MemoryPoolOptions<T>
             MinBufferSize = MinBufferSize,
             ClearMode = ClearMode,
             MaxBuffersPerBucket = MaxBuffersPerBucket,
+            AllocationStrategy = AllocationStrategy,
+            ChunkSize = ChunkSize,
         };
     }
 }
