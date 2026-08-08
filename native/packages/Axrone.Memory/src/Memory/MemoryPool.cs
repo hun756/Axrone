@@ -418,13 +418,6 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         if (!TryRent(exactLength, out memoryOwner))
             return false;
 
-        if (memoryOwner.Memory.Length != exactLength)
-        {
-            memoryOwner.Dispose();
-            memoryOwner = null;
-            return false;
-        }
-
         return true;
     }
 
