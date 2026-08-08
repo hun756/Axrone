@@ -1,4 +1,6 @@
 import { Component, Transform, script } from '@axrone/ecs-runtime';
+import type { ParticleSystem as CoreParticleSystem } from '@axrone/particle-system';
+import { createCoreParticleSystem, syncCoreRenderData } from './particle-system-bridge';
 
 /* ------------------------------------------------------------------ */
 /* Public types                                                        */
@@ -373,6 +375,9 @@ export class ParticleSystem extends Component {
     private _burstFired: boolean[];
     private _delayRemaining: number;
 
+    private _coreSystem: CoreParticleSystem | null = null;
+    private _useCoreSimulation: boolean = false;
+
     constructor(config: ParticleSystemConfig = {}) {
         super();
 
@@ -493,6 +498,8 @@ export class ParticleSystem extends Component {
         this._delayRemaining = 0;
 
         this._applyConfig(config);
+
+        this._initCoreSystem();
 
         if (this._playOnAwake) {
             this._playing = true;
@@ -934,17 +941,45 @@ export class ParticleSystem extends Component {
         return this._elapsed;
     }
 
+    get useCoreSimulation(): boolean {
+        return this._useCoreSimulation;
+    }
+
+    set useCoreSimulation(value: boolean) {
+        if (this._useCoreSimulation === value) {
+            return;
+        }
+        this._useCoreSimulation = value;
+        if (value && !this._coreSystem) {
+            this._initCoreSystem();
+        }
+        if (this._coreSystem) {
+            if (value && this._playing) {
+                this._coreSystem.play();
+            } else if (!value) {
+                this._coreSystem.stop();
+            }
+        }
+    }
+
+    get coreSystem(): CoreParticleSystem | null {
+        return this._coreSystem;
+    }
+
     play(): void {
         this._playing = true;
         this._delayRemaining = this._startDelay;
+        this._coreSystem?.play();
     }
 
     pause(): void {
         this._playing = false;
+        this._coreSystem?.pause();
     }
 
     stop(): void {
         this._playing = false;
+        this._coreSystem?.stop();
         this.clear();
     }
 
@@ -957,6 +992,7 @@ export class ParticleSystem extends Component {
         this._spawnAccumulator = 0;
         this._aliveCount = 0;
         this._burstFired = this._bursts.map(() => false);
+        this._coreSystem?.reset();
     }
 
     /** Immediately emits `count` particles, bypassing the rate limiter. */
@@ -1007,6 +1043,11 @@ export class ParticleSystem extends Component {
             if (this._delayRemaining > 0) {
                 return;
             }
+        }
+
+        if (this._useCoreSimulation && this._coreSystem) {
+            this._updateCoreSimulation(dt);
+            return;
         }
 
         const canSimulate = this._looping || this._loopTime < this._duration;
@@ -1356,6 +1397,117 @@ export class ParticleSystem extends Component {
             this.update(step);
         }
         this._playing = wasPlaying;
+    }
+
+    private _initCoreSystem(): void {
+        try {
+            const config = this._collectConfig();
+            this._coreSystem = createCoreParticleSystem(config);
+            this._coreSystem.initialize();
+            if (this._playing) {
+                this._coreSystem.play();
+            }
+        } catch {
+            this._coreSystem = null;
+        }
+    }
+
+    private _updateCoreSimulation(dt: number): void {
+        const core = this._coreSystem!;
+        core.update(dt);
+
+        const coreData = core.getParticles();
+        const alive = syncCoreRenderData(coreData, {
+            positions: this._positions,
+            renderColors: this._renderColors,
+            renderSizes: this._renderSizes,
+            renderAlphas: this._renderAlphas,
+            seeds: this._seeds,
+            rotations: this._rotations,
+            maxParticles: this._maxParticles,
+        });
+
+        this._aliveCount = alive;
+        this._elapsed += dt;
+        this.advanceTextureFrame(dt);
+
+        if (!this._looping && this._elapsed >= this._duration && alive === 0) {
+            this._playing = false;
+        }
+    }
+
+    private _collectConfig(): ParticleSystemConfig {
+        return {
+            duration: this._duration,
+            looping: this._looping,
+            prewarm: this._prewarm,
+            startDelay: this._startDelay,
+            startLifetime: this._startLifetime,
+            startSpeed: this._startSpeed,
+            startSize: this._startSize,
+            startRotation: this._startRotation,
+            startColor: this.startColor,
+            endColor: this.endColor,
+            colorMode: this._colorMode,
+            gravityModifier: this._gravityModifier,
+            simulationSpace: this._simulationSpace,
+            simulationSpeed: this._simulationSpeed,
+            maxParticles: this._maxParticles,
+            playOnAwake: this._playOnAwake,
+            stopAction: this._stopAction,
+            emissionEnabled: this._emissionEnabled,
+            rateOverTime: this._rateOverTime,
+            rateOverDistance: this._rateOverDistance,
+            bursts: this._bursts,
+            shapeEnabled: this._shapeEnabled,
+            shapeType: this._shapeType,
+            shapeRadius: this._shapeRadius,
+            shapeRadiusThickness: this._shapeRadiusThickness,
+            shapeAngle: this._shapeAngle,
+            shapeArc: this._shapeArc,
+            shapeLength: this._shapeLength,
+            shapeDonutRadius: this._shapeDonutRadius,
+            emitFrom: this._emitFrom,
+            randomDirectionAmount: this._randomDirectionAmount,
+            spherizeDirection: this._spherizeDirection,
+            velocityEnabled: this._velocityEnabled,
+            velocityLinear: this._velocityLinear,
+            velocityOrbital: this._velocityOrbital,
+            velocityRadial: this._velocityRadial,
+            velocitySpeedModifier: this._velocitySpeedModifier,
+            forceEnabled: this._forceEnabled,
+            force: this._force,
+            limitVelocityEnabled: this._limitVelocityEnabled,
+            speedLimit: this._speedLimit,
+            limitDampen: this._limitDampen,
+            drag: this._drag,
+            colorOverLifetimeEnabled: this._colorOverLifetimeEnabled,
+            sizeOverLifetimeEnabled: this._sizeOverLifetimeEnabled,
+            sizeCurve: this._sizeCurve,
+            rotationOverLifetimeEnabled: this._rotationOverLifetimeEnabled,
+            angularVelocity: this._angularVelocity,
+            noiseEnabled: this._noiseEnabled,
+            noiseStrength: this._noiseStrength,
+            noiseFrequency: this._noiseFrequency,
+            noiseDamping: this._noiseDamping,
+            collisionEnabled: this._collisionEnabled,
+            collisionBounce: this._collisionBounce,
+            collisionDampen: this._collisionDampen,
+            collisionLifetimeLoss: this._collisionLifetimeLoss,
+            minKillSpeed: this._minKillSpeed,
+            renderMode: this._renderMode,
+            blendMode: this._blendMode,
+            spriteMode: this._spriteMode,
+            minParticleSize: this._minParticleSize,
+            maxParticleSize: this._maxParticleSize,
+            sortingFudge: this._sortingFudge,
+            textureEnabled: this._textureEnabled,
+            textureSheetTilesX: this._textureSheetTilesX,
+            textureSheetTilesY: this._textureSheetTilesY,
+            textureSheetFps: this._textureSheetFps,
+            textureSheetLoop: this._textureSheetLoop,
+            textureRegion: this._textureRegion,
+        };
     }
 
     /* ------------------------------------------------------------------ */
