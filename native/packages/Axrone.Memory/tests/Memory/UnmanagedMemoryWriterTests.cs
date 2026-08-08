@@ -128,14 +128,25 @@ public sealed class UnmanagedMemoryWriterTests
     }
 
     [Fact]
-    public void GetMemory_ThrowsNotSupportedException()
+    public void GetMemory_ReturnsValidMemoryBackedByUnmanagedMemory()
     {
         using var pool = new UnmanagedMemoryPool();
         using var writer = new UnmanagedMemoryWriter(pool);
 
-        var action = () => writer.GetMemory(100);
+        var memory = writer.GetMemory(100);
 
-        action.Should().Throw<NotSupportedException>();
+        memory.Length.Should().BeGreaterThanOrEqualTo(100);
+
+        // Write through the Memory<byte> and verify via GetSpan
+        var span = memory.Span;
+        span[0] = 0xAB;
+        span[1] = 0xCD;
+        writer.Advance(2);
+
+        writer.Written.Should().Be(2);
+        var result = writer.ToArray();
+        result[0].Should().Be(0xAB);
+        result[1].Should().Be(0xCD);
     }
 
     [Fact]

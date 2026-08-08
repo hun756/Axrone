@@ -51,12 +51,13 @@ public sealed class UnmanagedMemoryWriter : IBufferWriter<byte>, IDisposable
 
     /// <summary>Gets a <see cref="Memory{T}"/> of at least <paramref name="sizeHint"/> bytes for writing.</summary>
     /// <param name="sizeHint">Minimum size required. 0 means any available space.</param>
-    /// <returns>A memory region for writing.</returns>
-    /// <exception cref="NotSupportedException">Use <see cref="GetSpan"/> for unmanaged memory.</exception>
+    /// <returns>A memory region for writing backed by unmanaged memory.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Memory<byte> GetMemory(int sizeHint = 0)
+    public unsafe Memory<byte> GetMemory(int sizeHint = 0)
     {
-        throw new NotSupportedException("Use GetSpan() for unmanaged memory writers.");
+        CheckAndResizeBuffer(sizeHint);
+        int remaining = Capacity - _written;
+        return new UnmanagedMemoryManager((byte*)_handle.ToPointer() + _written, remaining).Memory;
     }
 
     /// <summary>Gets a <see cref="Span{T}"/> of at least <paramref name="sizeHint"/> bytes for writing.</summary>
