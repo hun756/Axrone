@@ -6,7 +6,7 @@ namespace Axrone.Memory;
 public readonly record struct MemoryPoolDiagnostics
 {
     /// <summary>Per-bucket diagnostic information keyed by buffer size.</summary>
-    public Dictionary<int, BucketDiagnostics> BucketInfo { get; }
+    public IReadOnlyDictionary<int, BucketDiagnostics> BucketInfo { get; }
 
     /// <summary>Total bytes currently managed by the pool (active + pooled).</summary>
     public long TotalMemory { get; }
@@ -36,7 +36,7 @@ public readonly record struct MemoryPoolDiagnostics
     public float AllocationVariance { get; }
 
     internal MemoryPoolDiagnostics(
-        Dictionary<int, BucketDiagnostics> bucketInfo,
+        IReadOnlyDictionary<int, BucketDiagnostics> bucketInfo,
         long totalMemory,
         long maxMemory,
         long wastedMemory,
