@@ -50,7 +50,7 @@ public class PoolMetricsTests
     [Fact]
     public void PoolMetrics_ShouldBeReadonlyStruct()
     {
-        typeof(PoolMetrics).Should().BeValueType();
+        typeof(PoolMetrics).IsValueType.Should().BeTrue();
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public class PoolDiagnosticsTests
     [Fact]
     public void PoolDiagnostics_ShouldBeReadonlyStruct()
     {
-        typeof(PoolDiagnostics).Should().BeValueType();
+        typeof(PoolDiagnostics).IsValueType.Should().BeTrue();
     }
 
     [Fact]
