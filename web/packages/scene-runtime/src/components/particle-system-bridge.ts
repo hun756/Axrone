@@ -11,6 +11,9 @@ import {
     LimitVelocityModule,
     TextureSheetModule,
     ForceModule,
+    TrailModule,
+    LightsModule,
+    CustomDataModule,
     SOAParticleBuffer,
     EmitterShape,
     SimulationSpace,
@@ -315,6 +318,56 @@ export function createCoreParticleSystem(config: ParticleSystemConfig): CorePart
                     z: config.force[2] ?? 0,
                 },
             }],
+        }));
+    }
+
+    if (config.trailEnabled) {
+        core.addModule(new TrailModule({
+            enabled: true,
+            priority: 800,
+            mode: config.trailMode ?? 'particles',
+            ratio: config.trailRatio ?? 1,
+            lifetime: constantCurve(config.trailLifetime ?? 2),
+            minimumVertexDistance: config.trailMinVertexDistance ?? 0.1,
+            width: constantCurve(config.trailWidth ?? 0.5),
+            color: constantColor(startRgb[0], startRgb[1], startRgb[2], 1),
+            inheritParticleColor: config.trailInheritColor ?? true,
+            colorOverLifetime: constantColor(startRgb[0], startRgb[1], startRgb[2], 0),
+            worldSpace: false,
+            dieWithParticles: config.trailDieWithParticles ?? true,
+            sizeAffectsWidth: config.trailSizeAffectsWidth ?? false,
+            sizeAffectsLifetime: false,
+        }));
+    }
+
+    if (config.lightsEnabled) {
+        core.addModule(new LightsModule({
+            enabled: true,
+            priority: 900,
+            maxLights: config.lightsMaxCount ?? 8,
+            range: constantCurve(config.lightsRange ?? 10),
+            intensity: constantCurve(config.lightsIntensity ?? 1.5),
+            ratio: 1,
+            useParticleColors: config.lightsUseParticleColor ?? true,
+            shadowCasting: config.lightsShadowCasting ?? false,
+            defaultLights: false,
+            animateLights: false,
+            affectParticleColor: false,
+            maxInfluencesPerParticle: 4,
+            lightInfluenceMultiplier: 1,
+            lightBlendFactor: 0.5,
+            attenuationMode: 1,
+        }));
+    }
+
+    if (config.customDataEnabled) {
+        core.addModule(new CustomDataModule({
+            enabled: true,
+            priority: 1000,
+            slot1: { type: 'float' },
+            slot2: { type: 'vector3' },
+            slot3: { type: 'color' },
+            slot4: { type: 'float' },
         }));
     }
 

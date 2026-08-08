@@ -143,6 +143,28 @@ export interface ParticleSystemConfig {
     readonly textureSheetFps?: number;
     readonly textureSheetLoop?: boolean;
     readonly textureRegion?: readonly [number, number, number, number];
+
+    /* Trail */
+    readonly trailEnabled?: boolean;
+    readonly trailMode?: 'particles' | 'ribbon';
+    readonly trailLifetime?: number;
+    readonly trailWidth?: number;
+    readonly trailMinVertexDistance?: number;
+    readonly trailRatio?: number;
+    readonly trailDieWithParticles?: boolean;
+    readonly trailInheritColor?: boolean;
+    readonly trailSizeAffectsWidth?: boolean;
+
+    /* Lights */
+    readonly lightsEnabled?: boolean;
+    readonly lightsMaxCount?: number;
+    readonly lightsRange?: number;
+    readonly lightsIntensity?: number;
+    readonly lightsUseParticleColor?: boolean;
+    readonly lightsShadowCasting?: boolean;
+
+    /* Custom data */
+    readonly customDataEnabled?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -351,6 +373,28 @@ export class ParticleSystem extends Component {
     private _textureFrameIndex: number = 0;
     private _textureFrameAccum: number = 0;
 
+    /* Trail */
+    private _trailEnabled: boolean;
+    private _trailMode: 'particles' | 'ribbon';
+    private _trailLifetime: number;
+    private _trailWidth: number;
+    private _trailMinVertexDistance: number;
+    private _trailRatio: number;
+    private _trailDieWithParticles: boolean;
+    private _trailInheritColor: boolean;
+    private _trailSizeAffectsWidth: boolean;
+
+    /* Lights */
+    private _lightsEnabled: boolean;
+    private _lightsMaxCount: number;
+    private _lightsRange: number;
+    private _lightsIntensity: number;
+    private _lightsUseParticleColor: boolean;
+    private _lightsShadowCasting: boolean;
+
+    /* Custom data */
+    private _customDataEnabled: boolean;
+
     /* Particle pool (structure-of-arrays for cache friendly simulation). */
     private readonly _positions: Float32Array;
     private readonly _velocities: Float32Array;
@@ -475,6 +519,28 @@ export class ParticleSystem extends Component {
         this._textureSheetFps = 30;
         this._textureSheetLoop = true;
         this._textureRegion = [0, 0, 1, 1];
+
+        /* Trail */
+        this._trailEnabled = false;
+        this._trailMode = 'particles';
+        this._trailLifetime = 2;
+        this._trailWidth = 0.5;
+        this._trailMinVertexDistance = 0.1;
+        this._trailRatio = 1;
+        this._trailDieWithParticles = true;
+        this._trailInheritColor = true;
+        this._trailSizeAffectsWidth = false;
+
+        /* Lights */
+        this._lightsEnabled = false;
+        this._lightsMaxCount = 8;
+        this._lightsRange = 10;
+        this._lightsIntensity = 1.5;
+        this._lightsUseParticleColor = true;
+        this._lightsShadowCasting = false;
+
+        /* Custom data */
+        this._customDataEnabled = false;
 
         /* Allocate pool at the hard limit so maxParticles can change freely. */
         this._positions = new Float32Array(MAX_PARTICLES_HARD_LIMIT * 3);
@@ -1586,6 +1652,22 @@ export class ParticleSystem extends Component {
             textureSheetFps: this._textureSheetFps,
             textureSheetLoop: this._textureSheetLoop,
             textureRegion: this._textureRegion,
+            trailEnabled: this._trailEnabled,
+            trailMode: this._trailMode,
+            trailLifetime: this._trailLifetime,
+            trailWidth: this._trailWidth,
+            trailMinVertexDistance: this._trailMinVertexDistance,
+            trailRatio: this._trailRatio,
+            trailDieWithParticles: this._trailDieWithParticles,
+            trailInheritColor: this._trailInheritColor,
+            trailSizeAffectsWidth: this._trailSizeAffectsWidth,
+            lightsEnabled: this._lightsEnabled,
+            lightsMaxCount: this._lightsMaxCount,
+            lightsRange: this._lightsRange,
+            lightsIntensity: this._lightsIntensity,
+            lightsUseParticleColor: this._lightsUseParticleColor,
+            lightsShadowCasting: this._lightsShadowCasting,
+            customDataEnabled: this._customDataEnabled,
         };
     }
 
@@ -1833,6 +1915,43 @@ export class ParticleSystem extends Component {
                 config.textureRegion[2],
                 config.textureRegion[3],
             ];
+        }
+
+        if (typeof config.trailEnabled === 'boolean') this._trailEnabled = config.trailEnabled;
+        if (config.trailMode === 'particles' || config.trailMode === 'ribbon') {
+            this._trailMode = config.trailMode;
+        }
+        if (typeof config.trailLifetime === 'number') this._trailLifetime = Math.max(0, config.trailLifetime);
+        if (typeof config.trailWidth === 'number') this._trailWidth = Math.max(0, config.trailWidth);
+        if (typeof config.trailMinVertexDistance === 'number') {
+            this._trailMinVertexDistance = Math.max(0, config.trailMinVertexDistance);
+        }
+        if (typeof config.trailRatio === 'number') this._trailRatio = clamp(config.trailRatio, 0, 1);
+        if (typeof config.trailDieWithParticles === 'boolean') {
+            this._trailDieWithParticles = config.trailDieWithParticles;
+        }
+        if (typeof config.trailInheritColor === 'boolean') this._trailInheritColor = config.trailInheritColor;
+        if (typeof config.trailSizeAffectsWidth === 'boolean') {
+            this._trailSizeAffectsWidth = config.trailSizeAffectsWidth;
+        }
+
+        if (typeof config.lightsEnabled === 'boolean') this._lightsEnabled = config.lightsEnabled;
+        if (typeof config.lightsMaxCount === 'number') {
+            this._lightsMaxCount = Math.max(0, Math.min(64, config.lightsMaxCount));
+        }
+        if (typeof config.lightsRange === 'number') this._lightsRange = Math.max(0, config.lightsRange);
+        if (typeof config.lightsIntensity === 'number') {
+            this._lightsIntensity = Math.max(0, config.lightsIntensity);
+        }
+        if (typeof config.lightsUseParticleColor === 'boolean') {
+            this._lightsUseParticleColor = config.lightsUseParticleColor;
+        }
+        if (typeof config.lightsShadowCasting === 'boolean') {
+            this._lightsShadowCasting = config.lightsShadowCasting;
+        }
+
+        if (typeof config.customDataEnabled === 'boolean') {
+            this._customDataEnabled = config.customDataEnabled;
         }
 
         if (this._coreSystem) {
