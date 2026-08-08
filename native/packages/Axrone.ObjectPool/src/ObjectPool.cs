@@ -786,6 +786,13 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         Interlocked.Increment(ref _count);
         Interlocked.Increment(ref _rented);
 
+        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Basic)
+        {
+            RecordPeakUtilization();
+            if (Volatile.Read(ref _rented) > _configuration.MaximumCapacity)
+                Interlocked.Increment(ref _metrics.ExpansionCount);
+        }
+
         if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
         {
             sw.Stop();
@@ -2128,8 +2135,11 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         if (_configuration.DiagnosticsLevel <= DiagnosticsLevel.Minimal)
             return 0;
 
-        double estimatedSizePerItem = _metrics.MemoryUsageBytes / Math.Max(1, Count);
-        return estimatedSizePerItem * Count;
+        int count = Count;
+        if (count == 0) return 0;
+
+        double estimatedPerItem = IntPtr.Size * 4 + 64;
+        return estimatedPerItem * count;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2148,6 +2158,23 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         if (_configuration.DiagnosticsLevel < DiagnosticsLevel.Full)
             return;
         Interlocked.Add(ref _metrics.TotalCreateDurationTicks, elapsed.Ticks);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void RecordPeakUtilization()
+    {
+        int currentRented = Volatile.Read(ref _rented);
+        if (currentRented > _metrics.PeakUtilization)
+        {
+            lock (_syncLock)
+            {
+                if (currentRented > _metrics.PeakUtilization)
+                {
+                    _metrics.PeakUtilization = currentRented;
+                    _metrics.PeakTime = DateTime.UtcNow;
+                }
+            }
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
