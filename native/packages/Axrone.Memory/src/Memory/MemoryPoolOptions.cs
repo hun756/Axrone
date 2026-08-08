@@ -170,6 +170,14 @@ public sealed class MemoryPoolOptions<T>
         return this;
     }
 
+    /// <summary>Sets the per-thread cache size for thread-local buffering.</summary>
+    /// <param name="size">Number of buffers each thread can cache locally.</param>
+    public MemoryPoolOptions<T> WithTlsCacheSize(int size)
+    {
+        TlsCacheSize = Math.Max(0, size);
+        return this;
+    }
+
     /// <summary>Sets the number of buffers to pre-allocate on pool creation.</summary>
     public MemoryPoolOptions<T> WithPreallocation(int count)
     {

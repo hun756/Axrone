@@ -17,8 +17,14 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
     private readonly int _maxBuffersPerBucket;
     private readonly AllocationStrategy _strategy;
     private readonly int _chunkSize;
-    private readonly ConcurrentDictionary<int, ConcurrentQueue<MemoryPoolBuffer>> _buckets;
+    private readonly MemoryPoolFlags _flags;
+    private readonly bool _enableProfiling;
+    private readonly ConcurrentDictionary<int, BufferBucket<T>> _buckets;
+    private readonly Dictionary<Thread, ThreadLocalCache>? _threadLocalCaches;
+    private readonly int _tlsCacheSize;
+    private readonly object _tlsLock = new();
     private readonly Stopwatch _runtime = Stopwatch.StartNew();
+    private readonly Timer? _trimTimer;
     private int _isDisposed;
 
     private long _totalRentedBuffers;
@@ -47,10 +53,26 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         _maxBuffersPerBucket = Math.Max(1, options.MaxBuffersPerBucket);
         _strategy = options.AllocationStrategy;
         _chunkSize = Math.Max(16, options.ChunkSize);
-        _buckets = new ConcurrentDictionary<int, ConcurrentQueue<MemoryPoolBuffer>>();
+        _flags = options.Flags;
+        _enableProfiling = (_flags & MemoryPoolFlags.EnableProfiling) != 0;
+        _buckets = new ConcurrentDictionary<int, BufferBucket<T>>();
         _bucketSizes = options.CustomBucketSizes.Count > 0
             ? options.CustomBucketSizes.Order().Distinct().ToArray()
             : GenerateBucketSizes();
+
+        _tlsCacheSize = options.TlsCacheSize;
+        if ((_flags & MemoryPoolFlags.UseTlsCache) != 0 && _tlsCacheSize > 0)
+            _threadLocalCaches = new Dictionary<Thread, ThreadLocalCache>();
+
+        if (options.TrimInterval > TimeSpan.Zero && options.AutoTrimPercentage > 0)
+        {
+            double trimPressure = options.AutoTrimPercentage / 100.0;
+            _trimTimer = new Timer(
+                _ => Trim(trimPressure),
+                null,
+                options.TrimInterval,
+                options.TrimInterval);
+        }
 
         if (options.PreallocationCount > 0)
             Preallocate(options.PreallocationCount);
@@ -93,6 +115,15 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         }
 
         int requestedSize = minimumLength <= 0 ? _defaultBufferSize : minimumLength;
+
+        if ((_flags & MemoryPoolFlags.UseTlsCache) != 0
+            && TryRentFromTlsCache(requestedSize, out memoryOwner))
+        {
+            Interlocked.Increment(ref _totalRentedBuffers);
+            Interlocked.Increment(ref _activeBuffers);
+            return true;
+        }
+
         int bufferSize = GetOptimalBufferSize(requestedSize);
 
         if (bufferSize > _maxBufferSize)
@@ -101,10 +132,12 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
             return false;
         }
 
-        var bucket = _buckets.GetOrAdd(bufferSize, static _ => new ConcurrentQueue<MemoryPoolBuffer>());
+        var bucket = _buckets.GetOrAdd(bufferSize, static (size, pool) =>
+            new BufferBucket<T>(size, pool._maxBuffersPerBucket, pool._enableProfiling, false), this);
 
-        if (bucket.TryDequeue(out var buffer))
+        if (bucket.TryTake(out var owner))
         {
+            var buffer = (MemoryPoolBuffer)owner;
             Interlocked.Increment(ref _hits);
             Interlocked.Increment(ref _totalRentedBuffers);
             Interlocked.Increment(ref _activeBuffers);
@@ -141,12 +174,20 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
             return;
 
+        _trimTimer?.Dispose();
+
         foreach (var bucket in _buckets.Values)
-        {
-            while (bucket.TryDequeue(out _)) { }
-        }
+            bucket.Dispose();
 
         _buckets.Clear();
+
+        if (_threadLocalCaches != null)
+        {
+            lock (_tlsLock)
+            {
+                _threadLocalCaches.Clear();
+            }
+        }
     }
 
     private void Return(MemoryPoolBuffer buffer)
@@ -154,20 +195,95 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         if (Volatile.Read(ref _isDisposed) != 0)
             return;
 
+        int size = buffer.Length;
+
+        if ((_flags & MemoryPoolFlags.UseTlsCache) != 0 && TryReturnToTlsCache(buffer))
+        {
+            Interlocked.Increment(ref _totalReturnedBuffers);
+            Interlocked.Decrement(ref _activeBuffers);
+            return;
+        }
+
         if (_clearMode == ClearMode.OnReturn || _clearMode == ClearMode.Always)
             buffer.Clear();
+        var bucket = _buckets.GetOrAdd(size, static (s, pool) =>
+            new BufferBucket<T>(s, pool._maxBuffersPerBucket, pool._enableProfiling, false), this);
 
-        int size = buffer.Length;
-        var bucket = _buckets.GetOrAdd(size, static _ => new ConcurrentQueue<MemoryPoolBuffer>());
-
-        if (bucket.Count < _maxBuffersPerBucket)
-        {
-            bucket.Enqueue(buffer);
+        if (bucket.TryAdd(buffer))
             Interlocked.Increment(ref _pooledBuffers);
-        }
 
         Interlocked.Increment(ref _totalReturnedBuffers);
         Interlocked.Decrement(ref _activeBuffers);
+    }
+
+    private bool TryRentFromTlsCache(int requestedSize, [NotNullWhen(true)] out IMemoryOwner<T>? memoryOwner)
+    {
+        if (_threadLocalCaches == null || _tlsCacheSize <= 0)
+        {
+            memoryOwner = null;
+            return false;
+        }
+
+        var currentThread = Thread.CurrentThread;
+
+        if (!_threadLocalCaches.TryGetValue(currentThread, out ThreadLocalCache cache))
+        {
+            lock (_tlsLock)
+            {
+                if (!_threadLocalCaches.TryGetValue(currentThread, out cache))
+                {
+                    cache = new ThreadLocalCache(_tlsCacheSize, currentThread);
+                    _threadLocalCaches[currentThread] = cache;
+                }
+            }
+        }
+
+        lock (cache.Lock)
+        {
+            for (int i = 0; i < cache.Sizes.Length; i++)
+            {
+                int size = cache.Sizes[i];
+                if (size >= requestedSize && size <= requestedSize * 2 && cache.Buffers[i] != null)
+                {
+                    var buffer = cache.Buffers[i];
+                    cache.Buffers[i] = null!;
+                    cache.Sizes[i] = -1;
+
+                    Interlocked.Increment(ref _hits);
+                    memoryOwner = buffer;
+                    return true;
+                }
+            }
+        }
+
+        memoryOwner = null;
+        return false;
+    }
+
+    private bool TryReturnToTlsCache(MemoryPoolBuffer buffer)
+    {
+        if (_threadLocalCaches == null || _tlsCacheSize <= 0)
+            return false;
+
+        var currentThread = Thread.CurrentThread;
+
+        if (!_threadLocalCaches.TryGetValue(currentThread, out var cache))
+            return false;
+
+        lock (cache.Lock)
+        {
+            for (int i = 0; i < cache.Sizes.Length; i++)
+            {
+                if (cache.Sizes[i] == -1)
+                {
+                    cache.Buffers[i] = buffer;
+                    cache.Sizes[i] = buffer.Length;
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Tries to rent a buffer with exactly <paramref name="exactLength"/> elements.</summary>
@@ -295,38 +411,20 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         if (pressure == 0.0)
             return;
 
-        long removed = 0;
         long removedBytes = 0;
+        long removedCount = 0;
 
-        if (pressure == 1.0)
+        foreach (var bucket in _buckets.Values)
         {
-            foreach (var bucket in _buckets.Values)
-            {
-                while (bucket.TryDequeue(out var buffer))
-                {
-                    removed++;
-                    removedBytes += (long)buffer.Length * Unsafe.SizeOf<T>();
-                }
-            }
-        }
-        else
-        {
-            foreach (var bucket in _buckets.Values)
-            {
-                int count = bucket.Count;
-                int toRemove = (int)(count * pressure);
-                for (int i = 0; i < toRemove; i++)
-                {
-                    if (bucket.TryDequeue(out var buffer))
-                    {
-                        removed++;
-                        removedBytes += (long)buffer.Length * Unsafe.SizeOf<T>();
-                    }
-                }
-            }
+            int countBefore = bucket.Count;
+            bucket.Trim((float)pressure);
+            int countAfter = bucket.Count;
+            int removed = countBefore - countAfter;
+            removedCount += removed;
+            removedBytes += (long)removed * bucket.BufferSize * Unsafe.SizeOf<T>();
         }
 
-        Interlocked.Add(ref _pooledBuffers, -removed);
+        Interlocked.Add(ref _pooledBuffers, -removedCount);
         Interlocked.Add(ref _totalAllocated, -removedBytes);
     }
 
@@ -344,10 +442,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         {
             int count = bucket.Count;
             if (count > 0)
-            {
-                foreach (var _ in bucket)
-                    wastedMemory += Unsafe.SizeOf<T>();
-            }
+                wastedMemory += (long)count * bucket.BufferSize * Unsafe.SizeOf<T>();
         }
 
         return new MemoryPoolDiagnostics(
@@ -366,14 +461,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         var result = new Dictionary<int, BucketDiagnostics>(_buckets.Count);
 
         foreach (var kvp in _buckets)
-        {
-            int bufferSize = kvp.Key;
-            int count = kvp.Value.Count;
-            result[bufferSize] = new BucketDiagnostics(
-                bufferSize,
-                count,
-                (long)bufferSize * count * Unsafe.SizeOf<T>());
-        }
+            result[kvp.Key] = kvp.Value.GetDiagnostics();
 
         return result;
     }
@@ -388,9 +476,10 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
             var buffer = new MemoryPoolBuffer(this, array, bufferSize);
             Interlocked.Add(ref _totalAllocated, (long)bufferSize * Unsafe.SizeOf<T>());
 
-            var bucket = _buckets.GetOrAdd(bufferSize, static _ => new ConcurrentQueue<MemoryPoolBuffer>());
-            bucket.Enqueue(buffer);
-            Interlocked.Increment(ref _pooledBuffers);
+            var bucket = _buckets.GetOrAdd(bufferSize, static (size, pool) =>
+                new BufferBucket<T>(size, pool._maxBuffersPerBucket, pool._enableProfiling, false), this);
+            if (bucket.TryAdd(buffer))
+                Interlocked.Increment(ref _pooledBuffers);
         }
 
         UpdateMaxMemory(Interlocked.Read(ref _totalAllocated));
@@ -480,6 +569,23 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
 
         sizes.Sort();
         return sizes.Distinct().ToArray();
+    }
+
+    private readonly struct ThreadLocalCache
+    {
+        public readonly MemoryPoolBuffer[] Buffers;
+        public readonly int[] Sizes;
+        public readonly Thread Thread;
+        public readonly object Lock;
+
+        public ThreadLocalCache(int capacity, Thread thread)
+        {
+            Buffers = new MemoryPoolBuffer[capacity];
+            Sizes = new int[capacity];
+            Thread = thread;
+            Lock = new object();
+            Array.Fill(Sizes, -1);
+        }
     }
 
     private sealed class MemoryPoolBuffer : IMemoryOwner<T>
