@@ -263,6 +263,9 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
     /// <summary>Disposes the pool and releases all pooled buffers.</summary>
     public void Dispose()
     {
+        if (ReferenceEquals(this, Shared))
+            return;
+
         if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
             return;
 
@@ -296,7 +299,11 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
             buffer.Clear();
 
         if (Volatile.Read(ref _isDisposed) != 0)
+        {
+            Interlocked.Decrement(ref _activeBuffers);
+            Interlocked.Add(ref _totalAllocated, -(long)buffer.Length * Unsafe.SizeOf<T>());
             return;
+        }
 
         int size = buffer.Length;
 
@@ -553,10 +560,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         foreach (var bucket in _bucketArray)
         {
             if (bucket is null) continue;
-            int countBefore = bucket.Count;
-            bucket.Trim((float)pressure);
-            int countAfter = bucket.Count;
-            int removed = countBefore - countAfter;
+            int removed = bucket.Trim((float)pressure);
             removedCount += removed;
             removedBytes += (long)removed * bucket.BufferSize * Unsafe.SizeOf<T>();
         }

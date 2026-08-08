@@ -15,6 +15,9 @@ public static class VectorizedOperations
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static unsafe void ClearMemory(void* destination, int size)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(size);
+        if (size == 0) return;
+
         if (size >= 128 && Vector256.IsHardwareAccelerated && Avx2.IsSupported)
         {
             var zeroVector = Vector256<byte>.Zero;
@@ -54,6 +57,18 @@ public static class VectorizedOperations
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static unsafe void CopyMemory(void* source, void* destination, int size)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(size);
+        if (size == 0) return;
+
+        nint gap = (nint)((byte*)destination - (byte*)source);
+        bool overlaps = gap > 0 && gap < size;
+
+        if (overlaps)
+        {
+            Buffer.MemoryCopy(source, destination, size, size);
+            return;
+        }
+
         if (size >= 128 && Vector256.IsHardwareAccelerated && Avx2.IsSupported)
         {
             var src = (Vector256<byte>*)source;

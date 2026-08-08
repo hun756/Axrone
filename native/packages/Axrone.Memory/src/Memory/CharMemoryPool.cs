@@ -60,7 +60,11 @@ public sealed class CharMemoryPool : IMemoryPool<char>
     public void ResetStatistics() => _inner.ResetStatistics();
 
     /// <inheritdoc/>
-    public void Dispose() => _inner.Dispose();
+    public void Dispose()
+    {
+        if (ReferenceEquals(this, Shared)) return;
+        _inner.Dispose();
+    }
 
     /// <summary>Creates a new <see cref="CharMemoryWriter"/> backed by this pool.</summary>
     /// <param name="initialCapacity">Initial buffer capacity in chars.</param>

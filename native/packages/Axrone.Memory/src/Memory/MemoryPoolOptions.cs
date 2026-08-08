@@ -43,6 +43,7 @@ public sealed class MemoryPoolOptions<T>
     public MemoryPoolFlags Flags { get; set; } = MemoryPoolFlags.EnableThreadSafety;
 
     /// <summary>Alignment for buffer sizes (power of two). Null means no alignment. Default: null.</summary>
+    /// <remarks>Reserved for future use. Currently stored but not applied to buffer sizing.</remarks>
     public int? AllocationAlignment { get; set; }
 
     /// <summary>Chunk size for <see cref="AllocationStrategy.Chunked"/>. Default: 128.</summary>
@@ -98,6 +99,8 @@ public sealed class MemoryPoolOptions<T>
 
     public MemoryPoolOptions<T> WithClearMode(ClearMode mode)
     {
+        if (!Enum.IsDefined(mode))
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, "Invalid ClearMode value.");
         ClearMode = mode;
         return this;
     }
@@ -111,6 +114,8 @@ public sealed class MemoryPoolOptions<T>
 
     public MemoryPoolOptions<T> WithAllocationStrategy(AllocationStrategy strategy)
     {
+        if (!Enum.IsDefined(strategy))
+            throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Invalid AllocationStrategy value.");
         AllocationStrategy = strategy;
         return this;
     }

@@ -49,7 +49,7 @@ internal sealed class UnmanagedMemoryManager : MemoryManager<byte>
     {
         unsafe
         {
-            if ((uint)elementIndex > (uint)_length)
+            if ((uint)elementIndex >= (uint)_length)
                 throw new ArgumentOutOfRangeException(nameof(elementIndex));
 
             return new MemoryHandle((byte*)_pointer + elementIndex);

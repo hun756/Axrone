@@ -12,7 +12,7 @@ public sealed class UnmanagedMemoryPool : IDisposable
     private readonly ConcurrentDictionary<int, ConcurrentQueue<IntPtr>> _buffersBySize;
     private readonly ConcurrentDictionary<IntPtr, int> _bufferSizes;
     private readonly ConcurrentDictionary<int, int> _bucketCounts;
-    private readonly HashSet<int> _bucketSizes;
+    private readonly int[] _bucketSizesArray;
     private readonly int _maxBufferSize;
     private readonly int _defaultBufferSize;
     private readonly int _minBufferSize;
@@ -79,9 +79,10 @@ public sealed class UnmanagedMemoryPool : IDisposable
         _buffersBySize = new ConcurrentDictionary<int, ConcurrentQueue<IntPtr>>();
         _bufferSizes = new ConcurrentDictionary<IntPtr, int>();
         _bucketCounts = new ConcurrentDictionary<int, int>();
-        _bucketSizes = [];
 
-        GenerateBucketSizes();
+        var bucketSizesSet = new SortedSet<int>();
+        GenerateBucketSizes(bucketSizesSet);
+        _bucketSizesArray = [.. bucketSizesSet];
     }
 
     /// <summary>Gets the maximum buffer size this pool will allocate.</summary>
@@ -140,8 +141,8 @@ public sealed class UnmanagedMemoryPool : IDisposable
                 do
                 {
                     if (!_bucketCounts.TryGetValue(size, out currentCount))
-                        return true;
-                } while (currentCount > 0 && !_bucketCounts.TryUpdate(size, currentCount - 1, currentCount));
+                        break;
+                } while (!_bucketCounts.TryUpdate(size, Math.Max(0, currentCount - 1), currentCount));
                 return true;
             }
         }
@@ -186,6 +187,13 @@ public sealed class UnmanagedMemoryPool : IDisposable
             }
         } while (!_bucketCounts.TryUpdate(size, currentCount + 1, currentCount));
 
+        if (Volatile.Read(ref _isDisposed) != 0)
+        {
+            _bucketCounts.TryUpdate(size, currentCount, currentCount + 1);
+            FreeBuffer(buffer);
+            return;
+        }
+
         queue.Enqueue(buffer);
     }
 
@@ -215,15 +223,22 @@ public sealed class UnmanagedMemoryPool : IDisposable
                 if (trimCount <= 0)
                     continue;
 
+                int actualRemoved = 0;
                 for (int i = 0; i < trimCount; i++)
                 {
                     if (queue.TryDequeue(out var ptr))
+                    {
                         FreeBuffer(ptr);
+                        actualRemoved++;
+                    }
                     else
+                    {
                         break;
+                    }
                 }
 
-                _bucketCounts.TryUpdate(size, count - trimCount, count);
+                if (actualRemoved > 0)
+                    _bucketCounts.TryUpdate(size, Math.Max(0, count - actualRemoved), count);
             }
         }
     }
@@ -246,6 +261,9 @@ public sealed class UnmanagedMemoryPool : IDisposable
     /// <summary>Disposes the pool and frees all pooled native memory.</summary>
     public void Dispose()
     {
+        if (ReferenceEquals(this, Shared))
+            return;
+
         if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
             return;
 
@@ -253,7 +271,7 @@ public sealed class UnmanagedMemoryPool : IDisposable
         {
             var queue = pair.Value;
             while (queue.TryDequeue(out var ptr))
-                Marshal.FreeHGlobal(ptr);
+                FreeBuffer(ptr);
         }
 
         _buffersBySize.Clear();
@@ -273,17 +291,14 @@ public sealed class UnmanagedMemoryPool : IDisposable
         if (requestedSize <= _minBufferSize)
             return _minBufferSize;
 
-        if (_bucketSizes.Contains(requestedSize))
-            return requestedSize;
+        int index = Array.BinarySearch(_bucketSizesArray, requestedSize);
+        if (index >= 0)
+            return _bucketSizesArray[index];
 
-        return _allocationStrategy switch
-        {
-            AllocationStrategy.PowerOfTwo => GetNextPowerOfTwo(requestedSize),
-            AllocationStrategy.Fibonacci => GetNextFibonacci(requestedSize),
-            AllocationStrategy.Chunked => ((requestedSize + _chunkSize - 1) / _chunkSize) * _chunkSize,
-            AllocationStrategy.Exact => GetNextExact(requestedSize),
-            _ => GetNextPowerOfTwo(requestedSize)
-        };
+        int insertionPoint = ~index;
+        return insertionPoint < _bucketSizesArray.Length
+            ? _bucketSizesArray[insertionPoint]
+            : _bucketSizesArray[^1];
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -297,40 +312,18 @@ public sealed class UnmanagedMemoryPool : IDisposable
         return result > (uint)int.MaxValue ? int.MaxValue : (int)result;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private int GetNextFibonacci(int requestedSize)
-    {
-        foreach (var size in _bucketSizes)
-        {
-            if (size >= requestedSize)
-                return size;
-        }
-        return Math.Min(requestedSize, _maxBufferSize);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private int GetNextExact(int requestedSize)
-    {
-        foreach (var size in _bucketSizes)
-        {
-            if (size >= requestedSize)
-                return size;
-        }
-        return Math.Min(requestedSize, _maxBufferSize);
-    }
-
-    private void GenerateBucketSizes()
+    private void GenerateBucketSizes(SortedSet<int> set)
     {
         switch (_allocationStrategy)
         {
             case AllocationStrategy.PowerOfTwo:
                 for (int size = _minBufferSize; size <= _maxBufferSize; size = size > _maxBufferSize / 2 ? _maxBufferSize + 1 : size * 2)
-                    _bucketSizes.Add(size);
+                    set.Add(size);
                 break;
 
             case AllocationStrategy.Fibonacci:
                 int fa = _minBufferSize, fb = fa;
-                _bucketSizes.Add(fa);
+                set.Add(fa);
                 while (fb <= _maxBufferSize)
                 {
                     long nextLong = (long)fa + fb;
@@ -339,19 +332,19 @@ public sealed class UnmanagedMemoryPool : IDisposable
                     fa = fb;
                     fb = next;
                     if (fb > _maxBufferSize) break;
-                    _bucketSizes.Add(fb);
+                    set.Add(fb);
                 }
                 break;
 
             case AllocationStrategy.Chunked:
                 for (int size = _minBufferSize; size <= _maxBufferSize; size = size > _maxBufferSize - _chunkSize ? _maxBufferSize + 1 : size + _chunkSize)
-                    _bucketSizes.Add(size);
+                    set.Add(size);
                 break;
 
             case AllocationStrategy.Exact:
-                _bucketSizes.Add(_minBufferSize);
-                _bucketSizes.Add(_defaultBufferSize);
-                _bucketSizes.Add(_maxBufferSize);
+                set.Add(_minBufferSize);
+                set.Add(_defaultBufferSize);
+                set.Add(_maxBufferSize);
                 break;
         }
     }

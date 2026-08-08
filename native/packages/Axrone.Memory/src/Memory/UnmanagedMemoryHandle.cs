@@ -25,19 +25,28 @@ public sealed class UnmanagedMemoryHandle : IDisposable
     public int Size => _size;
 
     /// <summary>Gets the buffer contents as a <see cref="Span{T}"/> of bytes.</summary>
-    /// <returns>A span over the native memory.</returns>
+    /// <returns>A span over the native memory, or <see cref="Span{T}.Empty"/> if disposed.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public unsafe Span<byte> AsSpan() => new((void*)_pointer, _size);
+    public unsafe Span<byte> AsSpan()
+    {
+        var ptr = _pointer;
+        if (ptr == IntPtr.Zero) return Span<byte>.Empty;
+        return new((void*)ptr, _size);
+    }
 
     /// <summary>Gets the buffer contents as a <see cref="Span{T}"/> of the specified unmanaged type.</summary>
     /// <typeparam name="T">Unmanaged element type.</typeparam>
-    /// <returns>A span over the native memory reinterpreted as <typeparamref name="T"/> elements.</returns>
+    /// <returns>A span over the native memory reinterpreted as <typeparamref name="T"/> elements, or <see cref="Span{T}.Empty"/> if disposed.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public unsafe Span<T> AsSpan<T>() where T : unmanaged =>
-        new((void*)_pointer, _size / Unsafe.SizeOf<T>());
+    public unsafe Span<T> AsSpan<T>() where T : unmanaged
+    {
+        var ptr = _pointer;
+        if (ptr == IntPtr.Zero) return Span<T>.Empty;
+        return new((void*)ptr, _size / Unsafe.SizeOf<T>());
+    }
 
     /// <summary>Gets the raw native pointer as a <c>void*</c>.</summary>
-    /// <returns>The native pointer.</returns>
+    /// <returns>The native pointer, or <c>null</c> if disposed.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public unsafe void* ToPointer() => (void*)_pointer;
 
@@ -62,11 +71,11 @@ public sealed class UnmanagedMemoryHandle : IDisposable
 }
 
 /// <summary>
-/// A typed struct wrapping a native memory pointer, providing indexed access
+/// A typed class wrapping a native memory pointer, providing indexed access
 /// and span views over unmanaged memory for a specific unmanaged type.
 /// </summary>
 /// <typeparam name="T">Unmanaged element type.</typeparam>
-public readonly struct UnmanagedMemoryHandle<T> : IDisposable where T : unmanaged
+public sealed class UnmanagedMemoryHandle<T> : IDisposable where T : unmanaged
 {
     private readonly IntPtr _pointer;
     private readonly int _length;
@@ -83,7 +92,11 @@ public readonly struct UnmanagedMemoryHandle<T> : IDisposable where T : unmanage
     {
         _baseHandle = baseHandle;
         _length = length;
-        unsafe { _pointer = (IntPtr)((byte*)baseHandle.Pointer + (nint)offset * Unsafe.SizeOf<T>()); }
+        unsafe
+        {
+            nint byteOffset = checked((nint)offset * Unsafe.SizeOf<T>());
+            _pointer = (IntPtr)((byte*)baseHandle.Pointer + byteOffset);
+        }
     }
 
     /// <summary>Gets the native memory pointer.</summary>
@@ -110,7 +123,7 @@ public readonly struct UnmanagedMemoryHandle<T> : IDisposable where T : unmanage
     /// <summary>Gets a reference to the element at the specified index.</summary>
     /// <param name="index">Zero-based index.</param>
     /// <returns>A reference to the element.</returns>
-    /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is out of bounds.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is out of bounds.</exception>
     public ref T this[int index]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -137,7 +150,11 @@ public readonly struct UnmanagedMemoryHandle<T> : IDisposable where T : unmanage
         if ((uint)start > (uint)_length || (uint)length > (uint)(_length - start))
             throw new ArgumentOutOfRangeException(nameof(start));
 
-        unsafe { return new UnmanagedMemoryHandle<T>((IntPtr)((byte*)_pointer + (nint)start * Unsafe.SizeOf<T>()), length); }
+        unsafe
+        {
+            nint byteOffset = checked((nint)start * Unsafe.SizeOf<T>());
+            return new UnmanagedMemoryHandle<T>((IntPtr)((byte*)_pointer + byteOffset), length);
+        }
     }
 
     /// <summary>Copies the handle contents to the destination span.</summary>

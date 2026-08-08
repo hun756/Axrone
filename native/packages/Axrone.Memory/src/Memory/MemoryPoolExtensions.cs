@@ -9,13 +9,13 @@ public static class MemoryPoolExtensions
     /// <param name="pool">The pool to rent from.</param>
     /// <param name="exactLength">Exact number of elements required.</param>
     /// <returns>An <see cref="IMemoryOwner{T}"/> with exactly the requested length.</returns>
-    /// <exception cref="OutOfMemoryException">The pool could not satisfy the exact size request.</exception>
+    /// <exception cref="InvalidOperationException">The pool could not satisfy the exact size request.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static IMemoryOwner<T> RentExact<T>(this IMemoryPool<T> pool, int exactLength) where T : struct
     {
         ArgumentNullException.ThrowIfNull(pool);
         if (!pool.TryRentExact(exactLength, out var owner))
-            throw new OutOfMemoryException($"Pool could not rent an exact buffer of size {exactLength}.");
+            throw new InvalidOperationException($"Pool could not rent an exact buffer of size {exactLength}.");
         return owner;
     }
 

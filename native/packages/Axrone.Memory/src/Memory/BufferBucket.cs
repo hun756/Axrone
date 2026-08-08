@@ -164,12 +164,12 @@ internal sealed class BufferBucket<T> where T : struct
         return result;
     }
 
-    internal void Trim(float percentage)
+    internal int Trim(float percentage)
     {
         int currentCount = Volatile.Read(ref _count);
         int targetRemoveCount = (int)(currentCount * percentage);
         if (targetRemoveCount <= 0)
-            return;
+            return 0;
 
         int removed = 0;
 
@@ -198,6 +198,8 @@ internal sealed class BufferBucket<T> where T : struct
                 removed++;
             }
         }
+
+        return removed;
     }
 
     internal BucketDiagnostics GetDiagnostics()
