@@ -97,51 +97,57 @@ public abstract class SingletonBase<TSelf> : IDisposable where TSelf : Singleton
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static TSelf InitializeInstance()
     {
-        if (Interlocked.CompareExchange(ref _status, Initializing, Uninitialized) == Uninitialized)
+        while (true)
         {
-            TSelf newInstance;
-            try
+            if (Interlocked.CompareExchange(ref _status, Initializing, Uninitialized) == Uninitialized)
             {
-                SingletonDiagnostics.RecordCreationStart<TSelf>();
-                using (NestingContext.EnterScope())
+                TSelf newInstance;
+                try
                 {
-                    newInstance = new TSelf();
-                    newInstance.OnCreated();
-
-                    if (newInstance is ISingletonLifecycle lifecycle)
+                    SingletonDiagnostics.RecordCreationStart<TSelf>();
+                    using (NestingContext.EnterScope())
                     {
-                        lifecycle.Initialize();
-                        var asyncTask = lifecycle.InitializeAsync();
-                        if (!asyncTask.IsCompletedSuccessfully)
-                            asyncTask.AsTask().GetAwaiter().GetResult();
+                        newInstance = new TSelf();
+                        newInstance.OnCreated();
+
+                        if (newInstance is ISingletonLifecycle lifecycle)
+                        {
+                            lifecycle.Initialize();
+                            var asyncTask = lifecycle.InitializeAsync();
+                            if (!asyncTask.IsCompletedSuccessfully)
+                                asyncTask.AsTask().GetAwaiter().GetResult();
+                        }
                     }
+
+                    if (SingletonAttributeCache<TSelf>.Pinned)
+                        _pinHandle = GCHandle.Alloc(newInstance, GCHandleType.Normal);
+
+                    SingletonDiagnostics.RecordCreationEnd<TSelf>();
+                }
+                catch (Exception ex) when (ex is not SingletonCreationException)
+                {
+                    Interlocked.Exchange(ref _status, Uninitialized);
+                    throw new SingletonCreationException(
+                        $"Failed to create singleton instance of type {typeof(TSelf).Name}", typeof(TSelf), ex);
                 }
 
-                if (SingletonAttributeCache<TSelf>.Pinned)
-                    _pinHandle = GCHandle.Alloc(newInstance, GCHandleType.Normal);
-
-                SingletonDiagnostics.RecordCreationEnd<TSelf>();
+                Volatile.Write(ref _instance, newInstance);
+                SingletonRegistryInternal.Register(newInstance);
+                SingletonShutdownRegistry.Register(newInstance);
+                Volatile.Write(ref _status, Initialized);
+                return newInstance;
             }
-            catch (Exception ex) when (ex is not SingletonCreationException)
+
+            SpinWait spinner = default;
+            while (Volatile.Read(ref _status) == Initializing)
+                spinner.SpinOnce();
+
+            if (Volatile.Read(ref _status) == Initialized)
             {
-                Interlocked.Exchange(ref _status, Uninitialized);
-                throw new SingletonCreationException(
-                    $"Failed to create singleton instance of type {typeof(TSelf).Name}", typeof(TSelf), ex);
+                var result = Volatile.Read(ref _instance)!;
+                SingletonDiagnostics.RecordAccess<TSelf>();
+                return result;
             }
-
-            Volatile.Write(ref _instance, newInstance);
-            SingletonRegistryInternal.Register(newInstance);
-            SingletonShutdownRegistry.Register(newInstance);
-            Volatile.Write(ref _status, Initialized);
-            return newInstance;
         }
-
-        SpinWait spinner = default;
-        while (Volatile.Read(ref _status) != Initialized)
-            spinner.SpinOnce();
-
-        var result = Volatile.Read(ref _instance)!;
-        SingletonDiagnostics.RecordAccess<TSelf>();
-        return result;
     }
 }
