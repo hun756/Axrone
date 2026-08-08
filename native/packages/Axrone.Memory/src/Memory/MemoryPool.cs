@@ -129,6 +129,10 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryRent(int minimumLength, [NotNullWhen(true)] out IMemoryOwner<T>? memoryOwner)
     {
+        long startTimestamp = 0;
+        if (_enableProfiling)
+            startTimestamp = Stopwatch.GetTimestamp();
+
         if (Volatile.Read(ref _isDisposed) != 0)
         {
             memoryOwner = null;
@@ -156,6 +160,9 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         {
             Interlocked.Increment(ref _totalRentedBuffers);
             Interlocked.Increment(ref _activeBuffers);
+            Interlocked.Increment(ref _totalRents);
+            if (_enableProfiling)
+                Interlocked.Add(ref _totalRentTimeNs, Stopwatch.GetTimestamp() - startTimestamp);
             return true;
         }
 
@@ -177,6 +184,9 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
             Interlocked.Increment(ref _totalRentedBuffers);
             Interlocked.Increment(ref _activeBuffers);
             Interlocked.Decrement(ref _pooledBuffers);
+            Interlocked.Increment(ref _totalRents);
+            if (_enableProfiling)
+                Interlocked.Add(ref _totalRentTimeNs, Stopwatch.GetTimestamp() - startTimestamp);
 
             if (_clearMode == ClearMode.OnRent || _clearMode == ClearMode.Always)
                 buffer.Clear();
@@ -231,6 +241,9 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
 
         newBuffer.Activate();
         memoryOwner = newBuffer;
+        Interlocked.Increment(ref _totalRents);
+        if (_enableProfiling)
+            Interlocked.Add(ref _totalRentTimeNs, Stopwatch.GetTimestamp() - startTimestamp);
         return true;
     }
 
@@ -255,6 +268,10 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
 
     private void Return(MemoryPoolBuffer buffer)
     {
+        long startTimestamp = 0;
+        if (_enableProfiling)
+            startTimestamp = Stopwatch.GetTimestamp();
+
         if (Volatile.Read(ref _isDisposed) != 0)
             return;
 
@@ -263,7 +280,10 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         if ((_flags & MemoryPoolFlags.UseTlsCache) != 0 && TryReturnToTlsCache(buffer))
         {
             Interlocked.Increment(ref _totalReturnedBuffers);
+            Interlocked.Increment(ref _totalReturns);
             Interlocked.Decrement(ref _activeBuffers);
+            if (_enableProfiling)
+                Interlocked.Add(ref _totalReturnTimeNs, Stopwatch.GetTimestamp() - startTimestamp);
             return;
         }
 
@@ -276,7 +296,10 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
             Interlocked.Increment(ref _pooledBuffers);
 
         Interlocked.Increment(ref _totalReturnedBuffers);
+        Interlocked.Increment(ref _totalReturns);
         Interlocked.Decrement(ref _activeBuffers);
+        if (_enableProfiling)
+            Interlocked.Add(ref _totalReturnTimeNs, Stopwatch.GetTimestamp() - startTimestamp);
     }
 
     private bool TryRentFromTlsCache(int requestedSize, [NotNullWhen(true)] out IMemoryOwner<T>? memoryOwner)
@@ -502,6 +525,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
 
         Interlocked.Add(ref _pooledBuffers, -removedCount);
         Interlocked.Add(ref _totalAllocated, -removedBytes);
+        Interlocked.Add(ref _totalDeallocations, removedCount);
     }
 
     /// <summary>Gets a comprehensive diagnostic snapshot of the pool's internal state.</summary>
