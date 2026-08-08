@@ -138,7 +138,10 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         int requestedSize = minimumLength <= 0 ? _defaultBufferSize : minimumLength;
 
         if (_overAllocationFactor > 1.0f)
-            requestedSize = (int)(requestedSize * _overAllocationFactor);
+        {
+            long oversized = (long)(requestedSize * (double)_overAllocationFactor);
+            requestedSize = oversized > int.MaxValue ? int.MaxValue : (int)oversized;
+        }
 
         if (_allocationQuota > 0 && Interlocked.Read(ref _activeBuffers) >= _allocationQuota)
         {
@@ -200,9 +203,22 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         Interlocked.Increment(ref _totalAllocations);
         Interlocked.Add(ref _totalAllocationSize, bufferSize);
 
-        var array = (_flags & MemoryPoolFlags.PinBuffers) != 0
-            ? GC.AllocateUninitializedArray<T>(bufferSize, pinned: true)
-            : GC.AllocateUninitializedArray<T>(bufferSize);
+        T[] array;
+        try
+        {
+            array = (_flags & MemoryPoolFlags.PinBuffers) != 0
+                ? GC.AllocateUninitializedArray<T>(bufferSize, pinned: true)
+                : GC.AllocateUninitializedArray<T>(bufferSize);
+        }
+        catch
+        {
+            Interlocked.Decrement(ref _activeBuffers);
+            Interlocked.Decrement(ref _totalRentedBuffers);
+            Interlocked.Decrement(ref _totalAllocations);
+            Interlocked.Add(ref _totalAllocationSize, -bufferSize);
+            throw;
+        }
+
         var newBuffer = new MemoryPoolBuffer(this, array, bufferSize);
         long newTotal = Interlocked.Add(ref _totalAllocated, allocBytes);
         UpdateMaxMemory(newTotal);
@@ -436,8 +452,6 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
     {
         Interlocked.Exchange(ref _totalRentedBuffers, 0);
         Interlocked.Exchange(ref _totalReturnedBuffers, 0);
-        Interlocked.Exchange(ref _activeBuffers, 0);
-        Interlocked.Exchange(ref _pooledBuffers, 0);
         Interlocked.Exchange(ref _hits, 0);
         Interlocked.Exchange(ref _misses, 0);
         Interlocked.Exchange(ref _totalRentTimeNs, 0);
@@ -648,7 +662,8 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
     {
         if (value <= 0) return 1;
         if (BitOperations.IsPow2(value)) return value;
-        return (int)BitOperations.RoundUpToPowerOf2((uint)value);
+        uint result = BitOperations.RoundUpToPowerOf2((uint)value);
+        return result > (uint)int.MaxValue ? int.MaxValue : (int)result;
     }
 
     private int[] GenerateBucketSizes()
@@ -701,7 +716,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         return sizes.Distinct().ToArray();
     }
 
-    private readonly struct ThreadLocalCache
+    private sealed class ThreadLocalCache
     {
         public readonly MemoryPoolBuffer[] Buffers;
         public readonly int[] Sizes;
@@ -807,7 +822,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Activate()
         {
-            Volatile.Write(ref _referenceCount, 1);
+            Interlocked.Exchange(ref _referenceCount, 1);
             Interlocked.Exchange(ref _active, 1);
         }
 
