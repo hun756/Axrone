@@ -171,6 +171,57 @@ public sealed class MemoryPool<T> : IDisposable
         Interlocked.Exchange(ref _misses, 0);
     }
 
+    /// <summary>Removes all idle buffers from the pool, releasing them for garbage collection.</summary>
+    /// <exception cref="ObjectDisposedException">The pool has been disposed.</exception>
+    public void Trim()
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _isDisposed) != 0, this);
+
+        long removed = 0;
+        foreach (var bucket in _buckets.Values)
+        {
+            while (bucket.TryDequeue(out _))
+                removed++;
+        }
+
+        Interlocked.Add(ref _pooledBuffers, -removed);
+    }
+
+    /// <summary>Removes a fraction of idle buffers from the pool.</summary>
+    /// <param name="pressure">Fraction to remove: 0.0 removes none, 1.0 removes all.</param>
+    /// <exception cref="ObjectDisposedException">The pool has been disposed.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="pressure"/> is outside [0.0, 1.0].</exception>
+    public void Trim(double pressure)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _isDisposed) != 0, this);
+
+        if (pressure < 0.0 || pressure > 1.0)
+            MemoryPoolThrowHelper.ThrowPressureOutOfRange(pressure);
+
+        if (pressure == 0.0)
+            return;
+
+        if (pressure == 1.0)
+        {
+            Trim();
+            return;
+        }
+
+        long removed = 0;
+        foreach (var bucket in _buckets.Values)
+        {
+            int count = bucket.Count;
+            int toRemove = (int)(count * pressure);
+            for (int i = 0; i < toRemove; i++)
+            {
+                if (bucket.TryDequeue(out _))
+                    removed++;
+            }
+        }
+
+        Interlocked.Add(ref _pooledBuffers, -removed);
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int GetOptimalBufferSize(int requestedSize)
     {
@@ -387,4 +438,9 @@ internal static class MemoryPoolThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowRequestedSizeExceedsCapacity() =>
         throw new OutOfMemoryException("Requested size exceeds pool capacity.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowPressureOutOfRange(double pressure) =>
+        throw new ArgumentOutOfRangeException(nameof(pressure), pressure, "Pressure must be between 0.0 and 1.0.");
 }
