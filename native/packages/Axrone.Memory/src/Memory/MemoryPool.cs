@@ -818,7 +818,11 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         internal void Clear() => Array.Clear(_array, 0, _length);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void Activate() => Interlocked.Exchange(ref _active, 1);
+        internal void Activate()
+        {
+            Volatile.Write(ref _referenceCount, 1);
+            Interlocked.Exchange(ref _active, 1);
+        }
 
         public IMemoryOwner<T> Slice(int start, int length)
         {
