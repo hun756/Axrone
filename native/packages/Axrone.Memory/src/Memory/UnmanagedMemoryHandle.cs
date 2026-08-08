@@ -25,30 +25,38 @@ public sealed class UnmanagedMemoryHandle : IDisposable
     public int Size => _size;
 
     /// <summary>Gets the buffer contents as a <see cref="Span{T}"/> of bytes.</summary>
-    /// <returns>A span over the native memory, or <see cref="Span{T}.Empty"/> if disposed.</returns>
+    /// <returns>A span over the native memory.</returns>
+    /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public unsafe Span<byte> AsSpan()
     {
         var ptr = _pointer;
-        if (ptr == IntPtr.Zero) return Span<byte>.Empty;
+        ObjectDisposedException.ThrowIf(ptr == IntPtr.Zero, this);
         return new((void*)ptr, _size);
     }
 
     /// <summary>Gets the buffer contents as a <see cref="Span{T}"/> of the specified unmanaged type.</summary>
     /// <typeparam name="T">Unmanaged element type.</typeparam>
-    /// <returns>A span over the native memory reinterpreted as <typeparamref name="T"/> elements, or <see cref="Span{T}.Empty"/> if disposed.</returns>
+    /// <returns>A span over the native memory reinterpreted as <typeparamref name="T"/> elements.</returns>
+    /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public unsafe Span<T> AsSpan<T>() where T : unmanaged
     {
         var ptr = _pointer;
-        if (ptr == IntPtr.Zero) return Span<T>.Empty;
+        ObjectDisposedException.ThrowIf(ptr == IntPtr.Zero, this);
         return new((void*)ptr, _size / Unsafe.SizeOf<T>());
     }
 
     /// <summary>Gets the raw native pointer as a <c>void*</c>.</summary>
-    /// <returns>The native pointer, or <c>null</c> if disposed.</returns>
+    /// <returns>The native pointer.</returns>
+    /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public unsafe void* ToPointer() => (void*)_pointer;
+    public unsafe void* ToPointer()
+    {
+        var ptr = _pointer;
+        ObjectDisposedException.ThrowIf(ptr == IntPtr.Zero, this);
+        return (void*)ptr;
+    }
 
     /// <summary>Creates a typed <see cref="UnmanagedMemoryHandle{T}"/> over this buffer.</summary>
     /// <typeparam name="T">Unmanaged element type.</typeparam>
