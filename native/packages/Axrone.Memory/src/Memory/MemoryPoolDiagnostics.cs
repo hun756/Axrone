@@ -5,6 +5,9 @@ namespace Axrone.Memory;
 /// </summary>
 public readonly record struct MemoryPoolDiagnostics
 {
+    /// <summary>Per-bucket diagnostic information keyed by buffer size.</summary>
+    public Dictionary<int, BucketDiagnostics> BucketInfo { get; }
+
     /// <summary>Total bytes currently managed by the pool (active + pooled).</summary>
     public long TotalMemory { get; }
 
@@ -14,28 +17,45 @@ public readonly record struct MemoryPoolDiagnostics
     /// <summary>Bytes allocated but wasted due to size-class rounding.</summary>
     public long WastedMemory { get; }
 
-    /// <summary>Number of active bucket size classes.</summary>
-    public int BucketCount { get; }
+    /// <summary>Time elapsed since the pool was created.</summary>
+    public TimeSpan Runtime { get; }
 
-    /// <summary>Currently active (rented but not returned) buffers.</summary>
-    public long ActiveBuffers { get; }
+    /// <summary>Largest single allocation request size in elements.</summary>
+    public int LargestAllocation { get; }
 
-    /// <summary>Buffers currently sitting idle in pool buckets.</summary>
-    public long PooledBuffers { get; }
+    /// <summary>Smallest single allocation request size in elements.</summary>
+    public int SmallestAllocation { get; }
+
+    /// <summary>Most frequently requested allocation size in elements.</summary>
+    public int MostFrequentAllocation { get; }
+
+    /// <summary>Average allocation request size in elements.</summary>
+    public float AverageAllocationSize { get; }
+
+    /// <summary>Statistical variance of allocation request sizes.</summary>
+    public float AllocationVariance { get; }
 
     internal MemoryPoolDiagnostics(
+        Dictionary<int, BucketDiagnostics> bucketInfo,
         long totalMemory,
         long maxMemory,
         long wastedMemory,
-        int bucketCount,
-        long activeBuffers,
-        long pooledBuffers)
+        TimeSpan runtime,
+        int largestAllocation,
+        int smallestAllocation,
+        int mostFrequentAllocation,
+        float averageAllocationSize,
+        float allocationVariance)
     {
+        BucketInfo = bucketInfo;
         TotalMemory = totalMemory;
         MaxMemory = maxMemory;
         WastedMemory = wastedMemory;
-        BucketCount = bucketCount;
-        ActiveBuffers = activeBuffers;
-        PooledBuffers = pooledBuffers;
+        Runtime = runtime;
+        LargestAllocation = largestAllocation;
+        SmallestAllocation = smallestAllocation;
+        MostFrequentAllocation = mostFrequentAllocation;
+        AverageAllocationSize = averageAllocationSize;
+        AllocationVariance = allocationVariance;
     }
 }
