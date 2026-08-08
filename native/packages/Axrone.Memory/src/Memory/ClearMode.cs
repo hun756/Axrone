@@ -3,7 +3,7 @@ namespace Axrone.Memory;
 /// <summary>
 /// Controls when pooled buffers are zeroed.
 /// </summary>
-public enum ClearMode
+public enum ClearMode : byte
 {
     /// <summary>Buffers are never cleared. Retained data visible on next rent.</summary>
     Never = 0,
