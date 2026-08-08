@@ -6,6 +6,9 @@ namespace Axrone.Memory;
 /// <typeparam name="T">Element type of the pooled buffers.</typeparam>
 public sealed class MemoryPool<T> : IMemoryPool<T>
 {
+    /// <summary>Shared singleton pool with default options.</summary>
+    public static readonly MemoryPool<T> Shared = new();
+
     private readonly int[] _bucketSizes;
     private readonly int _defaultBufferSize;
     private readonly int _maxBufferSize;
@@ -15,6 +18,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
     private readonly AllocationStrategy _strategy;
     private readonly int _chunkSize;
     private readonly ConcurrentDictionary<int, ConcurrentQueue<MemoryPoolBuffer>> _buckets;
+    private readonly Stopwatch _runtime = Stopwatch.StartNew();
     private int _isDisposed;
 
     private long _totalRentedBuffers;
@@ -24,6 +28,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
     private long _hits;
     private long _misses;
     private long _totalAllocated;
+    private long _maxMemory;
 
     /// <summary>Creates a pool with default options.</summary>
     public MemoryPool() : this(new MemoryPoolOptions<T>()) { }
@@ -43,7 +48,12 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         _strategy = options.AllocationStrategy;
         _chunkSize = Math.Max(16, options.ChunkSize);
         _buckets = new ConcurrentDictionary<int, ConcurrentQueue<MemoryPoolBuffer>>();
-        _bucketSizes = GenerateBucketSizes();
+        _bucketSizes = options.CustomBucketSizes.Count > 0
+            ? options.CustomBucketSizes.Order().Distinct().ToArray()
+            : GenerateBucketSizes();
+
+        if (options.PreallocationCount > 0)
+            Preallocate(options.PreallocationCount);
     }
 
     /// <summary>Gets the maximum buffer size this pool will allocate.</summary>
@@ -114,7 +124,8 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
 
         var array = GC.AllocateUninitializedArray<T>(bufferSize);
         var newBuffer = new MemoryPoolBuffer(this, array, bufferSize);
-        Interlocked.Add(ref _totalAllocated, (long)bufferSize * Unsafe.SizeOf<T>());
+        long newTotal = Interlocked.Add(ref _totalAllocated, (long)bufferSize * Unsafe.SizeOf<T>());
+        UpdateMaxMemory(newTotal);
 
         if (_clearMode == ClearMode.OnRent || _clearMode == ClearMode.Always)
             newBuffer.Clear();
@@ -242,13 +253,21 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
     /// <returns>A <see cref="MemoryPoolMetrics"/> snapshot with current counter values.</returns>
     public MemoryPoolMetrics GetMetrics()
     {
+        long hits = Interlocked.Read(ref _hits);
+        long misses = Interlocked.Read(ref _misses);
+        long total = hits + misses;
+
         return new MemoryPoolMetrics(
             Interlocked.Read(ref _totalRentedBuffers),
             Interlocked.Read(ref _totalReturnedBuffers),
             Interlocked.Read(ref _activeBuffers),
             Interlocked.Read(ref _pooledBuffers),
-            Interlocked.Read(ref _hits),
-            Interlocked.Read(ref _misses));
+            hits,
+            misses,
+            Interlocked.Read(ref _totalAllocated),
+            _buckets.Count,
+            total > 0 ? (float)hits / total : 0f,
+            _runtime.Elapsed);
     }
 
     /// <summary>Resets all statistics counters to zero.</summary>
@@ -309,6 +328,84 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
 
         Interlocked.Add(ref _pooledBuffers, -removed);
         Interlocked.Add(ref _totalAllocated, -removedBytes);
+    }
+
+    /// <summary>Gets a comprehensive diagnostic snapshot of the pool's internal state.</summary>
+    /// <returns>A <see cref="MemoryPoolDiagnostics"/> snapshot.</returns>
+    public MemoryPoolDiagnostics GetDiagnostics()
+    {
+        long totalMemory = Interlocked.Read(ref _totalAllocated);
+        long maxMemory = Interlocked.Read(ref _maxMemory);
+        long activeBuffers = Interlocked.Read(ref _activeBuffers);
+        long pooledBuffers = Interlocked.Read(ref _pooledBuffers);
+
+        long wastedMemory = 0;
+        foreach (var bucket in _buckets.Values)
+        {
+            int count = bucket.Count;
+            if (count > 0)
+            {
+                foreach (var _ in bucket)
+                    wastedMemory += Unsafe.SizeOf<T>();
+            }
+        }
+
+        return new MemoryPoolDiagnostics(
+            totalMemory,
+            maxMemory,
+            Math.Max(0, wastedMemory),
+            _buckets.Count,
+            activeBuffers,
+            pooledBuffers);
+    }
+
+    /// <summary>Gets per-bucket diagnostic information.</summary>
+    /// <returns>A collection of <see cref="BucketDiagnostics"/> keyed by buffer size.</returns>
+    public IReadOnlyDictionary<int, BucketDiagnostics> GetBucketDiagnostics()
+    {
+        var result = new Dictionary<int, BucketDiagnostics>(_buckets.Count);
+
+        foreach (var kvp in _buckets)
+        {
+            int bufferSize = kvp.Key;
+            int count = kvp.Value.Count;
+            result[bufferSize] = new BucketDiagnostics(
+                bufferSize,
+                count,
+                (long)bufferSize * count * Unsafe.SizeOf<T>());
+        }
+
+        return result;
+    }
+
+    private void Preallocate(int count)
+    {
+        int bufferSize = _minBufferSize;
+
+        for (int i = 0; i < count; i++)
+        {
+            var array = GC.AllocateUninitializedArray<T>(bufferSize);
+            var buffer = new MemoryPoolBuffer(this, array, bufferSize);
+            Interlocked.Add(ref _totalAllocated, (long)bufferSize * Unsafe.SizeOf<T>());
+
+            var bucket = _buckets.GetOrAdd(bufferSize, static _ => new ConcurrentQueue<MemoryPoolBuffer>());
+            bucket.Enqueue(buffer);
+            Interlocked.Increment(ref _pooledBuffers);
+        }
+
+        UpdateMaxMemory(Interlocked.Read(ref _totalAllocated));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void UpdateMaxMemory(long currentTotal)
+    {
+        long currentMax;
+        do
+        {
+            currentMax = Volatile.Read(ref _maxMemory);
+            if (currentTotal <= currentMax)
+                return;
+        } while (Interlocked.CompareExchange(ref _maxMemory, currentTotal, currentMax) != currentMax);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

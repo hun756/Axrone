@@ -36,6 +36,8 @@
     <NoWarn>$(NoWarn);CA1711</NoWarn>
     <!-- CA2000: Dispose objects before losing scope — false positive on buffer dequeue for size tracking -->
     <NoWarn>$(NoWarn);CA2000</NoWarn>
+    <!-- CA2227: Collection property should be read-only — intentional mutable list for builder pattern -->
+    <NoWarn>$(NoWarn);CA2227</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
