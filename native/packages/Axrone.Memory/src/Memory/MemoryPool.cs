@@ -25,7 +25,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
     private readonly int _memoryGuardPadding;
     private readonly ConcurrentDictionary<int, BufferBucket<T>> _buckets;
     private readonly ConcurrentDictionary<int, long>? _allocationFrequency;
-    private readonly ConcurrentDictionary<Thread, ThreadLocalCache>? _threadLocalCaches;
+    private readonly ConditionalWeakTable<Thread, ThreadLocalCache>? _threadLocalCaches;
     private readonly int _tlsCacheSize;
     private readonly Stopwatch _runtime = Stopwatch.StartNew();
     private readonly Timer? _trimTimer;
@@ -80,7 +80,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
 
         _tlsCacheSize = options.TlsCacheSize;
         if ((_flags & MemoryPoolFlags.UseTlsCache) != 0 && _tlsCacheSize > 0)
-            _threadLocalCaches = new ConcurrentDictionary<Thread, ThreadLocalCache>();
+            _threadLocalCaches = new ConditionalWeakTable<Thread, ThreadLocalCache>();
 
         if ((_flags & (MemoryPoolFlags.EnableStatistics | MemoryPoolFlags.EnableProfiling)) != 0)
             _allocationFrequency = new ConcurrentDictionary<int, long>();
@@ -317,8 +317,8 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
 
         var currentThread = Thread.CurrentThread;
 
-        var cache = _threadLocalCaches.GetOrAdd(currentThread, static (t, pool) =>
-            new ThreadLocalCache(pool._tlsCacheSize, t), this);
+        var cache = _threadLocalCaches!.GetValue(currentThread, t =>
+            new ThreadLocalCache(_tlsCacheSize, t));
 
         lock (cache.Lock)
         {
@@ -349,7 +349,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
 
         var currentThread = Thread.CurrentThread;
 
-        if (!_threadLocalCaches.TryGetValue(currentThread, out var cache))
+        if (!_threadLocalCaches!.TryGetValue(currentThread, out var cache))
             return false;
 
         lock (cache.Lock)

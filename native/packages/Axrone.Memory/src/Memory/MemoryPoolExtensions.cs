@@ -11,7 +11,7 @@ public static class MemoryPoolExtensions
     /// <returns>An <see cref="IMemoryOwner{T}"/> with exactly the requested length.</returns>
     /// <exception cref="OutOfMemoryException">The pool could not satisfy the exact size request.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static IMemoryOwner<T> RentExact<T>(this IMemoryPool<T> pool, int exactLength)
+    public static IMemoryOwner<T> RentExact<T>(this IMemoryPool<T> pool, int exactLength) where T : struct
     {
         ArgumentNullException.ThrowIfNull(pool);
         if (!pool.TryRentExact(exactLength, out var owner))
