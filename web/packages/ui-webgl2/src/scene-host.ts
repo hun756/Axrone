@@ -1,5 +1,6 @@
 import type { UIAsset, WidgetId } from '@axrone/ui/types';
 import { UIRuntime, deserializeUIAsset } from '@axrone/ui/runtime';
+import { resolveCanvasScale, mapViewportPointToCanvas } from '@axrone/ui/layout';
 import { buttonFeedbackController, sliderController } from '@axrone/ui/controls';
 import { UIHost, setSceneUIWidgetRefResolver } from '@axrone/scene-runtime/scene-facade';
 // Re-export UIHost so the module namespace (imported via __AXRONE_RUNTIME__.modules)
@@ -225,27 +226,52 @@ const resolveFramebufferSize = (scene: SceneUIOverlayTarget): { width: number; h
 const connectUIHostInput = <TPayload>(
     runtime: UIRuntime<TPayload>,
     scene: SceneUIOverlayTarget,
-    input: UIHostInputOptions
+    input: UIHostInputOptions,
+    getViewportSize?: () => { width: number; height: number }
 ): (() => void) => {
     const target = input.target;
 
-    const toFramebufferPoint = (event: UIHostPointerEventLike): { x: number; y: number } => {
+    // Convert client (CSS) coordinates to reference-space coordinates for the
+    // UI runtime's hit-test. When a canvas config is loaded (match-width-or-height
+    // etc.), we must undo the same scale+offset transform the renderer applies so
+    // that pointer positions align with visually placed widgets regardless of
+    // letterboxing/pillarboxing.
+    //
+    // We call dispatchInput() directly with reference-space coords rather than
+    // dispatchViewportInput() to avoid depending on lastViewport being set by a
+    // prior commitToViewport() call — eliminating a rendering→input ordering
+    // coupling that caused input to silently fall through with framebuffer-
+    // space coordinates hit-tested against reference-space layout boxes.
+    //
+    // getViewportSize (optional): overrides the default framebuffer-based
+    // viewport dimensions. World-space hosts pass the offscreen surface size
+    // because they render via commitToViewport(surface.width, surface.height)
+    // rather than the main canvas framebuffer.
+    const toReferencePoint = (event: UIHostPointerEventLike): { x: number; y: number } => {
         const rect = target.getBoundingClientRect();
-        const framebuffer = resolveFramebufferSize(scene);
-        const scaleX = rect.width > 0 ? framebuffer.width / rect.width : 1;
-        const scaleY = rect.height > 0 ? framebuffer.height / rect.height : 1;
-        return {
-            x: (event.clientX - rect.left) * scaleX,
-            y: (event.clientY - rect.top) * scaleY,
-        };
+        const viewport = getViewportSize
+            ? getViewportSize()
+            : resolveFramebufferSize(scene);
+        const cssToVpScaleX = rect.width > 0 ? viewport.width / rect.width : 1;
+        const cssToVpScaleY = rect.height > 0 ? viewport.height / rect.height : 1;
+        const vpX = (event.clientX - rect.left) * cssToVpScaleX;
+        const vpY = (event.clientY - rect.top) * cssToVpScaleY;
+
+        const canvasConfig = runtime.getCanvasConfig();
+        if (!canvasConfig) {
+            return { x: vpX, y: vpY };
+        }
+
+        const scaleResult = resolveCanvasScale(canvasConfig, viewport.width, viewport.height);
+        return mapViewportPointToCanvas(scaleResult, vpX, vpY);
     };
 
     const dispatchPointer = (
         phase: 'move' | 'down' | 'up' | 'leave' | 'wheel',
         event: UIHostPointerEventLike
     ): void => {
-        const point = toFramebufferPoint(event);
-        runtime.dispatchViewportInput({
+        const point = toReferencePoint(event);
+        runtime.dispatchInput({
             type: 'pointer',
             phase,
             x: point.x,
@@ -269,7 +295,7 @@ const connectUIHostInput = <TPayload>(
     const onWheel = (event: UIHostPointerEventLike): void => dispatchPointer('wheel', event);
 
     const dispatchKey = (phase: 'down' | 'up', event: UIHostKeyEventLike): void => {
-        runtime.dispatchViewportInput({
+        runtime.dispatchInput({
             type: 'key',
             phase,
             key: event.key,
@@ -285,7 +311,7 @@ const connectUIHostInput = <TPayload>(
     const onKeyDown = (event: UIHostKeyEventLike): void => dispatchKey('down', event);
     const onKeyUp = (event: UIHostKeyEventLike): void => dispatchKey('up', event);
     const onBlur = (): void => {
-        runtime.dispatchViewportInput({ type: 'focus', focused: false });
+        runtime.dispatchInput({ type: 'focus', focused: false });
     };
 
     target.addEventListener('pointerdown', onPointerDown);
@@ -520,7 +546,7 @@ export function bindUIHostToWorld<TPayload = unknown>(
 
     const disconnectInput =
         host.receiveInput && options.input
-            ? connectUIHostInput(runtime, scene, options.input)
+            ? connectUIHostInput(runtime, scene, options.input, () => resolveWorldSurfaceSize(host))
             : null;
 
     let disposed = false;

@@ -9,8 +9,11 @@ export {
     normalizeCorners,
     normalizeEdges,
     resolveLength,
+    resolveCanvasScale,
+    canvasScaleToTransform,
+    mapViewportPointToCanvas,
 } from './layout';
-export type { LayoutTreeAdapter } from './layout';
+export type { LayoutTreeAdapter, CanvasScaleResult } from './layout';
 export * from './render';
 export {
     AXRONE_DEFAULT_UI_FONT_FAMILY,
