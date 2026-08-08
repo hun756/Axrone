@@ -58,4 +58,12 @@ public class SingletonBaseTests
         _ = CrtpWithOnCreated.Instance;
         CrtpWithOnCreated.IsInitialized.Should().BeTrue();
     }
+
+    [Fact]
+    public void Pinned_Instance_CreatedSuccessfully()
+    {
+        var instance = PinnedCrtpService.Instance;
+        instance.Should().NotBeNull();
+        PinnedCrtpService.IsInitialized.Should().BeTrue();
+    }
 }

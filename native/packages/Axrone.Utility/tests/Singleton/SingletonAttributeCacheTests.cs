@@ -76,4 +76,22 @@ public class SingletonAttributeCacheTests
         lifetime1.Should().Be(lifetime2);
         monitored1.Should().Be(monitored2);
     }
+
+    [Fact]
+    public void IsEager_TrueForSingletonWithLifecycle()
+    {
+        SingletonAttributeCache<EagerLifecycleService>.IsEager.Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsEager_FalseForTypeWithoutAttribute()
+    {
+        SingletonAttributeCache<SimpleService>.IsEager.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsEager_FalseForTypeWithoutLifecycle()
+    {
+        SingletonAttributeCache<PreRegisterService>.IsEager.Should().BeFalse();
+    }
 }

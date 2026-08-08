@@ -88,4 +88,20 @@ public class SingletonProviderTests
 
         SingletonProvider<ThrowingService>.IsInitialized.Should().BeFalse();
     }
+
+    [Fact]
+    public void TryRegister_PublishesInstance_TryGetReturnsIt()
+    {
+        var expected = new PreRegisterService();
+        SingletonProvider<PreRegisterService>.TryRegister(expected).Should().BeTrue();
+        SingletonProvider<PreRegisterService>.TryGet(out var actual).Should().BeTrue();
+        actual.Should().BeSameAs(expected);
+    }
+
+    [Fact]
+    public void TryRegister_Fails_WhenAlreadyInitialized()
+    {
+        _ = SingletonFacade.GetInstance<SimpleService>();
+        SingletonProvider<SimpleService>.TryRegister(new SimpleService()).Should().BeFalse();
+    }
 }

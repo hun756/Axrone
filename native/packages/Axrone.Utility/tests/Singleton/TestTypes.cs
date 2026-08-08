@@ -98,3 +98,34 @@ public sealed class UniqueInitializableService : ISingletonLifecycle
     public bool WasInitialized { get; private set; }
     public void Initialize() => WasInitialized = true;
 }
+
+[Singleton(SingletonLifetime.Singleton)]
+public sealed class PreRegisterService
+{
+    public int Id { get; } = Interlocked.Increment(ref _nextId);
+    private static int _nextId;
+}
+
+[Singleton(SingletonLifetime.Singleton)]
+public sealed class EagerLifecycleService : ISingletonLifecycle
+{
+    public bool WasInitialized { get; private set; }
+    public void Initialize() => WasInitialized = true;
+}
+
+[Singleton(SingletonLifetime.Singleton, Pinned = true)]
+public sealed class PinnedCrtpService : SingletonBase<PinnedCrtpService>
+{
+}
+
+public sealed class AsyncLifecycleService : ISingletonLifecycle
+{
+    public bool InitializeCalled { get; private set; }
+    public bool InitializeAsyncCalled { get; private set; }
+    public void Initialize() => InitializeCalled = true;
+    public ValueTask InitializeAsync()
+    {
+        InitializeAsyncCalled = true;
+        return default;
+    }
+}

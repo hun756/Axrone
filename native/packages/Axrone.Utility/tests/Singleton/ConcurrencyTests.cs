@@ -163,4 +163,37 @@ public class ConcurrencyTests
         var uniqueIds = instances.Select(i => i.Id).Distinct().ToArray();
         uniqueIds.Length.Should().Be(threadCount);
     }
+
+    [Fact]
+    public void Scope_ConcurrentTypedResolve_AllThreadsGetSameInstance()
+    {
+        using var scope = new SingletonScope("concurrent-typed");
+        scope.Register<SimpleService>(() => new SimpleService());
+
+        const int threadCount = 16;
+        var instances = new SimpleService[threadCount];
+        var barrier = new ManualResetEventSlim(false);
+        var threads = new Thread[threadCount];
+
+        using (scope.Activate())
+        {
+            for (var i = 0; i < threadCount; i++)
+            {
+                var idx = i;
+                threads[i] = new Thread(() =>
+                {
+                    barrier.Wait();
+                    instances[idx] = SingletonScope.Resolve<SimpleService>();
+                });
+                threads[i].Start();
+            }
+
+            barrier.Set();
+            foreach (var t in threads) t.Join();
+        }
+
+        var first = instances[0];
+        foreach (var instance in instances)
+            instance.Should().BeSameAs(first);
+    }
 }

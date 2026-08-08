@@ -100,4 +100,16 @@ public class AsyncSingletonTests
         var act = () => new AsyncSingleton<SimpleService>(null!);
         act.Should().Throw<ArgumentNullException>();
     }
+
+    [Fact]
+    public async Task GetInstanceAsync_DispatchesLifecycleHooks()
+    {
+        var singleton = new AsyncSingleton<AsyncLifecycleService>(
+            ct => new ValueTask<AsyncLifecycleService>(new AsyncLifecycleService()));
+
+        var instance = await singleton.GetInstanceAsync();
+
+        instance.InitializeCalled.Should().BeTrue();
+        instance.InitializeAsyncCalled.Should().BeTrue();
+    }
 }
