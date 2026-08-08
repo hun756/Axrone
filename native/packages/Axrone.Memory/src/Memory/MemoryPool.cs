@@ -866,7 +866,11 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
             get => Volatile.Read(ref _referenceCount);
         }
 
-        public int Length => _length;
+        public int Length
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => _length;
+        }
 
         public MemoryHandle Pin(int elementIndex = 0)
         {
