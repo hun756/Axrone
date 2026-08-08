@@ -101,13 +101,15 @@ public sealed class DiagnosticsTests
         pool.ResetStatistics();
         var metrics = pool.GetMetrics();
 
-        // Assert
+        // Assert — throughput counters are reset
         metrics.TotalRentedBuffers.Should().Be(0);
         metrics.TotalReturnedBuffers.Should().Be(0);
-        metrics.ActiveBuffers.Should().Be(0);
-        metrics.PooledBuffers.Should().Be(0);
         metrics.Hits.Should().Be(0);
         metrics.Misses.Should().Be(0);
+
+        // State counters are preserved (not reset) to prevent negative counter corruption
+        metrics.ActiveBuffers.Should().Be(0); // No active buffers after Dispose
+        metrics.PooledBuffers.Should().Be(1); // Buffer returned to pool, preserved by ResetStatistics
     }
 
     [Fact]
