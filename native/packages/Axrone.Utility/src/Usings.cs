@@ -14,10 +14,6 @@ global using Axrone.Utility.Clone;
 // Base64
 global using Axrone.Utility.Base64;
 
-// Singleton
-global using Axrone.Utility.Singleton;
-global using Axrone.Utility.Singleton.Internal;
-
 // Runtime
 global using System.Runtime.CompilerServices;
 global using System.Runtime.InteropServices;

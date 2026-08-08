@@ -16,6 +16,20 @@
   <PropertyGroup Label="SuppressedRules">
     <!-- CA1724: Type name conflicts with namespace — intentional module naming -->
     <NoWarn>$(NoWarn);CA1724</NoWarn>
+    <!-- CA1000: Static members on generic types — intentional for Singleton/KeyedSingleton API -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1031: Catching general exceptions — intentional for shutdown teardown -->
+    <NoWarn>$(NoWarn);CA1031</NoWarn>
+    <!-- CA1002: Don't use List&lt;T&gt; — too strict for engine utility library -->
+    <NoWarn>$(NoWarn);CA1002</NoWarn>
+    <!-- CA1024: Use properties — GetInstance() methods are intentional API design -->
+    <NoWarn>$(NoWarn);CA1024</NoWarn>
+    <!-- CA1034: Nested types — RAII scope structs are intentional design -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1508: Dead code — false positive on lock-protected static fields -->
+    <NoWarn>$(NoWarn);CA1508</NoWarn>
+    <!-- CA1815: Struct Equals/GetHashCode — lightweight tracker structs -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
