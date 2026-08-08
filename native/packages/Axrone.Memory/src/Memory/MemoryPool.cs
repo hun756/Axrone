@@ -187,14 +187,17 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         }
 
         long allocBytes = (long)bufferSize * Unsafe.SizeOf<T>();
-        if (_maxTotalMemory < long.MaxValue)
         {
-            long currentTotal = Volatile.Read(ref _totalAllocated);
-            if (currentTotal + allocBytes > _maxTotalMemory)
+            long currentTotal;
+            do
             {
-                memoryOwner = null;
-                return false;
-            }
+                currentTotal = Volatile.Read(ref _totalAllocated);
+                if (_maxTotalMemory < long.MaxValue && currentTotal + allocBytes > _maxTotalMemory)
+                {
+                    memoryOwner = null;
+                    return false;
+                }
+            } while (Interlocked.CompareExchange(ref _totalAllocated, currentTotal + allocBytes, currentTotal) != currentTotal);
         }
 
         Interlocked.Increment(ref _misses);
@@ -216,12 +219,12 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
             Interlocked.Decrement(ref _totalRentedBuffers);
             Interlocked.Decrement(ref _totalAllocations);
             Interlocked.Add(ref _totalAllocationSize, -bufferSize);
+            Interlocked.Add(ref _totalAllocated, -allocBytes);
             throw;
         }
 
         var newBuffer = new MemoryPoolBuffer(this, array, bufferSize);
-        long newTotal = Interlocked.Add(ref _totalAllocated, allocBytes);
-        UpdateMaxMemory(newTotal);
+        UpdateMaxMemory(Interlocked.Read(ref _totalAllocated));
 
         if ((_flags & MemoryPoolFlags.ZeroMemory) != 0 || _clearMode == ClearMode.OnRent || _clearMode == ClearMode.Always)
             newBuffer.Clear();
