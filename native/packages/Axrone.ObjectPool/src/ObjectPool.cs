@@ -134,6 +134,14 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     private readonly ShardedBucket[] _shards;
     private readonly ConcurrentDictionary<Guid, PoolObjectInfo<T>> _objectInfo;
     private readonly ConcurrentDictionary<int, byte> _activePoolables;
+    private readonly ConditionalWeakTable<T, RentTrackingInfo> _rentReverseLookup;
+
+    private sealed class RentTrackingInfo
+    {
+        public long RentId;
+        public DateTime RentTime;
+        public Guid InstanceId;
+    }
 
     private PoolConfiguration _configuration;
     private int _count;
@@ -174,6 +182,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         _isDisposed = false;
         _objectInfo = new ConcurrentDictionary<Guid, PoolObjectInfo<T>>();
         _activePoolables = new ConcurrentDictionary<int, byte>();
+        _rentReverseLookup = new ConditionalWeakTable<T, RentTrackingInfo>();
 
         int shardCount = concurrency * 2;
         _shards = new ShardedBucket[shardCount];
@@ -523,15 +532,12 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         if (_configuration.TrackLeaks)
         {
-            foreach (var kvp in _rentTracking)
+            if (_rentReverseLookup.TryGetValue(item, out var trackingInfo))
             {
-                if (ReferenceEquals(kvp.Value.Instance, item))
-                {
-                    instanceId = kvp.Value.InstanceId;
-                    rentDuration = now - kvp.Value.RentTime;
-                    _rentTracking.TryRemove(kvp.Key, out _);
-                    break;
-                }
+                instanceId = trackingInfo.InstanceId;
+                rentDuration = now - trackingInfo.RentTime;
+                _rentTracking.TryRemove(trackingInfo.RentId, out _);
+                _rentReverseLookup.Remove(item);
             }
         }
 
@@ -821,6 +827,12 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             long rentId = Interlocked.Increment(ref _lastRentId);
             _rentTracking[rentId] = new RentOperation(
                 instance, now, rentId, Environment.CurrentManagedThreadId, id);
+            _rentReverseLookup.AddOrUpdate(instance, new RentTrackingInfo
+            {
+                RentId = rentId,
+                RentTime = now,
+                InstanceId = id,
+            });
         }
     }
 
