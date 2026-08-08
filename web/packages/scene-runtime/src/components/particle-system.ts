@@ -215,6 +215,7 @@ export interface ParticleRenderData {
     readonly sizes: Float32Array;
     readonly alphas: Float32Array;
     readonly seeds: Float32Array;
+    readonly rotations: Float32Array;
     readonly count: number;
     readonly aliveCount: number;
 }
@@ -355,6 +356,7 @@ export class ParticleSystem extends Component {
     private readonly _lifetimes: Float32Array;
     private readonly _seeds: Float32Array;
     private readonly _sizeMultipliers: Float32Array;
+    private readonly _rotations: Float32Array;
 
     /* Render output buffers. */
     private readonly _renderColors: Float32Array;
@@ -476,6 +478,7 @@ export class ParticleSystem extends Component {
         this._lifetimes = new Float32Array(MAX_PARTICLES_HARD_LIMIT).fill(1);
         this._seeds = new Float32Array(MAX_PARTICLES_HARD_LIMIT);
         this._sizeMultipliers = new Float32Array(MAX_PARTICLES_HARD_LIMIT);
+        this._rotations = new Float32Array(MAX_PARTICLES_HARD_LIMIT);
         this._renderColors = new Float32Array(MAX_PARTICLES_HARD_LIMIT * 3);
         this._renderSizes = new Float32Array(MAX_PARTICLES_HARD_LIMIT);
         this._renderAlphas = new Float32Array(MAX_PARTICLES_HARD_LIMIT);
@@ -979,6 +982,7 @@ export class ParticleSystem extends Component {
             sizes: this._renderSizes,
             alphas: this._renderAlphas,
             seeds: this._seeds,
+            rotations: this._rotations,
             count: this._maxParticles,
             aliveCount: this._aliveCount,
         };
@@ -1198,6 +1202,7 @@ export class ParticleSystem extends Component {
         this._lifetimes[index] = Math.max(0.15, this._startLifetime * (1 + (random() - 0.5) * 0.8));
         this._seeds[index] = random() * 10;
         this._sizeMultipliers[index] = 0.75 + random() * 0.5;
+        this._rotations[index] = this._startRotation * DEG_TO_RAD + (random() - 0.5) * 0.5;
     }
 
     private _integrate(dt: number): void {
@@ -1304,6 +1309,11 @@ export class ParticleSystem extends Component {
                 if (this._collisionLifetimeLoss > 0) {
                     this._ages[i]! += this._lifetimes[i]! * this._collisionLifetimeLoss;
                 }
+            }
+
+            /* Rotation over lifetime. */
+            if (this._rotationOverLifetimeEnabled) {
+                this._rotations[i] += this._angularVelocity * dt;
             }
 
             /* Color over lifetime. */

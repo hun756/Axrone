@@ -33,6 +33,7 @@ export const createParticleShaderDefinition = (
     id,
     vertexSource: `#version 300 es
 layout(location = 0) in vec3 a_Position;
+layout(location = 1) in float a_Rotation;
 layout(location = 2) in vec2 a_UV0;
 layout(location = 3) in vec4 a_Color0;
 uniform mat4 u_ViewProjection;
@@ -41,11 +42,13 @@ uniform float u_PointScale;
 uniform float u_MaxPointSize;
 out vec4 v_Color;
 out float v_Seed;
+out float v_Rotation;
 void main() {
     vec4 worldPosition = u_Model * vec4(a_Position, 1.0);
     gl_Position = u_ViewProjection * worldPosition;
     v_Color = a_Color0;
     v_Seed = a_UV0.y;
+    v_Rotation = a_Rotation;
     float size = a_UV0.x;
     float attenuated = size * u_PointScale / max(gl_Position.w, 1e-4);
     gl_PointSize = clamp(attenuated, 1.0, u_MaxPointSize);
@@ -59,7 +62,15 @@ uniform vec4 u_TexSheetParams;
 uniform vec4 u_TexRegion;
 in vec4 v_Color;
 in float v_Seed;
+in float v_Rotation;
 out vec4 o_Color;
+
+vec2 rotateUV(vec2 uv, float angle) {
+    vec2 centered = uv - 0.5;
+    float c = cos(angle);
+    float s = sin(angle);
+    return vec2(c * centered.x - s * centered.y, s * centered.x + c * centered.y) + 0.5;
+}
 
 vec2 computeTexUV(vec2 pointCoord) {
     float tilesX = u_TexSheetParams.x;
@@ -80,7 +91,7 @@ vec2 computeTexUV(vec2 pointCoord) {
 }
 
 void main() {
-    vec2 pointCoord = gl_PointCoord;
+    vec2 pointCoord = rotateUV(gl_PointCoord, v_Rotation);
     vec2 centered = pointCoord - 0.5;
     float dist = length(centered);
 
