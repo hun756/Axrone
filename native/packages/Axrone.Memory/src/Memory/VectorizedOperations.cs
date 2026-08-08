@@ -61,7 +61,7 @@ public static class VectorizedOperations
         if (size == 0) return;
 
         nint gap = (nint)((byte*)destination - (byte*)source);
-        bool overlaps = gap > 0 && gap < size;
+        bool overlaps = gap > 0 ? gap < size : -gap < size;
 
         if (overlaps)
         {
