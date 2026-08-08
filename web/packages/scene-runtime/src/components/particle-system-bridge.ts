@@ -165,7 +165,7 @@ export function createCoreParticleSystem(config: ParticleSystemConfig): CorePart
     }));
 
     core.addModule(new SizeModule({
-        enabled: config.sizeOverLifetimeEnabled ?? true,
+        enabled: false,
         priority: 400,
         size: constantCurve(config.startSize ?? 1),
         sizeX: constantCurve(0),
