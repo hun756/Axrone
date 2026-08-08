@@ -4,6 +4,7 @@ namespace Axrone.Utility.Singleton.Internal;
 /// Factory-based singleton storage using <see cref="StrongBox{T}"/> for stable ref access.
 /// <see cref="StrongBox{T}"/> provides a heap-allocated mutable cell whose <c>.Value</c> field
 /// can be used with <see cref="Volatile"/> without the <c>volatile</c> keyword.
+/// Dispatches <see cref="ISingletonLifecycle"/> hooks and registers with the shutdown registry.
 /// </summary>
 [SkipLocalsInit]
 internal static class FactoryProvider<T> where T : class
@@ -16,7 +17,11 @@ internal static class FactoryProvider<T> where T : class
     public static T GetOrCreateInstance(Func<T> factory)
     {
         var instance = Volatile.Read(ref _instance.Value);
-        if (instance is not null) return instance;
+        if (instance is not null)
+        {
+            SingletonDiagnostics.RecordAccess<T>();
+            return instance;
+        }
 
         return InitializeInstance(factory);
     }
@@ -31,6 +36,7 @@ internal static class FactoryProvider<T> where T : class
 
             try
             {
+                SingletonDiagnostics.RecordCreationStart<T>();
                 using (NestingContext.EnterScope())
                 {
                     instance = factory();
@@ -39,12 +45,16 @@ internal static class FactoryProvider<T> where T : class
                         throw new SingletonCreationException(
                             $"Factory method returned null for type {typeof(T).FullName}", typeof(T));
 
-                    if (instance is IInitializable initializable)
-                        initializable.Initialize();
-
-                    if (instance is IAsyncInitializable asyncInitializable)
-                        asyncInitializable.InitializeAsync().GetAwaiter().GetResult();
+                    if (instance is ISingletonLifecycle lifecycle)
+                    {
+                        lifecycle.Initialize();
+                        var asyncTask = lifecycle.InitializeAsync();
+                        if (!asyncTask.IsCompletedSuccessfully)
+                            asyncTask.AsTask().GetAwaiter().GetResult();
+                    }
                 }
+
+                SingletonDiagnostics.RecordCreationEnd<T>();
             }
             catch (Exception ex) when (ex is not SingletonCreationException)
             {
@@ -54,8 +64,10 @@ internal static class FactoryProvider<T> where T : class
             }
 
             Interlocked.Exchange(ref _instance.Value, instance);
+            SingletonRegistryInternal.Register(instance!);
+            SingletonShutdownRegistry.Register(instance!);
             Interlocked.Exchange(ref _initialized, 1);
-            return instance;
+            return instance!;
         }
     }
 }

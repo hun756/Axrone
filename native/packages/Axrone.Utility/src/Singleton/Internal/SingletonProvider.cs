@@ -4,6 +4,7 @@ namespace Axrone.Utility.Singleton.Internal;
 /// Lock-free singleton storage using <see cref="Interlocked"/> + <see cref="Volatile"/>.
 /// Fast path: single volatile read for the initialized case.
 /// Slow path: compare-exchange for first-time creation, <see cref="SpinWait"/> for contention.
+/// Dispatches <see cref="ISingletonLifecycle"/> hooks and registers with the shutdown registry.
 /// </summary>
 [SkipLocalsInit]
 internal static class SingletonProvider<T> where T : class, new()
@@ -21,24 +22,32 @@ internal static class SingletonProvider<T> where T : class, new()
         get
         {
             var instance = Volatile.Read(ref _instance);
-            if (instance is not null) return instance;
+            if (instance is not null)
+            {
+                SingletonDiagnostics.RecordAccess<T>();
+                return instance;
+            }
 
             if (Interlocked.CompareExchange(ref _initializationState, Initializing, NotInitialized) == NotInitialized)
             {
                 T newInstance;
                 try
                 {
+                    SingletonDiagnostics.RecordCreationStart<T>();
                     newInstance = CreateInstanceInternal();
                     PerformInitialization(newInstance);
+                    SingletonDiagnostics.RecordCreationEnd<T>();
                 }
                 catch (Exception ex) when (ex is not SingletonCreationException)
                 {
                     Interlocked.Exchange(ref _initializationState, NotInitialized);
                     throw new SingletonCreationException(
-                        $"Failed to create singleton instance of type {typeof(T).FullName}", ex);
+                        $"Failed to create singleton instance of type {typeof(T).FullName}", typeof(T), ex);
                 }
 
                 Volatile.Write(ref _instance, newInstance);
+                SingletonRegistryInternal.Register(newInstance);
+                SingletonShutdownRegistry.Register(newInstance);
                 Interlocked.Exchange(ref _initializationState, Initialized);
                 return newInstance;
             }
@@ -47,7 +56,9 @@ internal static class SingletonProvider<T> where T : class, new()
             while (Volatile.Read(ref _initializationState) != Initialized)
                 spinner.SpinOnce();
 
-            return Volatile.Read(ref _instance)!;
+            var result = Volatile.Read(ref _instance)!;
+            SingletonDiagnostics.RecordAccess<T>();
+            return result;
         }
     }
 
@@ -73,26 +84,29 @@ internal static class SingletonProvider<T> where T : class, new()
         catch (Exception ex)
         {
             throw new SingletonCreationException(
-                $"Failed to create singleton instance of type {typeof(T).FullName}", ex);
+                $"Failed to create singleton instance of type {typeof(T).FullName}", typeof(T), ex);
         }
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void PerformInitialization(T instance)
     {
-        if (instance is IInitializable initializable)
-            initializable.Initialize();
-
-        if (instance is IAsyncInitializable asyncInitializable)
-            asyncInitializable.InitializeAsync().GetAwaiter().GetResult();
+        if (instance is ISingletonLifecycle lifecycle)
+        {
+            lifecycle.Initialize();
+            var asyncTask = lifecycle.InitializeAsync();
+            if (!asyncTask.IsCompletedSuccessfully)
+                asyncTask.AsTask().GetAwaiter().GetResult();
+        }
     }
 
     /// <summary>
-    /// Eager initialization hook. Call from a non-generic <c>[ModuleInitializer]</c> or from <c>Singleton.WarmUp</c>.
+    /// Eager initialization hook. Checks <see cref="SingletonAttributeCache{T}"/> for the eager flag.
+    /// Call from a non-generic <c>[ModuleInitializer]</c> or from <c>Singleton.WarmUp</c>.
     /// </summary>
     internal static void EnsurePreInitialized()
     {
-        if (typeof(IEagerSingleton).IsAssignableFrom(typeof(T)))
+        if (SingletonAttributeCache<T>.IsEager)
             _ = Instance;
     }
 }
