@@ -301,7 +301,14 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         var bucket = GetOrCreateBucket(GetBucketIndex(size));
 
         if (bucket.TryAdd(buffer))
+        {
             Interlocked.Increment(ref _pooledBuffers);
+        }
+        else
+        {
+            Interlocked.Add(ref _totalAllocated, -(long)size * Unsafe.SizeOf<T>());
+            Interlocked.Increment(ref _totalDeallocations);
+        }
 
         Interlocked.Increment(ref _totalReturnedBuffers);
         Interlocked.Increment(ref _totalReturns);
