@@ -199,10 +199,27 @@ export class SceneParticleBatchRuntime {
             SPRITE_MODE_INDEX[subject.system.spriteMode] ?? 0
         );
 
-        if (subject.system.blendMode === 'additive') {
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-        } else {
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        const blendMode = subject.system.blendMode;
+        switch (blendMode) {
+            case 'additive':
+                gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+                break;
+            case 'premultiplied':
+                gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+                break;
+            case 'multiply':
+                gl.blendFunc(gl.DST_COLOR, gl.ONE_MINUS_SRC_ALPHA);
+                break;
+            case 'screen':
+                gl.blendFunc(gl.ONE_MINUS_DST_COLOR, gl.ONE);
+                break;
+            case 'soft-additive':
+                gl.blendFunc(gl.ONE_MINUS_DST_COLOR, gl.SRC_ALPHA);
+                break;
+            case 'alpha':
+            default:
+                gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+                break;
         }
 
         const particleTexture = subject.system.particleTexture;

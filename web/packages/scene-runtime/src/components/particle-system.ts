@@ -21,7 +21,7 @@ export type ParticleRenderMode =
     | 'vertical-billboard'
     | 'mesh'
     | 'none';
-export type ParticleBlendMode = 'additive' | 'alpha';
+export type ParticleBlendMode = 'additive' | 'alpha' | 'premultiplied' | 'multiply' | 'screen' | 'soft-additive';
 export type ParticleSpriteMode = 'glow' | 'disc' | 'star' | 'spark';
 export type ParticleStopAction = 'none' | 'disable' | 'destroy' | 'callback';
 export type ParticleColorMode = 'color' | 'gradient' | 'random' | 'two-colors';
