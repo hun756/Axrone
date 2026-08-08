@@ -162,6 +162,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         _factory = handler.Factory;
         _handler = handler;
         _configuration = configuration;
+        ValidateStrategy(configuration.Strategy);
         _syncLock = new object();
         _asyncLock = new AsyncReaderWriterLock();
         _spinLock = new SpinLock(enableThreadOwnerTracking: false);
@@ -935,6 +936,26 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             _metrics.Events.Add(new KeyValuePair<DateTime, string>(DateTime.UtcNow, message));
             if (_metrics.Events.Count > 100)
                 _metrics.Events.RemoveRange(0, 50);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ValidateStrategy(PoolingStrategy strategy)
+    {
+        switch (strategy)
+        {
+            case PoolingStrategy.CentralizedQueue:
+            case PoolingStrategy.ThreadLocal:
+            case PoolingStrategy.ThreadLocalWithPartitioning:
+            case PoolingStrategy.ShardedByThread:
+            case PoolingStrategy.BoundedChannel:
+            case PoolingStrategy.LockFree:
+                return;
+            default:
+                ThrowHelper.ThrowArgumentOutOfRangeException(nameof(strategy),
+                    $"Unsupported pooling strategy: {strategy}. Supported strategies are: " +
+                    "CentralizedQueue, ThreadLocal, ThreadLocalWithPartitioning, ShardedByThread, BoundedChannel, LockFree.");
+                return;
         }
     }
 

@@ -670,3 +670,27 @@ public sealed class ObjectPoolPoolableDoubleReturnTests : IDisposable
         _pool.Count.Should().Be(1);
     }
 }
+
+public class UnsupportedStrategyTests
+{
+    [Theory]
+    [InlineData(PoolingStrategy.AdaptivePartitioning)]
+    [InlineData(PoolingStrategy.Hybrid)]
+    [InlineData(PoolingStrategy.Striped)]
+    public void Constructor_ShouldThrowForUnsupportedStrategy(PoolingStrategy strategy)
+    {
+        var act = () => new ObjectPool<TestItem>(
+            new PoolConfiguration
+            {
+                MaximumCapacity = 10,
+                Strategy = strategy,
+            },
+            new PoolableHandler<TestItem>
+            {
+                Factory = () => new TestItem(),
+            });
+
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName(nameof(strategy));
+    }
+}

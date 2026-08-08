@@ -25,6 +25,13 @@ internal static class ThrowHelper
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowArgumentOutOfRangeException(string paramName, string message)
+    {
+        throw new ArgumentOutOfRangeException(paramName, message);
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowObjectDisposedException(string objectName)
     {
         throw new ObjectDisposedException(objectName);
