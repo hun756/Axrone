@@ -501,6 +501,13 @@ export class ParticleSystem extends Component {
 
         this._initCoreSystem();
 
+        if (this._prewarm && this._coreSystem) {
+            const step = 1 / 30;
+            for (let i = 0; i < 110; i++) {
+                this._updateCoreSimulation(step);
+            }
+        }
+
         if (this._playOnAwake) {
             this._playing = true;
             this._delayRemaining = this._startDelay;
