@@ -104,6 +104,8 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     private volatile bool _clearOnReturn;
     private volatile bool _throwOnExhaustion;
     private volatile bool _allowExpansion;
+    private volatile DiagnosticsLevel _diagnosticsLevel;
+    private volatile int _maximumCapacity;
 
     private int _count;
     private int _rented;
@@ -136,6 +138,8 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         _clearOnReturn = configuration.ClearOnReturn;
         _throwOnExhaustion = configuration.ThrowOnExhaustion;
         _allowExpansion = configuration.AllowPoolExpansion;
+        _diagnosticsLevel = configuration.DiagnosticsLevel;
+        _maximumCapacity = configuration.MaximumCapacity;
         ValidateConfiguration(configuration);
         ValidateStrategy(configuration.Strategy);
         _syncLock = new object();
@@ -232,7 +236,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     /// <summary>
     /// Gets the maximum number of items the pool is configured to hold.
     /// </summary>
-    public int Capacity => _configuration.MaximumCapacity;
+    public int Capacity => _maximumCapacity;
 
     /// <summary>
     /// Gets the number of items currently available in the pool (total count minus rented count).
@@ -253,14 +257,14 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         ThrowIfDisposed();
 
         Stopwatch? sw = null;
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+        if (_diagnosticsLevel >= DiagnosticsLevel.Full)
         {
             sw = Stopwatch.StartNew();
         }
 
         if (TryGetFromPool(out var pooledItem))
         {
-            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
+            if (_diagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
             {
                 sw.Stop();
                 RecordRentTime(sw.Elapsed);
@@ -280,7 +284,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             {
                 if (TryGetFromPool(out var pooledItem))
                 {
-                    if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
+                    if (_diagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
                     {
                         sw.Stop();
                         RecordRentTime(sw.Elapsed);
@@ -290,7 +294,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
                 using (_asyncLock.WriteLock())
                 {
-                    if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
+                    if (Volatile.Read(ref _rented) >= _maximumCapacity
                         && !_allowExpansion)
                     {
                         if (_throwOnExhaustion)
@@ -310,7 +314,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             {
                 if (TryGetFromPool(out var pooledItem))
                 {
-                    if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
+                    if (_diagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
                     {
                         sw.Stop();
                         RecordRentTime(sw.Elapsed);
@@ -318,7 +322,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                     return pooledItem.Instance;
                 }
 
-                if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
+                if (Volatile.Read(ref _rented) >= _maximumCapacity
                     && !_allowExpansion)
                 {
                     if (_throwOnExhaustion)
@@ -367,7 +371,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
 
         Stopwatch? resetSw = null;
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+        if (_diagnosticsLevel >= DiagnosticsLevel.Full)
         {
             resetSw = Stopwatch.StartNew();
         }
@@ -412,7 +416,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         Interlocked.Increment(ref _metrics.TotalReturned);
 
         // Update objectInfo rent count
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && instanceId != 0L)
+        if (_diagnosticsLevel >= DiagnosticsLevel.Full && instanceId != 0L)
         {
             if (_objectInfo.TryGetValue(instanceId, out var info))
             {
@@ -437,7 +441,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             try
             {
                 _handler.OnDispose?.Invoke(item);
-                if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+                if (_diagnosticsLevel >= DiagnosticsLevel.Full)
                 {
                     _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
                     {
@@ -490,7 +494,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private T CreateNewInstance(Stopwatch? sw)
     {
-        var creationSw = _configuration.DiagnosticsLevel >= DiagnosticsLevel.Full
+        var creationSw = _diagnosticsLevel >= DiagnosticsLevel.Full
             ? Stopwatch.StartNew() : null;
 
         Interlocked.Increment(ref _metrics.TotalCreated);
@@ -504,7 +508,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         {
             Interlocked.Increment(ref _metrics.AllocFailureCount);
             _metrics.LastException = ex;
-            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Basic)
+            if (_diagnosticsLevel >= DiagnosticsLevel.Basic)
                 RecordEvent($"Failed to create instance: {ex.Message}");
             throw;
         }
@@ -516,13 +520,13 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
 
         long id = Interlocked.Increment(ref _nextInstanceId);
-        DateTime now = (_configuration.TrackLeaks
-            || _configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+        DateTime now = (_trackLeaks
+            || _diagnosticsLevel >= DiagnosticsLevel.Full)
             ? DateTime.UtcNow : default;
 
         TrackInstanceInfo(instance, now, id);
 
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+        if (_diagnosticsLevel >= DiagnosticsLevel.Full)
         {
             if (_objectInfo.TryGetValue(id, out var info))
                 _handler.OnCreate?.Invoke(info);
@@ -533,14 +537,14 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         Interlocked.Increment(ref _count);
         Interlocked.Increment(ref _rented);
 
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Basic)
+        if (_diagnosticsLevel >= DiagnosticsLevel.Basic)
         {
             RecordPeakUtilization();
-            if (Volatile.Read(ref _rented) > _configuration.MaximumCapacity)
+            if (Volatile.Read(ref _rented) > _maximumCapacity)
                 Interlocked.Increment(ref _metrics.ExpansionCount);
         }
 
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
+        if (_diagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
         {
             sw.Stop();
             RecordRentTime(sw.Elapsed);
@@ -552,7 +556,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
     private void TrackInstanceInfo(T instance, DateTime now, long id)
     {
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+        if (_diagnosticsLevel >= DiagnosticsLevel.Full)
         {
             _objectInfo[id] = new PoolObjectInfo<T>
             {
@@ -596,7 +600,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             Interlocked.Increment(ref _metrics.TotalCreated);
             TrackInstanceInfo(instance, now, id);
 
-            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+            if (_diagnosticsLevel >= DiagnosticsLevel.Full)
             {
                 if (_objectInfo.TryGetValue(id, out var info))
                     _handler.OnCreate?.Invoke(info);
@@ -614,7 +618,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void RecordRentTime(TimeSpan elapsed)
     {
-        if (_configuration.DiagnosticsLevel < DiagnosticsLevel.Full)
+        if (_diagnosticsLevel < DiagnosticsLevel.Full)
             return;
 
         Interlocked.Add(ref _metrics.TotalRentDurationTicks, elapsed.Ticks);
@@ -633,7 +637,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void RecordRentDuration(T item, TimeSpan duration)
     {
-        if (_configuration.DiagnosticsLevel < DiagnosticsLevel.Full)
+        if (_diagnosticsLevel < DiagnosticsLevel.Full)
             return;
 
         Interlocked.Add(ref _metrics.TotalRentDurationTicks, duration.Ticks);
@@ -658,7 +662,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
     private void RecordEvent(string message)
     {
-        if (_configuration.DiagnosticsLevel < DiagnosticsLevel.Basic)
+        if (_diagnosticsLevel < DiagnosticsLevel.Basic)
             return;
 
         lock (_syncLock)
@@ -793,7 +797,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             CurrentCount = Count,
             AvailableCount = Available,
             RentedCount = rented,
-            MaximumCapacity = _configuration.MaximumCapacity,
+            MaximumCapacity = _maximumCapacity,
             AverageRentDurationMs = avgRentDuration,
             AverageCreateDurationMs = CalculateAverageCreateDuration(),
             AverageResetDurationMs = CalculateAverageResetDuration(),
@@ -835,14 +839,14 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         ThrowIfDisposed();
 
         Stopwatch? sw = null;
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+        if (_diagnosticsLevel >= DiagnosticsLevel.Full)
         {
             sw = Stopwatch.StartNew();
         }
 
         if (TryGetFromPool(out var pooledItem))
         {
-            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
+            if (_diagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
             {
                 sw.Stop();
                 RecordRentTime(sw.Elapsed);
@@ -881,7 +885,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                             continue;
                         }
 
-                        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
+                        if (_diagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
                         {
                             sw.Stop();
                             RecordRentTime(sw.Elapsed);
@@ -901,7 +905,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             catch (Exception ex)
             {
                 _metrics.LastException = ex;
-                if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Basic)
+                if (_diagnosticsLevel >= DiagnosticsLevel.Basic)
                 {
                     RecordEvent($"Channel operation failed: {ex.Message}");
                 }
@@ -914,7 +918,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             {
                 if (TryGetFromPool(out var pooledItem))
                 {
-                    if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
+                    if (_diagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
                     {
                         sw.Stop();
                         RecordRentTime(sw.Elapsed);
@@ -924,7 +928,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
                 using (await _asyncLock.WriteLockAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
+                    if (Volatile.Read(ref _rented) >= _maximumCapacity
                         && !_allowExpansion)
                     {
                         if (_throwOnExhaustion)
@@ -944,7 +948,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             {
                 if (TryGetFromPool(out var pooledItem))
                 {
-                    if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
+                    if (_diagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
                     {
                         sw.Stop();
                         RecordRentTime(sw.Elapsed);
@@ -952,7 +956,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                     return pooledItem.Instance;
                 }
 
-                if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
+                if (Volatile.Read(ref _rented) >= _maximumCapacity
                     && !_allowExpansion)
                 {
                     if (_throwOnExhaustion)
@@ -1000,7 +1004,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
 
         Stopwatch? resetSw = null;
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+        if (_diagnosticsLevel >= DiagnosticsLevel.Full)
         {
             resetSw = Stopwatch.StartNew();
         }
@@ -1048,7 +1052,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         Interlocked.Decrement(ref _rented);
         Interlocked.Increment(ref _metrics.TotalReturned);
 
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && instanceId != 0L)
+        if (_diagnosticsLevel >= DiagnosticsLevel.Full && instanceId != 0L)
         {
             if (_objectInfo.TryGetValue(instanceId, out var info))
             {
@@ -1072,7 +1076,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             try
             {
                 _handler.OnDispose?.Invoke(item);
-                if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+                if (_diagnosticsLevel >= DiagnosticsLevel.Full)
                 {
                     _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
                     {
@@ -1131,8 +1135,8 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
 
         // Non-blocking: try to create if under capacity
-        if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
-            && !_configuration.AllowPoolExpansion)
+        if (Volatile.Read(ref _rented) >= _maximumCapacity
+            && !_allowExpansion)
         {
             return false;
         }
@@ -1142,8 +1146,8 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         {
             _spinLock.Enter(ref lockTaken);
 
-            if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
-                && !_configuration.AllowPoolExpansion)
+            if (Volatile.Read(ref _rented) >= _maximumCapacity
+                && !_allowExpansion)
             {
                 return false;
             }
@@ -1173,8 +1177,8 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             return (true, pooledItem.Instance);
         }
 
-        if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
-            && !_configuration.AllowPoolExpansion)
+        if (Volatile.Read(ref _rented) >= _maximumCapacity
+            && !_allowExpansion)
         {
             return (false, null);
         }
@@ -1183,7 +1187,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         {
             using (await _asyncLock.WriteLockAsync(cancellationToken).ConfigureAwait(false))
             {
-                if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
+                if (Volatile.Read(ref _rented) >= _maximumCapacity
                     && !_allowExpansion)
                 {
                     return (false, null);
@@ -1197,7 +1201,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         {
             lock (_syncLock)
             {
-                if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
+                if (Volatile.Read(ref _rented) >= _maximumCapacity
                     && !_allowExpansion)
                 {
                     return (false, null);
@@ -1310,7 +1314,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         try
         {
             _handler.OnDispose?.Invoke(item.Instance);
-            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+            if (_diagnosticsLevel >= DiagnosticsLevel.Full)
             {
                 _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
                 {
@@ -1425,7 +1429,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     {
         ThrowIfDisposed();
 
-        if (_configuration.DiagnosticsLevel == DiagnosticsLevel.None)
+        if (_diagnosticsLevel == DiagnosticsLevel.None)
         {
             return new PoolDiagnostics
             {
@@ -1439,11 +1443,11 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         lock (_syncLock)
         {
-            events = _configuration.DiagnosticsLevel >= DiagnosticsLevel.Basic
+            events = _diagnosticsLevel >= DiagnosticsLevel.Basic
                 ? _metrics.Events.ToList()
                 : new List<KeyValuePair<DateTime, string>>(0);
 
-            customMetrics = _configuration.DiagnosticsLevel >= DiagnosticsLevel.Basic
+            customMetrics = _diagnosticsLevel >= DiagnosticsLevel.Basic
                 ? new Dictionary<string, double>(_metrics.CustomMetrics)
                 : new Dictionary<string, double>(0);
         }
@@ -1458,7 +1462,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             FailedValidationCount = _metrics.FailedValidationCount,
             ExhaustionCount = _metrics.ExhaustionCount,
             InitialCapacity = _configuration.InitialCapacity,
-            MaximumCapacity = _configuration.MaximumCapacity,
+            MaximumCapacity = _maximumCapacity,
             AllocFailureCount = _metrics.AllocFailureCount,
             DisposeFailureCount = _metrics.DisposeFailureCount,
             RecycleFailureCount = _metrics.RecycleFailureCount,
@@ -1506,6 +1510,8 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         _clearOnReturn = configuration.ClearOnReturn;
         _throwOnExhaustion = configuration.ThrowOnExhaustion;
         _allowExpansion = configuration.AllowPoolExpansion;
+        _diagnosticsLevel = configuration.DiagnosticsLevel;
+        _maximumCapacity = configuration.MaximumCapacity;
         Thread.MemoryBarrier();
 
         if (configuration.MaximumCapacity < oldConfiguration.MaximumCapacity)
@@ -1564,7 +1570,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     {
         int currentCount = Count;
         int targetCount = targetCapacity > 0
-            ? Math.Min(targetCapacity, _configuration.MaximumCapacity)
+            ? Math.Min(targetCapacity, _maximumCapacity)
             : (int)(currentCount * (_configuration.TargetUtilizationPercentage / 100.0));
 
         if (targetCount >= currentCount)
@@ -1593,7 +1599,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         try
         {
             _handler.OnDispose?.Invoke(item.Instance);
-            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+            if (_diagnosticsLevel >= DiagnosticsLevel.Full)
             {
                 _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
                 {
@@ -1655,7 +1661,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     {
         ThrowIfDisposed();
 
-        if (_configuration.DiagnosticsLevel == DiagnosticsLevel.None)
+        if (_diagnosticsLevel == DiagnosticsLevel.None)
             return;
 
         DateTime now = DateTime.UtcNow;
@@ -1690,7 +1696,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         if (name is null)
             ThrowHelper.ThrowArgumentNullException(nameof(name));
 
-        if (_configuration.DiagnosticsLevel < DiagnosticsLevel.Basic)
+        if (_diagnosticsLevel < DiagnosticsLevel.Basic)
             return;
 
         lock (_syncLock)
@@ -1826,7 +1832,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         try
         {
             _handler.OnDispose?.Invoke(item.Instance);
-            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+            if (_diagnosticsLevel >= DiagnosticsLevel.Full)
             {
                 _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
                 {
@@ -1933,7 +1939,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private double CalculateMemoryUsage()
     {
-        if (_configuration.DiagnosticsLevel <= DiagnosticsLevel.Minimal)
+        if (_diagnosticsLevel <= DiagnosticsLevel.Minimal)
             return 0;
 
         int count = Count;
@@ -1946,7 +1952,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private double CalculateMemoryPressure(double memoryUsage)
     {
-        if (_configuration.DiagnosticsLevel <= DiagnosticsLevel.Minimal || memoryUsage <= 0)
+        if (_diagnosticsLevel <= DiagnosticsLevel.Minimal || memoryUsage <= 0)
             return 0;
 
         long availableMemory = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
@@ -1956,7 +1962,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void RecordCreateTime(TimeSpan elapsed)
     {
-        if (_configuration.DiagnosticsLevel < DiagnosticsLevel.Full)
+        if (_diagnosticsLevel < DiagnosticsLevel.Full)
             return;
         Interlocked.Add(ref _metrics.TotalCreateDurationTicks, elapsed.Ticks);
     }
@@ -1981,7 +1987,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void RecordResetTime(TimeSpan elapsed)
     {
-        if (_configuration.DiagnosticsLevel < DiagnosticsLevel.Full)
+        if (_diagnosticsLevel < DiagnosticsLevel.Full)
             return;
         Interlocked.Add(ref _metrics.TotalResetDurationTicks, elapsed.Ticks);
     }
