@@ -90,3 +90,11 @@ public sealed class ThrowingService
 }
 
 public sealed class UntouchedService;
+
+public sealed class UniqueFactoryCountService;
+public sealed class UniqueFactoryService;
+public sealed class UniqueInitializableService : ISingletonLifecycle
+{
+    public bool WasInitialized { get; private set; }
+    public void Initialize() => WasInitialized = true;
+}

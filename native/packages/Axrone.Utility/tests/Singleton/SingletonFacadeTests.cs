@@ -16,7 +16,7 @@ public class SingletonFacadeTests
     [Fact]
     public void GetInstance_WithFactory_UsesFactory()
     {
-        var expected = new FactoryService();
+        var expected = new UniqueFactoryService();
         var instance = SingletonFacade.GetInstance(() => expected);
         instance.Should().BeSameAs(expected);
     }
@@ -25,8 +25,8 @@ public class SingletonFacadeTests
     public void GetInstance_WithFactory_ReturnsSameOnSecondCall()
     {
         int callCount = 0;
-        var a = SingletonFacade.GetInstance(() => { callCount++; return new FactoryCountService(); });
-        var b = SingletonFacade.GetInstance(() => { callCount++; return new FactoryCountService(); });
+        var a = SingletonFacade.GetInstance(() => { callCount++; return new UniqueFactoryCountService(); });
+        var b = SingletonFacade.GetInstance(() => { callCount++; return new UniqueFactoryCountService(); });
         a.Should().BeSameAs(b);
         callCount.Should().Be(1);
     }
@@ -63,7 +63,7 @@ public class SingletonFacadeTests
     [Fact]
     public void IsInitialized_ReturnsFalse_WhenNotYetCreated()
     {
-        SingletonFacade.IsInitialized<FactoryCountService>().Should().BeFalse();
+        SingletonFacade.IsInitialized<UniqueFactoryCountService>().Should().BeFalse();
     }
 
     [Fact]
