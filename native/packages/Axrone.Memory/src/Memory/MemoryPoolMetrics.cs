@@ -27,7 +27,7 @@ public readonly record struct MemoryPoolMetrics
     public long Hits { get; }
 
     /// <summary>Number of active bucket size classes.</summary>
-    public long BucketCount { get; }
+    public int BucketCount { get; }
 
     /// <summary>Bytes wasted by size-class rounding across pooled buffers.</summary>
     public long FragmentationBytes { get; }
@@ -61,7 +61,7 @@ public readonly record struct MemoryPoolMetrics
         long pooledBuffers,
         long misses,
         long hits,
-        long bucketCount,
+        int bucketCount,
         long fragmentationBytes,
         TimeSpan elapsedTime,
         double averageRentTime,

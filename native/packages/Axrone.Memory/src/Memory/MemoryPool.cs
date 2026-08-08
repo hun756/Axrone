@@ -113,7 +113,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
     /// <summary>Rents a buffer with at least <paramref name="minimumLength"/> elements.</summary>
     /// <param name="minimumLength">Minimum number of elements. Use -1 for the default buffer size.</param>
     /// <returns>An <see cref="IMemoryOwner{T}"/> wrapping the rented buffer.</returns>
-    /// <exception cref="OutOfMemoryException">The requested size exceeds <see cref="MaxBufferSize"/>.</exception>
+    /// <exception cref="InvalidOperationException">The requested size exceeds <see cref="MaxBufferSize"/> or the pool has been disposed after allocation.</exception>
     /// <exception cref="ObjectDisposedException">The pool has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IMemoryOwner<T> Rent(int minimumLength = -1)
@@ -411,7 +411,17 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
             return false;
         }
 
-        return TryRent(exactLength, out memoryOwner);
+        if (!TryRent(exactLength, out memoryOwner))
+            return false;
+
+        if (memoryOwner.Memory.Length != exactLength)
+        {
+            memoryOwner.Dispose();
+            memoryOwner = null;
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>Rents multiple buffers at once.</summary>
@@ -1037,7 +1047,7 @@ internal static class MemoryPoolThrowHelper
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowRequestedSizeExceedsCapacity() =>
-        throw new InvalidOperationException("Requested size exceeds pool capacity.");
+        throw new InvalidOperationException("Pool could not satisfy the buffer request (size exceeds capacity, memory limit, or allocation quota).");
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]

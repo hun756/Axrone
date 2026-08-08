@@ -36,7 +36,7 @@ public static class MemoryPoolExtensions
     }
 
     /// <summary>Full reset: trims all idle buffers and resets statistics.</summary>
-    public static void Reset(this IMemoryPool<byte> pool)
+    public static void Reset<T>(this IMemoryPool<T> pool) where T : struct
     {
         ArgumentNullException.ThrowIfNull(pool);
         pool.Trim(1.0);

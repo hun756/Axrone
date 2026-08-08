@@ -29,18 +29,6 @@ public readonly record struct BucketDiagnostics
     /// <summary>Average return time in nanoseconds (requires profiling enabled).</summary>
     public double AverageReturnTimeNs { get; }
 
-    internal BucketDiagnostics(int bufferSize, int currentCount, long totalMemory)
-    {
-        BufferSize = bufferSize;
-        CurrentCount = currentCount;
-        MaxCount = 0;
-        TotalRents = 0;
-        TotalReturns = 0;
-        TotalMemory = totalMemory;
-        AverageRentTimeNs = 0;
-        AverageReturnTimeNs = 0;
-    }
-
     internal BucketDiagnostics(
         int bufferSize,
         int currentCount,

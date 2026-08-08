@@ -4,6 +4,10 @@ namespace Axrone.Memory;
 /// Configuration for <see cref="MemoryPool{T}"/> with fluent builder methods.
 /// </summary>
 /// <typeparam name="T">Element type of buffers managed by the pool.</typeparam>
+/// <remarks>
+/// <para>The <c>With*</c> methods mutate this instance and return <c>this</c> — they do NOT create clones.
+/// Use <see cref="Default"/> to obtain a fresh clone before chaining, or call <see cref="Clone"/> explicitly.</para>
+/// </remarks>
 public sealed class MemoryPoolOptions<T>
 {
     private static readonly MemoryPoolOptions<T> s_default = new();
@@ -69,7 +73,7 @@ public sealed class MemoryPoolOptions<T>
     public float OverAllocationFactor { get; set; } = 1.0f;
 
     /// <summary>Custom bucket sizes. When non-empty, overrides strategy-generated sizes.</summary>
-    public List<int> CustomBucketSizes { get; set; } = [];
+    public IReadOnlyList<int> CustomBucketSizes { get; set; } = [];
 
     public MemoryPoolOptions<T> WithDefaultBufferSize(int size)
     {
