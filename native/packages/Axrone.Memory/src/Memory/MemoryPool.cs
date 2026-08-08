@@ -982,7 +982,7 @@ internal static class MemoryPoolThrowHelper
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowRequestedSizeExceedsCapacity() =>
-        throw new OutOfMemoryException("Requested size exceeds pool capacity.");
+        throw new InvalidOperationException("Requested size exceeds pool capacity.");
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
