@@ -179,9 +179,8 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
 
         var bucket = GetOrCreateBucket(GetBucketIndex(bufferSize));
 
-        if (bucket.TryTake(out var owner))
+        if (bucket.TryTake(out var buffer))
         {
-            var buffer = (MemoryPoolBuffer)owner;
             Interlocked.Increment(ref _hits);
             Interlocked.Increment(ref _totalRentedBuffers);
             Interlocked.Increment(ref _activeBuffers);
@@ -805,7 +804,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         }
     }
 
-    private sealed class MemoryPoolBuffer : IMemoryOwner<T>
+    internal sealed class MemoryPoolBuffer : IMemoryOwner<T>
     {
         private readonly MemoryPool<T> _pool;
         private readonly T[] _array;

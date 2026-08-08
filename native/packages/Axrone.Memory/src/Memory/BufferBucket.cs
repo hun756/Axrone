@@ -6,10 +6,10 @@ namespace Axrone.Memory;
 /// Supports optional profiling for rent/return timing.
 /// </summary>
 /// <typeparam name="T">Element type of the pooled buffers.</typeparam>
-internal sealed class BufferBucket<T>
+internal sealed class BufferBucket<T> where T : struct
 {
-    private readonly ConcurrentQueue<IMemoryOwner<T>> _buffers;
-    private readonly ConcurrentStack<IMemoryOwner<T>> _fastBuffers;
+    private readonly ConcurrentQueue<MemoryPool<T>.MemoryPoolBuffer> _buffers;
+    private readonly ConcurrentStack<MemoryPool<T>.MemoryPoolBuffer> _fastBuffers;
     private readonly int _bufferSize;
     private readonly int _maxCount;
     private readonly bool _enableProfiling;
@@ -38,10 +38,10 @@ internal sealed class BufferBucket<T>
         else
         {
             _lock = null;
-            _fastBuffers = new ConcurrentStack<IMemoryOwner<T>>();
+            _fastBuffers = new ConcurrentStack<MemoryPool<T>.MemoryPoolBuffer>();
         }
 
-        _buffers = new ConcurrentQueue<IMemoryOwner<T>>();
+        _buffers = new ConcurrentQueue<MemoryPool<T>.MemoryPoolBuffer>();
     }
 
     /// <summary>Gets the current number of idle buffers in this bucket.</summary>
@@ -53,7 +53,7 @@ internal sealed class BufferBucket<T>
     /// <summary>Gets the maximum number of idle buffers allowed.</summary>
     public int MaxCount => _maxCount;
 
-    internal bool TryTake([NotNullWhen(true)] out IMemoryOwner<T>? buffer)
+    internal bool TryTake([NotNullWhen(true)] out MemoryPool<T>.MemoryPoolBuffer? buffer)
     {
         if (Volatile.Read(ref _isDisposed) != 0)
         {
@@ -107,7 +107,7 @@ internal sealed class BufferBucket<T>
         return result;
     }
 
-    internal bool TryAdd(IMemoryOwner<T> buffer)
+    internal bool TryAdd(MemoryPool<T>.MemoryPoolBuffer buffer)
     {
         if (Volatile.Read(ref _isDisposed) != 0)
             return false;
