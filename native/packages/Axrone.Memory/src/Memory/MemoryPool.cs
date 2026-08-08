@@ -169,13 +169,13 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
 
         TrackAllocationSize(requestedSize);
 
-        int bufferSize = GetOptimalBufferSize(requestedSize);
-
-        if (bufferSize > _maxBufferSize)
+        if (requestedSize > _maxBufferSize)
         {
             memoryOwner = null;
             return false;
         }
+
+        int bufferSize = GetOptimalBufferSize(requestedSize);
 
         var bucket = GetOrCreateBucket(GetBucketIndex(bufferSize));
 
@@ -723,7 +723,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         int insertionPoint = ~index;
         return insertionPoint < _bucketSizes.Length
             ? _bucketSizes[insertionPoint]
-            : GetNextPowerOfTwo(requestedSize);
+            : _bucketSizes[^1];
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
