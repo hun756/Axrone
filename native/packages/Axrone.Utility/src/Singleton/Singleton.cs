@@ -40,8 +40,8 @@ public static class Singleton
 
     /// <summary>Check if a singleton type has been initialized.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static bool IsInitialized<T>() where T : class, new() =>
-        SingletonProvider<T>.IsInitialized;
+    public static bool IsInitialized<T>() where T : class =>
+        SingletonRegistryInternal.TryGet(out T? _);
 
     /// <summary>
     /// Try to get an already-created instance without triggering creation.
