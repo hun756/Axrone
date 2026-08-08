@@ -9,6 +9,7 @@ obj/
 ## Build artifacts
 artifacts/
 publish/
+TestResults/
 
 ## NuGet
 *.nupkg
