@@ -89,7 +89,11 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         {
             double trimPressure = options.AutoTrimPercentage / 100.0;
             _trimTimer = new Timer(
-                _ => Trim(trimPressure),
+                _ =>
+                {
+                    if (Volatile.Read(ref _isDisposed) != 0) return;
+                    Trim(trimPressure);
+                },
                 null,
                 options.TrimInterval,
                 options.TrimInterval);
