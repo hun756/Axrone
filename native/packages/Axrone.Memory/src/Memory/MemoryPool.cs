@@ -23,7 +23,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
     private readonly int _allocationQuota;
     private readonly float _overAllocationFactor;
     private readonly int _memoryGuardPadding;
-    private readonly ConcurrentDictionary<int, BufferBucket<T>> _buckets;
+    private readonly BufferBucket<T>?[] _bucketArray;
     private readonly ConcurrentDictionary<int, long>? _allocationFrequency;
     private readonly ConditionalWeakTable<Thread, ThreadLocalCache>? _threadLocalCaches;
     private readonly int _tlsCacheSize;
@@ -73,10 +73,10 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         _allocationQuota = options.AllocationQuota;
         _overAllocationFactor = options.OverAllocationFactor;
         _memoryGuardPadding = options.MemoryGuardPadding;
-        _buckets = new ConcurrentDictionary<int, BufferBucket<T>>();
         _bucketSizes = options.CustomBucketSizes.Count > 0
             ? options.CustomBucketSizes.Order().Distinct().ToArray()
             : GenerateBucketSizes();
+        _bucketArray = new BufferBucket<T>?[_bucketSizes.Length];
 
         _tlsCacheSize = options.TlsCacheSize;
         if ((_flags & MemoryPoolFlags.UseTlsCache) != 0 && _tlsCacheSize > 0)
@@ -178,8 +178,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
             return false;
         }
 
-        var bucket = _buckets.GetOrAdd(bufferSize, static (size, pool) =>
-            new BufferBucket<T>(size, pool._maxBuffersPerBucket, pool._enableProfiling, false), this);
+        var bucket = GetOrCreateBucket(GetBucketIndex(bufferSize));
 
         if (bucket.TryTake(out var owner))
         {
@@ -260,14 +259,16 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         _trimTimer?.Dispose();
 
         long pooledBytes = 0;
-        foreach (var bucket in _buckets.Values)
+        for (int i = 0; i < _bucketArray.Length; i++)
         {
+            var bucket = _bucketArray[i];
+            if (bucket is null) continue;
             pooledBytes += (long)bucket.Count * bucket.BufferSize * Unsafe.SizeOf<T>();
             bucket.Dispose();
         }
 
         Interlocked.Add(ref _totalAllocated, -pooledBytes);
-        _buckets.Clear();
+        Array.Clear(_bucketArray);
 
         if (_threadLocalCaches != null)
         {
@@ -299,8 +300,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
             return;
         }
 
-        var bucket = _buckets.GetOrAdd(size, static (s, pool) =>
-            new BufferBucket<T>(s, pool._maxBuffersPerBucket, pool._enableProfiling, false), this);
+        var bucket = GetOrCreateBucket(GetBucketIndex(size));
 
         if (bucket.TryAdd(buffer))
             Interlocked.Increment(ref _pooledBuffers);
@@ -472,7 +472,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
             pooledBuffers: Interlocked.Read(ref _pooledBuffers),
             misses: misses,
             hits: hits,
-            bucketCount: _buckets.Count,
+            bucketCount: CountActiveBuckets(),
             fragmentationBytes: Interlocked.Read(ref _fragmentationBytes),
             elapsedTime: _runtime.Elapsed,
             averageRentTime: totalRents > 0 ? (double)Interlocked.Read(ref _totalRentTimeNs) / totalRents : 0,
@@ -502,8 +502,8 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         Interlocked.Exchange(ref _fragmentationBytes, 0);
         _allocationFrequency?.Clear();
 
-        foreach (var bucket in _buckets.Values)
-            bucket.ResetStatistics();
+        for (int i = 0; i < _bucketArray.Length; i++)
+            _bucketArray[i]?.ResetStatistics();
     }
 
     /// <summary>Removes a fraction of idle buffers from the pool.</summary>
@@ -523,8 +523,9 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         long removedBytes = 0;
         long removedCount = 0;
 
-        foreach (var bucket in _buckets.Values)
+        foreach (var bucket in _bucketArray)
         {
+            if (bucket is null) continue;
             int countBefore = bucket.Count;
             bucket.Trim((float)pressure);
             int countAfter = bucket.Count;
@@ -546,13 +547,15 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         long maxMemory = Interlocked.Read(ref _maxMemory);
 
         long wastedMemory = 0;
-        var bucketInfo = new Dictionary<int, BucketDiagnostics>(_buckets.Count);
-        foreach (var kvp in _buckets)
+        var bucketInfo = new Dictionary<int, BucketDiagnostics>(CountActiveBuckets());
+        for (int i = 0; i < _bucketArray.Length; i++)
         {
-            int count = kvp.Value.Count;
+            var bucket = _bucketArray[i];
+            if (bucket is null) continue;
+            int count = bucket.Count;
             if (count > 0)
-                wastedMemory += (long)count * kvp.Value.BufferSize * Unsafe.SizeOf<T>();
-            bucketInfo[kvp.Key] = kvp.Value.GetDiagnostics();
+                wastedMemory += (long)count * bucket.BufferSize * Unsafe.SizeOf<T>();
+            bucketInfo[_bucketSizes[i]] = bucket.GetDiagnostics();
         }
 
         long totalAllocations = Interlocked.Read(ref _totalAllocations);
@@ -580,10 +583,14 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
     /// <returns>A collection of <see cref="BucketDiagnostics"/> keyed by buffer size.</returns>
     public IReadOnlyDictionary<int, BucketDiagnostics> GetBucketDiagnostics()
     {
-        var result = new Dictionary<int, BucketDiagnostics>(_buckets.Count);
+        var result = new Dictionary<int, BucketDiagnostics>(CountActiveBuckets());
 
-        foreach (var kvp in _buckets)
-            result[kvp.Key] = kvp.Value.GetDiagnostics();
+        for (int i = 0; i < _bucketArray.Length; i++)
+        {
+            var bucket = _bucketArray[i];
+            if (bucket is null) continue;
+            result[_bucketSizes[i]] = bucket.GetDiagnostics();
+        }
 
         return result;
     }
@@ -609,6 +616,34 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
                 break;
             currentSmallest = Volatile.Read(ref _smallestAllocation);
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int GetBucketIndex(int bufferSize)
+    {
+        int index = Array.BinarySearch(_bucketSizes, bufferSize);
+        return index >= 0 ? index : ~index;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private BufferBucket<T> GetOrCreateBucket(int index)
+    {
+        var bucket = Volatile.Read(ref _bucketArray[index]);
+        if (bucket is not null)
+            return bucket;
+
+        int size = _bucketSizes[index];
+        var newBucket = new BufferBucket<T>(size, _maxBuffersPerBucket, _enableProfiling, false);
+        bucket = Interlocked.CompareExchange(ref _bucketArray[index], newBucket, null);
+        return bucket ?? newBucket;
+    }
+
+    private int CountActiveBuckets()
+    {
+        int count = 0;
+        for (int i = 0; i < _bucketArray.Length; i++)
+            if (_bucketArray[i] is not null) count++;
+        return count;
     }
 
     private int CalculateMostFrequentAllocation()
@@ -657,8 +692,7 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
             var buffer = new MemoryPoolBuffer(this, array, bufferSize);
             Interlocked.Add(ref _totalAllocated, (long)bufferSize * Unsafe.SizeOf<T>());
 
-            var bucket = _buckets.GetOrAdd(bufferSize, static (size, pool) =>
-                new BufferBucket<T>(size, pool._maxBuffersPerBucket, pool._enableProfiling, false), this);
+            var bucket = GetOrCreateBucket(GetBucketIndex(bufferSize));
             if (bucket.TryAdd(buffer))
                 Interlocked.Increment(ref _pooledBuffers);
         }
