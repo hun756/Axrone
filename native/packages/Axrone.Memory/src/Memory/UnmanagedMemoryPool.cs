@@ -202,9 +202,16 @@ public sealed class UnmanagedMemoryPool : IDisposable
 
     /// <summary>Removes a fraction of idle buffers from the pool.</summary>
     /// <param name="percentage">Fraction to remove: 0.0 removes none, 1.0 removes all.</param>
-    public void Trim(float percentage = 0.5f)
+    /// <exception cref="ObjectDisposedException">The pool has been disposed.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="percentage"/> is outside (0.0, 1.0].</exception>
+    public void Trim(double percentage = 0.5)
     {
-        if (percentage <= 0 || percentage > 1)
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _isDisposed) != 0, this);
+
+        if (percentage < 0.0 || percentage > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(percentage), percentage, "Percentage must be between 0.0 and 1.0.");
+
+        if (percentage == 0.0)
             return;
 
         foreach (var pair in _buffersBySize)
