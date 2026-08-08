@@ -6,7 +6,7 @@ namespace Axrone.ObjectPool;
 /// </summary>
 /// <typeparam name="T">The reference type of objects managed by the pool.</typeparam>
 [StructLayout(LayoutKind.Auto)]
-[SkipLocalsInit]
+[DebuggerDisplay("ObjectPool<{typeof(T).Name}> Count = {Count}, Rented = {_rented}, Strategy = {_configuration.Strategy}")]
 public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 {
     private readonly struct PooledItem

@@ -4,6 +4,7 @@ namespace Axrone.ObjectPool;
 /// Immutable configuration for an object pool, covering capacity, strategy, diagnostics, and memory behavior.
 /// </summary>
 [StructLayout(LayoutKind.Auto)]
+[DebuggerDisplay("PoolConfiguration(Initial={InitialCapacity}, Max={MaximumCapacity}, Strategy={Strategy})")]
 public readonly struct PoolConfiguration
 {
     /// <summary>

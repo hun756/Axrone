@@ -5,7 +5,7 @@ namespace Axrone.ObjectPool;
 /// and upgradeable read locks. Optionally supports recursive lock acquisition on the same thread.
 /// </summary>
 [StructLayout(LayoutKind.Auto)]
-[SkipLocalsInit]
+[DebuggerDisplay("AsyncReaderWriterLock Readers = {_readerCount}, Writers = {_writerCount}")]
 public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 {
     private struct LockHandle : IDisposable
