@@ -8,8 +8,8 @@ public sealed class MemoryPoolOptions<T>
 {
     private static readonly MemoryPoolOptions<T> s_default = new();
 
-    /// <summary>Shared default options instance.</summary>
-    public static MemoryPoolOptions<T> Default => s_default;
+    /// <summary>Shared default options instance. Returns a clone to prevent mutation of the singleton.</summary>
+    public static MemoryPoolOptions<T> Default => s_default.Clone();
 
     /// <summary>Default buffer size in elements when no size is specified. Default: 4096.</summary>
     public int DefaultBufferSize { get; set; } = 4096;
