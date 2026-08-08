@@ -6,6 +6,11 @@ namespace Axrone.Memory;
 /// <typeparam name="T">Element type of buffers managed by the pool.</typeparam>
 public sealed class MemoryPoolOptions<T>
 {
+    private static readonly MemoryPoolOptions<T> s_default = new();
+
+    /// <summary>Shared default options instance.</summary>
+    public static MemoryPoolOptions<T> Default => s_default;
+
     /// <summary>Default buffer size in elements when no size is specified. Default: 4096.</summary>
     public int DefaultBufferSize { get; set; } = 4096;
 
@@ -50,6 +55,9 @@ public sealed class MemoryPoolOptions<T>
 
     /// <summary>Percentage of idle buffers to remove during auto-trim. Default: 25.</summary>
     public int AutoTrimPercentage { get; set; } = 25;
+
+    /// <summary>Buffer size threshold for memory compression. Default: 1MB.</summary>
+    public int MemoryCompressThreshold { get; set; } = 1024 * 1024;
 
     /// <summary>Batch size for RentMultiple/ReturnMultiple operations. Default: 16.</summary>
     public int BatchOperationSize { get; set; } = 16;
@@ -212,6 +220,7 @@ public sealed class MemoryPoolOptions<T>
             MemoryGuardPadding = MemoryGuardPadding,
             TrimInterval = TrimInterval,
             AutoTrimPercentage = AutoTrimPercentage,
+            MemoryCompressThreshold = MemoryCompressThreshold,
             BatchOperationSize = BatchOperationSize,
             AllocationQuota = AllocationQuota,
             OverAllocationFactor = OverAllocationFactor,
