@@ -208,6 +208,7 @@ export interface ParticleRenderData {
     readonly alphas: Float32Array;
     readonly seeds: Float32Array;
     readonly count: number;
+    readonly aliveCount: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -894,6 +895,7 @@ export class ParticleSystem extends Component {
             alphas: this._renderAlphas,
             seeds: this._seeds,
             count: this._maxParticles,
+            aliveCount: this._aliveCount,
         };
     }
 

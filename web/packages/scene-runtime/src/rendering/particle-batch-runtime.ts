@@ -220,8 +220,12 @@ export class SceneParticleBatchRuntime {
      * buffer and returns the number of vertices written.
      */
     private _buildPointVertices(data: ParticleRenderData): number {
-        const liveCount = data.count;
-        this._ensureVertexCapacity(liveCount);
+        if (data.aliveCount === 0) {
+            return 0;
+        }
+
+        const totalCount = data.count;
+        this._ensureVertexCapacity(data.aliveCount);
 
         const positions = data.positions;
         const colors = data.colors;
@@ -231,7 +235,7 @@ export class SceneParticleBatchRuntime {
         const vertexData = this._vertexData;
 
         let vertexIndex = 0;
-        for (let i = 0; i < liveCount; i += 1) {
+        for (let i = 0; i < totalCount; i += 1) {
             const alpha = alphas[i] ?? 0;
             if (alpha <= ALPHA_EPSILON) {
                 continue;
