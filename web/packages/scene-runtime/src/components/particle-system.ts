@@ -1,6 +1,6 @@
 import { Component, Transform, script } from '@axrone/ecs-runtime';
 import type { ParticleSystem as CoreParticleSystem } from '@axrone/particle-system';
-import { createCoreParticleSystem, syncCoreRenderData } from './particle-system-bridge';
+import { createCoreParticleSystem, syncCoreRenderData, spawnToCoreBuffer } from './particle-system-bridge';
 
 /* ------------------------------------------------------------------ */
 /* Public types                                                        */
@@ -1004,6 +1004,18 @@ export class ParticleSystem extends Component {
                 break;
             }
             this._spawnParticle(slot);
+            if (this._useCoreSimulation && this._coreSystem) {
+                const i3 = slot * 3;
+                const r = this._startColorRgb[0], g = this._startColorRgb[1], b = this._startColorRgb[2];
+                spawnToCoreBuffer(
+                    this._coreSystem,
+                    { x: this._positions[i3], y: this._positions[i3 + 1], z: this._positions[i3 + 2] },
+                    { x: this._velocities[i3], y: this._velocities[i3 + 1], z: this._velocities[i3 + 2] },
+                    this._lifetimes[slot],
+                    this._startSize * (this._sizeMultipliers[slot] || 1),
+                    r, g, b, 1,
+                );
+            }
         }
     }
 
@@ -1412,12 +1424,60 @@ export class ParticleSystem extends Component {
         }
     }
 
+    private _rebuildCoreSystem(): void {
+        if (this._coreSystem) {
+            this._coreSystem.destroy();
+            this._coreSystem = null;
+        }
+        this._initCoreSystem();
+    }
+
     private _updateCoreSimulation(dt: number): void {
         const core = this._coreSystem!;
-        core.update(dt);
+        const prevCoreCount = core.getParticles().count;
+
+        const canSimulate = this._looping || this._loopTime < this._duration;
+        if (canSimulate) {
+            this._loopTime += dt;
+            this._elapsed += dt;
+
+            if (this._looping && this._loopTime >= this._duration) {
+                this._loopTime %= this._duration;
+                this._burstFired = this._burstFired.map(() => false);
+            }
+
+            this._emitOverTime(dt);
+            this._emitBursts();
+        }
+
+        this._integrate(dt);
 
         const coreData = core.getParticles();
-        const alive = syncCoreRenderData(coreData, {
+        const newCoreCount = coreData.count;
+        if (this._aliveCount > prevCoreCount && newCoreCount < this._aliveCount) {
+            const buffer = coreData as unknown as { addParticle(p: {x:number;y:number;z:number}, v: {x:number;y:number;z:number}, lt: number, sz: number, c: number): unknown };
+            const start = Math.max(prevCoreCount, newCoreCount);
+            const end = Math.min(this._aliveCount, this._maxParticles);
+            for (let idx = start; idx < end; idx++) {
+                const age = this._ages[idx];
+                const lt = this._lifetimes[idx];
+                if (age >= lt) continue;
+                const i3 = idx * 3;
+                const r = this._startColorRgb[0], g = this._startColorRgb[1], b = this._startColorRgb[2];
+                const packed = ((Math.round(r * 255) & 0xff) << 24) | ((Math.round(g * 255) & 0xff) << 16) | ((Math.round(b * 255) & 0xff) << 8) | 255;
+                buffer.addParticle(
+                    { x: this._positions[i3], y: this._positions[i3 + 1], z: this._positions[i3 + 2] },
+                    { x: this._velocities[i3], y: this._velocities[i3 + 1], z: this._velocities[i3 + 2] },
+                    lt - age,
+                    this._renderSizes[idx] || this._startSize,
+                    packed,
+                );
+            }
+        }
+
+        core.update(dt);
+
+        const alive = syncCoreRenderData(core.getParticles(), {
             positions: this._positions,
             renderColors: this._renderColors,
             renderSizes: this._renderSizes,
@@ -1428,7 +1488,6 @@ export class ParticleSystem extends Component {
         });
 
         this._aliveCount = alive;
-        this._elapsed += dt;
         this.advanceTextureFrame(dt);
 
         if (!this._looping && this._elapsed >= this._duration && alive === 0) {
@@ -1754,6 +1813,10 @@ export class ParticleSystem extends Component {
                 config.textureRegion[2],
                 config.textureRegion[3],
             ];
+        }
+
+        if (this._coreSystem) {
+            this._rebuildCoreSystem();
         }
     }
 }

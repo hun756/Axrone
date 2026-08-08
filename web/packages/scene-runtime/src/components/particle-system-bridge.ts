@@ -10,6 +10,7 @@ import {
     CollisionModule,
     LimitVelocityModule,
     TextureSheetModule,
+    SOAParticleBuffer,
     EmitterShape,
     SimulationSpace,
     CurveMode,
@@ -22,6 +23,7 @@ import type {
     ImmutableColor,
     ImmutableVec3,
     IParticleData,
+    ParticleId,
 } from '@axrone/particle-system';
 import type { ParticleSystemConfig } from './particle-system';
 
@@ -45,6 +47,14 @@ function hexToColor(hex: string): ImmutableColor {
     const g = parseInt(hex.slice(3, 5), 16) / 255;
     const b = parseInt(hex.slice(5, 7), 16) / 255;
     return { r, g, b, a: 1 };
+}
+
+function packColor(r: number, g: number, b: number, a: number): number {
+    const ri = Math.round(r * 255) & 0xff;
+    const gi = Math.round(g * 255) & 0xff;
+    const bi = Math.round(b * 255) & 0xff;
+    const ai = Math.round(a * 255) & 0xff;
+    return (ri << 24) | (gi << 16) | (bi << 8) | ai;
 }
 
 const SHAPE_MAP: Record<string, EmitterShape> = {
@@ -85,8 +95,8 @@ export function createCoreParticleSystem(config: ParticleSystemConfig): CorePart
     const startColor = hexToColor(config.startColor ?? '#FFCF6B');
     const startRgb = [startColor.r, startColor.g, startColor.b];
 
-    core.addModule(new EmissionModule({
-        enabled: config.emissionEnabled !== false,
+    const emission = new EmissionModule({
+        enabled: false,
         priority: 100,
         rateOverTime: constantCurve(config.rateOverTime ?? 50),
         rateOverDistance: constantCurve(config.rateOverDistance ?? 0),
@@ -100,7 +110,8 @@ export function createCoreParticleSystem(config: ParticleSystemConfig): CorePart
         startSize: constantCurve(config.startSize ?? 1),
         startSizeMultiplier: 1,
         startColor: constantColor(startRgb[0], startRgb[1], startRgb[2], 1),
-    }));
+    });
+    core.addModule(emission);
 
     core.addModule(new ShapeModule({
         enabled: config.shapeEnabled !== false,
@@ -324,11 +335,44 @@ function buildColorOverLifetimeGradient(config: ParticleSystemConfig): GradientC
     };
 }
 
+/**
+ * Retrieves the core's underlying SOA particle buffer for direct writes.
+ * The core's `getParticles()` returns a readonly view, but the concrete
+ * `SOAParticleBuffer` exposes `addParticle()` for direct buffer insertion.
+ */
+export function getCoreBuffer(core: CoreParticleSystem): SOAParticleBuffer {
+    return core.getParticles() as unknown as SOAParticleBuffer;
+}
+
+/**
+ * Spawns a particle directly into the core's SOA buffer with correct
+ * position, velocity (shape direction * startSpeed), lifetime, size and color.
+ *
+ * This bypasses the core's EmissionModule (which always emits at origin with
+ * zero velocity) so the scene component retains full control over the
+ * emission pipeline while the core handles over-lifetime effects.
+ */
+export function spawnToCoreBuffer(
+    core: CoreParticleSystem,
+    position: { x: number; y: number; z: number },
+    velocity: { x: number; y: number; z: number },
+    lifetime: number,
+    size: number,
+    r: number,
+    g: number,
+    b: number,
+    a: number = 1,
+): ParticleId | null {
+    const buffer = getCoreBuffer(core);
+    const color = packColor(r, g, b, a);
+    return buffer.addParticle(position, velocity, lifetime, size, color);
+}
+
 export function syncCoreRenderData(
     coreData: IParticleData,
     buffers: SceneParticleRenderBuffers,
 ): number {
-    const { positions, colors, sizes, ages, lifetimes, alive, rotations: coreRotations } = coreData;
+    const { positions, colors, sizes, ages, lifetimes, alive, ids, rotations: coreRotations } = coreData;
     const capacity = coreData.capacity;
     const maxParticles = buffers.maxParticles;
 
@@ -371,7 +415,7 @@ export function syncCoreRenderData(
 
         dstSize[aliveCount] = sizes[src3] ?? 1;
 
-        dstSeeds[aliveCount] = (i * 0.618) % 10;
+        dstSeeds[aliveCount] = ids ? (ids[i] ?? i) * 0.618033988 % 10 : i * 0.618033988 % 10;
 
         if (coreRotations) {
             dstRot[aliveCount] = coreRotations[src3] ?? 0;
