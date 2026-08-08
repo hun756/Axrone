@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using FluentAssertions;
 using Xunit;
 
@@ -141,5 +142,26 @@ public sealed class MemoryOwnerTests
 
         var accessReadOnlyMemory = () => owner.ReadOnlyMemory;
         accessReadOnlyMemory.Should().Throw<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public void ReuseAfterSliceCycle_RefCountResetCorrectly()
+    {
+        using var pool = new MemoryPool<byte>();
+
+        var owner1 = pool.Rent(64);
+        var slice1 = owner1.Slice(0, 32);
+
+        owner1.ReferenceCount.Should().Be(2);
+
+        owner1.Dispose();
+        slice1.Dispose();
+
+        var owner2 = pool.Rent(64);
+
+        owner2.ReferenceCount.Should().Be(1,
+            "Activate() must reset referenceCount to 1 when reusing a buffer from the pool");
+
+        owner2.Dispose();
     }
 }
