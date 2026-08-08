@@ -4,13 +4,16 @@ namespace Axrone.Utility.Singleton;
 
 /// <summary>
 /// CRTP base class for type-safe singletons. Provides <c>MySystem.Instance</c> access pattern.
+/// Supports <see cref="IDisposable"/>, GCHandle pinning via <c>[Singleton(Pinned = true)]</c>,
+/// and <see cref="ISingletonLifecycle"/> dispatch.
 /// </summary>
 /// <typeparam name="TSelf">The concrete singleton type (self-referencing generic).</typeparam>
 /// <example>
 /// <code>
-/// public sealed class AudioSystem : SingletonBase&lt;AudioSystem&gt;
+/// public sealed class AudioSystem : SingletonBase&lt;AudioSystem&gt;, ISingletonLifecycle
 /// {
 ///     protected override void OnCreated() { /* init audio device */ }
+///     void ISingletonLifecycle.Initialize() { /* load sound banks */ }
 /// }
 ///
 /// // Usage:
@@ -19,10 +22,12 @@ namespace Axrone.Utility.Singleton;
 /// </example>
 [StructLayout(LayoutKind.Auto)]
 [SkipLocalsInit]
-public abstract class SingletonBase<TSelf> where TSelf : SingletonBase<TSelf>, new()
+public abstract class SingletonBase<TSelf> : IDisposable where TSelf : SingletonBase<TSelf>, new()
 {
     private static TSelf? _instance;
     private static int _status;
+    private static GCHandle _pinHandle;
+    private static int _disposed;
 
     private const int Uninitialized = 0;
     private const int Initializing = 1;
@@ -36,7 +41,11 @@ public abstract class SingletonBase<TSelf> where TSelf : SingletonBase<TSelf>, n
         get
         {
             var status = Volatile.Read(ref _status);
-            if (status == Initialized) return Volatile.Read(ref _instance)!;
+            if (status == Initialized)
+            {
+                SingletonDiagnostics.RecordAccess<TSelf>();
+                return Volatile.Read(ref _instance)!;
+            }
             return InitializeInstance();
         }
     }
@@ -56,8 +65,26 @@ public abstract class SingletonBase<TSelf> where TSelf : SingletonBase<TSelf>, n
             ThrowInvalidConstruction();
     }
 
-    /// <summary>Called once after construction, before the instance is published.</summary>
+    /// <summary>Called once after construction, before lifecycle hooks.</summary>
     protected virtual void OnCreated() { }
+
+    /// <summary>Release resources held by this singleton. Idempotent.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Override to release managed/unmanaged resources.</summary>
+    /// <param name="disposing"><see langword="true"/> from <see cref="Dispose()"/>.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposing) return;
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+        if (_pinHandle.IsAllocated)
+            _pinHandle.Free();
+    }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     [DoesNotReturn]
@@ -75,17 +102,25 @@ public abstract class SingletonBase<TSelf> where TSelf : SingletonBase<TSelf>, n
             TSelf newInstance;
             try
             {
+                SingletonDiagnostics.RecordCreationStart<TSelf>();
                 using (NestingContext.EnterScope())
                 {
                     newInstance = new TSelf();
                     newInstance.OnCreated();
 
-                    if (newInstance is IInitializable initializable)
-                        initializable.Initialize();
-
-                    if (newInstance is IAsyncInitializable asyncInitializable)
-                        asyncInitializable.InitializeAsync().GetAwaiter().GetResult();
+                    if (newInstance is ISingletonLifecycle lifecycle)
+                    {
+                        lifecycle.Initialize();
+                        var asyncTask = lifecycle.InitializeAsync();
+                        if (!asyncTask.IsCompletedSuccessfully)
+                            asyncTask.AsTask().GetAwaiter().GetResult();
+                    }
                 }
+
+                if (SingletonAttributeCache<TSelf>.Pinned)
+                    _pinHandle = GCHandle.Alloc(newInstance, GCHandleType.Normal);
+
+                SingletonDiagnostics.RecordCreationEnd<TSelf>();
             }
             catch (Exception ex) when (ex is not SingletonCreationException)
             {
@@ -95,6 +130,8 @@ public abstract class SingletonBase<TSelf> where TSelf : SingletonBase<TSelf>, n
             }
 
             Volatile.Write(ref _instance, newInstance);
+            SingletonRegistryInternal.Register(newInstance);
+            SingletonShutdownRegistry.Register(newInstance);
             Volatile.Write(ref _status, Initialized);
             return newInstance;
         }
@@ -103,15 +140,8 @@ public abstract class SingletonBase<TSelf> where TSelf : SingletonBase<TSelf>, n
         while (Volatile.Read(ref _status) != Initialized)
             spinner.SpinOnce();
 
-        return Volatile.Read(ref _instance)!;
-    }
-
-    /// <summary>
-    /// Eager initialization hook. Call from a non-generic <c>[ModuleInitializer]</c> or from <c>WarmUp()</c>.
-    /// </summary>
-    internal static void RegisterForAotInitialization()
-    {
-        if (typeof(IEagerSingleton).IsAssignableFrom(typeof(TSelf)))
-            _ = Instance;
+        var result = Volatile.Read(ref _instance)!;
+        SingletonDiagnostics.RecordAccess<TSelf>();
+        return result;
     }
 }

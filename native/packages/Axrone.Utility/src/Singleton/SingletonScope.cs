@@ -3,11 +3,13 @@ using Axrone.Utility.Singleton.Internal;
 namespace Axrone.Utility.Singleton;
 
 /// <summary>
-/// Scoped singleton with <see cref="AsyncLocal{T}"/> ambient context.
-/// Supports parent-child hierarchy and automatic disposal on scope exit.
+/// Scoped singleton container with <see cref="AsyncLocal{T}"/> ambient context.
+/// Supports both string-keyed and type-keyed registrations, parent-child hierarchy,
+/// and automatic disposal on scope exit.
 /// </summary>
 /// <remarks>
-/// Named-key registry within a scope. Child scopes fall back to parent for unresolved keys.
+/// String-keyed entries fall back to parent scope for unresolved keys.
+/// Type-keyed entries (<c>Register&lt;T&gt;()</c>, <see cref="Resolve{T}()"/>) use the type itself as key.
 /// </remarks>
 [StructLayout(LayoutKind.Auto)]
 [SkipLocalsInit]
@@ -17,6 +19,8 @@ public sealed class SingletonScope : IDisposable
 
     private readonly Dictionary<string, object> _instances = new();
     private readonly Dictionary<string, Func<object>> _factories = new();
+    private readonly Dictionary<Type, object> _typedInstances = new();
+    private readonly Dictionary<Type, Func<object>> _typedFactories = new();
     private readonly List<Action> _disposers = [];
     private readonly SingletonScope? _parent;
     private readonly object _lock = new();
@@ -43,7 +47,9 @@ public sealed class SingletonScope : IDisposable
         _parent = parent;
     }
 
-    /// <summary>Register a keyed factory with optional disposer.</summary>
+    // ── String-keyed API ─────────────────────────────────────────────
+
+    /// <summary>Register a string-keyed factory with optional disposer.</summary>
     public void Register<T>(string key, Func<T> factory, Action<T>? disposer = null) where T : class
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -60,7 +66,7 @@ public sealed class SingletonScope : IDisposable
         }
     }
 
-    /// <summary>Resolve a keyed instance. Falls back to parent scope if not found locally.</summary>
+    /// <summary>Resolve a string-keyed instance. Falls back to parent scope if not found locally.</summary>
     public T Resolve<T>(string key) where T : class
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -83,7 +89,7 @@ public sealed class SingletonScope : IDisposable
         }
     }
 
-    /// <summary>Non-throwing resolve variant.</summary>
+    /// <summary>Non-throwing string-keyed resolve variant.</summary>
     public bool TryResolve<T>(string key, [NotNullWhen(true)] out T? instance) where T : class
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -110,6 +116,84 @@ public sealed class SingletonScope : IDisposable
             return true;
         }
     }
+
+    // ── Type-keyed API ───────────────────────────────────────────────
+
+    /// <summary>Register a type-keyed factory. Resolved via <see cref="Resolve{T}()"/> without a string key.</summary>
+    public void Register<T>(Func<T> factory) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        lock (_lock)
+        {
+            _typedFactories[typeof(T)] = () => factory();
+        }
+    }
+
+    /// <summary>
+    /// Resolve a type-keyed instance. Checks the current ambient scope first,
+    /// then falls back to <see cref="Global"/>.
+    /// </summary>
+    public static T Resolve<T>() where T : class
+    {
+        var scope = _current.Value ?? Global;
+        return scope.ResolveTyped<T>();
+    }
+
+    /// <summary>Try to resolve a type-keyed instance from the ambient scope chain.</summary>
+    public static bool TryResolve<T>([NotNullWhen(true)] out T? instance) where T : class
+    {
+        var scope = _current.Value ?? Global;
+        return scope.TryResolveTyped(out instance);
+    }
+
+    private T ResolveTyped<T>() where T : class
+    {
+        lock (_lock)
+        {
+            if (_typedInstances.TryGetValue(typeof(T), out var existing))
+                return (T)existing;
+
+            if (!_typedFactories.TryGetValue(typeof(T), out var factory))
+            {
+                if (_parent is not null)
+                    return _parent.ResolveTyped<T>();
+                throw new KeyNotFoundException(
+                    $"No typed registration found for {typeof(T).Name} in scope '{Name}'.");
+            }
+
+            var instance = (T)factory();
+            _typedInstances[typeof(T)] = instance;
+            return instance;
+        }
+    }
+
+    private bool TryResolveTyped<T>([NotNullWhen(true)] out T? instance) where T : class
+    {
+        lock (_lock)
+        {
+            if (_typedInstances.TryGetValue(typeof(T), out var existing))
+            {
+                instance = (T)existing;
+                return true;
+            }
+
+            if (!_typedFactories.TryGetValue(typeof(T), out var factory))
+            {
+                if (_parent is not null)
+                    return _parent.TryResolveTyped(out instance);
+
+                instance = default;
+                return false;
+            }
+
+            var created = (T)factory();
+            _typedInstances[typeof(T)] = created;
+            instance = created;
+            return true;
+        }
+    }
+
+    // ── Scope management ─────────────────────────────────────────────
 
     /// <summary>Create a child scope with this scope as parent.</summary>
     public SingletonScope CreateChild(string childName) => new(childName, this);
@@ -154,5 +238,7 @@ public sealed class SingletonScope : IDisposable
         _disposers.Clear();
         _instances.Clear();
         _factories.Clear();
+        _typedInstances.Clear();
+        _typedFactories.Clear();
     }
 }
