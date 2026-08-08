@@ -131,23 +131,28 @@ internal sealed class BufferBucket<T> where T : struct
         }
         else
         {
-            _fastBuffers.Push(buffer);
-
-            bool countIncremented;
             int currentCount;
+            bool casSucceeded;
             do
             {
                 currentCount = Volatile.Read(ref _count);
                 if (currentCount >= _maxCount)
                 {
-                    _fastBuffers.TryPop(out _);
-                    countIncremented = false;
+                    casSucceeded = false;
                     break;
                 }
-                countIncremented = Interlocked.CompareExchange(ref _count, currentCount + 1, currentCount) == currentCount;
-            } while (!countIncremented);
+                casSucceeded = Interlocked.CompareExchange(ref _count, currentCount + 1, currentCount) == currentCount;
+            } while (!casSucceeded);
 
-            result = countIncremented;
+            if (casSucceeded)
+            {
+                _fastBuffers.Push(buffer);
+                result = true;
+            }
+            else
+            {
+                result = false;
+            }
         }
 
         if (result && _enableProfiling)
