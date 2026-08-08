@@ -271,16 +271,13 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
 
         _trimTimer?.Dispose();
 
-        long pooledBytes = 0;
         for (int i = 0; i < _bucketArray.Length; i++)
         {
             var bucket = _bucketArray[i];
             if (bucket is null) continue;
-            pooledBytes += (long)bucket.Count * bucket.BufferSize * Unsafe.SizeOf<T>();
             bucket.Dispose();
         }
 
-        Interlocked.Add(ref _totalAllocated, -pooledBytes);
         Array.Clear(_bucketArray);
 
         if (_threadLocalCaches != null)
