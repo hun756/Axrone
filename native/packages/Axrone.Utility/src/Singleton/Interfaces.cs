@@ -5,8 +5,11 @@ namespace Axrone.Utility.Singleton;
 /// implement only the hooks your type needs.
 /// </summary>
 /// <remarks>
-/// Replaces the separate <c>IInitializable</c>, <c>IAsyncInitializable</c>, and <c>IEagerSingleton</c> interfaces
-/// with a single coherent contract. The subsystem dispatches to these methods during singleton creation.
+/// <para><b>Initialization ordering:</b> <see cref="Initialize"/> is always called before
+/// <see cref="InitializeAsync"/>. If you implement only async setup, the sync hook runs as a no-op first.</para>
+/// <para><b>Native AOT safety:</b> The default interface methods used here have trivial bodies
+/// (empty or <c>return default</c>) and are fully supported under Native AOT compilation.
+/// No complex DIM dispatch or interface-constrained generic calls are involved.</para>
 /// </remarks>
 /// <example>
 /// <code>
@@ -19,7 +22,7 @@ namespace Axrone.Utility.Singleton;
 /// </example>
 public interface ISingletonLifecycle
 {
-    /// <summary>Called once after construction, before the instance is published.</summary>
+    /// <summary>Called once after construction, before the instance is published. Always called before <see cref="InitializeAsync"/>.</summary>
     void Initialize() { }
 
     /// <summary>Called once after <see cref="Initialize"/> for async setup (device handles, file loads).</summary>
@@ -33,8 +36,14 @@ public interface ISingletonLifecycle
 }
 
 /// <summary>Keyed identity — for multiton/keyed types that receive their key at construction.</summary>
+/// <remarks>
+/// The <see cref="Key"/> property is set by <c>KeyedSingleton&lt;TSelf, TKey&gt;</c> immediately
+/// after construction and before <see cref="ISingletonLifecycle.Initialize"/>. Do not mutate
+/// the key after initialization — it is used as the dictionary lookup identity.
+/// </remarks>
 /// <typeparam name="TKey">The key type.</typeparam>
 public interface IKeyed<TKey>
 {
+    /// <summary>The key identifying this instance. Set once by the subsystem during creation.</summary>
     TKey Key { get; set; }
 }
