@@ -1,12 +1,13 @@
 namespace Axrone.Memory;
 
 /// <summary>
-/// A lightweight struct wrapping a native memory pointer rented from <see cref="UnmanagedMemoryPool"/>.
+/// A lightweight class wrapping a native memory pointer rented from <see cref="UnmanagedMemoryPool"/>.
 /// Provides zero-overhead access to unmanaged memory as spans and pointers.
+/// Reference type to prevent double-free on copy.
 /// </summary>
-public struct UnmanagedMemoryHandle : IDisposable
+public sealed class UnmanagedMemoryHandle : IDisposable
 {
-    private readonly UnmanagedMemoryPool _pool;
+    private UnmanagedMemoryPool? _pool;
     private IntPtr _pointer;
     private readonly int _size;
 
@@ -45,7 +46,7 @@ public struct UnmanagedMemoryHandle : IDisposable
     /// <returns>A typed handle with length computed from the buffer size.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public UnmanagedMemoryHandle<T> As<T>() where T : unmanaged =>
-        new(_pointer, _size / Unsafe.SizeOf<T>());
+        new(this, 0, _size / Unsafe.SizeOf<T>());
 
     /// <summary>Returns the buffer to the pool.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -53,12 +54,15 @@ public struct UnmanagedMemoryHandle : IDisposable
     {
         var pointer = Interlocked.Exchange(ref _pointer, IntPtr.Zero);
         if (pointer != IntPtr.Zero)
-            _pool.Return(pointer, _size);
+        {
+            _pool?.Return(pointer, _size);
+            _pool = null;
+        }
     }
 }
 
 /// <summary>
-/// A typed readonly struct wrapping a native memory pointer, providing indexed access
+/// A typed struct wrapping a native memory pointer, providing indexed access
 /// and span views over unmanaged memory for a specific unmanaged type.
 /// </summary>
 /// <typeparam name="T">Unmanaged element type.</typeparam>
@@ -66,20 +70,20 @@ public readonly struct UnmanagedMemoryHandle<T> : IDisposable where T : unmanage
 {
     private readonly IntPtr _pointer;
     private readonly int _length;
-    private readonly UnmanagedMemoryHandle _baseHandle;
+    private readonly UnmanagedMemoryHandle? _baseHandle;
 
     internal UnmanagedMemoryHandle(IntPtr pointer, int length)
     {
         _pointer = pointer;
         _length = length;
-        _baseHandle = default;
+        _baseHandle = null;
     }
 
     internal UnmanagedMemoryHandle(UnmanagedMemoryHandle baseHandle, int offset, int length)
     {
         _baseHandle = baseHandle;
         _length = length;
-        _pointer = IntPtr.Add(baseHandle.Pointer, offset * Unsafe.SizeOf<T>());
+        unsafe { _pointer = (IntPtr)((byte*)baseHandle.Pointer + (nint)offset * Unsafe.SizeOf<T>()); }
     }
 
     /// <summary>Gets the native memory pointer.</summary>
@@ -98,7 +102,7 @@ public readonly struct UnmanagedMemoryHandle<T> : IDisposable where T : unmanage
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public unsafe ReadOnlySpan<T> AsReadOnlySpan() => new((void*)_pointer, _length);
 
-    /// <summary>Gets the raw native pointer as a <typeparamref name="T"/>*.</summary>
+    /// <summary>Gets the raw native pointer as a typed pointer.</summary>
     /// <returns>The typed native pointer.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public unsafe T* ToPointer() => (T*)_pointer;
@@ -133,7 +137,7 @@ public readonly struct UnmanagedMemoryHandle<T> : IDisposable where T : unmanage
         if ((uint)start > (uint)_length || (uint)length > (uint)(_length - start))
             throw new ArgumentOutOfRangeException(nameof(start));
 
-        return new UnmanagedMemoryHandle<T>(IntPtr.Add(_pointer, start * Unsafe.SizeOf<T>()), length);
+        unsafe { return new UnmanagedMemoryHandle<T>((IntPtr)((byte*)_pointer + (nint)start * Unsafe.SizeOf<T>()), length); }
     }
 
     /// <summary>Copies the handle contents to the destination span.</summary>
@@ -152,7 +156,6 @@ public readonly struct UnmanagedMemoryHandle<T> : IDisposable where T : unmanage
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
-        if (_baseHandle.Pointer != IntPtr.Zero)
-            _baseHandle.Dispose();
+        _baseHandle?.Dispose();
     }
 }
