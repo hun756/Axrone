@@ -1,15 +1,35 @@
 namespace Axrone.Utility.Singleton;
 
-/// <summary>Declarative singleton lifetime metadata.</summary>
+/// <summary>Declarative singleton metadata — lifetime, thread-safety strategy, pinning, and diagnostics.</summary>
+/// <remarks>
+/// Consolidates the former <c>ThreadSafeSingletonAttribute</c> into a single attribute.
+/// Read once per closed type by <c>SingletonAttributeCache&lt;T&gt;</c>.
+/// </remarks>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class SingletonAttribute : Attribute
 {
-    public SingletonLifetime Lifetime { get; }
-
     public SingletonAttribute(SingletonLifetime lifetime = SingletonLifetime.Singleton)
     {
         Lifetime = lifetime;
     }
+
+    /// <summary>Singleton lifetime semantics.</summary>
+    public SingletonLifetime Lifetime { get; }
+
+    /// <summary>Thread-safety strategy for singleton storage.</summary>
+    public SingletonThreadSafety ThreadSafety { get; init; } = SingletonThreadSafety.ExecutionAndPublication;
+
+    /// <summary>
+    /// When <see langword="true"/>, the instance is pinned via <see cref="GCHandle"/>
+    /// so native code can hold a stable reference.
+    /// </summary>
+    public bool Pinned { get; init; }
+
+    /// <summary>
+    /// When <see langword="true"/>, creation time, access count, and access duration
+    /// are tracked via <c>SingletonDiagnostics</c>.
+    /// </summary>
+    public bool Monitored { get; init; }
 }
 
 /// <summary>Singleton lifetime semantics.</summary>
@@ -25,15 +45,17 @@ public enum SingletonLifetime
     Transient,
 }
 
-/// <summary>Thread-safety mode hint for singleton creation.</summary>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
-public sealed class ThreadSafeSingletonAttribute : Attribute
+/// <summary>Thread-safety strategy for singleton storage.</summary>
+public enum SingletonThreadSafety
 {
-    public ThreadSafeSingletonAttribute(
-        LazyThreadSafetyMode threadSafetyMode = LazyThreadSafetyMode.ExecutionAndPublication)
-    {
-        ThreadSafetyMode = threadSafetyMode;
-    }
+    /// <summary>
+    /// Standard lock-free CAS + <see cref="SpinWait"/>. One instance globally, safe for concurrent access.
+    /// </summary>
+    ExecutionAndPublication,
 
-    public LazyThreadSafetyMode ThreadSafetyMode { get; }
+    /// <summary>One instance per thread via <c>[ThreadStatic]</c>.</summary>
+    ThreadStatic,
+
+    /// <summary>GC-collectible via <see cref="WeakReference{T}"/> — re-created after collection.</summary>
+    Weak,
 }
