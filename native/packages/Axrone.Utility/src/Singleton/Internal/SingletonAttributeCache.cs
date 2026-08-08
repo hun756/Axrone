@@ -8,6 +8,7 @@ namespace Axrone.Utility.Singleton.Internal;
 internal static class SingletonAttributeCache<T> where T : class
 {
     private static int _read;
+    private static bool _initialized;
     private static SingletonAttribute? _attribute;
     private static SingletonLifetime _lifetime;
     private static SingletonThreadSafety _threadSafety;
@@ -60,8 +61,14 @@ internal static class SingletonAttributeCache<T> where T : class
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void EnsureRead()
     {
+        if (_initialized) return;
+
         var state = Volatile.Read(ref _read);
-        if (state == 2) return;
+        if (state == 2)
+        {
+            _initialized = true;
+            return;
+        }
 
         if (state == 0 && Interlocked.CompareExchange(ref _read, 1, 0) == 0)
         {
@@ -80,11 +87,14 @@ internal static class SingletonAttributeCache<T> where T : class
             }
 
             Volatile.Write(ref _read, 2);
+            _initialized = true;
             return;
         }
 
         SpinWait spinner = default;
         while (Volatile.Read(ref _read) != 2)
             spinner.SpinOnce();
+
+        _initialized = true;
     }
 }

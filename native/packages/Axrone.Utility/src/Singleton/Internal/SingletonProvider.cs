@@ -100,7 +100,8 @@ internal static class SingletonProvider<T> where T : class, new()
             return instance;
         }
 
-        if (SingletonRegistryInternal.TryGet(out T? preRegistered))
+        if (Volatile.Read(ref _initializationState) != Initialized &&
+            SingletonRegistryInternal.TryGet(out T? preRegistered))
         {
             Volatile.Write(ref _instance, preRegistered);
             Interlocked.Exchange(ref _initializationState, Initialized);
