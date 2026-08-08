@@ -40,6 +40,8 @@
     <NoWarn>$(NoWarn);CA2227</NoWarn>
     <!-- CA1720: Identifier contains type name — 'Pointer' is standard naming for native pointer access -->
     <NoWarn>$(NoWarn);CA1720</NoWarn>
+    <!-- CA1028: Enum storage type — byte/uint chosen for memory layout compatibility -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

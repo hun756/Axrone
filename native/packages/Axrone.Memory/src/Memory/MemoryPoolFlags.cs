@@ -4,7 +4,7 @@ namespace Axrone.Memory;
 /// Feature toggle flags for <see cref="MemoryPool{T}"/> configuration.
 /// </summary>
 [Flags]
-public enum MemoryPoolFlags : int
+public enum MemoryPoolFlags : uint
 {
     /// <summary>No flags enabled.</summary>
     None = 0,
