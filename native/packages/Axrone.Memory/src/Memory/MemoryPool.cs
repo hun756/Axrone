@@ -717,6 +717,8 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
             var bucket = GetOrCreateBucket(GetBucketIndex(bufferSize));
             if (bucket.TryAdd(buffer))
                 Interlocked.Increment(ref _pooledBuffers);
+            else
+                Interlocked.Add(ref _totalAllocated, -(long)bufferSize * Unsafe.SizeOf<T>());
         }
 
         UpdateMaxMemory(Interlocked.Read(ref _totalAllocated));
