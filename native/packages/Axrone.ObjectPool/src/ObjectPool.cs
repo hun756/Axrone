@@ -10,10 +10,10 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         public readonly DateTime Created;
         public readonly int Generation;
         public readonly long RentCount;
-        public readonly Guid Id;
+        public readonly long Id;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public PooledItem(T instance, DateTime created, int generation, long rentCount, Guid id)
+        public PooledItem(T instance, DateTime created, int generation, long rentCount, long id)
         {
             Instance = instance;
             Created = created;
@@ -29,10 +29,10 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         public readonly DateTime RentTime;
         public readonly long OperationId;
         public readonly int ThreadId;
-        public readonly Guid InstanceId;
+        public readonly long InstanceId;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RentOperation(T instance, DateTime rentTime, long operationId, int threadId, Guid instanceId)
+        public RentOperation(T instance, DateTime rentTime, long operationId, int threadId, long instanceId)
         {
             Instance = instance;
             RentTime = rentTime;
@@ -131,7 +131,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     private readonly PoolMetricsStorage _metrics;
     private readonly ThreadLocal<ConcurrentQueue<PooledItem>>? _threadLocalStorage;
     private readonly ShardedBucket[] _shards;
-    private readonly ConcurrentDictionary<Guid, PoolObjectInfo<T>> _objectInfo;
+    private readonly ConcurrentDictionary<long, PoolObjectInfo<T>> _objectInfo;
     private readonly ConcurrentDictionary<int, byte> _activePoolables;
     private readonly ConditionalWeakTable<T, RentTrackingInfo> _rentReverseLookup;
 
@@ -139,7 +139,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     {
         public long RentId;
         public DateTime RentTime;
-        public Guid InstanceId;
+        public long InstanceId;
     }
 
     private PoolConfiguration _configuration;
@@ -147,6 +147,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     private int _rented;
     private int _generation;
     private long _lastRentId;
+    private long _nextInstanceId;
     private volatile bool _isDisposed;
     private ConcurrentQueue<PooledItem> _items;
     private Timer? _scavengeTimer;
@@ -174,7 +175,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         _uptime = Stopwatch.StartNew();
         _metrics = new PoolMetricsStorage();
         _isDisposed = false;
-        _objectInfo = new ConcurrentDictionary<Guid, PoolObjectInfo<T>>();
+        _objectInfo = new ConcurrentDictionary<long, PoolObjectInfo<T>>();
         _activePoolables = new ConcurrentDictionary<int, byte>();
         _rentReverseLookup = new ConditionalWeakTable<T, RentTrackingInfo>();
 
@@ -405,8 +406,10 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         Interlocked.Increment(ref _metrics.TotalRented);
 
         T instance = _factory();
-        DateTime now = DateTime.UtcNow;
-        Guid id = Guid.NewGuid();
+        long id = Interlocked.Increment(ref _nextInstanceId);
+        DateTime now = (_configuration.TrackLeaks
+            || _configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+            ? DateTime.UtcNow : default;
 
         TrackInstanceInfo(instance, now, id);
         TrackRentOperation(instance, now, id);
@@ -521,7 +524,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         ThrowIfDisposed();
 
         DateTime now = DateTime.UtcNow;
-        Guid instanceId = Guid.Empty;
+        long instanceId = 0L;
         TimeSpan rentDuration = TimeSpan.Zero;
 
         if (_configuration.TrackLeaks)
@@ -587,7 +590,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
 
         // Update objectInfo rent count
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && instanceId != Guid.Empty)
+        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && instanceId != 0L)
         {
             if (_objectInfo.TryGetValue(instanceId, out var info))
             {
@@ -770,8 +773,10 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             RecordCreateTime(creationSw.Elapsed);
         }
 
-        DateTime now = DateTime.UtcNow;
-        Guid id = Guid.NewGuid();
+        long id = Interlocked.Increment(ref _nextInstanceId);
+        DateTime now = (_configuration.TrackLeaks
+            || _configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+            ? DateTime.UtcNow : default;
 
         TrackInstanceInfo(instance, now, id);
 
@@ -803,7 +808,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         return instance;
     }
 
-    private void TrackInstanceInfo(T instance, DateTime now, Guid id)
+    private void TrackInstanceInfo(T instance, DateTime now, long id)
     {
         if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
         {
@@ -821,7 +826,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
     }
 
-    private void TrackRentOperation(T instance, DateTime now, Guid id)
+    private void TrackRentOperation(T instance, DateTime now, long id)
     {
         if (_configuration.TrackLeaks)
         {
@@ -842,8 +847,8 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         for (int i = 0; i < count; i++)
         {
             T instance = _factory();
+            long id = Interlocked.Increment(ref _nextInstanceId);
             DateTime now = DateTime.UtcNow;
-            Guid id = Guid.NewGuid();
 
             Interlocked.Increment(ref _metrics.TotalCreated);
             TrackInstanceInfo(instance, now, id);
@@ -1156,7 +1161,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         ThrowIfDisposed();
 
         DateTime now = DateTime.UtcNow;
-        Guid instanceId = Guid.Empty;
+        long instanceId = 0L;
         TimeSpan rentDuration = TimeSpan.Zero;
 
         if (_configuration.TrackLeaks)
@@ -1224,7 +1229,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             RecordRentDuration(item, rentDuration);
         }
 
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && instanceId != Guid.Empty)
+        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && instanceId != 0L)
         {
             if (_objectInfo.TryGetValue(instanceId, out var info))
             {

@@ -9,7 +9,7 @@ public readonly struct PoolObjectInfo<T> where T : class
     public TimeSpan TotalRentTime { get; init; }
     public bool IsPoolable { get; init; }
     public bool IsActive { get; init; }
-    public Guid Id { get; init; }
+    public long Id { get; init; }
 }
 
 [StructLayout(LayoutKind.Auto)]

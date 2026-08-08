@@ -159,7 +159,7 @@ public class PoolableObjectInfoTests
             TotalRentTime = TimeSpan.FromMilliseconds(100),
             IsPoolable = false,
             IsActive = true,
-            Id = Guid.NewGuid(),
+            Id = 42L,
         };
 
         info.Instance.Should().HaveCount(3);
@@ -169,7 +169,7 @@ public class PoolableObjectInfoTests
         info.TotalRentTime.Should().Be(TimeSpan.FromMilliseconds(100));
         info.IsPoolable.Should().BeFalse();
         info.IsActive.Should().BeTrue();
-        info.Id.Should().NotBe(Guid.Empty);
+        info.Id.Should().NotBe(0L);
     }
 }
 
