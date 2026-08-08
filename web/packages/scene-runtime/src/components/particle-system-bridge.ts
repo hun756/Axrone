@@ -10,6 +10,7 @@ import {
     CollisionModule,
     LimitVelocityModule,
     TextureSheetModule,
+    ForceModule,
     SOAParticleBuffer,
     EmitterShape,
     SimulationSpace,
@@ -298,6 +299,22 @@ export function createCoreParticleSystem(config: ParticleSystemConfig): CorePart
             flipU: false,
             flipV: false,
             uvChannelMask: 1,
+        }));
+    }
+
+    if (config.forceEnabled && config.force) {
+        core.addModule(new ForceModule({
+            enabled: true,
+            priority: 150,
+            forces: [{
+                type: 'gravity',
+                strength: constantCurve(1),
+                direction: {
+                    x: config.force[0] ?? 0,
+                    y: config.force[1] ?? 0,
+                    z: config.force[2] ?? 0,
+                },
+            }],
         }));
     }
 
