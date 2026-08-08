@@ -115,6 +115,7 @@ public sealed class UnmanagedMemoryPool : IDisposable
             return new UnmanagedMemoryHandle(this, ptr, bufferSize);
         }
 
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _isDisposed) != 0, this);
         ptr = Marshal.AllocHGlobal(bufferSize);
         _bufferSizes[ptr] = bufferSize;
 
