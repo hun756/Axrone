@@ -30,6 +30,8 @@
     <NoWarn>$(NoWarn);CA1508</NoWarn>
     <!-- CA1815: Struct Equals/GetHashCode — lightweight tracker structs -->
     <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA2201: OutOfMemoryException reserved by runtime — pool throws it for quota exhaustion -->
+    <NoWarn>$(NoWarn);CA2201</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
