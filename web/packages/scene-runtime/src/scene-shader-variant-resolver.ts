@@ -45,16 +45,12 @@ export class SceneShaderVariantResolver {
         }
 
         const variant = this._dependencies.compileVariant(definition, enabledKeywords);
-        const registered = this._dependencies.shaders.registerVariant(
+        this._dependencies.shaders.registerVariant(
             shaderId,
             variantKey,
             variant
         );
 
-        if (!registered) {
-            return this._dependencies.shaders.getVariant(shaderId, variantKey);
-        }
-
-        return variant;
+        return this._dependencies.shaders.getVariant(shaderId, variantKey) ?? variant;
     }
 }
