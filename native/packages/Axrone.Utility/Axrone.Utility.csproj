@@ -32,6 +32,12 @@
     <NoWarn>$(NoWarn);CA1067</NoWarn>
     <!-- IL2091: Trim warning on Lazy&lt;T&gt; generic constraint — factory-based, safe -->
     <NoWarn>$(NoWarn);IL2091</NoWarn>
+    <!-- CA1024: Use properties — GetInstance() methods are intentional API design -->
+    <NoWarn>$(NoWarn);CA1024</NoWarn>
+    <!-- CA1034: Nested types — RAII scope structs are intentional design -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1508: Dead code — false positive on lock-protected static fields -->
+    <NoWarn>$(NoWarn);CA1508</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
