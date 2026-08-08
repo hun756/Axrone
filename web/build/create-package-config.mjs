@@ -4,7 +4,7 @@ import { builtinModules } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import commonjs from '@rollup/plugin-commonjs';
 import resolve from '@rollup/plugin-node-resolve';
-import typescript from 'rollup-plugin-typescript2';
+import esbuild from 'rollup-plugin-esbuild';
 import dts from 'rollup-plugin-dts';
 import peerDepsExternal from 'rollup-plugin-peer-deps-external';
 
@@ -39,36 +39,43 @@ const createExternalMatcher = (packageJson, additionalExternalIds) => {
     };
 };
 
-export const createPackageConfig = ({
+export const createMultiEntryConfig = ({
     packageDir,
+    entries = { index: 'src/index.ts' },
     external = [],
-    inputRelativePath = 'src/index.ts',
-    outputBasename = 'index',
 }) => {
     const packageJsonPath = path.join(packageDir, 'package.json');
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
     const packageTsconfigPath = fs.existsSync(path.join(packageDir, 'tsconfig.build.json'))
         ? path.join(packageDir, 'tsconfig.build.json')
         : defaultTsconfigPath;
-    const input = path.join(packageDir, inputRelativePath);
     const distDir = path.join(packageDir, 'dist');
     const isExternal = createExternalMatcher(packageJson, external);
 
+    const jsInput = {};
+    for (const [name, relativePath] of Object.entries(entries)) {
+        jsInput[name] = path.join(packageDir, relativePath);
+    }
+
     return [
         {
-            input,
+            input: jsInput,
             external: isExternal,
             output: [
                 {
-                    file: path.join(distDir, `${outputBasename}.js`),
+                    dir: distDir,
                     format: 'cjs',
                     sourcemap: true,
+                    entryFileNames: '[name].js',
+                    chunkFileNames: 'chunks/[name]-[hash].js',
                     exports: 'named',
                 },
                 {
-                    file: path.join(distDir, `${outputBasename}.mjs`),
+                    dir: distDir,
                     format: 'es',
                     sourcemap: true,
+                    entryFileNames: '[name].mjs',
+                    chunkFileNames: 'chunks/[name]-[hash].mjs',
                 },
             ],
             plugins: [
@@ -77,23 +84,18 @@ export const createPackageConfig = ({
                     extensions: ['.mjs', '.js', '.json', '.ts'],
                 }),
                 commonjs(),
-                typescript({
+                esbuild({
+                    include: /\.ts$/,
+                    target: 'es2020',
                     tsconfig: packageTsconfigPath,
-                    useTsconfigDeclarationDir: false,
-                    tsconfigOverride: {
-                        compilerOptions: {
-                            declaration: false,
-                            declarationMap: false,
-                        },
-                    },
                 }),
             ],
         },
-        {
-            input,
+        ...Object.entries(entries).map(([name, relativePath]) => ({
+            input: path.join(packageDir, relativePath),
             external: isExternal,
             output: {
-                file: path.join(distDir, `${outputBasename}.d.ts`),
+                file: path.join(distDir, `${name}.d.ts`),
                 format: 'es',
             },
             plugins: [
@@ -101,6 +103,6 @@ export const createPackageConfig = ({
                     tsconfig: packageTsconfigPath,
                 }),
             ],
-        },
+        })),
     ];
 };

@@ -1,49 +1,20 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createPackageConfig } from '../../build/create-package-config.mjs';
+import { createMultiEntryConfig } from '../../build/create-package-config.mjs';
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url));
 
-export default [
-    ...createPackageConfig({ packageDir }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/types.ts',
-        outputBasename: 'types',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/errors.ts',
-        outputBasename: 'errors',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/paint.ts',
-        outputBasename: 'paint',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/shape.ts',
-        outputBasename: 'shape',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/queries.ts',
-        outputBasename: 'queries',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/mesh.ts',
-        outputBasename: 'mesh',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/serialization.ts',
-        outputBasename: 'serialization',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/registry.ts',
-        outputBasename: 'registry',
-    }),
-];
+export default createMultiEntryConfig({
+    packageDir,
+    entries: {
+        index: 'src/index.ts',
+        types: 'src/types.ts',
+        errors: 'src/errors.ts',
+        paint: 'src/paint.ts',
+        shape: 'src/shape.ts',
+        queries: 'src/queries.ts',
+        mesh: 'src/mesh.ts',
+        serialization: 'src/serialization.ts',
+        registry: 'src/registry.ts',
+    },
+});

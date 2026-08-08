@@ -86,7 +86,7 @@
         }
     },
     "scripts": {
-        "build": "node --max-old-space-size=8192 ../../node_modules/rollup/dist/bin/rollup -c rollup.config.mjs",
+        "build": "rollup -c rollup.config.mjs",
         "clean": "rimraf dist",
         "test": "vitest run"
     },
