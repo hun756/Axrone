@@ -41,12 +41,10 @@ public sealed class UnmanagedMemoryWriter : IBufferWriter<byte>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Advance(int count)
     {
-        int newWritten = _written + count;
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(count, Capacity - _written);
 
-        if (newWritten > Capacity)
-            throw new ArgumentOutOfRangeException(nameof(count));
-
-        _written = newWritten;
+        _written += count;
     }
 
     /// <summary>Gets a <see cref="Memory{T}"/> of at least <paramref name="sizeHint"/> bytes for writing.</summary>
