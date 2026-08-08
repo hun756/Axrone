@@ -15,15 +15,14 @@ import type { WidgetController, WidgetControllerContext } from '../widget';
  *     markKey,    // the mark indicator inside the box
  *     labelKey,   // the text label child
  *     states: { normal, hover, checked, disabled },
- *     transition: 'color' | 'sprite' | 'scale' | 'animation',
- *     transitionDuration: number,
- *     zoomScale: number,
+ *     transition: 'color' | 'sprite',
  *     markStyle: 'check' | 'cross' | 'dot' | 'dash',
  *     markColor: string,
  *     markSize: number,
  *     markWeight: number,
  *     labelPosition: 'left' | 'right' | 'hidden',
  *     labelGap: number,
+ *     boxSize: number,
  *   }
  *
  * Child widgets are resolved through the asset's binding table.
@@ -81,11 +80,14 @@ const asRecord = (value: unknown): Record<string, unknown> =>
         ? (value as Record<string, unknown>)
         : {};
 
+/**
+ * Resolves the visual state from interaction state alone.
+ * The runtime guards input dispatch — disabled widgets never receive pointer
+ * or key events, so the controller only needs to track hover/press/checked.
+ */
 const resolveVisualState = (
     state: CheckboxControllerState,
-    enabled: boolean
 ): CheckboxVisualState => {
-    if (!enabled) return 'disabled';
     if (state.checked || state.indeterminate) return 'checked';
     if (state.hovered || state.pressed) return 'hover';
     return 'normal';
@@ -99,16 +101,15 @@ const DEFAULT_STATES: Readonly<Record<CheckboxVisualState, string>> = Object.fre
 });
 
 /**
- * Pushes the visual state onto the box and mark child widgets.
+ * Pushes the visual state onto the box, mark, and label child widgets.
  * Returns true once at least the box widget was reached.
  */
 const applyVisuals = (context: CheckboxContext): boolean => {
     const props = context.props as CheckboxControllerProps;
     const runtime = context.runtime;
     const state = context.state;
-    const enabled = context.widget != null;
 
-    const visualState = resolveVisualState(state, enabled);
+    const visualState = resolveVisualState(state);
     const states = asRecord(props.states);
     const stateColor =
         asString(states[visualState]) ||
@@ -116,37 +117,35 @@ const applyVisuals = (context: CheckboxContext): boolean => {
 
     const transition: CheckboxTransitionMode =
         (props.transition as CheckboxTransitionMode) ?? 'color';
-    const duration = asNumber(props.transitionDuration, 0.15);
-    const zoom = asNumber(props.zoomScale, 0.9);
 
     let applied = false;
 
+    // ─── box ──────────────────────────────────────────────────────────────
     const boxKey = asString(props.boxKey);
     if (boxKey) {
         const box = runtime.getBoundWidget(boxKey);
         if (box !== null) {
             const isActive = state.checked || state.indeterminate;
             const bg = transition === 'color'
-                ? (isActive ? stateColor : (visualState === 'hover' ? asString(states.hover) || DEFAULT_STATES.hover : asString(states.normal) || DEFAULT_STATES.normal))
-                : (isActive ? asString(states.checked) || DEFAULT_STATES.checked : asString(states.normal) || DEFAULT_STATES.normal);
-
-            const scaleValue = (transition === 'scale' || transition === 'animation') && state.pressed
-                ? zoom
-                : 1;
+                ? (isActive
+                    ? (asString(states.checked) || DEFAULT_STATES.checked)
+                    : (visualState === 'hover'
+                        ? (asString(states.hover) || DEFAULT_STATES.hover)
+                        : (asString(states.normal) || DEFAULT_STATES.normal)))
+                : (isActive
+                    ? (asString(states.checked) || DEFAULT_STATES.checked)
+                    : (asString(states.normal) || DEFAULT_STATES.normal));
 
             runtime.updateWidget(box, {
                 style: {
                     background: bg,
-                    opacity: visualState === 'disabled' ? 0.6 : 1,
-                },
-                layout: {
-                    scale: scaleValue,
                 },
             });
             applied = true;
         }
     }
 
+    // ─── mark ─────────────────────────────────────────────────────────────
     const markKey = asString(props.markKey);
     if (markKey) {
         const mark = runtime.getBoundWidget(markKey);
@@ -163,7 +162,23 @@ const applyVisuals = (context: CheckboxContext): boolean => {
         }
     }
 
-    return applied || (!boxKey && !markKey);
+    // ─── label ────────────────────────────────────────────────────────────
+    const labelKey = asString(props.labelKey);
+    if (labelKey) {
+        const label = runtime.getBoundWidget(labelKey);
+        if (label !== null) {
+            const labelPosition = asString(props.labelPosition) || 'right';
+            runtime.updateWidget(label, {
+                style: {
+                    color: '#e2e8f0ff',
+                },
+                text: labelPosition === 'hidden' ? null : undefined,
+            });
+            applied = true;
+        }
+    }
+
+    return applied || (!boxKey && !markKey && !labelKey);
 };
 
 export const checkboxToggleController: WidgetController<
@@ -198,12 +213,12 @@ export const checkboxToggleController: WidgetController<
             props.indeterminate !== previous.indeterminate ||
             props.states !== previous.states ||
             props.transition !== previous.transition ||
-            props.transitionDuration !== previous.transitionDuration ||
-            props.zoomScale !== previous.zoomScale ||
             props.markColor !== previous.markColor ||
             props.markStyle !== previous.markStyle ||
             props.boxKey !== previous.boxKey ||
-            props.markKey !== previous.markKey
+            props.markKey !== previous.markKey ||
+            props.labelKey !== previous.labelKey ||
+            props.labelPosition !== previous.labelPosition
         ) {
             typed.state.checked = asBoolean(props.isOn, typed.state.checked);
             typed.state.indeterminate = asBoolean(props.indeterminate, typed.state.indeterminate);

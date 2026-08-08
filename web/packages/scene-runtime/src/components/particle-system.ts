@@ -1,4 +1,6 @@
 import { Component, Transform, script } from '@axrone/ecs-runtime';
+import type { ParticleSystem as CoreParticleSystem } from '@axrone/particle-system';
+import { createCoreParticleSystem, syncCoreRenderData, spawnToCoreBuffer } from './particle-system-bridge';
 
 /* ------------------------------------------------------------------ */
 /* Public types                                                        */
@@ -21,7 +23,7 @@ export type ParticleRenderMode =
     | 'vertical-billboard'
     | 'mesh'
     | 'none';
-export type ParticleBlendMode = 'additive' | 'alpha';
+export type ParticleBlendMode = 'additive' | 'alpha' | 'premultiplied' | 'multiply' | 'screen' | 'soft-additive';
 export type ParticleSpriteMode = 'glow' | 'disc' | 'star' | 'spark';
 export type ParticleStopAction = 'none' | 'disable' | 'destroy' | 'callback';
 export type ParticleColorMode = 'color' | 'gradient' | 'random' | 'two-colors';
@@ -133,6 +135,36 @@ export interface ParticleSystemConfig {
     readonly minParticleSize?: number;
     readonly maxParticleSize?: number;
     readonly sortingFudge?: number;
+
+    /* Texture */
+    readonly textureEnabled?: boolean;
+    readonly textureSheetTilesX?: number;
+    readonly textureSheetTilesY?: number;
+    readonly textureSheetFps?: number;
+    readonly textureSheetLoop?: boolean;
+    readonly textureRegion?: readonly [number, number, number, number];
+
+    /* Trail */
+    readonly trailEnabled?: boolean;
+    readonly trailMode?: 'particles' | 'ribbon';
+    readonly trailLifetime?: number;
+    readonly trailWidth?: number;
+    readonly trailMinVertexDistance?: number;
+    readonly trailRatio?: number;
+    readonly trailDieWithParticles?: boolean;
+    readonly trailInheritColor?: boolean;
+    readonly trailSizeAffectsWidth?: boolean;
+
+    /* Lights */
+    readonly lightsEnabled?: boolean;
+    readonly lightsMaxCount?: number;
+    readonly lightsRange?: number;
+    readonly lightsIntensity?: number;
+    readonly lightsUseParticleColor?: boolean;
+    readonly lightsShadowCasting?: boolean;
+
+    /* Custom data */
+    readonly customDataEnabled?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -207,7 +239,9 @@ export interface ParticleRenderData {
     readonly sizes: Float32Array;
     readonly alphas: Float32Array;
     readonly seeds: Float32Array;
+    readonly rotations: Float32Array;
     readonly count: number;
+    readonly aliveCount: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -328,6 +362,39 @@ export class ParticleSystem extends Component {
     private _maxParticleSize: number;
     private _sortingFudge: number;
 
+    /* Texture */
+    private _textureEnabled: boolean;
+    private _particleTexture: WebGLTexture | null = null;
+    private _textureSheetTilesX: number;
+    private _textureSheetTilesY: number;
+    private _textureSheetFps: number;
+    private _textureSheetLoop: boolean;
+    private _textureRegion: [number, number, number, number];
+    private _textureFrameIndex: number = 0;
+    private _textureFrameAccum: number = 0;
+
+    /* Trail */
+    private _trailEnabled: boolean;
+    private _trailMode: 'particles' | 'ribbon';
+    private _trailLifetime: number;
+    private _trailWidth: number;
+    private _trailMinVertexDistance: number;
+    private _trailRatio: number;
+    private _trailDieWithParticles: boolean;
+    private _trailInheritColor: boolean;
+    private _trailSizeAffectsWidth: boolean;
+
+    /* Lights */
+    private _lightsEnabled: boolean;
+    private _lightsMaxCount: number;
+    private _lightsRange: number;
+    private _lightsIntensity: number;
+    private _lightsUseParticleColor: boolean;
+    private _lightsShadowCasting: boolean;
+
+    /* Custom data */
+    private _customDataEnabled: boolean;
+
     /* Particle pool (structure-of-arrays for cache friendly simulation). */
     private readonly _positions: Float32Array;
     private readonly _velocities: Float32Array;
@@ -335,6 +402,7 @@ export class ParticleSystem extends Component {
     private readonly _lifetimes: Float32Array;
     private readonly _seeds: Float32Array;
     private readonly _sizeMultipliers: Float32Array;
+    private readonly _rotations: Float32Array;
 
     /* Render output buffers. */
     private readonly _renderColors: Float32Array;
@@ -350,6 +418,9 @@ export class ParticleSystem extends Component {
     private _aliveCount: number;
     private _burstFired: boolean[];
     private _delayRemaining: number;
+
+    private _coreSystem: CoreParticleSystem | null = null;
+    private _useCoreSimulation: boolean = true;
 
     constructor(config: ParticleSystemConfig = {}) {
         super();
@@ -441,6 +512,36 @@ export class ParticleSystem extends Component {
         this._maxParticleSize = 0.5;
         this._sortingFudge = 0;
 
+        /* Texture */
+        this._textureEnabled = false;
+        this._textureSheetTilesX = 1;
+        this._textureSheetTilesY = 1;
+        this._textureSheetFps = 30;
+        this._textureSheetLoop = true;
+        this._textureRegion = [0, 0, 1, 1];
+
+        /* Trail */
+        this._trailEnabled = false;
+        this._trailMode = 'particles';
+        this._trailLifetime = 2;
+        this._trailWidth = 0.5;
+        this._trailMinVertexDistance = 0.1;
+        this._trailRatio = 1;
+        this._trailDieWithParticles = true;
+        this._trailInheritColor = true;
+        this._trailSizeAffectsWidth = false;
+
+        /* Lights */
+        this._lightsEnabled = false;
+        this._lightsMaxCount = 8;
+        this._lightsRange = 10;
+        this._lightsIntensity = 1.5;
+        this._lightsUseParticleColor = true;
+        this._lightsShadowCasting = false;
+
+        /* Custom data */
+        this._customDataEnabled = false;
+
         /* Allocate pool at the hard limit so maxParticles can change freely. */
         this._positions = new Float32Array(MAX_PARTICLES_HARD_LIMIT * 3);
         this._velocities = new Float32Array(MAX_PARTICLES_HARD_LIMIT * 3);
@@ -448,6 +549,7 @@ export class ParticleSystem extends Component {
         this._lifetimes = new Float32Array(MAX_PARTICLES_HARD_LIMIT).fill(1);
         this._seeds = new Float32Array(MAX_PARTICLES_HARD_LIMIT);
         this._sizeMultipliers = new Float32Array(MAX_PARTICLES_HARD_LIMIT);
+        this._rotations = new Float32Array(MAX_PARTICLES_HARD_LIMIT);
         this._renderColors = new Float32Array(MAX_PARTICLES_HARD_LIMIT * 3);
         this._renderSizes = new Float32Array(MAX_PARTICLES_HARD_LIMIT);
         this._renderAlphas = new Float32Array(MAX_PARTICLES_HARD_LIMIT);
@@ -462,6 +564,15 @@ export class ParticleSystem extends Component {
         this._delayRemaining = 0;
 
         this._applyConfig(config);
+
+        this._initCoreSystem();
+
+        if (this._prewarm && this._coreSystem) {
+            const step = 1 / 30;
+            for (let i = 0; i < 110; i++) {
+                this._updateCoreSimulation(step);
+            }
+        }
 
         if (this._playOnAwake) {
             this._playing = true;
@@ -829,6 +940,64 @@ export class ParticleSystem extends Component {
         this._spriteMode = value;
     }
 
+    get textureEnabled(): boolean {
+        return this._textureEnabled;
+    }
+
+    set textureEnabled(value: boolean) {
+        this._textureEnabled = value;
+    }
+
+    get particleTexture(): WebGLTexture | null {
+        return this._textureEnabled ? this._particleTexture : null;
+    }
+
+    set particleTexture(texture: WebGLTexture | null) {
+        this._particleTexture = texture;
+    }
+
+    get textureSheetParams(): [number, number, number, number] | null {
+        if (!this._textureEnabled || !this._particleTexture) return null;
+        const totalFrames = this._textureSheetTilesX * this._textureSheetTilesY;
+        if (totalFrames <= 1) return null;
+        return [
+            this._textureSheetTilesX,
+            this._textureSheetTilesY,
+            this._textureFrameIndex,
+            totalFrames,
+        ];
+    }
+
+    get textureRegion(): [number, number, number, number] {
+        return this._textureRegion;
+    }
+
+    set textureRegion(region: [number, number, number, number]) {
+        this._textureRegion = region;
+    }
+
+    /** Advance the flipbook frame based on elapsed time. */
+    advanceTextureFrame(dt: number): void {
+        if (!this._textureEnabled || !this._particleTexture) return;
+        const totalFrames = this._textureSheetTilesX * this._textureSheetTilesY;
+        if (totalFrames <= 1) return;
+
+        this._textureFrameAccum += dt * this._textureSheetFps;
+        if (this._textureFrameAccum >= 1) {
+            const advance = Math.floor(this._textureFrameAccum);
+            this._textureFrameAccum -= advance;
+            this._textureFrameIndex += advance;
+
+            if (this._textureFrameIndex >= totalFrames) {
+                if (this._textureSheetLoop) {
+                    this._textureFrameIndex %= totalFrames;
+                } else {
+                    this._textureFrameIndex = totalFrames - 1;
+                }
+            }
+        }
+    }
+
     /* ------------------------------------------------------------------ */
     /* Playback / status API                                               */
     /* ------------------------------------------------------------------ */
@@ -845,17 +1014,45 @@ export class ParticleSystem extends Component {
         return this._elapsed;
     }
 
+    get useCoreSimulation(): boolean {
+        return this._useCoreSimulation;
+    }
+
+    set useCoreSimulation(value: boolean) {
+        if (this._useCoreSimulation === value) {
+            return;
+        }
+        this._useCoreSimulation = value;
+        if (value && !this._coreSystem) {
+            this._initCoreSystem();
+        }
+        if (this._coreSystem) {
+            if (value && this._playing) {
+                this._coreSystem.play();
+            } else if (!value) {
+                this._coreSystem.stop();
+            }
+        }
+    }
+
+    get coreSystem(): CoreParticleSystem | null {
+        return this._coreSystem;
+    }
+
     play(): void {
         this._playing = true;
         this._delayRemaining = this._startDelay;
+        this._coreSystem?.play();
     }
 
     pause(): void {
         this._playing = false;
+        this._coreSystem?.pause();
     }
 
     stop(): void {
         this._playing = false;
+        this._coreSystem?.stop();
         this.clear();
     }
 
@@ -868,6 +1065,7 @@ export class ParticleSystem extends Component {
         this._spawnAccumulator = 0;
         this._aliveCount = 0;
         this._burstFired = this._bursts.map(() => false);
+        this._coreSystem?.reset();
     }
 
     /** Immediately emits `count` particles, bypassing the rate limiter. */
@@ -879,6 +1077,18 @@ export class ParticleSystem extends Component {
                 break;
             }
             this._spawnParticle(slot);
+            if (this._useCoreSimulation && this._coreSystem) {
+                const i3 = slot * 3;
+                const r = this._startColorRgb[0], g = this._startColorRgb[1], b = this._startColorRgb[2];
+                spawnToCoreBuffer(
+                    this._coreSystem,
+                    { x: this._positions[i3], y: this._positions[i3 + 1], z: this._positions[i3 + 2] },
+                    { x: this._velocities[i3], y: this._velocities[i3 + 1], z: this._velocities[i3 + 2] },
+                    this._lifetimes[slot],
+                    this._startSize * (this._sizeMultipliers[slot] || 1),
+                    r, g, b, 1,
+                );
+            }
         }
     }
 
@@ -893,7 +1103,9 @@ export class ParticleSystem extends Component {
             sizes: this._renderSizes,
             alphas: this._renderAlphas,
             seeds: this._seeds,
+            rotations: this._rotations,
             count: this._maxParticles,
+            aliveCount: this._aliveCount,
         };
     }
 
@@ -918,6 +1130,11 @@ export class ParticleSystem extends Component {
             }
         }
 
+        if (this._useCoreSimulation && this._coreSystem) {
+            this._updateCoreSimulation(dt);
+            return;
+        }
+
         const canSimulate = this._looping || this._loopTime < this._duration;
         if (canSimulate) {
             this._loopTime += dt;
@@ -933,6 +1150,7 @@ export class ParticleSystem extends Component {
         }
 
         this._integrate(dt);
+        this.advanceTextureFrame(dt);
     }
 
     private _emitOverTime(dt: number): void {
@@ -1110,6 +1328,7 @@ export class ParticleSystem extends Component {
         this._lifetimes[index] = Math.max(0.15, this._startLifetime * (1 + (random() - 0.5) * 0.8));
         this._seeds[index] = random() * 10;
         this._sizeMultipliers[index] = 0.75 + random() * 0.5;
+        this._rotations[index] = this._startRotation * DEG_TO_RAD + (random() - 0.5) * 0.5;
     }
 
     private _integrate(dt: number): void {
@@ -1218,6 +1437,11 @@ export class ParticleSystem extends Component {
                 }
             }
 
+            /* Rotation over lifetime. */
+            if (this._rotationOverLifetimeEnabled) {
+                this._rotations[i] += this._angularVelocity * dt;
+            }
+
             /* Color over lifetime. */
             const lifeT = this._ages[i]! / this._lifetimes[i]!;
             if (colorOn) {
@@ -1258,6 +1482,193 @@ export class ParticleSystem extends Component {
             this.update(step);
         }
         this._playing = wasPlaying;
+    }
+
+    private _initCoreSystem(): void {
+        try {
+            const config = this._collectConfig();
+            this._coreSystem = createCoreParticleSystem(config);
+            this._coreSystem.initialize();
+            if (this._playing) {
+                this._coreSystem.play();
+            }
+        } catch {
+            this._coreSystem = null;
+        }
+    }
+
+    private _rebuildCoreSystem(): void {
+        if (this._coreSystem) {
+            this._coreSystem.destroy();
+            this._coreSystem = null;
+        }
+        this._initCoreSystem();
+    }
+
+    private _updateCoreSimulation(dt: number): void {
+        const core = this._coreSystem!;
+        const prevCoreCount = core.getParticles().count;
+
+        const canSimulate = this._looping || this._loopTime < this._duration;
+        if (canSimulate) {
+            this._loopTime += dt;
+            this._elapsed += dt;
+
+            if (this._looping && this._loopTime >= this._duration) {
+                this._loopTime %= this._duration;
+                this._burstFired = this._burstFired.map(() => false);
+            }
+
+            this._emitOverTime(dt);
+            this._emitBursts();
+        }
+
+        // Lightweight aging only — core modules handle all physics
+        let aliveCount = 0;
+        for (let i = 0; i < this._maxParticles; i++) {
+            if (this._ages[i]! >= this._lifetimes[i]!) {
+                continue;
+            }
+            this._ages[i]! += dt;
+            if (this._ages[i]! >= this._lifetimes[i]!) {
+                continue;
+            }
+            aliveCount++;
+        }
+        this._aliveCount = aliveCount;
+
+        const coreData = core.getParticles();
+        const newCoreCount = coreData.count;
+        if (this._aliveCount > prevCoreCount && newCoreCount < this._aliveCount) {
+            const buffer = coreData as unknown as { addParticle(p: {x:number;y:number;z:number}, v: {x:number;y:number;z:number}, lt: number, sz: number, c: number): unknown };
+            const start = Math.max(prevCoreCount, newCoreCount);
+            const end = Math.min(this._aliveCount, this._maxParticles);
+            for (let idx = start; idx < end; idx++) {
+                const age = this._ages[idx];
+                const lt = this._lifetimes[idx];
+                if (age >= lt) continue;
+                const i3 = idx * 3;
+                const r = this._startColorRgb[0], g = this._startColorRgb[1], b = this._startColorRgb[2];
+                const packed = ((Math.round(r * 255) & 0xff) << 24) | ((Math.round(g * 255) & 0xff) << 16) | ((Math.round(b * 255) & 0xff) << 8) | 255;
+                const initialSize = this._startSize * (this._sizeMultipliers[idx] ?? 1);
+                buffer.addParticle(
+                    { x: this._positions[i3], y: this._positions[i3 + 1], z: this._positions[i3 + 2] },
+                    { x: this._velocities[i3], y: this._velocities[i3 + 1], z: this._velocities[i3 + 2] },
+                    lt - age,
+                    initialSize,
+                    packed,
+                );
+            }
+        }
+
+        core.update(dt);
+
+        const alive = syncCoreRenderData(core.getParticles(), {
+            positions: this._positions,
+            renderColors: this._renderColors,
+            renderSizes: this._renderSizes,
+            renderAlphas: this._renderAlphas,
+            seeds: this._seeds,
+            rotations: this._rotations,
+            maxParticles: this._maxParticles,
+        });
+
+        this._aliveCount = alive;
+        this.advanceTextureFrame(dt);
+
+        if (!this._looping && this._elapsed >= this._duration && alive === 0) {
+            this._playing = false;
+        }
+    }
+
+    private _collectConfig(): ParticleSystemConfig {
+        return {
+            duration: this._duration,
+            looping: this._looping,
+            prewarm: this._prewarm,
+            startDelay: this._startDelay,
+            startLifetime: this._startLifetime,
+            startSpeed: this._startSpeed,
+            startSize: this._startSize,
+            startRotation: this._startRotation,
+            startColor: this.startColor,
+            endColor: this.endColor,
+            colorMode: this._colorMode,
+            gravityModifier: this._gravityModifier,
+            simulationSpace: this._simulationSpace,
+            simulationSpeed: this._simulationSpeed,
+            maxParticles: this._maxParticles,
+            playOnAwake: this._playOnAwake,
+            stopAction: this._stopAction,
+            emissionEnabled: this._emissionEnabled,
+            rateOverTime: this._rateOverTime,
+            rateOverDistance: this._rateOverDistance,
+            bursts: this._bursts,
+            shapeEnabled: this._shapeEnabled,
+            shapeType: this._shapeType,
+            shapeRadius: this._shapeRadius,
+            shapeRadiusThickness: this._shapeRadiusThickness,
+            shapeAngle: this._shapeAngle,
+            shapeArc: this._shapeArc,
+            shapeLength: this._shapeLength,
+            shapeDonutRadius: this._shapeDonutRadius,
+            emitFrom: this._emitFrom,
+            randomDirectionAmount: this._randomDirectionAmount,
+            spherizeDirection: this._spherizeDirection,
+            velocityEnabled: this._velocityEnabled,
+            velocityLinear: this._velocityLinear,
+            velocityOrbital: this._velocityOrbital,
+            velocityRadial: this._velocityRadial,
+            velocitySpeedModifier: this._velocitySpeedModifier,
+            forceEnabled: this._forceEnabled,
+            force: this._force,
+            limitVelocityEnabled: this._limitVelocityEnabled,
+            speedLimit: this._speedLimit,
+            limitDampen: this._limitDampen,
+            drag: this._drag,
+            colorOverLifetimeEnabled: this._colorOverLifetimeEnabled,
+            sizeOverLifetimeEnabled: this._sizeOverLifetimeEnabled,
+            sizeCurve: this._sizeCurve,
+            rotationOverLifetimeEnabled: this._rotationOverLifetimeEnabled,
+            angularVelocity: this._angularVelocity,
+            noiseEnabled: this._noiseEnabled,
+            noiseStrength: this._noiseStrength,
+            noiseFrequency: this._noiseFrequency,
+            noiseDamping: this._noiseDamping,
+            collisionEnabled: this._collisionEnabled,
+            collisionBounce: this._collisionBounce,
+            collisionDampen: this._collisionDampen,
+            collisionLifetimeLoss: this._collisionLifetimeLoss,
+            minKillSpeed: this._minKillSpeed,
+            renderMode: this._renderMode,
+            blendMode: this._blendMode,
+            spriteMode: this._spriteMode,
+            minParticleSize: this._minParticleSize,
+            maxParticleSize: this._maxParticleSize,
+            sortingFudge: this._sortingFudge,
+            textureEnabled: this._textureEnabled,
+            textureSheetTilesX: this._textureSheetTilesX,
+            textureSheetTilesY: this._textureSheetTilesY,
+            textureSheetFps: this._textureSheetFps,
+            textureSheetLoop: this._textureSheetLoop,
+            textureRegion: this._textureRegion,
+            trailEnabled: this._trailEnabled,
+            trailMode: this._trailMode,
+            trailLifetime: this._trailLifetime,
+            trailWidth: this._trailWidth,
+            trailMinVertexDistance: this._trailMinVertexDistance,
+            trailRatio: this._trailRatio,
+            trailDieWithParticles: this._trailDieWithParticles,
+            trailInheritColor: this._trailInheritColor,
+            trailSizeAffectsWidth: this._trailSizeAffectsWidth,
+            lightsEnabled: this._lightsEnabled,
+            lightsMaxCount: this._lightsMaxCount,
+            lightsRange: this._lightsRange,
+            lightsIntensity: this._lightsIntensity,
+            lightsUseParticleColor: this._lightsUseParticleColor,
+            lightsShadowCasting: this._lightsShadowCasting,
+            customDataEnabled: this._customDataEnabled,
+        };
     }
 
     /* ------------------------------------------------------------------ */
@@ -1340,6 +1751,31 @@ export class ParticleSystem extends Component {
             minParticleSize: this._minParticleSize,
             maxParticleSize: this._maxParticleSize,
             sortingFudge: this._sortingFudge,
+            textureEnabled: this._textureEnabled,
+            textureSheetTilesX: this._textureSheetTilesX,
+            textureSheetTilesY: this._textureSheetTilesY,
+            textureSheetFps: this._textureSheetFps,
+            textureSheetLoop: this._textureSheetLoop,
+            textureRegion: [...this._textureRegion] as [number, number, number, number],
+
+            trailEnabled: this._trailEnabled,
+            trailMode: this._trailMode,
+            trailLifetime: this._trailLifetime,
+            trailWidth: this._trailWidth,
+            trailMinVertexDistance: this._trailMinVertexDistance,
+            trailRatio: this._trailRatio,
+            trailDieWithParticles: this._trailDieWithParticles,
+            trailInheritColor: this._trailInheritColor,
+            trailSizeAffectsWidth: this._trailSizeAffectsWidth,
+
+            lightsEnabled: this._lightsEnabled,
+            lightsMaxCount: this._lightsMaxCount,
+            lightsRange: this._lightsRange,
+            lightsIntensity: this._lightsIntensity,
+            lightsUseParticleColor: this._lightsUseParticleColor,
+            lightsShadowCasting: this._lightsShadowCasting,
+
+            customDataEnabled: this._customDataEnabled,
         };
     }
 
@@ -1478,6 +1914,68 @@ export class ParticleSystem extends Component {
             this._maxParticleSize = clamp(config.maxParticleSize, 0, 1);
         }
         if (typeof config.sortingFudge === 'number') this._sortingFudge = config.sortingFudge;
+
+        /* Texture */
+        if (typeof config.textureEnabled === 'boolean') this._textureEnabled = config.textureEnabled;
+        if (typeof config.textureSheetTilesX === 'number') {
+            this._textureSheetTilesX = Math.max(1, Math.floor(config.textureSheetTilesX));
+        }
+        if (typeof config.textureSheetTilesY === 'number') {
+            this._textureSheetTilesY = Math.max(1, Math.floor(config.textureSheetTilesY));
+        }
+        if (typeof config.textureSheetFps === 'number') {
+            this._textureSheetFps = Math.max(1, config.textureSheetFps);
+        }
+        if (typeof config.textureSheetLoop === 'boolean') this._textureSheetLoop = config.textureSheetLoop;
+        if (config.textureRegion && config.textureRegion.length === 4) {
+            this._textureRegion = [
+                config.textureRegion[0],
+                config.textureRegion[1],
+                config.textureRegion[2],
+                config.textureRegion[3],
+            ];
+        }
+
+        if (typeof config.trailEnabled === 'boolean') this._trailEnabled = config.trailEnabled;
+        if (config.trailMode === 'particles' || config.trailMode === 'ribbon') {
+            this._trailMode = config.trailMode;
+        }
+        if (typeof config.trailLifetime === 'number') this._trailLifetime = Math.max(0, config.trailLifetime);
+        if (typeof config.trailWidth === 'number') this._trailWidth = Math.max(0, config.trailWidth);
+        if (typeof config.trailMinVertexDistance === 'number') {
+            this._trailMinVertexDistance = Math.max(0, config.trailMinVertexDistance);
+        }
+        if (typeof config.trailRatio === 'number') this._trailRatio = clamp(config.trailRatio, 0, 1);
+        if (typeof config.trailDieWithParticles === 'boolean') {
+            this._trailDieWithParticles = config.trailDieWithParticles;
+        }
+        if (typeof config.trailInheritColor === 'boolean') this._trailInheritColor = config.trailInheritColor;
+        if (typeof config.trailSizeAffectsWidth === 'boolean') {
+            this._trailSizeAffectsWidth = config.trailSizeAffectsWidth;
+        }
+
+        if (typeof config.lightsEnabled === 'boolean') this._lightsEnabled = config.lightsEnabled;
+        if (typeof config.lightsMaxCount === 'number') {
+            this._lightsMaxCount = Math.max(0, Math.min(64, config.lightsMaxCount));
+        }
+        if (typeof config.lightsRange === 'number') this._lightsRange = Math.max(0, config.lightsRange);
+        if (typeof config.lightsIntensity === 'number') {
+            this._lightsIntensity = Math.max(0, config.lightsIntensity);
+        }
+        if (typeof config.lightsUseParticleColor === 'boolean') {
+            this._lightsUseParticleColor = config.lightsUseParticleColor;
+        }
+        if (typeof config.lightsShadowCasting === 'boolean') {
+            this._lightsShadowCasting = config.lightsShadowCasting;
+        }
+
+        if (typeof config.customDataEnabled === 'boolean') {
+            this._customDataEnabled = config.customDataEnabled;
+        }
+
+        if (this._coreSystem) {
+            this._rebuildCoreSystem();
+        }
     }
 }
 

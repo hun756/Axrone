@@ -104,6 +104,7 @@
         "@axrone/lighting": "^0.1.0",
         "@axrone/numeric": "^0.0.1",
         "@axrone/observer": "^0.1.0",
+        "@axrone/particle-system": "^0.1.0",
         "@axrone/render-2d": "^0.1.0",
         "@axrone/render-core": "^0.1.0",
         "@axrone/random": "^0.0.1",

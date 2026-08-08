@@ -29,6 +29,10 @@ export class ParticleSystem implements IParticleSystem {
     private readonly _emitters = new Map<EmitterId, IParticleEmitter>();
     private readonly _eventEmitter = new EventEmitter<ParticleSystemEventMap>();
 
+    private _sortedEnabledModules: IModule[] = [];
+    private _modulesDirty = false;
+    private readonly _killBuffer: ParticleId[] = [];
+
     private _configuration: ParticleSystemConfiguration;
     private _isPlaying = false;
     private _isPaused = false;
@@ -212,6 +216,8 @@ export class ParticleSystem implements IParticleSystem {
         typeModules.push(module);
         typeModules.sort((a, b) => b.priority - a.priority);
 
+        this._modulesDirty = true;
+
         if (this._initialized) {
             module.initialize();
         }
@@ -231,6 +237,8 @@ export class ParticleSystem implements IParticleSystem {
                 typeModules.splice(index, 1);
             }
         }
+
+        this._modulesDirty = true;
 
         return true;
     }
@@ -359,7 +367,7 @@ export class ParticleSystem implements IParticleSystem {
     }
 
     private _updateParticleLifetime(deltaTime: number): void {
-        const particlesToKill: ParticleId[] = [];
+        let killCount = 0;
 
         for (let i = 0; i < this._particles.capacity; i++) {
             if (!this._particles.alive[i]) continue;
@@ -370,22 +378,28 @@ export class ParticleSystem implements IParticleSystem {
             this._particles.setAge(i, age);
 
             if (age >= lifetime) {
-                const particleId = this._particles.getParticleId(i);
-                particlesToKill.push(particleId);
+                this._killBuffer[killCount++] = this._particles.getParticleId(i);
             }
         }
 
-        for (const particleId of particlesToKill) {
-            this.killParticle(particleId);
+        for (let i = 0; i < killCount; i++) {
+            this.killParticle(this._killBuffer[i]);
         }
     }
 
     private _updateModules(deltaTime: number): void {
-        const sortedModules = Array.from(this._modules.values())
-            .filter((m) => m.enabled)
-            .sort((a, b) => b.priority - a.priority);
+        if (this._modulesDirty) {
+            this._sortedEnabledModules = [];
+            for (const module of this._modules.values()) {
+                if (module.enabled) {
+                    this._sortedEnabledModules.push(module);
+                }
+            }
+            this._sortedEnabledModules.sort((a, b) => b.priority - a.priority);
+            this._modulesDirty = false;
+        }
 
-        for (const module of sortedModules) {
+        for (const module of this._sortedEnabledModules) {
             module.update(deltaTime);
 
             if (module.canProcess(this._particles)) {

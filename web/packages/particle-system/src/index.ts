@@ -37,5 +37,9 @@ export { RotationModule } from './modules/rotation-module';
 export { NoiseModule } from './modules/noise-module';
 export { CollisionModule } from './modules/collision-module';
 export { TrailModule } from './modules/trail-module';
+export { LightsModule } from './modules/lights-module';
+export { CustomDataModule } from './modules/custom-data-module';
+export { TextureSheetModule } from './modules/texture-sheet-module';
+export { LimitVelocityModule } from './modules/limit-velocity-module';
 
 export { ParticleSystem } from './particle-system';
