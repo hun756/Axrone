@@ -58,7 +58,7 @@ public sealed class SingletonScope : IDisposable
         ArgumentNullException.ThrowIfNull(factory);
         lock (_lock)
         {
-            _factories[key] = () => factory();
+            _factories[key] = factory;
             if (disposer is not null)
                 _disposers.Add(() =>
                 {
@@ -127,7 +127,7 @@ public sealed class SingletonScope : IDisposable
         ArgumentNullException.ThrowIfNull(factory);
         lock (_lock)
         {
-            _typedFactories[typeof(T)] = () => factory();
+            _typedFactories[typeof(T)] = factory;
         }
     }
 
@@ -150,36 +150,38 @@ public sealed class SingletonScope : IDisposable
 
     private T ResolveTyped<T>() where T : class
     {
+        var type = typeof(T);
         lock (_lock)
         {
-            if (_typedInstances.TryGetValue(typeof(T), out var existing))
+            if (_typedInstances.TryGetValue(type, out var existing))
                 return (T)existing;
 
-            if (!_typedFactories.TryGetValue(typeof(T), out var factory))
+            if (!_typedFactories.TryGetValue(type, out var factory))
             {
                 if (_parent is not null)
                     return _parent.ResolveTyped<T>();
                 throw new KeyNotFoundException(
-                    $"No typed registration found for {typeof(T).Name} in scope '{Name}'.");
+                    $"No typed registration found for {type.Name} in scope '{Name}'.");
             }
 
             var instance = (T)factory();
-            _typedInstances[typeof(T)] = instance;
+            _typedInstances[type] = instance;
             return instance;
         }
     }
 
     private bool TryResolveTyped<T>([NotNullWhen(true)] out T? instance) where T : class
     {
+        var type = typeof(T);
         lock (_lock)
         {
-            if (_typedInstances.TryGetValue(typeof(T), out var existing))
+            if (_typedInstances.TryGetValue(type, out var existing))
             {
                 instance = (T)existing;
                 return true;
             }
 
-            if (!_typedFactories.TryGetValue(typeof(T), out var factory))
+            if (!_typedFactories.TryGetValue(type, out var factory))
             {
                 if (_parent is not null)
                     return _parent.TryResolveTyped(out instance);
@@ -189,7 +191,7 @@ public sealed class SingletonScope : IDisposable
             }
 
             var created = (T)factory();
-            _typedInstances[typeof(T)] = created;
+            _typedInstances[type] = created;
             instance = created;
             return true;
         }
