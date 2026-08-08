@@ -172,12 +172,15 @@ public sealed class UnmanagedMemoryPool : IDisposable
 
         var queue = _buffersBySize.GetOrAdd(size, static _ => new ConcurrentQueue<IntPtr>());
 
+        queue.Enqueue(buffer);
+
         int currentCount;
         do
         {
             currentCount = _bucketCounts.GetOrAdd(size, 0);
             if (currentCount >= _maxBuffersPerBucket)
             {
+                queue.TryDequeue(out _);
                 FreeBuffer(buffer);
                 return;
             }
@@ -186,11 +189,9 @@ public sealed class UnmanagedMemoryPool : IDisposable
         if (Volatile.Read(ref _isDisposed) != 0)
         {
             _bucketCounts.TryUpdate(size, currentCount, currentCount + 1);
+            queue.TryDequeue(out _);
             FreeBuffer(buffer);
-            return;
         }
-
-        queue.Enqueue(buffer);
     }
 
     private void FreeBuffer(IntPtr buffer)
