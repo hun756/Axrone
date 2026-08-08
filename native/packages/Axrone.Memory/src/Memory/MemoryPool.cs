@@ -281,6 +281,9 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
         if (_enableProfiling)
             startTimestamp = Stopwatch.GetTimestamp();
 
+        if (_clearMode == ClearMode.OnReturn || _clearMode == ClearMode.Always)
+            buffer.Clear();
+
         if (Volatile.Read(ref _isDisposed) != 0)
             return;
 
@@ -296,8 +299,6 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
             return;
         }
 
-        if (_clearMode == ClearMode.OnReturn || _clearMode == ClearMode.Always)
-            buffer.Clear();
         var bucket = _buckets.GetOrAdd(size, static (s, pool) =>
             new BufferBucket<T>(s, pool._maxBuffersPerBucket, pool._enableProfiling, false), this);
 
