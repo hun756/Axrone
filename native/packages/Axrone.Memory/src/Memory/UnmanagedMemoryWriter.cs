@@ -8,6 +8,7 @@ public sealed class UnmanagedMemoryWriter : IBufferWriter<byte>, IDisposable
 {
     private readonly UnmanagedMemoryPool _pool;
     private UnmanagedMemoryHandle _handle;
+    private readonly UnmanagedMemoryManager _manager;
     private int _written;
     private readonly int _minimumSegmentSize;
     private bool _disposed;
@@ -16,13 +17,14 @@ public sealed class UnmanagedMemoryWriter : IBufferWriter<byte>, IDisposable
     /// <param name="pool">The unmanaged pool to rent from.</param>
     /// <param name="initialCapacity">Initial buffer capacity in bytes.</param>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is null.</exception>
-    public UnmanagedMemoryWriter(UnmanagedMemoryPool pool, int initialCapacity = 4096)
+    public unsafe UnmanagedMemoryWriter(UnmanagedMemoryPool pool, int initialCapacity = 4096)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
         _pool = pool;
         _minimumSegmentSize = Math.Max(initialCapacity, 1024);
         _handle = pool.Rent(_minimumSegmentSize);
+        _manager = new UnmanagedMemoryManager(_handle.ToPointer(), _handle.Size);
         _written = 0;
     }
 
@@ -55,7 +57,8 @@ public sealed class UnmanagedMemoryWriter : IBufferWriter<byte>, IDisposable
     {
         CheckAndResizeBuffer(sizeHint);
         int remaining = Capacity - _written;
-        return new UnmanagedMemoryManager((byte*)_handle.ToPointer() + _written, remaining).Memory;
+        _manager.Update((byte*)_handle.ToPointer() + _written, remaining);
+        return _manager.Memory;
     }
 
     /// <summary>Gets a <see cref="Span{T}"/> of at least <paramref name="sizeHint"/> bytes for writing.</summary>
@@ -139,6 +142,7 @@ public sealed class UnmanagedMemoryWriter : IBufferWriter<byte>, IDisposable
 
         _disposed = true;
         _handle.Dispose();
+        ((IDisposable)_manager).Dispose();
         _written = 0;
     }
 
