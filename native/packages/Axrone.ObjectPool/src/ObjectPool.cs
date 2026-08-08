@@ -9,24 +9,7 @@ namespace Axrone.ObjectPool;
 [DebuggerDisplay("ObjectPool<{typeof(T).Name}> Count = {Count}, Rented = {_rented}, Strategy = {_configuration.Strategy}")]
 public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 {
-    private readonly struct PooledItem
-    {
-        public readonly T Instance;
-        public readonly DateTime Created;
-        public readonly int Generation;
-        public readonly long RentCount;
-        public readonly long Id;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public PooledItem(T instance, DateTime created, int generation, long rentCount, long id)
-        {
-            Instance = instance;
-            Created = created;
-            Generation = generation;
-            RentCount = rentCount;
-            Id = id;
-        }
-    }
+    // PooledItem<T> is defined in PoolInternalTypes.cs
 
     private readonly struct RentOperation
     {
@@ -87,52 +70,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
     }
 
-    private struct ShardedBucket
-    {
-        private readonly ConcurrentQueue<PooledItem> _items;
-        private readonly int _shardIndex;
-        private readonly int _partitionsCount;
-        private int _localCount;
-
-        public ShardedBucket(int shardIndex, int partitionsCount)
-        {
-            _items = new ConcurrentQueue<PooledItem>();
-            _shardIndex = shardIndex;
-            _partitionsCount = partitionsCount;
-            _localCount = 0;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Enqueue(PooledItem item)
-        {
-            _items.Enqueue(item);
-            Interlocked.Increment(ref _localCount);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TryDequeue(out PooledItem item)
-        {
-            if (_items.TryDequeue(out item))
-            {
-                Interlocked.Decrement(ref _localCount);
-                return true;
-            }
-            return false;
-        }
-
-        public int Count => _localCount;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool ContainsInstance(T item)
-        {
-            foreach (var pooledItem in _items)
-            {
-                if (ReferenceEquals(pooledItem.Instance, item))
-                    return true;
-            }
-            return false;
-        }
-    }
+    // ShardedBucket<T> is defined in PoolStorageStrategy.cs
 
     // ─── Fields ──────────────────────────────────────────────────
 
@@ -141,12 +79,10 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     private readonly object _syncLock;
     private readonly AsyncReaderWriterLock _asyncLock;
     private readonly SpinLock _spinLock;
-    private readonly Channel<PooledItem>? _channel;
+    private readonly IPoolStorage<T> _storage;
     private readonly ConcurrentDictionary<long, RentOperation> _rentTracking;
     private readonly Stopwatch _uptime;
     private readonly PoolMetricsStorage _metrics;
-    private readonly ThreadLocal<ConcurrentQueue<PooledItem>>? _threadLocalStorage;
-    private readonly ShardedBucket[] _shards;
     private readonly ConcurrentDictionary<long, PoolObjectInfo<T>> _objectInfo;
     private readonly ConcurrentDictionary<int, byte> _activePoolables;
     private readonly ConditionalWeakTable<T, RentTrackingInfo> _rentReverseLookup;
@@ -159,13 +95,22 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     }
 
     private PoolConfiguration _configuration;
+
+    // Volatile caches of branching-critical _configuration fields.
+    // Prevents torn reads of the 56-byte struct in lock-free hot paths.
+    private volatile PoolingStrategy _strategy;
+    private volatile bool _useSlimSync;
+    private volatile bool _trackLeaks;
+    private volatile bool _clearOnReturn;
+    private volatile bool _throwOnExhaustion;
+    private volatile bool _allowExpansion;
+
     private int _count;
     private int _rented;
     private int _generation;
     private long _lastRentId;
     private long _nextInstanceId;
     private volatile bool _isDisposed;
-    private ConcurrentQueue<PooledItem> _items;
     private Timer? _scavengeTimer;
 
     // ─── Constructors ────────────────────────────────────────────
@@ -185,12 +130,18 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         _factory = handler.Factory;
         _handler = handler;
         _configuration = configuration;
+        _strategy = configuration.Strategy;
+        _useSlimSync = configuration.UseSlimSynchronization;
+        _trackLeaks = configuration.TrackLeaks;
+        _clearOnReturn = configuration.ClearOnReturn;
+        _throwOnExhaustion = configuration.ThrowOnExhaustion;
+        _allowExpansion = configuration.AllowPoolExpansion;
         ValidateConfiguration(configuration);
         ValidateStrategy(configuration.Strategy);
         _syncLock = new object();
         _asyncLock = new AsyncReaderWriterLock();
         _spinLock = new SpinLock(enableThreadOwnerTracking: false);
-        _items = new ConcurrentQueue<PooledItem>();
+        _storage = CreateStorage(configuration);
         int concurrency = (int)configuration.ConcurrencyLevel;
         if (concurrency <= 0) concurrency = (int)ConcurrencyLevel.Default;
 
@@ -203,33 +154,6 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         _objectInfo = new ConcurrentDictionary<long, PoolObjectInfo<T>>();
         _activePoolables = new ConcurrentDictionary<int, byte>();
         _rentReverseLookup = new ConditionalWeakTable<T, RentTrackingInfo>();
-
-        int shardCount = concurrency * 2;
-        _shards = new ShardedBucket[shardCount];
-        for (int i = 0; i < shardCount; i++)
-        {
-            _shards[i] = new ShardedBucket(i, shardCount);
-        }
-
-        if (configuration.Strategy == PoolingStrategy.ThreadLocal
-            || configuration.Strategy == PoolingStrategy.ThreadLocalWithPartitioning)
-        {
-            _threadLocalStorage = new ThreadLocal<ConcurrentQueue<PooledItem>>(
-                () => new ConcurrentQueue<PooledItem>(), true);
-        }
-
-        if (configuration.Strategy == PoolingStrategy.BoundedChannel)
-        {
-            var options = new BoundedChannelOptions(
-                configuration.MaximumCapacity > 0 ? configuration.MaximumCapacity : Environment.ProcessorCount * 32)
-            {
-                FullMode = BoundedChannelFullMode.Wait,
-                SingleReader = false,
-                SingleWriter = false,
-                AllowSynchronousContinuations = true,
-            };
-            _channel = Channel.CreateBounded<PooledItem>(options);
-        }
 
         if (configuration.InitialCapacity > 0)
         {
@@ -350,18 +274,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.NoInlining)]
     private T RentSlow(Stopwatch? sw)
     {
-        if (_configuration.Strategy == PoolingStrategy.LockFree)
-        {
-            return RentLockFree(sw);
-        }
-
-        if (_configuration.Strategy == PoolingStrategy.ThreadLocalWithPartitioning
-            || _configuration.Strategy == PoolingStrategy.ShardedByThread)
-        {
-            return RentSharded(sw);
-        }
-
-        if (_configuration.UseSlimSynchronization)
+        if (_useSlimSync)
         {
             using (_asyncLock.ReadLock())
             {
@@ -378,9 +291,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 using (_asyncLock.WriteLock())
                 {
                     if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
-                        && !_configuration.AllowPoolExpansion)
+                        && !_allowExpansion)
                     {
-                        if (_configuration.ThrowOnExhaustion)
+                        if (_throwOnExhaustion)
                         {
                             RecordExhaustion();
                             ThrowHelper.ThrowInvalidOperationException(
@@ -406,9 +319,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 }
 
                 if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
-                    && !_configuration.AllowPoolExpansion)
+                    && !_allowExpansion)
                 {
-                    if (_configuration.ThrowOnExhaustion)
+                    if (_throwOnExhaustion)
                     {
                         RecordExhaustion();
                         ThrowHelper.ThrowInvalidOperationException(
@@ -418,153 +331,6 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 return CreateNewInstance(sw);
             }
         }
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private T RentLockFree(Stopwatch? sw)
-    {
-        if (Interlocked.Increment(ref _rented) > _configuration.MaximumCapacity
-            && !_configuration.AllowPoolExpansion)
-        {
-            Interlocked.Decrement(ref _rented);
-            if (_configuration.ThrowOnExhaustion)
-            {
-                RecordExhaustion();
-                ThrowHelper.ThrowInvalidOperationException(
-                    "The pool is exhausted and cannot allocate more items.");
-            }
-
-            bool lockTaken = false;
-            _spinLock.Enter(ref lockTaken);
-            try
-            {
-                if (TryGetFromPool(out var pooledItem))
-                {
-                    if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
-                    {
-                        sw.Stop();
-                        RecordRentTime(sw.Elapsed);
-                    }
-                    return pooledItem.Instance;
-                }
-
-                return CreateNewInstance(sw);
-            }
-            finally
-            {
-                if (lockTaken)
-                    _spinLock.Exit();
-            }
-        }
-
-        Interlocked.Increment(ref _metrics.TotalRented);
-
-        T instance = _factory();
-        long id = Interlocked.Increment(ref _nextInstanceId);
-        DateTime now = (_configuration.TrackLeaks
-            || _configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
-            ? DateTime.UtcNow : default;
-
-        TrackInstanceInfo(instance, now, id);
-        TrackRentOperation(instance, now, id);
-
-        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
-        {
-            sw.Stop();
-            RecordRentTime(sw.Elapsed);
-        }
-
-        Interlocked.Increment(ref _count);
-        _handler.OnRent?.Invoke(instance);
-        return instance;
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private T RentSharded(Stopwatch? sw)
-    {
-        if (_threadLocalStorage is not null)
-        {
-            var localQueue = _threadLocalStorage.Value!;
-            if (localQueue.TryDequeue(out var localItem))
-            {
-                Interlocked.Increment(ref _rented);
-                Interlocked.Increment(ref _metrics.TotalRented);
-
-                if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
-                {
-                    sw.Stop();
-                    RecordRentTime(sw.Elapsed);
-                }
-
-                _handler.OnRent?.Invoke(localItem.Instance);
-                return localItem.Instance;
-            }
-        }
-
-        int threadId = Environment.CurrentManagedThreadId;
-        int shardIndex = Math.Abs(threadId % _shards.Length);
-        ref var shard = ref _shards[shardIndex];
-
-        if (shard.TryDequeue(out var shardItem))
-        {
-            Interlocked.Increment(ref _rented);
-            Interlocked.Increment(ref _metrics.TotalRented);
-
-            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
-            {
-                sw.Stop();
-                RecordRentTime(sw.Elapsed);
-            }
-
-            _handler.OnRent?.Invoke(shardItem.Instance);
-            return shardItem.Instance;
-        }
-
-        if (TryGetFromPool(out var pooledItem))
-        {
-            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
-            {
-                sw.Stop();
-                RecordRentTime(sw.Elapsed);
-            }
-            return pooledItem.Instance;
-        }
-
-        if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
-            && !_configuration.AllowPoolExpansion)
-        {
-            if (_configuration.ThrowOnExhaustion)
-            {
-                RecordExhaustion();
-                ThrowHelper.ThrowInvalidOperationException(
-                    "The pool is exhausted and cannot allocate more items.");
-            }
-
-            bool lockTaken = false;
-            try
-            {
-                _spinLock.Enter(ref lockTaken);
-                if (TryGetFromPool(out var fallbackItem))
-                {
-                    Interlocked.Increment(ref _rented);
-                    if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
-                    {
-                        sw.Stop();
-                        RecordRentTime(sw.Elapsed);
-                    }
-                    return fallbackItem.Instance;
-                }
-
-                return CreateNewInstance(sw);
-            }
-            finally
-            {
-                if (lockTaken)
-                    _spinLock.Exit();
-            }
-        }
-
-        return CreateNewInstance(sw);
     }
 
     // ─── Return ──────────────────────────────────────────────────
@@ -583,18 +349,20 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         ThrowIfDisposed();
 
+        if (!_rentReverseLookup.TryGetValue(item, out var trackingInfo))
+            return;
+        if (!_rentReverseLookup.Remove(item))
+            return;
+
+        long instanceId = trackingInfo.InstanceId;
         DateTime now = DateTime.UtcNow;
-        long instanceId = 0L;
         TimeSpan rentDuration = TimeSpan.Zero;
 
-        if (_configuration.TrackLeaks)
+        if (_trackLeaks)
         {
-            if (_rentReverseLookup.TryGetValue(item, out var trackingInfo))
+            if (_rentTracking.TryRemove(trackingInfo.RentId, out var trackingOp))
             {
-                instanceId = trackingInfo.InstanceId;
-                rentDuration = now - trackingInfo.RentTime;
-                _rentTracking.TryRemove(trackingInfo.RentId, out _);
-                _rentReverseLookup.Remove(item);
+                rentDuration = now - trackingOp.RentTime;
             }
         }
 
@@ -615,7 +383,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 poolable.Reset();
             }
 
-            if (_configuration.ClearOnReturn && item is IClearable clearable)
+            if (_clearOnReturn && item is IClearable clearable)
             {
                 clearable.Clear();
             }
@@ -673,9 +441,14 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 {
                     _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
                     {
-                        Instance = item, CreationTime = now, Generation = _generation,
-                        RentCount = 0, TotalRentTime = TimeSpan.Zero,
-                        IsPoolable = item is IPoolable, IsActive = false, Id = instanceId,
+                        Instance = item,
+                        CreationTime = now,
+                        Generation = _generation,
+                        RentCount = 0,
+                        TotalRentTime = TimeSpan.Zero,
+                        IsPoolable = item is IPoolable,
+                        IsActive = false,
+                        Id = instanceId,
                     });
                     _objectInfo.TryRemove(instanceId, out _);
                 }
@@ -686,102 +459,16 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             return;
         }
 
-        var pooledItem = new PooledItem(item, now, _generation, 0, instanceId);
-
-        if (_configuration.Strategy == PoolingStrategy.ThreadLocal && _threadLocalStorage is not null)
-        {
-            var localQueue = _threadLocalStorage.Value!;
-            localQueue.Enqueue(pooledItem);
-            return;
-        }
-
-        if (_configuration.Strategy == PoolingStrategy.ThreadLocalWithPartitioning
-            || _configuration.Strategy == PoolingStrategy.ShardedByThread)
-        {
-            int threadId = Environment.CurrentManagedThreadId;
-            int shardIndex = Math.Abs(threadId % _shards.Length);
-            ref var shard = ref _shards[shardIndex];
-            shard.Enqueue(pooledItem);
-            return;
-        }
-
-        if (_configuration.Strategy == PoolingStrategy.BoundedChannel && _channel is not null)
-        {
-            if (_channel.Writer.TryWrite(pooledItem))
-            {
-                return;
-            }
-        }
-
-        if (Count < _configuration.MaximumCapacity || _configuration.AllowPoolExpansion)
-        {
-            _items.Enqueue(pooledItem);
-        }
-        else
-        {
-            try
-            {
-                _handler.OnDispose?.Invoke(item);
-                if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
-                {
-                    _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
-                    {
-                        Instance = item, CreationTime = now, Generation = _generation,
-                        RentCount = 0, TotalRentTime = TimeSpan.Zero,
-                        IsPoolable = item is IPoolable, IsActive = false, Id = instanceId,
-                    });
-                    _objectInfo.TryRemove(instanceId, out _);
-                }
-            }
-            catch
-            {
-                Interlocked.Increment(ref _metrics.DisposeFailureCount);
-            }
-            Interlocked.Increment(ref _metrics.TotalDestroyed);
-            Interlocked.Decrement(ref _count);
-        }
+        var pooledItem = new PooledItem<T>(item, now, _generation, 0, instanceId);
+        _storage.Enqueue(in pooledItem);
     }
 
     // ─── Internal helpers ────────────────────────────────────────
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool TryGetFromPool(out PooledItem item)
+    private bool TryGetFromPool(out PooledItem<T> item)
     {
-        item = default;
-
-        if (_configuration.Strategy == PoolingStrategy.ThreadLocal && _threadLocalStorage is not null)
-        {
-            var localQueue = _threadLocalStorage.Value!;
-            if (localQueue.TryDequeue(out var localItem))
-            {
-                Interlocked.Increment(ref _rented);
-                Interlocked.Increment(ref _metrics.TotalRented);
-                item = localItem;
-                _handler.OnRent?.Invoke(item.Instance);
-                return true;
-            }
-        }
-
-        if (_configuration.Strategy == PoolingStrategy.BoundedChannel && _channel is not null)
-        {
-            if (_channel.Reader.TryRead(out var channelItem))
-            {
-                if (_handler.Validator is not null && !_handler.Validator(channelItem.Instance))
-                {
-                    Interlocked.Increment(ref _metrics.FailedValidationCount);
-                    Interlocked.Decrement(ref _count);
-                    return false;
-                }
-
-                Interlocked.Increment(ref _rented);
-                Interlocked.Increment(ref _metrics.TotalRented);
-                item = channelItem;
-                _handler.OnRent?.Invoke(item.Instance);
-                return true;
-            }
-        }
-
-        while (_items.TryDequeue(out item))
+        while (_storage.TryDequeue(out item))
         {
             if (_handler.Validator is not null && !_handler.Validator(item.Instance))
             {
@@ -792,6 +479,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
             Interlocked.Increment(ref _rented);
             Interlocked.Increment(ref _metrics.TotalRented);
+            TrackRentOperation(item.Instance, DateTime.UtcNow, item.Id);
             _handler.OnRent?.Invoke(item.Instance);
             return true;
         }
@@ -882,17 +570,18 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
     private void TrackRentOperation(T instance, DateTime now, long id)
     {
-        if (_configuration.TrackLeaks)
+        long rentId = Interlocked.Increment(ref _lastRentId);
+        _rentReverseLookup.AddOrUpdate(instance, new RentTrackingInfo
         {
-            long rentId = Interlocked.Increment(ref _lastRentId);
+            RentId = rentId,
+            RentTime = now,
+            InstanceId = id,
+        });
+
+        if (_trackLeaks)
+        {
             _rentTracking[rentId] = new RentOperation(
                 instance, now, rentId, Environment.CurrentManagedThreadId, id);
-            _rentReverseLookup.AddOrUpdate(instance, new RentTrackingInfo
-            {
-                RentId = rentId,
-                RentTime = now,
-                InstanceId = id,
-            });
         }
     }
 
@@ -913,26 +602,8 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                     _handler.OnCreate?.Invoke(info);
             }
 
-            var pooledItem = new PooledItem(instance, now, _generation, 0, id);
-
-            if (_configuration.Strategy == PoolingStrategy.ThreadLocal && _threadLocalStorage is not null)
-            {
-                _threadLocalStorage.Value!.Enqueue(pooledItem);
-            }
-            else if (_configuration.Strategy == PoolingStrategy.ThreadLocalWithPartitioning
-                || _configuration.Strategy == PoolingStrategy.ShardedByThread)
-            {
-                int shardIndex = i % _shards.Length;
-                _shards[shardIndex].Enqueue(pooledItem);
-            }
-            else if (_configuration.Strategy == PoolingStrategy.BoundedChannel && _channel is not null)
-            {
-                _channel.Writer.TryWrite(pooledItem);
-            }
-            else
-            {
-                _items.Enqueue(pooledItem);
-            }
+            var pooledItem = new PooledItem<T>(instance, now, _generation, 0, id);
+            _storage.Enqueue(in pooledItem);
 
             Interlocked.Increment(ref _count);
         }
@@ -1023,6 +694,30 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static IPoolStorage<T> CreateStorage(in PoolConfiguration configuration)
+    {
+        int concurrency = (int)configuration.ConcurrencyLevel;
+        if (concurrency <= 0) concurrency = (int)ConcurrencyLevel.Default;
+
+        return configuration.Strategy switch
+        {
+            PoolingStrategy.ThreadLocal
+                => new ThreadLocalPoolStorage<T>(),
+
+            PoolingStrategy.ThreadLocalWithPartitioning or PoolingStrategy.ShardedByThread
+                => new ShardedPoolStorage<T>(concurrency * 2),
+
+            PoolingStrategy.BoundedChannel
+                => new BoundedChannelPoolStorage<T>(configuration.MaximumCapacity),
+
+            PoolingStrategy.LockFree
+                => new LockFreePoolStorage<T>(),
+
+            _ => new CentralizedQueuePoolStorage<T>(),
+        };
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void ValidateStrategy(PoolingStrategy strategy)
     {
         switch (strategy)
@@ -1066,7 +761,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         ClearCore();
 
         _asyncLock.Dispose();
-        _threadLocalStorage?.Dispose();
+        _storage.Dispose();
 
         RecordEvent("Pool disposed");
     }
@@ -1161,13 +856,13 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.NoInlining)]
     private async ValueTask<T> RentSlowAsync(Stopwatch? sw, CancellationToken cancellationToken)
     {
-        if (_configuration.Strategy == PoolingStrategy.BoundedChannel && _channel is not null)
+        if (_strategy == PoolingStrategy.BoundedChannel)
         {
             try
             {
-                if (await _channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    if (_channel.Reader.TryRead(out var channelItem))
+                    if (TryGetFromPool(out var channelItem))
                     {
                         if (_handler.ValidatorAsync is not null)
                         {
@@ -1176,29 +871,28 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                             {
                                 Interlocked.Increment(ref _metrics.FailedValidationCount);
                                 Interlocked.Decrement(ref _count);
-                                return await RentAsync(cancellationToken).ConfigureAwait(false);
+                                continue;
                             }
                         }
                         else if (_handler.Validator is not null && !_handler.Validator(channelItem.Instance))
                         {
                             Interlocked.Increment(ref _metrics.FailedValidationCount);
                             Interlocked.Decrement(ref _count);
-                            return await RentAsync(cancellationToken).ConfigureAwait(false);
+                            continue;
                         }
-
-                        Interlocked.Increment(ref _rented);
-                        Interlocked.Increment(ref _metrics.TotalRented);
 
                         if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
                         {
                             sw.Stop();
                             RecordRentTime(sw.Elapsed);
                         }
-
-                        _handler.OnRent?.Invoke(channelItem.Instance);
                         return channelItem.Instance;
                     }
+
+                    await Task.Delay(1, cancellationToken).ConfigureAwait(false);
                 }
+
+                cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -1214,7 +908,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             }
         }
 
-        if (_configuration.UseSlimSynchronization)
+        if (_useSlimSync)
         {
             using (await _asyncLock.ReadLockAsync(cancellationToken).ConfigureAwait(false))
             {
@@ -1231,9 +925,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 using (await _asyncLock.WriteLockAsync(cancellationToken).ConfigureAwait(false))
                 {
                     if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
-                        && !_configuration.AllowPoolExpansion)
+                        && !_allowExpansion)
                     {
-                        if (_configuration.ThrowOnExhaustion)
+                        if (_throwOnExhaustion)
                         {
                             RecordExhaustion();
                             ThrowHelper.ThrowInvalidOperationException(
@@ -1259,9 +953,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 }
 
                 if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
-                    && !_configuration.AllowPoolExpansion)
+                    && !_allowExpansion)
                 {
-                    if (_configuration.ThrowOnExhaustion)
+                    if (_throwOnExhaustion)
                     {
                         RecordExhaustion();
                         ThrowHelper.ThrowInvalidOperationException(
@@ -1288,18 +982,20 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         ThrowIfDisposed();
 
+        if (!_rentReverseLookup.TryGetValue(item, out var trackingInfo))
+            return;
+        if (!_rentReverseLookup.Remove(item))
+            return;
+
+        long instanceId = trackingInfo.InstanceId;
         DateTime now = DateTime.UtcNow;
-        long instanceId = 0L;
         TimeSpan rentDuration = TimeSpan.Zero;
 
-        if (_configuration.TrackLeaks)
+        if (_trackLeaks)
         {
-            if (_rentReverseLookup.TryGetValue(item, out var trackingInfo))
+            if (_rentTracking.TryRemove(trackingInfo.RentId, out var trackingOp))
             {
-                instanceId = trackingInfo.InstanceId;
-                rentDuration = now - trackingInfo.RentTime;
-                _rentTracking.TryRemove(trackingInfo.RentId, out _);
-                _rentReverseLookup.Remove(item);
+                rentDuration = now - trackingOp.RentTime;
             }
         }
 
@@ -1324,7 +1020,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 await poolable.ResetAsync().ConfigureAwait(false);
             }
 
-            if (_configuration.ClearOnReturn && item is IClearable clearable)
+            if (_clearOnReturn && item is IClearable clearable)
             {
                 clearable.Clear();
             }
@@ -1380,9 +1076,14 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 {
                     _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
                     {
-                        Instance = item, CreationTime = now, Generation = _generation,
-                        RentCount = 0, TotalRentTime = TimeSpan.Zero,
-                        IsPoolable = item is IPoolable, IsActive = false, Id = instanceId,
+                        Instance = item,
+                        CreationTime = now,
+                        Generation = _generation,
+                        RentCount = 0,
+                        TotalRentTime = TimeSpan.Zero,
+                        IsPoolable = item is IPoolable,
+                        IsActive = false,
+                        Id = instanceId,
                     });
                     _objectInfo.TryRemove(instanceId, out _);
                 }
@@ -1393,67 +1094,22 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             return;
         }
 
-        var pooledItem = new PooledItem(item, now, _generation, 0, instanceId);
+        var pooledItem = new PooledItem<T>(item, now, _generation, 0, instanceId);
 
-        if (_configuration.Strategy == PoolingStrategy.ThreadLocal && _threadLocalStorage is not null)
-        {
-            var localQueue = _threadLocalStorage.Value!;
-            localQueue.Enqueue(pooledItem);
-            return;
-        }
-
-        if (_configuration.Strategy == PoolingStrategy.ThreadLocalWithPartitioning
-            || _configuration.Strategy == PoolingStrategy.ShardedByThread)
-        {
-            int threadId = Environment.CurrentManagedThreadId;
-            int shardIndex = Math.Abs(threadId % _shards.Length);
-            ref var shard = ref _shards[shardIndex];
-            shard.Enqueue(pooledItem);
-            return;
-        }
-
-        if (_configuration.Strategy == PoolingStrategy.BoundedChannel && _channel is not null)
+        if (_strategy == PoolingStrategy.BoundedChannel)
         {
             try
             {
-                if (_channel.Writer.TryWrite(pooledItem))
-                    return;
-
-                await _channel.Writer.WriteAsync(pooledItem, cancellationToken).ConfigureAwait(false);
-                return;
+                await _storage.EnqueueAsync(pooledItem, cancellationToken).ConfigureAwait(false);
             }
             catch
             {
-                // Fall through to central queue
+                // Fall through - item could not be enqueued
             }
-        }
-
-        if (Count < _configuration.MaximumCapacity || _configuration.AllowPoolExpansion)
-        {
-            _items.Enqueue(pooledItem);
         }
         else
         {
-            try
-            {
-                _handler.OnDispose?.Invoke(item);
-                if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
-                {
-                    _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
-                    {
-                        Instance = item, CreationTime = now, Generation = _generation,
-                        RentCount = 0, TotalRentTime = TimeSpan.Zero,
-                        IsPoolable = item is IPoolable, IsActive = false, Id = instanceId,
-                    });
-                    _objectInfo.TryRemove(instanceId, out _);
-                }
-            }
-            catch
-            {
-                Interlocked.Increment(ref _metrics.DisposeFailureCount);
-            }
-            Interlocked.Increment(ref _metrics.TotalDestroyed);
-            Interlocked.Decrement(ref _count);
+            _storage.Enqueue(in pooledItem);
         }
     }
 
@@ -1523,12 +1179,12 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             return (false, null);
         }
 
-        if (_configuration.UseSlimSynchronization)
+        if (_useSlimSync)
         {
             using (await _asyncLock.WriteLockAsync(cancellationToken).ConfigureAwait(false))
             {
                 if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
-                    && !_configuration.AllowPoolExpansion)
+                    && !_allowExpansion)
                 {
                     return (false, null);
                 }
@@ -1542,7 +1198,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             lock (_syncLock)
             {
                 if (Volatile.Read(ref _rented) >= _configuration.MaximumCapacity
-                    && !_configuration.AllowPoolExpansion)
+                    && !_allowExpansion)
                 {
                     return (false, null);
                 }
@@ -1619,7 +1275,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     {
         ThrowIfDisposed();
 
-        if (_configuration.UseSlimSynchronization)
+        if (_useSlimSync)
         {
             using (_asyncLock.WriteLock())
             {
@@ -1638,38 +1294,18 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ClearCore()
     {
-        while (_items.TryDequeue(out var item))
+        _storage.Clear(item =>
         {
             Interlocked.Decrement(ref _count);
             DisposeWithCallbacks(item);
-        }
+        });
 
-        if (_threadLocalStorage is not null)
-        {
-            foreach (var localQueue in _threadLocalStorage.Values)
-            {
-                while (localQueue.TryDequeue(out var item))
-                {
-                    Interlocked.Decrement(ref _count);
-                    DisposeWithCallbacks(item);
-                }
-            }
-        }
-
-        for (int i = 0; i < _shards.Length; i++)
-        {
-            while (_shards[i].TryDequeue(out var item))
-            {
-                Interlocked.Decrement(ref _count);
-                DisposeWithCallbacks(item);
-            }
-        }
-
+        _generation++;
         RecordEvent("Pool cleared");
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void DisposeWithCallbacks(PooledItem item)
+    private void DisposeWithCallbacks(PooledItem<T> item)
     {
         try
         {
@@ -1678,10 +1314,14 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             {
                 _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
                 {
-                    Instance = item.Instance, CreationTime = item.Created,
-                    Generation = item.Generation, RentCount = item.RentCount,
-                    TotalRentTime = TimeSpan.Zero, IsPoolable = item.Instance is IPoolable,
-                    IsActive = false, Id = item.Id,
+                    Instance = item.Instance,
+                    CreationTime = item.Created,
+                    Generation = item.Generation,
+                    RentCount = item.RentCount,
+                    TotalRentTime = TimeSpan.Zero,
+                    IsPoolable = item.Instance is IPoolable,
+                    IsActive = false,
+                    Id = item.Id,
                 });
                 _objectInfo.TryRemove(item.Id, out _);
             }
@@ -1704,7 +1344,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     {
         ThrowIfDisposed();
 
-        if (_configuration.UseSlimSynchronization)
+        if (_useSlimSync)
         {
             using (await _asyncLock.WriteLockAsync(cancellationToken).ConfigureAwait(false))
             {
@@ -1722,7 +1362,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
     private async ValueTask ClearAsyncCore(CancellationToken cancellationToken)
     {
-        while (_items.TryDequeue(out var item))
+        await _storage.ClearAsync(async item =>
         {
             Interlocked.Decrement(ref _count);
             try
@@ -1744,8 +1384,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-        }
+        }, cancellationToken).ConfigureAwait(false);
 
+        _generation++;
         RecordEvent("Pool cleared asynchronously");
     }
 
@@ -1763,7 +1404,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         ThrowIfDisposed();
 
-        if (_configuration.TrackLeaks)
+        if (_trackLeaks)
         {
             foreach (var kvp in _rentTracking)
             {
@@ -1772,31 +1413,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             }
         }
 
-        foreach (var pooledItem in _items)
-        {
-            if (ReferenceEquals(pooledItem.Instance, item))
-                return true;
-        }
-
-        if (_threadLocalStorage is not null)
-        {
-            foreach (var localQueue in _threadLocalStorage.Values)
-            {
-                foreach (var pooledItem in localQueue)
-                {
-                    if (ReferenceEquals(pooledItem.Instance, item))
-                        return true;
-                }
-            }
-        }
-
-        for (int i = 0; i < _shards.Length; i++)
-        {
-            if (_shards[i].ContainsInstance(item))
-                return true;
-        }
-
-        return false;
+        return _storage.Contains(item);
     }
 
     /// <summary>
@@ -1817,13 +1434,19 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             };
         }
 
-        var events = _configuration.DiagnosticsLevel >= DiagnosticsLevel.Basic
-            ? _metrics.Events.ToList()
-            : new List<KeyValuePair<DateTime, string>>(0);
+        List<KeyValuePair<DateTime, string>> events;
+        Dictionary<string, double> customMetrics;
 
-        var customMetrics = _configuration.DiagnosticsLevel >= DiagnosticsLevel.Basic
-            ? new Dictionary<string, double>(_metrics.CustomMetrics)
-            : new Dictionary<string, double>(0);
+        lock (_syncLock)
+        {
+            events = _configuration.DiagnosticsLevel >= DiagnosticsLevel.Basic
+                ? _metrics.Events.ToList()
+                : new List<KeyValuePair<DateTime, string>>(0);
+
+            customMetrics = _configuration.DiagnosticsLevel >= DiagnosticsLevel.Basic
+                ? new Dictionary<string, double>(_metrics.CustomMetrics)
+                : new Dictionary<string, double>(0);
+        }
 
         return new PoolDiagnostics
         {
@@ -1855,7 +1478,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     {
         ThrowIfDisposed();
 
-        if (_configuration.UseSlimSynchronization)
+        if (_useSlimSync)
         {
             using (_asyncLock.WriteLock())
             {
@@ -1877,6 +1500,12 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         Interlocked.Increment(ref _metrics.ConfigurationChanges);
         var oldConfiguration = _configuration;
         _configuration = configuration;
+        _strategy = configuration.Strategy;
+        _useSlimSync = configuration.UseSlimSynchronization;
+        _trackLeaks = configuration.TrackLeaks;
+        _clearOnReturn = configuration.ClearOnReturn;
+        _throwOnExhaustion = configuration.ThrowOnExhaustion;
+        _allowExpansion = configuration.AllowPoolExpansion;
         Thread.MemoryBarrier();
 
         if (configuration.MaximumCapacity < oldConfiguration.MaximumCapacity)
@@ -1914,7 +1543,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     {
         ThrowIfDisposed();
 
-        if (_configuration.UseSlimSynchronization)
+        if (_useSlimSync)
         {
             using (_asyncLock.WriteLock())
             {
@@ -1948,46 +1577,18 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         Interlocked.Increment(ref _metrics.ShrinkCount);
 
         int removed = 0;
-        while (removed < toRemove && _items.TryDequeue(out var item))
+        while (removed < toRemove && _storage.TryDequeue(out var item))
         {
             Interlocked.Decrement(ref _count);
             removed++;
             DisposeTrimmedItem(item);
         }
 
-        if (removed < toRemove && _threadLocalStorage is not null)
-        {
-            foreach (var localQueue in _threadLocalStorage.Values)
-            {
-                while (removed < toRemove && localQueue.TryDequeue(out var item))
-                {
-                    Interlocked.Decrement(ref _count);
-                    removed++;
-                    DisposeTrimmedItem(item);
-                }
-                if (removed >= toRemove) break;
-            }
-        }
-
-        if (removed < toRemove)
-        {
-            for (int i = 0; i < _shards.Length; i++)
-            {
-                while (removed < toRemove && _shards[i].TryDequeue(out var item))
-                {
-                    Interlocked.Decrement(ref _count);
-                    removed++;
-                    DisposeTrimmedItem(item);
-                }
-                if (removed >= toRemove) break;
-            }
-        }
-
         RecordEvent($"Pool trimmed: removed {removed} items");
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void DisposeTrimmedItem(PooledItem item)
+    private void DisposeTrimmedItem(PooledItem<T> item)
     {
         try
         {
@@ -1996,10 +1597,14 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             {
                 _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
                 {
-                    Instance = item.Instance, CreationTime = item.Created,
-                    Generation = item.Generation, RentCount = item.RentCount,
-                    TotalRentTime = TimeSpan.Zero, IsPoolable = item.Instance is IPoolable,
-                    IsActive = false, Id = item.Id,
+                    Instance = item.Instance,
+                    CreationTime = item.Created,
+                    Generation = item.Generation,
+                    RentCount = item.RentCount,
+                    TotalRentTime = TimeSpan.Zero,
+                    IsPoolable = item.Instance is IPoolable,
+                    IsActive = false,
+                    Id = item.Id,
                 });
                 _objectInfo.TryRemove(item.Id, out _);
             }
@@ -2023,7 +1628,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     {
         ThrowIfDisposed();
 
-        if (_configuration.UseSlimSynchronization)
+        if (_useSlimSync)
         {
             using (await _asyncLock.WriteLockAsync(cancellationToken).ConfigureAwait(false))
             {
@@ -2121,7 +1726,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         await _asyncLock.DisposeAsync().ConfigureAwait(false);
 
-        _threadLocalStorage?.Dispose();
+        _storage.Dispose();
 
         RecordEvent("Pool disposed asynchronously");
     }
@@ -2139,7 +1744,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 < TimeSpan.FromMilliseconds(_configuration.ScavengeIntervalMs / 2))
             return;
 
-        if (_configuration.UseSlimSynchronization)
+        if (_useSlimSync)
         {
             if (!_asyncLock.TryEnterWriteLock())
                 return;
@@ -2187,12 +1792,13 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         DateTime cutoffTime = DateTime.UtcNow - _configuration.IdleTimeout;
         int removed = 0;
+        int currentGen = _generation;
 
-        // Process central queue
-        var tempItems = new ConcurrentQueue<PooledItem>();
-        while (_items.TryDequeue(out var item))
+        var survivors = new List<PooledItem<T>>();
+
+        _storage.Clear(item =>
         {
-            if (item.Created < cutoffTime && item.Generation < _generation)
+            if (item.Created < cutoffTime && item.Generation < currentGen)
             {
                 Interlocked.Decrement(ref _count);
                 removed++;
@@ -2200,55 +1806,14 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             }
             else
             {
-                tempItems.Enqueue(item);
+                survivors.Add(item);
             }
-        }
-        while (tempItems.TryDequeue(out var item))
-            _items.Enqueue(item);
+        });
 
-        // Process thread-local storage
-        if (_threadLocalStorage is not null)
+        for (int i = 0; i < survivors.Count; i++)
         {
-            foreach (var localQueue in _threadLocalStorage.Values)
-            {
-                var localTemp = new ConcurrentQueue<PooledItem>();
-                while (localQueue.TryDequeue(out var item))
-                {
-                    if (item.Created < cutoffTime && item.Generation < _generation)
-                    {
-                        Interlocked.Decrement(ref _count);
-                        removed++;
-                        DisposeScavengedItem(item);
-                    }
-                    else
-                    {
-                        localTemp.Enqueue(item);
-                    }
-                }
-                while (localTemp.TryDequeue(out var item))
-                    localQueue.Enqueue(item);
-            }
-        }
-
-        // Process shards
-        for (int i = 0; i < _shards.Length; i++)
-        {
-            var shardTemp = new ConcurrentQueue<PooledItem>();
-            while (_shards[i].TryDequeue(out var item))
-            {
-                if (item.Created < cutoffTime && item.Generation < _generation)
-                {
-                    Interlocked.Decrement(ref _count);
-                    removed++;
-                    DisposeScavengedItem(item);
-                }
-                else
-                {
-                    shardTemp.Enqueue(item);
-                }
-            }
-            while (shardTemp.TryDequeue(out var item))
-                _shards[i].Enqueue(item);
+            var item = survivors[i];
+            _storage.Enqueue(in item);
         }
 
         if (removed > 0)
@@ -2256,7 +1821,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void DisposeScavengedItem(PooledItem item)
+    private void DisposeScavengedItem(PooledItem<T> item)
     {
         try
         {
@@ -2265,10 +1830,14 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             {
                 _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
                 {
-                    Instance = item.Instance, CreationTime = item.Created,
-                    Generation = item.Generation, RentCount = item.RentCount,
-                    TotalRentTime = TimeSpan.Zero, IsPoolable = item.Instance is IPoolable,
-                    IsActive = false, Id = item.Id,
+                    Instance = item.Instance,
+                    CreationTime = item.Created,
+                    Generation = item.Generation,
+                    RentCount = item.RentCount,
+                    TotalRentTime = TimeSpan.Zero,
+                    IsPoolable = item.Instance is IPoolable,
+                    IsActive = false,
+                    Id = item.Id,
                 });
                 _objectInfo.TryRemove(item.Id, out _);
             }
