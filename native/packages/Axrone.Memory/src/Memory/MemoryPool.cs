@@ -130,7 +130,6 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
     /// <param name="minimumLength">Minimum number of elements. Use -1 for the default buffer size.</param>
     /// <param name="memoryOwner">When this method returns <c>true</c>, the rented buffer owner; otherwise <c>null</c>.</param>
     /// <returns><c>true</c> if a buffer was successfully rented; otherwise <c>false</c>.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryRent(int minimumLength, [NotNullWhen(true)] out IMemoryOwner<T>? memoryOwner)
     {
         long startTimestamp = 0;
