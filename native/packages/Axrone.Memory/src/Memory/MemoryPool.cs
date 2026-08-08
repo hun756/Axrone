@@ -3,8 +3,8 @@ namespace Axrone.Memory;
 /// <summary>
 /// Zero-allocation memory pool for buffer reuse via bucket-based pooling.
 /// </summary>
-/// <typeparam name="T">Element type of the pooled buffers.</typeparam>
-public sealed class MemoryPool<T> : IMemoryPool<T>
+/// <typeparam name="T">Unmanaged element type of the pooled buffers.</typeparam>
+public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
 {
     /// <summary>Shared singleton pool with default options.</summary>
     public static readonly MemoryPool<T> Shared = new();

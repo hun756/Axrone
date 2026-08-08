@@ -3,8 +3,8 @@ namespace Axrone.Memory;
 /// <summary>
 /// Contract for a generic memory pool with rent/return, metrics, diagnostics, and trim operations.
 /// </summary>
-/// <typeparam name="T">Element type of the pooled buffers.</typeparam>
-public interface IMemoryPool<T> : IDisposable
+/// <typeparam name="T">Unmanaged element type of the pooled buffers.</typeparam>
+public interface IMemoryPool<T> : IDisposable where T : struct
 {
     /// <summary>Rents a buffer with at least <paramref name="minimumLength"/> elements.</summary>
     /// <param name="minimumLength">Minimum number of elements. Use -1 for the default buffer size.</param>
