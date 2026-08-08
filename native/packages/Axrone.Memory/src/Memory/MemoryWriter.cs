@@ -23,6 +23,7 @@ public sealed class MemoryWriter<T> : IBufferWriter<T>, IDisposable
     }
 
     /// <summary>Gets the number of elements written so far.</summary>
+    /// <returns>The count of elements written via <see cref="Advance"/>.</returns>
     public int WrittenCount
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -30,6 +31,7 @@ public sealed class MemoryWriter<T> : IBufferWriter<T>, IDisposable
     }
 
     /// <summary>Gets the number of elements that can still be written.</summary>
+    /// <returns>Remaining writable element count.</returns>
     public int RemainingCapacity
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -37,6 +39,7 @@ public sealed class MemoryWriter<T> : IBufferWriter<T>, IDisposable
     }
 
     /// <summary>Gets the written portion of the buffer as a <see cref="Span{T}"/>.</summary>
+    /// <returns>A span covering elements from index 0 to <see cref="WrittenCount"/>.</returns>
     public Span<T> WrittenSpan
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -44,6 +47,7 @@ public sealed class MemoryWriter<T> : IBufferWriter<T>, IDisposable
     }
 
     /// <summary>Gets the written portion of the buffer as a <see cref="Memory{T}"/>.</summary>
+    /// <returns>A memory region covering elements from index 0 to <see cref="WrittenCount"/>.</returns>
     public Memory<T> WrittenMemory
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

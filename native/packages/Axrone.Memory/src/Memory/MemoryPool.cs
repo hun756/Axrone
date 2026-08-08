@@ -28,6 +28,7 @@ public sealed class MemoryPool<T> : IDisposable
     public MemoryPool() : this(new MemoryPoolOptions<T>()) { }
 
     /// <summary>Creates a pool with the specified options.</summary>
+    /// <param name="options">Configuration options for the pool.</param>
     /// <exception cref="ArgumentNullException"><paramref name="options"/> is null.</exception>
     public MemoryPool(MemoryPoolOptions<T> options)
     {
@@ -48,6 +49,8 @@ public sealed class MemoryPool<T> : IDisposable
     public int MaxBufferSize => _maxBufferSize;
 
     /// <summary>Rents a buffer with at least <paramref name="minimumLength"/> elements.</summary>
+    /// <param name="minimumLength">Minimum number of elements. Use -1 for the default buffer size.</param>
+    /// <returns>An <see cref="IMemoryOwner{T}"/> wrapping the rented buffer.</returns>
     /// <exception cref="OutOfMemoryException">The requested size exceeds <see cref="MaxBufferSize"/>.</exception>
     /// <exception cref="ObjectDisposedException">The pool has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -63,6 +66,9 @@ public sealed class MemoryPool<T> : IDisposable
     }
 
     /// <summary>Tries to rent a buffer with at least <paramref name="minimumLength"/> elements.</summary>
+    /// <param name="minimumLength">Minimum number of elements. Use -1 for the default buffer size.</param>
+    /// <param name="memoryOwner">When this method returns <c>true</c>, the rented buffer owner; otherwise <c>null</c>.</param>
+    /// <returns><c>true</c> if a buffer was successfully rented; otherwise <c>false</c>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryRent(int minimumLength, [NotNullWhen(true)] out IMemoryOwner<T>? memoryOwner)
     {
@@ -149,6 +155,7 @@ public sealed class MemoryPool<T> : IDisposable
     }
 
     /// <summary>Gets a snapshot of the pool's performance metrics.</summary>
+    /// <returns>A <see cref="MemoryPoolMetrics"/> snapshot with current counter values.</returns>
     public MemoryPoolMetrics GetMetrics()
     {
         return new MemoryPoolMetrics(

@@ -27,42 +27,63 @@ public sealed class MemoryPoolOptions<T>
     /// <summary>Chunk size for <see cref="AllocationStrategy.Chunked"/>. Default: 128.</summary>
     public int ChunkSize { get; set; } = 128;
 
+    /// <summary>Sets the default buffer size in elements.</summary>
+    /// <param name="size">Default buffer size.</param>
+    /// <returns>This instance for chaining.</returns>
     public MemoryPoolOptions<T> WithDefaultBufferSize(int size)
     {
         DefaultBufferSize = size;
         return this;
     }
 
+    /// <summary>Sets the maximum buffer size the pool will allocate.</summary>
+    /// <param name="size">Maximum buffer size in elements.</param>
+    /// <returns>This instance for chaining.</returns>
     public MemoryPoolOptions<T> WithMaxBufferSize(int size)
     {
         MaxBufferSize = size;
         return this;
     }
 
+    /// <summary>Sets the minimum buffer size (smallest bucket).</summary>
+    /// <param name="size">Minimum buffer size in elements.</param>
+    /// <returns>This instance for chaining.</returns>
     public MemoryPoolOptions<T> WithMinBufferSize(int size)
     {
         MinBufferSize = size;
         return this;
     }
 
+    /// <summary>Sets when buffers are zeroed.</summary>
+    /// <param name="mode">The clear mode to use.</param>
+    /// <returns>This instance for chaining.</returns>
     public MemoryPoolOptions<T> WithClearMode(ClearMode mode)
     {
         ClearMode = mode;
         return this;
     }
 
+    /// <summary>Sets the maximum number of idle buffers per bucket.</summary>
+    /// <param name="count">Maximum idle buffers per bucket.</param>
+    /// <returns>This instance for chaining.</returns>
     public MemoryPoolOptions<T> WithMaxBuffersPerBucket(int count)
     {
         MaxBuffersPerBucket = count;
         return this;
     }
 
+    /// <summary>Sets the bucket sizing strategy.</summary>
+    /// <param name="strategy">The allocation strategy to use.</param>
+    /// <returns>This instance for chaining.</returns>
     public MemoryPoolOptions<T> WithAllocationStrategy(AllocationStrategy strategy)
     {
         AllocationStrategy = strategy;
         return this;
     }
 
+    /// <summary>Sets the chunk size for <see cref="AllocationStrategy.Chunked"/>.</summary>
+    /// <param name="size">Chunk size in elements.</param>
+    /// <returns>This instance for chaining.</returns>
     public MemoryPoolOptions<T> WithChunkSize(int size)
     {
         ChunkSize = size;
