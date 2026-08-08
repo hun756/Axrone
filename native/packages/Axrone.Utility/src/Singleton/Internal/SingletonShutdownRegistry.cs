@@ -8,10 +8,11 @@ namespace Axrone.Utility.Singleton.Internal;
 internal static class SingletonShutdownRegistry
 {
     private static readonly List<(Type Type, object Instance)> _tracked = [];
+    private static readonly HashSet<object> _seen = new(ReferenceEqualityComparer.Instance);
     private static readonly object _lock = new();
     private static int _shutDown;
 
-    /// <summary>Register an instance for shutdown disposal. Idempotent per type.</summary>
+    /// <summary>Register an instance for shutdown disposal. Idempotent per instance reference.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Register<T>(T instance) where T : class
     {
@@ -19,11 +20,7 @@ internal static class SingletonShutdownRegistry
 
         lock (_lock)
         {
-            for (var i = 0; i < _tracked.Count; i++)
-            {
-                if (_tracked[i].Type == typeof(T)) return;
-            }
-
+            if (!_seen.Add(instance)) return;
             _tracked.Add((typeof(T), instance));
         }
     }
@@ -41,6 +38,7 @@ internal static class SingletonShutdownRegistry
         {
             snapshot = new List<(Type, object)>(_tracked);
             _tracked.Clear();
+            _seen.Clear();
         }
 
         for (var i = snapshot.Count - 1; i >= 0; i--)

@@ -24,7 +24,7 @@ public sealed class SingletonScope : IDisposable
     private readonly List<Action> _disposers = [];
     private readonly SingletonScope? _parent;
     private readonly object _lock = new();
-    private bool _disposed;
+    private int _disposed;
 
     /// <summary>Scope name for diagnostics.</summary>
     public string Name { get; }
@@ -229,16 +229,18 @@ public sealed class SingletonScope : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
-        for (var i = _disposers.Count - 1; i >= 0; i--)
-            _disposers[i]();
+        lock (_lock)
+        {
+            for (var i = _disposers.Count - 1; i >= 0; i--)
+                _disposers[i]();
 
-        _disposers.Clear();
-        _instances.Clear();
-        _factories.Clear();
-        _typedInstances.Clear();
-        _typedFactories.Clear();
+            _disposers.Clear();
+            _instances.Clear();
+            _factories.Clear();
+            _typedInstances.Clear();
+            _typedFactories.Clear();
+        }
     }
 }

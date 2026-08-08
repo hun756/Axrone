@@ -17,6 +17,7 @@ public sealed class AsyncSingleton<T> : IAsyncDisposable where T : class
     private T? _value;
     private volatile bool _initialized;
     private volatile bool _faulted;
+    private volatile bool _disposed;
     private Exception? _exception;
 
     public AsyncSingleton(Func<CancellationToken, ValueTask<T>> factory)
@@ -35,11 +36,13 @@ public sealed class AsyncSingleton<T> : IAsyncDisposable where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public async ValueTask<T> GetInstanceAsync(CancellationToken ct = default)
     {
+        if (_disposed) ThrowDisposed();
         if (_initialized) return _value!;
 
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            if (_disposed) ThrowDisposed();
             if (_initialized) return _value!;
             if (_faulted) throw _exception!;
 
@@ -74,9 +77,14 @@ public sealed class AsyncSingleton<T> : IAsyncDisposable where T : class
     /// <summary>Dispose the underlying instance if it implements <see cref="IAsyncDisposable"/> or <see cref="IDisposable"/>.</summary>
     public async ValueTask DisposeAsync()
     {
+        if (_disposed) return;
+
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
+            if (_disposed) return;
+            _disposed = true;
+
             if (_value is IAsyncDisposable asyncDisp)
                 await asyncDisp.DisposeAsync().ConfigureAwait(false);
             else if (_value is IDisposable disp)
@@ -88,4 +96,9 @@ public sealed class AsyncSingleton<T> : IAsyncDisposable where T : class
             _gate.Dispose();
         }
     }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [DoesNotReturn]
+    private static void ThrowDisposed() =>
+        throw new ObjectDisposedException(typeof(AsyncSingleton<T>).Name);
 }
