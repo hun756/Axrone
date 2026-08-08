@@ -157,8 +157,6 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
             return false;
         }
 
-        TrackAllocationSize(requestedSize);
-
         if ((_flags & MemoryPoolFlags.UseTlsCache) != 0
             && TryRentFromTlsCache(requestedSize, out memoryOwner))
         {
@@ -169,6 +167,8 @@ public sealed class MemoryPool<T> : IMemoryPool<T> where T : struct
                 Interlocked.Add(ref _totalRentTimeNs, Stopwatch.GetTimestamp() - startTimestamp);
             return true;
         }
+
+        TrackAllocationSize(requestedSize);
 
         int bufferSize = GetOptimalBufferSize(requestedSize);
 

@@ -176,7 +176,7 @@ public sealed class CorePoolContractTests
             new MemoryPoolOptions<byte>().WithMaxBufferSize(256));
 
         var act = () => pool.Rent(1024);
-        act.Should().Throw<OutOfMemoryException>();
+        act.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
