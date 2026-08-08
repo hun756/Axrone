@@ -173,6 +173,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         _factory = handler.Factory;
         _handler = handler;
         _configuration = configuration;
+        ValidateConfiguration(configuration);
         ValidateStrategy(configuration.Strategy);
         _syncLock = new object();
         _asyncLock = new AsyncReaderWriterLock();
@@ -595,12 +596,6 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         Interlocked.Decrement(ref _rented);
         Interlocked.Increment(ref _metrics.TotalReturned);
 
-        // Track rent duration
-        if (rentDuration > TimeSpan.Zero)
-        {
-            RecordRentDuration(item, rentDuration);
-        }
-
         // Update objectInfo rent count
         if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && instanceId != 0L)
         {
@@ -865,6 +860,12 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             Interlocked.Increment(ref _metrics.TotalCreated);
             TrackInstanceInfo(instance, now, id);
 
+            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+            {
+                if (_objectInfo.TryGetValue(id, out var info))
+                    _handler.OnCreate?.Invoke(info);
+            }
+
             var pooledItem = new PooledItem(instance, now, _generation, 0, id);
 
             if (_configuration.Strategy == PoolingStrategy.ThreadLocal && _threadLocalStorage is not null)
@@ -948,6 +949,30 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             if (_metrics.Events.Count > 100)
                 _metrics.Events.RemoveRange(0, 50);
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ValidateConfiguration(in PoolConfiguration configuration)
+    {
+        if (configuration.InitialCapacity < 0)
+            ThrowHelper.ThrowArgumentOutOfRangeException(nameof(configuration.InitialCapacity),
+                "InitialCapacity must be non-negative.");
+
+        if (configuration.MaximumCapacity < 0)
+            ThrowHelper.ThrowArgumentOutOfRangeException(nameof(configuration.MaximumCapacity),
+                "MaximumCapacity must be non-negative.");
+
+        if (configuration.MaximumCapacity > 0 && configuration.InitialCapacity > configuration.MaximumCapacity)
+            ThrowHelper.ThrowArgumentOutOfRangeException(nameof(configuration.InitialCapacity),
+                "InitialCapacity must not exceed MaximumCapacity.");
+
+        if (configuration.TargetUtilizationPercentage < 0 || configuration.TargetUtilizationPercentage > 100)
+            ThrowHelper.ThrowArgumentOutOfRangeException(nameof(configuration.TargetUtilizationPercentage),
+                "TargetUtilizationPercentage must be between 0 and 100.");
+
+        if (configuration.ScavengeIntervalMs < 0)
+            ThrowHelper.ThrowArgumentOutOfRangeException(nameof(configuration.ScavengeIntervalMs),
+                "ScavengeIntervalMs must be non-negative.");
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1255,11 +1280,6 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         Interlocked.Decrement(ref _rented);
         Interlocked.Increment(ref _metrics.TotalReturned);
-
-        if (rentDuration > TimeSpan.Zero)
-        {
-            RecordRentDuration(item, rentDuration);
-        }
 
         if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && instanceId != 0L)
         {
@@ -1891,12 +1911,29 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             _metrics.TotalResetDurationTicks = 0;
             _metrics.RentDurationsMs.Clear();
             _metrics.Events.Clear();
+            _metrics.CustomMetrics.Clear();
             _metrics.LastResetTime = now;
             _metrics.PeakUtilization = Volatile.Read(ref _rented);
             _metrics.PeakTime = now;
         }
 
         RecordEvent("Metrics reset");
+    }
+
+    public void RecordCustomMetric(string name, double value)
+    {
+        ThrowIfDisposed();
+
+        if (name is null)
+            ThrowHelper.ThrowArgumentNullException(nameof(name));
+
+        if (_configuration.DiagnosticsLevel < DiagnosticsLevel.Basic)
+            return;
+
+        lock (_syncLock)
+        {
+            _metrics.CustomMetrics[name] = value;
+        }
     }
 
     public IPoolableFactory<T, TResult> CreateFactory<TResult>()
