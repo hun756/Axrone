@@ -4,9 +4,9 @@ namespace Axrone.ObjectPool;
 [SkipLocalsInit]
 public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 {
-    private readonly struct LockHandle : IDisposable
+    private struct LockHandle : IDisposable
     {
-        private readonly AsyncReaderWriterLock _lock;
+        private AsyncReaderWriterLock? _lock;
         private readonly int _lockType;
 
         public LockHandle(AsyncReaderWriterLock lockObj, int lockType)
@@ -17,16 +17,22 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         public void Dispose()
         {
+            var lockObj = _lock;
+            _lock = null;
+
+            if (lockObj is null)
+                return;
+
             switch (_lockType)
             {
                 case READ_LOCK:
-                    _lock.ExitReadLock();
+                    lockObj.ExitReadLock();
                     break;
                 case UPGRADEABLE_READ_LOCK:
-                    _lock.ExitUpgradeableReadLock();
+                    lockObj.ExitUpgradeableReadLock();
                     break;
                 case WRITE_LOCK:
-                    _lock.ExitWriteLock();
+                    lockObj.ExitWriteLock();
                     break;
             }
         }

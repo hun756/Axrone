@@ -116,6 +116,17 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
 
         public int Count => _localCount;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool ContainsInstance(T item)
+        {
+            foreach (var pooledItem in _items)
+            {
+                if (ReferenceEquals(pooledItem.Instance, item))
+                    return true;
+            }
+            return false;
+        }
     }
 
     // ─── Fields ──────────────────────────────────────────────────
@@ -1637,17 +1648,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         for (int i = 0; i < _shards.Length; i++)
         {
-            var tempShard = new ConcurrentQueue<PooledItem>();
-            bool found = false;
-            while (_shards[i].TryDequeue(out var pooledItem))
-            {
-                if (!found && ReferenceEquals(pooledItem.Instance, item))
-                    found = true;
-                tempShard.Enqueue(pooledItem);
-            }
-            while (tempShard.TryDequeue(out var requeue))
-                _shards[i].Enqueue(requeue);
-            if (found)
+            if (_shards[i].ContainsInstance(item))
                 return true;
         }
 
@@ -1721,6 +1722,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         Interlocked.Increment(ref _metrics.ConfigurationChanges);
         var oldConfiguration = _configuration;
         _configuration = configuration;
+        Thread.MemoryBarrier();
 
         if (configuration.MaximumCapacity < oldConfiguration.MaximumCapacity)
         {
