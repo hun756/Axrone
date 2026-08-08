@@ -20,6 +20,8 @@ public sealed class AsyncSingleton<T> : IAsyncDisposable where T : class
     private volatile bool _disposed;
     private Exception? _exception;
 
+    /// <summary>Create an async singleton with the given async factory.</summary>
+    /// <param name="factory">Async factory invoked once to produce the instance.</param>
     public AsyncSingleton(Func<CancellationToken, ValueTask<T>> factory)
     {
         ArgumentNullException.ThrowIfNull(factory);

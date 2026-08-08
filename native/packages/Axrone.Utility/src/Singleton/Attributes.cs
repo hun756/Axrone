@@ -8,6 +8,8 @@ namespace Axrone.Utility.Singleton;
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class SingletonAttribute : Attribute
 {
+    /// <summary>Declare singleton metadata with the specified lifetime.</summary>
+    /// <param name="lifetime">Singleton lifetime semantics. Defaults to <see cref="SingletonLifetime.Singleton"/>.</param>
     public SingletonAttribute(SingletonLifetime lifetime = SingletonLifetime.Singleton)
     {
         Lifetime = lifetime;

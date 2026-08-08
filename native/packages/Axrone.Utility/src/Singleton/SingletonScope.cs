@@ -39,6 +39,8 @@ public sealed class SingletonScope : IDisposable
     /// <summary>Global root scope — always available as fallback.</summary>
     public static SingletonScope Global { get; } = new("global");
 
+    /// <summary>Create a new scope with the given diagnostic name.</summary>
+    /// <param name="name">Scope name used in diagnostics and error messages.</param>
     public SingletonScope(string name) => Name = name;
 
     private SingletonScope(string name, SingletonScope parent)
@@ -227,6 +229,7 @@ public sealed class SingletonScope : IDisposable
         }
     }
 
+    /// <summary>Dispose all registered instances in reverse creation order and clear the scope.</summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
