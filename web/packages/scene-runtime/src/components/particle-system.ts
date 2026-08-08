@@ -376,7 +376,7 @@ export class ParticleSystem extends Component {
     private _delayRemaining: number;
 
     private _coreSystem: CoreParticleSystem | null = null;
-    private _useCoreSimulation: boolean = false;
+    private _useCoreSimulation: boolean = true;
 
     constructor(config: ParticleSystemConfig = {}) {
         super();
