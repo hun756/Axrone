@@ -125,7 +125,6 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     private readonly object _syncLock;
     private readonly AsyncReaderWriterLock _asyncLock;
     private readonly SpinLock _spinLock;
-    private readonly SemaphoreSlim _semaphore;
     private readonly Channel<PooledItem>? _channel;
     private readonly ConcurrentDictionary<long, RentOperation> _rentTracking;
     private readonly Stopwatch _uptime;
@@ -165,11 +164,6 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         _syncLock = new object();
         _asyncLock = new AsyncReaderWriterLock();
         _spinLock = new SpinLock(enableThreadOwnerTracking: false);
-        _semaphore = new SemaphoreSlim(
-            configuration.MaximumCapacity > 0
-                ? configuration.MaximumCapacity
-                : Environment.ProcessorCount * 32,
-            configuration.MaximumCapacity > 0 ? configuration.MaximumCapacity : int.MaxValue);
         _items = new ConcurrentQueue<PooledItem>();
         int concurrency = (int)configuration.ConcurrencyLevel;
         if (concurrency <= 0) concurrency = (int)ConcurrencyLevel.Default;
@@ -952,7 +946,6 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         ClearCore();
 
-        _semaphore.Dispose();
         _asyncLock.Dispose();
         _threadLocalStorage?.Dispose();
 
@@ -1887,7 +1880,6 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         await ClearAsyncCore(CancellationToken.None).ConfigureAwait(false);
 
-        _semaphore.Dispose();
         await _asyncLock.DisposeAsync().ConfigureAwait(false);
 
         _threadLocalStorage?.Dispose();
