@@ -16,7 +16,7 @@ public sealed class AsyncSingleton<T> : IAsyncDisposable where T : class
     private readonly SemaphoreSlim _gate = new(1, 1);
     private T? _value;
     private volatile bool _initialized;
-    private volatile bool _faulted;
+    private bool _faulted;
     private volatile bool _disposed;
     private Exception? _exception;
 

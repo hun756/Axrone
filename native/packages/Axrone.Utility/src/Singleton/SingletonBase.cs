@@ -51,7 +51,11 @@ public abstract class SingletonBase<TSelf> : IDisposable where TSelf : Singleton
     }
 
     /// <summary>Whether the instance has been created.</summary>
-    public static bool IsInitialized => Volatile.Read(ref _status) == Initialized;
+    public static bool IsInitialized
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Volatile.Read(ref _status) == Initialized;
+    }
 
     /// <summary>Force eager initialization.</summary>
     public static void WarmUp() => _ = Instance;

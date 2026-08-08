@@ -56,6 +56,7 @@ public static class Singleton
     /// Subsequent calls to <see cref="GetInstance{T}()"/> will return this instance
     /// only if the provider has not already created one.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Register<T>(T instance) where T : class
     {
         ArgumentNullException.ThrowIfNull(instance);
