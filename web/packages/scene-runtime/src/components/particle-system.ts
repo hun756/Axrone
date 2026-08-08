@@ -1757,6 +1757,25 @@ export class ParticleSystem extends Component {
             textureSheetFps: this._textureSheetFps,
             textureSheetLoop: this._textureSheetLoop,
             textureRegion: [...this._textureRegion] as [number, number, number, number],
+
+            trailEnabled: this._trailEnabled,
+            trailMode: this._trailMode,
+            trailLifetime: this._trailLifetime,
+            trailWidth: this._trailWidth,
+            trailMinVertexDistance: this._trailMinVertexDistance,
+            trailRatio: this._trailRatio,
+            trailDieWithParticles: this._trailDieWithParticles,
+            trailInheritColor: this._trailInheritColor,
+            trailSizeAffectsWidth: this._trailSizeAffectsWidth,
+
+            lightsEnabled: this._lightsEnabled,
+            lightsMaxCount: this._lightsMaxCount,
+            lightsRange: this._lightsRange,
+            lightsIntensity: this._lightsIntensity,
+            lightsUseParticleColor: this._lightsUseParticleColor,
+            lightsShadowCasting: this._lightsShadowCasting,
+
+            customDataEnabled: this._customDataEnabled,
         };
     }
 

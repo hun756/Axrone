@@ -46,6 +46,21 @@ function constantColor(r: number, g: number, b: number, a: number = 1): Gradient
     return { mode: GradientMode.Color, color, colorMin: ZERO_COLOR, colorMax: WHITE_COLOR };
 }
 
+function buildSizeCurve(sizeCurve: readonly number[] | undefined, startSize: number): CurveConfiguration {
+    if (!sizeCurve || sizeCurve.length === 0) {
+        return constantCurve(startSize);
+    }
+    const curveData = new Float32Array(sizeCurve);
+    return {
+        mode: CurveMode.Curve,
+        constant: startSize,
+        constantMin: 0,
+        constantMax: 0,
+        curve: curveData,
+        curveMultiplier: startSize,
+    };
+}
+
 function hexToColor(hex: string): ImmutableColor {
     const r = parseInt(hex.slice(1, 3), 16) / 255;
     const g = parseInt(hex.slice(3, 5), 16) / 255;
@@ -171,7 +186,7 @@ export function createCoreParticleSystem(config: ParticleSystemConfig): CorePart
     core.addModule(new SizeModule({
         enabled: config.sizeOverLifetimeEnabled ?? false,
         priority: 400,
-        size: constantCurve(config.startSize ?? 1),
+        size: buildSizeCurve(config.sizeCurve, config.startSize ?? 1),
         sizeX: constantCurve(0),
         sizeY: constantCurve(0),
         sizeZ: constantCurve(0),
