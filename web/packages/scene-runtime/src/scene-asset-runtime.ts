@@ -207,14 +207,16 @@ export class SceneAssetRuntime {
         const dependencies: SceneMaterialAdapterDependencies = {
             resolveTextures: (id: string): readonly SceneMaterialAdapterTextureEntry[] => {
                 const bindings = this.resources.getMaterialTextureBindings(id);
-                return bindings.map((binding) => ({
-                    textureId: binding.textureId,
-                    samplerId: binding.samplerId,
-                    unit: binding.unit,
-                    nativeTexture: binding.nativeTexture,
-                    width: binding.width,
-                    height: binding.height,
-                }));
+                return bindings
+                    .filter((binding): binding is typeof binding & { unit: number } => binding.unit !== null)
+                    .map((binding) => ({
+                        textureId: binding.textureId,
+                        samplerId: binding.samplerId,
+                        unit: binding.unit,
+                        nativeTexture: binding.nativeTexture,
+                        width: binding.width,
+                        height: binding.height,
+                    }));
             },
         };
 
