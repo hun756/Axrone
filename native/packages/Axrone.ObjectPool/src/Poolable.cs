@@ -1,5 +1,11 @@
 namespace Axrone.ObjectPool;
 
+/// <summary>
+/// A lightweight value-type wrapper that tracks a rented object and returns it to the
+/// originating <see cref="IObjectPool{T}"/> when disposed. Supports <see cref="IDisposable"/>
+/// and <see cref="IAsyncDisposable"/> for use in <c>using</c> / <c>await using</c> blocks.
+/// </summary>
+/// <typeparam name="T">The pooled reference type.</typeparam>
 [StructLayout(LayoutKind.Auto)]
 public struct Poolable<T> : IPoolable<T> where T : class
 {
@@ -37,6 +43,10 @@ public struct Poolable<T> : IPoolable<T> where T : class
         get => _poolableId;
     }
 
+    /// <summary>
+    /// Gets the pooled object instance.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown if this poolable has already been disposed.</exception>
     public T Instance
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -47,18 +57,36 @@ public struct Poolable<T> : IPoolable<T> where T : class
         }
     }
 
+    /// <summary>
+    /// Gets the UTC time at which this poolable was rented from the pool.
+    /// </summary>
     public DateTime RentTime => _rentTime;
 
+    /// <summary>
+    /// Gets a value indicating whether this poolable has been disposed or detached.
+    /// </summary>
     public bool IsDisposed => _isDisposed;
 
+    /// <summary>
+    /// Gets the elapsed time since this poolable was rented.
+    /// </summary>
     public TimeSpan Age => DateTime.UtcNow - _rentTime;
 
+    /// <summary>
+    /// Detaches this poolable from the underlying pool, preventing the object from being
+    /// returned when <see cref="Dispose"/> or <see cref="DisposeAsync"/> is called.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Detach()
     {
         _isDetached = true;
     }
 
+    /// <summary>
+    /// Returns the pooled object to the originating pool. If rent-time tracking is enabled,
+    /// the configured <c>onDispose</c> callback is invoked with the rent duration.
+    /// No-op if already disposed or detached.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
@@ -79,6 +107,12 @@ public struct Poolable<T> : IPoolable<T> where T : class
         _pool.ReturnPoolable(_poolableId, _instance);
     }
 
+    /// <summary>
+    /// Asynchronously returns the pooled object to the originating pool. If rent-time tracking
+    /// is enabled, the configured <c>onDispose</c> callback is invoked with the rent duration.
+    /// No-op if already disposed or detached.
+    /// </summary>
+    /// <returns>A <see cref="ValueTask"/> representing the asynchronous return operation.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask DisposeAsync()
     {

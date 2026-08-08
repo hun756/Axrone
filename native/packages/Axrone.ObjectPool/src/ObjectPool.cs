@@ -1,5 +1,10 @@
 namespace Axrone.ObjectPool;
 
+/// <summary>
+/// A high-performance, thread-safe generic object pool that supports multiple pooling strategies,
+/// diagnostics, metrics tracking, leak detection, and automatic scavenging of idle items.
+/// </summary>
+/// <typeparam name="T">The reference type of objects managed by the pool.</typeparam>
 [StructLayout(LayoutKind.Auto)]
 [SkipLocalsInit]
 public sealed class ObjectPool<T> : IObjectPool<T> where T : class
@@ -165,6 +170,13 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
     // ─── Constructors ────────────────────────────────────────────
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="ObjectPool{T}"/> with the specified configuration and handler.
+    /// </summary>
+    /// <param name="configuration">The pool configuration controlling capacity, strategy, and diagnostics.</param>
+    /// <param name="handler">The handler providing factory, reset, dispose, and optional validation callbacks.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="handler"/> or its <see cref="PoolableHandler{T}.Factory"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="configuration"/> contains invalid values.</exception>
     public ObjectPool(PoolConfiguration configuration, PoolableHandler<T> handler)
     {
         if (handler.Factory is null)
@@ -235,6 +247,11 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="ObjectPool{T}"/> with default configuration and the specified handler.
+    /// </summary>
+    /// <param name="handler">The handler providing factory, reset, dispose, and optional validation callbacks.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="handler"/> or its <see cref="PoolableHandler{T}.Factory"/> is <c>null</c>.</exception>
     public ObjectPool(PoolableHandler<T> handler)
         : this(
             new PoolConfiguration
@@ -248,6 +265,15 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="ObjectPool{T}"/> with a factory delegate and optional reset/dispose callbacks.
+    /// </summary>
+    /// <param name="factory">The delegate used to create new instances of <typeparamref name="T"/>.</param>
+    /// <param name="reset">An optional action invoked to reset an item when it is returned to the pool.</param>
+    /// <param name="dispose">An optional action invoked to dispose an item when it is evicted or the pool is cleared.</param>
+    /// <param name="initialCapacity">The number of items to pre-allocate; 0 means no pre-allocation.</param>
+    /// <param name="maxCapacity">The maximum number of items the pool may hold; 0 defaults to <c>ProcessorCount * 32</c>.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="factory"/> is <c>null</c>.</exception>
     public ObjectPool(
         Func<T> factory,
         Action<T>? reset = null,
@@ -274,14 +300,29 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
     // ─── Properties ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Gets the total number of items currently managed by the pool (both available and rented).
+    /// </summary>
     public int Count => Volatile.Read(ref _count);
 
+    /// <summary>
+    /// Gets the maximum number of items the pool is configured to hold.
+    /// </summary>
     public int Capacity => _configuration.MaximumCapacity;
 
+    /// <summary>
+    /// Gets the number of items currently available in the pool (total count minus rented count).
+    /// </summary>
     public int Available => Count - Volatile.Read(ref _rented);
 
     // ─── Rent ────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Rents an item from the pool, reusing an available item or creating a new one if the pool is empty.
+    /// </summary>
+    /// <returns>A pooled instance of <typeparamref name="T"/>.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the pool is exhausted and <see cref="PoolConfiguration.ThrowOnExhaustion"/> is enabled.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public T Rent()
     {
@@ -528,6 +569,12 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
     // ─── Return ──────────────────────────────────────────────────
 
+    /// <summary>
+    /// Returns a previously rented item to the pool, invoking reset and validation callbacks before making it available.
+    /// </summary>
+    /// <param name="item">The item to return to the pool.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="item"/> is <c>null</c>.</exception>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Return(T item)
     {
@@ -1004,6 +1051,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
     // ─── Dispose ─────────────────────────────────────────────────
 
+    /// <summary>
+    /// Releases all resources used by the pool, disposing all available items and stopping background timers.
+    /// </summary>
     public void Dispose()
     {
         if (_isDisposed)
@@ -1023,6 +1073,11 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
     // ─── GetMetrics ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Returns a snapshot of the current pool performance metrics including throughput, utilization, and latency percentiles.
+    /// </summary>
+    /// <returns>A <see cref="PoolMetrics"/> struct containing the current metrics snapshot.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
     public PoolMetrics GetMetrics()
     {
         ThrowIfDisposed();
@@ -1072,6 +1127,14 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
     // ─── IObjectPool<T> — remaining methods ──────────────────────
 
+    /// <summary>
+    /// Asynchronously rents an item from the pool, awaiting availability when using bounded-channel strategy.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A <see cref="ValueTask{T}"/> representing the asynchronous rent operation, yielding the pooled instance.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the pool is exhausted and <see cref="PoolConfiguration.ThrowOnExhaustion"/> is enabled.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken"/> is cancelled.</exception>
     public async ValueTask<T> RentAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -1210,6 +1273,14 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
     }
 
+    /// <summary>
+    /// Asynchronously returns a previously rented item to the pool, invoking async reset and validation callbacks.
+    /// </summary>
+    /// <param name="item">The item to return to the pool.</param>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A <see cref="ValueTask"/> representing the asynchronous return operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="item"/> is <c>null</c>.</exception>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
     public async ValueTask ReturnAsync(T item, CancellationToken cancellationToken = default)
     {
         if (item is null)
@@ -1386,6 +1457,12 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
     }
 
+    /// <summary>
+    /// Attempts to rent an item from the pool without blocking; returns <c>false</c> if the pool is exhausted and expansion is disabled.
+    /// </summary>
+    /// <param name="item">When this method returns <c>true</c>, contains the rented instance; otherwise, <c>null</c>.</param>
+    /// <returns><c>true</c> if an item was successfully rented; otherwise, <c>false</c>.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
     public bool TryRent([NotNullWhen(true)] out T? item)
     {
         ThrowIfDisposed();
@@ -1425,6 +1502,12 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
     }
 
+    /// <summary>
+    /// Asynchronously attempts to rent an item from the pool without blocking; returns a failure tuple if the pool is exhausted.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A <see cref="ValueTask{T}"/> yielding a tuple indicating success and the rented item (or <c>null</c> on failure).</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
     public async ValueTask<(bool Success, T? Item)> TryRentAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -1470,6 +1553,12 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
     }
 
+    /// <summary>
+    /// Rents an item and wraps it in an <see cref="IPoolable{T}"/> RAII wrapper that automatically returns the item on disposal.
+    /// </summary>
+    /// <returns>An <see cref="IPoolable{T}"/> wrapper around the rented instance.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the pool is exhausted and <see cref="PoolConfiguration.ThrowOnExhaustion"/> is enabled.</exception>
     public IPoolable<T> GetPoolable()
     {
         var instance = Rent();
@@ -1478,6 +1567,13 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         return poolable;
     }
 
+    /// <summary>
+    /// Asynchronously rents an item and wraps it in an <see cref="IPoolable{T}"/> RAII wrapper that automatically returns the item on disposal.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A <see cref="ValueTask{T}"/> yielding an <see cref="IPoolable{T}"/> wrapper around the rented instance.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken"/> is cancelled.</exception>
     public async ValueTask<IPoolable<T>> GetPoolableAsync(CancellationToken cancellationToken = default)
     {
         var instance = await RentAsync(cancellationToken).ConfigureAwait(false);
@@ -1486,6 +1582,11 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         return poolable;
     }
 
+    /// <summary>
+    /// Returns a poolable wrapper's item back to the pool, identified by the poolable's unique ID.
+    /// </summary>
+    /// <param name="poolableId">The unique identifier of the poolable wrapper to return.</param>
+    /// <param name="item">The item to return to the pool.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ReturnPoolable(int poolableId, T item)
     {
@@ -1495,6 +1596,12 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         Return(item);
     }
 
+    /// <summary>
+    /// Asynchronously returns a poolable wrapper's item back to the pool, identified by the poolable's unique ID.
+    /// </summary>
+    /// <param name="poolableId">The unique identifier of the poolable wrapper to return.</param>
+    /// <param name="item">The item to return to the pool.</param>
+    /// <returns>A <see cref="ValueTask"/> representing the asynchronous return operation.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask ReturnPoolableAsync(int poolableId, T item)
     {
@@ -1504,6 +1611,10 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         return ReturnAsync(item);
     }
 
+    /// <summary>
+    /// Removes all available items from the pool, invoking dispose callbacks for each evicted item.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
     public void Clear()
     {
         ThrowIfDisposed();
@@ -1583,6 +1694,12 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
     }
 
+    /// <summary>
+    /// Asynchronously removes all available items from the pool, invoking async dispose callbacks for each evicted item.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A <see cref="ValueTask"/> representing the asynchronous clear operation.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
     public async ValueTask ClearAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -1632,6 +1749,13 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         RecordEvent("Pool cleared asynchronously");
     }
 
+    /// <summary>
+    /// Determines whether the specified item is currently managed by the pool (either available or rented).
+    /// </summary>
+    /// <param name="item">The item to locate in the pool.</param>
+    /// <returns><c>true</c> if the item is found in the pool; otherwise, <c>false</c>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="item"/> is <c>null</c>.</exception>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
     public bool Contains(T item)
     {
         if (item is null)
@@ -1675,6 +1799,11 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         return false;
     }
 
+    /// <summary>
+    /// Returns a snapshot of the pool's diagnostic information including events, failure counts, and configuration changes.
+    /// </summary>
+    /// <returns>A <see cref="PoolDiagnostics"/> struct containing the current diagnostic snapshot.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
     public PoolDiagnostics GetDiagnostics()
     {
         ThrowIfDisposed();
@@ -1716,6 +1845,12 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         };
     }
 
+    /// <summary>
+    /// Applies a new pool configuration at runtime, trimming or pre-allocating items as needed to match the new capacity.
+    /// </summary>
+    /// <param name="configuration">The new configuration to apply.</param>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="configuration"/> contains invalid values.</exception>
     public void Reconfigure(PoolConfiguration configuration)
     {
         ThrowIfDisposed();
@@ -1770,6 +1905,11 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         RecordEvent($"Pool reconfigured: MaxCapacity {oldConfiguration.MaximumCapacity} -> {configuration.MaximumCapacity}");
     }
 
+    /// <summary>
+    /// Reduces the pool size by disposing idle items down to the specified target capacity or the configured utilization percentage.
+    /// </summary>
+    /// <param name="targetCapacity">The desired number of items to retain; -1 uses <see cref="PoolConfiguration.TargetUtilizationPercentage"/> to compute the target.</param>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
     public void Trim(int targetCapacity = -1)
     {
         ThrowIfDisposed();
@@ -1872,6 +2012,13 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
     }
 
+    /// <summary>
+    /// Asynchronously reduces the pool size by disposing idle items down to the specified target capacity.
+    /// </summary>
+    /// <param name="targetCapacity">The desired number of items to retain; -1 uses <see cref="PoolConfiguration.TargetUtilizationPercentage"/> to compute the target.</param>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A <see cref="ValueTask"/> representing the asynchronous trim operation.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
     public async ValueTask TrimAsync(int targetCapacity = -1, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -1895,6 +2042,10 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
     }
 
+    /// <summary>
+    /// Resets all accumulated performance metrics, duration histograms, and custom metrics to their initial state.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
     public void ResetMetrics()
     {
         ThrowIfDisposed();
@@ -1920,6 +2071,13 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         RecordEvent("Metrics reset");
     }
 
+    /// <summary>
+    /// Records or updates a named custom metric value that will be included in diagnostic snapshots.
+    /// </summary>
+    /// <param name="name">The name of the custom metric.</param>
+    /// <param name="value">The numeric value to record.</param>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="name"/> is <c>null</c>.</exception>
     public void RecordCustomMetric(string name, double value)
     {
         ThrowIfDisposed();
@@ -1936,11 +2094,20 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         }
     }
 
+    /// <summary>
+    /// Creates a <see cref="IPoolableFactory{T, TResult}"/> that wraps this pool and produces <typeparamref name="TResult"/> instances from pooled items.
+    /// </summary>
+    /// <typeparam name="TResult">The result type to create from pooled items (e.g., <see cref="IPoolable{T}"/> or <typeparamref name="T"/> itself).</typeparam>
+    /// <returns>A new <see cref="IPoolableFactory{T, TResult}"/> bound to this pool.</returns>
     public IPoolableFactory<T, TResult> CreateFactory<TResult>()
     {
         return new PooledObjectFactory<T, TResult>(this);
     }
 
+    /// <summary>
+    /// Asynchronously releases all resources used by the pool, disposing all available items and stopping background timers.
+    /// </summary>
+    /// <returns>A <see cref="ValueTask"/> representing the asynchronous dispose operation.</returns>
     public async ValueTask DisposeAsync()
     {
         if (_isDisposed)
@@ -2253,16 +2420,33 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
 // ─── PooledObjectFactory ────────────────────────────────────────
 
+/// <summary>
+/// A factory that creates <typeparamref name="TResult"/> wrappers from pooled items managed by an <see cref="IObjectPool{T}"/>.
+/// </summary>
+/// <typeparam name="T">The reference type of objects managed by the underlying pool.</typeparam>
+/// <typeparam name="TResult">The result type produced by the factory (e.g., <see cref="IPoolable{T}"/> or <typeparamref name="T"/>).</typeparam>
 [StructLayout(LayoutKind.Auto)]
 public sealed class PooledObjectFactory<T, TResult> : IPoolableFactory<T, TResult> where T : class
 {
     private readonly IObjectPool<T> _pool;
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="PooledObjectFactory{T, TResult}"/> bound to the specified pool.
+    /// </summary>
+    /// <param name="pool">The object pool to rent items from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="pool"/> is <c>null</c>.</exception>
     public PooledObjectFactory(IObjectPool<T> pool)
     {
         _pool = pool ?? ThrowHelper.ThrowArgumentNullException<IObjectPool<T>>(nameof(pool));
     }
 
+    /// <summary>
+    /// Creates a <typeparamref name="TResult"/> instance from the specified pooled item, wrapping it in an <see cref="IPoolable{T}"/> when applicable.
+    /// </summary>
+    /// <param name="item">The pooled item to wrap or cast.</param>
+    /// <returns>A <typeparamref name="TResult"/> instance derived from <paramref name="item"/>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="item"/> is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="item"/> cannot be converted to <typeparamref name="TResult"/>.</exception>
     public TResult Create(T item)
     {
         if (item is null)

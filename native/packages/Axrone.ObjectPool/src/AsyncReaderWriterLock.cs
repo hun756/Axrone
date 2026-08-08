@@ -1,5 +1,9 @@
 namespace Axrone.ObjectPool;
 
+/// <summary>
+/// An asynchronous reader-writer lock that supports multiple concurrent readers, a single exclusive writer,
+/// and upgradeable read locks. Optionally supports recursive lock acquisition on the same thread.
+/// </summary>
 [StructLayout(LayoutKind.Auto)]
 [SkipLocalsInit]
 public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
@@ -52,6 +56,13 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     private int _writerCount;
     private volatile bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AsyncReaderWriterLock"/> class.
+    /// </summary>
+    /// <param name="supportRecursion">
+    /// <c>true</c> to allow the same thread to re-enter read, upgradeable-read, or write locks recursively;
+    /// otherwise <c>false</c>.
+    /// </param>
     public AsyncReaderWriterLock(bool supportRecursion = false)
     {
         _readSemaphore = new SemaphoreSlim(int.MaxValue, int.MaxValue);
@@ -65,6 +76,11 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Acquires a read lock synchronously and returns a disposable handle that releases the lock when disposed.
+    /// </summary>
+    /// <returns>An <see cref="IDisposable"/> that releases the read lock upon disposal.</returns>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IDisposable ReadLock()
     {
@@ -72,6 +88,12 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         return new LockHandle(this, READ_LOCK);
     }
 
+    /// <summary>
+    /// Acquires an upgradeable read lock synchronously and returns a disposable handle that releases the lock when disposed.
+    /// An upgradeable read lock allows the holder to later upgrade to a write lock.
+    /// </summary>
+    /// <returns>An <see cref="IDisposable"/> that releases the upgradeable read lock upon disposal.</returns>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IDisposable UpgradeableReadLock()
     {
@@ -79,6 +101,11 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         return new LockHandle(this, UPGRADEABLE_READ_LOCK);
     }
 
+    /// <summary>
+    /// Acquires a write lock synchronously and returns a disposable handle that releases the lock when disposed.
+    /// </summary>
+    /// <returns>An <see cref="IDisposable"/> that releases the write lock upon disposal.</returns>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IDisposable WriteLock()
     {
@@ -86,6 +113,13 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         return new LockHandle(this, WRITE_LOCK);
     }
 
+    /// <summary>
+    /// Asynchronously acquires a read lock and returns a disposable handle that releases the lock when disposed.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A task that completes with an <see cref="IDisposable"/> that releases the read lock upon disposal.</returns>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">The cancellation token was canceled.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task<IDisposable> ReadLockAsync(CancellationToken cancellationToken = default)
     {
@@ -93,6 +127,13 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         return new LockHandle(this, READ_LOCK);
     }
 
+    /// <summary>
+    /// Asynchronously acquires an upgradeable read lock and returns a disposable handle that releases the lock when disposed.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A task that completes with an <see cref="IDisposable"/> that releases the upgradeable read lock upon disposal.</returns>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">The cancellation token was canceled.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task<IDisposable> UpgradeableReadLockAsync(
         CancellationToken cancellationToken = default)
@@ -101,6 +142,13 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         return new LockHandle(this, UPGRADEABLE_READ_LOCK);
     }
 
+    /// <summary>
+    /// Asynchronously acquires a write lock and returns a disposable handle that releases the lock when disposed.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A task that completes with an <see cref="IDisposable"/> that releases the write lock upon disposal.</returns>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">The cancellation token was canceled.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task<IDisposable> WriteLockAsync(CancellationToken cancellationToken = default)
     {
@@ -108,6 +156,16 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         return new LockHandle(this, WRITE_LOCK);
     }
 
+    /// <summary>
+    /// Asynchronously attempts to acquire a write lock within the specified timeout.
+    /// Returns a disposable handle that releases the lock when disposed.
+    /// </summary>
+    /// <param name="timeout">The maximum time to wait for the write lock.</param>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A task that completes with an <see cref="IDisposable"/> that releases the write lock upon disposal.</returns>
+    /// <exception cref="TimeoutException">The write lock could not be acquired within the specified timeout.</exception>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">The cancellation token was canceled.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task<IDisposable> TryWriteLockAsync(
         TimeSpan timeout,
@@ -120,6 +178,13 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
             : throw new TimeoutException("Failed to acquire write lock");
     }
 
+    /// <summary>
+    /// Enters a read lock synchronously. The caller must call <see cref="ExitReadLock"/> to release the lock.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
+    /// <exception cref="LockRecursionException">
+    /// Thrown when recursion is enabled and the current thread holds a read lock and attempts to upgrade.
+    /// </exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void EnterReadLock()
     {
@@ -158,6 +223,13 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Asynchronously enters a read lock. The caller must call <see cref="ExitReadLock"/> to release the lock.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A task representing the asynchronous lock acquisition.</returns>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">The cancellation token was canceled.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task EnterReadLockAsync(CancellationToken cancellationToken = default)
     {
@@ -196,6 +268,14 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Enters an upgradeable read lock synchronously. The caller must call <see cref="ExitUpgradeableReadLock"/> to release the lock.
+    /// An upgradeable read lock allows the holder to later upgrade to a write lock.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
+    /// <exception cref="LockRecursionException">
+    /// Thrown when recursion is enabled and the current thread holds a read lock and attempts to upgrade.
+    /// </exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void EnterUpgradeableReadLock()
     {
@@ -249,6 +329,16 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Asynchronously enters an upgradeable read lock. The caller must call <see cref="ExitUpgradeableReadLock"/> to release the lock.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A task representing the asynchronous lock acquisition.</returns>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">The cancellation token was canceled.</exception>
+    /// <exception cref="LockRecursionException">
+    /// Thrown when recursion is enabled and the current thread holds a read lock and attempts to upgrade.
+    /// </exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task EnterUpgradeableReadLockAsync(CancellationToken cancellationToken = default)
     {
@@ -302,6 +392,13 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Enters a write lock synchronously. The caller must call <see cref="ExitWriteLock"/> to release the lock.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
+    /// <exception cref="LockRecursionException">
+    /// Thrown when recursion is enabled and the current thread holds a read lock and attempts to upgrade to a write lock.
+    /// </exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void EnterWriteLock()
     {
@@ -357,6 +454,14 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Attempts to enter a write lock synchronously within the specified timeout.
+    /// </summary>
+    /// <param name="millisecondsTimeout">
+    /// The number of milliseconds to wait, or 0 to attempt the lock without waiting.
+    /// </param>
+    /// <returns><c>true</c> if the write lock was acquired; otherwise <c>false</c>.</returns>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryEnterWriteLock(int millisecondsTimeout = 0)
     {
@@ -422,6 +527,14 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         return true;
     }
 
+    /// <summary>
+    /// Asynchronously attempts to enter a write lock within the specified timeout.
+    /// </summary>
+    /// <param name="timeout">The maximum time to wait for the write lock.</param>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A task that completes with <c>true</c> if the write lock was acquired; otherwise <c>false</c>.</returns>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">The cancellation token was canceled.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task<bool> TryEnterWriteLockAsync(
         TimeSpan timeout,
@@ -493,6 +606,16 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         return true;
     }
 
+    /// <summary>
+    /// Asynchronously enters a write lock. The caller must call <see cref="ExitWriteLock"/> to release the lock.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>A task representing the asynchronous lock acquisition.</returns>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">The cancellation token was canceled.</exception>
+    /// <exception cref="LockRecursionException">
+    /// Thrown when recursion is enabled and the current thread holds a read lock and attempts to upgrade to a write lock.
+    /// </exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task EnterWriteLockAsync(CancellationToken cancellationToken = default)
     {
@@ -548,6 +671,10 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Exits a previously acquired read lock.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ExitReadLock()
     {
@@ -579,6 +706,10 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         Interlocked.Decrement(ref _readerCount);
     }
 
+    /// <summary>
+    /// Exits a previously acquired upgradeable read lock.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ExitUpgradeableReadLock()
     {
@@ -610,6 +741,10 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         _upgradeSemaphore.Release();
     }
 
+    /// <summary>
+    /// Exits a previously acquired write lock.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ExitWriteLock()
     {
@@ -644,6 +779,9 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Releases all resources used by this <see cref="AsyncReaderWriterLock"/> instance.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -657,6 +795,10 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         _recursiveData?.Dispose();
     }
 
+    /// <summary>
+    /// Asynchronously releases all resources used by this <see cref="AsyncReaderWriterLock"/> instance.
+    /// </summary>
+    /// <returns>A completed <see cref="ValueTask"/>.</returns>
     public ValueTask DisposeAsync()
     {
         Dispose();
