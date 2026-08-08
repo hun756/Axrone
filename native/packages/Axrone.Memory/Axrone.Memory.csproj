@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Memory</RootNamespace>
+    <AssemblyName>Axrone.Memory</AssemblyName>
+    <Description>Zero-allocation memory pool and allocator for the Axrone engine.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1724: Type name conflicts with namespace — intentional module naming -->
+    <NoWarn>$(NoWarn);CA1724</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Memory.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+
+</Project>
