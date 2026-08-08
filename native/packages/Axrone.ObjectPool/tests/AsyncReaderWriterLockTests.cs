@@ -16,58 +16,56 @@ public class AsyncReaderWriterLockTests
         using var r1 = lck.ReadLock();
         using var r2 = lck.ReadLock();
         using var r3 = lck.ReadLock();
-        // All three readers acquired the lock without blocking
     }
 
     [Fact]
-    public void WriteLock_IsExclusive_BlocksOtherWriters()
+    public async Task WriteLock_IsExclusive_BlocksOtherWriters()
     {
         var lck = new AsyncReaderWriterLock();
         using var w = lck.WriteLock();
         var acquired = false;
-        var t = Task.Run(() =>
+        _ = Task.Run(() =>
         {
             using var w2 = lck.WriteLock();
             acquired = true;
         });
-        Task.Delay(200).Wait();
+        await Task.Delay(200).ConfigureAwait(false);
         acquired.Should().BeFalse("second writer should be blocked");
     }
 
     [Fact]
-    public void WriteLock_BlocksReaders()
+    public async Task WriteLock_BlocksReaders()
     {
         var lck = new AsyncReaderWriterLock();
         using var w = lck.WriteLock();
         var acquired = false;
-        var t = Task.Run(() =>
+        _ = Task.Run(() =>
         {
             using var r = lck.ReadLock();
             acquired = true;
         });
-        Task.Delay(200).Wait();
+        await Task.Delay(200).ConfigureAwait(false);
         acquired.Should().BeFalse("reader should be blocked by writer");
     }
 
     [Fact]
-    public void ReadLock_Dispose_ReleasesLock()
+    public async Task ReadLock_Dispose_ReleasesLock()
     {
         var lck = new AsyncReaderWriterLock();
         var handle = lck.ReadLock();
         handle.Dispose();
-        // After dispose, a writer should be able to acquire the lock
         var writerAcquired = false;
         var t = Task.Run(() =>
         {
             using var w = lck.WriteLock();
             writerAcquired = true;
         });
-        t.Wait(TimeSpan.FromSeconds(2));
+        await t.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
         writerAcquired.Should().BeTrue();
     }
 
     [Fact]
-    public void WriteLock_Dispose_ReleasesLock()
+    public async Task WriteLock_Dispose_ReleasesLock()
     {
         var lck = new AsyncReaderWriterLock();
         var handle = lck.WriteLock();
@@ -78,7 +76,7 @@ public class AsyncReaderWriterLockTests
             using var r = lck.ReadLock();
             readerAcquired = true;
         });
-        t.Wait(TimeSpan.FromSeconds(2));
+        await t.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
         readerAcquired.Should().BeTrue();
     }
 
@@ -86,23 +84,22 @@ public class AsyncReaderWriterLockTests
     public async Task AsyncReadLock_WorksCorrectly()
     {
         var lck = new AsyncReaderWriterLock();
-        using var r1 = await lck.ReadLockAsync();
-        using var r2 = await lck.ReadLockAsync();
-        // Both async readers acquired concurrently
+        using var r1 = await lck.ReadLockAsync().ConfigureAwait(false);
+        using var r2 = await lck.ReadLockAsync().ConfigureAwait(false);
     }
 
     [Fact]
     public async Task AsyncWriteLock_WorksCorrectly()
     {
         var lck = new AsyncReaderWriterLock();
-        using var w = await lck.WriteLockAsync();
+        using var w = await lck.WriteLockAsync().ConfigureAwait(false);
         var acquired = false;
-        var t = Task.Run(async () =>
+        _ = Task.Run(async () =>
         {
-            using var w2 = await lck.WriteLockAsync();
+            using var w2 = await lck.WriteLockAsync().ConfigureAwait(false);
             acquired = true;
         });
-        await Task.Delay(200);
+        await Task.Delay(200).ConfigureAwait(false);
         acquired.Should().BeFalse("second async writer should be blocked");
     }
 
@@ -148,7 +145,6 @@ public class AsyncReaderWriterLockTests
         var lck = new AsyncReaderWriterLock(supportRecursion: true);
         using var r1 = lck.ReadLock();
         using var r2 = lck.ReadLock();
-        // Recursive read lock acquired without deadlock
     }
 
     [Fact]
@@ -157,7 +153,6 @@ public class AsyncReaderWriterLockTests
         var lck = new AsyncReaderWriterLock(supportRecursion: true);
         using var w1 = lck.WriteLock();
         using var w2 = lck.WriteLock();
-        // Recursive write lock acquired without deadlock
     }
 
     [Fact]
@@ -166,7 +161,6 @@ public class AsyncReaderWriterLockTests
         var lck = new AsyncReaderWriterLock(supportRecursion: true);
         using var ur = lck.UpgradeableReadLock();
         using var w = lck.WriteLock();
-        // Successfully upgraded to write lock
     }
 
     [Fact]
@@ -178,10 +172,10 @@ public class AsyncReaderWriterLockTests
         {
             tasks.Add(Task.Run(async () =>
             {
-                using var r = await lck.ReadLockAsync();
-                await Task.Delay(50);
+                using var r = await lck.ReadLockAsync().ConfigureAwait(false);
+                await Task.Delay(50).ConfigureAwait(false);
             }));
         }
-        await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
     }
 }
