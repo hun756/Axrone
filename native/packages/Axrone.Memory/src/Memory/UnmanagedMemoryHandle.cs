@@ -85,7 +85,7 @@ public sealed class UnmanagedMemoryHandle : IDisposable
 /// <typeparam name="T">Unmanaged element type.</typeparam>
 public sealed class UnmanagedMemoryHandle<T> : IDisposable where T : unmanaged
 {
-    private readonly IntPtr _pointer;
+    private IntPtr _pointer;
     private readonly int _length;
     private readonly UnmanagedMemoryHandle? _baseHandle;
 
@@ -108,42 +108,71 @@ public sealed class UnmanagedMemoryHandle<T> : IDisposable where T : unmanaged
     }
 
     /// <summary>Gets the native memory pointer.</summary>
-    public IntPtr Pointer => _pointer;
+    /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
+    public IntPtr Pointer
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get
+        {
+            var ptr = _pointer;
+            ObjectDisposedException.ThrowIf(ptr == IntPtr.Zero, this);
+            return ptr;
+        }
+    }
 
     /// <summary>Gets the number of <typeparamref name="T"/> elements in this handle.</summary>
     public int Length => _length;
 
     /// <summary>Gets the buffer contents as a <see cref="Span{T}"/>.</summary>
     /// <returns>A span over the native memory.</returns>
+    /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public unsafe Span<T> AsSpan() => new((void*)_pointer, _length);
+    public unsafe Span<T> AsSpan()
+    {
+        var ptr = _pointer;
+        ObjectDisposedException.ThrowIf(ptr == IntPtr.Zero, this);
+        return new((void*)ptr, _length);
+    }
 
     /// <summary>Gets the buffer contents as a <see cref="ReadOnlySpan{T}"/>.</summary>
     /// <returns>A read-only span over the native memory.</returns>
+    /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public unsafe ReadOnlySpan<T> AsReadOnlySpan() => new((void*)_pointer, _length);
+    public unsafe ReadOnlySpan<T> AsReadOnlySpan()
+    {
+        var ptr = _pointer;
+        ObjectDisposedException.ThrowIf(ptr == IntPtr.Zero, this);
+        return new((void*)ptr, _length);
+    }
 
     /// <summary>Gets the raw native pointer as a typed pointer.</summary>
     /// <returns>The typed native pointer.</returns>
+    /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public unsafe T* ToPointer() => (T*)_pointer;
+    public unsafe T* ToPointer()
+    {
+        var ptr = _pointer;
+        ObjectDisposedException.ThrowIf(ptr == IntPtr.Zero, this);
+        return (T*)ptr;
+    }
 
     /// <summary>Gets a reference to the element at the specified index.</summary>
     /// <param name="index">Zero-based index.</param>
     /// <returns>A reference to the element.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is out of bounds.</exception>
+    /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
     public ref T this[int index]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
+            var ptr = _pointer;
+            ObjectDisposedException.ThrowIf(ptr == IntPtr.Zero, this);
+
             if ((uint)index >= (uint)_length)
                 throw new ArgumentOutOfRangeException(nameof(index));
 
-            unsafe
-            {
-                return ref Unsafe.Add(ref Unsafe.AsRef<T>((void*)_pointer), index);
-            }
+            unsafe { return ref Unsafe.Add(ref Unsafe.AsRef<T>((void*)ptr), index); }
         }
     }
 
@@ -168,6 +197,7 @@ public sealed class UnmanagedMemoryHandle<T> : IDisposable where T : unmanaged
     /// <summary>Copies the handle contents to the destination span.</summary>
     /// <param name="destination">Destination span.</param>
     /// <exception cref="ArgumentOutOfRangeException">Destination is too small.</exception>
+    /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void CopyTo(Span<T> destination)
     {
@@ -177,10 +207,11 @@ public sealed class UnmanagedMemoryHandle<T> : IDisposable where T : unmanaged
         AsSpan().CopyTo(destination);
     }
 
-    /// <summary>Disposes the underlying base handle, returning memory to the pool.</summary>
+    /// <summary>Poisons the pointer to prevent use-after-dispose, then disposes the underlying base handle if present.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
+        _pointer = IntPtr.Zero;
         _baseHandle?.Dispose();
     }
 }
