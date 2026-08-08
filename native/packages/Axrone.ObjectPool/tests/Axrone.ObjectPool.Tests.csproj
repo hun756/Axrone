@@ -4,7 +4,7 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <NoWarn>$(NoWarn);CA1707;CA1305;CA2000;CA1515;CA2231;CA1815;CA1031</NoWarn>
+    <NoWarn>$(NoWarn);CA1707;CA1305;CA2000;CA1515;CA2231;CA1815;CA1031;CA1812</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

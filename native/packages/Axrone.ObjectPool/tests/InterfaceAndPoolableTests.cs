@@ -254,7 +254,7 @@ public class PoolableTests
         var item = new List<int>();
         var poolable = new Poolable<List<int>>(item, null);
 
-        poolable.Age.Should().BeGreaterOrEqualTo(TimeSpan.Zero);
+        poolable.Age.Should().BeGreaterThanOrEqualTo(TimeSpan.Zero);
     }
 
     [Fact]
