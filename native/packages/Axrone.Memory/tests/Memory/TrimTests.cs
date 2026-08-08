@@ -27,7 +27,7 @@ public sealed class TrimTests
         var buffer = pool.Rent(1024);
         buffer.Dispose();
 
-        pool.Trim();
+        pool.Trim(1.0);
 
         pool.GetMetrics().PooledBuffers.Should().Be(0);
     }
@@ -41,7 +41,7 @@ public sealed class TrimTests
         var buffer3 = pool.Rent(1024);
         buffer1.Dispose();
 
-        pool.Trim();
+        pool.Trim(1.0);
 
         pool.GetMetrics().ActiveBuffers.Should().Be(2);
         pool.GetMetrics().PooledBuffers.Should().Be(0);

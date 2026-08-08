@@ -4,7 +4,7 @@ namespace Axrone.Memory;
 /// Zero-allocation memory pool for buffer reuse via bucket-based pooling.
 /// </summary>
 /// <typeparam name="T">Element type of the pooled buffers.</typeparam>
-public sealed class MemoryPool<T> : IDisposable
+public sealed class MemoryPool<T> : IMemoryPool<T>
 {
     private readonly int[] _bucketSizes;
     private readonly int _defaultBufferSize;
@@ -23,6 +23,7 @@ public sealed class MemoryPool<T> : IDisposable
     private long _pooledBuffers;
     private long _hits;
     private long _misses;
+    private long _totalAllocated;
 
     /// <summary>Creates a pool with default options.</summary>
     public MemoryPool() : this(new MemoryPoolOptions<T>()) { }
@@ -47,6 +48,9 @@ public sealed class MemoryPool<T> : IDisposable
 
     /// <summary>Gets the maximum buffer size this pool will allocate.</summary>
     public int MaxBufferSize => _maxBufferSize;
+
+    /// <summary>Gets the total number of bytes currently allocated by the pool (active + pooled).</summary>
+    public long TotalAllocated => Interlocked.Read(ref _totalAllocated);
 
     /// <summary>Rents a buffer with at least <paramref name="minimumLength"/> elements.</summary>
     /// <param name="minimumLength">Minimum number of elements. Use -1 for the default buffer size.</param>
@@ -110,6 +114,7 @@ public sealed class MemoryPool<T> : IDisposable
 
         var array = GC.AllocateUninitializedArray<T>(bufferSize);
         var newBuffer = new MemoryPoolBuffer(this, array, bufferSize);
+        Interlocked.Add(ref _totalAllocated, (long)bufferSize * Unsafe.SizeOf<T>());
 
         if (_clearMode == ClearMode.OnRent || _clearMode == ClearMode.Always)
             newBuffer.Clear();
@@ -154,6 +159,85 @@ public sealed class MemoryPool<T> : IDisposable
         Interlocked.Decrement(ref _activeBuffers);
     }
 
+    /// <summary>Tries to rent a buffer with exactly <paramref name="exactLength"/> elements.</summary>
+    /// <param name="exactLength">Exact number of elements required.</param>
+    /// <param name="memoryOwner">When this method returns <c>true</c>, the rented buffer owner; otherwise <c>null</c>.</param>
+    /// <returns><c>true</c> if a buffer of the exact size was successfully rented; otherwise <c>false</c>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryRentExact(int exactLength, [NotNullWhen(true)] out IMemoryOwner<T>? memoryOwner)
+    {
+        if (Volatile.Read(ref _isDisposed) != 0 || exactLength <= 0)
+        {
+            memoryOwner = null;
+            return false;
+        }
+
+        int bufferSize = GetOptimalBufferSize(exactLength);
+
+        if (bufferSize != exactLength || bufferSize > _maxBufferSize)
+        {
+            memoryOwner = null;
+            return false;
+        }
+
+        return TryRent(exactLength, out memoryOwner);
+    }
+
+    /// <summary>Rents multiple buffers at once.</summary>
+    /// <param name="count">Number of buffers to rent.</param>
+    /// <param name="minimumLength">Minimum number of elements per buffer.</param>
+    /// <returns>An array of rented buffer owners.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is less than or equal to zero.</exception>
+    public IMemoryOwner<T>[] RentMultiple(int count, int minimumLength = -1)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(count);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _isDisposed) != 0, this);
+
+        var owners = new IMemoryOwner<T>[count];
+        int rented = 0;
+
+        try
+        {
+            for (int i = 0; i < count; i++)
+            {
+                owners[i] = Rent(minimumLength);
+                rented++;
+            }
+        }
+        catch
+        {
+            for (int i = 0; i < rented; i++)
+                owners[i].Dispose();
+            throw;
+        }
+
+        return owners;
+    }
+
+    /// <summary>Returns multiple buffers to the pool at once.</summary>
+    /// <param name="buffers">The buffers to return.</param>
+    /// <returns><c>true</c> if all buffers were successfully returned; otherwise <c>false</c>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="buffers"/> is null.</exception>
+    public bool ReturnMultiple(IMemoryOwner<T>[] buffers)
+    {
+        ArgumentNullException.ThrowIfNull(buffers);
+
+        bool allReturned = true;
+        for (int i = 0; i < buffers.Length; i++)
+        {
+            try
+            {
+                buffers[i]?.Dispose();
+            }
+            catch
+            {
+                allReturned = false;
+            }
+        }
+
+        return allReturned;
+    }
+
     /// <summary>Gets a snapshot of the pool's performance metrics.</summary>
     /// <returns>A <see cref="MemoryPoolMetrics"/> snapshot with current counter values.</returns>
     public MemoryPoolMetrics GetMetrics()
@@ -178,27 +262,11 @@ public sealed class MemoryPool<T> : IDisposable
         Interlocked.Exchange(ref _misses, 0);
     }
 
-    /// <summary>Removes all idle buffers from the pool, releasing them for garbage collection.</summary>
-    /// <exception cref="ObjectDisposedException">The pool has been disposed.</exception>
-    public void Trim()
-    {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref _isDisposed) != 0, this);
-
-        long removed = 0;
-        foreach (var bucket in _buckets.Values)
-        {
-            while (bucket.TryDequeue(out _))
-                removed++;
-        }
-
-        Interlocked.Add(ref _pooledBuffers, -removed);
-    }
-
     /// <summary>Removes a fraction of idle buffers from the pool.</summary>
     /// <param name="pressure">Fraction to remove: 0.0 removes none, 1.0 removes all.</param>
     /// <exception cref="ObjectDisposedException">The pool has been disposed.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="pressure"/> is outside [0.0, 1.0].</exception>
-    public void Trim(double pressure)
+    public void Trim(double pressure = 0.5)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _isDisposed) != 0, this);
 
@@ -208,25 +276,39 @@ public sealed class MemoryPool<T> : IDisposable
         if (pressure == 0.0)
             return;
 
+        long removed = 0;
+        long removedBytes = 0;
+
         if (pressure == 1.0)
         {
-            Trim();
-            return;
-        }
-
-        long removed = 0;
-        foreach (var bucket in _buckets.Values)
-        {
-            int count = bucket.Count;
-            int toRemove = (int)(count * pressure);
-            for (int i = 0; i < toRemove; i++)
+            foreach (var bucket in _buckets.Values)
             {
-                if (bucket.TryDequeue(out _))
+                while (bucket.TryDequeue(out var buffer))
+                {
                     removed++;
+                    removedBytes += (long)buffer.Length * Unsafe.SizeOf<T>();
+                }
+            }
+        }
+        else
+        {
+            foreach (var bucket in _buckets.Values)
+            {
+                int count = bucket.Count;
+                int toRemove = (int)(count * pressure);
+                for (int i = 0; i < toRemove; i++)
+                {
+                    if (bucket.TryDequeue(out var buffer))
+                    {
+                        removed++;
+                        removedBytes += (long)buffer.Length * Unsafe.SizeOf<T>();
+                    }
+                }
             }
         }
 
         Interlocked.Add(ref _pooledBuffers, -removed);
+        Interlocked.Add(ref _totalAllocated, -removedBytes);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -349,7 +431,42 @@ public sealed class MemoryPool<T> : IDisposable
             }
         }
 
+        public ReadOnlySpan<T> ReadOnlySpan
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
+            {
+                ObjectDisposedException.ThrowIf(Volatile.Read(ref _active) != 1, nameof(IMemoryOwner<T>));
+                return _array.AsSpan(0, _length);
+            }
+        }
+
+        public int ReferenceCount
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => Volatile.Read(ref _referenceCount);
+        }
+
         public int Length => _length;
+
+        public MemoryHandle Pin(int elementIndex = 0)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _active) != 1, nameof(IMemoryOwner<T>));
+            if ((uint)elementIndex >= (uint)_length)
+                throw new ArgumentOutOfRangeException(nameof(elementIndex));
+            return _array.AsMemory(elementIndex, _length - elementIndex).Pin();
+        }
+
+        public bool TryGetArray(out ArraySegment<T> segment)
+        {
+            if (Volatile.Read(ref _active) != 1)
+            {
+                segment = default;
+                return false;
+            }
+            segment = new ArraySegment<T>(_array, 0, _length);
+            return true;
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Clear() => Array.Clear(_array, 0, _length);
@@ -419,7 +536,37 @@ public sealed class MemoryPool<T> : IDisposable
                 get => _owner.ReadOnlyMemory.Slice(_start, _length);
             }
 
+            public ReadOnlySpan<T> ReadOnlySpan
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get => _owner.ReadOnlySpan.Slice(_start, _length);
+            }
+
+            public int ReferenceCount
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get => _owner.ReferenceCount;
+            }
+
             public int Length => _length;
+
+            public MemoryHandle Pin(int elementIndex = 0)
+            {
+                if ((uint)elementIndex >= (uint)_length)
+                    throw new ArgumentOutOfRangeException(nameof(elementIndex));
+                return _owner.Memory.Slice(_start + elementIndex, _length - elementIndex).Pin();
+            }
+
+            public bool TryGetArray(out ArraySegment<T> segment)
+            {
+                if (_owner.TryGetArray(out var parentSegment))
+                {
+                    segment = new ArraySegment<T>(parentSegment.Array!, parentSegment.Offset + _start, _length);
+                    return true;
+                }
+                segment = default;
+                return false;
+            }
 
             public IMemoryOwner<T> Slice(int start, int length)
             {

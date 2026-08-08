@@ -32,6 +32,10 @@
     <NoWarn>$(NoWarn);CA1815</NoWarn>
     <!-- CA2201: OutOfMemoryException reserved by runtime — pool throws it for quota exhaustion -->
     <NoWarn>$(NoWarn);CA2201</NoWarn>
+    <!-- CA1711: Type name ends in 'Flags' — intentional for flags enumeration naming -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
+    <!-- CA2000: Dispose objects before losing scope — false positive on buffer dequeue for size tracking -->
+    <NoWarn>$(NoWarn);CA2000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
