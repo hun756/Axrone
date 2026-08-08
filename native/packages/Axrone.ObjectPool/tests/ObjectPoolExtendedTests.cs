@@ -694,3 +694,110 @@ public class UnsupportedStrategyTests
             .WithParameterName(nameof(strategy));
     }
 }
+
+public sealed class AllocationRegressionTests : IDisposable
+{
+    private readonly ObjectPool<TestItem> _pool;
+
+    public AllocationRegressionTests()
+    {
+        _pool = new ObjectPool<TestItem>(
+            new PoolConfiguration
+            {
+                MaximumCapacity = 64,
+                InitialCapacity = 16,
+                Strategy = PoolingStrategy.CentralizedQueue,
+                UseSlimSynchronization = true,
+                ConcurrencyLevel = ConcurrencyLevel.Default,
+                DiagnosticsLevel = DiagnosticsLevel.None,
+            },
+            new PoolableHandler<TestItem>
+            {
+                Factory = () => new TestItem(),
+                Reset = item => item.Reset(),
+            });
+    }
+
+    [Fact]
+    public void RentReturn_CentralizedQueue_ShouldAllocateZeroInHotPath()
+    {
+        var warmup = _pool.Rent();
+        _pool.Return(warmup);
+
+        long bytesBefore = GC.GetTotalAllocatedBytes(true);
+
+        for (int i = 0; i < 1000; i++)
+        {
+            var item = _pool.Rent();
+            _pool.Return(item);
+        }
+
+        long bytesAfter = GC.GetTotalAllocatedBytes(true);
+        long delta = bytesAfter - bytesBefore;
+
+        delta.Should().Be(0, "Rent/Return hot path must be zero-allocation");
+    }
+
+    [Fact]
+    public void RentReturn_LockFree_ShouldAllocateZeroInHotPath()
+    {
+        var pool = new ObjectPool<TestItem>(
+            new PoolConfiguration
+            {
+                MaximumCapacity = 64,
+                InitialCapacity = 16,
+                Strategy = PoolingStrategy.LockFree,
+                UseSlimSynchronization = true,
+                ConcurrencyLevel = ConcurrencyLevel.Default,
+                DiagnosticsLevel = DiagnosticsLevel.None,
+            },
+            new PoolableHandler<TestItem>
+            {
+                Factory = () => new TestItem(),
+                Reset = item => item.Reset(),
+            });
+
+        var warmup = pool.Rent();
+        pool.Return(warmup);
+
+        long bytesBefore = GC.GetTotalAllocatedBytes(true);
+
+        for (int i = 0; i < 1000; i++)
+        {
+            var item = pool.Rent();
+            pool.Return(item);
+        }
+
+        long bytesAfter = GC.GetTotalAllocatedBytes(true);
+        long delta = bytesAfter - bytesBefore;
+
+        delta.Should().Be(0, "LockFree Rent/Return hot path must be zero-allocation");
+        pool.Dispose();
+    }
+
+    [Fact]
+    public void TryRent_ShouldAllocateZeroInHotPath()
+    {
+        _pool.TryRent(out var warmup);
+        if (warmup is not null) _pool.Return(warmup);
+
+        long bytesBefore = GC.GetTotalAllocatedBytes(true);
+
+        for (int i = 0; i < 1000; i++)
+        {
+            _pool.TryRent(out var item);
+            if (item is not null) _pool.Return(item);
+        }
+
+        long bytesAfter = GC.GetTotalAllocatedBytes(true);
+        long delta = bytesAfter - bytesBefore;
+
+        delta.Should().Be(0, "TryRent hot path must be zero-allocation");
+    }
+
+    public void Dispose()
+    {
+        _pool.Dispose();
+        GC.SuppressFinalize(this);
+    }
+}

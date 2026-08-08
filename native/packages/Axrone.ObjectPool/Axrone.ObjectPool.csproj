@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
   </ItemGroup>
 
 </Project>
