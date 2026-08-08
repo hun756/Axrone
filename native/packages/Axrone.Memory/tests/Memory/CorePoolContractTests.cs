@@ -9,7 +9,7 @@ public sealed class CorePoolContractTests
         using var owner = pool.Rent(256);
 
         owner.Should().NotBeNull();
-        owner.Memory.Length.Should().BeGreaterOrEqualTo(256);
+        owner.Memory.Length.Should().BeGreaterThanOrEqualTo(256);
     }
 
     [Fact]
@@ -27,7 +27,7 @@ public sealed class CorePoolContractTests
         using var pool = new MemoryPool<byte>();
         using var owner = pool.Rent(1);
 
-        owner.Memory.Length.Should().BeGreaterOrEqualTo(1);
+        owner.Memory.Length.Should().BeGreaterThanOrEqualTo(1);
     }
 
     [Fact]

@@ -17,6 +17,13 @@ public sealed class MemoryPool<T> : IDisposable
     private readonly ConcurrentDictionary<int, ConcurrentQueue<MemoryPoolBuffer>> _buckets;
     private int _isDisposed;
 
+    private long _totalRentedBuffers;
+    private long _totalReturnedBuffers;
+    private long _activeBuffers;
+    private long _pooledBuffers;
+    private long _hits;
+    private long _misses;
+
     /// <summary>Creates a pool with default options.</summary>
     public MemoryPool() : this(new MemoryPoolOptions<T>()) { }
 
@@ -78,6 +85,11 @@ public sealed class MemoryPool<T> : IDisposable
 
         if (bucket.TryDequeue(out var buffer))
         {
+            Interlocked.Increment(ref _hits);
+            Interlocked.Increment(ref _totalRentedBuffers);
+            Interlocked.Increment(ref _activeBuffers);
+            Interlocked.Decrement(ref _pooledBuffers);
+
             if (_clearMode == ClearMode.OnRent || _clearMode == ClearMode.Always)
                 buffer.Clear();
 
@@ -85,6 +97,10 @@ public sealed class MemoryPool<T> : IDisposable
             memoryOwner = buffer;
             return true;
         }
+
+        Interlocked.Increment(ref _misses);
+        Interlocked.Increment(ref _totalRentedBuffers);
+        Interlocked.Increment(ref _activeBuffers);
 
         var array = GC.AllocateUninitializedArray<T>(bufferSize);
         var newBuffer = new MemoryPoolBuffer(this, array, bufferSize);
@@ -125,7 +141,34 @@ public sealed class MemoryPool<T> : IDisposable
         if (bucket.Count < _maxBuffersPerBucket)
         {
             bucket.Enqueue(buffer);
+            Interlocked.Increment(ref _pooledBuffers);
         }
+
+        Interlocked.Increment(ref _totalReturnedBuffers);
+        Interlocked.Decrement(ref _activeBuffers);
+    }
+
+    /// <summary>Gets a snapshot of the pool's performance metrics.</summary>
+    public MemoryPoolMetrics GetMetrics()
+    {
+        return new MemoryPoolMetrics(
+            Interlocked.Read(ref _totalRentedBuffers),
+            Interlocked.Read(ref _totalReturnedBuffers),
+            Interlocked.Read(ref _activeBuffers),
+            Interlocked.Read(ref _pooledBuffers),
+            Interlocked.Read(ref _hits),
+            Interlocked.Read(ref _misses));
+    }
+
+    /// <summary>Resets all statistics counters to zero.</summary>
+    public void ResetStatistics()
+    {
+        Interlocked.Exchange(ref _totalRentedBuffers, 0);
+        Interlocked.Exchange(ref _totalReturnedBuffers, 0);
+        Interlocked.Exchange(ref _activeBuffers, 0);
+        Interlocked.Exchange(ref _pooledBuffers, 0);
+        Interlocked.Exchange(ref _hits, 0);
+        Interlocked.Exchange(ref _misses, 0);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -267,13 +310,23 @@ public sealed class MemoryPool<T> : IDisposable
 
         public void Dispose()
         {
-            if (Interlocked.CompareExchange(ref _active, 0, 1) != 1)
+            if (Interlocked.Exchange(ref _active, 0) != 1)
                 return;
 
             if (Interlocked.Decrement(ref _referenceCount) > 0)
                 return;
 
             _pool.Return(this);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void ReleaseSlice()
+        {
+            if (Interlocked.Decrement(ref _referenceCount) > 0)
+                return;
+
+            if (Volatile.Read(ref _active) == 0)
+                _pool.Return(this);
         }
 
         private sealed class SlicedMemoryOwner : IMemoryOwner<T>
@@ -322,7 +375,7 @@ public sealed class MemoryPool<T> : IDisposable
             {
                 if (Interlocked.Exchange(ref _disposed, 1) != 0)
                     return;
-                _owner.Dispose();
+                _owner.ReleaseSlice();
             }
         }
     }
