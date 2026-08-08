@@ -5,6 +5,7 @@ namespace Axrone.Utility.Singleton;
 /// <summary>
 /// GC-collectible singleton — uses <see cref="WeakReference{T}"/> so the instance can be
 /// collected under memory pressure and re-created on next access.
+/// Dispatches <see cref="ISingletonLifecycle"/> hooks on creation and re-creation.
 /// </summary>
 [StructLayout(LayoutKind.Auto)]
 [SkipLocalsInit]
@@ -54,8 +55,15 @@ public static class WeakSingleton<T> where T : class, new()
             using (NestingContext.EnterScope())
             {
                 var instance = new T();
-                if (instance is IInitializable initializable)
-                    initializable.Initialize();
+
+                if (instance is ISingletonLifecycle lifecycle)
+                {
+                    lifecycle.Initialize();
+                    var asyncTask = lifecycle.InitializeAsync();
+                    if (!asyncTask.IsCompletedSuccessfully)
+                        asyncTask.AsTask().GetAwaiter().GetResult();
+                }
+
                 return instance;
             }
         }

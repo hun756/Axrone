@@ -1,8 +1,11 @@
+using Axrone.Utility.Singleton.Internal;
+
 namespace Axrone.Utility.Singleton;
 
 /// <summary>
 /// Async singleton — lazily initializes via an async factory with <see cref="SemaphoreSlim"/> gating.
 /// Supports fault caching: if the factory throws, subsequent calls re-throw the original exception.
+/// Dispatches <see cref="ISingletonLifecycle"/> hooks after factory creation.
 /// </summary>
 /// <typeparam name="T">The singleton value type.</typeparam>
 [StructLayout(LayoutKind.Auto)]
@@ -41,6 +44,18 @@ public sealed class AsyncSingleton<T> : IAsyncDisposable where T : class
             if (_faulted) throw _exception!;
 
             _value = await _factory(ct).ConfigureAwait(false);
+
+            if (_value is ISingletonLifecycle lifecycle)
+            {
+#pragma warning disable CA1849 // Call async when available — sync hook runs before async hook
+                lifecycle.Initialize();
+#pragma warning restore CA1849
+                var asyncTask = lifecycle.InitializeAsync();
+                if (!asyncTask.IsCompletedSuccessfully)
+                    await asyncTask.ConfigureAwait(false);
+            }
+
+            SingletonShutdownRegistry.Register(_value);
             _initialized = true;
             return _value;
         }
