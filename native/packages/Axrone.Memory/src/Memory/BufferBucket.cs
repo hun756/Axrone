@@ -34,14 +34,14 @@ internal sealed class BufferBucket<T> where T : struct
         {
             _lock = new object();
             _fastBuffers = null!;
+            _buffers = new ConcurrentQueue<MemoryPool<T>.MemoryPoolBuffer>();
         }
         else
         {
             _lock = null;
             _fastBuffers = new ConcurrentStack<MemoryPool<T>.MemoryPoolBuffer>();
+            _buffers = null!;
         }
-
-        _buffers = new ConcurrentQueue<MemoryPool<T>.MemoryPoolBuffer>();
     }
 
     /// <summary>Gets the current number of idle buffers in this bucket.</summary>
@@ -81,11 +81,6 @@ internal sealed class BufferBucket<T> where T : struct
         else
         {
             if (_fastBuffers.TryPop(out buffer))
-            {
-                Interlocked.Decrement(ref _count);
-                result = true;
-            }
-            else if (_buffers.TryDequeue(out buffer))
             {
                 Interlocked.Decrement(ref _count);
                 result = true;
@@ -191,12 +186,6 @@ internal sealed class BufferBucket<T> where T : struct
                 Interlocked.Decrement(ref _count);
                 removed++;
             }
-
-            for (int i = removed; i < targetRemoveCount && _buffers.TryDequeue(out _); i++)
-            {
-                Interlocked.Decrement(ref _count);
-                removed++;
-            }
         }
 
         return removed;
@@ -248,7 +237,6 @@ internal sealed class BufferBucket<T> where T : struct
         else
         {
             while (_fastBuffers.TryPop(out _)) { }
-            while (_buffers.TryDequeue(out _)) { }
         }
     }
 }
