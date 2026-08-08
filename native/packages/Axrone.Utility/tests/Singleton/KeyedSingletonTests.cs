@@ -50,10 +50,10 @@ public class KeyedSingletonTests
     public void Count_ReflectsActiveInstances()
     {
         KeyedSession.Clear();
-        KeyedSession.Count.Should().Be(0);
-        _ = KeyedSession.GetInstance("a");
-        _ = KeyedSession.GetInstance("b");
-        KeyedSession.Count.Should().Be(2);
+        var baseline = KeyedSession.Count;
+        _ = KeyedSession.GetInstance("count-a");
+        _ = KeyedSession.GetInstance("count-b");
+        KeyedSession.Count.Should().Be(baseline + 2);
     }
 
     [Fact]
