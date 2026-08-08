@@ -127,6 +127,30 @@ export interface UIToggleHandle extends UIHandle {
     setDisabled(disabled: boolean): void;
 }
 
+export type UICheckboxMarkStyle = 'check' | 'cross' | 'dot' | 'dash';
+export type UICheckboxLabelPosition = 'left' | 'right' | 'hidden';
+
+export interface UICheckboxOptions extends UIBaseOptions {
+    readonly label?: string;
+    readonly checked?: boolean;
+    readonly indeterminate?: boolean;
+    readonly disabled?: boolean;
+    readonly labelPosition?: UICheckboxLabelPosition;
+    readonly markStyle?: UICheckboxMarkStyle;
+    readonly variant?: UIControlVariant;
+    readonly theme?: Partial<UIControlTheme>;
+    readonly onChange?: (checked: boolean, handle: UICheckboxHandle) => void;
+}
+
+export interface UICheckboxHandle extends UIHandle {
+    isChecked(): boolean;
+    setChecked(checked: boolean): void;
+    isIndeterminate(): boolean;
+    setIndeterminate(value: boolean): void;
+    toggle(): void;
+    setDisabled(disabled: boolean): void;
+}
+
 export interface UIProgressBarOptions extends UIBaseOptions {
     readonly label?: string;
     readonly value?: number;
