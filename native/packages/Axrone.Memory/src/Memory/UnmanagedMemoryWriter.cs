@@ -172,9 +172,17 @@ public sealed class UnmanagedMemoryWriter : IBufferWriter<byte>, IDisposable
 
         var newHandle = _pool.Rent(newSize);
 
-        _handle.AsSpan().Slice(0, _written).CopyTo(newHandle.AsSpan());
-        var oldHandle = _handle;
-        _handle = newHandle;
-        oldHandle.Dispose();
+        try
+        {
+            _handle.AsSpan().Slice(0, _written).CopyTo(newHandle.AsSpan());
+            var oldHandle = _handle;
+            _handle = newHandle;
+            oldHandle.Dispose();
+        }
+        catch
+        {
+            newHandle.Dispose();
+            throw;
+        }
     }
 }
