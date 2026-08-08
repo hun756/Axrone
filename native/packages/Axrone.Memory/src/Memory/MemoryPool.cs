@@ -255,9 +255,14 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
 
         _trimTimer?.Dispose();
 
+        long pooledBytes = 0;
         foreach (var bucket in _buckets.Values)
+        {
+            pooledBytes += (long)bucket.Count * bucket.BufferSize * Unsafe.SizeOf<T>();
             bucket.Dispose();
+        }
 
+        Interlocked.Add(ref _totalAllocated, -pooledBytes);
         _buckets.Clear();
 
         if (_threadLocalCaches != null)
