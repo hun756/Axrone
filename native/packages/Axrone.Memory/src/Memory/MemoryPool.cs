@@ -688,7 +688,9 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
                 sizes.Add(a);
                 while (b <= _maxBufferSize)
                 {
-                    int next = a + b;
+                    long nextLong = (long)a + b;
+                    if (nextLong > int.MaxValue) break;
+                    int next = (int)nextLong;
                     a = b;
                     b = next;
                     if (b > _maxBufferSize) break;
