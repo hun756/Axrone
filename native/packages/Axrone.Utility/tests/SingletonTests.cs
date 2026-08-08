@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Axrone.Utility.Singleton;
 using SingletonFacade = Axrone.Utility.Singleton.Singleton;
 
@@ -12,7 +11,7 @@ public sealed class SimpleService
     private static int _nextId;
 }
 
-public sealed class InitializableService : IInitializable
+public sealed class InitializableService : ISingletonLifecycle
 {
     public bool WasInitialized { get; private set; }
     public void Initialize() => WasInitialized = true;
@@ -38,38 +37,23 @@ public sealed class CrtpWithOnCreated : SingletonBase<CrtpWithOnCreated>
     protected override void OnCreated() => OnCreatedCalled = true;
 }
 
-public struct GameConfig : IValueInitializable, IEquatable<GameConfig>
-{
-    public int MaxPlayers { get; private set; }
-    public void Initialize() => MaxPlayers = 4;
-    public bool Equals(GameConfig other) => MaxPlayers == other.MaxPlayers;
-    public override bool Equals(object? obj) => obj is GameConfig g && Equals(g);
-    public override int GetHashCode() => MaxPlayers;
-}
-
-public struct PlainStruct : IEquatable<PlainStruct>
-{
-    public int Value { get; set; }
-    public bool Equals(PlainStruct other) => Value == other.Value;
-    public override bool Equals(object? obj) => obj is PlainStruct p && Equals(p);
-    public override int GetHashCode() => Value;
-}
-
 public sealed class DisposableService : IDisposable
 {
-    private Action _onDispose;
-    public DisposableService() => _onDispose = () => { };
-    public DisposableService(Action onDispose) => _onDispose = onDispose;
-    public void Dispose() => _onDispose();
+    public bool WasDisposed { get; private set; }
+    public void Dispose() => WasDisposed = true;
 }
 
 public sealed class FactoryService;
 public sealed class FactoryCountService;
 
-public sealed class NamedService : NamedSingleton<NamedService>
+public sealed class KeyedSession : KeyedSingleton<KeyedSession, string>, IKeyed<string>, ISingletonLifecycle
 {
+    public string Key { get; set; } = "";
     public string? InitName { get; private set; }
-    protected override void Initialize(string name) => InitName = name;
+
+    protected override void OnCreated() { }
+
+    void ISingletonLifecycle.Initialize() => InitName = Key;
 }
 
 #endregion
@@ -107,6 +91,21 @@ public class SingletonFacadeTests
     {
         SingletonFacade.WarmUp<InitializableService>();
         SingletonFacade.IsInitialized<InitializableService>().Should().BeTrue();
+    }
+
+    [Fact]
+    public void TryGet_ReturnsFalse_WhenNotCreated()
+    {
+        SingletonFacade.TryGet<SimpleService>(out var result).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Register_PreCreatedInstance()
+    {
+        var expected = new DisposableService();
+        SingletonFacade.Register(expected);
+        SingletonFacade.TryGet<DisposableService>(out var result).Should().BeTrue();
+        result.Should().BeSameAs(expected);
     }
 }
 
@@ -150,6 +149,14 @@ public class SingletonBaseTests
         var act = () => new CrtpService();
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*must be accessed through the Instance property*");
+    }
+
+    [Fact]
+    public void Dispose_IsIdempotent()
+    {
+        var instance = CrtpWithOnCreated.Instance;
+        instance.Dispose();
+        instance.Dispose();
     }
 }
 
@@ -241,8 +248,6 @@ public class SingletonScopeTests
             SingletonScope.Current.Should().BeSameAs(scope);
         }
 
-        // After deactivation, Current should be restored to whatever it was before
-        // (may not be null if another test set it via AsyncLocal)
         SingletonScope.Current.Should().NotBeSameAs(scope);
     }
 
@@ -256,147 +261,94 @@ public class SingletonScopeTests
         scope.Dispose();
         disposed.Should().BeTrue();
     }
-}
 
-public class SingletonRegistryTests
-{
     [Fact]
-    public void GetOrAdd_ReturnsSameInstance()
+    public void TypedRegister_Resolve_ReturnsSameInstance()
     {
-        SingletonRegistry.Clear();
-        var a = SingletonRegistry.GetOrAdd<SimpleService>();
-        var b = SingletonRegistry.GetOrAdd<SimpleService>();
-        a.Should().BeSameAs(b);
+        using var scope = new SingletonScope("typed-test");
+        scope.Register<SimpleService>(() => new SimpleService());
+
+        using (scope.Activate())
+        {
+            var a = SingletonScope.Resolve<SimpleService>();
+            var b = SingletonScope.Resolve<SimpleService>();
+            a.Should().BeSameAs(b);
+        }
     }
 
     [Fact]
-    public void GetOrAdd_WithFactory_UsesFactory()
+    public void TypedResolve_UnknownType_ThrowsKeyNotFound()
     {
-        SingletonRegistry.Clear();
-        var expected = new SimpleService();
-        var actual = SingletonRegistry.GetOrAdd(() => expected);
-        actual.Should().BeSameAs(expected);
-    }
-
-    [Fact]
-    public void Register_PreCreatedInstance()
-    {
-        SingletonRegistry.Clear();
-        var expected = new SimpleService();
-        SingletonRegistry.Register(expected);
-        SingletonRegistry.GetOrAdd<SimpleService>().Should().BeSameAs(expected);
-    }
-
-    [Fact]
-    public void IsRegistered_TrueAfterAccess()
-    {
-        SingletonRegistry.Clear();
-        SingletonRegistry.IsRegistered<SimpleService>().Should().BeFalse();
-        _ = SingletonRegistry.GetOrAdd<SimpleService>();
-        SingletonRegistry.IsRegistered<SimpleService>().Should().BeTrue();
-    }
-
-    [Fact]
-    public void TryGet_ReturnsFalse_WhenNotCreated()
-    {
-        SingletonRegistry.Clear();
-        SingletonRegistry.TryGet<SimpleService>(out var result).Should().BeFalse();
-        result.Should().BeNull();
-    }
-
-    [Fact]
-    public void Clear_RemovesInstances()
-    {
-        SingletonRegistry.Clear();
-        _ = SingletonRegistry.GetOrAdd<SimpleService>();
-        SingletonRegistry.IsRegistered<SimpleService>().Should().BeTrue();
-        SingletonRegistry.Clear();
-        SingletonRegistry.IsRegistered<SimpleService>().Should().BeFalse();
+        using var scope = new SingletonScope("typed-missing");
+        using (scope.Activate())
+        {
+            scope.Invoking(_ => SingletonScope.Resolve<FactoryService>())
+                .Should().Throw<KeyNotFoundException>();
+        }
     }
 }
 
-public class ValueSingletonTests
-{
-    [Fact]
-    public void Value_ReturnsInitializedStruct()
-    {
-        ref readonly var config = ref ValueSingleton<GameConfig>.Value;
-        config.MaxPlayers.Should().Be(4);
-    }
-
-    [Fact]
-    public void Value_ReturnsSameRef()
-    {
-        ref readonly var a = ref ValueSingleton<GameConfig>.Value;
-        ref readonly var b = ref ValueSingleton<GameConfig>.Value;
-        Unsafe.AreSame(ref Unsafe.AsRef(in a), ref Unsafe.AsRef(in b)).Should().BeTrue();
-    }
-
-    [Fact]
-    public void IsInitialized_TrueAfterAccess()
-    {
-        _ = ValueSingleton<GameConfig>.Value;
-        ValueSingleton<GameConfig>.IsInitialized.Should().BeTrue();
-    }
-}
-
-public class NamedSingletonTests
+public class KeyedSingletonTests
 {
     [Fact]
     public void GetInstance_SameKey_ReturnsSameInstance()
     {
-        NamedService.Clear();
-        var a = NamedService.GetInstance("primary");
-        var b = NamedService.GetInstance("primary");
+        KeyedSession.Clear();
+        var a = KeyedSession.GetInstance("primary");
+        var b = KeyedSession.GetInstance("primary");
         a.Should().BeSameAs(b);
     }
 
     [Fact]
     public void GetInstance_DifferentKeys_ReturnsDifferentInstances()
     {
-        NamedService.Clear();
-        var a = NamedService.GetInstance("primary");
-        var b = NamedService.GetInstance("secondary");
+        KeyedSession.Clear();
+        var a = KeyedSession.GetInstance("primary");
+        var b = KeyedSession.GetInstance("secondary");
         a.Should().NotBeSameAs(b);
     }
 
     [Fact]
-    public void Contains_TrueAfterCreation()
+    public void Key_IsSetOnCreation()
     {
-        NamedService.Clear();
-        NamedService.Contains("test").Should().BeFalse();
-        _ = NamedService.GetInstance("test");
-        NamedService.Contains("test").Should().BeTrue();
+        KeyedSession.Clear();
+        var instance = KeyedSession.GetInstance("mykey");
+        instance.Key.Should().Be("mykey");
+    }
+
+    [Fact]
+    public void Lifecycle_Initialize_CalledWithKey()
+    {
+        KeyedSession.Clear();
+        var instance = KeyedSession.GetInstance("testkey");
+        instance.InitName.Should().Be("testkey");
     }
 
     [Fact]
     public void TryGet_ReturnsFalse_WhenMissing()
     {
-        NamedService.Clear();
-        NamedService.TryGet("missing", out var result).Should().BeFalse();
+        KeyedSession.Clear();
+        KeyedSession.TryGet("missing", out var result).Should().BeFalse();
         result.Should().BeNull();
     }
 
     [Fact]
-    public void NullName_Throws()
+    public void Count_ReflectsActiveInstances()
     {
-        var act = () => NamedService.GetInstance(null!);
-        act.Should().Throw<ArgumentNullException>();
+        KeyedSession.Clear();
+        KeyedSession.Count.Should().Be(0);
+        _ = KeyedSession.GetInstance("a");
+        _ = KeyedSession.GetInstance("b");
+        KeyedSession.Count.Should().Be(2);
     }
 
     [Fact]
-    public void EmptyName_Throws()
+    public void TryRemove_DisposesInstance()
     {
-        var act = () => NamedService.GetInstance("");
-        act.Should().Throw<ArgumentException>();
-    }
-
-    [Fact]
-    public void Initialize_CalledWithName()
-    {
-        NamedService.Clear();
-        var instance = NamedService.GetInstance("mydb");
-        instance.InitName.Should().Be("mydb");
+        KeyedSession.Clear();
+        _ = KeyedSession.GetInstance("removable");
+        KeyedSession.TryRemove("removable").Should().BeTrue();
+        KeyedSession.Count.Should().Be(0);
     }
 }
 
@@ -443,5 +395,42 @@ public class SingletonCreationExceptionTests
         var inner = new InvalidOperationException("inner");
         var ex = new SingletonCreationException("outer", typeof(SimpleService), inner);
         ex.InnerException.Should().BeSameAs(inner);
+    }
+}
+
+public class SingletonServiceProviderTests
+{
+    [Fact]
+    public void Register_GetService_RoundTrips()
+    {
+        var provider = SingletonServiceProvider.Instance;
+        var service = new FactoryService();
+        provider.Register(service);
+        provider.GetService<FactoryService>().Should().BeSameAs(service);
+    }
+
+    [Fact]
+    public void GetService_Throws_WhenNotRegistered()
+    {
+        var provider = SingletonServiceProvider.Instance;
+        provider.Invoking(p => p.GetService<CrtpService>())
+            .Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void TryGetService_ReturnsFalse_WhenMissing()
+    {
+        var provider = SingletonServiceProvider.Instance;
+        provider.TryGetService<FactoryCountService>(out var result).Should().BeFalse();
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void GetOrCreateService_CreatesOnFirstCall()
+    {
+        var provider = SingletonServiceProvider.Instance;
+        var a = provider.GetOrCreateService<SimpleService>();
+        var b = provider.GetOrCreateService<SimpleService>();
+        a.Should().BeSameAs(b);
     }
 }
