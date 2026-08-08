@@ -133,6 +133,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     private readonly ThreadLocal<ConcurrentQueue<PooledItem>>? _threadLocalStorage;
     private readonly ShardedBucket[] _shards;
     private readonly ConcurrentDictionary<Guid, PoolObjectInfo<T>> _objectInfo;
+    private readonly ConcurrentDictionary<int, byte> _activePoolables;
 
     private PoolConfiguration _configuration;
     private int _count;
@@ -172,6 +173,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         _metrics = new PoolMetricsStorage();
         _isDisposed = false;
         _objectInfo = new ConcurrentDictionary<Guid, PoolObjectInfo<T>>();
+        _activePoolables = new ConcurrentDictionary<int, byte>();
 
         int shardCount = concurrency * 2;
         _shards = new ShardedBucket[shardCount];
@@ -1280,13 +1282,35 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     public IPoolable<T> GetPoolable()
     {
         var instance = Rent();
-        return new Poolable<T>(instance, this);
+        var poolable = new Poolable<T>(instance, this);
+        _activePoolables.TryAdd(poolable.PoolableId, 0);
+        return poolable;
     }
 
     public async ValueTask<IPoolable<T>> GetPoolableAsync(CancellationToken cancellationToken = default)
     {
         var instance = await RentAsync(cancellationToken).ConfigureAwait(false);
-        return new Poolable<T>(instance, this);
+        var poolable = new Poolable<T>(instance, this);
+        _activePoolables.TryAdd(poolable.PoolableId, 0);
+        return poolable;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ReturnPoolable(int poolableId, T item)
+    {
+        if (!_activePoolables.TryRemove(poolableId, out _))
+            return;
+
+        Return(item);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ValueTask ReturnPoolableAsync(int poolableId, T item)
+    {
+        if (!_activePoolables.TryRemove(poolableId, out _))
+            return ValueTask.CompletedTask;
+
+        return ReturnAsync(item);
     }
 
     public void Clear()

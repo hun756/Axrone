@@ -276,6 +276,8 @@ public class PoolableTests
         public ValueTask<T> RentAsync(CancellationToken ct = default) => throw new NotImplementedException();
         public void Return(T item) => _onReturn?.Invoke(item);
         public ValueTask ReturnAsync(T item, CancellationToken ct = default) { Return(item); return ValueTask.CompletedTask; }
+        public void ReturnPoolable(int poolableId, T item) => Return(item);
+        public ValueTask ReturnPoolableAsync(int poolableId, T item) { Return(item); return ValueTask.CompletedTask; }
         public bool TryRent([NotNullWhen(true)] out T? item) { item = default; return false; }
         public ValueTask<(bool, T?)> TryRentAsync(CancellationToken ct = default) => new((false, default(T)));
         public IPoolable<T> GetPoolable() => throw new NotImplementedException();

@@ -3,11 +3,14 @@ namespace Axrone.ObjectPool;
 [StructLayout(LayoutKind.Auto)]
 public struct Poolable<T> : IPoolable<T> where T : class
 {
+    private static int s_nextPoolableId;
+
     private readonly T _instance;
     private readonly IObjectPool<T>? _pool;
     private readonly DateTime _rentTime;
     private readonly bool _trackRentTime;
     private readonly Action<T, TimeSpan>? _onDispose;
+    private readonly int _poolableId;
     private bool _isDisposed;
     private bool _isDetached;
 
@@ -23,8 +26,15 @@ public struct Poolable<T> : IPoolable<T> where T : class
         _rentTime = DateTime.UtcNow;
         _trackRentTime = trackRentTime;
         _onDispose = onDispose;
+        _poolableId = Interlocked.Increment(ref s_nextPoolableId);
         _isDisposed = false;
         _isDetached = false;
+    }
+
+    internal int PoolableId
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _poolableId;
     }
 
     public T Instance
@@ -66,7 +76,7 @@ public struct Poolable<T> : IPoolable<T> where T : class
             _onDispose(_instance, rentDuration);
         }
 
-        _pool.Return(_instance);
+        _pool.ReturnPoolable(_poolableId, _instance);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -86,7 +96,7 @@ public struct Poolable<T> : IPoolable<T> where T : class
             _onDispose(_instance, rentDuration);
         }
 
-        return _pool.ReturnAsync(_instance);
+        return _pool.ReturnPoolableAsync(_poolableId, _instance);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

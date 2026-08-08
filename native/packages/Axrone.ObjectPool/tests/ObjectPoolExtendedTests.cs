@@ -619,3 +619,54 @@ public sealed class ObjectPoolDisposeAsyncTests
         await pool.DisposeAsync();
     }
 }
+
+public sealed class ObjectPoolPoolableDoubleReturnTests : IDisposable
+{
+    private readonly ObjectPool<TestItem> _pool;
+
+    public ObjectPoolPoolableDoubleReturnTests()
+    {
+        _pool = new ObjectPool<TestItem>(
+            new PoolConfiguration
+            {
+                MaximumCapacity = 10,
+                InitialCapacity = 0,
+                Strategy = PoolingStrategy.CentralizedQueue,
+                UseSlimSynchronization = true,
+                ConcurrencyLevel = ConcurrencyLevel.Default,
+            },
+            new PoolableHandler<TestItem>
+            {
+                Factory = () => new TestItem(),
+                Reset = item => item.Reset(),
+            });
+    }
+
+    public void Dispose() => _pool.Dispose();
+
+    [Fact]
+    public void PoolableStructCopy_ShouldNotDoubleReturn()
+    {
+        var poolable = _pool.GetPoolable();
+        var copy = poolable;
+
+        poolable.Dispose();
+        copy.Dispose();
+
+        _pool.Available.Should().Be(1, "item should be returned exactly once despite struct copy");
+        _pool.Count.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task PoolableStructCopy_ShouldNotDoubleReturnAsync()
+    {
+        var poolable = await _pool.GetPoolableAsync();
+        var copy = poolable;
+
+        await poolable.DisposeAsync();
+        await copy.DisposeAsync();
+
+        _pool.Available.Should().Be(1, "item should be returned exactly once despite struct copy");
+        _pool.Count.Should().Be(1);
+    }
+}

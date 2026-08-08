@@ -35,6 +35,8 @@ public interface IObjectPool<T> : IDisposable, IAsyncDisposable where T : class
     ValueTask<T> RentAsync(CancellationToken cancellationToken = default);
     void Return(T item);
     ValueTask ReturnAsync(T item, CancellationToken cancellationToken = default);
+    void ReturnPoolable(int poolableId, T item);
+    ValueTask ReturnPoolableAsync(int poolableId, T item);
     bool TryRent([NotNullWhen(true)] out T? item);
     ValueTask<(bool Success, T? Item)> TryRentAsync(CancellationToken cancellationToken = default);
     IPoolable<T> GetPoolable();
