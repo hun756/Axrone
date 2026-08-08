@@ -53,7 +53,6 @@ internal sealed class BufferBucket<T>
     /// <summary>Gets the maximum number of idle buffers allowed.</summary>
     public int MaxCount => _maxCount;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool TryTake([NotNullWhen(true)] out IMemoryOwner<T>? buffer)
     {
         if (Volatile.Read(ref _isDisposed) != 0)
@@ -108,7 +107,6 @@ internal sealed class BufferBucket<T>
         return result;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool TryAdd(IMemoryOwner<T> buffer)
     {
         if (Volatile.Read(ref _isDisposed) != 0)
