@@ -137,12 +137,7 @@ public sealed class UnmanagedMemoryPool : IDisposable
         {
             if (queue.TryDequeue(out ptr))
             {
-                int currentCount;
-                do
-                {
-                    if (!_bucketCounts.TryGetValue(size, out currentCount))
-                        break;
-                } while (!_bucketCounts.TryUpdate(size, Math.Max(0, currentCount - 1), currentCount));
+                _bucketCounts.AddOrUpdate(size, 0, static (_, count) => Math.Max(0, count - 1));
                 return true;
             }
         }
