@@ -276,5 +276,9 @@ public sealed class MemoryPoolOptions<T>
             throw new ArgumentOutOfRangeException(nameof(OverAllocationFactor));
         if (BatchOperationSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(BatchOperationSize));
+        if (!Enum.IsDefined(ClearMode))
+            throw new ArgumentOutOfRangeException(nameof(ClearMode), ClearMode, "Invalid ClearMode value.");
+        if (!Enum.IsDefined(AllocationStrategy))
+            throw new ArgumentOutOfRangeException(nameof(AllocationStrategy), AllocationStrategy, "Invalid AllocationStrategy value.");
     }
 }
