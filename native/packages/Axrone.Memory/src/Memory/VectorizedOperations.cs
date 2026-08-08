@@ -12,7 +12,6 @@ public static class VectorizedOperations
     /// <summary>Clears (zeroes) <paramref name="size"/> bytes at <paramref name="destination"/> using SIMD.</summary>
     /// <param name="destination">Pointer to the memory to clear.</param>
     /// <param name="size">Number of bytes to zero.</param>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static unsafe void ClearMemory(void* destination, int size)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(size);
@@ -54,7 +53,6 @@ public static class VectorizedOperations
     /// <param name="source">Source pointer.</param>
     /// <param name="destination">Destination pointer.</param>
     /// <param name="size">Number of bytes to copy.</param>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static unsafe void CopyMemory(void* source, void* destination, int size)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(size);
