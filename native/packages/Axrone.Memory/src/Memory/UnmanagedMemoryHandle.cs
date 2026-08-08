@@ -1,13 +1,13 @@
 namespace Axrone.Memory;
 
 /// <summary>
-/// A lightweight readonly struct wrapping a native memory pointer rented from <see cref="UnmanagedMemoryPool"/>.
+/// A lightweight struct wrapping a native memory pointer rented from <see cref="UnmanagedMemoryPool"/>.
 /// Provides zero-overhead access to unmanaged memory as spans and pointers.
 /// </summary>
-public readonly struct UnmanagedMemoryHandle : IDisposable
+public struct UnmanagedMemoryHandle : IDisposable
 {
     private readonly UnmanagedMemoryPool _pool;
-    private readonly IntPtr _pointer;
+    private IntPtr _pointer;
     private readonly int _size;
 
     internal UnmanagedMemoryHandle(UnmanagedMemoryPool pool, IntPtr pointer, int size)
@@ -51,8 +51,9 @@ public readonly struct UnmanagedMemoryHandle : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
-        if (_pointer != IntPtr.Zero)
-            _pool.Return(_pointer, _size);
+        var pointer = Interlocked.Exchange(ref _pointer, IntPtr.Zero);
+        if (pointer != IntPtr.Zero)
+            _pool.Return(pointer, _size);
     }
 }
 
