@@ -517,6 +517,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         DateTime now = DateTime.UtcNow;
         Guid instanceId = Guid.Empty;
+        TimeSpan rentDuration = TimeSpan.Zero;
 
         if (_configuration.TrackLeaks)
         {
@@ -525,10 +526,17 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 if (ReferenceEquals(kvp.Value.Instance, item))
                 {
                     instanceId = kvp.Value.InstanceId;
+                    rentDuration = now - kvp.Value.RentTime;
                     _rentTracking.TryRemove(kvp.Key, out _);
                     break;
                 }
             }
+        }
+
+        Stopwatch? resetSw = null;
+        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+        {
+            resetSw = Stopwatch.StartNew();
         }
 
         try
@@ -549,22 +557,71 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
             _handler.OnReturn?.Invoke(item);
         }
-        catch
+        catch (Exception ex)
         {
+            Interlocked.Increment(ref _metrics.RecycleFailureCount);
+            _metrics.LastException = ex;
             _handler.OnDispose?.Invoke(item);
             Interlocked.Decrement(ref _count);
             Interlocked.Decrement(ref _rented);
             return;
         }
+        finally
+        {
+            if (resetSw is not null)
+            {
+                resetSw.Stop();
+                RecordResetTime(resetSw.Elapsed);
+            }
+        }
 
         Interlocked.Decrement(ref _rented);
         Interlocked.Increment(ref _metrics.TotalReturned);
+
+        // Track rent duration
+        if (rentDuration > TimeSpan.Zero)
+        {
+            RecordRentDuration(item, rentDuration);
+        }
+
+        // Update objectInfo rent count
+        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full && instanceId != Guid.Empty)
+        {
+            if (_objectInfo.TryGetValue(instanceId, out var info))
+            {
+                _objectInfo[instanceId] = new PoolObjectInfo<T>
+                {
+                    Instance = info.Instance,
+                    CreationTime = info.CreationTime,
+                    Generation = info.Generation,
+                    RentCount = info.RentCount + 1,
+                    TotalRentTime = info.TotalRentTime + rentDuration,
+                    IsPoolable = info.IsPoolable,
+                    IsActive = false,
+                    Id = info.Id,
+                };
+            }
+        }
 
         // Validate before returning to pool
         if (_handler.Validator is not null && !_handler.Validator(item))
         {
             Interlocked.Increment(ref _metrics.FailedValidationCount);
-            try { _handler.OnDispose?.Invoke(item); } catch { Interlocked.Increment(ref _metrics.DisposeFailureCount); }
+            try
+            {
+                _handler.OnDispose?.Invoke(item);
+                if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+                {
+                    _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
+                    {
+                        Instance = item, CreationTime = now, Generation = _generation,
+                        RentCount = 0, TotalRentTime = TimeSpan.Zero,
+                        IsPoolable = item is IPoolable, IsActive = false, Id = instanceId,
+                    });
+                    _objectInfo.TryRemove(instanceId, out _);
+                }
+            }
+            catch { Interlocked.Increment(ref _metrics.DisposeFailureCount); }
             Interlocked.Increment(ref _metrics.TotalDestroyed);
             Interlocked.Decrement(ref _count);
             return;
@@ -592,7 +649,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         if (_configuration.Strategy == PoolingStrategy.BoundedChannel && _channel is not null)
         {
             if (_channel.Writer.TryWrite(pooledItem))
+            {
                 return;
+            }
         }
 
         if (Count < _configuration.MaximumCapacity || _configuration.AllowPoolExpansion)
@@ -604,6 +663,16 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             try
             {
                 _handler.OnDispose?.Invoke(item);
+                if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+                {
+                    _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
+                    {
+                        Instance = item, CreationTime = now, Generation = _generation,
+                        RentCount = 0, TotalRentTime = TimeSpan.Zero,
+                        IsPoolable = item is IPoolable, IsActive = false, Id = instanceId,
+                    });
+                    _objectInfo.TryRemove(instanceId, out _);
+                }
             }
             catch
             {
@@ -674,6 +743,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private T CreateNewInstance(Stopwatch? sw)
     {
+        var creationSw = _configuration.DiagnosticsLevel >= DiagnosticsLevel.Full
+            ? Stopwatch.StartNew() : null;
+
         Interlocked.Increment(ref _metrics.TotalCreated);
 
         T instance;
@@ -685,13 +757,28 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         {
             Interlocked.Increment(ref _metrics.AllocFailureCount);
             _metrics.LastException = ex;
+            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Basic)
+                RecordEvent($"Failed to create instance: {ex.Message}");
             throw;
+        }
+
+        if (creationSw is not null)
+        {
+            creationSw.Stop();
+            RecordCreateTime(creationSw.Elapsed);
         }
 
         DateTime now = DateTime.UtcNow;
         Guid id = Guid.NewGuid();
 
         TrackInstanceInfo(instance, now, id);
+
+        if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+        {
+            if (_objectInfo.TryGetValue(id, out var info))
+                _handler.OnCreate?.Invoke(info);
+        }
+
         TrackRentOperation(instance, now, id);
 
         Interlocked.Increment(ref _count);
@@ -776,9 +863,13 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void RecordRentTime(TimeSpan elapsed)
     {
+        if (_configuration.DiagnosticsLevel < DiagnosticsLevel.Full)
+            return;
+
+        Interlocked.Add(ref _metrics.TotalRentDurationTicks, elapsed.Ticks);
+
         lock (_syncLock)
         {
-            _metrics.TotalRentDurationTicks += elapsed.Ticks;
             if (_configuration.MetricsSamplingRate >= MetricsSamplingRate.Medium)
             {
                 _metrics.RentDurationsMs.Add(elapsed.TotalMilliseconds);
@@ -789,16 +880,41 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void RecordRentDuration(T item, TimeSpan duration)
+    {
+        if (_configuration.DiagnosticsLevel < DiagnosticsLevel.Full)
+            return;
+
+        Interlocked.Add(ref _metrics.TotalRentDurationTicks, duration.Ticks);
+
+        lock (_syncLock)
+        {
+            if (_configuration.MetricsSamplingRate >= MetricsSamplingRate.Medium)
+            {
+                _metrics.RentDurationsMs.Add(duration.TotalMilliseconds);
+                if (_metrics.RentDurationsMs.Count > 1000)
+                    _metrics.RentDurationsMs.RemoveRange(0, 500);
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void RecordExhaustion()
     {
         Interlocked.Increment(ref _metrics.ExhaustionCount);
+        RecordEvent("Pool exhaustion occurred");
     }
 
     private void RecordEvent(string message)
     {
+        if (_configuration.DiagnosticsLevel < DiagnosticsLevel.Basic)
+            return;
+
         lock (_syncLock)
         {
             _metrics.Events.Add(new KeyValuePair<DateTime, string>(DateTime.UtcNow, message));
+            if (_metrics.Events.Count > 100)
+                _metrics.Events.RemoveRange(0, 50);
         }
     }
 
@@ -833,16 +949,44 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
     public PoolMetrics GetMetrics()
     {
+        ThrowIfDisposed();
+
+        (double avgRentDuration, double p95RentDuration, double p99RentDuration) =
+            CalculateRentStatistics();
+
+        int rented = Volatile.Read(ref _rented);
+        double utilization = rented > 0 ? (double)rented / Math.Max(1, Count) * 100 : 0;
+        double memoryUsage = CalculateMemoryUsage();
+
         return new PoolMetrics
         {
-            TotalCreated = Volatile.Read(ref _metrics.TotalCreated),
-            TotalRented = Volatile.Read(ref _metrics.TotalRented),
-            TotalReturned = Volatile.Read(ref _metrics.TotalReturned),
-            TotalDestroyed = Volatile.Read(ref _metrics.TotalDestroyed),
+            TotalCreated = Interlocked.Read(ref _metrics.TotalCreated),
+            TotalRented = Interlocked.Read(ref _metrics.TotalRented),
+            TotalReturned = Interlocked.Read(ref _metrics.TotalReturned),
+            TotalDestroyed = Interlocked.Read(ref _metrics.TotalDestroyed),
             CurrentCount = Count,
             AvailableCount = Available,
-            RentedCount = Volatile.Read(ref _rented),
+            RentedCount = rented,
             MaximumCapacity = _configuration.MaximumCapacity,
+            AverageRentDurationMs = avgRentDuration,
+            AverageCreateDurationMs = CalculateAverageCreateDuration(),
+            AverageResetDurationMs = CalculateAverageResetDuration(),
+            P95RentDurationMs = p95RentDuration,
+            P99RentDurationMs = p99RentDuration,
+            HitRatio = Interlocked.Read(ref _metrics.TotalRented) > 0
+                ? 1.0 - (double)Interlocked.Read(ref _metrics.TotalCreated) / Interlocked.Read(ref _metrics.TotalRented)
+                : 0,
+            Utilization = utilization,
+            TurnoverRate = CalculateTurnoverRate(),
+            GrowthRate = CalculateGrowthRate(),
+            MemoryUsageBytes = memoryUsage,
+            MemoryPressureLevel = CalculateMemoryPressure(memoryUsage),
+            AverageThroughputPerSecond = _uptime.Elapsed.TotalSeconds > 0
+                ? Interlocked.Read(ref _metrics.TotalRented) / _uptime.Elapsed.TotalSeconds
+                : 0,
+            CurrentThroughputPerSecond = _uptime.Elapsed.TotalSeconds > 0
+                ? Interlocked.Read(ref _metrics.TotalReturned) / _uptime.Elapsed.TotalSeconds
+                : 0,
             PeakUtilization = _metrics.PeakUtilization,
             PeakTime = _metrics.PeakTime,
             LastResetTime = _metrics.LastResetTime,
@@ -1171,16 +1315,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         while (_items.TryDequeue(out var item))
         {
             Interlocked.Decrement(ref _count);
-            try
-            {
-                _handler.OnDispose?.Invoke(item.Instance);
-                Interlocked.Increment(ref _metrics.TotalDestroyed);
-            }
-            catch (Exception ex)
-            {
-                Interlocked.Increment(ref _metrics.DisposeFailureCount);
-                _metrics.LastException = ex;
-            }
+            DisposeWithCallbacks(item);
         }
 
         if (_threadLocalStorage is not null)
@@ -1190,16 +1325,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 while (localQueue.TryDequeue(out var item))
                 {
                     Interlocked.Decrement(ref _count);
-                    try
-                    {
-                        _handler.OnDispose?.Invoke(item.Instance);
-                        Interlocked.Increment(ref _metrics.TotalDestroyed);
-                    }
-                    catch (Exception ex)
-                    {
-                        Interlocked.Increment(ref _metrics.DisposeFailureCount);
-                        _metrics.LastException = ex;
-                    }
+                    DisposeWithCallbacks(item);
                 }
             }
         }
@@ -1209,20 +1335,37 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             while (_shards[i].TryDequeue(out var item))
             {
                 Interlocked.Decrement(ref _count);
-                try
-                {
-                    _handler.OnDispose?.Invoke(item.Instance);
-                    Interlocked.Increment(ref _metrics.TotalDestroyed);
-                }
-                catch (Exception ex)
-                {
-                    Interlocked.Increment(ref _metrics.DisposeFailureCount);
-                    _metrics.LastException = ex;
-                }
+                DisposeWithCallbacks(item);
             }
         }
 
         RecordEvent("Pool cleared");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void DisposeWithCallbacks(PooledItem item)
+    {
+        try
+        {
+            _handler.OnDispose?.Invoke(item.Instance);
+            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+            {
+                _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
+                {
+                    Instance = item.Instance, CreationTime = item.Created,
+                    Generation = item.Generation, RentCount = item.RentCount,
+                    TotalRentTime = TimeSpan.Zero, IsPoolable = item.Instance is IPoolable,
+                    IsActive = false, Id = item.Id,
+                });
+                _objectInfo.TryRemove(item.Id, out _);
+            }
+            Interlocked.Increment(ref _metrics.TotalDestroyed);
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _metrics.DisposeFailureCount);
+            _metrics.LastException = ex;
+        }
     }
 
     public async ValueTask ClearAsync(CancellationToken cancellationToken = default)
@@ -1306,6 +1449,22 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                         return true;
                 }
             }
+        }
+
+        for (int i = 0; i < _shards.Length; i++)
+        {
+            var tempShard = new ConcurrentQueue<PooledItem>();
+            bool found = false;
+            while (_shards[i].TryDequeue(out var pooledItem))
+            {
+                if (!found && ReferenceEquals(pooledItem.Instance, item))
+                    found = true;
+                tempShard.Enqueue(pooledItem);
+            }
+            while (tempShard.TryDequeue(out var requeue))
+                _shards[i].Enqueue(requeue);
+            if (found)
+                return true;
         }
 
         return false;
@@ -1487,6 +1646,17 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         try
         {
             _handler.OnDispose?.Invoke(item.Instance);
+            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+            {
+                _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
+                {
+                    Instance = item.Instance, CreationTime = item.Created,
+                    Generation = item.Generation, RentCount = item.RentCount,
+                    TotalRentTime = TimeSpan.Zero, IsPoolable = item.Instance is IPoolable,
+                    IsActive = false, Id = item.Id,
+                });
+                _objectInfo.TryRemove(item.Id, out _);
+            }
             Interlocked.Increment(ref _metrics.TotalDestroyed);
         }
         catch (Exception ex)
@@ -1548,10 +1718,23 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         return new PooledObjectFactory<T, TResult>(this);
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        Dispose();
-        return ValueTask.CompletedTask;
+        if (_isDisposed)
+            return;
+
+        _isDisposed = true;
+
+        _scavengeTimer?.Dispose();
+
+        await ClearAsyncCore(CancellationToken.None).ConfigureAwait(false);
+
+        _semaphore.Dispose();
+        await _asyncLock.DisposeAsync().ConfigureAwait(false);
+
+        _threadLocalStorage?.Dispose();
+
+        RecordEvent("Pool disposed asynchronously");
     }
 
     // ─── Scavenge ────────────────────────────────────────────────
@@ -1616,39 +1799,96 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         DateTime cutoffTime = DateTime.UtcNow - _configuration.IdleTimeout;
         int removed = 0;
 
+        // Process central queue
         var tempItems = new ConcurrentQueue<PooledItem>();
-
         while (_items.TryDequeue(out var item))
         {
             if (item.Created < cutoffTime && item.Generation < _generation)
             {
                 Interlocked.Decrement(ref _count);
                 removed++;
-                try
-                {
-                    _handler.OnDispose?.Invoke(item.Instance);
-                    Interlocked.Increment(ref _metrics.TotalDestroyed);
-                }
-                catch (Exception ex)
-                {
-                    Interlocked.Increment(ref _metrics.DisposeFailureCount);
-                    _metrics.LastException = ex;
-                }
+                DisposeScavengedItem(item);
             }
             else
             {
                 tempItems.Enqueue(item);
             }
         }
-
         while (tempItems.TryDequeue(out var item))
-        {
             _items.Enqueue(item);
+
+        // Process thread-local storage
+        if (_threadLocalStorage is not null)
+        {
+            foreach (var localQueue in _threadLocalStorage.Values)
+            {
+                var localTemp = new ConcurrentQueue<PooledItem>();
+                while (localQueue.TryDequeue(out var item))
+                {
+                    if (item.Created < cutoffTime && item.Generation < _generation)
+                    {
+                        Interlocked.Decrement(ref _count);
+                        removed++;
+                        DisposeScavengedItem(item);
+                    }
+                    else
+                    {
+                        localTemp.Enqueue(item);
+                    }
+                }
+                while (localTemp.TryDequeue(out var item))
+                    localQueue.Enqueue(item);
+            }
+        }
+
+        // Process shards
+        for (int i = 0; i < _shards.Length; i++)
+        {
+            var shardTemp = new ConcurrentQueue<PooledItem>();
+            while (_shards[i].TryDequeue(out var item))
+            {
+                if (item.Created < cutoffTime && item.Generation < _generation)
+                {
+                    Interlocked.Decrement(ref _count);
+                    removed++;
+                    DisposeScavengedItem(item);
+                }
+                else
+                {
+                    shardTemp.Enqueue(item);
+                }
+            }
+            while (shardTemp.TryDequeue(out var item))
+                _shards[i].Enqueue(item);
         }
 
         if (removed > 0)
-        {
             RecordEvent($"Scavenged {removed} idle items");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void DisposeScavengedItem(PooledItem item)
+    {
+        try
+        {
+            _handler.OnDispose?.Invoke(item.Instance);
+            if (_configuration.DiagnosticsLevel >= DiagnosticsLevel.Full)
+            {
+                _handler.OnDestroy?.Invoke(new PoolObjectInfo<T>
+                {
+                    Instance = item.Instance, CreationTime = item.Created,
+                    Generation = item.Generation, RentCount = item.RentCount,
+                    TotalRentTime = TimeSpan.Zero, IsPoolable = item.Instance is IPoolable,
+                    IsActive = false, Id = item.Id,
+                });
+                _objectInfo.TryRemove(item.Id, out _);
+            }
+            Interlocked.Increment(ref _metrics.TotalDestroyed);
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _metrics.DisposeFailureCount);
+            _metrics.LastException = ex;
         }
     }
 
