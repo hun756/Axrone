@@ -138,15 +138,21 @@ internal sealed class BufferBucket<T>
         }
         else
         {
-            if (Interlocked.Increment(ref _count) <= _maxCount)
+            result = true;
+            int currentCount;
+            do
+            {
+                currentCount = Volatile.Read(ref _count);
+                if (currentCount >= _maxCount)
+                {
+                    result = false;
+                    break;
+                }
+            } while (Interlocked.CompareExchange(ref _count, currentCount + 1, currentCount) != currentCount);
+
+            if (result)
             {
                 _fastBuffers.Push(buffer);
-                result = true;
-            }
-            else
-            {
-                Interlocked.Decrement(ref _count);
-                result = false;
             }
         }
 
