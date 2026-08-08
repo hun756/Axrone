@@ -19,7 +19,12 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
     private readonly int _chunkSize;
     private readonly MemoryPoolFlags _flags;
     private readonly bool _enableProfiling;
+    private readonly long _maxTotalMemory;
+    private readonly int _allocationQuota;
+    private readonly float _overAllocationFactor;
+    private readonly int _memoryGuardPadding;
     private readonly ConcurrentDictionary<int, BufferBucket<T>> _buckets;
+    private readonly ConcurrentDictionary<int, long>? _allocationFrequency;
     private readonly Dictionary<Thread, ThreadLocalCache>? _threadLocalCaches;
     private readonly int _tlsCacheSize;
     private readonly object _tlsLock = new();
@@ -35,6 +40,16 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
     private long _misses;
     private long _totalAllocated;
     private long _maxMemory;
+    private long _totalRentTimeNs;
+    private long _totalReturnTimeNs;
+    private long _totalRents;
+    private long _totalReturns;
+    private long _totalAllocations;
+    private long _totalDeallocations;
+    private long _totalAllocationSize;
+    private int _largestAllocation;
+    private int _smallestAllocation = int.MaxValue;
+    private long _fragmentationBytes;
 
     /// <summary>Creates a pool with default options.</summary>
     public MemoryPool() : this(new MemoryPoolOptions<T>()) { }
@@ -55,6 +70,10 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         _chunkSize = Math.Max(16, options.ChunkSize);
         _flags = options.Flags;
         _enableProfiling = (_flags & MemoryPoolFlags.EnableProfiling) != 0;
+        _maxTotalMemory = options.MaxTotalMemory;
+        _allocationQuota = options.AllocationQuota;
+        _overAllocationFactor = options.OverAllocationFactor;
+        _memoryGuardPadding = options.MemoryGuardPadding;
         _buckets = new ConcurrentDictionary<int, BufferBucket<T>>();
         _bucketSizes = options.CustomBucketSizes.Count > 0
             ? options.CustomBucketSizes.Order().Distinct().ToArray()
@@ -63,6 +82,9 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         _tlsCacheSize = options.TlsCacheSize;
         if ((_flags & MemoryPoolFlags.UseTlsCache) != 0 && _tlsCacheSize > 0)
             _threadLocalCaches = new Dictionary<Thread, ThreadLocalCache>();
+
+        if ((_flags & (MemoryPoolFlags.EnableStatistics | MemoryPoolFlags.EnableProfiling)) != 0)
+            _allocationFrequency = new ConcurrentDictionary<int, long>();
 
         if (options.TrimInterval > TimeSpan.Zero && options.AutoTrimPercentage > 0)
         {
@@ -116,6 +138,17 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
 
         int requestedSize = minimumLength <= 0 ? _defaultBufferSize : minimumLength;
 
+        if (_overAllocationFactor > 1.0f)
+            requestedSize = (int)(requestedSize * _overAllocationFactor);
+
+        if (_allocationQuota > 0 && Interlocked.Read(ref _activeBuffers) >= _allocationQuota)
+        {
+            memoryOwner = null;
+            return false;
+        }
+
+        TrackAllocationSize(requestedSize);
+
         if ((_flags & MemoryPoolFlags.UseTlsCache) != 0
             && TryRentFromTlsCache(requestedSize, out memoryOwner))
         {
@@ -151,16 +184,31 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
             return true;
         }
 
+        long allocBytes = (long)bufferSize * Unsafe.SizeOf<T>();
+        if (_maxTotalMemory < long.MaxValue)
+        {
+            long currentTotal = Volatile.Read(ref _totalAllocated);
+            if (currentTotal + allocBytes > _maxTotalMemory)
+            {
+                memoryOwner = null;
+                return false;
+            }
+        }
+
         Interlocked.Increment(ref _misses);
         Interlocked.Increment(ref _totalRentedBuffers);
         Interlocked.Increment(ref _activeBuffers);
+        Interlocked.Increment(ref _totalAllocations);
+        Interlocked.Add(ref _totalAllocationSize, bufferSize);
 
-        var array = GC.AllocateUninitializedArray<T>(bufferSize);
+        var array = (_flags & MemoryPoolFlags.PinBuffers) != 0
+            ? GC.AllocateUninitializedArray<T>(bufferSize, pinned: true)
+            : GC.AllocateUninitializedArray<T>(bufferSize);
         var newBuffer = new MemoryPoolBuffer(this, array, bufferSize);
-        long newTotal = Interlocked.Add(ref _totalAllocated, (long)bufferSize * Unsafe.SizeOf<T>());
+        long newTotal = Interlocked.Add(ref _totalAllocated, allocBytes);
         UpdateMaxMemory(newTotal);
 
-        if (_clearMode == ClearMode.OnRent || _clearMode == ClearMode.Always)
+        if ((_flags & MemoryPoolFlags.ZeroMemory) != 0 || _clearMode == ClearMode.OnRent || _clearMode == ClearMode.Always)
             newBuffer.Clear();
 
         newBuffer.Activate();
@@ -372,18 +420,28 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         long hits = Interlocked.Read(ref _hits);
         long misses = Interlocked.Read(ref _misses);
         long total = hits + misses;
+        long totalRents = Interlocked.Read(ref _totalRents);
+        long totalReturns = Interlocked.Read(ref _totalReturns);
+        long totalAllocations = Interlocked.Read(ref _totalAllocations);
+        long totalAllocationSize = Interlocked.Read(ref _totalAllocationSize);
 
         return new MemoryPoolMetrics(
-            Interlocked.Read(ref _totalRentedBuffers),
-            Interlocked.Read(ref _totalReturnedBuffers),
-            Interlocked.Read(ref _activeBuffers),
-            Interlocked.Read(ref _pooledBuffers),
-            hits,
-            misses,
-            Interlocked.Read(ref _totalAllocated),
-            _buckets.Count,
-            total > 0 ? (float)hits / total : 0f,
-            _runtime.Elapsed);
+            totalAllocatedBytes: Interlocked.Read(ref _totalAllocated),
+            totalRentedBuffers: Interlocked.Read(ref _totalRentedBuffers),
+            totalReturnedBuffers: Interlocked.Read(ref _totalReturnedBuffers),
+            activeBuffers: Interlocked.Read(ref _activeBuffers),
+            pooledBuffers: Interlocked.Read(ref _pooledBuffers),
+            misses: misses,
+            hits: hits,
+            bucketCount: _buckets.Count,
+            fragmentationBytes: Interlocked.Read(ref _fragmentationBytes),
+            elapsedTime: _runtime.Elapsed,
+            averageRentTime: totalRents > 0 ? (double)Interlocked.Read(ref _totalRentTimeNs) / totalRents : 0,
+            averageReturnTime: totalReturns > 0 ? (double)Interlocked.Read(ref _totalReturnTimeNs) / totalReturns : 0,
+            totalAllocations: totalAllocations,
+            totalDeallocations: Interlocked.Read(ref _totalDeallocations),
+            hitRatio: total > 0 ? (float)hits / total : 0f,
+            bytesPerAllocation: totalAllocations > 0 ? (int)(totalAllocationSize / totalAllocations) : 0);
     }
 
     /// <summary>Resets all statistics counters to zero.</summary>
@@ -395,6 +453,20 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
         Interlocked.Exchange(ref _pooledBuffers, 0);
         Interlocked.Exchange(ref _hits, 0);
         Interlocked.Exchange(ref _misses, 0);
+        Interlocked.Exchange(ref _totalRentTimeNs, 0);
+        Interlocked.Exchange(ref _totalReturnTimeNs, 0);
+        Interlocked.Exchange(ref _totalRents, 0);
+        Interlocked.Exchange(ref _totalReturns, 0);
+        Interlocked.Exchange(ref _totalAllocations, 0);
+        Interlocked.Exchange(ref _totalDeallocations, 0);
+        Interlocked.Exchange(ref _totalAllocationSize, 0);
+        Interlocked.Exchange(ref _largestAllocation, 0);
+        Interlocked.Exchange(ref _smallestAllocation, int.MaxValue);
+        Interlocked.Exchange(ref _fragmentationBytes, 0);
+        _allocationFrequency?.Clear();
+
+        foreach (var bucket in _buckets.Values)
+            bucket.ResetStatistics();
     }
 
     /// <summary>Removes a fraction of idle buffers from the pool.</summary>
@@ -434,24 +506,36 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
     {
         long totalMemory = Interlocked.Read(ref _totalAllocated);
         long maxMemory = Interlocked.Read(ref _maxMemory);
-        long activeBuffers = Interlocked.Read(ref _activeBuffers);
-        long pooledBuffers = Interlocked.Read(ref _pooledBuffers);
 
         long wastedMemory = 0;
-        foreach (var bucket in _buckets.Values)
+        var bucketInfo = new Dictionary<int, BucketDiagnostics>(_buckets.Count);
+        foreach (var kvp in _buckets)
         {
-            int count = bucket.Count;
+            int count = kvp.Value.Count;
             if (count > 0)
-                wastedMemory += (long)count * bucket.BufferSize * Unsafe.SizeOf<T>();
+                wastedMemory += (long)count * kvp.Value.BufferSize * Unsafe.SizeOf<T>();
+            bucketInfo[kvp.Key] = kvp.Value.GetDiagnostics();
         }
 
+        long totalAllocations = Interlocked.Read(ref _totalAllocations);
+        long totalAllocationSize = Interlocked.Read(ref _totalAllocationSize);
+        int largest = Volatile.Read(ref _largestAllocation);
+        int smallest = Volatile.Read(ref _smallestAllocation);
+        float avgSize = totalAllocations > 0 ? (float)((double)totalAllocationSize / totalAllocations) : 0;
+        int mostFrequent = CalculateMostFrequentAllocation();
+        float variance = CalculateAllocationVariance(avgSize);
+
         return new MemoryPoolDiagnostics(
-            totalMemory,
-            maxMemory,
-            Math.Max(0, wastedMemory),
-            _buckets.Count,
-            activeBuffers,
-            pooledBuffers);
+            bucketInfo: bucketInfo,
+            totalMemory: totalMemory,
+            maxMemory: maxMemory,
+            wastedMemory: Math.Max(0, wastedMemory),
+            runtime: _runtime.Elapsed,
+            largestAllocation: largest,
+            smallestAllocation: smallest == int.MaxValue ? 0 : smallest,
+            mostFrequentAllocation: mostFrequent,
+            averageAllocationSize: avgSize,
+            allocationVariance: variance);
     }
 
     /// <summary>Gets per-bucket diagnostic information.</summary>
@@ -464,6 +548,65 @@ public sealed class MemoryPool<T> : IMemoryPool<T>
             result[kvp.Key] = kvp.Value.GetDiagnostics();
 
         return result;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void TrackAllocationSize(int size)
+    {
+        if (_allocationFrequency != null)
+            _allocationFrequency.AddOrUpdate(size, 1, (_, count) => count + 1);
+
+        int currentLargest = Volatile.Read(ref _largestAllocation);
+        while (size > currentLargest)
+        {
+            if (Interlocked.CompareExchange(ref _largestAllocation, size, currentLargest) == currentLargest)
+                break;
+            currentLargest = Volatile.Read(ref _largestAllocation);
+        }
+
+        int currentSmallest = Volatile.Read(ref _smallestAllocation);
+        while (size < currentSmallest)
+        {
+            if (Interlocked.CompareExchange(ref _smallestAllocation, size, currentSmallest) == currentSmallest)
+                break;
+            currentSmallest = Volatile.Read(ref _smallestAllocation);
+        }
+    }
+
+    private int CalculateMostFrequentAllocation()
+    {
+        if (_allocationFrequency == null || _allocationFrequency.IsEmpty)
+            return 0;
+
+        int maxSize = 0;
+        long maxCount = 0;
+        foreach (var kvp in _allocationFrequency)
+        {
+            if (kvp.Value > maxCount)
+            {
+                maxCount = kvp.Value;
+                maxSize = kvp.Key;
+            }
+        }
+
+        return maxSize;
+    }
+
+    private float CalculateAllocationVariance(float mean)
+    {
+        if (_allocationFrequency == null || _allocationFrequency.IsEmpty || mean == 0)
+            return 0;
+
+        double sumSquaredDiff = 0;
+        long totalCount = 0;
+        foreach (var kvp in _allocationFrequency)
+        {
+            double diff = kvp.Key - mean;
+            sumSquaredDiff += diff * diff * kvp.Value;
+            totalCount += kvp.Value;
+        }
+
+        return totalCount > 0 ? (float)(sumSquaredDiff / totalCount) : 0;
     }
 
     private void Preallocate(int count)
