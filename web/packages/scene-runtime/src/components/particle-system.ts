@@ -133,6 +133,14 @@ export interface ParticleSystemConfig {
     readonly minParticleSize?: number;
     readonly maxParticleSize?: number;
     readonly sortingFudge?: number;
+
+    /* Texture */
+    readonly textureEnabled?: boolean;
+    readonly textureSheetTilesX?: number;
+    readonly textureSheetTilesY?: number;
+    readonly textureSheetFps?: number;
+    readonly textureSheetLoop?: boolean;
+    readonly textureRegion?: readonly [number, number, number, number];
 }
 
 /* ------------------------------------------------------------------ */
@@ -329,6 +337,17 @@ export class ParticleSystem extends Component {
     private _maxParticleSize: number;
     private _sortingFudge: number;
 
+    /* Texture */
+    private _textureEnabled: boolean;
+    private _particleTexture: WebGLTexture | null = null;
+    private _textureSheetTilesX: number;
+    private _textureSheetTilesY: number;
+    private _textureSheetFps: number;
+    private _textureSheetLoop: boolean;
+    private _textureRegion: [number, number, number, number];
+    private _textureFrameIndex: number = 0;
+    private _textureFrameAccum: number = 0;
+
     /* Particle pool (structure-of-arrays for cache friendly simulation). */
     private readonly _positions: Float32Array;
     private readonly _velocities: Float32Array;
@@ -441,6 +460,14 @@ export class ParticleSystem extends Component {
         this._minParticleSize = 0;
         this._maxParticleSize = 0.5;
         this._sortingFudge = 0;
+
+        /* Texture */
+        this._textureEnabled = false;
+        this._textureSheetTilesX = 1;
+        this._textureSheetTilesY = 1;
+        this._textureSheetFps = 30;
+        this._textureSheetLoop = true;
+        this._textureRegion = [0, 0, 1, 1];
 
         /* Allocate pool at the hard limit so maxParticles can change freely. */
         this._positions = new Float32Array(MAX_PARTICLES_HARD_LIMIT * 3);
@@ -830,6 +857,64 @@ export class ParticleSystem extends Component {
         this._spriteMode = value;
     }
 
+    get textureEnabled(): boolean {
+        return this._textureEnabled;
+    }
+
+    set textureEnabled(value: boolean) {
+        this._textureEnabled = value;
+    }
+
+    get particleTexture(): WebGLTexture | null {
+        return this._textureEnabled ? this._particleTexture : null;
+    }
+
+    set particleTexture(texture: WebGLTexture | null) {
+        this._particleTexture = texture;
+    }
+
+    get textureSheetParams(): [number, number, number, number] | null {
+        if (!this._textureEnabled || !this._particleTexture) return null;
+        const totalFrames = this._textureSheetTilesX * this._textureSheetTilesY;
+        if (totalFrames <= 1) return null;
+        return [
+            this._textureSheetTilesX,
+            this._textureSheetTilesY,
+            this._textureFrameIndex,
+            totalFrames,
+        ];
+    }
+
+    get textureRegion(): [number, number, number, number] {
+        return this._textureRegion;
+    }
+
+    set textureRegion(region: [number, number, number, number]) {
+        this._textureRegion = region;
+    }
+
+    /** Advance the flipbook frame based on elapsed time. */
+    advanceTextureFrame(dt: number): void {
+        if (!this._textureEnabled || !this._particleTexture) return;
+        const totalFrames = this._textureSheetTilesX * this._textureSheetTilesY;
+        if (totalFrames <= 1) return;
+
+        this._textureFrameAccum += dt * this._textureSheetFps;
+        if (this._textureFrameAccum >= 1) {
+            const advance = Math.floor(this._textureFrameAccum);
+            this._textureFrameAccum -= advance;
+            this._textureFrameIndex += advance;
+
+            if (this._textureFrameIndex >= totalFrames) {
+                if (this._textureSheetLoop) {
+                    this._textureFrameIndex %= totalFrames;
+                } else {
+                    this._textureFrameIndex = totalFrames - 1;
+                }
+            }
+        }
+    }
+
     /* ------------------------------------------------------------------ */
     /* Playback / status API                                               */
     /* ------------------------------------------------------------------ */
@@ -935,6 +1020,7 @@ export class ParticleSystem extends Component {
         }
 
         this._integrate(dt);
+        this.advanceTextureFrame(dt);
     }
 
     private _emitOverTime(dt: number): void {
@@ -1342,6 +1428,12 @@ export class ParticleSystem extends Component {
             minParticleSize: this._minParticleSize,
             maxParticleSize: this._maxParticleSize,
             sortingFudge: this._sortingFudge,
+            textureEnabled: this._textureEnabled,
+            textureSheetTilesX: this._textureSheetTilesX,
+            textureSheetTilesY: this._textureSheetTilesY,
+            textureSheetFps: this._textureSheetFps,
+            textureSheetLoop: this._textureSheetLoop,
+            textureRegion: [...this._textureRegion] as [number, number, number, number],
         };
     }
 
@@ -1480,6 +1572,27 @@ export class ParticleSystem extends Component {
             this._maxParticleSize = clamp(config.maxParticleSize, 0, 1);
         }
         if (typeof config.sortingFudge === 'number') this._sortingFudge = config.sortingFudge;
+
+        /* Texture */
+        if (typeof config.textureEnabled === 'boolean') this._textureEnabled = config.textureEnabled;
+        if (typeof config.textureSheetTilesX === 'number') {
+            this._textureSheetTilesX = Math.max(1, Math.floor(config.textureSheetTilesX));
+        }
+        if (typeof config.textureSheetTilesY === 'number') {
+            this._textureSheetTilesY = Math.max(1, Math.floor(config.textureSheetTilesY));
+        }
+        if (typeof config.textureSheetFps === 'number') {
+            this._textureSheetFps = Math.max(1, config.textureSheetFps);
+        }
+        if (typeof config.textureSheetLoop === 'boolean') this._textureSheetLoop = config.textureSheetLoop;
+        if (config.textureRegion && config.textureRegion.length === 4) {
+            this._textureRegion = [
+                config.textureRegion[0],
+                config.textureRegion[1],
+                config.textureRegion[2],
+                config.textureRegion[3],
+            ];
+        }
     }
 }
 

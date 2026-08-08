@@ -205,6 +205,31 @@ export class SceneParticleBatchRuntime {
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         }
 
+        const particleTexture = subject.system.particleTexture;
+        if (particleTexture) {
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, particleTexture);
+            this._options.uniformWriter.write(shader, 'u_Texture', 0);
+            this._options.uniformWriter.write(shader, 'u_UseTexture', 1);
+
+            const sheet = subject.system.textureSheetParams;
+            this._options.uniformWriter.write(
+                shader,
+                'u_TexSheetParams',
+                sheet ?? [0, 0, 0, 0]
+            );
+            const region = subject.system.textureRegion;
+            this._options.uniformWriter.write(
+                shader,
+                'u_TexRegion',
+                region ?? [0, 0, 1, 1]
+            );
+        } else {
+            this._options.uniformWriter.write(shader, 'u_UseTexture', 0);
+            this._options.uniformWriter.write(shader, 'u_TexSheetParams', [0, 0, 0, 0]);
+            this._options.uniformWriter.write(shader, 'u_TexRegion', [0, 0, 1, 1]);
+        }
+
         gl.drawArrays(gl.POINTS, 0, vertexCount);
         params.frameState.recordDraw({
             topology: 'points',
