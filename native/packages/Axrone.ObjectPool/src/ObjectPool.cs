@@ -112,7 +112,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     private int _generation;
     private long _lastRentId;
     private long _nextInstanceId;
-    private volatile bool _isDisposed;
+    private volatile int _disposeState;
     private Timer? _scavengeTimer;
 
     // ─── Constructors ────────────────────────────────────────────
@@ -154,7 +154,6 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
             configuration.MaximumCapacity > 0 ? configuration.MaximumCapacity : 32);
         _uptime = Stopwatch.StartNew();
         _metrics = new PoolMetricsStorage();
-        _isDisposed = false;
         _objectInfo = new ConcurrentDictionary<long, PoolObjectInfo<T>>();
         _activePoolables = new ConcurrentDictionary<int, byte>();
         _rentReverseLookup = new ConditionalWeakTable<T, RentTrackingInfo>();
@@ -744,7 +743,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfDisposed()
     {
-        if (_isDisposed)
+        if (_disposeState != 0)
             ThrowHelper.ThrowObjectDisposedException(nameof(ObjectPool<T>));
     }
 
@@ -755,10 +754,8 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     /// </summary>
     public void Dispose()
     {
-        if (_isDisposed)
+        if (Interlocked.CompareExchange(ref _disposeState, 1, 0) != 0)
             return;
-
-        _isDisposed = true;
 
         _scavengeTimer?.Dispose();
 
@@ -1721,10 +1718,8 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     /// <returns>A <see cref="ValueTask"/> representing the asynchronous dispose operation.</returns>
     public async ValueTask DisposeAsync()
     {
-        if (_isDisposed)
+        if (Interlocked.CompareExchange(ref _disposeState, 1, 0) != 0)
             return;
-
-        _isDisposed = true;
 
         _scavengeTimer?.Dispose();
 
@@ -1742,7 +1737,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ScavengeCallback(object? state)
     {
-        if (_isDisposed)
+        if (_disposeState != 0)
             return;
 
         if (Available <= 0

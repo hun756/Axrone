@@ -54,7 +54,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     private int _readerCount;
     private int _upgraderCount;
     private int _writerCount;
-    private volatile bool _disposed;
+    private volatile int _disposeState;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AsyncReaderWriterLock"/> class.
@@ -791,7 +791,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfDisposed()
     {
-        if (_disposed)
+        if (_disposeState != 0)
         {
             ThrowHelper.ThrowObjectDisposedException(nameof(AsyncReaderWriterLock));
         }
@@ -802,10 +802,8 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
+        if (Interlocked.CompareExchange(ref _disposeState, 1, 0) != 0)
             return;
-
-        _disposed = true;
 
         _readSemaphore.Dispose();
         _upgradeSemaphore.Dispose();
