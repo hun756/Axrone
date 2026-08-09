@@ -44,7 +44,6 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     private const int UPGRADEABLE_READ_LOCK = 2;
     private const int WRITE_LOCK = 3;
 
-    private readonly SemaphoreSlim _readSemaphore;
     private readonly SemaphoreSlim _upgradeSemaphore;
     private readonly SemaphoreSlim _writeSemaphore;
     private readonly bool _supportRecursion;
@@ -63,7 +62,6 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     /// </param>
     public AsyncReaderWriterLock(bool supportRecursion = false)
     {
-        _readSemaphore = new SemaphoreSlim(int.MaxValue, int.MaxValue);
         _upgradeSemaphore = new SemaphoreSlim(1, 1);
         _writeSemaphore = new SemaphoreSlim(1, 1);
         _supportRecursion = supportRecursion;
@@ -803,7 +801,6 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         if (Interlocked.CompareExchange(ref _disposeState, 1, 0) != 0)
             return;
 
-        _readSemaphore.Dispose();
         _upgradeSemaphore.Dispose();
         _writeSemaphore.Dispose();
         _recursiveData?.Dispose();
