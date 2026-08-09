@@ -279,9 +279,19 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     {
         if (_useSlimSync)
         {
-            using (_asyncLock.ReadLock())
+            if (TryGetFromPool(out var pooledItem))
             {
-                if (TryGetFromPool(out var pooledItem))
+                if (_diagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
+                {
+                    sw.Stop();
+                    RecordRentTime(sw.Elapsed);
+                }
+                return pooledItem.Instance;
+            }
+
+            using (_asyncLock.WriteLock())
+            {
+                if (TryGetFromPool(out pooledItem))
                 {
                     if (_diagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
                     {
@@ -291,20 +301,17 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                     return pooledItem.Instance;
                 }
 
-                using (_asyncLock.WriteLock())
+                if (Volatile.Read(ref _rented) >= _maximumCapacity
+                    && !_allowExpansion)
                 {
-                    if (Volatile.Read(ref _rented) >= _maximumCapacity
-                        && !_allowExpansion)
+                    if (_throwOnExhaustion)
                     {
-                        if (_throwOnExhaustion)
-                        {
-                            RecordExhaustion();
-                            ThrowHelper.ThrowInvalidOperationException(
-                                "The pool is exhausted and cannot allocate more items.");
-                        }
+                        RecordExhaustion();
+                        ThrowHelper.ThrowInvalidOperationException(
+                            "The pool is exhausted and cannot allocate more items.");
                     }
-                    return CreateNewInstance(sw);
                 }
+                return CreateNewInstance(sw);
             }
         }
         else
@@ -892,9 +899,19 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
 
         if (_useSlimSync)
         {
-            using (await _asyncLock.ReadLockAsync(cancellationToken).ConfigureAwait(false))
+            if (TryGetFromPool(out var pooledItem))
             {
-                if (TryGetFromPool(out var pooledItem))
+                if (_diagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
+                {
+                    sw.Stop();
+                    RecordRentTime(sw.Elapsed);
+                }
+                return pooledItem.Instance;
+            }
+
+            using (await _asyncLock.WriteLockAsync(cancellationToken).ConfigureAwait(false))
+            {
+                if (TryGetFromPool(out pooledItem))
                 {
                     if (_diagnosticsLevel >= DiagnosticsLevel.Full && sw is not null)
                     {
@@ -904,20 +921,17 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                     return pooledItem.Instance;
                 }
 
-                using (await _asyncLock.WriteLockAsync(cancellationToken).ConfigureAwait(false))
+                if (Volatile.Read(ref _rented) >= _maximumCapacity
+                    && !_allowExpansion)
                 {
-                    if (Volatile.Read(ref _rented) >= _maximumCapacity
-                        && !_allowExpansion)
+                    if (_throwOnExhaustion)
                     {
-                        if (_throwOnExhaustion)
-                        {
-                            RecordExhaustion();
-                            ThrowHelper.ThrowInvalidOperationException(
-                                "The pool is exhausted and cannot allocate more items.");
-                        }
+                        RecordExhaustion();
+                        ThrowHelper.ThrowInvalidOperationException(
+                            "The pool is exhausted and cannot allocate more items.");
                     }
-                    return CreateNewInstance(sw);
                 }
+                return CreateNewInstance(sw);
             }
         }
         else
