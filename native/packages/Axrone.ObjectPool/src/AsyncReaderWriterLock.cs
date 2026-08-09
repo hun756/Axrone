@@ -424,6 +424,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
                 _writeSemaphore.Wait();
                 try
                 {
+                    WaitForReadersToDrain();
                     Interlocked.Increment(ref _writerCount);
                 }
                 catch
@@ -440,6 +441,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         _writeSemaphore.Wait();
         try
         {
+            WaitForReadersToDrain();
             Interlocked.Increment(ref _writerCount);
         }
         catch
@@ -491,6 +493,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
                 try
                 {
+                    WaitForReadersToDrain();
                     Interlocked.Increment(ref _writerCount);
                 }
                 catch
@@ -511,6 +514,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         try
         {
+            WaitForReadersToDrain();
             Interlocked.Increment(ref _writerCount);
         }
         catch
@@ -568,6 +572,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
                 try
                 {
+                    WaitForReadersToDrain();
                     Interlocked.Increment(ref _writerCount);
                 }
                 catch
@@ -590,6 +595,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         try
         {
+            WaitForReadersToDrain();
             Interlocked.Increment(ref _writerCount);
         }
         catch
@@ -641,6 +647,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
                 await _writeSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
+                    WaitForReadersToDrain();
                     Interlocked.Increment(ref _writerCount);
                 }
                 catch
@@ -657,6 +664,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         await _writeSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            WaitForReadersToDrain();
             Interlocked.Increment(ref _writerCount);
         }
         catch
@@ -768,6 +776,16 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         Interlocked.Decrement(ref _writerCount);
         _writeSemaphore.Release();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void WaitForReadersToDrain()
+    {
+        SpinWait spin = new SpinWait();
+        while (Volatile.Read(ref _readerCount) > 0)
+        {
+            spin.SpinOnce();
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
