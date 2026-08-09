@@ -1,14 +1,19 @@
 namespace Axrone.ObjectPool;
 
 /// <summary>
-/// A lightweight value-type wrapper that tracks a rented object and returns it to the
+/// A lightweight reference-type wrapper that tracks a rented object and returns it to the
 /// originating <see cref="IObjectPool{T}"/> when disposed. Supports <see cref="IDisposable"/>
 /// and <see cref="IAsyncDisposable"/> for use in <c>using</c> / <c>await using</c> blocks.
 /// </summary>
 /// <typeparam name="T">The pooled reference type.</typeparam>
 [StructLayout(LayoutKind.Auto)]
-public struct Poolable<T> : IPoolable<T> where T : class
+[DebuggerDisplay("Poolable<{typeof(T).Name}> Id = {_poolableId}, Disposed = {IsDisposed}")]
+public sealed class Poolable<T> : IPoolable<T> where T : class
 {
+    private const int STATE_ACTIVE = 0;
+    private const int STATE_DISPOSED = 1;
+    private const int STATE_DETACHED = 2;
+
     private static int s_nextPoolableId;
 
     private readonly T _instance;
@@ -17,8 +22,7 @@ public struct Poolable<T> : IPoolable<T> where T : class
     private readonly bool _trackRentTime;
     private readonly Action<T, TimeSpan>? _onDispose;
     private readonly int _poolableId;
-    private bool _isDisposed;
-    private bool _isDetached;
+    private int _state;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal Poolable(
@@ -33,8 +37,7 @@ public struct Poolable<T> : IPoolable<T> where T : class
         _trackRentTime = trackRentTime;
         _onDispose = onDispose;
         _poolableId = Interlocked.Increment(ref s_nextPoolableId);
-        _isDisposed = false;
-        _isDetached = false;
+        _state = STATE_ACTIVE;
     }
 
     internal int PoolableId
@@ -65,7 +68,7 @@ public struct Poolable<T> : IPoolable<T> where T : class
     /// <summary>
     /// Gets a value indicating whether this poolable has been disposed or detached.
     /// </summary>
-    public bool IsDisposed => _isDisposed;
+    public bool IsDisposed => Volatile.Read(ref _state) != STATE_ACTIVE;
 
     /// <summary>
     /// Gets the elapsed time since this poolable was rented.
@@ -79,7 +82,7 @@ public struct Poolable<T> : IPoolable<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Detach()
     {
-        _isDetached = true;
+        Interlocked.Exchange(ref _state, STATE_DETACHED);
     }
 
     /// <summary>
@@ -90,10 +93,8 @@ public struct Poolable<T> : IPoolable<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
-        if (_isDisposed || _isDetached)
+        if (Interlocked.Exchange(ref _state, STATE_DISPOSED) != STATE_ACTIVE)
             return;
-
-        _isDisposed = true;
 
         if (_pool == null)
             return;
@@ -116,10 +117,8 @@ public struct Poolable<T> : IPoolable<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask DisposeAsync()
     {
-        if (_isDisposed || _isDetached)
+        if (Interlocked.Exchange(ref _state, STATE_DISPOSED) != STATE_ACTIVE)
             return ValueTask.CompletedTask;
-
-        _isDisposed = true;
 
         if (_pool == null)
             return ValueTask.CompletedTask;
@@ -136,7 +135,7 @@ public struct Poolable<T> : IPoolable<T> where T : class
     [MethodImpl(MethodImplOptions.NoInlining)]
     private void ThrowIfDisposed()
     {
-        if (_isDisposed)
+        if (Volatile.Read(ref _state) == STATE_DISPOSED)
         {
             ThrowHelper.ThrowObjectDisposedException(nameof(Poolable<T>));
         }
