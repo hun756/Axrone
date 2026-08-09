@@ -377,7 +377,13 @@ internal sealed class BoundedChannelPoolStorage<T> : IPoolStorage<T> where T : c
         {
             if (ReferenceEquals(items[i].Instance, instance))
                 found = true;
-            _channel.Writer.TryWrite(items[i]);
+
+            SpinWait spin = new SpinWait();
+            while (!_channel.Writer.TryWrite(items[i]))
+            {
+                spin.SpinOnce();
+            }
+
             Interlocked.Increment(ref _count);
         }
         return found;
