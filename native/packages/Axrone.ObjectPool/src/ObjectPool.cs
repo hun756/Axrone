@@ -634,25 +634,6 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void RecordRentDuration(T item, TimeSpan duration)
-    {
-        if (_diagnosticsLevel < DiagnosticsLevel.Full)
-            return;
-
-        Interlocked.Add(ref _metrics.TotalRentDurationTicks, duration.Ticks);
-
-        lock (_syncLock)
-        {
-            if (_configuration.MetricsSamplingRate >= MetricsSamplingRate.Medium)
-            {
-                _metrics.RentDurationsMs.Add(duration.TotalMilliseconds);
-                if (_metrics.RentDurationsMs.Count > 1000)
-                    _metrics.RentDurationsMs.RemoveRange(0, 500);
-            }
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void RecordExhaustion()
     {
         Interlocked.Increment(ref _metrics.ExhaustionCount);
