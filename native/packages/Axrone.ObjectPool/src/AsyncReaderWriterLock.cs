@@ -8,9 +8,9 @@ namespace Axrone.ObjectPool;
 [DebuggerDisplay("AsyncReaderWriterLock Readers = {_readerCount}, Writers = {_writerCount}")]
 public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 {
-    private struct LockHandle : IDisposable
+    public readonly struct LockHandle : IDisposable
     {
-        private AsyncReaderWriterLock? _lock;
+        private readonly AsyncReaderWriterLock? _lock;
         private readonly int _lockType;
 
         public LockHandle(AsyncReaderWriterLock lockObj, int lockType)
@@ -22,8 +22,6 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         public void Dispose()
         {
             var lockObj = _lock;
-            _lock = null;
-
             if (lockObj is null)
                 return;
 
@@ -82,7 +80,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     /// <returns>An <see cref="IDisposable"/> that releases the read lock upon disposal.</returns>
     /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IDisposable ReadLock()
+    public LockHandle ReadLock()
     {
         EnterReadLock();
         return new LockHandle(this, READ_LOCK);
@@ -95,7 +93,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     /// <returns>An <see cref="IDisposable"/> that releases the upgradeable read lock upon disposal.</returns>
     /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IDisposable UpgradeableReadLock()
+    public LockHandle UpgradeableReadLock()
     {
         EnterUpgradeableReadLock();
         return new LockHandle(this, UPGRADEABLE_READ_LOCK);
@@ -107,7 +105,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     /// <returns>An <see cref="IDisposable"/> that releases the write lock upon disposal.</returns>
     /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IDisposable WriteLock()
+    public LockHandle WriteLock()
     {
         EnterWriteLock();
         return new LockHandle(this, WRITE_LOCK);
@@ -121,7 +119,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     /// <exception cref="OperationCanceledException">The cancellation token was canceled.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public async Task<IDisposable> ReadLockAsync(CancellationToken cancellationToken = default)
+    public async Task<LockHandle> ReadLockAsync(CancellationToken cancellationToken = default)
     {
         await EnterReadLockAsync(cancellationToken).ConfigureAwait(false);
         return new LockHandle(this, READ_LOCK);
@@ -135,7 +133,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     /// <exception cref="OperationCanceledException">The cancellation token was canceled.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public async Task<IDisposable> UpgradeableReadLockAsync(
+    public async Task<LockHandle> UpgradeableReadLockAsync(
         CancellationToken cancellationToken = default)
     {
         await EnterUpgradeableReadLockAsync(cancellationToken).ConfigureAwait(false);
@@ -150,7 +148,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     /// <exception cref="OperationCanceledException">The cancellation token was canceled.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public async Task<IDisposable> WriteLockAsync(CancellationToken cancellationToken = default)
+    public async Task<LockHandle> WriteLockAsync(CancellationToken cancellationToken = default)
     {
         await EnterWriteLockAsync(cancellationToken).ConfigureAwait(false);
         return new LockHandle(this, WRITE_LOCK);
@@ -167,7 +165,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     /// <exception cref="ObjectDisposedException">The lock has been disposed.</exception>
     /// <exception cref="OperationCanceledException">The cancellation token was canceled.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public async Task<IDisposable> TryWriteLockAsync(
+    public async Task<LockHandle> TryWriteLockAsync(
         TimeSpan timeout,
         CancellationToken cancellationToken = default)
     {
