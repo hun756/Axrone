@@ -43,7 +43,14 @@ public readonly struct PoolDiagnostics
     public int AllocFailureCount { get; init; }
     public int DisposeFailureCount { get; init; }
     public int RecycleFailureCount { get; init; }
-    public List<KeyValuePair<DateTime, string>> Events { get; init; }
-    public Dictionary<string, double> CustomMetrics { get; init; }
+    /// <summary>
+    /// Diagnostic events recorded by the pool. May be <c>null</c> on a default-constructed struct.
+    /// </summary>
+    public List<KeyValuePair<DateTime, string>>? Events { get; init; }
+
+    /// <summary>
+    /// Custom metrics recorded by the pool. May be <c>null</c> on a default-constructed struct.
+    /// </summary>
+    public Dictionary<string, double>? CustomMetrics { get; init; }
     public Exception? LastException { get; init; }
 }

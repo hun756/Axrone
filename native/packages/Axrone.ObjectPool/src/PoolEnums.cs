@@ -28,11 +28,13 @@ public enum PoolingStrategy
     /// <summary>
     /// Dynamically adjusts partition sizes based on observed thread demand.
     /// </summary>
+    [Obsolete("Not yet implemented. Using this value will throw ArgumentOutOfRangeException at construction time.")]
     AdaptivePartitioning,
 
     /// <summary>
     /// Combines multiple strategies and selects the best one at runtime based on workload.
     /// </summary>
+    [Obsolete("Not yet implemented. Using this value will throw ArgumentOutOfRangeException at construction time.")]
     Hybrid,
 
     /// <summary>
@@ -43,6 +45,7 @@ public enum PoolingStrategy
     /// <summary>
     /// Divides the pool into stripes to reduce contention while keeping a shared backing store.
     /// </summary>
+    [Obsolete("Not yet implemented. Using this value will throw ArgumentOutOfRangeException at construction time.")]
     Striped,
 
     /// <summary>
@@ -203,21 +206,25 @@ public enum EvictionStrategy
     /// <summary>
     /// Eviction is triggered when internal pressure indicators exceed thresholds.
     /// </summary>
+    [Obsolete("Not yet implemented. This value is reserved for future use.")]
     PressureBased,
 
     /// <summary>
     /// The pool dynamically scales its size up or down based on utilization.
     /// </summary>
+    [Obsolete("Not yet implemented. This value is reserved for future use.")]
     AdaptiveScaling,
 
     /// <summary>
     /// Eviction is driven by the host process memory pressure notifications.
     /// </summary>
+    [Obsolete("Not yet implemented. This value is reserved for future use.")]
     MemoryPressure,
 
     /// <summary>
     /// The most recently used objects are evicted first, preserving older entries.
     /// </summary>
+    [Obsolete("Not yet implemented. This value is reserved for future use.")]
     MostRecentlyUsed,
 }
 
