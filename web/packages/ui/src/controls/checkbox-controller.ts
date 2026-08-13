@@ -1,5 +1,5 @@
 import type { UIRuntime } from '../runtime';
-import type { UIInputEvent, WidgetId } from '../types';
+import type { UIInputEvent, UIImageSource, WidgetId, WidgetImageInput } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 
 /**
@@ -15,7 +15,11 @@ import type { WidgetController, WidgetControllerContext } from '../widget';
  *     markKey,    // the mark indicator inside the box
  *     labelKey,   // the text label child
  *     states: { normal, hover, checked, disabled },
- *     transition: 'color' | 'sprite',
+ *     transition: 'color' | 'tint' | 'sprite',
+ *     boxTints:   { normal: '#ffffffff', hover: '#ccccccccff', ... },
+ *     markTints:  { normal: '#ffffffff', checked: '#ff0000ff', ... },
+ *     boxSprites: { normal: { kind:'texture', resourceId:'box_off.png', ... }, ... },
+ *     markSprites:{ normal: { kind:'texture', resourceId:'mark_off.png', ... }, ... },
  *     markStyle: 'check' | 'cross' | 'dot' | 'dash',
  *     markColor: string,
  *     markSize: number,
@@ -25,13 +29,32 @@ import type { WidgetController, WidgetControllerContext } from '../widget';
  *     boxSize: number,
  *   }
  *
+ * Transition modes:
+ *   'color'  — swaps `style.background` on the box child (default).
+ *   'tint'   — patches `image.tint` on box and/or mark children (requires image).
+ *   'sprite' — swaps `image.source` on box and/or mark children (requires image).
+ *
  * Child widgets are resolved through the asset's binding table.
  */
 export const CHECKBOX_TOGGLE_CONTROLLER_TYPE = 'checkbox-toggle';
 
 export type CheckboxVisualState = 'normal' | 'hover' | 'checked' | 'disabled';
 export type CheckboxMarkStyle = 'check' | 'cross' | 'dot' | 'dash';
-export type CheckboxTransitionMode = 'color' | 'sprite' | 'scale' | 'animation';
+export type CheckboxTransitionMode = 'color' | 'tint' | 'sprite';
+
+/**
+ * Inline image-source descriptor for per-state sprite swapping on checkbox
+ * children. Mirrors `UIImageSource` without requiring consumers to import
+ * the full widget type.
+ */
+export interface CheckboxImageSourceInput {
+	readonly kind: 'texture' | 'material';
+	readonly resourceId?: string;
+	readonly materialId?: string;
+	readonly textureBinding?: string;
+	readonly width: number;
+	readonly height: number;
+}
 
 export interface CheckboxControllerProps {
     readonly isOn?: boolean;
@@ -43,6 +66,10 @@ export interface CheckboxControllerProps {
     readonly transition?: CheckboxTransitionMode;
     readonly transitionDuration?: number;
     readonly zoomScale?: number;
+    readonly boxTints?: Partial<Record<CheckboxVisualState, string>>;
+    readonly markTints?: Partial<Record<CheckboxVisualState, string>>;
+    readonly boxSprites?: Partial<Record<CheckboxVisualState, CheckboxImageSourceInput>>;
+    readonly markSprites?: Partial<Record<CheckboxVisualState, CheckboxImageSourceInput>>;
     readonly markStyle?: CheckboxMarkStyle;
     readonly markColor?: string;
     readonly markSize?: number;
@@ -58,6 +85,8 @@ export interface CheckboxControllerState {
     hovered: boolean;
     pressed: boolean;
     initialized: boolean;
+    originalBoxSource: UIImageSource | null;
+    originalMarkSource: UIImageSource | null;
 }
 
 type CheckboxContext = WidgetControllerContext<
@@ -100,6 +129,91 @@ const DEFAULT_STATES: Readonly<Record<CheckboxVisualState, string>> = Object.fre
     disabled: '#1e293bff',
 });
 
+const isValidImageSource = (source: unknown): source is UIImageSource => {
+    if (!source || typeof source !== 'object') return false;
+    const src = source as Record<string, unknown>;
+    if (src.kind === 'texture') return typeof src.resourceId === 'string' && !!src.resourceId;
+    if (src.kind === 'material') return typeof src.materialId === 'string' && !!src.materialId;
+    return false;
+};
+
+const toImageSource = (input: CheckboxImageSourceInput): UIImageSource | null => {
+    if (input.kind === 'texture' && input.resourceId) {
+        return { kind: 'texture', resourceId: input.resourceId, width: input.width, height: input.height };
+    }
+    if (input.kind === 'material' && input.materialId) {
+        return {
+            kind: 'material',
+            materialId: input.materialId,
+            textureBinding: input.textureBinding,
+            width: input.width,
+            height: input.height,
+        };
+    }
+    return null;
+};
+
+const extractSourceInput = (record: Record<string, unknown>): CheckboxImageSourceInput | null => {
+    const kind = record.kind;
+    if (kind !== 'texture' && kind !== 'material') return null;
+    const width = Number(record.width);
+    const height = Number(record.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+    const result: Record<string, unknown> = { kind, width, height };
+    if (typeof record.resourceId === 'string') result.resourceId = record.resourceId;
+    if (typeof record.materialId === 'string') result.materialId = record.materialId;
+    if (typeof record.textureBinding === 'string') result.textureBinding = record.textureBinding;
+    return result as unknown as CheckboxImageSourceInput;
+};
+
+const captureOriginalSource = (runtime: UIRuntime, key: string): UIImageSource | null => {
+    const widgetId = runtime.getBoundWidget(key);
+    if (widgetId === null) return null;
+    const imageInput = runtime.getWidgetImageInput(widgetId);
+    return imageInput?.source ?? null;
+};
+
+/**
+ * Applies tint-mode visuals to a single child widget.
+ * Patches `image.tint` from the state-specific tint map.
+ * No-op when the child has no image configured.
+ */
+const applyTintToChild = (
+    runtime: UIRuntime,
+    childId: WidgetId,
+    visualState: CheckboxVisualState,
+    tints: Record<string, unknown>,
+): void => {
+    if (!runtime.getWidgetImageInput(childId)) return;
+    const tintValue = asString(tints[visualState]);
+    runtime.updateWidget(childId, {
+        image: { tint: (tintValue || '#ffffffff') } as Partial<WidgetImageInput>,
+    });
+};
+
+/**
+ * Applies sprite-mode visuals to a single child widget.
+ * Swaps `image.source` from the state-specific sprite map, falling back to
+ * the original source captured at mount time.
+ * No-op when the child has no image configured and no original source.
+ */
+const applySpriteToChild = (
+    runtime: UIRuntime,
+    childId: WidgetId,
+    visualState: CheckboxVisualState,
+    sprites: Record<string, unknown>,
+    originalSource: UIImageSource | null,
+): void => {
+    const stateEntry = sprites[visualState] as Record<string, unknown> | undefined;
+    const sourceInput = stateEntry ? extractSourceInput(stateEntry) : null;
+    const source = sourceInput ? toImageSource(sourceInput) : originalSource;
+    if (isValidImageSource(source)) {
+        runtime.updateWidget(childId, {
+            image: { source } as Partial<WidgetImageInput>,
+        });
+    }
+};
+
 /**
  * Pushes the visual state onto the box, mark, and label child widgets.
  * Returns true once at least the box widget was reached.
@@ -110,11 +224,6 @@ const applyVisuals = (context: CheckboxContext): boolean => {
     const state = context.state;
 
     const visualState = resolveVisualState(state);
-    const states = asRecord(props.states);
-    const stateColor =
-        asString(states[visualState]) ||
-        DEFAULT_STATES[visualState];
-
     const transition: CheckboxTransitionMode =
         (props.transition as CheckboxTransitionMode) ?? 'color';
 
@@ -125,22 +234,24 @@ const applyVisuals = (context: CheckboxContext): boolean => {
     if (boxKey) {
         const box = runtime.getBoundWidget(boxKey);
         if (box !== null) {
-            const isActive = state.checked || state.indeterminate;
-            const bg = transition === 'color'
-                ? (isActive
+            if (transition === 'tint') {
+                const boxTints = asRecord(props.boxTints);
+                applyTintToChild(runtime, box, visualState, boxTints);
+            } else if (transition === 'sprite') {
+                const boxSprites = asRecord(props.boxSprites);
+                applySpriteToChild(runtime, box, visualState, boxSprites, state.originalBoxSource);
+            } else {
+                const states = asRecord(props.states);
+                const isActive = state.checked || state.indeterminate;
+                const bg = isActive
                     ? (asString(states.checked) || DEFAULT_STATES.checked)
                     : (visualState === 'hover'
                         ? (asString(states.hover) || DEFAULT_STATES.hover)
-                        : (asString(states.normal) || DEFAULT_STATES.normal)))
-                : (isActive
-                    ? (asString(states.checked) || DEFAULT_STATES.checked)
-                    : (asString(states.normal) || DEFAULT_STATES.normal));
-
-            runtime.updateWidget(box, {
-                style: {
-                    background: bg as `#${string}`,
-                },
-            });
+                        : (asString(states.normal) || DEFAULT_STATES.normal));
+                runtime.updateWidget(box, {
+                    style: { background: bg as `#${string}` },
+                });
+            }
             applied = true;
         }
     }
@@ -151,13 +262,30 @@ const applyVisuals = (context: CheckboxContext): boolean => {
         const mark = runtime.getBoundWidget(markKey);
         if (mark !== null) {
             const markVisible = state.checked || state.indeterminate;
-            const markColor = (asString(props.markColor) || '#ffffffff') as `#${string}`;
-            runtime.updateWidget(mark, {
-                style: {
-                    background: markVisible ? markColor : '#00000000',
-                },
-                enabled: markVisible,
-            });
+
+            if (transition === 'tint') {
+                const markTints = asRecord(props.markTints);
+                if (markVisible) {
+                    applyTintToChild(runtime, mark, visualState, markTints);
+                    runtime.updateWidget(mark, { enabled: true });
+                } else {
+                    runtime.updateWidget(mark, { enabled: false });
+                }
+            } else if (transition === 'sprite') {
+                const markSprites = asRecord(props.markSprites);
+                if (markVisible) {
+                    applySpriteToChild(runtime, mark, visualState, markSprites, state.originalMarkSource);
+                    runtime.updateWidget(mark, { enabled: true });
+                } else {
+                    runtime.updateWidget(mark, { enabled: false });
+                }
+            } else {
+                const markColor = (asString(props.markColor) || '#ffffffff') as `#${string}`;
+                runtime.updateWidget(mark, {
+                    style: { background: markVisible ? markColor : '#00000000' },
+                    enabled: markVisible,
+                });
+            }
             applied = true;
         }
     }
@@ -208,10 +336,24 @@ export const checkboxToggleController: WidgetController<
             hovered: false,
             pressed: false,
             initialized: false,
+            originalBoxSource: null,
+            originalMarkSource: null,
         };
     },
     mount: (context) => {
         const typed = context as CheckboxContext;
+        const props = typed.props as CheckboxControllerProps;
+        const runtime = typed.runtime;
+
+        const boxKey = asString(props.boxKey);
+        if (boxKey) {
+            typed.state.originalBoxSource = captureOriginalSource(runtime, boxKey);
+        }
+        const markKey = asString(props.markKey);
+        if (markKey) {
+            typed.state.originalMarkSource = captureOriginalSource(runtime, markKey);
+        }
+
         typed.state.initialized = applyVisuals(typed);
     },
     update: (context, previousProps) => {
@@ -230,7 +372,11 @@ export const checkboxToggleController: WidgetController<
             props.markKey !== previous.markKey ||
             props.labelKey !== previous.labelKey ||
             props.labelPosition !== previous.labelPosition ||
-            props.labelGap !== previous.labelGap
+            props.labelGap !== previous.labelGap ||
+            props.boxTints !== previous.boxTints ||
+            props.markTints !== previous.markTints ||
+            props.boxSprites !== previous.boxSprites ||
+            props.markSprites !== previous.markSprites
         ) {
             typed.state.checked = asBoolean(props.isOn, typed.state.checked);
             typed.state.indeterminate = asBoolean(props.indeterminate, typed.state.indeterminate);
