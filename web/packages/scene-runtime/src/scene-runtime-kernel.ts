@@ -22,6 +22,7 @@ import {
     resolveSceneSkyLight,
 } from './scene-runtime-defaults';
 import { SceneSnapshotRuntime } from './scene-snapshot-runtime';
+import { PhysicsBridge3D, type PhysicsBridge3DOptions } from './components/physics-bridge-3d';
 
 type RuntimeRegistry<R extends ComponentRegistry> = SceneRegistry<R>;
 
@@ -30,6 +31,7 @@ export interface SceneRuntimeKernelOptions<
 > {
     readonly sceneId: string;
     readonly options?: SceneOptions<R>;
+    readonly physicsBridge?: PhysicsBridge3DOptions;
 }
 
 export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, never>> {
@@ -44,6 +46,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
     readonly renderRuntime: SceneRenderRuntime;
     readonly snapshots: SceneSnapshotRuntime;
     readonly lifecycle: SceneLifecycleRuntime;
+    readonly physicsBridge: PhysicsBridge3D;
 
     constructor(options: SceneRuntimeKernelOptions<R>) {
         const sceneOptions = options.options ?? {};
@@ -108,7 +111,9 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
         });
         this.snapshots.initializeRenderPasses(sceneOptions.renderPasses);
 
-        const loopSystems: readonly GameLoopSystem<SceneLoopState>[] = createSceneLoopSystems({
+        this.physicsBridge = new PhysicsBridge3D(this.world, options.physicsBridge);
+
+        const baseLoopSystems = createSceneLoopSystems({
             executePhase: (phase, delta) => {
                 this.systems.executePhase(phase, delta);
             },
@@ -125,6 +130,16 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
                 this.render(delta);
             },
         });
+
+        const loopSystems: readonly GameLoopSystem<SceneLoopState>[] = [
+            ...baseLoopSystems,
+            {
+                id: this.physicsBridge.id,
+                beforeUpdate: (ctx) => this.physicsBridge.beforeUpdate(ctx),
+                fixedUpdate: (ctx) => this.physicsBridge.fixedUpdate(ctx),
+                dispose: () => this.physicsBridge.dispose(),
+            },
+        ];
 
         this.loop = createGameLoop({
             state: { sceneId: options.sceneId },
