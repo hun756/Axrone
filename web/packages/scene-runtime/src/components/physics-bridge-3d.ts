@@ -1,5 +1,5 @@
 import type { GameLoopSystem, FixedUpdateContext, BeforeUpdateContext } from '@axrone/game-loop';
-import type { World, ComponentRegistry } from '@axrone/ecs-runtime';
+import type { World, Actor } from '@axrone/ecs-runtime';
 import type { SceneLoopState } from '../types';
 import {
     PhysicsWorld3D,
@@ -9,12 +9,26 @@ import {
 } from '@axrone/physics-3d';
 import type {
     IContactListener3D,
-    IContactManifold3D,
+    ICollisionEvent3D,
+    ISensorEvent3D,
     BodyId3D,
     IPhysicsWorld3DConfig,
 } from '@axrone/physics-core';
 
-type AnyWorld = World<ComponentRegistry>;
+type AnyWorld = World<any>;
+type AnyActor = Actor<AnyWorld>;
+
+/**
+ * Interface for user script components that want to receive physics collision events.
+ * Implement these methods on any Component subclass to receive callbacks.
+ */
+export interface IPhysicsCollisionHandler {
+    onCollisionEnter?(other: Rigidbody3D, event: ICollisionEvent3D): void;
+    onCollisionStay?(other: Rigidbody3D, event: ICollisionEvent3D): void;
+    onCollisionExit?(other: Rigidbody3D, event: ICollisionEvent3D): void;
+    onSensorEnter?(other: Rigidbody3D, event: ISensorEvent3D): void;
+    onSensorExit?(other: Rigidbody3D, event: ISensorEvent3D): void;
+}
 
 interface ContactPair {
     readonly bodyIdA: BodyId3D;
@@ -34,7 +48,7 @@ export interface PhysicsBridge3DOptions {
 export class PhysicsBridge3D implements GameLoopSystem<SceneLoopState>, IContactListener3D {
     readonly id = 'scene.physics-bridge-3d';
 
-    private readonly _ecsWorld: AnyWorld;
+    private readonly _ecsWorld: World<any>;
     private readonly _physicsWorld: PhysicsWorld3D;
     private readonly _velocityIterations: number;
     private readonly _positionIterations: number;
@@ -43,12 +57,13 @@ export class PhysicsBridge3D implements GameLoopSystem<SceneLoopState>, IContact
     private readonly _initializedColliders = new WeakSet<Collider3D>();
     private readonly _initializedJoints = new WeakSet<Joint3D>();
     private readonly _bodyIdToComponent = new Map<BodyId3D, Rigidbody3D>();
+    private readonly _componentToActor = new Map<Rigidbody3D, AnyActor>();
     private readonly _activeContactPairs = new Set<string>();
     private readonly _activeTriggerPairs = new Set<string>();
 
     private _disposed = false;
 
-    constructor(ecsWorld: AnyWorld, options: PhysicsBridge3DOptions = {}) {
+    constructor(ecsWorld: World<any>, options: PhysicsBridge3DOptions = {}) {
         this._ecsWorld = ecsWorld;
         this._physicsWorld = new PhysicsWorld3D(options.worldConfig);
         this._velocityIterations = options.velocityIterations ?? 10;
@@ -81,60 +96,66 @@ export class PhysicsBridge3D implements GameLoopSystem<SceneLoopState>, IContact
         this._syncAllTransforms();
     }
 
-    onCollisionBegin(manifold: IContactManifold3D): void {
-        const bodyIdA = manifold.bodyIdA as BodyId3D;
-        const bodyIdB = manifold.bodyIdB as BodyId3D;
+    onCollisionBegin(event: ICollisionEvent3D): void {
+        const bodyIdA = event.bodyIdA as BodyId3D;
+        const bodyIdB = event.bodyIdB as BodyId3D;
         const key = makePairKey(bodyIdA, bodyIdB);
         this._activeContactPairs.add(key);
 
         const componentA = this._bodyIdToComponent.get(bodyIdA);
         const componentB = this._bodyIdToComponent.get(bodyIdB);
         if (componentA && componentB) {
-            this._dispatchCollisionEvent(componentA, componentB, manifold, 'onCollisionBegin');
+            this._dispatchCollisionEvent(componentA, componentB, event, 'onCollisionBegin');
         }
     }
 
-    onCollisionStay(manifold: IContactManifold3D): void {
-        const bodyIdA = manifold.bodyIdA as BodyId3D;
-        const bodyIdB = manifold.bodyIdB as BodyId3D;
+    onCollisionStay(event: ICollisionEvent3D): void {
+        const bodyIdA = event.bodyIdA as BodyId3D;
+        const bodyIdB = event.bodyIdB as BodyId3D;
 
         const componentA = this._bodyIdToComponent.get(bodyIdA);
         const componentB = this._bodyIdToComponent.get(bodyIdB);
         if (componentA && componentB) {
-            this._dispatchCollisionEvent(componentA, componentB, manifold, 'onCollisionStay');
+            this._dispatchCollisionEvent(componentA, componentB, event, 'onCollisionStay');
         }
     }
 
-    onCollisionEnd(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void {
+    onCollisionEnd(event: ICollisionEvent3D): void {
+        const bodyIdA = event.bodyIdA as BodyId3D;
+        const bodyIdB = event.bodyIdB as BodyId3D;
         const key = makePairKey(bodyIdA, bodyIdB);
         this._activeContactPairs.delete(key);
 
         const componentA = this._bodyIdToComponent.get(bodyIdA);
         const componentB = this._bodyIdToComponent.get(bodyIdB);
         if (componentA && componentB) {
-            this._dispatchCollisionEndEvent(componentA, componentB);
+            this._dispatchCollisionEndEvent(componentA, componentB, event);
         }
     }
 
-    onTriggerEnter(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void {
+    onSensorEnter(event: ISensorEvent3D): void {
+        const bodyIdA = event.sensorBodyId as BodyId3D;
+        const bodyIdB = event.visitorBodyId as BodyId3D;
         const key = makePairKey(bodyIdA, bodyIdB);
         this._activeTriggerPairs.add(key);
 
         const componentA = this._bodyIdToComponent.get(bodyIdA);
         const componentB = this._bodyIdToComponent.get(bodyIdB);
         if (componentA && componentB) {
-            this._dispatchTriggerEvent(componentA, componentB, 'onTriggerEnter');
+            this._dispatchSensorEvent(componentA, componentB, event, 'onSensorEnter');
         }
     }
 
-    onTriggerExit(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void {
+    onSensorExit(event: ISensorEvent3D): void {
+        const bodyIdA = event.sensorBodyId as BodyId3D;
+        const bodyIdB = event.visitorBodyId as BodyId3D;
         const key = makePairKey(bodyIdA, bodyIdB);
         this._activeTriggerPairs.delete(key);
 
         const componentA = this._bodyIdToComponent.get(bodyIdA);
         const componentB = this._bodyIdToComponent.get(bodyIdB);
         if (componentA && componentB) {
-            this._dispatchTriggerEvent(componentA, componentB, 'onTriggerExit');
+            this._dispatchSensorEvent(componentA, componentB, event, 'onSensorExit');
         }
     }
 
@@ -143,6 +164,7 @@ export class PhysicsBridge3D implements GameLoopSystem<SceneLoopState>, IContact
         this._disposed = true;
         this._physicsWorld.setContactListener(null);
         this._bodyIdToComponent.clear();
+        this._componentToActor.clear();
         this._activeContactPairs.clear();
         this._activeTriggerPairs.clear();
         this._physicsWorld[Symbol.dispose]();
@@ -159,6 +181,7 @@ export class PhysicsBridge3D implements GameLoopSystem<SceneLoopState>, IContact
                 rigidbody.initialize(this._physicsWorld);
                 this._initializedBodies.add(rigidbody);
                 this._bodyIdToComponent.set(rigidbody.bodyId, rigidbody);
+                this._componentToActor.set(rigidbody, actor as unknown as AnyActor);
             }
 
             const colliders = this._getCollidersFromActor(actor);
@@ -220,32 +243,69 @@ export class PhysicsBridge3D implements GameLoopSystem<SceneLoopState>, IContact
     }
 
     private _dispatchCollisionEvent(
-        _self: Rigidbody3D,
-        _other: Rigidbody3D,
-        _manifold: IContactManifold3D,
-        _event: 'onCollisionBegin' | 'onCollisionStay'
+        self: Rigidbody3D,
+        other: Rigidbody3D,
+        event: ICollisionEvent3D,
+        handler: 'onCollisionBegin' | 'onCollisionStay'
     ): void {
-        // Collision callbacks will be dispatched to user scripts via
-        // the component event system once @script collision handlers
-        // are wired (onCollisionEnter/Stay/Exit on user components).
+        const method = handler === 'onCollisionBegin' ? 'onCollisionEnter' : 'onCollisionStay';
+        this._notifyActor(self, method, other, event);
+        this._notifyActor(other, method, self, event);
     }
 
     private _dispatchCollisionEndEvent(
-        _self: Rigidbody3D,
-        _other: Rigidbody3D
+        self: Rigidbody3D,
+        other: Rigidbody3D,
+        event: ICollisionEvent3D
     ): void {
-        // See _dispatchCollisionEvent — user script collision handlers
-        // will be wired in a follow-up.
+        this._notifyActor(self, 'onCollisionExit', other, event);
+        this._notifyActor(other, 'onCollisionExit', self, event);
     }
 
-    private _dispatchTriggerEvent(
-        _self: Rigidbody3D,
-        _other: Rigidbody3D,
-        _event: 'onTriggerEnter' | 'onTriggerExit'
+    private _dispatchSensorEvent(
+        self: Rigidbody3D,
+        other: Rigidbody3D,
+        event: ISensorEvent3D,
+        handler: 'onSensorEnter' | 'onSensorExit'
     ): void {
-        // Trigger callbacks will be dispatched to user scripts via
-        // the component event system once @script trigger handlers
-        // are wired (onTriggerEnter/Exit on user components).
+        this._notifySensorActor(self, handler, other, event);
+        this._notifySensorActor(other, handler, self, event);
+    }
+
+    private _notifyActor(
+        rigidbody: Rigidbody3D,
+        method: 'onCollisionEnter' | 'onCollisionStay' | 'onCollisionExit',
+        other: Rigidbody3D,
+        event: ICollisionEvent3D
+    ): void {
+        const actor = this._componentToActor.get(rigidbody);
+        if (!actor) return;
+
+        for (const component of actor.getAllComponents()) {
+            const handler = component as unknown as IPhysicsCollisionHandler;
+            const fn = handler[method];
+            if (typeof fn === 'function') {
+                fn.call(component, other, event);
+            }
+        }
+    }
+
+    private _notifySensorActor(
+        rigidbody: Rigidbody3D,
+        method: 'onSensorEnter' | 'onSensorExit',
+        other: Rigidbody3D,
+        event: ISensorEvent3D
+    ): void {
+        const actor = this._componentToActor.get(rigidbody);
+        if (!actor) return;
+
+        for (const component of actor.getAllComponents()) {
+            const handler = component as unknown as IPhysicsCollisionHandler;
+            const fn = handler[method];
+            if (typeof fn === 'function') {
+                fn.call(component, other, event);
+            }
+        }
     }
 }
 
