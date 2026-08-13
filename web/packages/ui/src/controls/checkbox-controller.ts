@@ -138,7 +138,7 @@ const applyVisuals = (context: CheckboxContext): boolean => {
 
             runtime.updateWidget(box, {
                 style: {
-                    background: bg,
+                    background: bg as `#${string}`,
                 },
             });
             applied = true;
@@ -151,7 +151,7 @@ const applyVisuals = (context: CheckboxContext): boolean => {
         const mark = runtime.getBoundWidget(markKey);
         if (mark !== null) {
             const markVisible = state.checked || state.indeterminate;
-            const markColor = asString(props.markColor) || '#ffffffff';
+            const markColor = (asString(props.markColor) || '#ffffffff') as `#${string}`;
             runtime.updateWidget(mark, {
                 style: {
                     background: markVisible ? markColor : '#00000000',
@@ -168,14 +168,25 @@ const applyVisuals = (context: CheckboxContext): boolean => {
         const label = runtime.getBoundWidget(labelKey);
         if (label !== null) {
             const labelPosition = asString(props.labelPosition) || 'right';
+            const isHidden = labelPosition === 'hidden';
             runtime.updateWidget(label, {
                 style: {
                     color: '#e2e8f0ff',
                 },
-                text: labelPosition === 'hidden' ? null : undefined,
+                enabled: !isHidden,
             });
             applied = true;
         }
+    }
+
+    // ─── root layout: gap ───────────────────────────────────────────────────
+    const labelGap = asNumber(props.labelGap, NaN);
+    const rootUpdate: Record<string, unknown> = {};
+    if (Number.isFinite(labelGap)) {
+        rootUpdate.layout = { gap: labelGap };
+    }
+    if (Object.keys(rootUpdate).length > 0) {
+        runtime.updateWidget(context.widget, rootUpdate);
     }
 
     return applied || (!boxKey && !markKey && !labelKey);
@@ -218,7 +229,8 @@ export const checkboxToggleController: WidgetController<
             props.boxKey !== previous.boxKey ||
             props.markKey !== previous.markKey ||
             props.labelKey !== previous.labelKey ||
-            props.labelPosition !== previous.labelPosition
+            props.labelPosition !== previous.labelPosition ||
+            props.labelGap !== previous.labelGap
         ) {
             typed.state.checked = asBoolean(props.isOn, typed.state.checked);
             typed.state.indeterminate = asBoolean(props.indeterminate, typed.state.indeterminate);
