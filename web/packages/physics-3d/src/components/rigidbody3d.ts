@@ -143,6 +143,9 @@ export class Rigidbody3D extends Component {
 
     set linearDamping(value: number) {
         this._linearDamping = Math.max(0, value);
+        if (this._bodyManager && this._bodyId !== -1) {
+            this._bodyManager.setLinearDamping(this._bodyId, this._linearDamping);
+        }
     }
 
     get angularDamping(): number {
@@ -151,6 +154,9 @@ export class Rigidbody3D extends Component {
 
     set angularDamping(value: number) {
         this._angularDamping = Math.max(0, value);
+        if (this._bodyManager && this._bodyId !== -1) {
+            this._bodyManager.setAngularDamping(this._bodyId, this._angularDamping);
+        }
     }
 
     get gravityScale(): number {
@@ -592,6 +598,10 @@ export class Rigidbody3D extends Component {
         this._applyAccumulatedForces(deltaTime);
         if (this._interpolation !== RigidbodyInterpolation3D.None) this._storeState();
         this._updateSleepState(deltaTime);
+    }
+
+    syncTransformFromWorld(): void {
+        if (!this._bodyManager || this._bodyId === -1) return;
         this._syncTransform();
     }
 
