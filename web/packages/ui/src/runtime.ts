@@ -85,6 +85,7 @@ import type {
     WidgetEventContext,
     WidgetEventHandlers,
     WidgetFocusChangeEvent,
+    WidgetImageInput,
     UIAsset,
     UICanvasConfig,
     WidgetId,
@@ -297,6 +298,18 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         this.ensureActive();
         const index = this.requireWidget(widget);
         return (this.states[index] as TState | undefined) ?? null;
+    }
+
+    /**
+     * Returns a clone of the widget's current image input, or null when the
+     * widget has no image. Lets controllers read the authored image source
+     * (e.g. to restore it after a per-state sprite swap).
+     */
+    getWidgetImageInput(widget: WidgetId): WidgetImageInput | null {
+        this.ensureActive();
+        const index = this.requireWidget(widget);
+        const record = this.records[index]!;
+        return cloneData(record.imageInput);
     }
 
     setViewport(width: number, height: number): this {
