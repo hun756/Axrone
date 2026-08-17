@@ -325,11 +325,13 @@ export const dropdownController: WidgetController<
                         selectIndex(typed, state.hoveredIndex);
                     }
                     return true;
-                case 'leave':
-                    if (state.isOpen) {
+                case 'leave': {
+                    const wasOpen = state.isOpen;
+                    if (wasOpen) {
                         setOpen(typed, false);
                     }
-                    return false;
+                    return wasOpen;
+                }
                 default:
                     return false;
             }
