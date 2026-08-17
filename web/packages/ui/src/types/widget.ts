@@ -216,7 +216,7 @@ export interface ResolvedFocusPolicy {
     readonly scope: boolean;
     readonly cycle: boolean;
     readonly order: number;
-    readonly ringColor: ColorInput;
+    readonly ringColor: ReadonlyColor;
     readonly ringWidth: number;
     readonly ringOffset: number;
 }
