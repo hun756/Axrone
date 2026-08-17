@@ -1,7 +1,7 @@
 import type { UIAsset, WidgetId } from '@axrone/ui/types';
 import { UIRuntime, deserializeUIAsset } from '@axrone/ui/runtime';
 import { resolveCanvasScale, mapViewportPointToCanvas } from '@axrone/ui/layout';
-import { buttonFeedbackController, checkboxToggleController, sliderController, dropdownController, tooltipHostController } from '@axrone/ui/controls';
+import { buttonFeedbackController, checkboxToggleController, sliderController, dropdownController, tooltipHostController, toggleSwitchController, radioGroupController, segmentedController, dragController } from '@axrone/ui/controls';
 import { UIHost, setSceneUIWidgetRefResolver } from '@axrone/scene-runtime/scene-facade';
 // Re-export UIHost so the module namespace (imported via __AXRONE_RUNTIME__.modules)
 // exposes the class for the boot-factory fallback discovery path.
@@ -16,9 +16,10 @@ let nextWorldHostSystemId = 1;
 
 /**
  * Registers the built-in widget controllers (button-feedback, checkbox-toggle,
- * slider-drag, dropdown-select, tooltip-host) on a UIRuntime so interactive
- * widgets respond to input in builds. The Editor preview calls its own
- * equivalent; this covers the runtime/build path.
+ * slider-drag, dropdown-select, tooltip-host, toggle-switch, radio-group,
+ * segmented-control, widget-drag) on a UIRuntime so interactive widgets respond
+ * to input in builds. The Editor preview calls its own equivalent; this covers
+ * the runtime/build path.
  */
 const registerBuiltinWidgetControllers = (runtime: UIRuntime<any>): void => {
     type RegistryEntry = Parameters<typeof runtime.registry.register>[0];
@@ -27,6 +28,10 @@ const registerBuiltinWidgetControllers = (runtime: UIRuntime<any>): void => {
     runtime.registry.register(sliderController as RegistryEntry);
     runtime.registry.register(dropdownController as RegistryEntry);
     runtime.registry.register(tooltipHostController as RegistryEntry);
+    runtime.registry.register(toggleSwitchController as RegistryEntry);
+    runtime.registry.register(radioGroupController as RegistryEntry);
+    runtime.registry.register(segmentedController as RegistryEntry);
+    runtime.registry.register(dragController as RegistryEntry);
 };
 
 /**
