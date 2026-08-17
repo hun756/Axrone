@@ -19,10 +19,15 @@ import type { IPhysicsWorldConfig } from '../types';
     enableCaching: false,
 })
 export class PhysicsWorld2DComponent extends Component {
+    private static _instance: PhysicsWorld2DComponent | null = null;
     private _physicsWorld: PhysicsWorld2D | null = null;
     private _gravity: Vec2 = new Vec2(0, -9.81);
     private _velocityIterations: number = 8;
     private _positionIterations: number = 3;
+
+    static get instance(): PhysicsWorld2DComponent | null {
+        return PhysicsWorld2DComponent._instance;
+    }
 
     get physicsWorld(): PhysicsWorld2D | null {
         return this._physicsWorld;
@@ -41,6 +46,7 @@ export class PhysicsWorld2DComponent extends Component {
     }
 
     awake(): void {
+        PhysicsWorld2DComponent._instance = this;
         const config: IPhysicsWorldConfig = {
             gravity: { x: this._gravity.x, y: this._gravity.y },
         };
@@ -56,6 +62,9 @@ export class PhysicsWorld2DComponent extends Component {
         if (this._physicsWorld) {
             this._physicsWorld[Symbol.dispose]();
             this._physicsWorld = null;
+        }
+        if (PhysicsWorld2DComponent._instance === this) {
+            PhysicsWorld2DComponent._instance = null;
         }
     }
 

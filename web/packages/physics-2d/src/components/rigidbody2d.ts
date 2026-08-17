@@ -369,13 +369,10 @@ export class Rigidbody2D extends Component {
 
     private getPhysicsWorld(): PhysicsWorld2D | null {
         if (this._physicsWorld) return this._physicsWorld;
-        const actor = this.findActorOfType(PhysicsWorld2DComponent as any);
-        if (actor) {
-            const comp = actor.getComponent(PhysicsWorld2DComponent as any) as PhysicsWorld2DComponent | undefined;
-            if (comp?.physicsWorld) {
-                this._physicsWorld = comp.physicsWorld;
-                return this._physicsWorld;
-            }
+        const worldComponent = PhysicsWorld2DComponent.instance;
+        if (worldComponent?.physicsWorld) {
+            this._physicsWorld = worldComponent.physicsWorld;
+            return this._physicsWorld;
         }
         return null;
     }
