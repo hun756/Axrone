@@ -37,6 +37,8 @@ export interface ResolvedWidgetStyle {
     readonly color: ReadonlyColor;
 }
 
+export type TextAutoSizeMode = 'none' | 'shrink-to-fit';
+
 export interface TextBlockInput {
     readonly value: string;
     readonly family?: string;
@@ -72,6 +74,9 @@ export interface TextBlockInput {
     readonly caretColor?: ColorInput;
     readonly caretWidth?: number;
     readonly caretInset?: number;
+    readonly autoSize?: TextAutoSizeMode;
+    readonly minAutoSize?: number;
+    readonly maxAutoSize?: number;
 }
 
 export interface UIImageTextureSource {
@@ -146,6 +151,9 @@ export interface ResolvedTextBlock {
     readonly caretColor: ReadonlyColor;
     readonly caretWidth: number;
     readonly caretInset: number;
+    readonly autoSize: TextAutoSizeMode;
+    readonly minAutoSize: number;
+    readonly maxAutoSize: number;
 }
 
 export interface ResolvedWidgetImage {
@@ -167,6 +175,9 @@ export interface WidgetFocusPolicyInput {
     readonly scope?: boolean;
     readonly cycle?: boolean;
     readonly order?: number;
+    readonly ringColor?: ColorInput;
+    readonly ringWidth?: number;
+    readonly ringOffset?: number;
 }
 
 export interface ResolvedFocusPolicy {
@@ -175,6 +186,9 @@ export interface ResolvedFocusPolicy {
     readonly scope: boolean;
     readonly cycle: boolean;
     readonly order: number;
+    readonly ringColor: ColorInput;
+    readonly ringWidth: number;
+    readonly ringOffset: number;
 }
 
 export interface UIPointerEvent {
