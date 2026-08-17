@@ -13,6 +13,7 @@ import type {
     TextLayoutConstraint,
     TextLayoutResult,
     TextLineLayout,
+    TextSpanRenderStyle,
 } from './types';
 
 interface TextLayoutEngineOptions {
@@ -36,6 +37,7 @@ interface MeasuredCluster {
     readonly whitespace: boolean;
     readonly newline: boolean;
     readonly breakOpportunity: boolean;
+    readonly spanIndex: number;
 }
 
 interface ClusterLine {
@@ -190,6 +192,7 @@ export class TextLayoutEngine implements Disposable {
                         line: lineIndex,
                         text: cluster.text,
                         atlasEntry: glyph.atlasEntry,
+                        spanIndex: cluster.spanIndex,
                     });
                     cursorX += glyph.advance;
                 }
@@ -210,6 +213,7 @@ export class TextLayoutEngine implements Disposable {
                     text: cluster.text,
                     whitespace: cluster.whitespace,
                     newline: cluster.newline,
+                    spanIndex: cluster.spanIndex,
                 });
                 if (!caretMap.has(cluster.index)) {
                     caretMap.set(cluster.index, {
@@ -281,12 +285,15 @@ export class TextLayoutEngine implements Disposable {
             truncated,
             direction,
             text: block.value,
+            spanStyles: buildSpanStyles(block),
         };
     }
 
     private measureClusters(block: ResolvedTextBlock, faceId: FontFaceId | null, locale: string): MeasuredCluster[] {
         const segments = createGraphemeSegments(block.value, locale);
         const result: MeasuredCluster[] = [];
+        const spanMap = block.spans.length > 0 ? buildSpanOffsetMap(block) : null;
+        let charOffset = 0;
         for (let index = 0; index < segments.length; index += 1) {
             const segment = segments[index];
             const newline = segment === '\n';
@@ -294,6 +301,7 @@ export class TextLayoutEngine implements Disposable {
             const codePoints = Array.from(segment).map((char) => char.codePointAt(0) ?? 32);
             const glyphs: MeasuredClusterGlyph[] = [];
             let width = 0;
+            const spanIndex = spanMap !== null ? resolveSpanIndexAtOffset(spanMap, charOffset) : 0;
             for (let glyphIndex = 0; glyphIndex < codePoints.length; glyphIndex += 1) {
                 const codePoint = codePoints[glyphIndex];
                 const nextCodePoint = glyphIndex < codePoints.length - 1 ? codePoints[glyphIndex + 1] : undefined;
@@ -316,7 +324,9 @@ export class TextLayoutEngine implements Disposable {
                 whitespace,
                 newline,
                 breakOpportunity: block.wrap === 'grapheme' || whitespace || segment === '-' || segment === '/',
+                spanIndex,
             });
+            charOffset += segment.length;
         }
         return result;
     }
@@ -421,3 +431,53 @@ export class TextLayoutEngine implements Disposable {
 }
 
 export type { TextLayoutEngineOptions, TextLayoutConstraint, TextLayoutResult, TextLineLayout, TextGlyphPlacement, TextBlockInput };
+
+/**
+ * Builds an array where entry[i] is the span index that owns the character at
+ * offset i in the block's value. The block value is the concatenation of span
+ * texts when spans are present.
+ */
+const buildSpanOffsetMap = (block: ResolvedTextBlock): readonly number[] => {
+    const map: number[] = [];
+    for (let spanIndex = 0; spanIndex < block.spans.length; spanIndex += 1) {
+        const spanText = block.spans[spanIndex].text;
+        for (let charIndex = 0; charIndex < spanText.length; charIndex += 1) {
+            map.push(spanIndex);
+        }
+    }
+    return map;
+};
+
+/**
+ * Returns the span index for a given character offset, clamped to the last span
+ * when the offset exceeds the map length (e.g. for a trailing grapheme that
+ * straddles a span boundary).
+ */
+const resolveSpanIndexAtOffset = (spanMap: readonly number[], offset: number): number => {
+    if (offset < spanMap.length) {
+        return spanMap[offset];
+    }
+    return spanMap.length > 0 ? spanMap[spanMap.length - 1] : 0;
+};
+
+/**
+ * Derives the per-span render styles from the resolved block spans. Returns an
+ * empty array when no spans are present, so the renderer can fall back to the
+ * command-level color.
+ */
+const buildSpanStyles = (block: ResolvedTextBlock): readonly TextSpanRenderStyle[] => {
+    if (block.spans.length === 0) {
+        return EMPTY_SPAN_STYLES;
+    }
+    const styles: TextSpanRenderStyle[] = [];
+    for (const span of block.spans) {
+        styles.push({
+            color: span.color,
+            outlineColor: span.outlineColor,
+            outlineWidth: span.outlineWidth,
+        });
+    }
+    return styles;
+};
+
+const EMPTY_SPAN_STYLES: readonly TextSpanRenderStyle[] = Object.freeze([]);
