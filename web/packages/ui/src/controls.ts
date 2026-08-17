@@ -13,3 +13,5 @@ export * from './controls/checkbox-controller';
 export * from './controls/edit-box';
 export * from './controls/scroll-view';
 export * from './controls/page-view';
+export * from './controls/dropdown-controller';
+export * from './controls/tooltip-controller';
