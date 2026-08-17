@@ -26,6 +26,7 @@ export const createUIScrollView = <TRuntime>(
     let velocityX = 0;
     let velocityY = 0;
     let momentumRafId: number | null = null;
+    let wheelTimeoutId: ReturnType<typeof setTimeout> | null = null;
     let lastWheelTime = 0;
     const MOMENTUM_FRICTION = 0.92;
     const MOMENTUM_THRESHOLD = 0.5;
@@ -36,6 +37,10 @@ export const createUIScrollView = <TRuntime>(
         if (momentumRafId !== null) {
             cancelAnimationFrame(momentumRafId);
             momentumRafId = null;
+        }
+        if (wheelTimeoutId !== null) {
+            clearTimeout(wheelTimeoutId);
+            wheelTimeoutId = null;
         }
         velocityX = 0;
         velocityY = 0;
@@ -113,7 +118,8 @@ export const createUIScrollView = <TRuntime>(
 
                 // Record time and schedule momentum start after wheel events stop
                 lastWheelTime = now;
-                setTimeout(() => {
+                wheelTimeoutId = setTimeout(() => {
+                    wheelTimeoutId = null;
                     const elapsed = typeof performance !== 'undefined' ? performance.now() : Date.now();
                     if (elapsed - lastWheelTime >= WHEEL_END_TIMEOUT - 10) {
                         startMomentum();
@@ -186,6 +192,7 @@ export const createUIScrollView = <TRuntime>(
         interactive: true,
         handlers: {
             pointerDown: (event) => {
+                if (state.disabled) return false;
                 cancelMomentum();
                 draggingV = true;
                 dragStartY = event.y;
@@ -244,6 +251,7 @@ export const createUIScrollView = <TRuntime>(
         interactive: true,
         handlers: {
             pointerDown: (event) => {
+                if (state.disabled) return false;
                 cancelMomentum();
                 draggingH = true;
                 dragStartX = event.x;
@@ -406,6 +414,10 @@ export const createUIScrollView = <TRuntime>(
             if (momentumRafId !== null) {
                 cancelAnimationFrame(momentumRafId);
                 momentumRafId = null;
+            }
+            if (wheelTimeoutId !== null) {
+                clearTimeout(wheelTimeoutId);
+                wheelTimeoutId = null;
             }
             disposeWidget(runtime, root);
         },
