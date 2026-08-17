@@ -224,6 +224,10 @@ export interface UIScrollViewHandle extends UISlotHandle {
     setScroll(x: number, y: number): void;
     scrollBy(deltaX: number, deltaY: number): void;
     clampToBounds(): void;
+    readonly scrollbarTrackV: WidgetId;
+    readonly scrollbarThumbV: WidgetId;
+    readonly scrollbarTrackH: WidgetId;
+    readonly scrollbarThumbH: WidgetId;
 }
 
 export interface UIPageViewOptions extends UIBaseOptions {
