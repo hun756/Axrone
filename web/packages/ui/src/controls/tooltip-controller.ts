@@ -42,7 +42,9 @@ export interface TooltipControllerState {
     hovered: boolean;
     initialized: boolean;
     pendingShow: boolean;
+    delayFrames: number;
     delayFramesRemaining: number;
+    entryTime: number;
     cachedTooltip: WidgetId | null;
     cachedTextWidget: WidgetId | null;
 }
@@ -208,7 +210,9 @@ export const tooltipHostController: WidgetController<
         hovered: false,
         initialized: false,
         pendingShow: false,
+        delayFrames: 0,
         delayFramesRemaining: 0,
+        entryTime: 0,
         cachedTooltip: null,
         cachedTextWidget: null,
     }),
@@ -220,6 +224,13 @@ export const tooltipHostController: WidgetController<
         // lookups succeed here even for widgets authored as descendants.
         resolveTooltipWidget(typed);
         resolveTextWidget(typed);
+
+        // Compute the delay in frames from props.delay (seconds).
+        // At ~60fps each frame is ~16.67ms; we convert seconds to frame count
+        // so the event-driven delay check can compare elapsed time against it.
+        const props = typed.props as TooltipControllerProps;
+        const delaySeconds = asNumber(props.delay, 0);
+        typed.state.delayFrames = Math.round(delaySeconds * 60);
 
         // Start with the tooltip hidden.
         const tooltipWidget = typed.state.cachedTooltip;
@@ -241,6 +252,13 @@ export const tooltipHostController: WidgetController<
         }
         if (props.textKey !== previous.textKey) {
             resolveTextWidget(typed);
+        }
+
+        // Recompute delay frames when the delay prop changes.
+        // Convert seconds to frames at ~60fps.
+        if (props.delay !== previous.delay) {
+            const delaySeconds = asNumber(props.delay, 0);
+            typed.state.delayFrames = Math.round(delaySeconds * 60);
         }
 
         // If the tooltip is currently visible and relevant props changed,
@@ -275,17 +293,34 @@ export const tooltipHostController: WidgetController<
             switch (event.phase) {
                 case 'enter':
                     state.hovered = true;
-                    // TODO: The `delay` prop is stored for future integration
-                    // with a runtime timer API. The controller interface has no
-                    // per-frame tick, so the delay cannot be implemented here.
-                    // For now, show the tooltip immediately on pointer enter.
-                    showTooltip(typed);
+                    // Record entry time and begin the delay countdown.
+                    // If delayFrames is 0 (no delay configured) show immediately
+                    // to preserve the original zero-delay behavior.
+                    state.entryTime = performance.now();
+                    state.pendingShow = true;
+                    if (state.delayFrames === 0) {
+                        showTooltip(typed);
+                    }
                     return false;
                 case 'leave':
                     state.hovered = false;
+                    state.pendingShow = false;
                     hideTooltip(typed);
                     return false;
                 default:
+                    // Event-driven delay check: on any subsequent pointer event
+                    // while a show is pending, test whether enough time has
+                    // elapsed since pointer enter. Each "frame" corresponds to
+                    // 1000/60 ms (~16.67ms). This avoids setTimeout and
+                    // per-frame allocations — the controller only receives
+                    // input events, so the delay is evaluated lazily here.
+                    if (state.pendingShow && state.delayFrames > 0) {
+                        const elapsed = performance.now() - state.entryTime;
+                        const delayMs = state.delayFrames * (1000 / 60);
+                        if (elapsed >= delayMs) {
+                            showTooltip(typed);
+                        }
+                    }
                     return false;
             }
         }
