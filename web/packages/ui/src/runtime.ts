@@ -54,7 +54,6 @@ import {
     mergeProps,
     mergeStyleInput,
     mergeTextInput,
-    normalizeColor,
 } from './runtime/internals';
 import { TextLayoutEngine } from './text';
 import { WidgetRegistry } from './widget';
@@ -161,6 +160,8 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private canvasConfig: UICanvasConfig | null = null;
     private lastViewport: { readonly width: number; readonly height: number } | null = null;
     private readonly bindingTable = new Map<string, WidgetId>();
+    private readonly autoSizeCache = new Map<string, TextLayoutResult>();
+    private readonly autoSizeCacheMaxSize = 64;
 
     private readonly inputHost: UIInputDispatchHost = {
         getPressed: () => this.pressed,
@@ -1194,7 +1195,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
                 const focusBox = this.readBox(focusIndex);
                 const ringOffset = focusPolicy.ringOffset;
                 const ringWidth = focusPolicy.ringWidth;
-                const ringColor = normalizeColor(focusPolicy.ringColor, TRANSPARENT);
+                const ringColor = focusPolicy.ringColor;
 
                 // Compute the parent clip by walking up the ancestor chain.
                 // The focus ring should be clipped by ancestor clip rects, not the widget's own.
@@ -1266,6 +1267,14 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         if (text.autoSize !== 'shrink-to-fit') {
             return this.textEngine.measure(text, constraints);
         }
+
+        // Build cache key from text properties and constraints.
+        const cacheKey = `${text.value}\0${text.family}\0${text.size}\0${text.weight}\0${text.style}\0${constraints.width}\0${constraints.height}`;
+        const cached = this.autoSizeCache.get(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
         const maxWidth = constraints.width ?? Number.POSITIVE_INFINITY;
         const maxHeight = constraints.height ?? Number.POSITIVE_INFINITY;
         // When either constraint is unbounded, text already fits by definition — no-op.
@@ -1305,10 +1314,26 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             }
         }
         if (bestSize >= maxSize - 0.5) {
-            return initialLayout;
+            const clampedBlock = { ...text, size: maxSize };
+            return this.textEngine.measure(clampedBlock, constraints);
         }
         const finalBlock: ResolvedTextBlock = { ...text, size: bestSize, autoSize: 'none' };
-        return this.textEngine.measure(finalBlock, constraints);
+        const result = this.textEngine.measure(finalBlock, constraints);
+
+        // Store result in cache, evicting oldest half if over capacity.
+        if (this.autoSizeCache.size >= this.autoSizeCacheMaxSize) {
+            const keysToDelete = Math.ceil(this.autoSizeCacheMaxSize / 2);
+            const keys = this.autoSizeCache.keys();
+            for (let i = 0; i < keysToDelete; i++) {
+                const key = keys.next().value;
+                if (key !== undefined) {
+                    this.autoSizeCache.delete(key);
+                }
+            }
+        }
+        this.autoSizeCache.set(cacheKey, result);
+
+        return result;
     }
 
     private resolveTextLayoutForRender(index: number): TextLayoutResult | null {
