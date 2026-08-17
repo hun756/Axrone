@@ -13,7 +13,7 @@ import { clamp } from './internals';
  *   props: {
  *     enabled,        // Can be dragged (default true)
  *     axis,           // 'both' | 'horizontal' | 'vertical' (default 'both')
- *     bounds,         // 'parent' | 'none' (default 'none')
+ *     bounds,         // 'root' | 'none' (default 'none')
  *     ghostOpacity,   // Opacity of dragged widget (default 0.5)
  *     onDragStart,    // Event callback name
  *     onDragEnd,      // Event callback name
@@ -23,7 +23,7 @@ import { clamp } from './internals';
 export const DRAG_CONTROLLER_TYPE = 'widget-drag';
 
 export type DragAxis = 'both' | 'horizontal' | 'vertical';
-export type DragBounds = 'parent' | 'none';
+export type DragBounds = 'root' | 'none';
 
 export interface DragControllerProps {
     readonly enabled?: boolean;
@@ -69,8 +69,8 @@ const resolveAxis = (props: DragControllerProps): DragAxis => {
 
 const resolveBounds = (props: DragControllerProps): DragBounds => {
     const bounds = asString(props.bounds);
-    if (bounds === 'parent') {
-        return 'parent';
+    if (bounds === 'root') {
+        return 'root';
     }
     return 'none';
 };
@@ -103,12 +103,12 @@ const updateDragPosition = (context: DragContext, pointerX: number, pointerY: nu
         newX = state.originalPosition?.x ?? 0;
     }
 
-    // Apply parent bounds if requested.
-    if (bounds === 'parent') {
+    // Apply root bounds if requested.
+    if (bounds === 'root') {
         const box = context.runtime.getLayoutBox(context.widget as WidgetId);
-        const parentBox = context.runtime.getLayoutBox(context.runtime.root);
-        newX = clamp(newX, parentBox.x, parentBox.x + parentBox.width - box.width);
-        newY = clamp(newY, parentBox.y, parentBox.y + parentBox.height - box.height);
+        const rootBox = context.runtime.getLayoutBox(context.runtime.root);
+        newX = clamp(newX, rootBox.x, rootBox.x + rootBox.width - box.width);
+        newY = clamp(newY, rootBox.y, rootBox.y + rootBox.height - box.height);
     }
 
     // Update widget position via absolute positioning.
