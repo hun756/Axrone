@@ -103,4 +103,29 @@ describe('PhysicsWorld2DComponent', () => {
             expect(component.gravity.y).toBe(-9.81);
         });
     });
+
+    describe('singleton replacement', () => {
+        it('replaces static instance when a second component awakes', () => {
+            component.awake();
+            expect(PhysicsWorld2DComponent.instance).toBe(component);
+
+            const second = new PhysicsWorld2DComponent();
+            second.awake();
+            expect(PhysicsWorld2DComponent.instance).toBe(second);
+
+            second.onDestroy();
+        });
+
+        it('clears static instance only if the destroyed component is the current instance', () => {
+            component.awake();
+            const second = new PhysicsWorld2DComponent();
+            second.awake();
+            expect(PhysicsWorld2DComponent.instance).toBe(second);
+
+            component.onDestroy();
+            expect(PhysicsWorld2DComponent.instance).toBe(second);
+
+            second.onDestroy();
+        });
+    });
 });
