@@ -30,6 +30,13 @@ export interface PopupConfig {
     readonly onOpen?: () => void;
     /** Callback when popup closes. */
     readonly onClose?: () => void;
+    /**
+     * The widget the popup should be restored to on close. Defaults to
+     * runtime.root when not provided. Callers that reparent the popup from a
+     * non-root container should pass that container here so the widget is
+     * returned to its original location when the popup closes.
+     */
+    readonly originalParent?: WidgetId;
 }
 
 export interface PopupHandle {
@@ -61,6 +68,7 @@ const DEFAULT_OFFSET = 8;
 interface ActivePopupEntry {
     readonly config: PopupConfig;
     readonly popupWidget: WidgetId;
+    readonly originalParent: WidgetId;
     backdrop: WidgetId | null;
     readonly zIndex: number;
     closed: boolean;
@@ -251,9 +259,12 @@ export const createPopupManager = (runtime: UIRuntime): PopupManager => {
         }
         entry.closed = true;
 
-        // Disable the popup widget if it still exists.
+        // Restore the popup to its original parent so the reparenting to root
+        // is not permanent. The widget may have been disposed externally, so
+        // guard with a layout-box probe before touching the tree.
         const popupBox = tryGetLayoutBox(runtime, entry.popupWidget);
         if (popupBox !== null) {
+            runtime.appendChild(entry.originalParent, entry.popupWidget);
             runtime.updateWidget(entry.popupWidget, { enabled: false });
         }
 
@@ -282,6 +293,11 @@ export const createPopupManager = (runtime: UIRuntime): PopupManager => {
             const autoFlip = config.autoFlip ?? true;
             const dismissOnOutsideClick = config.dismissOnOutsideClick ?? true;
 
+            // Record where the popup currently lives before reparenting it to
+            // root. Callers can supply the original parent explicitly via the
+            // config; otherwise we fall back to root (the safe no-op target).
+            const originalParent = config.originalParent ?? runtime.root;
+
             // Reparent the popup widget to the root so it renders above all
             // other content and is not clipped by ancestor containers.
             runtime.appendChild(runtime.root, config.popup);
@@ -305,6 +321,7 @@ export const createPopupManager = (runtime: UIRuntime): PopupManager => {
             const entry: ActivePopupEntry = {
                 config,
                 popupWidget: config.popup,
+                originalParent,
                 backdrop: null,
                 zIndex,
                 closed: false,
