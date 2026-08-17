@@ -2,6 +2,7 @@ import { Component } from '@axrone/ecs-runtime';
 import type { ConstraintId } from '../types';
 import type { PhysicsWorld2D } from '../core/physics-world';
 import { Rigidbody2D } from './rigidbody2d';
+import { PhysicsWorld2DComponent } from './physics-world-2d-component';
 
 export abstract class Joint2D extends Component {
     protected _constraintId: ConstraintId | null = null;
@@ -81,6 +82,15 @@ export abstract class Joint2D extends Component {
     }
 
     protected getPhysicsWorld(): PhysicsWorld2D | null {
+        if (this._physicsWorld) return this._physicsWorld;
+        const actor = this.findActorOfType(PhysicsWorld2DComponent as any);
+        if (actor) {
+            const comp = actor.getComponent(PhysicsWorld2DComponent as any) as PhysicsWorld2DComponent | undefined;
+            if (comp?.physicsWorld) {
+                this._physicsWorld = comp.physicsWorld;
+                return this._physicsWorld;
+            }
+        }
         return null;
     }
 

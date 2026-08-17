@@ -4,6 +4,7 @@ import { script } from '@axrone/ecs-runtime/decorators';
 import { Vec2 } from '@axrone/numeric';
 import type { BodyId, BodyType } from '../types';
 import type { PhysicsWorld2D } from '../core/physics-world';
+import { PhysicsWorld2DComponent } from './physics-world-2d-component';
 
 export enum RigidbodyType2D {
     Static = 0,
@@ -367,6 +368,15 @@ export class Rigidbody2D extends Component {
     }
 
     private getPhysicsWorld(): PhysicsWorld2D | null {
+        if (this._physicsWorld) return this._physicsWorld;
+        const actor = this.findActorOfType(PhysicsWorld2DComponent as any);
+        if (actor) {
+            const comp = actor.getComponent(PhysicsWorld2DComponent as any) as PhysicsWorld2DComponent | undefined;
+            if (comp?.physicsWorld) {
+                this._physicsWorld = comp.physicsWorld;
+                return this._physicsWorld;
+            }
+        }
         return null;
     }
 
