@@ -54,6 +54,7 @@ import {
     mergeProps,
     mergeStyleInput,
     mergeTextInput,
+    normalizeColor,
 } from './runtime/internals';
 import { TextLayoutEngine } from './text';
 import { WidgetRegistry } from './widget';
@@ -74,6 +75,7 @@ import type {
     RectLike,
     SizeLike,
     TextLayoutResult,
+    TextLayoutConstraint,
     TextRenderCommand,
     UIFrame,
     UIFrameMetrics,
@@ -656,6 +658,11 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         return true;
     }
 
+    /** Returns the currently focused widget, or null if nothing is focused. */
+    getFocused(): WidgetId | null {
+        return this.focused;
+    }
+
     moveFocus(direction: FocusMoveDirection): WidgetId | null {
         this.ensureActive();
         const candidates = this.getFocusableCandidates();
@@ -1012,7 +1019,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
                 ? Math.max(0, constraints.width)
                 : Number.POSITIVE_INFINITY;
             if (!this.textLayouts[index] || this.textLayoutWidths[index] !== width) {
-                this.textLayouts[index] = this.textEngine.measure(text, {
+                this.textLayouts[index] = this.measureTextWithAutoSize(text, {
                     width,
                     height: constraints.height,
                 });
@@ -1178,6 +1185,62 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             }
             return this.sequence[left.widget as number] - this.sequence[right.widget as number];
         });
+
+        // ── Focus ring overlay ──────────────────────────────────────────────
+        if (this.focused !== null) {
+            const focusIndex = this.focused as number;
+            const focusPolicy = this.focuses[focusIndex];
+            if (focusPolicy && (this.flags[focusIndex] & NodeFlag.Allocated) !== 0) {
+                const focusBox = this.readBox(focusIndex);
+                const ringOffset = focusPolicy.ringOffset;
+                const ringWidth = focusPolicy.ringWidth;
+                const ringColor = normalizeColor(focusPolicy.ringColor, TRANSPARENT);
+
+                // Compute the parent clip by walking up the ancestor chain.
+                // The focus ring should be clipped by ancestor clip rects, not the widget's own.
+                let parentClip: LayoutBox | null = null;
+                for (let ancestor = this.parent[focusIndex]; ancestor !== 0; ancestor = this.parent[ancestor]) {
+                    if (!this.isVisible(ancestor)) {
+                        continue;
+                    }
+                    const ancestorStyle = this.styles[ancestor];
+                    if (ancestorStyle && ancestorStyle.clip) {
+                        const ancestorBox = this.readBox(ancestor);
+                        parentClip = parentClip === null ? ancestorBox : intersectRect(parentClip, ancestorBox);
+                        if (parentClip === null) {
+                            break;
+                        }
+                    }
+                }
+
+                const focusStyle = this.styles[focusIndex];
+                const baseRadius = focusStyle?.radius ?? { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 };
+                const ringExpansion = ringOffset + ringWidth;
+
+                const focusRingQuad: QuadRenderCommand = {
+                    kind: 'quad',
+                    widget: focusIndex as WidgetId,
+                    x: focusBox.x - ringExpansion,
+                    y: focusBox.y - ringExpansion,
+                    width: focusBox.width + ringExpansion * 2,
+                    height: focusBox.height + ringExpansion * 2,
+                    zIndex: Number.MAX_SAFE_INTEGER,
+                    color: TRANSPARENT,
+                    borderColor: ringColor,
+                    borderWidth: ringWidth,
+                    radius: {
+                        topLeft: baseRadius.topLeft + ringExpansion,
+                        topRight: baseRadius.topRight + ringExpansion,
+                        bottomRight: baseRadius.bottomRight + ringExpansion,
+                        bottomLeft: baseRadius.bottomLeft + ringExpansion,
+                    },
+                    opacity: 1,
+                    clip: parentClip,
+                };
+                commands.push(focusRingQuad);
+            }
+        }
+
         const metrics: UIFrameMetrics = {
             widgetCount: this.getWidgetCount(),
             visibleWidgetCount,
@@ -1196,6 +1259,58 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         };
     }
 
+    private measureTextWithAutoSize(
+        text: ResolvedTextBlock,
+        constraints: TextLayoutConstraint
+    ): TextLayoutResult {
+        if (text.autoSize !== 'shrink-to-fit') {
+            return this.textEngine.measure(text, constraints);
+        }
+        const maxWidth = constraints.width ?? Number.POSITIVE_INFINITY;
+        const maxHeight = constraints.height ?? Number.POSITIVE_INFINITY;
+        // When either constraint is unbounded, text already fits by definition — no-op.
+        if (!Number.isFinite(maxWidth) && !Number.isFinite(maxHeight)) {
+            return this.textEngine.measure(text, constraints);
+        }
+        const authoredSize = text.size;
+        const maxSize = Math.min(authoredSize, text.maxAutoSize);
+        const minSize = text.minAutoSize;
+        if (minSize >= maxSize) {
+            const clampedBlock: ResolvedTextBlock = { ...text, size: minSize, autoSize: 'none' };
+            return this.textEngine.measure(clampedBlock, constraints);
+        }
+        // First check if the authored size already fits — if so, use it directly.
+        const initialLayout = this.textEngine.measure(text, constraints);
+        const fitsWidth = initialLayout.width <= (Number.isFinite(maxWidth) ? maxWidth : Number.POSITIVE_INFINITY);
+        const fitsHeight = initialLayout.height <= (Number.isFinite(maxHeight) ? maxHeight : Number.POSITIVE_INFINITY);
+        if (fitsWidth && fitsHeight) {
+            return initialLayout;
+        }
+        // Binary search for the largest font size that fits within the constraints.
+        let lo = minSize;
+        let hi = maxSize;
+        let bestSize = minSize;
+        const maxIter = 8;
+        for (let iter = 0; iter < maxIter && hi - lo > 0.5; iter += 1) {
+            const mid = (lo + hi) * 0.5;
+            const scaledBlock: ResolvedTextBlock = { ...text, size: mid, autoSize: 'none' };
+            const scaledLayout = this.textEngine.measure(scaledBlock, constraints);
+            const scaledFitsWidth = scaledLayout.width <= (Number.isFinite(maxWidth) ? maxWidth : Number.POSITIVE_INFINITY);
+            const scaledFitsHeight = scaledLayout.height <= (Number.isFinite(maxHeight) ? maxHeight : Number.POSITIVE_INFINITY);
+            if (scaledFitsWidth && scaledFitsHeight) {
+                bestSize = mid;
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        if (bestSize >= maxSize - 0.5) {
+            return initialLayout;
+        }
+        const finalBlock: ResolvedTextBlock = { ...text, size: bestSize, autoSize: 'none' };
+        return this.textEngine.measure(finalBlock, constraints);
+    }
+
     private resolveTextLayoutForRender(index: number): TextLayoutResult | null {
         const text = this.texts[index];
         if (!text) {
@@ -1203,7 +1318,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         }
         const width = this.contentWidth[index];
         if (!this.textLayouts[index] || this.textLayoutWidths[index] !== width) {
-            this.textLayouts[index] = this.textEngine.measure(text, {
+            this.textLayouts[index] = this.measureTextWithAutoSize(text, {
                 width,
                 height: this.contentHeight[index],
             });
