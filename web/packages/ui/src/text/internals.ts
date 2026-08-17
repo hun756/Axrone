@@ -56,8 +56,8 @@ export const createCacheKey = (
     faceId: FontFaceId | null,
     width: number,
     height: number
-): string =>
-    [
+): string => {
+    const parts: (string | number | null)[] = [
         faceId ?? 'none',
         block.family,
         block.size,
@@ -74,4 +74,21 @@ export const createCacheKey = (
         width,
         height,
         block.value,
-    ].join('|');
+    ];
+    if (block.spans && block.spans.length > 0) {
+        for (const span of block.spans) {
+            parts.push(
+                span.text,
+                span.size,
+                span.weight,
+                span.style,
+                span.family,
+                span.color.r,
+                span.color.g,
+                span.color.b,
+                span.color.a,
+            );
+        }
+    }
+    return parts.join('|');
+};
