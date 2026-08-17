@@ -231,7 +231,7 @@ export const compileWidgetFocus = (
     scope: input.scope ?? false,
     cycle: input.cycle ?? false,
     order: input.order ?? 0,
-    ringColor: input.ringColor ?? '#60a5faff',
+    ringColor: normalizeColor(input.ringColor, '#60a5faff'),
     ringWidth: input.ringWidth ?? 2,
     ringOffset: input.ringOffset ?? 2,
 });
