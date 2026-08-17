@@ -131,6 +131,7 @@ const createTextLayout = (entry: GlyphAtlasEntry): TextLayoutResult => ({
             text: 'A',
             whitespace: false,
             newline: false,
+            spanIndex: 0,
         },
     ],
     carets: [
@@ -147,11 +148,13 @@ const createTextLayout = (entry: GlyphAtlasEntry): TextLayoutResult => ({
             line: 0,
             text: 'A',
             atlasEntry: entry,
+            spanIndex: 0,
         },
     ],
     truncated: false,
     direction: 'ltr',
     text: 'A',
+    spanStyles: [],
 });
 
 const createFrame = (): UIFrame<{ readonly kind: 'pulse' }> => {
@@ -951,6 +954,7 @@ describe('@axrone/ui-webgl2', () => {
                                 text: 'A',
                                 whitespace: false,
                                 newline: false,
+                                spanIndex: 0,
                             },
                             {
                                 index: 1,
@@ -962,6 +966,7 @@ describe('@axrone/ui-webgl2', () => {
                                 text: 'A',
                                 whitespace: false,
                                 newline: false,
+                                spanIndex: 0,
                             },
                         ],
                         carets: [
@@ -981,6 +986,7 @@ describe('@axrone/ui-webgl2', () => {
                                 line: 0,
                                 text: 'A',
                                 atlasEntry: smallGlyph,
+                                spanIndex: 0,
                             },
                             {
                                 codePoint: 65,
@@ -993,11 +999,13 @@ describe('@axrone/ui-webgl2', () => {
                                 line: 0,
                                 text: 'A',
                                 atlasEntry: largeGlyph,
+                                spanIndex: 0,
                             },
                         ],
                         truncated: false,
                         direction: 'ltr',
                         text: 'AA',
+                        spanStyles: [],
                     },
                 },
             ],
