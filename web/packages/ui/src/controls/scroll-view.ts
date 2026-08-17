@@ -22,6 +22,51 @@ export const createUIScrollView = <TRuntime>(
     let dragStartX = 0;
     let dragStartScrollX = 0;
 
+    // Momentum scrolling state
+    let velocityX = 0;
+    let velocityY = 0;
+    let momentumRafId: number | null = null;
+    let lastWheelTime = 0;
+    const MOMENTUM_FRICTION = 0.92;
+    const MOMENTUM_THRESHOLD = 0.5;
+    const WHEEL_VELOCITY_SMOOTHING = 0.3;
+    const WHEEL_END_TIMEOUT = 80;
+
+    const cancelMomentum = (): void => {
+        if (momentumRafId !== null) {
+            cancelAnimationFrame(momentumRafId);
+            momentumRafId = null;
+        }
+        velocityX = 0;
+        velocityY = 0;
+    };
+
+    const startMomentum = (): void => {
+        if (Math.abs(velocityX) < MOMENTUM_THRESHOLD && Math.abs(velocityY) < MOMENTUM_THRESHOLD) {
+            velocityX = 0;
+            velocityY = 0;
+            return;
+        }
+
+        const tick = (): void => {
+            velocityX *= MOMENTUM_FRICTION;
+            velocityY *= MOMENTUM_FRICTION;
+
+            if (Math.abs(velocityX) > MOMENTUM_THRESHOLD || Math.abs(velocityY) > MOMENTUM_THRESHOLD) {
+                state.scrollX = Math.max(0, state.scrollX + velocityX);
+                state.scrollY = Math.max(0, state.scrollY + velocityY);
+                applyOffsets();
+                momentumRafId = requestAnimationFrame(tick);
+            } else {
+                velocityX = 0;
+                velocityY = 0;
+                momentumRafId = null;
+            }
+        };
+
+        momentumRafId = requestAnimationFrame(tick);
+    };
+
     const root = runtime.createWidget({
         role: 'custom:scroll-view',
         key: options.key,
@@ -50,9 +95,31 @@ export const createUIScrollView = <TRuntime>(
                 if (state.disabled) {
                     return false;
                 }
-                state.scrollX = Math.max(0, state.scrollX + (event.deltaX ?? 0));
-                state.scrollY = Math.max(0, state.scrollY + (event.deltaY ?? 0));
+                const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                const dx = event.deltaX ?? 0;
+                const dy = event.deltaY ?? 0;
+
+                // Exponential moving average for velocity
+                velocityX = velocityX * (1 - WHEEL_VELOCITY_SMOOTHING) + dx * WHEEL_VELOCITY_SMOOTHING;
+                velocityY = velocityY * (1 - WHEEL_VELOCITY_SMOOTHING) + dy * WHEEL_VELOCITY_SMOOTHING;
+
+                // Apply the scroll delta immediately
+                state.scrollX = Math.max(0, state.scrollX + dx);
+                state.scrollY = Math.max(0, state.scrollY + dy);
                 applyOffsets();
+
+                // Cancel any existing momentum animation
+                cancelMomentum();
+
+                // Record time and schedule momentum start after wheel events stop
+                lastWheelTime = now;
+                setTimeout(() => {
+                    const elapsed = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                    if (elapsed - lastWheelTime >= WHEEL_END_TIMEOUT - 10) {
+                        startMomentum();
+                    }
+                }, WHEEL_END_TIMEOUT);
+
                 return true;
             },
             keyDown: (event) => {
@@ -119,6 +186,7 @@ export const createUIScrollView = <TRuntime>(
         interactive: true,
         handlers: {
             pointerDown: (event) => {
+                cancelMomentum();
                 draggingV = true;
                 dragStartY = event.y;
                 dragStartScrollY = state.scrollY;
@@ -176,6 +244,7 @@ export const createUIScrollView = <TRuntime>(
         interactive: true,
         handlers: {
             pointerDown: (event) => {
+                cancelMomentum();
                 draggingH = true;
                 dragStartX = event.x;
                 dragStartScrollX = state.scrollX;
@@ -334,6 +403,10 @@ export const createUIScrollView = <TRuntime>(
             applyOffsets();
         },
         dispose() {
+            if (momentumRafId !== null) {
+                cancelAnimationFrame(momentumRafId);
+                momentumRafId = null;
+            }
             disposeWidget(runtime, root);
         },
     };
