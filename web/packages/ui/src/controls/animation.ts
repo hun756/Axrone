@@ -258,10 +258,20 @@ export const animate = (runtime: UIRuntime, config: UIAnimationConfig): UIAnimat
         const easedProgress = easing(rawProgress);
 
         // Apply interpolated values.
-        for (let i = 0; i < config.targets.length; i++) {
-            const target = config.targets[i];
-            const start = startValues[i];
-            writeInterpolatedValue(runtime, target.widget, target.property, start, target.to, easedProgress);
+        try {
+            for (let i = 0; i < config.targets.length; i++) {
+                const target = config.targets[i];
+                const start = startValues[i];
+                writeInterpolatedValue(runtime, target.widget, target.property, start, target.to, easedProgress);
+            }
+        } catch {
+            // A target widget was disposed mid-animation — cancel silently.
+            if (animationId !== null) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            completed = true;
+            return;
         }
 
         if (rawProgress >= 1) {
