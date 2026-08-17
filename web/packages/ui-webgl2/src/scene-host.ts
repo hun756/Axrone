@@ -1,7 +1,7 @@
 import type { UIAsset, WidgetId } from '@axrone/ui/types';
 import { UIRuntime, deserializeUIAsset } from '@axrone/ui/runtime';
 import { resolveCanvasScale, mapViewportPointToCanvas } from '@axrone/ui/layout';
-import { buttonFeedbackController, checkboxToggleController, sliderController, dropdownController, tooltipHostController, toggleSwitchController, radioGroupController, segmentedController, dragController } from '@axrone/ui/controls';
+import { buttonFeedbackController, checkboxToggleController, sliderController, dropdownController, tooltipHostController, toggleSwitchController, radioGroupController, segmentedController, dragController, tabViewController, editBoxController } from '@axrone/ui/controls';
 import { UIHost, setSceneUIWidgetRefResolver } from '@axrone/scene-runtime/scene-facade';
 // Re-export UIHost so the module namespace (imported via __AXRONE_RUNTIME__.modules)
 // exposes the class for the boot-factory fallback discovery path.
@@ -32,6 +32,8 @@ const registerBuiltinWidgetControllers = (runtime: UIRuntime<any>): void => {
     runtime.registry.register(radioGroupController as RegistryEntry);
     runtime.registry.register(segmentedController as RegistryEntry);
     runtime.registry.register(dragController as RegistryEntry);
+    runtime.registry.register(tabViewController as RegistryEntry);
+    runtime.registry.register(editBoxController as RegistryEntry);
 };
 
 /**
