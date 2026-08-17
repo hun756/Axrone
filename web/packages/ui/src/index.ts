@@ -29,6 +29,7 @@ export {
 export type { SystemFontFaceAssetOptions } from './font';
 export * from './font-runtime';
 export * from './text';
+export { parseRichTextMarkup } from './rich-text-parser';
 export * from './runtime';
 export {
     serializeUIAsset,

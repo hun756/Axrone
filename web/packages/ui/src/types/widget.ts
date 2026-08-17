@@ -39,6 +39,34 @@ export interface ResolvedWidgetStyle {
 
 export type TextAutoSizeMode = 'none' | 'shrink-to-fit';
 
+/** A styled span within a rich text block. */
+export interface RichTextSpan {
+    readonly text: string;
+    readonly color?: ColorInput;
+    readonly outlineColor?: ColorInput;
+    readonly outlineWidth?: number;
+    readonly size?: number;
+    readonly weight?: FontWeight;
+    readonly style?: FontStyle;
+    readonly family?: string;
+    readonly underline?: boolean;
+    readonly strikeThrough?: boolean;
+}
+
+/** A resolved rich text span with normalized style values. */
+export interface ResolvedRichTextSpan {
+    readonly text: string;
+    readonly color: ReadonlyColor;
+    readonly outlineColor: ReadonlyColor;
+    readonly outlineWidth: number;
+    readonly size: number;
+    readonly weight: number;
+    readonly style: FontStyle;
+    readonly family: string;
+    readonly underline: boolean;
+    readonly strikeThrough: boolean;
+}
+
 export interface TextBlockInput {
     readonly value: string;
     readonly family?: string;
@@ -77,6 +105,7 @@ export interface TextBlockInput {
     readonly autoSize?: TextAutoSizeMode;
     readonly minAutoSize?: number;
     readonly maxAutoSize?: number;
+    readonly spans?: readonly RichTextSpan[];
 }
 
 export interface UIImageTextureSource {
@@ -154,6 +183,7 @@ export interface ResolvedTextBlock {
     readonly autoSize: TextAutoSizeMode;
     readonly minAutoSize: number;
     readonly maxAutoSize: number;
+    readonly spans: readonly ResolvedRichTextSpan[];
 }
 
 export interface ResolvedWidgetImage {
