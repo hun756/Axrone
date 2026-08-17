@@ -122,6 +122,9 @@ export const compileWidgetText = (
         caretColor: normalizeColor(input.caretColor, TRANSPARENT),
         caretWidth: Math.max(1, input.caretWidth ?? 1),
         caretInset: Math.max(0, input.caretInset ?? 1),
+        autoSize: input.autoSize ?? 'none',
+        minAutoSize: Math.max(1, input.minAutoSize ?? 6),
+        maxAutoSize: Math.max(1, input.maxAutoSize ?? 200),
     };
 };
 
@@ -181,4 +184,7 @@ export const compileWidgetFocus = (
     scope: input.scope ?? false,
     cycle: input.cycle ?? false,
     order: input.order ?? 0,
+    ringColor: input.ringColor ?? '#60a5faff',
+    ringWidth: input.ringWidth ?? 2,
+    ringOffset: input.ringOffset ?? 2,
 });
