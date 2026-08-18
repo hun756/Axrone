@@ -2,11 +2,13 @@ import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import { Camera } from './components/camera';
 import { DirectionalLight } from './components/directional-light';
 import { FollowCameraController } from './components/follow-camera-controller';
+import { LineRenderer } from './components/line-renderer';
 import { MeshRenderer } from './components/mesh-renderer';
 import { OrbitCameraController } from './components/orbit-camera-controller';
 import { PointLight } from './components/point-light';
 import { SpotLight } from './components/spot-light';
 import { Terrain } from './components/terrain';
+import { TrailRenderer } from './components/trail-renderer';
 import {
     CORE_SCENE_BUILT_IN_MANIFESTS,
     SCENE_CORE_BUILT_IN_MANIFEST,
@@ -37,6 +39,8 @@ const SCENE_3D_ONLY_BUILT_IN_REGISTRY_SOURCE: SceneBuiltInRegistrySource = Objec
     Terrain,
     OrbitCameraController,
     FollowCameraController,
+    LineRenderer,
+    TrailRenderer,
 });
 
 const SCENE_3D_BUILT_IN_REGISTRY_SOURCE: SceneBuiltInRegistrySource = Object.freeze({
@@ -56,6 +60,8 @@ export const SCENE_3D_BUILT_IN_MANIFEST = createSceneBuiltInManifest({
         'Terrain',
         'OrbitCameraController',
         'FollowCameraController',
+        'LineRenderer',
+        'TrailRenderer',
     ] as const,
 });
 
