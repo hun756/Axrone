@@ -3,10 +3,10 @@ import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
 
-export type NavMeshAgentPathStatus = 'idle' | 'computing' | 'following' | 'arrived' | 'failed';
-export type NavMeshAgentObstacleAvoidanceQuality = 'none' | 'low' | 'medium' | 'high';
+export type PathAgentPathStatus = 'idle' | 'computing' | 'following' | 'arrived' | 'failed';
+export type PathAgentObstacleAvoidanceQuality = 'none' | 'low' | 'medium' | 'high';
 
-export interface NavMeshAgentConfig {
+export interface PathAgentConfig {
     readonly radius?: number;
     readonly height?: number;
     readonly speed?: number;
@@ -17,40 +17,40 @@ export interface NavMeshAgentConfig {
     readonly autoRepath?: boolean;
     readonly baseOffset?: number;
     readonly areaMask?: number;
-    readonly obstacleAvoidanceQuality?: NavMeshAgentObstacleAvoidanceQuality;
+    readonly obstacleAvoidanceQuality?: PathAgentObstacleAvoidanceQuality;
     readonly avoidancePriority?: number;
 }
 
-export interface NavMeshPath {
+export interface PathAgentPath {
     readonly corners: readonly Vec3[];
     readonly status: 'complete' | 'partial' | 'invalid';
 }
 
 /**
- * NavMeshAgent component enables AI-driven navigation on a NavMesh surface.
+ * PathAgent component enables AI-driven navigation on a navigation surface.
  * The agent automatically calculates paths to destinations and moves along them
  * while avoiding obstacles.
  *
  * @example
  * ```ts
- * const agent = new NavMeshAgent({
+ * const agent = new PathAgent({
  *     speed: 3.5,
  *     angularSpeed: 120,
  *     stoppingDistance: 0.5,
  * });
- * actor.addComponent(NavMeshAgent, agent);
+ * actor.addComponent(PathAgent, agent);
  *
  * // Set destination
  * agent.setDestination(new Vec3(10, 0, 5));
  * ```
  */
 @script({
-    scriptName: 'NavMeshAgent',
+    scriptName: 'PathAgent',
     priority: 300,
     executeInEditMode: false,
     singleton: false,
 })
-export class NavMeshAgent extends Component {
+export class PathAgent extends Component {
     private _radius: number;
     private _height: number;
     private _speed: number;
@@ -61,12 +61,12 @@ export class NavMeshAgent extends Component {
     private _autoRepath: boolean;
     private _baseOffset: number;
     private _areaMask: number;
-    private _obstacleAvoidanceQuality: NavMeshAgentObstacleAvoidanceQuality;
+    private _obstacleAvoidanceQuality: PathAgentObstacleAvoidanceQuality;
     private _avoidancePriority: number;
 
     private _destination: Vec3 | null = null;
-    private _path: NavMeshPath | null = null;
-    private _pathStatus: NavMeshAgentPathStatus = 'idle';
+    private _path: PathAgentPath | null = null;
+    private _pathStatus: PathAgentPathStatus = 'idle';
     private _currentCornerIndex: number = 0;
     private _velocity: Vec3 = Vec3.ZERO.clone();
     private _remainingDistance: number = 0;
@@ -74,7 +74,7 @@ export class NavMeshAgent extends Component {
     private _warpPending: boolean = false;
     private _warpTarget: Vec3 | null = null;
 
-    constructor(config: NavMeshAgentConfig = {}) {
+    constructor(config: PathAgentConfig = {}) {
         super();
         this._radius = 0.5;
         this._height = 2;
@@ -171,11 +171,11 @@ export class NavMeshAgent extends Component {
         this._areaMask = value >>> 0;
     }
 
-    get obstacleAvoidanceQuality(): NavMeshAgentObstacleAvoidanceQuality {
+    get obstacleAvoidanceQuality(): PathAgentObstacleAvoidanceQuality {
         return this._obstacleAvoidanceQuality;
     }
 
-    set obstacleAvoidanceQuality(value: NavMeshAgentObstacleAvoidanceQuality) {
+    set obstacleAvoidanceQuality(value: PathAgentObstacleAvoidanceQuality) {
         this._obstacleAvoidanceQuality = value;
     }
 
@@ -191,11 +191,11 @@ export class NavMeshAgent extends Component {
         return this._destination;
     }
 
-    get path(): NavMeshPath | null {
+    get path(): PathAgentPath | null {
         return this._path;
     }
 
-    get pathStatus(): NavMeshAgentPathStatus {
+    get pathStatus(): PathAgentPathStatus {
         return this._pathStatus;
     }
 
@@ -222,8 +222,8 @@ export class NavMeshAgent extends Component {
         return this._path !== null && this._path.status !== 'invalid';
     }
 
-    get isOnNavMesh(): boolean {
-        // In a full implementation, this would check if the agent is on a valid NavMesh
+    get isOnPath(): boolean {
+        // In a full implementation, this would check if the agent is on a valid path network
         return true;
     }
 
@@ -266,7 +266,7 @@ export class NavMeshAgent extends Component {
         this._warpTarget = targetVec;
         this._warpPending = true;
 
-        // In a full implementation, this would validate the position is on the NavMesh
+        // In a full implementation, this would validate the position is on the path network
         // and update the transform
         return true;
     }
@@ -347,15 +347,18 @@ export class NavMeshAgent extends Component {
     }
 
     override update(deltaTime: number): void {
-        if (this._isStopped || this._pathStatus !== 'following' || !this._path) {
-            return;
-        }
-
-        // Handle pending warp
+        // Handle pending warp before any early returns so warp works regardless of path status
         if (this._warpPending && this._warpTarget) {
-            // In a full implementation, this would update the transform
+            const transform = this.transform as Transform | undefined;
+            if (transform) {
+                transform.worldPosition = this._warpTarget.clone();
+            }
             this._warpPending = false;
             this._warpTarget = null;
+        }
+
+        if (this._isStopped || this._pathStatus !== 'following' || !this._path) {
+            return;
         }
 
         const nextCorner = this.getNextCorner();
@@ -419,7 +422,7 @@ export class NavMeshAgent extends Component {
     }
 
     override deserialize(data: Record<string, any>): void {
-        const patch: NavMeshAgentConfig = {};
+        const patch: PathAgentConfig = {};
 
         if (typeof data.radius === 'number') {
             (patch as any).radius = data.radius;
@@ -488,7 +491,7 @@ export class NavMeshAgent extends Component {
         this._remainingDistance = distance;
     }
 
-    private _applyConfig(config: NavMeshAgentConfig): void {
+    private _applyConfig(config: PathAgentConfig): void {
         if (typeof config.radius === 'number') {
             this._radius = Math.max(0.01, config.radius);
         }
