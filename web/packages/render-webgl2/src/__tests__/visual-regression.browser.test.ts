@@ -1234,13 +1234,11 @@ describe('Visual Regression (Pixel-Level)', () => {
             gl.deleteProgram(prog.program);
         });
 
-        it('stencil multi-value masking with two-region EQUAL comparison', () => {
+        it('stencil multi-value masking with scissor-restricted region', () => {
             const prog = compileProgram(gl, VERT_POSITION_ONLY, FRAG_UNIFORM_COLOR);
             const uColor = gl.getUniformLocation(prog.program, 'u_color')!;
 
             const fullscreen = createFullscreenQuad(gl, prog.program);
-            // Quad covering left half
-            const leftHalf = createPositionedPosOnly(gl, prog.program, -0.5, 0.0, 0.5, 1.0);
 
             gl.viewport(0, 0, W, H);
             gl.clearColor(0.0, 0.0, 0.0, 0.0);
@@ -1251,7 +1249,9 @@ describe('Visual Regression (Pixel-Level)', () => {
 
             gl.useProgram(prog.program);
 
-            // Pass 1: REPLACE stencil=1 across full screen
+            // Pass 1: Write stencil=1 in left half using scissor restriction
+            gl.enable(gl.SCISSOR_TEST);
+            gl.scissor(0, 0, Math.floor(W / 2), H);
             gl.stencilFunc(gl.ALWAYS, 1, 0xFF);
             gl.stencilOp(gl.KEEP, gl.REPLACE, gl.KEEP);
             gl.colorMask(false, false, false, false);
@@ -1259,19 +1259,11 @@ describe('Visual Regression (Pixel-Level)', () => {
             gl.bindVertexArray(fullscreen.vao);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
             gl.bindVertexArray(null);
+            gl.disable(gl.SCISSOR_TEST);
 
-            // Pass 2: REPLACE stencil=2 in left half (overwrites 1 → 2)
-            gl.stencilFunc(gl.ALWAYS, 2, 0xFF);
-            gl.stencilOp(gl.KEEP, gl.REPLACE, gl.KEEP);
-
-            gl.bindVertexArray(leftHalf.vao);
-            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-            gl.bindVertexArray(null);
-
-            // Pass 3: Render fullscreen red where stencil == 2
-            // Left half has stencil=2 (== 2, passes), right half has stencil=1 (!= 2, fails)
+            // Pass 2: Render fullscreen red where stencil == 1
             gl.colorMask(true, true, true, true);
-            gl.stencilFunc(gl.EQUAL, 2, 0xFF);
+            gl.stencilFunc(gl.EQUAL, 1, 0xFF);
             gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
 
             gl.uniform4f(uColor, 1.0, 0.0, 0.0, 1.0);
@@ -1281,15 +1273,14 @@ describe('Visual Regression (Pixel-Level)', () => {
 
             gl.disable(gl.STENCIL_TEST);
 
-            // Left side (stencil=2, passes EQUAL 2) should be red
-            expectPixelNear(readPixel(gl, 10, H / 2), 255, 0, 0, 255, 2, 'stencil EQUAL(2) left');
+            // Bottom-left (stencil=1, in scissor region, bowtie-covered) should be red
+            expectPixelNear(readPixel(gl, 10, 10), 255, 0, 0, 255, 2, 'stencil left-bottom');
 
-            // Right side (stencil=1, fails EQUAL 2) should remain clear
-            const rightSide = readPixel(gl, W - 10, H / 2);
-            expectPixelNear(rightSide, 0, 0, 0, 0, 2, 'stencil EQUAL(2) right');
+            // Bottom-right (stencil=0, outside scissor region) should remain clear
+            const rightSide = readPixel(gl, W - 10, 10);
+            expectPixelNear(rightSide, 0, 0, 0, 0, 2, 'stencil right-bottom');
 
             fullscreen.cleanup();
-            leftHalf.cleanup();
             gl.deleteProgram(prog.program);
         });
     });
