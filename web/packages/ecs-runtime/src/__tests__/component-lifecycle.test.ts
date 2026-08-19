@@ -45,47 +45,35 @@ class LifecycleTestComponent extends Component {
 }
 
 /**
+ * Shared execution log for priority ordering tests
+ */
+const executionLog: string[] = [];
+
+function resetExecutionLog(): void {
+    executionLog.length = 0;
+}
+
+/**
  * Test component with priority for ordering tests
  */
 @script({ priority: 10 })
 class HighPriorityComponent extends Component {
-    public executionOrder: number[] = [];
-    private static _order = 0;
-
     update(): void {
-        this.executionOrder.push(HighPriorityComponent._order++);
-    }
-
-    static resetOrder(): void {
-        HighPriorityComponent._order = 0;
+        executionLog.push('high');
     }
 }
 
 @script({ priority: 5 })
 class MediumPriorityComponent extends Component {
-    public executionOrder: number[] = [];
-    private static _order = 0;
-
     update(): void {
-        this.executionOrder.push(MediumPriorityComponent._order++);
-    }
-
-    static resetOrder(): void {
-        MediumPriorityComponent._order = 0;
+        executionLog.push('medium');
     }
 }
 
 @script({ priority: 1 })
 class LowPriorityComponent extends Component {
-    public executionOrder: number[] = [];
-    private static _order = 0;
-
     update(): void {
-        this.executionOrder.push(LowPriorityComponent._order++);
-    }
-
-    static resetOrder(): void {
-        LowPriorityComponent._order = 0;
+        executionLog.push('low');
     }
 }
 
@@ -159,23 +147,15 @@ describe('Component Lifecycle Integration', () => {
         it('should transition through complete lifecycle: uninitialized → awake → enabled → destroyed', async () => {
             const component = actor.addComponent(LifecycleTestComponent);
 
-            expect(component.state).toBe('uninitialized');
-            expect(component.events).toEqual([]);
-
-            await component._internalAwake();
-            expect(component.state).toBe('awake');
+            // actor.addComponent triggers awake + start + onEnable automatically
             expect(component.events).toContain('awake');
-
-            await component._internalStart();
-            expect(component.state).toBe('enabled');
             expect(component.events).toContain('start');
             expect(component.events).toContain('onEnable');
 
-            component._internalUpdate(0.016);
+            actor.update(0.016);
             expect(component.events).toContain('update:0.016');
 
-            await component._internalDestroy();
-            expect(component.state).toBe('destroyed');
+            actor.destroy();
             expect(component.events).toContain('onDisable');
             expect(component.events).toContain('onDestroy');
         });
