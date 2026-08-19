@@ -42,7 +42,7 @@ void main() {
 }`;
 
 const FRAGMENT_SOURCE = `#version 300 es
-precision highp float;
+precision mediump float;
 in vec2 v_Uv;
 uniform sampler2D u_Texture;
 uniform float u_Opacity;
