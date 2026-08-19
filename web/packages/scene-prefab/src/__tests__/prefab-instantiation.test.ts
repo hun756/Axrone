@@ -64,7 +64,7 @@ class TestFollowTarget extends Component {
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 interface PrefabTestHarness {
-    readonly actorRuntime: SceneActorRuntime;
+    readonly actorRuntime: SceneActorRuntime<any>;
     readonly world: World<any>;
     readonly componentCatalog: SceneComponentCatalog;
 }
