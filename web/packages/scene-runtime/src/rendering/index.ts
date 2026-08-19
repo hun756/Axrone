@@ -43,3 +43,8 @@ export type {
 export { SceneSpriteBatchRuntime } from './sprite-batch-runtime';
 export { SceneSpriteRenderItemCollector } from './sprite-render-item-collector';
 export { SceneDirectGlPassGuard } from './internal/render-state-guard';
+export type {
+    SceneLodEvaluateParams,
+    SceneLodEvaluateStats,
+} from './lod-evaluator';
+export { SceneLodEvaluator } from './lod-evaluator';

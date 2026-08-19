@@ -20,6 +20,7 @@ import { SceneSkinningUniformBinder } from '../skinning-uniform-binder';
 import { SceneSpriteBatchRuntime } from './sprite-batch-runtime';
 import { SceneParticleBatchRuntime } from './particle-batch-runtime';
 import { SceneLineBatchRuntime } from './line-batch-runtime';
+import { SceneBillboardBatchRuntime } from './billboard-batch-runtime';
 import type { SceneMeshResource } from '../mesh-registry';
 import type {
     SceneMeshDefinition,
@@ -138,12 +139,18 @@ export class SceneRenderRuntime {
             uniformWriter: this._uniformWriter,
             renderStateApplier: this._renderStateApplier,
         });
+        const billboardBatchRuntime = new SceneBillboardBatchRuntime({
+            gl: _options.gl,
+            uniformWriter: this._uniformWriter,
+            renderStateApplier: this._renderStateApplier,
+        });
         this._renderPipeline = new SceneRenderPipeline({
             gl: _options.gl,
             drawExecutor: this._drawExecutor,
             spriteBatchRuntime,
             particleBatchRuntime,
             lineBatchRuntime,
+            billboardBatchRuntime,
             planning: _options.planning,
             pipeline: _options.pipeline,
         });
