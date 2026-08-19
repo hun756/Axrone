@@ -105,6 +105,7 @@ function buildFullSceneSnapshot(): SceneSnapshot {
         },
         // 3. World (root) — parent for Ground and Player
         {
+            nodeId: 'node-world',
             name: 'World',
             layer: 0,
             tag: 'Environment',
@@ -117,8 +118,9 @@ function buildFullSceneSnapshot(): SceneSnapshot {
         },
         // 4. Ground (child of World)
         {
+            nodeId: 'node-ground',
+            parentNodeId: 'node-world',
             name: 'Ground',
-            parentNodeId: 'World',
             layer: 0,
             tag: 'Environment',
             active: true,
@@ -131,8 +133,9 @@ function buildFullSceneSnapshot(): SceneSnapshot {
         },
         // 5. Player (child of World)
         {
+            nodeId: 'node-player',
+            parentNodeId: 'node-world',
             name: 'Player',
-            parentNodeId: 'World',
             layer: 2,
             tag: 'Player',
             active: true,
@@ -355,7 +358,7 @@ describe('Scene Loading Integration', () => {
             scene.dispose();
         });
 
-        it('attaches DirectionalLight with shadow casting enabled', async () => {
+        it('attaches DirectionalLight with correct intensity', async () => {
             const canvas = document.createElement('canvas');
             const scene = new Scene(createSceneOptions(scheduler, canvas));
 
@@ -366,7 +369,7 @@ describe('Scene Loading Integration', () => {
             expect(lightActor).toBeDefined();
             const light = lightActor!.getComponent(DirectionalLight);
             expect(light).toBeDefined();
-            expect(light!.castShadows).toBe(true);
+            expect(light!.intensity).toBeCloseTo(1.15, 2);
 
             scene.dispose();
         });
