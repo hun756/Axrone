@@ -13,6 +13,8 @@ import { LODGroup } from './components/lod-group';
 import { BillboardRenderer } from './components/billboard-renderer';
 import { Terrain } from './components/terrain';
 import { TrailRenderer } from './components/trail-renderer';
+import { ParticleSystem } from './components/particle-system';
+import { PathAgent } from './components/path-agent';
 import {
     CORE_SCENE_BUILT_IN_MANIFESTS,
     SCENE_CORE_BUILT_IN_MANIFEST,
@@ -49,6 +51,8 @@ const SCENE_3D_ONLY_BUILT_IN_REGISTRY_SOURCE: SceneBuiltInRegistrySource = Objec
     FollowCameraController,
     LineRenderer,
     TrailRenderer,
+    ParticleSystem,
+    PathAgent,
 });
 
 const SCENE_3D_BUILT_IN_REGISTRY_SOURCE: SceneBuiltInRegistrySource = Object.freeze({
@@ -74,6 +78,8 @@ export const SCENE_3D_BUILT_IN_MANIFEST = createSceneBuiltInManifest({
         'FollowCameraController',
         'LineRenderer',
         'TrailRenderer',
+        'ParticleSystem',
+        'PathAgent',
     ] as const,
 });
 
