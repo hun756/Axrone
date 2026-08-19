@@ -1236,7 +1236,7 @@ describe('Scene Loading Integration', () => {
             // Count root actors (those without parentNodeId)
             const rootActors = actors.filter((a) => {
                 const transform = a.getComponent(Transform);
-                return transform!.parent === null;
+                return !transform!.parent;
             });
 
             // Main Camera, Directional Light, World, UI Host, Actor,
@@ -1246,7 +1246,7 @@ describe('Scene Loading Integration', () => {
             // Ground and Player are children of World
             const childActors = actors.filter((a) => {
                 const transform = a.getComponent(Transform);
-                return transform!.parent !== null;
+                return !!transform!.parent;
             });
             expect(childActors.length).toBe(2);
 
