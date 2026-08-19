@@ -54,7 +54,7 @@ void main() {
     gl_PointSize = clamp(attenuated, 1.0, u_MaxPointSize);
 }`,
     fragmentSource: `#version 300 es
-precision highp float;
+precision mediump float;
 uniform int u_SpriteMode;
 uniform sampler2D u_Texture;
 uniform float u_UseTexture;

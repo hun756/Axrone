@@ -131,6 +131,8 @@ void main() {
     v_TexCoord = a_TexCoord;
 }`,
             fragmentShader: `
+out vec4 o_FragColor;
+
 void main() {
     vec4 color = u_Color;
 
@@ -143,7 +145,7 @@ void main() {
         color.rgb *= (sin(u_Time) * 0.5 + 0.5);
     #endif
 
-    gl_FragColor = color;
+    o_FragColor = color;
 }`,
             renderState: {
                 depthTest: true,
@@ -284,7 +286,7 @@ const shaderConfigJSON = `{
             "name": "TextRendering",
             "stage": ["vertex", "fragment"],
             "vertexShader": "void main() { gl_Position = u_MVPMatrix * vec4(a_Position, 1.0); v_TexCoord = a_TexCoord; v_Color = a_Color; }",
-            "fragmentShader": "void main() { float sdf = texture(u_FontTexture, v_TexCoord).r; float alpha = smoothstep(0.5 - u_Smoothing, 0.5 + u_Smoothing, sdf); gl_FragColor = vec4(u_TextColor.rgb * v_Color.rgb, alpha * u_TextColor.a * v_Color.a); }",
+            "fragmentShader": "out vec4 o_FragColor; void main() { float sdf = texture(u_FontTexture, v_TexCoord).r; float alpha = smoothstep(0.5 - u_Smoothing, 0.5 + u_Smoothing, sdf); o_FragColor = vec4(u_TextColor.rgb * v_Color.rgb, alpha * u_TextColor.a * v_Color.a); }",
             "renderState": {
                 "depthTest": false,
                 "depthWrite": false,
