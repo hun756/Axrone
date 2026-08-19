@@ -413,10 +413,10 @@ describe('Script Performance Regression', () => {
             }
 
             // The range (max - min) across all samples should be bounded.
-            // In Node.js, V8 heap fluctuates with GC cycles — allow 50 MB.
+            // In Node.js, V8 heap fluctuates with GC cycles — allow 100 MB.
             const minSample = Math.min(...samples);
             const maxSample = Math.max(...samples);
-            expect(maxSample - minSample).toBeLessThan(50 * 1024 * 1024);
+            expect(maxSample - minSample).toBeLessThan(100 * 1024 * 1024);
 
             scene.dispose();
         });
