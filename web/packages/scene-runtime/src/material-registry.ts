@@ -334,6 +334,13 @@ export class SceneMaterialRegistry {
             keywords: new Map(),
         };
 
+        if (this._resources.has(definition.id)) {
+            console.warn(
+                `[SceneMaterialRegistry] Material '${definition.id}' is already registered. Overwriting existing material. This may cause unexpected rendering behavior.`
+            );
+            this._observables?._notifyMaterialDeleted(definition.id);
+        }
+
         this._resources.set(resource.id, resource);
         this._definitions.set(resource.id, cloneSceneMaterialDefinition(definition));
 
