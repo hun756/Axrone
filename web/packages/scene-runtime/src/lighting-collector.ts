@@ -10,6 +10,7 @@ import type { Actor, Transform } from '@axrone/ecs-runtime';
 import { DirectionalLight } from './components/directional-light';
 import { PointLight } from './components/point-light';
 import { SpotLight } from './components/spot-light';
+import { AreaLight } from './components/area-light';
 
 const DEFAULT_LIGHT_DIRECTION = Object.freeze(new Vec3(0, -1, 0));
 const DEFAULT_LIGHT_ATTENUATION = 2;
@@ -86,6 +87,11 @@ export class SceneLightingCollector {
             const spot = actor.getComponent(SpotLight);
             if (spot && spot.enabled) {
                 this._syncSpotLight(spot);
+            }
+
+            const areaLight = actor.getComponent(AreaLight);
+            if (areaLight && areaLight.enabled) {
+                this._syncAreaLight(areaLight);
             }
         }
 
@@ -233,6 +239,52 @@ export class SceneLightingCollector {
             coneMode: 'angle',
             innerConeAngle: light.innerConeAngle,
             outerConeAngle: light.outerConeAngle,
+        });
+    }
+
+    private _syncAreaLight(light: AreaLight): void {
+        const lightId = `area-light:${String(light.id)}`;
+        const transform = light.transform as Transform | undefined;
+        const position = transform?.worldPosition ?? Vec3.ZERO;
+        const existing = this._rig.get(lightId);
+
+        this._seenLightIds.add(lightId);
+
+        // Approximate area light as a point light with area-scaled intensity
+        const areaFactor = light.width * light.height * 0.1;
+        const effectiveIntensity = light.intensity * Math.max(0.001, areaFactor);
+
+        if (existing?.kind === LightingLightKind.Point) {
+            if (
+                sameVec3(existing.color, light.color) &&
+                sameVec3(existing.position, position) &&
+                sameNumber(existing.intensity, effectiveIntensity) &&
+                sameNumber(existing.range, light.range)
+            ) {
+                return;
+            }
+
+            this._rig.update(lightId, {
+                color: light.color,
+                intensity: effectiveIntensity,
+                range: light.range,
+                attenuation: DEFAULT_LIGHT_ATTENUATION,
+                position,
+            });
+            return;
+        }
+
+        if (existing) {
+            this._rig.remove(lightId);
+        }
+
+        this._rig.addPoint({
+            id: lightId,
+            color: light.color,
+            intensity: effectiveIntensity,
+            range: light.range,
+            attenuation: DEFAULT_LIGHT_ATTENUATION,
+            position,
         });
     }
 
