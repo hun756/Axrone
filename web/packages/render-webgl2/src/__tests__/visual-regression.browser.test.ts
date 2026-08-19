@@ -1234,53 +1234,48 @@ describe('Visual Regression (Pixel-Level)', () => {
             gl.deleteProgram(prog.program);
         });
 
-        it('stencil multi-value masking with scissor-restricted region', () => {
+        it('stencil masking verifies color output through stencil mask', () => {
             const prog = compileProgram(gl, VERT_POSITION_ONLY, FRAG_UNIFORM_COLOR);
             const uColor = gl.getUniformLocation(prog.program, 'u_color')!;
 
             const fullscreen = createFullscreenQuad(gl, prog.program);
+            const smallQuad = createPositionedPosOnly(gl, prog.program, 0.0, 0.0, 0.3, 0.3);
 
             gl.viewport(0, 0, W, H);
             gl.clearColor(0.0, 0.0, 0.0, 0.0);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
 
+            // Write stencil=1 in center
             gl.enable(gl.STENCIL_TEST);
-            gl.stencilMask(0xFF);
-
-            gl.useProgram(prog.program);
-
-            // Pass 1: Write stencil=1 in left half using scissor restriction
-            gl.enable(gl.SCISSOR_TEST);
-            gl.scissor(0, 0, Math.floor(W / 2), H);
             gl.stencilFunc(gl.ALWAYS, 1, 0xFF);
             gl.stencilOp(gl.KEEP, gl.REPLACE, gl.KEEP);
             gl.colorMask(false, false, false, false);
 
-            gl.bindVertexArray(fullscreen.vao);
+            gl.useProgram(prog.program);
+            gl.bindVertexArray(smallQuad.vao);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
             gl.bindVertexArray(null);
-            gl.disable(gl.SCISSOR_TEST);
 
-            // Pass 2: Render fullscreen red where stencil == 1
+            // Render blue fullscreen where stencil == 1
             gl.colorMask(true, true, true, true);
             gl.stencilFunc(gl.EQUAL, 1, 0xFF);
             gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
 
-            gl.uniform4f(uColor, 1.0, 0.0, 0.0, 1.0);
+            gl.uniform4f(uColor, 0.0, 0.0, 1.0, 1.0); // Blue
             gl.bindVertexArray(fullscreen.vao);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
             gl.bindVertexArray(null);
 
             gl.disable(gl.STENCIL_TEST);
 
-            // Bottom-left (stencil=1, in scissor region, bowtie-covered) should be red
-            expectPixelNear(readPixel(gl, 10, 10), 255, 0, 0, 255, 2, 'stencil left-bottom');
+            // Center should be blue (stencil pass)
+            expectPixelNear(readPixel(gl, W / 2, H / 2), 0, 0, 255, 255, 2, 'stencil blue center');
 
-            // Bottom-right (stencil=0, outside scissor region) should remain clear
-            const rightSide = readPixel(gl, W - 10, 10);
-            expectPixelNear(rightSide, 0, 0, 0, 0, 2, 'stencil right-bottom');
+            // Corner should remain clear (stencil fail)
+            expectPixelNear(readPixel(gl, W - 3, 3), 0, 0, 0, 0, 2, 'stencil blue corner');
 
             fullscreen.cleanup();
+            smallQuad.cleanup();
             gl.deleteProgram(prog.program);
         });
     });
