@@ -920,7 +920,7 @@ const createGltfUnlitShaderEffect = (id: string): RenderShaderEffectDefinition =
         ],
     },
     fragment: {
-        precision: 'highp',
+        precision: 'mediump',
         outputs: [{ name: 'o_Color', type: 'vec4' }],
         includes: ['gltf.uv', 'gltf.color-space'],
         main: [
@@ -1742,7 +1742,7 @@ const createGltfToonShaderEffect = (id: string): RenderShaderEffectDefinition =>
         ],
     },
     fragment: {
-        precision: 'highp',
+        precision: 'mediump',
         outputs: [{ name: 'o_Color', type: 'vec4' }],
         includes: ['gltf.uv', 'gltf.pbr-lighting'],
         main: [
