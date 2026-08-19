@@ -10,6 +10,7 @@ import {
 } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
 import { PrefabNodeBinding } from '../prefab-node-binding';
+import { ScenePrefabWorkflow } from '../scene-prefab-workflow';
 import { SceneActorRuntime, createSceneRegistry } from '@axrone/scene-runtime';
 import { SceneComponentCatalog } from '@axrone/scene-runtime/component-catalog';
 import { encodeSceneValue } from '@axrone/scene-runtime/serialization';
@@ -851,7 +852,6 @@ describe('Prefab Instantiation — Prefab Variant', () => {
         const actors = harness.actorRuntime.instantiatePrefab(variant, {
             prefabResolver: {
                 resolvePrefab: (prefab) => {
-                    const { ScenePrefabWorkflow } = require('../scene-prefab-workflow');
                     const workflow = new ScenePrefabWorkflow({
                         prefabs: [basePrefab, variant],
                     });
@@ -886,7 +886,6 @@ describe('Prefab Instantiation — Prefab Variant', () => {
         const actors = harness.actorRuntime.instantiatePrefab(variant, {
             prefabResolver: {
                 resolvePrefab: (prefab) => {
-                    const { ScenePrefabWorkflow } = require('../scene-prefab-workflow');
                     const workflow = new ScenePrefabWorkflow({
                         prefabs: [basePrefab, variant],
                     });
@@ -924,7 +923,6 @@ describe('Prefab Instantiation — Prefab Variant', () => {
         const actors = harness.actorRuntime.instantiatePrefab(variant, {
             prefabResolver: {
                 resolvePrefab: (prefab) => {
-                    const { ScenePrefabWorkflow } = require('../scene-prefab-workflow');
                     const workflow = new ScenePrefabWorkflow({
                         prefabs: [basePrefab, variant],
                     });
@@ -958,7 +956,6 @@ describe('Prefab Instantiation — Prefab Variant', () => {
         harness.actorRuntime.instantiatePrefab(variant, {
             prefabResolver: {
                 resolvePrefab: (prefab) => {
-                    const { ScenePrefabWorkflow } = require('../scene-prefab-workflow');
                     const workflow = new ScenePrefabWorkflow({
                         prefabs: [basePrefab, variant],
                     });
