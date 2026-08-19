@@ -7,6 +7,10 @@ import { MeshRenderer } from './components/mesh-renderer';
 import { OrbitCameraController } from './components/orbit-camera-controller';
 import { PointLight } from './components/point-light';
 import { SpotLight } from './components/spot-light';
+import { AreaLight } from './components/area-light';
+import { ReflectionProbe } from './components/reflection-probe';
+import { LODGroup } from './components/lod-group';
+import { BillboardRenderer } from './components/billboard-renderer';
 import { Terrain } from './components/terrain';
 import { TrailRenderer } from './components/trail-renderer';
 import {
@@ -36,6 +40,10 @@ const SCENE_3D_ONLY_BUILT_IN_REGISTRY_SOURCE: SceneBuiltInRegistrySource = Objec
     DirectionalLight,
     PointLight,
     SpotLight,
+    AreaLight,
+    ReflectionProbe,
+    LODGroup,
+    BillboardRenderer,
     Terrain,
     OrbitCameraController,
     FollowCameraController,
@@ -57,6 +65,10 @@ export const SCENE_3D_BUILT_IN_MANIFEST = createSceneBuiltInManifest({
         'DirectionalLight',
         'PointLight',
         'SpotLight',
+        'AreaLight',
+        'ReflectionProbe',
+        'LODGroup',
+        'BillboardRenderer',
         'Terrain',
         'OrbitCameraController',
         'FollowCameraController',
