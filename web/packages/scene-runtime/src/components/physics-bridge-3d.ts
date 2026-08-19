@@ -6,6 +6,7 @@ import {
     Rigidbody3D,
     Collider3D,
     Joint3D,
+    CharacterController,
 } from '@axrone/physics-3d';
 import type {
     IContactListener3D,
@@ -56,6 +57,7 @@ export class PhysicsBridge3D implements GameLoopSystem<SceneLoopState>, IContact
     private readonly _initializedBodies = new WeakSet<Rigidbody3D>();
     private readonly _initializedColliders = new WeakSet<Collider3D>();
     private readonly _initializedJoints = new WeakSet<Joint3D>();
+    private readonly _initializedCharacterControllers = new WeakSet<CharacterController>();
     private readonly _bodyIdToComponent = new Map<BodyId3D, Rigidbody3D>();
     private readonly _componentToActor = new Map<Rigidbody3D, AnyActor>();
     private readonly _activeContactPairs = new Set<string>();
@@ -199,6 +201,12 @@ export class PhysicsBridge3D implements GameLoopSystem<SceneLoopState>, IContact
                 const connectedBody = this._resolveConnectedBody(joint);
                 joint.initialize(this._physicsWorld, rigidbody, connectedBody ?? undefined);
                 this._initializedJoints.add(joint);
+            }
+
+            const characterController = actor.getComponent(CharacterController);
+            if (characterController && !this._initializedCharacterControllers.has(characterController)) {
+                characterController.initialize(this._physicsWorld);
+                this._initializedCharacterControllers.add(characterController);
             }
         }
     }
