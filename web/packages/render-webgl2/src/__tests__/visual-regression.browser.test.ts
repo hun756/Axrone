@@ -166,8 +166,8 @@ function createFullscreenQuad(gl: WebGL2RenderingContext, program: WebGLProgram)
         // pos       uv
         -1, -1, 0, 0,
          1, -1, 1, 0,
-         1,  1, 1, 1,
         -1,  1, 0, 1,
+         1,  1, 1, 1,
     ]);
     const vbo = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
@@ -239,8 +239,8 @@ function createPositionedColoredQuad(
     const vertices = new Float32Array([
         x0, y0, r, g, b, a,
         x1, y0, r, g, b, a,
-        x1, y1, r, g, b, a,
         x0, y1, r, g, b, a,
+        x1, y1, r, g, b, a,
     ]);
     const vbo = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
