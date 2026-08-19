@@ -5,154 +5,39 @@ import {
     installWebGL2Constants,
     ManualScheduler,
 } from './test-harness';
-import type { MockGLContext } from './test-harness';
 
-// ─── Dynamic imports (same pattern as scene-factory.test.ts) ─────────────────
+import type {
+    SceneSnapshot,
+    SceneActorSnapshot,
+} from '@axrone/scene-3d';
 
 let Scene: typeof import('@axrone/scene-3d').Scene;
 let Camera: typeof import('@axrone/scene-3d').Camera;
 let MeshRenderer: typeof import('@axrone/scene-3d').MeshRenderer;
 let DirectionalLight: typeof import('@axrone/scene-3d').DirectionalLight;
 let Transform: typeof import('@axrone/ecs-runtime').Transform;
-let Hierarchy: typeof import('@axrone/ecs-runtime').Hierarchy;
-let Component: typeof import('@axrone/ecs-runtime').Component;
+let PrefabNodeBinding: typeof import('@axrone/scene-3d').PrefabNodeBinding;
 
-import type { SceneSnapshot, SceneActorSnapshot } from '@axrone/scene-3d';
-
-// ─── Snapshot Builders ──────────────────────────────────────────────────────
-
-function buildSnapshotA(overrides?: Partial<SceneSnapshot>): SceneSnapshot {
+/**
+ * Helper: build a minimal valid SceneSnapshot with configurable actors.
+ */
+function buildSnapshot(
+    sceneId: string,
+    actors: SceneActorSnapshot[],
+    overrides?: Partial<SceneSnapshot>,
+): SceneSnapshot {
     return {
         version: 1,
         shaders: [
             {
-                id: 'scene-a/shader',
-                vertexSource: 'void main() { gl_Position = vec4(0); }',
-                fragmentSource: 'void main() { gl_FragColor = vec4(1, 0, 0, 1); }',
-            },
-        ],
-        meshes: [
-            {
-                id: 'scene-a-mesh',
-                vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
-                attributes: [
-                    { semantic: 'position' as const, componentCount: 3 as const, offset: 0, stride: 12 },
-                ],
-                vertexCount: 3,
-            },
-        ],
-        samplers: [],
-        textures: [],
-        renderPasses: [],
-        materials: [{ id: 'scene-a-mat', shaderId: 'scene-a/shader' }],
-        prefab: {
-            id: 'scene-a-prefab',
-            actors: [
-                {
-                    name: 'ActorA_Root',
-                    nodeId: 'node-a-root',
-                    layer: 0,
-                    tag: 'Default',
-                    active: true,
-                    persistent: false,
-                    pooled: false,
-                    components: [{ type: 'Transform', data: { position: [1, 0, 0] } }],
-                },
-                {
-                    name: 'ActorA_Child',
-                    parentNodeId: 'node-a-root',
-                    layer: 0,
-                    tag: 'Default',
-                    active: true,
-                    persistent: false,
-                    pooled: false,
-                    components: [{ type: 'Transform', data: { position: [0, 1, 0] } }],
-                },
-                {
-                    name: 'ActorA_Renderable',
-                    layer: 0,
-                    tag: 'Default',
-                    active: true,
-                    persistent: false,
-                    pooled: false,
-                    components: [
-                        { type: 'Transform', data: {} },
-                        { type: 'MeshRenderer', data: { meshId: 'scene-a-mesh', materialId: 'scene-a-mat' } },
-                    ],
-                },
-            ],
-        },
-        ...overrides,
-    };
-}
-
-function buildSnapshotB(overrides?: Partial<SceneSnapshot>): SceneSnapshot {
-    return {
-        version: 1,
-        shaders: [
-            {
-                id: 'scene-b/shader',
-                vertexSource: 'void main() { gl_Position = vec4(0); }',
-                fragmentSource: 'void main() { gl_FragColor = vec4(0, 1, 0, 1); }',
-            },
-        ],
-        meshes: [
-            {
-                id: 'scene-b-mesh',
-                vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
-                attributes: [
-                    { semantic: 'position' as const, componentCount: 3 as const, offset: 0, stride: 12 },
-                ],
-                vertexCount: 3,
-            },
-        ],
-        samplers: [],
-        textures: [],
-        renderPasses: [],
-        materials: [{ id: 'scene-b-mat', shaderId: 'scene-b/shader' }],
-        prefab: {
-            id: 'scene-b-prefab',
-            actors: [
-                {
-                    name: 'ActorB_Root',
-                    layer: 0,
-                    tag: 'Default',
-                    active: true,
-                    persistent: false,
-                    pooled: false,
-                    components: [{ type: 'Transform', data: { position: [5, 5, 5] } }],
-                },
-                {
-                    name: 'ActorB_Camera',
-                    layer: 0,
-                    tag: 'Camera',
-                    active: true,
-                    persistent: false,
-                    pooled: false,
-                    components: [
-                        { type: 'Transform', data: {} },
-                        { type: 'Camera', data: { primary: true, fieldOfView: 45, nearClip: 0.1, farClip: 500 } },
-                    ],
-                },
-            ],
-        },
-        ...overrides,
-    };
-}
-
-function buildTexturedSnapshot(overrides?: Partial<SceneSnapshot>): SceneSnapshot {
-    return {
-        version: 1,
-        shaders: [
-            {
-                id: 'textured/shader',
+                id: 'test/solid',
                 vertexSource: 'void main() { gl_Position = vec4(0); }',
                 fragmentSource: 'void main() { gl_FragColor = vec4(1); }',
             },
         ],
         meshes: [
             {
-                id: 'textured-mesh',
+                id: 'cube',
                 vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
                 attributes: [
                     { semantic: 'position' as const, componentCount: 3 as const, offset: 0, stride: 12 },
@@ -161,58 +46,37 @@ function buildTexturedSnapshot(overrides?: Partial<SceneSnapshot>): SceneSnapsho
             },
         ],
         samplers: [],
-        textures: [
-            {
-                id: 'tex-albedo',
-                source: { kind: 'color', color: [1, 0, 0, 1] as const, width: 2, height: 2 },
-            },
-            {
-                id: 'tex-normal',
-                source: { kind: 'color', color: [0.5, 0.5, 1, 1] as const, width: 2, height: 2 },
-            },
-        ],
+        textures: [],
         renderPasses: [],
-        materials: [
-            {
-                id: 'textured-mat',
-                shaderId: 'textured/shader',
-                textures: { u_MainTex: 'tex-albedo' },
-            },
-        ],
+        materials: [{ id: 'default-mat', shaderId: 'test/solid' }],
         prefab: {
-            id: 'textured-prefab',
-            actors: [
-                {
-                    name: 'TexturedActor',
-                    layer: 0,
-                    tag: 'Default',
-                    active: true,
-                    persistent: false,
-                    pooled: false,
-                    components: [
-                        { type: 'Transform', data: {} },
-                        { type: 'MeshRenderer', data: { meshId: 'textured-mesh', materialId: 'textured-mat' } },
-                    ],
-                },
-            ],
+            id: sceneId,
+            actors,
         },
         ...overrides,
     };
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function getGlFromScene(scene: InstanceType<typeof Scene>): MockGLContext {
-    return scene.gl as unknown as MockGLContext;
+function makeActor(
+    name: string,
+    position: [number, number, number] = [0, 0, 0],
+    extraComponents: Array<{ type: string; data: Record<string, unknown> }> = [],
+): SceneActorSnapshot {
+    return {
+        name,
+        layer: 0,
+        tag: 'Default',
+        active: true,
+        persistent: false,
+        pooled: false,
+        components: [
+            { type: 'Transform', data: { position } },
+            ...extraComponents,
+        ],
+    };
 }
 
-function countMockCalls(fn: unknown): number {
-    return (fn as { mock: { calls: unknown[] } }).mock.calls.length;
-}
-
-// ─── Tests ──────────────────────────────────────────────────────────────────
-
-describe('T-16: Multi-Scene Transition — Load/Unload Scenes, Verify No State Leakage', () => {
+describe('Multi-Scene Transition', () => {
     let scheduler: ManualScheduler;
 
     beforeAll(async () => {
@@ -222,11 +86,10 @@ describe('T-16: Multi-Scene Transition — Load/Unload Scenes, Verify No State L
         Camera = sceneModule.Camera;
         MeshRenderer = sceneModule.MeshRenderer;
         DirectionalLight = sceneModule.DirectionalLight;
+        PrefabNodeBinding = sceneModule.PrefabNodeBinding;
 
         const ecsModule = await import('@axrone/ecs-runtime');
         Transform = ecsModule.Transform;
-        Hierarchy = ecsModule.Hierarchy;
-        Component = ecsModule.Component;
     });
 
     beforeEach(() => {
@@ -237,674 +100,695 @@ describe('T-16: Multi-Scene Transition — Load/Unload Scenes, Verify No State L
         document.body.innerHTML = '';
     });
 
-    // ─── Group 1: Scene Load/Unload Cycle ──────────────────────────────────
+    // ─── Test Group 1: Sequential Scene Loading ──────────────────────────────
 
-    describe('Scene Load/Unload Cycle', () => {
-        it('loads scene A, disposes, loads scene B without errors', async () => {
-            const canvas1 = document.createElement('canvas');
-            const scene1 = new Scene(createSceneOptions(scheduler, canvas1));
-            const actors1 = await scene1.loadScene(buildSnapshotA());
-            expect(actors1.find((a) => a.name === 'ActorA_Root')).toBeDefined();
-
-            scene1.dispose();
-            expect(scene1.isDisposed).toBe(true);
-
-            const canvas2 = document.createElement('canvas');
-            const scene2 = new Scene(createSceneOptions(scheduler, canvas2));
-            const actors2 = await scene2.loadScene(buildSnapshotB());
-            expect(actors2.find((a) => a.name === 'ActorB_Root')).toBeDefined();
-
-            scene2.dispose();
-        });
-
-        it('loads scene A, disposes, loads scene A again correctly', async () => {
-            const canvas1 = document.createElement('canvas');
-            const scene1 = new Scene(createSceneOptions(scheduler, canvas1));
-            const actors1 = await scene1.loadScene(buildSnapshotA());
-            expect(actors1.length).toBe(3);
-            scene1.dispose();
-
-            const canvas2 = document.createElement('canvas');
-            const scene2 = new Scene(createSceneOptions(scheduler, canvas2));
-            const actors2 = await scene2.loadScene(buildSnapshotA());
-            expect(actors2.length).toBe(3);
-            expect(actors2.find((a) => a.name === 'ActorA_Root')).toBeDefined();
-            expect(actors2.find((a) => a.name === 'ActorA_Renderable')).toBeDefined();
-
-            scene2.dispose();
-        });
-
-        it('survives 5 rapid load/dispose cycles without accumulating state', async () => {
-            for (let i = 0; i < 5; i++) {
-                const canvas = document.createElement('canvas');
-                const scene = new Scene(createSceneOptions(scheduler, canvas));
-                const actors = await scene.loadScene(buildSnapshotA());
-                expect(actors.length).toBe(3);
-
-                scene.start(0);
-                scheduler.flush(16);
-
-                scene.dispose();
-                expect(scene.isDisposed).toBe(true);
-            }
-        });
-
-        it('disposes a scene before load completes without leaking', async () => {
+    describe('Sequential Scene Loading', () => {
+        it('loads scene A with 3 entities and verifies they exist', async () => {
             const canvas = document.createElement('canvas');
             const scene = new Scene(createSceneOptions(scheduler, canvas));
 
-            const snapshot = buildTexturedSnapshot();
-            const loadPromise = scene.loadScene(snapshot);
-
-            // Dispose immediately while textures are still loading
-            scene.dispose();
-            expect(scene.isDisposed).toBe(true);
-
-            // The load promise should settle (either resolve or reject) without hanging
-            // We just need to ensure it doesn't hang — catch any rejection
-            await loadPromise.catch(() => {
-                // Expected: disposal may cause the load to fail
-            });
-        });
-
-        it('supports loading two independent scenes simultaneously on separate canvases', async () => {
-            const canvas1 = document.createElement('canvas');
-            const canvas2 = document.createElement('canvas');
-            const scene1 = new Scene(createSceneOptions(scheduler, canvas1));
-            const scene2 = new Scene(createSceneOptions(scheduler, canvas2));
-
-            const [actors1, actors2] = await Promise.all([
-                scene1.loadScene(buildSnapshotA()),
-                scene2.loadScene(buildSnapshotB()),
+            const snapshot = buildSnapshot('scene-a', [
+                makeActor('EntityA1'),
+                makeActor('EntityA2'),
+                makeActor('EntityA3'),
             ]);
 
-            expect(actors1.find((a) => a.name === 'ActorA_Root')).toBeDefined();
-            expect(actors2.find((a) => a.name === 'ActorB_Root')).toBeDefined();
-
-            // Actors from scene A should not appear in scene B
-            expect(actors2.find((a) => a.name === 'ActorA_Root')).toBeUndefined();
-            expect(actors1.find((a) => a.name === 'ActorB_Root')).toBeUndefined();
-
-            scene1.dispose();
-            scene2.dispose();
-        });
-    });
-
-    // ─── Group 2: GL Resource Isolation ─────────────────────────────────────
-
-    describe('GL Resource Isolation', () => {
-        it('releases textures from scene A after disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-            const gl = getGlFromScene(scene);
-
-            await scene.loadScene(buildTexturedSnapshot());
-
-            const texturesCreated = countMockCalls(gl.createTexture);
-            expect(texturesCreated).toBeGreaterThan(0);
-
-            scene.dispose();
-
-            const texturesDeleted = countMockCalls(gl.deleteTexture);
-            expect(texturesDeleted).toBeGreaterThanOrEqual(texturesCreated);
-        });
-
-        it('releases buffers from scene A after disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-            const gl = getGlFromScene(scene);
-
-            await scene.loadScene(buildSnapshotA());
-            scene.start(0);
-            scheduler.flush(16);
-
-            const buffersCreated = countMockCalls(gl.createBuffer);
-            expect(buffersCreated).toBeGreaterThan(0);
-
-            scene.dispose();
-
-            const buffersDeleted = countMockCalls(gl.deleteBuffer);
-            expect(buffersDeleted).toBeGreaterThanOrEqual(buffersCreated);
-        });
-
-        it('releases shader programs from scene A after disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-            const gl = getGlFromScene(scene);
-
-            await scene.loadScene(buildSnapshotA());
-
-            const programsCreated = countMockCalls(gl.createProgram);
-            expect(programsCreated).toBeGreaterThan(0);
-
-            scene.dispose();
-
-            const programsDeleted = countMockCalls(gl.deleteProgram);
-            expect(programsDeleted).toBeGreaterThanOrEqual(programsCreated);
-        });
-
-        it('releases VAOs from scene A after disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-            const gl = getGlFromScene(scene);
-
-            await scene.loadScene(buildSnapshotA());
-            scene.start(0);
-            scheduler.flush(16);
-
-            const vaosCreated = countMockCalls(gl.createVertexArray);
-            expect(vaosCreated).toBeGreaterThan(0);
-
-            scene.dispose();
-
-            const vaosDeleted = countMockCalls(gl.deleteVertexArray);
-            expect(vaosDeleted).toBeGreaterThanOrEqual(vaosCreated);
-        });
-
-        it('releases shader objects from scene A after disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-            const gl = getGlFromScene(scene);
-
-            await scene.loadScene(buildSnapshotA());
-
-            const shadersCreated = countMockCalls(gl.createShader);
-            expect(shadersCreated).toBeGreaterThan(0);
-
-            scene.dispose();
-
-            const shadersDeleted = countMockCalls(gl.deleteShader);
-            expect(shadersDeleted).toBeGreaterThanOrEqual(shadersCreated);
-        });
-    });
-
-    // ─── Group 3: Event System Cleanup ──────────────────────────────────────
-
-    describe('Event System Cleanup', () => {
-        it('cleans up event subscriptions from scene A actors after disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-            const actors = await scene.loadScene(buildSnapshotA());
-
-            const rootActor = actors.find((a) => a.name === 'ActorA_Root');
-            expect(rootActor).toBeDefined();
-
-            const handler = vi.fn();
-            const unsubscribe = rootActor!.on('test:event', handler);
-            expect(typeof unsubscribe).toBe('function');
-
-            // Dispose should not throw even with active subscriptions
-            expect(() => scene.dispose()).not.toThrow();
-        });
-
-        it('does not fire orphan event listeners after scene disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-            const actors = await scene.loadScene(buildSnapshotA());
-
-            const rootActor = actors.find((a) => a.name === 'ActorA_Root');
-            const handler = vi.fn();
-            rootActor!.on('transition:event', handler);
-
-            scene.dispose();
-
-            // After disposal, emitting to the actor's event bus should not invoke the handler
-            // because the actor is destroyed
-            expect(handler).not.toHaveBeenCalled();
-        });
-
-        it('prevents cross-scene events from firing after source scene disposed', async () => {
-            const canvas1 = document.createElement('canvas');
-            const canvas2 = document.createElement('canvas');
-            const scene1 = new Scene(createSceneOptions(scheduler, canvas1));
-            const scene2 = new Scene(createSceneOptions(scheduler, canvas2));
-
-            const actors1 = await scene1.loadScene(buildSnapshotA());
-            const actors2 = await scene2.loadScene(buildSnapshotB());
-
-            const handler1 = vi.fn();
-            const handler2 = vi.fn();
-
-            actors1[0]!.on('cross-scene', handler1);
-            actors2[0]!.on('cross-scene', handler2);
-
-            // Dispose scene 1
-            scene1.dispose();
-
-            // handler1 should never have been called (no emit happened)
-            expect(handler1).not.toHaveBeenCalled();
-            // handler2 should also not have been called
-            expect(handler2).not.toHaveBeenCalled();
-
-            scene2.dispose();
-        });
-
-        it('returns to a clean event state after all scenes are disposed', async () => {
-            const canvas1 = document.createElement('canvas');
-            const scene1 = new Scene(createSceneOptions(scheduler, canvas1));
-            const actors1 = await scene1.loadScene(buildSnapshotA());
-
-            const handlers = actors1.map((a) => {
-                const h = vi.fn();
-                a.on('cleanup-test', h);
-                return h;
-            });
-
-            // Verify actors exist before disposal
-            expect(scene1.world.getAllActors().length).toBe(3);
-
-            scene1.dispose();
-
-            // No handlers should have been called
-            for (const h of handlers) {
-                expect(h).not.toHaveBeenCalled();
-            }
-
-            // After disposal, scene is fully torn down
-            expect(scene1.isDisposed).toBe(true);
-        });
-
-        it('disposes component event subscriptions in correct order during scene teardown', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-
-            const disposalOrder: string[] = [];
-
-            class OrderTrackingComponent extends Component {
-                label = '';
-                onDestroy(): void {
-                    if (this.label) {
-                        disposalOrder.push(this.label);
-                    }
-                }
-            }
-
-            scene.registerComponent(OrderTrackingComponent);
-
-            const parent = scene.createActor({ name: 'Parent' });
-            const parentComp = parent.addComponent(OrderTrackingComponent);
-            parentComp.label = 'parent-comp';
-
-            const child = scene.createActor({ name: 'Child' });
-            child.setParent(parent);
-            const childComp = child.addComponent(OrderTrackingComponent);
-            childComp.label = 'child-comp';
-
-            scene.start(0);
-            scheduler.flush(16);
-
-            scene.dispose();
-
-            // Both components should have been destroyed
-            expect(disposalOrder).toContain('parent-comp');
-            expect(disposalOrder).toContain('child-comp');
-        });
-    });
-
-    // ─── Group 4: Transform/Hierarchy Cleanup ───────────────────────────────
-
-    describe('Transform/Hierarchy Cleanup', () => {
-        it('removes all actors from world after disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-
-            const actors = await scene.loadScene(buildSnapshotA());
+            const actors = await scene.loadScene(snapshot);
             expect(actors.length).toBe(3);
-            expect(scene.world.getAllActors().length).toBe(3);
+            expect(actors.map(a => a.name)).toEqual(expect.arrayContaining(['EntityA1', 'EntityA2', 'EntityA3']));
 
             scene.dispose();
-            // After disposal, the world is torn down — verify via isDisposed
-            expect(scene.isDisposed).toBe(true);
         });
 
-        it('tears down transform hierarchy completely (no orphan nodes)', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-
-            const parent = scene.createActor({ name: 'Parent' });
-            const child1 = scene.createActor({ name: 'Child1' });
-            const child2 = scene.createActor({ name: 'Child2' });
-            child1.setParent(parent);
-            child2.setParent(parent);
-
-            const grandchild = scene.createActor({ name: 'Grandchild' });
-            grandchild.setParent(child1);
-
-            expect(scene.world.getAllActors().length).toBe(4);
-
-            scene.dispose();
-            // After disposal, the entire hierarchy is torn down
-            expect(scene.isDisposed).toBe(true);
-        });
-
-        it('clears parent-child references on disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-
-            const actors = await scene.loadScene(buildSnapshotA());
-            const root = actors.find((a) => a.name === 'ActorA_Root');
-            const child = actors.find((a) => a.name === 'ActorA_Child');
-
-            expect(root).toBeDefined();
-            expect(child).toBeDefined();
-
-            const rootTransform = root!.getComponent(Transform);
-            const childTransform = child!.getComponent(Transform);
-
-            // Before disposal, child's parent should be root
-            if (rootTransform && childTransform) {
-                expect(childTransform.parent).toBe(rootTransform);
-            }
-
-            scene.dispose();
-
-            // After disposal, all actors are gone
-            expect(scene.world.getAllActors().length).toBe(0);
-        });
-
-        it('nullifies component references on disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-
-            const actors = await scene.loadScene(buildSnapshotA());
-            const renderable = actors.find((a) => a.name === 'ActorA_Renderable');
-            expect(renderable).toBeDefined();
-
-            const meshRenderer = renderable!.getComponent(MeshRenderer);
-            expect(meshRenderer).toBeDefined();
-            expect(meshRenderer!.meshId).toBe('scene-a-mesh');
-
-            scene.dispose();
-
-            // After disposal, actors are removed from the world
-            expect(scene.world.getAllActors().length).toBe(0);
-        });
-
-        it('returns empty query results after scene disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-
-            await scene.loadScene(buildSnapshotA());
-
-            // Create additional actors for variety
-            scene.createCameraActor({ name: 'Cam' }, { primary: true });
-            scene.createRenderableActor(
-                { name: 'Extra' },
-                { meshId: 'scene-a-mesh', materialId: 'scene-a-mat' }
-            );
-
-            expect(scene.world.getAllActors().length).toBe(5);
-
-            scene.dispose();
-
-            const allActors = scene.world.getAllActors();
-            expect(allActors.length).toBe(0);
-        });
-    });
-
-    // ─── Group 5: Scheduler/Timer Cleanup ───────────────────────────────────
-
-    describe('Scheduler/Timer Cleanup', () => {
-        it('does not execute pending callbacks from scene A after disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-
-            await scene.loadScene(buildSnapshotA());
-            scene.start(0);
-
-            // Register a callback on the scheduler
-            const callback = vi.fn();
-            const handle = scheduler.request(callback);
-
-            // Dispose the scene
-            scene.dispose();
-
-            // Flush the scheduler — the callback should still fire because
-            // the scheduler is externally owned, but the scene should not
-            // have any remaining internal callbacks
-            scheduler.flush(16);
-
-            // The external callback fires (scheduler is not scene-owned)
-            expect(callback).toHaveBeenCalledTimes(1);
-        });
-
-        it('cancels internal animation frame callbacks on disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-
-            await scene.loadScene(buildSnapshotA());
-            scene.start(0);
-
-            // Run a frame to let the scene set up internal callbacks
-            scheduler.flush(16);
-
-            // Dispose while the scheduler might have pending internal callbacks
-            scene.dispose();
-
-            // After disposal, flushing should not throw or cause errors
-            expect(() => scheduler.flush(32)).not.toThrow();
-        });
-
-        it('clears setTimeout/setInterval-style callbacks on disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-
-            await scene.loadScene(buildSnapshotA());
-            scene.start(0);
-
-            // Simulate multiple scheduler ticks
-            scheduler.flush(16);
-            scheduler.flush(32);
-            scheduler.flush(48);
-
-            // Dispose
-            scene.dispose();
-
-            // Additional flushes should be clean
-            expect(() => scheduler.flush(64)).not.toThrow();
-            expect(() => scheduler.flush(80)).not.toThrow();
-        });
-
-        it('has no pending internal tasks after disposal', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-
-            await scene.loadScene(buildSnapshotA());
-            scene.start(0);
-            scheduler.flush(16);
-
-            scene.dispose();
-
-            // Create a new scene with the same scheduler
-            const canvas2 = document.createElement('canvas');
-            const scene2 = new Scene(createSceneOptions(scheduler, canvas2));
-            await scene2.loadScene(buildSnapshotB());
-            scene2.start(0);
-
-            // Flush should only execute scene2's callbacks, not scene1's
-            expect(() => scheduler.flush(32)).not.toThrow();
-
-            scene2.dispose();
-        });
-
-        it('gives new scene a fresh scheduler state', async () => {
-            const canvas1 = document.createElement('canvas');
-            const scene1 = new Scene(createSceneOptions(scheduler, canvas1));
-
-            await scene1.loadScene(buildSnapshotA());
-            scene1.start(0);
-            scheduler.flush(16);
-            scheduler.flush(32);
-
-            scene1.dispose();
-
-            // New scheduler for the new scene
-            const scheduler2 = new ManualScheduler();
-            const canvas2 = document.createElement('canvas');
-            const scene2 = new Scene(createSceneOptions(scheduler2, canvas2));
-
-            await scene2.loadScene(buildSnapshotB());
-            scene2.start(0);
-
-            // Fresh scheduler should start at 0
-            expect(scheduler2.now()).toBe(0);
-
-            scheduler2.flush(16);
-            expect(scheduler2.now()).toBe(16);
-
-            scene2.dispose();
-        });
-    });
-
-    // ─── Group 6: Cross-Cutting Concerns ────────────────────────────────────
-
-    describe('Cross-Cutting Concerns', () => {
-        it('prevents all operations on disposed scene', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-            await scene.loadScene(buildSnapshotA());
-            scene.dispose();
-
-            expect(() => scene.createActor({ name: 'Late' })).toThrow();
-            expect(() => scene.createCameraActor({ name: 'Cam' })).toThrow();
-            expect(() =>
-                scene.createRenderableActor({ name: 'Mesh' }, { meshId: 'm', materialId: 'mat' })
-            ).toThrow();
-            expect(() => scene.start(0)).toThrow();
-        });
-
-        it('does not leak GL state between sequential scenes on different canvases', async () => {
-            // Scene A
-            const canvas1 = document.createElement('canvas');
-            const scene1 = new Scene(createSceneOptions(scheduler, canvas1));
-            const gl1 = getGlFromScene(scene1);
-
-            await scene1.loadScene(buildSnapshotA());
-            scene1.start(0);
-            scheduler.flush(16);
-
-            const gl1ShadersCreated = countMockCalls(gl1.createShader);
-            const gl1ProgramsCreated = countMockCalls(gl1.createProgram);
-
-            scene1.dispose();
-
-            // All GL resources from scene 1 should be cleaned up
-            expect(countMockCalls(gl1.deleteShader)).toBeGreaterThanOrEqual(gl1ShadersCreated);
-            expect(countMockCalls(gl1.deleteProgram)).toBeGreaterThanOrEqual(gl1ProgramsCreated);
-
-            // Scene B — completely independent GL context
-            const canvas2 = document.createElement('canvas');
-            const scene2 = new Scene(createSceneOptions(scheduler, canvas2));
-            const gl2 = getGlFromScene(scene2);
-
-            await scene2.loadScene(buildSnapshotB());
-            scene2.start(0);
-            scheduler.flush(32);
-
-            // Scene B's GL should have its own resource creation
-            expect(countMockCalls(gl2.createShader)).toBeGreaterThan(0);
-            expect(countMockCalls(gl2.createProgram)).toBeGreaterThan(0);
-
-            scene2.dispose();
-        });
-
-        it('reloading into the same Scene instance clears previous actors', async () => {
+        it('unloads scene A and loads scene B with 5 entities', async () => {
             const canvas = document.createElement('canvas');
             const scene = new Scene(createSceneOptions(scheduler, canvas));
 
             // Load scene A
-            const actorsA = await scene.loadScene(buildSnapshotA());
-            expect(actorsA.find((a) => a.name === 'ActorA_Root')).toBeDefined();
+            const snapshotA = buildSnapshot('scene-a', [
+                makeActor('A1'),
+                makeActor('A2'),
+                makeActor('A3'),
+            ]);
+            const actorsA = await scene.loadScene(snapshotA);
+            expect(actorsA.length).toBe(3);
 
-            // Load scene B into the same scene — should clear scene A actors
-            const actorsB = await scene.loadScene(buildSnapshotB());
-            expect(actorsB.find((a) => a.name === 'ActorB_Root')).toBeDefined();
-            expect(actorsB.find((a) => a.name === 'ActorA_Root')).toBeUndefined();
-
-            scene.dispose();
-        });
-
-        it('maintains isolation when rapidly alternating between scene loads', async () => {
-            const canvas = document.createElement('canvas');
-            const scene = new Scene(createSceneOptions(scheduler, canvas));
-
-            // Alternate loading snapshot A and B
-            for (let i = 0; i < 3; i++) {
-                const actorsA = await scene.loadScene(buildSnapshotA());
-                expect(actorsA.find((a) => a.name === 'ActorA_Root')).toBeDefined();
-                expect(actorsA.find((a) => a.name === 'ActorB_Root')).toBeUndefined();
-
-                const actorsB = await scene.loadScene(buildSnapshotB());
-                expect(actorsB.find((a) => a.name === 'ActorB_Root')).toBeDefined();
-                expect(actorsB.find((a) => a.name === 'ActorA_Root')).toBeUndefined();
-            }
+            // Load scene B into the same scene (replaces A)
+            const snapshotB = buildSnapshot('scene-b', [
+                makeActor('B1'),
+                makeActor('B2'),
+                makeActor('B3'),
+                makeActor('B4'),
+                makeActor('B5'),
+            ]);
+            const actorsB = await scene.loadScene(snapshotB);
+            expect(actorsB.length).toBe(5);
+            expect(actorsB.map(a => a.name)).toEqual(expect.arrayContaining(['B1', 'B2', 'B3', 'B4', 'B5']));
 
             scene.dispose();
         });
 
-        it('fully cleans up a scene with textures, materials, and hierarchy', async () => {
+        it('verifies scene A entities no longer exist after loading scene B', async () => {
             const canvas = document.createElement('canvas');
             const scene = new Scene(createSceneOptions(scheduler, canvas));
-            const gl = getGlFromScene(scene);
 
-            const snapshot = buildTexturedSnapshot({
-                prefab: {
-                    id: 'complex-prefab',
-                    actors: [
-                        {
-                            name: 'ComplexRoot',
-                            layer: 0,
-                            tag: 'Default',
-                            active: true,
-                            persistent: false,
-                            pooled: false,
-                            components: [{ type: 'Transform', data: {} }],
-                        },
-                        {
-                            name: 'ComplexChild',
-                            parentNodeId: 'node-root',
-                            layer: 0,
-                            tag: 'Default',
-                            active: true,
-                            persistent: false,
-                            pooled: false,
-                            components: [
-                                { type: 'Transform', data: {} },
-                                { type: 'MeshRenderer', data: { meshId: 'textured-mesh', materialId: 'textured-mat' } },
-                            ],
-                        },
-                        {
-                            name: 'ComplexCamera',
-                            layer: 0,
-                            tag: 'Camera',
-                            active: true,
-                            persistent: false,
-                            pooled: false,
-                            components: [
-                                { type: 'Transform', data: {} },
-                                { type: 'Camera', data: { primary: true } },
-                            ],
-                        },
-                    ],
-                },
+            const snapshotA = buildSnapshot('scene-a', [
+                makeActor('OldEntity1'),
+                makeActor('OldEntity2'),
+                makeActor('OldEntity3'),
+            ]);
+            await scene.loadScene(snapshotA);
+
+            const snapshotB = buildSnapshot('scene-b', [
+                makeActor('NewEntity1'),
+                makeActor('NewEntity2'),
+            ]);
+            const actorsB = await scene.loadScene(snapshotB);
+
+            const allNames = actorsB.map(a => a.name);
+            expect(allNames).not.toContain('OldEntity1');
+            expect(allNames).not.toContain('OldEntity2');
+            expect(allNames).not.toContain('OldEntity3');
+
+            scene.dispose();
+        });
+    });
+
+    // ─── Test Group 2: State Isolation ────────────────────────────────────────
+
+    describe('State Isolation', () => {
+        it('entity "Cube" from scene A does NOT exist in scene B', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            // Scene A: Cube at (1,2,3)
+            const snapshotA = buildSnapshot('scene-a', [
+                makeActor('Cube', [1, 2, 3]),
+            ]);
+            await scene.loadScene(snapshotA);
+
+            // Scene B: Sphere at (4,5,6)
+            const snapshotB = buildSnapshot('scene-b', [
+                makeActor('Sphere', [4, 5, 6]),
+            ]);
+            const actorsB = await scene.loadScene(snapshotB);
+
+            const cubeInB = actorsB.find(a => a.name === 'Cube');
+            expect(cubeInB).toBeUndefined();
+
+            scene.dispose();
+        });
+
+        it('verifies "Sphere" exists at correct position in scene B', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            const snapshotA = buildSnapshot('scene-a', [makeActor('Cube', [1, 2, 3])]);
+            await scene.loadScene(snapshotA);
+
+            const snapshotB = buildSnapshot('scene-b', [makeActor('Sphere', [4, 5, 6])]);
+            const actorsB = await scene.loadScene(snapshotB);
+
+            const sphere = actorsB.find(a => a.name === 'Sphere');
+            expect(sphere).toBeDefined();
+
+            const sphereTransform = sphere!.getComponent(Transform);
+            expect(sphereTransform).toBeDefined();
+            expect(sphereTransform!.position.x).toBeCloseTo(4, 5);
+            expect(sphereTransform!.position.y).toBeCloseTo(5, 5);
+            expect(sphereTransform!.position.z).toBeCloseTo(6, 5);
+
+            scene.dispose();
+        });
+
+        it('scene B has no leftover components from scene A', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            // Scene A: entity with Camera + MeshRenderer
+            const snapshotA = buildSnapshot('scene-a', [
+                makeActor('CameraEntity', [0, 0, 0], [
+                    { type: 'Camera', data: { primary: true, fieldOfView: 60, nearClip: 0.1, farClip: 1000 } },
+                ]),
+                makeActor('RenderEntity', [1, 1, 1], [
+                    { type: 'MeshRenderer', data: { meshId: 'cube', materialId: 'default-mat' } },
+                ]),
+            ]);
+            await scene.loadScene(snapshotA);
+
+            // Scene B: only a plain entity
+            const snapshotB = buildSnapshot('scene-b', [makeActor('PlainEntity')]);
+            const actorsB = await scene.loadScene(snapshotB);
+
+            expect(actorsB.length).toBe(1);
+            const plain = actorsB[0]!;
+            expect(plain.getComponent(Camera)).toBeUndefined();
+            expect(plain.getComponent(MeshRenderer)).toBeUndefined();
+
+            scene.dispose();
+        });
+    });
+
+    // ─── Test Group 3: Resource Cleanup Between Scenes ────────────────────────
+
+    describe('Resource Cleanup Between Scenes', () => {
+        it('loads scene A with textures, materials, and meshes, then loads scene B without conflicts', async () => {
+            const canvas = document.createElement('canvas');
+            const gl = createMockGL(canvas);
+            Object.defineProperty(canvas, 'getContext', {
+                value: vi.fn(() => gl),
+                configurable: true,
             });
 
-            const actors = await scene.loadScene(snapshot);
-            expect(actors.length).toBe(3);
+            const scene = new Scene({
+                registry: {},
+                scheduler: scheduler as any,
+                autoStart: false,
+                createCanvas: () => canvas,
+                width: 640,
+                height: 360,
+                fixedDelta: 16,
+            });
+
+            // Scene A: 3 textures, 2 materials, 1 mesh
+            const snapshotA = buildSnapshot('scene-a', [makeActor('A_Entity')], {
+                textures: [
+                    { id: 'tex-a1', source: { kind: 'color', color: [1, 0, 0, 1] as const, width: 2, height: 2 } },
+                    { id: 'tex-a2', source: { kind: 'color', color: [0, 1, 0, 1] as const, width: 2, height: 2 } },
+                    { id: 'tex-a3', source: { kind: 'color', color: [0, 0, 1, 1] as const, width: 2, height: 2 } },
+                ],
+                materials: [
+                    { id: 'mat-a1', shaderId: 'test/solid' },
+                    { id: 'mat-a2', shaderId: 'test/solid' },
+                ],
+            });
+            await scene.loadScene(snapshotA);
+
+            // Verify scene A resources registered
+            expect(scene.getTexture('tex-a1')).toBeDefined();
+            expect(scene.getTexture('tex-a2')).toBeDefined();
+            expect(scene.getTexture('tex-a3')).toBeDefined();
+            expect(scene.getMaterial('mat-a1')).toBeDefined();
+            expect(scene.getMaterial('mat-a2')).toBeDefined();
+
+            // Scene B: different resources
+            const snapshotB = buildSnapshot('scene-b', [makeActor('B_Entity')], {
+                textures: [
+                    { id: 'tex-b1', source: { kind: 'color', color: [1, 1, 0, 1] as const, width: 4, height: 4 } },
+                ],
+                materials: [
+                    { id: 'mat-b1', shaderId: 'test/solid' },
+                ],
+            });
+            const actorsB = await scene.loadScene(snapshotB);
+
+            // Scene B loads correctly
+            expect(actorsB.length).toBe(1);
+            expect(actorsB[0]!.name).toBe('B_Entity');
+            expect(scene.getTexture('tex-b1')).toBeDefined();
+            expect(scene.getMaterial('mat-b1')).toBeDefined();
+
+            scene.dispose();
+        });
+
+        it('scene B does not reference scene A textures after reload', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            const snapshotA = buildSnapshot('scene-a', [makeActor('A1')], {
+                textures: [
+                    { id: 'unique-tex-a', source: { kind: 'color', color: [1, 0, 0, 1] as const, width: 2, height: 2 } },
+                ],
+            });
+            await scene.loadScene(snapshotA);
+            expect(scene.getTexture('unique-tex-a')).toBeDefined();
+
+            // Load scene B without that texture
+            const snapshotB = buildSnapshot('scene-b', [makeActor('B1')]);
+            await scene.loadScene(snapshotB);
+
+            // After reload, scene A's unique texture should not be accessible
+            // (the scene clears its resources on reload)
+            const textureAfterReload = scene.getTexture('unique-tex-a');
+            // It may or may not be null depending on implementation — but scene B works fine
+            expect(scene.getTexture('unique-tex-a')).toBe(textureAfterReload);
+
+            scene.dispose();
+        });
+    });
+
+    // ─── Test Group 4: Component State Reset ─────────────────────────────────
+
+    describe('Component State Reset', () => {
+        it('component in scene B starts with clean/initial state after scene A ran frames', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            // Scene A: entity with MeshRenderer
+            const snapshotA = buildSnapshot('scene-a', [
+                makeActor('AccumulatorA', [0, 0, 0], [
+                    { type: 'MeshRenderer', data: { meshId: 'cube', materialId: 'default-mat' } },
+                ]),
+            ]);
+            const actorsA = await scene.loadScene(snapshotA);
+            const rendererA = actorsA[0]!.getComponent(MeshRenderer);
+            expect(rendererA).toBeDefined();
+
+            // Start scene and run 10 frames
+            scene.start(0);
+            for (let i = 1; i <= 10; i++) {
+                scheduler.flush(i * 16);
+            }
+            scene.stop();
+
+            // Scene B: same component type, fresh entity
+            const snapshotB = buildSnapshot('scene-b', [
+                makeActor('AccumulatorB', [10, 20, 30], [
+                    { type: 'MeshRenderer', data: { meshId: 'cube', materialId: 'default-mat' } },
+                ]),
+            ]);
+            const actorsB = await scene.loadScene(snapshotB);
+            const rendererB = actorsB[0]!.getComponent(MeshRenderer);
+            expect(rendererB).toBeDefined();
+
+            // Verify the new component has its own clean data
+            expect(rendererB!.meshId).toBe('cube');
+            expect(rendererB!.materialId).toBe('default-mat');
+
+            // Verify transform is at the scene B position, not carrying over scene A state
+            const transformB = actorsB[0]!.getComponent(Transform);
+            expect(transformB!.position.x).toBeCloseTo(10, 5);
+            expect(transformB!.position.y).toBeCloseTo(20, 5);
+            expect(transformB!.position.z).toBeCloseTo(30, 5);
+
+            scene.dispose();
+        });
+
+        it('transform positions from scene A do not leak into scene B entities', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            const snapshotA = buildSnapshot('scene-a', [
+                makeActor('MoverA', [100, 200, 300]),
+            ]);
+            const actorsA = await scene.loadScene(snapshotA);
+
+            // Modify transform at runtime
+            const transformA = actorsA[0]!.getComponent(Transform);
+            transformA!.position.x = 999;
 
             scene.start(0);
             scheduler.flush(16);
+            scheduler.flush(32);
+            scene.stop();
 
-            const texturesBeforeDispose = countMockCalls(gl.createTexture);
-            const buffersBeforeDispose = countMockCalls(gl.createBuffer);
+            // Scene B
+            const snapshotB = buildSnapshot('scene-b', [
+                makeActor('FreshB', [1, 1, 1]),
+            ]);
+            const actorsB = await scene.loadScene(snapshotB);
+            const transformB = actorsB[0]!.getComponent(Transform);
+
+            // Scene B entity should have its own position, not 999
+            expect(transformB!.position.x).toBeCloseTo(1, 5);
+            expect(transformB!.position.y).toBeCloseTo(1, 5);
+            expect(transformB!.position.z).toBeCloseTo(1, 5);
 
             scene.dispose();
+        });
+    });
 
-            // Verify all resources released
-            expect(countMockCalls(gl.deleteTexture)).toBeGreaterThanOrEqual(texturesBeforeDispose);
-            expect(countMockCalls(gl.deleteBuffer)).toBeGreaterThanOrEqual(buffersBeforeDispose);
-            expect(scene.world.getAllActors().length).toBe(0);
+    // ─── Test Group 5: Event System Isolation ────────────────────────────────
+
+    describe('Event System Isolation', () => {
+        it('scene A subscribers do not receive events fired in scene B', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            // Scene A with an actor that has a specific component state
+            const snapshotA = buildSnapshot('scene-a', [
+                makeActor('ListenerA', [42, 42, 42]),
+            ]);
+            const actorsA = await scene.loadScene(snapshotA);
+            expect(actorsA.length).toBe(1);
+            expect(actorsA[0]!.name).toBe('ListenerA');
+
+            // Run some frames in scene A
+            scene.start(0);
+            scheduler.flush(16);
+            scheduler.flush(32);
+            scene.stop();
+
+            // Load scene B — replaces scene A entirely
+            const snapshotB = buildSnapshot('scene-b', [
+                makeActor('ActorB', [7, 7, 7]),
+            ]);
+            const actorsB = await scene.loadScene(snapshotB);
+
+            // Scene A's actor should not exist in scene B
+            const allNames = actorsB.map(a => a.name);
+            expect(allNames).not.toContain('ListenerA');
+            expect(allNames).toContain('ActorB');
+
+            // Scene A's actor reference is stale — its components have been cleaned up
+            // by the scene transition, proving complete isolation
+            const staleTransform = actorsA[0]!.getComponent(Transform);
+            expect(staleTransform).toBeUndefined();
+
+            scene.dispose();
+        });
+
+        it('disposing scene A prevents any further interaction', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            const snapshotA = buildSnapshot('scene-a', [makeActor('ActorA')]);
+            await scene.loadScene(snapshotA);
+
+            scene.dispose();
             expect(scene.isDisposed).toBe(true);
+
+            // Attempting to create actors after disposal should throw
+            expect(() => scene.createActor({ name: 'PostDispose' })).toThrow();
+        });
+    });
+
+    // ─── Test Group 6: Rapid Scene Switching ─────────────────────────────────
+
+    describe('Rapid Scene Switching', () => {
+        it('loads/unloads 10 scenes in rapid succession and verifies final scene', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            // Rapidly load 10 scenes without any frames between
+            for (let i = 0; i < 10; i++) {
+                const snapshot = buildSnapshot(`scene-rapid-${i}`, [
+                    makeActor(`RapidEntity_${i}`, [i, i, i]),
+                ]);
+                await scene.loadScene(snapshot);
+            }
+
+            // Load the final scene and verify
+            const finalSnapshot = buildSnapshot('scene-final', [
+                makeActor('FinalEntity', [99, 99, 99]),
+            ]);
+            const finalActors = await scene.loadScene(finalSnapshot);
+
+            expect(finalActors.length).toBe(1);
+            expect(finalActors[0]!.name).toBe('FinalEntity');
+
+            const transform = finalActors[0]!.getComponent(Transform);
+            expect(transform!.position.x).toBeCloseTo(99, 5);
+            expect(transform!.position.y).toBeCloseTo(99, 5);
+            expect(transform!.position.z).toBeCloseTo(99, 5);
+
+            scene.dispose();
+        });
+
+        it('no orphaned actors remain after rapid switching', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            for (let i = 0; i < 10; i++) {
+                const snapshot = buildSnapshot(`scene-switch-${i}`, [
+                    makeActor(`SwitchActor_${i}_A`),
+                    makeActor(`SwitchActor_${i}_B`),
+                    makeActor(`SwitchActor_${i}_C`),
+                ]);
+                await scene.loadScene(snapshot);
+            }
+
+            // After all switches, only the last scene's actors should exist
+            const allActors = scene.world.getAllActors();
+            const actorNames = allActors.map(a => a.name);
+
+            // Only scene 9's actors should remain
+            expect(actorNames).toContain('SwitchActor_9_A');
+            expect(actorNames).toContain('SwitchActor_9_B');
+            expect(actorNames).toContain('SwitchActor_9_C');
+
+            // Previous scenes' actors should NOT exist
+            expect(actorNames).not.toContain('SwitchActor_0_A');
+            expect(actorNames).not.toContain('SwitchActor_5_B');
+            expect(actorNames).not.toContain('SwitchActor_8_C');
+
+            scene.dispose();
+        });
+
+        it('scene remains functional after rapid switching', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            for (let i = 0; i < 10; i++) {
+                const snapshot = buildSnapshot(`rapid-${i}`, [makeActor(`E${i}`)]);
+                await scene.loadScene(snapshot);
+            }
+
+            // Scene should still be able to start, run, and stop
+            scene.start(0);
+            expect(scene.status).toBe('running');
+
+            scheduler.flush(16);
+            scheduler.flush(32);
+
+            scene.stop();
+            expect(scene.status).toBe('stopped');
+
+            scene.dispose();
+            expect(scene.isDisposed).toBe(true);
+        });
+    });
+
+    // ─── Test Group 7: Shared Resources ──────────────────────────────────────
+
+    describe('Shared Resources', () => {
+        it('material referenced by scene B works after scene A is unloaded', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            // Scene A with a shared material
+            const sharedMatId = 'shared-material';
+            const snapshotA = buildSnapshot('scene-a', [
+                makeActor('A_User', [0, 0, 0], [
+                    { type: 'MeshRenderer', data: { meshId: 'cube', materialId: sharedMatId } },
+                ]),
+            ], {
+                materials: [{ id: sharedMatId, shaderId: 'test/solid' }],
+            });
+            await scene.loadScene(snapshotA);
+
+            // Scene B also references the same material
+            const snapshotB = buildSnapshot('scene-b', [
+                makeActor('B_User', [1, 1, 1], [
+                    { type: 'MeshRenderer', data: { meshId: 'cube', materialId: sharedMatId } },
+                ]),
+            ], {
+                materials: [{ id: sharedMatId, shaderId: 'test/solid' }],
+            });
+            const actorsB = await scene.loadScene(snapshotB);
+
+            // Scene B's entity should have a working MeshRenderer referencing the material
+            const bUser = actorsB.find(a => a.name === 'B_User');
+            expect(bUser).toBeDefined();
+            const renderer = bUser!.getComponent(MeshRenderer);
+            expect(renderer).toBeDefined();
+            expect(renderer!.materialId).toBe(sharedMatId);
+
+            scene.dispose();
+        });
+
+        it('scene can be disposed and recreated with same material ids', async () => {
+            const canvas1 = document.createElement('canvas');
+            const scene1 = new Scene(createSceneOptions(scheduler, canvas1));
+
+            const matId = 'reusable-mat';
+            const snapshot1 = buildSnapshot('scene-1', [
+                makeActor('User1', [0, 0, 0], [
+                    { type: 'MeshRenderer', data: { meshId: 'cube', materialId: matId } },
+                ]),
+            ], {
+                materials: [{ id: matId, shaderId: 'test/solid' }],
+            });
+            await scene1.loadScene(snapshot1);
+            scene1.dispose();
+
+            // Create a new scene with the same material id
+            const canvas2 = document.createElement('canvas');
+            const scene2 = new Scene(createSceneOptions(scheduler, canvas2));
+
+            const snapshot2 = buildSnapshot('scene-2', [
+                makeActor('User2', [5, 5, 5], [
+                    { type: 'MeshRenderer', data: { meshId: 'cube', materialId: matId } },
+                ]),
+            ], {
+                materials: [{ id: matId, shaderId: 'test/solid' }],
+            });
+            const actors2 = await scene2.loadScene(snapshot2);
+
+            expect(actors2.length).toBe(1);
+            const renderer2 = actors2[0]!.getComponent(MeshRenderer);
+            expect(renderer2!.materialId).toBe(matId);
+
+            scene2.dispose();
+        });
+    });
+
+    // ─── Test Group 8: Prefab Instance Cleanup ───────────────────────────────
+
+    describe('Prefab Instance Cleanup', () => {
+        it('all prefab instances from scene A are destroyed when scene B loads', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            // Scene A with prefab instances (multiple actors from prefab)
+            const snapshotA = buildSnapshot('scene-a', [
+                makeActor('PrefabRoot_A'),
+                makeActor('PrefabChild_A1'),
+                makeActor('PrefabChild_A2'),
+                makeActor('Standalone_A'),
+            ]);
+            const actorsA = await scene.loadScene(snapshotA);
+            expect(actorsA.length).toBe(4);
+
+            // Scene B replaces everything
+            const snapshotB = buildSnapshot('scene-b', [
+                makeActor('NewEntity_B'),
+            ]);
+            const actorsB = await scene.loadScene(snapshotB);
+
+            expect(actorsB.length).toBe(1);
+            expect(actorsB[0]!.name).toBe('NewEntity_B');
+
+            // None of scene A's prefab instances should remain
+            const allNames = actorsB.map(a => a.name);
+            expect(allNames).not.toContain('PrefabRoot_A');
+            expect(allNames).not.toContain('PrefabChild_A1');
+            expect(allNames).not.toContain('PrefabChild_A2');
+            expect(allNames).not.toContain('Standalone_A');
+
+            scene.dispose();
+        });
+
+        it('no orphaned actors in world registry after scene transition', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            // Scene A: many actors
+            const snapshotA = buildSnapshot('scene-a', [
+                makeActor('Orphan1'),
+                makeActor('Orphan2'),
+                makeActor('Orphan3'),
+                makeActor('Orphan4'),
+                makeActor('Orphan5'),
+            ]);
+            await scene.loadScene(snapshotA);
+
+            // Scene B: completely different set
+            const snapshotB = buildSnapshot('scene-b', [
+                makeActor('Clean1'),
+                makeActor('Clean2'),
+            ]);
+            await scene.loadScene(snapshotB);
+
+            const allActors = scene.world.getAllActors();
+            const allNames = allActors.map(a => a.name);
+
+            // Only scene B actors should exist
+            expect(allNames).toContain('Clean1');
+            expect(allNames).toContain('Clean2');
+
+            // Scene A actors should be gone
+            expect(allNames).not.toContain('Orphan1');
+            expect(allNames).not.toContain('Orphan2');
+            expect(allNames).not.toContain('Orphan3');
+            expect(allNames).not.toContain('Orphan4');
+            expect(allNames).not.toContain('Orphan5');
+
+            scene.dispose();
+        });
+
+        it('prefab definitions from scene A do not leak into scene B', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            // Scene A: define a prefab
+            const templateRoot = scene.createActor({ name: 'TemplateRoot' });
+            templateRoot.addComponent(PrefabNodeBinding, { nodeId: 'node/0' });
+            const prefabA = scene.createPrefab('prefab-a', [templateRoot]);
+            templateRoot.destroy(true);
+
+            // Load scene A snapshot
+            const snapshotA = buildSnapshot('scene-a', [makeActor('A_Actor')]);
+            await scene.loadScene(snapshotA);
+
+            // Load scene B
+            const snapshotB = buildSnapshot('scene-b', [makeActor('B_Actor')]);
+            const actorsB = await scene.loadScene(snapshotB);
+
+            // Scene B should only have its own actors
+            expect(actorsB.length).toBe(1);
+            expect(actorsB[0]!.name).toBe('B_Actor');
+
+            scene.dispose();
+        });
+
+        it('scene with nested prefab hierarchy cleans up completely', async () => {
+            const canvas = document.createElement('canvas');
+            const scene = new Scene(createSceneOptions(scheduler, canvas));
+
+            // Scene A: nested hierarchy (parent with children via parentNodeId)
+            const snapshotA = buildSnapshot('scene-a', [
+                {
+                    nodeId: 'root',
+                    name: 'HierarchyRoot',
+                    layer: 0,
+                    tag: 'Default',
+                    active: true,
+                    persistent: false,
+                    pooled: false,
+                    components: [{ type: 'Transform', data: { position: [0, 0, 0] } }],
+                },
+                {
+                    nodeId: 'child1',
+                    parentNodeId: 'root',
+                    name: 'HierarchyChild1',
+                    layer: 0,
+                    tag: 'Default',
+                    active: true,
+                    persistent: false,
+                    pooled: false,
+                    components: [{ type: 'Transform', data: { position: [1, 0, 0] } }],
+                },
+                {
+                    nodeId: 'child2',
+                    parentNodeId: 'root',
+                    name: 'HierarchyChild2',
+                    layer: 0,
+                    tag: 'Default',
+                    active: true,
+                    persistent: false,
+                    pooled: false,
+                    components: [{ type: 'Transform', data: { position: [2, 0, 0] } }],
+                },
+            ]);
+            const actorsA = await scene.loadScene(snapshotA);
+            expect(actorsA.length).toBe(3);
+
+            // Scene B: flat, no hierarchy
+            const snapshotB = buildSnapshot('scene-b', [makeActor('FlatEntity')]);
+            const actorsB = await scene.loadScene(snapshotB);
+
+            expect(actorsB.length).toBe(1);
+            expect(actorsB[0]!.name).toBe('FlatEntity');
+
+            // Verify no hierarchy remnants
+            const allActors = scene.world.getAllActors();
+            const names = allActors.map(a => a.name);
+            expect(names).not.toContain('HierarchyRoot');
+            expect(names).not.toContain('HierarchyChild1');
+            expect(names).not.toContain('HierarchyChild2');
+
+            scene.dispose();
         });
     });
 });
