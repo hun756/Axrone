@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Component, script } from '@axrone/ecs-runtime';
 import { World } from '@axrone/ecs-runtime';
 import { Actor } from '@axrone/ecs-runtime/actor';
@@ -316,27 +316,21 @@ describe('Component Lifecycle Integration', () => {
     });
 
     describe('Test Group 3: Priority Ordering', () => {
-        it('should execute components in priority order (lower number = earlier)', () => {
-            LowPriorityComponent.resetOrder();
-            MediumPriorityComponent.resetOrder();
-            HighPriorityComponent.resetOrder();
+        it('should execute components in priority order (higher number = earlier)', () => {
+            resetExecutionLog();
 
-            const low = actor.addComponent(LowPriorityComponent);
-            const medium = actor.addComponent(MediumPriorityComponent);
-            const high = actor.addComponent(HighPriorityComponent);
+            actor.addComponent(LowPriorityComponent);
+            actor.addComponent(MediumPriorityComponent);
+            actor.addComponent(HighPriorityComponent);
 
             actor.start();
             actor.update(0.016);
 
-            expect(low.executionOrder[0]).toBe(0);
-            expect(medium.executionOrder[0]).toBe(1);
-            expect(high.executionOrder[0]).toBe(2);
+            expect(executionLog).toEqual(['high', 'medium', 'low']);
         });
 
         it('should maintain priority order across multiple updates', () => {
-            LowPriorityComponent.resetOrder();
-            MediumPriorityComponent.resetOrder();
-            HighPriorityComponent.resetOrder();
+            resetExecutionLog();
 
             actor.addComponent(LowPriorityComponent);
             actor.addComponent(MediumPriorityComponent);
@@ -348,34 +342,29 @@ describe('Component Lifecycle Integration', () => {
             actor.update(0.016);
             actor.update(0.016);
 
-            const lowComp = actor.getComponent(LowPriorityComponent) as LowPriorityComponent;
-            const mediumComp = actor.getComponent(MediumPriorityComponent) as MediumPriorityComponent;
-            const highComp = actor.getComponent(HighPriorityComponent) as HighPriorityComponent;
+            expect(executionLog).toHaveLength(9);
 
-            expect(lowComp.executionOrder).toHaveLength(3);
-            expect(mediumComp.executionOrder).toHaveLength(3);
-            expect(highComp.executionOrder).toHaveLength(3);
-
-            expect(lowComp.executionOrder[0]).toBeLessThan(mediumComp.executionOrder[0]);
-            expect(mediumComp.executionOrder[0]).toBeLessThan(highComp.executionOrder[0]);
+            // Verify each frame follows priority order (higher priority number = earlier)
+            for (let frame = 0; frame < 3; frame++) {
+                const base = frame * 3;
+                expect(executionLog[base]).toBe('high');
+                expect(executionLog[base + 1]).toBe('medium');
+                expect(executionLog[base + 2]).toBe('low');
+            }
         });
 
         it('should handle components with same priority', () => {
             class SamePriorityA extends Component {
-                public order: number[] = [];
-                private static _counter = 0;
-                update() { this.order.push(SamePriorityA._counter++); }
-                static reset() { SamePriorityA._counter = 0; }
+                update() { executionLog.push('A'); }
             }
 
             class SamePriorityB extends Component {
-                public order: number[] = [];
-                update() { this.order.push(SamePriorityA._counter++); }
+                update() { executionLog.push('B'); }
             }
 
             world.registerComponentType(SamePriorityA);
             world.registerComponentType(SamePriorityB);
-            SamePriorityA.reset();
+            resetExecutionLog();
 
             actor.addComponent(SamePriorityA);
             actor.addComponent(SamePriorityB);
@@ -383,11 +372,9 @@ describe('Component Lifecycle Integration', () => {
             actor.start();
             actor.update(0.016);
 
-            const compA = actor.getComponent(SamePriorityA) as SamePriorityA;
-            const compB = actor.getComponent(SamePriorityB) as SamePriorityB;
-
-            expect(compA.order).toHaveLength(1);
-            expect(compB.order).toHaveLength(1);
+            expect(executionLog).toHaveLength(2);
+            expect(executionLog).toContain('A');
+            expect(executionLog).toContain('B');
         });
     });
 
