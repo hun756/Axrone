@@ -270,7 +270,7 @@ function createPositionOnlyQuad(gl: WebGL2RenderingContext, program: WebGLProgra
     vao: WebGLVertexArrayObject;
     cleanup: () => void;
 } {
-    const vertices = new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]);
+    const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
     const vbo = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
