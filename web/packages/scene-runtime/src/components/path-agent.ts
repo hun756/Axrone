@@ -74,6 +74,10 @@ export class PathAgent extends Component {
     private _warpPending: boolean = false;
     private _warpTarget: Vec3 | null = null;
 
+    // Pre-allocated temp vectors to avoid per-frame garbage in update()
+    private readonly _tempToCorner = new Vec3();
+    private readonly _tempVelocity = new Vec3();
+
     constructor(config: PathAgentConfig = {}) {
         super();
         this._radius = 0.5;
@@ -214,7 +218,9 @@ export class PathAgent extends Component {
     set isStopped(value: boolean) {
         this._isStopped = value;
         if (value) {
-            this._velocity = Vec3.ZERO.clone();
+            this._velocity.x = 0;
+            this._velocity.y = 0;
+            this._velocity.z = 0;
         }
     }
 
@@ -278,7 +284,9 @@ export class PathAgent extends Component {
         this._path = null;
         this._pathStatus = 'idle';
         this._currentCornerIndex = 0;
-        this._velocity = Vec3.ZERO.clone();
+        this._velocity.x = 0;
+        this._velocity.y = 0;
+        this._velocity.z = 0;
         this._remainingDistance = 0;
     }
 
@@ -287,7 +295,9 @@ export class PathAgent extends Component {
      */
     stop(clearPath: boolean = false): void {
         this._isStopped = true;
-        this._velocity = Vec3.ZERO.clone();
+        this._velocity.x = 0;
+        this._velocity.y = 0;
+        this._velocity.z = 0;
 
         if (clearPath) {
             this.resetPath();
@@ -364,12 +374,14 @@ export class PathAgent extends Component {
         const nextCorner = this.getNextCorner();
         if (!nextCorner) {
             this._pathStatus = 'arrived';
-            this._velocity = Vec3.ZERO.clone();
+            this._velocity.x = 0;
+            this._velocity.y = 0;
+            this._velocity.z = 0;
             return;
         }
 
         const currentPosition = this.getWorldPosition();
-        const toCorner = Vec3.subtract(nextCorner, currentPosition, new Vec3());
+        const toCorner = Vec3.subtract(nextCorner, currentPosition, this._tempToCorner);
         const distanceToCorner = Vec3.len(toCorner);
 
         if (distanceToCorner <= this._stoppingDistance) {
@@ -377,7 +389,9 @@ export class PathAgent extends Component {
 
             if (this._currentCornerIndex >= this._path.corners.length) {
                 this._pathStatus = 'arrived';
-                this._velocity = Vec3.ZERO.clone();
+                this._velocity.x = 0;
+                this._velocity.y = 0;
+                this._velocity.z = 0;
                 this._remainingDistance = 0;
                 return;
             }
@@ -398,7 +412,7 @@ export class PathAgent extends Component {
                 currentSpeed + this._acceleration * deltaTime
             );
 
-            this._velocity = Vec3.multiplyScalar(toCorner, newSpeed, new Vec3());
+            this._velocity = Vec3.multiplyScalar(toCorner, newSpeed, this._tempVelocity);
         }
 
         this._updateRemainingDistance();
@@ -422,43 +436,44 @@ export class PathAgent extends Component {
     }
 
     override deserialize(data: Record<string, any>): void {
-        const patch: PathAgentConfig = {};
+        type MutableConfig = { -readonly [K in keyof PathAgentConfig]: PathAgentConfig[K] };
+        const patch: MutableConfig = {};
 
         if (typeof data.radius === 'number') {
-            (patch as any).radius = data.radius;
+            patch.radius = data.radius;
         }
         if (typeof data.height === 'number') {
-            (patch as any).height = data.height;
+            patch.height = data.height;
         }
         if (typeof data.speed === 'number') {
-            (patch as any).speed = data.speed;
+            patch.speed = data.speed;
         }
         if (typeof data.angularSpeed === 'number') {
-            (patch as any).angularSpeed = data.angularSpeed;
+            patch.angularSpeed = data.angularSpeed;
         }
         if (typeof data.acceleration === 'number') {
-            (patch as any).acceleration = data.acceleration;
+            patch.acceleration = data.acceleration;
         }
         if (typeof data.stoppingDistance === 'number') {
-            (patch as any).stoppingDistance = data.stoppingDistance;
+            patch.stoppingDistance = data.stoppingDistance;
         }
         if (typeof data.autoBraking === 'boolean') {
-            (patch as any).autoBraking = data.autoBraking;
+            patch.autoBraking = data.autoBraking;
         }
         if (typeof data.autoRepath === 'boolean') {
-            (patch as any).autoRepath = data.autoRepath;
+            patch.autoRepath = data.autoRepath;
         }
         if (typeof data.baseOffset === 'number') {
-            (patch as any).baseOffset = data.baseOffset;
+            patch.baseOffset = data.baseOffset;
         }
         if (typeof data.areaMask === 'number') {
-            (patch as any).areaMask = data.areaMask;
+            patch.areaMask = data.areaMask;
         }
         if (typeof data.obstacleAvoidanceQuality === 'string') {
-            (patch as any).obstacleAvoidanceQuality = data.obstacleAvoidanceQuality;
+            patch.obstacleAvoidanceQuality = data.obstacleAvoidanceQuality;
         }
         if (typeof data.avoidancePriority === 'number') {
-            (patch as any).avoidancePriority = data.avoidancePriority;
+            patch.avoidancePriority = data.avoidancePriority;
         }
 
         this._applyConfig(patch);
