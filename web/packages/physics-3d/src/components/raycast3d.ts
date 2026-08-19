@@ -1,6 +1,7 @@
 import { Vec3, Quat, type IVec3Like } from '@axrone/numeric';
 import { script } from '@axrone/ecs-runtime/decorators';
 import { Component, Transform } from '@axrone/ecs-runtime';
+import type { PhysicsWorld3D } from '../core/physics-world-3d';
 
 export interface RaycastHit3D {
     readonly hit: boolean;
@@ -56,6 +57,7 @@ export class RayCast3D extends Component {
 
     private _lastHit: RaycastHit3D | null = null;
     private _hitActors: string[] = [];
+    private _world: PhysicsWorld3D | null = null;
 
     constructor(config: RayCast3DConfig = {}) {
         super();
@@ -191,14 +193,45 @@ export class RayCast3D extends Component {
     }
 
     /**
+     * Sets the physics world reference for raycasting queries.
+     * Called by the physics bridge during initialization.
+     */
+    setPhysicsWorld(world: PhysicsWorld3D): void {
+        this._world = world;
+    }
+
+    /**
      * Performs the raycast and returns whether something was hit.
-     * Note: Actual physics queries require a physics world reference.
-     * This method provides the ray parameters for external physics systems.
+     * Queries the physics world for the closest ray intersection.
      */
     cast(): boolean {
-        // In a full implementation, this would query the physics world
-        // For now, we provide the ray data for external systems to use
-        return this._lastHit?.hit ?? false;
+        if (!this._world) {
+            return this._lastHit?.hit ?? false;
+        }
+
+        const origin = this.getRayOrigin();
+        const direction = this.getWorldDirection();
+
+        const hit = this._world.rayCastClosest(
+            { x: origin.x, y: origin.y, z: origin.z },
+            { x: direction.x, y: direction.y, z: direction.z },
+            this._maxDistance / Math.max(0.001, Vec3.length(direction))
+        );
+
+        if (hit && hit.hit) {
+            this._lastHit = {
+                hit: true,
+                point: new Vec3(hit.point.x, hit.point.y, hit.point.z),
+                normal: new Vec3(hit.normal.x, hit.normal.y, hit.normal.z),
+                distance: hit.fraction * this._maxDistance,
+                colliderId: hit.shapeId,
+                actorId: String(hit.bodyId),
+            };
+            return true;
+        }
+
+        this._lastHit = null;
+        return false;
     }
 
     /**
@@ -213,6 +246,10 @@ export class RayCast3D extends Component {
      */
     clearHit(): void {
         this._lastHit = null;
+    }
+
+    override onDestroy(): void {
+        this._world = null;
     }
 
     /**
