@@ -28,10 +28,16 @@ export interface TrailRendererConfig {
     readonly autodestruct?: boolean;
 }
 
+/** Mutable projection of TrailRendererConfig — avoids `(patch as any)` bypasses. */
+type MutableTrailConfig = { -readonly [K in keyof TrailRendererConfig]: TrailRendererConfig[K] };
+
 const DEFAULT_GRADIENT: readonly TrailRendererGradientStop[] = Object.freeze([
     { position: 0, color: [1, 1, 1, 1] },
     { position: 1, color: [1, 1, 1, 0] },
 ]);
+
+/** Default ring-buffer capacity for trail points. */
+const DEFAULT_MAX_POINTS = 256;
 
 const toVec4 = (
     value?: Vec4 | readonly [number, number, number, number],
@@ -46,6 +52,33 @@ const toVec4 = (
     }
 
     return fallback.clone();
+};
+
+/**
+ * Writes the components of `value` into `target` without allocating.
+ * Used on hot paths where `toVec4` would otherwise create a new Vec4.
+ */
+const copyIntoVec4 = (
+    value: Vec4 | readonly [number, number, number, number],
+    target: Vec4,
+    fallback: Vec4 = Vec4.ONE
+): void => {
+    if (value instanceof Vec4) {
+        target.x = value.x;
+        target.y = value.y;
+        target.z = value.z;
+        target.w = value.w;
+    } else if (Array.isArray(value) && value.length === 4) {
+        target.x = value[0];
+        target.y = value[1];
+        target.z = value[2];
+        target.w = value[3];
+    } else {
+        target.x = fallback.x;
+        target.y = fallback.y;
+        target.z = fallback.z;
+        target.w = fallback.w;
+    }
 };
 
 interface TrailPoint {
@@ -92,8 +125,20 @@ export class TrailRenderer extends Component {
     private _endCapVertices: number;
     private _autodestruct: boolean;
 
-    private readonly _points: TrailPoint[] = [];
-    private _lastPosition: Vec3 | null = null;
+    // ── Ring buffer for trail points (zero-allocation on hot path) ──
+    private readonly _capacity: number;
+    private readonly _points: TrailPoint[];
+    private _headIndex: number = 0;
+    private _pointCount: number = 0;
+
+    // ── Pre-allocated temporaries — never re-allocated at runtime ──
+    private readonly _tempPosition: Vec3 = new Vec3();
+    private readonly _tempColor: Vec4 = new Vec4();
+    private readonly _tempLowerColor: Vec4 = new Vec4();
+    private readonly _tempUpperColor: Vec4 = new Vec4();
+    private readonly _lastPosition: Vec3 = new Vec3();
+    private _hasLastPosition: boolean = false;
+
     private _elapsedTime: number = 0;
 
     constructor(config: TrailRendererConfig = {}) {
@@ -113,6 +158,14 @@ export class TrailRenderer extends Component {
         this._cornerVertices = 0;
         this._endCapVertices = 0;
         this._autodestruct = false;
+
+        // Pre-allocate the ring buffer with reusable TrailPoint objects.
+        this._capacity = DEFAULT_MAX_POINTS;
+        this._points = new Array<TrailPoint>(this._capacity);
+        for (let i = 0; i < this._capacity; i++) {
+            this._points[i] = { position: new Vec3(), time: 0, width: 0 };
+        }
+
         this._applyConfig(config);
     }
 
@@ -233,15 +286,16 @@ export class TrailRenderer extends Component {
     }
 
     get pointCount(): number {
-        return this._points.length;
+        return this._pointCount;
     }
 
     /**
      * Clears all trail points immediately.
      */
     clear(): void {
-        this._points.length = 0;
-        this._lastPosition = null;
+        this._headIndex = 0;
+        this._pointCount = 0;
+        this._hasLastPosition = false;
     }
 
     /**
@@ -265,16 +319,25 @@ export class TrailRenderer extends Component {
 
     /**
      * Evaluates the color at a normalized position (0-1) along the trail.
+     * Zero-allocation: writes into the pre-allocated `_tempColor` Vec4.
+     *
+     * NOTE: callers that need to retain the result across multiple calls
+     * should copy the components before the next invocation.
      */
     evaluateColor(t: number): Vec4 {
         const clampedT = Math.max(0, Math.min(1, t));
 
         if (this._colorGradient.length === 0) {
-            return Vec4.ONE.clone();
+            this._tempColor.x = 1;
+            this._tempColor.y = 1;
+            this._tempColor.z = 1;
+            this._tempColor.w = 1;
+            return this._tempColor;
         }
 
         if (this._colorGradient.length === 1) {
-            return toVec4(this._colorGradient[0].color);
+            copyIntoVec4(this._colorGradient[0].color, this._tempColor);
+            return this._tempColor;
         }
 
         let lowerStop = this._colorGradient[0];
@@ -293,24 +356,33 @@ export class TrailRenderer extends Component {
         const range = upperStop.position - lowerStop.position;
         const fraction = range > 0 ? (clampedT - lowerStop.position) / range : 0;
 
-        const lowerColor = toVec4(lowerStop.color);
-        const upperColor = toVec4(upperStop.color);
+        copyIntoVec4(lowerStop.color, this._tempLowerColor);
+        copyIntoVec4(upperStop.color, this._tempUpperColor);
 
-        return new Vec4(
-            lowerColor.x + (upperColor.x - lowerColor.x) * fraction,
-            lowerColor.y + (upperColor.y - lowerColor.y) * fraction,
-            lowerColor.z + (upperColor.z - lowerColor.z) * fraction,
-            lowerColor.w + (upperColor.w - lowerColor.w) * fraction
-        );
+        this._tempColor.x = this._tempLowerColor.x + (this._tempUpperColor.x - this._tempLowerColor.x) * fraction;
+        this._tempColor.y = this._tempLowerColor.y + (this._tempUpperColor.y - this._tempLowerColor.y) * fraction;
+        this._tempColor.z = this._tempLowerColor.z + (this._tempUpperColor.z - this._tempLowerColor.z) * fraction;
+        this._tempColor.w = this._tempLowerColor.w + (this._tempUpperColor.w - this._tempLowerColor.w) * fraction;
+
+        return this._tempColor;
     }
 
     /**
      * Gets all current trail points for rendering.
+     * Builds a contiguous view from the ring buffer.
      */
     getPoints(): readonly TrailPoint[] {
-        return this._points;
+        const result: TrailPoint[] = new Array(this._pointCount);
+        for (let i = 0; i < this._pointCount; i++) {
+            result[i] = this._points[(this._headIndex + i) % this._capacity]!;
+        }
+        return result;
     }
 
+    /**
+     * Hot-path update — zero allocations.
+     * All Vec3/TrailPoint writes go into pre-allocated objects.
+     */
     override update(deltaTime: number): void {
         this._elapsedTime += deltaTime;
 
@@ -321,25 +393,30 @@ export class TrailRenderer extends Component {
 
         const currentPosition = transform.worldPosition;
 
-        if (!this._lastPosition) {
-            this._lastPosition = currentPosition.clone();
-            this._points.push({
-                position: currentPosition.clone(),
-                time: this._elapsedTime,
-                width: this._startWidth,
-            });
+        // Stage position into pre-allocated temp (avoids .clone()).
+        this._tempPosition.x = currentPosition.x;
+        this._tempPosition.y = currentPosition.y;
+        this._tempPosition.z = currentPosition.z;
+
+        if (!this._hasLastPosition) {
+            this._lastPosition.x = this._tempPosition.x;
+            this._lastPosition.y = this._tempPosition.y;
+            this._lastPosition.z = this._tempPosition.z;
+            this._hasLastPosition = true;
+            this._addPoint(this._tempPosition.x, this._tempPosition.y, this._tempPosition.z, this._elapsedTime, this._startWidth);
             return;
         }
 
-        const distance = Vec3.distance(currentPosition, this._lastPosition);
+        const dx = this._tempPosition.x - this._lastPosition.x;
+        const dy = this._tempPosition.y - this._lastPosition.y;
+        const dz = this._tempPosition.z - this._lastPosition.z;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
         if (distance >= this._minVertexDistance) {
-            this._points.push({
-                position: currentPosition.clone(),
-                time: this._elapsedTime,
-                width: this._startWidth,
-            });
-            this._lastPosition = currentPosition.clone();
+            this._addPoint(this._tempPosition.x, this._tempPosition.y, this._tempPosition.z, this._elapsedTime, this._startWidth);
+            this._lastPosition.x = this._tempPosition.x;
+            this._lastPosition.y = this._tempPosition.y;
+            this._lastPosition.z = this._tempPosition.z;
         }
 
         this._pruneExpiredPoints();
@@ -371,59 +448,91 @@ export class TrailRenderer extends Component {
     }
 
     override deserialize(data: Record<string, any>): void {
-        const patch: TrailRendererConfig = {};
+        const patch: MutableTrailConfig = {};
 
         if (typeof data.lifetime === 'number') {
-            (patch as any).lifetime = data.lifetime;
+            patch.lifetime = data.lifetime;
         }
         if (typeof data.minVertexDistance === 'number') {
-            (patch as any).minVertexDistance = data.minVertexDistance;
+            patch.minVertexDistance = data.minVertexDistance;
         }
         if (typeof data.startWidth === 'number') {
-            (patch as any).startWidth = data.startWidth;
+            patch.startWidth = data.startWidth;
         }
         if (typeof data.endWidth === 'number') {
-            (patch as any).endWidth = data.endWidth;
+            patch.endWidth = data.endWidth;
         }
         if (Array.isArray(data.widthCurve)) {
-            (patch as any).widthCurve = data.widthCurve;
+            patch.widthCurve = data.widthCurve;
         }
         if (Array.isArray(data.colorGradient)) {
-            (patch as any).colorGradient = data.colorGradient;
+            patch.colorGradient = data.colorGradient;
         }
         if (typeof data.textureMode === 'string') {
-            (patch as any).textureMode = data.textureMode;
+            patch.textureMode = data.textureMode;
         }
         if (typeof data.alignment === 'string') {
-            (patch as any).alignment = data.alignment;
+            patch.alignment = data.alignment;
         }
         if (Array.isArray(data.textureScale) && data.textureScale.length === 2) {
-            (patch as any).textureScale = data.textureScale;
+            patch.textureScale = data.textureScale;
         }
         if (typeof data.shadowCasting === 'boolean') {
-            (patch as any).shadowCasting = data.shadowCasting;
+            patch.shadowCasting = data.shadowCasting;
         }
         if (typeof data.generateLightingData === 'boolean') {
-            (patch as any).generateLightingData = data.generateLightingData;
+            patch.generateLightingData = data.generateLightingData;
         }
         if (typeof data.cornerVertices === 'number') {
-            (patch as any).cornerVertices = data.cornerVertices;
+            patch.cornerVertices = data.cornerVertices;
         }
         if (typeof data.endCapVertices === 'number') {
-            (patch as any).endCapVertices = data.endCapVertices;
+            patch.endCapVertices = data.endCapVertices;
         }
         if (typeof data.autodestruct === 'boolean') {
-            (patch as any).autodestruct = data.autodestruct;
+            patch.autodestruct = data.autodestruct;
         }
 
         this._applyConfig(patch);
     }
 
+    /**
+     * Advances the head index to drop expired points — O(k) where k =
+     * number of expired points, with no array resizing or shifting.
+     */
     private _pruneExpiredPoints(): void {
         const cutoffTime = this._elapsedTime - this._lifetime;
 
-        while (this._points.length > 0 && this._points[0]!.time < cutoffTime) {
-            this._points.shift();
+        while (this._pointCount > 0) {
+            const headPoint = this._points[this._headIndex]!;
+            if (headPoint.time < cutoffTime) {
+                this._headIndex = (this._headIndex + 1) % this._capacity;
+                this._pointCount--;
+            } else {
+                break;
+            }
+        }
+    }
+
+    /**
+     * Writes a new point into the ring buffer at the tail position.
+     * If the buffer is full the oldest point is silently overwritten
+     * (head advances by one).
+     */
+    private _addPoint(x: number, y: number, z: number, time: number, width: number): void {
+        const tailIndex = (this._headIndex + this._pointCount) % this._capacity;
+        const point = this._points[tailIndex]!;
+        point.position.x = x;
+        point.position.y = y;
+        point.position.z = z;
+        point.time = time;
+        point.width = width;
+
+        if (this._pointCount < this._capacity) {
+            this._pointCount++;
+        } else {
+            // Buffer full — overwrite oldest, advance head.
+            this._headIndex = (this._headIndex + 1) % this._capacity;
         }
     }
 
