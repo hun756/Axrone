@@ -263,12 +263,12 @@ export class Raycaster2D {
         };
 
         let normal: IVec2Like = { x: 0, y: 0 };
-        const epsilon = 0.001;
+        const CONTACT_NORMAL_EPSILON = 0.001;
 
-        if (Math.abs(point.x - aabb.min.x) < epsilon) normal = { x: -1, y: 0 };
-        else if (Math.abs(point.x - aabb.max.x) < epsilon) normal = { x: 1, y: 0 };
-        else if (Math.abs(point.y - aabb.min.y) < epsilon) normal = { x: 0, y: -1 };
-        else if (Math.abs(point.y - aabb.max.y) < epsilon) normal = { x: 0, y: 1 };
+        if (Math.abs(point.x - aabb.min.x) < CONTACT_NORMAL_EPSILON) normal = { x: -1, y: 0 };
+        else if (Math.abs(point.x - aabb.max.x) < CONTACT_NORMAL_EPSILON) normal = { x: 1, y: 0 };
+        else if (Math.abs(point.y - aabb.min.y) < CONTACT_NORMAL_EPSILON) normal = { x: 0, y: -1 };
+        else if (Math.abs(point.y - aabb.max.y) < CONTACT_NORMAL_EPSILON) normal = { x: 0, y: 1 };
 
         return {
             hit: true,
