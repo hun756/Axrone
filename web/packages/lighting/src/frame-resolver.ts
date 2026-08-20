@@ -118,13 +118,6 @@ const writeCamera = (camera: Vec3, value: Vec3Input | undefined): boolean => {
     return true;
 };
 
-const distanceSquared = (a: Readonly<Vec3>, b: Readonly<Vec3>): number => {
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
-    const dz = a.z - b.z;
-    return dx * dx + dy * dy + dz * dz;
-};
-
 const pointInfluence = (light: PointLightDefinition, camera: Readonly<Vec3> | null): number => {
     if (!camera) {
         return light.intensity;
@@ -135,7 +128,7 @@ const pointInfluence = (light: PointLightDefinition, camera: Readonly<Vec3> | nu
         return 0;
     }
 
-    const normalizedDistance = distanceSquared(light.position, camera) / radiusSq;
+    const normalizedDistance = Vec3.distanceSquared(light.position, camera) / radiusSq;
     return light.intensity / (1 + light.attenuation * normalizedDistance * normalizedDistance);
 };
 
@@ -152,22 +145,22 @@ const spotInfluence = (light: SpotLightDefinition, camera: Readonly<Vec3> | null
     const offsetX = camera.x - light.position.x;
     const offsetY = camera.y - light.position.y;
     const offsetZ = camera.z - light.position.z;
-    const length = Math.hypot(offsetX, offsetY, offsetZ);
+    const distance = Vec3.distance(light.position, camera);
 
-    if (length <= 1e-8) {
+    if (distance <= 1e-8) {
         return light.intensity;
     }
 
     const directionDot =
-        (offsetX / length) * light.direction.x +
-        (offsetY / length) * light.direction.y +
-        (offsetZ / length) * light.direction.z;
+        (offsetX / distance) * light.direction.x +
+        (offsetY / distance) * light.direction.y +
+        (offsetZ / distance) * light.direction.z;
 
     if (directionDot <= light.outerConeCosine) {
         return 0;
     }
 
-    const normalizedDistance = distanceSquared(light.position, camera) / radiusSq;
+    const normalizedDistance = Vec3.distanceSquared(light.position, camera) / radiusSq;
     const coneFactor =
         light.innerConeCosine <= light.outerConeCosine
             ? 1
