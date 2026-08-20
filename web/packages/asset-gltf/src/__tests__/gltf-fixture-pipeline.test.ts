@@ -18,7 +18,7 @@ import {
 
 const FIXTURE_PATH = path.resolve(
     __dirname,
-    '../../../../../../Assets/Models/GM_AssetStore_3D_Character.glb'
+    '../../../../../../Assets/Models/EN_Character_Stickman_01.glb'
 );
 
 // ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ const importFixture = async () => {
     const receipt = await database.import({
         kind: 'bytes',
         data: fixtureBytes,
-        uri: 'models/GM_AssetStore_3D_Character.glb',
+        uri: 'models/EN_Character_Stickman_01.glb',
         mimeType: 'model/gltf-binary',
     });
 
@@ -102,7 +102,7 @@ const importFixture = async () => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('T-06: GLTF Fixture Pipeline — GM_AssetStore_3D_Character.glb', () => {
+describe('T-06: GLTF Fixture Pipeline — EN_Character_Stickman_01.glb', () => {
     // -----------------------------------------------------------------------
     // 1. GLB Binary Header Validation
     // -----------------------------------------------------------------------

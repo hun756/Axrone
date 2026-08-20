@@ -54,7 +54,7 @@ const clipMap = new Map<string, AnimationClip>([
 ]);
 
 // ---------------------------------------------------------------------------
-// GM_AssetStore_3D_Character animator pattern
+// EN_Character_Stickman_01 animator pattern
 // ---------------------------------------------------------------------------
 
 const TRANSITION_DURATION = 0.2;

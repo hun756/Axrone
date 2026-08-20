@@ -22,10 +22,10 @@
  * AUDIT SUMMARY (as of initial baseline):
  *   Total entities/nodes audited: 66
  *   Total violations found: 63
- *   - Main.scene.json: 9 violations (GM_AssetStore_3D_Character matches pattern)
+ *   - Main.scene.json: 9 violations (EN_Character_Stickman_01 matches pattern with valid NS)
  *   - Cube.prefab: 1 violation (root entity)
  *   - Cube-copy.prefab: 1 violation (root entity)
- *   - GM_AssetStore_3D_Character.prefab: 26 violations (2 entities match pattern)
+ *   - EN_Character_Stickman_01.prefab: 26 violations (2 entities match pattern)
  *   - UI-test.ui.json: 26 violations (all UI nodes)
  *
  * RECOMMENDED RENAMES:
@@ -46,11 +46,11 @@
  *   Cube-copy.prefab:
  *     "Cube-copy" (scene + entity) -> "EN_Prop_CubeCopy_01"
  *
- *   GM_AssetStore_3D_Character.prefab:
- *     "GM_AssetStore_3D_Character" -> matches pattern but uses non-standard NS "GM"; consider "EN_Character_Hero_01"
- *     "Armature"                   -> "AN_Armature_Hero_01"
- *     "GM_AssetStore_3D_Main"     -> matches pattern but uses non-standard NS "GM"; consider "EN_Character_HeroMesh_01"
- *     "mixamorig:*" bones          -> "AN_Bone_<Name>_01" (25 bones)
+ *   EN_Character_Stickman_01.prefab:
+ *     "EN_Character_Stickman_01"     -> valid name (EN namespace, matches convention)
+ *     "Armature"                     -> "AN_Armature_Hero_01"
+ *     "EN_Character_Stickman_Mesh_01" -> valid name (EN namespace, matches convention)
+ *     "Bone_*" bones                 -> "AN_Bone_<Name>_01" (25 bones)
  *
  *   UI-test.ui.json:
  *     "root"                       -> "UI_Root_Test_01"
@@ -143,7 +143,7 @@ const ASSETS_DIR = resolve(PROJECT_ROOT, 'Assets');
 const SCENE_FILE = resolve(PROJECT_ROOT, 'Main.scene.json');
 const PREFAB_CUBE = resolve(ASSETS_DIR, 'Prefab', 'Cube.prefab');
 const PREFAB_CUBE_COPY = resolve(ASSETS_DIR, 'Prefab', 'Cube-copy.prefab');
-const PREFAB_CHARACTER = resolve(ASSETS_DIR, 'Prefab', 'GM_AssetStore_3D_Character.prefab');
+const PREFAB_CHARACTER = resolve(ASSETS_DIR, 'Prefab', 'EN_Character_Stickman_01.prefab');
 const UI_TEST = resolve(ASSETS_DIR, 'UI-test.ui.json');
 
 /**
@@ -151,7 +151,7 @@ const UI_TEST = resolve(ASSETS_DIR, 'UI-test.ui.json');
  * The ratchet ensures no NEW violations are introduced beyond this set.
  */
 const BASELINE_VIOLATIONS: ReadonlySet<string> = new Set([
-    // Main.scene.json (9 violations — GM_AssetStore_3D_Character matches the pattern)
+    // Main.scene.json (9 violations — EN_Character_Stickman_01 matches the pattern)
     'Main.scene.json::Main Camera',
     'Main.scene.json::Directional Light',
     'Main.scene.json::World',
@@ -165,33 +165,33 @@ const BASELINE_VIOLATIONS: ReadonlySet<string> = new Set([
     'Cube.prefab::Cube',
     // Cube-copy.prefab (1 violation)
     'Cube-copy.prefab::Cube-copy',
-    // GM_AssetStore_3D_Character.prefab (26 violations — 2 entities match the pattern)
-    'GM_AssetStore_3D_Character.prefab::Armature',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:Hips',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:Spine',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:Spine1',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:Spine2',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:Neck',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:Head',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:HeadTop_End',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:LeftShoulder',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:LeftArm',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:LeftForeArm',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:LeftHand',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:RightShoulder',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:RightArm',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:RightForeArm',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:RightHand',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:LeftUpLeg',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:LeftLeg',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:LeftFoot',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:LeftToeBase',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:LeftToe_End',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:RightUpLeg',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:RightLeg',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:RightFoot',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:RightToeBase',
-    'GM_AssetStore_3D_Character.prefab::mixamorig:RightToe_End',
+    // EN_Character_Stickman_01.prefab (26 violations — 2 entities match the pattern)
+    'EN_Character_Stickman_01.prefab::Armature',
+    'EN_Character_Stickman_01.prefab::Bone_Hips',
+    'EN_Character_Stickman_01.prefab::Bone_Spine',
+    'EN_Character_Stickman_01.prefab::Bone_Spine1',
+    'EN_Character_Stickman_01.prefab::Bone_Spine2',
+    'EN_Character_Stickman_01.prefab::Bone_Neck',
+    'EN_Character_Stickman_01.prefab::Bone_Head',
+    'EN_Character_Stickman_01.prefab::Bone_HeadTop_End',
+    'EN_Character_Stickman_01.prefab::Bone_LeftShoulder',
+    'EN_Character_Stickman_01.prefab::Bone_LeftArm',
+    'EN_Character_Stickman_01.prefab::Bone_LeftForeArm',
+    'EN_Character_Stickman_01.prefab::Bone_LeftHand',
+    'EN_Character_Stickman_01.prefab::Bone_RightShoulder',
+    'EN_Character_Stickman_01.prefab::Bone_RightArm',
+    'EN_Character_Stickman_01.prefab::Bone_RightForeArm',
+    'EN_Character_Stickman_01.prefab::Bone_RightHand',
+    'EN_Character_Stickman_01.prefab::Bone_LeftUpLeg',
+    'EN_Character_Stickman_01.prefab::Bone_LeftLeg',
+    'EN_Character_Stickman_01.prefab::Bone_LeftFoot',
+    'EN_Character_Stickman_01.prefab::Bone_LeftToeBase',
+    'EN_Character_Stickman_01.prefab::Bone_LeftToe_End',
+    'EN_Character_Stickman_01.prefab::Bone_RightUpLeg',
+    'EN_Character_Stickman_01.prefab::Bone_RightLeg',
+    'EN_Character_Stickman_01.prefab::Bone_RightFoot',
+    'EN_Character_Stickman_01.prefab::Bone_RightToeBase',
+    'EN_Character_Stickman_01.prefab::Bone_RightToe_End',
     // UI-test.ui.json (26 violations)
     'UI-test.ui.json::root',
     'UI-test.ui.json::Container',
@@ -321,8 +321,8 @@ describe('R-03: Naming Convention Validation', () => {
             expect(validateName('UID_Button_Play_01')).toBe(false);
         });
 
-        it('rejects names with special characters like colons', () => {
-            expect(validateName('mixamorig:Hips')).toBe(false);
+        it('rejects names that do not follow the NS_Category_Description_## pattern', () => {
+            expect(validateName('Bone_Hips')).toBe(false);
             expect(validateName('EN_Bone:Spine_01')).toBe(false);
         });
 
@@ -345,11 +345,10 @@ describe('R-03: Naming Convention Validation', () => {
             expect(validateName('1A_Test_Name_01')).toBe(false);
         });
 
-        it('matches GM_AssetStore_3D_Character format (valid pattern but non-standard namespace)', () => {
-            // GM is a valid 2-letter uppercase prefix per the regex, so this matches the pattern.
-            // However, GM is not in the approved namespace list (EN, PL, FX, UI, LM, CM, AU, AN).
-            // Namespace validation is a separate semantic check beyond the regex.
-            expect(validateName('GM_AssetStore_3D_Character')).toBe(true);
+        it('matches EN_Character_Stickman_01 format (valid pattern with standard namespace)', () => {
+            // EN is a valid 2-letter uppercase prefix per the regex and is in the
+            // approved namespace list (EN, PL, FX, UI, LM, CM, AU, AN).
+            expect(validateName('EN_Character_Stickman_01')).toBe(true);
         });
     });
 
@@ -445,7 +444,7 @@ describe('R-03: Naming Convention Validation', () => {
         it.todo('rename "Cube-copy" to "EN_Prop_CubeCopy_01" in Cube-copy.prefab');
     });
 
-    describe('GM_AssetStore_3D_Character.prefab entity names', () => {
+    describe('EN_Character_Stickman_01.prefab entity names', () => {
         const prefabDoc = loadJsonFile<SceneDocument>(PREFAB_CHARACTER);
         const entityNames = extractSceneEntityNames(prefabDoc);
         const violations = collectViolations(PREFAB_CHARACTER, entityNames);
@@ -470,10 +469,8 @@ describe('R-03: Naming Convention Validation', () => {
             expect(newViolations.length).toBe(0);
         });
 
-        it.todo('consider renaming "GM_AssetStore_3D_Character" to use standard NS (e.g. "EN_Character_Hero_01")');
         it.todo('rename "Armature" to "AN_Armature_Hero_01"');
-        it.todo('consider renaming "GM_AssetStore_3D_Main" to use standard NS (e.g. "EN_Character_HeroMesh_01")');
-        it.todo('rename all "mixamorig:*" bones to "AN_Bone_<Name>_01" format (25 bones)');
+        it.todo('rename all "Bone_*" bones to "AN_Bone_<Name>_01" format (25 bones)');
     });
 
     describe('UI-test.ui.json node names', () => {

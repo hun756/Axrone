@@ -147,7 +147,7 @@ describe('Main.scene.json — Static Validation', () => {
                 'Player',
                 'UI Host',
                 'Actor',
-                'GM_AssetStore_3D_Character',
+                'EN_Character_Stickman_01',
                 'Actor 2',
                 'Cube',
             ];
@@ -226,7 +226,7 @@ describe('Main.scene.json — Static Validation', () => {
             // Extra: Camera(1) + DirectionalLight(1) + MeshRenderer(2) + UIHost(1) + PrefabInstance(2) = 7
             // But some entities only have Transform, so: 10 + extras
             // Main Camera: 2, Dir Light: 2, World: 1, Ground: 2, Player: 2,
-            // UI Host: 2, Actor: 1, GM_Character: 2, Actor 2: 1, Cube: 2
+            // UI Host: 2, Actor: 1, Stickman: 2, Actor 2: 1, Cube: 2
             // Total = 2+2+1+2+2+2+1+2+1+2 = 17
             // But the task says 13 components — let's just verify the count matches reality
             expect(totalComponents).toBe(17);
@@ -585,9 +585,9 @@ function buildFullSceneSnapshot(): SceneSnapshot {
                 { type: 'Transform', data: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
             ],
         },
-        // 8. GM_AssetStore_3D_Character (prefab instance, root)
+        // 8. EN_Character_Stickman_01 (prefab instance, root)
         {
-            name: 'GM_AssetStore_3D_Character',
+            name: 'EN_Character_Stickman_01',
             layer: 0,
             tag: 'Imported',
             active: true,
@@ -749,7 +749,7 @@ describe('Scene Loading Integration', () => {
             expect(names).toContain('Player');
             expect(names).toContain('UI Host');
             expect(names).toContain('Actor');
-            expect(names).toContain('GM_AssetStore_3D_Character');
+            expect(names).toContain('EN_Character_Stickman_01');
             expect(names).toContain('Actor 2');
             expect(names).toContain('Cube');
 
@@ -1240,7 +1240,7 @@ describe('Scene Loading Integration', () => {
             });
 
             // Main Camera, Directional Light, World, UI Host, Actor,
-            // GM_AssetStore_3D_Character, Actor 2, Cube = 8 root actors
+            // EN_Character_Stickman_01, Actor 2, Cube = 8 root actors
             expect(rootActors.length).toBe(8);
 
             // Ground and Player are children of World

@@ -1,7 +1,7 @@
 /**
  * T-07: Animator Fixture State Machine Test
  *
- * Loads the actual GM_AssetStore_3D_Character.animator.json fixture,
+ * Loads the actual EN_Character_Stickman_01.animator.json fixture,
  * compiles it into a state machine, and validates all transitions,
  * parameters, and blending behavior.
  *
@@ -143,7 +143,7 @@ interface FixtureFile {
 // Fixture loading
 // ---------------------------------------------------------------------------
 
-const FIXTURE_FILE = 'GM_AssetStore_3D_Character.animator.json';
+const FIXTURE_FILE = 'EN_Character_Stickman_01.animator.json';
 
 let fixture: FixtureFile;
 let stateMachineDef: AnimationStateMachineDefinition;
@@ -223,7 +223,7 @@ beforeAll(() => {
 describe('T-07: Fixture JSON Schema', () => {
     it('loads the fixture file without errors', () => {
         expect(fixture).toBeDefined();
-        expect(fixture.name).toBe('GM_AssetStore_3D_Character');
+        expect(fixture.name).toBe('EN_Character_Stickman_01');
     });
 
     it('has schemaVersion 1 and kind "axrone.animator-controller"', () => {
