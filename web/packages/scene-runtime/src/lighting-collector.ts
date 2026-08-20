@@ -1,4 +1,4 @@
-import { EPSILON, Quat, Vec3 } from '@axrone/numeric';
+import { floatEquals, Quat, Vec3 } from '@axrone/numeric';
 import {
     LightKind as LightingLightKind,
     LightingFrameResolver,
@@ -23,8 +23,6 @@ const resetVec3 = (vector: Vec3, x: number, y: number, z: number): void => {
     vector.y = y;
     vector.z = z;
 };
-
-const sameNumber = (left: number, right: number): boolean => Math.abs(left - right) <= EPSILON;
 
 const buildLightId = (
     kind: (typeof LightingLightKind)[keyof typeof LightingLightKind],
@@ -108,8 +106,8 @@ export class SceneLightingCollector {
                 existing.color.equals(light.color) &&
                 existing.ambient.equals(light.ambientColor) &&
                 existing.direction.equals(this._directionScratch) &&
-                sameNumber(existing.intensity, light.intensity) &&
-                sameNumber(existing.priority, priority)
+                floatEquals(existing.intensity, light.intensity) &&
+                floatEquals(existing.priority, priority)
             ) {
                 return;
             }
@@ -150,8 +148,8 @@ export class SceneLightingCollector {
             if (
                 existing.color.equals(light.color) &&
                 existing.position.equals(position) &&
-                sameNumber(existing.intensity, light.intensity) &&
-                sameNumber(existing.range, light.range)
+                floatEquals(existing.intensity, light.intensity) &&
+                floatEquals(existing.range, light.range)
             ) {
                 return;
             }
@@ -194,10 +192,10 @@ export class SceneLightingCollector {
                 existing.color.equals(light.color) &&
                 existing.position.equals(position) &&
                 existing.direction.equals(this._directionScratch) &&
-                sameNumber(existing.intensity, light.intensity) &&
-                sameNumber(existing.range, light.range) &&
-                sameNumber(existing.innerConeCosine, Math.cos(light.innerConeAngle)) &&
-                sameNumber(existing.outerConeCosine, Math.cos(light.outerConeAngle))
+                floatEquals(existing.intensity, light.intensity) &&
+                floatEquals(existing.range, light.range) &&
+                floatEquals(existing.innerConeCosine, Math.cos(light.innerConeAngle)) &&
+                floatEquals(existing.outerConeCosine, Math.cos(light.outerConeAngle))
             ) {
                 return;
             }
@@ -250,8 +248,8 @@ export class SceneLightingCollector {
             if (
                 existing.color.equals(light.color) &&
                 existing.position.equals(position) &&
-                sameNumber(existing.intensity, effectiveIntensity) &&
-                sameNumber(existing.range, light.range)
+                floatEquals(existing.intensity, effectiveIntensity) &&
+                floatEquals(existing.range, light.range)
             ) {
                 return;
             }
