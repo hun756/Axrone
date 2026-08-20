@@ -94,7 +94,7 @@ const sameVec3Input = (camera: Vec3Input | undefined, lastCamera: Vec3, hasLastC
         return camera[0] === lastCamera.x && camera[1] === lastCamera.y && camera[2] === lastCamera.z;
     }
 
-    return camera.x === lastCamera.x && camera.y === lastCamera.y && camera.z === lastCamera.z;
+    return camera.equals(lastCamera);
 };
 
 const writeCamera = (camera: Vec3, value: Vec3Input | undefined): boolean => {
