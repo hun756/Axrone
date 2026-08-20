@@ -1609,6 +1609,8 @@ const createGltfToonShaderEffect = (id: string): RenderShaderEffectDefinition =>
         { name: 'a_Normal', type: 'vec3', location: 1 },
         { name: 'a_UV0', type: 'vec2', location: 2 },
         { name: 'a_Tangent', type: 'vec4', location: 4 },
+        { name: 'a_Joints0', type: 'uvec4', location: 9 },
+        { name: 'a_Weights0', type: 'vec4', location: 10 },
     ],
     varyings: [
         { name: 'v_UV0', type: 'vec2' },
