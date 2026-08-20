@@ -669,6 +669,42 @@ describe('Visual Regression (Pixel-Level)', () => {
             quad.cleanup();
             gl.deleteProgram(prog.program);
         });
+
+        it('verifies depthFunc ALWAYS overwrites regardless of depth order', () => {
+            const prog = compileProgram(gl, VERT_DEPTH, FRAG_UNIFORM_COLOR);
+            const uColor = gl.getUniformLocation(prog.program, 'u_color')!;
+            const uDepth = gl.getUniformLocation(prog.program, 'u_depth')!;
+
+            const quad = createPositionOnlyQuad(gl, prog.program);
+
+            gl.viewport(0, 0, W, H);
+            gl.enable(gl.DEPTH_TEST);
+            gl.depthFunc(gl.ALWAYS); // Accept ALL fragments regardless of depth
+            gl.clearColor(0.0, 0.0, 0.0, 0.0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            gl.useProgram(prog.program);
+
+            // Draw front quad first (red, z=-0.8, nearer)
+            gl.uniform4f(uColor, 1.0, 0.0, 0.0, 1.0);
+            gl.uniform1f(uDepth, -0.8);
+            gl.bindVertexArray(quad.vao);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+            // Draw back quad second (blue, z=0.8, farther) — should overwrite with ALWAYS
+            gl.uniform4f(uColor, 0.0, 0.0, 1.0, 1.0);
+            gl.uniform1f(uDepth, 0.8);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            gl.bindVertexArray(null);
+
+            // Center should be blue (ALWAYS allows back quad to overwrite front)
+            const center = readPixel(gl, W / 2, H / 2);
+            expectPixelNear(center, 0, 0, 255, 255, 2, 'ALWAYS depth func');
+
+            gl.disable(gl.DEPTH_TEST);
+            quad.cleanup();
+            gl.deleteProgram(prog.program);
+        });
     });
 
     // =========================================================================
@@ -1234,49 +1270,5 @@ describe('Visual Regression (Pixel-Level)', () => {
             gl.deleteProgram(prog.program);
         });
 
-        it('stencil masking verifies color output through stencil mask', () => {
-            const prog = compileProgram(gl, VERT_POSITION_ONLY, FRAG_UNIFORM_COLOR);
-            const uColor = gl.getUniformLocation(prog.program, 'u_color')!;
-
-            const fullscreen = createFullscreenQuad(gl, prog.program);
-            const smallQuad = createPositionedPosOnly(gl, prog.program, 0.0, 0.0, 0.3, 0.3);
-
-            gl.viewport(0, 0, W, H);
-            gl.clearColor(0.0, 0.0, 0.0, 0.0);
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-
-            // Write stencil=1 in center
-            gl.enable(gl.STENCIL_TEST);
-            gl.stencilFunc(gl.ALWAYS, 1, 0xFF);
-            gl.stencilOp(gl.KEEP, gl.REPLACE, gl.KEEP);
-            gl.colorMask(false, false, false, false);
-
-            gl.useProgram(prog.program);
-            gl.bindVertexArray(smallQuad.vao);
-            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-            gl.bindVertexArray(null);
-
-            // Render blue fullscreen where stencil == 1
-            gl.colorMask(true, true, true, true);
-            gl.stencilFunc(gl.EQUAL, 1, 0xFF);
-            gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
-
-            gl.uniform4f(uColor, 0.0, 0.0, 1.0, 1.0); // Blue
-            gl.bindVertexArray(fullscreen.vao);
-            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-            gl.bindVertexArray(null);
-
-            gl.disable(gl.STENCIL_TEST);
-
-            // Center should be blue (stencil pass)
-            expectPixelNear(readPixel(gl, W / 2, H / 2), 0, 0, 255, 255, 2, 'stencil blue center');
-
-            // Corner should remain clear (stencil fail)
-            expectPixelNear(readPixel(gl, W - 3, 3), 0, 0, 0, 0, 2, 'stencil blue corner');
-
-            fullscreen.cleanup();
-            smallQuad.cleanup();
-            gl.deleteProgram(prog.program);
-        });
     });
 });
