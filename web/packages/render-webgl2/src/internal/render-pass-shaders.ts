@@ -1,5 +1,5 @@
 export const FULLSCREEN_VERTEX_SHADER_SOURCE = `#version 300 es
-precision highp float;
+precision mediump float;
 
 out vec2 vUv;
 

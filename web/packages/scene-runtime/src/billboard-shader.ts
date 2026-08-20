@@ -23,6 +23,7 @@ export const createBillboardShaderDefinition = (
 ): SceneShaderDefinition => ({
     id,
     vertexSource: `#version 300 es
+precision mediump float;
 layout(location = 0) in vec3 a_Position;
 layout(location = 2) in vec2 a_UV0;
 layout(location = 3) in vec4 a_Color0;
