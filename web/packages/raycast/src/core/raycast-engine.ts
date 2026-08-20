@@ -32,6 +32,7 @@ export interface IRaycastBroadphaseSource2D {
 
 const RAYCAST_HIT_POOL_SIZE = 512;
 const DEFAULT_MAX_HITS = 128;
+const RAY_HIT_EPSILON = 1e-4;
 
 class RaycastHit2D implements IRaycastHit2D {
     public bodyId!: BodyId;
@@ -495,7 +496,7 @@ export class Raycaster2D {
                     const edgeHit = RayPrimitiveIntersector2D.intersectSegment(
                         ray.origin, ray.direction, v0, v1, ray.length
                     );
-                    if (edgeHit.hit && Math.abs(edgeHit.distance - result.distance) < 1e-4) {
+                    if (edgeHit.hit && Math.abs(edgeHit.distance - result.distance) < RAY_HIT_EPSILON) {
                         const ex = v1.x - v0.x;
                         const ey = v1.y - v0.y;
                         const eLen = Math.sqrt(ex * ex + ey * ey);
