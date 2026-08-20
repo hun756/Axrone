@@ -12,7 +12,7 @@ import {
     getShaderDataTypeSize,
 } from './utils';
 import { ByteBuffer } from '@axrone/memory';
-import { EPSILON, Mat4, Vec2, Vec3, Vec4 } from '@axrone/numeric';
+import { floatEquals, Mat4, Vec2, Vec3, Vec4 } from '@axrone/numeric';
 import {
     ShaderInstanceError,
     ShaderInstanceLifecycleError,
@@ -339,8 +339,6 @@ interface ShaderInstanceStats {
     readonly uploadSkipped: number;
 }
 
-const areFloatsEqual = (a: number, b: number): boolean => Math.abs(a - b) <= EPSILON;
-
 const isUniformValueEqual = (a: ShaderUniformValue, b: ShaderUniformValue): boolean => {
     if (a === b) return true;
     if (a === null || b === null) return false;
@@ -351,7 +349,7 @@ const isUniformValueEqual = (a: ShaderUniformValue, b: ShaderUniformValue): bool
     if (isFloat32Array(a) && isFloat32Array(b)) {
         if (a.length !== b.length) return false;
         for (let i = 0; i < a.length; i++) {
-            if (!areFloatsEqual(a[i] as number, b[i] as number)) return false;
+            if (!floatEquals(a[i] as number, b[i] as number)) return false;
         }
         return true;
     }
@@ -380,7 +378,7 @@ const isUniformValueEqual = (a: ShaderUniformValue, b: ShaderUniformValue): bool
             const av = a[i];
             const bv = b[i];
             if (typeof av === 'number' && typeof bv === 'number') {
-                if (!areFloatsEqual(av, bv)) return false;
+                if (!floatEquals(av, bv)) return false;
             } else if (av !== bv) {
                 return false;
             }
