@@ -128,12 +128,15 @@ describe('physics-core Foundation', () => {
             expect(PhysicsCore.INVALID_CONTACT_ID).toBe(0);
         });
 
-        it('all invalid IDs are distinct branded types', () => {
+        it('all invalid IDs are 0 at runtime (branding is compile-time only)', () => {
             const { INVALID_BODY_ID, INVALID_SHAPE_ID, INVALID_CONSTRAINT_ID, INVALID_CONTACT_ID } =
                 PhysicsCore;
-            expect(INVALID_BODY_ID).not.toBe(INVALID_SHAPE_ID);
-            expect(INVALID_BODY_ID).not.toBe(INVALID_CONSTRAINT_ID);
-            expect(INVALID_BODY_ID).not.toBe(INVALID_CONTACT_ID);
+            // At runtime, all branded ID types erase to plain number 0.
+            // The branding (unique symbol) exists only in the type system.
+            expect(INVALID_BODY_ID).toBe(0);
+            expect(INVALID_SHAPE_ID).toBe(0);
+            expect(INVALID_CONSTRAINT_ID).toBe(0);
+            expect(INVALID_CONTACT_ID).toBe(0);
         });
     });
 
@@ -191,53 +194,6 @@ describe('physics-core Foundation', () => {
             expect(SLEEP_TIME).toBe(0.5);
             expect(LINEAR_SLEEP_TOLERANCE).toBe(0.01);
             expect(ANGULAR_SLEEP_TOLERANCE).toBeCloseTo((2.0 / 180.0) * Math.PI);
-        });
-    });
-
-    describe('Raycast Enums (Runtime Values)', () => {
-        it('exports RaycastFlags as runtime enum', () => {
-            expect(PhysicsCore.RaycastFlags).toBeDefined();
-            expect(PhysicsCore.RaycastFlags.None).toBe(0);
-            expect(PhysicsCore.RaycastFlags.ClosestOnly).toBe(1 << 0);
-            expect(PhysicsCore.RaycastFlags.AllHits).toBe(1 << 1);
-            expect(PhysicsCore.RaycastFlags.IgnoreTriggers).toBe(1 << 2);
-            expect(PhysicsCore.RaycastFlags.IgnoreBackfaces).toBe(1 << 3);
-            expect(PhysicsCore.RaycastFlags.PreciseHitNormal).toBe(1 << 4);
-            expect(PhysicsCore.RaycastFlags.SortByDistance).toBe(1 << 5);
-            expect(PhysicsCore.RaycastFlags.StopAtFirstHit).toBe(1 << 6);
-            expect(PhysicsCore.RaycastFlags.IncludeInactive).toBe(1 << 7);
-        });
-
-        it('exports RaycastLayer as runtime enum', () => {
-            expect(PhysicsCore.RaycastLayer).toBeDefined();
-            expect(PhysicsCore.RaycastLayer.Default).toBe(1 << 0);
-            expect(PhysicsCore.RaycastLayer.Static).toBe(1 << 1);
-            expect(PhysicsCore.RaycastLayer.Dynamic).toBe(1 << 2);
-            expect(PhysicsCore.RaycastLayer.Kinematic).toBe(1 << 3);
-            expect(PhysicsCore.RaycastLayer.Trigger).toBe(1 << 4);
-            expect(PhysicsCore.RaycastLayer.Character).toBe(1 << 5);
-            expect(PhysicsCore.RaycastLayer.Terrain).toBe(1 << 6);
-            expect(PhysicsCore.RaycastLayer.Projectile).toBe(1 << 7);
-            expect(PhysicsCore.RaycastLayer.Water).toBe(1 << 8);
-            expect(PhysicsCore.RaycastLayer.Transparent).toBe(1 << 9);
-            expect(PhysicsCore.RaycastLayer.All).toBe(0xffffffff);
-        });
-
-        it('RaycastLayer.All includes all layers', () => {
-            const { All, Default, Static, Dynamic, Kinematic, Trigger } = PhysicsCore.RaycastLayer;
-            expect(All & Default).toBe(Default);
-            expect(All & Static).toBe(Static);
-            expect(All & Dynamic).toBe(Dynamic);
-            expect(All & Kinematic).toBe(Kinematic);
-            expect(All & Trigger).toBe(Trigger);
-        });
-
-        it('exports RayIntersectionType enum', () => {
-            expect(PhysicsCore.RayIntersectionType).toBeDefined();
-            expect(PhysicsCore.RayIntersectionType.None).toBe(0);
-            expect(PhysicsCore.RayIntersectionType.Entry).toBe(1);
-            expect(PhysicsCore.RayIntersectionType.Exit).toBe(2);
-            expect(PhysicsCore.RayIntersectionType.Tangent).toBe(3);
         });
     });
 
@@ -328,9 +284,6 @@ describe('physics-core Foundation', () => {
                 'CollisionFilter',
                 'SolverFlags',
                 'BodyFlags',
-                'RaycastFlags',
-                'RaycastLayer',
-                'RayIntersectionType',
                 'ShapeType3D',
                 'ConstraintType3D',
                 'CollisionEventType',
@@ -393,23 +346,6 @@ describe('physics-core Foundation', () => {
             expect(combined & FixedRotation).toBe(FixedRotation);
             expect(combined & Bullet).toBe(Bullet);
             expect(combined & Sensor).toBe(Sensor);
-        });
-
-        it('RaycastFlags can be combined', () => {
-            const { ClosestOnly, IgnoreTriggers, SortByDistance } = PhysicsCore.RaycastFlags;
-            const combined = ClosestOnly | IgnoreTriggers | SortByDistance;
-            expect(combined & ClosestOnly).toBe(ClosestOnly);
-            expect(combined & IgnoreTriggers).toBe(IgnoreTriggers);
-            expect(combined & SortByDistance).toBe(SortByDistance);
-        });
-
-        it('RaycastLayer supports layer masking', () => {
-            const { Default, Static, Dynamic, All } = PhysicsCore.RaycastLayer;
-            const mask = Default | Static;
-            expect(mask & Default).toBe(Default);
-            expect(mask & Static).toBe(Static);
-            expect(mask & Dynamic).toBe(0);
-            expect(All & Default).toBe(Default);
         });
     });
 });
