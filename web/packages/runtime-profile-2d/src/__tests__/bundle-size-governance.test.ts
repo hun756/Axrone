@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { RUNTIME_PROFILE_2D_CAPABILITY_PACKAGES } from '../capabilities';
 import {
-    SCENE_2D_RUNTIME_PROFILE_ID,
     get2DSceneRuntimeProfile,
     scene2DRuntimeProfile,
 } from '../profile';
@@ -13,14 +11,20 @@ import * as barrelExports from '../index';
 
 /* ---------------------------------------------------------------------------
  * Path resolution
+ *
+ * process.cwd() during vitest = Axrone/web/
+ * build.json = Axrone-Project/build.json (two levels above cwd)
+ * This package root = resolved via import.meta.url for package.json reads
  * ------------------------------------------------------------------------- */
 
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const packageDir = path.resolve(currentDir, '..');
-const workspaceRoot = path.resolve(packageDir, '../..');
-const buildJsonPath = path.resolve(workspaceRoot, '../../../../build.json');
-const governanceScriptPath = path.resolve(workspaceRoot, 'scripts/playable-2d-governance.mjs');
-const baselinePath = path.resolve(workspaceRoot, 'scripts/playable-2d-bundle-baseline.json');
+const cwd = process.cwd(); // Axrone/web/
+const projectRoot = path.resolve(cwd, '..', '..'); // Axrone-Project/
+const buildJsonPath = path.resolve(projectRoot, 'build.json');
+const governanceScriptPath = path.resolve(cwd, 'scripts/playable-2d-governance.mjs');
+const baselinePath = path.resolve(cwd, 'scripts/playable-2d-bundle-baseline.json');
+
+// Resolve this package's root directory relative to cwd (Axrone/web/).
+const packageDir = path.resolve(cwd, 'packages/runtime-profile-2d');
 
 /* ---------------------------------------------------------------------------
  * Shared helpers
