@@ -145,7 +145,7 @@ describe('T-02: Prefab Instantiation Integration (file-backed)', () => {
     beforeAll(() => {
         cubeFile = readPrefabFile('Cube.prefab');
         cubeCopyFile = readPrefabFile('Cube-copy.prefab');
-        characterFile = readPrefabFile('GM_AssetStore_3D_Character.prefab');
+        characterFile = readPrefabFile('EN_Character_Stickman_01.prefab');
     });
 
     // ── 1. Prefab JSON can be parsed without errors ──────────────────────
@@ -167,11 +167,11 @@ describe('T-02: Prefab Instantiation Integration (file-backed)', () => {
             expect(cubeCopyFile.entities).toBeInstanceOf(Array);
         });
 
-        it('parses GM_AssetStore_3D_Character.prefab as valid JSON', () => {
+        it('parses EN_Character_Stickman_01.prefab as valid JSON', () => {
             expect(characterFile).toBeDefined();
             expect(characterFile.schemaVersion).toBe(2);
             expect(characterFile.id).toBeTruthy();
-            expect(characterFile.name).toBe('GM_AssetStore_3D_Character');
+            expect(characterFile.name).toBe('EN_Character_Stickman_01');
             expect(characterFile.entities).toBeInstanceOf(Array);
         });
 
@@ -204,7 +204,7 @@ describe('T-02: Prefab Instantiation Integration (file-backed)', () => {
             expect(new Set(componentIds).size).toBe(componentIds.length);
         });
 
-        it('GM_AssetStore_3D_Character.prefab has all unique component IDs', () => {
+        it('EN_Character_Stickman_01.prefab has all unique component IDs', () => {
             const componentIds = characterFile.entities.flatMap((e) =>
                 e.components.map((c) => c.id),
             );
@@ -241,7 +241,7 @@ describe('T-02: Prefab Instantiation Integration (file-backed)', () => {
             }
         });
 
-        it('every parentId in GM_AssetStore_3D_Character.prefab references an existing entity or is null', () => {
+        it('every parentId in EN_Character_Stickman_01.prefab references an existing entity or is null', () => {
             const entityIds = new Set(characterFile.entities.map((e) => e.id));
             for (const entity of characterFile.entities) {
                 if (entity.parentId !== null) {
@@ -272,10 +272,10 @@ describe('T-02: Prefab Instantiation Integration (file-backed)', () => {
             expect(roots[0]!.name).toBe('Cube-copy');
         });
 
-        it('GM_AssetStore_3D_Character.prefab has exactly one root entity', () => {
+        it('EN_Character_Stickman_01.prefab has exactly one root entity', () => {
             const roots = characterFile.entities.filter((e) => e.parentId === null);
             expect(roots).toHaveLength(1);
-            expect(roots[0]!.name).toBe('GM_AssetStore_3D_Character');
+            expect(roots[0]!.name).toBe('EN_Character_Stickman_01');
         });
 
         it('hierarchy has no cycles in any prefab', () => {
@@ -333,7 +333,7 @@ describe('T-02: Prefab Instantiation Integration (file-backed)', () => {
             expect(typeof meshRenderer!.properties.castShadows).toBe('boolean');
         });
 
-        it('every entity in GM_AssetStore_3D_Character.prefab has a transform component', () => {
+        it('every entity in EN_Character_Stickman_01.prefab has a transform component', () => {
             for (const entity of characterFile.entities) {
                 const transform = entity.components.find((c) => c.kind === 'transform');
                 expect(transform, `Entity "${entity.name}" missing transform`).toBeDefined();
@@ -432,7 +432,7 @@ describe('T-02: Prefab Instantiation Integration (file-backed)', () => {
 
         it('root entity name matches the prefab name', () => {
             const root = characterFile.entities.find((e) => e.parentId === null)!;
-            expect(root.name).toBe('GM_AssetStore_3D_Character');
+            expect(root.name).toBe('EN_Character_Stickman_01');
         });
 
         it('second-level entity is Armature', () => {
@@ -490,7 +490,7 @@ describe('T-02: Prefab Instantiation Integration (file-backed)', () => {
             expect(result.definition.actors.length).toBe(cubeFile.entities.length);
         });
 
-        it('resolves GM_AssetStore_3D_Character.prefab through the workflow', () => {
+        it('resolves EN_Character_Stickman_01.prefab through the workflow', () => {
             const definition = toScenePrefabDefinition(characterFile);
             const workflow = new ScenePrefabWorkflow({ prefabs: [definition] });
 
