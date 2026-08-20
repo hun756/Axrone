@@ -57,51 +57,68 @@ function readSource(...segments: string[]): string {
 /**
  * Extract the body of a method from source code by finding the method
  * declaration and matching braces. Returns the method body string or null.
+ * Skips matches inside comments and uses lookbehind to avoid partial
+ * identifier matches (e.g. _updateRemainingDistance containing 'update').
  */
 function extractMethodBody(source: string, methodName: string): string | null {
-    // Find the method declaration: word-boundary + methodName + (
-    const regex = new RegExp(`\\b${methodName}\\s*\\(`);
-    const match = regex.exec(source);
-    if (!match) return null;
+    // Use negative lookbehind to ensure the method name is not part of a
+    // larger identifier (e.g. _updateRemainingDistance should not match 'update').
+    const regex = new RegExp(`(?<![a-zA-Z0-9_$])${methodName}\\s*\\(`, 'g');
 
-    // Position of the opening '('
-    const openParenIdx = match.index + match[0].length - 1;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(source)) !== null) {
+        const matchIdx = match.index;
 
-    // Track parentheses depth to find the matching close ')'
-    let depth = 1;
-    let closeParenIdx = -1;
-    for (let i = openParenIdx + 1; i < source.length; i++) {
-        if (source[i] === '(') depth++;
-        else if (source[i] === ')') {
-            depth--;
-            if (depth === 0) {
-                closeParenIdx = i;
-                break;
+        // Skip matches inside single-line comments
+        const lineStart = source.lastIndexOf('\n', matchIdx) + 1;
+        const prefix = source.substring(lineStart, matchIdx);
+        if (prefix.trimStart().startsWith('//')) continue;
+
+        // Skip matches inside block comments (simple check: count /* and */)
+        const beforeMatch = source.substring(0, matchIdx);
+        const opens = (beforeMatch.match(/\/\*/g) || []).length;
+        const closes = (beforeMatch.match(/\*\//g) || []).length;
+        if (opens > closes) continue;
+
+        // Position of the opening '('
+        const openParenIdx = matchIdx + match[0].length - 1;
+
+        // Track parentheses depth to find the matching close ')'
+        let depth = 1;
+        let closeParenIdx = -1;
+        for (let i = openParenIdx + 1; i < source.length; i++) {
+            if (source[i] === '(') depth++;
+            else if (source[i] === ')') {
+                depth--;
+                if (depth === 0) {
+                    closeParenIdx = i;
+                    break;
+                }
             }
         }
-    }
-    if (closeParenIdx === -1) return null;
+        if (closeParenIdx === -1) continue;
 
-    // Find the opening '{' of the method body (skip return type annotations)
-    let braceStart = -1;
-    for (let i = closeParenIdx + 1; i < source.length; i++) {
-        if (source[i] === '{') {
-            braceStart = i;
-            break;
+        // Find the opening '{' of the method body (skip return type annotations)
+        let braceStart = -1;
+        for (let i = closeParenIdx + 1; i < source.length; i++) {
+            if (source[i] === '{') {
+                braceStart = i;
+                break;
+            }
+            // If we hit a semicolon before a brace, this isn't a method with a body
+            if (source[i] === ';') break;
         }
-        // If we hit a semicolon before a brace, this isn't a method with a body
-        if (source[i] === ';') return null;
-    }
-    if (braceStart === -1) return null;
+        if (braceStart === -1) continue;
 
-    // Match braces to find the end of the method body
-    let braceDepth = 1;
-    for (let i = braceStart + 1; i < source.length; i++) {
-        if (source[i] === '{') braceDepth++;
-        else if (source[i] === '}') {
-            braceDepth--;
-            if (braceDepth === 0) {
-                return source.substring(braceStart + 1, i);
+        // Match braces to find the end of the method body
+        let braceDepth = 1;
+        for (let i = braceStart + 1; i < source.length; i++) {
+            if (source[i] === '{') braceDepth++;
+            else if (source[i] === '}') {
+                braceDepth--;
+                if (braceDepth === 0) {
+                    return source.substring(braceStart + 1, i);
+                }
             }
         }
     }
@@ -720,8 +737,12 @@ describe('T-11: Production Script Verification — MutableConfig governance', ()
     it('TrailRenderer deserialize uses MutableTrailConfig (not `as any`)', () => {
         // Verify the pattern: `const patch: MutableTrailConfig = {}`
         expect(TRAIL_RENDERER_SOURCE).toMatch(/const\s+patch\s*:\s*MutableTrailConfig\s*=\s*\{\}/);
-        // Verify there is no `as any` cast on the patch variable
-        expect(TRAIL_RENDERER_SOURCE).not.toMatch(/patch\s+as\s+any/);
+        // Verify there is no `as any` cast on the patch variable (strip comments first
+        // because the source has a doc comment mentioning `(patch as any)` as anti-pattern)
+        const codeWithoutComments = TRAIL_RENDERER_SOURCE
+            .replace(/\/\/.*$/gm, '')
+            .replace(/\/\*[\s\S]*?\*\//g, '');
+        expect(codeWithoutComments).not.toMatch(/patch\s+as\s+any/);
     });
 
     it('PathAgent deserialize uses MutableConfig (not `as any`)', () => {
