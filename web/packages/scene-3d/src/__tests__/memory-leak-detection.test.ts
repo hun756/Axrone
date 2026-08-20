@@ -4,8 +4,8 @@ import {
     createSceneOptions,
     installWebGL2Constants,
     ManualScheduler,
-} from './test-harness';
-import type { MockGLContext } from './test-harness';
+} from '../../../../tests/shared/test-harness';
+import type { MockGLContext } from '../../../../tests/shared/test-harness';
 
 // ─── Dynamic imports ─────────────────────────────────────────────────────────
 

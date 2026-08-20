@@ -11,7 +11,7 @@ import {
     ManualScheduler,
     createSceneOptions,
     installWebGL2Constants,
-} from '../../../packages/scene-3d/src/__tests__/test-harness';
+} from '../../shared/test-harness';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 

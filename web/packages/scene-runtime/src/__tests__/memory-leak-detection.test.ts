@@ -14,7 +14,7 @@ import { Vec4 } from '@axrone/numeric';
 import {
     createMockGL,
     installWebGL2Constants,
-} from '../../../scene-3d/src/__tests__/test-harness';
+} from '../../../../tests/shared/test-harness';
 import { SceneResourceRuntime } from '../scene-resource-runtime';
 import type { SceneResourceRuntimeClearCallbacks } from '../scene-resource-runtime';
 import type { SceneTextureResource } from '../texture-registry';

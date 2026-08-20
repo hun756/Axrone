@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SceneShaderFactory } from '@axrone/scene-3d';
 import { SceneShaderError } from '@axrone/scene-3d';
-import { createMockGL } from './test-harness';
+import { createMockGL } from '../../../../tests/shared/test-harness';
 
 describe('SceneShaderFactory', () => {
     it('creates linked shader resources with inferred uniforms and attribute bindings', () => {

@@ -5,7 +5,7 @@ import {
     installWebGL2Constants,
     ManualScheduler,
     type MockGLContext,
-} from './test-harness';
+} from '../../../../tests/shared/test-harness';
 
 let Scene: typeof import('@axrone/scene-3d').Scene;
 let createScene: typeof import('@axrone/scene-3d').createScene;

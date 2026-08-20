@@ -5,7 +5,7 @@ import {
     createSceneOptions,
     installWebGL2Constants,
     ManualScheduler,
-} from './test-harness';
+} from '../../../../tests/shared/test-harness';
 
 let Scene: typeof import('@axrone/scene-3d').Scene;
 let Animator: typeof import('@axrone/scene-3d').Animator;

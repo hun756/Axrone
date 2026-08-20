@@ -5,7 +5,7 @@ import {
     createSceneOptions,
     installWebGL2Constants,
     ManualScheduler,
-} from './test-harness';
+} from '../../../../tests/shared/test-harness';
 
 // Static import of the actual scene file for validation tests
 import mainSceneJson from '../../../../../../Main.scene.json';

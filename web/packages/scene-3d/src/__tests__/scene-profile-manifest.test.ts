@@ -12,7 +12,7 @@ import {
 } from '@axrone/scene-3d';
 import { SceneCapabilityError } from '@axrone/scene-3d';
 import { SCENE_CORE_BUILT_IN_MANIFEST } from '@axrone/scene-3d';
-import { ManualScheduler, createSceneOptions, installWebGL2Constants } from './test-harness';
+import { ManualScheduler, createSceneOptions, installWebGL2Constants } from '../../../../tests/shared/test-harness';
 
 class PulseComponent extends Component {}
 
