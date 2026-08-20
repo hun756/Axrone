@@ -8,14 +8,7 @@ const isSameVec4 = (
     right: Vec4 | null | undefined
 ): boolean =>
     left === right ||
-    (left !== null &&
-        left !== undefined &&
-        right !== null &&
-        right !== undefined &&
-        left.x === right.x &&
-        left.y === right.y &&
-        left.z === right.z &&
-        left.w === right.w);
+    (left != null && right != null && left.equals(right));
 
 const resolveClearFlags = (
     renderPassClearFlags: readonly SceneClearFlag[],
