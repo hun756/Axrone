@@ -1,6 +1,7 @@
 import { IVec2Like, IVec3Like, Vec2, Vec3, Mat4, IMat4Like, EPSILON } from '@axrone/numeric';
 import { ICloneable, Equatable } from '@axrone/utility';
 import type { Brand } from '@axrone/utility';
+import { Fnv1a32 } from '@axrone/hash';
 
 export type Radians = Brand<number, 'Radians'>;
 export type Degrees = Brand<number, 'Degrees'>;
@@ -279,12 +280,12 @@ export class AABB2D implements IAABB<IVec2Like> {
     }
 
     getHashCode(): number {
-        let h1 = 2166136261;
-        h1 = Math.imul(h1 ^ Math.floor(this._min.x * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this._min.y * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this._max.x * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this._max.y * 1000), 16777619);
-        return h1 >>> 0;
+        return new Fnv1a32()
+            .updateF32(this._min.x)
+            .updateF32(this._min.y)
+            .updateF32(this._max.x)
+            .updateF32(this._max.y)
+            .digest();
     }
 
     copy(other: Readonly<IAABB<IVec2Like>>): void {
@@ -586,14 +587,14 @@ export class AABB3D implements IAABB<IVec3Like> {
     }
 
     getHashCode(): number {
-        let h1 = 2166136261;
-        h1 = Math.imul(h1 ^ Math.floor(this._min.x * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this._min.y * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this._min.z * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this._max.x * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this._max.y * 1000), 16777619);
-        h1 = Math.imul(h1 ^ Math.floor(this._max.z * 1000), 16777619);
-        return h1 >>> 0;
+        return new Fnv1a32()
+            .updateF32(this._min.x)
+            .updateF32(this._min.y)
+            .updateF32(this._min.z)
+            .updateF32(this._max.x)
+            .updateF32(this._max.y)
+            .updateF32(this._max.z)
+            .digest();
     }
 
     copy(other: Readonly<IAABB<IVec3Like>>): void {
