@@ -4,6 +4,8 @@ import type { IParticleBuffer } from '../core/interfaces';
 import type { ParticleId } from '../types';
 import { BaseModule } from './base-module';
 
+const VELOCITY_CHANGE_THRESHOLD = 0.001;
+
 interface VelocityState {
     initialVelocity: IVec3Like;
     currentVelocity: IVec3Like;
@@ -233,7 +235,7 @@ export class VelocityModule extends BaseModule<'velocity'> {
 
         const velocityMultiplier = this._evaluateCurve(config.velocityOverLifetime, normalizedAge);
 
-        if (Math.abs(velocityMultiplier - 1.0) > 0.001) {
+        if (Math.abs(velocityMultiplier - 1.0) > VELOCITY_CHANGE_THRESHOLD) {
             const factor = velocityMultiplier;
             state.currentVelocity.x *= factor;
             state.currentVelocity.y *= factor;
