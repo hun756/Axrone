@@ -11,6 +11,11 @@ export interface AnimationSkinningPaletteOptions {
     readonly scratchMatrix?: Float32Array;
 }
 
+const fallbackInverseMesh = new Float32Array(16);
+const fallbackScratch = new Float32Array(16);
+const fallbackWorldMatrix = new Float32Array(16);
+const fallbackRigScratch = new Float32Array(16);
+
 const writeIdentity = (target: Float32Array, offset: number): void => {
     target[offset] = 1;
     target[offset + 1] = 0;
@@ -39,8 +44,8 @@ export const computeSkinningPalette = ({
     scratchMatrix,
 }: AnimationSkinningPaletteOptions): Float32Array => {
     const palette = out ?? new Float32Array(jointWorldMatrices.length * 16);
-    const inverseMeshMatrix = scratchInverseMesh ?? new Float32Array(16);
-    const scratch = scratchMatrix ?? new Float32Array(16);
+    const inverseMeshMatrix = scratchInverseMesh ?? fallbackInverseMesh;
+    const scratch = scratchMatrix ?? fallbackScratch;
     if (!mat4Invert(inverseMeshMatrix, 0, meshWorldMatrix, 0)) {
         palette.fill(0);
         for (let index = 0; index < jointWorldMatrices.length; index += 1) {
@@ -73,8 +78,8 @@ export const computeRigSkinningPalette = (
     scratchBuffers?: AnimationRigSkinningPaletteScratch
 ): Float32Array => {
     const palette = out ?? new Float32Array(rig.boneCount * 16);
-    const worldMatrix = scratchBuffers?.worldMatrix ?? new Float32Array(16);
-    const scratch = scratchBuffers?.scratch ?? new Float32Array(16);
+    const worldMatrix = scratchBuffers?.worldMatrix ?? fallbackWorldMatrix;
+    const scratch = scratchBuffers?.scratch ?? fallbackRigScratch;
     for (let boneIndex = 0; boneIndex < rig.boneCount; boneIndex += 1) {
         composeMatrix(
             worldMatrix,
