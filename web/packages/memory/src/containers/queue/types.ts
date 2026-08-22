@@ -1,6 +1,6 @@
-declare const __nominal: unique symbol;
+import type { Opaque } from '@axrone/utility';
 
-export type Nominal<T, K> = T & { readonly [__nominal]: K };
+export type { Opaque as Nominal };
 
 export type Comparator<T> = (a: T, b: T) => number;
 

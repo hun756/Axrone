@@ -1,3 +1,7 @@
+import type { Comparator, HeapOrder } from '../containers/queue/binary-heap';
+
+export type { Comparator, HeapOrder };
+
 declare const __indexedHeapBrand: unique symbol;
 declare const __indexedHeapVersion: unique symbol;
 declare const __indexedHeapState: unique symbol;
@@ -5,10 +9,6 @@ declare const __indexedHeapState: unique symbol;
 export type IndexedHeapBrand = { readonly [__indexedHeapBrand]: true };
 export type IndexedHeapVersion = { readonly [__indexedHeapVersion]: 1 };
 export type IndexedHeapState = { readonly [__indexedHeapState]: 'open' | 'sealed' };
-
-export type Comparator<T> = (left: T, right: T) => number;
-
-export type HeapOrder = 'min' | 'max';
 
 export interface IndexedHeapOptions<K, V> {
     readonly compare: Comparator<K>;
