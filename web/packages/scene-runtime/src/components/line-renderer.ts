@@ -475,12 +475,7 @@ export class LineRenderer extends Component {
         const lowerColor = toVec4(lowerStop.color);
         const upperColor = toVec4(upperStop.color);
 
-        return new Vec4(
-            lowerColor.x + (upperColor.x - lowerColor.x) * fraction,
-            lowerColor.y + (upperColor.y - lowerColor.y) * fraction,
-            lowerColor.z + (upperColor.z - lowerColor.z) * fraction,
-            lowerColor.w + (upperColor.w - lowerColor.w) * fraction
-        );
+        return Vec4.lerpUnClamped(lowerColor, upperColor, fraction);
     }
 
     private _applyConfig(config: LineRendererConfig): void {
