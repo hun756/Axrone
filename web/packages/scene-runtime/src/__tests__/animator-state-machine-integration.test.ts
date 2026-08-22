@@ -910,8 +910,8 @@ describe('T-07.7: Builder API Integration', () => {
                 'base',
                 AnimationControllerGraph.machine('Idle')
                     .state('Idle', { kind: 'clip', clipId: 'idle' }, (state) => {
-                        state.transitionTo('Walk', (t) => {
-                            t.whenFloat('speed', '>', 0.5).withDuration(0.3).withFixedDuration();
+                        return state.transitionTo('Walk', (t) => {
+                            return t.whenFloat('speed', '>', 0.5).withDuration(0.3).withFixedDuration();
                         });
                     })
                     .state('Walk', { kind: 'clip', clipId: 'walk' })
@@ -928,7 +928,7 @@ describe('T-07.7: Builder API Integration', () => {
             .state('A', { kind: 'clip', clipId: 'idle' })
             .state('B', { kind: 'clip', clipId: 'walk' })
             .anyState('A', (t) => {
-                t.whenTriggered('reset').withPriority(10);
+                return t.whenTriggered('reset').withPriority(10);
             })
             .build();
 
@@ -939,8 +939,8 @@ describe('T-07.7: Builder API Integration', () => {
     it('compiles and runs a builder-constructed state machine end-to-end', () => {
         const machineDef = AnimationControllerGraph.machine('Idle')
             .state('Idle', { kind: 'clip', clipId: 'idle' }, (state) => {
-                state.transitionTo('Walk', (t) => {
-                    t.whenTriggered('go').withDuration(0.2).withFixedDuration();
+                return state.transitionTo('Walk', (t) => {
+                    return t.whenTriggered('go').withDuration(0.2).withFixedDuration();
                 });
             })
             .state('Walk', { kind: 'clip', clipId: 'walk' })
@@ -970,7 +970,7 @@ describe('T-07.7: Builder API Integration', () => {
     it('reports diagnostics for machines with unknown transition targets', () => {
         const machineDef = AnimationControllerGraph.machine('A')
             .state('A', { kind: 'clip', clipId: 'idle' }, (state) => {
-                state.transitionTo('MISSING');
+                return state.transitionTo('MISSING');
             })
             .build();
 
