@@ -64,20 +64,14 @@ const copyIntoVec4 = (
     fallback: Vec4 = Vec4.ONE
 ): void => {
     if (value instanceof Vec4) {
-        target.x = value.x;
-        target.y = value.y;
-        target.z = value.z;
-        target.w = value.w;
+        Vec4.copy(value, target);
     } else if (Array.isArray(value) && value.length === 4) {
         target.x = value[0];
         target.y = value[1];
         target.z = value[2];
         target.w = value[3];
     } else {
-        target.x = fallback.x;
-        target.y = fallback.y;
-        target.z = fallback.z;
-        target.w = fallback.w;
+        Vec4.copy(fallback, target);
     }
 };
 
