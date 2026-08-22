@@ -1,4 +1,4 @@
-import type { IVec3Like } from '@axrone/numeric';
+import { Vec3, type IVec3Like } from '@axrone/numeric';
 import type { LightsConfiguration } from '../core/configuration';
 import type { IParticleBuffer } from '../core/interfaces';
 import type { ParticleId } from '../types';
@@ -291,18 +291,14 @@ export class LightsModule extends BaseModule<'lights'> {
             z: particlePos.z - lightPos.z,
         };
 
-        const toParticleLength = Math.sqrt(
-            toParticle.x * toParticle.x + toParticle.y * toParticle.y + toParticle.z * toParticle.z
-        );
+        const toParticleLength = Vec3.len(toParticle);
         if (toParticleLength === 0) return intensity;
 
-        const lightDirLength = Math.sqrt(
-            lightDir.x * lightDir.x + lightDir.y * lightDir.y + lightDir.z * lightDir.z
-        );
+        const lightDirLength = Vec3.len(lightDir);
         if (lightDirLength === 0) return 0;
 
         const cosAngle =
-            (toParticle.x * lightDir.x + toParticle.y * lightDir.y + toParticle.z * lightDir.z) /
+            Vec3.dot(toParticle, lightDir) /
             (toParticleLength * lightDirLength);
         const angle = Math.acos(Math.max(-1, Math.min(1, cosAngle)));
 
