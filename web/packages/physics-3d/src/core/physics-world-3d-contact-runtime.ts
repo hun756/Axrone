@@ -34,6 +34,7 @@ import {
     type IConstraintDescriptor3D,
     type IResolvedContactManifold3D,
     type IShapeDescriptor3D,
+    type IMutableContactPoint3D,
     type IShapePairCandidate3D,
     type SupportedConstraintDef3D,
     type SupportedShapeDef3D,

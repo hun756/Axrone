@@ -7,6 +7,7 @@ import {
     normalizeVec3,
     transformPoint3D, inverseTransformPoint3D,
     clamp, componentMin, componentMax, midpointVec3,
+    inverseVec3, cylinderConeLocalHalfExtents,
     intersectsAabb, expandAabb,
     makeMaterial, makeFilter,
     supportsQueryFilter, shouldShapeFiltersCollide,
@@ -78,6 +79,20 @@ describe('physics-world-3d-shared', () => {
 
         it('midpointVec3 averages two points', () => {
             expect(midpointVec3({ x: 0, y: 0, z: 0 }, { x: 4, y: 6, z: 8 })).toEqual({ x: 2, y: 3, z: 4 });
+        });
+
+        it('inverseVec3 returns component-wise reciprocal for positive values', () => {
+            const inv = inverseVec3({ x: 2, y: 4, z: 5 });
+            expect(inv.x).toBeCloseTo(0.5, 5);
+            expect(inv.y).toBeCloseTo(0.25, 5);
+            expect(inv.z).toBeCloseTo(0.2, 5);
+        });
+
+        it('inverseVec3 returns zero for zero/negative components', () => {
+            const inv = inverseVec3({ x: 0, y: -1, z: 5 });
+            expect(inv.x).toBe(0);
+            expect(inv.y).toBe(0);
+            expect(inv.z).toBeCloseTo(0.2, 5);
         });
     });
 
@@ -197,6 +212,23 @@ describe('physics-world-3d-shared', () => {
         });
         it('returns Z for axis 2', () => {
             expect(getAxisVector(2)).toEqual({ x: 0, y: 0, z: 1 });
+        });
+    });
+
+    describe('cylinderConeLocalHalfExtents', () => {
+        it('returns correct half extents for X axis', () => {
+            const h = cylinderConeLocalHalfExtents(0, 2, 6);
+            expect(h).toEqual({ x: 3, y: 2, z: 2 });
+        });
+
+        it('returns correct half extents for Y axis (default)', () => {
+            const h = cylinderConeLocalHalfExtents(1, 1.5, 4);
+            expect(h).toEqual({ x: 1.5, y: 2, z: 1.5 });
+        });
+
+        it('returns correct half extents for Z axis', () => {
+            const h = cylinderConeLocalHalfExtents(2, 3, 10);
+            expect(h).toEqual({ x: 3, y: 3, z: 5 });
         });
     });
 
