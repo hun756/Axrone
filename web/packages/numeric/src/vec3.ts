@@ -61,6 +61,17 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return new Vec3(this.x, this.y, this.z);
     }
 
+    static copy<T extends IVec3Like, V extends IVec3Like>(source: Readonly<T>, out?: V): V {
+        if (out) {
+            out.x = source.x;
+            out.y = source.y;
+            out.z = source.z;
+            return out;
+        }
+
+        return { x: source.x, y: source.y, z: source.z } as V;
+    }
+
     equals(other: unknown): boolean {
         if (!(other instanceof Vec3)) return false;
 

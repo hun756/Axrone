@@ -73,12 +73,6 @@ const createStats = (): MutableLightingSelectionStats => ({
     omittedLocalLightCount: 0,
 });
 
-const writeVec3 = (target: Vec3, source: Readonly<Vec3>): void => {
-    target.x = source.x;
-    target.y = source.y;
-    target.z = source.z;
-};
-
 const isVec3TupleInput = (value: Vec3Input): value is ReadonlyTuple3<number> => Array.isArray(value);
 
 const sameVec3Input = (camera: Vec3Input | undefined, lastCamera: Vec3, hasLastCamera: boolean): boolean => {
@@ -698,9 +692,9 @@ export class LightingFrameResolver implements Disposable {
     }
 
     #syncEnvironment(environment: LightingEnvironment): void {
-        writeVec3(this.#state.environment.ambient, environment.ambient);
-        writeVec3(this.#state.environment.sky, environment.sky);
-        writeVec3(this.#state.environment.ground, environment.ground);
+        Vec3.copy(environment.ambient, this.#state.environment.ambient);
+        Vec3.copy(environment.sky, this.#state.environment.sky);
+        Vec3.copy(environment.ground, this.#state.environment.ground);
         this.#state.environment.exposure = environment.exposure;
         this.#state.environment.gamma = environment.gamma;
     }
