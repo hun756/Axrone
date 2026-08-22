@@ -1,3 +1,4 @@
+import { Vec3, Quat } from '@axrone/numeric';
 import type { IQuatLike, IVec3Like } from '@axrone/numeric';
 import type {
     ContactId,
@@ -152,110 +153,6 @@ export const DEFAULT_MATERIAL: IMaterial = {
 };
 export const DEFAULT_FILTER: ICollisionFilter3D = { categoryBits: 1, maskBits: 0xffff, groupIndex: 0 };
 
-export function cloneVec3(vector: Readonly<IVec3Like>): IVec3Like {
-    return { x: vector.x, y: vector.y, z: vector.z };
-}
-
-export function cloneQuat(rotation: Readonly<IQuatLike>): IQuatLike {
-    return { x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w };
-}
-
-export function addVec3(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
-    return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
-}
-
-export function subVec3(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
-    return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
-}
-
-export function scaleVec3(vector: Readonly<IVec3Like>, scalar: number): IVec3Like {
-    return { x: vector.x * scalar, y: vector.y * scalar, z: vector.z * scalar };
-}
-
-export function negateVec3(vector: Readonly<IVec3Like>): IVec3Like {
-    return { x: -vector.x, y: -vector.y, z: -vector.z };
-}
-
-export function dotVec3(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): number {
-    return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-export function crossVec3(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
-    return {
-        x: a.y * b.z - a.z * b.y,
-        y: a.z * b.x - a.x * b.z,
-        z: a.x * b.y - a.y * b.x,
-    };
-}
-
-export function lengthSquaredVec3(vector: Readonly<IVec3Like>): number {
-    return dotVec3(vector, vector);
-}
-
-export function lengthVec3(vector: Readonly<IVec3Like>): number {
-    return Math.sqrt(lengthSquaredVec3(vector));
-}
-
-export function normalizeVec3(vector: Readonly<IVec3Like>): IVec3Like {
-    const length = lengthVec3(vector);
-    if (length <= 1e-10) {
-        return { x: 0, y: 0, z: 0 };
-    }
-
-    const inverseLength = 1 / length;
-    return scaleVec3(vector, inverseLength);
-}
-
-export function conjugateQuat(rotation: Readonly<IQuatLike>): IQuatLike {
-    return { x: -rotation.x, y: -rotation.y, z: -rotation.z, w: rotation.w };
-}
-
-export function multiplyQuat(a: Readonly<IQuatLike>, b: Readonly<IQuatLike>): IQuatLike {
-    return {
-        x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
-        y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
-        z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
-        w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
-    };
-}
-
-export function rotateVec3(vector: Readonly<IVec3Like>, rotation: Readonly<IQuatLike>): IVec3Like {
-    const qx = rotation.x;
-    const qy = rotation.y;
-    const qz = rotation.z;
-    const qw = rotation.w;
-
-    const tx = 2 * (qy * vector.z - qz * vector.y);
-    const ty = 2 * (qz * vector.x - qx * vector.z);
-    const tz = 2 * (qx * vector.y - qy * vector.x);
-
-    return {
-        x: vector.x + qw * tx + (qy * tz - qz * ty),
-        y: vector.y + qw * ty + (qz * tx - qx * tz),
-        z: vector.z + qw * tz + (qx * ty - qy * tx),
-    };
-}
-
-export function inverseRotateVec3(vector: Readonly<IVec3Like>, rotation: Readonly<IQuatLike>): IVec3Like {
-    return rotateVec3(vector, conjugateQuat(rotation));
-}
-
-export function transformPoint3D(
-    point: Readonly<IVec3Like>,
-    position: Readonly<IVec3Like>,
-    rotation: Readonly<IQuatLike>
-): IVec3Like {
-    return addVec3(position, rotateVec3(point, rotation));
-}
-
-export function inverseTransformPoint3D(
-    point: Readonly<IVec3Like>,
-    position: Readonly<IVec3Like>,
-    rotation: Readonly<IQuatLike>
-): IVec3Like {
-    return inverseRotateVec3(subVec3(point, position), rotation);
-}
-
 export function clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value));
 }
@@ -269,7 +166,7 @@ export function componentMax(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IV
 }
 
 export function midpointVec3(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
-    return scaleVec3(addVec3(a, b), 0.5);
+    return Vec3.multiplyScalar(Vec3.add(a, b), 0.5);
 }
 
 export function expandAabb(aabb: IAabb3D, point: Readonly<IVec3Like>): IAabb3D {
@@ -350,8 +247,8 @@ export function buildOrthonormalBasis(normal: Readonly<IVec3Like>): { tangent1: 
             : Math.abs(normal.y) < 0.57735
               ? { x: 0, y: 1, z: 0 }
               : { x: 0, y: 0, z: 1 };
-    const tangent1 = normalizeVec3(crossVec3(normal, tangentSeed));
-    const tangent2 = normalizeVec3(crossVec3(normal, tangent1));
+    const tangent1 = Vec3.normalize(Vec3.cross(normal, tangentSeed));
+    const tangent2 = Vec3.normalize(Vec3.cross(normal, tangent1));
     return { tangent1, tangent2 };
 }
 
@@ -411,15 +308,15 @@ export function linePointDistanceSquared(
     lineStart: Readonly<IVec3Like>,
     lineEnd: Readonly<IVec3Like>
 ): number {
-    const line = subVec3(lineEnd, lineStart);
-    const lineLengthSquared = lengthSquaredVec3(line);
+    const line = Vec3.subtract(lineEnd, lineStart);
+    const lineLengthSquared = Vec3.lengthSquared(line);
     if (lineLengthSquared <= 1e-10) {
-        return lengthSquaredVec3(subVec3(point, lineStart));
+        return Vec3.lengthSquared(Vec3.subtract(point, lineStart));
     }
 
-    const t = clamp(dotVec3(subVec3(point, lineStart), line) / lineLengthSquared, 0, 1);
-    const closestPoint = addVec3(lineStart, scaleVec3(line, t));
-    return lengthSquaredVec3(subVec3(point, closestPoint));
+    const t = clamp(Vec3.dot(Vec3.subtract(point, lineStart), line) / lineLengthSquared, 0, 1);
+    const closestPoint = Vec3.add(lineStart, Vec3.multiplyScalar(line, t));
+    return Vec3.lengthSquared(Vec3.subtract(point, closestPoint));
 }
 
 export function triangleNormal(
@@ -427,7 +324,7 @@ export function triangleNormal(
     b: Readonly<IVec3Like>,
     c: Readonly<IVec3Like>
 ): IVec3Like {
-    return normalizeVec3(crossVec3(subVec3(b, a), subVec3(c, a)));
+    return Vec3.normalize(Vec3.cross(Vec3.subtract(b, a), Vec3.subtract(c, a)));
 }
 
 export function rayTriangleHit(
@@ -438,29 +335,29 @@ export function rayTriangleHit(
     c: Readonly<IVec3Like>,
     maxFraction: number
 ): IShapeRayHit3D | null {
-    const edge1 = subVec3(b, a);
-    const edge2 = subVec3(c, a);
-    const p = crossVec3(direction, edge2);
-    const determinant = dotVec3(edge1, p);
+    const edge1 = Vec3.subtract(b, a);
+    const edge2 = Vec3.subtract(c, a);
+    const p = Vec3.cross(direction, edge2);
+    const determinant = Vec3.dot(edge1, p);
 
     if (Math.abs(determinant) <= 1e-10) {
         return null;
     }
 
     const inverseDeterminant = 1 / determinant;
-    const t = subVec3(origin, a);
-    const u = dotVec3(t, p) * inverseDeterminant;
+    const t = Vec3.subtract(origin, a);
+    const u = Vec3.dot(t, p) * inverseDeterminant;
     if (u < 0 || u > 1) {
         return null;
     }
 
-    const q = crossVec3(t, edge1);
-    const v = dotVec3(direction, q) * inverseDeterminant;
+    const q = Vec3.cross(t, edge1);
+    const v = Vec3.dot(direction, q) * inverseDeterminant;
     if (v < 0 || u + v > 1) {
         return null;
     }
 
-    const fraction = dotVec3(edge2, q) * inverseDeterminant;
+    const fraction = Vec3.dot(edge2, q) * inverseDeterminant;
     if (fraction < 0 || fraction > maxFraction) {
         return null;
     }
@@ -468,7 +365,7 @@ export function rayTriangleHit(
     const normal = triangleNormal(a, b, c);
     return {
         fraction,
-        normal: dotVec3(normal, direction) > 0 ? scaleVec3(normal, -1) : normal,
+        normal: Vec3.dot(normal, direction) > 0 ? Vec3.multiplyScalar(normal, -1) : normal,
     };
 }
 
@@ -493,13 +390,13 @@ export function raySphereHit(
     radius: number,
     maxFraction: number
 ): IShapeRayHit3D | null {
-    const m = subVec3(origin, center);
-    const a = dotVec3(direction, direction);
-    const b = dotVec3(m, direction);
-    const c = dotVec3(m, m) - radius * radius;
+    const m = Vec3.subtract(origin, center);
+    const a = Vec3.dot(direction, direction);
+    const b = Vec3.dot(m, direction);
+    const c = Vec3.dot(m, m) - radius * radius;
 
     if (c <= 0) {
-        return { fraction: 0, normal: normalizeVec3(m) };
+        return { fraction: 0, normal: Vec3.normalize(m) };
     }
     if (a <= 1e-10) {
         return null;
@@ -515,8 +412,8 @@ export function raySphereHit(
         return null;
     }
 
-    const hitPoint = addVec3(origin, scaleVec3(direction, fraction));
-    return { fraction, normal: normalizeVec3(subVec3(hitPoint, center)) };
+    const hitPoint = Vec3.add(origin, Vec3.multiplyScalar(direction, fraction));
+    return { fraction, normal: Vec3.normalize(Vec3.subtract(hitPoint, center)) };
 }
 
 export function isSphereDef(def: SupportedShapeDef3D): def is { readonly kind: typeof SHAPE_TYPE_SPHERE } & ISphereShapeDef3D {
@@ -613,7 +510,7 @@ export function rayAabbHit(
             const swap = t1;
             t1 = t2;
             t2 = swap;
-            axisNormal = scaleVec3(axisNormal, -1);
+            axisNormal = Vec3.multiplyScalar(axisNormal, -1);
         }
 
         if (t1 > tMin) {
