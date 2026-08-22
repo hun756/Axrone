@@ -1,5 +1,5 @@
 import { createAnimationClips, AnimationClip } from './clip';
-import { AnimationScratchPool, resolveMotionDuration, type AnimationMotionEvaluationContext } from './blend-tree';
+import { AnimationScratchPool, BlendScratchContext, resolveMotionDuration, type AnimationMotionEvaluationContext } from './blend-tree';
 import { AnimationStateMachineError, AnimationValidationError } from './errors';
 import { AnimationIkLayer } from './ik';
 import { AnimationParameterStore } from './parameters';
@@ -10,6 +10,7 @@ import {
     applyAdditiveFrame,
     blendFrame,
 } from './pose';
+import { createAdditiveFrameScratch } from './pose-blend';
 import { AnimationRig } from './rig';
 import {
     commitLayerRuntime,
@@ -104,6 +105,7 @@ export class AnimationController<
 
     private readonly _restFrame: AnimationFrame;
     private readonly _scratchPool: AnimationScratchPool;
+    private readonly _blendScratch: BlendScratchContext;
     private readonly _layers: readonly AnimationCompiledLayer[];
     private readonly _layerRuntimes: AnimationLayerRuntime[];
     private readonly _layerWeights: Float32Array;
@@ -112,9 +114,6 @@ export class AnimationController<
     private readonly _rootMotionRotation = new Float32Array([0, 0, 0, 1]);
     private readonly _rootMotionConfig: NonNullable<AnimationControllerDefinition['rootMotion']> | null;
     private readonly _rootMotionBoneIndex: number;
-    // Reused per-frame scratch collections keep the update hot path free of
-    // array/object churn; exposed results stay valid until the next
-    // update()/evaluate() call.
     private readonly _eventScratch: AnimationControllerEvent[] = [];
     private readonly _activeClipScratch: AnimationControllerClipActivity[] = [];
     private _events: readonly AnimationControllerEvent[] = [];
@@ -137,11 +136,13 @@ export class AnimationController<
         this._restFrame = new AnimationFrame(this.rig, this.curveLayout);
         this.currentFrame = new AnimationFrame(this.rig, this.curveLayout);
         this._scratchPool = new AnimationScratchPool(this.rig, this.curveLayout, this._restFrame.curves.values);
+        this._blendScratch = new BlendScratchContext();
         this._evaluationContext = {
             rig: this.rig,
             parameters: this.parameters,
             restFrame: this._restFrame,
             scratch: this._scratchPool,
+            blendScratch: this._blendScratch,
         };
         this._layers = Object.freeze(
             definition.layers.map((layer) => {
@@ -194,12 +195,10 @@ export class AnimationController<
         };
     }
 
-    /** Emitted events for the latest update; contents are reused and only valid until the next update()/evaluate() call. */
     get events(): readonly AnimationControllerEvent[] {
         return this._events;
     }
 
-    /** Active clip sampling info for the latest update; contents are reused and only valid until the next update()/evaluate() call. */
     get activeClips(): readonly AnimationControllerClipActivity[] {
         return this._activeClips;
     }
@@ -302,6 +301,7 @@ export class AnimationController<
         events.length = 0;
         const activeClips = this._activeClipScratch;
         activeClips.length = 0;
+        const additiveScratch = createAdditiveFrameScratch();
 
         for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
             const layer = this._layers[layerIndex]!;
@@ -326,6 +326,7 @@ export class AnimationController<
                         layerFrame,
                         this._restFrame,
                         layerWeight,
+                        additiveScratch,
                         layer.mask ?? undefined
                     );
                 } else {
@@ -344,6 +345,7 @@ export class AnimationController<
                     layerFrame,
                     this._restFrame,
                     layerWeight,
+                    additiveScratch,
                     layer.mask ?? undefined
                 );
             } else {
@@ -430,7 +432,7 @@ export class AnimationController<
             (left, right) =>
                 right.motionWeight - left.motionWeight ||
                 left.layerId.localeCompare(right.layerId) ||
-                left.stateId.localeCompare(right.stateId) ||
+                right.stateId.localeCompare(right.stateId) ||
                 left.clipId.localeCompare(right.clipId)
         );
         this._activeClips = activeClips;
@@ -460,9 +462,6 @@ export class AnimationController<
     }
 
     private _updateProfile(evaluationTimeMs: number): void {
-        // Profile snapshots stay immutable-by-construction: layer entries and
-        // the containing array are freshly allocated (layer counts are small),
-        // unlike the documented reused events/activeClips scratch arrays.
         const activeLayers: AnimationControllerLayerProfile[] = [];
         for (let index = 0; index < this._layers.length; index += 1) {
             const layer = this._layers[index]!;

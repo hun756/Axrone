@@ -1,5 +1,7 @@
 export * from './brands';
 export * from './blend-graph';
+export * from './blend-tree';
+export * from './blend-types';
 export * from './clip';
 export * from './controller-graph';
 export * from './controller';
@@ -10,6 +12,8 @@ export * from './motion-matching';
 export * from './optimization';
 export * from './parameters';
 export * from './pose';
+export * from './pose-frame';
+export * from './pose-blend';
 export * from './retargeting';
 export * from './rig';
 export * from './skinning';
