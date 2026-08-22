@@ -1,24 +1,10 @@
+export type { JsonValue as SerializedValue } from '@axrone/utility';
 import { Vec2 } from '../vec2';
 import { Vec3 } from '../vec3';
 import { Vec4 } from '../vec4';
 import { Quat } from '../quat';
 import { Mat4 } from '../mat4';
 
-/**
- * Canonical JSON-serializable value type for engine value-object encoding.
- *
- * Both `GltfSerializedValue` (asset-gltf) and `SceneSerializedValue`
- * (scene-prefab) are structurally identical to this type. Package-local
- * aliases are kept for API backwards compatibility; TypeScript's structural
- * typing ensures cross-package assignability without shared imports.
- */
-export type SerializedValue =
-    | string
-    | number
-    | boolean
-    | null
-    | readonly SerializedValue[]
-    | { readonly [key: string]: SerializedValue };
 
 /**
  * Rounds a Float32 value to 6 significant decimal digits before JSON
