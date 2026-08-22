@@ -1,6 +1,7 @@
 import type { Brand } from '@axrone/utility';
 
 export const MAX_BLEND_DEPTH = 16 as const;
+export type ValidBlendDepth = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
 
 declare const BlendWeightBrand: unique symbol;
 export type BlendWeight = Brand<number, 'BlendWeight'>;

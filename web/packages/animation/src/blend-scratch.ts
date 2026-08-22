@@ -3,7 +3,7 @@ import { AnimationFrame, type AnimationCurveLayout } from './pose-frame';
 import { createAdditiveFrameScratch, type AdditiveFrameScratch } from './pose-blend';
 import type { AnimationRig } from './rig';
 import type { AnimationParameterStore } from './parameters';
-import { MAX_BLEND_DEPTH } from './blend-types';
+import { MAX_BLEND_DEPTH, type ValidBlendDepth } from './blend-types';
 
 export class AnimationScratchPool {
     private readonly _framePool: ObjectPool<AnimationFrame>;
@@ -117,9 +117,15 @@ export class BlendScratchContext {
     private readonly _rootDeltaSlots: RootDeltaScratchSlot[] = [];
     private readonly _referenceRotation = new Float32Array(4);
     private readonly _additiveScratch: AdditiveFrameScratch = createAdditiveFrameScratch();
+    private readonly _transitionRootDeltaScratch = {
+        sourceTranslation: new Float32Array(3),
+        targetTranslation: new Float32Array(3),
+        sourceRotation: new Float32Array(4),
+        targetRotation: new Float32Array(4),
+    };
 
     acquireBlend2DWeights(depth: number, count: number): number[] {
-        const clampedDepth = Math.min(depth, MAX_BLEND_DEPTH - 1);
+        const clampedDepth = Math.min(depth, MAX_BLEND_DEPTH - 1) as ValidBlendDepth;
         let slot = this._blend2DWeightSlots[clampedDepth];
         if (!slot) {
             slot = new Array<number>(count);
@@ -131,7 +137,7 @@ export class BlendScratchContext {
     }
 
     acquireRootDeltaScratch(slotIndex: number): RootDeltaScratchSlot {
-        const clampedIndex = Math.min(slotIndex, MAX_BLEND_DEPTH * 2 - 1);
+        const clampedIndex = Math.min(slotIndex, MAX_BLEND_DEPTH * 2 - 1) as ValidBlendDepth extends number ? number : never;
         let slot = this._rootDeltaSlots[clampedIndex];
         if (!slot) {
             slot = {
@@ -149,6 +155,10 @@ export class BlendScratchContext {
 
     get additiveScratch(): AdditiveFrameScratch {
         return this._additiveScratch;
+    }
+
+    get transitionRootDeltaScratch(): typeof this._transitionRootDeltaScratch {
+        return this._transitionRootDeltaScratch;
     }
 }
 

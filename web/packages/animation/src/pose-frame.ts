@@ -1,5 +1,5 @@
 import { AnimationValidationError } from './errors';
-import { clamp, quatAccumulateWeighted, quatApplyToVec3, quatCopy, quatFinalizeWeighted, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Add, vec3Lerp, vec3Multiply } from './math';
+import { quatAccumulateWeighted, quatApplyToVec3, quatCopy, quatFinalizeWeighted, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Add, vec3Lerp, vec3Multiply } from './math';
 import type { AnimationCurveBindingDefinition } from './types';
 import type { AnimationRig } from './rig';
 
