@@ -20,6 +20,7 @@ import {
     CurveMode,
     GradientMode,
 } from '@axrone/particle-system';
+import { Vec3 } from '@axrone/numeric';
 import type {
     CurveConfiguration,
     GradientConfiguration,
@@ -32,8 +33,8 @@ import type {
 import type { ParticleSystemConfig } from './particle-system';
 
 const DEG_TO_RAD = Math.PI / 180;
-const ZERO_VEC3: ImmutableVec3 = Object.freeze({ x: 0, y: 0, z: 0 });
-const UNIT_VEC3: ImmutableVec3 = Object.freeze({ x: 1, y: 1, z: 1 });
+const ZERO_VEC3: ImmutableVec3 = Vec3.ZERO;
+const UNIT_VEC3: ImmutableVec3 = Vec3.ONE;
 const ZERO_COLOR: ImmutableColor = Object.freeze({ r: 0, g: 0, b: 0, a: 0 });
 const WHITE_COLOR: ImmutableColor = Object.freeze({ r: 1, g: 1, b: 1, a: 1 });
 
