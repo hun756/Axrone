@@ -42,7 +42,6 @@ import {
     clamp,
     inverseTransformPoint3D,
     midpointVec3,
-    normalizeVec3,
     shouldShapeFiltersCollide,
     transformPoint3D,
     isSphereDef,

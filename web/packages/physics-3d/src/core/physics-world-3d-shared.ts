@@ -175,10 +175,6 @@ export function normalizeVec3(v: Readonly<IVec3Like>): IVec3Like {
     return Vec3.multiplyScalar(v, 1 / len);
 }
 
-export function inverseRotateVec3(vector: Readonly<IVec3Like>, rotation: Readonly<IQuatLike>): IVec3Like {
-    return Quat.rotateVector(Quat.conjugate(rotation), vector);
-}
-
 export function transformPoint3D(
     point: Readonly<IVec3Like>,
     position: Readonly<IVec3Like>,
