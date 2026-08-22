@@ -128,24 +128,16 @@ export abstract class Joint3D extends Component {
         return this._axis;
     }
     set axis(value: IVec3Like) {
-        const len = Math.sqrt(value.x * value.x + value.y * value.y + value.z * value.z);
-        if (len < 1e-6) return;
-        const invLen = 1 / len;
-        this._axis.x = value.x * invLen;
-        this._axis.y = value.y * invLen;
-        this._axis.z = value.z * invLen;
+        if (Vec3.len(value) < 1e-6) return;
+        Vec3.normalize(value, this._axis);
         this._updateConstraint();
     }
     get secondaryAxis(): Readonly<Vec3> {
         return this._secondaryAxis;
     }
     set secondaryAxis(value: IVec3Like) {
-        const len = Math.sqrt(value.x * value.x + value.y * value.y + value.z * value.z);
-        if (len < 1e-6) return;
-        const invLen = 1 / len;
-        this._secondaryAxis.x = value.x * invLen;
-        this._secondaryAxis.y = value.y * invLen;
-        this._secondaryAxis.z = value.z * invLen;
+        if (Vec3.len(value) < 1e-6) return;
+        Vec3.normalize(value, this._secondaryAxis);
         this._updateConstraint();
     }
     get breakForce(): number {
@@ -303,16 +295,8 @@ export abstract class Joint3D extends Component {
 
     protected _checkBreakForce(): void {
         if (!this._constraintManager || this._constraintId === INVALID_CONSTRAINT_ID) return;
-        const forceLen = Math.sqrt(
-            this._currentForce.x * this._currentForce.x +
-                this._currentForce.y * this._currentForce.y +
-                this._currentForce.z * this._currentForce.z
-        );
-        const torqueLen = Math.sqrt(
-            this._currentTorque.x * this._currentTorque.x +
-                this._currentTorque.y * this._currentTorque.y +
-                this._currentTorque.z * this._currentTorque.z
-        );
+        const forceLen = Vec3.len(this._currentForce);
+        const torqueLen = Vec3.len(this._currentTorque);
         if (forceLen > this._breakForce || torqueLen > this._breakTorque) {
             this._constraintManager.destroyConstraint(this._constraintId);
             this._constraintId = INVALID_CONSTRAINT_ID;
