@@ -2,6 +2,7 @@ import { Vec3 } from '@axrone/numeric';
 import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
+import type { Mutable } from '@axrone/utility';
 
 export interface LODLevelConfig {
     readonly screenRelativeTransitionHeight: number;
@@ -296,9 +297,7 @@ export class LODGroup extends Component {
     }
 
     override deserialize(data: Record<string, any>): void {
-        type MutableLODConfig = {
-            -readonly [K in keyof LODGroupConfig]: LODGroupConfig[K];
-        };
+        type MutableLODConfig = Mutable<LODGroupConfig>;
         const patch: MutableLODConfig = {};
 
         if (Array.isArray(data.localReferencePoint) && data.localReferencePoint.length === 3) {

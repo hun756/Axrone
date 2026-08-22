@@ -3,6 +3,7 @@ import type { Actor } from '@axrone/ecs-runtime';
 import { Transform } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
 import { MeshRenderer } from '../components/mesh-renderer';
+import { isBoundingSphereCenterTuple } from '../scene-mesh-bounds';
 
 export interface SceneRenderItem {
     transform: Transform;
@@ -20,16 +21,11 @@ export interface SceneRenderItemSortOptions {
     readonly isBlended?: (renderer: MeshRenderer) => boolean;
 }
 
-type BoundingSphereCenter = Readonly<BoundingSphere>['center'];
-
 type MutableBoundingSphere = {
     readonly kind: 'sphere';
     center: Vec3;
     radius: number;
 };
-
-const isBoundingSphereCenterTuple = (center: BoundingSphereCenter): center is readonly [number, number, number] =>
-    Array.isArray(center);
 
 const readCenterX = (bounds: Readonly<BoundingSphere>): number =>
     isBoundingSphereCenterTuple(bounds.center) ? bounds.center[0] : bounds.center.x;

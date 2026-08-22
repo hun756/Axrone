@@ -544,9 +544,9 @@ describe('T-11: Production Script Verification — TrailRenderer (runtime)', () 
         expect(containsAllocation(body!)).toBe(false);
     });
 
-    it('source-level: declares MutableTrailConfig mapped type (no `as any` bypass)', () => {
+    it('source-level: declares MutableTrailConfig via Mutable<T> from @axrone/utility (no `as any` bypass)', () => {
         expect(TRAIL_RENDERER_SOURCE).toContain('MutableTrailConfig');
-        expect(TRAIL_RENDERER_SOURCE).toMatch(/type\s+MutableTrailConfig\s*=\s*\{\s*-readonly/);
+        expect(TRAIL_RENDERER_SOURCE).toMatch(/type\s+MutableTrailConfig\s*=\s*Mutable<TrailRendererConfig>/);
     });
 
     it('source-level: declares all temp fields as private readonly', () => {
@@ -642,9 +642,9 @@ describe('T-11: Production Script Verification — PathAgent (runtime)', () => {
         expect(containsAllocation(body!)).toBe(false);
     });
 
-    it('source-level: declares MutableConfig mapped type in deserialize (no `as any` bypass)', () => {
+    it('source-level: declares MutableConfig via Mutable<T> from @axrone/utility in deserialize (no `as any` bypass)', () => {
         expect(PATH_AGENT_SOURCE).toContain('MutableConfig');
-        expect(PATH_AGENT_SOURCE).toMatch(/type\s+MutableConfig\s*=\s*\{\s*-readonly/);
+        expect(PATH_AGENT_SOURCE).toMatch(/type\s+MutableConfig\s*=\s*Mutable<PathAgentConfig>/);
     });
 
     it('source-level: declares pre-allocated temp fields as private readonly', () => {
@@ -717,9 +717,9 @@ describe('T-11: Production Script Verification — BillboardRenderer (runtime)',
         expect(billboard.opacity).toBe(0.5);
     });
 
-    it('source-level: declares MutableBillboardConfig mapped type in deserialize', () => {
+    it('source-level: declares MutableBillboardConfig via Mutable<T> from @axrone/utility in deserialize', () => {
         expect(BILLBOARD_RENDERER_SOURCE).toContain('MutableBillboardConfig');
-        expect(BILLBOARD_RENDERER_SOURCE).toMatch(/-readonly\s+\[K\s+in\s+keyof\s+BillboardRendererConfig\]/);
+        expect(BILLBOARD_RENDERER_SOURCE).toMatch(/type\s+MutableBillboardConfig\s*=\s*Mutable<BillboardRendererConfig>/);
     });
 
     it('source-level: no update() method defined (passive component)', () => {

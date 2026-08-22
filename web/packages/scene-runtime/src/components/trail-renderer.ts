@@ -2,6 +2,7 @@ import { Vec3, Vec4 } from '@axrone/numeric';
 import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
+import type { Mutable } from '@axrone/utility';
 
 export type TrailTextureMode = 'stretch' | 'tile';
 export type TrailAlignment = 'view' | 'transform-z' | 'local';
@@ -29,7 +30,7 @@ export interface TrailRendererConfig {
 }
 
 /** Mutable projection of TrailRendererConfig — avoids `(patch as any)` bypasses. */
-type MutableTrailConfig = { -readonly [K in keyof TrailRendererConfig]: TrailRendererConfig[K] };
+type MutableTrailConfig = Mutable<TrailRendererConfig>;
 
 const DEFAULT_GRADIENT: readonly TrailRendererGradientStop[] = Object.freeze([
     { position: 0, color: [1, 1, 1, 1] },

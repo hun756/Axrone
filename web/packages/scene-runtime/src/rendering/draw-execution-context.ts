@@ -2,10 +2,9 @@ import type { SceneCameraFrameState } from '../camera-frame-state';
 import type { SceneDrawExecutorContext } from './draw-executor';
 import type { SceneLightingState } from '../lighting-collector';
 import type { SceneRenderPassResource } from './render-pass-registry';
+import type { Mutable } from '@axrone/utility';
 
-type MutableSceneDrawExecutorContext = {
-    -readonly [K in keyof SceneDrawExecutorContext]: SceneDrawExecutorContext[K];
-};
+type MutableSceneDrawExecutorContext = Mutable<SceneDrawExecutorContext>;
 
 export class SceneDrawExecutionContextCache {
     private readonly _context: MutableSceneDrawExecutorContext = {

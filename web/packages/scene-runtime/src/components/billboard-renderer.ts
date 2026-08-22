@@ -2,6 +2,7 @@ import { Vec3 } from '@axrone/numeric';
 import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
+import type { Mutable } from '@axrone/utility';
 
 export type BillboardMode = 'spherical' | 'cylindrical' | 'velocity-oriented';
 
@@ -290,9 +291,7 @@ export class BillboardRenderer extends Component {
     }
 
     override deserialize(data: Record<string, any>): void {
-        type MutableBillboardConfig = {
-            -readonly [K in keyof BillboardRendererConfig]: BillboardRendererConfig[K];
-        };
+        type MutableBillboardConfig = Mutable<BillboardRendererConfig>;
         const patch: MutableBillboardConfig = {};
 
         if (typeof data.textureId === 'string' || data.textureId === null) {

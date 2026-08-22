@@ -2,6 +2,7 @@ import { Vec3, Vec4 } from '@axrone/numeric';
 import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
+import type { Mutable } from '@axrone/utility';
 
 export type LineTextureMode = 'stretch' | 'tile' | 'distribute-per-segment' | 'repeat-per-segment';
 export type LineAlignment = 'view' | 'transform-z' | 'local';
@@ -390,9 +391,7 @@ export class LineRenderer extends Component {
     }
 
     override deserialize(data: Record<string, any>): void {
-        type MutableLineConfig = {
-            -readonly [K in keyof LineRendererConfig]: LineRendererConfig[K];
-        };
+        type MutableLineConfig = Mutable<LineRendererConfig>;
         const patch: MutableLineConfig = {};
 
         if (Array.isArray(data.positions)) {

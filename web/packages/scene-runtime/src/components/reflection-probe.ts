@@ -2,6 +2,7 @@ import { Vec3 } from '@axrone/numeric';
 import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
+import type { Mutable } from '@axrone/utility';
 
 export type ReflectionProbeMode = 'baked' | 'realtime' | 'custom';
 export type ReflectionProbeShape = 'sphere' | 'box';
@@ -31,9 +32,7 @@ export interface ReflectionProbeConfig {
     readonly customTextureId?: string | null;
 }
 
-type MutableReflectionProbeConfig = {
-    -readonly [K in keyof ReflectionProbeConfig]: ReflectionProbeConfig[K];
-};
+type MutableReflectionProbeConfig = Mutable<ReflectionProbeConfig>;
 
 const toVec3 = (
     value?: Vec3 | readonly [number, number, number],
