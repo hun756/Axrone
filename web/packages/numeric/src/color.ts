@@ -820,7 +820,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return Color.fromHSL(hNew, sNew, lNew, aNew) as unknown as U;
     }
 
-    static darken<T extends IColorLike>(color: Readonly<T>, amount: number, out?: T): T {
+    static darken<T extends IColorLike, U extends IColorLike>(
+        color: Readonly<T>,
+        amount: number,
+        out?: U
+    ): U {
         return Color.lighten(color, -amount, out);
     }
 
@@ -847,7 +851,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return Color.fromHSL(hNew, sNew, lNew, aNew) as unknown as U;
     }
 
-    static desaturate<T extends IColorLike>(color: Readonly<T>, amount: number, out?: T): T {
+    static desaturate<T extends IColorLike, U extends IColorLike>(
+        color: Readonly<T>,
+        amount: number,
+        out?: U
+    ): U {
         return Color.saturate(color, -amount, out);
     }
 
