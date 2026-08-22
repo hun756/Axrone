@@ -74,8 +74,7 @@ export class AnimationTransitionBuilder<
     }
 
     addCondition(condition: AnimationConditionDefinition): AnimationTransitionBuilder<'to' | 'conditions'> {
-        const current = (this.peek().conditions ?? []) as readonly AnimationConditionDefinition[];
-        return this.set('conditions', Object.freeze([...current, cloneCondition(condition)])) as unknown as AnimationTransitionBuilder<'to' | 'conditions'>;
+        return this._append('conditions', cloneCondition(condition)) as AnimationTransitionBuilder<'to' | 'conditions'>;
     }
 
     whenFloat(parameter: string, operator: AnimationTransitionOperator, value: number): AnimationTransitionBuilder<'to' | 'conditions'> {
@@ -121,9 +120,7 @@ export class AnimationStateBuilder<
     }
 
     addTransition(transition: AnimationTransitionInput): AnimationStateBuilder<'id' | 'motion' | 'transitions'> {
-        const current = (this.peek().transitions ?? []) as readonly AnimationTransitionDefinition[];
-        const built = buildAnimationTransitionDefinition(transition);
-        return this.set('transitions', Object.freeze([...current, built])) as unknown as AnimationStateBuilder<'id' | 'motion' | 'transitions'>;
+        return this._append('transitions', buildAnimationTransitionDefinition(transition)) as AnimationStateBuilder<'id' | 'motion' | 'transitions'>;
     }
 
     transitionTo(
@@ -158,12 +155,10 @@ export class AnimationStateMachineBuilder<
     }
 
     addState(state: AnimationStateInput): AnimationStateMachineBuilder<'entryState' | 'states'> {
-        const current = (this.peek().states ?? []) as readonly AnimationStateDefinition[];
         const built = buildAnimationStateDefinition(state);
-        const next = this.set('states', Object.freeze([...current, built])) as unknown as AnimationStateMachineBuilder<'entryState' | 'states'>;
-        const currentEntry = next.peek().entryState;
-        if (!currentEntry) {
-            return next.set('entryState', built.id) as unknown as AnimationStateMachineBuilder<'entryState' | 'states'>;
+        const next = this._append('states', built) as AnimationStateMachineBuilder<'entryState' | 'states'>;
+        if (!next.peek().entryState) {
+            return next.set('entryState', built.id) as AnimationStateMachineBuilder<'entryState' | 'states'>;
         }
         return next;
     }
@@ -182,9 +177,7 @@ export class AnimationStateMachineBuilder<
     }
 
     addAnyStateTransition(transition: AnimationTransitionInput): AnimationStateMachineBuilder<'entryState' | 'states' | 'anyStateTransitions'> {
-        const current = (this.peek().anyStateTransitions ?? []) as readonly AnimationTransitionDefinition[];
-        const built = buildAnimationTransitionDefinition(transition);
-        return this.set('anyStateTransitions', Object.freeze([...current, built])) as unknown as AnimationStateMachineBuilder<'entryState' | 'states' | 'anyStateTransitions'>;
+        return this._append('anyStateTransitions', buildAnimationTransitionDefinition(transition)) as AnimationStateMachineBuilder<'entryState' | 'states' | 'anyStateTransitions'>;
     }
 
     anyState(
@@ -214,8 +207,7 @@ export class AnimationIkLayerBuilder<
     }
 
     addJob(job: AnimationIkJobDefinition): AnimationIkLayerBuilder<'id' | 'jobs'> {
-        const current = (this.peek().jobs ?? []) as readonly AnimationIkJobDefinition[];
-        return this.set('jobs', Object.freeze([...current, Object.freeze({ ...job })])) as unknown as AnimationIkLayerBuilder<'id' | 'jobs'>;
+        return this._append('jobs', Object.freeze({ ...job })) as AnimationIkLayerBuilder<'id' | 'jobs'>;
     }
 }
 
@@ -248,9 +240,7 @@ export class AnimationLayerBuilder<
     }
 
     addIkLayer(layer: AnimationIkLayerInput): AnimationLayerBuilder<'id' | 'stateMachine' | 'ikLayers'> {
-        const current = ((this.peek() as any).ikLayers ?? []) as readonly AnimationIkLayerDefinition[];
-        const built = buildAnimationIkLayerDefinition(layer);
-        return this.set('ikLayers' as keyof AnimationLayerDefinition, Object.freeze([...current, built]) as any) as unknown as AnimationLayerBuilder<'id' | 'stateMachine' | 'ikLayers'>;
+        return this._append('ikLayers', buildAnimationIkLayerDefinition(layer)) as AnimationLayerBuilder<'id' | 'stateMachine' | 'ikLayers'>;
     }
 }
 
@@ -270,13 +260,11 @@ export class AnimationControllerBuilder<
     }
 
     addClip(clip: ControllerClips[number]): AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'clips'> {
-        const current = (this.peek().clips ?? []) as unknown as readonly ControllerClips[number][];
-        return this.set('clips', Object.freeze([...current, clip]) as unknown as ControllerClips) as unknown as AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'clips'>;
+        return this._append('clips', clip) as AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'clips'>;
     }
 
     addParameter(parameter: AnimationParameterDefinition): AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'parameters'> {
-        const current = (this.peek().parameters ?? []) as readonly AnimationParameterDefinition[];
-        return this.set('parameters', Object.freeze([...current, cloneParameterDefinition(parameter)])) as unknown as AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'parameters'>;
+        return this._append('parameters', cloneParameterDefinition(parameter)) as AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'parameters'>;
     }
 
     parameter<TKind extends AnimationParameterKind>(
@@ -292,9 +280,7 @@ export class AnimationControllerBuilder<
     }
 
     addLayer(layer: AnimationLayerInput): AnimationControllerBuilder<'rig' | 'clips' | 'layers'> {
-        const current = (this.peek().layers ?? []) as readonly AnimationLayerDefinition[];
-        const built = buildAnimationLayerDefinition(layer);
-        return this.set('layers', Object.freeze([...current, built])) as unknown as AnimationControllerBuilder<'rig' | 'clips' | 'layers'>;
+        return this._append('layers', buildAnimationLayerDefinition(layer)) as AnimationControllerBuilder<'rig' | 'clips' | 'layers'>;
     }
 
     layer(

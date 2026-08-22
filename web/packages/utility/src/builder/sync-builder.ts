@@ -67,6 +67,12 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
         return this._fork(new StateNode(this[$node], delta)) as this & Builder<TTarget, TSupplied | K>;
     }
 
+    protected _append<K extends keyof TTarget>(key: K, item: unknown): this {
+        const snapshot = this.peek() as Record<string, unknown>;
+        const current = (snapshot[key as string] ?? []) as readonly unknown[];
+        return this.set(key, Object.freeze([...current, item]) as TTarget[K]) as this;
+    }
+
     public setPath<P extends Path<TTarget>>(
         path: P,
         value: PathValue<TTarget, P>
