@@ -1,14 +1,16 @@
 import { clamp, quatAccumulateWeighted, quatFinalizeWeighted, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Lerp } from './math';
 import { AnimationFrame, AnimationMask } from './pose-frame';
+import { type BlendWeight, asBlendWeight, unblendWeight } from './blend-types';
 
 export const blendFrame = (
     target: AnimationFrame,
     base: AnimationFrame,
     overlay: AnimationFrame,
-    weight: number,
+    weight: BlendWeight | number,
     mask?: AnimationMask
 ): AnimationFrame => {
-    const alpha = clamp(weight, 0, 1);
+    const blendWeight: BlendWeight = typeof weight === 'number' ? asBlendWeight(weight) : weight;
+    const alpha = unblendWeight(blendWeight);
     if (alpha <= 0) {
         return target.copyFrom(base);
     }
@@ -150,11 +152,12 @@ export const applyAdditiveFrame = (
     base: AnimationFrame,
     additive: AnimationFrame,
     restFrame: AnimationFrame,
-    weight: number,
+    weight: BlendWeight | number,
     additiveScratch: AdditiveFrameScratch,
     mask?: AnimationMask
 ): AnimationFrame => {
-    const alpha = clamp(weight, 0, 1);
+    const blendWeight: BlendWeight = typeof weight === 'number' ? asBlendWeight(weight) : weight;
+    const alpha = unblendWeight(blendWeight);
     target.copyFrom(base);
     if (alpha <= 0) {
         return target;
