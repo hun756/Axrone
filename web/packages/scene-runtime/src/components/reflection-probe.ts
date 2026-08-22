@@ -316,11 +316,7 @@ export class ReflectionProbe extends Component {
      */
     getWorldCenter(): Vec3 {
         const worldPos = this.getWorldPosition();
-        return new Vec3(
-            worldPos.x + this._boxOffset.x,
-            worldPos.y + this._boxOffset.y,
-            worldPos.z + this._boxOffset.z
-        );
+        return Vec3.add(worldPos, this._boxOffset);
     }
 
     /**
@@ -370,7 +366,7 @@ export class ReflectionProbe extends Component {
             return 1 - (distance - radius) / this._blendDistance;
         }
 
-        const halfSize = new Vec3(this._boxSize.x * 0.5, this._boxSize.y * 0.5, this._boxSize.z * 0.5);
+        const halfSize = Vec3.multiplyScalar(this._boxSize, 0.5);
         const dx = Math.max(0, Math.abs(point.x - center.x) - halfSize.x);
         const dy = Math.max(0, Math.abs(point.y - center.y) - halfSize.y);
         const dz = Math.max(0, Math.abs(point.z - center.z) - halfSize.z);
