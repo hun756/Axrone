@@ -265,7 +265,7 @@ export class Rigidbody2D extends Component {
     getPosition(): Vec2 {
         if (!this._bodyId || !this._physicsWorld) return Vec2.ZERO.clone();
         const pos = (this._physicsWorld as any).getBodyManager().getPosition(this._bodyId);
-        return new Vec2(pos.x, pos.y);
+        return Vec2.from(pos);
     }
 
     getRotation(): number {
