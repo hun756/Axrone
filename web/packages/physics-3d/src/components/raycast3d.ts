@@ -76,7 +76,7 @@ export class RayCast3D extends Component {
     }
 
     set direction(value: IVec3Like) {
-        this._direction = new Vec3(value.x, value.y, value.z);
+        this._direction = Vec3.from(value);
         Vec3.normalize(this._direction, this._direction);
     }
 
@@ -215,7 +215,7 @@ export class RayCast3D extends Component {
         const hit = this._world.rayCastClosest(
             { x: origin.x, y: origin.y, z: origin.z },
             { x: direction.x, y: direction.y, z: direction.z },
-            this._maxDistance / Math.max(0.001, Vec3.length(direction))
+            this._maxDistance / Math.max(0.001, Vec3.len(direction))
         );
 
         if (hit && hit.hit) {
