@@ -154,7 +154,7 @@ export class AreaLight extends Component {
     getRight(): Vec3 {
         const transform = this.transform as Transform | undefined;
         if (!transform) {
-            return new Vec3(1, 0, 0);
+            return Vec3.RIGHT;
         }
 
         const right = Quat.rotateVector(transform.worldRotation, Vec3.RIGHT, new Vec3());
@@ -167,7 +167,7 @@ export class AreaLight extends Component {
     getUp(): Vec3 {
         const transform = this.transform as Transform | undefined;
         if (!transform) {
-            return new Vec3(0, 1, 0);
+            return Vec3.UP;
         }
 
         const up = Quat.rotateVector(transform.worldRotation, Vec3.UP, new Vec3());
