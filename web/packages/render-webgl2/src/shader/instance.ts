@@ -438,8 +438,14 @@ export class ShaderInstance implements IShaderInstance {
     private programBindCount = 0;
     private stateChangeCount = 0;
     private uploadSkipped = 0;
-    private lastBoundProgram: WebGLProgram | null = null;
     private disposed = false;
+
+    /**
+     * Context-level mirror of the currently bound program. Per-instance
+     * `lastBoundProgram` caches cannot see binds performed by OTHER
+     * instances, so the skip decision must consult shared state (see bind()).
+     */
+    private static contextCurrentProgram: WebGLProgram | null = null;
 
     private batchActive = false;
     private readonly batchBuffer: UniformBatchEntry[] = [];
@@ -580,9 +586,15 @@ export class ShaderInstance implements IShaderInstance {
             });
         }
         const program = this.variant.shader.program;
-        if (this.lastBoundProgram !== program) {
+        // FIX(upstream): lastBoundProgram cache is per-INSTANCE, but the GL
+        // program binding is CONTEXT-GLOBAL. When host code interleaves draws
+        // across instances (A → B → A), instance A's stale cache skips
+        // useProgram() while B is still current — every uniform upload then
+        // targets the wrong program ("location is not from the associated
+        // program"). Track the context-level current program instead.
+        if (ShaderInstance.contextCurrentProgram !== program) {
             gl.useProgram(program);
-            this.lastBoundProgram = program;
+            ShaderInstance.contextCurrentProgram = program;
             this.programBindCount++;
         }
 
@@ -646,6 +658,9 @@ export class ShaderInstance implements IShaderInstance {
     dispose(): void {
         if (this.disposed) return;
         this.disposed = true;
+        if (ShaderInstance.contextCurrentProgram === this.variant.shader.program) {
+            ShaderInstance.contextCurrentProgram = null;
+        }
         if (this.gl) {
             for (const glBuffer of this.glBufferHandles.values()) {
                 this.gl.deleteBuffer(glBuffer);
@@ -659,7 +674,6 @@ export class ShaderInstance implements IShaderInstance {
         this.dirtyBuffers.clear();
         this.boundTextureUnits.clear();
         this.batchBuffer.length = 0;
-        this.lastBoundProgram = null;
     }
 
     private buildDescriptors(): void {
