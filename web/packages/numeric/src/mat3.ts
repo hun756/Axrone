@@ -79,7 +79,7 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
 
     static copy<T extends IMat3Like, V extends IMat3Like>(source: Readonly<T>, out?: V): V {
         if (out) {
-            for (let i = 0; i < 9; i++) (out as IMutableMat3).data[i] = source.data[i];
+            for (let i = 0; i < 9; i++) (out as unknown as IMutableMat3).data[i] = source.data[i];
             return out;
         }
 

@@ -67,7 +67,7 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
 
     static copy<T extends IMat2Like, V extends IMat2Like>(source: Readonly<T>, out?: V): V {
         if (out) {
-            for (let i = 0; i < 4; i++) (out as IMutableMat2).data[i] = source.data[i];
+            for (let i = 0; i < 4; i++) (out as unknown as IMutableMat2).data[i] = source.data[i];
             return out;
         }
 
