@@ -8,104 +8,19 @@ import type {
     AnimationCompiledDirectMotion,
     AnimationCompiledAdditiveMotion,
 } from './blend-types';
-import { BLEND_EPSILON } from './blend-types';
-import { assertNever } from './errors';
 import { quatAccumulateWeighted, quatFinalizeWeighted, quatIdentity, quatMultiply, quatNormalize, quatSlerp } from './math';
-import { resolveMotionTime } from './blend-evaluate';
+import { dispatchMotion } from './blend-visitor';
+import type { BlendMotionVisitor } from './blend-types';
 import type { AnimationMotionEvaluationContext } from './blend-scratch';
-
-const resolveParameterScalar = (parameters: AnimationParameterStore, name: string): number => {
-    const value = parameters.get(name);
-    return typeof value === 'number' ? value : value ? 1 : 0;
-};
-
-const resolveDirectChildWeight = (
-    parameters: AnimationParameterStore,
-    parameter: string | undefined,
-    weight: number
-): number => {
-    if (!parameter) {
-        return Math.max(0, weight);
-    }
-    const value = parameters.get(parameter);
-    return typeof value === 'number' ? Math.max(0, value * weight) : value ? Math.max(0, weight) : 0;
-};
-
-const resolveAdditiveWeight = (
-    parameters: AnimationParameterStore,
-    parameter: string | undefined,
-    weight: number
-): number => {
-    if (!parameter) {
-        return weight;
-    }
-    const value = parameters.get(parameter);
-    return typeof value === 'number' ? value : value ? weight : 0;
-};
-
-const findBlend1DSegment = (
-    children: readonly { readonly threshold: number }[],
-    input: number
-): number => {
-    if (children.length === 1 || input <= children[0]!.threshold) {
-        return -1;
-    }
-    for (let index = 0; index < children.length - 1; index += 1) {
-        if (input > children[index + 1]!.threshold) {
-            continue;
-        }
-        return index;
-    }
-    return -children.length;
-};
-
-const resolveBlend1DAlpha = (
-    children: readonly { readonly threshold: number }[],
-    leftIndex: number,
-    input: number
-): number => {
-    const left = children[leftIndex]!;
-    const right = children[leftIndex + 1]!;
-    return (input - left.threshold) / Math.max(BLEND_EPSILON, right.threshold - left.threshold);
-};
-
-const resolveBlend2DWeights = (
-    x: number,
-    y: number,
-    children: readonly { readonly x: number; readonly y: number }[],
-    context: AnimationMotionEvaluationContext,
-    depth: number
-): number[] => {
-    const weights = context.blendScratch.acquireBlend2DWeights(depth, children.length);
-    let total = 0;
-    for (let index = 0; index < children.length; index += 1) {
-        const child = children[index]!;
-        const dx = x - child.x;
-        const dy = y - child.y;
-        const distanceSquared = dx * dx + dy * dy;
-        if (distanceSquared <= 1e-12) {
-            for (let fill = 0; fill < children.length; fill += 1) {
-                weights[fill] = 0;
-            }
-            weights[index] = 1;
-            return weights;
-        }
-        const inverseDistance = 1 / Math.sqrt(distanceSquared);
-        weights[index] = inverseDistance;
-        total += inverseDistance;
-    }
-    if (total <= 0) {
-        const uniform = 1 / Math.max(1, children.length);
-        for (let index = 0; index < children.length; index += 1) {
-            weights[index] = uniform;
-        }
-        return weights;
-    }
-    for (let index = 0; index < children.length; index += 1) {
-        weights[index] /= total;
-    }
-    return weights;
-};
+import {
+    resolveParameterScalar,
+    resolveDirectChildWeight,
+    resolveAdditiveWeight,
+    resolveMotionTime,
+    findBlend1DSegment,
+    resolveBlend1DAlpha,
+    resolveBlend2DWeightsWithContext,
+} from './blend-helpers';
 
 function extractClipRootDelta(
     motion: AnimationCompiledClipMotion,
@@ -168,7 +83,7 @@ function extractBlend2DRootDelta(
     context: AnimationMotionEvaluationContext,
     depth: number
 ): void {
-    const weights = resolveBlend2DWeights(
+    const weights = resolveBlend2DWeightsWithContext(
         resolveParameterScalar(parameters, motion.parameterX),
         resolveParameterScalar(parameters, motion.parameterY),
         motion.children,
@@ -256,6 +171,27 @@ function extractAdditiveRootDelta(
     quatNormalize(outRotation, 0, outRotation, 0);
 }
 
+interface RootDeltaContext {
+    readonly previousNormalizedTime: number;
+    readonly currentNormalizedTime: number;
+    readonly loop: boolean;
+    readonly rootBoneIndex: number;
+    readonly rig: AnimationRig;
+    readonly parameters: AnimationParameterStore;
+    readonly outTranslation: Float32Array;
+    readonly outRotation: Float32Array;
+    readonly context: AnimationMotionEvaluationContext;
+    readonly depth: number;
+}
+
+const rootDeltaVisitor: BlendMotionVisitor<RootDeltaContext, void> = {
+    visitClip: (motion: AnimationCompiledClipMotion, ctx: RootDeltaContext) => extractClipRootDelta(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.rootBoneIndex, ctx.rig, ctx.outTranslation, ctx.outRotation),
+    visitBlend1d: (motion: AnimationCompiledBlend1DMotion, ctx: RootDeltaContext) => extractBlend1DRootDelta(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.rootBoneIndex, ctx.rig, ctx.parameters, ctx.outTranslation, ctx.outRotation, ctx.context, ctx.depth),
+    visitBlend2d: (motion: AnimationCompiledBlend2DMotion, ctx: RootDeltaContext) => extractBlend2DRootDelta(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.rootBoneIndex, ctx.rig, ctx.parameters, ctx.outTranslation, ctx.outRotation, ctx.context, ctx.depth),
+    visitDirect: (motion: AnimationCompiledDirectMotion, ctx: RootDeltaContext) => extractDirectRootDelta(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.rootBoneIndex, ctx.rig, ctx.parameters, ctx.outTranslation, ctx.outRotation, ctx.context, ctx.depth),
+    visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: RootDeltaContext) => extractAdditiveRootDelta(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.rootBoneIndex, ctx.rig, ctx.parameters, ctx.outTranslation, ctx.outRotation, ctx.context, ctx.depth),
+};
+
 export const extractMotionRootDelta = (
     motion: AnimationCompiledMotion,
     previousNormalizedTime: number,
@@ -269,12 +205,16 @@ export const extractMotionRootDelta = (
     context: AnimationMotionEvaluationContext,
     depth: number = 0
 ): void => {
-    switch (motion.kind) {
-        case 'clip': extractClipRootDelta(motion, previousNormalizedTime, currentNormalizedTime, loop, rootBoneIndex, rig, outTranslation, outRotation); break;
-        case 'blend1d': extractBlend1DRootDelta(motion, previousNormalizedTime, currentNormalizedTime, loop, rootBoneIndex, rig, parameters, outTranslation, outRotation, context, depth); break;
-        case 'blend2d': extractBlend2DRootDelta(motion, previousNormalizedTime, currentNormalizedTime, loop, rootBoneIndex, rig, parameters, outTranslation, outRotation, context, depth); break;
-        case 'direct': extractDirectRootDelta(motion, previousNormalizedTime, currentNormalizedTime, loop, rootBoneIndex, rig, parameters, outTranslation, outRotation, context, depth); break;
-        case 'additive': extractAdditiveRootDelta(motion, previousNormalizedTime, currentNormalizedTime, loop, rootBoneIndex, rig, parameters, outTranslation, outRotation, context, depth); break;
-        default: assertNever(motion, 'Unsupported motion kind');
-    }
+    dispatchMotion(motion, rootDeltaVisitor, {
+        previousNormalizedTime,
+        currentNormalizedTime,
+        loop,
+        rootBoneIndex,
+        rig,
+        parameters,
+        outTranslation,
+        outRotation,
+        context,
+        depth,
+    });
 };
