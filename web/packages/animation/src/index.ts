@@ -2,6 +2,7 @@ export * from './brands';
 export * from './blend-graph';
 export * from './blend-tree';
 export * from './blend-types';
+export * from './blend-helpers';
 export * from './clip';
 export * from './controller-graph';
 export * from './controller';
