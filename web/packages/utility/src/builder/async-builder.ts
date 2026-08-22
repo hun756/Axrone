@@ -60,75 +60,45 @@ export class AsyncBuilder<TTarget extends object, in out TSupplied extends keyof
                 const snap = this.peek();
                 return (valueOrResolver as Function)(snap[key]);
             });
-            const Ctor = this.constructor as new (
-                seed: Record<string, unknown>,
-                node: StateNode,
-                validators: readonly AnyValidator<TTarget>[],
-                beforeHooks: readonly AsyncHook<Partial<TTarget>>[],
-                afterHooks: readonly AsyncHook<TTarget>[],
-                shouldFreeze: boolean,
-                asyncResolvers: Map<keyof TTarget, AsyncValueResolver<unknown>>,
-                asyncPathResolvers: Map<string, AsyncValueResolver<unknown>>
-            ) => this;
-            return new Ctor(
-                this[$state],
-                this[$node],
-                this.validators,
-                this.beforeHooks,
-                this.afterHooks,
-                this.shouldFreeze,
-                nextResolvers,
-                this.asyncPathResolvers
-            ) as this & AsyncBuilder<TTarget, TSupplied | K>;
+            const instance = Object.create(Object.getPrototypeOf(this)) as this;
+            (instance as any)[$state] = this[$state];
+            (instance as any)[$node] = this[$node];
+            (instance as any).validators = this.validators;
+            (instance as any).beforeHooks = this.beforeHooks;
+            (instance as any).afterHooks = this.afterHooks;
+            (instance as any).shouldFreeze = this.shouldFreeze;
+            (instance as any).asyncResolvers = nextResolvers;
+            (instance as any).asyncPathResolvers = this.asyncPathResolvers;
+            return instance as this & AsyncBuilder<TTarget, TSupplied | K>;
         }
 
         if (valueOrResolver instanceof Promise) {
             nextResolvers.set(key, () => valueOrResolver);
-            const Ctor = this.constructor as new (
-                seed: Record<string, unknown>,
-                node: StateNode,
-                validators: readonly AnyValidator<TTarget>[],
-                beforeHooks: readonly AsyncHook<Partial<TTarget>>[],
-                afterHooks: readonly AsyncHook<TTarget>[],
-                shouldFreeze: boolean,
-                asyncResolvers: Map<keyof TTarget, AsyncValueResolver<unknown>>,
-                asyncPathResolvers: Map<string, AsyncValueResolver<unknown>>
-            ) => this;
-            return new Ctor(
-                this[$state],
-                this[$node],
-                this.validators,
-                this.beforeHooks,
-                this.afterHooks,
-                this.shouldFreeze,
-                nextResolvers,
-                this.asyncPathResolvers
-            ) as this & AsyncBuilder<TTarget, TSupplied | K>;
+            const instance = Object.create(Object.getPrototypeOf(this)) as this;
+            (instance as any)[$state] = this[$state];
+            (instance as any)[$node] = this[$node];
+            (instance as any).validators = this.validators;
+            (instance as any).beforeHooks = this.beforeHooks;
+            (instance as any).afterHooks = this.afterHooks;
+            (instance as any).shouldFreeze = this.shouldFreeze;
+            (instance as any).asyncResolvers = nextResolvers;
+            (instance as any).asyncPathResolvers = this.asyncPathResolvers;
+            return instance as this & AsyncBuilder<TTarget, TSupplied | K>;
         }
 
         nextResolvers.delete(key);
         const delta: DeltaRecord = { kind: DeltaKind.DIRECT, key, value: valueOrResolver };
 
-        const Ctor = this.constructor as new (
-            seed: Record<string, unknown>,
-            node: StateNode,
-            validators: readonly AnyValidator<TTarget>[],
-            beforeHooks: readonly AsyncHook<Partial<TTarget>>[],
-            afterHooks: readonly AsyncHook<TTarget>[],
-            shouldFreeze: boolean,
-            asyncResolvers: Map<keyof TTarget, AsyncValueResolver<unknown>>,
-            asyncPathResolvers: Map<string, AsyncValueResolver<unknown>>
-        ) => this;
-        return new Ctor(
-            this[$state],
-            new StateNode(this[$node], delta),
-            this.validators,
-            this.beforeHooks,
-            this.afterHooks,
-            this.shouldFreeze,
-            nextResolvers,
-            this.asyncPathResolvers
-        ) as this & AsyncBuilder<TTarget, TSupplied | K>;
+        const instance = Object.create(Object.getPrototypeOf(this)) as this;
+        (instance as any)[$state] = this[$state];
+        (instance as any)[$node] = new StateNode(this[$node], delta);
+        (instance as any).validators = this.validators;
+        (instance as any).beforeHooks = this.beforeHooks;
+        (instance as any).afterHooks = this.afterHooks;
+        (instance as any).shouldFreeze = this.shouldFreeze;
+        (instance as any).asyncResolvers = nextResolvers;
+        (instance as any).asyncPathResolvers = this.asyncPathResolvers;
+        return instance as this & AsyncBuilder<TTarget, TSupplied | K>;
     }
 
     public setPath<P extends Path<TTarget>>(

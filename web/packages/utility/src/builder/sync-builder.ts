@@ -53,22 +53,14 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
             delta = { kind: DeltaKind.DIRECT, key, value: valueOrUpdater };
         }
 
-        const Ctor = this.constructor as new (
-            seed: Record<string, unknown>,
-            node: StateNode,
-            validators: readonly SyncValidator<TTarget>[],
-            beforeHooks: readonly SyncHook<Partial<TTarget>>[],
-            afterHooks: readonly SyncHook<TTarget>[],
-            shouldFreeze: boolean
-        ) => this;
-        return new Ctor(
-            this[$state],
-            new StateNode(this[$node], delta),
-            this.validators,
-            this.beforeHooks,
-            this.afterHooks,
-            this.shouldFreeze
-        ) as this & Builder<TTarget, TSupplied | K>;
+        const instance = Object.create(Object.getPrototypeOf(this)) as this;
+        (instance as any)[$state] = this[$state];
+        (instance as any)[$node] = new StateNode(this[$node], delta);
+        (instance as any).validators = this.validators;
+        (instance as any).beforeHooks = this.beforeHooks;
+        (instance as any).afterHooks = this.afterHooks;
+        (instance as any).shouldFreeze = this.shouldFreeze;
+        return instance as this & Builder<TTarget, TSupplied | K>;
     }
 
     public setPath<P extends Path<TTarget>>(
@@ -97,22 +89,14 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
         const segments = parsePath(path);
         const delta: DeltaRecord = { kind: DeltaKind.PATH, segments, value };
 
-        const Ctor = this.constructor as new (
-            seed: Record<string, unknown>,
-            node: StateNode,
-            validators: readonly SyncValidator<TTarget>[],
-            beforeHooks: readonly SyncHook<Partial<TTarget>>[],
-            afterHooks: readonly SyncHook<TTarget>[],
-            shouldFreeze: boolean
-        ) => this;
-        return new Ctor(
-            this[$state],
-            new StateNode(this[$node], delta),
-            this.validators,
-            this.beforeHooks,
-            this.afterHooks,
-            this.shouldFreeze
-        ) as this &
+        const instance = Object.create(Object.getPrototypeOf(this)) as this;
+        (instance as any)[$state] = this[$state];
+        (instance as any)[$node] = new StateNode(this[$node], delta);
+        (instance as any).validators = this.validators;
+        (instance as any).beforeHooks = this.beforeHooks;
+        (instance as any).afterHooks = this.afterHooks;
+        (instance as any).shouldFreeze = this.shouldFreeze;
+        return instance as this &
             Builder<
                 TTarget,
                 TSupplied |
@@ -139,22 +123,14 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
             partial: Object.assign({}, partial) as Record<PropertyKey, unknown>,
         };
 
-        const Ctor = this.constructor as new (
-            seed: Record<string, unknown>,
-            node: StateNode,
-            validators: readonly SyncValidator<TTarget>[],
-            beforeHooks: readonly SyncHook<Partial<TTarget>>[],
-            afterHooks: readonly SyncHook<TTarget>[],
-            shouldFreeze: boolean
-        ) => this;
-        return new Ctor(
-            this[$state],
-            new StateNode(this[$node], delta),
-            this.validators,
-            this.beforeHooks,
-            this.afterHooks,
-            this.shouldFreeze
-        ) as this & Builder<TTarget, TSupplied | (keyof P & keyof TTarget)>;
+        const instance = Object.create(Object.getPrototypeOf(this)) as this;
+        (instance as any)[$state] = this[$state];
+        (instance as any)[$node] = new StateNode(this[$node], delta);
+        (instance as any).validators = this.validators;
+        (instance as any).beforeHooks = this.beforeHooks;
+        (instance as any).afterHooks = this.afterHooks;
+        (instance as any).shouldFreeze = this.shouldFreeze;
+        return instance as this & Builder<TTarget, TSupplied | (keyof P & keyof TTarget)>;
     }
 
     public mutate(mutator: (draft: Partial<TTarget>) => void): this & Builder<TTarget, TSupplied> {
@@ -163,22 +139,14 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
             fn: mutator as (draft: Record<string, unknown>) => void,
         };
 
-        const Ctor = this.constructor as new (
-            seed: Record<string, unknown>,
-            node: StateNode,
-            validators: readonly SyncValidator<TTarget>[],
-            beforeHooks: readonly SyncHook<Partial<TTarget>>[],
-            afterHooks: readonly SyncHook<TTarget>[],
-            shouldFreeze: boolean
-        ) => this;
-        return new Ctor(
-            this[$state],
-            new StateNode(this[$node], delta),
-            this.validators,
-            this.beforeHooks,
-            this.afterHooks,
-            this.shouldFreeze
-        ) as this & Builder<TTarget, TSupplied>;
+        const instance = Object.create(Object.getPrototypeOf(this)) as this;
+        (instance as any)[$state] = this[$state];
+        (instance as any)[$node] = new StateNode(this[$node], delta);
+        (instance as any).validators = this.validators;
+        (instance as any).beforeHooks = this.beforeHooks;
+        (instance as any).afterHooks = this.afterHooks;
+        (instance as any).shouldFreeze = this.shouldFreeze;
+        return instance as this & Builder<TTarget, TSupplied>;
     }
 
     public validateWith(validator: SyncValidator<TTarget>): this {
@@ -205,15 +173,15 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
         return Object.freeze(this[$node].materialize(this[$state])) as Readonly<Partial<TTarget>>;
     }
 
-    public clone(): Builder<TTarget, TSupplied> {
-        return new Builder<TTarget, TSupplied>(
-            this[$state],
-            this[$node],
-            this.validators.slice(),
-            this.beforeHooks.slice(),
-            this.afterHooks.slice(),
-            this.shouldFreeze
-        );
+    public clone(): this & Builder<TTarget, TSupplied> {
+        const instance = Object.create(Object.getPrototypeOf(this)) as this;
+        (instance as any)[$state] = this[$state];
+        (instance as any)[$node] = this[$node];
+        (instance as any).validators = this.validators.slice();
+        (instance as any).beforeHooks = this.beforeHooks.slice();
+        (instance as any).afterHooks = this.afterHooks.slice();
+        (instance as any).shouldFreeze = this.shouldFreeze;
+        return instance as this & Builder<TTarget, TSupplied>;
     }
 
     public when(
