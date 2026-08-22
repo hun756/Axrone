@@ -63,7 +63,7 @@ import {
     isTriangleMeshDef,
 } from './physics-world-3d-shared';
 
-import { GJK3D, supportFromVertices, type Support3D, type IVec3 } from './gjk3d';
+import { GJK3D, supportFromVertices, type Support3D } from './gjk3d';
 
 export interface IPhysicsWorld3DContactRuntimeHost {
     readonly bodyManager: BodyManager3D;
@@ -315,7 +315,7 @@ export class PhysicsWorld3DContactRuntime {
         if (isSphereDef(def)) {
             const center = this._host.getShapeWorldCenter(descriptor);
             const r = def.radius;
-            return (dir: IVec3): IVec3 => {
+            return (dir: IVec3Like): IVec3Like => {
                 const len = Vec3.len(dir);
                 const inv = len > 1e-6 ? r / len : 0;
                 return { x: center.x + dir.x * inv, y: center.y + dir.y * inv, z: center.z + dir.z * inv };
@@ -331,7 +331,7 @@ export class PhysicsWorld3DContactRuntime {
                 rotateVec3({ x: 0, y: 0, z: 1 }, rotFull),
             ];
             const ext = [halfExtents.x, halfExtents.y, halfExtents.z];
-            return (dir: IVec3): IVec3 => {
+            return (dir: IVec3Like): IVec3Like => {
                 let x = center.x, y = center.y, z = center.z;
                 for (let i = 0; i < 3; i++) {
                     const s = (dir.x * axes[i].x + dir.y * axes[i].y + dir.z * axes[i].z) >= 0 ? ext[i] : -ext[i];
@@ -346,7 +346,7 @@ export class PhysicsWorld3DContactRuntime {
             const p1 = transformPoint3D(def.p1, pos, rot);
             const p2 = transformPoint3D(def.p2, pos, rot);
             const r = def.radius;
-            return (dir: IVec3): IVec3 => {
+            return (dir: IVec3Like): IVec3Like => {
                 const d1 = dir.x * p1.x + dir.y * p1.y + dir.z * p1.z;
                 const d2 = dir.x * p2.x + dir.y * p2.y + dir.z * p2.z;
                 const base = d1 >= d2 ? p1 : p2;
@@ -358,7 +358,7 @@ export class PhysicsWorld3DContactRuntime {
         if (isConvexHullDef(def) || isTriangleMeshDef(def) || isCylinderDef(def) || isConeDef(def)) {
             const vertices = this._worldVerticesOf(descriptor);
             if (vertices.length === 0) return null;
-            return supportFromVertices(vertices as IVec3[]);
+            return supportFromVertices(vertices as IVec3Like[]);
         }
         return null;
     }
