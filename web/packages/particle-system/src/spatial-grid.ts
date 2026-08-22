@@ -103,7 +103,7 @@ export class SpatialGrid implements ISpatialGrid {
             return;
         }
 
-        const avgPos = cell.centerMass || new Vec3(0, 0, 0);
+        const avgPos = cell.centerMass || Vec3.ZERO;
         this._removeFromCell(entry.cellHash, cell, entry.index, avgPos, particleId);
     }
 
