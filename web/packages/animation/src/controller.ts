@@ -114,6 +114,8 @@ export class AnimationController<
     private readonly _rootMotionRotation = new Float32Array([0, 0, 0, 1]);
     private readonly _rootMotionConfig: NonNullable<AnimationControllerDefinition['rootMotion']> | null;
     private readonly _rootMotionBoneIndex: number;
+    private readonly _additiveScratch = createAdditiveFrameScratch();
+    private readonly _layerIndexById: Map<string, number>;
     private readonly _eventScratch: AnimationControllerEvent[] = [];
     private readonly _activeClipScratch: AnimationControllerClipActivity[] = [];
     private _events: readonly AnimationControllerEvent[] = [];
@@ -165,6 +167,10 @@ export class AnimationController<
         );
         if (this._layers.length === 0) {
             throw new AnimationValidationError('Animation controllers require at least one layer');
+        }
+        this._layerIndexById = new Map<string, number>();
+        for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
+            this._layerIndexById.set(this._layers[layerIndex]!.id, layerIndex);
         }
         this._layerRuntimes = this._layers.map((layer) => createLayerRuntime(layer.machine));
         this._layerWeights = new Float32Array(this._layers.length);
@@ -286,8 +292,8 @@ export class AnimationController<
 
     private _resolveLayerIndex(layerId: string | undefined): number {
         const resolvedId = layerId ?? this._layers[0]!.id;
-        const layerIndex = this._layers.findIndex((layer) => layer.id === resolvedId);
-        if (layerIndex < 0) {
+        const layerIndex = this._layerIndexById.get(resolvedId);
+        if (layerIndex === undefined) {
             throw new AnimationStateMachineError(`Unknown animation layer '${resolvedId}'`);
         }
         return layerIndex;
@@ -301,7 +307,7 @@ export class AnimationController<
         events.length = 0;
         const activeClips = this._activeClipScratch;
         activeClips.length = 0;
-        const additiveScratch = createAdditiveFrameScratch();
+        const additiveScratch = this._additiveScratch;
 
         for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
             const layer = this._layers[layerIndex]!;

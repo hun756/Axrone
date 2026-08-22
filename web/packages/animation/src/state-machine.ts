@@ -465,13 +465,6 @@ export const evaluateLayerRuntime = (
     return blendFrame(out, sourceFrame, targetFrame, runtime.transition.progress);
 };
 
-const layerRootDeltaScratch = {
-    sourceTranslation: new Float32Array(3),
-    targetTranslation: new Float32Array(3),
-    sourceRotation: new Float32Array(4),
-    targetRotation: new Float32Array(4),
-};
-
 export const extractLayerRootDelta = (
     machine: AnimationCompiledStateMachine,
     runtime: AnimationLayerRuntime,
@@ -502,10 +495,11 @@ export const extractLayerRootDelta = (
         return;
     }
 
-    const sourceTranslation = layerRootDeltaScratch.sourceTranslation;
-    const targetTranslation = layerRootDeltaScratch.targetTranslation;
-    const sourceRotation = layerRootDeltaScratch.sourceRotation;
-    const targetRotation = layerRootDeltaScratch.targetRotation;
+    const scratch = context.blendScratch.transitionRootDeltaScratch;
+    const sourceTranslation = scratch.sourceTranslation;
+    const targetTranslation = scratch.targetTranslation;
+    const sourceRotation = scratch.sourceRotation;
+    const targetRotation = scratch.targetRotation;
     const sourceState = machine.states[runtime.transition.sourceStateIndex]!;
     const targetState = machine.states[runtime.transition.targetStateIndex]!;
 
