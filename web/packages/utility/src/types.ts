@@ -159,3 +159,14 @@ export type DeepMutable<T> = T extends (...args: never[]) => unknown
             : T extends Record<string | number | symbol, any>
               ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
               : T;
+
+// Nullable shorthand
+export type Nullable<T> = T | null;
+
+// Common callback signatures
+export type VoidCallback = () => void;
+export type ValueCallback<T> = (value: T) => void;
+export type Predicate<T> = (value: T) => boolean;
+
+// Easing function signature (used by tween, ui, animation)
+export type EasingFunction = (t: number) => number;
