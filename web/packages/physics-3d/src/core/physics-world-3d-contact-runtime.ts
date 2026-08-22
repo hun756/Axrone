@@ -35,7 +35,6 @@ import {
     type IResolvedContactManifold3D,
     type IShapeDescriptor3D,
     type IShapePairCandidate3D,
-    type IMutableContactPoint3D,
     type SupportedConstraintDef3D,
     type SupportedShapeDef3D,
     buildOrthonormalBasis,
@@ -142,9 +141,9 @@ export class PhysicsWorld3DContactRuntime {
 
         const pStart = performance.now();
         for (let i = 0; i < posIters; i++) {
-            for (const m of next.values()) this._solveContactPosition(m);
+            for (const m of next.values()) this._correctContactPositions(m, 0.2);
         }
-        for (const m of next.values()) this._finalizeContactPosition(m);
+        for (const m of next.values()) this._correctContactPositions(m, 1.0);
         if (profiler) profiler.solvePositionTime = performance.now() - pStart;
 
         // Persist accumulated impulses for next-frame warm starting.
@@ -487,11 +486,10 @@ export class PhysicsWorld3DContactRuntime {
         const c1 = { x: clamp(l1.x, -hE.x, hE.x), y: clamp(l1.y, -hE.y, hE.y), z: clamp(l1.z, -hE.z, hE.z) };
         const c2 = { x: clamp(l2.x, -hE.x, hE.x), y: clamp(l2.y, -hE.y, hE.y), z: clamp(l2.z, -hE.z, hE.z) };
         const closest = this._closestSeg({ x: 0, y: 0, z: 0 }, c1, c2);
-        const delta = Vec3.subtract(closest, { x: 0, y: 0, z: 0 });
-        const dist = Vec3.len(delta);
+        const dist = Vec3.len(closest);
         if (dist > cap.def.radius) return null;
         const invD = dist > PhysicsConstants.EPSILON ? 1 / dist : 0;
-        const localN = { x: delta.x * invD, y: delta.y * invD, z: delta.z * invD };
+        const localN = { x: closest.x * invD, y: closest.y * invD, z: closest.z * invD };
         return { normal: Quat.rotateVector(bRot, localN), point: transformPoint3D({ x: 0, y: 0, z: 0 }, bC, bRot), penetration: cap.def.radius - dist };
     }
 
@@ -555,9 +553,8 @@ export class PhysicsWorld3DContactRuntime {
             }
 
             // Friction along the tangent defined by the current relative velocity.
-            const relV2 = Vec3.subtract(this._getWPV(manifold.bodyIdB, wp), this._getWPV(manifold.bodyIdA, wp));
-            const vn = Vec3.dot(relV2, manifold.normal);
-            const tanV = Vec3.subtract(relV2, Vec3.multiplyScalar(manifold.normal, vn));
+            const vn = Vec3.dot(relV, manifold.normal);
+            const tanV = Vec3.subtract(relV, Vec3.multiplyScalar(manifold.normal, vn));
             const tLen = Vec3.len(tanV);
             if (tLen <= PhysicsConstants.EPSILON) continue;
 
@@ -575,7 +572,7 @@ export class PhysicsWorld3DContactRuntime {
                 invIB.z * rtB.z * rtB.z;
             const tangentMass = kTangent > PhysicsConstants.EPSILON ? 1 / kTangent : 0;
 
-            let dPt = tangentMass * -Vec3.dot(relV2, tan);
+            let dPt = tangentMass * -Vec3.dot(relV, tan);
             const maxPt = manifold.friction * (point.normalImpulse as number);
             const newPt = clamp((point.tangentImpulse1 as number) + dPt, -maxPt, maxPt);
             dPt = newPt - (point.tangentImpulse1 as number);
@@ -602,7 +599,7 @@ export class PhysicsWorld3DContactRuntime {
         manifold.points[0].tangentImpulse2 = 0 as Impulse;
     }
 
-    private _solveContactPosition(manifold: IResolvedContactManifold3D): void {
+    private _correctContactPositions(manifold: IResolvedContactManifold3D, beta: number): void {
         for (const point of manifold.points) {
             const sep = this._getSep(manifold, point);
             const pen = Math.max(0, -sep);
@@ -610,22 +607,7 @@ export class PhysicsWorld3DContactRuntime {
             const iA = this._invMass(manifold.bodyIdA), iB = this._invMass(manifold.bodyIdB);
             const iSum = iA + iB;
             if (iSum <= PhysicsConstants.EPSILON) continue;
-            const corr = Vec3.multiplyScalar(manifold.normal, ((pen - PhysicsConstants.ALLOWED_PENETRATION) * 0.2) / iSum);
-            if (iA > 0) this._host.bodyManager.setPosition(manifold.bodyIdA, Vec3.subtract(this._host.bodyManager.getPosition(manifold.bodyIdA), Vec3.multiplyScalar(corr, iA)));
-            if (iB > 0) this._host.bodyManager.setPosition(manifold.bodyIdB, Vec3.add(this._host.bodyManager.getPosition(manifold.bodyIdB), Vec3.multiplyScalar(corr, iB)));
-            point.separation = this._getSep(manifold, point);
-        }
-    }
-
-    private _finalizeContactPosition(manifold: IResolvedContactManifold3D): void {
-        for (const point of manifold.points) {
-            const sep = this._getSep(manifold, point);
-            const pen = Math.max(0, -sep);
-            if (pen <= PhysicsConstants.ALLOWED_PENETRATION) continue;
-            const iA = this._invMass(manifold.bodyIdA), iB = this._invMass(manifold.bodyIdB);
-            const iSum = iA + iB;
-            if (iSum <= PhysicsConstants.EPSILON) continue;
-            const corr = Vec3.multiplyScalar(manifold.normal, (pen - PhysicsConstants.ALLOWED_PENETRATION) / iSum);
+            const corr = Vec3.multiplyScalar(manifold.normal, ((pen - PhysicsConstants.ALLOWED_PENETRATION) * beta) / iSum);
             if (iA > 0) this._host.bodyManager.setPosition(manifold.bodyIdA, Vec3.subtract(this._host.bodyManager.getPosition(manifold.bodyIdA), Vec3.multiplyScalar(corr, iA)));
             if (iB > 0) this._host.bodyManager.setPosition(manifold.bodyIdB, Vec3.add(this._host.bodyManager.getPosition(manifold.bodyIdB), Vec3.multiplyScalar(corr, iB)));
             point.separation = this._getSep(manifold, point);

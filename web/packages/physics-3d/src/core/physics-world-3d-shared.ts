@@ -175,6 +175,27 @@ export function normalizeVec3(v: Readonly<IVec3Like>): IVec3Like {
     return Vec3.multiplyScalar(v, 1 / len);
 }
 
+export function inverseVec3(v: Readonly<IVec3Like>): IVec3Like {
+    return {
+        x: v.x > 0 ? 1 / v.x : 0,
+        y: v.y > 0 ? 1 / v.y : 0,
+        z: v.z > 0 ? 1 / v.z : 0,
+    };
+}
+
+export function cylinderConeLocalHalfExtents(
+    axis: number,
+    radius: number,
+    height: number
+): IVec3Like {
+    const half = height * 0.5;
+    return axis === 0
+        ? { x: half, y: radius, z: radius }
+        : axis === 2
+          ? { x: radius, y: radius, z: half }
+          : { x: radius, y: half, z: radius };
+}
+
 export function transformPoint3D(
     point: Readonly<IVec3Like>,
     position: Readonly<IVec3Like>,
