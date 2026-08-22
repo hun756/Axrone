@@ -169,6 +169,32 @@ export function midpointVec3(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IV
     return Vec3.multiplyScalar(Vec3.add(a, b), 0.5);
 }
 
+export function normalizeVec3(v: Readonly<IVec3Like>): IVec3Like {
+    const len = Vec3.len(v);
+    if (len < 1e-10) return { x: 0, y: 0, z: 0 };
+    return Vec3.multiplyScalar(v, 1 / len);
+}
+
+export function inverseRotateVec3(vector: Readonly<IVec3Like>, rotation: Readonly<IQuatLike>): IVec3Like {
+    return Quat.rotateVector(Quat.conjugate(rotation), vector);
+}
+
+export function transformPoint3D(
+    point: Readonly<IVec3Like>,
+    position: Readonly<IVec3Like>,
+    rotation: Readonly<IQuatLike>
+): IVec3Like {
+    return Vec3.add(Quat.rotateVector(rotation, point), position);
+}
+
+export function inverseTransformPoint3D(
+    point: Readonly<IVec3Like>,
+    position: Readonly<IVec3Like>,
+    rotation: Readonly<IQuatLike>
+): IVec3Like {
+    return Quat.rotateVector(Quat.conjugate(rotation), Vec3.subtract(point, position));
+}
+
 export function expandAabb(aabb: IAabb3D, point: Readonly<IVec3Like>): IAabb3D {
     return {
         min: componentMin(aabb.min, point),

@@ -1,5 +1,5 @@
 // Part 1
-import { Vec3, Quat, type IQuatLike, type IVec3Like } from '@axrone/numeric';
+import { Vec3, Quat, type IVec3Like } from '@axrone/numeric';
 import type {
     ContactId,
     ICollisionFilter,
