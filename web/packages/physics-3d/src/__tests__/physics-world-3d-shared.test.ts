@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { Vec3 } from '@axrone/numeric';
 import {
     BODY_TYPE_STATIC, BODY_TYPE_DYNAMIC,
     SHAPE_TYPE_SPHERE, SHAPE_TYPE_BOX, SHAPE_TYPE_CAPSULE,
     CONSTRAINT_TYPE_FIXED, CONSTRAINT_TYPE_HINGE, CONSTRAINT_TYPE_SPRING,
-    cloneVec3, cloneQuat, addVec3, subVec3, scaleVec3, negateVec3,
-    dotVec3, crossVec3, lengthVec3, normalizeVec3, lengthSquaredVec3,
-    conjugateQuat, multiplyQuat, rotateVec3, inverseRotateVec3,
+    normalizeVec3,
     transformPoint3D, inverseTransformPoint3D,
     clamp, componentMin, componentMax, midpointVec3,
     intersectsAabb, expandAabb,
@@ -56,54 +55,10 @@ describe('physics-world-3d-shared', () => {
     });
 
     describe('vector math', () => {
-        it('cloneVec3 produces independent copy', () => {
-            const v = { x: 1, y: 2, z: 3 };
-            const c = cloneVec3(v);
-            expect(c).toEqual(v);
-            c.x = 99;
-            expect(v.x).toBe(1);
-        });
-
-        it('addVec3 adds components', () => {
-            expect(addVec3({ x: 1, y: 2, z: 3 }, { x: 4, y: 5, z: 6 })).toEqual({ x: 5, y: 7, z: 9 });
-        });
-
-        it('subVec3 subtracts components', () => {
-            expect(subVec3({ x: 5, y: 7, z: 9 }, { x: 1, y: 2, z: 3 })).toEqual({ x: 4, y: 5, z: 6 });
-        });
-
-        it('scaleVec3 scales uniformly', () => {
-            expect(scaleVec3({ x: 1, y: 2, z: 3 }, 2)).toEqual({ x: 2, y: 4, z: 6 });
-        });
-
-        it('negateVec3 flips sign', () => {
-            expect(negateVec3({ x: 1, y: -2, z: 3 })).toEqual({ x: -1, y: 2, z: -3 });
-        });
-
-        it('dotVec3 computes dot product', () => {
-            expect(dotVec3({ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 })).toBe(0);
-            expect(dotVec3({ x: 1, y: 2, z: 3 }, { x: 4, y: 5, z: 6 })).toBe(32);
-        });
-
-        it('crossVec3 produces perpendicular vector', () => {
-            const r = crossVec3({ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 });
-            expect(r.x).toBeCloseTo(0);
-            expect(r.y).toBeCloseTo(0);
-            expect(r.z).toBeCloseTo(1);
-        });
-
-        it('lengthVec3 computes magnitude', () => {
-            expect(lengthVec3({ x: 3, y: 4, z: 0 })).toBeCloseTo(5, 5);
-        });
-
-        it('lengthSquaredVec3 avoids sqrt', () => {
-            expect(lengthSquaredVec3({ x: 3, y: 4, z: 0 })).toBeCloseTo(25, 5);
-        });
-
         it('normalizeVec3 returns unit vector', () => {
             const n = normalizeVec3({ x: 3, y: 0, z: 0 });
             expect(n.x).toBeCloseTo(1, 5);
-            expect(lengthVec3(n)).toBeCloseTo(1, 5);
+            expect(Vec3.len(n)).toBeCloseTo(1, 5);
         });
 
         it('normalizeVec3 returns zero for zero-length vector', () => {
@@ -123,48 +78,6 @@ describe('physics-world-3d-shared', () => {
 
         it('midpointVec3 averages two points', () => {
             expect(midpointVec3({ x: 0, y: 0, z: 0 }, { x: 4, y: 6, z: 8 })).toEqual({ x: 2, y: 3, z: 4 });
-        });
-    });
-
-    describe('quaternion math', () => {
-        it('cloneQuat produces independent copy', () => {
-            const q = { x: 0, y: 0, z: 0, w: 1 };
-            const c = cloneQuat(q);
-            expect(c).toEqual(q);
-            c.w = 0;
-            expect(q.w).toBe(1);
-        });
-
-        it('conjugateQuat negates imaginary part', () => {
-            const c = conjugateQuat({ x: 1, y: 2, z: 3, w: 4 });
-            expect(c).toEqual({ x: -1, y: -2, z: -3, w: 4 });
-        });
-
-        it('multiplyQuat with identity returns same quaternion', () => {
-            const q = { x: 0.1, y: 0.2, z: 0.3, w: 0.9 };
-            const r = multiplyQuat(q, IDENTITY_ROTATION);
-            expect(r.x).toBeCloseTo(q.x, 5);
-            expect(r.y).toBeCloseTo(q.y, 5);
-            expect(r.z).toBeCloseTo(q.z, 5);
-            expect(r.w).toBeCloseTo(q.w, 5);
-        });
-
-        it('rotateVec3 with identity returns same vector', () => {
-            const v = { x: 1, y: 2, z: 3 };
-            const r = rotateVec3(v, IDENTITY_ROTATION);
-            expect(r.x).toBeCloseTo(1, 5);
-            expect(r.y).toBeCloseTo(2, 5);
-            expect(r.z).toBeCloseTo(3, 5);
-        });
-
-        it('inverseRotateVec3 undoes rotateVec3', () => {
-            const q = { x: 0, y: 0.707107, z: 0, w: 0.707107 };
-            const v = { x: 1, y: 0, z: 0 };
-            const rotated = rotateVec3(v, q);
-            const back = inverseRotateVec3(rotated, q);
-            expect(back.x).toBeCloseTo(v.x, 4);
-            expect(back.y).toBeCloseTo(v.y, 4);
-            expect(back.z).toBeCloseTo(v.z, 4);
         });
     });
 
@@ -268,9 +181,9 @@ describe('physics-world-3d-shared', () => {
         it('produces two tangent vectors perpendicular to the normal', () => {
             const normal = { x: 0, y: 1, z: 0 };
             const { tangent1, tangent2 } = buildOrthonormalBasis(normal);
-            expect(dotVec3(tangent1, normal)).toBeCloseTo(0, 5);
-            expect(dotVec3(tangent2, normal)).toBeCloseTo(0, 5);
-            expect(dotVec3(tangent1, tangent2)).toBeCloseTo(0, 5);
+            expect(Vec3.dot(tangent1, normal)).toBeCloseTo(0, 5);
+            expect(Vec3.dot(tangent2, normal)).toBeCloseTo(0, 5);
+            expect(Vec3.dot(tangent1, tangent2)).toBeCloseTo(0, 5);
         });
     });
 
