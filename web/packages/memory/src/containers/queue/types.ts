@@ -1,5 +1,6 @@
 import type { Opaque } from '@axrone/utility';
 
+type Nominal<T, K extends PropertyKey> = Opaque<T, K>;
 export type { Opaque as Nominal };
 
 export type Comparator<T> = (a: T, b: T) => number;
