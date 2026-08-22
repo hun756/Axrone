@@ -1,4 +1,7 @@
-export type { JsonValue as SerializedValue } from '@axrone/utility';
+import type { JsonValue } from '@axrone/utility';
+
+type SerializedValue = JsonValue;
+export type { JsonValue as SerializedValue };
 import { Vec2 } from '../vec2';
 import { Vec3 } from '../vec3';
 import { Vec4 } from '../vec4';
