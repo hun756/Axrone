@@ -74,6 +74,11 @@
             "import": "./dist/blend-duration.mjs",
             "require": "./dist/blend-duration.js"
         },
+        "./blend-helpers": {
+            "types": "./dist/blend-helpers.d.ts",
+            "import": "./dist/blend-helpers.mjs",
+            "require": "./dist/blend-helpers.js"
+        },
         "./pose-frame": {
             "types": "./dist/pose-frame.d.ts",
             "import": "./dist/pose-frame.mjs",

@@ -1,6 +1,7 @@
 export { AnimationScratchPool, BlendScratchContext, type AnimationMotionEvaluationContext } from './blend-scratch';
 export { compileMotion } from './blend-compile';
-export { evaluateMotion, resolveMotionTime } from './blend-evaluate';
+export { evaluateMotion } from './blend-evaluate';
+export { resolveMotionTime } from './blend-helpers';
 export { resolveMotionDuration } from './blend-duration';
 export { collectMotionEvents } from './blend-events';
 export { collectMotionClipActivities } from './blend-activities';

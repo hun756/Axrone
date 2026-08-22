@@ -20,6 +20,7 @@ export default createMultiEntryConfig({
         'blend-activities': 'src/blend-activities.ts',
         'blend-root-delta': 'src/blend-root-delta.ts',
         'blend-duration': 'src/blend-duration.ts',
+        'blend-helpers': 'src/blend-helpers.ts',
         'pose-frame': 'src/pose-frame.ts',
         'pose-blend': 'src/pose-blend.ts',
         'state-machine': 'src/state-machine.ts',
