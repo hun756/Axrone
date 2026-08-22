@@ -8,10 +8,7 @@ const rotationScratch = Quat.create();
 const inverseParentRotationScratch = Quat.create();
 
 const copyInverseParentRotation = (worldRotation: Readonly<IQuatLike>): Quat => {
-    inverseParentRotationScratch.x = worldRotation.x;
-    inverseParentRotationScratch.y = worldRotation.y;
-    inverseParentRotationScratch.z = worldRotation.z;
-    inverseParentRotationScratch.w = worldRotation.w;
+    Quat.copy(worldRotation, inverseParentRotationScratch);
     inverseParentRotationScratch.inverse();
     return inverseParentRotationScratch;
 };
@@ -26,9 +23,7 @@ export const syncTransformWorldPosition = (
 
     const parent = transform.parent;
     if (!parent) {
-        positionScratch.x = value.x;
-        positionScratch.y = value.y;
-        positionScratch.z = value.z;
+        Vec3.copy(value, positionScratch);
         transform.position = positionScratch;
         return;
     }
@@ -64,10 +59,7 @@ export const syncTransformWorldRotation = (
 
     const parent = transform.parent;
     if (!parent) {
-        rotationScratch.x = value.x;
-        rotationScratch.y = value.y;
-        rotationScratch.z = value.z;
-        rotationScratch.w = value.w;
+        Quat.copy(value, rotationScratch);
         transform.rotation = rotationScratch;
         return;
     }
@@ -87,13 +79,8 @@ export const syncTransformWorldPose = (
 
     const parent = transform.parent;
     if (!parent) {
-        positionScratch.x = position.x;
-        positionScratch.y = position.y;
-        positionScratch.z = position.z;
-        rotationScratch.x = rotation.x;
-        rotationScratch.y = rotation.y;
-        rotationScratch.z = rotation.z;
-        rotationScratch.w = rotation.w;
+        Vec3.copy(position, positionScratch);
+        Quat.copy(rotation, rotationScratch);
         transform.position = positionScratch;
         transform.rotation = rotationScratch;
         return;
