@@ -7,6 +7,8 @@ export interface AnimationSkinningPaletteOptions {
     readonly jointWorldMatrices: readonly ArrayLike<number>[];
     readonly inverseBindMatrices?: ArrayLike<number> | null;
     readonly out?: Float32Array;
+    readonly scratchInverseMesh?: Float32Array;
+    readonly scratchMatrix?: Float32Array;
 }
 
 const writeIdentity = (target: Float32Array, offset: number): void => {
@@ -33,10 +35,12 @@ export const computeSkinningPalette = ({
     jointWorldMatrices,
     inverseBindMatrices,
     out,
+    scratchInverseMesh,
+    scratchMatrix,
 }: AnimationSkinningPaletteOptions): Float32Array => {
     const palette = out ?? new Float32Array(jointWorldMatrices.length * 16);
-    const inverseMeshMatrix = new Float32Array(16);
-    const scratchMatrix = new Float32Array(16);
+    const inverseMeshMatrix = scratchInverseMesh ?? new Float32Array(16);
+    const scratch = scratchMatrix ?? new Float32Array(16);
     if (!mat4Invert(inverseMeshMatrix, 0, meshWorldMatrix, 0)) {
         palette.fill(0);
         for (let index = 0; index < jointWorldMatrices.length; index += 1) {
@@ -46,25 +50,31 @@ export const computeSkinningPalette = ({
     }
 
     for (let jointIndex = 0; jointIndex < jointWorldMatrices.length; jointIndex += 1) {
-        mat4Multiply(scratchMatrix, 0, inverseMeshMatrix, 0, jointWorldMatrices[jointIndex]!, 0);
+        mat4Multiply(scratch, 0, inverseMeshMatrix, 0, jointWorldMatrices[jointIndex]!, 0);
         if (inverseBindMatrices) {
-            mat4Multiply(palette, jointIndex * 16, scratchMatrix, 0, inverseBindMatrices, jointIndex * 16);
+            mat4Multiply(palette, jointIndex * 16, scratch, 0, inverseBindMatrices, jointIndex * 16);
         } else {
-            palette.set(scratchMatrix, jointIndex * 16);
+            palette.set(scratch, jointIndex * 16);
         }
     }
 
     return palette;
 };
 
+export interface AnimationRigSkinningPaletteScratch {
+    readonly worldMatrix?: Float32Array;
+    readonly scratch?: Float32Array;
+}
+
 export const computeRigSkinningPalette = (
     rig: AnimationRig,
     worldPose: AnimationWorldPose,
-    out?: Float32Array
+    out?: Float32Array,
+    scratchBuffers?: AnimationRigSkinningPaletteScratch
 ): Float32Array => {
     const palette = out ?? new Float32Array(rig.boneCount * 16);
-    const worldMatrix = new Float32Array(16);
-    const scratch = new Float32Array(16);
+    const worldMatrix = scratchBuffers?.worldMatrix ?? new Float32Array(16);
+    const scratch = scratchBuffers?.scratch ?? new Float32Array(16);
     for (let boneIndex = 0; boneIndex < rig.boneCount; boneIndex += 1) {
         composeMatrix(
             worldMatrix,

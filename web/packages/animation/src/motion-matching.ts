@@ -1,11 +1,15 @@
 import { AnimationClip } from './clip';
 import { freezeTuple3 } from './internal';
+import { ANIMATION_EPSILON } from './math';
 import type {
     AnimationClipDefinition,
     AnimationMotionFeatureDefinition,
     AnimationMotionMatchQuery,
     AnimationMotionMatchResult,
 } from './types';
+
+export const MOTION_MATCH_TRAJECTORY_MISSING_PENALTY = 10;
+export const MOTION_MATCH_FACING_MISSING_PENALTY = 5;
 
 interface AnimationMotionMatchEntry {
     readonly clipId: string;
@@ -58,7 +62,7 @@ const normalizedDot3 = (
 ): number => {
     const leftLength = Math.hypot(left[0], left[1], left[2]);
     const rightLength = Math.hypot(right[0], right[1], right[2]);
-    if (leftLength <= Number.EPSILON || rightLength <= Number.EPSILON) {
+    if (leftLength <= ANIMATION_EPSILON || rightLength <= ANIMATION_EPSILON) {
         return 1;
     }
     return (
@@ -154,13 +158,13 @@ export class AnimationMotionMatchDatabase {
                     if (query.desiredTrajectoryPosition && entry.trajectoryPosition) {
                         score += squaredDistance3(query.desiredTrajectoryPosition, entry.trajectoryPosition);
                     } else if (query.desiredTrajectoryPosition) {
-                        score += 10;
+                        score += MOTION_MATCH_TRAJECTORY_MISSING_PENALTY;
                     }
 
                     if (query.desiredFacingDirection && entry.facingDirection) {
                         score += 1 - normalizedDot3(query.desiredFacingDirection, entry.facingDirection);
                     } else if (query.desiredFacingDirection) {
-                        score += 5;
+                        score += MOTION_MATCH_FACING_MISSING_PENALTY;
                     }
 
                     if (query.currentClipId && query.currentClipId === entry.clipId) {
