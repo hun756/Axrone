@@ -1,5 +1,6 @@
-import { AnimationValidationError } from './errors';
+import { AnimationCompilationError, AnimationResolutionError } from './errors';
 import { AnimationClip } from './clip';
+import type { DiagnosticCode } from './blend-types';
 import type {
     AnimationCompiledMotion,
     AnimationCompiledBlend1DMotion,
@@ -11,6 +12,10 @@ import type {
 import type { AnimationBlendTreeDefinition, AnimationMotionDefinition } from './types';
 import { assertNever } from './errors';
 
+const pushDiagnostic = (code: DiagnosticCode, message: string, path: string): never => {
+    throw new AnimationCompilationError(message, code, path);
+};
+
 const compileBlendTree = (
     definition: AnimationBlendTreeDefinition,
     clips: ReadonlyMap<string, AnimationClip>
@@ -18,7 +23,7 @@ const compileBlendTree = (
     switch (definition.kind) {
         case 'blend1d':
             if (definition.children.length === 0) {
-                throw new AnimationValidationError('1D blend trees require at least one child');
+                pushDiagnostic('animation.blendGraph.empty', '1D blend trees require at least one child', definition.kind);
             }
             return Object.freeze({
                 kind: 'blend1d',
@@ -36,7 +41,7 @@ const compileBlendTree = (
             } satisfies AnimationCompiledBlend1DMotion);
         case 'blend2d':
             if (definition.children.length === 0) {
-                throw new AnimationValidationError('2D blend trees require at least one child');
+                pushDiagnostic('animation.blendGraph.empty', '2D blend trees require at least one child', definition.kind);
             }
             return Object.freeze({
                 kind: 'blend2d',
@@ -54,7 +59,7 @@ const compileBlendTree = (
             } satisfies AnimationCompiledBlend2DMotion);
         case 'direct':
             if (definition.children.length === 0) {
-                throw new AnimationValidationError('Direct blend trees require at least one child');
+                pushDiagnostic('animation.blendGraph.empty', 'Direct blend trees require at least one child', definition.kind);
             }
             return Object.freeze({
                 kind: 'direct',
@@ -88,7 +93,7 @@ export const compileMotion = (
     if (definition.kind === 'clip') {
         const clip = clips.get(definition.clipId);
         if (!clip) {
-            throw new AnimationValidationError(`Unknown animation clip '${definition.clipId}'`);
+            throw new AnimationResolutionError(`Unknown animation clip '${definition.clipId}'`, definition.clipId);
         }
         return Object.freeze({
             kind: 'clip',

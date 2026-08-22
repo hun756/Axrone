@@ -20,6 +20,32 @@ export class AnimationValidationError extends AnimationError {
     }
 }
 
+export class AnimationCompilationError extends AnimationError {
+    constructor(
+        message: string,
+        readonly diagnosticCode: import('./blend-types').DiagnosticCode,
+        readonly motionPath: string = '',
+        cause?: unknown
+    ) {
+        super(message, diagnosticCode, cause);
+        this.name = 'AnimationCompilationError';
+    }
+}
+
+export class AnimationResolutionError extends AnimationError {
+    constructor(message: string, readonly clipId: string, cause?: unknown) {
+        super(message, 'animation.clip.unknown', cause);
+        this.name = 'AnimationResolutionError';
+    }
+}
+
+export class AnimationEvaluationError extends AnimationError {
+    constructor(message: string, readonly motionKind: import('./blend-types').BlendMotionKind, cause?: unknown) {
+        super(message, 'animation.kind.invalid', cause);
+        this.name = 'AnimationEvaluationError';
+    }
+}
+
 export class AnimationSamplingError extends AnimationError {
     constructor(message: string, cause?: unknown) {
         super(message, 'ANIMATION_SAMPLING_ERROR', cause);
