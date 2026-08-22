@@ -6,6 +6,8 @@
  * prefab authoring / diff / merge / resolution logic.
  */
 
+import type { JsonValue as SceneSerializedValue } from '@axrone/utility';
+
 export type { JsonValue as SceneSerializedValue } from '@axrone/utility';
 
 // ─── Brand helpers ──────────────────────────────────────────────────

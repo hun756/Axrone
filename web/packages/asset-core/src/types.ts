@@ -1,6 +1,13 @@
 import type { IDisposable } from './disposable';
 import type { AssetDatabase } from './database';
 import type { AssetImportPipeline } from './importer';
+import type {
+    JsonPrimitive as AssetJsonPrimitive,
+    JsonObject as AssetJsonObject,
+    JsonArray as AssetJsonArray,
+    JsonValue as AssetJsonValue,
+} from '@axrone/utility';
+
 export type {
     JsonPrimitive as AssetJsonPrimitive,
     JsonObject as AssetJsonObject,
