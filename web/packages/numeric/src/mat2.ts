@@ -65,6 +65,15 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         return new Mat2(m.data);
     }
 
+    static copy<T extends IMat2Like, V extends IMat2Like>(source: Readonly<T>, out?: V): V {
+        if (out) {
+            for (let i = 0; i < 4; i++) (out as IMutableMat2).data[i] = source.data[i];
+            return out;
+        }
+
+        return new Mat2(source.data) as unknown as V;
+    }
+
     static fromArray(arr: ArrayLike<number>, offset: number = 0): Mat2 {
         if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
             if (offset < 0) {

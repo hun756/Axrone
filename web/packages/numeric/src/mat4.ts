@@ -86,6 +86,15 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         return new Mat4(m.data);
     }
 
+    static copy<T extends IMat4Like, V extends IMat4Like>(source: Readonly<T>, out?: V): V {
+        if (out) {
+            for (let i = 0; i < 16; i++) (out as IMutableMat4).data[i] = source.data[i];
+            return out;
+        }
+
+        return new Mat4(source.data) as unknown as V;
+    }
+
     static fromArray(arr: ArrayLike<number>, offset: number = 0): Mat4 {
         if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
             if (offset < 0) {
