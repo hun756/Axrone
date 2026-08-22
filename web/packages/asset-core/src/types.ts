@@ -1,6 +1,12 @@
 import type { IDisposable } from './disposable';
 import type { AssetDatabase } from './database';
 import type { AssetImportPipeline } from './importer';
+export type {
+    JsonPrimitive as AssetJsonPrimitive,
+    JsonObject as AssetJsonObject,
+    JsonArray as AssetJsonArray,
+    JsonValue as AssetJsonValue,
+} from '@axrone/utility';
 
 export type AssetSchema = Readonly<Record<string, unknown>>;
 export type AssetKind<TSchema extends AssetSchema = AssetSchema> = string & keyof TSchema;
@@ -22,15 +28,6 @@ export type AssetReferenceToken<TKind extends string = string> = `asset:${TKind}
 export type AssetVersionedReferenceToken<TKind extends string = string> =
     `asset:${TKind}:${string}@${number}`;
 
-export type AssetJsonPrimitive = string | number | boolean | null;
-
-export interface AssetJsonObject {
-    readonly [key: string]: AssetJsonValue;
-}
-
-export interface AssetJsonArray extends ReadonlyArray<AssetJsonValue> {}
-
-export type AssetJsonValue = AssetJsonPrimitive | AssetJsonObject | AssetJsonArray;
 
 export interface AssetInlineBinaryValue {
     readonly __asset: 'axrone.binary';
