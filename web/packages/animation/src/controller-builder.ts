@@ -10,6 +10,7 @@ import {
     cloneRigDefinition,
     cloneRootMotionDefinition,
 } from './controller-clone';
+import { spreadIfFinite } from './internal';
 import type {
     AnimationConditionDefinition,
     AnimationControllerDefinition,
@@ -444,6 +445,3 @@ export const buildAnimationControllerDefinition = (
                     }
                   : {}),
           });
-
-const spreadIfFinite = (key: string, value: unknown): Record<string, unknown> =>
-    typeof value === 'number' && Number.isFinite(value) ? { [key]: value } : {};
