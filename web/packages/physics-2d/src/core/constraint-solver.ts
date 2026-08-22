@@ -31,6 +31,12 @@ const SOLVER_EPSILON = NUMERIC_SOLVER_EPSILON;
 const BAUMGARTE = 0.2;
 const POSITION_SLOP = 0.005;
 
+const _scratchA: IVec2Like = { x: 0, y: 0 };
+const _scratchB: IVec2Like = { x: 0, y: 0 };
+const _scratchC: IVec2Like = { x: 0, y: 0 };
+const _scratchD: IVec2Like = { x: 0, y: 0 };
+const _scratchE: IVec2Like = { x: 0, y: 0 };
+
 export class ConstraintSolver2D {
     private readonly _constraintManager: ConstraintManager2D;
     private readonly _bodyManager: BodyManager2D;
@@ -259,17 +265,25 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
-        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
-        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
-        const distance = Math.sqrt(Vec2.lengthSquared(delta));
+        Vec2.rotate(data.localAnchorA, bodyA.rotation, _scratchA);
+        Vec2.add(bodyA.position, _scratchA, _scratchB);
+        Vec2.rotate(data.localAnchorB, bodyB.rotation, _scratchA);
+        Vec2.add(bodyB.position, _scratchA, _scratchC);
+        Vec2.subtract(_scratchC, _scratchB, _scratchD);
+        const distance = Math.sqrt(Vec2.lengthSquared(_scratchD));
         if (distance <= SOLVER_EPSILON) {
             return;
         }
 
-        const ndir = { x: delta.x / distance, y: delta.y / distance };
-        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
+        const ndir = { x: _scratchD.x / distance, y: _scratchD.y / distance };
+        Vec2.subtract(data.localAnchorA, bodyA.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyA.rotation, _scratchE);
+        const rAx = _scratchE.x;
+        const rAy = _scratchE.y;
+        Vec2.subtract(data.localAnchorB, bodyB.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyB.rotation, _scratchE);
+        const rBx = _scratchE.x;
+        const rBy = _scratchE.y;
         const h = Math.max(dt, SOLVER_EPSILON);
 
         const error = distance - data.length;
@@ -287,8 +301,8 @@ export class ConstraintSolver2D {
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -ndir.x, y: -ndir.y }, angular: -Vec2.cross(rA, ndir) },
-                j2: { linear: { x: ndir.x, y: ndir.y }, angular: Vec2.cross(rB, ndir) },
+                j1: { linear: { x: -ndir.x, y: -ndir.y }, angular: -(rAx * ndir.y - rAy * ndir.x) },
+                j2: { linear: { x: ndir.x, y: ndir.y }, angular: rBx * ndir.y - rBy * ndir.x },
                 bias: -bias,
                 impulse: 0,
                 lowerLimit: -Infinity,
