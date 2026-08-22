@@ -1,3 +1,4 @@
+import type { Mutable } from '@axrone/utility';
 import { Vec4 } from '@axrone/numeric';
 import {
     ITextureSampler,
@@ -262,28 +263,7 @@ export class SamplerFactory {
 }
 
 export class SamplerBuilder {
-    private _options: {
-        minFilter?: FilterMode;
-        magFilter?: FilterMode;
-        wrapS?: WrapMode;
-        wrapT?: WrapMode;
-        wrapR?: WrapMode;
-        borderColor?: Vec4;
-        maxAnisotropy?: number;
-        compareMode?: 'NONE' | 'COMPARE_REF_TO_TEXTURE';
-        compareFunc?:
-            | 'NEVER'
-            | 'LESS'
-            | 'EQUAL'
-            | 'LEQUAL'
-            | 'GREATER'
-            | 'NOTEQUAL'
-            | 'GEQUAL'
-            | 'ALWAYS';
-        minLod?: number;
-        maxLod?: number;
-        lodBias?: number;
-    } = {};
+    private _options: Mutable<Partial<ITextureSamplerOptions>> = {};
 
     public minFilter(filter: FilterMode): SamplerBuilder {
         this._options.minFilter = filter;

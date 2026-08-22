@@ -1,3 +1,4 @@
+import type { Mutable } from '@axrone/utility';
 import { Vec4 } from '@axrone/numeric';
 import {
     ITexture,
@@ -7,6 +8,7 @@ import {
     ITextureCreateOptions,
     ITextureSamplerOptions,
     ITextureBuilder,
+    ColorSpace,
     TextureDimension,
     TextureFormat,
     TextureUsage,
@@ -476,28 +478,8 @@ export class WebGLTextureManager implements ITextureManager {
 }
 
 class TextureBuilder implements ITextureBuilder {
-    private _options: {
-        width?: number;
-        height?: number;
-        depth?: number;
-        format?: TextureFormat;
-        dimension?: TextureDimension;
-        mipLevels?: number;
-        arrayLayers?: number;
-        samples?: number;
-        usage?: TextureUsage;
-        colorSpace?: any;
-        label?: string;
-    } = {};
-    private _samplerOptions: {
-        minFilter?: FilterMode;
-        magFilter?: FilterMode;
-        wrapS?: WrapMode;
-        wrapT?: WrapMode;
-        wrapR?: WrapMode;
-        borderColor?: Vec4;
-        maxAnisotropy?: number;
-    } = {};
+    private _options: Mutable<Partial<ITextureCreateOptions>> = {};
+    private _samplerOptions: Mutable<Partial<ITextureSamplerOptions>> = {};
     private _data: TextureDataSource = null;
 
     constructor(private _manager: WebGLTextureManager) {}
@@ -541,7 +523,7 @@ class TextureBuilder implements ITextureBuilder {
         return this;
     }
 
-    public colorSpace(space: any): ITextureBuilder {
+    public colorSpace(space: ColorSpace): ITextureBuilder {
         this._options.colorSpace = space;
         return this;
     }
