@@ -277,11 +277,7 @@ export class LODGroup extends Component {
         }
 
         const worldPos = transform.worldPosition;
-        return new Vec3(
-            worldPos.x + this._localReferencePoint.x,
-            worldPos.y + this._localReferencePoint.y,
-            worldPos.z + this._localReferencePoint.z
-        );
+        return Vec3.add(worldPos, this._localReferencePoint);
     }
 
     override serialize(): Record<string, unknown> {
