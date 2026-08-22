@@ -1,8 +1,16 @@
 import type { RotationConfiguration } from '../core/configuration';
 import type { IParticleBuffer } from '../core/interfaces';
 import type { ICurve } from '../interfaces';
+import type { IQuatLike } from '@axrone/numeric';
+import { Quat } from '@axrone/numeric';
 import { BaseModule } from './base-module';
 import { CurveEvaluator } from '../curve-evaluator';
+
+// Scratch objects for zero-allocation in the per-particle hot path
+const _scratchQuat = new Quat();
+const _scratchRotQuat = new Quat();
+const _scratchNewQuat = new Quat();
+const _scratchEuler = { x: 0, y: 0, z: 0 };
 
 export enum RotationMode {
     Constant = 'constant',
@@ -36,75 +44,6 @@ export interface RotationStats {
     readonly totalRotationalEnergy: number;
     readonly constraintViolations: number;
     readonly performanceMs: number;
-}
-
-class Quaternion {
-    constructor(
-        public x = 0,
-        public y = 0,
-        public z = 0,
-        public w = 1
-    ) {}
-
-    static fromEuler(x: number, y: number, z: number): Quaternion {
-        const cx = Math.cos(x * 0.5);
-        const sx = Math.sin(x * 0.5);
-        const cy = Math.cos(y * 0.5);
-        const sy = Math.sin(y * 0.5);
-        const cz = Math.cos(z * 0.5);
-        const sz = Math.sin(z * 0.5);
-
-        return new Quaternion(
-            sx * cy * cz - cx * sy * sz,
-            cx * sy * cz + sx * cy * sz,
-            cx * cy * sz - sx * sy * cz,
-            cx * cy * cz + sx * sy * sz
-        );
-    }
-
-    static multiply(a: Quaternion, b: Quaternion): Quaternion {
-        return new Quaternion(
-            a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
-            a.w * b.y + a.y * b.w + a.z * b.x - a.x * b.z,
-            a.w * b.z + a.z * b.w + a.x * b.y - a.y * b.x,
-            a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z
-        );
-    }
-
-    normalize(): Quaternion {
-        const length = Math.sqrt(
-            this.x * this.x + this.y * this.y + this.z * this.z + this.w * this.w
-        );
-        if (length > 0) {
-            this.x /= length;
-            this.y /= length;
-            this.z /= length;
-            this.w /= length;
-        }
-        return this;
-    }
-
-    toEuler(): [number, number, number] {
-        const test = this.x * this.y + this.z * this.w;
-
-        if (test > 0.499) {
-            return [2 * Math.atan2(this.x, this.w), Math.PI / 2, 0];
-        }
-
-        if (test < -0.499) {
-            return [-2 * Math.atan2(this.x, this.w), -Math.PI / 2, 0];
-        }
-
-        const sqx = this.x * this.x;
-        const sqy = this.y * this.y;
-        const sqz = this.z * this.z;
-
-        return [
-            Math.atan2(2 * this.y * this.w - 2 * this.x * this.z, 1 - 2 * sqy - 2 * sqz),
-            Math.asin(2 * test),
-            Math.atan2(2 * this.x * this.w - 2 * this.y * this.z, 1 - 2 * sqx - 2 * sqz),
-        ];
-    }
 }
 
 export class RotationModule extends BaseModule<'rotation'> {
@@ -208,9 +147,9 @@ export class RotationModule extends BaseModule<'rotation'> {
         }
     }
 
-    getParticleQuaternion(particleIndex: number): Quaternion {
+    getParticleQuaternion(particleIndex: number): Quat {
         const i4 = particleIndex * 4;
-        return new Quaternion(
+        return new Quat(
             this._quaternions[i4],
             this._quaternions[i4 + 1],
             this._quaternions[i4 + 2],
@@ -218,7 +157,7 @@ export class RotationModule extends BaseModule<'rotation'> {
         );
     }
 
-    setParticleQuaternion(particleIndex: number, quaternion: Quaternion): void {
+    setParticleQuaternion(particleIndex: number, quaternion: IQuatLike): void {
         const i4 = particleIndex * 4;
         this._quaternions[i4] = quaternion.x;
         this._quaternions[i4 + 1] = quaternion.y;
@@ -523,32 +462,32 @@ export class RotationModule extends BaseModule<'rotation'> {
         particleIndex: number,
         deltaTime: number
     ): void {
-        const quat = new Quaternion(
-            this._quaternions[i4],
-            this._quaternions[i4 + 1],
-            this._quaternions[i4 + 2],
-            this._quaternions[i4 + 3]
-        );
+        // Read current quaternion from array into scratch (zero allocation)
+        _scratchQuat.x = this._quaternions[i4];
+        _scratchQuat.y = this._quaternions[i4 + 1];
+        _scratchQuat.z = this._quaternions[i4 + 2];
+        _scratchQuat.w = this._quaternions[i4 + 3];
 
         const halfDt = deltaTime * 0.5;
-        const rotQuat = Quaternion.fromEuler(
+        Quat.fromEuler(
             angularVel[0] * halfDt,
             angularVel[1] * halfDt,
-            angularVel[2] * halfDt
+            angularVel[2] * halfDt,
+            _scratchRotQuat
         );
 
-        const newQuat = Quaternion.multiply(quat, rotQuat);
-        newQuat.normalize();
+        Quat.multiply(_scratchQuat, _scratchRotQuat, _scratchNewQuat);
+        Quat.normalize(_scratchNewQuat, _scratchNewQuat);
 
-        this._quaternions[i4] = newQuat.x;
-        this._quaternions[i4 + 1] = newQuat.y;
-        this._quaternions[i4 + 2] = newQuat.z;
-        this._quaternions[i4 + 3] = newQuat.w;
+        this._quaternions[i4] = _scratchNewQuat.x;
+        this._quaternions[i4 + 1] = _scratchNewQuat.y;
+        this._quaternions[i4 + 2] = _scratchNewQuat.z;
+        this._quaternions[i4 + 3] = _scratchNewQuat.w;
 
-        const euler = newQuat.toEuler();
-        rotations[i3] = euler[0];
-        rotations[i3 + 1] = euler[1];
-        rotations[i3 + 2] = euler[2];
+        Quat.toEuler(_scratchNewQuat, _scratchEuler);
+        rotations[i3] = _scratchEuler.x;
+        rotations[i3 + 1] = _scratchEuler.y;
+        rotations[i3 + 2] = _scratchEuler.z;
     }
 
     private _evaluateCurve(curve: any, time: number, seed: number): number {
