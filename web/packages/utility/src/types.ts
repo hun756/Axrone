@@ -1,4 +1,4 @@
-export type Primitive = undefined | null | boolean | number | string | bigint | symbol;
+export type Primitive = undefined | null | boolean | number | string | bigint | symbol | Date | RegExp | Function;
 
 export type JsonPrimitive = string | number | boolean | null;
 
@@ -123,6 +123,16 @@ export type DeepReadonly<T> = T extends (...args: never[]) => unknown
             : T extends Record<string | number | symbol, any>
               ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
               : T;
+
+export type DeepPartial<T> = T extends Primitive
+    ? T
+    : T extends readonly (infer U)[]
+      ? readonly DeepPartial<U>[]
+      : T extends Map<infer K, infer V>
+        ? Map<DeepPartial<K>, DeepPartial<V>>
+        : T extends Set<infer M>
+          ? Set<DeepPartial<M>>
+          : { [K in keyof T]?: DeepPartial<T[K]> };
 
 export type DeepReadonlyPartial<TValue> = TValue extends readonly (infer TElement)[]
     ? readonly DeepReadonlyPartial<TElement>[]
