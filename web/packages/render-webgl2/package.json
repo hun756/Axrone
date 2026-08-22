@@ -48,6 +48,11 @@
             "types": "./dist/pipeline.d.ts",
             "import": "./dist/pipeline.mjs",
             "require": "./dist/pipeline.js"
+        },
+        "./context": {
+            "types": "./dist/context.d.ts",
+            "import": "./dist/context.mjs",
+            "require": "./dist/context.js"
         }
     },
     "scripts": {
