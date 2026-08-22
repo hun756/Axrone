@@ -5,9 +5,6 @@ export {
     $node,
 } from './types';
 export type {
-    IsNever,
-    IsAny,
-    IsUnknown,
     DepthCounter,
     NestedKey,
     Path,

@@ -6,10 +6,6 @@ export const $brand: unique symbol = Symbol.for('axrone.builder.brand');
 export const $state: unique symbol = Symbol.for('axrone.builder.state');
 export const $node: unique symbol = Symbol.for('axrone.builder.node');
 
-export type IsNever<T> = [T] extends [never] ? true : false;
-export type IsAny<T> = 0 extends 1 & T ? true : false;
-export type IsUnknown<T> = IsAny<T> extends true ? false : unknown extends T ? true : false;
-
 export type DepthCounter = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 export type NestedKey<T> = T extends readonly (infer U)[]
