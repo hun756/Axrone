@@ -43,6 +43,23 @@ export class AsyncBuilder<TTarget extends object, in out TSupplied extends keyof
         this.asyncPathResolvers = asyncPathResolvers;
     }
 
+    private _fork(
+        node: StateNode,
+        asyncResolvers?: Map<keyof TTarget, AsyncValueResolver<unknown>>,
+        asyncPathResolvers?: Map<string, AsyncValueResolver<unknown>>
+    ): this {
+        const instance = Object.create(Object.getPrototypeOf(this)) as this;
+        (instance as any)[$state] = this[$state];
+        (instance as any)[$node] = node;
+        (instance as any).validators = this.validators;
+        (instance as any).beforeHooks = this.beforeHooks;
+        (instance as any).afterHooks = this.afterHooks;
+        (instance as any).shouldFreeze = this.shouldFreeze;
+        (instance as any).asyncResolvers = asyncResolvers ?? this.asyncResolvers;
+        (instance as any).asyncPathResolvers = asyncPathResolvers ?? this.asyncPathResolvers;
+        return instance;
+    }
+
     public set<K extends keyof TTarget>(
         key: K,
         valueOrResolver:
@@ -60,45 +77,18 @@ export class AsyncBuilder<TTarget extends object, in out TSupplied extends keyof
                 const snap = this.peek();
                 return (valueOrResolver as Function)(snap[key]);
             });
-            const instance = Object.create(Object.getPrototypeOf(this)) as this;
-            (instance as any)[$state] = this[$state];
-            (instance as any)[$node] = this[$node];
-            (instance as any).validators = this.validators;
-            (instance as any).beforeHooks = this.beforeHooks;
-            (instance as any).afterHooks = this.afterHooks;
-            (instance as any).shouldFreeze = this.shouldFreeze;
-            (instance as any).asyncResolvers = nextResolvers;
-            (instance as any).asyncPathResolvers = this.asyncPathResolvers;
-            return instance as this & AsyncBuilder<TTarget, TSupplied | K>;
+            return this._fork(this[$node], nextResolvers) as this & AsyncBuilder<TTarget, TSupplied | K>;
         }
 
         if (valueOrResolver instanceof Promise) {
             nextResolvers.set(key, () => valueOrResolver);
-            const instance = Object.create(Object.getPrototypeOf(this)) as this;
-            (instance as any)[$state] = this[$state];
-            (instance as any)[$node] = this[$node];
-            (instance as any).validators = this.validators;
-            (instance as any).beforeHooks = this.beforeHooks;
-            (instance as any).afterHooks = this.afterHooks;
-            (instance as any).shouldFreeze = this.shouldFreeze;
-            (instance as any).asyncResolvers = nextResolvers;
-            (instance as any).asyncPathResolvers = this.asyncPathResolvers;
-            return instance as this & AsyncBuilder<TTarget, TSupplied | K>;
+            return this._fork(this[$node], nextResolvers) as this & AsyncBuilder<TTarget, TSupplied | K>;
         }
 
         nextResolvers.delete(key);
         const delta: DeltaRecord = { kind: DeltaKind.DIRECT, key, value: valueOrResolver };
 
-        const instance = Object.create(Object.getPrototypeOf(this)) as this;
-        (instance as any)[$state] = this[$state];
-        (instance as any)[$node] = new StateNode(this[$node], delta);
-        (instance as any).validators = this.validators;
-        (instance as any).beforeHooks = this.beforeHooks;
-        (instance as any).afterHooks = this.afterHooks;
-        (instance as any).shouldFreeze = this.shouldFreeze;
-        (instance as any).asyncResolvers = nextResolvers;
-        (instance as any).asyncPathResolvers = this.asyncPathResolvers;
-        return instance as this & AsyncBuilder<TTarget, TSupplied | K>;
+        return this._fork(new StateNode(this[$node], delta), nextResolvers) as this & AsyncBuilder<TTarget, TSupplied | K>;
     }
 
     public setPath<P extends Path<TTarget>>(
@@ -107,17 +97,18 @@ export class AsyncBuilder<TTarget extends object, in out TSupplied extends keyof
             | PathValue<TTarget, P>
             | Promise<PathValue<TTarget, P>>
             | AsyncValueResolver<PathValue<TTarget, P>>
-    ): AsyncBuilder<
-        TTarget,
-        TSupplied |
-            (P extends `${infer K}.${string}`
-                ? K extends keyof TTarget
-                    ? K
-                    : never
-                : P extends keyof TTarget
-                  ? P
-                  : never)
-    > {
+    ): this &
+        AsyncBuilder<
+            TTarget,
+            TSupplied |
+                (P extends `${infer K}.${string}`
+                    ? K extends keyof TTarget
+                        ? K
+                        : never
+                    : P extends keyof TTarget
+                      ? P
+                      : never)
+        > {
         type KeyType = P extends `${infer K}.${string}`
             ? K extends keyof TTarget
                 ? K
@@ -136,48 +127,23 @@ export class AsyncBuilder<TTarget extends object, in out TSupplied extends keyof
                     ? (valueOrResolver as AsyncValueResolver<unknown>)
                     : () => valueOrResolver
             );
-            return new AsyncBuilder<TTarget, TSupplied | KeyType>(
-                this[$state],
-                this[$node],
-                this.validators,
-                this.beforeHooks,
-                this.afterHooks,
-                this.shouldFreeze,
-                this.asyncResolvers,
-                nextPathResolvers
-            );
+            return this._fork(this[$node], undefined, nextPathResolvers) as this &
+                AsyncBuilder<TTarget, TSupplied | KeyType>;
         }
 
         nextPathResolvers.delete(path);
         const delta: DeltaRecord = { kind: DeltaKind.PATH, segments, value: valueOrResolver };
 
-        return new AsyncBuilder<TTarget, TSupplied | KeyType>(
-            this[$state],
-            new StateNode(this[$node], delta),
-            this.validators,
-            this.beforeHooks,
-            this.afterHooks,
-            this.shouldFreeze,
-            this.asyncResolvers,
-            nextPathResolvers
-        );
+        return this._fork(new StateNode(this[$node], delta), undefined, nextPathResolvers) as this &
+            AsyncBuilder<TTarget, TSupplied | KeyType>;
     }
 
-    public merge(partial: Partial<TTarget> | Promise<Partial<TTarget>>): AsyncBuilder<TTarget, TSupplied> {
+    public merge(partial: Partial<TTarget> | Promise<Partial<TTarget>>): this & AsyncBuilder<TTarget, TSupplied> {
         if (partial instanceof Promise) {
             const nextResolvers = new Map(this.asyncResolvers);
             const syntheticKey = Symbol('merge') as unknown as keyof TTarget;
             nextResolvers.set(syntheticKey, async () => partial);
-            return new AsyncBuilder<TTarget, TSupplied>(
-                this[$state],
-                this[$node],
-                this.validators,
-                this.beforeHooks,
-                this.afterHooks,
-                this.shouldFreeze,
-                nextResolvers,
-                this.asyncPathResolvers
-            );
+            return this._fork(this[$node], nextResolvers) as this & AsyncBuilder<TTarget, TSupplied>;
         }
 
         const delta: DeltaRecord = {
@@ -185,16 +151,7 @@ export class AsyncBuilder<TTarget extends object, in out TSupplied extends keyof
             partial: Object.assign({}, partial) as Record<PropertyKey, unknown>,
         };
 
-        return new AsyncBuilder<TTarget, TSupplied>(
-            this[$state],
-            new StateNode(this[$node], delta),
-            this.validators,
-            this.beforeHooks,
-            this.afterHooks,
-            this.shouldFreeze,
-            this.asyncResolvers,
-            this.asyncPathResolvers
-        );
+        return this._fork(new StateNode(this[$node], delta)) as this & AsyncBuilder<TTarget, TSupplied>;
     }
 
     public validateWith(validator: AnyValidator<TTarget>): this {

@@ -38,6 +38,17 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
         this.shouldFreeze = shouldFreeze;
     }
 
+    private _fork(node: StateNode): this {
+        const instance = Object.create(Object.getPrototypeOf(this)) as this;
+        (instance as any)[$state] = this[$state];
+        (instance as any)[$node] = node;
+        (instance as any).validators = this.validators;
+        (instance as any).beforeHooks = this.beforeHooks;
+        (instance as any).afterHooks = this.afterHooks;
+        (instance as any).shouldFreeze = this.shouldFreeze;
+        return instance;
+    }
+
     public set<K extends keyof TTarget>(
         key: K,
         valueOrUpdater: TTarget[K] | ValueUpdater<TTarget[K]>
@@ -53,14 +64,7 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
             delta = { kind: DeltaKind.DIRECT, key, value: valueOrUpdater };
         }
 
-        const instance = Object.create(Object.getPrototypeOf(this)) as this;
-        (instance as any)[$state] = this[$state];
-        (instance as any)[$node] = new StateNode(this[$node], delta);
-        (instance as any).validators = this.validators;
-        (instance as any).beforeHooks = this.beforeHooks;
-        (instance as any).afterHooks = this.afterHooks;
-        (instance as any).shouldFreeze = this.shouldFreeze;
-        return instance as this & Builder<TTarget, TSupplied | K>;
+        return this._fork(new StateNode(this[$node], delta)) as this & Builder<TTarget, TSupplied | K>;
     }
 
     public setPath<P extends Path<TTarget>>(
@@ -89,14 +93,7 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
         const segments = parsePath(path);
         const delta: DeltaRecord = { kind: DeltaKind.PATH, segments, value };
 
-        const instance = Object.create(Object.getPrototypeOf(this)) as this;
-        (instance as any)[$state] = this[$state];
-        (instance as any)[$node] = new StateNode(this[$node], delta);
-        (instance as any).validators = this.validators;
-        (instance as any).beforeHooks = this.beforeHooks;
-        (instance as any).afterHooks = this.afterHooks;
-        (instance as any).shouldFreeze = this.shouldFreeze;
-        return instance as this &
+        return this._fork(new StateNode(this[$node], delta)) as this &
             Builder<
                 TTarget,
                 TSupplied |
@@ -123,14 +120,7 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
             partial: Object.assign({}, partial) as Record<PropertyKey, unknown>,
         };
 
-        const instance = Object.create(Object.getPrototypeOf(this)) as this;
-        (instance as any)[$state] = this[$state];
-        (instance as any)[$node] = new StateNode(this[$node], delta);
-        (instance as any).validators = this.validators;
-        (instance as any).beforeHooks = this.beforeHooks;
-        (instance as any).afterHooks = this.afterHooks;
-        (instance as any).shouldFreeze = this.shouldFreeze;
-        return instance as this & Builder<TTarget, TSupplied | (keyof P & keyof TTarget)>;
+        return this._fork(new StateNode(this[$node], delta)) as this & Builder<TTarget, TSupplied | (keyof P & keyof TTarget)>;
     }
 
     public mutate(mutator: (draft: Partial<TTarget>) => void): this & Builder<TTarget, TSupplied> {
@@ -139,14 +129,7 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
             fn: mutator as (draft: Record<string, unknown>) => void,
         };
 
-        const instance = Object.create(Object.getPrototypeOf(this)) as this;
-        (instance as any)[$state] = this[$state];
-        (instance as any)[$node] = new StateNode(this[$node], delta);
-        (instance as any).validators = this.validators;
-        (instance as any).beforeHooks = this.beforeHooks;
-        (instance as any).afterHooks = this.afterHooks;
-        (instance as any).shouldFreeze = this.shouldFreeze;
-        return instance as this & Builder<TTarget, TSupplied>;
+        return this._fork(new StateNode(this[$node], delta)) as this & Builder<TTarget, TSupplied>;
     }
 
     public validateWith(validator: SyncValidator<TTarget>): this {
