@@ -114,6 +114,21 @@
             "import": "./dist/controller.mjs",
             "require": "./dist/controller.js"
         },
+        "./controller-builder": {
+            "types": "./dist/controller-builder.d.ts",
+            "import": "./dist/controller-builder.mjs",
+            "require": "./dist/controller-builder.js"
+        },
+        "./controller-validator": {
+            "types": "./dist/controller-validator.d.ts",
+            "import": "./dist/controller-validator.mjs",
+            "require": "./dist/controller-validator.js"
+        },
+        "./controller-clone": {
+            "types": "./dist/controller-clone.d.ts",
+            "import": "./dist/controller-clone.mjs",
+            "require": "./dist/controller-clone.js"
+        },
         "./streaming": {
             "types": "./dist/streaming.d.ts",
             "import": "./dist/streaming.mjs",
