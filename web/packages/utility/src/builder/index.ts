@@ -31,9 +31,6 @@ export type {
     FactoryProvider,
     IFactory,
 } from './types';
-// NOTE: Primitive, Brand, DeepPartial, DeepReadonly are intentionally NOT re-exported
-// to avoid conflicts with existing @axrone/utility types (types.ts, comparer/shared.ts).
-// The builder module uses its own internal versions of these types.
 
 // Errors
 export {

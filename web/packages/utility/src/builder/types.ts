@@ -1,22 +1,10 @@
+import type { Primitive, DeepReadonly, DeepPartial } from '../types';
+
+export type { Primitive, DeepReadonly, DeepPartial };
+
 export const $brand: unique symbol = Symbol.for('axrone.builder.brand');
 export const $state: unique symbol = Symbol.for('axrone.builder.state');
 export const $node: unique symbol = Symbol.for('axrone.builder.node');
-
-export type Brand<T, B extends string | symbol> = T & {
-    readonly [$brand]: B;
-};
-
-export type Primitive =
-    | string
-    | number
-    | boolean
-    | bigint
-    | symbol
-    | null
-    | undefined
-    | Date
-    | RegExp
-    | Function;
 
 export type IsNever<T> = [T] extends [never] ? true : false;
 export type IsAny<T> = 0 extends 1 & T ? true : false;
@@ -73,26 +61,6 @@ export type OptionalKeys<T> = {
 export type MissingKeys<T, TSupplied extends keyof T> = Exclude<RequiredKeys<T>, TSupplied>;
 
 export type IsBuildable<T, TSupplied extends keyof T> = [MissingKeys<T, TSupplied>] extends [never] ? true : false;
-
-export type DeepPartial<T> = T extends Primitive
-    ? T
-    : T extends readonly (infer U)[]
-      ? readonly DeepPartial<U>[]
-      : T extends Map<infer K, infer V>
-        ? Map<DeepPartial<K>, DeepPartial<V>>
-        : T extends Set<infer M>
-          ? Set<DeepPartial<M>>
-          : { [K in keyof T]?: DeepPartial<T[K]> };
-
-export type DeepReadonly<T> = T extends Primitive
-    ? T
-    : T extends readonly (infer U)[]
-      ? readonly DeepReadonly<U>[]
-      : T extends Map<infer K, infer V>
-        ? ReadonlyMap<DeepReadonly<K>, DeepReadonly<V>>
-        : T extends Set<infer M>
-          ? ReadonlySet<DeepReadonly<M>>
-          : { readonly [K in keyof T]: DeepReadonly<T[K]> };
 
 export type ValueUpdater<TValue> = (previous: TValue | undefined) => TValue;
 export type AsyncValueResolver<TValue> = () => Promise<TValue> | TValue;
