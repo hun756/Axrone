@@ -36,7 +36,7 @@ import {
     type AnimationCompiledStateMachine,
     type AnimationLayerRuntime,
 } from '../state-machine';
-import { AnimationScratchPool } from '../blend-tree';
+import { AnimationScratchPool, BlendScratchContext } from '../blend-tree';
 import type { AnimationStateMachineDefinition } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -202,6 +202,7 @@ const makeContext = (parameters?: AnimationParameterStore) => {
         parameters: parameters ?? new AnimationParameterStore([]),
         restFrame: new AnimationFrame(rig, curveLayout),
         scratch: scratchPool,
+        blendScratch: new BlendScratchContext(),
     };
 };
 
