@@ -8,85 +8,15 @@ import type {
     AnimationCompiledAdditiveMotion,
 } from './blend-types';
 import { BLEND_EPSILON } from './blend-types';
-import { assertNever } from './errors';
-
-const resolveParameterScalar = (parameters: AnimationParameterStore, name: string): number => {
-    const value = parameters.get(name);
-    return typeof value === 'number' ? value : value ? 1 : 0;
-};
-
-const resolveDirectChildWeight = (
-    parameters: AnimationParameterStore,
-    parameter: string | undefined,
-    weight: number
-): number => {
-    if (!parameter) {
-        return Math.max(0, weight);
-    }
-    const value = parameters.get(parameter);
-    return typeof value === 'number' ? Math.max(0, value * weight) : value ? Math.max(0, weight) : 0;
-};
-
-const findBlend1DSegment = (
-    children: readonly { readonly threshold: number }[],
-    input: number
-): number => {
-    if (children.length === 1 || input <= children[0]!.threshold) {
-        return -1;
-    }
-    for (let index = 0; index < children.length - 1; index += 1) {
-        if (input > children[index + 1]!.threshold) {
-            continue;
-        }
-        return index;
-    }
-    return -children.length;
-};
-
-const resolveBlend1DAlpha = (
-    children: readonly { readonly threshold: number }[],
-    leftIndex: number,
-    input: number
-): number => {
-    const left = children[leftIndex]!;
-    const right = children[leftIndex + 1]!;
-    return (input - left.threshold) / Math.max(BLEND_EPSILON, right.threshold - left.threshold);
-};
-
-const resolveBlend2DWeights = (
-    x: number,
-    y: number,
-    children: readonly { readonly x: number; readonly y: number }[],
-    weights: number[]
-): void => {
-    let total = 0;
-    for (let index = 0; index < children.length; index += 1) {
-        const child = children[index]!;
-        const dx = x - child.x;
-        const dy = y - child.y;
-        const distanceSquared = dx * dx + dy * dy;
-        if (distanceSquared <= 1e-12) {
-            for (let fill = 0; fill < children.length; fill += 1) {
-                weights[fill] = 0;
-            }
-            weights[index] = 1;
-            return;
-        }
-        const inverseDistance = 1 / Math.sqrt(distanceSquared);
-        weights[index] = inverseDistance;
-        total += inverseDistance;
-    }
-    if (total <= 0) {
-        const uniform = 1 / Math.max(1, children.length);
-        for (let index = 0; index < children.length; index += 1) {
-            weights[index] = uniform;
-        }
-        return;
-    }
-    for (let index = 0; index < children.length; index += 1) {
-        weights[index] /= total;
-    }
-};
+import { dispatchMotion } from './blend-visitor';
+import type { BlendMotionVisitor } from './blend-types';
+import {
+    resolveParameterScalar,
+    resolveDirectChildWeight,
+    findBlend1DSegment,
+    resolveBlend1DAlpha,
+    computeBlend2DWeights,
+} from './blend-helpers';
 
 function resolveClipDuration(motion: AnimationCompiledClipMotion, parameters: AnimationParameterStore): number {
     return motion.clip.duration / Math.max(Math.abs(motion.timeScale), BLEND_EPSILON);
@@ -106,7 +36,7 @@ function resolveBlend1DDuration(motion: AnimationCompiledBlend1DMotion, paramete
 }
 
 function resolveBlend2DDuration(motion: AnimationCompiledBlend2DMotion, parameters: AnimationParameterStore, depth: number, weights: number[]): number {
-    resolveBlend2DWeights(
+    computeBlend2DWeights(
         resolveParameterScalar(parameters, motion.parameterX),
         resolveParameterScalar(parameters, motion.parameterY),
         motion.children,
@@ -140,17 +70,22 @@ function resolveAdditiveDuration(motion: AnimationCompiledAdditiveMotion, parame
 
 const _durationWeights: number[] = [];
 
+interface DurationContext {
+    readonly parameters: AnimationParameterStore;
+    readonly depth: number;
+    readonly weights: number[];
+}
+
+const durationVisitor: BlendMotionVisitor<DurationContext, number> = {
+    visitClip: (motion: AnimationCompiledClipMotion, ctx: DurationContext) => resolveClipDuration(motion, ctx.parameters),
+    visitBlend1d: (motion: AnimationCompiledBlend1DMotion, ctx: DurationContext) => resolveBlend1DDuration(motion, ctx.parameters, ctx.depth),
+    visitBlend2d: (motion: AnimationCompiledBlend2DMotion, ctx: DurationContext) => resolveBlend2DDuration(motion, ctx.parameters, ctx.depth, ctx.weights),
+    visitDirect: (motion: AnimationCompiledDirectMotion, ctx: DurationContext) => resolveDirectDuration(motion, ctx.parameters, ctx.depth),
+    visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: DurationContext) => resolveAdditiveDuration(motion, ctx.parameters, ctx.depth),
+};
+
 export const resolveMotionDuration = (
     motion: AnimationCompiledMotion,
     parameters: AnimationParameterStore,
     depth: number = 0
-): number => {
-    switch (motion.kind) {
-        case 'clip': return resolveClipDuration(motion, parameters);
-        case 'blend1d': return resolveBlend1DDuration(motion, parameters, depth);
-        case 'blend2d': return resolveBlend2DDuration(motion, parameters, depth, _durationWeights);
-        case 'direct': return resolveDirectDuration(motion, parameters, depth);
-        case 'additive': return resolveAdditiveDuration(motion, parameters, depth);
-        default: return assertNever(motion, 'Unsupported motion kind');
-    }
-};
+): number => dispatchMotion(motion, durationVisitor, { parameters, depth, weights: _durationWeights });
