@@ -1,5 +1,5 @@
 import { Vec3 } from '@axrone/numeric';
-import type { Disposable } from '@axrone/utility';
+import type { Disposable, Mutable } from '@axrone/utility';
 import type { ReadonlyTuple3 } from '@axrone/utility';
 import { brandLightingRigId, brandLightingVersion } from './brands';
 import { LightKind, LightSortMode, LightTypeCode } from './constants';
@@ -22,10 +22,6 @@ import { DEFAULT_LIGHTING_CAPACITY, resolveLightingCapacity } from './validation
 
 type RankedDirectional = InternalLightRecord<'directional'>;
 type RankedLocal = InternalLightRecord<'point' | 'spot'>;
-
-type Mutable<T> = {
-    -readonly [K in keyof T]: T[K];
-};
 
 interface MutableLightingEnvironment {
     ambient: Vec3;
