@@ -6,15 +6,7 @@
  * prefab authoring / diff / merge / resolution logic.
  */
 
-// ─── Serialized value ───────────────────────────────────────────────
-
-export type SceneSerializedValue =
-    | string
-    | number
-    | boolean
-    | null
-    | readonly SceneSerializedValue[]
-    | { readonly [key: string]: SceneSerializedValue };
+export type { JsonValue as SceneSerializedValue } from '@axrone/utility';
 
 // ─── Brand helpers ──────────────────────────────────────────────────
 
