@@ -1,5 +1,5 @@
 // Part 1
-import type { IVec3Like } from '@axrone/numeric';
+import { Vec3, type IVec3Like } from '@axrone/numeric';
 import type {
     ContactId,
     ICollisionFilter,
@@ -316,7 +316,7 @@ export class PhysicsWorld3DContactRuntime {
             const center = this._host.getShapeWorldCenter(descriptor);
             const r = def.radius;
             return (dir: IVec3): IVec3 => {
-                const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+                const len = Vec3.len(dir);
                 const inv = len > 1e-6 ? r / len : 0;
                 return { x: center.x + dir.x * inv, y: center.y + dir.y * inv, z: center.z + dir.z * inv };
             };
@@ -350,7 +350,7 @@ export class PhysicsWorld3DContactRuntime {
                 const d1 = dir.x * p1.x + dir.y * p1.y + dir.z * p1.z;
                 const d2 = dir.x * p2.x + dir.y * p2.y + dir.z * p2.z;
                 const base = d1 >= d2 ? p1 : p2;
-                const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+                const len = Vec3.len(dir);
                 const inv = len > 1e-6 ? r / len : 0;
                 return { x: base.x + dir.x * inv, y: base.y + dir.y * inv, z: base.z + dir.z * inv };
             };
