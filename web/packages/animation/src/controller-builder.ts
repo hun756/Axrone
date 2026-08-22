@@ -1,6 +1,4 @@
-import { Builder, $state, $node } from '@axrone/utility';
-import type { DeepReadonly, RequiredKeys } from '@axrone/utility';
-import { StateNode } from '@axrone/utility';
+import { Builder } from '@axrone/utility';
 import {
     buildAnimationMotionDefinition,
     type AnimationMotionBuilder,
@@ -12,7 +10,6 @@ import {
     cloneRigDefinition,
     cloneRootMotionDefinition,
 } from './controller-clone';
-import { spreadIfFinite } from './internal';
 import type {
     AnimationConditionDefinition,
     AnimationControllerDefinition,
@@ -20,6 +17,7 @@ import type {
     AnimationIkLayerDefinition,
     AnimationLayerBlendMode,
     AnimationLayerDefinition,
+    AnimationMotionDefinition,
     AnimationParameterDefinition,
     AnimationParameterKind,
     AnimationParameterValue,
@@ -43,102 +41,64 @@ export type AnimationControllerInput =
 
 // ─── AnimationTransitionBuilder ──────────────────────────────────────────────
 
-export class AnimationTransitionBuilder extends Builder<
-    AnimationTransitionDefinition,
-    TSupplied extends keyof AnimationTransitionDefinition = 'to'
-> {
+export class AnimationTransitionBuilder<
+    TSupplied extends keyof AnimationTransitionDefinition = 'to',
+> extends Builder<AnimationTransitionDefinition, TSupplied> {
     constructor(to: string) {
         super({ to, conditions: Object.freeze([]) as readonly AnimationConditionDefinition[] });
     }
 
-    withDuration(duration: number): AnimationTransitionBuilder<TSupplied | 'to'> {
-        return this._wrap(this.set('duration', duration));
+    withDuration(duration: number): AnimationTransitionBuilder<'to' | 'duration'> {
+        return this.set('duration', duration) as unknown as AnimationTransitionBuilder<'to' | 'duration'>;
     }
 
-    withOffset(offset: number): AnimationTransitionBuilder<TSupplied | 'to'> {
-        return this._wrap(this.set('offset', offset));
+    withOffset(offset: number): AnimationTransitionBuilder<'to' | 'offset'> {
+        return this.set('offset', offset) as unknown as AnimationTransitionBuilder<'to' | 'offset'>;
     }
 
-    withExitTime(exitTime: number): AnimationTransitionBuilder<TSupplied | 'to'> {
-        return this._wrap(this.set('exitTime', exitTime));
+    withExitTime(exitTime: number): AnimationTransitionBuilder<'to' | 'exitTime'> {
+        return this.set('exitTime', exitTime) as unknown as AnimationTransitionBuilder<'to' | 'exitTime'>;
     }
 
-    withFixedDuration(fixedDuration = true): AnimationTransitionBuilder<TSupplied | 'to'> {
-        return this._wrap(this.set('fixedDuration', fixedDuration));
+    withFixedDuration(fixedDuration = true): AnimationTransitionBuilder<'to' | 'fixedDuration'> {
+        return this.set('fixedDuration', fixedDuration) as unknown as AnimationTransitionBuilder<'to' | 'fixedDuration'>;
     }
 
-    withInterruptible(canInterrupt = true): AnimationTransitionBuilder<TSupplied | 'to'> {
-        return this._wrap(this.set('canInterrupt', canInterrupt));
+    withInterruptible(canInterrupt = true): AnimationTransitionBuilder<'to' | 'canInterrupt'> {
+        return this.set('canInterrupt', canInterrupt) as unknown as AnimationTransitionBuilder<'to' | 'canInterrupt'>;
     }
 
-    withPriority(priority: number): AnimationTransitionBuilder<TSupplied | 'to'> {
-        return this._wrap(this.set('priority', priority));
+    withPriority(priority: number): AnimationTransitionBuilder<'to' | 'priority'> {
+        return this.set('priority', priority) as unknown as AnimationTransitionBuilder<'to' | 'priority'>;
     }
 
-    addCondition(condition: AnimationConditionDefinition): AnimationTransitionBuilder<TSupplied | 'to'> {
+    addCondition(condition: AnimationConditionDefinition): AnimationTransitionBuilder<'to' | 'conditions'> {
         const current = (this.peek().conditions ?? []) as readonly AnimationConditionDefinition[];
-        return this._wrap(this.set('conditions', Object.freeze([...current, cloneCondition(condition)])));
+        return this.set('conditions', Object.freeze([...current, cloneCondition(condition)])) as unknown as AnimationTransitionBuilder<'to' | 'conditions'>;
     }
 
-    whenFloat(parameter: string, operator: AnimationTransitionOperator, value: number): AnimationTransitionBuilder<TSupplied | 'to'> {
+    whenFloat(parameter: string, operator: AnimationTransitionOperator, value: number): AnimationTransitionBuilder<'to' | 'conditions'> {
         return this.addCondition({ kind: 'float', parameter, operator, value });
     }
 
-    whenInt(parameter: string, operator: AnimationTransitionOperator, value: number): AnimationTransitionBuilder<TSupplied | 'to'> {
+    whenInt(parameter: string, operator: AnimationTransitionOperator, value: number): AnimationTransitionBuilder<'to' | 'conditions'> {
         return this.addCondition({ kind: 'int', parameter, operator, value });
     }
 
-    whenBool(parameter: string, value: boolean): AnimationTransitionBuilder<TSupplied | 'to'> {
+    whenBool(parameter: string, value: boolean): AnimationTransitionBuilder<'to' | 'conditions'> {
         return this.addCondition({ kind: 'bool', parameter, value });
     }
 
-    whenTriggered(parameter: string): AnimationTransitionBuilder<TSupplied | 'to'> {
+    whenTriggered(parameter: string): AnimationTransitionBuilder<'to' | 'conditions'> {
         return this.addCondition({ kind: 'trigger', parameter });
-    }
-
-    public override build(this: AnimationTransitionBuilder<RequiredKeys<AnimationTransitionDefinition>>): DeepReadonly<AnimationTransitionDefinition> {
-        return super.build();
-    }
-
-    private _wrap<TNext extends keyof AnimationTransitionDefinition>(
-        builder: Builder<AnimationTransitionDefinition, TNext>
-    ): AnimationTransitionBuilder<TNext> {
-        return AnimationTransitionBuilder._reconstruct<TNext>(
-            (builder as any)[$state],
-            (builder as any)[$node],
-            (builder as any).validators,
-            (builder as any).beforeHooks,
-            (builder as any).afterHooks,
-            (builder as any).shouldFreeze
-        );
-    }
-
-    /** @internal */
-    static _reconstruct<S extends keyof AnimationTransitionDefinition>(
-        seed: Record<string, unknown>,
-        node: StateNode,
-        validators: readonly unknown[] = [],
-        beforeHooks: readonly unknown[] = [],
-        afterHooks: readonly unknown[] = [],
-        shouldFreeze = false
-    ): AnimationTransitionBuilder<S> {
-        const instance = Object.create(AnimationTransitionBuilder.prototype) as AnimationTransitionBuilder<S>;
-        (instance as any)[$state] = seed;
-        (instance as any)[$node] = node;
-        (instance as any).validators = validators;
-        (instance as any).beforeHooks = beforeHooks;
-        (instance as any).afterHooks = afterHooks;
-        (instance as any).shouldFreeze = shouldFreeze;
-        return instance;
     }
 }
 
 // ─── AnimationStateBuilder ───────────────────────────────────────────────────
 
-export class AnimationStateBuilder extends Builder<
-    AnimationStateDefinition,
-    TSupplied extends keyof AnimationStateDefinition = 'id' | 'motion'
-> {
+export class AnimationStateBuilder<
+    TSupplied extends keyof AnimationStateDefinition = 'id' | 'motion',
+> extends Builder<AnimationStateDefinition, TSupplied> {
     constructor(id: string, motion: AnimationMotionInput) {
         super({
             id,
@@ -147,78 +107,43 @@ export class AnimationStateBuilder extends Builder<
         });
     }
 
-    withMotion(motion: AnimationMotionInput): AnimationStateBuilder<TSupplied | 'id' | 'motion'> {
-        return this._wrap(this.set('motion', buildAnimationMotionDefinition(motion)));
+    withMotion(motion: AnimationMotionInput): AnimationStateBuilder<'id' | 'motion'> {
+        return this.set('motion', buildAnimationMotionDefinition(motion)) as unknown as AnimationStateBuilder<'id' | 'motion'>;
     }
 
-    withSpeed(speed: number): AnimationStateBuilder<TSupplied | 'id' | 'motion'> {
-        return this._wrap(this.set('speed', speed));
+    withSpeed(speed: number): AnimationStateBuilder<'id' | 'motion' | 'speed'> {
+        return this.set('speed', speed) as unknown as AnimationStateBuilder<'id' | 'motion' | 'speed'>;
     }
 
-    withLoop(loop: boolean): AnimationStateBuilder<TSupplied | 'id' | 'motion'> {
-        return this._wrap(this.set('loop', loop));
+    withLoop(loop: boolean): AnimationStateBuilder<'id' | 'motion' | 'loop'> {
+        return this.set('loop', loop) as unknown as AnimationStateBuilder<'id' | 'motion' | 'loop'>;
     }
 
-    addTransition(transition: AnimationTransitionInput): AnimationStateBuilder<TSupplied | 'id' | 'motion'> {
+    addTransition(transition: AnimationTransitionInput): AnimationStateBuilder<'id' | 'motion' | 'transitions'> {
         const current = (this.peek().transitions ?? []) as readonly AnimationTransitionDefinition[];
         const built = buildAnimationTransitionDefinition(transition);
-        return this._wrap(this.set('transitions', Object.freeze([...current, built])));
+        return this.set('transitions', Object.freeze([...current, built])) as unknown as AnimationStateBuilder<'id' | 'motion' | 'transitions'>;
     }
 
     transitionTo(
         to: string,
         configure?: (transition: AnimationTransitionBuilder) => AnimationTransitionBuilder
-    ): AnimationStateBuilder<TSupplied | 'id' | 'motion'> {
+    ): AnimationStateBuilder<'id' | 'motion' | 'transitions'> {
         let transition = new AnimationTransitionBuilder(to);
         if (configure) {
-            transition = configure(transition);
+            const configured = configure(transition);
+            // `configure` may return a new immutable instance
+            transition = configured as AnimationTransitionBuilder;
         }
         return this.addTransition(transition);
-    }
-
-    public override build(this: AnimationStateBuilder<RequiredKeys<AnimationStateDefinition>>): DeepReadonly<AnimationStateDefinition> {
-        return super.build();
-    }
-
-    private _wrap<TNext extends keyof AnimationStateDefinition>(
-        builder: Builder<AnimationStateDefinition, TNext>
-    ): AnimationStateBuilder<TNext> {
-        return AnimationStateBuilder._reconstruct<TNext>(
-            (builder as any)[$state],
-            (builder as any)[$node],
-            (builder as any).validators,
-            (builder as any).beforeHooks,
-            (builder as any).afterHooks,
-            (builder as any).shouldFreeze
-        );
-    }
-
-    /** @internal */
-    static _reconstruct<S extends keyof AnimationStateDefinition>(
-        seed: Record<string, unknown>,
-        node: StateNode,
-        validators: readonly unknown[] = [],
-        beforeHooks: readonly unknown[] = [],
-        afterHooks: readonly unknown[] = [],
-        shouldFreeze = false
-    ): AnimationStateBuilder<S> {
-        const instance = Object.create(AnimationStateBuilder.prototype) as AnimationStateBuilder<S>;
-        (instance as any)[$state] = seed;
-        (instance as any)[$node] = node;
-        (instance as any).validators = validators;
-        (instance as any).beforeHooks = beforeHooks;
-        (instance as any).afterHooks = afterHooks;
-        (instance as any).shouldFreeze = shouldFreeze;
-        return instance;
     }
 }
 
 // ─── AnimationStateMachineBuilder ────────────────────────────────────────────
 
-export class AnimationStateMachineBuilder extends Builder<
-    AnimationStateMachineDefinition,
-    TSupplied extends keyof AnimationStateMachineDefinition = 'entryState' | 'states'
-> {
+export class AnimationStateMachineBuilder<
+    TSupplied extends keyof AnimationStateMachineDefinition = 'entryState' | 'states',
+> extends Builder<AnimationStateMachineDefinition, TSupplied> {
     constructor(entryState?: string) {
         super({
             entryState: entryState ?? '',
@@ -227,17 +152,17 @@ export class AnimationStateMachineBuilder extends Builder<
         });
     }
 
-    withEntryState(entryState: string): AnimationStateMachineBuilder<TSupplied | 'entryState' | 'states'> {
-        return this._wrap(this.set('entryState', entryState));
+    withEntryState(entryState: string): AnimationStateMachineBuilder<'entryState' | 'states'> {
+        return this.set('entryState', entryState) as unknown as AnimationStateMachineBuilder<'entryState' | 'states'>;
     }
 
-    addState(state: AnimationStateInput): AnimationStateMachineBuilder<TSupplied | 'entryState' | 'states'> {
+    addState(state: AnimationStateInput): AnimationStateMachineBuilder<'entryState' | 'states'> {
         const current = (this.peek().states ?? []) as readonly AnimationStateDefinition[];
         const built = buildAnimationStateDefinition(state);
-        const next = this._wrap(this.set('states', Object.freeze([...current, built])));
+        const next = this.set('states', Object.freeze([...current, built])) as unknown as AnimationStateMachineBuilder<'entryState' | 'states'>;
         const currentEntry = next.peek().entryState;
         if (!currentEntry) {
-            return next._wrap(next.set('entryState', built.id));
+            return next.set('entryState', built.id) as unknown as AnimationStateMachineBuilder<'entryState' | 'states'>;
         }
         return next;
     }
@@ -246,130 +171,58 @@ export class AnimationStateMachineBuilder extends Builder<
         id: string,
         motion: AnimationMotionInput,
         configure?: (state: AnimationStateBuilder) => AnimationStateBuilder
-    ): AnimationStateMachineBuilder<TSupplied | 'entryState' | 'states'> {
+    ): AnimationStateMachineBuilder<'entryState' | 'states'> {
         let stateBuilder = new AnimationStateBuilder(id, motion);
         if (configure) {
-            stateBuilder = configure(stateBuilder);
+            const configured = configure(stateBuilder);
+            stateBuilder = configured as AnimationStateBuilder;
         }
         return this.addState(stateBuilder);
     }
 
-    addAnyStateTransition(transition: AnimationTransitionInput): AnimationStateMachineBuilder<TSupplied | 'entryState' | 'states'> {
+    addAnyStateTransition(transition: AnimationTransitionInput): AnimationStateMachineBuilder<'entryState' | 'states' | 'anyStateTransitions'> {
         const current = (this.peek().anyStateTransitions ?? []) as readonly AnimationTransitionDefinition[];
         const built = buildAnimationTransitionDefinition(transition);
-        return this._wrap(this.set('anyStateTransitions', Object.freeze([...current, built])));
+        return this.set('anyStateTransitions', Object.freeze([...current, built])) as unknown as AnimationStateMachineBuilder<'entryState' | 'states' | 'anyStateTransitions'>;
     }
 
     anyState(
         to: string,
         configure?: (transition: AnimationTransitionBuilder) => AnimationTransitionBuilder
-    ): AnimationStateMachineBuilder<TSupplied | 'entryState' | 'states'> {
+    ): AnimationStateMachineBuilder<'entryState' | 'states' | 'anyStateTransitions'> {
         let transition = new AnimationTransitionBuilder(to);
         if (configure) {
-            transition = configure(transition);
+            const configured = configure(transition);
+            transition = configured as AnimationTransitionBuilder;
         }
         return this.addAnyStateTransition(transition);
-    }
-
-    public override build(this: AnimationStateMachineBuilder<RequiredKeys<AnimationStateMachineDefinition>>): DeepReadonly<AnimationStateMachineDefinition> {
-        return super.build();
-    }
-
-    private _wrap<TNext extends keyof AnimationStateMachineDefinition>(
-        builder: Builder<AnimationStateMachineDefinition, TNext>
-    ): AnimationStateMachineBuilder<TNext> {
-        return AnimationStateMachineBuilder._reconstruct<TNext>(
-            (builder as any)[$state],
-            (builder as any)[$node],
-            (builder as any).validators,
-            (builder as any).beforeHooks,
-            (builder as any).afterHooks,
-            (builder as any).shouldFreeze
-        );
-    }
-
-    /** @internal */
-    static _reconstruct<S extends keyof AnimationStateMachineDefinition>(
-        seed: Record<string, unknown>,
-        node: StateNode,
-        validators: readonly unknown[] = [],
-        beforeHooks: readonly unknown[] = [],
-        afterHooks: readonly unknown[] = [],
-        shouldFreeze = false
-    ): AnimationStateMachineBuilder<S> {
-        const instance = Object.create(AnimationStateMachineBuilder.prototype) as AnimationStateMachineBuilder<S>;
-        (instance as any)[$state] = seed;
-        (instance as any)[$node] = node;
-        (instance as any).validators = validators;
-        (instance as any).beforeHooks = beforeHooks;
-        (instance as any).afterHooks = afterHooks;
-        (instance as any).shouldFreeze = shouldFreeze;
-        return instance;
     }
 }
 
 // ─── AnimationIkLayerBuilder ─────────────────────────────────────────────────
 
-export class AnimationIkLayerBuilder extends Builder<
-    AnimationIkLayerDefinition,
-    TSupplied extends keyof AnimationIkLayerDefinition = 'id' | 'jobs'
-> {
+export class AnimationIkLayerBuilder<
+    TSupplied extends keyof AnimationIkLayerDefinition = 'id' | 'jobs',
+> extends Builder<AnimationIkLayerDefinition, TSupplied> {
     constructor(id: string) {
         super({ id, jobs: Object.freeze([]) as readonly AnimationIkJobDefinition[] });
     }
 
-    withWeight(weight: number): AnimationIkLayerBuilder<TSupplied | 'id' | 'jobs'> {
-        return this._wrap(this.set('weight', weight));
+    withWeight(weight: number): AnimationIkLayerBuilder<'id' | 'jobs' | 'weight'> {
+        return this.set('weight', weight) as unknown as AnimationIkLayerBuilder<'id' | 'jobs' | 'weight'>;
     }
 
-    addJob(job: AnimationIkJobDefinition): AnimationIkLayerBuilder<TSupplied | 'id' | 'jobs'> {
+    addJob(job: AnimationIkJobDefinition): AnimationIkLayerBuilder<'id' | 'jobs'> {
         const current = (this.peek().jobs ?? []) as readonly AnimationIkJobDefinition[];
-        return this._wrap(this.set('jobs', Object.freeze([...current, Object.freeze({ ...job })])));
-    }
-
-    public override build(this: AnimationIkLayerBuilder<RequiredKeys<AnimationIkLayerDefinition>>): DeepReadonly<AnimationIkLayerDefinition> {
-        return super.build();
-    }
-
-    private _wrap<TNext extends keyof AnimationIkLayerDefinition>(
-        builder: Builder<AnimationIkLayerDefinition, TNext>
-    ): AnimationIkLayerBuilder<TNext> {
-        return AnimationIkLayerBuilder._reconstruct<TNext>(
-            (builder as any)[$state],
-            (builder as any)[$node],
-            (builder as any).validators,
-            (builder as any).beforeHooks,
-            (builder as any).afterHooks,
-            (builder as any).shouldFreeze
-        );
-    }
-
-    /** @internal */
-    static _reconstruct<S extends keyof AnimationIkLayerDefinition>(
-        seed: Record<string, unknown>,
-        node: StateNode,
-        validators: readonly unknown[] = [],
-        beforeHooks: readonly unknown[] = [],
-        afterHooks: readonly unknown[] = [],
-        shouldFreeze = false
-    ): AnimationIkLayerBuilder<S> {
-        const instance = Object.create(AnimationIkLayerBuilder.prototype) as AnimationIkLayerBuilder<S>;
-        (instance as any)[$state] = seed;
-        (instance as any)[$node] = node;
-        (instance as any).validators = validators;
-        (instance as any).beforeHooks = beforeHooks;
-        (instance as any).afterHooks = afterHooks;
-        (instance as any).shouldFreeze = shouldFreeze;
-        return instance;
+        return this.set('jobs', Object.freeze([...current, Object.freeze({ ...job })])) as unknown as AnimationIkLayerBuilder<'id' | 'jobs'>;
     }
 }
 
 // ─── AnimationLayerBuilder ───────────────────────────────────────────────────
 
-export class AnimationLayerBuilder extends Builder<
-    AnimationLayerDefinition,
-    TSupplied extends keyof AnimationLayerDefinition = 'id' | 'stateMachine'
-> {
+export class AnimationLayerBuilder<
+    TSupplied extends keyof AnimationLayerDefinition = 'id' | 'stateMachine',
+> extends Builder<AnimationLayerDefinition, TSupplied> {
     constructor(id: string, stateMachine: AnimationStateMachineInput) {
         super({
             id,
@@ -377,62 +230,26 @@ export class AnimationLayerBuilder extends Builder<
         });
     }
 
-    withWeight(weight: number): AnimationLayerBuilder<TSupplied | 'id' | 'stateMachine'> {
-        return this._wrap(this.set('weight', weight));
+    withWeight(weight: number): AnimationLayerBuilder<'id' | 'stateMachine' | 'weight'> {
+        return this.set('weight', weight) as unknown as AnimationLayerBuilder<'id' | 'stateMachine' | 'weight'>;
     }
 
-    withMode(mode: AnimationLayerBlendMode): AnimationLayerBuilder<TSupplied | 'id' | 'stateMachine'> {
-        return this._wrap(this.set('mode', mode));
+    withMode(mode: AnimationLayerBlendMode): AnimationLayerBuilder<'id' | 'stateMachine' | 'mode'> {
+        return this.set('mode', mode) as unknown as AnimationLayerBuilder<'id' | 'stateMachine' | 'mode'>;
     }
 
-    withBoneMask(bones: readonly string[]): AnimationLayerBuilder<TSupplied | 'id' | 'stateMachine'> {
-        return this._wrap(this.set('boneMask', Object.freeze([...bones])));
+    withBoneMask(bones: readonly string[]): AnimationLayerBuilder<'id' | 'stateMachine' | 'boneMask'> {
+        return this.set('boneMask', Object.freeze([...bones])) as unknown as AnimationLayerBuilder<'id' | 'stateMachine' | 'boneMask'>;
     }
 
-    withStateMachine(stateMachine: AnimationStateMachineInput): AnimationLayerBuilder<TSupplied | 'id' | 'stateMachine'> {
-        return this._wrap(this.set('stateMachine', buildAnimationStateMachineDefinition(stateMachine)));
+    withStateMachine(stateMachine: AnimationStateMachineInput): AnimationLayerBuilder<'id' | 'stateMachine'> {
+        return this.set('stateMachine', buildAnimationStateMachineDefinition(stateMachine)) as unknown as AnimationLayerBuilder<'id' | 'stateMachine'>;
     }
 
-    addIkLayer(layer: AnimationIkLayerInput): AnimationLayerBuilder<TSupplied | 'id' | 'stateMachine'> {
+    addIkLayer(layer: AnimationIkLayerInput): AnimationLayerBuilder<'id' | 'stateMachine' | 'ikLayers'> {
         const current = ((this.peek() as any).ikLayers ?? []) as readonly AnimationIkLayerDefinition[];
         const built = buildAnimationIkLayerDefinition(layer);
-        return this._wrap(this.set('ikLayers' as keyof AnimationLayerDefinition, Object.freeze([...current, built]) as any));
-    }
-
-    public override build(this: AnimationLayerBuilder<RequiredKeys<AnimationLayerDefinition>>): DeepReadonly<AnimationLayerDefinition> {
-        return super.build();
-    }
-
-    private _wrap<TNext extends keyof AnimationLayerDefinition>(
-        builder: Builder<AnimationLayerDefinition, TNext>
-    ): AnimationLayerBuilder<TNext> {
-        return AnimationLayerBuilder._reconstruct<TNext>(
-            (builder as any)[$state],
-            (builder as any)[$node],
-            (builder as any).validators,
-            (builder as any).beforeHooks,
-            (builder as any).afterHooks,
-            (builder as any).shouldFreeze
-        );
-    }
-
-    /** @internal */
-    static _reconstruct<S extends keyof AnimationLayerDefinition>(
-        seed: Record<string, unknown>,
-        node: StateNode,
-        validators: readonly unknown[] = [],
-        beforeHooks: readonly unknown[] = [],
-        afterHooks: readonly unknown[] = [],
-        shouldFreeze = false
-    ): AnimationLayerBuilder<S> {
-        const instance = Object.create(AnimationLayerBuilder.prototype) as AnimationLayerBuilder<S>;
-        (instance as any)[$state] = seed;
-        (instance as any)[$node] = node;
-        (instance as any).validators = validators;
-        (instance as any).beforeHooks = beforeHooks;
-        (instance as any).afterHooks = afterHooks;
-        (instance as any).shouldFreeze = shouldFreeze;
-        return instance;
+        return this.set('ikLayers' as keyof AnimationLayerDefinition, Object.freeze([...current, built]) as any) as unknown as AnimationLayerBuilder<'id' | 'stateMachine' | 'ikLayers'>;
     }
 }
 
@@ -440,10 +257,9 @@ export class AnimationLayerBuilder extends Builder<
 
 type ControllerClips = AnimationControllerDefinition<readonly AnimationParameterDefinition[]>['clips'];
 
-export class AnimationControllerBuilder extends Builder<
-    AnimationControllerDefinition<readonly AnimationParameterDefinition[]>,
-    TSupplied extends keyof AnimationControllerDefinition<readonly AnimationParameterDefinition[]> = 'rig' | 'clips' | 'layers'
-> {
+export class AnimationControllerBuilder<
+    TSupplied extends keyof AnimationControllerDefinition<readonly AnimationParameterDefinition[]> = 'rig' | 'clips' | 'layers',
+> extends Builder<AnimationControllerDefinition<readonly AnimationParameterDefinition[]>, TSupplied> {
     constructor(rig: AnimationRigDefinition) {
         super({
             rig: cloneRigDefinition(rig),
@@ -452,21 +268,21 @@ export class AnimationControllerBuilder extends Builder<
         });
     }
 
-    addClip(clip: ControllerClips[number]): AnimationControllerBuilder<TSupplied | 'rig' | 'clips' | 'layers'> {
+    addClip(clip: ControllerClips[number]): AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'clips'> {
         const current = (this.peek().clips ?? []) as unknown as readonly ControllerClips[number][];
-        return this._wrap(this.set('clips', Object.freeze([...current, clip]) as unknown as ControllerClips));
+        return this.set('clips', Object.freeze([...current, clip]) as unknown as ControllerClips) as unknown as AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'clips'>;
     }
 
-    addParameter(parameter: AnimationParameterDefinition): AnimationControllerBuilder<TSupplied | 'rig' | 'clips' | 'layers'> {
+    addParameter(parameter: AnimationParameterDefinition): AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'parameters'> {
         const current = (this.peek().parameters ?? []) as readonly AnimationParameterDefinition[];
-        return this._wrap(this.set('parameters', Object.freeze([...current, cloneParameterDefinition(parameter)])));
+        return this.set('parameters', Object.freeze([...current, cloneParameterDefinition(parameter)])) as unknown as AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'parameters'>;
     }
 
     parameter<TKind extends AnimationParameterKind>(
         name: string,
         kind: TKind,
         defaultValue?: AnimationParameterValue<TKind>
-    ): AnimationControllerBuilder<TSupplied | 'rig' | 'clips' | 'layers'> {
+    ): AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'parameters'> {
         return this.addParameter({
             name,
             kind,
@@ -474,65 +290,28 @@ export class AnimationControllerBuilder extends Builder<
         });
     }
 
-    addLayer(layer: AnimationLayerInput): AnimationControllerBuilder<TSupplied | 'rig' | 'clips' | 'layers'> {
+    addLayer(layer: AnimationLayerInput): AnimationControllerBuilder<'rig' | 'clips' | 'layers'> {
         const current = (this.peek().layers ?? []) as readonly AnimationLayerDefinition[];
         const built = buildAnimationLayerDefinition(layer);
-        return this._wrap(this.set('layers', Object.freeze([...current, built])));
+        return this.set('layers', Object.freeze([...current, built])) as unknown as AnimationControllerBuilder<'rig' | 'clips' | 'layers'>;
     }
 
     layer(
         id: string,
         stateMachine: AnimationStateMachineInput,
         configure?: (layer: AnimationLayerBuilder) => AnimationLayerBuilder
-    ): AnimationControllerBuilder<TSupplied | 'rig' | 'clips' | 'layers'> {
+    ): AnimationControllerBuilder<'rig' | 'clips' | 'layers'> {
         let layerBuilder = new AnimationLayerBuilder(id, stateMachine);
         if (configure) {
-            layerBuilder = configure(layerBuilder);
+            const configured = configure(layerBuilder);
+            layerBuilder = configured as AnimationLayerBuilder;
         }
         return this.addLayer(layerBuilder);
     }
 
-    withRootMotion(rootMotion: AnimationRootMotionDefinition | null): AnimationControllerBuilder<TSupplied | 'rig' | 'clips' | 'layers'> {
+    withRootMotion(rootMotion: AnimationRootMotionDefinition | null): AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'rootMotion'> {
         const cloned = rootMotion ? cloneRootMotionDefinition(rootMotion) : null;
-        return this._wrap(this.set('rootMotion', cloned));
-    }
-
-    public override build(
-        this: AnimationControllerBuilder<RequiredKeys<AnimationControllerDefinition<readonly AnimationParameterDefinition[]>>>
-    ): DeepReadonly<AnimationControllerDefinition<readonly AnimationParameterDefinition[]>> {
-        return super.build();
-    }
-
-    private _wrap<TNext extends keyof AnimationControllerDefinition<readonly AnimationParameterDefinition[]>>(
-        builder: Builder<AnimationControllerDefinition<readonly AnimationParameterDefinition[]>, TNext>
-    ): AnimationControllerBuilder<TNext> {
-        return AnimationControllerBuilder._reconstruct<TNext>(
-            (builder as any)[$state],
-            (builder as any)[$node],
-            (builder as any).validators,
-            (builder as any).beforeHooks,
-            (builder as any).afterHooks,
-            (builder as any).shouldFreeze
-        );
-    }
-
-    /** @internal */
-    static _reconstruct<S extends keyof AnimationControllerDefinition<readonly AnimationParameterDefinition[]>>(
-        seed: Record<string, unknown>,
-        node: StateNode,
-        validators: readonly unknown[] = [],
-        beforeHooks: readonly unknown[] = [],
-        afterHooks: readonly unknown[] = [],
-        shouldFreeze = false
-    ): AnimationControllerBuilder<S> {
-        const instance = Object.create(AnimationControllerBuilder.prototype) as AnimationControllerBuilder<S>;
-        (instance as any)[$state] = seed;
-        (instance as any)[$node] = node;
-        (instance as any).validators = validators;
-        (instance as any).beforeHooks = beforeHooks;
-        (instance as any).afterHooks = afterHooks;
-        (instance as any).shouldFreeze = shouldFreeze;
-        return instance;
+        return this.set('rootMotion', cloned) as unknown as AnimationControllerBuilder<'rig' | 'clips' | 'layers' | 'rootMotion'>;
     }
 }
 
@@ -665,3 +444,6 @@ export const buildAnimationControllerDefinition = (
                     }
                   : {}),
           });
+
+const spreadIfFinite = (key: string, value: unknown): Record<string, unknown> =>
+    typeof value === 'number' && Number.isFinite(value) ? { [key]: value } : {};

@@ -30,7 +30,7 @@ export class Lens<TRoot extends object, TSub> implements ILens<TRoot, TSub> {
             (root) => getPathInTarget(root, segments) as PathValue<TRoot, P>,
             (sub, root) => {
                 const copy = Object.assign({}, root);
-                setPathInTarget(copy, segments, sub);
+                setPathInTarget(copy as unknown as Record<string, unknown>, segments, sub);
                 return copy as TRoot;
             }
         );

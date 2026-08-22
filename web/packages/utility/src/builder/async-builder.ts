@@ -50,7 +50,7 @@ export class AsyncBuilder<TTarget extends object, in out TSupplied extends keyof
             | Promise<TTarget[K]>
             | AsyncValueResolver<TTarget[K]>
             | ((prev: TTarget[K] | undefined) => TTarget[K] | Promise<TTarget[K]>)
-    ): AsyncBuilder<TTarget, TSupplied | K> {
+    ): this & AsyncBuilder<TTarget, TSupplied | K> {
         assertSafeKey(String(key));
 
         const nextResolvers = new Map(this.asyncResolvers);
@@ -60,7 +60,17 @@ export class AsyncBuilder<TTarget extends object, in out TSupplied extends keyof
                 const snap = this.peek();
                 return (valueOrResolver as Function)(snap[key]);
             });
-            return new AsyncBuilder<TTarget, TSupplied | K>(
+            const Ctor = this.constructor as new (
+                seed: Record<string, unknown>,
+                node: StateNode,
+                validators: readonly AnyValidator<TTarget>[],
+                beforeHooks: readonly AsyncHook<Partial<TTarget>>[],
+                afterHooks: readonly AsyncHook<TTarget>[],
+                shouldFreeze: boolean,
+                asyncResolvers: Map<keyof TTarget, AsyncValueResolver<unknown>>,
+                asyncPathResolvers: Map<string, AsyncValueResolver<unknown>>
+            ) => this;
+            return new Ctor(
                 this[$state],
                 this[$node],
                 this.validators,
@@ -69,12 +79,22 @@ export class AsyncBuilder<TTarget extends object, in out TSupplied extends keyof
                 this.shouldFreeze,
                 nextResolvers,
                 this.asyncPathResolvers
-            );
+            ) as this & AsyncBuilder<TTarget, TSupplied | K>;
         }
 
         if (valueOrResolver instanceof Promise) {
             nextResolvers.set(key, () => valueOrResolver);
-            return new AsyncBuilder<TTarget, TSupplied | K>(
+            const Ctor = this.constructor as new (
+                seed: Record<string, unknown>,
+                node: StateNode,
+                validators: readonly AnyValidator<TTarget>[],
+                beforeHooks: readonly AsyncHook<Partial<TTarget>>[],
+                afterHooks: readonly AsyncHook<TTarget>[],
+                shouldFreeze: boolean,
+                asyncResolvers: Map<keyof TTarget, AsyncValueResolver<unknown>>,
+                asyncPathResolvers: Map<string, AsyncValueResolver<unknown>>
+            ) => this;
+            return new Ctor(
                 this[$state],
                 this[$node],
                 this.validators,
@@ -83,13 +103,23 @@ export class AsyncBuilder<TTarget extends object, in out TSupplied extends keyof
                 this.shouldFreeze,
                 nextResolvers,
                 this.asyncPathResolvers
-            );
+            ) as this & AsyncBuilder<TTarget, TSupplied | K>;
         }
 
         nextResolvers.delete(key);
         const delta: DeltaRecord = { kind: DeltaKind.DIRECT, key, value: valueOrResolver };
 
-        return new AsyncBuilder<TTarget, TSupplied | K>(
+        const Ctor = this.constructor as new (
+            seed: Record<string, unknown>,
+            node: StateNode,
+            validators: readonly AnyValidator<TTarget>[],
+            beforeHooks: readonly AsyncHook<Partial<TTarget>>[],
+            afterHooks: readonly AsyncHook<TTarget>[],
+            shouldFreeze: boolean,
+            asyncResolvers: Map<keyof TTarget, AsyncValueResolver<unknown>>,
+            asyncPathResolvers: Map<string, AsyncValueResolver<unknown>>
+        ) => this;
+        return new Ctor(
             this[$state],
             new StateNode(this[$node], delta),
             this.validators,
@@ -98,7 +128,7 @@ export class AsyncBuilder<TTarget extends object, in out TSupplied extends keyof
             this.shouldFreeze,
             nextResolvers,
             this.asyncPathResolvers
-        );
+        ) as this & AsyncBuilder<TTarget, TSupplied | K>;
     }
 
     public setPath<P extends Path<TTarget>>(
@@ -213,7 +243,7 @@ export class AsyncBuilder<TTarget extends object, in out TSupplied extends keyof
     }
 
     public freeze(): this {
-        (this as { shouldFreeze: boolean }).shouldFreeze = true;
+        (this as unknown as { shouldFreeze: boolean }).shouldFreeze = true;
         return this;
     }
 

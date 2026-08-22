@@ -41,7 +41,7 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
     public set<K extends keyof TTarget>(
         key: K,
         valueOrUpdater: TTarget[K] | ValueUpdater<TTarget[K]>
-    ): Builder<TTarget, TSupplied | K> {
+    ): this & Builder<TTarget, TSupplied | K> {
         assertSafeKey(String(key));
 
         let delta: DeltaRecord;
@@ -53,30 +53,39 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
             delta = { kind: DeltaKind.DIRECT, key, value: valueOrUpdater };
         }
 
-        return new Builder<TTarget, TSupplied | K>(
+        const Ctor = this.constructor as new (
+            seed: Record<string, unknown>,
+            node: StateNode,
+            validators: readonly SyncValidator<TTarget>[],
+            beforeHooks: readonly SyncHook<Partial<TTarget>>[],
+            afterHooks: readonly SyncHook<TTarget>[],
+            shouldFreeze: boolean
+        ) => this;
+        return new Ctor(
             this[$state],
             new StateNode(this[$node], delta),
             this.validators,
             this.beforeHooks,
             this.afterHooks,
             this.shouldFreeze
-        );
+        ) as this & Builder<TTarget, TSupplied | K>;
     }
 
     public setPath<P extends Path<TTarget>>(
         path: P,
         value: PathValue<TTarget, P>
-    ): Builder<
-        TTarget,
-        TSupplied |
-            (P extends `${infer K}.${string}`
-                ? K extends keyof TTarget
-                    ? K
-                    : never
-                : P extends keyof TTarget
-                  ? P
-                  : never)
-    > {
+    ): this &
+        Builder<
+            TTarget,
+            TSupplied |
+                (P extends `${infer K}.${string}`
+                    ? K extends keyof TTarget
+                        ? K
+                        : never
+                    : P extends keyof TTarget
+                      ? P
+                      : never)
+        > {
         type KeyType = P extends `${infer K}.${string}`
             ? K extends keyof TTarget
                 ? K
@@ -88,19 +97,38 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
         const segments = parsePath(path);
         const delta: DeltaRecord = { kind: DeltaKind.PATH, segments, value };
 
-        return new Builder<TTarget, TSupplied | KeyType>(
+        const Ctor = this.constructor as new (
+            seed: Record<string, unknown>,
+            node: StateNode,
+            validators: readonly SyncValidator<TTarget>[],
+            beforeHooks: readonly SyncHook<Partial<TTarget>>[],
+            afterHooks: readonly SyncHook<TTarget>[],
+            shouldFreeze: boolean
+        ) => this;
+        return new Ctor(
             this[$state],
             new StateNode(this[$node], delta),
             this.validators,
             this.beforeHooks,
             this.afterHooks,
             this.shouldFreeze
-        );
+        ) as this &
+            Builder<
+                TTarget,
+                TSupplied |
+                    (P extends `${infer K}.${string}`
+                        ? K extends keyof TTarget
+                            ? K
+                            : never
+                        : P extends keyof TTarget
+                          ? P
+                          : never)
+            >;
     }
 
     public merge<P extends Partial<TTarget>>(
         partial: P
-    ): Builder<TTarget, TSupplied | (keyof P & keyof TTarget)> {
+    ): this & Builder<TTarget, TSupplied | (keyof P & keyof TTarget)> {
         const keys = Object.keys(partial);
         for (let i = 0; i < keys.length; i++) {
             assertSafeKey(keys[i]!);
@@ -111,30 +139,46 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
             partial: Object.assign({}, partial) as Record<PropertyKey, unknown>,
         };
 
-        return new Builder<TTarget, TSupplied | (keyof P & keyof TTarget)>(
+        const Ctor = this.constructor as new (
+            seed: Record<string, unknown>,
+            node: StateNode,
+            validators: readonly SyncValidator<TTarget>[],
+            beforeHooks: readonly SyncHook<Partial<TTarget>>[],
+            afterHooks: readonly SyncHook<TTarget>[],
+            shouldFreeze: boolean
+        ) => this;
+        return new Ctor(
             this[$state],
             new StateNode(this[$node], delta),
             this.validators,
             this.beforeHooks,
             this.afterHooks,
             this.shouldFreeze
-        );
+        ) as this & Builder<TTarget, TSupplied | (keyof P & keyof TTarget)>;
     }
 
-    public mutate(mutator: (draft: Partial<TTarget>) => void): Builder<TTarget, TSupplied> {
+    public mutate(mutator: (draft: Partial<TTarget>) => void): this & Builder<TTarget, TSupplied> {
         const delta: DeltaRecord = {
             kind: DeltaKind.MUTATION,
             fn: mutator as (draft: Record<string, unknown>) => void,
         };
 
-        return new Builder<TTarget, TSupplied>(
+        const Ctor = this.constructor as new (
+            seed: Record<string, unknown>,
+            node: StateNode,
+            validators: readonly SyncValidator<TTarget>[],
+            beforeHooks: readonly SyncHook<Partial<TTarget>>[],
+            afterHooks: readonly SyncHook<TTarget>[],
+            shouldFreeze: boolean
+        ) => this;
+        return new Ctor(
             this[$state],
             new StateNode(this[$node], delta),
             this.validators,
             this.beforeHooks,
             this.afterHooks,
             this.shouldFreeze
-        );
+        ) as this & Builder<TTarget, TSupplied>;
     }
 
     public validateWith(validator: SyncValidator<TTarget>): this {
@@ -153,7 +197,7 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
     }
 
     public freeze(): this {
-        (this as { shouldFreeze: boolean }).shouldFreeze = true;
+        (this as unknown as { shouldFreeze: boolean }).shouldFreeze = true;
         return this;
     }
 
