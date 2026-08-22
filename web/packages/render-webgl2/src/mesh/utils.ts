@@ -430,10 +430,10 @@ export class BoundingVolumeUtils {
         const radius = Vec3.distance(center, max);
 
         return {
-            min: new Vec3(min.x, min.y, min.z),
-            max: new Vec3(max.x, max.y, max.z),
-            center: new Vec3(center.x, center.y, center.z),
-            size: new Vec3(size.x, size.y, size.z),
+            min: Vec3.from(min),
+            max: Vec3.from(max),
+            center: Vec3.from(center),
+            size: Vec3.from(size),
             radius,
         };
     }
@@ -491,10 +491,10 @@ export class BoundingVolumeUtils {
         const radius = Vec3.distance(center, max);
 
         return {
-            min: new Vec3(min.x, min.y, min.z),
-            max: new Vec3(max.x, max.y, max.z),
-            center: new Vec3(center.x, center.y, center.z),
-            size: new Vec3(size.x, size.y, size.z),
+            min: Vec3.from(min),
+            max: Vec3.from(max),
+            center: Vec3.from(center),
+            size: Vec3.from(size),
             radius,
         };
     }
