@@ -7,100 +7,18 @@ import type {
     AnimationCompiledDirectMotion,
     AnimationCompiledAdditiveMotion,
 } from './blend-types';
-import { BLEND_EPSILON } from './blend-types';
-import { assertNever } from './errors';
-import { resolveMotionTime } from './blend-evaluate';
 import type { AnimationControllerClipActivity } from './types';
-
-const resolveParameterScalar = (parameters: AnimationParameterStore, name: string): number => {
-    const value = parameters.get(name);
-    return typeof value === 'number' ? value : value ? 1 : 0;
-};
-
-const resolveDirectChildWeight = (
-    parameters: AnimationParameterStore,
-    parameter: string | undefined,
-    weight: number
-): number => {
-    if (!parameter) {
-        return Math.max(0, weight);
-    }
-    const value = parameters.get(parameter);
-    return typeof value === 'number' ? Math.max(0, value * weight) : value ? Math.max(0, weight) : 0;
-};
-
-const resolveAdditiveWeight = (
-    parameters: AnimationParameterStore,
-    parameter: string | undefined,
-    weight: number
-): number => {
-    if (!parameter) {
-        return weight;
-    }
-    const value = parameters.get(parameter);
-    return typeof value === 'number' ? value : value ? weight : 0;
-};
-
-const findBlend1DSegment = (
-    children: readonly { readonly threshold: number }[],
-    input: number
-): number => {
-    if (children.length === 1 || input <= children[0]!.threshold) {
-        return -1;
-    }
-    for (let index = 0; index < children.length - 1; index += 1) {
-        if (input > children[index + 1]!.threshold) {
-            continue;
-        }
-        return index;
-    }
-    return -children.length;
-};
-
-const resolveBlend1DAlpha = (
-    children: readonly { readonly threshold: number }[],
-    leftIndex: number,
-    input: number
-): number => {
-    const left = children[leftIndex]!;
-    const right = children[leftIndex + 1]!;
-    return (input - left.threshold) / Math.max(BLEND_EPSILON, right.threshold - left.threshold);
-};
-
-const resolveBlend2DWeights = (
-    x: number,
-    y: number,
-    children: readonly { readonly x: number; readonly y: number }[],
-    weights: number[]
-): void => {
-    let total = 0;
-    for (let index = 0; index < children.length; index += 1) {
-        const child = children[index]!;
-        const dx = x - child.x;
-        const dy = y - child.y;
-        const distanceSquared = dx * dx + dy * dy;
-        if (distanceSquared <= 1e-12) {
-            for (let fill = 0; fill < children.length; fill += 1) {
-                weights[fill] = 0;
-            }
-            weights[index] = 1;
-            return;
-        }
-        const inverseDistance = 1 / Math.sqrt(distanceSquared);
-        weights[index] = inverseDistance;
-        total += inverseDistance;
-    }
-    if (total <= 0) {
-        const uniform = 1 / Math.max(1, children.length);
-        for (let index = 0; index < children.length; index += 1) {
-            weights[index] = uniform;
-        }
-        return;
-    }
-    for (let index = 0; index < children.length; index += 1) {
-        weights[index] /= total;
-    }
-};
+import { dispatchMotion } from './blend-visitor';
+import type { BlendMotionVisitor } from './blend-types';
+import {
+    resolveParameterScalar,
+    resolveDirectChildWeight,
+    resolveAdditiveWeight,
+    resolveMotionTime,
+    findBlend1DSegment,
+    resolveBlend1DAlpha,
+    computeBlend2DWeights,
+} from './blend-helpers';
 
 function collectClipActivity(
     motion: AnimationCompiledClipMotion,
@@ -152,7 +70,7 @@ function collectBlend2DActivity(
     depth: number,
     weights: number[]
 ): void {
-    resolveBlend2DWeights(resolveParameterScalar(parameters, motion.parameterX), resolveParameterScalar(parameters, motion.parameterY), motion.children, weights);
+    computeBlend2DWeights(resolveParameterScalar(parameters, motion.parameterX), resolveParameterScalar(parameters, motion.parameterY), motion.children, weights);
     for (let index = 0; index < motion.children.length; index += 1) {
         const childWeight = weights[index] ?? 0;
         if (childWeight <= 0) continue;
@@ -201,6 +119,27 @@ function collectAdditiveActivity(
 
 const _activityWeights: number[] = [];
 
+interface ActivityContext {
+    readonly normalizedTime: number;
+    readonly loop: boolean;
+    readonly parameters: AnimationParameterStore;
+    readonly resolvedLayerWeight: number;
+    readonly resolvedMotionWeight: number;
+    readonly layerId: string;
+    readonly stateId: string;
+    readonly out: AnimationControllerClipActivity[];
+    readonly depth: number;
+    readonly weights: number[];
+}
+
+const activityVisitor: BlendMotionVisitor<ActivityContext, void> = {
+    visitClip: (motion: AnimationCompiledClipMotion, ctx: ActivityContext) => collectClipActivity(motion, ctx.normalizedTime, ctx.loop, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out),
+    visitBlend1d: (motion: AnimationCompiledBlend1DMotion, ctx: ActivityContext) => collectBlend1DActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
+    visitBlend2d: (motion: AnimationCompiledBlend2DMotion, ctx: ActivityContext) => collectBlend2DActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth, ctx.weights),
+    visitDirect: (motion: AnimationCompiledDirectMotion, ctx: ActivityContext) => collectDirectActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
+    visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: ActivityContext) => collectAdditiveActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
+};
+
 export const collectMotionClipActivities = (
     motion: AnimationCompiledMotion,
     normalizedTime: number,
@@ -213,18 +152,22 @@ export const collectMotionClipActivities = (
     out: AnimationControllerClipActivity[] = [],
     depth: number = 0
 ): readonly AnimationControllerClipActivity[] => {
-    const resolvedLayerWeight = Math.max(0, Math.min(1, layerWeight));
-    const resolvedMotionWeight = Math.max(0, motionWeight);
+    const resolvedLayerWeight = Math.max(0, Math.min(1, Number.isFinite(layerWeight) ? layerWeight : 0));
+    const resolvedMotionWeight = Math.max(0, Number.isFinite(motionWeight) ? motionWeight : 0);
     if (resolvedLayerWeight <= 0 || resolvedMotionWeight <= 0) {
         return out;
     }
-    switch (motion.kind) {
-        case 'clip': collectClipActivity(motion, normalizedTime, loop, resolvedLayerWeight, resolvedMotionWeight, layerId, stateId, out); break;
-        case 'blend1d': collectBlend1DActivity(motion, normalizedTime, loop, parameters, resolvedLayerWeight, resolvedMotionWeight, layerId, stateId, out, depth); break;
-        case 'blend2d': collectBlend2DActivity(motion, normalizedTime, loop, parameters, resolvedLayerWeight, resolvedMotionWeight, layerId, stateId, out, depth, _activityWeights); break;
-        case 'direct': collectDirectActivity(motion, normalizedTime, loop, parameters, resolvedLayerWeight, resolvedMotionWeight, layerId, stateId, out, depth); break;
-        case 'additive': collectAdditiveActivity(motion, normalizedTime, loop, parameters, resolvedLayerWeight, resolvedMotionWeight, layerId, stateId, out, depth); break;
-        default: assertNever(motion, 'Unsupported motion kind');
-    }
+    dispatchMotion(motion, activityVisitor, {
+        normalizedTime,
+        loop,
+        parameters,
+        resolvedLayerWeight,
+        resolvedMotionWeight,
+        layerId,
+        stateId,
+        out,
+        depth,
+        weights: _activityWeights,
+    });
     return out;
 };
