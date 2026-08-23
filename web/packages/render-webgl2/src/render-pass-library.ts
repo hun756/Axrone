@@ -527,8 +527,8 @@ const clearFramebuffer = (
 class WebGL2FramebufferResolver {
 	private readonly _cache = new Map<string, WebGLFramebuffer>();
 	private readonly _defaultFramebuffer: WebGLFramebuffer | null;
-	private readonly _ctx!: IGLContext;
-	private readonly _gl!: WebGL2RenderingContext;
+	private readonly _ctx: IGLContext;
+	private readonly _gl: WebGL2RenderingContext;
 
 	constructor(
 		source: ContextSource,
@@ -715,8 +715,8 @@ class WebGL2FullscreenProgramCache {
 	private _tonemapResources: WebGL2TonemapResources | null = null;
 	private _exposureResources: WebGL2ExposureResources | null = null;
 	private _postProcessResources: WebGL2PostProcessResources | null = null;
-	private readonly _ctx!: IGLContext;
-	private readonly _gl!: WebGL2RenderingContext;
+	private readonly _ctx: IGLContext;
+	private readonly _gl: WebGL2RenderingContext;
 
     constructor(
 		source: ContextSource,
@@ -1424,8 +1424,9 @@ const createBuiltinExecutors = (
 };
 
 class ManagedWebGL2RenderPassLibraryImpl implements ManagedWebGL2RenderPassLibrary {
-	private readonly _ctx!: IGLContext;
-	private readonly _gl!: WebGL2RenderingContext;
+	private readonly _ctx: IGLContext;
+	private readonly _gl: WebGL2RenderingContext;
+	private readonly _unsubscribeLost: () => void;
 	private readonly _locale: WebGL2RenderPassLocale;
 	private readonly _strictUnsupportedPasses: boolean;
 	private readonly _registry: WebGL2RenderPassExecutorRegistry;
@@ -1466,7 +1467,7 @@ class ManagedWebGL2RenderPassLibraryImpl implements ManagedWebGL2RenderPassLibra
 				programs: this._programs,
 			}),
 		]);
-		this._ctx.onLost(() => this.invalidateContextResources());
+		this._unsubscribeLost = this._ctx.onLost(() => this.invalidateContextResources());
 	}
 
 	beginFrame(context: RenderExecutionContext<WebGL2RenderResourceHandle>): void {
@@ -1540,7 +1541,6 @@ class ManagedWebGL2RenderPassLibraryImpl implements ManagedWebGL2RenderPassLibra
 		_context: RenderExecutionContext<WebGL2RenderResourceHandle>
 	): void {
 		const gl = this._gl;
-		void this._ctx;
 		gl.bindFramebuffer(gl.FRAMEBUFFER, this._framebuffers.defaultFramebuffer);
 		gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
 		gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
@@ -1584,6 +1584,11 @@ class ManagedWebGL2RenderPassLibraryImpl implements ManagedWebGL2RenderPassLibra
 	}
 
 	dispose(): void {
+		try {
+			this._unsubscribeLost();
+		} catch {
+			// best-effort
+		}
 		this._framebuffers.dispose();
 		this._programs.dispose();
 		this._frameCaptures.length = 0;
