@@ -20,7 +20,27 @@ export class GLStateCache implements IGLStateCache {
     #capabilities = new Map<number, boolean>();
     #textureBindings = new Map<number, TextureBinding>();
     #samplerBindings = new Map<number, WebGLSampler | null>();
+    #blendFunc: [number, number, number, number] | null = null;
+    #blendEquation: [number, number] | null = null;
+    #depthFunc = 0;
+    #depthMask = true;
+    #colorMask: [boolean, boolean, boolean, boolean] = [true, true, true, true];
+    #cullFaceMode = 0;
+    #frontFaceMode = 0;
+    #polygonOffset: [number, number] | null = null;
+    #stencilFuncFront: [number, number, number] | null = null;
+    #stencilFuncBack: [number, number, number] | null = null;
+    #stencilOpFront: [number, number, number] | null = null;
+    #stencilOpBack: [number, number, number] | null = null;
+    #stencilMaskFront: number | null = null;
+    #stencilMaskBack: number | null = null;
+    #uniformBufferBindings = new Map<number, WebGLBuffer | null>();
+    #transformFeedbackBindings = new Map<number, WebGLBuffer | null>();
     #invalidated = false;
+
+    public get isDeduplicationActive(): boolean {
+        return this.#enabled && !this.#invalidated;
+    }
 
     constructor(gl: WebGL2RenderingContext, enabled = true) {
         this.#gl = gl;
@@ -161,6 +181,158 @@ export class GLStateCache implements IGLStateCache {
         this.#gl.bindSampler(unit, sampler);
     }
 
+    public blendFunc(srcRGB: number, dstRGB: number): void {
+        this.blendFuncSeparate(srcRGB, dstRGB, srcRGB, dstRGB);
+    }
+
+    public blendFuncSeparate(srcRGB: number, dstRGB: number, srcAlpha: number, dstAlpha: number): void {
+        if (this.isDeduplicationActive) {
+            const s = this.#blendFunc;
+            if (s && s[0] === srcRGB && s[1] === dstRGB && s[2] === srcAlpha && s[3] === dstAlpha) return;
+            this.#blendFunc = [srcRGB, dstRGB, srcAlpha, dstAlpha];
+        }
+        this.#gl.blendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
+    }
+
+    public blendEquation(mode: number): void {
+        this.blendEquationSeparate(mode, mode);
+    }
+
+    public blendEquationSeparate(modeRGB: number, modeAlpha: number): void {
+        if (this.isDeduplicationActive) {
+            const s = this.#blendEquation;
+            if (s && s[0] === modeRGB && s[1] === modeAlpha) return;
+            this.#blendEquation = [modeRGB, modeAlpha];
+        }
+        this.#gl.blendEquationSeparate(modeRGB, modeAlpha);
+    }
+
+    public depthFunc(func: number): void {
+        if (this.isDeduplicationActive && this.#depthFunc === func) return;
+        this.#depthFunc = func;
+        this.#gl.depthFunc(func);
+    }
+
+    public depthMask(flag: boolean): void {
+        if (this.isDeduplicationActive && this.#depthMask === flag) return;
+        this.#depthMask = flag;
+        this.#gl.depthMask(flag);
+    }
+
+    public colorMask(r: boolean, g: boolean, b: boolean, a: boolean): void {
+        if (this.isDeduplicationActive) {
+            const m = this.#colorMask;
+            if (m[0] === r && m[1] === g && m[2] === b && m[3] === a) return;
+            this.#colorMask = [r, g, b, a];
+        }
+        this.#gl.colorMask(r, g, b, a);
+    }
+
+    public cullFace(mode: number): void {
+        if (this.isDeduplicationActive && this.#cullFaceMode === mode) return;
+        this.#cullFaceMode = mode;
+        this.#gl.cullFace(mode);
+    }
+
+    public frontFace(mode: number): void {
+        if (this.isDeduplicationActive && this.#frontFaceMode === mode) return;
+        this.#frontFaceMode = mode;
+        this.#gl.frontFace(mode);
+    }
+
+    public polygonOffset(factor: number, units: number): void {
+        if (this.isDeduplicationActive) {
+            const s = this.#polygonOffset;
+            if (s && s[0] === factor && s[1] === units) return;
+            this.#polygonOffset = [factor, units];
+        }
+        this.#gl.polygonOffset(factor, units);
+    }
+
+    public stencilFunc(func: number, ref: number, mask: number): void {
+        this.stencilFuncSeparate(this.#gl.FRONT_AND_BACK as number, func, ref, mask);
+    }
+
+    public stencilFuncSeparate(face: number, func: number, ref: number, mask: number): void {
+        if (face === this.#gl.FRONT_AND_BACK) {
+            this.#applyStencilFunc(this.#gl.FRONT as number, func, ref, mask);
+            this.#applyStencilFunc(this.#gl.BACK as number, func, ref, mask);
+            return;
+        }
+        this.#applyStencilFunc(face, func, ref, mask);
+    }
+
+    #applyStencilFunc(face: number, func: number, ref: number, mask: number): void {
+        const isFront = face === (this.#gl.FRONT as number);
+        const cached = isFront ? this.#stencilFuncFront : this.#stencilFuncBack;
+        if (this.isDeduplicationActive && cached) {
+            if (cached[0] === func && cached[1] === ref && cached[2] === mask) return;
+        }
+        const next: [number, number, number] = [func, ref, mask];
+        if (isFront) this.#stencilFuncFront = next;
+        else this.#stencilFuncBack = next;
+        this.#gl.stencilFuncSeparate(face, func, ref, mask);
+    }
+
+    public stencilOp(sfail: number, dpfail: number, dppass: number): void {
+        this.stencilOpSeparate(this.#gl.FRONT_AND_BACK as number, sfail, dpfail, dppass);
+    }
+
+    public stencilOpSeparate(face: number, sfail: number, dpfail: number, dppass: number): void {
+        if (face === this.#gl.FRONT_AND_BACK) {
+            this.#applyStencilOp(this.#gl.FRONT as number, sfail, dpfail, dppass);
+            this.#applyStencilOp(this.#gl.BACK as number, sfail, dpfail, dppass);
+            return;
+        }
+        this.#applyStencilOp(face, sfail, dpfail, dppass);
+    }
+
+    #applyStencilOp(face: number, sfail: number, dpfail: number, dppass: number): void {
+        const isFront = face === (this.#gl.FRONT as number);
+        const cached = isFront ? this.#stencilOpFront : this.#stencilOpBack;
+        if (this.isDeduplicationActive && cached) {
+            if (cached[0] === sfail && cached[1] === dpfail && cached[2] === dppass) return;
+        }
+        const next: [number, number, number] = [sfail, dpfail, dppass];
+        if (isFront) this.#stencilOpFront = next;
+        else this.#stencilOpBack = next;
+        this.#gl.stencilOpSeparate(face, sfail, dpfail, dppass);
+    }
+
+    public stencilMask(mask: number): void {
+        this.stencilMaskSeparate(this.#gl.FRONT_AND_BACK as number, mask);
+    }
+
+    public stencilMaskSeparate(face: number, mask: number): void {
+        if (face === this.#gl.FRONT_AND_BACK) {
+            this.#applyStencilMask(this.#gl.FRONT as number, mask);
+            this.#applyStencilMask(this.#gl.BACK as number, mask);
+            return;
+        }
+        this.#applyStencilMask(face, mask);
+    }
+
+    #applyStencilMask(face: number, mask: number): void {
+        const isFront = face === (this.#gl.FRONT as number);
+        const cached = isFront ? this.#stencilMaskFront : this.#stencilMaskBack;
+        if (this.isDeduplicationActive && cached === mask) return;
+        if (isFront) this.#stencilMaskFront = mask;
+        else this.#stencilMaskBack = mask;
+        this.#gl.stencilMaskSeparate(face, mask);
+    }
+
+    public bindBufferBase(target: number, index: number, buffer: WebGLBuffer | null): void {
+        if (target === this.#gl.UNIFORM_BUFFER || target === this.#gl.TRANSFORM_FEEDBACK_BUFFER) {
+            const bindings =
+                target === this.#gl.UNIFORM_BUFFER
+                    ? this.#uniformBufferBindings
+                    : this.#transformFeedbackBindings;
+            if (this.isDeduplicationActive && bindings.get(index) === buffer) return;
+            bindings.set(index, buffer);
+        }
+        this.#gl.bindBufferBase(target, index, buffer);
+    }
+
     public enable(cap: number): void {
         if (this.#enabled && !this.#invalidated) {
             if (this.#capabilities.get(cap) === true) return;
@@ -240,6 +412,22 @@ export class GLStateCache implements IGLStateCache {
         this.#capabilities.clear();
         this.#textureBindings.clear();
         this.#samplerBindings.clear();
+        this.#blendFunc = null;
+        this.#blendEquation = null;
+        this.#depthFunc = 0;
+        this.#depthMask = true;
+        this.#colorMask = [true, true, true, true];
+        this.#cullFaceMode = 0;
+        this.#frontFaceMode = 0;
+        this.#polygonOffset = null;
+        this.#stencilFuncFront = null;
+        this.#stencilFuncBack = null;
+        this.#stencilOpFront = null;
+        this.#stencilOpBack = null;
+        this.#stencilMaskFront = null;
+        this.#stencilMaskBack = null;
+        this.#uniformBufferBindings.clear();
+        this.#transformFeedbackBindings.clear();
         this.#invalidated = false;
     }
 
@@ -256,6 +444,19 @@ export class GLStateCache implements IGLStateCache {
         this.#textureBindings.clear();
         this.#samplerBindings.clear();
         this.#capabilities.clear();
+        this.#blendFunc = null;
+        this.#blendEquation = null;
+        this.#depthFunc = 0;
+        this.#colorMask = [true, true, true, true];
+        this.#polygonOffset = null;
+        this.#stencilFuncFront = null;
+        this.#stencilFuncBack = null;
+        this.#stencilOpFront = null;
+        this.#stencilOpBack = null;
+        this.#stencilMaskFront = null;
+        this.#stencilMaskBack = null;
+        this.#uniformBufferBindings.clear();
+        this.#transformFeedbackBindings.clear();
     }
 
     #trackBuffer = (target: number, buffer: WebGLBuffer | null): void => {
