@@ -132,7 +132,10 @@ const createTextureStorage = (
         gl.texParameteri(target, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
     }
 
-    if (target === gl.TEXTURE_2D || target === gl.TEXTURE_CUBE_MAP) {
+    const samplesForStorage = (descriptor as unknown as { samples?: number }).samples ?? 1;
+    if (samplesForStorage > 1 && target === gl.TEXTURE_2D && typeof (gl as unknown as { texStorage2DMultisample?: unknown }).texStorage2DMultisample === 'function') {
+        (gl as unknown as { texStorage2DMultisample: (t:number,s:number,f:number,w:number,h:number, fix:boolean)=>void }).texStorage2DMultisample(target, samplesForStorage, formatInfo.internalFormat, descriptor.width, descriptor.height, true);
+    } else if (target === gl.TEXTURE_2D || target === gl.TEXTURE_CUBE_MAP) {
         gl.texStorage2D(target, mipLevels, formatInfo.internalFormat, descriptor.width, descriptor.height);
     } else {
         gl.texStorage3D(
@@ -168,9 +171,7 @@ export const createWebGL2RenderResourceAllocator = (
             return DEFAULT_FRAMEBUFFER_HANDLE;
         }
 
-        if ((descriptor.samples ?? 1) !== 1) {
-            throw new Error('WebGL2 render resource allocator does not support multisampled textures yet');
-        }
+        const samples = descriptor.samples ?? 1;
 
         if (previous?.kind === 'texture') {
             gl.deleteTexture(previous.texture);
