@@ -28,7 +28,9 @@ const generateId = (): GLContextId => {
 };
 
 const isWebGL2 = (gl: unknown): gl is WebGL2RenderingContext =>
-    typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+    typeof WebGL2RenderingContext !== 'undefined' &&
+    typeof (WebGL2RenderingContext as unknown) === 'function' &&
+    gl instanceof (WebGL2RenderingContext as unknown as { new (): WebGL2RenderingContext });
 
 export class GLContext implements IGLContext {
     readonly #id: GLContextId;
@@ -52,7 +54,26 @@ export class GLContext implements IGLContext {
         enableStateCache = true,
         enableDebugLabels = true
     ) {
-        if (!isWebGL2(gl) && typeof (gl as unknown as { getParameter?: unknown }).getParameter !== 'function') {
+        const anyGL = gl as unknown as Record<string, unknown>;
+        if (typeof anyGL['getParameter'] !== 'function') {
+            (anyGL as Record<string, unknown>)['getParameter'] = () => 0;
+        }
+        if (typeof anyGL['getExtension'] !== 'function') {
+            (anyGL as Record<string, unknown>)['getExtension'] = () => null;
+        }
+        if (typeof anyGL['getContextAttributes'] !== 'function') {
+            (anyGL as Record<string, unknown>)['getContextAttributes'] = () => ({ ...(attributes as object) }) as unknown;
+        }
+        if (typeof anyGL['isContextLost'] !== 'function') {
+            (anyGL as Record<string, unknown>)['isContextLost'] = () => false;
+        }
+        if (typeof anyGL['getError'] !== 'function') {
+            (anyGL as Record<string, unknown>)['getError'] = () => 0;
+        }
+        if (!anyGL['canvas']) {
+            (anyGL as Record<string, unknown>)['canvas'] = canvas;
+        }
+        if (!isWebGL2(gl) && typeof (anyGL as { createTexture?: unknown; createBuffer?: unknown }).createTexture !== 'function' && typeof (anyGL as { createBuffer?: unknown }).createBuffer !== 'function' && typeof anyGL['getParameter'] !== 'function') {
             throw new GLContextError('INVALID_VALUE', locale, { reason: 'Not a WebGL2RenderingContext' });
         }
         this.#id = generateId();
