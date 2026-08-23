@@ -1,6 +1,14 @@
 import type { IDisposable } from './disposable';
 import type { IBindableTarget } from './interfaces';
 import type { Brand } from '@axrone/utility';
+import type { IGLContext } from './context';
+import { getOrCreateGLContext, isGLContext } from './context';
+import type { GLConstants } from './context/types';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 
 export type FramebufferId = Brand<WebGLFramebuffer, 'FramebufferId'>;
 export type RenderbufferId = Brand<WebGLRenderbuffer, 'RenderbufferId'>;
@@ -248,116 +256,7 @@ export interface IFramebufferFactory {
     ) => IFramebuffer;
 }
 
-const createGLConstants = <T extends number>(
-    gl: WebGL2RenderingContext
-): Readonly<{
-    TEXTURE_2D: T;
-    TEXTURE_CUBE_MAP: T;
-    TEXTURE_2D_ARRAY: T;
-    TEXTURE_3D: T;
 
-    RGB: T;
-    RGBA: T;
-    RGBA8: T;
-    RGBA16F: T;
-    RGBA32F: T;
-    RGB8: T;
-    RGB16F: T;
-    RGB32F: T;
-    R8: T;
-    R16F: T;
-    R32F: T;
-    RG8: T;
-    RG16F: T;
-    RG32F: T;
-    DEPTH_COMPONENT16: T;
-    DEPTH_COMPONENT24: T;
-    DEPTH_COMPONENT32F: T;
-    DEPTH24_STENCIL8: T;
-    DEPTH32F_STENCIL8: T;
-
-    COLOR_ATTACHMENT0: T;
-    DEPTH_ATTACHMENT: T;
-    STENCIL_ATTACHMENT: T;
-    DEPTH_STENCIL_ATTACHMENT: T;
-
-    NEAREST: T;
-    LINEAR: T;
-
-    CLAMP_TO_EDGE: T;
-    REPEAT: T;
-    MIRRORED_REPEAT: T;
-
-    UNSIGNED_BYTE: T;
-    FLOAT: T;
-    HALF_FLOAT: T;
-    UNSIGNED_SHORT: T;
-    UNSIGNED_INT: T;
-    UNSIGNED_INT_24_8: T;
-    FLOAT_32_UNSIGNED_INT_24_8_REV: T;
-
-    FRAMEBUFFER_COMPLETE: T;
-    FRAMEBUFFER_INCOMPLETE_ATTACHMENT: T;
-    FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT: T;
-    FRAMEBUFFER_INCOMPLETE_DIMENSIONS: T;
-    FRAMEBUFFER_UNSUPPORTED: T;
-    FRAMEBUFFER_INCOMPLETE_MULTISAMPLE: T;
-}> => {
-    return Object.freeze({
-        TEXTURE_2D: gl.TEXTURE_2D as T,
-        TEXTURE_CUBE_MAP: gl.TEXTURE_CUBE_MAP as T,
-        TEXTURE_2D_ARRAY: gl.TEXTURE_2D_ARRAY as T,
-        TEXTURE_3D: gl.TEXTURE_3D as T,
-
-        RGB: gl.RGB as T,
-        RGBA: gl.RGBA as T,
-        RGBA8: gl.RGBA8 as T,
-        RGBA16F: gl.RGBA16F as T,
-        RGBA32F: gl.RGBA32F as T,
-        RGB8: gl.RGB8 as T,
-        RGB16F: gl.RGB16F as T,
-        RGB32F: gl.RGB32F as T,
-        R8: gl.R8 as T,
-        R16F: gl.R16F as T,
-        R32F: gl.R32F as T,
-        RG8: gl.RG8 as T,
-        RG16F: gl.RG16F as T,
-        RG32F: gl.RG32F as T,
-        DEPTH_COMPONENT16: gl.DEPTH_COMPONENT16 as T,
-        DEPTH_COMPONENT24: gl.DEPTH_COMPONENT24 as T,
-        DEPTH_COMPONENT32F: gl.DEPTH_COMPONENT32F as T,
-        DEPTH24_STENCIL8: gl.DEPTH24_STENCIL8 as T,
-        DEPTH32F_STENCIL8: gl.DEPTH32F_STENCIL8 as T,
-
-        COLOR_ATTACHMENT0: gl.COLOR_ATTACHMENT0 as T,
-        DEPTH_ATTACHMENT: gl.DEPTH_ATTACHMENT as T,
-        STENCIL_ATTACHMENT: gl.STENCIL_ATTACHMENT as T,
-        DEPTH_STENCIL_ATTACHMENT: gl.DEPTH_STENCIL_ATTACHMENT as T,
-
-        NEAREST: gl.NEAREST as T,
-        LINEAR: gl.LINEAR as T,
-
-        CLAMP_TO_EDGE: gl.CLAMP_TO_EDGE as T,
-        REPEAT: gl.REPEAT as T,
-        MIRRORED_REPEAT: gl.MIRRORED_REPEAT as T,
-
-        UNSIGNED_BYTE: gl.UNSIGNED_BYTE as T,
-        FLOAT: gl.FLOAT as T,
-        HALF_FLOAT: gl.HALF_FLOAT as T,
-        UNSIGNED_SHORT: gl.UNSIGNED_SHORT as T,
-        UNSIGNED_INT: gl.UNSIGNED_INT as T,
-        UNSIGNED_INT_24_8: gl.UNSIGNED_INT_24_8 as T,
-        FLOAT_32_UNSIGNED_INT_24_8_REV: gl.FLOAT_32_UNSIGNED_INT_24_8_REV as T,
-
-        FRAMEBUFFER_COMPLETE: gl.FRAMEBUFFER_COMPLETE as T,
-        FRAMEBUFFER_INCOMPLETE_ATTACHMENT: gl.FRAMEBUFFER_INCOMPLETE_ATTACHMENT as T,
-        FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
-            gl.FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT as T,
-        FRAMEBUFFER_INCOMPLETE_DIMENSIONS: gl.FRAMEBUFFER_INCOMPLETE_DIMENSIONS as T,
-        FRAMEBUFFER_UNSUPPORTED: gl.FRAMEBUFFER_UNSUPPORTED as T,
-        FRAMEBUFFER_INCOMPLETE_MULTISAMPLE: gl.FRAMEBUFFER_INCOMPLETE_MULTISAMPLE as T,
-    });
-};
 
 const getTextureTypeForFormat = (gl: WebGL2RenderingContext, format: GLTextureFormat): GLenum => {
     switch (format) {
@@ -487,10 +386,11 @@ const getFramebufferStatusString = (
 };
 
 export class Texture implements ITexture {
+    readonly #ctx: IGLContext;
     readonly #gl: WebGL2RenderingContext;
     readonly #id: WebGLTexture;
     readonly #target: GLTextureTarget;
-    readonly #constants: ReturnType<typeof createGLConstants>;
+    readonly #constants: GLConstants;
 
     #width: number;
     #height: number;
@@ -542,7 +442,9 @@ export class Texture implements ITexture {
         return this.#isDisposed;
     }
 
-    constructor(gl: WebGL2RenderingContext, target: GLTextureTarget, options: TextureOptions) {
+    constructor(source: ContextSource, target: GLTextureTarget, options: TextureOptions) {
+        const ctx = resolveContext(source as ContextSource);
+        const gl = ctx.gl;
         const {
             width,
             height,
@@ -558,6 +460,7 @@ export class Texture implements ITexture {
             label = null,
         } = options;
 
+        this.#ctx = ctx;
         this.#gl = gl;
         this.#target = target;
         this.#width = width;
@@ -567,7 +470,7 @@ export class Texture implements ITexture {
         this.#type = type ?? getTextureTypeForFormat(gl, internalFormat);
         this.#samples = samples;
         this.#label = label;
-        this.#constants = createGLConstants(gl);
+        this.#constants = ctx.constants;
 
         const texture = gl.createTexture();
         if (!texture) {
@@ -748,9 +651,10 @@ export class Texture implements ITexture {
 }
 
 export class Renderbuffer implements IRenderbuffer {
+    readonly #ctx: IGLContext;
     readonly #gl: WebGL2RenderingContext;
     readonly #id: WebGLRenderbuffer;
-    readonly #constants: ReturnType<typeof createGLConstants>;
+    readonly #constants: GLConstants;
 
     #width: number;
     #height: number;
@@ -788,16 +692,19 @@ export class Renderbuffer implements IRenderbuffer {
         return this.#isDisposed;
     }
 
-    constructor(gl: WebGL2RenderingContext, options: RenderbufferOptions) {
+    constructor(source: ContextSource, options: RenderbufferOptions) {
+        const ctx = resolveContext(source as ContextSource);
+        const gl = ctx.gl;
         const { width, height, internalFormat, samples = 0, label = null } = options;
 
+        this.#ctx = ctx;
         this.#gl = gl;
         this.#width = width;
         this.#height = height;
         this.#internalFormat = internalFormat;
         this.#samples = samples;
         this.#label = label;
-        this.#constants = createGLConstants(gl);
+        this.#constants = ctx.constants;
 
         const renderbuffer = gl.createRenderbuffer();
         if (!renderbuffer) {
@@ -893,9 +800,10 @@ export class Renderbuffer implements IRenderbuffer {
 }
 
 export class Framebuffer implements IFramebuffer {
+    readonly #ctx: IGLContext;
     readonly #gl: WebGL2RenderingContext;
     readonly #id: WebGLFramebuffer;
-    readonly #constants: ReturnType<typeof createGLConstants>;
+    readonly #constants: GLConstants;
 
     #width: number;
     #height: number;
@@ -959,7 +867,9 @@ export class Framebuffer implements IFramebuffer {
         return status;
     }
 
-    constructor(gl: WebGL2RenderingContext, options: FramebufferOptions) {
+    constructor(source: ContextSource, options: FramebufferOptions) {
+        const ctx = resolveContext(source as ContextSource);
+        const gl = ctx.gl;
         const {
             width,
             height,
@@ -970,11 +880,12 @@ export class Framebuffer implements IFramebuffer {
             label = null,
         } = options;
 
+        this.#ctx = ctx;
         this.#gl = gl;
         this.#width = width;
         this.#height = height;
         this.#label = label;
-        this.#constants = createGLConstants(gl);
+        this.#constants = ctx.constants;
 
         const framebuffer = gl.createFramebuffer();
         if (!framebuffer) {
@@ -1297,12 +1208,15 @@ export class Framebuffer implements IFramebuffer {
 }
 
 export class FramebufferFactory implements IFramebufferFactory {
+    readonly #ctx: IGLContext;
     readonly #gl: WebGL2RenderingContext;
-    readonly #constants: ReturnType<typeof createGLConstants>;
+    readonly #constants: GLConstants;
 
-    constructor(gl: WebGL2RenderingContext) {
-        this.#gl = gl;
-        this.#constants = createGLConstants(gl);
+    constructor(source: ContextSource) {
+        const ctx = resolveContext(source);
+        this.#ctx = ctx;
+        this.#gl = ctx.gl;
+        this.#constants = ctx.constants;
     }
 
     public createTexture = (target: GLTextureTarget, options: TextureOptions): ITexture => {
@@ -1474,12 +1388,12 @@ export class FramebufferFactory implements IFramebufferFactory {
     };
 }
 
-export const createFramebufferFactory = (gl: WebGL2RenderingContext): IFramebufferFactory => {
-    return new FramebufferFactory(gl);
+export const createFramebufferFactory = (source: ContextSource): IFramebufferFactory => {
+    return new FramebufferFactory(source);
 };
 
 export const createRenderTarget = (
-    gl: WebGL2RenderingContext,
+    source: ContextSource,
     width: number,
     height: number,
     options: {
@@ -1491,6 +1405,8 @@ export const createRenderTarget = (
         label?: string;
     } = {}
 ): IFramebuffer => {
+    const ctx = resolveContext(source);
+    const gl = ctx.gl;
     const {
         colorFormat = gl.RGBA8,
         depthFormat = gl.DEPTH24_STENCIL8,
@@ -1500,7 +1416,7 @@ export const createRenderTarget = (
         label = 'RenderTarget',
     } = options;
 
-    const factory = createFramebufferFactory(gl);
+    const factory = createFramebufferFactory(ctx);
 
     if (useDepth || useStencil) {
         const actualDepthFormat =
@@ -1523,37 +1439,44 @@ export const createRenderTarget = (
 };
 
 export const createShadowMap = (
-    gl: WebGL2RenderingContext,
+    source: ContextSource,
     size: number,
-    format: GLTextureFormat = gl.DEPTH_COMPONENT24
+    format?: GLTextureFormat
 ): IFramebuffer => {
-    const factory = createFramebufferFactory(gl);
-    return factory.createDepthFramebuffer(size, size, format);
+    const ctx = resolveContext(source);
+    const gl = ctx.gl;
+    const resolvedFormat = format ?? gl.DEPTH_COMPONENT24 as GLTextureFormat;
+    const factory = createFramebufferFactory(ctx);
+    return factory.createDepthFramebuffer(size, size, resolvedFormat);
 };
 
 export const createMultisampledRenderTarget = (
-    gl: WebGL2RenderingContext,
+    source: ContextSource,
     width: number,
     height: number,
     samples: number,
-    colorFormat: GLTextureFormat = gl.RGBA8,
-    depthFormat: GLTextureFormat = gl.DEPTH24_STENCIL8
+    colorFormat?: GLTextureFormat,
+    depthFormat?: GLTextureFormat
 ): { msaaTarget: IFramebuffer; resolveTarget: IFramebuffer } => {
-    const factory = createFramebufferFactory(gl);
+    const ctx = resolveContext(source);
+    const gl = ctx.gl;
+    const resolvedColorFormat = colorFormat ?? (gl.RGBA8 as GLTextureFormat);
+    const resolvedDepthFormat = depthFormat ?? (gl.DEPTH24_STENCIL8 as GLTextureFormat);
+    const factory = createFramebufferFactory(ctx);
 
     const msaaTarget = factory.createFramebufferWithDepth(
         width,
         height,
-        colorFormat,
-        depthFormat,
+        resolvedColorFormat,
+        resolvedDepthFormat,
         samples
     );
 
     const resolveTarget = factory.createFramebufferWithDepth(
         width,
         height,
-        colorFormat,
-        depthFormat,
+        resolvedColorFormat,
+        resolvedDepthFormat,
         0
     );
 
