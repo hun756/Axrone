@@ -28,6 +28,12 @@ import {
 	type WebGL2RenderTextureNativeHandle,
 	type WebGL2ResolvedFramebufferBinding,
 } from './pipeline-contracts';
+import type { IGLContext } from './context';
+import { getOrCreateGLContext, isGLContext } from './context';
+import type { ContextSource } from './pipeline-contracts';
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source as WebGL2RenderingContext);
 import {
 	EXPOSURE_HISTORY_FRAGMENT_SHADER_SOURCE,
 	FULLSCREEN_VERTEX_SHADER_SOURCE,
@@ -133,6 +139,7 @@ interface WebGL2PostProcessResources {
 }
 
 interface BuiltinExecutorDependencies {
+	readonly ctx: IGLContext;
 	readonly gl: WebGL2RenderingContext;
 	readonly locale: WebGL2RenderPassLocale;
 	readonly framebuffers: WebGL2FramebufferResolver;
@@ -523,14 +530,27 @@ const clearFramebuffer = (
 class WebGL2FramebufferResolver {
 	private readonly _cache = new Map<string, WebGLFramebuffer>();
 	private readonly _defaultFramebuffer: WebGLFramebuffer | null;
+	private readonly _ctx!: IGLContext;
+	private readonly _gl!: WebGL2RenderingContext;
 
 	constructor(
-		private readonly _gl: WebGL2RenderingContext,
+		source: ContextSource,
 		defaultFramebuffer: WebGLFramebuffer | null | undefined,
 		private readonly _directFrameOutput: boolean,
 		private readonly _locale: WebGL2RenderPassLocale
 	) {
+		const ctx = resolveContext(source);
+		this._ctx = ctx;
+		this._gl = ctx.gl;
 		this._defaultFramebuffer = defaultFramebuffer ?? null;
+	}
+
+	get context(): IGLContext {
+		return this._ctx;
+	}
+
+	get gl(): WebGL2RenderingContext {
+		return this._gl;
 	}
 
 	get defaultFramebuffer(): WebGLFramebuffer | null {
@@ -698,11 +718,25 @@ class WebGL2FullscreenProgramCache {
 	private _tonemapResources: WebGL2TonemapResources | null = null;
 	private _exposureResources: WebGL2ExposureResources | null = null;
 	private _postProcessResources: WebGL2PostProcessResources | null = null;
+	private readonly _ctx!: IGLContext;
+	private readonly _gl!: WebGL2RenderingContext;
 
-	constructor(
-		private readonly _gl: WebGL2RenderingContext,
+    constructor(
+		source: ContextSource,
 		private readonly _locale: WebGL2RenderPassLocale
-	) {}
+	) {
+		const ctx = resolveContext(source);
+		this._ctx = ctx;
+		this._gl = ctx.gl;
+	}
+
+	get context(): IGLContext {
+		return this._ctx;
+	}
+
+	get gl(): WebGL2RenderingContext {
+		return this._gl;
+	}
 
 	getTonemapResources(): WebGL2TonemapResources {
 		if (this._tonemapResources) {
@@ -1393,6 +1427,8 @@ const createBuiltinExecutors = (
 };
 
 class ManagedWebGL2RenderPassLibraryImpl implements ManagedWebGL2RenderPassLibrary {
+	private readonly _ctx!: IGLContext;
+	private readonly _gl!: WebGL2RenderingContext;
 	private readonly _locale: WebGL2RenderPassLocale;
 	private readonly _strictUnsupportedPasses: boolean;
 	private readonly _registry: WebGL2RenderPassExecutorRegistry;
@@ -1411,24 +1447,29 @@ class ManagedWebGL2RenderPassLibraryImpl implements ManagedWebGL2RenderPassLibra
 	private _frameStartTime = 0;
 
 	constructor(private readonly _options: WebGL2RenderPassLibraryOptions) {
+		const resolvedCtx = _options.context ?? resolveContext(_options.gl as ContextSource);
+		this._ctx = resolvedCtx;
+		this._gl = resolvedCtx.gl;
 		this._locale = normalizeLocale(_options.locale);
 		this._strictUnsupportedPasses = _options.strictUnsupportedPasses ?? true;
 		this._framebuffers = new WebGL2FramebufferResolver(
-			_options.gl,
+			resolvedCtx,
 			_options.defaultFramebuffer,
 			_options.directFrameOutput ?? false,
 			this._locale
 		);
-		this._programs = new WebGL2FullscreenProgramCache(_options.gl, this._locale);
+		this._programs = new WebGL2FullscreenProgramCache(resolvedCtx, this._locale);
 		this._registry = new WebGL2RenderPassExecutorRegistry([
 			...(_options.executors ?? []),
 			...createBuiltinExecutors({
-				gl: _options.gl,
+				ctx: this._ctx,
+				gl: this._gl,
 				locale: this._locale,
 				framebuffers: this._framebuffers,
 				programs: this._programs,
 			}),
 		]);
+		this._ctx.onLost(() => this.invalidateContextResources());
 	}
 
 	beginFrame(context: RenderExecutionContext<WebGL2RenderResourceHandle>): void {
@@ -1447,10 +1488,11 @@ class ManagedWebGL2RenderPassLibraryImpl implements ManagedWebGL2RenderPassLibra
 		context: RenderExecutionContext<WebGL2RenderResourceHandle>
 	): void | Promise<void> {
 		const binding = this._framebuffers.resolveForPass(pass, context);
-		const gl = this._options.gl;
+		const gl = this._gl;
+		const state = this._ctx.state;
 
-		gl.bindFramebuffer(gl.FRAMEBUFFER, resolveNativeFramebuffer(binding.framebuffer));
-		gl.viewport(0, 0, binding.width, binding.height);
+		state.bindFramebuffer(gl.FRAMEBUFFER, resolveNativeFramebuffer(binding.framebuffer));
+		state.viewport(0, 0, binding.width, binding.height);
 
 		if (clearFramebuffer(gl, pass.clearState) !== 0) {
 			this._profiler.clears += 1;
@@ -1500,7 +1542,8 @@ class ManagedWebGL2RenderPassLibraryImpl implements ManagedWebGL2RenderPassLibra
 		result: RenderFrameResult<WebGL2RenderResourceHandle>,
 		_context: RenderExecutionContext<WebGL2RenderResourceHandle>
 	): void {
-		const gl = this._options.gl;
+		const gl = this._gl;
+		void this._ctx;
 		gl.bindFramebuffer(gl.FRAMEBUFFER, this._framebuffers.defaultFramebuffer);
 		gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
 		gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
@@ -1525,6 +1568,14 @@ class ManagedWebGL2RenderPassLibraryImpl implements ManagedWebGL2RenderPassLibra
 			presents: this._profiler.presents,
 			cpuTimeMs: this._profiler.cpuTimeMs,
 		});
+	}
+
+	get context(): IGLContext {
+		return this._ctx;
+	}
+
+	get gl(): WebGL2RenderingContext {
+		return this._gl;
 	}
 
 	hasExecutor(kind: RenderPassKind): boolean {
