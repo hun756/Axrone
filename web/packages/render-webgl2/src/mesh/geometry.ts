@@ -16,13 +16,8 @@ import {
 import { IGeometryBuffers, IGeometryLayout } from '@axrone/geometry';
 import { WebGLVertexBuffer } from './vertex-buffer';
 import { WebGLIndexBuffer } from './index-buffer';
-import type { IGLContext } from '../context';
-import { getOrCreateGLContext, isGLContext } from '../context';
-
-export type ContextSource = IGLContext | WebGL2RenderingContext;
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source);
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
 
 export class WebGLGeometry implements IGeometry {
     public readonly id: string;

@@ -3,13 +3,8 @@ import { ObjectPool } from '@axrone/memory';
 import { IBatchable, IBatchGroup } from './interfaces';
 import { IMaterialInstance } from '../shader/interfaces';
 import { IBuffer, createBufferFactory } from '../buffer';
-import type { IGLContext } from '../context';
-import { getOrCreateGLContext, isGLContext } from '../context';
-
-type ContextSource = IGLContext | WebGL2RenderingContext;
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source);
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
 
 interface InstanceData {
     worldMatrix: Float32Array;

@@ -1,12 +1,8 @@
 import { IBuffer, IBufferFactory, createBufferFactory } from '../buffer';
 import { IGeometryBuffers } from '@axrone/geometry';
-import type { IGLContext } from '../context';
-import { getOrCreateGLContext, isGLContext } from '../context';
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
 
-export type ContextSource = IGLContext | WebGL2RenderingContext;
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source);
 import {
     createSphere,
     createBox,

@@ -31,13 +31,8 @@ import {
 } from './utils';
 
 import { ByteBuffer } from '@axrone/memory';
-import type { IGLContext } from '../context';
-import { getOrCreateGLContext, isGLContext } from '../context';
-
-export type ContextSource = IGLContext | WebGL2RenderingContext;
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source);
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
 
 class ShaderSourceGenerator {
     private readonly includeCache = new Map<string, string>();

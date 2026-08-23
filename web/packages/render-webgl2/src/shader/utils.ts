@@ -1,10 +1,8 @@
-import type { IGLContext } from '../context';
-import { getOrCreateGLContext, isGLContext } from '../context';
 import { ShaderDataType, ShaderStage } from './interfaces';
 
-type ContextSource = IGLContext | WebGL2RenderingContext;
-const resolveContext = (source: ContextSource): IGLContext => isGLContext(source) ? source : getOrCreateGLContext(source);
 import { Djb2 } from '@axrone/hash';
+import type { ContextSource, IGLContext } from '../context';
+import { isGLContext, resolveContext } from '../context';
 
 export const getShaderDataTypeSize = (type: ShaderDataType): number => {
     switch (type) {

@@ -7,13 +7,8 @@ import type {
     WebGL2RenderResourceHandle,
     WebGL2RenderTextureNativeHandle,
 } from './pipeline-contracts';
-import type { IGLContext } from './context';
-import { getOrCreateGLContext, isGLContext } from './context';
-
-import type { ContextSource } from './pipeline-contracts';
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source as WebGL2RenderingContext);
+import type { ContextSource, IGLContext } from './context';
+import { resolveContext } from './context';
 
 interface WebGL2FormatInfo {
     readonly internalFormat: number;

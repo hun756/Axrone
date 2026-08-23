@@ -1,6 +1,9 @@
 import { ShaderInstance } from './instance';
 import { ShaderInstancePool } from './pool';
 import { UniformCache } from './uniform-cache';
+import type { ContextSource, IGLContext } from '../context';
+import { isGLContext, resolveContext, resolveContextNullable } from '../context';
+
 import {
     ShaderInstanceError,
     ShaderInstanceValidationError,
@@ -14,23 +17,6 @@ import type {
     ShaderDataType,
     ShaderUniformValue,
 } from './interfaces';
-import type { IGLContext } from '../context';
-import { getOrCreateGLContext, isGLContext } from '../context';
-
-export type ContextSource = IGLContext | WebGL2RenderingContext;
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source as WebGL2RenderingContext);
-
-const resolveContextNullable = (source: ContextSource | null | undefined): IGLContext | null => {
-    if (!source) return null;
-    if (isGLContext(source as unknown)) return source as IGLContext;
-    try {
-        return getOrCreateGLContext(source as WebGL2RenderingContext);
-    } catch {
-        return null;
-    }
-};
 
 export type ShaderInstanceManagerContextSource = ContextSource;
 
@@ -95,10 +81,8 @@ export class ShaderInstanceManager {
         this._ctx = ctx;
         if (ctx) {
             this.gl = ctx.gl;
-        } else if (source && !isGLContext(source as unknown)) {
+        } else if (source) {
             this.gl = source as unknown as WebGL2RenderingContext;
-        } else if (ctx === null && isGLContext(source as unknown)) {
-            this.gl = (source as IGLContext).gl;
         } else {
             this.gl = null;
         }

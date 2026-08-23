@@ -13,32 +13,15 @@ import {
 } from './utils';
 import { ByteBuffer } from '@axrone/memory';
 import { floatEquals, Mat4, Vec2, Vec3, Vec4 } from '@axrone/numeric';
+import type { ContextSource, IGLContext } from '../context';
+import { isGLContext, resolveContext, resolveContextNullable, resolveRawGL } from '../context';
+
 import {
     ShaderInstanceError,
     ShaderInstanceLifecycleError,
     ShaderInstanceValidationError,
     ShaderInstanceBackendError,
 } from './errors';
-import type { IGLContext } from '../context';
-import { getOrCreateGLContext, isGLContext } from '../context';
-
-export type ContextSource = IGLContext | WebGL2RenderingContext;
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source);
-
-const resolveContextNullable = (source: ContextSource | null | undefined): IGLContext | null => {
-    if (!source) return null;
-    if (isGLContext(source as unknown)) return source as IGLContext;
-    try {
-        return getOrCreateGLContext(source as WebGL2RenderingContext);
-    } catch {
-        return null;
-    }
-};
-
-const resolveGL = (source: ContextSource): WebGL2RenderingContext =>
-    isGLContext(source as unknown) ? (source as IGLContext).gl : (source as WebGL2RenderingContext);
 
 type UniformValuePrimitive = number | boolean;
 
@@ -622,7 +605,7 @@ export class ShaderInstance implements IShaderInstance {
                 shader: this.shader.name,
             });
         }
-        const gl = resolveGL(source as ContextSource);
+        const gl = resolveRawGL(source as ContextSource);
         const program = this.variant.shader.program;
         // FIX(upstream): lastBoundProgram cache is per-INSTANCE, but the GL
         // program binding is CONTEXT-GLOBAL. When host code interleaves draws
@@ -644,7 +627,7 @@ export class ShaderInstance implements IShaderInstance {
     unbind(source: ContextSource): void;
     unbind(gl: WebGL2RenderingContext): void;
     unbind(source: ContextSource | WebGL2RenderingContext): void {
-        const gl = resolveGL(source as ContextSource);
+        const gl = resolveRawGL(source as ContextSource);
         for (const unit of this.boundTextureUnits) {
             gl.activeTexture(gl.TEXTURE0 + unit);
             gl.bindTexture(gl.TEXTURE_2D, null);

@@ -62,6 +62,9 @@ export {
     getOrCreateGLContext,
     isContextSourceGLContext,
     resolveContextGL,
+    resolveContext,
+    resolveContextNullable,
+    resolveRawGL,
 } from './factory';
 
 export { createMockGL, createMockCanvas, createMockGLContext, createMockGLContextWithGL } from './mock';

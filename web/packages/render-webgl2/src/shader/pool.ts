@@ -1,28 +1,7 @@
 import { ShaderInstance } from './instance';
 import type { ICompiledShader, IShaderVariant, ShaderUniformValue } from './interfaces';
-import type { IGLContext } from '../context';
-import { getOrCreateGLContext, isGLContext } from '../context';
-
-export type ContextSource = IGLContext | WebGL2RenderingContext;
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source as WebGL2RenderingContext);
-
-const resolveContextNullable = (source: ContextSource | null | undefined): IGLContext | null => {
-    if (!source) return null;
-    if (isGLContext(source)) return source;
-    try {
-        return getOrCreateGLContext(source as WebGL2RenderingContext);
-    } catch {
-        return null;
-    }
-};
-
-const resolveRawGL = (source: ContextSource | null): WebGL2RenderingContext | null => {
-    if (!source) return null;
-    if (isGLContext(source)) return source.gl;
-    return source as WebGL2RenderingContext;
-};
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContextNullable, resolveRawGL } from '../context';
 
 export interface ShaderInstancePoolOptions {
     readonly initialCapacity: number;

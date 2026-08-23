@@ -1,14 +1,9 @@
 import type { IDisposable } from './disposable';
 import type { IBindableTarget } from './interfaces';
 import type { Brand } from '@axrone/utility';
-import type { IGLContext } from './context';
-import { getOrCreateGLContext, isGLContext } from './context';
 import type { GLConstants } from './context/types';
-
-export type ContextSource = IGLContext | WebGL2RenderingContext;
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source);
+import type { ContextSource, IGLContext } from './context';
+import { resolveContext } from './context';
 
 export type FramebufferId = Brand<WebGLFramebuffer, 'FramebufferId'>;
 export type RenderbufferId = Brand<WebGLRenderbuffer, 'RenderbufferId'>;
@@ -255,8 +250,6 @@ export interface IFramebufferFactory {
         samples?: number
     ) => IFramebuffer;
 }
-
-
 
 const getTextureTypeForFormat = (gl: WebGL2RenderingContext, format: GLTextureFormat): GLenum => {
     switch (format) {

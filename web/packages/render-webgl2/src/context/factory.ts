@@ -1,6 +1,12 @@
 import { GLContext, isGLContext, unwrapGL } from './gl-context';
 import { GLContextError } from './errors';
-import type { CreateGLContextOptions, GLContextAttributes, GLContextLocale, IGLContext } from './types';
+import type {
+    ContextSource,
+    CreateGLContextOptions,
+    GLContextAttributes,
+    GLContextLocale,
+    IGLContext,
+} from './types';
 
 const DEFAULT_ATTRIBUTES: GLContextAttributes = Object.freeze({
     alpha: true,
@@ -106,5 +112,17 @@ export const getOrCreateGLContext = (gl: WebGL2RenderingContext, canvas?: HTMLCa
 export const isContextSourceGLContext = isGLContext;
 
 export const resolveContextGL = unwrapGL;
+
+export const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source as WebGL2RenderingContext);
+
+export const resolveContextNullable = (
+    source: ContextSource | null | undefined
+): IGLContext | null => (source == null ? null : resolveContext(source));
+
+export const resolveRawGL = (
+    source: ContextSource | null | undefined
+): WebGL2RenderingContext | null =>
+    source == null ? null : isGLContext(source) ? source.gl : (source as WebGL2RenderingContext);
 
 export type GLContextFactory = typeof createGLContext;

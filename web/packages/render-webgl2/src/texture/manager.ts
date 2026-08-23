@@ -20,14 +20,9 @@ import {
 } from './interfaces';
 import { WebGLTexture } from './texture';
 import { WebGLTextureSampler, SamplerFactory } from './sampler';
-import type { IGLContext } from '../context';
-import { getOrCreateGLContext, isGLContext } from '../context';
-
-export type ContextSource = IGLContext | WebGL2RenderingContext;
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source);
 import { TextureUtils, TextureValidation } from './utils';
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
 
 export class WebGLTextureManager implements ITextureManager {
     private readonly _ctx: IGLContext;

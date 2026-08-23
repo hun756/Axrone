@@ -2,14 +2,10 @@ import { IVec2Like, IVec3Like, IVec4Like } from '@axrone/numeric';
 import { ObjectPool, ByteBuffer } from '@axrone/memory';
 import type { Brand, TypedArray } from '@axrone/utility';
 import { createBufferFactory, IBuffer, IBufferFactory } from './buffer';
-import type { IGLContext } from './context';
-import { getOrCreateGLContext, isGLContext } from './context';
+import type { ContextSource, IGLContext } from './context';
+import { resolveContext } from './context';
 
 type GLContext = Brand<WebGL2RenderingContext, 'GLContext'>;
-type ContextSource = IGLContext | WebGL2RenderingContext;
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source as WebGL2RenderingContext);
 type GLBuffer = IBuffer;
 type GLVAO = Brand<WebGLVertexArrayObject, 'GLVAO'>;
 

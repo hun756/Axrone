@@ -28,12 +28,9 @@ import {
 	type WebGL2RenderTextureNativeHandle,
 	type WebGL2ResolvedFramebufferBinding,
 } from './pipeline-contracts';
-import type { IGLContext } from './context';
-import { getOrCreateGLContext, isGLContext } from './context';
-import type { ContextSource } from './pipeline-contracts';
+import type { ContextSource, IGLContext } from './context';
+import { resolveContext } from './context';
 
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source as WebGL2RenderingContext);
 import {
 	EXPOSURE_HISTORY_FRAGMENT_SHADER_SOURCE,
 	FULLSCREEN_VERTEX_SHADER_SOURCE,

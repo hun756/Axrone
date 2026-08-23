@@ -1,7 +1,8 @@
 import { Vec2, Vec3, Vec4 } from '@axrone/numeric';
 import { Djb2 } from '@axrone/hash';
-import type { IGLContext } from '../context';
-import { getOrCreateGLContext, isGLContext } from '../context';
+import type { ContextSource, IGLContext } from '../context';
+import { isGLContext, resolveContext } from '../context';
+
 import {
     TextureDimension,
     TextureFormat,
@@ -40,9 +41,6 @@ const WEBGL_S3TC_EXTENSIONS = [
 const WEBGL_RGTC_EXTENSIONS = ['EXT_texture_compression_rgtc'] as const;
 const WEBGL_BPTC_EXTENSIONS = ['EXT_texture_compression_bptc'] as const;
 const WEBGL_ASTC_EXTENSIONS = ['WEBGL_compressed_texture_astc'] as const;
-
-type ContextSource = IGLContext | WebGL2RenderingContext;
-const resolveContext = (source: ContextSource): IGLContext => isGLContext(source) ? source : getOrCreateGLContext(source);
 
 const createCompressedFormatInfo = (
     internalFormat: number,

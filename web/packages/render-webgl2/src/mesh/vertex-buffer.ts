@@ -1,12 +1,7 @@
 import { IBuffer, IBufferFactory, createBufferFactory, GLBufferUsage } from '../buffer';
 import { IVertexBuffer, IVertexLayout, BufferUsage, MeshError, MeshErrorCode } from './interfaces';
-import type { IGLContext } from '../context';
-import { getOrCreateGLContext, isGLContext } from '../context';
-
-export type ContextSource = IGLContext | WebGL2RenderingContext;
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source);
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
 
 export class WebGLVertexBuffer implements IVertexBuffer {
     public readonly id: string;

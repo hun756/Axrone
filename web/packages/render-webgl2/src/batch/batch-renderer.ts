@@ -3,13 +3,8 @@ import { PriorityQueue } from '@axrone/memory';
 import { IBatchable, IBatchRenderer, BatchConfiguration } from './interfaces';
 import { IMaterialInstance } from '../shader/interfaces';
 import { BatchGroup } from './batch-group';
-import type { IGLContext } from '../context';
-import { getOrCreateGLContext, isGLContext } from '../context';
-
-type ContextSource = IGLContext | WebGL2RenderingContext;
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source);
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
 
 const getTranslationZ = (matrix: Mat4): number => matrix.data[11];
 

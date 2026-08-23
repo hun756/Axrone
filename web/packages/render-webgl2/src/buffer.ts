@@ -2,9 +2,9 @@ import type { IDisposable } from './disposable';
 import type { IBindableTarget } from './interfaces';
 import { BufferPool, ResourceTracker } from './internal/buffer-management';
 import type { Brand } from '@axrone/utility';
-import type { IGLContext } from './context';
-import { getOrCreateGLContext, isGLContext } from './context';
 import type { GLConstants } from './context/types';
+import type { ContextSource, IGLContext } from './context';
+import { resolveContext } from './context';
 
 export type GLBufferTarget =
     | WebGL2RenderingContext['ARRAY_BUFFER']
@@ -28,8 +28,6 @@ export type GLBufferUsage =
     | WebGL2RenderingContext['STREAM_COPY'];
 
 export type BufferId = Brand<WebGLBuffer, 'BufferId'>;
-
-export type ContextSource = IGLContext | WebGL2RenderingContext;
 
 export interface BufferOptions {
     readonly initialData?: BufferSource | null;
@@ -153,9 +151,6 @@ const isRawBufferData = (value: unknown): value is ArrayBuffer | SharedArrayBuff
 const isBufferData = (value: unknown): value is BufferSource | SharedArrayBuffer => {
     return isRawBufferData(value) || ArrayBuffer.isView(value);
 };
-
-const resolveContext = (source: ContextSource): IGLContext =>
-    isGLContext(source) ? source : getOrCreateGLContext(source);
 
 export class Buffer implements IBuffer {
     readonly #ctx: IGLContext;
