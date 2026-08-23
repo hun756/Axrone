@@ -7,6 +7,13 @@ import type {
     WebGL2RenderResourceHandle,
     WebGL2RenderTextureNativeHandle,
 } from './pipeline-contracts';
+import type { IGLContext } from './context';
+import { getOrCreateGLContext, isGLContext } from './context';
+
+import type { ContextSource } from './pipeline-contracts';
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source as WebGL2RenderingContext);
 
 interface WebGL2FormatInfo {
     readonly internalFormat: number;
@@ -153,8 +160,11 @@ const createTextureStorage = (
 };
 
 export const createWebGL2RenderResourceAllocator = (
-    gl: WebGL2RenderingContext
-): RenderResourceAllocator<WebGL2RenderResourceHandle> => ({
+    source: ContextSource
+): RenderResourceAllocator<WebGL2RenderResourceHandle> => {
+    const ctx = resolveContext(source);
+    const gl = ctx.gl;
+    return {
     createTexture(descriptor, previous) {
         if (descriptor.usage.includes('present')) {
             if (previous?.kind === 'texture') {
@@ -183,4 +193,5 @@ export const createWebGL2RenderResourceAllocator = (
             gl.deleteTexture(native.texture);
         }
     },
-});
+    };
+};
