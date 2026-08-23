@@ -208,7 +208,7 @@ export class TextureFormatInfo {
             TextureFormat.RGB8,
             {
                 internalFormat: 0x8051,
-                format: 0x8227B,
+                format: 0x1907,
                 type: 0x1401,
                 bytesPerPixel: 3,
                 channels: 3,
@@ -224,7 +224,7 @@ export class TextureFormatInfo {
             TextureFormat.RGBA8,
             {
                 internalFormat: 0x8058,
-                format: 0x8227BA,
+                format: 0x1908,
                 type: 0x1401,
                 bytesPerPixel: 4,
                 channels: 4,
@@ -273,7 +273,7 @@ export class TextureFormatInfo {
             TextureFormat.RGB16F,
             {
                 internalFormat: 0x881b,
-                format: 0x8227B,
+                format: 0x1907,
                 type: 0x140b,
                 bytesPerPixel: 6,
                 channels: 3,
@@ -289,7 +289,7 @@ export class TextureFormatInfo {
             TextureFormat.RGBA16F,
             {
                 internalFormat: 0x881a,
-                format: 0x8227BA,
+                format: 0x1908,
                 type: 0x140b,
                 bytesPerPixel: 8,
                 channels: 4,
@@ -338,7 +338,7 @@ export class TextureFormatInfo {
             TextureFormat.RGB32F,
             {
                 internalFormat: 0x8815,
-                format: 0x8227B,
+                format: 0x1907,
                 type: 0x1406,
                 bytesPerPixel: 12,
                 channels: 3,
@@ -354,7 +354,7 @@ export class TextureFormatInfo {
             TextureFormat.RGBA32F,
             {
                 internalFormat: 0x8814,
-                format: 0x8227BA,
+                format: 0x1908,
                 type: 0x1406,
                 bytesPerPixel: 16,
                 channels: 4,
@@ -420,7 +420,7 @@ export class TextureFormatInfo {
             {
                 internalFormat: 0x88f0,
                 format: 0x84f9,
-                type: 0x1405_24_8,
+                type: 0x84F9,
                 bytesPerPixel: 4,
                 channels: 2,
                 compressed: false,
