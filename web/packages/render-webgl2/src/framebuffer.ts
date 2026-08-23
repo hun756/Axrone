@@ -4,6 +4,7 @@ import type { Brand } from '@axrone/utility';
 import type { GLConstants } from './context/types';
 import type { ContextSource, IGLContext } from './context';
 import { resolveContext } from './context';
+import { DisposalTracker } from './internal/disposable';
 
 export type FramebufferId = Brand<WebGLFramebuffer, 'FramebufferId'>;
 export type RenderbufferId = Brand<WebGLRenderbuffer, 'RenderbufferId'>;
@@ -206,7 +207,9 @@ export interface IFramebuffer extends IDisposable, IBindableTarget<IFramebuffer>
         y?: number,
         width?: number,
         height?: number,
-        attachment?: GLAttachment
+        attachment?: GLAttachment,
+        format?: GLenum,
+        type?: GLenum
     ) => T;
 
     readonly blit: (
@@ -329,6 +332,36 @@ const isStencilFormat = (gl: WebGL2RenderingContext, format: GLTextureFormat): b
     return format === gl.DEPTH24_STENCIL8 || format === gl.DEPTH32F_STENCIL8;
 };
 
+/**
+ * Extract the internal format from an attached texture or renderbuffer.
+ */
+const getAttachmentInternalFormat = (
+    resource: ITexture | IRenderbuffer | null
+): GLTextureFormat | null => {
+    if (!resource || resource.isDisposed) return null;
+    return resource.internalFormat;
+};
+
+/**
+ * Infer the `format` parameter for gl.readPixels from an attachment's internal format.
+ */
+const inferReadFormat = (
+    gl: WebGL2RenderingContext,
+    internalFormat: GLTextureFormat
+): GLenum => {
+    return getPixelFormatForInternalFormat(gl, internalFormat) as GLenum;
+};
+
+/**
+ * Infer the `type` parameter for gl.readPixels from an attachment's internal format.
+ */
+const inferReadType = (
+    gl: WebGL2RenderingContext,
+    internalFormat: GLTextureFormat
+): GLenum => {
+    return getTextureTypeForFormat(gl, internalFormat);
+};
+
 const validateAttachmentConfig = (gl: WebGL2RenderingContext, config: AttachmentConfig): void => {
     if (!config.texture && !config.renderbuffer) {
         throw new FramebufferError(
@@ -392,7 +425,7 @@ export class Texture implements ITexture {
     #type: GLenum;
     #samples: number;
     #label: string | null;
-    #isDisposed: boolean = false;
+    private readonly _disposal = new DisposalTracker();
 
     public get id(): TextureId {
         this.#throwIfDisposed();
@@ -432,7 +465,7 @@ export class Texture implements ITexture {
     }
 
     public get isDisposed(): boolean {
-        return this.#isDisposed;
+        return this._disposal.isDisposed;
     }
 
     /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
@@ -508,13 +541,13 @@ export class Texture implements ITexture {
 
     public bind = (): ITexture => {
         this.#throwIfDisposed();
-        this.#gl.bindTexture(this.#target, this.#id);
+        this.#ctx.state.bindTexture(this.#target, this.#id);
         return this;
     };
 
     public unbind = (): ITexture => {
         this.#throwIfDisposed();
-        this.#gl.bindTexture(this.#target, null);
+        this.#ctx.state.bindTexture(this.#target, null);
         return this;
     };
 
@@ -633,16 +666,16 @@ export class Texture implements ITexture {
     };
 
     public dispose = (): void => {
-        if (this.#isDisposed) return;
+        if (!this._disposal.markDisposed()) return;
 
         this.#gl.deleteTexture(this.#id);
-        this.#isDisposed = true;
     };
 
     #throwIfDisposed = (): void => {
-        if (this.#isDisposed) {
-            throw new FramebufferError('Texture has been disposed', 'TEXTURE_ALREADY_DISPOSED');
-        }
+        this._disposal.assertAlive(
+            (name) => new FramebufferError(`${name} has been disposed`, 'TEXTURE_ALREADY_DISPOSED'),
+            'Texture'
+        );
     };
 }
 
@@ -657,7 +690,7 @@ export class Renderbuffer implements IRenderbuffer {
     #internalFormat: GLTextureFormat;
     #samples: number;
     #label: string | null;
-    #isDisposed: boolean = false;
+    private readonly _disposal = new DisposalTracker();
 
     public get id(): RenderbufferId {
         this.#throwIfDisposed();
@@ -685,7 +718,7 @@ export class Renderbuffer implements IRenderbuffer {
     }
 
     public get isDisposed(): boolean {
-        return this.#isDisposed;
+        return this._disposal.isDisposed;
     }
 
     /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
@@ -782,19 +815,16 @@ export class Renderbuffer implements IRenderbuffer {
     };
 
     public dispose = (): void => {
-        if (this.#isDisposed) return;
+        if (!this._disposal.markDisposed()) return;
 
         this.#gl.deleteRenderbuffer(this.#id);
-        this.#isDisposed = true;
     };
 
     #throwIfDisposed = (): void => {
-        if (this.#isDisposed) {
-            throw new FramebufferError(
-                'Renderbuffer has been disposed',
-                'RENDERBUFFER_ALREADY_DISPOSED'
-            );
-        }
+        this._disposal.assertAlive(
+            (name) => new FramebufferError(`${name} has been disposed`, 'RENDERBUFFER_ALREADY_DISPOSED'),
+            'Renderbuffer'
+        );
     };
 }
 
@@ -807,7 +837,7 @@ export class Framebuffer implements IFramebuffer {
     #width: number;
     #height: number;
     #label: string | null;
-    #isDisposed: boolean = false;
+    private readonly _disposal = new DisposalTracker();
     #colorAttachments: (ITexture | null)[] = [];
     #depthAttachment: ITexture | IRenderbuffer | null = null;
     #stencilAttachment: ITexture | IRenderbuffer | null = null;
@@ -831,7 +861,7 @@ export class Framebuffer implements IFramebuffer {
     }
 
     public get isDisposed(): boolean {
-        return this.#isDisposed;
+        return this._disposal.isDisposed;
     }
 
     public get colorAttachments(): readonly ITexture[] {
@@ -932,14 +962,14 @@ export class Framebuffer implements IFramebuffer {
 
     public bind = (): IFramebuffer => {
         this.#throwIfDisposed();
-        this.#gl.bindFramebuffer(this.#gl.FRAMEBUFFER, this.#id);
-        this.#gl.viewport(0, 0, this.#width, this.#height);
+        this.#ctx.state.bindFramebuffer(this.#gl.FRAMEBUFFER, this.#id);
+        this.#ctx.state.viewport(0, 0, this.#width, this.#height);
         return this;
     };
 
     public unbind = (): IFramebuffer => {
         this.#throwIfDisposed();
-        this.#gl.bindFramebuffer(this.#gl.FRAMEBUFFER, null);
+        this.#ctx.state.bindFramebuffer(this.#gl.FRAMEBUFFER, null);
         return this;
     };
 
@@ -1097,22 +1127,55 @@ export class Framebuffer implements IFramebuffer {
         y: number = 0,
         width: number = this.#width,
         height: number = this.#height,
-        attachment: GLAttachment = this.#gl.COLOR_ATTACHMENT0
+        attachment: GLAttachment = this.#gl.COLOR_ATTACHMENT0,
+        format?: GLenum,
+        type?: GLenum
     ): T => {
         this.#throwIfDisposed();
 
-        this.bind();
+        // Use state cache for framebuffer binding to avoid bypassing the cache
+        this.#ctx.state.bindFramebuffer(this.#gl.FRAMEBUFFER, this.#id);
 
         if (attachment >= this.#gl.COLOR_ATTACHMENT0 && attachment <= this.#gl.COLOR_ATTACHMENT15) {
             this.#gl.readBuffer(attachment);
         }
 
-        const format = this.#gl.RGBA;
-        const type = this.#gl.UNSIGNED_BYTE;
+        // Resolve format and type: use caller overrides, or infer from the attachment
+        let resolvedFormat = format;
+        let resolvedType = type;
 
-        this.#gl.readPixels(x, y, width, height, format, type, output);
+        if (resolvedFormat === undefined || resolvedType === undefined) {
+            // Determine the internal format of the resource attached at the requested attachment point
+            let internalFormat: GLTextureFormat | null = null;
 
-        this.unbind();
+            if (attachment >= this.#gl.COLOR_ATTACHMENT0 && attachment <= this.#gl.COLOR_ATTACHMENT15) {
+                const colorIndex = attachment - this.#gl.COLOR_ATTACHMENT0;
+                internalFormat = getAttachmentInternalFormat(this.#colorAttachments[colorIndex] ?? null);
+            } else if (attachment === this.#gl.DEPTH_ATTACHMENT) {
+                internalFormat = getAttachmentInternalFormat(this.#depthAttachment);
+            } else if (attachment === this.#gl.STENCIL_ATTACHMENT) {
+                internalFormat = getAttachmentInternalFormat(this.#stencilAttachment);
+            } else if (attachment === this.#gl.DEPTH_STENCIL_ATTACHMENT) {
+                internalFormat = getAttachmentInternalFormat(this.#depthStencilAttachment);
+            }
+
+            if (internalFormat !== null) {
+                if (resolvedFormat === undefined) {
+                    resolvedFormat = inferReadFormat(this.#gl, internalFormat);
+                }
+                if (resolvedType === undefined) {
+                    resolvedType = inferReadType(this.#gl, internalFormat);
+                }
+            } else {
+                // Fallback for unknown or unattached attachment points
+                if (resolvedFormat === undefined) resolvedFormat = this.#gl.RGBA;
+                if (resolvedType === undefined) resolvedType = this.#gl.UNSIGNED_BYTE;
+            }
+        }
+
+        this.#gl.readPixels(x, y, width, height, resolvedFormat, resolvedType, output);
+
+        this.#ctx.state.bindFramebuffer(this.#gl.FRAMEBUFFER, null);
         return output;
     };
 
@@ -1132,8 +1195,8 @@ export class Framebuffer implements IFramebuffer {
             );
         }
 
-        this.#gl.bindFramebuffer(this.#gl.READ_FRAMEBUFFER, source.id as WebGLFramebuffer);
-        this.#gl.bindFramebuffer(this.#gl.DRAW_FRAMEBUFFER, this.#id);
+        this.#ctx.state.bindFramebuffer(this.#gl.READ_FRAMEBUFFER, source.id as WebGLFramebuffer);
+        this.#ctx.state.bindFramebuffer(this.#gl.DRAW_FRAMEBUFFER, this.#id);
 
         this.#gl.blitFramebuffer(
             srcRect[0],
@@ -1148,17 +1211,16 @@ export class Framebuffer implements IFramebuffer {
             filter
         );
 
-        this.#gl.bindFramebuffer(this.#gl.READ_FRAMEBUFFER, null);
-        this.#gl.bindFramebuffer(this.#gl.DRAW_FRAMEBUFFER, null);
+        this.#ctx.state.bindFramebuffer(this.#gl.READ_FRAMEBUFFER, null);
+        this.#ctx.state.bindFramebuffer(this.#gl.DRAW_FRAMEBUFFER, null);
 
         return this;
     };
 
     public dispose = (): void => {
-        if (this.#isDisposed) return;
+        if (!this._disposal.markDisposed()) return;
 
         this.#gl.deleteFramebuffer(this.#id);
-        this.#isDisposed = true;
 
         this.#colorAttachments.length = 0;
         this.#depthAttachment = null;
@@ -1200,12 +1262,10 @@ export class Framebuffer implements IFramebuffer {
     };
 
     #throwIfDisposed = (): void => {
-        if (this.#isDisposed) {
-            throw new FramebufferError(
-                'Framebuffer has been disposed',
-                'FRAMEBUFFER_ALREADY_DISPOSED'
-            );
-        }
+        this._disposal.assertAlive(
+            (name) => new FramebufferError(`${name} has been disposed`, 'FRAMEBUFFER_ALREADY_DISPOSED'),
+            'Framebuffer'
+        );
     };
 }
 
