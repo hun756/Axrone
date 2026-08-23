@@ -22,6 +22,7 @@ export interface SceneLineBatchRuntimeOptions {
     readonly gl: WebGL2RenderingContext;
     readonly uniformWriter: SceneUniformWriteTarget;
     readonly renderStateApplier: Pick<SceneRenderStateApplier, 'reset'>;
+    readonly stateCache?: import('@axrone/render-webgl2').IGLStateCache;
 }
 
 export interface SceneLineBatchRuntimeRenderParams {
@@ -83,6 +84,7 @@ export class SceneLineBatchRuntime {
         this._guard = new SceneDirectGlPassGuard({
             gl: _options.gl,
             renderStateApplier: _options.renderStateApplier,
+            stateCache: _options.stateCache,
             label: 'line-batch',
         });
         this._vertexCapacity = 2048;

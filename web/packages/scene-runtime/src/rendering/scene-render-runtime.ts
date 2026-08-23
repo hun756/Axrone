@@ -1,3 +1,4 @@
+import type { IGLStateCache } from '@axrone/render-webgl2';
 import { Vec3, Vec4 } from '@axrone/numeric';
 import type { Actor, Transform } from '@axrone/ecs-runtime';
 import { selectSceneCamera } from '../camera-selector';
@@ -45,6 +46,8 @@ export interface SceneRenderRuntimeOptions {
     readonly applyMissingVertexAttributeDefaults: (mesh: SceneMeshResource) => void;
     readonly planning?: SceneRenderPlanningOptions;
     readonly pipeline?: SceneRenderPipelineSettings;
+    /** Optional GL state cache — when provided, texture unbinds and raw-GL guards stay in sync. */
+    readonly stateCache?: IGLStateCache;
 }
 
 export interface SceneRenderRuntimeParams {
@@ -93,7 +96,7 @@ export class SceneRenderRuntime {
 
     constructor(private readonly _options: SceneRenderRuntimeOptions) {
         this._lightingCollector = new SceneLightingCollector(4);
-        this._materialTextureBinder = new SceneMaterialTextureBinder(_options.gl);
+        this._materialTextureBinder = new SceneMaterialTextureBinder(_options.gl, _options.stateCache);
         this._renderPassPreparer = new SceneRenderPassPreparer(
             _options.gl,
             _options.defaultClearColor
@@ -128,21 +131,25 @@ export class SceneRenderRuntime {
             uniformWriter: this._uniformWriter,
             materialTextureBinder: this._materialTextureBinder,
             textureUniformSetter: this._textureUniformSetter,
+            stateCache: _options.stateCache,
         });
         const particleBatchRuntime = new SceneParticleBatchRuntime({
             gl: _options.gl,
             uniformWriter: this._uniformWriter,
             renderStateApplier: this._renderStateApplier,
+            stateCache: _options.stateCache,
         });
         const lineBatchRuntime = new SceneLineBatchRuntime({
             gl: _options.gl,
             uniformWriter: this._uniformWriter,
             renderStateApplier: this._renderStateApplier,
+            stateCache: _options.stateCache,
         });
         const billboardBatchRuntime = new SceneBillboardBatchRuntime({
             gl: _options.gl,
             uniformWriter: this._uniformWriter,
             renderStateApplier: this._renderStateApplier,
+            stateCache: _options.stateCache,
         });
         this._renderPipeline = new SceneRenderPipeline({
             gl: _options.gl,
