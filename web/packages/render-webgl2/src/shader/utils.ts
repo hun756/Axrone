@@ -98,28 +98,28 @@ export const getWebGLTypeForContext = (ctx: IGLContext, type: ShaderDataType): n
         case ShaderDataType.MAT2:
         case ShaderDataType.MAT3:
         case ShaderDataType.MAT4:
-            return gl.FLOAT;
+            return ctx.constants.FLOAT;
         case ShaderDataType.INT:
         case ShaderDataType.IVEC2:
         case ShaderDataType.IVEC3:
         case ShaderDataType.IVEC4:
-            return gl.INT;
+            return ctx.constants.INT;
         case ShaderDataType.UINT:
         case ShaderDataType.UVEC2:
         case ShaderDataType.UVEC3:
         case ShaderDataType.UVEC4:
-            return gl.UNSIGNED_INT;
+            return ctx.constants.UNSIGNED_INT;
         case ShaderDataType.BOOL:
         case ShaderDataType.BVEC2:
         case ShaderDataType.BVEC3:
         case ShaderDataType.BVEC4:
-            return gl.BOOL;
+            return ctx.constants.BOOL;
         case ShaderDataType.SAMPLER_2D:
-            return gl.SAMPLER_2D;
+            return ctx.constants.SAMPLER_2D;
         case ShaderDataType.SAMPLER_CUBE:
-            return gl.SAMPLER_CUBE;
+            return ctx.constants.SAMPLER_CUBE;
         case ShaderDataType.SAMPLER_2D_ARRAY:
-            return gl.SAMPLER_2D_ARRAY;
+            return ctx.constants.SAMPLER_2D_ARRAY;
         default:
             throw new Error(`Unknown shader data type: ${type}`);
     }

@@ -175,9 +175,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.R8,
             {
-                internalFormat: WebGL2RenderingContext.R8,
-                format: WebGL2RenderingContext.RED,
-                type: WebGL2RenderingContext.UNSIGNED_BYTE,
+                internalFormat: 0x8229,
+                format: 0x1903,
+                type: 0x1401,
                 bytesPerPixel: 1,
                 channels: 1,
                 compressed: false,
@@ -191,9 +191,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.RG8,
             {
-                internalFormat: WebGL2RenderingContext.RG8,
-                format: WebGL2RenderingContext.RG,
-                type: WebGL2RenderingContext.UNSIGNED_BYTE,
+                internalFormat: 0x822b,
+                format: 0x8227,
+                type: 0x1401,
                 bytesPerPixel: 2,
                 channels: 2,
                 compressed: false,
@@ -207,9 +207,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.RGB8,
             {
-                internalFormat: WebGL2RenderingContext.RGB8,
-                format: WebGL2RenderingContext.RGB,
-                type: WebGL2RenderingContext.UNSIGNED_BYTE,
+                internalFormat: 0x8051,
+                format: 0x8227B,
+                type: 0x1401,
                 bytesPerPixel: 3,
                 channels: 3,
                 compressed: false,
@@ -223,9 +223,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.RGBA8,
             {
-                internalFormat: WebGL2RenderingContext.RGBA8,
-                format: WebGL2RenderingContext.RGBA,
-                type: WebGL2RenderingContext.UNSIGNED_BYTE,
+                internalFormat: 0x8058,
+                format: 0x8227BA,
+                type: 0x1401,
                 bytesPerPixel: 4,
                 channels: 4,
                 compressed: false,
@@ -240,9 +240,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.R16F,
             {
-                internalFormat: WebGL2RenderingContext.R16F,
-                format: WebGL2RenderingContext.RED,
-                type: WebGL2RenderingContext.HALF_FLOAT,
+                internalFormat: 0x822d,
+                format: 0x1903,
+                type: 0x140b,
                 bytesPerPixel: 2,
                 channels: 1,
                 compressed: false,
@@ -256,9 +256,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.RG16F,
             {
-                internalFormat: WebGL2RenderingContext.RG16F,
-                format: WebGL2RenderingContext.RG,
-                type: WebGL2RenderingContext.HALF_FLOAT,
+                internalFormat: 0x822f,
+                format: 0x8227,
+                type: 0x140b,
                 bytesPerPixel: 4,
                 channels: 2,
                 compressed: false,
@@ -272,9 +272,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.RGB16F,
             {
-                internalFormat: WebGL2RenderingContext.RGB16F,
-                format: WebGL2RenderingContext.RGB,
-                type: WebGL2RenderingContext.HALF_FLOAT,
+                internalFormat: 0x881b,
+                format: 0x8227B,
+                type: 0x140b,
                 bytesPerPixel: 6,
                 channels: 3,
                 compressed: false,
@@ -288,9 +288,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.RGBA16F,
             {
-                internalFormat: WebGL2RenderingContext.RGBA16F,
-                format: WebGL2RenderingContext.RGBA,
-                type: WebGL2RenderingContext.HALF_FLOAT,
+                internalFormat: 0x881a,
+                format: 0x8227BA,
+                type: 0x140b,
                 bytesPerPixel: 8,
                 channels: 4,
                 compressed: false,
@@ -305,9 +305,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.R32F,
             {
-                internalFormat: WebGL2RenderingContext.R32F,
-                format: WebGL2RenderingContext.RED,
-                type: WebGL2RenderingContext.FLOAT,
+                internalFormat: 0x822e,
+                format: 0x1903,
+                type: 0x1406,
                 bytesPerPixel: 4,
                 channels: 1,
                 compressed: false,
@@ -321,9 +321,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.RG32F,
             {
-                internalFormat: WebGL2RenderingContext.RG32F,
-                format: WebGL2RenderingContext.RG,
-                type: WebGL2RenderingContext.FLOAT,
+                internalFormat: 0x8230,
+                format: 0x8227,
+                type: 0x1406,
                 bytesPerPixel: 8,
                 channels: 2,
                 compressed: false,
@@ -337,9 +337,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.RGB32F,
             {
-                internalFormat: WebGL2RenderingContext.RGB32F,
-                format: WebGL2RenderingContext.RGB,
-                type: WebGL2RenderingContext.FLOAT,
+                internalFormat: 0x8815,
+                format: 0x8227B,
+                type: 0x1406,
                 bytesPerPixel: 12,
                 channels: 3,
                 compressed: false,
@@ -353,9 +353,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.RGBA32F,
             {
-                internalFormat: WebGL2RenderingContext.RGBA32F,
-                format: WebGL2RenderingContext.RGBA,
-                type: WebGL2RenderingContext.FLOAT,
+                internalFormat: 0x8814,
+                format: 0x8227BA,
+                type: 0x1406,
                 bytesPerPixel: 16,
                 channels: 4,
                 compressed: false,
@@ -370,9 +370,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.DEPTH_COMPONENT16,
             {
-                internalFormat: WebGL2RenderingContext.DEPTH_COMPONENT16,
-                format: WebGL2RenderingContext.DEPTH_COMPONENT,
-                type: WebGL2RenderingContext.UNSIGNED_SHORT,
+                internalFormat: 0x81a5,
+                format: 0x1902,
+                type: 0x1403,
                 bytesPerPixel: 2,
                 channels: 1,
                 compressed: false,
@@ -386,9 +386,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.DEPTH_COMPONENT24,
             {
-                internalFormat: WebGL2RenderingContext.DEPTH_COMPONENT24,
-                format: WebGL2RenderingContext.DEPTH_COMPONENT,
-                type: WebGL2RenderingContext.UNSIGNED_INT,
+                internalFormat: 0x81a6,
+                format: 0x1902,
+                type: 0x1405,
                 bytesPerPixel: 4,
                 channels: 1,
                 compressed: false,
@@ -402,9 +402,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.DEPTH_COMPONENT32F,
             {
-                internalFormat: WebGL2RenderingContext.DEPTH_COMPONENT32F,
-                format: WebGL2RenderingContext.DEPTH_COMPONENT,
-                type: WebGL2RenderingContext.FLOAT,
+                internalFormat: 0x8cac,
+                format: 0x1902,
+                type: 0x1406,
                 bytesPerPixel: 4,
                 channels: 1,
                 compressed: false,
@@ -418,9 +418,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.DEPTH24_STENCIL8,
             {
-                internalFormat: WebGL2RenderingContext.DEPTH24_STENCIL8,
-                format: WebGL2RenderingContext.DEPTH_STENCIL,
-                type: WebGL2RenderingContext.UNSIGNED_INT_24_8,
+                internalFormat: 0x88f0,
+                format: 0x84f9,
+                type: 0x1405_24_8,
                 bytesPerPixel: 4,
                 channels: 2,
                 compressed: false,
@@ -434,9 +434,9 @@ export class TextureFormatInfo {
         [
             TextureFormat.DEPTH32F_STENCIL8,
             {
-                internalFormat: WebGL2RenderingContext.DEPTH32F_STENCIL8,
-                format: WebGL2RenderingContext.DEPTH_STENCIL,
-                type: WebGL2RenderingContext.FLOAT_32_UNSIGNED_INT_24_8_REV,
+                internalFormat: 0x8cad,
+                format: 0x84f9,
+                type: 0x8dad,
                 bytesPerPixel: 8,
                 channels: 2,
                 compressed: false,
@@ -451,8 +451,8 @@ export class TextureFormatInfo {
     ]);
 
     private static readonly SRGB_INTERNAL_FORMAT_OVERRIDES = new Map<TextureFormat, number>([
-        [TextureFormat.RGB8, WebGL2RenderingContext.SRGB8],
-        [TextureFormat.RGBA8, WebGL2RenderingContext.SRGB8_ALPHA8],
+        [TextureFormat.RGB8, 0x8c41],
+        [TextureFormat.RGBA8, 0x8c43],
     ]);
 
     public static getFormatInfo(
@@ -549,27 +549,27 @@ export class TextureFormatInfo {
 export class TextureWebGLConstants {
     public static readonly DIMENSION_MAP = new Map<TextureDimension, number>([
         [TextureDimension.TEXTURE_1D, 0x0de0],
-        [TextureDimension.TEXTURE_2D, WebGL2RenderingContext.TEXTURE_2D],
-        [TextureDimension.TEXTURE_3D, WebGL2RenderingContext.TEXTURE_3D],
-        [TextureDimension.TEXTURE_CUBE, WebGL2RenderingContext.TEXTURE_CUBE_MAP],
-        [TextureDimension.TEXTURE_2D_ARRAY, WebGL2RenderingContext.TEXTURE_2D_ARRAY],
+        [TextureDimension.TEXTURE_2D, 0x0de1],
+        [TextureDimension.TEXTURE_3D, 0x806f],
+        [TextureDimension.TEXTURE_CUBE, 0x8513],
+        [TextureDimension.TEXTURE_2D_ARRAY, 0x8c1a],
         [TextureDimension.TEXTURE_CUBE_ARRAY, 0x9009],
     ]);
 
     public static readonly FILTER_MAP = new Map<FilterMode, number>([
-        [FilterMode.NEAREST, WebGL2RenderingContext.NEAREST],
-        [FilterMode.LINEAR, WebGL2RenderingContext.LINEAR],
-        [FilterMode.NEAREST_MIPMAP_NEAREST, WebGL2RenderingContext.NEAREST_MIPMAP_NEAREST],
-        [FilterMode.LINEAR_MIPMAP_NEAREST, WebGL2RenderingContext.LINEAR_MIPMAP_NEAREST],
-        [FilterMode.NEAREST_MIPMAP_LINEAR, WebGL2RenderingContext.NEAREST_MIPMAP_LINEAR],
-        [FilterMode.LINEAR_MIPMAP_LINEAR, WebGL2RenderingContext.LINEAR_MIPMAP_LINEAR],
+        [FilterMode.NEAREST, 0x2600],
+        [FilterMode.LINEAR, 0x2601],
+        [FilterMode.NEAREST_MIPMAP_NEAREST, 0x2700],
+        [FilterMode.LINEAR_MIPMAP_NEAREST, 0x2701],
+        [FilterMode.NEAREST_MIPMAP_LINEAR, 0x2702],
+        [FilterMode.LINEAR_MIPMAP_LINEAR, 0x2703],
     ]);
 
     public static readonly WRAP_MAP = new Map<WrapMode, number>([
-        [WrapMode.REPEAT, WebGL2RenderingContext.REPEAT],
-        [WrapMode.CLAMP_TO_EDGE, WebGL2RenderingContext.CLAMP_TO_EDGE],
+        [WrapMode.REPEAT, 0x2901],
+        [WrapMode.CLAMP_TO_EDGE, 0x812f],
         [WrapMode.CLAMP_TO_BORDER, 0x812d],
-        [WrapMode.MIRRORED_REPEAT, WebGL2RenderingContext.MIRRORED_REPEAT],
+        [WrapMode.MIRRORED_REPEAT, 0x8370],
     ]);
 
     public static getDimensionConstant(dimension: TextureDimension): number {
