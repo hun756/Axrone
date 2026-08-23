@@ -3,6 +3,13 @@ import { PriorityQueue } from '@axrone/memory';
 import { IBatchable, IBatchRenderer, BatchConfiguration } from './interfaces';
 import { IMaterialInstance } from '../shader/interfaces';
 import { BatchGroup } from './batch-group';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 
 const getTranslationZ = (matrix: Mat4): number => matrix.data[11];
 
@@ -15,6 +22,7 @@ interface BatchJob {
 export class BatchRenderer implements IBatchRenderer {
     readonly maxBatchSize: number;
 
+    private readonly _ctx: IGLContext;
     private readonly gl: WebGL2RenderingContext;
     private readonly config: Required<BatchConfiguration>;
     private readonly batchGroups = new Map<string, BatchGroup>();
@@ -28,8 +36,10 @@ export class BatchRenderer implements IBatchRenderer {
         batchesProcessed: 0,
     };
 
-    constructor(gl: WebGL2RenderingContext, config: BatchConfiguration = {}) {
-        this.gl = gl;
+    constructor(source: ContextSource, config: BatchConfiguration = {}) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
         this.maxBatchSize = config.maxBatchSize ?? 1024;
 
         this.config = {
@@ -44,6 +54,10 @@ export class BatchRenderer implements IBatchRenderer {
 
     get activeGroups(): number {
         return this.batchGroups.size;
+    }
+
+    public get context(): IGLContext {
+        return this._ctx;
     }
 
     get totalInstances(): number {
@@ -173,7 +187,7 @@ export class BatchRenderer implements IBatchRenderer {
         }
 
         const group = new BatchGroup(
-            this.gl,
+            this._ctx,
             material,
             this.maxBatchSize,
             this.config.enableDynamicBatching

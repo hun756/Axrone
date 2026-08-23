@@ -1,8 +1,16 @@
 import { IBatchManager, IBatchRenderer, BatchStats, BatchConfiguration } from './interfaces';
 import { IMaterialInstance } from '../shader/interfaces';
 import { BatchRenderer } from './batch-renderer';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 
 export class BatchManager implements IBatchManager {
+    private readonly _ctx: IGLContext;
     private readonly gl: WebGL2RenderingContext;
     private readonly config: Required<BatchConfiguration>;
     private readonly renderers = new Map<string, BatchRenderer>();
@@ -11,8 +19,10 @@ export class BatchManager implements IBatchManager {
     private disposed = false;
     private frameCounter = 0;
 
-    constructor(gl: WebGL2RenderingContext, config: BatchConfiguration = {}) {
-        this.gl = gl;
+    constructor(source: ContextSource, config: BatchConfiguration = {}) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
         this.config = {
             maxBatchSize: config.maxBatchSize ?? 1024,
             maxRenderers: config.maxRenderers ?? 16,
@@ -21,6 +31,10 @@ export class BatchManager implements IBatchManager {
             sortByMaterial: config.sortByMaterial ?? true,
             sortByDepth: config.sortByDepth ?? false,
         };
+    }
+
+    public get context(): IGLContext {
+        return this._ctx;
     }
 
     createRenderer(maxBatchSize?: number): IBatchRenderer {
@@ -33,7 +47,7 @@ export class BatchManager implements IBatchManager {
         }
 
         const rendererId = `renderer_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-        const renderer = new BatchRenderer(this.gl, {
+        const renderer = new BatchRenderer(this._ctx, {
             ...this.config,
             maxBatchSize: maxBatchSize ?? this.config.maxBatchSize,
         });

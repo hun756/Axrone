@@ -3,6 +3,13 @@ import { ObjectPool } from '@axrone/memory';
 import { IBatchable, IBatchGroup } from './interfaces';
 import { IMaterialInstance } from '../shader/interfaces';
 import { IBuffer, createBufferFactory } from '../buffer';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 
 interface InstanceData {
     worldMatrix: Float32Array;
@@ -16,6 +23,7 @@ export class BatchGroup implements IBatchGroup {
     readonly maxInstances: number;
     readonly isDynamic: boolean;
 
+    private readonly _ctx: IGLContext;
     private readonly gl: WebGL2RenderingContext;
     private readonly instancePool: ObjectPool<InstanceData>;
     private readonly instanceMap = new Map<string, IBatchable>();
@@ -28,12 +36,14 @@ export class BatchGroup implements IBatchGroup {
     private disposed = false;
 
     constructor(
-        gl: WebGL2RenderingContext,
+        source: ContextSource,
         material: IMaterialInstance,
         maxInstances: number = 1024,
         isDynamic: boolean = false
     ) {
-        this.gl = gl;
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
         this.material = material;
         this.maxInstances = maxInstances;
         this.isDynamic = isDynamic;
@@ -52,24 +62,28 @@ export class BatchGroup implements IBatchGroup {
             },
         });
 
-        const bufferFactory = createBufferFactory(gl);
+        const bufferFactory = createBufferFactory(ctx);
 
-        this.matrixBuffer = bufferFactory.createBuffer(gl.ARRAY_BUFFER, {
+        this.matrixBuffer = bufferFactory.createBuffer(this.gl.ARRAY_BUFFER, {
             initialData: new Float32Array(maxInstances * 16),
-            usage: isDynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW,
+            usage: isDynamic ? this.gl.DYNAMIC_DRAW : this.gl.STATIC_DRAW,
         });
 
-        this.colorBuffer = bufferFactory.createBuffer(gl.ARRAY_BUFFER, {
+        this.colorBuffer = bufferFactory.createBuffer(this.gl.ARRAY_BUFFER, {
             initialData: new Float32Array(maxInstances * 4),
-            usage: isDynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW,
+            usage: isDynamic ? this.gl.DYNAMIC_DRAW : this.gl.STATIC_DRAW,
         });
 
-        this.customBuffer = bufferFactory.createBuffer(gl.ARRAY_BUFFER, {
+        this.customBuffer = bufferFactory.createBuffer(this.gl.ARRAY_BUFFER, {
             initialData: new Float32Array(maxInstances * 4),
-            usage: isDynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW,
+            usage: isDynamic ? this.gl.DYNAMIC_DRAW : this.gl.STATIC_DRAW,
         });
 
         bufferFactory.dispose();
+    }
+
+    public get context(): IGLContext {
+        return this._ctx;
     }
 
     get instances(): readonly IBatchable[] {
