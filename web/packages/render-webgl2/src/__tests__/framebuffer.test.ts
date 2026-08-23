@@ -299,6 +299,7 @@ describe('Texture', () => {
 
         it('unbind should call gl.bindTexture with target and null', () => {
             const tex = createTexture();
+            tex.bind();
             (gl.bindTexture as ReturnType<typeof vi.fn>).mockClear();
             tex.unbind();
             expect(gl.bindTexture).toHaveBeenCalledWith(gl.TEXTURE_2D, null);
@@ -685,9 +686,17 @@ describe('Renderbuffer', () => {
 
         it('unbind should call gl.bindRenderbuffer with RENDERBUFFER target and null', () => {
             const rb = createRenderbuffer();
+            rb.bind();
             (gl.bindRenderbuffer as ReturnType<typeof vi.fn>).mockClear();
             rb.unbind();
             expect(gl.bindRenderbuffer).toHaveBeenCalledWith(gl.RENDERBUFFER, null);
+        });
+
+        it('unbind should be no-op when already unbound (state cache)', () => {
+            const rb = createRenderbuffer();
+            (gl.bindRenderbuffer as ReturnType<typeof vi.fn>).mockClear();
+            rb.unbind();
+            expect(gl.bindRenderbuffer).not.toHaveBeenCalled();
         });
 
         it('bind should return the renderbuffer for chaining', () => {
@@ -1059,10 +1068,13 @@ describe('Framebuffer', () => {
 
         it('unbind should call bindFramebuffer with null', () => {
             const fb = createFramebuffer();
+            fb.bind();
             (gl.bindFramebuffer as ReturnType<typeof vi.fn>).mockClear();
             fb.unbind();
             expect(gl.bindFramebuffer).toHaveBeenCalledWith(gl.FRAMEBUFFER, null);
         });
+
+
 
         it('bind should return the framebuffer for chaining', () => {
             const fb = createFramebuffer();
