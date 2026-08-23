@@ -237,6 +237,67 @@ export const normalizeSceneTextureBinding = (
     };
 };
 
+const SURFACE_MAP_TO_UNIFORM: ReadonlyArray<{
+    surfaceKey: keyof Pick<
+        SceneMaterialSurfaceDefinition,
+        | 'albedoMap'
+        | 'normalMap'
+        | 'metallicRoughnessMap'
+        | 'occlusionMap'
+        | 'emissiveMap'
+        | 'clearcoatMap'
+        | 'clearcoatRoughnessMap'
+        | 'clearcoatNormalMap'
+    >;
+    uniformName: string;
+}> = Object.freeze([
+    { surfaceKey: 'albedoMap', uniformName: '_BaseColorTexture' },
+    { surfaceKey: 'normalMap', uniformName: '_NormalTexture' },
+    { surfaceKey: 'metallicRoughnessMap', uniformName: '_MetallicRoughnessTexture' },
+    { surfaceKey: 'occlusionMap', uniformName: '_OcclusionTexture' },
+    { surfaceKey: 'emissiveMap', uniformName: '_EmissiveTexture' },
+    { surfaceKey: 'clearcoatMap', uniformName: '_ClearcoatTexture' },
+    { surfaceKey: 'clearcoatRoughnessMap', uniformName: '_ClearcoatRoughnessTexture' },
+    { surfaceKey: 'clearcoatNormalMap', uniformName: '_ClearcoatNormalTexture' },
+]);
+
+const bridgeSurfaceTextureMaps = (resource: SceneMaterialResource): void => {
+    const surface = resource.surface;
+    if (!surface) {
+        return;
+    }
+
+    for (const entry of SURFACE_MAP_TO_UNIFORM) {
+        const map = surface[entry.surfaceKey] as SceneMaterialSurfaceTextureBindingDefinition | undefined;
+        if (!map?.textureId) {
+            continue;
+        }
+
+        if (!resource.textureBindings.has(entry.uniformName)) {
+            resource.textureBindings.set(entry.uniformName, {
+                textureId: map.textureId,
+                samplerId: map.samplerId ?? null,
+                unit: map.unit,
+            });
+        }
+
+        const texCoord = map.texCoord ?? 0;
+        resource.uniforms.set(`${entry.uniformName}_TexCoord`, texCoord);
+
+        if (map.scale || map.offset) {
+            const sx = map.scale?.[0] ?? 1;
+            const sy = map.scale?.[1] ?? 1;
+            const ox = map.offset?.[0] ?? 0;
+            const oy = map.offset?.[1] ?? 0;
+            resource.uniforms.set(`${entry.uniformName}_ST`, Object.freeze([sx, sy, ox, oy]));
+        }
+
+        if (map.rotation !== undefined) {
+            resource.uniforms.set(`${entry.uniformName}_Rotation`, map.rotation);
+        }
+    }
+};
+
 export const cloneSceneMaterialDefinition = (
     definition: SceneMaterialDefinition
 ): SceneMaterialDefinition => ({
@@ -351,6 +412,13 @@ export class SceneMaterialRegistry {
                 resource.keywords.set(keyword, { enabled, source: 'auto' });
             }
         }
+
+        // Bridge surface texture maps → texture bindings + TexCoord/ST/Rotation uniforms.
+        // The glTF importer populates both `textures` and uniforms directly, but the
+        // Editor material-graph path only sets surface.<map>Map. Without this bridge
+        // the shader's `if (_BaseColorTexture_TexCoord >= 0)` guard stays at -1 and
+        // the texture is never sampled.
+        bridgeSurfaceTextureMaps(resource);
 
         const handle = toHandle(resource);
         this._handles.set(resource.id, handle);
