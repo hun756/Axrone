@@ -10,7 +10,7 @@ const readString = (gl: WebGL2RenderingContext, pname: number, fallback: string)
     try {
         const v = gl.getParameter(pname);
         return typeof v === 'string' ? v : fallback;
-    } catch {
+    } catch { // best-effort
         return fallback;
     }
 };
@@ -18,7 +18,7 @@ const readString = (gl: WebGL2RenderingContext, pname: number, fallback: string)
 const readInt = (gl: WebGL2RenderingContext, pname: number, fallback: number): number => {
     try {
         return clampInt(gl.getParameter(pname), fallback);
-    } catch {
+    } catch { // best-effort
         return fallback;
     }
 };
@@ -36,7 +36,7 @@ const readViewportDims = (gl: WebGL2RenderingContext): readonly [number, number]
             return Object.freeze([clampInt(v[0], 0), clampInt(v[1], 0)]) as readonly [number, number];
         }
         return Object.freeze([0, 0]) as readonly [number, number];
-    } catch {
+    } catch { // best-effort
         return Object.freeze([0, 0]) as readonly [number, number];
     }
 };
@@ -56,7 +56,7 @@ const readRange = (gl: WebGL2RenderingContext, pname: number): readonly [number,
             return Object.freeze([Number(v[0]) || 0, Number(v[1]) || 0]) as readonly [number, number];
         }
         return Object.freeze([0, 0]) as readonly [number, number];
-    } catch {
+    } catch { // best-effort
         return Object.freeze([0, 0]) as readonly [number, number];
     }
 };
@@ -67,7 +67,7 @@ const queryAnisotropy = (gl: WebGL2RenderingContext): { max: number; supported: 
     try {
         const max = clampInt(gl.getParameter((ext as unknown as { MAX_TEXTURE_MAX_ANISOTROPY_EXT: number }).MAX_TEXTURE_MAX_ANISOTROPY_EXT), 1);
         return { max: Math.max(1, max), supported: true };
-    } catch {
+    } catch { // best-effort
         return { max: 1, supported: false };
     }
 };

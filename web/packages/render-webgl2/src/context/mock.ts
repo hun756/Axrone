@@ -306,11 +306,35 @@ export const createMockGL = (options: MockGLOptions = {}): WebGL2RenderingContex
             drawElementsInstanced() {},
             blitFramebuffer() {},
             readPixels() {},
+            samplerParameterf() {},
+            samplerParameteri() {},
+            bindSampler() {},
+            createSampler() {
+                return {} as WebGLSampler;
+            },
+            deleteSampler() {},
+            isSampler() { return false; },
+            clearBufferfv() {},
+            clearBufferfi() {},
+            clearBufferiv() {},
+            clearBufferuiv() {},
+            fenceSync() { return {} as WebGLSync; },
+            deleteSync() {},
+            isSync() { return false; },
+            clientWaitSync() { return 0x911f; },
+            waitSync() {},
+            getSyncParameter() { return 0; },
+            getActiveUniform() { return null; },
+            getActiveAttrib() { return null; },
         },
         {
             get(target, prop) {
                 if (prop in target) return (target as Record<string | symbol, unknown>)[prop];
-                if (typeof prop === 'string' && prop.startsWith('MAX_')) return 4096;
+                if (typeof prop === 'string') {
+                    if (prop.startsWith('MAX_')) return 4096;
+                    if (/^[A-Z_]+$/.test(prop)) return 0;
+                    if (/^[a-z]/.test(prop)) return () => {};
+                }
                 return 0;
             },
         }

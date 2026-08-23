@@ -533,7 +533,7 @@ export class TextureFormatInfo {
             try {
                 TextureWebGLConstants.getCompressedInternalFormat(gl, format);
                 supported.push(format);
-            } catch {
+            } catch { // best-effort
                 continue;
             }
         }

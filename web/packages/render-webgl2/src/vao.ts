@@ -164,7 +164,7 @@ class ResourcePoolAdapter<T> implements ResourcePool<T> {
         this.nextId = 1;
         try {
             (this.descriptorPool as any)[Symbol.dispose]?.();
-        } catch {
+        } catch { // best-effort
             // ignore disposal errors
         }
         return resources;
@@ -216,7 +216,7 @@ class BufferAllocator {
 
         try {
             bb.release();
-        } catch {
+        } catch { // best-effort
             // ignore pool release errors
         }
 

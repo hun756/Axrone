@@ -25,7 +25,7 @@ export class ContextLifecycle {
                 'webglcontextrestored',
                 this.#onRestoredBound as EventListener
             );
-        } catch {}
+        } catch { // best-effort}
     }
 
     public get isLost(): boolean {
@@ -41,7 +41,7 @@ export class ContextLifecycle {
             const lost = this.#gl.isContextLost();
             this.#isLost = lost;
             return lost;
-        } catch {
+        } catch { // best-effort
             return this.#isLost;
         }
     }
@@ -94,7 +94,7 @@ export class ContextLifecycle {
                 'webglcontextrestored',
                 this.#onRestoredBound as EventListener
             );
-        } catch {
+        } catch { // best-effort
         }
         this.#emit({ kind: 'disposed' });
         this.#listeners.clear();
@@ -103,7 +103,7 @@ export class ContextLifecycle {
     #handleLost = (event: Event): void => {
         try {
             event.preventDefault();
-        } catch {
+        } catch { // best-effort
         }
         this.#isLost = true;
         this.#emit({ kind: 'lost', event });
@@ -118,7 +118,7 @@ export class ContextLifecycle {
         for (const listener of [...this.#listeners]) {
             try {
                 listener(event);
-            } catch {
+            } catch { // best-effort
             }
         }
     };

@@ -78,7 +78,7 @@ export class ExtensionRegistry implements IExtensionRegistry {
         let value: unknown | null = null;
         try {
             value = this.#gl.getExtension(name);
-        } catch {
+        } catch { // best-effort
             value = null;
         }
         if (!this.#sealed || !this.#cache.has(name)) {

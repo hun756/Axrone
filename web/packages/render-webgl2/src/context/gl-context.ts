@@ -174,7 +174,7 @@ export class GLContext implements IGLContext {
         if (ext && typeof ext.labelObject === 'function') {
             try {
                 ext.labelObject(type, object, label);
-            } catch {
+            } catch { // best-effort
             }
         }
     }
@@ -204,7 +204,7 @@ export class GLContext implements IGLContext {
         if (ext && typeof ext.loseContext === 'function') {
             try {
                 ext.loseContext();
-            } catch {
+            } catch { // best-effort
             }
         }
     }
@@ -217,7 +217,7 @@ export class GLContext implements IGLContext {
         if (ext && typeof ext.restoreContext === 'function') {
             try {
                 ext.restoreContext();
-            } catch {
+            } catch { // best-effort
             }
         }
     }

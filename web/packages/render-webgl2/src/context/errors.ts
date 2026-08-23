@@ -43,7 +43,7 @@ const serializeContext = (context: GLContextErrorContext): string => {
     if (!context || Object.keys(context).length === 0) return '';
     try {
         return ` ${JSON.stringify(context)}`;
-    } catch {
+    } catch { // best-effort
         return '';
     }
 };

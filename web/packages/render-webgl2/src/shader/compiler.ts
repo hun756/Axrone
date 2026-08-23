@@ -369,7 +369,7 @@ export class WebGLShaderCompiler implements IShaderCompiler {
                 const dbg = this._ctx.extensions.tryGet('KHR_debug') as unknown as { PROGRAM?: number } | null;
                 const type = dbg?.PROGRAM ?? 0x82e2;
                 this._ctx.labelObject(type, program as unknown as object, configuration.name);
-            } catch {}
+            } catch { // best-effort}
 
             return program;
         } catch (error) {

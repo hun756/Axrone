@@ -225,7 +225,7 @@ export class Buffer implements IBuffer {
             if (ext && typeof ext.labelObject === 'function') {
                 try {
                     ext.labelObject(ext.BUFFER ?? ctx.constants.ARRAY_BUFFER, this.#id as unknown as object, label);
-                } catch {}
+                } catch { // best-effort}
             } else {
                 ctx.labelObject(ctx.constants.ARRAY_BUFFER, this.#id as unknown as object, label);
             }
@@ -573,11 +573,11 @@ export class Buffer implements IBuffer {
                     if (currentBinding === this.#id) {
                         this.#ctx.state.bindBuffer(target, null);
                     }
-                } catch {}
+                } catch { // best-effort}
             }
 
             this.#gl.deleteBuffer(this.#id);
-        } catch {
+        } catch { // best-effort
         } finally {
             this.#isDisposed = true;
         }
@@ -609,7 +609,7 @@ class BufferFactory implements IBufferFactory {
         this.#constants = ctx.constants;
 
         this.#unsubscribeLost = ctx.onLost((event: Event) => {
-            try { event.preventDefault(); } catch {}
+            try { event.preventDefault(); } catch { // best-effort}
             this.#isDisposed = true;
             this.#tracker.dispose();
         });
@@ -699,7 +699,7 @@ class BufferFactory implements IBufferFactory {
     public dispose = (): void => {
         if (this.#isDisposed) return;
 
-        try { this.#unsubscribeLost?.(); } catch {}
+        try { this.#unsubscribeLost?.(); } catch { // best-effort}
 
         this.#tracker.dispose();
         this.#isDisposed = true;

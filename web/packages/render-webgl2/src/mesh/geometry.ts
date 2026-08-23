@@ -132,7 +132,7 @@ export class WebGLGeometry implements IGeometry {
             const dbg = ctx.extensions.tryGet('KHR_debug') as unknown as { VERTEX_ARRAY?: number } | null;
             const type = dbg?.VERTEX_ARRAY ?? 0x8074;
             ctx.labelObject(type, vao as unknown as object, `VAO_${this.id}`);
-        } catch {}
+        } catch { // best-effort}
 
         const vaoId = `vao_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
