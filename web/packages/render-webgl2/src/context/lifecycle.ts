@@ -25,7 +25,7 @@ export class ContextLifecycle {
                 'webglcontextrestored',
                 this.#onRestoredBound as EventListener
             );
-        } catch { // best-effort}
+        } catch { /* best-effort */ }
     }
 
     public get isLost(): boolean {

@@ -261,7 +261,7 @@ describe('Rendering Correctness (Pixel-Level)', () => {
     afterEach(() => {
         try {
             (factory as any)?.dispose?.();
-        } catch { // best-effort}
+        } catch { /* best-effort */ }
         if (canvas.parentNode) {
             canvas.parentNode.removeChild(canvas);
         }

@@ -308,7 +308,6 @@ export const createMockGL = (options: MockGLOptions = {}): WebGL2RenderingContex
             readPixels() {},
             samplerParameterf() {},
             samplerParameteri() {},
-            bindSampler() {},
             createSampler() {
                 return {} as WebGLSampler;
             },
