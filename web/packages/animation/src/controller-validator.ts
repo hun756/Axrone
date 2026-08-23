@@ -28,7 +28,7 @@ export interface AnimationControllerGraphValidationOptions {
     readonly knownBones?: readonly string[];
 }
 
-const VALID_LAYER_MODES = new Set<AnimationLayerBlendMode>(['override', 'additive']);
+const VALID_LAYER_MODES: readonly AnimationLayerBlendMode[] = ['override', 'additive'] as const;
 
 const pushDiagnostic = (
     diagnostics: AnimationControllerGraphDiagnostic[],
@@ -340,7 +340,7 @@ export const validateAnimationLayerDefinition = (
             'layer.weight'
         );
     }
-    if (resolved.mode !== undefined && VALID_LAYER_MODES.has(resolved.mode) === false) {
+    if (resolved.mode !== undefined && VALID_LAYER_MODES.includes(resolved.mode) === false) {
         pushDiagnostic(
             diagnostics,
             'animation.controller.layer.mode.invalid',
