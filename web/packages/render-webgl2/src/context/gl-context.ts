@@ -54,15 +54,21 @@ export class GLContext implements IGLContext {
         enableStateCache = true,
         enableDebugLabels = true
     ) {
-        const preHasGetParameter = typeof (gl as unknown as { getParameter?: unknown }).getParameter === 'function';
-        const preHasCreateTexture =
-            typeof (gl as unknown as { createTexture?: unknown }).createTexture === 'function';
-        const preHasCreateBuffer =
-            typeof (gl as unknown as { createBuffer?: unknown }).createBuffer === 'function';
+        const src = gl as unknown as Record<string, unknown>;
+        const hasFn = (name: string): boolean => typeof src[name] === 'function';
+        const hasGLSurface =
+            hasFn('getParameter') ||
+            hasFn('createTexture') ||
+            hasFn('createBuffer') ||
+            hasFn('createProgram') ||
+            hasFn('createShader') ||
+            hasFn('bindBuffer');
 
-        if (!isWebGL2(gl) && !preHasGetParameter && !preHasCreateTexture && !preHasCreateBuffer) {
+        if (!isWebGL2(gl) && !hasGLSurface) {
             throw new GLContextError('INVALID_VALUE', locale, { reason: 'Not a WebGL2RenderingContext' });
         }
+
+        const preHasGetParameter = hasFn('getParameter');
 
         let effectiveGL: WebGL2RenderingContext = gl;
         const needsWrap =
@@ -77,7 +83,6 @@ export class GLContext implements IGLContext {
             const base = gl as unknown as object;
             effectiveGL = Object.create(base) as WebGL2RenderingContext;
             const w = effectiveGL as unknown as Record<string, unknown>;
-            const src = gl as unknown as Record<string, unknown>;
             if (!preHasGetParameter) w['getParameter'] = () => 0;
             if (typeof src['getExtension'] !== 'function') w['getExtension'] = () => null;
             if (typeof src['getContextAttributes'] !== 'function')
