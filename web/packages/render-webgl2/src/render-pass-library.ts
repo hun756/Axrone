@@ -632,17 +632,25 @@ class WebGL2FramebufferResolver {
 			this._cache.set(cacheKey, framebuffer);
 		}
 
-		this._gl.bindFramebuffer(this._gl.FRAMEBUFFER, framebuffer);
+		this._ctx.state.bindFramebuffer(this._gl.FRAMEBUFFER, framebuffer);
 
-		if (colorHandle) {
-			this._gl.framebufferTexture2D(
-				this._gl.FRAMEBUFFER,
-				this._gl.COLOR_ATTACHMENT0,
-				this._gl.TEXTURE_2D,
-				colorHandle.texture,
-				0
-			);
-			this._gl.drawBuffers([this._gl.COLOR_ATTACHMENT0]);
+		const colorHandles: WebGL2RenderTextureNativeHandle[] = [];
+		if (colorHandle) colorHandles.push(colorHandle);
+
+		if (colorHandles.length > 0) {
+			const attachments: number[] = [];
+			for (let i = 0; i < colorHandles.length; i++) {
+				const h = colorHandles[i]!;
+				this._gl.framebufferTexture2D(
+					this._gl.FRAMEBUFFER,
+					(this._gl.COLOR_ATTACHMENT0 as number) + i,
+					this._gl.TEXTURE_2D,
+					h.texture,
+					0
+				);
+				attachments.push((this._gl.COLOR_ATTACHMENT0 as number) + i);
+			}
+			this._gl.drawBuffers(attachments);
 		} else {
 			this._gl.drawBuffers([]);
 		}
@@ -1027,6 +1035,128 @@ const createBuiltinExecutors = (
 	const { gl, locale, framebuffers, programs } = dependencies;
 
 	return Object.freeze([
+		defineWebGL2RenderPassExecutor({
+			kind: 'depth-prepass',
+			name: 'builtin-depth-prepass',
+			priority: BUILTIN_EXECUTOR_PRIORITY,
+			execute(pass, context) {
+				const depthTex = framebuffers.getTextureHandle(context.graph, pass.metadata.depth);
+				if (!depthTex || depthTex.target !== gl.TEXTURE_2D) {
+					throw createValidationError(locale, 'SOURCE_TEXTURE_INVALID', resolveSourceTextureMessage(locale, 'tonemap' as never), pass);
+				}
+				dependencies.ctx.state.colorMask(false, false, false, false);
+				dependencies.ctx.state.depthMask(true);
+				gl.enable(gl.DEPTH_TEST);
+				gl.depthFunc(gl.LESS);
+				return { drawCalls: pass.items?.length ?? 0, notes: Object.freeze(['builtin-depth-prepass']) as readonly string[] };
+			},
+		}),
+		defineWebGL2RenderPassExecutor({
+			kind: 'shadow',
+			name: 'builtin-shadow',
+			priority: BUILTIN_EXECUTOR_PRIORITY,
+			execute(pass, context) {
+				const atlas = framebuffers.getTextureHandle(context.graph, pass.metadata.atlas);
+				if (!atlas || atlas.target !== gl.TEXTURE_2D) {
+					throw createValidationError(locale, 'SOURCE_TEXTURE_INVALID', resolveSourceTextureMessage(locale, 'tonemap' as never), pass);
+				}
+				dependencies.ctx.state.colorMask(false, false, false, false);
+				dependencies.ctx.state.depthMask(true);
+				gl.enable(gl.DEPTH_TEST);
+				gl.enable(gl.CULL_FACE);
+				dependencies.ctx.state.cullFace(gl.FRONT);
+				const result = { drawCalls: pass.items?.length ?? 0, notes: Object.freeze(['builtin-shadow']) as readonly string[] };
+				dependencies.ctx.state.cullFace(gl.BACK);
+				return result;
+			},
+		}),
+		defineWebGL2RenderPassExecutor({
+			kind: 'opaque',
+			name: 'builtin-opaque',
+			priority: BUILTIN_EXECUTOR_PRIORITY,
+			execute(pass) {
+				dependencies.ctx.state.colorMask(true, true, true, true);
+				dependencies.ctx.state.depthMask(true);
+				gl.enable(gl.DEPTH_TEST);
+				dependencies.ctx.state.depthFunc(gl.LESS);
+				gl.enable(gl.CULL_FACE);
+				dependencies.ctx.state.cullFace(gl.BACK);
+				dependencies.ctx.state.frontFace(gl.CCW);
+				return { drawCalls: pass.items?.length ?? 0, notes: Object.freeze(['builtin-opaque']) as readonly string[] };
+			},
+		}),
+		defineWebGL2RenderPassExecutor({
+			kind: 'transparent',
+			name: 'builtin-transparent',
+			priority: BUILTIN_EXECUTOR_PRIORITY,
+			execute(pass) {
+				dependencies.ctx.state.colorMask(true, true, true, true);
+				dependencies.ctx.state.depthMask(false);
+				gl.enable(gl.DEPTH_TEST);
+				gl.enable(gl.BLEND);
+				dependencies.ctx.state.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+				dependencies.ctx.state.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
+				const result = { drawCalls: pass.items?.length ?? 0, notes: Object.freeze(['builtin-transparent']) as readonly string[] };
+				gl.disable(gl.BLEND);
+				dependencies.ctx.state.depthMask(true);
+				return result;
+			},
+		}),
+		defineWebGL2RenderPassExecutor({
+			kind: 'skybox',
+			name: 'builtin-skybox',
+			priority: BUILTIN_EXECUTOR_PRIORITY,
+			execute(pass) {
+				dependencies.ctx.state.colorMask(true, true, true, true);
+				dependencies.ctx.state.depthMask(false);
+				gl.enable(gl.DEPTH_TEST);
+				dependencies.ctx.state.depthFunc(gl.LEQUAL);
+				gl.disable(gl.CULL_FACE);
+				const result = { drawCalls: 1, notes: Object.freeze(['builtin-skybox']) as readonly string[] };
+				dependencies.ctx.state.depthFunc(gl.LESS);
+				dependencies.ctx.state.depthMask(true);
+				return result;
+			},
+		}),
+		defineWebGL2RenderPassExecutor({
+			kind: 'reflection-probe',
+			name: 'builtin-reflection-probe',
+			priority: BUILTIN_EXECUTOR_PRIORITY,
+			execute(pass) {
+				dependencies.ctx.state.colorMask(true, true, true, true);
+				dependencies.ctx.state.depthMask(true);
+				gl.enable(gl.DEPTH_TEST);
+				return { drawCalls: pass.items?.length ?? 0, notes: Object.freeze(['builtin-reflection-probe']) as readonly string[] };
+			},
+		}),
+		defineWebGL2RenderPassExecutor({
+			kind: 'global-illumination',
+			name: 'builtin-global-illumination',
+			priority: BUILTIN_EXECUTOR_PRIORITY,
+			execute(pass) {
+				return { drawCalls: pass.items?.length ?? 0, notes: Object.freeze(['builtin-global-illumination']) as readonly string[] };
+			},
+		}),
+		defineWebGL2RenderPassExecutor({
+			kind: 'volumetric',
+			name: 'builtin-volumetric',
+			priority: BUILTIN_EXECUTOR_PRIORITY,
+			execute(pass) {
+				gl.enable(gl.BLEND);
+				dependencies.ctx.state.blendFuncSeparate(gl.ONE, gl.ONE, gl.ONE, gl.ONE);
+				const result = { drawCalls: pass.items?.length ?? 0, notes: Object.freeze(['builtin-volumetric']) as readonly string[] };
+				gl.disable(gl.BLEND);
+				return result;
+			},
+		}),
+		defineWebGL2RenderPassExecutor({
+			kind: 'light-bake',
+			name: 'builtin-light-bake',
+			priority: BUILTIN_EXECUTOR_PRIORITY,
+			execute(pass) {
+				return { drawCalls: pass.items?.length ?? 0, notes: Object.freeze(['builtin-light-bake']) as readonly string[] };
+			},
+		}),
 		defineWebGL2RenderPassExecutor({
 			kind: 'present',
 			name: 'builtin-present',
