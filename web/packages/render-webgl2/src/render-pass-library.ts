@@ -30,6 +30,7 @@ import {
 } from './pipeline-contracts';
 import type { ContextSource, IGLContext } from './context';
 import { resolveContext } from './context';
+import { WebGL2RenderPassExecutorRegistry } from './render-pass/registry';
 
 import {
 	EXPOSURE_HISTORY_FRAGMENT_SHADER_SOURCE,
@@ -61,12 +62,6 @@ interface WebGL2RenderPassErrorOptions {
 	readonly locale: WebGL2RenderPassLocale;
 	readonly cause?: unknown;
 	readonly pass?: ResolvedRenderPass;
-}
-
-interface RegisteredExecutor {
-	readonly descriptor: WebGL2AnyRenderPassExecutorDescriptor;
-	readonly priority: number;
-	readonly sequence: number;
 }
 
 interface MutableProfilerState {
@@ -352,98 +347,28 @@ const createExecutionError = (
 		cause,
 	});
 
-const normalizeExecutorRegistration = (
-	registration: WebGL2AnyRenderPassExecutorRegistration
-): WebGL2AnyRenderPassExecutorDescriptor => {
-	const descriptor = isWebGL2RenderPassExecutorDescriptor(registration)
-		? registration
-		: defineWebGL2RenderPassExecutor(registration);
-
-	return Object.freeze({
-		...descriptor,
-		priority: Number.isFinite(descriptor.priority) ? descriptor.priority : 0,
-	});
-};
-
-class WebGL2RenderPassExecutorRegistry {
-	private readonly _byKind = new Map<RenderPassKind, readonly WebGL2AnyRenderPassExecutorDescriptor[]>();
-	private readonly _all: readonly WebGL2AnyRenderPassExecutorDescriptor[];
-
-	constructor(registrations: readonly WebGL2AnyRenderPassExecutorRegistration[]) {
-		const grouped = new Map<RenderPassKind, RegisteredExecutor[]>();
-		const all: WebGL2AnyRenderPassExecutorDescriptor[] = [];
-
-		for (let index = 0; index < registrations.length; index += 1) {
-			const descriptor = normalizeExecutorRegistration(registrations[index]!);
-			const current = grouped.get(descriptor.kind) ?? [];
-			current.push({
-				descriptor,
-				priority: descriptor.priority,
-				sequence: index,
-			});
-			grouped.set(descriptor.kind, current);
-			all.push(descriptor);
-		}
-
-		for (const [kind, entries] of grouped.entries()) {
-			entries.sort((left, right) =>
-				right.priority === left.priority
-					? left.sequence - right.sequence
-					: right.priority - left.priority
-			);
-			this._byKind.set(
-				kind,
-				Object.freeze(entries.map((entry) => entry.descriptor))
-			);
-		}
-
-		this._all = Object.freeze(all);
-	}
-
-	has(kind: RenderPassKind): boolean {
-		return (this._byKind.get(kind)?.length ?? 0) > 0;
-	}
-
-	list(kind?: RenderPassKind): readonly WebGL2AnyRenderPassExecutorDescriptor[] {
-		return kind ? this._byKind.get(kind) ?? EMPTY_EXECUTORS : this._all;
-	}
-
-	resolve<K extends RenderPassKind>(
-		pass: WebGL2RenderPassOf<K>,
-		context: RenderExecutionContext<WebGL2RenderResourceHandle>,
-		execution: WebGL2RenderPassExecutionContext
-	): WebGL2RenderPassExecutorDescriptor<K> | null {
-		const descriptors = this._byKind.get(pass.kind);
-		if (!descriptors) {
-			return null;
-		}
-
-		for (let index = 0; index < descriptors.length; index += 1) {
-			const descriptor = descriptors[index]!;
-			if (descriptor.kind !== pass.kind) {
-				continue;
-			}
-
-			// The `_byKind` bucket plus the kind check above guarantee the
-			// descriptor targets this pass kind; the distributed union cannot
-			// express that relationship for a generic K, so narrow explicitly.
-			const typedDescriptor =
-				descriptor as unknown as WebGL2RenderPassExecutorDescriptor<K>;
-			if (!typedDescriptor.matches || typedDescriptor.matches(pass, context, execution)) {
-				return typedDescriptor;
-			}
-		}
-
-		return null;
-	}
-}
-
 const resolveFramebufferTargets = (
 	pass: ResolvedRenderPass
 ): {
 	readonly colorTarget: RenderResourceName | null;
+	readonly colorTargets?: readonly RenderResourceName[] | null;
 	readonly depthTarget: RenderResourceName | null;
 } => {
+	const meta = pass.metadata as unknown as { colorAttachments?: readonly RenderResourceName[]; gBuffer?: readonly RenderResourceName[] };
+	if (meta.colorAttachments && Array.isArray(meta.colorAttachments) && meta.colorAttachments.length > 0) {
+		return {
+			colorTarget: meta.colorAttachments[0] ?? null,
+			colorTargets: meta.colorAttachments,
+			depthTarget: (pass.metadata as unknown as { depth?: RenderResourceName | null }).depth ?? null,
+		};
+	}
+	if (meta.gBuffer && Array.isArray(meta.gBuffer) && meta.gBuffer.length > 0) {
+		return {
+			colorTarget: meta.gBuffer[0] ?? null,
+			colorTargets: meta.gBuffer,
+			depthTarget: (pass.metadata as unknown as { depth?: RenderResourceName | null }).depth ?? null,
+		};
+	}
 	switch (pass.kind) {
 		case 'depth-prepass':
 			return {
@@ -580,7 +505,8 @@ class WebGL2FramebufferResolver {
 	resolveBinding(
 		colorTarget: RenderResourceName | null,
 		depthTarget: RenderResourceName | null,
-		context: RenderExecutionContext<WebGL2RenderResourceHandle>
+		context: RenderExecutionContext<WebGL2RenderResourceHandle>,
+		colorTargets?: readonly RenderResourceName[] | null
 	): WebGL2ResolvedFramebufferBinding {
 		if (this._directFrameOutput && (isFrameResourceName(colorTarget) || isFrameResourceName(depthTarget))) {
 			return {
@@ -618,7 +544,8 @@ class WebGL2FramebufferResolver {
 			);
 		}
 
-		const cacheKey = createFramebufferCacheKey(colorTarget, depthTarget);
+		const effectiveColorKey = colorTargets && colorTargets.length > 0 ? colorTargets.join('+') : (colorTarget ?? 'none');
+		const cacheKey = `${effectiveColorKey}|${depthTarget ?? 'none'}`;
 		let framebuffer = this._cache.get(cacheKey);
 		if (!framebuffer) {
 			framebuffer = this._gl.createFramebuffer();
@@ -635,7 +562,12 @@ class WebGL2FramebufferResolver {
 		this._ctx.state.bindFramebuffer(this._gl.FRAMEBUFFER, framebuffer);
 
 		const colorHandles: WebGL2RenderTextureNativeHandle[] = [];
-		if (colorHandle) colorHandles.push(colorHandle);
+		if (colorTargets && colorTargets.length > 0) {
+			for (const ct of colorTargets) {
+				const h = this.getTextureHandle(context.graph, ct);
+				if (h) colorHandles.push(h);
+			}
+		} else if (colorHandle) colorHandles.push(colorHandle);
 
 		if (colorHandles.length > 0) {
 			const attachments: number[] = [];
@@ -699,7 +631,7 @@ class WebGL2FramebufferResolver {
 		}
 
 		const targets = resolveFramebufferTargets(pass);
-		return this.resolveBinding(targets.colorTarget, targets.depthTarget, context);
+		return this.resolveBinding(targets.colorTarget, targets.depthTarget, context, (targets as unknown as { colorTargets?: readonly RenderResourceName[] }).colorTargets ?? null);
 	}
 
 	dispose(): void {
