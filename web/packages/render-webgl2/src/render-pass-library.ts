@@ -1,4 +1,3 @@
-/** @deprecated Raw WebGL2RenderingContext overloads in this file are deprecated. Prefer IGLContext. */
 import {
 	BUILTIN_POST_PROCESS_EFFECTS as CORE_BUILTIN_POST_PROCESS_EFFECTS,
 	type ReadonlyRenderResourceRegistry,

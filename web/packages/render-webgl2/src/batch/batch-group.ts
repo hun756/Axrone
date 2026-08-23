@@ -1,4 +1,3 @@
-/** @deprecated Raw WebGL2RenderingContext overloads in this file are deprecated. Prefer IGLContext. */
 import { Mat4 } from '@axrone/numeric';
 import { ObjectPool } from '@axrone/memory';
 import { IBatchable, IBatchGroup } from './interfaces';

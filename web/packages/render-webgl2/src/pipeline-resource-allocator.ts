@@ -1,4 +1,3 @@
-/** @deprecated Raw WebGL2RenderingContext overloads in this file are deprecated. Prefer IGLContext. */
 import type {
     RenderResourceAllocator,
     RenderTextureDescriptor,
