@@ -1,5 +1,12 @@
 import { IBuffer, IBufferFactory, createBufferFactory, GLBufferUsage } from '../buffer';
 import { IVertexBuffer, IVertexLayout, BufferUsage, MeshError, MeshErrorCode } from './interfaces';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 
 export class WebGLVertexBuffer implements IVertexBuffer {
     public readonly id: string;
@@ -10,27 +17,37 @@ export class WebGLVertexBuffer implements IVertexBuffer {
     public readonly vertexCount: number;
     public readonly layout: IVertexLayout;
 
+    private readonly _ctx: IGLContext;
+    private readonly gl: WebGL2RenderingContext;
+
     private _isDisposed = false;
 
     constructor(
-        gl: WebGL2RenderingContext,
+        source: ContextSource,
         id: string,
         data: ArrayBuffer | ArrayBufferView,
         layout: IVertexLayout,
         usage: BufferUsage = BufferUsage.STATIC_DRAW
     ) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
         this.id = id;
         this.usage = usage;
         this.layout = layout;
         this.vertexCount = data.byteLength / layout.stride;
         this.size = data.byteLength;
 
-        this.bufferFactory = createBufferFactory(gl);
+        this.bufferFactory = createBufferFactory(ctx);
         this.buffer = this.bufferFactory.createArrayBuffer({
             initialData: data as BufferSource,
             usage: this.convertUsage(usage),
             label: `VertexBuffer_${id}`,
         });
+    }
+
+    public get context(): IGLContext {
+        return this._ctx;
     }
 
     private convertUsage(usage: BufferUsage): GLBufferUsage {

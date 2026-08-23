@@ -7,8 +7,16 @@ import {
     BufferUsage,
 } from './interfaces';
 import { ByteBuffer } from '@axrone/memory';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 
 export class WebGLIndexBuffer implements IIndexBuffer {
+    private readonly _ctx: IGLContext;
     private readonly gl: WebGL2RenderingContext;
     private readonly bufferFactory: IBufferFactory;
     private buffer: IBuffer | null = null;
@@ -17,9 +25,11 @@ export class WebGLIndexBuffer implements IIndexBuffer {
     private _usage: BufferUsage;
     private _id: string;
 
-    constructor(gl: WebGL2RenderingContext, config: IIndexBufferConfig) {
-        this.gl = gl;
-        this.bufferFactory = createBufferFactory(gl);
+    constructor(source: ContextSource, config: IIndexBufferConfig) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
+        this.bufferFactory = createBufferFactory(ctx);
         this._usage = config.usage || BufferUsage.STATIC_DRAW;
         this._indexType = config.indexType || IndexType.UNSIGNED_SHORT;
         this._id = `index_buffer_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
@@ -70,6 +80,10 @@ export class WebGLIndexBuffer implements IIndexBuffer {
 
     get isDisposed(): boolean {
         return this.buffer === null;
+    }
+
+    get context(): IGLContext {
+        return this._ctx;
     }
 
     setData(data: ArrayBufferView | ArrayBuffer | ByteBuffer): IndexBufferError {

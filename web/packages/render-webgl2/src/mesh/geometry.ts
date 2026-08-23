@@ -16,6 +16,13 @@ import {
 import { IGeometryBuffers, IGeometryLayout } from '@axrone/geometry';
 import { WebGLVertexBuffer } from './vertex-buffer';
 import { WebGLIndexBuffer } from './index-buffer';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 
 export class WebGLGeometry implements IGeometry {
     public readonly id: string;
@@ -29,14 +36,20 @@ export class WebGLGeometry implements IGeometry {
     public readonly boundingSphere: IBoundingSphere;
     public readonly vertexBuffers: readonly IVertexBuffer[];
 
+    private readonly _ctx: IGLContext;
+    private readonly gl: WebGL2RenderingContext;
+
     private _isDisposed = false;
 
     constructor(
-        gl: WebGL2RenderingContext,
+        source: ContextSource,
         id: string,
         geometryData: IGeometryBuffers,
         topology: PrimitiveTopology = PrimitiveTopology.TRIANGLES
     ) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
         this.id = id;
         this.primitiveTopology = topology;
         this.vertexCount = geometryData.layout.vertexCount;
@@ -44,7 +57,7 @@ export class WebGLGeometry implements IGeometry {
 
         const vertexLayout = this.createVertexLayout(geometryData.layout);
         this.vertexBuffer = new WebGLVertexBuffer(
-            gl,
+            ctx,
             `${id}_vertices`,
             geometryData.vertices.toUint8Array(),
             vertexLayout
@@ -52,7 +65,7 @@ export class WebGLGeometry implements IGeometry {
 
         if (geometryData.layout.indexCount > 0) {
             const indexData = geometryData.indices.toUint8Array();
-            this.indexBuffer = new WebGLIndexBuffer(gl, {
+            this.indexBuffer = new WebGLIndexBuffer(ctx, {
                 data: new Uint16Array(indexData.buffer),
                 usage: BufferUsage.STATIC_DRAW,
                 indexType: IndexType.UNSIGNED_SHORT,
@@ -63,7 +76,7 @@ export class WebGLGeometry implements IGeometry {
 
         this.vertexBuffers = [this.vertexBuffer];
 
-        this.vertexArrayObject = this.createVAO(gl);
+        this.vertexArrayObject = this.createVAO(ctx);
 
         this.boundingBox = this.computeInitialBounds(geometryData);
         this.boundingSphere = this.computeInitialBoundingSphere(geometryData);
@@ -111,11 +124,20 @@ export class WebGLGeometry implements IGeometry {
         };
     }
 
-    private createVAO(gl: WebGL2RenderingContext): IVertexArrayObject {
+    private createVAO(source: ContextSource): IVertexArrayObject {
+        const gl = resolveContext(source).gl;
         const vao = gl.createVertexArray();
         if (!vao) {
             throw new MeshError('Failed to create VAO', MeshErrorCode.VAO_CREATION_FAILED);
         }
+
+        const ctx = resolveContext(source);
+        // Label VAO via IGLContext if available
+        try {
+            const dbg = ctx.extensions.tryGet('KHR_debug') as unknown as { VERTEX_ARRAY?: number } | null;
+            const type = dbg?.VERTEX_ARRAY ?? 0x8074;
+            ctx.labelObject(type, vao as unknown as object, `VAO_${this.id}`);
+        } catch {}
 
         const vaoId = `vao_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
@@ -150,6 +172,10 @@ export class WebGLGeometry implements IGeometry {
                 gl.deleteVertexArray(vao);
             },
         } as IVertexArrayObject;
+    }
+
+    public get context(): IGLContext {
+        return this._ctx;
     }
 
     public get isDisposed(): boolean {

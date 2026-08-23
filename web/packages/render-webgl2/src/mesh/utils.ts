@@ -1,4 +1,5 @@
 import { Vec3, Mat4 } from '@axrone/numeric';
+import type { IGLContext } from '../context';
 import {
     VertexAttributeType,
     VertexDataType,
@@ -95,6 +96,52 @@ export class MeshWebGLConstants {
             );
         }
         return constant;
+    }
+
+    public static getVertexDataTypeConstantForContext(ctx: IGLContext, type: VertexDataType): number {
+        switch (type) {
+            case VertexDataType.BYTE: return ctx.constants.BYTE;
+            case VertexDataType.UNSIGNED_BYTE: return ctx.constants.UNSIGNED_BYTE;
+            case VertexDataType.SHORT: return ctx.constants.SHORT;
+            case VertexDataType.UNSIGNED_SHORT: return ctx.constants.UNSIGNED_SHORT;
+            case VertexDataType.INT: return ctx.constants.INT;
+            case VertexDataType.UNSIGNED_INT: return ctx.constants.UNSIGNED_INT;
+            case VertexDataType.FLOAT: return ctx.constants.FLOAT;
+            case VertexDataType.HALF_FLOAT: return ctx.constants.HALF_FLOAT;
+            default: return this.getVertexDataTypeConstant(type);
+        }
+    }
+
+    public static getPrimitiveTopologyConstantForContext(ctx: IGLContext, topology: PrimitiveTopology): number {
+        switch (topology) {
+            case PrimitiveTopology.POINTS: return ctx.constants.POINTS;
+            case PrimitiveTopology.LINES: return ctx.constants.LINES;
+            default: return this.getPrimitiveTopologyConstant(topology);
+        }
+    }
+
+    public static getBufferUsageConstantForContext(ctx: IGLContext, usage: BufferUsage): number {
+        switch (usage) {
+            case BufferUsage.STATIC_DRAW: return ctx.constants.STATIC_DRAW;
+            case BufferUsage.DYNAMIC_DRAW: return ctx.constants.DYNAMIC_DRAW;
+            case BufferUsage.STREAM_DRAW: return ctx.constants.STREAM_DRAW;
+            case BufferUsage.STATIC_READ: return ctx.constants.STATIC_READ;
+            case BufferUsage.DYNAMIC_READ: return ctx.constants.DYNAMIC_READ;
+            case BufferUsage.STREAM_READ: return ctx.constants.STREAM_READ;
+            case BufferUsage.STATIC_COPY: return ctx.constants.STATIC_COPY;
+            case BufferUsage.DYNAMIC_COPY: return ctx.constants.DYNAMIC_COPY;
+            case BufferUsage.STREAM_COPY: return ctx.constants.STREAM_COPY;
+            default: return this.getBufferUsageConstant(usage);
+        }
+    }
+
+    public static getIndexTypeConstantForContext(ctx: IGLContext, type: IndexType): number {
+        switch (type) {
+            case IndexType.UNSIGNED_BYTE: return ctx.constants.UNSIGNED_BYTE;
+            case IndexType.UNSIGNED_SHORT: return ctx.constants.UNSIGNED_SHORT;
+            case IndexType.UNSIGNED_INT: return ctx.constants.UNSIGNED_INT;
+            default: return this.getIndexTypeConstant(type);
+        }
     }
 }
 

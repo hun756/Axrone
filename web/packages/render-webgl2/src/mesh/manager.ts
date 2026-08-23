@@ -1,5 +1,12 @@
 import { IBuffer, IBufferFactory, createBufferFactory } from '../buffer';
 import { IGeometryBuffers } from '@axrone/geometry';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 import {
     createSphere,
     createBox,
@@ -21,13 +28,20 @@ export interface IMeshData {
 }
 
 export class MeshManager {
+    private readonly _ctx: IGLContext;
     private readonly gl: WebGL2RenderingContext;
     private readonly bufferFactory: IBufferFactory;
     private readonly meshCache = new Map<string, IMeshData>();
 
-    constructor(gl: WebGL2RenderingContext) {
-        this.gl = gl;
-        this.bufferFactory = createBufferFactory(gl);
+    constructor(source: ContextSource) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
+        this.bufferFactory = createBufferFactory(ctx);
+    }
+
+    public get context(): IGLContext {
+        return this._ctx;
     }
 
     public createMeshFromGeometry(id: string, geometryBuffers: IGeometryBuffers): IMeshData {
