@@ -605,7 +605,7 @@ export class ShaderInstance implements IShaderInstance {
                 shader: this.shader.name,
             });
         }
-        const gl = resolveRawGL(source as ContextSource);
+        const gl = resolveRawGL(source as ContextSource)!;
         const program = this.variant.shader.program;
         // FIX(upstream): lastBoundProgram cache is per-INSTANCE, but the GL
         // program binding is CONTEXT-GLOBAL. When host code interleaves draws
@@ -627,7 +627,7 @@ export class ShaderInstance implements IShaderInstance {
     unbind(source: ContextSource): void;
     unbind(gl: WebGL2RenderingContext): void;
     unbind(source: ContextSource | WebGL2RenderingContext): void {
-        const gl = resolveRawGL(source as ContextSource);
+        const gl = resolveRawGL(source as ContextSource)!;
         for (const unit of this.boundTextureUnits) {
             gl.activeTexture(gl.TEXTURE0 + unit);
             gl.bindTexture(gl.TEXTURE_2D, null);

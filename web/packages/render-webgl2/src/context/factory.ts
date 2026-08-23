@@ -120,9 +120,13 @@ export const resolveContextNullable = (
     source: ContextSource | null | undefined
 ): IGLContext | null => (source == null ? null : resolveContext(source));
 
-export const resolveRawGL = (
+export function resolveRawGL(source: ContextSource): WebGL2RenderingContext;
+export function resolveRawGL(source: ContextSource | null | undefined): WebGL2RenderingContext | null;
+export function resolveRawGL(
     source: ContextSource | null | undefined
-): WebGL2RenderingContext | null =>
-    source == null ? null : isGLContext(source) ? source.gl : (source as WebGL2RenderingContext);
+): WebGL2RenderingContext | null {
+    if (source == null) return null;
+    return isGLContext(source) ? source.gl : (source as WebGL2RenderingContext);
+}
 
 export type GLContextFactory = typeof createGLContext;
