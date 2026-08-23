@@ -1,3 +1,4 @@
+import type { IGLContext } from './context';
 import type {
     RenderExecutionContext,
     RenderFrameResult,
@@ -6,6 +7,8 @@ import type {
     RenderResourceName,
     ResolvedRenderPass,
 } from '@axrone/render-core/types';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
 
 declare const webgl2RenderPassExecutorIdBrand: unique symbol;
 declare const webgl2NativeFramebufferHandleBrand: unique symbol;
@@ -156,7 +159,8 @@ export interface ManagedWebGL2RenderPassLibrary
 }
 
 export interface WebGL2RenderPassLibraryOptions {
-    readonly gl: WebGL2RenderingContext;
+    readonly context?: IGLContext;
+    readonly gl: ContextSource;
     readonly executors?: readonly WebGL2AnyRenderPassExecutorRegistration[];
     readonly defaultFramebuffer?: WebGLFramebuffer | null;
     readonly strictUnsupportedPasses?: boolean;
