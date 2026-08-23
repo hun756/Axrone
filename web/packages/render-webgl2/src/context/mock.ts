@@ -306,6 +306,30 @@ export const createMockGL = (options: MockGLOptions = {}): WebGL2RenderingContex
             drawElementsInstanced() {},
             blitFramebuffer() {},
             readPixels() {},
+            createQuery() {
+                return {} as WebGLQuery;
+            },
+            deleteQuery() {},
+            isQuery() { return false; },
+            beginQuery() {},
+            endQuery() {},
+            getQuery() { return null; },
+            getQueryParameter(_q: WebGLQuery, pname: number) {
+                if (pname === 0x8866) return true;
+                if (pname === 0x8866) return true;
+                return 1;
+            },
+            createTransformFeedback() {
+                return {} as WebGLTransformFeedback;
+            },
+            deleteTransformFeedback() {},
+            isTransformFeedback() { return false; },
+            bindTransformFeedback() {},
+            beginTransformFeedback() {},
+            endTransformFeedback() {},
+            pauseTransformFeedback() {},
+            resumeTransformFeedback() {},
+            transformFeedbackVaryings() {},
             samplerParameterf() {},
             samplerParameteri() {},
             createSampler() {
