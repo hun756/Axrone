@@ -15,6 +15,7 @@ export interface SceneBillboardBatchRuntimeOptions {
     readonly gl: WebGL2RenderingContext;
     readonly uniformWriter: SceneUniformWriteTarget;
     readonly renderStateApplier: Pick<SceneRenderStateApplier, 'reset'>;
+    readonly stateCache?: import('@axrone/render-webgl2').IGLStateCache;
 }
 
 export interface SceneBillboardBatchRuntimeRenderParams {
@@ -107,6 +108,7 @@ export class SceneBillboardBatchRuntime {
         this._guard = new SceneDirectGlPassGuard({
             gl: _options.gl,
             renderStateApplier: _options.renderStateApplier,
+            stateCache: _options.stateCache,
             label: 'billboard-batch',
         });
         this._vertexCapacity = 256;
