@@ -1,6 +1,7 @@
 import type { IDisposable } from './disposable';
 import type { IBindableTarget } from './interfaces';
 import { BufferPool, ResourceTracker } from './internal/buffer-management';
+import { DisposalTracker, assertAlive } from './internal/disposable';
 import type { Brand } from '@axrone/utility';
 import type { GLConstants } from './context/types';
 import type { ContextSource, IGLContext } from './context';
@@ -158,18 +159,32 @@ const isBufferData = (value: unknown): value is BufferSource | SharedArrayBuffer
 export class Buffer implements IBuffer {
     readonly #ctx: IGLContext;
     readonly #gl: WebGL2RenderingContext;
-    readonly #id: WebGLBuffer;
     readonly #target: GLBufferTarget;
     readonly #constants: GLConstants;
+    readonly #recoveryId: number;
+    readonly #unsubscribeRegistry: (() => void) | null;
 
+    #id: WebGLBuffer | null;
     #byteLength: number = 0;
     #usage: GLBufferUsage;
     #label: string | null = null;
-    #isDisposed: boolean = false;
+    private readonly _disposal = new DisposalTracker();
+    #contextLost: boolean = false;
+    #lastData: ArrayBuffer | null = null;
+
+    static #nextRecoveryId = 1;
 
     public get id(): BufferId {
         this.#throwIfDisposed();
+        if (this.#id === null || this.#contextLost) {
+            throw new GLError('WebGLBuffer handle is invalid (context lost or not yet restored)', 'CONTEXT_LOST');
+        }
         return this.#id as BufferId;
+    }
+
+    /** Numeric recovery identifier for ResourceRegistry. */
+    public get recoveryId(): number {
+        return this.#recoveryId;
     }
 
     public get target(): GLBufferTarget {
@@ -189,7 +204,7 @@ export class Buffer implements IBuffer {
     }
 
     public get isDisposed(): boolean {
-        return this.#isDisposed;
+        return this._disposal.isDisposed;
     }
 
     public get context(): IGLContext {
@@ -211,6 +226,9 @@ export class Buffer implements IBuffer {
         this.#label = label;
         this.#constants = ctx.constants;
 
+        // Assign a unique recovery id for ResourceRegistry tracking
+        this.#recoveryId = Buffer.#nextRecoveryId++;
+
         const buffer = gl.createBuffer();
         if (!buffer) {
             throw new GLError('Failed to create WebGLBuffer', 'OUT_OF_MEMORY');
@@ -218,6 +236,7 @@ export class Buffer implements IBuffer {
         this.#id = buffer;
 
         if (initialData) {
+            this.#snapshotData(initialData);
             this.resize(initialData, usage);
         } else if (byteSize > 0) {
             this.resize(byteSize, usage);
@@ -236,6 +255,17 @@ export class Buffer implements IBuffer {
                 ctx.labelObject(ctx.constants.ARRAY_BUFFER, this.#id as unknown as WebGLBuffer, label);
             }
         }
+
+        // Register with the context resource registry for context-loss recovery
+        const self = this;
+        this.#unsubscribeRegistry = ctx.registry.register(
+            {
+                get id() { return self.#recoveryId; },
+                handleContextLost: () => this.handleContextLost(),
+                handleContextRestored: (restoredCtx: IGLContext) => this.handleContextRestored(restoredCtx),
+            },
+            'buffer'
+        );
     }
 
     public bind = (): IBuffer => {
@@ -365,6 +395,9 @@ export class Buffer implements IBuffer {
             if (!isBufferData(dataOrByteSize)) {
                 throw new GLError('Invalid data type for buffer resize', 'INVALID_VALUE');
             }
+
+            // Snapshot data for context-loss recovery
+            this.#snapshotData(dataOrByteSize as BufferSource);
 
             this.#gl.bufferData(this.#target, dataOrByteSize as BufferSource, effectiveUsage);
             this.#byteLength = (dataOrByteSize as BufferSource).byteLength;
@@ -559,7 +592,9 @@ export class Buffer implements IBuffer {
     };
 
     public dispose = (): void => {
-        if (this.#isDisposed) return;
+        if (!this._disposal.markDisposed()) return;
+
+        try { this.#unsubscribeRegistry?.(); } catch { /* best-effort */ }
 
         try {
             const possibleTargets = [
@@ -582,16 +617,83 @@ export class Buffer implements IBuffer {
                 } catch { /* best-effort */ }
             }
 
-            this.#gl.deleteBuffer(this.#id);
+            if (this.#id !== null) {
+                this.#gl.deleteBuffer(this.#id);
+            }
         } catch { // best-effort
         } finally {
-            this.#isDisposed = true;
+            this.#id = null;
+            this.#lastData = null;
+        }
+    };
+
+    /**
+     * Store a copy of the provided BufferSource for context-loss recovery.
+     * Converts to a plain ArrayBuffer to avoid holding references to user-provided views.
+     */
+    #snapshotData = (data: BufferSource): void => {
+        if (isRawBufferData(data)) {
+            // Copy raw ArrayBuffer / SharedArrayBuffer into a fresh ArrayBuffer
+            const copy = new ArrayBuffer(data.byteLength);
+            new Uint8Array(copy).set(new Uint8Array(data as ArrayBuffer));
+            this.#lastData = copy;
+        } else if (ArrayBuffer.isView(data)) {
+            const copy = new ArrayBuffer(data.byteLength);
+            new Uint8Array(copy).set(new Uint8Array(data.buffer as ArrayBuffer, data.byteOffset, data.byteLength));
+            this.#lastData = copy;
+        }
+    };
+
+    /**
+     * Called by the ResourceRegistry when the WebGL context is lost.
+     * Invalidates the WebGLBuffer handle; data is preserved in #lastData for recovery.
+     */
+    public handleContextLost = (): void => {
+        this.#contextLost = true;
+        this.#id = null;
+    };
+
+    /**
+     * Called by the ResourceRegistry when the WebGL context is restored.
+     * Re-creates the WebGLBuffer and re-uploads stored data.
+     */
+    public handleContextRestored = (ctx: IGLContext): void => {
+        if (this._disposal.isDisposed) return;
+
+        const gl = ctx.gl;
+        const buffer = gl.createBuffer();
+        if (!buffer) {
+            // Recovery failed — buffer remains unusable until next restore attempt
+            return;
+        }
+        this.#id = buffer;
+        this.#contextLost = false;
+
+        // Re-upload data if we have a snapshot
+        if (this.#lastData !== null && this.#byteLength > 0) {
+            gl.bindBuffer(this.#target, buffer);
+            gl.bufferData(this.#target, this.#lastData, this.#usage);
+            gl.bindBuffer(this.#target, null);
+        } else if (this.#byteLength > 0) {
+            // Allocate empty buffer of the same size
+            gl.bindBuffer(this.#target, buffer);
+            gl.bufferData(this.#target, this.#byteLength, this.#usage);
+            gl.bindBuffer(this.#target, null);
+        }
+
+        // Re-apply debug label
+        if (this.#label) {
+            ctx.labelObject(ctx.constants.ARRAY_BUFFER, buffer, this.#label);
         }
     };
 
     #throwIfDisposed = (): void => {
-        if (this.#isDisposed) {
-            throw new GLError('Buffer has been disposed', 'BUFFER_ALREADY_DISPOSED');
+        assertAlive(this._disposal, 'Buffer');
+        if (this.#contextLost) {
+            throw new GLError(
+                'WebGL context lost — buffer handle is invalid, awaiting restoration',
+                'CONTEXT_LOST'
+            );
         }
     };
 }
@@ -606,7 +708,9 @@ class BufferFactory implements IBufferFactory {
     readonly #constants: GLConstants;
     readonly #tracker = new ResourceTracker((message, code) => new GLError(message, code));
     readonly #unsubscribeLost: (() => void) | null;
+    readonly #unsubscribeRestored: (() => void) | null;
     #isDisposed = false;
+    #contextLost = false;
 
     /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
 
@@ -617,10 +721,17 @@ class BufferFactory implements IBufferFactory {
         this.#gl = ctx.gl;
         this.#constants = ctx.constants;
 
-        this.#unsubscribeLost = ctx.onLost((event: Event) => {
-            try { event.preventDefault(); } catch { /* best-effort */ }
-            this.#isDisposed = true;
-            this.#tracker.dispose();
+        // On context loss: mark as lost but do NOT permanently dispose.
+        // Individual buffers are recovered via the ResourceRegistry.
+        this.#unsubscribeLost = ctx.onLost((_event: Event) => {
+            try { _event.preventDefault(); } catch { /* best-effort */ }
+            this.#contextLost = true;
+        });
+
+        // On context restoration: clear the lost flag so the factory is usable again.
+        // Buffers are restored by the ResourceRegistry before this fires (priority order).
+        this.#unsubscribeRestored = ctx.onRestored(() => {
+            this.#contextLost = false;
         });
     }
 
@@ -709,6 +820,7 @@ class BufferFactory implements IBufferFactory {
         if (this.#isDisposed) return;
 
         try { this.#unsubscribeLost?.(); } catch { /* best-effort */ }
+        try { this.#unsubscribeRestored?.(); } catch { /* best-effort */ }
 
         this.#tracker.dispose();
         this.#isDisposed = true;
@@ -717,8 +829,14 @@ class BufferFactory implements IBufferFactory {
     #throwIfDisposed = (): void => {
         if (this.#isDisposed) {
             throw new GLError(
-                'BufferFactory has been disposed or context was lost',
+                'BufferFactory has been disposed',
                 'INVALID_OPERATION'
+            );
+        }
+        if (this.#contextLost) {
+            throw new GLError(
+                'BufferFactory is suspended: WebGL context lost, awaiting restoration',
+                'CONTEXT_LOST'
             );
         }
     };

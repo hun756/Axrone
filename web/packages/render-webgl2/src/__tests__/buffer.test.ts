@@ -1454,7 +1454,7 @@ describe('BufferFactory', () => {
             );
         });
 
-        it('should dispose factory when context is lost', () => {
+        it('should survive context loss without disposing (enables recovery)', () => {
             // Get the handler that was registered
             const addEventCalls = (gl.canvas.addEventListener as ReturnType<typeof vi.fn>).mock.calls;
             const contextLostHandler = addEventCalls.find(
@@ -1468,7 +1468,8 @@ describe('BufferFactory', () => {
             contextLostHandler!(mockEvent as unknown as Event);
 
             expect(mockEvent.preventDefault).toHaveBeenCalled();
-            expect(factory.isDisposed).toBe(true);
+            // Factory should NOT be disposed — it must survive context loss for recovery
+            expect(factory.isDisposed).toBe(false);
         });
     });
 });
