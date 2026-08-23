@@ -16,8 +16,16 @@ export class ContextLifecycle {
         this.#canvas = canvas;
         this.#onLostBound = (event: Event) => this.#handleLost(event);
         this.#onRestoredBound = (event: Event) => this.#handleRestored(event);
-        this.#canvas.addEventListener('webglcontextlost', this.#onLostBound);
-        this.#canvas.addEventListener('webglcontextrestored', this.#onRestoredBound);
+        try {
+            (this.#canvas as unknown as { addEventListener?: (type: string, listener: EventListener) => void })?.addEventListener?.(
+                'webglcontextlost',
+                this.#onLostBound as EventListener
+            );
+            (this.#canvas as unknown as { addEventListener?: (type: string, listener: EventListener) => void })?.addEventListener?.(
+                'webglcontextrestored',
+                this.#onRestoredBound as EventListener
+            );
+        } catch {}
     }
 
     public get isLost(): boolean {
@@ -78,8 +86,14 @@ export class ContextLifecycle {
         if (this.#isDisposed) return;
         this.#isDisposed = true;
         try {
-            this.#canvas.removeEventListener('webglcontextlost', this.#onLostBound);
-            this.#canvas.removeEventListener('webglcontextrestored', this.#onRestoredBound);
+            (this.#canvas as unknown as { removeEventListener?: (type: string, listener: EventListener) => void })?.removeEventListener?.(
+                'webglcontextlost',
+                this.#onLostBound as EventListener
+            );
+            (this.#canvas as unknown as { removeEventListener?: (type: string, listener: EventListener) => void })?.removeEventListener?.(
+                'webglcontextrestored',
+                this.#onRestoredBound as EventListener
+            );
         } catch {
         }
         this.#emit({ kind: 'disposed' });
