@@ -323,6 +323,11 @@ export interface IGLContext {
     readonly capabilities: IGLCapabilities;
     readonly extensions: IExtensionRegistry;
     readonly state: IGLStateCache;
+    readonly registry: {
+        register(resource: { readonly id: number | string; handleContextLost(): void; handleContextRestored(ctx: IGLContext): void }, kind: string, priority?: number): () => void;
+        unregister(id: number | string): boolean;
+        readonly size: number;
+    };
     readonly isDisposed: boolean;
     readonly isLost: boolean;
     readonly locale: GLContextLocale;

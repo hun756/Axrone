@@ -3,6 +3,7 @@ import { createCapabilities } from './capabilities';
 import { createExtensionRegistry } from './extensions';
 import { createStateCache } from './state-cache';
 import { createLifecycle } from './lifecycle';
+import { ResourceRegistry } from './resource-registry';
 import { GLContextError } from './errors';
 import type {
     GLConstants,
@@ -41,6 +42,7 @@ export class GLContext implements IGLContext {
     readonly #extensions: IExtensionRegistry;
     readonly #state: IGLStateCache;
     readonly #lifecycle: ContextLifecycle;
+    readonly #registry: ResourceRegistry;
     readonly #locale: GLContextLocale;
     readonly #attributes: GLContextAttributes;
     readonly #enableDebugLabels: boolean;
@@ -107,6 +109,7 @@ export class GLContext implements IGLContext {
         this.#extensions = createExtensionRegistry(effectiveGL, locale);
         this.#state = createStateCache(effectiveGL, enableStateCache);
         this.#lifecycle = createLifecycle(effectiveGL, canvas);
+        this.#registry = new ResourceRegistry(this as unknown as IGLContext);
         this.#lifecycle.subscribe((event) => {
             if (event.kind === 'lost') this.#state.invalidate();
             if (event.kind === 'restored') this.#state.reset();
@@ -139,6 +142,10 @@ export class GLContext implements IGLContext {
 
     public get state(): IGLStateCache {
         return this.#state;
+    }
+
+    public get registry(): ResourceRegistry {
+        return this.#registry;
     }
 
     public get isDisposed(): boolean {
@@ -238,6 +245,7 @@ export class GLContext implements IGLContext {
     public dispose(): void {
         if (this.#isDisposed) return;
         this.#isDisposed = true;
+        this.#registry.dispose();
         this.#lifecycle.dispose();
         this.#state.invalidate();
     }

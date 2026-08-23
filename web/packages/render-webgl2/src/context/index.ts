@@ -69,3 +69,6 @@ export {
 
 export { createMockGL, createMockCanvas, createMockGLContext, createMockGLContextWithGL } from './mock';
 export type { MockGLOptions } from './mock';
+
+export { ResourceRegistry, createResourceRegistry } from './resource-registry';
+export type { RecoverableResource, ResourceKind } from './resource-registry';
