@@ -97,10 +97,9 @@ export class WebGLTexture implements ITexture {
             this.setData(data);
         }
 
-        if (this.label && this._gl.getExtension('WEBGL_debug_renderer_info')) {
-            this._gl.bindTexture(this._target, this.nativeHandle);
-
-            this._gl.bindTexture(this._target, null);
+        if (this.label) {
+            const dbg = this._ctx.extensions.get('KHR_debug');
+            this._ctx.labelObject(dbg?.TEXTURE ?? 0x1700, this.nativeHandle, this.label);
         }
     }
 
@@ -245,19 +244,22 @@ export class WebGLTexture implements ITexture {
     public bind(unit?: number): void {
         this._validateNotDisposed();
 
+        let targetUnit: number;
         if (unit !== undefined) {
-            this._gl.activeTexture(this._gl.TEXTURE0 + unit);
             this._currentUnit = unit;
+            targetUnit = unit;
+        } else {
+            targetUnit = this._currentUnit >= 0 ? this._currentUnit : 0;
         }
-
-        this._gl.bindTexture(this._target, this.nativeHandle);
+        this._ctx.state.activeTexture(targetUnit);
+        this._ctx.state.bindTexture(this._target, this.nativeHandle);
     }
 
     public unbind(): void {
         if (this._currentUnit >= 0) {
-            this._gl.activeTexture(this._gl.TEXTURE0 + this._currentUnit);
+            this._ctx.state.activeTexture(this._currentUnit);
         }
-        this._gl.bindTexture(this._target, null);
+        this._ctx.state.bindTexture(this._target, null);
         this._currentUnit = -1;
     }
 
