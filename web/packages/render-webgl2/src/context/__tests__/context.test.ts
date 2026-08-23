@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { createMockGL, createMockGLContext } from '../mock';
 import { GLContext, isGLContext } from '../gl-context';
-import { getOrCreateGLContext } from '../factory';
+import {
+    getOrCreateGLContext,
+    resolveContext,
+    resolveContextNullable,
+    resolveRawGL,
+} from '../factory';
+import type { ContextSource } from '../types';
 
 describe('IGLContext', () => {
     it('creates mock GL with required constants', () => {
@@ -82,5 +88,53 @@ describe('IGLContext backward compatibility', () => {
         const ctx = new GLContext(gl, gl.canvas as HTMLCanvasElement);
         expect(ctx.gl).toBe(gl);
         expect(ctx.constants.TEXTURE_2D).toBe(gl.TEXTURE_2D);
+    });
+
+    it('resolveContext wraps raw gl and passes IGLContext through', () => {
+        const gl = createMockGL();
+        const fromRaw = resolveContext(gl as ContextSource);
+        expect(isGLContext(fromRaw)).toBe(true);
+        const again = resolveContext(fromRaw as ContextSource);
+        expect(again).toBe(fromRaw);
+    });
+
+    it('resolveContextNullable handles null/undefined', () => {
+        expect(resolveContextNullable(null)).toBeNull();
+        expect(resolveContextNullable(undefined)).toBeNull();
+        const ctx = createMockGLContext();
+        expect(resolveContextNullable(ctx)).toBe(ctx);
+    });
+
+    it('resolveRawGL unwraps both source kinds', () => {
+        const gl = createMockGL();
+        const ctx = getOrCreateGLContext(gl);
+        expect(resolveRawGL(ctx)).toBe(ctx.gl);
+        expect(resolveRawGL(gl as ContextSource)).toBe(gl);
+    });
+
+    it('does not mutate the input raw gl object', () => {
+        const gl: Record<string, unknown> = {
+            createTexture: () => ({}),
+            createBuffer: () => ({}),
+            bindBuffer: () => {},
+            bufferData: () => {},
+            deleteBuffer: () => {},
+        };
+        const before = Object.keys(gl).sort().join(',');
+        const canvas = { width: 4, height: 4 } as unknown as HTMLCanvasElement;
+        new GLContext(gl as unknown as WebGL2RenderingContext, canvas);
+        const after = Object.keys(gl).sort().join(',');
+        expect(after).toBe(before);
+    });
+
+    it('throws on garbage objects without any GL surface', () => {
+        const canvas = { width: 1, height: 1 } as unknown as HTMLCanvasElement;
+        expect(
+            () =>
+                new GLContext(
+                    { foo: 'bar' } as unknown as WebGL2RenderingContext,
+                    canvas
+                )
+        ).toThrow();
     });
 });
