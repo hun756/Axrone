@@ -54,39 +54,54 @@ export class GLContext implements IGLContext {
         enableStateCache = true,
         enableDebugLabels = true
     ) {
-        const anyGL = gl as unknown as Record<string, unknown>;
-        if (typeof anyGL['getParameter'] !== 'function') {
-            (anyGL as Record<string, unknown>)['getParameter'] = () => 0;
-        }
-        if (typeof anyGL['getExtension'] !== 'function') {
-            (anyGL as Record<string, unknown>)['getExtension'] = () => null;
-        }
-        if (typeof anyGL['getContextAttributes'] !== 'function') {
-            (anyGL as Record<string, unknown>)['getContextAttributes'] = () => ({ ...(attributes as object) }) as unknown;
-        }
-        if (typeof anyGL['isContextLost'] !== 'function') {
-            (anyGL as Record<string, unknown>)['isContextLost'] = () => false;
-        }
-        if (typeof anyGL['getError'] !== 'function') {
-            (anyGL as Record<string, unknown>)['getError'] = () => 0;
-        }
-        if (!anyGL['canvas']) {
-            (anyGL as Record<string, unknown>)['canvas'] = canvas;
-        }
-        if (!isWebGL2(gl) && typeof (anyGL as { createTexture?: unknown; createBuffer?: unknown }).createTexture !== 'function' && typeof (anyGL as { createBuffer?: unknown }).createBuffer !== 'function' && typeof anyGL['getParameter'] !== 'function') {
+        const preHasGetParameter = typeof (gl as unknown as { getParameter?: unknown }).getParameter === 'function';
+        const preHasCreateTexture =
+            typeof (gl as unknown as { createTexture?: unknown }).createTexture === 'function';
+        const preHasCreateBuffer =
+            typeof (gl as unknown as { createBuffer?: unknown }).createBuffer === 'function';
+
+        if (!isWebGL2(gl) && !preHasGetParameter && !preHasCreateTexture && !preHasCreateBuffer) {
             throw new GLContextError('INVALID_VALUE', locale, { reason: 'Not a WebGL2RenderingContext' });
         }
+
+        let effectiveGL: WebGL2RenderingContext = gl;
+        const needsWrap =
+            !preHasGetParameter ||
+            typeof (gl as unknown as { getExtension?: unknown }).getExtension !== 'function' ||
+            typeof (gl as unknown as { getContextAttributes?: unknown }).getContextAttributes !== 'function' ||
+            typeof (gl as unknown as { isContextLost?: unknown }).isContextLost !== 'function' ||
+            typeof (gl as unknown as { getError?: unknown }).getError !== 'function' ||
+            !(gl as unknown as { canvas?: unknown }).canvas;
+
+        if (needsWrap) {
+            const base = gl as unknown as object;
+            effectiveGL = Object.create(base) as WebGL2RenderingContext;
+            const w = effectiveGL as unknown as Record<string, unknown>;
+            const src = gl as unknown as Record<string, unknown>;
+            if (!preHasGetParameter) w['getParameter'] = () => 0;
+            if (typeof src['getExtension'] !== 'function') w['getExtension'] = () => null;
+            if (typeof src['getContextAttributes'] !== 'function')
+                w['getContextAttributes'] = () => ({ ...(attributes as object) }) as unknown;
+            if (typeof src['isContextLost'] !== 'function') w['isContextLost'] = () => false;
+            if (typeof src['getError'] !== 'function') w['getError'] = () => 0;
+            if (!src['canvas']) w['canvas'] = canvas;
+            if (typeof (src['drawingBufferWidth'] as unknown) === 'undefined')
+                w['drawingBufferWidth'] = canvas.width;
+            if (typeof (src['drawingBufferHeight'] as unknown) === 'undefined')
+                w['drawingBufferHeight'] = canvas.height;
+        }
+
         this.#id = generateId();
-        this.#gl = gl;
+        this.#gl = effectiveGL;
         this.#canvas = canvas;
         this.#locale = locale;
         this.#attributes = Object.freeze({ ...attributes });
         this.#enableDebugLabels = enableDebugLabels;
-        this.#constants = getGLConstants(gl);
-        this.#capabilities = createCapabilities(gl, locale, attributes);
-        this.#extensions = createExtensionRegistry(gl, locale);
-        this.#state = createStateCache(gl, enableStateCache);
-        this.#lifecycle = createLifecycle(gl, canvas);
+        this.#constants = getGLConstants(effectiveGL);
+        this.#capabilities = createCapabilities(effectiveGL, locale, attributes);
+        this.#extensions = createExtensionRegistry(effectiveGL, locale);
+        this.#state = createStateCache(effectiveGL, enableStateCache);
+        this.#lifecycle = createLifecycle(effectiveGL, canvas);
         this.#lifecycle.subscribe((event) => {
             if (event.kind === 'lost') this.#state.invalidate();
             if (event.kind === 'restored') this.#state.reset();
