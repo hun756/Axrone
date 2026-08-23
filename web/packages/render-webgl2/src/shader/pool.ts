@@ -81,11 +81,12 @@ class PoolBucket {
     release(instance: ShaderInstance): void {
         if (!this.inUse.has(instance)) return;
         this.inUse.delete(instance);
-        instance.dispose();
         this.released++;
-        if (this.idle.length < this.maxCapacity) {
+        if (!instance.isDisposed() && this.idle.length < this.maxCapacity) {
             this.idle.push(instance);
+            return;
         }
+        instance.dispose();
     }
 
     releaseAll(): void {
