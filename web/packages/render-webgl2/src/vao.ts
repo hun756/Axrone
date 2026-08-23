@@ -2,8 +2,14 @@ import { IVec2Like, IVec3Like, IVec4Like } from '@axrone/numeric';
 import { ObjectPool, ByteBuffer } from '@axrone/memory';
 import type { Brand, TypedArray } from '@axrone/utility';
 import { createBufferFactory, IBuffer, IBufferFactory } from './buffer';
+import type { IGLContext } from './context';
+import { getOrCreateGLContext, isGLContext } from './context';
 
 type GLContext = Brand<WebGL2RenderingContext, 'GLContext'>;
+type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source as WebGL2RenderingContext);
 type GLBuffer = IBuffer;
 type GLVAO = Brand<WebGLVertexArrayObject, 'GLVAO'>;
 
@@ -187,14 +193,17 @@ const TYPE_DESCRIPTORS: GLTypeInfo = {
 } as const;
 
 class BufferAllocator {
-    private readonly gl: GLContext;
+    private readonly _ctx: IGLContext;
+    private readonly gl: WebGL2RenderingContext;
     private readonly factory: IBufferFactory;
     private readonly vertexPool = new ResourcePoolAdapter<IBuffer>();
     private readonly indexPool = new ResourcePoolAdapter<IBuffer>();
 
-    constructor(gl: GLContext) {
-        this.gl = gl;
-        this.factory = createBufferFactory(gl);
+    constructor(source: ContextSource) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
+        this.factory = createBufferFactory(ctx);
     }
 
     createVertexBuffer<T extends readonly Attribute[]>(
@@ -376,7 +385,8 @@ class BufferAllocator {
 }
 
 class VertexArray<T extends readonly Attribute[]> {
-    private readonly gl: GLContext;
+    private readonly _ctx: IGLContext;
+    private readonly gl: WebGL2RenderingContext;
     private readonly vao: GLVAO;
     private readonly layout: Layout<T>;
     private readonly vertexBuffer: ResourceID;
@@ -386,7 +396,7 @@ class VertexArray<T extends readonly Attribute[]> {
     private disposed = false;
 
     constructor(
-        gl: GLContext,
+        source: ContextSource,
         allocator: BufferAllocator,
         layout: Layout<T>,
         vertexBuffer: ResourceID,
@@ -394,14 +404,16 @@ class VertexArray<T extends readonly Attribute[]> {
         indexBuffer?: ResourceID,
         indexConfig?: IndexConfig
     ) {
-        this.gl = gl;
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
         this.layout = layout;
         this.vertexBuffer = vertexBuffer;
         this.indexBuffer = indexBuffer;
         this.indexConfig = indexConfig;
         this.vertexCount = vertexCount;
 
-        const vao = gl.createVertexArray();
+        const vao = this.gl.createVertexArray();
         if (!vao) throw new Error('VAO allocation failed');
         this.vao = vao as GLVAO;
 
@@ -499,13 +511,16 @@ class VertexArray<T extends readonly Attribute[]> {
 }
 
 class VAORegistry {
-    private readonly gl: GLContext;
+    private readonly _ctx: IGLContext;
+    private readonly gl: WebGL2RenderingContext;
     private readonly allocator: BufferAllocator;
     private readonly registry = new ResourcePoolAdapter<VertexArray<any>>();
 
-    constructor(gl: GLContext) {
-        this.gl = gl;
-        this.allocator = new BufferAllocator(gl);
+    constructor(source: ContextSource) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
+        this.allocator = new BufferAllocator(ctx);
     }
 
     create<T extends readonly Attribute[]>(
@@ -533,7 +548,7 @@ class VAORegistry {
         }
 
         const vao = new VertexArray(
-            this.gl,
+            this._ctx,
             this.allocator,
             layout,
             vertexBufferId,
@@ -601,13 +616,14 @@ const draw = (
 ): DrawCall => ({ primitive, first, count, instances });
 
 const createVAOFactory = () => {
-    const registries = new WeakMap<GLContext, VAORegistry>();
+    const registries = new WeakMap<IGLContext, VAORegistry>();
 
-    return (gl: GLContext) => {
-        let registry = registries.get(gl);
+    return (source: ContextSource) => {
+        const ctx = resolveContext(source);
+        let registry = registries.get(ctx);
         if (!registry) {
-            registry = new VAORegistry(gl);
-            registries.set(gl, registry);
+            registry = new VAORegistry(ctx);
+            registries.set(ctx, registry);
         }
         return registry;
     };
@@ -638,6 +654,7 @@ const GL = {
 
 export type {
     GLContext,
+    ContextSource,
     GLBuffer,
     GLVAO,
     GLDataType,
