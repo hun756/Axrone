@@ -594,8 +594,11 @@ export class WebGLTexture implements ITexture {
             // Ensure mipmap completeness: clamp MAX_LEVEL to the allocated mip chain.
             // Without this, TEXTURE_MAX_LEVEL defaults to 1000 and a mipmapped min filter
             // treats the texture as incomplete (black) until all 1000 levels are defined.
-            if (!formatInfo.compressed && options.mipLevels! > 1) {
-                this._gl.texParameteri(this._target, this._gl.TEXTURE_MAX_LEVEL, options.mipLevels! - 1);
+            // This must apply even for single-mip textures (mipLevels === 1) where MAX_LEVEL
+            // would otherwise be 1000 and the texture would be incomplete with a mipmap minFilter.
+            if (!formatInfo.compressed) {
+                const maxLevel = Math.max(0, (options.mipLevels ?? 1) - 1);
+                this._gl.texParameteri(this._target, this._gl.TEXTURE_MAX_LEVEL, maxLevel);
                 this._gl.texParameteri(this._target, this._gl.TEXTURE_BASE_LEVEL, 0);
             }
         } finally {
