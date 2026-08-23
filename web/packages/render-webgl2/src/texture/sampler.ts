@@ -73,13 +73,13 @@ export class WebGLTextureSampler implements ITextureSampler {
             );
         }
 
-        this._gl.bindSampler(unit, this.nativeHandle);
+        this._ctx.state.bindSampler(unit, this.nativeHandle);
         this._currentUnit = unit;
     }
 
     public unbind(): void {
         if (this._currentUnit >= 0) {
-            this._gl.bindSampler(this._currentUnit, null);
+            this._ctx.state.bindSampler(this._currentUnit, null);
             this._currentUnit = -1;
         }
     }
