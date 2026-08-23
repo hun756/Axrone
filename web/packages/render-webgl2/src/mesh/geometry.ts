@@ -1,3 +1,4 @@
+/** @deprecated Raw WebGL2RenderingContext overloads in this file are deprecated. Prefer IGLContext. */
 import { Vec3 } from '@axrone/numeric';
 import {
     IGeometry,

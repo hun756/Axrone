@@ -195,6 +195,9 @@ class BufferAllocator {
     private readonly vertexPool = new ResourcePoolAdapter<IBuffer>();
     private readonly indexPool = new ResourcePoolAdapter<IBuffer>();
 
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource) {
         const ctx = resolveContext(source);
         this._ctx = ctx;
@@ -511,6 +514,9 @@ class VAORegistry {
     private readonly gl: WebGL2RenderingContext;
     private readonly allocator: BufferAllocator;
     private readonly registry = new ResourcePoolAdapter<VertexArray<any>>();
+
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
 
     constructor(source: ContextSource) {
         const ctx = resolveContext(source);

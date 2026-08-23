@@ -29,8 +29,8 @@ const generateId = (): GLContextId => {
 
 const isWebGL2 = (gl: unknown): gl is WebGL2RenderingContext =>
     typeof WebGL2RenderingContext !== 'undefined' &&
-    typeof (WebGL2RenderingContext as unknown) === 'function' &&
-    gl instanceof (WebGL2RenderingContext as unknown as { new (): WebGL2RenderingContext });
+    typeof WebGL2RenderingContext === 'function' &&
+    gl instanceof WebGL2RenderingContext;
 
 export class GLContext implements IGLContext {
     readonly #id: GLContextId;

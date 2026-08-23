@@ -20,6 +20,9 @@ export class WebGLIndexBuffer implements IIndexBuffer {
     private _usage: BufferUsage;
     private _id: string;
 
+    /** @deprecated Raw WebGL2RenderingContext overload is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource, config: IIndexBufferConfig) {
         const ctx = resolveContext(source);
         this._ctx = ctx;

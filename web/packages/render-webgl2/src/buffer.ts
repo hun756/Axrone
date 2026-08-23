@@ -148,6 +148,9 @@ const isRawBufferData = (value: unknown): value is ArrayBuffer | SharedArrayBuff
     return value instanceof ArrayBuffer || isSharedArrayBuffer(value);
 };
 
+const isArrayBufferView = (value: unknown): value is ArrayBufferView & { readonly BYTES_PER_ELEMENT: number; readonly buffer: ArrayBufferLike; readonly byteOffset: number; readonly byteLength: number } =>
+    ArrayBuffer.isView(value as ArrayBufferView);
+
 const isBufferData = (value: unknown): value is BufferSource | SharedArrayBuffer => {
     return isRawBufferData(value) || ArrayBuffer.isView(value);
 };
@@ -193,6 +196,9 @@ export class Buffer implements IBuffer {
         return this.#ctx;
     }
 
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource, target: GLBufferTarget, options: BufferOptions = {}) {
         const ctx = resolveContext(source);
         const gl = ctx.gl;
@@ -224,10 +230,10 @@ export class Buffer implements IBuffer {
             } | null;
             if (ext && typeof ext.labelObject === 'function') {
                 try {
-                    ext.labelObject(ext.BUFFER ?? ctx.constants.ARRAY_BUFFER, this.#id as unknown as object, label);
+                    ext.labelObject(ext.BUFFER ?? ctx.constants.ARRAY_BUFFER, this.#id as unknown as WebGLBuffer, label);
                 } catch { // best-effort}
             } else {
-                ctx.labelObject(ctx.constants.ARRAY_BUFFER, this.#id as unknown as object, label);
+                ctx.labelObject(ctx.constants.ARRAY_BUFFER, this.#id as unknown as WebGLBuffer, label);
             }
         }
     }
@@ -311,23 +317,23 @@ export class Buffer implements IBuffer {
             this.#gl.bufferSubData(this.#target, dstByteOffset, view);
         } else {
             const bytesPerElement =
-                'BYTES_PER_ELEMENT' in data ? (data as unknown as { BYTES_PER_ELEMENT: number }).BYTES_PER_ELEMENT : 1;
+                isArrayBufferView(data) ? (data as { BYTES_PER_ELEMENT: number }).BYTES_PER_ELEMENT : 1;
             const elementOffset = Math.floor(srcByteOffset / bytesPerElement);
 
             if (srcByteOffset % bytesPerElement !== 0) {
-                const buffer = (data as unknown as { buffer: ArrayBufferLike }).buffer;
+                const buffer = (data as ArrayBufferView).buffer as ArrayBufferLike;
                 const view = new Uint8Array(
                     buffer as ArrayBuffer,
-                    (data as unknown as { byteOffset: number }).byteOffset + srcByteOffset,
+                    (data as ArrayBufferView).byteOffset + srcByteOffset,
                     updateLength
                 );
                 this.#gl.bufferSubData(this.#target, dstByteOffset, view);
             } else {
-                const constructor = (data as unknown as { constructor: ArrayBufferViewConstructor }).constructor;
+                const constructor = (data as ArrayBufferView & { constructor: ArrayBufferViewConstructor }).constructor;
                 const elementsLength = Math.floor(updateLength / bytesPerElement);
                 const typedView = new constructor(
-                    (data as unknown as { buffer: ArrayBufferLike }).buffer,
-                    (data as unknown as { byteOffset: number }).byteOffset + srcByteOffset,
+                    (data as ArrayBufferView).buffer as ArrayBufferLike,
+                    (data as ArrayBufferView).byteOffset + srcByteOffset,
                     elementsLength
                 );
 
@@ -439,7 +445,7 @@ export class Buffer implements IBuffer {
         }
 
         const bytesPerElement =
-            'BYTES_PER_ELEMENT' in output ? (output as unknown as { BYTES_PER_ELEMENT: number }).BYTES_PER_ELEMENT : 1;
+            isArrayBufferView(output) ? (output as { BYTES_PER_ELEMENT: number }).BYTES_PER_ELEMENT : 1;
         const maxLength = Math.min(this.#byteLength - byteOffset, output.byteLength);
 
         const readLength = length !== undefined ? Math.min(length, maxLength) : maxLength;
@@ -491,7 +497,7 @@ export class Buffer implements IBuffer {
         }
 
         const bytesPerElement =
-            'BYTES_PER_ELEMENT' in output ? (output as unknown as { BYTES_PER_ELEMENT: number }).BYTES_PER_ELEMENT : 1;
+            isArrayBufferView(output) ? (output as { BYTES_PER_ELEMENT: number }).BYTES_PER_ELEMENT : 1;
         const outputSize = output.byteLength;
 
         if (dstByteOffset >= outputSize) {
@@ -601,6 +607,9 @@ class BufferFactory implements IBufferFactory {
     readonly #tracker = new ResourceTracker((message, code) => new GLError(message, code));
     readonly #unsubscribeLost: (() => void) | null;
     #isDisposed = false;
+
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
 
     constructor(source: ContextSource) {
         const ctx = resolveContext(source);
@@ -745,6 +754,7 @@ export const calculatePadding = (offset: number, alignment: number): number => {
     return remainder === 0 ? 0 : alignment - remainder;
 };
 
+/** @deprecated Raw GL overload is deprecated. Use IGLContext. */
 export const createBufferFactory = (source: ContextSource): IBufferFactory => {
     return new BufferFactory(source);
 };

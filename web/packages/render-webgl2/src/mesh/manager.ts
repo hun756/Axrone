@@ -29,6 +29,9 @@ export class MeshManager {
     private readonly bufferFactory: IBufferFactory;
     private readonly meshCache = new Map<string, IMeshData>();
 
+    /** @deprecated Raw WebGL2RenderingContext overload is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource) {
         const ctx = resolveContext(source);
         this._ctx = ctx;

@@ -14,6 +14,9 @@ export class BatchManager implements IBatchManager {
     private disposed = false;
     private frameCounter = 0;
 
+    /** @deprecated Raw WebGL2RenderingContext overload is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource, config: BatchConfiguration = {}) {
         const ctx = resolveContext(source);
         this._ctx = ctx;

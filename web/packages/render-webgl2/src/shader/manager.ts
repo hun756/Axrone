@@ -52,6 +52,9 @@ export class ShaderManager implements IShaderManager {
         hitRate: 0,
     };
 
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource) {
         const ctx = resolveContext(source);
         this._ctx = ctx;

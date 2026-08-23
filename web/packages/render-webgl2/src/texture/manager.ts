@@ -45,6 +45,9 @@ export class WebGLTextureManager implements ITextureManager {
     private _maxMemoryUsage: number = 512 * 1024 * 1024;
     private _enableCache: boolean = true;
 
+    /** @deprecated Raw WebGL2RenderingContext overload is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource) {
         const ctx = resolveContext(source);
         this._ctx = ctx;

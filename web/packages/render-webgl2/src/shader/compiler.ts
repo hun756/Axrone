@@ -163,6 +163,9 @@ export class WebGLShaderCompiler implements IShaderCompiler {
     private readonly compilationCache = new Map<string, ICompiledShader>();
     private readonly variantCache = new Map<string, IShaderVariant>();
 
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource) {
         const ctx = resolveContext(source);
         this._ctx = ctx;

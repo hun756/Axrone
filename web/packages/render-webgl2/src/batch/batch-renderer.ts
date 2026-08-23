@@ -31,6 +31,9 @@ export class BatchRenderer implements IBatchRenderer {
         batchesProcessed: 0,
     };
 
+    /** @deprecated Raw WebGL2RenderingContext overload is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource, config: BatchConfiguration = {}) {
         const ctx = resolveContext(source);
         this._ctx = ctx;

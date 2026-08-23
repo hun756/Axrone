@@ -435,6 +435,9 @@ export class Texture implements ITexture {
         return this.#isDisposed;
     }
 
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource, target: GLTextureTarget, options: TextureOptions) {
         const ctx = resolveContext(source as ContextSource);
         const gl = ctx.gl;
@@ -685,6 +688,9 @@ export class Renderbuffer implements IRenderbuffer {
         return this.#isDisposed;
     }
 
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource, options: RenderbufferOptions) {
         const ctx = resolveContext(source as ContextSource);
         const gl = ctx.gl;
@@ -859,6 +865,9 @@ export class Framebuffer implements IFramebuffer {
         this.unbind();
         return status;
     }
+
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
 
     constructor(source: ContextSource, options: FramebufferOptions) {
         const ctx = resolveContext(source as ContextSource);
@@ -1205,6 +1214,9 @@ export class FramebufferFactory implements IFramebufferFactory {
     readonly #gl: WebGL2RenderingContext;
     readonly #constants: GLConstants;
 
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource) {
         const ctx = resolveContext(source);
         this.#ctx = ctx;
@@ -1381,6 +1393,7 @@ export class FramebufferFactory implements IFramebufferFactory {
     };
 }
 
+/** @deprecated Raw GL overload is deprecated. Use IGLContext. */
 export const createFramebufferFactory = (source: ContextSource): IFramebufferFactory => {
     return new FramebufferFactory(source);
 };

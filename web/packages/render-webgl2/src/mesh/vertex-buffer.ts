@@ -1,3 +1,4 @@
+/** @deprecated Raw WebGL2RenderingContext overloads in this file are deprecated. Prefer IGLContext. */
 import { IBuffer, IBufferFactory, createBufferFactory, GLBufferUsage } from '../buffer';
 import { IVertexBuffer, IVertexLayout, BufferUsage, MeshError, MeshErrorCode } from './interfaces';
 import type { ContextSource, IGLContext } from '../context';

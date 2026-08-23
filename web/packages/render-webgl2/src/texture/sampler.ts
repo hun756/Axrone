@@ -23,6 +23,9 @@ export class WebGLTextureSampler implements ITextureSampler {
     private readonly _ctx: IGLContext;
     private readonly _gl: WebGL2RenderingContext;
 
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
     constructor(source: ContextSource, options: ITextureSamplerOptions) {
         const ctx = resolveContext(source);
         const gl = ctx.gl;
