@@ -29,6 +29,8 @@ export class BatchGroup implements IBatchGroup {
     private instanceCount = 0;
     private needsUpdate = true;
     private disposed = false;
+    private _instanceAttributesSetup = false;
+    private _lastProgram: WebGLProgram | null = null;
     private _matrixScratch: Float32Array | null = null;
     private _colorScratch: Float32Array | null = null;
     private _customScratch: Float32Array | null = null;
@@ -207,6 +209,8 @@ export class BatchGroup implements IBatchGroup {
         this.customBuffer.dispose();
         this.instanceMap.clear();
 
+        this._instanceAttributesSetup = false;
+        this._lastProgram = null;
         this.disposed = true;
     }
 
@@ -216,6 +220,7 @@ export class BatchGroup implements IBatchGroup {
 
     private setupInstanceAttributes(): void {
         const program = this.material.shader.shader.program;
+        if (this._instanceAttributesSetup && this._lastProgram === program) return;
 
         const matrixLocation = this.gl.getAttribLocation(program, 'instanceMatrix');
         if (matrixLocation !== -1) {
@@ -243,5 +248,8 @@ export class BatchGroup implements IBatchGroup {
             this.gl.vertexAttribPointer(customLocation, 4, this.gl.FLOAT, false, 0, 0);
             this.gl.vertexAttribDivisor(customLocation, 1);
         }
+
+        this._instanceAttributesSetup = true;
+        this._lastProgram = program;
     }
 }
