@@ -20,9 +20,17 @@ import {
 } from './interfaces';
 import { WebGLTexture } from './texture';
 import { WebGLTextureSampler, SamplerFactory } from './sampler';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 import { TextureUtils, TextureValidation } from './utils';
 
 export class WebGLTextureManager implements ITextureManager {
+    private readonly _ctx: IGLContext;
     private readonly _gl: WebGL2RenderingContext;
     private readonly _textureCache = new Map<string, ITexture>();
     private readonly _samplerCache = new Map<string, ITextureSampler>();
@@ -42,15 +50,17 @@ export class WebGLTextureManager implements ITextureManager {
     private _maxMemoryUsage: number = 512 * 1024 * 1024;
     private _enableCache: boolean = true;
 
-    constructor(gl: WebGL2RenderingContext) {
-        this._gl = gl;
+    constructor(source: ContextSource) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this._gl = ctx.gl;
         this._initializeDefaultTextures();
     }
 
     public createTexture(options: ITextureCreateOptions, data?: TextureDataSource): ITexture {
         TextureValidation.validateCreateOptions(options);
 
-        const texture = new WebGLTexture(this._gl, options, data);
+        const texture = new WebGLTexture(this._ctx, options, data);
         this._registerTexture(texture);
 
         return texture;
@@ -105,7 +115,7 @@ export class WebGLTextureManager implements ITextureManager {
             usage: TextureUsage.STATIC,
         };
 
-        const texture = new WebGLTexture(this._gl, options);
+        const texture = new WebGLTexture(this._ctx, options);
 
         if (data && data.length === 6) {
             for (let face = 0; face < 6; face++) {
@@ -135,7 +145,7 @@ export class WebGLTextureManager implements ITextureManager {
             usage: TextureUsage.STATIC,
         };
 
-        const texture = new WebGLTexture(this._gl, options);
+        const texture = new WebGLTexture(this._ctx, options);
 
         if (data) {
             for (let layer = 0; layer < Math.min(data.length, layers); layer++) {
@@ -151,7 +161,7 @@ export class WebGLTextureManager implements ITextureManager {
 
     public createSampler(options: ITextureSamplerOptions): ITextureSampler {
         TextureValidation.validateSamplerOptions(options);
-        return new WebGLTextureSampler(this._gl, options);
+        return new WebGLTextureSampler(this._ctx, options);
     }
 
     public getDefaultSampler(filterMode: FilterMode, wrapMode: WrapMode): ITextureSampler {
@@ -166,7 +176,7 @@ export class WebGLTextureManager implements ITextureManager {
                 wrapT: wrapMode,
             };
 
-            const sampler = new WebGLTextureSampler(this._gl, options);
+            const sampler = new WebGLTextureSampler(this._ctx, options);
             this._samplerCache.set(cacheKey, sampler);
         }
 

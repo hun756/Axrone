@@ -1,5 +1,7 @@
 import { Vec2, Vec3, Vec4 } from '@axrone/numeric';
 import { Djb2 } from '@axrone/hash';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
 import {
     TextureDimension,
     TextureFormat,
@@ -38,6 +40,9 @@ const WEBGL_S3TC_EXTENSIONS = [
 const WEBGL_RGTC_EXTENSIONS = ['EXT_texture_compression_rgtc'] as const;
 const WEBGL_BPTC_EXTENSIONS = ['EXT_texture_compression_bptc'] as const;
 const WEBGL_ASTC_EXTENSIONS = ['WEBGL_compressed_texture_astc'] as const;
+
+type ContextSource = IGLContext | WebGL2RenderingContext;
+const resolveContext = (source: ContextSource): IGLContext => isGLContext(source) ? source : getOrCreateGLContext(source);
 
 const createCompressedFormatInfo = (
     internalFormat: number,
@@ -811,8 +816,14 @@ export class TextureUtils {
         return new Vec4(1, 1, 1, 1);
     }
 
-    public static isExtensionAvailable(gl: WebGL2RenderingContext, name: string): boolean {
-        return gl.getExtension(name) !== null;
+    public static isExtensionAvailableForContext(ctx: IGLContext, name: string): boolean {
+        return ctx.extensions.has(name as any);
+    }
+
+    public static isExtensionAvailable(gl: WebGL2RenderingContext | IGLContext, name: string): boolean {
+        const source = gl as unknown as ContextSource;
+        if (isGLContext(source as any)) return (source as IGLContext).extensions.has(name as any);
+        return (gl as WebGL2RenderingContext).getExtension(name) !== null;
     }
 
     public static getOptimalFormat(

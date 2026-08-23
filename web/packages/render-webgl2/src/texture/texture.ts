@@ -13,6 +13,13 @@ import {
     TextureErrorCode,
 } from './interfaces';
 import { TextureFormatInfo, TextureUtils, TextureWebGLConstants, TextureValidation } from './utils';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 
 export class WebGLTexture implements ITexture {
     public readonly id: string;
@@ -37,14 +44,18 @@ export class WebGLTexture implements ITexture {
     private _currentUnit = -1;
     private _generation = 0;
 
+    private readonly _ctx: IGLContext;
     private readonly _gl: WebGL2RenderingContext;
     private readonly _target: number;
 
     constructor(
-        gl: WebGL2RenderingContext,
+        source: ContextSource,
         options: ITextureCreateOptions,
         data?: TextureDataSource
     ) {
+        const ctx = resolveContext(source);
+        const gl = ctx.gl;
+        this._ctx = ctx;
         this._gl = gl;
 
         TextureValidation.validateCreateOptions(options);
@@ -231,7 +242,7 @@ export class WebGLTexture implements ITexture {
             label: this.label ? `${this.label}_clone` : undefined,
         };
 
-        const clone = new WebGLTexture(this._gl, cloneOptions);
+        const clone = new WebGLTexture(this._ctx, cloneOptions);
 
         return clone;
     }

@@ -9,6 +9,13 @@ import {
     TextureErrorCode,
 } from './interfaces';
 import { TextureWebGLConstants, TextureValidation } from './utils';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 
 export class WebGLTextureSampler implements ITextureSampler {
     public readonly id: string;
@@ -18,9 +25,13 @@ export class WebGLTextureSampler implements ITextureSampler {
     private _isDisposed = false;
     private _currentUnit = -1;
 
+    private readonly _ctx: IGLContext;
     private readonly _gl: WebGL2RenderingContext;
 
-    constructor(gl: WebGL2RenderingContext, options: ITextureSamplerOptions) {
+    constructor(source: ContextSource, options: ITextureSamplerOptions) {
+        const ctx = resolveContext(source);
+        const gl = ctx.gl;
+        this._ctx = ctx;
         this._gl = gl;
 
         TextureValidation.validateSamplerOptions(options);
@@ -237,7 +248,7 @@ export class SamplerFactory {
     }
 
     public static createCommonSampler(
-        gl: WebGL2RenderingContext,
+        source: ContextSource,
         type:
             | 'linear_repeat'
             | 'linear_clamp'
@@ -254,7 +265,7 @@ export class SamplerFactory {
             );
         }
 
-        return new WebGLTextureSampler(gl, options);
+        return new WebGLTextureSampler(source, options);
     }
 
     public static builder(): SamplerBuilder {
@@ -326,7 +337,7 @@ export class SamplerBuilder {
         return this;
     }
 
-    public build(gl: WebGL2RenderingContext): WebGLTextureSampler {
+    public build(source: ContextSource): WebGLTextureSampler {
         if (!this._options.minFilter || !this._options.magFilter) {
             throw new TextureError(
                 'Min and mag filters are required',
@@ -341,6 +352,6 @@ export class SamplerBuilder {
             );
         }
 
-        return new WebGLTextureSampler(gl, this._options as ITextureSamplerOptions);
+        return new WebGLTextureSampler(source, this._options as ITextureSamplerOptions);
     }
 }
