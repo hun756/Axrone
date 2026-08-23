@@ -1,4 +1,5 @@
 import type { RenderPassKind, ResolvedRenderPass } from '@axrone/render-core/types';
+import { GLContextError } from './context/errors';
 
 export type FrameGraphNodeId = string & { readonly __brand: 'FrameGraphNode' };
 
@@ -118,7 +119,7 @@ export class FrameGraph {
         }
 
         if (sorted.length !== needed.size) {
-            throw new Error('FrameGraph: cycle detected in pass dependencies');
+            throw new GLContextError('INVALID_OPERATION', 'en', { reason: 'FrameGraph: cycle detected in pass dependencies' });
         }
 
         return sorted.map((id) => this.nodes.get(id)!.pass);

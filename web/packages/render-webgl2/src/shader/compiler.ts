@@ -33,6 +33,7 @@ import {
 import { ByteBuffer } from '@axrone/memory';
 import type { ContextSource, IGLContext } from '../context';
 import { resolveContext } from '../context';
+import { ShaderInstanceBackendError, ShaderInstanceValidationError } from './errors';
 
 class ShaderSourceGenerator {
     private readonly includeCache = new Map<string, string>();
@@ -185,7 +186,7 @@ export class WebGLShaderCompiler implements IShaderCompiler {
 
         const validation = this.validateConfiguration(configuration);
         if (!validation.isValid) {
-            throw new Error(`Shader validation failed: ${validation.errors.join(', ')}`);
+            throw new ShaderInstanceValidationError('INVALID_ARGUMENT', 'en', { details: validation.errors.join(', ') });
         }
 
         const cacheKey = this.generateConfigurationKey(configuration);
@@ -334,7 +335,7 @@ export class WebGLShaderCompiler implements IShaderCompiler {
         const program = this.gl.createProgram();
 
         if (!program) {
-            throw new Error('Failed to create WebGL program');
+            throw new ShaderInstanceBackendError('BACKEND_UNAVAILABLE', 'en', { reason: 'Failed to create WebGL program' });
         }
 
         try {
@@ -374,7 +375,7 @@ export class WebGLShaderCompiler implements IShaderCompiler {
 
             if (!this.gl.getProgramParameter(program, this.gl.LINK_STATUS)) {
                 const info = this.gl.getProgramInfoLog(program);
-                throw new Error(`Shader program linking failed: ${info}`);
+                throw new ShaderInstanceBackendError('SHADER_LINK_FAILED', 'en', { detail: info });
             }
 
             // Label program via IGLContext if debug labels enabled
@@ -394,7 +395,7 @@ export class WebGLShaderCompiler implements IShaderCompiler {
     private compileShader(type: number, source: string): WebGLShader {
         const shader = this.gl.createShader(type);
         if (!shader) {
-            throw new Error('Failed to create WebGL shader');
+            throw new ShaderInstanceBackendError('BACKEND_UNAVAILABLE', 'en', { reason: 'Failed to create WebGL shader' });
         }
 
         this.gl.shaderSource(shader, source);
@@ -403,7 +404,7 @@ export class WebGLShaderCompiler implements IShaderCompiler {
         if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
             const info = this.gl.getShaderInfoLog(shader);
             this.gl.deleteShader(shader);
-            throw new Error(`Shader compilation failed: ${info}`);
+            throw new ShaderInstanceBackendError('SHADER_COMPILE_FAILED', 'en', { detail: info });
         }
 
         return shader;

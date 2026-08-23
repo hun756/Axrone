@@ -9,6 +9,7 @@ import type {
 } from './pipeline-contracts';
 import type { ContextSource, IGLContext } from './context';
 import { resolveContext } from './context';
+import { GLContextError } from './context/errors';
 
 interface WebGL2FormatInfo {
     readonly internalFormat: number;
@@ -179,7 +180,7 @@ export const createWebGL2RenderResourceAllocator = (
 
         const texture = gl.createTexture();
         if (!texture) {
-            throw new Error('Failed to allocate WebGL2 render texture');
+            throw new GLContextError('OUT_OF_MEMORY', 'en', { reason: 'Failed to allocate WebGL2 render texture' });
         }
 
         return createTextureStorage(gl, texture, descriptor);

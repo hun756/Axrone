@@ -9,6 +9,7 @@ import {
 import { ByteBuffer } from '@axrone/memory';
 import type { ContextSource, IGLContext } from '../context';
 import { resolveContext } from '../context';
+import { createDisposedError } from '../errors';
 
 export class WebGLIndexBuffer implements IIndexBuffer {
     private readonly _ctx: IGLContext;
@@ -43,7 +44,7 @@ export class WebGLIndexBuffer implements IIndexBuffer {
 
     get nativeHandle(): WebGLBuffer {
         if (!this.buffer) {
-            throw new Error('IndexBuffer: Buffer not initialized');
+            throw createDisposedError('IndexBuffer');
         }
         return this.buffer.id as WebGLBuffer;
     }

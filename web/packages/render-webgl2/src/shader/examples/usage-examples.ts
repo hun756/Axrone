@@ -12,12 +12,13 @@ import {
 } from '../index';
 
 import { StandardUnlitShader } from '../templates/standard-shaders';
+import { GLContextError } from '../../context/errors';
 
 async function basicShaderUsage() {
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl2');
     if (!gl) {
-        throw new Error('WebGL2 not supported');
+        throw new GLContextError('CONTEXT_CREATION_FAILED', 'en', { reason: 'WebGL2 not supported' });
     }
 
     const shaderManager = new ShaderManager(gl);
@@ -171,7 +172,7 @@ async function advancedShaderUsage() {
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl2');
     if (!gl) {
-        throw new Error('WebGL2 not supported');
+        throw new GLContextError('CONTEXT_CREATION_FAILED', 'en', { reason: 'WebGL2 not supported' });
     }
 
     const shaderManager = new ShaderManager(gl);
@@ -309,7 +310,7 @@ async function loadShaderFromJSON() {
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl2');
     if (!gl) {
-        throw new Error('WebGL2 not supported');
+        throw new GLContextError('CONTEXT_CREATION_FAILED', 'en', { reason: 'WebGL2 not supported' });
     }
 
     const shaderManager = new ShaderManager(gl);

@@ -1,5 +1,6 @@
 import type { ContextSource, IGLContext } from './context';
 import { resolveContext } from './context';
+import { GLContextError } from './context/errors';
 import type { IBuffer } from './buffer';
 
 export interface TransformFeedbackOptions {
@@ -25,7 +26,7 @@ export class GLTransformFeedback implements Disposable {
         this.gl.transformFeedbackVaryings(this.program, [...options.varyings], mode);
         this.gl.linkProgram(this.program);
         const tf = this.gl.createTransformFeedback();
-        if (!tf) throw new Error('Failed to create WebGLTransformFeedback');
+        if (!tf) throw new GLContextError('INVALID_OPERATION', 'en', { reason: 'Failed to create WebGLTransformFeedback' });
         this.tf = tf;
     }
 

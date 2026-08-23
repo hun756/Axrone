@@ -3,6 +3,7 @@ import { ShaderDataType, ShaderStage } from './interfaces';
 import { Djb2 } from '@axrone/hash';
 import type { ContextSource, IGLContext } from '../context';
 import { resolveContext } from '../context';
+import { ShaderInstanceValidationError } from './errors';
 
 export const getShaderDataTypeSize = (type: ShaderDataType): number => {
     switch (type) {
@@ -43,7 +44,7 @@ export const getShaderDataTypeSize = (type: ShaderDataType): number => {
             return 4;
 
         default:
-            throw new Error(`Unknown shader data type: ${type}`);
+            throw new ShaderInstanceValidationError('INVALID_ARGUMENT', 'en', { reason: `Unknown shader data type: ${type}` });
     }
 };
 
@@ -84,7 +85,7 @@ export const getShaderDataTypeComponentCount = (type: ShaderDataType): number =>
             return 16;
 
         default:
-            throw new Error(`Unknown shader data type: ${type}`);
+            throw new ShaderInstanceValidationError('INVALID_ARGUMENT', 'en', { reason: `Unknown shader data type: ${type}` });
     }
 };
 
@@ -121,7 +122,7 @@ export const getWebGLTypeForContext = (ctx: IGLContext, type: ShaderDataType): n
         case ShaderDataType.SAMPLER_2D_ARRAY:
             return ctx.constants.SAMPLER_2D_ARRAY;
         default:
-            throw new Error(`Unknown shader data type: ${type}`);
+            throw new ShaderInstanceValidationError('INVALID_ARGUMENT', 'en', { reason: `Unknown shader data type: ${type}` });
     }
 };
 

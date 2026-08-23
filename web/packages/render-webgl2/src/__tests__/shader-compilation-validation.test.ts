@@ -868,7 +868,7 @@ void main() { o_FragColor = vec4(1); }`,
             const compiler = new WebGLShaderCompiler(gl);
             const config = createValidConfig();
 
-            await expect(compiler.compile(config)).rejects.toThrow('Shader compilation failed');
+            await expect(compiler.compile(config)).rejects.toThrow('SHADER_COMPILE_FAILED');
         });
 
         it('throws when configuration validation fails before compilation', async () => {
@@ -876,7 +876,7 @@ void main() { o_FragColor = vec4(1); }`,
             const compiler = new WebGLShaderCompiler(gl);
             const config = createValidConfig({ name: '' });
 
-            await expect(compiler.compile(config)).rejects.toThrow('Shader validation failed');
+            await expect(compiler.compile(config)).rejects.toThrow('INVALID_ARGUMENT');
         });
 
         it('clearCache resets compilation and variant caches', async () => {

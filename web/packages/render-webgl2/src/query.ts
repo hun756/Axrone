@@ -1,5 +1,7 @@
 import type { ContextSource, IGLContext } from './context';
 import { resolveContext } from './context';
+import { GLContextError } from './context/errors';
+import { createDisposedError } from './errors';
 
 export type QueryKind = 'occlusion' | 'timer';
 
@@ -22,7 +24,7 @@ export class GLQuery implements Disposable {
         this.gl = ctx.gl;
         this.kind = kind;
         const q = this.gl.createQuery();
-        if (!q) throw new Error(`Failed to create WebGLQuery (${kind})`);
+        if (!q) throw new GLContextError('INVALID_OPERATION', 'en', { reason: `Failed to create WebGLQuery (${kind})` });
         this.handle = q;
     }
 
@@ -35,7 +37,7 @@ export class GLQuery implements Disposable {
     }
 
     begin(target: number): void {
-        if (this.disposed) throw new Error('Query disposed');
+        if (this.disposed) throw createDisposedError('Query');
         this.gl.beginQuery(target, this.handle);
         this.active = true;
     }

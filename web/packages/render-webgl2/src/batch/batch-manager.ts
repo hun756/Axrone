@@ -3,6 +3,8 @@ import { IMaterialInstance } from '../shader/interfaces';
 import { BatchRenderer } from './batch-renderer';
 import type { ContextSource, IGLContext } from '../context';
 import { resolveContext } from '../context';
+import { GLContextError } from '../context/errors';
+import { createDisposedError } from '../errors';
 
 export class BatchManager implements IBatchManager {
     private readonly _ctx: IGLContext;
@@ -37,11 +39,11 @@ export class BatchManager implements IBatchManager {
 
     createRenderer(maxBatchSize?: number): IBatchRenderer {
         if (this.disposed) {
-            throw new Error('BatchManager has been disposed');
+            throw createDisposedError('BatchManager');
         }
 
         if (this.renderers.size >= this.config.maxRenderers) {
-            throw new Error(`Maximum number of renderers (${this.config.maxRenderers}) reached`);
+            throw new GLContextError('OUT_OF_MEMORY', 'en', { reason: `Maximum number of renderers (${this.config.maxRenderers}) reached` });
         }
 
         const rendererId = `renderer_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
