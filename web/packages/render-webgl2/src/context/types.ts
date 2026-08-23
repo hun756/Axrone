@@ -293,6 +293,24 @@ export interface IGLStateCache {
     disable(cap: number): void;
     viewport(x: number, y: number, width: number, height: number): void;
     scissor(x: number, y: number, width: number, height: number): void;
+    blendFunc(srcRGB: number, dstRGB: number): void;
+    blendFuncSeparate(srcRGB: number, dstRGB: number, srcAlpha: number, dstAlpha: number): void;
+    blendEquation(mode: number): void;
+    blendEquationSeparate(modeRGB: number, modeAlpha: number): void;
+    depthFunc(func: number): void;
+    depthMask(flag: boolean): void;
+    colorMask(r: boolean, g: boolean, b: boolean, a: boolean): void;
+    cullFace(mode: number): void;
+    frontFace(mode: number): void;
+    polygonOffset(factor: number, units: number): void;
+    stencilFunc(func: number, ref: number, mask: number): void;
+    stencilFuncSeparate(face: number, func: number, ref: number, mask: number): void;
+    stencilOp(sfail: number, dpfail: number, dppass: number): void;
+    stencilOpSeparate(face: number, sfail: number, dpfail: number, dppass: number): void;
+    stencilMask(mask: number): void;
+    stencilMaskSeparate(face: number, mask: number): void;
+    bindBufferBase(target: number, index: number, buffer: WebGLBuffer | null): void;
+    readonly isDeduplicationActive: boolean;
     reset(): void;
     invalidate(): void;
 }
