@@ -179,6 +179,11 @@ export type GLConstants = Readonly<{
     MAX_VIEWPORT_DIMS: number;
     ALIASED_LINE_WIDTH_RANGE: number;
     ALIASED_POINT_SIZE_RANGE: number;
+    BOOL: number;
+    SAMPLER_2D: number;
+    SAMPLER_CUBE: number;
+    SAMPLER_2D_ARRAY: number;
+    SAMPLER_3D: number;
 }>;
 
 export type GLCapabilitiesSnapshot = Readonly<{
