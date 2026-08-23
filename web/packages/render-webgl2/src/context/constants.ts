@@ -95,6 +95,11 @@ const createConstantsFromGL = (gl: WebGL2RenderingContext): GLConstants =>
         MAX_VIEWPORT_DIMS: gl.MAX_VIEWPORT_DIMS,
         ALIASED_LINE_WIDTH_RANGE: gl.ALIASED_LINE_WIDTH_RANGE,
         ALIASED_POINT_SIZE_RANGE: gl.ALIASED_POINT_SIZE_RANGE,
+        BOOL: (gl as unknown as { BOOL: number }).BOOL ?? 0x8b56,
+        SAMPLER_2D: (gl as unknown as { SAMPLER_2D: number }).SAMPLER_2D ?? 0x8b5e,
+        SAMPLER_CUBE: (gl as unknown as { SAMPLER_CUBE: number }).SAMPLER_CUBE ?? 0x8b60,
+        SAMPLER_2D_ARRAY: (gl as unknown as { SAMPLER_2D_ARRAY: number }).SAMPLER_2D_ARRAY ?? 0x8dc1,
+        SAMPLER_3D: (gl as unknown as { SAMPLER_3D: number }).SAMPLER_3D ?? 0x8b5f,
     });
 
 const cache = new WeakMap<WebGL2RenderingContext, GLConstants>();
