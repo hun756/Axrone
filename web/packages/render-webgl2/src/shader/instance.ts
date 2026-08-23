@@ -437,6 +437,7 @@ export class ShaderInstance implements IShaderInstance {
     private readonly dirtyBuffers: Set<string> = new Set();
     private readonly boundTextureUnits: Set<number> = new Set();
     private readonly glBufferHandles: Map<string, WebGLBuffer> = new Map();
+    private readonly uniformBufferCapacities: Map<string, number> = new Map();
 
     private uniformUpdateCount = 0;
     private programBindCount = 0;
@@ -629,8 +630,7 @@ export class ShaderInstance implements IShaderInstance {
     unbind(source: ContextSource | WebGL2RenderingContext): void {
         const gl = resolveRawGL(source as ContextSource)!;
         for (const unit of this.boundTextureUnits) {
-            gl.activeTexture(gl.TEXTURE0 + unit);
-            gl.bindTexture(gl.TEXTURE_2D, null);
+            if (this._ctx) { this._ctx.state.activeTexture(unit); this._ctx.state.bindTexture(gl.TEXTURE_2D, null); } else { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, null); }
         }
         this.boundTextureUnits.clear();
     }
@@ -798,8 +798,7 @@ export class ShaderInstance implements IShaderInstance {
             const slot = this.textureSlots.get(textureName);
             const location = this.shader.uniformLocations.get(textureName);
             if (slot === undefined || !location) continue;
-            gl.activeTexture(gl.TEXTURE0 + slot);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
+            if (this._ctx) { this._ctx.state.activeTexture(slot); this._ctx.state.bindTexture(gl.TEXTURE_2D, texture); } else { gl.activeTexture(gl.TEXTURE0 + slot); gl.bindTexture(gl.TEXTURE_2D, texture); }
             gl.uniform1i(location, slot);
             this.boundTextureUnits.add(slot);
         }
@@ -821,13 +820,20 @@ export class ShaderInstance implements IShaderInstance {
                 }
                 this.glBufferHandles.set(bufferName, glBuffer);
             }
-            gl.bindBuffer(gl.UNIFORM_BUFFER, glBuffer);
             const source = buffer as unknown as { buffer?: ArrayBuffer; byteOffset?: number };
-            gl.bufferData(
-                gl.UNIFORM_BUFFER,
-                source.buffer ?? (buffer as unknown as ArrayBuffer),
-                gl.DYNAMIC_DRAW
-            );
+            const data = source.buffer ?? (buffer as unknown as ArrayBuffer);
+            const size = data.byteLength;
+            gl.bindBuffer(gl.UNIFORM_BUFFER, glBuffer);
+            const capacity = this.uniformBufferCapacities.get(bufferName) ?? 0;
+            if (capacity >= size && capacity > 0) {
+                gl.bufferSubData(gl.UNIFORM_BUFFER, 0, new Uint8Array(data, 0, size));
+            } else if (size > 0) {
+                gl.bufferData(gl.UNIFORM_BUFFER, data as ArrayBuffer, gl.DYNAMIC_DRAW);
+                this.uniformBufferCapacities.set(bufferName, size);
+            } else {
+                gl.bufferData(gl.UNIFORM_BUFFER, 0, gl.DYNAMIC_DRAW);
+                this.uniformBufferCapacities.set(bufferName, 0);
+            }
             gl.bindBufferBase(gl.UNIFORM_BUFFER, binding, glBuffer);
         }
         this.dirtyBuffers.clear();
