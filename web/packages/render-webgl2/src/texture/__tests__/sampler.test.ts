@@ -153,9 +153,11 @@ describe('WebGLTextureSampler', () => {
 		});
 
 		it('skips anisotropy when maxAnisotropy <= 1', () => {
-			new WebGLTextureSampler(mockGL._gl, { ...baseOptions, maxAnisotropy: 1 });
-			expect(mockGL._gl.getExtension).not.toHaveBeenCalled();
-		});
+            const before = (mockGL._gl.samplerParameterf as any).mock.calls.length;
+            new WebGLTextureSampler(mockGL._gl, { ...baseOptions, maxAnisotropy: 1 });
+            const after = (mockGL._gl.samplerParameterf as any).mock.calls.length;
+            expect(after - before).toBe(0);
+        });
 	});
 
 	describe('shadow comparison configuration', () => {
