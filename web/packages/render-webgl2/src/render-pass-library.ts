@@ -1541,9 +1541,9 @@ class ManagedWebGL2RenderPassLibraryImpl implements ManagedWebGL2RenderPassLibra
 		_context: RenderExecutionContext<WebGL2RenderResourceHandle>
 	): void {
 		const gl = this._gl;
-		gl.bindFramebuffer(gl.FRAMEBUFFER, this._framebuffers.defaultFramebuffer);
-		gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-		gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+		this._ctx.state.bindFramebuffer(gl.FRAMEBUFFER, this._framebuffers.defaultFramebuffer);
+		this._ctx.state.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+		this._ctx.state.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
 
 		this._profiler.cpuTimeMs = getNow() - this._frameStartTime;
 		this._lastFrameCapture = Object.freeze({

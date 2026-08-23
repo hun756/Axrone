@@ -735,13 +735,13 @@ export class Renderbuffer implements IRenderbuffer {
 
     public bind = (): IRenderbuffer => {
         this.#throwIfDisposed();
-        this.#gl.bindRenderbuffer(this.#gl.RENDERBUFFER, this.#id);
+        this.#ctx.state.bindRenderbuffer(this.#constants.RENDERBUFFER, this.#id);
         return this;
     };
 
     public unbind = (): IRenderbuffer => {
         this.#throwIfDisposed();
-        this.#gl.bindRenderbuffer(this.#gl.RENDERBUFFER, null);
+        this.#ctx.state.bindRenderbuffer(this.#constants.RENDERBUFFER, null);
         return this;
     };
 
@@ -1225,7 +1225,7 @@ export class FramebufferFactory implements IFramebufferFactory {
     }
 
     public createTexture = (target: GLTextureTarget, options: TextureOptions): ITexture => {
-        return new Texture(this.#gl, target, options);
+        return new Texture(this.#ctx, target, options);
     };
 
     public createTexture2D = (options: TextureOptions): ITexture => {
@@ -1245,11 +1245,11 @@ export class FramebufferFactory implements IFramebufferFactory {
     };
 
     public createRenderbuffer = (options: RenderbufferOptions): IRenderbuffer => {
-        return new Renderbuffer(this.#gl, options);
+        return new Renderbuffer(this.#ctx, options);
     };
 
     public createFramebuffer = (options: FramebufferOptions): IFramebuffer => {
-        return new Framebuffer(this.#gl, options);
+        return new Framebuffer(this.#ctx, options);
     };
 
     public createColorFramebuffer = (

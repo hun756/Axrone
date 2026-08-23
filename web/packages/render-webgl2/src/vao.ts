@@ -420,7 +420,7 @@ class VertexArray<T extends readonly Attribute[]> {
     }
 
     private configure(allocator: BufferAllocator): void {
-        this.gl.bindVertexArray(this.vao as WebGLVertexArrayObject);
+        this._ctx.state.bindVertexArray(this.vao as WebGLVertexArrayObject);
 
         const vb = allocator.getVertexBuffer(this.vertexBuffer);
         if (!vb) throw new Error('Invalid vertex buffer');
@@ -449,17 +449,17 @@ class VertexArray<T extends readonly Attribute[]> {
             ib.bind();
         }
 
-        this.gl.bindVertexArray(null);
+        this._ctx.state.bindVertexArray(null);
     }
 
     bind(): this {
         if (this.disposed) throw new Error('VAO disposed');
-        this.gl.bindVertexArray(this.vao as WebGLVertexArrayObject);
+        this._ctx.state.bindVertexArray(this.vao as WebGLVertexArrayObject);
         return this;
     }
 
     unbind(): this {
-        this.gl.bindVertexArray(null);
+        this._ctx.state.bindVertexArray(null);
         return this;
     }
 
