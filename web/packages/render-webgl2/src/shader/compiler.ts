@@ -360,7 +360,17 @@ export class WebGLShaderCompiler implements IShaderCompiler {
                 this.gl.attachShader(program, fragmentShader);
             }
 
+            const parallelExt = this._ctx.extensions.tryGet('KHR_parallel_shader_compile') as unknown as { COMPLETION_STATUS_KHR?: number } | null;
             this.gl.linkProgram(program);
+            if (parallelExt && typeof parallelExt.COMPLETION_STATUS_KHR === 'number') {
+                const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                while (true) {
+                    const completed = this.gl.getProgramParameter(program, parallelExt.COMPLETION_STATUS_KHR) as boolean;
+                    if (completed) break;
+                    if ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - start > 5000) break;
+                    await new Promise<void>((r) => setTimeout(r, 1));
+                }
+            }
 
             if (!this.gl.getProgramParameter(program, this.gl.LINK_STATUS)) {
                 const info = this.gl.getProgramInfoLog(program);
