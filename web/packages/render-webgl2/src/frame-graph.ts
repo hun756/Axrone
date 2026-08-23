@@ -124,6 +124,37 @@ export class FrameGraph {
         return sorted.map((id) => this.nodes.get(id)!.pass);
     }
 
+    getResourceLifetime(resource: string): { first: FrameGraphNodeId | null; last: FrameGraphNodeId | null } | null {
+        const first = this.resourceWriters.get(resource) ?? null;
+        const readers = this.resourceReaders.get(resource);
+        if (!readers || readers.size === 0) return first ? { first, last: first } : null;
+        let last: FrameGraphNodeId | null = null;
+        for (const id of readers) last = id;
+        return { first, last };
+    }
+
+    getTransients(): string[] {
+        const out: string[] = [];
+        for (const [r, writer] of this.resourceWriters) {
+            const readers = this.resourceReaders.get(r);
+            if (!readers || readers.size === 0) continue;
+            if (this.nodes.has(writer)) out.push(r);
+        }
+        return out;
+    }
+
+    getBarriers(): Array<{ resource: string; before: FrameGraphNodeId; after: FrameGraphNodeId }> {
+        const barriers: Array<{ resource: string; before: FrameGraphNodeId; after: FrameGraphNodeId }> = [];
+        for (const [resource, readers] of this.resourceReaders) {
+            const writer = this.resourceWriters.get(resource);
+            if (!writer) continue;
+            for (const reader of readers) {
+                if (writer !== reader) barriers.push({ resource, before: writer, after: reader });
+            }
+        }
+        return barriers;
+    }
+
     clear(): void {
         this.nodes.clear();
         this.resourceWriters.clear();
