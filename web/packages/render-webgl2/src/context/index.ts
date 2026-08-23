@@ -63,3 +63,6 @@ export {
     isContextSourceGLContext,
     resolveContextGL,
 } from './factory';
+
+export { createMockGL, createMockCanvas, createMockGLContext, createMockGLContextWithGL } from './mock';
+export type { MockGLOptions } from './mock';
