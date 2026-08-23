@@ -19,6 +19,26 @@ import {
     ShaderInstanceValidationError,
     ShaderInstanceBackendError,
 } from './errors';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
+
+const resolveContextNullable = (source: ContextSource | null | undefined): IGLContext | null => {
+    if (!source) return null;
+    if (isGLContext(source as unknown)) return source as IGLContext;
+    try {
+        return getOrCreateGLContext(source as WebGL2RenderingContext);
+    } catch {
+        return null;
+    }
+};
+
+const resolveGL = (source: ContextSource): WebGL2RenderingContext =>
+    isGLContext(source as unknown) ? (source as IGLContext).gl : (source as WebGL2RenderingContext);
 
 type UniformValuePrimitive = number | boolean;
 
@@ -422,6 +442,7 @@ export class ShaderInstance implements IShaderInstance {
     public readonly textures = new Map<string, WebGLTexture>();
     public readonly uniformBuffers = new Map<string, ByteBuffer>();
 
+    private readonly _ctx: IGLContext | null;
     private readonly gl: WebGL2RenderingContext | null;
     private readonly uniformUploader: UniformUploader;
     private readonly uniformDescriptors: Map<string, UniformDescriptor> = new Map();
@@ -454,16 +475,30 @@ export class ShaderInstance implements IShaderInstance {
     constructor(
         shader: ICompiledShader,
         variant: IShaderVariant,
-        gl?: WebGL2RenderingContext | null,
+        source?: ContextSource | null,
         options?: { batchCapacity?: number }
     ) {
         this.shader = shader;
         this.variant = variant;
-        this.gl = gl ?? null;
+        const ctx = resolveContextNullable(source);
+        this._ctx = ctx;
+        // Prefer ctx.gl, fallback to raw WebGL2RenderingContext if wrapper creation failed (e.g., mocked gl without canvas in tests)
+        const rawGL = !ctx && source && !isGLContext(source as unknown) ? (source as WebGL2RenderingContext) : null;
+        this.gl = ctx?.gl ?? rawGL ?? null;
         this.batchCapacity = Math.max(1, options?.batchCapacity ?? DEFAULT_BATCH_CAPACITY);
-        this.uniformUploader = this.gl ? new UniformUploader(this.gl) : new UniformUploader(assertContext(null));
+        const effectiveGL = this.gl ?? this._ctx?.gl ?? null;
+        this.uniformUploader = effectiveGL ? new UniformUploader(effectiveGL) : new UniformUploader(assertContext(null));
         this.buildDescriptors();
         this.initializeDefaultValues();
+    }
+
+    public get context(): IGLContext | null {
+        return this._ctx;
+    }
+
+    /** Backward-compat alias: some callers may still expect .gl access */
+    public get glContext(): WebGL2RenderingContext | null {
+        return this.gl;
     }
 
     setUniform(name: string, value: ShaderUniformValue): void {
@@ -579,12 +614,15 @@ export class ShaderInstance implements IShaderInstance {
         this.batchBuffer.length = 0;
     }
 
-    bind(gl: WebGL2RenderingContext): void {
+    bind(source: ContextSource): void;
+    bind(gl: WebGL2RenderingContext): void;
+    bind(source: ContextSource | WebGL2RenderingContext): void {
         if (this.disposed) {
             throw new ShaderInstanceLifecycleError('PROGRAM_DISPOSED', 'en', {
                 shader: this.shader.name,
             });
         }
+        const gl = resolveGL(source as ContextSource);
         const program = this.variant.shader.program;
         // FIX(upstream): lastBoundProgram cache is per-INSTANCE, but the GL
         // program binding is CONTEXT-GLOBAL. When host code interleaves draws
@@ -603,7 +641,10 @@ export class ShaderInstance implements IShaderInstance {
         this.flushUniformBuffers(gl);
     }
 
-    unbind(gl: WebGL2RenderingContext): void {
+    unbind(source: ContextSource): void;
+    unbind(gl: WebGL2RenderingContext): void;
+    unbind(source: ContextSource | WebGL2RenderingContext): void {
+        const gl = resolveGL(source as ContextSource);
         for (const unit of this.boundTextureUnits) {
             gl.activeTexture(gl.TEXTURE0 + unit);
             gl.bindTexture(gl.TEXTURE_2D, null);

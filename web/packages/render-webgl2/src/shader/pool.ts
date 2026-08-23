@@ -1,5 +1,28 @@
 import { ShaderInstance } from './instance';
 import type { ICompiledShader, IShaderVariant, ShaderUniformValue } from './interfaces';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source as WebGL2RenderingContext);
+
+const resolveContextNullable = (source: ContextSource | null | undefined): IGLContext | null => {
+    if (!source) return null;
+    if (isGLContext(source)) return source;
+    try {
+        return getOrCreateGLContext(source as WebGL2RenderingContext);
+    } catch {
+        return null;
+    }
+};
+
+const resolveRawGL = (source: ContextSource | null): WebGL2RenderingContext | null => {
+    if (!source) return null;
+    if (isGLContext(source)) return source.gl;
+    return source as WebGL2RenderingContext;
+};
 
 export interface ShaderInstancePoolOptions {
     readonly initialCapacity: number;
@@ -43,13 +66,19 @@ class PoolBucket {
     private acquired = 0;
     private released = 0;
     private reused = 0;
+    private readonly _ctx: IGLContext | null;
+    private readonly gl: WebGL2RenderingContext | null;
 
     constructor(
         public readonly shader: ICompiledShader,
         public readonly variant: IShaderVariant,
         private readonly maxCapacity: number,
-        private readonly gl: WebGL2RenderingContext | null
-    ) {}
+        source: ContextSource | null
+    ) {
+        const ctx = resolveContextNullable(source);
+        this._ctx = ctx;
+        this.gl = ctx?.gl ?? resolveRawGL(source);
+    }
 
     acquire(): ShaderInstance {
         let instance: ShaderInstance | null = null;
@@ -62,7 +91,7 @@ class PoolBucket {
             }
         }
         if (!instance) {
-            instance = new ShaderInstance(this.shader, this.variant, this.gl);
+            instance = new ShaderInstance(this.shader, this.variant, this._ctx ?? this.gl);
             this.created++;
         }
         this.acquired++;
@@ -110,11 +139,18 @@ export class ShaderInstancePool {
     private readonly buckets: Map<string, PoolBucket> = new Map();
     private readonly inUseCount: Map<string, number> = new Map();
     private readonly options: ShaderInstancePoolOptions;
+    private readonly _ctx: IGLContext | null;
     private readonly gl: WebGL2RenderingContext | null;
 
-    constructor(gl: WebGL2RenderingContext | null, options?: Partial<ShaderInstancePoolOptions>) {
-        this.gl = gl;
+    constructor(source: ContextSource | null, options?: Partial<ShaderInstancePoolOptions>) {
+        const ctx = resolveContextNullable(source);
+        this._ctx = ctx;
+        this.gl = ctx?.gl ?? resolveRawGL(source);
         this.options = { ...DEFAULT_POOL_OPTIONS, ...options };
+    }
+
+    public get context(): IGLContext | null {
+        return this._ctx;
     }
 
     acquire(shader: ICompiledShader, variant: IShaderVariant): ShaderInstance {
@@ -122,7 +158,7 @@ export class ShaderInstancePool {
         const keyStr = `${key.shader}::${key.variant}`;
         let bucket = this.buckets.get(keyStr);
         if (!bucket) {
-            bucket = new PoolBucket(shader, variant, this.options.maxCapacity, this.gl);
+            bucket = new PoolBucket(shader, variant, this.options.maxCapacity, this._ctx ?? this.gl);
             this.buckets.set(keyStr, bucket);
             this.inUseCount.set(keyStr, 0);
         }

@@ -13,6 +13,13 @@ import { WebGLShaderCompiler } from './compiler';
 import { ShaderInstance } from './instance';
 import { MaterialInstance } from './material';
 import { generateVariantKey, SHADER_CACHE_LIMITS } from './utils';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 
 interface ShaderCacheEntry {
     readonly shader: ICompiledShader;
@@ -32,6 +39,7 @@ interface ShaderManagerStats {
 }
 
 export class ShaderManager implements IShaderManager {
+    private readonly _ctx: IGLContext;
     private readonly gl: WebGL2RenderingContext;
     private readonly compiler: IShaderCompiler;
     private readonly shaderCache = new Map<string, ShaderCacheEntry>();
@@ -49,9 +57,11 @@ export class ShaderManager implements IShaderManager {
         hitRate: 0,
     };
 
-    constructor(gl: WebGL2RenderingContext) {
-        this.gl = gl;
-        this.compiler = new WebGLShaderCompiler(gl);
+    constructor(source: ContextSource) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
+        this.compiler = new WebGLShaderCompiler(ctx);
 
         this.materialPool = new ObjectPool<MaterialInstance>({
             factory: () => new MaterialInstance(null as any),
@@ -345,6 +355,10 @@ export class ShaderManager implements IShaderManager {
             hitRate:
                 this.stats.cacheHits / Math.max(1, this.stats.cacheHits + this.stats.cacheMisses),
         };
+    }
+
+    public get context(): IGLContext {
+        return this._ctx;
     }
 
     private disposeShaderEntry(entry: ShaderCacheEntry): void {

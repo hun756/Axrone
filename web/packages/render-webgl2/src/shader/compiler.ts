@@ -31,6 +31,13 @@ import {
 } from './utils';
 
 import { ByteBuffer } from '@axrone/memory';
+import type { IGLContext } from '../context';
+import { getOrCreateGLContext, isGLContext } from '../context';
+
+export type ContextSource = IGLContext | WebGL2RenderingContext;
+
+const resolveContext = (source: ContextSource): IGLContext =>
+    isGLContext(source) ? source : getOrCreateGLContext(source);
 
 class ShaderSourceGenerator {
     private readonly includeCache = new Map<string, string>();
@@ -155,14 +162,21 @@ class ShaderSourceGenerator {
 }
 
 export class WebGLShaderCompiler implements IShaderCompiler {
+    private readonly _ctx: IGLContext;
     private readonly gl: WebGL2RenderingContext;
     private readonly sourceGenerator: ShaderSourceGenerator;
     private readonly compilationCache = new Map<string, ICompiledShader>();
     private readonly variantCache = new Map<string, IShaderVariant>();
 
-    constructor(gl: WebGL2RenderingContext) {
-        this.gl = gl;
+    constructor(source: ContextSource) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
         this.sourceGenerator = new ShaderSourceGenerator();
+    }
+
+    public get context(): IGLContext {
+        return this._ctx;
     }
 
     async compile(
@@ -354,6 +368,13 @@ export class WebGLShaderCompiler implements IShaderCompiler {
                 const info = this.gl.getProgramInfoLog(program);
                 throw new Error(`Shader program linking failed: ${info}`);
             }
+
+            // Label program via IGLContext if debug labels enabled
+            try {
+                const dbg = this._ctx.extensions.tryGet('KHR_debug') as unknown as { PROGRAM?: number } | null;
+                const type = dbg?.PROGRAM ?? 0x82e2;
+                this._ctx.labelObject(type, program as unknown as object, configuration.name);
+            } catch {}
 
             return program;
         } catch (error) {
