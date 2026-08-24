@@ -1,6 +1,10 @@
 <Solution>
   <Folder Name="/packages/">
+    <Project Path="packages/Axrone.Memory/Axrone.Memory.csproj" />
+    <Project Path="packages/Axrone.Memory/tests/Axrone.Memory.Tests.csproj" />
     <Project Path="packages/Axrone.Utility/Axrone.Utility.csproj" />
     <Project Path="packages/Axrone.Utility/tests/Axrone.Utility.Tests.csproj" />
+    <Project Path="packages/Axrone.ObjectPool/Axrone.ObjectPool.csproj" />
+    <Project Path="packages/Axrone.ObjectPool/tests/Axrone.ObjectPool.Tests.csproj" />
   </Folder>
 </Solution>
