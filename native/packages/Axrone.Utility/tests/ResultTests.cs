@@ -34,7 +34,7 @@ public class ResultTests
     [Fact]
     public async Task Unit_ValueTask_Completes_Successfully()
     {
-        var result = await Unit.ValueTask;
+        var result = await Unit.CompletedValueTask;
         result.Should().Be(Unit.Value);
     }
 
