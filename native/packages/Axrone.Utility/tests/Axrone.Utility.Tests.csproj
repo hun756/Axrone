@@ -3,7 +3,7 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <NoWarn>$(NoWarn);CA1707;CA1305;CA2000;CA1515;CA2231;CA1815;CA1031</NoWarn>
+    <NoWarn>$(NoWarn);CA1707;CA1305;CA2000;CA1515;CA2231;CA1815;CA1031;CA2007;CA2201;CA1861;CA1869</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
