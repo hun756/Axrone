@@ -356,6 +356,90 @@ const SCENE_MATERIAL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
 
 const resolveAlias = (name: string): string => SCENE_MATERIAL_ALIASES[name] ?? name;
 
+/**
+ * Stable JSON serialization for deep comparison of material definitions.
+ * Handles Maps by converting to sorted objects.
+ */
+const stableStringify = (value: unknown): string => {
+    if (value instanceof Map) {
+        const entries = [...value.entries()].sort(([a], [b]) => a.localeCompare(b));
+        return JSON.stringify(Object.fromEntries(entries), stableReplacer);
+    }
+    return JSON.stringify(value, stableReplacer);
+};
+
+const stableReplacer = (_key: string, value: unknown): unknown => {
+    if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Map)) {
+        const sorted: Record<string, unknown> = {};
+        for (const k of Object.keys(value as Record<string, unknown>).sort()) {
+            sorted[k] = (value as Record<string, unknown>)[k];
+        }
+        return sorted;
+    }
+    return value;
+};
+
+/**
+ * Deep-compares an existing material resource with a new definition to determine
+ * if they are semantically identical (shaderId + uniforms + textures + surface + passes).
+ */
+const areMaterialDefinitionsEquivalent = (
+    existing: SceneMaterialResource,
+    incoming: SceneMaterialDefinition
+): boolean => {
+    // Compare shaderId
+    if (existing.shaderId !== incoming.shaderId) {
+        return false;
+    }
+
+    // Compare uniforms: existing is Map, incoming is Record
+    const existingUniforms: Record<string, unknown> = {};
+    for (const [k, v] of existing.uniforms) {
+        existingUniforms[k] = v;
+    }
+    const incomingUniforms = incoming.uniforms ?? {};
+    if (stableStringify(existingUniforms) !== stableStringify(incomingUniforms)) {
+        return false;
+    }
+
+    // Compare textures: existing is Map<name, SceneMaterialTextureBinding>, incoming is Record<name, binding>
+    const existingTextures: Record<string, unknown> = {};
+    for (const [k, v] of existing.textureBindings) {
+        existingTextures[k] = { textureId: v.textureId, samplerId: v.samplerId, unit: v.unit };
+    }
+    const incomingTextures: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(incoming.textures ?? {})) {
+        const normalized = normalizeSceneTextureBinding(v as SceneTextureBindingDefinition);
+        incomingTextures[k] = { textureId: normalized.textureId, samplerId: normalized.samplerId, unit: normalized.unit };
+    }
+    if (stableStringify(existingTextures) !== stableStringify(incomingTextures)) {
+        return false;
+    }
+
+    // Compare surface
+    const existingSurface = existing.surface;
+    const incomingSurface = incoming.surface ?? null;
+    if (existingSurface === null && incomingSurface === null) {
+        // both null — equal
+    } else if (existingSurface === null || incomingSurface === null) {
+        return false;
+    } else if (stableStringify(existingSurface) !== stableStringify(incomingSurface)) {
+        return false;
+    }
+
+    // Compare passes
+    const existingPasses = existing.passes;
+    const incomingPasses = incoming.passes ?? [];
+    if (existingPasses.length !== incomingPasses.length) {
+        return false;
+    }
+    if (stableStringify(existingPasses) !== stableStringify(incomingPasses)) {
+        return false;
+    }
+
+    return true;
+};
+
 export class SceneMaterialRegistry {
     private readonly _resources = new Map<string, SceneMaterialResource>();
     private readonly _definitions = new Map<string, SceneMaterialDefinition>();
@@ -380,6 +464,13 @@ export class SceneMaterialRegistry {
         definition: SceneMaterialDefinition,
         suppressCreated: boolean
     ): SceneMaterialHandle {
+        const existing = this._resources.get(definition.id);
+
+        // Idempotent: if an identical material is already registered, return the existing handle silently.
+        if (existing && areMaterialDefinitionsEquivalent(existing, definition)) {
+            return toHandle(existing);
+        }
+
         const resource: SceneMaterialResource = {
             id: definition.id,
             shaderId: definition.shaderId,
@@ -395,7 +486,7 @@ export class SceneMaterialRegistry {
             keywords: new Map(),
         };
 
-        if (this._resources.has(definition.id)) {
+        if (existing) {
             console.warn(
                 `[SceneMaterialRegistry] Material '${definition.id}' is already registered. Overwriting existing material. This may cause unexpected rendering behavior.`
             );
