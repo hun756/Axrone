@@ -38,6 +38,18 @@
     <NoWarn>$(NoWarn);CA1034</NoWarn>
     <!-- CA1508: Dead code — false positive on lock-protected static fields -->
     <NoWarn>$(NoWarn);CA1508</NoWarn>
+    <!-- CA1028: ErrorType enum byte base — intentional for minimal memory footprint -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1805: Unit.Value/Default explicit default init — intentional public API surface -->
+    <NoWarn>$(NoWarn);CA1805</NoWarn>
+    <!-- CA1036: Unit missing comparison operators — meaningless for void-equivalent type -->
+    <NoWarn>$(NoWarn);CA1036</NoWarn>
+    <!-- CA2225: Implicit operators need named alternatives — Result pattern design -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1062: JSON writer null check — STJ framework guarantees non-null -->
+    <NoWarn>$(NoWarn);CA1062</NoWarn>
+    <!-- IL2026: Exception.TargetSite in source-gen JSON context — diagnostics only -->
+    <NoWarn>$(NoWarn);IL2026</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
