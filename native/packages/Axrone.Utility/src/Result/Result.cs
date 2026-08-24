@@ -1,204 +1,335 @@
-namespace Axrone.Utility.Result;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
-/// <summary>
-/// Represents the outcome of an operation that can either succeed with a value of type <typeparamref name="T"/>
-/// or fail with an error of type <typeparamref name="TErr"/>.
-/// </summary>
-/// <remarks>
-/// <para>Thread-safety: instances are immutable and safe for concurrent reads.</para>
-/// </remarks>
-public abstract class Result<T, TErr> : IEquatable<Result<T, TErr>>
+namespace Enterprise.Patterns.Result;
+
+[DebuggerDisplay("{GetDebuggerDisplay(),nq}")]
+[StructLayout(LayoutKind.Auto)]
+public readonly struct Result : IResult, IEquatable<Result>
 {
-    internal Result() { }
+    private static readonly Result CachedSuccess = new(true, default);
 
-    public abstract bool IsOk { get; }
-    public bool IsErr => !IsOk;
+    private readonly ErrorCollection _errors;
+    private readonly bool _isSuccess;
 
-    public abstract TResult Fold<TResult>(Func<T, TResult> onOk, Func<TErr, TResult> onErr);
-    public abstract T Unwrap();
-    public abstract T UnwrapOr(T defaultValue);
-    public abstract T UnwrapOrElse(Func<TErr, T> onError);
-
-    public T Expect(string message)
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private Result(bool isSuccess, in ErrorCollection errors)
     {
-        if (IsOk) return Unwrap();
-        throw new ResultException(message) { InnerError = UnwrapErrAsObject() };
+        _isSuccess = isSuccess;
+        _errors = errors;
     }
 
-    public abstract Result<TResult, TErr> Map<TResult>(Func<T, TResult> fn);
-    public abstract Result<T, TResult> MapErr<TResult>(Func<TErr, TResult> fn);
-    public abstract Result<TResult, TErr> AndThen<TResult>(Func<T, Result<TResult, TErr>> fn);
-    public abstract Result<T, TResult> OrElse<TResult>(Func<TErr, Result<T, TResult>> fn);
-    public abstract Result<T, TErr> Tap(Action<T> action);
-    public abstract Result<T, TErr> TapErr(Action<TErr> action);
-
-    internal abstract object UnwrapErrAsObject();
-
-    public abstract T? ToNullable();
-    public abstract (bool Success, T? Value) ToTuple();
-
-    public abstract bool Equals(Result<T, TErr>? other);
-    public abstract override int GetHashCode();
-    public abstract override string ToString();
-}
-
-public sealed class Ok<T, TErr> : Result<T, TErr>
-{
-    private readonly T _value;
-
-    internal Ok(T value) => _value = value;
-
-    public override bool IsOk => true;
-
-    public override TResult Fold<TResult>(Func<T, TResult> onOk, Func<TErr, TResult> onErr) => onOk(_value);
-    public override T Unwrap() => _value;
-    public override T UnwrapOr(T defaultValue) => _value;
-    public override T UnwrapOrElse(Func<TErr, T> onError) => _value;
-
-    public override Result<TResult, TErr> Map<TResult>(Func<T, TResult> fn) => new Ok<TResult, TErr>(fn(_value));
-    public override Result<T, TResult> MapErr<TResult>(Func<TErr, TResult> fn) => new Ok<T, TResult>(_value);
-    public override Result<TResult, TErr> AndThen<TResult>(Func<T, Result<TResult, TErr>> fn) => fn(_value);
-    public override Result<T, TResult> OrElse<TResult>(Func<TErr, Result<T, TResult>> fn) => new Ok<T, TResult>(_value);
-
-    public override Result<T, TErr> Tap(Action<T> action)
+    public bool IsSuccess
     {
-        action(_value);
-        return this;
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => _isSuccess;
     }
 
-    public override Result<T, TErr> TapErr(Action<TErr> action) => this;
-
-    internal override object UnwrapErrAsObject() => _value!;
-
-    public override T? ToNullable() => _value;
-    public override (bool Success, T? Value) ToTuple() => (true, _value);
-
-    public override bool Equals(Result<T, TErr>? other) =>
-        other is Ok<T, TErr> ok && EqualityComparer<T>.Default.Equals(_value, ok._value);
-
-    public override int GetHashCode() => HashCode.Combine(true, _value);
-    public override string ToString() => $"Ok({_value})";
-}
-
-public sealed class Err<T, TErr> : Result<T, TErr>
-{
-    private readonly TErr _error;
-
-    internal Err(TErr error) => _error = error;
-
-    public override bool IsOk => false;
-
-    public override TResult Fold<TResult>(Func<T, TResult> onOk, Func<TErr, TResult> onErr) => onErr(_error);
-
-    public override T Unwrap() =>
-        throw new ResultException($"Attempted to unwrap Err result: {_error}") { InnerError = _error };
-
-    public override T UnwrapOr(T defaultValue) => defaultValue;
-    public override T UnwrapOrElse(Func<TErr, T> onError) => onError(_error);
-
-    public override Result<TResult, TErr> Map<TResult>(Func<T, TResult> fn) => new Err<TResult, TErr>(_error);
-    public override Result<T, TResult> MapErr<TResult>(Func<TErr, TResult> fn) => new Err<T, TResult>(fn(_error));
-    public override Result<TResult, TErr> AndThen<TResult>(Func<T, Result<TResult, TErr>> fn) => new Err<TResult, TErr>(_error);
-    public override Result<T, TResult> OrElse<TResult>(Func<TErr, Result<T, TResult>> fn) => fn(_error);
-
-    public override Result<T, TErr> Tap(Action<T> action) => this;
-
-    public override Result<T, TErr> TapErr(Action<TErr> action)
+    public bool IsFailure
     {
-        action(_error);
-        return this;
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => !_isSuccess;
     }
 
-    internal override object UnwrapErrAsObject() => _error!;
-
-    public override T? ToNullable() => default;
-    public override (bool Success, T? Value) ToTuple() => (false, default);
-
-    public override bool Equals(Result<T, TErr>? other) =>
-        other is Err<T, TErr> err && EqualityComparer<TErr>.Default.Equals(_error, err._error);
-
-    public override int GetHashCode() => HashCode.Combine(false, _error);
-    public override string ToString() => $"Err({_error})";
-}
-
-public sealed class ResultException : Exception
-{
-    public object? InnerError { get; init; }
-
-    public ResultException() { }
-    public ResultException(string message) : base(message) { }
-    public ResultException(string message, Exception inner) : base(message, inner) { }
-}
-
-public static class ResultModule
-{
-    public static Result<T, TErr> Ok<T, TErr>(T value) => new Ok<T, TErr>(value);
-    public static Result<T, TErr> Err<T, TErr>(TErr error) => new Err<T, TErr>(error);
-
-    public static Result<T, Exception> Try<T>(Func<T> fn)
+    public Error TopError
     {
-        ArgumentNullException.ThrowIfNull(fn);
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get
+        {
+            if (_isSuccess) return Error.None;
+            return _errors.Count == 0 ? Error.Uninitialized : _errors.TopError;
+        }
+    }
+
+    public ErrorCollection Errors
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get
+        {
+            if (_isSuccess) return ErrorCollection.Empty;
+            return _errors.Count == 0 ? new ErrorCollection(Error.Uninitialized) : _errors;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result Success() => CachedSuccess;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result<TValue> Success<TValue>(TValue value) => Result<TValue>.Success(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result Failure(Error error) => new(false, new ErrorCollection(error));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result Failure(in ErrorCollection errors) =>
+        new(false, errors.Count == 0 ? new ErrorCollection(Error.Uninitialized) : errors);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result Failure(params Error[] errors) =>
+        new(false, errors is null || errors.Length == 0 ? new ErrorCollection(Error.Uninitialized) : new ErrorCollection(errors));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result Failure(List<Error> errors) =>
+        new(false, errors is null || errors.Count == 0 ? new ErrorCollection(Error.Uninitialized) : new ErrorCollection(errors));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result<TValue> Failure<TValue>(Error error) => Result<TValue>.Failure(error);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result<TValue> Failure<TValue>(in ErrorCollection errors) => Result<TValue>.Failure(in errors);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result<TValue> Failure<TValue>(params Error[] errors) => Result<TValue>.Failure(errors);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result<TValue> Failure<TValue>(List<Error> errors) => Result<TValue>.Failure(errors);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result Create(bool condition, Error error) => condition ? Success() : Failure(error);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result Create(bool condition, Func<Error> errorFactory)
+    {
+        ArgumentNullException.ThrowIfNull(errorFactory);
+        return condition ? Success() : Failure(errorFactory());
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result<TValue> Create<TValue>(bool condition, TValue value, Error error) =>
+        condition ? Success(value) : Failure<TValue>(error);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result<TValue> Create<TValue>(bool condition, Func<TValue> valueFactory, Func<Error> errorFactory)
+    {
+        ArgumentNullException.ThrowIfNull(valueFactory);
+        ArgumentNullException.ThrowIfNull(errorFactory);
+        return condition ? Success(valueFactory()) : Failure<TValue>(errorFactory());
+    }
+
+    public static Result Try(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
         try
         {
-            return new Ok<T, Exception>(fn());
+            action();
+            return Success();
         }
         catch (Exception ex)
         {
-            return new Err<T, Exception>(ex);
+            return Failure(Error.FromException(ex));
         }
     }
 
-    public static async ValueTask<Result<T, Exception>> TryAsync<T>(Func<ValueTask<T>> fn)
+    public static Result<TValue> Try<TValue>(Func<TValue> func)
     {
-        ArgumentNullException.ThrowIfNull(fn);
+        ArgumentNullException.ThrowIfNull(func);
         try
         {
-            return new Ok<T, Exception>(await fn().ConfigureAwait(false));
+            return Success(func());
         }
         catch (Exception ex)
         {
-            return new Err<T, Exception>(ex);
+            return Failure<TValue>(Error.FromException(ex));
         }
     }
 
-    public static Result<T, TErr> FromNullable<T, TErr>(T? value, Func<TErr> onNull) where T : class
+    public static async Task<Result> TryAsync(Func<Task> action)
     {
-        ArgumentNullException.ThrowIfNull(onNull);
-        if (value is not null) return new Ok<T, TErr>(value);
-        return new Err<T, TErr>(onNull());
-    }
-
-    public static Result<T[], TErr> All<T, TErr>(ReadOnlySpan<Result<T, TErr>> results)
-    {
-        var values = new T[results.Length];
-        for (var i = 0; i < results.Length; i++)
+        ArgumentNullException.ThrowIfNull(action);
+        try
         {
-            if (results[i] is Err<T, TErr> err)
-                return ResultModule.Err<T[], TErr>(err.Fold(static _ => default!, static e => e));
-            values[i] = results[i].Unwrap();
+            await action().ConfigureAwait(false);
+            return Success();
         }
-        return new Ok<T[], TErr>(values);
-    }
-
-    public static (T[] OkValues, TErr[] ErrValues) Partition<T, TErr>(ReadOnlySpan<Result<T, TErr>> results)
-    {
-        var okCount = 0;
-        for (var i = 0; i < results.Length; i++)
-            if (results[i].IsOk) okCount++;
-
-        var okValues = new T[okCount];
-        var errValues = new TErr[results.Length - okCount];
-        var oi = 0;
-        var ei = 0;
-
-        for (var i = 0; i < results.Length; i++)
+        catch (Exception ex)
         {
-            if (results[i] is Ok<T, TErr> ok)
-                okValues[oi++] = ok.Unwrap();
-            else
-                errValues[ei++] = results[i].Fold(static _ => default!, static e => e);
+            return Failure(Error.FromException(ex));
+        }
+    }
+
+    public static async ValueTask<Result> TryAsync(Func<ValueTask> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        try
+        {
+            await action().ConfigureAwait(false);
+            return Success();
+        }
+        catch (Exception ex)
+        {
+            return Failure(Error.FromException(ex));
+        }
+    }
+
+    public static async Task<Result<TValue>> TryAsync<TValue>(Func<Task<TValue>> func)
+    {
+        ArgumentNullException.ThrowIfNull(func);
+        try
+        {
+            TValue val = await func().ConfigureAwait(false);
+            return Success(val);
+        }
+        catch (Exception ex)
+        {
+            return Failure<TValue>(Error.FromException(ex));
+        }
+    }
+
+    public static async ValueTask<Result<TValue>> TryAsync<TValue>(Func<ValueTask<TValue>> func)
+    {
+        ArgumentNullException.ThrowIfNull(func);
+        try
+        {
+            TValue val = await func().ConfigureAwait(false);
+            return Success(val);
+        }
+        catch (Exception ex)
+        {
+            return Failure<TValue>(Error.FromException(ex));
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result Combine(scoped ReadOnlySpan<Result> results)
+    {
+        List<Error>? collected = null;
+        for (int i = 0; i < results.Length; i++)
+        {
+            if (results[i].IsFailure)
+            {
+                collected ??= new List<Error>(results.Length);
+                var errs = results[i].Errors;
+                for (int j = 0; j < errs.Count; j++)
+                {
+                    collected.Add(errs[j]);
+                }
+            }
         }
 
-        return (okValues, errValues);
+        return collected is null ? Success() : Failure(collected);
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Result Combine(IEnumerable<Result> results)
+    {
+        ArgumentNullException.ThrowIfNull(results);
+        List<Error>? collected = null;
+        foreach (Result r in results)
+        {
+            if (r.IsFailure)
+            {
+                collected ??= new List<Error>();
+                var errs = r.Errors;
+                for (int j = 0; j < errs.Count; j++)
+                {
+                    collected.Add(errs[j]);
+                }
+            }
+        }
+
+        return collected is null ? Success() : Failure(collected);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public TResult Match<TResult>(Func<TResult> onSuccess, Func<ErrorCollection, TResult> onFailure)
+    {
+        ArgumentNullException.ThrowIfNull(onSuccess);
+        ArgumentNullException.ThrowIfNull(onFailure);
+        return _isSuccess ? onSuccess() : onFailure(Errors);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void Match(Action onSuccess, Action<ErrorCollection> onFailure)
+    {
+        ArgumentNullException.ThrowIfNull(onSuccess);
+        ArgumentNullException.ThrowIfNull(onFailure);
+        if (_isSuccess) onSuccess();
+        else onFailure(Errors);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Result Map(Func<Result> mapper)
+    {
+        ArgumentNullException.ThrowIfNull(mapper);
+        return _isSuccess ? mapper() : this;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Result<TResult> Map<TResult>(Func<TResult> mapper)
+    {
+        ArgumentNullException.ThrowIfNull(mapper);
+        return _isSuccess ? Result<TResult>.Success(mapper()) : Result<TResult>.Failure(Errors);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Result<TResult> Bind<TResult>(Func<Result<TResult>> binder)
+    {
+        ArgumentNullException.ThrowIfNull(binder);
+        return _isSuccess ? binder() : Result<TResult>.Failure(Errors);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Result Bind(Func<Result> binder)
+    {
+        ArgumentNullException.ThrowIfNull(binder);
+        return _isSuccess ? binder() : this;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Result Tap(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        if (_isSuccess) action();
+        return this;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Result TapError(Action<ErrorCollection> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        if (!_isSuccess) action(Errors);
+        return this;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Result OrElse(Result fallback) => _isSuccess ? this : fallback;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Result OrElse(Func<Result> fallbackFactory)
+    {
+        ArgumentNullException.ThrowIfNull(fallbackFactory);
+        return _isSuccess ? this : fallbackFactory();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator Result(Error error) => Failure(error);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator Result(Error[] errors) => Failure(errors);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator Result(in ErrorCollection errors) => Failure(in errors);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool Equals(Result other)
+    {
+        if (_isSuccess != other._isSuccess) return false;
+        return _isSuccess || Errors.Equals(other.Errors);
+    }
+
+    public override bool Equals(object? obj) => obj is Result other && Equals(other);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public override int GetHashCode() => _isSuccess ? 1 : HashCode.Combine(false, Errors);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator ==(Result left, Result right) => left.Equals(right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator !=(Result left, Result right) => !left.Equals(right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private string GetDebuggerDisplay() => _isSuccess ? "Success" : $"Failure: [{TopError.Code}] {TopError.Message}";
 }
