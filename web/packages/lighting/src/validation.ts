@@ -215,9 +215,9 @@ export const DEFAULT_LIGHTING_CAPACITY: Readonly<LightingCapacity> = Object.free
 });
 
 export const DEFAULT_LIGHTING_ENVIRONMENT: LightingEnvironment = Object.freeze({
-    ambient: freezeVec3(0.08, 0.08, 0.1),
-    sky: freezeVec3(0.08, 0.09, 0.11),
-    ground: freezeVec3(0.04, 0.04, 0.045),
+    ambient: freezeVec3(0.2, 0.2, 0.25),
+    sky: freezeVec3(0.4, 0.45, 0.55),
+    ground: freezeVec3(0.15, 0.13, 0.1),
     exposure: 1,
     gamma: 2.2,
 });

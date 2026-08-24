@@ -1,9 +1,9 @@
 import { Vec3, Vec4 } from '@axrone/numeric';
 
 export const DEFAULT_SCENE_CLEAR_COLOR = new Vec4(0.08, 0.09, 0.11, 1);
-export const DEFAULT_SCENE_AMBIENT_LIGHT = new Vec3(0.08, 0.08, 0.1);
-export const DEFAULT_SCENE_SKY_LIGHT = new Vec3(0.08, 0.09, 0.11);
-export const DEFAULT_SCENE_GROUND_LIGHT = new Vec3(0.04, 0.04, 0.045);
+export const DEFAULT_SCENE_AMBIENT_LIGHT = new Vec3(0.2, 0.2, 0.25);
+export const DEFAULT_SCENE_SKY_LIGHT = new Vec3(0.4, 0.45, 0.55);
+export const DEFAULT_SCENE_GROUND_LIGHT = new Vec3(0.15, 0.13, 0.1);
 export const DEFAULT_SCENE_WIDTH = 1280;
 export const DEFAULT_SCENE_HEIGHT = 720;
 export const DEFAULT_SCENE_RENDER_PASS_ID = 'main';

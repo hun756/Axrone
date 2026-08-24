@@ -1393,7 +1393,7 @@ const createGltfPbrShaderEffect = (id: string): RenderShaderEffectDefinition => 
     fragment: {
         precision: 'highp',
         outputs: [{ name: 'o_Color', type: 'vec4' }],
-        includes: ['gltf.uv', 'gltf.pbr-lighting', 'gltf.ibl', 'gltf.shadow', 'gltf.advanced-shading'],
+        includes: ['gltf.uv', 'gltf.pbr-lighting', 'gltf.ibl', 'gltf.shadow', 'gltf.advanced-shading', 'gltf.color-space'],
         main: [
             'vec4 baseColor = _BaseColorFactor;',
             'if (_BaseColorTexture_TexCoord >= 0) {',
@@ -1585,7 +1585,7 @@ const createGltfPbrShaderEffect = (id: string): RenderShaderEffectDefinition => 
             '}',
             '',
             'float alpha = alphaMode == 2 ? baseColor.a : 1.0;',
-            'o_Color = vec4(lighting + emissive, alpha);',
+            'o_Color = vec4(linearToSrgb(lighting + emissive), alpha);',
         ],
     },
     renderState: {
@@ -1746,7 +1746,7 @@ const createGltfToonShaderEffect = (id: string): RenderShaderEffectDefinition =>
     fragment: {
         precision: 'mediump',
         outputs: [{ name: 'o_Color', type: 'vec4' }],
-        includes: ['gltf.uv', 'gltf.pbr-lighting'],
+        includes: ['gltf.uv', 'gltf.pbr-lighting', 'gltf.color-space'],
         main: [
             'vec4 baseColor = _BaseColorFactor;',
             'if (_BaseColorTexture_TexCoord >= 0) {',
@@ -1805,7 +1805,7 @@ const createGltfToonShaderEffect = (id: string): RenderShaderEffectDefinition =>
             '}',
             '',
             'float alpha = alphaMode == 2 ? baseColor.a : 1.0;',
-            'o_Color = vec4(lighting + emissive, alpha);',
+            'o_Color = vec4(linearToSrgb(lighting + emissive), alpha);',
         ],
     },
     renderState: {
