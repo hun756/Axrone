@@ -71,7 +71,6 @@ export class SceneLightingCollector {
             const point = actor.getComponent(PointLight);
             if (point && point.enabled) {
                 this._syncPointLight(point);
-                continue;
             }
 
             const spot = actor.getComponent(SpotLight);
