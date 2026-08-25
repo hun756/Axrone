@@ -8,6 +8,7 @@ export interface PointLightConfig {
     readonly color?: Vec3 | readonly [number, number, number];
     readonly intensity?: number;
     readonly range?: number;
+    readonly attenuation?: number;
 }
 
 const toVec3 = (
@@ -35,12 +36,14 @@ export class PointLight extends Component {
     private _color: Vec3;
     private _intensity: number;
     private _range: number;
+    private _attenuation: number;
 
     constructor(config: PointLightConfig = {}) {
         super();
         this._color = Vec3.ONE.clone();
         this._intensity = 1;
         this._range = 8;
+        this._attenuation = 2;
         this._applyConfig(config);
     }
 
@@ -68,6 +71,14 @@ export class PointLight extends Component {
         this._applyConfig({ range: value });
     }
 
+    get attenuation(): number {
+        return this._attenuation;
+    }
+
+    set attenuation(value: number) {
+        this._applyConfig({ attenuation: value });
+    }
+
     getWorldPosition(): Vec3 {
         const transform = this.transform as Transform | undefined;
         if (!transform) {
@@ -82,6 +93,7 @@ export class PointLight extends Component {
             color: [this._color.x, this._color.y, this._color.z],
             intensity: this._intensity,
             range: this._range,
+            attenuation: this._attenuation,
         };
     }
 
@@ -94,6 +106,7 @@ export class PointLight extends Component {
             ...(color ? { color } : {}),
             ...(typeof data.intensity === 'number' ? { intensity: data.intensity } : {}),
             ...(typeof data.range === 'number' ? { range: data.range } : {}),
+            ...(typeof data.attenuation === 'number' ? { attenuation: data.attenuation } : {}),
         };
 
         this._applyConfig(patch);
@@ -105,6 +118,7 @@ export class PointLight extends Component {
                 color: config.color ?? this._color,
                 intensity: config.intensity ?? this._intensity,
                 range: config.range ?? this._range,
+                attenuation: config.attenuation ?? this._attenuation,
             },
             'scene-runtime:point-light'
         );
@@ -112,5 +126,6 @@ export class PointLight extends Component {
         this._color = Vec3.from(definition.color);
         this._intensity = definition.intensity;
         this._range = definition.range;
+        this._attenuation = definition.attenuation;
     }
 }

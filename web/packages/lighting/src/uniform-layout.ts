@@ -18,6 +18,7 @@ export type LightingUniformField =
     | 'PointLightColor'
     | 'PointLightIntensity'
     | 'PointLightRange'
+    | 'PointLightAttenuation'
     | 'SpotLightCount'
     | 'SpotLightPosition'
     | 'SpotLightDirection'
@@ -33,6 +34,7 @@ export type LightingUniformField =
     | 'LocalLightColor'
     | 'LocalLightIntensity'
     | 'LocalLightRange'
+    | 'LocalLightAttenuation'
     | 'LocalLightInnerConeCosine'
     | 'LocalLightOuterConeCosine';
 
@@ -101,6 +103,7 @@ const NAMES: LightingUniformNames = Object.freeze({
     pointLightColor: 'u_PointLightColor',
     pointLightIntensity: 'u_PointLightIntensity',
     pointLightRange: 'u_PointLightRange',
+    pointLightAttenuation: 'u_PointLightAttenuation',
     spotLightCount: 'u_SpotLightCount',
     spotLightPosition: 'u_SpotLightPosition',
     spotLightDirection: 'u_SpotLightDirection',
@@ -116,6 +119,7 @@ const NAMES: LightingUniformNames = Object.freeze({
     localLightColor: 'u_LocalLightColor',
     localLightIntensity: 'u_LocalLightIntensity',
     localLightRange: 'u_LocalLightRange',
+    localLightAttenuation: 'u_LocalLightAttenuation',
     localLightInnerConeCosine: 'u_LocalLightInnerConeCosine',
     localLightOuterConeCosine: 'u_LocalLightOuterConeCosine',
 });
@@ -175,6 +179,12 @@ const createLightingUniformProperties = (
         },
         {
             name: NAMES.pointLightRange,
+            type: 'float',
+            scope: 'frame',
+            arrayLength: capacity.maxPointLights,
+        },
+        {
+            name: NAMES.pointLightAttenuation,
             type: 'float',
             scope: 'frame',
             arrayLength: capacity.maxPointLights,
@@ -260,6 +270,12 @@ const createLightingUniformProperties = (
             arrayLength: capacity.maxLocalLights,
         },
         {
+            name: NAMES.localLightAttenuation,
+            type: 'float',
+            scope: 'frame',
+            arrayLength: capacity.maxLocalLights,
+        },
+        {
             name: NAMES.localLightInnerConeCosine,
             type: 'float',
             scope: 'frame',
@@ -311,6 +327,7 @@ export const createLightingUniformValueMap = (
         u_PointLightColor: state.pointColors,
         u_PointLightIntensity: state.pointIntensities,
         u_PointLightRange: state.pointRanges,
+        u_PointLightAttenuation: state.pointAttenuations,
         u_SpotLightCount: state.stats.selectedSpotCount,
         u_SpotLightPosition: state.spotPositions,
         u_SpotLightDirection: state.spotDirections,
@@ -326,6 +343,7 @@ export const createLightingUniformValueMap = (
         u_LocalLightColor: state.localLightColors,
         u_LocalLightIntensity: state.localLightIntensities,
         u_LocalLightRange: state.localLightRanges,
+        u_LocalLightAttenuation: state.localLightAttenuations,
         u_LocalLightInnerConeCosine: state.localLightInnerConeCosines,
         u_LocalLightOuterConeCosine: state.localLightOuterConeCosines,
     };
