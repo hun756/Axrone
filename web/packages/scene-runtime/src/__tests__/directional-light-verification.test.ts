@@ -144,8 +144,8 @@ describe('DirectionalLight — verification tests for reported bugs', () => {
         });
     });
 
-    describe('collector continue-skip bug', () => {
-        it('drops SpotLight when PointLight coexists on the same actor', () => {
+    describe('collector coexisting light types', () => {
+        it('collects both PointLight and SpotLight when they coexist on the same actor', () => {
             const world = createWorld();
             const collector = new SceneLightingCollector(4);
 
@@ -166,12 +166,10 @@ describe('DirectionalLight — verification tests for reported bugs', () => {
 
             const lighting = collector.collect(world.getAllActors(), Vec3.ZERO);
 
-            // BUG: PointLight's `continue` skips SpotLight check
-            // Expected: 1 point + 1 spot = 2 local lights
-            // Actual: 1 point + 0 spots = 1 local light
+            // Both PointLight and SpotLight are collected from the same actor
             expect(lighting.stats.selectedPointCount).toBe(1);
-            expect(lighting.stats.selectedSpotCount).toBe(0); // BUG: should be 1
-            expect(lighting.stats.selectedLocalLightCount).toBe(1); // BUG: should be 2
+            expect(lighting.stats.selectedSpotCount).toBe(1);
+            expect(lighting.stats.selectedLocalLightCount).toBe(2);
         });
 
         it('collects SpotLight when no PointLight is on the same actor', () => {
