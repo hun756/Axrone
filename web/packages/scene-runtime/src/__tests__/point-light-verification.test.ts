@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Vec3 } from '@axrone/numeric';
+import { Actor, Transform, World } from '@axrone/ecs-runtime';
 import {
     createPointLightDefinition,
     createLightingUniformLayout,
@@ -8,6 +9,8 @@ import {
     LightingFrameResolver,
 } from '@axrone/lighting';
 import { PointLight } from '../components/point-light';
+import { SceneLightingCollector } from '../lighting-collector';
+import { createSceneRegistry } from '../scene-registry';
 
 describe('PointLight — post-fix verification tests', () => {
     describe('C1 FIXED: Attenuation IS uploaded to GPU', () => {
@@ -228,6 +231,29 @@ describe('PointLight — post-fix verification tests', () => {
             const light = new PointLight({ range: 5 });
             expect(() => { light.range = 0; }).toThrow();
             expect(light.range).toBe(5);
+        });
+    });
+
+    describe('End-to-end: component attenuation flows to GPU buffer', () => {
+        it('collector passes component attenuation (not hardcoded default) to resolver', () => {
+            const world = new World(createSceneRegistry());
+            const collector = new SceneLightingCollector(4);
+
+            const actor = new Actor(world);
+            actor.addComponent(PointLight, {
+                color: [1, 0.5, 0.25],
+                intensity: 5,
+                range: 12,
+                attenuation: 3.5,
+            });
+            actor.requireComponent(Transform).position = new Vec3(4, 0, 0);
+
+            const state = collector.collect(world.getAllActors(), Vec3.ZERO);
+
+            expect(state.stats.selectedPointCount).toBe(1);
+            expect(state.pointAttenuations[0]).toBeCloseTo(3.5);
+            expect(state.pointIntensities[0]).toBeCloseTo(5);
+            expect(state.pointRanges[0]).toBeCloseTo(12);
         });
     });
 });
