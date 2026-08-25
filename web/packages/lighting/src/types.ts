@@ -195,6 +195,7 @@ export interface LightingSelectionState {
     readonly pointColors: Float32Array;
     readonly pointIntensities: Float32Array;
     readonly pointRanges: Float32Array;
+    readonly pointAttenuations: Float32Array;
     readonly spotPositions: Float32Array;
     readonly spotDirections: Float32Array;
     readonly spotColors: Float32Array;
@@ -208,6 +209,7 @@ export interface LightingSelectionState {
     readonly localLightColors: Float32Array;
     readonly localLightIntensities: Float32Array;
     readonly localLightRanges: Float32Array;
+    readonly localLightAttenuations: Float32Array;
     readonly localLightInnerConeCosines: Float32Array;
     readonly localLightOuterConeCosines: Float32Array;
 }
