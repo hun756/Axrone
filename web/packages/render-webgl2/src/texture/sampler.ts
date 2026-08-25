@@ -1,3 +1,4 @@
+import type { Mutable } from '@axrone/utility';
 import { Vec4 } from '@axrone/numeric';
 import {
     ITextureSampler,
@@ -8,6 +9,8 @@ import {
     TextureErrorCode,
 } from './interfaces';
 import { TextureWebGLConstants, TextureValidation } from './utils';
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
 
 export class WebGLTextureSampler implements ITextureSampler {
     public readonly id: string;
@@ -17,9 +20,16 @@ export class WebGLTextureSampler implements ITextureSampler {
     private _isDisposed = false;
     private _currentUnit = -1;
 
+    private readonly _ctx: IGLContext;
     private readonly _gl: WebGL2RenderingContext;
 
-    constructor(gl: WebGL2RenderingContext, options: ITextureSamplerOptions) {
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
+    constructor(source: ContextSource, options: ITextureSamplerOptions) {
+        const ctx = resolveContext(source);
+        const gl = ctx.gl;
+        this._ctx = ctx;
         this._gl = gl;
 
         TextureValidation.validateSamplerOptions(options);
@@ -63,13 +73,13 @@ export class WebGLTextureSampler implements ITextureSampler {
             );
         }
 
-        this._gl.bindSampler(unit, this.nativeHandle);
+        this._ctx.state.bindSampler(unit, this.nativeHandle);
         this._currentUnit = unit;
     }
 
     public unbind(): void {
         if (this._currentUnit >= 0) {
-            this._gl.bindSampler(this._currentUnit, null);
+            this._ctx.state.bindSampler(this._currentUnit, null);
             this._currentUnit = -1;
         }
     }
@@ -236,7 +246,7 @@ export class SamplerFactory {
     }
 
     public static createCommonSampler(
-        gl: WebGL2RenderingContext,
+        source: ContextSource,
         type:
             | 'linear_repeat'
             | 'linear_clamp'
@@ -253,7 +263,7 @@ export class SamplerFactory {
             );
         }
 
-        return new WebGLTextureSampler(gl, options);
+        return new WebGLTextureSampler(source, options);
     }
 
     public static builder(): SamplerBuilder {
@@ -262,28 +272,7 @@ export class SamplerFactory {
 }
 
 export class SamplerBuilder {
-    private _options: {
-        minFilter?: FilterMode;
-        magFilter?: FilterMode;
-        wrapS?: WrapMode;
-        wrapT?: WrapMode;
-        wrapR?: WrapMode;
-        borderColor?: Vec4;
-        maxAnisotropy?: number;
-        compareMode?: 'NONE' | 'COMPARE_REF_TO_TEXTURE';
-        compareFunc?:
-            | 'NEVER'
-            | 'LESS'
-            | 'EQUAL'
-            | 'LEQUAL'
-            | 'GREATER'
-            | 'NOTEQUAL'
-            | 'GEQUAL'
-            | 'ALWAYS';
-        minLod?: number;
-        maxLod?: number;
-        lodBias?: number;
-    } = {};
+    private _options: Mutable<Partial<ITextureSamplerOptions>> = {};
 
     public minFilter(filter: FilterMode): SamplerBuilder {
         this._options.minFilter = filter;
@@ -346,7 +335,7 @@ export class SamplerBuilder {
         return this;
     }
 
-    public build(gl: WebGL2RenderingContext): WebGLTextureSampler {
+    public build(source: ContextSource): WebGLTextureSampler {
         if (!this._options.minFilter || !this._options.magFilter) {
             throw new TextureError(
                 'Min and mag filters are required',
@@ -361,6 +350,6 @@ export class SamplerBuilder {
             );
         }
 
-        return new WebGLTextureSampler(gl, this._options as ITextureSamplerOptions);
+        return new WebGLTextureSampler(source, this._options as ITextureSamplerOptions);
     }
 }

@@ -1,35 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { BatchManager } from '../batch-manager';
+import { createMockGL } from '../../context/mock';
 
 function createMinimalGL(): WebGL2RenderingContext {
-    return new Proxy(
-        {
-            ARRAY_BUFFER: 0x8892,
-            ELEMENT_ARRAY_BUFFER: 0x8893,
-            STATIC_DRAW: 0x88e4,
-            DYNAMIC_DRAW: 0x88e8,
-            FLOAT: 0x1406,
-            TRIANGLES: 0x0004,
-            createBuffer() { return {}; },
-            bindBuffer() {},
-            bufferData() {},
-            deleteBuffer() {},
-            createVertexArray() { return {}; },
-            bindVertexArray() {},
-            deleteVertexArray() {},
-            enableVertexAttribArray() {},
-            vertexAttribPointer() {},
-            drawArraysInstanced() {},
-            drawElementsInstanced() {},
-            useProgram() {},
+    return createMockGL({
+        parameters: {
+            0x0d33: 16384,
         },
-        {
-            get: (target, property) => {
-                if (property in target) return (target as any)[property];
-                return 0;
-            },
-        }
-    ) as unknown as WebGL2RenderingContext;
+    });
 }
 
 describe('BatchManager', () => {

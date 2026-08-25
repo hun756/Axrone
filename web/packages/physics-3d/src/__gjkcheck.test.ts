@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { GJK3D, supportFromVertices, type IVec3 } from './core/gjk3d.ts';
+import { type IVec3Like } from '@axrone/numeric';
+import { GJK3D, supportFromVertices } from './core/gjk3d';
 
-const sphere = (cx: number, cy: number, cz: number, r: number) => (dir: IVec3): IVec3 => {
+const sphere = (cx: number, cy: number, cz: number, r: number) => (dir: IVec3Like): IVec3Like => {
     const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
     const inv = len > 1e-6 ? r / len : 0;
     return { x: cx + dir.x * inv, y: cy + dir.y * inv, z: cz + dir.z * inv };
@@ -20,7 +21,7 @@ describe('GJK3D', () => {
     });
 
     it('detects overlapping axis-aligned boxes', () => {
-        const a: IVec3[] = [
+        const a: IVec3Like[] = [
             { x: -1, y: -1, z: -1 }, { x: 1, y: -1, z: -1 }, { x: 1, y: 1, z: -1 }, { x: -1, y: 1, z: -1 },
             { x: -1, y: -1, z: 1 }, { x: 1, y: -1, z: 1 }, { x: 1, y: 1, z: 1 }, { x: -1, y: 1, z: 1 },
         ];
@@ -31,7 +32,7 @@ describe('GJK3D', () => {
     });
 
     it('reports just-touching boxes as non-colliding', () => {
-        const a: IVec3[] = [
+        const a: IVec3Like[] = [
             { x: -1, y: -1, z: -1 }, { x: 1, y: -1, z: -1 }, { x: 1, y: 1, z: -1 }, { x: -1, y: 1, z: -1 },
             { x: -1, y: -1, z: 1 }, { x: 1, y: -1, z: 1 }, { x: 1, y: 1, z: 1 }, { x: -1, y: 1, z: 1 },
         ];

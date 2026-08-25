@@ -1,8 +1,9 @@
 import { Mat4 } from '@axrone/numeric';
 import { describe, expect, it } from 'vitest';
 import { BatchRenderer } from '../batch/batch-renderer';
+import { createMockGL } from '../context/mock';
 
-const createRenderer = () => new BatchRenderer({} as WebGL2RenderingContext, { sortByDepth: true });
+const createRenderer = () => new BatchRenderer(createMockGL(), { sortByDepth: true });
 
 describe('BatchRenderer', () => {
     it('calculates depth from row-major translation slots', () => {

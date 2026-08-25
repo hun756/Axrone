@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Color, ColorBlendMode, ColorHarmonyType, ColorComparisonMode, ColorComparer } from '../color';
-
-const EPS = 1e-6;
-const close = (a: number, b: number, eps: number = EPS) => Math.abs(a - b) < eps;
+import { floatEquals } from '../../src';
 
 describe('Color module - refactor regression', () => {
     describe('SILVER constant (P0 fix)', () => {
@@ -125,19 +123,19 @@ describe('Color module - refactor regression', () => {
 
         it('NORMAL returns overlay', () => {
             const r = Color.blend(base, overlay, ColorBlendMode.NORMAL);
-            expect(close(r.r, 0.8)).toBe(true);
-            expect(close(r.g, 0.2)).toBe(true);
-            expect(close(r.b, 0.4)).toBe(true);
+            expect(floatEquals(r.r, 0.8)).toBe(true);
+            expect(floatEquals(r.g, 0.2)).toBe(true);
+            expect(floatEquals(r.b, 0.4)).toBe(true);
         });
 
         it('MULTIPLY multiplies channels', () => {
             const r = Color.blend(base, overlay, ColorBlendMode.MULTIPLY);
-            expect(close(r.r, 0.4)).toBe(true);
+            expect(floatEquals(r.r, 0.4)).toBe(true);
         });
 
         it('SCREEN formula', () => {
             const r = Color.blend(base, overlay, ColorBlendMode.SCREEN);
-            expect(close(r.r, 1 - (1 - 0.5) * (1 - 0.8))).toBe(true);
+            expect(floatEquals(r.r, 1 - (1 - 0.5) * (1 - 0.8))).toBe(true);
         });
 
         it('DARKEN/LIGHTEN/DIFFERENCE/EXCLUSION', () => {
@@ -147,23 +145,23 @@ describe('Color module - refactor regression', () => {
             const ex = Color.blend(base, overlay, ColorBlendMode.EXCLUSION);
             expect(dk.r).toBe(0.5);
             expect(lt.r).toBe(0.8);
-            expect(close(df.r, 0.3)).toBe(true);
-            expect(close(ex.r, 0.5 + 0.8 - 2 * 0.5 * 0.8)).toBe(true);
+            expect(floatEquals(df.r, 0.3)).toBe(true);
+            expect(floatEquals(ex.r, 0.5 + 0.8 - 2 * 0.5 * 0.8)).toBe(true);
         });
 
         it('OVERLAY at base < 0.5 uses 2*a*b', () => {
             const r = Color.blend(new Color(0.3, 0.3, 0.3), overlay, ColorBlendMode.OVERLAY);
-            expect(close(r.r, 2 * 0.3 * 0.8)).toBe(true);
+            expect(floatEquals(r.r, 2 * 0.3 * 0.8)).toBe(true);
         });
 
         it('OVERLAY at base >= 0.5 uses 1 - 2*(1-a)*(1-b)', () => {
             const r = Color.blend(new Color(0.6, 0.6, 0.6), overlay, ColorBlendMode.OVERLAY);
-            expect(close(r.r, 1 - 2 * 0.4 * 0.2)).toBe(true);
+            expect(floatEquals(r.r, 1 - 2 * 0.4 * 0.2)).toBe(true);
         });
 
         it('HARD_LIGHT uses overlay as decision', () => {
             const r = Color.blend(base, new Color(0.3, 0.3, 0.3), ColorBlendMode.HARD_LIGHT);
-            expect(close(r.r, 2 * 0.5 * 0.3)).toBe(true);
+            expect(floatEquals(r.r, 2 * 0.5 * 0.3)).toBe(true);
         });
 
         it('COLOR_DODGE edge case at overlay=1 returns 1', () => {
@@ -180,8 +178,8 @@ describe('Color module - refactor regression', () => {
             const out: { r: number; g: number; b: number; a: number } = { r: 0, g: 0, b: 0, a: 0 };
             const result = Color.blend(base, overlay, ColorBlendMode.MULTIPLY, out);
             expect(result).toBe(out);
-            expect(close(out.r, 0.4)).toBe(true);
-            expect(close(out.g, 0.1)).toBe(true);
+            expect(floatEquals(out.r, 0.4)).toBe(true);
+            expect(floatEquals(out.g, 0.1)).toBe(true);
         });
     });
 
@@ -193,10 +191,10 @@ describe('Color module - refactor regression', () => {
             const out: { r: number; g: number; b: number; a: number } = { r: 0, g: 0, b: 0, a: 0 };
             const ret = Color.lerpHSL(a, b, 0.5, out);
             expect(ret).toBe(out);
-            expect(close(out.r, ref.r, 1e-5)).toBe(true);
-            expect(close(out.g, ref.g, 1e-5)).toBe(true);
-            expect(close(out.b, ref.b, 1e-5)).toBe(true);
-            expect(close(out.a, ref.a, 1e-5)).toBe(true);
+            expect(floatEquals(out.r, ref.r, 1e-5)).toBe(true);
+            expect(floatEquals(out.g, ref.g, 1e-5)).toBe(true);
+            expect(floatEquals(out.b, ref.b, 1e-5)).toBe(true);
+            expect(floatEquals(out.a, ref.a, 1e-5)).toBe(true);
         });
 
         it('takes shortest hue path (red->cyan = 180 deg, half should be at 180/270 boundary)', () => {
@@ -225,9 +223,9 @@ describe('Color module - refactor regression', () => {
             const out: { r: number; g: number; b: number; a: number } = { r: 0, g: 0, b: 0, a: 0 };
             const ret = Color.lerpLab(a, b, 0.3, out);
             expect(ret).toBe(out);
-            expect(close(out.r, ref.r, 1e-4)).toBe(true);
-            expect(close(out.g, ref.g, 1e-4)).toBe(true);
-            expect(close(out.b, ref.b, 1e-4)).toBe(true);
+            expect(floatEquals(out.r, ref.r, 1e-4)).toBe(true);
+            expect(floatEquals(out.g, ref.g, 1e-4)).toBe(true);
+            expect(floatEquals(out.b, ref.b, 1e-4)).toBe(true);
         });
     });
 
@@ -237,9 +235,9 @@ describe('Color module - refactor regression', () => {
             const ref = Color.lighten(c, 0.2);
             const out: { r: number; g: number; b: number; a: number } = { r: 0, g: 0, b: 0, a: 0 };
             Color.lighten(c, 0.2, out);
-            expect(close(out.r, ref.r, 1e-5)).toBe(true);
-            expect(close(out.g, ref.g, 1e-5)).toBe(true);
-            expect(close(out.b, ref.b, 1e-5)).toBe(true);
+            expect(floatEquals(out.r, ref.r, 1e-5)).toBe(true);
+            expect(floatEquals(out.g, ref.g, 1e-5)).toBe(true);
+            expect(floatEquals(out.b, ref.b, 1e-5)).toBe(true);
         });
 
         it('darken is lighten with negative amount', () => {
@@ -254,7 +252,7 @@ describe('Color module - refactor regression', () => {
             const ref = Color.saturate(c, 0.2);
             const out: { r: number; g: number; b: number; a: number } = { r: 0, g: 0, b: 0, a: 0 };
             Color.saturate(c, 0.2, out);
-            expect(close(out.r, ref.r, 1e-5)).toBe(true);
+            expect(floatEquals(out.r, ref.r, 1e-5)).toBe(true);
         });
 
         it('desaturate is saturate with negative amount', () => {
@@ -269,8 +267,8 @@ describe('Color module - refactor regression', () => {
             const ref = Color.adjustHue(c, 120);
             const out: { r: number; g: number; b: number; a: number } = { r: 0, g: 0, b: 0, a: 0 };
             Color.adjustHue(c, 120, out);
-            expect(close(out.r, ref.r, 1e-5)).toBe(true);
-            expect(close(out.g, ref.g, 1e-5)).toBe(true);
+            expect(floatEquals(out.r, ref.r, 1e-5)).toBe(true);
+            expect(floatEquals(out.g, ref.g, 1e-5)).toBe(true);
         });
     });
 
@@ -296,9 +294,9 @@ describe('Color module - refactor regression', () => {
             const out = { h: 0, s: 0, l: 0, a: 0 };
             const ret = c.toHSL(out);
             expect(ret).toBe(out);
-            expect(close(out.h, 0, 1e-4)).toBe(true);
+            expect(floatEquals(out.h, 0, 1e-4)).toBe(true);
             expect(out.s).toBe(1);
-            expect(close(out.l, 0.5, 1e-4)).toBe(true);
+            expect(floatEquals(out.l, 0.5, 1e-4)).toBe(true);
         });
     });
 

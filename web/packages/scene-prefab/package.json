@@ -21,7 +21,8 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@axrone/ecs-runtime": "^0.1.0"
+        "@axrone/ecs-runtime": "^0.1.0",
+        "@axrone/utility": "^0.0.1"
     },
     "devDependencies": {
         "@axrone/scene-runtime": "^0.1.0"

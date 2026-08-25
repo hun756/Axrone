@@ -1,6 +1,5 @@
 
-import { clamp as numericClamp, Mat4 } from '@axrone/numeric';
-import { ObjectPool } from '@axrone/memory';
+import { clamp as numericClamp } from '@axrone/numeric';
 
 export const ANIMATION_EPSILON = 1e-6;
 
@@ -616,78 +615,63 @@ export const mat4Multiply = (
     target[targetOffset + 15] = a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33;
 };
 
-const setMat4Identity = (value: Mat4): void => {
-    const data = value.data;
-    data[0] = 1;
-    data[1] = 0;
-    data[2] = 0;
-    data[3] = 0;
-    data[4] = 0;
-    data[5] = 1;
-    data[6] = 0;
-    data[7] = 0;
-    data[8] = 0;
-    data[9] = 0;
-    data[10] = 1;
-    data[11] = 0;
-    data[12] = 0;
-    data[13] = 0;
-    data[14] = 0;
-    data[15] = 1;
-};
-
-const loadMat4 = (source: ArrayLike<number>, offset: number, out: Mat4): Mat4 => {
-    const data = out.data;
-    for (let index = 0; index < 16; index += 1) {
-        data[index] = Number(source[offset + index] ?? (index % 5 === 0 ? 1 : 0));
-    }
-    return out;
-};
-
-const writeMat4 = (target: Float32Array, offset: number, value: Mat4): void => {
-    const data = value.data;
-    for (let index = 0; index < 16; index += 1) {
-        target[offset + index] = Number(data[index] ?? (index % 5 === 0 ? 1 : 0));
-    }
-};
-
-const mat4Pool = new ObjectPool<Mat4>({
-    initialCapacity: 2,
-    maxCapacity: 8,
-    minFree: 0,
-    expansionStrategy: 'multiplicative',
-    expansionFactor: 1.5,
-    allocationStrategy: 'least-recently-used',
-    evictionPolicy: 'lru',
-    resetOnRecycle: true,
-    preallocate: false,
-    autoExpand: true,
-    enableMetrics: false,
-    name: 'AnimationMat4Pool',
-    factory: () => new Mat4(),
-    resetHandler: (value) => {
-        setMat4Identity(value);
-    },
-});
-
 export const mat4Invert = (
     target: Float32Array,
     targetOffset: number,
     source: ArrayLike<number>,
     sourceOffset: number
 ): boolean => {
-    const sourceMatrix = mat4Pool.acquire();
-    const resultMatrix = mat4Pool.acquire();
-    try {
-        try {
-            Mat4.invert(loadMat4(source, sourceOffset, sourceMatrix), resultMatrix);
-        } catch {
-            return false;
-        }
-        writeMat4(target, targetOffset, resultMatrix);
-        return true;
-    } finally {
-        mat4Pool.release(resultMatrix);
-        mat4Pool.release(sourceMatrix);
+    const a00 = Number(source[sourceOffset] ?? 1);
+    const a01 = Number(source[sourceOffset + 1] ?? 0);
+    const a02 = Number(source[sourceOffset + 2] ?? 0);
+    const a03 = Number(source[sourceOffset + 3] ?? 0);
+    const a10 = Number(source[sourceOffset + 4] ?? 0);
+    const a11 = Number(source[sourceOffset + 5] ?? 1);
+    const a12 = Number(source[sourceOffset + 6] ?? 0);
+    const a13 = Number(source[sourceOffset + 7] ?? 0);
+    const a20 = Number(source[sourceOffset + 8] ?? 0);
+    const a21 = Number(source[sourceOffset + 9] ?? 0);
+    const a22 = Number(source[sourceOffset + 10] ?? 1);
+    const a23 = Number(source[sourceOffset + 11] ?? 0);
+    const a30 = Number(source[sourceOffset + 12] ?? 0);
+    const a31 = Number(source[sourceOffset + 13] ?? 0);
+    const a32 = Number(source[sourceOffset + 14] ?? 0);
+    const a33 = Number(source[sourceOffset + 15] ?? 1);
+
+    const b00 = a00 * a11 - a01 * a10;
+    const b01 = a00 * a12 - a02 * a10;
+    const b02 = a00 * a13 - a03 * a10;
+    const b03 = a01 * a12 - a02 * a11;
+    const b04 = a01 * a13 - a03 * a11;
+    const b05 = a02 * a13 - a03 * a12;
+    const b06 = a20 * a31 - a21 * a30;
+    const b07 = a20 * a32 - a22 * a30;
+    const b08 = a20 * a33 - a23 * a30;
+    const b09 = a21 * a32 - a22 * a31;
+    const b10 = a21 * a33 - a23 * a31;
+    const b11 = a22 * a33 - a23 * a32;
+
+    const det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+    if (!Number.isFinite(det) || Math.abs(det) <= ANIMATION_EPSILON) {
+        return false;
     }
+
+    const invDet = 1 / det;
+    target[targetOffset] = (a11 * b11 - a12 * b10 + a13 * b09) * invDet;
+    target[targetOffset + 1] = (a02 * b10 - a01 * b11 - a03 * b09) * invDet;
+    target[targetOffset + 2] = (a31 * b05 - a32 * b04 + a33 * b03) * invDet;
+    target[targetOffset + 3] = (a22 * b04 - a21 * b05 - a23 * b03) * invDet;
+    target[targetOffset + 4] = (a12 * b08 - a10 * b11 - a13 * b07) * invDet;
+    target[targetOffset + 5] = (a00 * b11 - a02 * b08 + a03 * b07) * invDet;
+    target[targetOffset + 6] = (a32 * b02 - a30 * b05 - a33 * b01) * invDet;
+    target[targetOffset + 7] = (a20 * b05 - a22 * b02 + a23 * b01) * invDet;
+    target[targetOffset + 8] = (a10 * b10 - a11 * b08 + a13 * b06) * invDet;
+    target[targetOffset + 9] = (a01 * b08 - a00 * b10 - a03 * b06) * invDet;
+    target[targetOffset + 10] = (a30 * b04 - a31 * b02 + a33 * b00) * invDet;
+    target[targetOffset + 11] = (a21 * b02 - a20 * b04 - a23 * b00) * invDet;
+    target[targetOffset + 12] = (a11 * b07 - a10 * b09 - a12 * b06) * invDet;
+    target[targetOffset + 13] = (a00 * b09 - a01 * b07 + a02 * b06) * invDet;
+    target[targetOffset + 14] = (a31 * b01 - a30 * b03 - a32 * b00) * invDet;
+    target[targetOffset + 15] = (a20 * b03 - a21 * b01 + a22 * b00) * invDet;
+    return true;
 };

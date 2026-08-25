@@ -52,6 +52,15 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return new Vec2(x, y);
     }
 
+    static copy<T extends IVec2Like, V extends IVec2Like>(source: Readonly<T>, out?: V): V {
+        if (out) {
+            out.x = source.x;
+            out.y = source.y;
+            return out;
+        }
+        return { x: source.x, y: source.y } as V;
+    }
+
     clone(): Vec2 {
         return new Vec2(this.x, this.y);
     }
@@ -270,7 +279,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return v.x * v.x + v.y * v.y;
     }
 
-    static normalize<T extends IVec2Like>(v: Readonly<T>, out?: T): T {
+    static normalize<T extends IVec2Like, V extends IVec2Like>(v: Readonly<T>, out?: V): V {
         const length = Math.sqrt(v.x * v.x + v.y * v.y);
         if (length < EPSILON) {
             throw new Error('Cannot normalize a zero-length vector');
@@ -281,7 +290,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             out.y = v.y / length;
             return out;
         } else {
-            return { x: v.x / length, y: v.y / length } as T;
+            return { x: v.x / length, y: v.y / length } as V;
         }
     }
 
@@ -341,7 +350,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return (angle * 180) / Math.PI;
     }
 
-    static rotate<T extends IVec2Like>(v: Readonly<T>, angle: number, out?: T): T {
+    static rotate<T extends IVec2Like, V extends IVec2Like>(v: Readonly<T>, angle: number, out?: V): V {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -350,16 +359,16 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             out.y = v.x * sin + v.y * cos;
             return out;
         } else {
-            return { x: v.x * cos - v.y * sin, y: v.x * sin + v.y * cos } as T;
+            return { x: v.x * cos - v.y * sin, y: v.x * sin + v.y * cos } as V;
         }
     }
 
-    static fastRotate<T extends IVec2Like>(v: Readonly<T>, angle: number, out?: T): T {
+    static fastRotate<T extends IVec2Like, V extends IVec2Like>(v: Readonly<T>, angle: number, out?: V): V {
         const x = v.x;
         const y = v.y;
 
         if (!out) {
-            out = { x: 0, y: 0 } as T;
+            out = { x: 0, y: 0 } as V;
         }
 
         if (angle === Math.PI) {
@@ -398,12 +407,12 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return out;
     }
 
-    static rotateAround<T extends IVec2Like, U extends IVec2Like>(
+    static rotateAround<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         v: Readonly<T>,
         angle: number,
         pivot: Readonly<U>,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -415,47 +424,47 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             return {
                 x: (v.x - pivot.x) * cos - (v.y - pivot.y) * sin + pivot.x,
                 y: (v.x - pivot.x) * sin + (v.y - pivot.y) * cos + pivot.y,
-            } as T;
+            } as V;
         }
     }
 
-    static lerp<T extends IVec2Like, U extends IVec2Like>(
+    static lerp<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const t1 = clamp01(t);
         if (out) {
             out.x = a.x + (b.x - a.x) * t1;
             out.y = a.y + (b.y - a.y) * t1;
             return out;
         } else {
-            return { x: a.x + (b.x - a.x) * t1, y: a.y + (b.y - a.y) * t1 } as T;
+            return { x: a.x + (b.x - a.x) * t1, y: a.y + (b.y - a.y) * t1 } as V;
         }
     }
 
-    static lerpUnClamped<T extends IVec2Like, U extends IVec2Like>(
+    static lerpUnClamped<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         if (out) {
             out.x = a.x + (b.x - a.x) * t;
             out.y = a.y + (b.y - a.y) * t;
             return out;
         } else {
-            return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t } as T;
+            return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t } as V;
         }
     }
 
-    static slerp<T extends IVec2Like, U extends IVec2Like>(
+    static slerp<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const t1 = clamp01(t);
 
         const lenASq = a.x * a.x + a.y * a.y;
@@ -488,16 +497,16 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             out.y = y;
             return out;
         } else {
-            return { x, y } as T;
+            return { x, y } as V;
         }
     }
 
-    static smoothStep<T extends IVec2Like, U extends IVec2Like>(
+    static smoothStep<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const t1 = clamp01(t);
         const t2 = t1 * t1 * (3 - 2 * t1); // Smooth step function: 3t² - 2t³
         if (out) {
@@ -505,16 +514,16 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             out.y = a.y + (b.y - a.y) * t2;
             return out;
         } else {
-            return { x: a.x + (b.x - a.x) * t2, y: a.y + (b.y - a.y) * t2 } as T;
+            return { x: a.x + (b.x - a.x) * t2, y: a.y + (b.y - a.y) * t2 } as V;
         }
     }
 
-    static smootherStep<T extends IVec2Like, U extends IVec2Like>(
+    static smootherStep<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const t1 = clamp01(t);
         // Smoother step: 6t⁵ - 15t⁴ + 10t³
         const t2 = t1 * t1 * t1 * (10 - 15 * t1 + 6 * t1 * t1);
@@ -523,7 +532,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             out.y = a.y + (b.y - a.y) * t2;
             return out;
         } else {
-            return { x: a.x + (b.x - a.x) * t2, y: a.y + (b.y - a.y) * t2 } as T;
+            return { x: a.x + (b.x - a.x) * t2, y: a.y + (b.y - a.y) * t2 } as V;
         }
     }
 
@@ -639,7 +648,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return out;
     }
 
-    static random<T extends IVec2Like>(scale: number = 1, out?: T): T {
+    static random<T extends IVec2Like, V extends IVec2Like>(scale: number = 1, out?: V): V {
         const x = sampleStandardNormal() * scale;
         const y = sampleStandardNormal() * scale;
 
@@ -648,11 +657,11 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             out.y = y;
             return out;
         } else {
-            return { x, y } as T;
+            return { x, y } as V;
         }
     }
 
-    static fastRandom<T extends IVec2Like>(scale: number = 1, out?: T): T {
+    static fastRandom<T extends IVec2Like, V extends IVec2Like>(scale: number = 1, out?: V): V {
         const angle = sampleUniform() * PI_2;
 
         if (out) {
@@ -663,11 +672,11 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             return {
                 x: Math.cos(angle) * scale,
                 y: Math.sin(angle) * scale,
-            } as T;
+            } as V;
         }
     }
 
-    static randomNormal<T extends IVec2Like>(scale: number = 1, out?: T): T {
+    static randomNormal<T extends IVec2Like, V extends IVec2Like>(scale: number = 1, out?: V): V {
         const x = sampleStandardNormal() * scale;
         const y = sampleStandardNormal() * scale;
 
@@ -676,17 +685,17 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             out.y = y;
             return out;
         } else {
-            return { x, y } as T;
+            return { x, y } as V;
         }
     }
 
-    randomBox<T extends IVec2Like>(
+    static randomBox<T extends IVec2Like, V extends IVec2Like>(
         minX: number,
         maxX: number,
         minY: number,
         maxY: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const x = sampleUniformRange(minX, maxX);
         const y = sampleUniformRange(minY, maxY);
 
@@ -695,17 +704,17 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             out.y = y;
             return out;
         } else {
-            return { x, y } as T;
+            return { x, y } as V;
         }
     }
 
-    randomBoxNormal<T extends IVec2Like>(
+    static randomBoxNormal<T extends IVec2Like, V extends IVec2Like>(
         minX: number,
         maxX: number,
         minY: number,
         maxY: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const centerX = (minX + maxX) * 0.5;
         const centerY = (minY + maxY) * 0.5;
         const rangeX = maxX - minX;
@@ -719,7 +728,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             out.y = y;
             return out;
         } else {
-            return { x, y } as T;
+            return { x, y } as V;
         }
     }
 

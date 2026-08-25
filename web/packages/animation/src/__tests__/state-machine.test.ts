@@ -17,7 +17,7 @@ import {
     forceLayerState,
     updateLayerRuntime,
 } from '../state-machine';
-import { AnimationScratchPool } from '../blend-tree';
+import { AnimationScratchPool, BlendScratchContext } from '../blend-tree';
 import { AnimationFrame } from '../pose';
 import type { AnimationStateMachineDefinition, AnimationTransitionDefinition, AnimationTransitionOperator } from '../types';
 
@@ -392,7 +392,7 @@ describe('evaluateLayerRuntime during transition', () => {
         const scratchPool = new AnimationScratchPool(rig, curveLayout, new Float32Array(curveLayout.componentCount * 0));
         scratchPool.reset();
         const out = new AnimationFrame(rig, curveLayout);
-        const context = { rig, parameters: makeParameters(), restFrame: new AnimationFrame(rig, curveLayout), scratch: scratchPool };
+        const context = { rig, parameters: makeParameters(), restFrame: new AnimationFrame(rig, curveLayout), scratch: scratchPool, blendScratch: new BlendScratchContext() };
         const result = evaluateLayerRuntime(machine, runtime, context, out);
         expect(result).toBe(out);
     });
@@ -404,7 +404,7 @@ describe('extractLayerRootDelta', () => {
         const runtime = createLayerRuntime(machine);
         const parameters = makeParameters();
         const scratchPool = new AnimationScratchPool(rig, curveLayout, new Float32Array(curveLayout.componentCount * 0));
-        const context = { rig, parameters, restFrame: new AnimationFrame(rig, curveLayout), scratch: scratchPool };
+        const context = { rig, parameters, restFrame: new AnimationFrame(rig, curveLayout), scratch: scratchPool, blendScratch: new BlendScratchContext() };
         const outTranslation = new Float32Array(3);
         const outRotation = new Float32Array(4);
         extractLayerRootDelta(machine, runtime, -1, context, outTranslation, outRotation);
@@ -421,7 +421,7 @@ describe('collectLayerEvents', () => {
         const runtime = createLayerRuntime(machine);
         const parameters = makeParameters();
         const scratchPool = new AnimationScratchPool(rig, curveLayout, new Float32Array(curveLayout.componentCount * 0));
-        const context = { rig, parameters, restFrame: new AnimationFrame(rig, curveLayout), scratch: scratchPool };
+        const context = { rig, parameters, restFrame: new AnimationFrame(rig, curveLayout), scratch: scratchPool, blendScratch: new BlendScratchContext() };
         const events = collectLayerEvents(machine, runtime, context, 'base', 0);
         expect(events).toHaveLength(0);
     });
@@ -433,7 +433,7 @@ describe('collectLayerClipActivities', () => {
         const runtime = createLayerRuntime(machine);
         const parameters = makeParameters();
         const scratchPool = new AnimationScratchPool(rig, curveLayout, new Float32Array(curveLayout.componentCount * 0));
-        const context = { rig, parameters, restFrame: new AnimationFrame(rig, curveLayout), scratch: scratchPool };
+        const context = { rig, parameters, restFrame: new AnimationFrame(rig, curveLayout), scratch: scratchPool, blendScratch: new BlendScratchContext() };
         const activities = collectLayerClipActivities(machine, runtime, context, 'base', 0);
         expect(activities).toHaveLength(0);
     });

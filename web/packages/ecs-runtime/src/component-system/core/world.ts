@@ -403,6 +403,16 @@ export class World<R extends ComponentRegistry> {
         return this._actorRegistry.getAll();
     }
 
+    getActorsByTag(tag: string): readonly Actor[] {
+        this._validateWorldState('getActorsByTag');
+        return this._actorRegistry.getByTag(tag);
+    }
+
+    getActorsByLayer(layer: number): readonly Actor[] {
+        this._validateWorldState('getActorsByLayer');
+        return this._actorRegistry.getByLayer(layer);
+    }
+
     getEntityCount(): number {
         return this._storage.entityCount;
     }

@@ -59,6 +59,17 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         return new Vec4(x, y, z, w);
     }
 
+    static copy<T extends IVec4Like, V extends IVec4Like>(source: Readonly<T>, out?: V): V {
+        if (out) {
+            out.x = source.x;
+            out.y = source.y;
+            out.z = source.z;
+            out.w = source.w;
+            return out;
+        }
+        return { x: source.x, y: source.y, z: source.z, w: source.w } as V;
+    }
+
     clone(): Vec4 {
         return new Vec4(this.x, this.y, this.z, this.w);
     }
@@ -416,7 +427,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
     }
 
     // 4D rotation in XY plane
-    static rotateXY<T extends IVec4Like>(v: Readonly<T>, angle: number, out?: T): T {
+    static rotateXY<T extends IVec4Like, V extends IVec4Like>(v: Readonly<T>, angle: number, out?: V): V {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -432,12 +443,12 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
                 y: v.x * sin + v.y * cos,
                 z: v.z,
                 w: v.w,
-            } as T;
+            } as V;
         }
     }
 
     // 4D rotation in XZ plane
-    static rotateXZ<T extends IVec4Like>(v: Readonly<T>, angle: number, out?: T): T {
+    static rotateXZ<T extends IVec4Like, V extends IVec4Like>(v: Readonly<T>, angle: number, out?: V): V {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -453,12 +464,12 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
                 y: v.y,
                 z: -v.x * sin + v.z * cos,
                 w: v.w,
-            } as T;
+            } as V;
         }
     }
 
     // 4D rotation in XW plane
-    static rotateXW<T extends IVec4Like>(v: Readonly<T>, angle: number, out?: T): T {
+    static rotateXW<T extends IVec4Like, V extends IVec4Like>(v: Readonly<T>, angle: number, out?: V): V {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -474,12 +485,12 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
                 y: v.y,
                 z: v.z,
                 w: v.x * sin + v.w * cos,
-            } as T;
+            } as V;
         }
     }
 
     // 4D rotation in YZ plane
-    static rotateYZ<T extends IVec4Like>(v: Readonly<T>, angle: number, out?: T): T {
+    static rotateYZ<T extends IVec4Like, V extends IVec4Like>(v: Readonly<T>, angle: number, out?: V): V {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -495,12 +506,12 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
                 y: v.y * cos - v.z * sin,
                 z: v.y * sin + v.z * cos,
                 w: v.w,
-            } as T;
+            } as V;
         }
     }
 
     // 4D rotation in YW plane
-    static rotateYW<T extends IVec4Like>(v: Readonly<T>, angle: number, out?: T): T {
+    static rotateYW<T extends IVec4Like, V extends IVec4Like>(v: Readonly<T>, angle: number, out?: V): V {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -516,12 +527,12 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
                 y: v.y * cos - v.w * sin,
                 z: v.z,
                 w: v.y * sin + v.w * cos,
-            } as T;
+            } as V;
         }
     }
 
     // 4D rotation in ZW plane
-    static rotateZW<T extends IVec4Like>(v: Readonly<T>, angle: number, out?: T): T {
+    static rotateZW<T extends IVec4Like, V extends IVec4Like>(v: Readonly<T>, angle: number, out?: V): V {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -537,7 +548,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
                 y: v.y,
                 z: v.z * cos - v.w * sin,
                 w: v.z * sin + v.w * cos,
-            } as T;
+            } as V;
         }
     }
 
@@ -806,7 +817,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         return out;
     }
 
-    static random<T extends IVec4Like>(scale: number = 1, out?: T): T {
+    static random<T extends IVec4Like, V extends IVec4Like>(scale: number = 1, out?: V): V {
         const x = sampleStandardNormal();
         const y = sampleStandardNormal();
         const z = sampleStandardNormal();
@@ -831,11 +842,11 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
                 y: y * invLength,
                 z: z * invLength,
                 w: w * invLength,
-            } as T;
+            } as V;
         }
     }
 
-    static fastRandom<T extends IVec4Like>(scale: number = 1, out?: T): T {
+    static fastRandom<T extends IVec4Like, V extends IVec4Like>(scale: number = 1, out?: V): V {
         const u1 = sampleUniform();
         const u2 = sampleUniform();
         const u3 = sampleUniform();
@@ -859,11 +870,11 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
                 y: Math.sin(phi) * sinTheta * sinPsi * scale,
                 z: Math.cos(theta) * sinPsi * scale,
                 w: Math.cos(psi) * scale,
-            } as T;
+            } as V;
         }
     }
 
-    static randomNormal<T extends IVec4Like>(scale: number = 1, out?: T): T {
+    static randomNormal<T extends IVec4Like, V extends IVec4Like>(scale: number = 1, out?: V): V {
         const x = sampleStandardNormal() * scale;
         const y = sampleStandardNormal() * scale;
         const z = sampleStandardNormal() * scale;
@@ -876,7 +887,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
             out.w = w;
             return out;
         } else {
-            return { x, y, z, w } as T;
+            return { x, y, z, w } as V;
         }
     }
 
@@ -1217,11 +1228,11 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         return this;
     }
 
-    static project<T extends IVec4Like, U extends IVec4Like>(
+    static project<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
         v: Readonly<T>,
         onto: Readonly<U>,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const dotProduct = Vec4.dot(v, onto);
         const ontoLengthSq = Vec4.lengthSquared(onto);
 
@@ -1243,15 +1254,15 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
                 y: onto.y * scalar,
                 z: onto.z * scalar,
                 w: onto.w * scalar,
-            } as T;
+            } as V;
         }
     }
 
-    static reject<T extends IVec4Like, U extends IVec4Like>(
+    static reject<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
         v: Readonly<T>,
         onto: Readonly<U>,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const projection = Vec4.project(v, onto);
 
         if (out) {
@@ -1266,15 +1277,15 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
                 y: v.y - projection.y,
                 z: v.z - projection.z,
                 w: v.w - projection.w,
-            } as T;
+            } as V;
         }
     }
 
-    static reflect<T extends IVec4Like, U extends IVec4Like>(
+    static reflect<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
         v: Readonly<T>,
         normal: Readonly<U>,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const dotProduct = Vec4.dot(v, normal);
         const factor = 2 * dotProduct;
 
@@ -1290,7 +1301,7 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
                 y: v.y - factor * normal.y,
                 z: v.z - factor * normal.z,
                 w: v.w - factor * normal.w,
-            } as T;
+            } as V;
         }
     }
 

@@ -245,6 +245,7 @@ export interface RenderPointLight {
     readonly color: RenderVector3Like;
     readonly intensity: number;
     readonly range: number;
+    readonly attenuation?: number;
     readonly castsShadows?: boolean;
     readonly shadowResolution?: number;
 }

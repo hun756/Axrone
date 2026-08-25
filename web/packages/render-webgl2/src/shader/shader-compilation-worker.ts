@@ -1,3 +1,5 @@
+import { ShaderInstanceBackendError } from './errors';
+
 export class ShaderCompilationWorker {
     private readonly worker: Worker;
     private readonly pendingCompilations = new Map<string, (shader: string) => void>();
@@ -94,7 +96,7 @@ export class ShaderCompilationWorker {
         if (success) {
             callback(shader);
         } else {
-            throw new Error(`Shader compilation failed: ${error}`);
+            throw new ShaderInstanceBackendError('SHADER_COMPILE_FAILED', 'en', { detail: error });
         }
     }
 

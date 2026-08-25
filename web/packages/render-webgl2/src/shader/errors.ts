@@ -61,7 +61,7 @@ const serializeContext = (context: ShaderInstanceErrorContext): string => {
     }
     try {
         return ` ${JSON.stringify(context)}`;
-    } catch {
+    } catch { // best-effort
         return '';
     }
 };

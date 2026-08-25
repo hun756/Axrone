@@ -26,7 +26,7 @@ const toVec2 = (
     }
 
     if (value instanceof Vec2) {
-        return new Vec2(value.x, value.y);
+        return value.clone();
     }
 
     if (isTuple2(value)) {

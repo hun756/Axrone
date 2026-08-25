@@ -15,6 +15,7 @@ export interface SceneBillboardBatchRuntimeOptions {
     readonly gl: WebGL2RenderingContext;
     readonly uniformWriter: SceneUniformWriteTarget;
     readonly renderStateApplier: Pick<SceneRenderStateApplier, 'reset'>;
+    readonly stateCache?: import('@axrone/render-webgl2').IGLStateCache;
 }
 
 export interface SceneBillboardBatchRuntimeRenderParams {
@@ -52,6 +53,12 @@ const BILLBOARD_INDICES_PER_QUAD = 6;
 const BILLBOARD_VERTICES_PER_QUAD = 4;
 
 const _identityMatrix = Mat4.IDENTITY;
+
+// Module-level scratch vectors — reused across billboard draws to avoid
+// per-billboard per-frame heap allocations on the hot path.
+const _scratchRight = new Vec3();
+const _scratchUp = new Vec3();
+const _scratchViewDir = new Vec3();
 
 const BILLBOARD_MODE_SPHERICAL = 0;
 const BILLBOARD_MODE_CYLINDRICAL = 1;
@@ -101,6 +108,7 @@ export class SceneBillboardBatchRuntime {
         this._guard = new SceneDirectGlPassGuard({
             gl: _options.gl,
             renderStateApplier: _options.renderStateApplier,
+            stateCache: _options.stateCache,
             label: 'billboard-batch',
         });
         this._vertexCapacity = 256;
@@ -221,75 +229,52 @@ export class SceneBillboardBatchRuntime {
         const pivot = renderer.pivot;
         const mode = renderer.mode;
 
-        // Compute billboard orientation vectors
-        const right = new Vec3();
-        const up = new Vec3();
+        // Compute billboard orientation vectors using module-level scratch
+        // vectors — zero allocations on the hot path.
+        const right = _scratchRight;
+        const up = _scratchUp;
 
         if (mode === 'spherical') {
             // Spherical: quad always faces camera
-            const viewDir = new Vec3(
-                worldPos.x - cameraPosition.x,
-                worldPos.y - cameraPosition.y,
-                worldPos.z - cameraPosition.z
-            );
-            const viewLen = viewDir.length;
+            Vec3.subtract(worldPos, cameraPosition, _scratchViewDir);
+            const viewLen = Vec3.len(_scratchViewDir);
             if (viewLen < 1e-6) {
                 // Billboard at camera position, use default orientation
                 right.set(1, 0, 0);
                 up.set(0, 1, 0);
             } else {
-                viewDir.x /= viewLen;
-                viewDir.y /= viewLen;
-                viewDir.z /= viewLen;
+                Vec3.normalize(_scratchViewDir, _scratchViewDir);
 
-                // cameraUp is the Y axis of the view
-                const cameraUp = new Vec3(0, 1, 0);
-
-                // right = normalize(cross(cameraUp, viewDir))
-                right.x = cameraUp.y * viewDir.z - cameraUp.z * viewDir.y;
-                right.y = cameraUp.z * viewDir.x - cameraUp.x * viewDir.z;
-                right.z = cameraUp.x * viewDir.y - cameraUp.y * viewDir.x;
-                const rightLen = right.length;
+                // right = normalize(cross(Vec3.UP, viewDir))
+                Vec3.cross(Vec3.UP, _scratchViewDir, _scratchRight);
+                const rightLen = Vec3.len(_scratchRight);
                 if (rightLen < 1e-6) {
-                    // viewDir is parallel to cameraUp, pick arbitrary right
+                    // viewDir is parallel to Vec3.UP, pick arbitrary right
                     right.set(1, 0, 0);
                 } else {
-                    right.x /= rightLen;
-                    right.y /= rightLen;
-                    right.z /= rightLen;
+                    Vec3.normalize(_scratchRight, _scratchRight);
                 }
 
                 // up = cross(viewDir, right)
-                up.x = viewDir.y * right.z - viewDir.z * right.y;
-                up.y = viewDir.z * right.x - viewDir.x * right.z;
-                up.z = viewDir.x * right.y - viewDir.y * right.x;
+                Vec3.cross(_scratchViewDir, _scratchRight, _scratchUp);
             }
         } else if (mode === 'cylindrical') {
             // Cylindrical: only rotate around Y axis
-            const viewDirY = new Vec3(
-                worldPos.x - cameraPosition.x,
-                0,
-                worldPos.z - cameraPosition.z
-            );
-            const viewDirYLen = viewDirY.length;
+            Vec3.subtract(worldPos, cameraPosition, _scratchViewDir);
+            _scratchViewDir.y = 0;
+            const viewDirYLen = Vec3.len(_scratchViewDir);
             if (viewDirYLen < 1e-6) {
                 right.set(1, 0, 0);
             } else {
-                viewDirY.x /= viewDirYLen;
-                viewDirY.z /= viewDirYLen;
+                Vec3.normalize(_scratchViewDir, _scratchViewDir);
 
-                // right = cross(worldUp, viewDirY)
-                const worldUp = new Vec3(0, 1, 0);
-                right.x = worldUp.y * viewDirY.z - worldUp.z * viewDirY.y;
-                right.y = worldUp.z * viewDirY.x - worldUp.x * viewDirY.z;
-                right.z = worldUp.x * viewDirY.y - worldUp.y * viewDirY.x;
-                const rightLen = right.length;
+                // right = normalize(cross(Vec3.UP, viewDirY))
+                Vec3.cross(Vec3.UP, _scratchViewDir, _scratchRight);
+                const rightLen = Vec3.len(_scratchRight);
                 if (rightLen < 1e-6) {
                     right.set(1, 0, 0);
                 } else {
-                    right.x /= rightLen;
-                    right.y /= rightLen;
-                    right.z /= rightLen;
+                    Vec3.normalize(_scratchRight, _scratchRight);
                 }
             }
             // Up is always world up for cylindrical

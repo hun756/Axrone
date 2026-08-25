@@ -120,7 +120,7 @@ export const vtxStage = (
     declarations: readonly ShaderEffectGlslBlock[] = [],
     options: ShaderEffectStageOptions = {}
 ): RenderShaderStageDefinition => ({
-    ...(options.precision !== undefined ? { precision: options.precision } : {}),
+    precision: options.precision ?? 'highp',
     ...(options.directives !== undefined ? { directives: options.directives } : {}),
     ...(options.inputs !== undefined ? { inputs: options.inputs } : {}),
     ...(options.outputs !== undefined ? { outputs: options.outputs } : {}),

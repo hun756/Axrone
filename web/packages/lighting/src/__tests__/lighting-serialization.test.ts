@@ -19,9 +19,9 @@ describe('lighting serialization', () => {
         expect(document.version).toBe(1);
         expect(document.rigId).toBe('rig');
         expect(document.environment).toEqual({
-            ambient: [0.08, 0.08, 0.1],
-            sky: [0.08, 0.09, 0.11],
-            ground: [0.04, 0.04, 0.045],
+            ambient: [0.2, 0.2, 0.25],
+            sky: [0.4, 0.45, 0.55],
+            ground: [0.15, 0.13, 0.1],
             exposure: 1,
             gamma: 2.2,
         });

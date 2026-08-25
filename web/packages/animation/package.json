@@ -29,6 +29,66 @@
             "import": "./dist/blend-tree.mjs",
             "require": "./dist/blend-tree.js"
         },
+        "./blend-types": {
+            "types": "./dist/blend-types.d.ts",
+            "import": "./dist/blend-types.mjs",
+            "require": "./dist/blend-types.js"
+        },
+        "./blend-scratch": {
+            "types": "./dist/blend-scratch.d.ts",
+            "import": "./dist/blend-scratch.mjs",
+            "require": "./dist/blend-scratch.js"
+        },
+        "./blend-visitor": {
+            "types": "./dist/blend-visitor.d.ts",
+            "import": "./dist/blend-visitor.mjs",
+            "require": "./dist/blend-visitor.js"
+        },
+        "./blend-compile": {
+            "types": "./dist/blend-compile.d.ts",
+            "import": "./dist/blend-compile.mjs",
+            "require": "./dist/blend-compile.js"
+        },
+        "./blend-evaluate": {
+            "types": "./dist/blend-evaluate.d.ts",
+            "import": "./dist/blend-evaluate.mjs",
+            "require": "./dist/blend-evaluate.js"
+        },
+        "./blend-events": {
+            "types": "./dist/blend-events.d.ts",
+            "import": "./dist/blend-events.mjs",
+            "require": "./dist/blend-events.js"
+        },
+        "./blend-activities": {
+            "types": "./dist/blend-activities.d.ts",
+            "import": "./dist/blend-activities.mjs",
+            "require": "./dist/blend-activities.js"
+        },
+        "./blend-root-delta": {
+            "types": "./dist/blend-root-delta.d.ts",
+            "import": "./dist/blend-root-delta.mjs",
+            "require": "./dist/blend-root-delta.js"
+        },
+        "./blend-duration": {
+            "types": "./dist/blend-duration.d.ts",
+            "import": "./dist/blend-duration.mjs",
+            "require": "./dist/blend-duration.js"
+        },
+        "./blend-helpers": {
+            "types": "./dist/blend-helpers.d.ts",
+            "import": "./dist/blend-helpers.mjs",
+            "require": "./dist/blend-helpers.js"
+        },
+        "./pose-frame": {
+            "types": "./dist/pose-frame.d.ts",
+            "import": "./dist/pose-frame.mjs",
+            "require": "./dist/pose-frame.js"
+        },
+        "./pose-blend": {
+            "types": "./dist/pose-blend.d.ts",
+            "import": "./dist/pose-blend.mjs",
+            "require": "./dist/pose-blend.js"
+        },
         "./state-machine": {
             "types": "./dist/state-machine.d.ts",
             "import": "./dist/state-machine.mjs",
@@ -53,6 +113,21 @@
             "types": "./dist/controller.d.ts",
             "import": "./dist/controller.mjs",
             "require": "./dist/controller.js"
+        },
+        "./controller-builder": {
+            "types": "./dist/controller-builder.d.ts",
+            "import": "./dist/controller-builder.mjs",
+            "require": "./dist/controller-builder.js"
+        },
+        "./controller-validator": {
+            "types": "./dist/controller-validator.d.ts",
+            "import": "./dist/controller-validator.mjs",
+            "require": "./dist/controller-validator.js"
+        },
+        "./controller-clone": {
+            "types": "./dist/controller-clone.d.ts",
+            "import": "./dist/controller-clone.mjs",
+            "require": "./dist/controller-clone.js"
         },
         "./streaming": {
             "types": "./dist/streaming.d.ts",

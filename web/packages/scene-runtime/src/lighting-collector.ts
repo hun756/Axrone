@@ -1,4 +1,4 @@
-import { EPSILON, Quat, Vec3 } from '@axrone/numeric';
+import { floatEquals, Quat, Vec3 } from '@axrone/numeric';
 import {
     LightKind as LightingLightKind,
     LightingFrameResolver,
@@ -22,16 +22,6 @@ const resetVec3 = (vector: Vec3, x: number, y: number, z: number): void => {
     vector.x = x;
     vector.y = y;
     vector.z = z;
-};
-
-const sameNumber = (left: number, right: number): boolean => Math.abs(left - right) <= EPSILON;
-
-const sameVec3 = (left: Readonly<Vec3>, right: Readonly<Vec3>): boolean => {
-    return (
-        sameNumber(left.x, right.x) &&
-        sameNumber(left.y, right.y) &&
-        sameNumber(left.z, right.z)
-    );
 };
 
 const buildLightId = (
@@ -81,7 +71,6 @@ export class SceneLightingCollector {
             const point = actor.getComponent(PointLight);
             if (point && point.enabled) {
                 this._syncPointLight(point);
-                continue;
             }
 
             const spot = actor.getComponent(SpotLight);
@@ -113,11 +102,11 @@ export class SceneLightingCollector {
 
         if (existing?.kind === LightingLightKind.Directional) {
             if (
-                sameVec3(existing.color, light.color) &&
-                sameVec3(existing.ambient, light.ambientColor) &&
-                sameVec3(existing.direction, this._directionScratch) &&
-                sameNumber(existing.intensity, light.intensity) &&
-                sameNumber(existing.priority, priority)
+                existing.color.equals(light.color) &&
+                existing.ambient.equals(light.ambientColor) &&
+                existing.direction.equals(this._directionScratch) &&
+                floatEquals(existing.intensity, light.intensity) &&
+                floatEquals(existing.priority, priority)
             ) {
                 return;
             }
@@ -156,10 +145,11 @@ export class SceneLightingCollector {
 
         if (existing?.kind === LightingLightKind.Point) {
             if (
-                sameVec3(existing.color, light.color) &&
-                sameVec3(existing.position, position) &&
-                sameNumber(existing.intensity, light.intensity) &&
-                sameNumber(existing.range, light.range)
+                existing.color.equals(light.color) &&
+                existing.position.equals(position) &&
+                floatEquals(existing.intensity, light.intensity) &&
+                floatEquals(existing.range, light.range) &&
+                floatEquals(existing.attenuation, light.attenuation)
             ) {
                 return;
             }
@@ -168,7 +158,7 @@ export class SceneLightingCollector {
                 color: light.color,
                 intensity: light.intensity,
                 range: light.range,
-                attenuation: DEFAULT_LIGHT_ATTENUATION,
+                attenuation: light.attenuation,
                 position,
             });
             return;
@@ -183,7 +173,7 @@ export class SceneLightingCollector {
             color: light.color,
             intensity: light.intensity,
             range: light.range,
-            attenuation: DEFAULT_LIGHT_ATTENUATION,
+            attenuation: light.attenuation,
             position,
         });
     }
@@ -199,13 +189,13 @@ export class SceneLightingCollector {
 
         if (existing?.kind === LightingLightKind.Spot) {
             if (
-                sameVec3(existing.color, light.color) &&
-                sameVec3(existing.position, position) &&
-                sameVec3(existing.direction, this._directionScratch) &&
-                sameNumber(existing.intensity, light.intensity) &&
-                sameNumber(existing.range, light.range) &&
-                sameNumber(existing.innerConeCosine, Math.cos(light.innerConeAngle)) &&
-                sameNumber(existing.outerConeCosine, Math.cos(light.outerConeAngle))
+                existing.color.equals(light.color) &&
+                existing.position.equals(position) &&
+                existing.direction.equals(this._directionScratch) &&
+                floatEquals(existing.intensity, light.intensity) &&
+                floatEquals(existing.range, light.range) &&
+                floatEquals(existing.innerConeCosine, Math.cos(light.innerConeAngle)) &&
+                floatEquals(existing.outerConeCosine, Math.cos(light.outerConeAngle))
             ) {
                 return;
             }
@@ -256,10 +246,10 @@ export class SceneLightingCollector {
 
         if (existing?.kind === LightingLightKind.Point) {
             if (
-                sameVec3(existing.color, light.color) &&
-                sameVec3(existing.position, position) &&
-                sameNumber(existing.intensity, effectiveIntensity) &&
-                sameNumber(existing.range, light.range)
+                existing.color.equals(light.color) &&
+                existing.position.equals(position) &&
+                floatEquals(existing.intensity, effectiveIntensity) &&
+                floatEquals(existing.range, light.range)
             ) {
                 return;
             }
@@ -327,9 +317,9 @@ export class SceneLightingCollector {
         const environment = this._rig.environment;
 
         if (
-            sameVec3(environment.ambient, ambientBase) &&
-            sameVec3(environment.sky, skyLightBase) &&
-            sameVec3(environment.ground, groundLightBase)
+            environment.ambient.equals(ambientBase) &&
+            environment.sky.equals(skyLightBase) &&
+            environment.ground.equals(groundLightBase)
         ) {
             return;
         }

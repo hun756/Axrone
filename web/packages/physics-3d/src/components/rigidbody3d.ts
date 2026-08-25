@@ -749,13 +749,7 @@ export class Rigidbody3D extends Component {
         if (!this.isSleepingAllowed()) return;
         const vel = this.velocity;
         const angVel = this.angularVelocity;
-        const kineticEnergy =
-            vel.x * vel.x +
-            vel.y * vel.y +
-            vel.z * vel.z +
-            angVel.x * angVel.x +
-            angVel.y * angVel.y +
-            angVel.z * angVel.z;
+        const kineticEnergy = Vec3.lengthSquared(vel) + Vec3.lengthSquared(angVel);
         if (kineticEnergy < this._sleepThreshold * this._sleepThreshold) {
             this._sleepTime += dt;
             if (this._sleepTime > TIME_TO_SLEEP) this.sleep();
@@ -782,7 +776,7 @@ export class Rigidbody3D extends Component {
     }
 
     private _clampAngularVelocity(velocity: IVec3Like): IVec3Like {
-        const sqLen = velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z;
+        const sqLen = Vec3.lengthSquared(velocity);
         if (sqLen > this._maxAngularVelocity * this._maxAngularVelocity) {
             const scale = this._maxAngularVelocity / Math.sqrt(sqLen);
             return { x: velocity.x * scale, y: velocity.y * scale, z: velocity.z * scale };

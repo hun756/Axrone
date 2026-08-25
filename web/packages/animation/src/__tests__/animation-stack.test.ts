@@ -539,17 +539,17 @@ describe('Animation stack', () => {
                 'base',
                 AnimationControllerGraph.machine('idle')
                     .state('idle', AnimationBlendGraph.clip('idle'), (state) => {
-                        state.transitionTo('run', (transition) => {
-                            transition.withDuration(0.1).whenFloat('speed', '>', 0.5);
+                        return state.transitionTo('run', (transition) => {
+                            return transition.withDuration(0.1).whenFloat('speed', '>', 0.5);
                         });
                     })
                     .state('run', AnimationBlendGraph.clip('run'), (state) => {
-                        state.transitionTo('idle', (transition) => {
-                            transition.withDuration(0.1).whenFloat('speed', '<=', 0.5);
+                        return state.transitionTo('idle', (transition) => {
+                            return transition.withDuration(0.1).whenFloat('speed', '<=', 0.5);
                         });
                     }),
                 (layer) => {
-                    layer.withWeight(1).withBoneMask(['hips']);
+                    return layer.withWeight(1).withBoneMask(['hips']);
                 }
             )
             .withRootMotion({
@@ -600,10 +600,10 @@ describe('Animation stack', () => {
                             .addChild(1, AnimationBlendGraph.clip('missing-clip'))
                     )
                     .anyState('missing-state', (transition) => {
-                        transition.whenFloat('missing-parameter', '>', 0.1);
+                        return transition.whenFloat('missing-parameter', '>', 0.1);
                     }),
                 (layer) => {
-                    layer.withBoneMask(['missing-bone']);
+                    return layer.withBoneMask(['missing-bone']);
                 }
             )
             .withRootMotion({

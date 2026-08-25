@@ -1,5 +1,4 @@
 import { vi } from 'vitest';
-import type { SceneOptions } from '@axrone/scene-3d';
 
 export const installWebGL2Constants = (): void => {
     const root = globalThis as typeof globalThis & {
@@ -60,6 +59,7 @@ export const createMockGL = (canvas: HTMLCanvasElement) => {
     const vertexArrays = new Set<object>();
     const textures = new Set<object>();
     const samplers = new Set<object>();
+    const framebuffers = new Set<object>();
 
     const gl = {
         canvas,
@@ -305,6 +305,38 @@ export const createMockGL = (canvas: HTMLCanvasElement) => {
         samplerParameterf: vi.fn(),
         getExtension: vi.fn(() => null),
         getParameter: vi.fn(() => 1),
+        createFramebuffer: vi.fn(() => {
+            const fb = {};
+            framebuffers.add(fb);
+            return fb as WebGLFramebuffer;
+        }),
+        deleteFramebuffer: vi.fn((fb: object) => {
+            framebuffers.delete(fb);
+        }),
+        checkFramebufferStatus: vi.fn(() => 0x8cd5), // FRAMEBUFFER_COMPLETE
+        framebufferTexture2D: vi.fn(),
+        framebufferRenderbuffer: vi.fn(),
+        renderbufferStorage: vi.fn(),
+        renderbufferStorageMultisample: vi.fn(),
+        createRenderbuffer: vi.fn(() => ({})),
+        deleteRenderbuffer: vi.fn(),
+        bindRenderbuffer: vi.fn(),
+        readBuffer: vi.fn(),
+        readPixels: vi.fn(),
+        blitFramebuffer: vi.fn(),
+        drawArraysInstanced: vi.fn(),
+        drawElementsInstanced: vi.fn(),
+        vertexAttribDivisor: vi.fn(),
+        copyBufferSubData: vi.fn(),
+        getBufferSubData: vi.fn(),
+        // Exposed tracking Sets for memory leak detection tests
+        _shaders: shaders,
+        _programs: programs,
+        _buffers: buffers,
+        _vertexArrays: vertexArrays,
+        _textures: textures,
+        _samplers: samplers,
+        _framebuffers: framebuffers,
     };
 
     return gl as unknown as WebGL2RenderingContext;
@@ -315,8 +347,8 @@ export type MockGLContext = ReturnType<typeof createMockGL>;
 export const createSceneOptions = (
     scheduler: ManualScheduler,
     canvas: HTMLCanvasElement,
-    registry: SceneOptions<any>['registry'] = {}
-): SceneOptions<any> => {
+    registry: Record<string, unknown> = {}
+) => {
     const gl = createMockGL(canvas);
     Object.defineProperty(canvas, 'getContext', {
         value: vi.fn(() => gl),

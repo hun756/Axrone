@@ -24,9 +24,18 @@ export class SceneLightingUniformBinder {
         }
 
         if (!renderer.receiveLighting) {
-            this._writer.write(shader, 'u_AmbientLight', Vec3.ZERO);
-            this._writer.write(shader, 'u_SkyLight', Vec3.ZERO);
-            this._writer.write(shader, 'u_GroundLight', Vec3.ZERO);
+            // Bind NEUTRAL lighting instead of all-zeros so PBR shaders render
+            // flat albedo (base color) rather than pure black. The IBL path in
+            // the glTF/PBR fragment shader still executes when receiveLighting
+            // is false (else branch), computing:
+            //   irradiance = mix(u_GroundLight, u_SkyLight, hemiFactor)
+            //   diffuse    = kD * irradiance * albedo
+            // With sky/ground = ONE the irradiance is 1.0, yielding ~albedo
+            // for non-metallic surfaces. Direct light counts stay zeroed so
+            // no directional/point/spot contribution is added.
+            this._writer.write(shader, 'u_AmbientLight', Vec3.ONE);
+            this._writer.write(shader, 'u_SkyLight', Vec3.ONE);
+            this._writer.write(shader, 'u_GroundLight', Vec3.ONE);
             this._writer.write(shader, 'u_DirectionalLightCount', 0);
             this._writer.write(shader, 'u_PointLightCount', 0);
             this._writer.write(shader, 'u_SpotLightCount', 0);

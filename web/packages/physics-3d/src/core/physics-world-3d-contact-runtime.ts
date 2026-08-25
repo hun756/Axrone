@@ -1,5 +1,5 @@
 // Part 1
-import type { IVec3Like } from '@axrone/numeric';
+import { Vec3, Quat, type IVec3Like } from '@axrone/numeric';
 import type {
     ContactId,
     ICollisionFilter,
@@ -34,25 +34,15 @@ import {
     type IConstraintDescriptor3D,
     type IResolvedContactManifold3D,
     type IShapeDescriptor3D,
-    type IShapePairCandidate3D,
     type IMutableContactPoint3D,
+    type IShapePairCandidate3D,
     type SupportedConstraintDef3D,
     type SupportedShapeDef3D,
-    addVec3,
     buildOrthonormalBasis,
     clamp,
-    crossVec3,
-    dotVec3,
-    inverseRotateVec3,
     inverseTransformPoint3D,
-    lengthVec3,
     midpointVec3,
-    multiplyQuat,
-    negateVec3,
-    rotateVec3,
-    scaleVec3,
     shouldShapeFiltersCollide,
-    subVec3,
     transformPoint3D,
     isSphereDef,
     isBoxDef,
@@ -63,7 +53,7 @@ import {
     isTriangleMeshDef,
 } from './physics-world-3d-shared';
 
-import { GJK3D, supportFromVertices, type Support3D, type IVec3 } from './gjk3d';
+import { GJK3D, supportFromVertices, type Support3D } from './gjk3d';
 
 export interface IPhysicsWorld3DContactRuntimeHost {
     readonly bodyManager: BodyManager3D;
@@ -152,9 +142,9 @@ export class PhysicsWorld3DContactRuntime {
 
         const pStart = performance.now();
         for (let i = 0; i < posIters; i++) {
-            for (const m of next.values()) this._solveContactPosition(m);
+            for (const m of next.values()) this._correctContactPositions(m, 0.2);
         }
-        for (const m of next.values()) this._finalizeContactPosition(m);
+        for (const m of next.values()) this._correctContactPositions(m, 1.0);
         if (profiler) profiler.solvePositionTime = performance.now() - pStart;
 
         // Persist accumulated impulses for next-frame warm starting.
@@ -242,7 +232,7 @@ export class PhysicsWorld3DContactRuntime {
                 id: (this._nextContactId++ as unknown) as ContactId,
                 localPointA: lA, localPointB: lB,
                 normalImpulse: 0 as Impulse, tangentImpulse1: 0 as Impulse, tangentImpulse2: 0 as Impulse,
-                separation: dotVec3(subVec3(wB, wA), c.normal),
+                separation: Vec3.dot(Vec3.subtract(wB, wA), c.normal),
             }],
             sensor: pair.descriptorA.isSensor || pair.descriptorB.isSensor,
             friction, restitution,
@@ -251,7 +241,7 @@ export class PhysicsWorld3DContactRuntime {
 
     private _getContactPointOnShape(d: IShapeDescriptor3D, c: { normal: IVec3Like; point: IVec3Like; penetration: number }, first: boolean): IVec3Like {
         if (isSphereDef(d.def)) {
-            return addVec3(this._host.getShapeWorldCenter(d), scaleVec3(first ? c.normal : negateVec3(c.normal), d.def.radius));
+            return Vec3.add(this._host.getShapeWorldCenter(d), Vec3.multiplyScalar(first ? c.normal : Vec3.negate(c.normal), d.def.radius));
         }
         return c.point;
     }
@@ -260,13 +250,13 @@ export class PhysicsWorld3DContactRuntime {
         const tA = dA.type, tB = dB.type;
         if (tA === SHAPE_TYPE_SPHERE && tB === SHAPE_TYPE_SPHERE) return this._cSphSph(dA, dB);
         if (tA === SHAPE_TYPE_SPHERE && tB === SHAPE_TYPE_BOX) return this._cSphBox(dA, dB);
-        if (tA === SHAPE_TYPE_BOX && tB === SHAPE_TYPE_SPHERE) { const k = this._cSphBox(dB, dA); return k ? { normal: negateVec3(k.normal), point: k.point, penetration: k.penetration } : null; }
+        if (tA === SHAPE_TYPE_BOX && tB === SHAPE_TYPE_SPHERE) { const k = this._cSphBox(dB, dA); return k ? { normal: Vec3.negate(k.normal), point: k.point, penetration: k.penetration } : null; }
         if (tA === SHAPE_TYPE_BOX && tB === SHAPE_TYPE_BOX) return this._cBoxBox(dA, dB);
         if (tA === SHAPE_TYPE_CAPSULE && tB === SHAPE_TYPE_CAPSULE) return this._cCapCap(dA, dB);
         if (tA === SHAPE_TYPE_CAPSULE && tB === SHAPE_TYPE_SPHERE) return this._cCapSph(dA, dB);
-        if (tA === SHAPE_TYPE_SPHERE && tB === SHAPE_TYPE_CAPSULE) { const k = this._cCapSph(dB, dA); return k ? { normal: negateVec3(k.normal), point: k.point, penetration: k.penetration } : null; }
+        if (tA === SHAPE_TYPE_SPHERE && tB === SHAPE_TYPE_CAPSULE) { const k = this._cCapSph(dB, dA); return k ? { normal: Vec3.negate(k.normal), point: k.point, penetration: k.penetration } : null; }
         if (tA === SHAPE_TYPE_CAPSULE && tB === SHAPE_TYPE_BOX) return this._cCapBox(dA, dB);
-        if (tA === SHAPE_TYPE_BOX && tB === SHAPE_TYPE_CAPSULE) { const k = this._cCapBox(dB, dA); return k ? { normal: negateVec3(k.normal), point: k.point, penetration: k.penetration } : null; }
+        if (tA === SHAPE_TYPE_BOX && tB === SHAPE_TYPE_CAPSULE) { const k = this._cCapBox(dB, dA); return k ? { normal: Vec3.negate(k.normal), point: k.point, penetration: k.penetration } : null; }
         // Convex hull / triangle mesh: real GJK/EPA narrowphase (replaces AABB fallback).
         if (
             tA === SHAPE_TYPE_CONVEX_HULL || tA === SHAPE_TYPE_TRIANGLE_MESH ||
@@ -315,8 +305,8 @@ export class PhysicsWorld3DContactRuntime {
         if (isSphereDef(def)) {
             const center = this._host.getShapeWorldCenter(descriptor);
             const r = def.radius;
-            return (dir: IVec3): IVec3 => {
-                const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+            return (dir: IVec3Like): IVec3Like => {
+                const len = Vec3.len(dir);
                 const inv = len > 1e-6 ? r / len : 0;
                 return { x: center.x + dir.x * inv, y: center.y + dir.y * inv, z: center.z + dir.z * inv };
             };
@@ -324,14 +314,14 @@ export class PhysicsWorld3DContactRuntime {
         if (isBoxDef(def)) {
             const center = transformPoint3D(def.center, pos, rot);
             const halfExtents = def.halfExtents;
-            const rotFull = multiplyQuat(rot, def.rotation ?? IDENTITY_ROTATION);
+            const rotFull = Quat.multiply(rot, def.rotation ?? IDENTITY_ROTATION);
             const axes = [
-                rotateVec3({ x: 1, y: 0, z: 0 }, rotFull),
-                rotateVec3({ x: 0, y: 1, z: 0 }, rotFull),
-                rotateVec3({ x: 0, y: 0, z: 1 }, rotFull),
+                Quat.rotateVector(rotFull, { x: 1, y: 0, z: 0 }),
+                Quat.rotateVector(rotFull, { x: 0, y: 1, z: 0 }),
+                Quat.rotateVector(rotFull, { x: 0, y: 0, z: 1 }),
             ];
             const ext = [halfExtents.x, halfExtents.y, halfExtents.z];
-            return (dir: IVec3): IVec3 => {
+            return (dir: IVec3Like): IVec3Like => {
                 let x = center.x, y = center.y, z = center.z;
                 for (let i = 0; i < 3; i++) {
                     const s = (dir.x * axes[i].x + dir.y * axes[i].y + dir.z * axes[i].z) >= 0 ? ext[i] : -ext[i];
@@ -346,11 +336,11 @@ export class PhysicsWorld3DContactRuntime {
             const p1 = transformPoint3D(def.p1, pos, rot);
             const p2 = transformPoint3D(def.p2, pos, rot);
             const r = def.radius;
-            return (dir: IVec3): IVec3 => {
+            return (dir: IVec3Like): IVec3Like => {
                 const d1 = dir.x * p1.x + dir.y * p1.y + dir.z * p1.z;
                 const d2 = dir.x * p2.x + dir.y * p2.y + dir.z * p2.z;
                 const base = d1 >= d2 ? p1 : p2;
-                const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+                const len = Vec3.len(dir);
                 const inv = len > 1e-6 ? r / len : 0;
                 return { x: base.x + dir.x * inv, y: base.y + dir.y * inv, z: base.z + dir.z * inv };
             };
@@ -358,7 +348,7 @@ export class PhysicsWorld3DContactRuntime {
         if (isConvexHullDef(def) || isTriangleMeshDef(def) || isCylinderDef(def) || isConeDef(def)) {
             const vertices = this._worldVerticesOf(descriptor);
             if (vertices.length === 0) return null;
-            return supportFromVertices(vertices as IVec3[]);
+            return supportFromVertices(vertices as IVec3Like[]);
         }
         return null;
     }
@@ -379,23 +369,23 @@ export class PhysicsWorld3DContactRuntime {
             const height = def.height ?? 0;
             const segments = 8;
             const c = transformPoint3D(center, pos, rot);
-            const localY = rotateVec3({ x: 0, y: 1, z: 0 }, rot);
-            const localX = rotateVec3({ x: 1, y: 0, z: 0 }, rot);
-            const localZ = rotateVec3({ x: 0, y: 0, z: 1 }, rot);
-            const ringOffset = scaleVec3(localY, height * 0.5);
-            const top = addVec3(c, ringOffset);
-            const bottom = subVec3(c, ringOffset);
+            const localY = Quat.rotateVector(rot, { x: 0, y: 1, z: 0 });
+            const localX = Quat.rotateVector(rot, { x: 1, y: 0, z: 0 });
+            const localZ = Quat.rotateVector(rot, { x: 0, y: 0, z: 1 });
+            const ringOffset = Vec3.multiplyScalar(localY, height * 0.5);
+            const top = Vec3.add(c, ringOffset);
+            const bottom = Vec3.subtract(c, ringOffset);
             const verts: IVec3Like[] = [];
             for (let i = 0; i < segments; i++) {
                 const a = (i / segments) * Math.PI * 2;
                 const ox = Math.cos(a) * radius;
                 const oz = Math.sin(a) * radius;
-                const radial = addVec3(scaleVec3(localX, ox), scaleVec3(localZ, oz));
-                verts.push(addVec3(top, radial));
-                verts.push(addVec3(bottom, radial));
+                const radial = Vec3.add(Vec3.multiplyScalar(localX, ox), Vec3.multiplyScalar(localZ, oz));
+                verts.push(Vec3.add(top, radial));
+                verts.push(Vec3.add(bottom, radial));
             }
             if (isConeDef(def)) {
-                verts.push(addVec3(c, scaleVec3(localY, height)));
+                verts.push(Vec3.add(c, Vec3.multiplyScalar(localY, height)));
             }
             return verts;
         }
@@ -405,15 +395,15 @@ export class PhysicsWorld3DContactRuntime {
 
     private _cSphSph(dA: IShapeDescriptor3D, dB: IShapeDescriptor3D): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {
         const cA = this._host.getShapeWorldCenter(dA), cB = this._host.getShapeWorldCenter(dB);
-        const delta = subVec3(cB, cA);
-        const dist = lengthVec3(delta);
+        const delta = Vec3.subtract(cB, cA);
+        const dist = Vec3.len(delta);
         const rA = isSphereDef(dA.def) ? dA.def.radius : 0;
         const rB = isSphereDef(dB.def) ? dB.def.radius : 0;
         const rSum = rA + rB;
         if (dist > rSum) return null;
-        const n = dist > PhysicsConstants.EPSILON ? scaleVec3(delta, 1 / dist) : { x: 1, y: 0, z: 0 };
+        const n = dist > PhysicsConstants.EPSILON ? Vec3.multiplyScalar(delta, 1 / dist) : { x: 1, y: 0, z: 0 };
         const pen = rSum - dist;
-        return { normal: n, point: addVec3(cA, scaleVec3(n, rA - pen * 0.5)), penetration: pen };
+        return { normal: n, point: Vec3.add(cA, Vec3.multiplyScalar(n, rA - pen * 0.5)), penetration: pen };
     }
 
     private _cSphBox(s: IShapeDescriptor3D, b: IShapeDescriptor3D): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {
@@ -421,15 +411,15 @@ export class PhysicsWorld3DContactRuntime {
         const bP = this._host.bodyManager.getPosition(b.bodyId), bR = this._host.bodyManager.getRotation(b.bodyId);
         if (!isSphereDef(s.def) || !isBoxDef(b.def)) return null;
         const bC = transformPoint3D(b.def.center, bP, bR);
-        const bRot = multiplyQuat(bR, b.def.rotation ?? IDENTITY_ROTATION);
+        const bRot = Quat.multiply(bR, b.def.rotation ?? IDENTITY_ROTATION);
         const localSC = inverseTransformPoint3D(sC, bC, bRot);
         const closestLocal = { x: clamp(localSC.x, -b.def.halfExtents.x, b.def.halfExtents.x), y: clamp(localSC.y, -b.def.halfExtents.y, b.def.halfExtents.y), z: clamp(localSC.z, -b.def.halfExtents.z, b.def.halfExtents.z) };
         const closestWorld = transformPoint3D(closestLocal, bC, bRot);
-        const delta = subVec3(sC, closestWorld);
-        const dist = lengthVec3(delta);
+        const delta = Vec3.subtract(sC, closestWorld);
+        const dist = Vec3.len(delta);
         const r = s.def.radius;
         if (dist > r) return null;
-        if (dist > PhysicsConstants.EPSILON) return { normal: scaleVec3(delta, -1 / dist), point: closestWorld, penetration: r - dist };
+        if (dist > PhysicsConstants.EPSILON) return { normal: Vec3.multiplyScalar(delta, -1 / dist), point: closestWorld, penetration: r - dist };
         return { normal: { x: 0, y: 1, z: 0 }, point: closestWorld, penetration: r };
     }
 
@@ -438,21 +428,21 @@ export class PhysicsWorld3DContactRuntime {
         const bDA = dA.def, bDB = dB.def;
         const cA = transformPoint3D(bDA.center, this._host.bodyManager.getPosition(dA.bodyId), this._host.bodyManager.getRotation(dA.bodyId));
         const cB = transformPoint3D(bDB.center, this._host.bodyManager.getPosition(dB.bodyId), this._host.bodyManager.getRotation(dB.bodyId));
-        const rA = multiplyQuat(this._host.bodyManager.getRotation(dA.bodyId), bDA.rotation ?? IDENTITY_ROTATION);
-        const rB = multiplyQuat(this._host.bodyManager.getRotation(dB.bodyId), bDB.rotation ?? IDENTITY_ROTATION);
-        const xA = rotateVec3({ x: 1, y: 0, z: 0 }, rA), yA = rotateVec3({ x: 0, y: 1, z: 0 }, rA), zA = rotateVec3({ x: 0, y: 0, z: 1 }, rA);
-        const xB = rotateVec3({ x: 1, y: 0, z: 0 }, rB), yB = rotateVec3({ x: 0, y: 1, z: 0 }, rB), zB = rotateVec3({ x: 0, y: 0, z: 1 }, rB);
+        const rA = Quat.multiply(this._host.bodyManager.getRotation(dA.bodyId), bDA.rotation ?? IDENTITY_ROTATION);
+        const rB = Quat.multiply(this._host.bodyManager.getRotation(dB.bodyId), bDB.rotation ?? IDENTITY_ROTATION);
+        const xA = Quat.rotateVector(rA, { x: 1, y: 0, z: 0 }), yA = Quat.rotateVector(rA, { x: 0, y: 1, z: 0 }), zA = Quat.rotateVector(rA, { x: 0, y: 0, z: 1 });
+        const xB = Quat.rotateVector(rB, { x: 1, y: 0, z: 0 }), yB = Quat.rotateVector(rB, { x: 0, y: 1, z: 0 }), zB = Quat.rotateVector(rB, { x: 0, y: 0, z: 1 });
         const axes = [xA, yA, zA, xB, yB, zB];
         const hA = bDA.halfExtents, hB = bDB.halfExtents;
-        const delta = subVec3(cB, cA);
+        const delta = Vec3.subtract(cB, cA);
         let minP = Infinity; let bestN: IVec3Like = { x: 0, y: 1, z: 0 };
         for (const ax of axes) {
-            const pA = hA.x * Math.abs(dotVec3(xA, ax)) + hA.y * Math.abs(dotVec3(yA, ax)) + hA.z * Math.abs(dotVec3(zA, ax));
-            const pB = hB.x * Math.abs(dotVec3(xB, ax)) + hB.y * Math.abs(dotVec3(yB, ax)) + hB.z * Math.abs(dotVec3(zB, ax));
-            const d = Math.abs(dotVec3(delta, ax));
+            const pA = hA.x * Math.abs(Vec3.dot(xA, ax)) + hA.y * Math.abs(Vec3.dot(yA, ax)) + hA.z * Math.abs(Vec3.dot(zA, ax));
+            const pB = hB.x * Math.abs(Vec3.dot(xB, ax)) + hB.y * Math.abs(Vec3.dot(yB, ax)) + hB.z * Math.abs(Vec3.dot(zB, ax));
+            const d = Math.abs(Vec3.dot(delta, ax));
             const pen = pA + pB - d;
             if (pen < 0) return null;
-            if (pen < minP) { minP = pen; bestN = dotVec3(delta, ax) > 0 ? ax : negateVec3(ax); }
+            if (pen < minP) { minP = pen; bestN = Vec3.dot(delta, ax) > 0 ? ax : Vec3.negate(ax); }
         }
         return { normal: bestN, point: midpointVec3(cA, cB), penetration: minP };
     }
@@ -478,8 +468,8 @@ export class PhysicsWorld3DContactRuntime {
         const p2 = transformPoint3D(cap.def.p2, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
         const sC = this._host.getShapeWorldCenter(sph);
         const closest = this._closestSeg(sC, p1, p2);
-        const delta = subVec3(sC, closest);
-        const dist = lengthVec3(delta);
+        const delta = Vec3.subtract(sC, closest);
+        const dist = Vec3.len(delta);
         const rSum = cap.def.radius + sph.def.radius;
         if (dist > rSum) return null;
         const invD = dist > PhysicsConstants.EPSILON ? 1 / dist : 0;
@@ -491,18 +481,17 @@ export class PhysicsWorld3DContactRuntime {
         const p1 = transformPoint3D(cap.def.p1, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
         const p2 = transformPoint3D(cap.def.p2, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
         const bC = transformPoint3D(box.def.center, this._host.bodyManager.getPosition(box.bodyId), this._host.bodyManager.getRotation(box.bodyId));
-        const bRot = multiplyQuat(this._host.bodyManager.getRotation(box.bodyId), box.def.rotation ?? IDENTITY_ROTATION);
+        const bRot = Quat.multiply(this._host.bodyManager.getRotation(box.bodyId), box.def.rotation ?? IDENTITY_ROTATION);
         const l1 = inverseTransformPoint3D(p1, bC, bRot), l2 = inverseTransformPoint3D(p2, bC, bRot);
         const hE = box.def.halfExtents;
         const c1 = { x: clamp(l1.x, -hE.x, hE.x), y: clamp(l1.y, -hE.y, hE.y), z: clamp(l1.z, -hE.z, hE.z) };
         const c2 = { x: clamp(l2.x, -hE.x, hE.x), y: clamp(l2.y, -hE.y, hE.y), z: clamp(l2.z, -hE.z, hE.z) };
         const closest = this._closestSeg({ x: 0, y: 0, z: 0 }, c1, c2);
-        const delta = subVec3(closest, { x: 0, y: 0, z: 0 });
-        const dist = lengthVec3(delta);
+        const dist = Vec3.len(closest);
         if (dist > cap.def.radius) return null;
         const invD = dist > PhysicsConstants.EPSILON ? 1 / dist : 0;
-        const localN = { x: delta.x * invD, y: delta.y * invD, z: delta.z * invD };
-        return { normal: rotateVec3(localN, bRot), point: transformPoint3D({ x: 0, y: 0, z: 0 }, bC, bRot), penetration: cap.def.radius - dist };
+        const localN = { x: closest.x * invD, y: closest.y * invD, z: closest.z * invD };
+        return { normal: Quat.rotateVector(bRot, localN), point: transformPoint3D({ x: 0, y: 0, z: 0 }, bC, bRot), penetration: cap.def.radius - dist };
     }
 
     private _cAabbApprox(dA: IShapeDescriptor3D, dB: IShapeDescriptor3D, aabbA: IAabb3D, aabbB: IAabb3D): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {
@@ -535,12 +524,12 @@ export class PhysicsWorld3DContactRuntime {
                 this._lp2w(manifold.bodyIdA, point.localPointA),
                 this._lp2w(manifold.bodyIdB, point.localPointB)
             );
-            const rA = subVec3(wp, cA);
-            const rB = subVec3(wp, cB);
+            const rA = Vec3.subtract(wp, cA);
+            const rB = Vec3.subtract(wp, cB);
 
             // Normal effective mass (includes angular inertia via diagonal inertia tensors).
-            const rnA = crossVec3(rA, manifold.normal);
-            const rnB = crossVec3(rB, manifold.normal);
+            const rnA = Vec3.cross(rA, manifold.normal);
+            const rnB = Vec3.cross(rB, manifold.normal);
             const kNormal =
                 invMassA +
                 invMassB +
@@ -552,28 +541,27 @@ export class PhysicsWorld3DContactRuntime {
                 invIB.z * rnB.z * rnB.z;
             const normalMass = kNormal > PhysicsConstants.EPSILON ? 1 / kNormal : 0;
 
-            const relV = subVec3(this._getWPV(manifold.bodyIdB, wp), this._getWPV(manifold.bodyIdA, wp));
-            const ns = dotVec3(relV, manifold.normal);
+            const relV = Vec3.subtract(this._getWPV(manifold.bodyIdB, wp), this._getWPV(manifold.bodyIdA, wp));
+            const ns = Vec3.dot(relV, manifold.normal);
             if (ns < 0) {
                 const rest = ns < -PhysicsConstants.VELOCITY_THRESHOLD ? manifold.restitution : 0;
                 let dPn = normalMass * (-(1 + rest) * ns);
                 const newPn = Math.max((point.normalImpulse as number) + dPn, 0);
                 dPn = newPn - (point.normalImpulse as number);
                 point.normalImpulse = newPn as unknown as Impulse;
-                this._applyImp(manifold.bodyIdA, negateVec3(scaleVec3(manifold.normal, dPn)), wp);
-                this._applyImp(manifold.bodyIdB, scaleVec3(manifold.normal, dPn), wp);
+                this._applyImp(manifold.bodyIdA, Vec3.negate(Vec3.multiplyScalar(manifold.normal, dPn)), wp);
+                this._applyImp(manifold.bodyIdB, Vec3.multiplyScalar(manifold.normal, dPn), wp);
             }
 
             // Friction along the tangent defined by the current relative velocity.
-            const relV2 = subVec3(this._getWPV(manifold.bodyIdB, wp), this._getWPV(manifold.bodyIdA, wp));
-            const vn = dotVec3(relV2, manifold.normal);
-            const tanV = subVec3(relV2, scaleVec3(manifold.normal, vn));
-            const tLen = lengthVec3(tanV);
+            const vn = Vec3.dot(relV, manifold.normal);
+            const tanV = Vec3.subtract(relV, Vec3.multiplyScalar(manifold.normal, vn));
+            const tLen = Vec3.len(tanV);
             if (tLen <= PhysicsConstants.EPSILON) continue;
 
-            const tan = scaleVec3(tanV, 1 / tLen);
-            const rtA = crossVec3(rA, tan);
-            const rtB = crossVec3(rB, tan);
+            const tan = Vec3.multiplyScalar(tanV, 1 / tLen);
+            const rtA = Vec3.cross(rA, tan);
+            const rtB = Vec3.cross(rB, tan);
             const kTangent =
                 invMassA +
                 invMassB +
@@ -585,13 +573,13 @@ export class PhysicsWorld3DContactRuntime {
                 invIB.z * rtB.z * rtB.z;
             const tangentMass = kTangent > PhysicsConstants.EPSILON ? 1 / kTangent : 0;
 
-            let dPt = tangentMass * -dotVec3(relV2, tan);
+            let dPt = tangentMass * -Vec3.dot(relV, tan);
             const maxPt = manifold.friction * (point.normalImpulse as number);
             const newPt = clamp((point.tangentImpulse1 as number) + dPt, -maxPt, maxPt);
             dPt = newPt - (point.tangentImpulse1 as number);
             point.tangentImpulse1 = newPt as unknown as Impulse;
-            this._applyImp(manifold.bodyIdA, negateVec3(scaleVec3(tan, dPt)), wp);
-            this._applyImp(manifold.bodyIdB, scaleVec3(tan, dPt), wp);
+            this._applyImp(manifold.bodyIdA, Vec3.negate(Vec3.multiplyScalar(tan, dPt)), wp);
+            this._applyImp(manifold.bodyIdB, Vec3.multiplyScalar(tan, dPt), wp);
         }
     }
 
@@ -604,15 +592,15 @@ export class PhysicsWorld3DContactRuntime {
             this._lp2w(manifold.bodyIdB, manifold.points[0].localPointB)
         );
 
-        const normalImpulse = scaleVec3(manifold.normal, normal);
-        this._applyImp(manifold.bodyIdA, negateVec3(normalImpulse), wp);
+        const normalImpulse = Vec3.multiplyScalar(manifold.normal, normal);
+        this._applyImp(manifold.bodyIdA, Vec3.negate(normalImpulse), wp);
         this._applyImp(manifold.bodyIdB, normalImpulse, wp);
 
         manifold.points[0].tangentImpulse1 = 0 as Impulse;
         manifold.points[0].tangentImpulse2 = 0 as Impulse;
     }
 
-    private _solveContactPosition(manifold: IResolvedContactManifold3D): void {
+    private _correctContactPositions(manifold: IResolvedContactManifold3D, beta: number): void {
         for (const point of manifold.points) {
             const sep = this._getSep(manifold, point);
             const pen = Math.max(0, -sep);
@@ -620,45 +608,30 @@ export class PhysicsWorld3DContactRuntime {
             const iA = this._invMass(manifold.bodyIdA), iB = this._invMass(manifold.bodyIdB);
             const iSum = iA + iB;
             if (iSum <= PhysicsConstants.EPSILON) continue;
-            const corr = scaleVec3(manifold.normal, ((pen - PhysicsConstants.ALLOWED_PENETRATION) * 0.2) / iSum);
-            if (iA > 0) this._host.bodyManager.setPosition(manifold.bodyIdA, subVec3(this._host.bodyManager.getPosition(manifold.bodyIdA), scaleVec3(corr, iA)));
-            if (iB > 0) this._host.bodyManager.setPosition(manifold.bodyIdB, addVec3(this._host.bodyManager.getPosition(manifold.bodyIdB), scaleVec3(corr, iB)));
-            point.separation = this._getSep(manifold, point);
-        }
-    }
-
-    private _finalizeContactPosition(manifold: IResolvedContactManifold3D): void {
-        for (const point of manifold.points) {
-            const sep = this._getSep(manifold, point);
-            const pen = Math.max(0, -sep);
-            if (pen <= PhysicsConstants.ALLOWED_PENETRATION) continue;
-            const iA = this._invMass(manifold.bodyIdA), iB = this._invMass(manifold.bodyIdB);
-            const iSum = iA + iB;
-            if (iSum <= PhysicsConstants.EPSILON) continue;
-            const corr = scaleVec3(manifold.normal, (pen - PhysicsConstants.ALLOWED_PENETRATION) / iSum);
-            if (iA > 0) this._host.bodyManager.setPosition(manifold.bodyIdA, subVec3(this._host.bodyManager.getPosition(manifold.bodyIdA), scaleVec3(corr, iA)));
-            if (iB > 0) this._host.bodyManager.setPosition(manifold.bodyIdB, addVec3(this._host.bodyManager.getPosition(manifold.bodyIdB), scaleVec3(corr, iB)));
+            const corr = Vec3.multiplyScalar(manifold.normal, ((pen - PhysicsConstants.ALLOWED_PENETRATION) * beta) / iSum);
+            if (iA > 0) this._host.bodyManager.setPosition(manifold.bodyIdA, Vec3.subtract(this._host.bodyManager.getPosition(manifold.bodyIdA), Vec3.multiplyScalar(corr, iA)));
+            if (iB > 0) this._host.bodyManager.setPosition(manifold.bodyIdB, Vec3.add(this._host.bodyManager.getPosition(manifold.bodyIdB), Vec3.multiplyScalar(corr, iB)));
             point.separation = this._getSep(manifold, point);
         }
     }
 
     private _segSeg(a1: IVec3Like, a2: IVec3Like, b1: IVec3Like, b2: IVec3Like): { pointA: IVec3Like; pointB: IVec3Like; distSq: number } {
-        const d1 = subVec3(a2, a1), d2 = subVec3(b2, b1), r = subVec3(a1, b1);
-        const a = dotVec3(d1, d1), e = dotVec3(d2, d2), f = dotVec3(d2, r);
+        const d1 = Vec3.subtract(a2, a1), d2 = Vec3.subtract(b2, b1), r = Vec3.subtract(a1, b1);
+        const a = Vec3.dot(d1, d1), e = Vec3.dot(d2, d2), f = Vec3.dot(d2, r);
         let s = 0, t = 0;
         if (a <= PhysicsConstants.EPSILON && e <= PhysicsConstants.EPSILON) { s = t = 0; }
         else if (a <= PhysicsConstants.EPSILON) { s = 0; t = clamp(f / e, 0, 1); }
-        else { const c = dotVec3(d1, r); if (e <= PhysicsConstants.EPSILON) { t = 0; s = clamp(-c / a, 0, 1); } else { const b = dotVec3(d1, d2); const denom = a * e - b * b; if (denom !== 0) s = clamp((b * f - c * e) / denom, 0, 1); t = (b * s + f) / e; if (t < 0) { t = 0; s = clamp(-c / a, 0, 1); } else if (t > 1) { t = 1; s = clamp((b - c) / a, 0, 1); } } }
+        else { const c = Vec3.dot(d1, r); if (e <= PhysicsConstants.EPSILON) { t = 0; s = clamp(-c / a, 0, 1); } else { const b = Vec3.dot(d1, d2); const denom = a * e - b * b; if (denom !== 0) s = clamp((b * f - c * e) / denom, 0, 1); t = (b * s + f) / e; if (t < 0) { t = 0; s = clamp(-c / a, 0, 1); } else if (t > 1) { t = 1; s = clamp((b - c) / a, 0, 1); } } }
         const pA = { x: a1.x + d1.x * s, y: a1.y + d1.y * s, z: a1.z + d1.z * s };
         const pB = { x: b1.x + d2.x * t, y: b1.y + d2.y * t, z: b1.z + d2.z * t };
-        const delta = subVec3(pB, pA);
-        return { pointA: pA, pointB: pB, distSq: dotVec3(delta, delta) };
+        const delta = Vec3.subtract(pB, pA);
+        return { pointA: pA, pointB: pB, distSq: Vec3.dot(delta, delta) };
     }
 
     private _closestSeg(point: IVec3Like, a: IVec3Like, b: IVec3Like): IVec3Like {
-        const ab = subVec3(b, a), ap = subVec3(point, a);
-        const ab2 = dotVec3(ab, ab);
-        const t = ab2 > PhysicsConstants.EPSILON ? clamp(dotVec3(ap, ab) / ab2, 0, 1) : 0;
+        const ab = Vec3.subtract(b, a), ap = Vec3.subtract(point, a);
+        const ab2 = Vec3.dot(ab, ab);
+        const t = ab2 > PhysicsConstants.EPSILON ? clamp(Vec3.dot(ap, ab) / ab2, 0, 1) : 0;
         return { x: a.x + ab.x * t, y: a.y + ab.y * t, z: a.z + ab.z * t };
     }
 
@@ -721,7 +694,7 @@ export class PhysicsWorld3DContactRuntime {
 
     private _getWPV(bodyId: BodyId3D, point: IVec3Like): IVec3Like {
         const center = this._host.bodyManager.getPosition(bodyId);
-        return addVec3(this._host.bodyManager.getLinearVelocity(bodyId), crossVec3(this._host.bodyManager.getAngularVelocity(bodyId), subVec3(point, center)));
+        return Vec3.add(this._host.bodyManager.getLinearVelocity(bodyId), Vec3.cross(this._host.bodyManager.getAngularVelocity(bodyId), Vec3.subtract(point, center)));
     }
 
     private _lp2w(bodyId: BodyId3D, localPoint: IVec3Like): IVec3Like {
@@ -729,6 +702,6 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     private _getSep(manifold: IResolvedContactManifold3D, point: IMutableContactPoint3D): number {
-        return dotVec3(subVec3(this._lp2w(manifold.bodyIdB, point.localPointB), this._lp2w(manifold.bodyIdA, point.localPointA)), manifold.normal);
+        return Vec3.dot(Vec3.subtract(this._lp2w(manifold.bodyIdB, point.localPointB), this._lp2w(manifold.bodyIdA, point.localPointA)), manifold.normal);
     }
 }

@@ -32,6 +32,7 @@ export const createParticleShaderDefinition = (
 ): SceneShaderDefinition => ({
     id,
     vertexSource: `#version 300 es
+precision mediump float;
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in float a_Rotation;
 layout(location = 2) in vec2 a_UV0;
@@ -54,7 +55,7 @@ void main() {
     gl_PointSize = clamp(attenuated, 1.0, u_MaxPointSize);
 }`,
     fragmentSource: `#version 300 es
-precision highp float;
+precision mediump float;
 uniform int u_SpriteMode;
 uniform sampler2D u_Texture;
 uniform float u_UseTexture;

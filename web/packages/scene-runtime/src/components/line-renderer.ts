@@ -2,6 +2,7 @@ import { Vec3, Vec4 } from '@axrone/numeric';
 import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
+import type { Mutable } from '@axrone/utility';
 
 export type LineTextureMode = 'stretch' | 'tile' | 'distribute-per-segment' | 'repeat-per-segment';
 export type LineAlignment = 'view' | 'transform-z' | 'local';
@@ -390,55 +391,56 @@ export class LineRenderer extends Component {
     }
 
     override deserialize(data: Record<string, any>): void {
-        const patch: LineRendererConfig = {};
+        type MutableLineConfig = Mutable<LineRendererConfig>;
+        const patch: MutableLineConfig = {};
 
         if (Array.isArray(data.positions)) {
-            (patch as any).positions = data.positions;
+            patch.positions = data.positions;
         }
         if (typeof data.useWorldSpace === 'boolean') {
-            (patch as any).useWorldSpace = data.useWorldSpace;
+            patch.useWorldSpace = data.useWorldSpace;
         }
         if (typeof data.loop === 'boolean') {
-            (patch as any).loop = data.loop;
+            patch.loop = data.loop;
         }
         if (typeof data.startWidth === 'number') {
-            (patch as any).startWidth = data.startWidth;
+            patch.startWidth = data.startWidth;
         }
         if (typeof data.endWidth === 'number') {
-            (patch as any).endWidth = data.endWidth;
+            patch.endWidth = data.endWidth;
         }
         if (Array.isArray(data.widthCurve)) {
-            (patch as any).widthCurve = data.widthCurve;
+            patch.widthCurve = data.widthCurve;
         }
         if (Array.isArray(data.startColor) && data.startColor.length === 4) {
-            (patch as any).startColor = data.startColor;
+            patch.startColor = data.startColor;
         }
         if (Array.isArray(data.endColor) && data.endColor.length === 4) {
-            (patch as any).endColor = data.endColor;
+            patch.endColor = data.endColor;
         }
         if (Array.isArray(data.colorGradient)) {
-            (patch as any).colorGradient = data.colorGradient;
+            patch.colorGradient = data.colorGradient;
         }
         if (typeof data.cornerVertices === 'number') {
-            (patch as any).cornerVertices = data.cornerVertices;
+            patch.cornerVertices = data.cornerVertices;
         }
         if (typeof data.endCapVertices === 'number') {
-            (patch as any).endCapVertices = data.endCapVertices;
+            patch.endCapVertices = data.endCapVertices;
         }
         if (typeof data.textureMode === 'string') {
-            (patch as any).textureMode = data.textureMode;
+            patch.textureMode = data.textureMode;
         }
         if (typeof data.alignment === 'string') {
-            (patch as any).alignment = data.alignment;
+            patch.alignment = data.alignment;
         }
         if (Array.isArray(data.textureScale) && data.textureScale.length === 2) {
-            (patch as any).textureScale = data.textureScale;
+            patch.textureScale = data.textureScale;
         }
         if (typeof data.shadowCasting === 'boolean') {
-            (patch as any).shadowCasting = data.shadowCasting;
+            patch.shadowCasting = data.shadowCasting;
         }
         if (typeof data.generateLightingData === 'boolean') {
-            (patch as any).generateLightingData = data.generateLightingData;
+            patch.generateLightingData = data.generateLightingData;
         }
 
         this._applyConfig(patch);
@@ -472,12 +474,7 @@ export class LineRenderer extends Component {
         const lowerColor = toVec4(lowerStop.color);
         const upperColor = toVec4(upperStop.color);
 
-        return new Vec4(
-            lowerColor.x + (upperColor.x - lowerColor.x) * fraction,
-            lowerColor.y + (upperColor.y - lowerColor.y) * fraction,
-            lowerColor.z + (upperColor.z - lowerColor.z) * fraction,
-            lowerColor.w + (upperColor.w - lowerColor.w) * fraction
-        );
+        return Vec4.lerpUnClamped(lowerColor, upperColor, fraction);
     }
 
     private _applyConfig(config: LineRendererConfig): void {

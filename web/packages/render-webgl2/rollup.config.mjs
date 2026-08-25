@@ -15,5 +15,10 @@ export default createMultiEntryConfig({
         mesh: 'src/mesh/index.ts',
         batch: 'src/batch/index.ts',
         pipeline: 'src/pipeline.ts',
+        context: 'src/context/index.ts',
+        query: 'src/query.ts',
+        sync: 'src/sync.ts',
+        'transform-feedback': 'src/transform-feedback.ts',
+        'frame-graph': 'src/frame-graph.ts',
     },
 });

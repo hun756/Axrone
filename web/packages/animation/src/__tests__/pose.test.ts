@@ -10,6 +10,7 @@ import {
     blendWeightedFrames,
     applyAdditiveFrame,
 } from '../pose';
+import { createAdditiveFrameScratch } from '../pose-blend';
 import { AnimationRig } from '../rig';
 import { AnimationValidationError } from '../errors';
 
@@ -364,6 +365,7 @@ describe('blendFrame', () => {
 describe('blendWeightedFrames', () => {
     const rig = new AnimationRig({ bones: [{ name: 'root' }] });
     const curveLayout = new AnimationCurveLayout([{ id: 'w', componentCount: 1 }]);
+    const referenceRotationScratch = new Float32Array(4);
 
     it('zero total weight returns rest frame', () => {
         const rest = new AnimationFrame(rig, curveLayout);
@@ -371,7 +373,7 @@ describe('blendWeightedFrames', () => {
         const frame1 = new AnimationFrame(rig, curveLayout);
         frame1.pose.translations[0] = 10;
         const target = new AnimationFrame(rig, curveLayout);
-        blendWeightedFrames(target, [frame1], [0], rest);
+        blendWeightedFrames(target, [frame1], [0], rest, referenceRotationScratch);
         expect(target.pose.translations[0]).toBeCloseTo(99, 5);
     });
 
@@ -380,7 +382,7 @@ describe('blendWeightedFrames', () => {
         const frame = new AnimationFrame(rig, curveLayout);
         frame.pose.translations[0] = 42;
         const target = new AnimationFrame(rig, curveLayout);
-        blendWeightedFrames(target, [frame], [1], rest);
+        blendWeightedFrames(target, [frame], [1], rest, referenceRotationScratch);
         expect(target.pose.translations[0]).toBeCloseTo(42, 5);
     });
 
@@ -391,7 +393,7 @@ describe('blendWeightedFrames', () => {
         frame1.pose.translations[0] = 10;
         frame2.pose.translations[0] = 20;
         const target = new AnimationFrame(rig, curveLayout);
-        blendWeightedFrames(target, [frame1, frame2], [1, 3], rest);
+        blendWeightedFrames(target, [frame1, frame2], [1, 3], rest, referenceRotationScratch);
         expect(target.pose.translations[0]).toBeCloseTo(17.5, 5);
     });
 
@@ -402,13 +404,11 @@ describe('blendWeightedFrames', () => {
         frame1.curves.values[0] = 100;
         frame2.curves.values[0] = 200;
         const target = new AnimationFrame(rig, curveLayout);
-        blendWeightedFrames(target, [frame1, frame2], [1, 1], rest);
+        blendWeightedFrames(target, [frame1, frame2], [1, 1], rest, referenceRotationScratch);
         expect(target.curves.values[0]).toBeCloseTo(150, 5);
     });
 
     it('sequential calls produce correct independent results', () => {
-        // blendWeightedFrames uses module-level scratch (blendReferenceRotation),
-        // so sequential calls must each produce correct results without interference.
         const rest = new AnimationFrame(rig, curveLayout);
         const frame1 = new AnimationFrame(rig, curveLayout);
         const frame2 = new AnimationFrame(rig, curveLayout);
@@ -418,17 +418,14 @@ describe('blendWeightedFrames', () => {
         const targetA = new AnimationFrame(rig, curveLayout);
         const targetB = new AnimationFrame(rig, curveLayout);
 
-        // First call: blend with weight [1, 0] -> should get frame1
-        blendWeightedFrames(targetA, [frame1, frame2], [1, 0], rest);
-        // Second call: blend with weight [0, 1] -> should get frame2
-        blendWeightedFrames(targetB, [frame1, frame2], [0, 1], rest);
+        blendWeightedFrames(targetA, [frame1, frame2], [1, 0], rest, referenceRotationScratch);
+        blendWeightedFrames(targetB, [frame1, frame2], [0, 1], rest, referenceRotationScratch);
 
         expect(targetA.pose.translations[0]).toBeCloseTo(10, 5);
         expect(targetB.pose.translations[0]).toBeCloseTo(30, 5);
 
-        // Third call: equal weights -> should get average
         const targetC = new AnimationFrame(rig, curveLayout);
-        blendWeightedFrames(targetC, [frame1, frame2], [1, 1], rest);
+        blendWeightedFrames(targetC, [frame1, frame2], [1, 1], rest, referenceRotationScratch);
         expect(targetC.pose.translations[0]).toBeCloseTo(20, 5);
     });
 });
@@ -436,6 +433,7 @@ describe('blendWeightedFrames', () => {
 describe('applyAdditiveFrame', () => {
     const rig = new AnimationRig({ bones: [{ name: 'root' }] });
     const curveLayout = new AnimationCurveLayout([{ id: 'w', componentCount: 1 }]);
+    const additiveScratch = createAdditiveFrameScratch();
 
     it('weight=0 returns base unchanged', () => {
         const base = new AnimationFrame(rig, curveLayout);
@@ -444,7 +442,7 @@ describe('applyAdditiveFrame', () => {
         const target = new AnimationFrame(rig, curveLayout);
         base.pose.translations[0] = 5;
         additive.pose.translations[0] = 100;
-        applyAdditiveFrame(target, base, additive, rest, 0);
+        applyAdditiveFrame(target, base, additive, rest, 0, additiveScratch);
         expect(target.pose.translations[0]).toBeCloseTo(5, 5);
     });
 
@@ -455,7 +453,7 @@ describe('applyAdditiveFrame', () => {
         const target = new AnimationFrame(rig, curveLayout);
         base.pose.translations[0] = 5;
         // additive == rest, so delta is 0
-        applyAdditiveFrame(target, base, additive, rest, 1);
+        applyAdditiveFrame(target, base, additive, rest, 1, additiveScratch);
         expect(target.pose.translations[0]).toBeCloseTo(5, 5);
     });
 
@@ -467,7 +465,7 @@ describe('applyAdditiveFrame', () => {
         base.pose.translations[0] = 5;
         additive.pose.translations[0] = 8;
         rest.pose.translations[0] = 3;
-        applyAdditiveFrame(target, base, additive, rest, 1);
+        applyAdditiveFrame(target, base, additive, rest, 1, additiveScratch);
         // target = base + (additive - rest) * 1 = 5 + (8 - 3) = 10
         expect(target.pose.translations[0]).toBeCloseTo(10, 5);
     });
@@ -480,7 +478,7 @@ describe('applyAdditiveFrame', () => {
         base.curves.values[0] = 10;
         additive.curves.values[0] = 15;
         rest.curves.values[0] = 5;
-        applyAdditiveFrame(target, base, additive, rest, 0.5);
+        applyAdditiveFrame(target, base, additive, rest, 0.5, additiveScratch);
         // target = 10 + (15 - 5) * 0.5 = 15
         expect(target.curves.values[0]).toBeCloseTo(15, 5);
     });
@@ -502,7 +500,7 @@ describe('applyAdditiveFrame', () => {
 
         const mask = new AnimationMask(2);
         mask.set(0, true);
-        applyAdditiveFrame(target, base, additive, rest, 1, mask);
+        applyAdditiveFrame(target, base, additive, rest, 1, additiveScratch, mask);
         // Masked bone 0: target = base(5) + (additive(10) - rest(0)) * weight(1) = 15
         expect(target.pose.translations[0]).toBeCloseTo(15, 5);
         // Bone 1 not masked, should keep base value

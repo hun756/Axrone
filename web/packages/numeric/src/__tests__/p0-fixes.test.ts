@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Color, Mat2, Mat4, Vec2 } from '../../src';
-
-const EPS = 1e-6;
-const almost = (a: number, b: number, eps = EPS) => Math.abs(a - b) < eps;
+import { Color, floatEquals, Mat2, Mat4, Vec2 } from '../../src';
 
 describe('P0 regression: Mat4.lookAt', () => {
     it('places eye at the origin of camera space', () => {
@@ -88,10 +85,10 @@ describe('P0 regression: Vec2.slerp', () => {
         const b: Vec2 = { x: 0, y: 1 };
         const r0 = Vec2.slerp(a, b, 0);
         const r1 = Vec2.slerp(a, b, 1);
-        expect(almost(r0.x, 1)).toBe(true);
-        expect(almost(r0.y, 0)).toBe(true);
-        expect(almost(r1.x, 0)).toBe(true);
-        expect(almost(r1.y, 1)).toBe(true);
+        expect(floatEquals(r0.x, 1)).toBe(true);
+        expect(floatEquals(r0.y, 0)).toBe(true);
+        expect(floatEquals(r1.x, 0)).toBe(true);
+        expect(floatEquals(r1.y, 1)).toBe(true);
     });
 
     it('interpolates along the quarter arc at t=0.5 (radius preserved, angle = 45deg)', () => {
@@ -99,32 +96,32 @@ describe('P0 regression: Vec2.slerp', () => {
         const b: Vec2 = { x: 0, y: 2 };
         const r = Vec2.slerp(a, b, 0.5);
         const expected = Math.SQRT2;
-        expect(almost(r.x, expected)).toBe(true);
-        expect(almost(r.y, expected)).toBe(true);
+        expect(floatEquals(r.x, expected)).toBe(true);
+        expect(floatEquals(r.y, expected)).toBe(true);
     });
 
     it('takes the shortest path across the wrap-around at 180 degrees', () => {
         const a: Vec2 = { x: 1, y: 0 };
         const b: Vec2 = { x: -1, y: 0 };
         const r = Vec2.slerp(a, b, 0.5);
-        expect(almost(r.x, 0)).toBe(true);
-        expect(almost(Math.abs(r.y), 1)).toBe(true);
+        expect(floatEquals(r.x, 0)).toBe(true);
+        expect(floatEquals(Math.abs(r.y), 1)).toBe(true);
     });
 
     it('interpolates radius linearly when angles are equal', () => {
         const a: Vec2 = { x: 1, y: 0 };
         const b: Vec2 = { x: 3, y: 0 };
         const r = Vec2.slerp(a, b, 0.5);
-        expect(almost(r.x, 2)).toBe(true);
-        expect(almost(r.y, 0)).toBe(true);
+        expect(floatEquals(r.x, 2)).toBe(true);
+        expect(floatEquals(r.y, 0)).toBe(true);
     });
 
     it('falls back to lerpUnClamped for zero-length inputs', () => {
         const a: Vec2 = { x: 0, y: 0 };
         const b: Vec2 = { x: 2, y: 0 };
         const r = Vec2.slerp(a, b, 0.5);
-        expect(almost(r.x, 1)).toBe(true);
-        expect(almost(r.y, 0)).toBe(true);
+        expect(floatEquals(r.x, 1)).toBe(true);
+        expect(floatEquals(r.y, 0)).toBe(true);
     });
 
     it('writes to `out` correctly', () => {
@@ -133,7 +130,7 @@ describe('P0 regression: Vec2.slerp', () => {
         const out: Vec2 = { x: 0, y: 0 };
         const r = Vec2.slerp(a, b, 0.5, out);
         expect(r).toBe(out);
-        expect(almost(out.x, Math.SQRT2 / 2)).toBe(true);
+        expect(floatEquals(out.x, Math.SQRT2 / 2)).toBe(true);
     });
 });
 
@@ -151,16 +148,16 @@ describe('P0 regression: Mat2.translate', () => {
 describe('P0 regression: Color.SILVER', () => {
     it('equals #C0C0C0 (192/255 in linear sRGB)', () => {
         const silver = Color.SILVER;
-        expect(almost(silver.r, 192 / 255, 1e-9)).toBe(true);
-        expect(almost(silver.g, 192 / 255, 1e-9)).toBe(true);
-        expect(almost(silver.b, 192 / 255, 1e-9)).toBe(true);
-        expect(almost(silver.a, 1, 1e-9)).toBe(true);
+        expect(floatEquals(silver.r, 192 / 255, 1e-9)).toBe(true);
+        expect(floatEquals(silver.g, 192 / 255, 1e-9)).toBe(true);
+        expect(floatEquals(silver.b, 192 / 255, 1e-9)).toBe(true);
+        expect(floatEquals(silver.a, 1, 1e-9)).toBe(true);
     });
 
     it('differs from LIGHT_GRAY (0.75) to expose the previous off-by-tile bug', () => {
         const silver = Color.SILVER;
         const lightGray = Color.LIGHT_GRAY;
-        const same = almost(silver.r, lightGray.r) && almost(silver.g, lightGray.g) && almost(silver.b, lightGray.b);
+        const same = floatEquals(silver.r, lightGray.r) && floatEquals(silver.g, lightGray.g) && floatEquals(silver.b, lightGray.b);
         expect(same).toBe(false);
     });
 });

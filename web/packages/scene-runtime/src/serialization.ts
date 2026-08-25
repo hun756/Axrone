@@ -1,6 +1,6 @@
 import type { BoundingSphere } from '@axrone/geometry';
 import { Mat4, Quat, Vec2, Vec3, Vec4, encodeValue } from '@axrone/numeric';
-import { cloneSceneMeshBounds } from './scene-mesh-bounds';
+import { cloneSceneMeshBounds, isBoundingSphereCenterTuple } from './scene-mesh-bounds';
 import type {
     SceneMorphTargetDefinition,
     SceneMeshDefinition,
@@ -8,7 +8,6 @@ import type {
     SceneTextureBindingDefinition,
 } from './types';
 
-type BoundingSphereCenter = Readonly<BoundingSphere>['center'];
 type SerializedSphereBounds = {
     readonly kind: 'sphere';
     readonly center: readonly SceneSerializedValue[];
@@ -24,9 +23,6 @@ type SerializedSphereBounds = {
  */
 export const encodeSceneValue = (value: unknown): SceneSerializedValue =>
     encodeValue(value) as SceneSerializedValue;
-
-const isBoundingSphereCenterTuple = (center: BoundingSphereCenter): center is readonly [number, number, number] =>
-    Array.isArray(center);
 
 const isSerializedSphereBounds = (value: SceneSerializedValue | undefined): value is SerializedSphereBounds => {
     if (value === null || value === undefined || Array.isArray(value) || typeof value !== 'object') {

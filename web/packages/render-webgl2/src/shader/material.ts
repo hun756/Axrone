@@ -1,3 +1,4 @@
+import { EPSILON } from '@axrone/numeric';
 import {
     IMaterialInstance,
     IShaderInstance,
@@ -305,7 +306,7 @@ export class MaterialInstance implements IMaterialInstance {
     private areArraysEqual(a: ArrayLike<number>, b: ArrayLike<number>): boolean {
         if (a.length !== b.length) return false;
         for (let i = 0; i < a.length; i++) {
-            if (Math.abs(a[i] - b[i]) > 1e-6) return false;
+            if (Math.abs(a[i] - b[i]) > EPSILON) return false;
         }
         return true;
     }

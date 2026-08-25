@@ -6,7 +6,7 @@ import type { SceneShaderResource } from '@axrone/scene-3d';
 import type { SceneUniformWriteTarget } from '@axrone/scene-3d';
 
 describe('SceneLightingUniformBinder', () => {
-    it('writes zeroed lighting controls when the renderer does not receive lighting', () => {
+    it('writes neutral (non-zero) ambient lighting when the renderer does not receive lighting', () => {
         const writer = {
             write: vi.fn(),
         } as unknown as SceneUniformWriteTarget;
@@ -71,9 +71,9 @@ describe('SceneLightingUniformBinder', () => {
         binder.apply(shader, { receiveLighting: false }, lighting);
 
         expect(writer.write).toHaveBeenCalledWith(shader, 'u_ReceiveLighting', false);
-        expect(writer.write).toHaveBeenCalledWith(shader, 'u_AmbientLight', Vec3.ZERO);
-        expect(writer.write).toHaveBeenCalledWith(shader, 'u_SkyLight', Vec3.ZERO);
-        expect(writer.write).toHaveBeenCalledWith(shader, 'u_GroundLight', Vec3.ZERO);
+        expect(writer.write).toHaveBeenCalledWith(shader, 'u_AmbientLight', Vec3.ONE);
+        expect(writer.write).toHaveBeenCalledWith(shader, 'u_SkyLight', Vec3.ONE);
+        expect(writer.write).toHaveBeenCalledWith(shader, 'u_GroundLight', Vec3.ONE);
         expect(writer.write).toHaveBeenCalledWith(shader, 'u_DirectionalLightCount', 0);
         expect(writer.write).toHaveBeenCalledWith(shader, 'u_PointLightCount', 0);
         expect(writer.write).toHaveBeenCalledWith(shader, 'u_SpotLightCount', 0);

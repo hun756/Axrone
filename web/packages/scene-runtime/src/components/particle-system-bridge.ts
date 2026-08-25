@@ -20,22 +20,18 @@ import {
     CurveMode,
     GradientMode,
 } from '@axrone/particle-system';
+import { Vec3, Color } from '@axrone/numeric';
 import type {
     CurveConfiguration,
     GradientConfiguration,
     BurstConfiguration,
     ImmutableColor,
-    ImmutableVec3,
     IParticleData,
     ParticleId,
 } from '@axrone/particle-system';
 import type { ParticleSystemConfig } from './particle-system';
 
 const DEG_TO_RAD = Math.PI / 180;
-const ZERO_VEC3: ImmutableVec3 = Object.freeze({ x: 0, y: 0, z: 0 });
-const UNIT_VEC3: ImmutableVec3 = Object.freeze({ x: 1, y: 1, z: 1 });
-const ZERO_COLOR: ImmutableColor = Object.freeze({ r: 0, g: 0, b: 0, a: 0 });
-const WHITE_COLOR: ImmutableColor = Object.freeze({ r: 1, g: 1, b: 1, a: 1 });
 
 function constantCurve(value: number): CurveConfiguration {
     return { mode: CurveMode.Constant, constant: value, constantMin: 0, constantMax: 0, curveMultiplier: 1 };
@@ -43,7 +39,7 @@ function constantCurve(value: number): CurveConfiguration {
 
 function constantColor(r: number, g: number, b: number, a: number = 1): GradientConfiguration {
     const color: ImmutableColor = { r, g, b, a };
-    return { mode: GradientMode.Color, color, colorMin: ZERO_COLOR, colorMax: WHITE_COLOR };
+    return { mode: GradientMode.Color, color, colorMin: Color.TRANSPARENT, colorMax: Color.WHITE };
 }
 
 function buildSizeCurve(sizeCurve: readonly number[] | undefined, startSize: number): CurveConfiguration {
@@ -141,9 +137,9 @@ export function createCoreParticleSystem(config: ParticleSystemConfig): CorePart
         angle: (config.shapeAngle ?? 25) * DEG_TO_RAD,
         length: config.shapeLength ?? 10,
         boxSize: { x: 10, y: 10, z: 10 },
-        position: ZERO_VEC3,
-        rotation: ZERO_VEC3,
-        scale: UNIT_VEC3,
+        position: Vec3.ZERO,
+        rotation: Vec3.ZERO,
+        scale: Vec3.ONE,
         alignToDirection: false,
         randomizeDirection: false,
         spherizeDirection: (config.spherizeDirection ?? 0) > 0,
@@ -256,8 +252,8 @@ export function createCoreParticleSystem(config: ParticleSystemConfig): CorePart
                 y: config.noiseStrength?.[1] ?? 1,
                 z: config.noiseStrength?.[2] ?? 1,
             },
-            rotationAmount: ZERO_VEC3,
-            sizeAmount: ZERO_VEC3,
+            rotationAmount: Vec3.ZERO,
+            sizeAmount: Vec3.ZERO,
             noiseType: 'curl',
             amplitude: 1,
             persistence: 0.5,

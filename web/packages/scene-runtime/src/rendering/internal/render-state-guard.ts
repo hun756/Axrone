@@ -1,3 +1,4 @@
+import type { IGLStateCache } from '@axrone/render-webgl2';
 import type { SceneRenderStateApplier } from '../render-state-applier';
 
 /**
@@ -25,6 +26,8 @@ export interface SceneDirectGlPassGuardOptions {
     readonly label: string;
     /** Optional hook invoked exactly once when the pass gets disabled. */
     readonly onDisabled?: (error: unknown) => void;
+    /** Optional GL state cache — reset in `finally` so raw-GL passes cannot desync dedup. */
+    readonly stateCache?: IGLStateCache;
 }
 
 export class SceneDirectGlPassGuard {
@@ -75,6 +78,7 @@ export class SceneDirectGlPassGuard {
             gl.bindVertexArray?.(null);
             gl.bindBuffer?.(gl.ARRAY_BUFFER, null);
             this._options.renderStateApplier.reset();
+            this._options.stateCache?.reset();
         }
     }
 }

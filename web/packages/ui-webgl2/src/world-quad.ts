@@ -27,7 +27,7 @@ export interface UIWorldQuadRenderer extends Disposable {
 }
 
 const VERTEX_SOURCE = `#version 300 es
-precision highp float;
+precision mediump float;
 layout(location = 0) in vec2 a_Unit;
 uniform mat4 u_ViewProjection;
 uniform mat4 u_Model;
@@ -42,7 +42,7 @@ void main() {
 }`;
 
 const FRAGMENT_SOURCE = `#version 300 es
-precision highp float;
+precision mediump float;
 in vec2 v_Uv;
 uniform sampler2D u_Texture;
 uniform float u_Opacity;

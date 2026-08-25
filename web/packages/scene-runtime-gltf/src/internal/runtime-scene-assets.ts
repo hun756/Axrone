@@ -323,7 +323,7 @@ const cloneUniformValue = (value: GltfUniformValue): GltfUniformValue => {
     }
 
     if (value instanceof Vec3) {
-        return new Vec3(value.x, value.y, value.z);
+        return value.clone();
     }
 
     return value;

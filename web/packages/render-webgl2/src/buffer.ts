@@ -1,7 +1,11 @@
 import type { IDisposable } from './disposable';
 import type { IBindableTarget } from './interfaces';
 import { BufferPool, ResourceTracker } from './internal/buffer-management';
+import { DisposalTracker, assertAlive } from './internal/disposable';
 import type { Brand } from '@axrone/utility';
+import type { GLConstants } from './context/types';
+import type { ContextSource, IGLContext } from './context';
+import { resolveContext } from './context';
 
 export type GLBufferTarget =
     | WebGL2RenderingContext['ARRAY_BUFFER']
@@ -145,66 +149,42 @@ const isRawBufferData = (value: unknown): value is ArrayBuffer | SharedArrayBuff
     return value instanceof ArrayBuffer || isSharedArrayBuffer(value);
 };
 
+const isArrayBufferView = (value: unknown): value is ArrayBufferView & { readonly BYTES_PER_ELEMENT: number; readonly buffer: ArrayBufferLike; readonly byteOffset: number; readonly byteLength: number } =>
+    ArrayBuffer.isView(value as ArrayBufferView);
+
 const isBufferData = (value: unknown): value is BufferSource | SharedArrayBuffer => {
     return isRawBufferData(value) || ArrayBuffer.isView(value);
 };
 
-const createGLConstants = <T extends number>(
-    gl: WebGL2RenderingContext
-): Readonly<{
-    ARRAY_BUFFER: T;
-    ELEMENT_ARRAY_BUFFER: T;
-    COPY_READ_BUFFER: T;
-    COPY_WRITE_BUFFER: T;
-    TRANSFORM_FEEDBACK_BUFFER: T;
-    UNIFORM_BUFFER: T;
-    PIXEL_PACK_BUFFER: T;
-    PIXEL_UNPACK_BUFFER: T;
-    STATIC_DRAW: T;
-    DYNAMIC_DRAW: T;
-    STREAM_DRAW: T;
-    STATIC_READ: T;
-    DYNAMIC_READ: T;
-    STREAM_READ: T;
-    STATIC_COPY: T;
-    DYNAMIC_COPY: T;
-    STREAM_COPY: T;
-}> => {
-    return Object.freeze({
-        ARRAY_BUFFER: gl.ARRAY_BUFFER as T,
-        ELEMENT_ARRAY_BUFFER: gl.ELEMENT_ARRAY_BUFFER as T,
-        COPY_READ_BUFFER: gl.COPY_READ_BUFFER as T,
-        COPY_WRITE_BUFFER: gl.COPY_WRITE_BUFFER as T,
-        TRANSFORM_FEEDBACK_BUFFER: gl.TRANSFORM_FEEDBACK_BUFFER as T,
-        UNIFORM_BUFFER: gl.UNIFORM_BUFFER as T,
-        PIXEL_PACK_BUFFER: gl.PIXEL_PACK_BUFFER as T,
-        PIXEL_UNPACK_BUFFER: gl.PIXEL_UNPACK_BUFFER as T,
-        STATIC_DRAW: gl.STATIC_DRAW as T,
-        DYNAMIC_DRAW: gl.DYNAMIC_DRAW as T,
-        STREAM_DRAW: gl.STREAM_DRAW as T,
-        STATIC_READ: gl.STATIC_READ as T,
-        DYNAMIC_READ: gl.DYNAMIC_READ as T,
-        STREAM_READ: gl.STREAM_READ as T,
-        STATIC_COPY: gl.STATIC_COPY as T,
-        DYNAMIC_COPY: gl.DYNAMIC_COPY as T,
-        STREAM_COPY: gl.STREAM_COPY as T,
-    });
-};
-
 export class Buffer implements IBuffer {
+    readonly #ctx: IGLContext;
     readonly #gl: WebGL2RenderingContext;
-    readonly #id: WebGLBuffer;
     readonly #target: GLBufferTarget;
-    readonly #constants: ReturnType<typeof createGLConstants>;
+    readonly #constants: GLConstants;
+    readonly #recoveryId: number;
+    readonly #unsubscribeRegistry: (() => void) | null;
 
+    #id: WebGLBuffer | null;
     #byteLength: number = 0;
     #usage: GLBufferUsage;
     #label: string | null = null;
-    #isDisposed: boolean = false;
+    private readonly _disposal = new DisposalTracker();
+    #contextLost: boolean = false;
+    #lastData: ArrayBuffer | null = null;
+
+    static #nextRecoveryId = 1;
 
     public get id(): BufferId {
         this.#throwIfDisposed();
+        if (this.#id === null || this.#contextLost) {
+            throw new GLError('WebGLBuffer handle is invalid (context lost or not yet restored)', 'CONTEXT_LOST');
+        }
         return this.#id as BufferId;
+    }
+
+    /** Numeric recovery identifier for ResourceRegistry. */
+    public get recoveryId(): number {
+        return this.#recoveryId;
     }
 
     public get target(): GLBufferTarget {
@@ -224,17 +204,30 @@ export class Buffer implements IBuffer {
     }
 
     public get isDisposed(): boolean {
-        return this.#isDisposed;
+        return this._disposal.isDisposed;
     }
 
-    constructor(gl: WebGL2RenderingContext, target: GLBufferTarget, options: BufferOptions = {}) {
+    public get context(): IGLContext {
+        return this.#ctx;
+    }
+
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
+    constructor(source: ContextSource, target: GLBufferTarget, options: BufferOptions = {}) {
+        const ctx = resolveContext(source);
+        const gl = ctx.gl;
         const { initialData = null, usage = gl.STATIC_DRAW, byteSize = 0, label = null } = options;
 
+        this.#ctx = ctx;
         this.#gl = gl;
         this.#target = target;
         this.#usage = usage;
         this.#label = label;
-        this.#constants = createGLConstants(gl);
+        this.#constants = ctx.constants;
+
+        // Assign a unique recovery id for ResourceRegistry tracking
+        this.#recoveryId = Buffer.#nextRecoveryId++;
 
         const buffer = gl.createBuffer();
         if (!buffer) {
@@ -243,26 +236,47 @@ export class Buffer implements IBuffer {
         this.#id = buffer;
 
         if (initialData) {
+            this.#snapshotData(initialData);
             this.resize(initialData, usage);
         } else if (byteSize > 0) {
             this.resize(byteSize, usage);
         }
 
-        const debugExt = this.#gl.getExtension('KHR_debug');
-        if (debugExt && typeof debugExt.labelObject === 'function' && label) {
-            debugExt.labelObject(debugExt.BUFFER, this.#id, label);
+        if (label) {
+            const ext = ctx.extensions.tryGet('KHR_debug') as unknown as {
+                labelObject?: (t: number, o: unknown, l: string) => void;
+                BUFFER?: number;
+            } | null;
+            if (ext && typeof ext.labelObject === 'function') {
+                try {
+                    ext.labelObject(ext.BUFFER ?? ctx.constants.ARRAY_BUFFER, this.#id as unknown as WebGLBuffer, label);
+                } catch { /* best-effort */ }
+            } else {
+                ctx.labelObject(ctx.constants.ARRAY_BUFFER, this.#id as unknown as WebGLBuffer, label);
+            }
         }
+
+        // Register with the context resource registry for context-loss recovery
+        const self = this;
+        this.#unsubscribeRegistry = ctx.registry.register(
+            {
+                get id() { return self.#recoveryId; },
+                handleContextLost: () => this.handleContextLost(),
+                handleContextRestored: (restoredCtx: IGLContext) => this.handleContextRestored(restoredCtx),
+            },
+            'buffer'
+        );
     }
 
     public bind = (): IBuffer => {
         this.#throwIfDisposed();
-        this.#gl.bindBuffer(this.#target, this.#id);
+        this.#ctx.state.bindBuffer(this.#target, this.#id);
         return this;
     };
 
     public unbind = (): IBuffer => {
         this.#throwIfDisposed();
-        this.#gl.bindBuffer(this.#target, null);
+        this.#ctx.state.bindBuffer(this.#target, null);
         return this;
     };
 
@@ -333,23 +347,27 @@ export class Buffer implements IBuffer {
             this.#gl.bufferSubData(this.#target, dstByteOffset, view);
         } else {
             const bytesPerElement =
-                'BYTES_PER_ELEMENT' in data ? (data as any).BYTES_PER_ELEMENT : 1;
+                isArrayBufferView(data) ? (data as { BYTES_PER_ELEMENT: number }).BYTES_PER_ELEMENT : 1;
             const elementOffset = Math.floor(srcByteOffset / bytesPerElement);
 
             if (srcByteOffset % bytesPerElement !== 0) {
-                const buffer = data.buffer;
-                const view = new Uint8Array(buffer, data.byteOffset + srcByteOffset, updateLength);
+                const buffer = (data as ArrayBufferView).buffer as ArrayBufferLike;
+                const view = new Uint8Array(
+                    buffer as ArrayBuffer,
+                    (data as ArrayBufferView).byteOffset + srcByteOffset,
+                    updateLength
+                );
                 this.#gl.bufferSubData(this.#target, dstByteOffset, view);
             } else {
-                const constructor = data.constructor as ArrayBufferViewConstructor;
+                const constructor = (data as ArrayBufferView & { constructor: ArrayBufferViewConstructor }).constructor;
                 const elementsLength = Math.floor(updateLength / bytesPerElement);
                 const typedView = new constructor(
-                    data.buffer,
-                    data.byteOffset + srcByteOffset,
+                    (data as ArrayBufferView).buffer as ArrayBufferLike,
+                    (data as ArrayBufferView).byteOffset + srcByteOffset,
                     elementsLength
                 );
 
-                this.#gl.bufferSubData(this.#target, dstByteOffset, typedView);
+                this.#gl.bufferSubData(this.#target, dstByteOffset, typedView as unknown as BufferSource);
             }
         }
 
@@ -378,8 +396,11 @@ export class Buffer implements IBuffer {
                 throw new GLError('Invalid data type for buffer resize', 'INVALID_VALUE');
             }
 
-            this.#gl.bufferData(this.#target, dataOrByteSize, effectiveUsage);
-            this.#byteLength = dataOrByteSize.byteLength;
+            // Snapshot data for context-loss recovery
+            this.#snapshotData(dataOrByteSize as BufferSource);
+
+            this.#gl.bufferData(this.#target, dataOrByteSize as BufferSource, effectiveUsage);
+            this.#byteLength = (dataOrByteSize as BufferSource).byteLength;
         }
 
         this.#usage = effectiveUsage;
@@ -425,7 +446,7 @@ export class Buffer implements IBuffer {
         }
 
         this.#gl.bindBuffer(this.#constants.COPY_READ_BUFFER, this.#id);
-        this.#gl.bindBuffer(this.#constants.COPY_WRITE_BUFFER, dstBuffer.id as WebGLBuffer);
+        this.#gl.bindBuffer(this.#constants.COPY_WRITE_BUFFER, dstBuffer.id as unknown as WebGLBuffer);
 
         this.#gl.copyBufferSubData(
             this.#constants.COPY_READ_BUFFER,
@@ -457,7 +478,7 @@ export class Buffer implements IBuffer {
         }
 
         const bytesPerElement =
-            'BYTES_PER_ELEMENT' in output ? (output as any).BYTES_PER_ELEMENT : 1;
+            isArrayBufferView(output) ? (output as { BYTES_PER_ELEMENT: number }).BYTES_PER_ELEMENT : 1;
         const maxLength = Math.min(this.#byteLength - byteOffset, output.byteLength);
 
         const readLength = length !== undefined ? Math.min(length, maxLength) : maxLength;
@@ -509,7 +530,7 @@ export class Buffer implements IBuffer {
         }
 
         const bytesPerElement =
-            'BYTES_PER_ELEMENT' in output ? (output as any).BYTES_PER_ELEMENT : 1;
+            isArrayBufferView(output) ? (output as { BYTES_PER_ELEMENT: number }).BYTES_PER_ELEMENT : 1;
         const outputSize = output.byteLength;
 
         if (dstByteOffset >= outputSize) {
@@ -571,7 +592,9 @@ export class Buffer implements IBuffer {
     };
 
     public dispose = (): void => {
-        if (this.#isDisposed) return;
+        if (!this._disposal.markDisposed()) return;
+
+        try { this.#unsubscribeRegistry?.(); } catch { /* best-effort */ }
 
         try {
             const possibleTargets = [
@@ -586,22 +609,91 @@ export class Buffer implements IBuffer {
             ];
 
             for (const target of possibleTargets) {
-                const currentBinding = this.#gl.getParameter(target + 0x20) as WebGLBuffer | null;
-                if (currentBinding === this.#id) {
-                    this.#gl.bindBuffer(target, null);
-                }
+                try {
+                    const currentBinding = this.#gl.getParameter(target + 0x20) as WebGLBuffer | null;
+                    if (currentBinding === this.#id) {
+                        this.#ctx.state.bindBuffer(target, null);
+                    }
+                } catch { /* best-effort */ }
             }
 
-            this.#gl.deleteBuffer(this.#id);
-        } catch (e) {
+            if (this.#id !== null) {
+                this.#gl.deleteBuffer(this.#id);
+            }
+        } catch { // best-effort
         } finally {
-            this.#isDisposed = true;
+            this.#id = null;
+            this.#lastData = null;
+        }
+    };
+
+    /**
+     * Store a copy of the provided BufferSource for context-loss recovery.
+     * Converts to a plain ArrayBuffer to avoid holding references to user-provided views.
+     */
+    #snapshotData = (data: BufferSource): void => {
+        if (isRawBufferData(data)) {
+            // Copy raw ArrayBuffer / SharedArrayBuffer into a fresh ArrayBuffer
+            const copy = new ArrayBuffer(data.byteLength);
+            new Uint8Array(copy).set(new Uint8Array(data as ArrayBuffer));
+            this.#lastData = copy;
+        } else if (ArrayBuffer.isView(data)) {
+            const copy = new ArrayBuffer(data.byteLength);
+            new Uint8Array(copy).set(new Uint8Array(data.buffer as ArrayBuffer, data.byteOffset, data.byteLength));
+            this.#lastData = copy;
+        }
+    };
+
+    /**
+     * Called by the ResourceRegistry when the WebGL context is lost.
+     * Invalidates the WebGLBuffer handle; data is preserved in #lastData for recovery.
+     */
+    public handleContextLost = (): void => {
+        this.#contextLost = true;
+        this.#id = null;
+    };
+
+    /**
+     * Called by the ResourceRegistry when the WebGL context is restored.
+     * Re-creates the WebGLBuffer and re-uploads stored data.
+     */
+    public handleContextRestored = (ctx: IGLContext): void => {
+        if (this._disposal.isDisposed) return;
+
+        const gl = ctx.gl;
+        const buffer = gl.createBuffer();
+        if (!buffer) {
+            // Recovery failed — buffer remains unusable until next restore attempt
+            return;
+        }
+        this.#id = buffer;
+        this.#contextLost = false;
+
+        // Re-upload data if we have a snapshot
+        if (this.#lastData !== null && this.#byteLength > 0) {
+            gl.bindBuffer(this.#target, buffer);
+            gl.bufferData(this.#target, this.#lastData, this.#usage);
+            gl.bindBuffer(this.#target, null);
+        } else if (this.#byteLength > 0) {
+            // Allocate empty buffer of the same size
+            gl.bindBuffer(this.#target, buffer);
+            gl.bufferData(this.#target, this.#byteLength, this.#usage);
+            gl.bindBuffer(this.#target, null);
+        }
+
+        // Re-apply debug label
+        if (this.#label) {
+            ctx.labelObject(ctx.constants.ARRAY_BUFFER, buffer, this.#label);
         }
     };
 
     #throwIfDisposed = (): void => {
-        if (this.#isDisposed) {
-            throw new GLError('Buffer has been disposed', 'BUFFER_ALREADY_DISPOSED');
+        assertAlive(this._disposal, 'Buffer');
+        if (this.#contextLost) {
+            throw new GLError(
+                'WebGL context lost — buffer handle is invalid, awaiting restoration',
+                'CONTEXT_LOST'
+            );
         }
     };
 }
@@ -611,32 +703,49 @@ type ArrayBufferViewConstructor = {
 };
 
 class BufferFactory implements IBufferFactory {
+    readonly #ctx: IGLContext;
     readonly #gl: WebGL2RenderingContext;
-    readonly #constants: ReturnType<typeof createGLConstants>;
+    readonly #constants: GLConstants;
     readonly #tracker = new ResourceTracker((message, code) => new GLError(message, code));
-    readonly #contextLostHandler: (event: Event) => void;
+    readonly #unsubscribeLost: (() => void) | null;
+    readonly #unsubscribeRestored: (() => void) | null;
     #isDisposed = false;
+    #contextLost = false;
 
-    constructor(gl: WebGL2RenderingContext) {
-        this.#gl = gl;
-        this.#constants = createGLConstants(gl);
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
 
-        this.#contextLostHandler = (event: Event) => {
-            event.preventDefault();
-            this.#isDisposed = true;
-            this.#tracker.dispose();
-        };
 
-        gl.canvas.addEventListener('webglcontextlost', this.#contextLostHandler);
+    constructor(source: ContextSource) {
+        const ctx = resolveContext(source);
+        this.#ctx = ctx;
+        this.#gl = ctx.gl;
+        this.#constants = ctx.constants;
+
+        // On context loss: mark as lost but do NOT permanently dispose.
+        // Individual buffers are recovered via the ResourceRegistry.
+        this.#unsubscribeLost = ctx.onLost((_event: Event) => {
+            try { _event.preventDefault(); } catch { /* best-effort */ }
+            this.#contextLost = true;
+        });
+
+        // On context restoration: clear the lost flag so the factory is usable again.
+        // Buffers are restored by the ResourceRegistry before this fires (priority order).
+        this.#unsubscribeRestored = ctx.onRestored(() => {
+            this.#contextLost = false;
+        });
     }
 
     public get isDisposed(): boolean {
         return this.#isDisposed;
     }
 
+    public get context(): IGLContext {
+        return this.#ctx;
+    }
+
     public createBuffer = (target: GLBufferTarget, options: BufferOptions = {}): IBuffer => {
         this.#throwIfDisposed();
-        return this.#tracker.track(new Buffer(this.#gl, target, options));
+        return this.#tracker.track(new Buffer(this.#ctx, target, options));
     };
 
     public createArrayBuffer = (options: BufferOptions = {}): IBuffer => {
@@ -698,7 +807,7 @@ class BufferFactory implements IBufferFactory {
             new BufferPool<T>({
                 defaultUsage: this.#constants.STATIC_DRAW as GLBufferUsage,
                 createBuffer: (size, usage) =>
-                    new Buffer(this.#gl, this.#constants.ARRAY_BUFFER as GLBufferTarget, {
+                    new Buffer(this.#ctx, this.#constants.ARRAY_BUFFER as GLBufferTarget, {
                         byteSize: size,
                         usage,
                     }),
@@ -710,7 +819,8 @@ class BufferFactory implements IBufferFactory {
     public dispose = (): void => {
         if (this.#isDisposed) return;
 
-        this.#gl.canvas.removeEventListener('webglcontextlost', this.#contextLostHandler);
+        try { this.#unsubscribeLost?.(); } catch { /* best-effort */ }
+        try { this.#unsubscribeRestored?.(); } catch { /* best-effort */ }
 
         this.#tracker.dispose();
         this.#isDisposed = true;
@@ -719,8 +829,14 @@ class BufferFactory implements IBufferFactory {
     #throwIfDisposed = (): void => {
         if (this.#isDisposed) {
             throw new GLError(
-                'BufferFactory has been disposed or context was lost',
+                'BufferFactory has been disposed',
                 'INVALID_OPERATION'
+            );
+        }
+        if (this.#contextLost) {
+            throw new GLError(
+                'BufferFactory is suspended: WebGL context lost, awaiting restoration',
+                'CONTEXT_LOST'
             );
         }
     };
@@ -732,7 +848,7 @@ export const createTypedArrayFromBuffer = <T extends ArrayBufferView>(
     byteOffset: number = 0,
     length?: number
 ): T => {
-    const bytesPerElement = type.prototype.BYTES_PER_ELEMENT || 1;
+    const bytesPerElement = (type as unknown as { prototype: { BYTES_PER_ELEMENT: number } }).prototype.BYTES_PER_ELEMENT || 1;
 
     if (byteOffset % bytesPerElement !== 0) {
         throw new GLError(
@@ -756,8 +872,9 @@ export const calculatePadding = (offset: number, alignment: number): number => {
     return remainder === 0 ? 0 : alignment - remainder;
 };
 
-export const createBufferFactory = (gl: WebGL2RenderingContext): IBufferFactory => {
-    return new BufferFactory(gl);
+/** @deprecated Raw GL overload is deprecated. Use IGLContext. */
+export const createBufferFactory = (source: ContextSource): IBufferFactory => {
+    return new BufferFactory(source);
 };
 
 export const WBuffer = Object.freeze({

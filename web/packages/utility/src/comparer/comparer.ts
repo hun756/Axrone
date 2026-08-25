@@ -27,7 +27,6 @@ export {
     type Comparer,
     type ComparerOptions,
     type CompareResult,
-    type DeepPartial,
     type EqualityComparer,
     type EqualityComparerOptions,
     type Equatable,

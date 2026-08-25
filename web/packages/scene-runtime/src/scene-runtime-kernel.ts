@@ -1,4 +1,5 @@
 import { createGameLoop, type GameLoop, type GameLoopSystem } from '@axrone/game-loop';
+import { getOrCreateGLContext } from '@axrone/render-webgl2';
 import { World } from '@axrone/ecs-runtime';
 import { SystemManager } from '@axrone/ecs-runtime';
 import type { ComponentRegistry } from '@axrone/ecs-runtime';
@@ -64,9 +65,11 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
         }) as RuntimeRegistry<R>;
         const componentCatalog = new SceneComponentCatalog(registry);
 
+        const ctx = getOrCreateGLContext(this.gl, this.canvas);
+
         let renderRuntime!: SceneRenderRuntime;
         this.assets = new SceneAssetRuntime({
-            gl: this.gl,
+            gl: ctx,
             defaultPassId: DEFAULT_SCENE_RENDER_PASS_ID,
             defaultClearColor,
             releaseBaseMesh: (meshId) => {
@@ -95,6 +98,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
             defaultClearColor,
             planning: sceneOptions.renderPlanning,
             pipeline: sceneOptions.renderPipeline,
+            stateCache: ctx.state,
             getActors: () => this.world.getAllActors(),
             createMeshResource: (definition) => this.assets.createMeshResource(definition),
             disposeMesh: (mesh) => this.assets.disposeMesh(mesh),

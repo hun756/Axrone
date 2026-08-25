@@ -53,6 +53,17 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         return new Quat(x, y, z, w);
     }
 
+    static copy<T extends IQuatLike, V extends IQuatLike>(source: Readonly<T>, out?: V): V {
+        if (out) {
+            out.x = source.x;
+            out.y = source.y;
+            out.z = source.z;
+            out.w = source.w;
+            return out;
+        }
+        return { x: source.x, y: source.y, z: source.z, w: source.w } as V;
+    }
+
     clone(): Quat {
         return new Quat(this.x, this.y, this.z, this.w);
     }

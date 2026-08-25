@@ -61,6 +61,17 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return new Vec3(this.x, this.y, this.z);
     }
 
+    static copy<T extends IVec3Like, V extends IVec3Like>(source: Readonly<T>, out?: V): V {
+        if (out) {
+            out.x = source.x;
+            out.y = source.y;
+            out.z = source.z;
+            return out;
+        }
+
+        return { x: source.x, y: source.y, z: source.z } as V;
+    }
+
     equals(other: unknown): boolean {
         if (!(other instanceof Vec3)) return false;
 
@@ -365,7 +376,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return (angle * 180) / Math.PI;
     }
 
-    static rotateX<T extends IVec3Like>(v: Readonly<T>, angle: number, out?: T): T {
+    static rotateX<T extends IVec3Like, V extends IVec3Like>(v: Readonly<T>, angle: number, out?: V): V {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -379,11 +390,11 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: v.x,
                 y: v.y * cos - v.z * sin,
                 z: v.y * sin + v.z * cos,
-            } as T;
+            } as V;
         }
     }
 
-    static rotateY<T extends IVec3Like>(v: Readonly<T>, angle: number, out?: T): T {
+    static rotateY<T extends IVec3Like, V extends IVec3Like>(v: Readonly<T>, angle: number, out?: V): V {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -397,11 +408,11 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: v.x * cos + v.z * sin,
                 y: v.y,
                 z: -v.x * sin + v.z * cos,
-            } as T;
+            } as V;
         }
     }
 
-    static rotateZ<T extends IVec3Like>(v: Readonly<T>, angle: number, out?: T): T {
+    static rotateZ<T extends IVec3Like, V extends IVec3Like>(v: Readonly<T>, angle: number, out?: V): V {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
@@ -415,16 +426,16 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: v.x * cos - v.y * sin,
                 y: v.x * sin + v.y * cos,
                 z: v.z,
-            } as T;
+            } as V;
         }
     }
 
-    static rotateAxis<T extends IVec3Like, U extends IVec3Like>(
+    static rotateAxis<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         v: Readonly<T>,
         axis: Readonly<U>,
         angle: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const cosTheta = Math.cos(angle);
         const sinTheta = Math.sin(angle);
         const oneMinusCos = 1 - cosTheta;
@@ -455,7 +466,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                     v.z * cosTheta +
                     crossProduct.z * sinTheta +
                     axisNorm.z * dotProduct * oneMinusCos,
-            } as T;
+            } as V;
         }
     }
 
@@ -705,7 +716,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return out;
     }
 
-    static random<T extends IVec3Like>(scale: number = 1, out?: T): T {
+    static random<T extends IVec3Like, V extends IVec3Like>(scale: number = 1, out?: V): V {
         const x = sampleStandardNormal();
         const y = sampleStandardNormal();
         const z = sampleStandardNormal();
@@ -723,11 +734,11 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             out.z = z * invLength;
             return out;
         } else {
-            return { x: x * invLength, y: y * invLength, z: z * invLength } as T;
+            return { x: x * invLength, y: y * invLength, z: z * invLength } as V;
         }
     }
 
-    static fastRandom<T extends IVec3Like>(scale: number = 1, out?: T): T {
+    static fastRandom<T extends IVec3Like, V extends IVec3Like>(scale: number = 1, out?: V): V {
         const theta = sampleUniform() * PI_2;
         const phi = Math.acos(2 * sampleUniform() - 1);
         const sinPhi = Math.sin(phi);
@@ -742,11 +753,11 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: Math.cos(theta) * sinPhi * scale,
                 y: Math.sin(theta) * sinPhi * scale,
                 z: Math.cos(phi) * scale,
-            } as T;
+            } as V;
         }
     }
 
-    static randomNormal<T extends IVec3Like>(scale: number = 1, out?: T): T {
+    static randomNormal<T extends IVec3Like, V extends IVec3Like>(scale: number = 1, out?: V): V {
         const x = sampleStandardNormal() * scale;
         const y = sampleStandardNormal() * scale;
         const z = sampleStandardNormal() * scale;
@@ -757,19 +768,19 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             out.z = z;
             return out;
         } else {
-            return { x, y, z } as T;
+            return { x, y, z } as V;
         }
     }
 
-    randomBox<T extends IVec3Like>(
+    static randomBox<T extends IVec3Like, V extends IVec3Like>(
         minX: number,
         maxX: number,
         minY: number,
         maxY: number,
         minZ: number,
         maxZ: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         if (out) {
             out.x = sampleUniformRange(minX, maxX);
             out.y = sampleUniformRange(minY, maxY);
@@ -780,19 +791,19 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: sampleUniformRange(minX, maxX),
                 y: sampleUniformRange(minY, maxY),
                 z: sampleUniformRange(minZ, maxZ),
-            } as T;
+            } as V;
         }
     }
 
-    randomBoxNormal<T extends IVec3Like>(
+    static randomBoxNormal<T extends IVec3Like, V extends IVec3Like>(
         minX: number,
         maxX: number,
         minY: number,
         maxY: number,
         minZ: number,
         maxZ: number,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const centerX = (minX + maxX) * 0.5;
         const centerY = (minY + maxY) * 0.5;
         const centerZ = (minZ + maxZ) * 0.5;
@@ -810,7 +821,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             out.z = z;
             return out;
         } else {
-            return { x, y, z } as T;
+            return { x, y, z } as V;
         }
     }
 
@@ -1028,11 +1039,11 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return this;
     }
 
-    static project<T extends IVec3Like, U extends IVec3Like>(
+    static project<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         v: Readonly<T>,
         onto: Readonly<U>,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const dotProduct = Vec3.dot(v, onto);
         const ontoLengthSq = Vec3.lengthSquared(onto);
 
@@ -1052,15 +1063,15 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: onto.x * scalar,
                 y: onto.y * scalar,
                 z: onto.z * scalar,
-            } as T;
+            } as V;
         }
     }
 
-    static reject<T extends IVec3Like, U extends IVec3Like>(
+    static reject<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         v: Readonly<T>,
         onto: Readonly<U>,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const projection = Vec3.project(v, onto);
 
         if (out) {
@@ -1073,15 +1084,15 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: v.x - projection.x,
                 y: v.y - projection.y,
                 z: v.z - projection.z,
-            } as T;
+            } as V;
         }
     }
 
-    static reflect<T extends IVec3Like, U extends IVec3Like>(
+    static reflect<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         v: Readonly<T>,
         normal: Readonly<U>,
-        out?: T
-    ): T {
+        out?: V
+    ): V {
         const dotProduct = Vec3.dot(v, normal);
         const factor = 2 * dotProduct;
 
@@ -1095,7 +1106,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
                 x: v.x - factor * normal.x,
                 y: v.y - factor * normal.y,
                 z: v.z - factor * normal.z,
-            } as T;
+            } as V;
         }
     }
 

@@ -188,6 +188,7 @@ const toRenderLights = (lighting: SceneLightingState): readonly RenderLight[] =>
             ],
             intensity: lighting.pointIntensities[index] ?? 1,
             range: lighting.pointRanges[index] ?? 1,
+            attenuation: lighting.pointAttenuations[index] ?? 2,
         });
     }
 

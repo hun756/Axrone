@@ -1,7 +1,4 @@
 import {
-    Brand,
-    Nominal,
-    Phantom,
     StackCapacity,
     StackSize,
     NodeId,
