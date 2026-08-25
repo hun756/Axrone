@@ -148,7 +148,8 @@ export class SceneLightingCollector {
                 existing.color.equals(light.color) &&
                 existing.position.equals(position) &&
                 floatEquals(existing.intensity, light.intensity) &&
-                floatEquals(existing.range, light.range)
+                floatEquals(existing.range, light.range) &&
+                floatEquals(existing.attenuation, light.attenuation)
             ) {
                 return;
             }
@@ -157,7 +158,7 @@ export class SceneLightingCollector {
                 color: light.color,
                 intensity: light.intensity,
                 range: light.range,
-                attenuation: DEFAULT_LIGHT_ATTENUATION,
+                attenuation: light.attenuation,
                 position,
             });
             return;
@@ -172,7 +173,7 @@ export class SceneLightingCollector {
             color: light.color,
             intensity: light.intensity,
             range: light.range,
-            attenuation: DEFAULT_LIGHT_ATTENUATION,
+            attenuation: light.attenuation,
             position,
         });
     }
