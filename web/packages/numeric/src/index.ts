@@ -12,6 +12,7 @@ export * from './box-muller';
 
 // Extended functionality
 export * from './ext/perlin-noise';
+export * from './ext/serialized-value';
 
 export { Vec2 } from './vec2';
 export { Vec3 } from './vec3';

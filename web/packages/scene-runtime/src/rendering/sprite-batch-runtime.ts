@@ -129,6 +129,7 @@ export interface SceneSpriteBatchRuntimeOptions {
         'bind' | 'unbind'
     >;
     readonly textureUniformSetter: SceneMaterialTextureUniformSetter;
+    readonly stateCache?: import('@axrone/render-webgl2').IGLStateCache;
 }
 
 export interface SceneSpriteBatchRuntimeRenderParams {
@@ -182,6 +183,7 @@ export class SceneSpriteBatchRuntime {
         this._guard = new SceneDirectGlPassGuard({
             gl: _options.gl,
             renderStateApplier: _options.renderStateApplier,
+            stateCache: _options.stateCache,
             label: 'sprite-batch',
         });
     }

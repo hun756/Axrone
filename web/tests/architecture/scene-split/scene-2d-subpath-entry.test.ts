@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { installWebGL2Constants } from '../../../packages/scene-3d/src/__tests__/test-harness';
+import { installWebGL2Constants } from '../../shared/test-harness';
 
 describe('scene-2d subpath entries', () => {
     beforeAll(() => {

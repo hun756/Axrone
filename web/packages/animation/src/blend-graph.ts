@@ -1,11 +1,6 @@
 import { assertNever } from './errors';
 import { freezeTuple2, isFiniteNumber, spreadIfFinite } from './internal';
-import type {
-    AnimationBlendTreeAdditiveDefinition,
-    AnimationBlendTreeDefinition,
-    AnimationMotionClipDefinition,
-    AnimationMotionDefinition,
-} from './types';
+import type { AnimationBlendTreeDefinition, AnimationMotionDefinition } from './types';
 
 export interface AnimationBlendGraphDiagnostic {
     readonly code: string;
@@ -24,6 +19,11 @@ export interface AnimationMotionBuilder {
 
 type AnimationMotionInput = AnimationMotionDefinition | AnimationMotionBuilder;
 
+// ─── Recursive deep-freeze with optional-field normalization ────────
+// Single normalization point: builders produce raw data (undefined for
+// optional fields), this function produces the final frozen shape —
+// stripping non-finite optionals, freezing children recursively.
+
 const freezeMotionDefinition = (motion: AnimationMotionDefinition): AnimationMotionDefinition => {
     switch (motion.kind) {
         case 'clip':
@@ -32,7 +32,7 @@ const freezeMotionDefinition = (motion: AnimationMotionDefinition): AnimationMot
                 clipId: motion.clipId,
                 ...spreadIfFinite('timeScale', motion.timeScale),
                 ...spreadIfFinite('cycleOffset', motion.cycleOffset),
-            } satisfies AnimationMotionClipDefinition);
+            });
         case 'blend1d':
             return Object.freeze({
                 kind: 'blend1d',
@@ -67,8 +67,10 @@ const freezeMotionDefinition = (motion: AnimationMotionDefinition): AnimationMot
                     motion.children.map((child) =>
                         Object.freeze({
                             motion: freezeMotionDefinition(child.motion),
-                            ...(typeof child.parameter === 'string' ? { parameter: child.parameter } : {}),
                             ...spreadIfFinite('weight', child.weight),
+                            ...(typeof child.parameter === 'string'
+                                ? { parameter: child.parameter }
+                                : {}),
                         })
                     )
                 ),
@@ -78,18 +80,25 @@ const freezeMotionDefinition = (motion: AnimationMotionDefinition): AnimationMot
                 kind: 'additive',
                 base: freezeMotionDefinition(motion.base),
                 additive: freezeMotionDefinition(motion.additive),
-                ...(typeof motion.parameter === 'string' ? { parameter: motion.parameter } : {}),
                 ...spreadIfFinite('weight', motion.weight),
-            } satisfies AnimationBlendTreeAdditiveDefinition);
+                ...(typeof motion.parameter === 'string' ? { parameter: motion.parameter } : {}),
+            });
         default:
             return assertNever(motion, 'Unsupported motion kind');
     }
 };
 
 const toMotionDefinition = (motion: AnimationMotionInput): AnimationMotionDefinition =>
-    typeof (motion as AnimationMotionBuilder).build === 'function'
-        ? (motion as AnimationMotionBuilder).build()
-        : freezeMotionDefinition(motion as AnimationMotionDefinition);
+    isBuilder(motion)
+        ? motion.build()
+        : freezeMotionDefinition(motion);
+
+const isBuilder = (motion: AnimationMotionInput): motion is AnimationMotionBuilder =>
+    typeof (motion as AnimationMotionBuilder).build === 'function';
+
+// ─── Builders ───────────────────────────────────────────────────────
+// Builders produce raw data — undefined for optional fields, no spreading,
+// no freezing. freezeMotionDefinition handles normalization at the boundary.
 
 export class AnimationClipMotionBuilder implements AnimationMotionBuilder {
     constructor(
@@ -107,12 +116,12 @@ export class AnimationClipMotionBuilder implements AnimationMotionBuilder {
     }
 
     build(): AnimationMotionDefinition {
-        return freezeMotionDefinition({
+        return {
             kind: 'clip',
             clipId: this._clipId,
-            ...spreadIfFinite('timeScale', this._timeScale),
-            ...spreadIfFinite('cycleOffset', this._cycleOffset),
-        });
+            timeScale: this._timeScale,
+            cycleOffset: this._cycleOffset,
+        };
     }
 }
 
@@ -127,20 +136,16 @@ export class AnimationBlend1DGraphBuilder implements AnimationMotionBuilder {
     }
 
     build(): AnimationMotionDefinition {
-        return freezeMotionDefinition({
+        return {
             kind: 'blend1d',
             parameter: this._parameter,
-            children: Object.freeze(
-                [...this._children]
-                    .sort((left, right) => left.threshold - right.threshold)
-                    .map((child) =>
-                        Object.freeze({
-                            threshold: child.threshold,
-                            motion: toMotionDefinition(child.motion),
-                        })
-                    )
-            ),
-        });
+            children: [...this._children]
+                .sort((left, right) => left.threshold - right.threshold)
+                .map((child) => ({
+                    threshold: child.threshold,
+                    motion: toMotionDefinition(child.motion),
+                })),
+        };
     }
 }
 
@@ -158,19 +163,15 @@ export class AnimationBlend2DGraphBuilder implements AnimationMotionBuilder {
     }
 
     build(): AnimationMotionDefinition {
-        return freezeMotionDefinition({
+        return {
             kind: 'blend2d',
             parameterX: this._parameterX,
             parameterY: this._parameterY,
-            children: Object.freeze(
-                this._children.map((child) =>
-                    Object.freeze({
-                        position: freezeTuple2(child.x, child.y),
-                        motion: toMotionDefinition(child.motion),
-                    })
-                )
-            ),
-        });
+            children: this._children.map((child) => ({
+                position: freezeTuple2(child.x, child.y),
+                motion: toMotionDefinition(child.motion),
+            })),
+        };
     }
 }
 
@@ -190,18 +191,14 @@ export class AnimationDirectBlendGraphBuilder implements AnimationMotionBuilder 
     }
 
     build(): AnimationMotionDefinition {
-        return freezeMotionDefinition({
+        return {
             kind: 'direct',
-            children: Object.freeze(
-                this._children.map((child) =>
-                    Object.freeze({
-                        motion: toMotionDefinition(child.motion),
-                        ...(typeof child.parameter === 'string' ? { parameter: child.parameter } : {}),
-                        ...spreadIfFinite('weight', child.weight),
-                    })
-                )
-            ),
-        });
+            children: this._children.map((child) => ({
+                motion: toMotionDefinition(child.motion),
+                parameter: child.parameter,
+                weight: child.weight,
+            })),
+        };
     }
 }
 
@@ -225,15 +222,17 @@ export class AnimationAdditiveBlendGraphBuilder implements AnimationMotionBuilde
     }
 
     build(): AnimationMotionDefinition {
-        return freezeMotionDefinition({
+        return {
             kind: 'additive',
             base: toMotionDefinition(this._base),
             additive: toMotionDefinition(this._additive),
-            ...(typeof this._parameter === 'string' ? { parameter: this._parameter } : {}),
-            ...spreadIfFinite('weight', this._weight),
-        });
+            parameter: this._parameter,
+            weight: this._weight,
+        };
     }
 }
+
+// ─── Factory functions ──────────────────────────────────────────────
 
 export const createAnimationClipMotion = (
     clipId: string,
@@ -259,6 +258,8 @@ export const createAnimationAdditiveBlendGraph = (
 
 export const buildAnimationMotionDefinition = (motion: AnimationMotionInput): AnimationMotionDefinition =>
     toMotionDefinition(motion);
+
+// ─── Validation ─────────────────────────────────────────────────────
 
 const pushDiagnostic = (
     diagnostics: AnimationBlendGraphDiagnostic[],

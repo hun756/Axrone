@@ -8,73 +8,35 @@
  * replacing the previous AABB fallback for those shapes.
  */
 
-export interface IVec3 {
-    x: number;
-    y: number;
-    z: number;
-}
+import { Vec3, type IVec3Like } from '@axrone/numeric';
 
-export type Support3D = (dir: IVec3) => IVec3;
+export type Support3D = (dir: IVec3Like) => IVec3Like;
 
 export interface GJKContact3D {
     /** true when the two shapes overlap */
     hit: boolean;
     /** unit normal pointing from shape A to shape B (separation direction) */
-    normal: IVec3;
+    normal: IVec3Like;
     /** penetration depth (> 0 when hit) */
     depth: number;
     /** approximate world contact point */
-    point: IVec3;
+    point: IVec3Like;
 }
 
 interface MVert {
     /** support point in Minkowski difference space: supportA(dir) - supportB(-dir) */
-    v: IVec3;
+    v: IVec3Like;
     /** source support point on A */
-    a: IVec3;
+    a: IVec3Like;
     /** source support point on B */
-    b: IVec3;
+    b: IVec3Like;
 }
 
 const EPS = 1e-6;
 const EPS_SQ = EPS * EPS;
 
-function sub(a: IVec3, b: IVec3): IVec3 {
-    return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
-}
-function add(a: IVec3, b: IVec3): IVec3 {
-    return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
-}
-function scale(a: IVec3, s: number): IVec3 {
-    return { x: a.x * s, y: a.y * s, z: a.z * s };
-}
-function negate(a: IVec3): IVec3 {
-    return { x: -a.x, y: -a.y, z: -a.z };
-}
-function dot(a: IVec3, b: IVec3): number {
-    return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-function cross(a: IVec3, b: IVec3): IVec3 {
-    return {
-        x: a.y * b.z - a.z * b.y,
-        y: a.z * b.x - a.x * b.z,
-        z: a.x * b.y - a.y * b.x,
-    };
-}
-function lengthSq(a: IVec3): number {
-    return dot(a, a);
-}
-function length(a: IVec3): number {
-    return Math.sqrt(lengthSq(a));
-}
-function normalize(a: IVec3): IVec3 {
-    const len = length(a);
-    if (len <= EPS) return { x: 0, y: 1, z: 0 };
-    const inv = 1 / len;
-    return { x: a.x * inv, y: a.y * inv, z: a.z * inv };
-}
-function sameDirection(a: IVec3, b: IVec3): boolean {
-    return dot(a, b) > 0;
+function sameDirection(a: IVec3Like, b: IVec3Like): boolean {
+    return Vec3.dot(a, b) > 0;
 }
 
 export class GJK3D {
@@ -88,32 +50,32 @@ export class GJK3D {
         supportB: Support3D,
         maxIterations = 32
     ): GJKContact3D {
-        const support = (dir: IVec3): MVert => {
+        const support = (dir: IVec3Like): MVert => {
             const a = supportA(dir);
-            const b = supportB(negate(dir));
-            return { v: sub(a, b), a, b };
+            const b = supportB(Vec3.negate(dir));
+            return { v: Vec3.subtract(a, b), a, b };
         };
 
-        let dir: IVec3 = { x: 1, y: 0, z: 0 };
+        let dir: IVec3Like = { x: 1, y: 0, z: 0 };
         let simplex: MVert[] = [support(dir)];
-        let d = negate(simplex[0].v);
+        let d = Vec3.negate(simplex[0].v);
 
         let hit = false;
         for (let iter = 0; iter < maxIterations; iter++) {
-            if (lengthSq(d) < EPS_SQ) {
+            if (Vec3.lengthSquared(d) < EPS_SQ) {
                 // Degenerate direction: perturb to break out of coplanar/colinear
                 // configurations (standard GJK robustness trick).
                 const angle = iter * 2.39996; // golden angle
                 d = { x: Math.cos(angle) * 0.1, y: 0.5, z: Math.sin(angle) * 0.1 };
                 if (simplex.length >= 1) {
-                    d = sub(d, simplex[simplex.length - 1].v);
-                    if (lengthSq(d) < EPS_SQ) {
+                    d = Vec3.subtract(d, simplex[simplex.length - 1].v);
+                    if (Vec3.lengthSquared(d) < EPS_SQ) {
                         d = { x: 1, y: 0, z: 0 };
                     }
                 }
             }
             const a = support(d);
-            if (dot(a.v, d) < 0) {
+            if (Vec3.dot(a.v, d) < 0) {
                 break;
             }
             simplex.push(a);
@@ -133,23 +95,23 @@ export class GJK3D {
         let guard = 0;
         while (simplex.length < 4 && guard < 16) {
             guard++;
-            let dir: IVec3;
+            let dir: IVec3Like;
             if (simplex.length === 1) {
                 dir = { x: 0, y: 1, z: 0 };
             } else if (simplex.length === 2) {
-                const e = sub(simplex[1].v, simplex[0].v);
-                dir = cross(e, { x: 1, y: 0, z: 0 });
-                if (lengthSq(dir) < EPS_SQ) dir = cross(e, { x: 0, y: 1, z: 0 });
+                const e = Vec3.subtract(simplex[1].v, simplex[0].v);
+                dir = Vec3.cross(e, { x: 1, y: 0, z: 0 });
+                if (Vec3.lengthSquared(dir) < EPS_SQ) dir = Vec3.cross(e, { x: 0, y: 1, z: 0 });
             } else {
-                const ab = sub(simplex[1].v, simplex[0].v);
-                const ac = sub(simplex[2].v, simplex[0].v);
-                dir = cross(ab, ac);
+                const ab = Vec3.subtract(simplex[1].v, simplex[0].v);
+                const ac = Vec3.subtract(simplex[2].v, simplex[0].v);
+                dir = Vec3.cross(ab, ac);
             }
-            if (lengthSq(dir) < EPS_SQ) dir = { x: 0, y: 1, z: 0 };
-            if (dot(dir, simplex[0].v) > 0) dir = negate(dir);
+            if (Vec3.lengthSquared(dir) < EPS_SQ) dir = { x: 0, y: 1, z: 0 };
+            if (Vec3.dot(dir, simplex[0].v) > 0) dir = Vec3.negate(dir);
 
             const a = support(dir);
-            if (dot(a.v, dir) < 0) break; // separating axis found: not colliding
+            if (Vec3.dot(a.v, dir) < 0) break; // separating axis found: not colliding
             simplex.push(a);
             if (nextSimplex(simplex, dir) && simplex.length === 4) break;
         }
@@ -164,7 +126,7 @@ export class GJK3D {
     }
 }
 
-function nextSimplex(simplex: MVert[], dir: IVec3): boolean {
+function nextSimplex(simplex: MVert[], dir: IVec3Like): boolean {
     switch (simplex.length) {
         case 2:
             return lineCase(simplex, dir);
@@ -177,13 +139,13 @@ function nextSimplex(simplex: MVert[], dir: IVec3): boolean {
     }
 }
 
-function lineCase(simplex: MVert[], dir: IVec3): boolean {
+function lineCase(simplex: MVert[], dir: IVec3Like): boolean {
     const [a, b] = simplex;
-    const ab = sub(b.v, a.v);
-    const ao = negate(a.v);
+    const ab = Vec3.subtract(b.v, a.v);
+    const ao = Vec3.negate(a.v);
     if (sameDirection(ab, ao)) {
         // Origin is beyond AB on the line: keep A and B, search perpendicular.
-        const d = cross(cross(ab, ao), ab);
+        const d = Vec3.cross(Vec3.cross(ab, ao), ab);
         dir.x = d.x;
         dir.y = d.y;
         dir.z = d.z;
@@ -197,18 +159,18 @@ function lineCase(simplex: MVert[], dir: IVec3): boolean {
     return false;
 }
 
-function triangleCase(simplex: MVert[], dir: IVec3): boolean {
+function triangleCase(simplex: MVert[], dir: IVec3Like): boolean {
     const [a, b, c] = simplex;
-    const ab = sub(b.v, a.v);
-    const ac = sub(c.v, a.v);
-    const ao = negate(a.v);
-    const abc = cross(ab, ac);
+    const ab = Vec3.subtract(b.v, a.v);
+    const ac = Vec3.subtract(c.v, a.v);
+    const ao = Vec3.negate(a.v);
+    const abc = Vec3.cross(ab, ac);
 
-    if (sameDirection(cross(abc, ac), ao)) {
+    if (sameDirection(Vec3.cross(abc, ac), ao)) {
         if (sameDirection(ac, ao)) {
             simplex.length = 0;
             simplex.push(a, c);
-            const d = cross(cross(ac, ao), ac);
+            const d = Vec3.cross(Vec3.cross(ac, ao), ac);
             dir.x = d.x;
             dir.y = d.y;
             dir.z = d.z;
@@ -219,10 +181,10 @@ function triangleCase(simplex: MVert[], dir: IVec3): boolean {
             return lineCase(simplex, dir);
         }
     } else {
-        if (sameDirection(cross(ab, abc), ao)) {
+        if (sameDirection(Vec3.cross(ab, abc), ao)) {
             simplex.length = 0;
             simplex.push(a, b);
-            const d = cross(cross(ab, ao), ab);
+            const d = Vec3.cross(Vec3.cross(ab, ao), ab);
             dir.x = d.x;
             dir.y = d.y;
             dir.z = d.z;
@@ -232,7 +194,7 @@ function triangleCase(simplex: MVert[], dir: IVec3): boolean {
                 dir.y = abc.y;
                 dir.z = abc.z;
             } else {
-                const d = negate(abc);
+                const d = Vec3.negate(abc);
                 dir.x = d.x;
                 dir.y = d.y;
                 dir.z = d.z;
@@ -243,16 +205,16 @@ function triangleCase(simplex: MVert[], dir: IVec3): boolean {
     return false;
 }
 
-function tetrahedronCase(simplex: MVert[], dir: IVec3): boolean {
+function tetrahedronCase(simplex: MVert[], dir: IVec3Like): boolean {
     const [a, b, c, d] = simplex;
-    const ab = sub(b.v, a.v);
-    const ac = sub(c.v, a.v);
-    const ad = sub(d.v, a.v);
-    const ao = negate(a.v);
+    const ab = Vec3.subtract(b.v, a.v);
+    const ac = Vec3.subtract(c.v, a.v);
+    const ad = Vec3.subtract(d.v, a.v);
+    const ao = Vec3.negate(a.v);
 
-    const abc = cross(ab, ac);
-    const acd = cross(ac, ad);
-    const adb = cross(ad, ab);
+    const abc = Vec3.cross(ab, ac);
+    const acd = Vec3.cross(ac, ad);
+    const adb = Vec3.cross(ad, ab);
 
     if (sameDirection(abc, ao)) {
         simplex.length = 0;
@@ -274,13 +236,13 @@ function tetrahedronCase(simplex: MVert[], dir: IVec3): boolean {
 }
 
 interface EPAResult {
-    normal: IVec3;
+    normal: IVec3Like;
     depth: number;
-    point: IVec3;
+    point: IVec3Like;
 }
 
-function EPA(simplex: MVert[], support: (dir: IVec3) => MVert, maxIterations = 64): EPAResult | null {
-    const vertices: IVec3[] = simplex.map((m) => m.v);
+function EPA(simplex: MVert[], support: (dir: IVec3Like) => MVert, maxIterations = 64): EPAResult | null {
+    const vertices: IVec3Like[] = simplex.map((m) => m.v);
     let faces: number[][] = [
         [0, 1, 2],
         [0, 2, 3],
@@ -288,12 +250,12 @@ function EPA(simplex: MVert[], support: (dir: IVec3) => MVert, maxIterations = 6
         [1, 3, 2],
     ];
 
-    let bestNormal: IVec3 = { x: 0, y: 1, z: 0 };
+    let bestNormal: IVec3Like = { x: 0, y: 1, z: 0 };
     let bestDepth = 0;
 
     for (let iter = 0; iter < maxIterations; iter++) {
         let minDist = Infinity;
-        let minNormal: IVec3 = { x: 0, y: 1, z: 0 };
+        let minNormal: IVec3Like = { x: 0, y: 1, z: 0 };
         let minFaceIdx = -1;
 
         for (let fi = 0; fi < faces.length; fi++) {
@@ -302,17 +264,15 @@ function EPA(simplex: MVert[], support: (dir: IVec3) => MVert, maxIterations = 6
             const pa = vertices[ia];
             const pb = vertices[ib];
             const pc = vertices[ic];
-            let n = cross(sub(pb, pa), sub(pc, pa));
-            const nLen = length(n);
+            const crossVec = Vec3.cross(Vec3.subtract(pb, pa), Vec3.subtract(pc, pa));
+            const nLen = Vec3.len(crossVec);
             if (nLen <= EPS) continue;
-            n = scale(n, 1 / nLen);
-            if (dot(n, pa) < 0) {
-                n = negate(n);
-            }
-            const dist = dot(n, pa);
+            const n = Vec3.multiplyScalar(crossVec, 1 / nLen);
+            const orientedN = Vec3.dot(n, pa) < 0 ? Vec3.negate(n) : n;
+            const dist = Vec3.dot(orientedN, pa);
             if (dist < minDist) {
                 minDist = dist;
-                minNormal = n;
+                minNormal = orientedN;
                 minFaceIdx = fi;
             }
         }
@@ -323,9 +283,9 @@ function EPA(simplex: MVert[], support: (dir: IVec3) => MVert, maxIterations = 6
         bestDepth = minDist;
 
         const sup = support(minNormal);
-        const newDist = dot(minNormal, sup.v);
+        const newDist = Vec3.dot(minNormal, sup.v);
         if (newDist - minDist < EPS) {
-            return { normal: minNormal, depth: minDist, point: scale(minNormal, minDist) };
+            return { normal: minNormal, depth: minDist, point: Vec3.multiplyScalar(minNormal, minDist) };
         }
 
         const newIndex = vertices.length;
@@ -337,13 +297,13 @@ function EPA(simplex: MVert[], support: (dir: IVec3) => MVert, maxIterations = 6
             const [ia, ib, ic] = face;
             const pa = vertices[ia];
             const normal = (() => {
-                let n = cross(sub(vertices[ib], pa), sub(vertices[ic], pa));
-                const nLen = length(n);
+                const crossVec = Vec3.cross(Vec3.subtract(vertices[ib], pa), Vec3.subtract(vertices[ic], pa));
+                const nLen = Vec3.len(crossVec);
                 if (nLen <= EPS) return { x: 0, y: 0, z: 0 };
-                n = scale(n, 1 / nLen);
-                return dot(n, pa) < 0 ? negate(n) : n;
+                const n = Vec3.multiplyScalar(crossVec, 1 / nLen);
+                return Vec3.dot(n, pa) < 0 ? Vec3.negate(n) : n;
             })();
-            if (dot(normal, sub(sup.v, pa)) > 0) {
+            if (Vec3.dot(normal, Vec3.subtract(sup.v, pa)) > 0) {
                 edges.push([ia, ib], [ib, ic], [ic, ia]);
             } else {
                 remaining.push(face);
@@ -371,16 +331,16 @@ function EPA(simplex: MVert[], support: (dir: IVec3) => MVert, maxIterations = 6
         faces = remaining;
     }
 
-    return bestDepth > 0 ? { normal: bestNormal, depth: bestDepth, point: scale(bestNormal, bestDepth) } : null;
+    return bestDepth > 0 ? { normal: bestNormal, depth: bestDepth, point: Vec3.multiplyScalar(bestNormal, bestDepth) } : null;
 }
 
 /** Builds a convex support function from a world-space vertex set. */
-export function supportFromVertices(worldVertices: ReadonlyArray<IVec3>): Support3D {
-    return (dir: IVec3): IVec3 => {
+export function supportFromVertices(worldVertices: ReadonlyArray<IVec3Like>): Support3D {
+    return (dir: IVec3Like): IVec3Like => {
         let best = worldVertices[0];
-        let bestDot = dot(best, dir);
+        let bestDot = Vec3.dot(best, dir);
         for (let i = 1; i < worldVertices.length; i++) {
-            const d = dot(worldVertices[i], dir);
+            const d = Vec3.dot(worldVertices[i], dir);
             if (d > bestDot) {
                 bestDot = d;
                 best = worldVertices[i];

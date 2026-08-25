@@ -1,5 +1,7 @@
-export type Brand<T, B extends string> = T & { readonly __brand?: B };
-export type Nominal<T, N extends string> = T & { readonly __nominal?: N };
+import type { Nominal, NonEmptyReadonlyArray } from '@axrone/utility';
+
+export type { Nominal };
+
 // Variance is a phantom type marker used for documentation and compile-time checks.
 export type Variance<T, V extends 'in' | 'out' | 'invariant'> = T & { readonly __variance?: V };
 export type Phantom<T, P> = T & { readonly __phantom?: P };
@@ -11,7 +13,7 @@ export type MemoryAddress = Nominal<number, 'MemoryAddress'>;
 export type AllocatorId = Nominal<number, 'AllocatorId'>;
 export type PoolIndex = Nominal<number, 'PoolIndex'>;
 
-export type NonEmptyArray<T> = readonly [T, ...T[]];
+export type NonEmptyArray<T> = NonEmptyReadonlyArray<T>;
 export type EmptyArray = readonly [];
 export type ArrayWithLength<T, N extends number> = readonly T[] & { readonly length: N };
 

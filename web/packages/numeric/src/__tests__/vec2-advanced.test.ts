@@ -466,7 +466,7 @@ describe('Vec2 Advanced Operations', () => {
         test('instance randomBox within bounds', () => {
             const v = new Vec2();
             for (let i = 0; i < 20; i++) {
-                v.randomBox(-5, 5, -10, 10);
+                Vec2.randomBox(-5, 5, -10, 10, v);
                 expect(v.x).toBeGreaterThanOrEqual(-5);
                 expect(v.x).toBeLessThanOrEqual(5);
                 expect(v.y).toBeGreaterThanOrEqual(-10);
@@ -477,7 +477,7 @@ describe('Vec2 Advanced Operations', () => {
         test('instance randomBoxNormal within bounds', () => {
             const v = new Vec2();
             for (let i = 0; i < 20; i++) {
-                v.randomBoxNormal(-5, 5, -10, 10);
+                Vec2.randomBoxNormal(-5, 5, -10, 10, v);
                 expect(v.x).toBeGreaterThanOrEqual(-5);
                 expect(v.x).toBeLessThanOrEqual(5);
                 expect(v.y).toBeGreaterThanOrEqual(-10);

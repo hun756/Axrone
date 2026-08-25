@@ -3,7 +3,7 @@
  *
  * Removes:
  *   - Nx task runner cache (.nx/cache)
- *   - rollup-plugin-typescript2 caches (.rpt2_cache, .rts2_cache_*)
+ *   - Legacy rollup-plugin-typescript2 caches (if any remain from prior builds)
  *
  * Usage: node ./scripts/clean-build-cache.mjs
  *   or:  yarn build:clean
@@ -25,24 +25,22 @@ const removeDir = (dirPath) => {
 
 let cleaned = 0;
 
-// Nx task runner cache
 const nxCacheDir = path.join(workspaceDir, '.nx', 'cache');
 if (removeDir(nxCacheDir)) {
     console.log('  Removed .nx/cache');
     cleaned++;
 }
 
-// Per-package rollup-plugin-typescript2 caches
-const cacheDirPatterns = ['.rpt2_cache', '.rts2_cache_cjs', '.rts2_cache_es', '.rts2_cache_umd'];
+const legacyCacheDirPatterns = ['.rpt2_cache', '.rts2_cache_cjs', '.rts2_cache_es', '.rts2_cache_umd'];
 
 if (fs.existsSync(packagesDir)) {
     const packages = fs.readdirSync(packagesDir, { withFileTypes: true });
     for (const pkg of packages) {
         if (!pkg.isDirectory()) continue;
-        for (const cacheName of cacheDirPatterns) {
+        for (const cacheName of legacyCacheDirPatterns) {
             const cachePath = path.join(packagesDir, pkg.name, cacheName);
             if (removeDir(cachePath)) {
-                console.log(`  Removed packages/${pkg.name}/${cacheName}`);
+                console.log(`  Removed legacy cache packages/${pkg.name}/${cacheName}`);
                 cleaned++;
             }
         }

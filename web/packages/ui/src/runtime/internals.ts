@@ -198,7 +198,7 @@ export const mergeImageInput = (
 export const mergeFocusInput = (
     base: WidgetFocusPolicyInput,
     patch: WidgetPatch['focus'] | undefined
-): WidgetFocusPolicyInput => ({ ...(base ?? {}), ...(patch ?? {}) });
+): WidgetFocusPolicyInput => ({ ...(base ?? {}), ...(patch ?? {}) }) as WidgetFocusPolicyInput;
 
 export const mergeHandlers = <TRuntime>(
     base: WidgetEventHandlers<Record<string, unknown>, TRuntime> | null,

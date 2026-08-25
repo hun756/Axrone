@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SceneMeshFactory } from '@axrone/scene-3d';
-import { createMockGL } from './test-harness';
+import { createMockGL } from '../../../../tests/shared/test-harness';
 
 describe('SceneMeshFactory', () => {
     it('creates indexed mesh resources and disposes them cleanly', () => {

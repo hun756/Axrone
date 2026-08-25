@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SceneRuntimeKernel } from '@axrone/scene-3d';
-import { ManualScheduler, createSceneOptions } from './test-harness';
+import { ManualScheduler, createSceneOptions } from '../../../../tests/shared/test-harness';
 
 describe('SceneRuntimeKernel', () => {
     it('builds scene runtime services and initializes a default render pass', () => {

@@ -216,12 +216,12 @@ export type {
 } from './components/billboard-renderer';
 export { BillboardRenderer } from './components/billboard-renderer';
 export type {
-    NavMeshAgentConfig,
-    NavMeshAgentPathStatus,
-    NavMeshAgentObstacleAvoidanceQuality,
-    NavMeshPath,
-} from './components/navmesh-agent';
-export { NavMeshAgent } from './components/navmesh-agent';
+    PathAgentConfig,
+    PathAgentPathStatus,
+    PathAgentObstacleAvoidanceQuality,
+    PathAgentPath,
+} from './components/path-agent';
+export { PathAgent } from './components/path-agent';
 export type {
     ParticleSystemConfig,
     ParticleRenderData,

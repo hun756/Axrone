@@ -1,4 +1,6 @@
-import { ForceConfiguration } from '../core/configuration';
+import { BaseModule } from './base-module';
+import type { ForceConfiguration } from '../core/configuration';
+import type { IParticleBuffer } from '../core/interfaces';
 import { IForce } from '../core/interfaces';
 import { IVec3Array, IVec4Array } from '../aligned-arrays';
 import { CurveEvaluator } from '../curve-evaluator';
@@ -38,8 +40,10 @@ export enum ForceComputeMode {
     Optimized = 2,
 }
 
-export class ForceModule {
-    private readonly _configuration: ForceConfiguration;
+const DEFAULT_PRIORITY = 150;
+const INITIAL_CAPACITY = 4096;
+
+export class ForceModule extends BaseModule<'force'> {
     private readonly _forces: ForceField[] = [];
     private readonly _activeForces = new Set<number>();
 
@@ -52,48 +56,111 @@ export class ForceModule {
         falloffCalculations: 0,
     };
 
-    private readonly _tempForces = new Float32Array(4096 * 3);
-    private readonly _tempDistances = new Float32Array(4096);
-    private readonly _tempFalloffs = new Float32Array(4096);
+    private readonly _tempForces = new Float32Array(INITIAL_CAPACITY * 3);
+    private readonly _tempDistances = new Float32Array(INITIAL_CAPACITY);
+    private readonly _tempFalloffs = new Float32Array(INITIAL_CAPACITY);
 
     private _noiseTime = 0;
     private readonly _noiseOffsets = new Float32Array(16);
 
-    constructor(configuration: ForceConfiguration) {
-        this._configuration = configuration;
+    private _soaPosX = new Float32Array(INITIAL_CAPACITY);
+    private _soaPosY = new Float32Array(INITIAL_CAPACITY);
+    private _soaPosZ = new Float32Array(INITIAL_CAPACITY);
+    private _soaVelX = new Float32Array(INITIAL_CAPACITY);
+    private _soaVelY = new Float32Array(INITIAL_CAPACITY);
+    private _soaVelZ = new Float32Array(INITIAL_CAPACITY);
+    private _massBuffer = new Float32Array(INITIAL_CAPACITY).fill(1);
+
+    constructor(configuration: ForceConfiguration, priority?: number) {
+        super('force', configuration, priority ?? DEFAULT_PRIORITY);
         this._initializeForces();
         this._initializeNoise();
     }
 
-    private _initializeForces(): void {
-        this._forces.length = 0;
-        this._activeForces.clear();
+    /* ------------------------------------------------------------------ */
+    /* BaseModule template methods                                         */
+    /* ------------------------------------------------------------------ */
 
-        for (let i = 0; i < this._configuration.forces.length; i++) {
-            const forceConfig = this._configuration.forces[i];
-
-            const force: ForceField = {
-                type: forceConfig.type,
-                strength: 1.0,
-                direction: { ...forceConfig.direction },
-                position: forceConfig.position ? { ...forceConfig.position } : undefined,
-                range: forceConfig.falloffRadius || Infinity,
-                falloff: 'linear',
-            };
-
-            this._forces.push(force);
-            this._activeForces.add(i);
-        }
-
-        this._stats.totalForces = this._forces.length;
-        this._stats.activeForces = this._activeForces.size;
+    protected onInitialize(): void {
+        this._initializeForces();
+        this._initializeNoise();
     }
 
-    private _initializeNoise(): void {
-        for (let i = 0; i < this._noiseOffsets.length; i++) {
-            this._noiseOffsets[i] = Math.random() * 1000;
+    protected onDestroy(): void {
+        this.clearForces();
+    }
+
+    protected onReset(): void {
+        this._noiseTime = 0;
+        this.resetStats();
+    }
+
+    protected onUpdate(_deltaTime: number): void {
+        // Force computation happens in onProcess, not in update
+    }
+
+    protected onProcess(particles: IParticleBuffer, deltaTime: number): void {
+        const count = particles.count;
+        if (count === 0 || this._activeForces.size === 0) return;
+
+        this._ensureSOABuffers(count);
+        this._ensureMassBuffer(count);
+
+        const flatPos = particles.positions;
+        const flatVel = particles.velocities;
+
+        for (let i = 0; i < count; i++) {
+            const i3 = i * 3;
+            this._soaPosX[i] = flatPos[i3];
+            this._soaPosY[i] = flatPos[i3 + 1];
+            this._soaPosZ[i] = flatPos[i3 + 2];
+            this._soaVelX[i] = flatVel[i3];
+            this._soaVelY[i] = flatVel[i3 + 1];
+            this._soaVelZ[i] = flatVel[i3 + 2];
+        }
+
+        const posAdapter = {
+            x: this._soaPosX,
+            y: this._soaPosY,
+            z: this._soaPosZ,
+        } as unknown as IVec3Array;
+
+        const velAdapter = {
+            x: this._soaVelX,
+            y: this._soaVelY,
+            z: this._soaVelZ,
+        } as unknown as IVec3Array;
+
+        this.applyForces(
+            posAdapter,
+            velAdapter,
+            particles.ages as Float32Array,
+            particles.lifetimes as Float32Array,
+            this._massBuffer,
+            count,
+            deltaTime
+        );
+
+        for (let i = 0; i < count; i++) {
+            const i3 = i * 3;
+            particles.setVelocity(i, {
+                x: this._soaVelX[i],
+                y: this._soaVelY[i],
+                z: this._soaVelZ[i],
+            });
         }
     }
+
+    protected onConfigure(
+        _newConfig: ForceConfiguration,
+        _oldConfig: ForceConfiguration
+    ): void {
+        this._initializeForces();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Public force API (backward-compatible)                              */
+    /* ------------------------------------------------------------------ */
 
     applyForces(
         positions: IVec3Array,
@@ -132,6 +199,106 @@ export class ForceModule {
 
         this._stats.avgComputationTime = performance.now() - startTime;
     }
+
+    addForce(force: ForceField): number {
+        const index = this._forces.length;
+        this._forces.push(force);
+        this._activeForces.add(index);
+        this._stats.totalForces++;
+        this._stats.activeForces++;
+        return index;
+    }
+
+    removeForce(index: number): boolean {
+        if (index >= 0 && index < this._forces.length && this._activeForces.has(index)) {
+            this._activeForces.delete(index);
+            this._stats.activeForces--;
+            return true;
+        }
+        return false;
+    }
+
+    setForceEnabled(index: number, enabled: boolean): void {
+        if (index >= 0 && index < this._forces.length) {
+            if (enabled) {
+                if (!this._activeForces.has(index)) {
+                    this._activeForces.add(index);
+                    this._stats.activeForces++;
+                }
+            } else {
+                if (this._activeForces.has(index)) {
+                    this._activeForces.delete(index);
+                    this._stats.activeForces--;
+                }
+            }
+        }
+    }
+
+    updateForceStrength(index: number, strength: number): void {
+        if (index >= 0 && index < this._forces.length) {
+            (this._forces[index] as any).strength = strength;
+        }
+    }
+
+    getStats(): ForceStats {
+        return { ...this._stats };
+    }
+
+    resetStats(): void {
+        this._stats.computationsPerFrame = 0;
+        this._stats.avgComputationTime = 0;
+        this._stats.rangeChecks = 0;
+        this._stats.falloffCalculations = 0;
+    }
+
+    getActiveForces(): readonly ForceField[] {
+        return Array.from(this._activeForces).map((index) => this._forces[index]);
+    }
+
+    clearForces(): void {
+        this._forces.length = 0;
+        this._activeForces.clear();
+        this._stats.totalForces = 0;
+        this._stats.activeForces = 0;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Private: force initialization                                       */
+    /* ------------------------------------------------------------------ */
+
+    private _initializeForces(): void {
+        this._forces.length = 0;
+        this._activeForces.clear();
+
+        for (let i = 0; i < this._configuration.forces.length; i++) {
+            const forceConfig = this._configuration.forces[i];
+
+            const force: ForceField = {
+                type: forceConfig.type,
+                strength: 1.0,
+                direction: { ...forceConfig.direction },
+                position: forceConfig.position ? { ...forceConfig.position } : undefined,
+                range: forceConfig.falloffRadius || Infinity,
+                falloff: 'linear',
+            };
+
+            this._forces.push(force);
+            this._activeForces.add(i);
+        }
+
+        this._stats.totalForces = this._forces.length;
+        this._stats.activeForces = this._activeForces.size;
+    }
+
+    private _initializeNoise(): void {
+        for (let i = 0; i < this._noiseOffsets.length; i++) {
+            this._noiseOffsets[i] = Math.random() * 1000;
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Private: force application                                          */
+    /* ------------------------------------------------------------------ */
 
     private _applyForce(
         force: ForceField,
@@ -404,6 +571,10 @@ export class ForceModule {
         }
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Private: utilities                                                  */
+    /* ------------------------------------------------------------------ */
+
     private _calculateFalloff(
         falloffType: IForce['falloff'],
         distance: number,
@@ -435,65 +606,22 @@ export class ForceModule {
         return 1 - normalizedAge * normalizedAge;
     }
 
-    addForce(force: ForceField): number {
-        const index = this._forces.length;
-        this._forces.push(force);
-        this._activeForces.add(index);
-        this._stats.totalForces++;
-        this._stats.activeForces++;
-        return index;
+    private _ensureSOABuffers(count: number): void {
+        if (count <= this._soaPosX.length) return;
+
+        const newSize = Math.max(count, this._soaPosX.length * 2);
+        this._soaPosX = new Float32Array(newSize);
+        this._soaPosY = new Float32Array(newSize);
+        this._soaPosZ = new Float32Array(newSize);
+        this._soaVelX = new Float32Array(newSize);
+        this._soaVelY = new Float32Array(newSize);
+        this._soaVelZ = new Float32Array(newSize);
     }
 
-    removeForce(index: number): boolean {
-        if (index >= 0 && index < this._forces.length && this._activeForces.has(index)) {
-            this._activeForces.delete(index);
-            this._stats.activeForces--;
-            return true;
-        }
-        return false;
-    }
+    private _ensureMassBuffer(count: number): void {
+        if (count <= this._massBuffer.length) return;
 
-    setForceEnabled(index: number, enabled: boolean): void {
-        if (index >= 0 && index < this._forces.length) {
-            if (enabled) {
-                if (!this._activeForces.has(index)) {
-                    this._activeForces.add(index);
-                    this._stats.activeForces++;
-                }
-            } else {
-                if (this._activeForces.has(index)) {
-                    this._activeForces.delete(index);
-                    this._stats.activeForces--;
-                }
-            }
-        }
-    }
-
-    updateForceStrength(index: number, strength: number): void {
-        if (index >= 0 && index < this._forces.length) {
-            (this._forces[index] as any).strength = strength;
-        }
-    }
-
-    getStats(): ForceStats {
-        return { ...this._stats };
-    }
-
-    resetStats(): void {
-        this._stats.computationsPerFrame = 0;
-        this._stats.avgComputationTime = 0;
-        this._stats.rangeChecks = 0;
-        this._stats.falloffCalculations = 0;
-    }
-
-    getActiveForces(): readonly ForceField[] {
-        return Array.from(this._activeForces).map((index) => this._forces[index]);
-    }
-
-    clearForces(): void {
-        this._forces.length = 0;
-        this._activeForces.clear();
-        this._stats.totalForces = 0;
-        this._stats.activeForces = 0;
+        const newSize = Math.max(count, this._massBuffer.length * 2);
+        this._massBuffer = new Float32Array(newSize).fill(1);
     }
 }

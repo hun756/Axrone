@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { compileMotion, extractMotionRootDelta } from '../blend-tree';
+import { AnimationScratchPool, BlendScratchContext } from '../blend-scratch';
 import { AnimationClip } from '../clip';
 import { AnimationParameterStore } from '../parameters';
-import { AnimationCurveLayout } from '../pose';
+import { AnimationCurveLayout, AnimationFrame } from '../pose';
 import { AnimationRig } from '../rig';
 import type { AnimationMotionDefinition } from '../types';
+import type { AnimationMotionEvaluationContext } from '../blend-scratch';
 
 const rig = new AnimationRig({ bones: [{ name: 'root' }] });
 const curveLayout = new AnimationCurveLayout();
@@ -37,6 +39,17 @@ const parameters = new AnimationParameterStore([
     { name: 'y', kind: 'float', defaultValue: 0 },
 ]);
 
+const scratchPool = new AnimationScratchPool(rig, curveLayout);
+const blendScratch = new BlendScratchContext();
+const restFrame = new AnimationFrame(rig, curveLayout);
+const context: AnimationMotionEvaluationContext = {
+    rig,
+    parameters,
+    restFrame,
+    scratch: scratchPool,
+    blendScratch,
+};
+
 const extract = (definition: AnimationMotionDefinition): { translation: Float32Array; rotation: Float32Array } => {
     const translation = new Float32Array(3);
     const rotation = new Float32Array(4);
@@ -49,7 +62,8 @@ const extract = (definition: AnimationMotionDefinition): { translation: Float32A
         rig,
         parameters,
         translation,
-        rotation
+        rotation,
+        context
     );
     return { translation, rotation };
 };

@@ -1,25 +1,16 @@
+import type { TypedArray } from '@axrone/utility';
 import { MemoryPool, MemoryPoolOptions, PoolableObject } from './mempool';
 import { CircularBuffer } from './internal/circular-buffer';
 
-export type TypedArrayType =
-    | Float32Array
-    | Float64Array
-    | Int8Array
-    | Int16Array
-    | Int32Array
-    | Uint8Array
-    | Uint16Array
-    | Uint32Array
-    | BigInt64Array
-    | BigUint64Array;
+export type { TypedArray, TypedArray as TypedArrayType };
 
-export type TypedArrayConstructor<T extends TypedArrayType> = {
+export type TypedArrayConstructor<T extends TypedArray> = {
     new (length: number): T;
     new (buffer: ArrayBuffer, byteOffset?: number, length?: number): T;
     BYTES_PER_ELEMENT: number;
 };
 
-export interface PoolableTypedArray<T extends TypedArrayType> extends PoolableObject {
+export interface PoolableTypedArray<T extends TypedArray> extends PoolableObject {
     readonly array: T;
     readonly byteLength: number;
     readonly length: number;
@@ -44,7 +35,7 @@ export interface PoolableTypedArray<T extends TypedArrayType> extends PoolableOb
     subarray(start?: number, end?: number): T;
 }
 
-export interface TypedArrayPoolOptions<T extends TypedArrayType>
+export interface TypedArrayPoolOptions<T extends TypedArray>
     extends Omit<MemoryPoolOptions<PoolableTypedArray<T>>, 'factory'> {
     readonly arrayConstructor: TypedArrayConstructor<T>;
 
@@ -99,7 +90,7 @@ export interface TypedArrayPoolStats {
     };
 }
 
-export class TypedArrayPool<T extends TypedArrayType> {
+export class TypedArrayPool<T extends TypedArray> {
     private readonly _pools: Map<number, MemoryPool<PoolableTypedArray<T>>>;
     private readonly _options: Partial<TypedArrayPoolOptions<T>> & {
         arrayConstructor: TypedArrayConstructor<T>;

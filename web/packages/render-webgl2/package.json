@@ -48,6 +48,36 @@
             "types": "./dist/pipeline.d.ts",
             "import": "./dist/pipeline.mjs",
             "require": "./dist/pipeline.js"
+        },
+        "./context": {
+            "types": "./dist/context.d.ts",
+            "import": "./dist/context.mjs",
+            "require": "./dist/context.js"
+        },
+        "./context/mock": {
+            "types": "./dist/context/mock.d.ts",
+            "import": "./dist/context/mock.mjs",
+            "require": "./dist/context/mock.js"
+        },
+        "./query": {
+            "types": "./dist/query.d.ts",
+            "import": "./dist/query.mjs",
+            "require": "./dist/query.js"
+        },
+        "./sync": {
+            "types": "./dist/sync.d.ts",
+            "import": "./dist/sync.mjs",
+            "require": "./dist/sync.js"
+        },
+        "./transform-feedback": {
+            "types": "./dist/transform-feedback.d.ts",
+            "import": "./dist/transform-feedback.mjs",
+            "require": "./dist/transform-feedback.js"
+        },
+        "./frame-graph": {
+            "types": "./dist/frame-graph.d.ts",
+            "import": "./dist/frame-graph.mjs",
+            "require": "./dist/frame-graph.js"
         }
     },
     "scripts": {

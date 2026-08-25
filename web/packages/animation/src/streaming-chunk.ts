@@ -1,5 +1,6 @@
 import { AnimationValidationError } from './errors';
 import { getTrackComponentCount, isFiniteNumber } from './internal';
+import { ANIMATION_EPSILON } from './math';
 import { isRecord } from '@axrone/utility';
 import type { AnimationClipDefinition, AnimationTrackDefinition } from './types';
 
@@ -216,7 +217,7 @@ const mergeTrackDefinitions = (
     for (let index = 0; index < merged.length; index += 1) {
         const frame = merged[index]!;
         const previous = deduped[deduped.length - 1];
-        if (previous && Math.abs(previous.time - frame.time) <= 1e-6) {
+        if (previous && Math.abs(previous.time - frame.time) <= ANIMATION_EPSILON) {
             deduped[deduped.length - 1] = frame;
             continue;
         }

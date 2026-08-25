@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ShaderInstance } from '../instance';
+import { createMockGL } from '../../context/mock';
 import type { ICompiledShader, IShaderVariant } from '../interfaces';
 
 /** Minimal truthy mock — satisfies assertContext but is never called for upload. */
-const mockGl = {} as WebGL2RenderingContext;
+const mockGl = createMockGL();
 
 function createMockShader(name = 'test-shader'): ICompiledShader {
     return {

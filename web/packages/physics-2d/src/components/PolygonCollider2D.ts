@@ -25,7 +25,7 @@ export class PolygonCollider2D extends Collider2D {
             console.warn('Polygon collider requires at least 3 vertices');
             return;
         }
-        this._vertices = value.map((v) => new Vec2(v.x, v.y));
+        this._vertices = value.map((v) => Vec2.from(v));
         this.recreateShape();
     }
 
@@ -71,12 +71,18 @@ export class PolygonCollider2D extends Collider2D {
         this._shapeId = null;
     }
 
-    protected updateTrigger(): void {}
-    protected updateMaterial(): void {}
+    protected updateTrigger(): void {
+        this.recreateShape();
+    }
+    protected updateMaterial(): void {
+        this.recreateShape();
+    }
     protected updateOffset(): void {
         this.recreateShape();
     }
-    protected updateCollisionFilter(): void {}
+    protected updateCollisionFilter(): void {
+        this.recreateShape();
+    }
 
     private recreateShape(): void {
         this.destroyPhysicsShape();
@@ -92,6 +98,6 @@ export class PolygonCollider2D extends Collider2D {
 
     deserialize(data: Record<string, any>): void {
         super.deserialize(data);
-        this._vertices = (data.vertices ?? []).map((v: any) => new Vec2(v.x, v.y));
+        this._vertices = (data.vertices ?? []).map((v: any) => Vec2.from(v));
     }
 }

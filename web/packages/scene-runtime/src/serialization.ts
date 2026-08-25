@@ -1,6 +1,6 @@
 import type { BoundingSphere } from '@axrone/geometry';
-import { Mat4, Quat, Vec2, Vec3, Vec4 } from '@axrone/numeric';
-import { cloneSceneMeshBounds } from './scene-mesh-bounds';
+import { Mat4, Quat, Vec2, Vec3, Vec4, encodeValue } from '@axrone/numeric';
+import { cloneSceneMeshBounds, isBoundingSphereCenterTuple } from './scene-mesh-bounds';
 import type {
     SceneMorphTargetDefinition,
     SceneMeshDefinition,
@@ -8,7 +8,6 @@ import type {
     SceneTextureBindingDefinition,
 } from './types';
 
-type BoundingSphereCenter = Readonly<BoundingSphere>['center'];
 type SerializedSphereBounds = {
     readonly kind: 'sphere';
     readonly center: readonly SceneSerializedValue[];
@@ -16,21 +15,14 @@ type SerializedSphereBounds = {
 };
 
 /**
- * Rounds a Float32 value to 6 significant decimal digits before JSON
- * serialization. Float32 has ~7 significant digits; when spread into a JS
- * number (Float64) the extra digits are representation noise, not meaningful
- * data. Rounding cuts per-value text from ~18 chars to ~8 chars on average,
- * reducing animation keyframe and vertex data JSON by ~55%.
+ * Encodes a runtime value into a scene-compatible serialized form.
+ *
+ * Thin wrapper around the canonical {@link encodeValue} from `@axrone/numeric`.
+ * The return type is narrowed to `SceneSerializedValue` for backwards
+ * compatibility with existing scene pipeline consumers.
  */
-const roundFloat32ForJson = (value: number): number => {
-    if (value === 0 || !Number.isFinite(value)) return value;
-    const magnitude = Math.pow(10, 5 - Math.floor(Math.log10(Math.abs(value))));
-    if (!Number.isFinite(magnitude)) return value;
-    return Math.round(value * magnitude) / magnitude;
-};
-
-const isBoundingSphereCenterTuple = (center: BoundingSphereCenter): center is readonly [number, number, number] =>
-    Array.isArray(center);
+export const encodeSceneValue = (value: unknown): SceneSerializedValue =>
+    encodeValue(value) as SceneSerializedValue;
 
 const isSerializedSphereBounds = (value: SceneSerializedValue | undefined): value is SerializedSphereBounds => {
     if (value === null || value === undefined || Array.isArray(value) || typeof value !== 'object') {
@@ -58,74 +50,6 @@ const cloneMorphTargets = (
               }))
           )
         : undefined;
-
-const asSerializedArray = (value: readonly unknown[]): readonly SceneSerializedValue[] =>
-    value.map((item) => encodeSceneValue(item));
-
-export const encodeSceneValue = (value: unknown): SceneSerializedValue => {
-    if (value === undefined || value === null) {
-        return null;
-    }
-
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-        return value;
-    }
-
-    if (value instanceof Vec2) {
-        return { $type: 'Vec2', value: [value.x, value.y] };
-    }
-
-    if (value instanceof Vec3) {
-        return { $type: 'Vec3', value: [value.x, value.y, value.z] };
-    }
-
-    if (value instanceof Vec4) {
-        return { $type: 'Vec4', value: [value.x, value.y, value.z, value.w] };
-    }
-
-    if (value instanceof Quat) {
-        return { $type: 'Quat', value: [value.x, value.y, value.z, value.w] };
-    }
-
-    if (value instanceof Mat4) {
-        return { $type: 'Mat4', value: [...value.data] };
-    }
-
-    if (value instanceof Float32Array) {
-        return {
-            $type: 'Float32Array',
-            value: Array.from(value, roundFloat32ForJson),
-        };
-    }
-
-    if (
-        value instanceof Int32Array ||
-        value instanceof Uint32Array ||
-        value instanceof Uint16Array ||
-        value instanceof Uint8Array
-    ) {
-        return {
-            $type: value.constructor.name,
-            value: [...value],
-        };
-    }
-
-    if (Array.isArray(value)) {
-        return asSerializedArray(value);
-    }
-
-    if (typeof value === 'object') {
-        const encoded: Record<string, SceneSerializedValue> = {};
-
-        for (const [key, entry] of Object.entries(value)) {
-            encoded[key] = encodeSceneValue(entry);
-        }
-
-        return encoded;
-    }
-
-    return String(value);
-};
 
 export const decodeSceneValue = (value: SceneSerializedValue): unknown => {
     if (

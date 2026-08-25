@@ -107,9 +107,13 @@ describe('createWebGL2RenderResourceAllocator', () => {
         });
     });
 
-    describe('createTexture — MSAA rejection', () => {
-        it('throws for multisampled textures', () => {
-            const gl = createGLMock();
+    describe('createTexture — MSAA', () => {
+        it('creates multisampled texture via texStorage2DMultisample', () => {
+            const gl = createGLMock() as unknown as WebGL2RenderingContext & {
+                texStorage2DMultisample: ReturnType<typeof vi.fn>;
+                _createdTextures: WebGLTexture[];
+            };
+            (gl as unknown as Record<string, unknown>).texStorage2DMultisample = vi.fn();
             const allocator = createWebGL2RenderResourceAllocator(gl);
             const descriptor: RenderTextureDescriptor = {
                 width: 256,
@@ -118,7 +122,9 @@ describe('createWebGL2RenderResourceAllocator', () => {
                 usage: ['color-attachment'],
                 samples: 4,
             };
-            expect(() => allocator.createTexture(descriptor)).toThrow(/multisampled/);
+            const handle = allocator.createTexture(descriptor);
+            expect(handle.kind).toBe('texture');
+            expect(gl._createdTextures).toHaveLength(1);
         });
     });
 

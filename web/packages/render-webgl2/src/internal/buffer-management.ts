@@ -197,7 +197,7 @@ export class ResourceTracker {
             if (!resource.isDisposed) {
                 try {
                     resource.dispose();
-                } catch {
+                } catch { // best-effort
                     // Ignore errors during disposal so the remaining resources can still be released.
                 }
             }

@@ -1,8 +1,13 @@
 import { IBatchManager, IBatchRenderer, BatchStats, BatchConfiguration } from './interfaces';
 import { IMaterialInstance } from '../shader/interfaces';
 import { BatchRenderer } from './batch-renderer';
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
+import { GLContextError } from '../context/errors';
+import { createDisposedError } from '../errors';
 
 export class BatchManager implements IBatchManager {
+    private readonly _ctx: IGLContext;
     private readonly gl: WebGL2RenderingContext;
     private readonly config: Required<BatchConfiguration>;
     private readonly renderers = new Map<string, BatchRenderer>();
@@ -11,8 +16,13 @@ export class BatchManager implements IBatchManager {
     private disposed = false;
     private frameCounter = 0;
 
-    constructor(gl: WebGL2RenderingContext, config: BatchConfiguration = {}) {
-        this.gl = gl;
+    /** @deprecated Raw WebGL2RenderingContext overload is deprecated. Prefer IGLContext. */
+
+
+    constructor(source: ContextSource, config: BatchConfiguration = {}) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
         this.config = {
             maxBatchSize: config.maxBatchSize ?? 1024,
             maxRenderers: config.maxRenderers ?? 16,
@@ -23,17 +33,21 @@ export class BatchManager implements IBatchManager {
         };
     }
 
+    public get context(): IGLContext {
+        return this._ctx;
+    }
+
     createRenderer(maxBatchSize?: number): IBatchRenderer {
         if (this.disposed) {
-            throw new Error('BatchManager has been disposed');
+            throw createDisposedError('BatchManager');
         }
 
         if (this.renderers.size >= this.config.maxRenderers) {
-            throw new Error(`Maximum number of renderers (${this.config.maxRenderers}) reached`);
+            throw new GLContextError('OUT_OF_MEMORY', 'en', { reason: `Maximum number of renderers (${this.config.maxRenderers}) reached` });
         }
 
         const rendererId = `renderer_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-        const renderer = new BatchRenderer(this.gl, {
+        const renderer = new BatchRenderer(this._ctx, {
             ...this.config,
             maxBatchSize: maxBatchSize ?? this.config.maxBatchSize,
         });

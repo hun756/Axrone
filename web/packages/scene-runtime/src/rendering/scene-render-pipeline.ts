@@ -28,6 +28,8 @@ import type { SceneRenderItem } from './render-item-collector';
 import type { SceneRenderPassResource } from './render-pass-registry';
 import type { SceneSpriteBatchRuntime } from './sprite-batch-runtime';
 import type { SceneParticleBatchRuntime } from './particle-batch-runtime';
+import type { SceneLineBatchRuntime } from './line-batch-runtime';
+import type { SceneBillboardBatchRuntime } from './billboard-batch-runtime';
 import type {
     SceneMaterialAlphaMode,
     SceneRenderPlanningOptions,
@@ -58,6 +60,8 @@ export interface SceneRenderPipelineParams {
 
 type SceneSpriteBatchRenderer = Pick<SceneSpriteBatchRuntime, 'render' | 'clear'>;
 type SceneParticleBatchRenderer = Pick<SceneParticleBatchRuntime, 'render' | 'clear'>;
+type SceneLineBatchRenderer = Pick<SceneLineBatchRuntime, 'render' | 'clear'>;
+type SceneBillboardBatchRenderer = Pick<SceneBillboardBatchRuntime, 'render' | 'clear'>;
 
 const DEFAULT_SCENE_RENDER_PLANNING_STATS: SceneRenderPlanningStats = Object.freeze({
     passCount: 0,
@@ -184,6 +188,7 @@ const toRenderLights = (lighting: SceneLightingState): readonly RenderLight[] =>
             ],
             intensity: lighting.pointIntensities[index] ?? 1,
             range: lighting.pointRanges[index] ?? 1,
+            attenuation: lighting.pointAttenuations[index] ?? 2,
         });
     }
 
@@ -308,6 +313,8 @@ interface SceneRenderPipelineOptions {
     readonly drawExecutor: Pick<SceneDrawExecutor, 'execute'>;
     readonly spriteBatchRuntime?: SceneSpriteBatchRenderer;
     readonly particleBatchRuntime?: SceneParticleBatchRenderer;
+    readonly lineBatchRuntime?: SceneLineBatchRenderer;
+    readonly billboardBatchRuntime?: SceneBillboardBatchRenderer;
     readonly planning?: SceneRenderPlanningOptions;
     readonly pipeline?: SceneRenderPipelineSettings;
 }
@@ -496,6 +503,22 @@ export class SceneRenderPipeline {
                 });
             }
 
+            if (this._options.lineBatchRuntime && params.actors) {
+                this._options.lineBatchRuntime.render({
+                    actors: params.actors,
+                    cameraFrame: params.cameraFrame,
+                    frameState: params.frameState,
+                });
+            }
+
+            if (this._options.billboardBatchRuntime && params.actors) {
+                this._options.billboardBatchRuntime.render({
+                    actors: params.actors,
+                    cameraFrame: params.cameraFrame,
+                    frameState: params.frameState,
+                });
+            }
+
             return Object.freeze({
                 passCount: result.statistics.passCount,
                 opaqueCount: result.statistics.opaqueCount,
@@ -517,6 +540,8 @@ export class SceneRenderPipeline {
         this._primitiveLookup.clear();
         this._options.spriteBatchRuntime?.clear();
         this._options.particleBatchRuntime?.clear();
+        this._options.lineBatchRuntime?.clear();
+        this._options.billboardBatchRuntime?.clear();
         this._pipeline.dispose();
         this._backend.dispose();
         this._backend = this._createBackend();
@@ -536,6 +561,8 @@ export class SceneRenderPipeline {
         // lost context, so clear() is safe and resets their lazy creation.
         this._options.spriteBatchRuntime?.clear();
         this._options.particleBatchRuntime?.clear();
+        this._options.lineBatchRuntime?.clear();
+        this._options.billboardBatchRuntime?.clear();
         this._backend.invalidateContextResources();
         this._pipeline.dispose();
         this._pipeline = this._createPipeline();
@@ -546,6 +573,8 @@ export class SceneRenderPipeline {
         this._backend.dispose();
         this._options.spriteBatchRuntime?.clear();
         this._options.particleBatchRuntime?.clear();
+        this._options.lineBatchRuntime?.clear();
+        this._options.billboardBatchRuntime?.clear();
         this._activeExecution = null;
         this._primitiveLookup.clear();
     }

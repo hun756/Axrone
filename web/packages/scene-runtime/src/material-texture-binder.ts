@@ -1,4 +1,4 @@
-import type { ITextureSampler } from '@axrone/render-webgl2';
+import type { IGLStateCache, ITextureSampler } from '@axrone/render-webgl2';
 import type { SceneMaterialResource } from './material-registry';
 import type { SceneShaderResource } from './shader-registry';
 import type { SceneTextureResource } from './texture-registry';
@@ -29,8 +29,13 @@ export type SceneMaterialTextureUniformSetter = (
 
 export class SceneMaterialTextureBinder {
     private readonly _boundUnits: number[] = [];
+    private readonly _state: IGLStateCache | null;
+    private readonly _gl: WebGL2RenderingContext;
 
-    constructor(private readonly _gl: WebGL2RenderingContext) {}
+    constructor(gl: WebGL2RenderingContext, state?: IGLStateCache) {
+        this._gl = gl;
+        this._state = state ?? null;
+    }
 
     bind(
         shader: SceneShaderResource,
@@ -58,11 +63,20 @@ export class SceneMaterialTextureBinder {
     }
 
     unbind(): void {
-        for (let index = 0; index < this._boundUnits.length; index += 1) {
-            const unit = this._boundUnits[index]!;
-            this._gl.bindSampler(unit, null);
-            this._gl.activeTexture(this._gl.TEXTURE0 + unit);
-            this._gl.bindTexture(this._gl.TEXTURE_2D, null);
+        if (this._state) {
+            for (let index = 0; index < this._boundUnits.length; index += 1) {
+                const unit = this._boundUnits[index]!;
+                this._state.bindSampler(unit, null);
+                this._state.activeTexture(unit);
+                this._state.bindTexture(this._gl.TEXTURE_2D, null);
+            }
+        } else {
+            for (let index = 0; index < this._boundUnits.length; index += 1) {
+                const unit = this._boundUnits[index]!;
+                this._gl.bindSampler(unit, null);
+                this._gl.activeTexture(this._gl.TEXTURE0 + unit);
+                this._gl.bindTexture(this._gl.TEXTURE_2D, null);
+            }
         }
 
         this._boundUnits.length = 0;

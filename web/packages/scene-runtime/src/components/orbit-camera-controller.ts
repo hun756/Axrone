@@ -63,6 +63,11 @@ export class OrbitCameraController extends Component {
     private _azimuth: number;
     private _elevation: number;
     private _autoRotateSpeed: number;
+    private readonly _tempPosition = new Vec3();
+    private readonly _tempForward = new Vec3();
+    private readonly _tempNormalizedForward = new Vec3();
+    private readonly _tempBackward = new Vec3();
+    private readonly _tempRotation = new Quat();
 
     constructor(config: OrbitCameraControllerConfig = {}) {
         super();
@@ -133,29 +138,30 @@ export class OrbitCameraController extends Component {
         }
 
         const cosElevation = Math.cos(this._elevation);
-        const position = new Vec3(
-            this._target.x + Math.sin(this._azimuth) * cosElevation * this._distance,
-            this._target.y + Math.sin(this._elevation) * this._distance,
-            this._target.z + Math.cos(this._azimuth) * cosElevation * this._distance
-        );
+        this._tempPosition.x = this._target.x + Math.sin(this._azimuth) * cosElevation * this._distance;
+        this._tempPosition.y = this._target.y + Math.sin(this._elevation) * this._distance;
+        this._tempPosition.z = this._target.z + Math.cos(this._azimuth) * cosElevation * this._distance;
 
-        const forward = Vec3.subtract(this._target, position, new Vec3());
+        const forward = Vec3.subtract(this._target, this._tempPosition, this._tempForward);
         if (Vec3.lengthSquared(forward) <= ORBIT_MIN_DISTANCE * ORBIT_MIN_DISTANCE) {
-            transform.position = position;
+            transform.position = this._tempPosition;
             return;
         }
 
-        const normalizedForward = Vec3.normalize(forward, new Vec3());
+        const normalizedForward = Vec3.normalize(forward, this._tempNormalizedForward);
         const up =
             Math.abs(Vec3.dot(normalizedForward, this._up)) >= ORBIT_PARALLEL_DOT_THRESHOLD
                 ? Math.abs(normalizedForward.y) < ORBIT_PARALLEL_DOT_THRESHOLD
                     ? Vec3.UP
                     : Vec3.FORWARD
                 : this._up;
-        const backward = new Vec3(-normalizedForward.x, -normalizedForward.y, -normalizedForward.z);
+        this._tempBackward.x = -normalizedForward.x;
+        this._tempBackward.y = -normalizedForward.y;
+        this._tempBackward.z = -normalizedForward.z;
 
-        transform.position = position;
-        transform.rotation = Quat.lookRotation(backward, up, new Quat());
+        transform.position = this._tempPosition;
+        Quat.lookRotation(this._tempBackward, up, this._tempRotation);
+        transform.rotation = this._tempRotation;
     }
 
     override serialize(): Record<string, unknown> {

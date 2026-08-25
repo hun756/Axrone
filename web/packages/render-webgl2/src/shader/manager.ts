@@ -13,6 +13,9 @@ import { WebGLShaderCompiler } from './compiler';
 import { ShaderInstance } from './instance';
 import { MaterialInstance } from './material';
 import { generateVariantKey, SHADER_CACHE_LIMITS } from './utils';
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
+import { ShaderInstanceError, ShaderInstanceBackendError } from './errors';
 
 interface ShaderCacheEntry {
     readonly shader: ICompiledShader;
@@ -32,6 +35,7 @@ interface ShaderManagerStats {
 }
 
 export class ShaderManager implements IShaderManager {
+    private readonly _ctx: IGLContext;
     private readonly gl: WebGL2RenderingContext;
     private readonly compiler: IShaderCompiler;
     private readonly shaderCache = new Map<string, ShaderCacheEntry>();
@@ -49,9 +53,14 @@ export class ShaderManager implements IShaderManager {
         hitRate: 0,
     };
 
-    constructor(gl: WebGL2RenderingContext) {
-        this.gl = gl;
-        this.compiler = new WebGLShaderCompiler(gl);
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
+    constructor(source: ContextSource) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
+        this.compiler = new WebGLShaderCompiler(ctx);
 
         this.materialPool = new ObjectPool<MaterialInstance>({
             factory: () => new MaterialInstance(null as any),
@@ -66,7 +75,7 @@ export class ShaderManager implements IShaderManager {
             const configuration: IShaderConfiguration = JSON.parse(json);
             return await this.loadFromConfiguration(configuration);
         } catch (error) {
-            throw new Error(`Failed to parse shader JSON: ${error}`);
+            throw new ShaderInstanceBackendError('BACKEND_UNAVAILABLE', 'en', { reason: 'Failed to parse shader JSON', detail: String(error) });
         } finally {
             this.stats.compilationTime += performance.now() - startTime;
         }
@@ -83,7 +92,7 @@ export class ShaderManager implements IShaderManager {
 
             const response = await fetch(path);
             if (!response.ok) {
-                throw new Error(`Failed to load shader file: ${response.statusText}`);
+                throw new ShaderInstanceBackendError('BACKEND_UNAVAILABLE', 'en', { reason: 'Failed to load shader file', detail: response.statusText });
             }
 
             const json = await response.text();
@@ -93,7 +102,7 @@ export class ShaderManager implements IShaderManager {
 
             return await this.loadFromConfiguration(configuration);
         } catch (error) {
-            throw new Error(`Failed to load shader from file "${path}": ${error}`);
+            throw new ShaderInstanceBackendError('BACKEND_UNAVAILABLE', 'en', { reason: `Failed to load shader from file "${path}"`, detail: String(error) });
         } finally {
             this.stats.compilationTime += performance.now() - startTime;
         }
@@ -135,7 +144,7 @@ export class ShaderManager implements IShaderManager {
     ): IMaterialInstance {
         const shader = this.getShader(shaderName);
         if (!shader) {
-            throw new Error(`Shader "${shaderName}" not found`);
+            throw new ShaderInstanceError('INVALID_ARGUMENT', 'en', { reason: `Shader "${shaderName}" not found` });
         }
 
         const instance = new ShaderInstance(shader, {
@@ -171,7 +180,7 @@ export class ShaderManager implements IShaderManager {
     async getVariant(shader: ICompiledShader, keywords: string[]): Promise<IShaderVariant> {
         const entry = this.shaderCache.get(shader.name);
         if (!entry) {
-            throw new Error(`Shader "${shader.name}" not found in cache`);
+            throw new ShaderInstanceError('INVALID_ARGUMENT', 'en', { reason: `Shader "${shader.name}" not found in cache` });
         }
 
         const variantKey = generateVariantKey(shader.name, keywords, {});
@@ -345,6 +354,10 @@ export class ShaderManager implements IShaderManager {
             hitRate:
                 this.stats.cacheHits / Math.max(1, this.stats.cacheHits + this.stats.cacheMisses),
         };
+    }
+
+    public get context(): IGLContext {
+        return this._ctx;
     }
 
     private disposeShaderEntry(entry: ShaderCacheEntry): void {

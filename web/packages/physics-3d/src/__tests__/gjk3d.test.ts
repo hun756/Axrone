@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { GJK3D, supportFromVertices, type IVec3 } from '../core/gjk3d';
+import { type IVec3Like } from '@axrone/numeric';
+import { GJK3D, supportFromVertices } from '../core/gjk3d';
 
-const sphere = (cx: number, cy: number, cz: number, r: number) => (dir: IVec3): IVec3 => {
+const sphere = (cx: number, cy: number, cz: number, r: number) => (dir: IVec3Like): IVec3Like => {
     const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
     const inv = len > 1e-6 ? r / len : 0;
     return { x: cx + dir.x * inv, y: cy + dir.y * inv, z: cz + dir.z * inv };
 };
 
-const unitCube: IVec3[] = [
+const unitCube: IVec3Like[] = [
     { x: -1, y: -1, z: -1 }, { x: 1, y: -1, z: -1 }, { x: 1, y: 1, z: -1 }, { x: -1, y: 1, z: -1 },
     { x: -1, y: -1, z: 1 }, { x: 1, y: -1, z: 1 }, { x: 1, y: 1, z: 1 }, { x: -1, y: 1, z: 1 },
 ];
@@ -92,7 +93,7 @@ describe('GJK3D', () => {
 
     describe('supportFromVertices', () => {
         it('returns the farthest vertex in the given direction', () => {
-            const verts: IVec3[] = [
+            const verts: IVec3Like[] = [
                 { x: 0, y: 0, z: 0 },
                 { x: 1, y: 0, z: 0 },
                 { x: 0, y: 1, z: 0 },

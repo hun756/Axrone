@@ -117,7 +117,7 @@ const createTerrainSplatShaderEffect = (id: string): RenderShaderEffectDefinitio
         ],
     },
     fragment: {
-        precision: 'highp',
+        precision: 'mediump',
         inputs: [
             { name: 'v_Normal', type: 'vec3' },
             { name: 'v_UV', type: 'vec2' },

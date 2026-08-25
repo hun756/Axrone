@@ -164,6 +164,3 @@ export type ExtractSingletonType<T> =
 export type IsSingletonType<T> = T extends ISingleton<unknown> ? true : false;
 export type IsAsyncSingletonType<T> = T extends IAsyncSingleton<unknown> ? true : false;
 export type IsScopedSingletonType<T> = T extends IScopedSingleton<unknown> ? true : false;
-
-export type Constructor<T = unknown> = new (...args: any[]) => T;
-export type AbstractConstructor<T = unknown> = abstract new (...args: any[]) => T;

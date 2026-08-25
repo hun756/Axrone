@@ -15,7 +15,7 @@ import {
     installWebGL2Constants,
     ManualScheduler,
     type MockGLContext,
-} from '../../../scene-3d/src/__tests__/test-harness';
+} from '../../../../tests/shared/test-harness';
 
 const trianglePositions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]);
 const triangleIndices = new Uint16Array([0, 1, 2]);

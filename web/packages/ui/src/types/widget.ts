@@ -37,6 +37,36 @@ export interface ResolvedWidgetStyle {
     readonly color: ReadonlyColor;
 }
 
+export type TextAutoSizeMode = 'none' | 'shrink-to-fit';
+
+/** A styled span within a rich text block. */
+export interface RichTextSpan {
+    readonly text: string;
+    readonly color?: ColorInput;
+    readonly outlineColor?: ColorInput;
+    readonly outlineWidth?: number;
+    readonly size?: number;
+    readonly weight?: FontWeight;
+    readonly style?: FontStyle;
+    readonly family?: string;
+    readonly underline?: boolean;
+    readonly strikeThrough?: boolean;
+}
+
+/** A resolved rich text span with normalized style values. */
+export interface ResolvedRichTextSpan {
+    readonly text: string;
+    readonly color: ReadonlyColor;
+    readonly outlineColor: ReadonlyColor;
+    readonly outlineWidth: number;
+    readonly size: number;
+    readonly weight: number;
+    readonly style: FontStyle;
+    readonly family: string;
+    readonly underline: boolean;
+    readonly strikeThrough: boolean;
+}
+
 export interface TextBlockInput {
     readonly value: string;
     readonly family?: string;
@@ -72,6 +102,10 @@ export interface TextBlockInput {
     readonly caretColor?: ColorInput;
     readonly caretWidth?: number;
     readonly caretInset?: number;
+    readonly autoSize?: TextAutoSizeMode;
+    readonly minAutoSize?: number;
+    readonly maxAutoSize?: number;
+    readonly spans?: readonly RichTextSpan[];
 }
 
 export interface UIImageTextureSource {
@@ -146,6 +180,10 @@ export interface ResolvedTextBlock {
     readonly caretColor: ReadonlyColor;
     readonly caretWidth: number;
     readonly caretInset: number;
+    readonly autoSize: TextAutoSizeMode;
+    readonly minAutoSize: number;
+    readonly maxAutoSize: number;
+    readonly spans: readonly ResolvedRichTextSpan[];
 }
 
 export interface ResolvedWidgetImage {
@@ -167,6 +205,9 @@ export interface WidgetFocusPolicyInput {
     readonly scope?: boolean;
     readonly cycle?: boolean;
     readonly order?: number;
+    readonly ringColor?: ColorInput;
+    readonly ringWidth?: number;
+    readonly ringOffset?: number;
 }
 
 export interface ResolvedFocusPolicy {
@@ -175,6 +216,9 @@ export interface ResolvedFocusPolicy {
     readonly scope: boolean;
     readonly cycle: boolean;
     readonly order: number;
+    readonly ringColor: ReadonlyColor;
+    readonly ringWidth: number;
+    readonly ringOffset: number;
 }
 
 export interface UIPointerEvent {

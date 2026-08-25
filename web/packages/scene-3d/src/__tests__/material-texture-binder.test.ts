@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ITextureSampler } from '@axrone/render-webgl2';
+import type { ITextureSampler, IGLStateCache } from '@axrone/render-webgl2';
 import type { SceneMaterialResource } from '@axrone/scene-3d';
 import { SceneMaterialTextureBinder } from '@axrone/scene-3d';
 import type { SceneShaderResource } from '@axrone/scene-3d';
@@ -8,14 +8,16 @@ import type { SceneTextureResource } from '@axrone/scene-3d';
 describe('SceneMaterialTextureBinder', () => {
     it('reuses its bound unit buffer while binding and unbinding texture slots', () => {
         const gl = {
-            bindSampler: vi.fn(),
-            activeTexture: vi.fn(),
-            bindTexture: vi.fn(),
-            TEXTURE0: 32,
             TEXTURE_2D: 3553,
         } as unknown as WebGL2RenderingContext;
 
-        const binder = new SceneMaterialTextureBinder(gl);
+        const state = {
+            bindSampler: vi.fn(),
+            activeTexture: vi.fn(),
+            bindTexture: vi.fn(),
+        } as unknown as IGLStateCache;
+
+        const binder = new SceneMaterialTextureBinder(gl, state);
         const shader = {} as SceneShaderResource;
         const material = {
             id: 'mat',
@@ -99,12 +101,12 @@ describe('SceneMaterialTextureBinder', () => {
 
         binder.unbind();
 
-        expect(gl.bindSampler).toHaveBeenNthCalledWith(1, 0, null);
-        expect(gl.bindSampler).toHaveBeenNthCalledWith(2, 3, null);
-        expect(gl.activeTexture).toHaveBeenNthCalledWith(1, 32);
-        expect(gl.activeTexture).toHaveBeenNthCalledWith(2, 35);
-        expect(gl.bindTexture).toHaveBeenNthCalledWith(1, 3553, null);
-        expect(gl.bindTexture).toHaveBeenNthCalledWith(2, 3553, null);
+        expect(state.bindSampler).toHaveBeenNthCalledWith(1, 0, null);
+        expect(state.bindSampler).toHaveBeenNthCalledWith(2, 3, null);
+        expect(state.activeTexture).toHaveBeenNthCalledWith(1, 0);
+        expect(state.activeTexture).toHaveBeenNthCalledWith(2, 3);
+        expect(state.bindTexture).toHaveBeenNthCalledWith(1, 3553, null);
+        expect(state.bindTexture).toHaveBeenNthCalledWith(2, 3553, null);
 
         const second = binder.bind(shader, material, resources, setUniform);
 

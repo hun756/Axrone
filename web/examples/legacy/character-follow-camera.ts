@@ -22,8 +22,8 @@ import {
 import { bindSceneToContainer } from './example-runtime';
 import type { ExampleContext, SceneExample } from './example-types';
 
-const CHARACTER_MODEL_URL = '/models/GM_AssetStore_3D_Character.glb';
-const DESK_MODEL_URL = '/models/GM_AssetStore_3D_CityDesk.glb';
+const CHARACTER_MODEL_URL = '/models/EN_Character_Stickman_01.glb';
+const DESK_MODEL_URL = '/models/EN_Prop_CityDesk_01.glb';
 const COLOR_PALETTE_URL = '/color_palette/color-palette.jpg';
 const CHARACTER_PALETTE_SAMPLER_ID = 'character-demo.palette-sampler';
 const CHARACTER_PALETTE_TEXTURE_ID = 'character-demo.palette-texture';

@@ -199,6 +199,18 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return new Color(c.r, c.g, c.b, c.a ?? 1);
     }
 
+    static copy<T extends IColorLike, V extends IColorLike>(source: Readonly<T>, out?: V): V {
+        if (out) {
+            out.r = source.r;
+            out.g = source.g;
+            out.b = source.b;
+            if (source.a !== undefined) out.a = source.a;
+            return out;
+        }
+
+        return { r: source.r, g: source.g, b: source.b, a: source.a ?? 1 } as V;
+    }
+
     static fromArray(arr: ArrayLike<number>, offset: number = 0): Color {
         if (offset < 0) {
             throw new RangeError('Offset cannot be negative');
@@ -820,7 +832,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return Color.fromHSL(hNew, sNew, lNew, aNew) as unknown as U;
     }
 
-    static darken<T extends IColorLike>(color: Readonly<T>, amount: number, out?: T): T {
+    static darken<T extends IColorLike, U extends IColorLike>(
+        color: Readonly<T>,
+        amount: number,
+        out?: U
+    ): U {
         return Color.lighten(color, -amount, out);
     }
 
@@ -847,7 +863,11 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         return Color.fromHSL(hNew, sNew, lNew, aNew) as unknown as U;
     }
 
-    static desaturate<T extends IColorLike>(color: Readonly<T>, amount: number, out?: T): T {
+    static desaturate<T extends IColorLike, U extends IColorLike>(
+        color: Readonly<T>,
+        amount: number,
+        out?: U
+    ): U {
         return Color.saturate(color, -amount, out);
     }
 

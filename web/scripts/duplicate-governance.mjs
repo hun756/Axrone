@@ -20,14 +20,6 @@ const jscpdIgnoreGlobs = [
 const approvedCrossPackageDebt = [
     {
         files: [
-            'packages/asset-gltf/src/value-serialization.ts',
-            'packages/scene-runtime/src/serialization.ts',
-        ],
-        maxLines: 52,
-        reason: 'Pending extraction of shared scene/gltf serialized value encoding contracts.',
-    },
-    {
-        files: [
             'packages/asset-gltf/src/asset-ir.ts',
             'packages/scene-runtime/src/types.ts',
         ],

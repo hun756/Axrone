@@ -3,6 +3,10 @@ import { AABB2D } from '@axrone/geometry';
 import type { BodyId, ShapeId, IRaycastResult2D } from '../types';
 import { GJK2D } from './collision-algorithms';
 
+const _scratch2DA: IVec2Like = { x: 0, y: 0 };
+const _scratch2DB: IVec2Like = { x: 0, y: 0 };
+const _scratch2DC: IVec2Like = { x: 0, y: 0 };
+
 interface CCDResult {
     hit: boolean;
     toi: number;
@@ -22,7 +26,8 @@ export class ContinuousCollisionDetection {
         velocityB: IVec2Like,
         deltaTime: number
     ): CCDResult {
-        const relativeVelocity = Vec2.subtract(velocityA, velocityB);
+        Vec2.subtract(velocityA, velocityB, _scratch2DA);
+        const relativeVelocity = _scratch2DA;
 
         let tLower = 0;
         let tUpper = deltaTime;
@@ -168,8 +173,8 @@ export class ContinuousCollisionDetection {
                 };
             }
 
-            const relativeVelocity = Vec2.subtract(velocityA, velocityB);
-            const linearSpeed = Math.sqrt(Vec2.lengthSquared(relativeVelocity));
+            Vec2.subtract(velocityA, velocityB, _scratch2DA);
+            const linearSpeed = Math.sqrt(Vec2.lengthSquared(_scratch2DA));
             const angularSpeed = Math.abs(angularVelocityA) + Math.abs(angularVelocityB);
             const totalSpeed = linearSpeed + angularSpeed * maxRadius;
 
@@ -263,12 +268,12 @@ export class Raycaster2D {
         };
 
         let normal: IVec2Like = { x: 0, y: 0 };
-        const epsilon = 0.001;
+        const CONTACT_NORMAL_EPSILON = 0.001;
 
-        if (Math.abs(point.x - aabb.min.x) < epsilon) normal = { x: -1, y: 0 };
-        else if (Math.abs(point.x - aabb.max.x) < epsilon) normal = { x: 1, y: 0 };
-        else if (Math.abs(point.y - aabb.min.y) < epsilon) normal = { x: 0, y: -1 };
-        else if (Math.abs(point.y - aabb.max.y) < epsilon) normal = { x: 0, y: 1 };
+        if (Math.abs(point.x - aabb.min.x) < CONTACT_NORMAL_EPSILON) normal = { x: -1, y: 0 };
+        else if (Math.abs(point.x - aabb.max.x) < CONTACT_NORMAL_EPSILON) normal = { x: 1, y: 0 };
+        else if (Math.abs(point.y - aabb.min.y) < CONTACT_NORMAL_EPSILON) normal = { x: 0, y: -1 };
+        else if (Math.abs(point.y - aabb.max.y) < CONTACT_NORMAL_EPSILON) normal = { x: 0, y: 1 };
 
         return {
             hit: true,
@@ -285,7 +290,8 @@ export class Raycaster2D {
         radius: number,
         maxDistance: number = Infinity
     ): { hit: boolean; distance: number; point: IVec2Like; normal: IVec2Like } {
-        const oc = Vec2.subtract(origin, center);
+        Vec2.subtract(origin, center, _scratch2DA);
+        const oc = _scratch2DA;
 
         const a = Vec2.lengthSquared(direction);
         const b = 2 * Vec2.dot(oc, direction);
@@ -349,11 +355,13 @@ export class Raycaster2D {
             const v1 = vertices[i];
             const v2 = vertices[j];
 
-            const p1 = Vec2.add(transform.position, Vec2.rotate(v1, transform.rotation));
+            Vec2.rotate(v1, transform.rotation, _scratch2DA);
+            Vec2.add(transform.position, _scratch2DA, _scratch2DB);
 
-            const p2 = Vec2.add(transform.position, Vec2.rotate(v2, transform.rotation));
+            Vec2.rotate(v2, transform.rotation, _scratch2DA);
+            Vec2.add(transform.position, _scratch2DA, _scratch2DC);
 
-            const result = this.raycastSegment(origin, direction, p1, p2, maxDistance);
+            const result = this.raycastSegment(origin, direction, _scratch2DB, _scratch2DC, maxDistance);
 
             if (result.hit && result.distance < minDistance) {
                 minDistance = result.distance;
@@ -378,7 +386,8 @@ export class Raycaster2D {
         p2: IVec2Like,
         maxDistance: number
     ): { hit: boolean; distance: number; point: IVec2Like; normal: IVec2Like } {
-        const edge = Vec2.subtract(p2, p1);
+        Vec2.subtract(p2, p1, _scratch2DA);
+        const edge = _scratch2DA;
 
         const normal = {
             x: -edge.y,
@@ -402,7 +411,8 @@ export class Raycaster2D {
             };
         }
 
-        const t = Vec2.dot(Vec2.subtract(p1, origin), normal) / denom;
+        Vec2.subtract(p1, origin, _scratch2DC);
+        const t = Vec2.dot(_scratch2DC, normal) / denom;
 
         if (t < 0 || t > maxDistance) {
             return {
@@ -418,8 +428,9 @@ export class Raycaster2D {
             y: origin.y + direction.y * t,
         };
 
+        Vec2.subtract(point, p1, _scratch2DC);
         const edgeParam =
-            Vec2.dot(Vec2.subtract(point, p1), edge) /
+            Vec2.dot(_scratch2DC, edge) /
             Vec2.lengthSquared(edge);
 
         if (edgeParam < 0 || edgeParam > 1) {

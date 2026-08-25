@@ -1,8 +1,10 @@
 import { AnimationIkError, AnimationValidationError } from './errors';
-import { quatCopy, quatFromTo, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Length, vec3Normalize, vec3Subtract } from './math';
+import { quatCopy, quatFromTo, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Length, vec3Normalize, vec3Subtract } from './math';
 import { AnimationWorldPose, type AnimationPose } from './pose';
 import type { AnimationRig } from './rig';
 import type { AnimationIkJobDefinition, AnimationIkLayerDefinition, AnimationIkTarget } from './types';
+
+export const IK_CONVERGENCE_EPSILON = 1e-8;
 
 interface AnimationCompiledIkJob {
     readonly id: string;
@@ -183,38 +185,13 @@ export class AnimationIkLayer {
             for (let chainIndex = job.chain.length - 2; chainIndex >= 0; chainIndex -= 1) {
                 const boneIndex = job.chain[chainIndex]!;
                 const boneTranslationOffset = boneIndex * 3;
-                const boneRotationOffset = boneIndex * 4;
                 vec3Subtract(this._scratchVectors, 0, this._worldPose.translations, tipOffset, this._worldPose.translations, boneTranslationOffset);
                 vec3Subtract(this._scratchVectors, 3, job.targetPosition, 0, this._worldPose.translations, boneTranslationOffset);
-                if (vec3Length(this._scratchVectors, 0) <= 1e-8 || vec3Length(this._scratchVectors, 3) <= 1e-8) {
+                if (vec3Length(this._scratchVectors, 0) <= IK_CONVERGENCE_EPSILON || vec3Length(this._scratchVectors, 3) <= IK_CONVERGENCE_EPSILON) {
                     continue;
                 }
 
-                quatFromTo(this._scratchQuaternion, 0, this._scratchVectors, 0, this._scratchVectors, 3, this._scratchVectors);
-                quatMultiply(
-                    this._scratchQuaternionB,
-                    0,
-                    this._scratchQuaternion,
-                    0,
-                    this._worldPose.rotations,
-                    boneRotationOffset
-                );
-                const parentIndex = this._rig.parentIndices[boneIndex]!;
-                if (parentIndex >= 0) {
-                    quatInvert(this._scratchQuaternionC, 0, this._worldPose.rotations, parentIndex * 4);
-                    quatMultiply(this._scratchQuaternionB, 0, this._scratchQuaternionC, 0, this._scratchQuaternionB, 0);
-                }
-                quatSlerp(
-                    pose.rotations,
-                    boneRotationOffset,
-                    pose.rotations,
-                    boneRotationOffset,
-                    this._scratchQuaternionB,
-                    0,
-                    weight
-                );
-                quatNormalize(pose.rotations, boneRotationOffset, pose.rotations, boneRotationOffset);
-                this._worldPose.update(this._rig, pose);
+                this._applyBoneCorrection(boneIndex, pose, weight);
             }
         }
     }
@@ -293,39 +270,43 @@ export class AnimationIkLayer {
 
         for (let chainIndex = 0; chainIndex < chainLength - 1; chainIndex += 1) {
             const boneIndex = job.chain[chainIndex]!;
-            const boneRotationOffset = boneIndex * 4;
             const currentChildIndex = job.chain[chainIndex + 1]!;
             vec3Subtract(this._scratchVectors, 0, this._worldPose.translations, currentChildIndex * 3, this._worldPose.translations, boneIndex * 3);
             vec3Subtract(this._scratchVectors, 3, positions, (chainIndex + 1) * 3, positions, chainIndex * 3);
-            if (vec3Length(this._scratchVectors, 0) <= 1e-8 || vec3Length(this._scratchVectors, 3) <= 1e-8) {
+            if (vec3Length(this._scratchVectors, 0) <= IK_CONVERGENCE_EPSILON || vec3Length(this._scratchVectors, 3) <= IK_CONVERGENCE_EPSILON) {
                 continue;
             }
-            quatFromTo(this._scratchQuaternion, 0, this._scratchVectors, 0, this._scratchVectors, 3, this._scratchVectors);
-            quatMultiply(
-                this._scratchQuaternionB,
-                0,
-                this._scratchQuaternion,
-                0,
-                this._worldPose.rotations,
-                boneRotationOffset
-            );
-            const parentIndex = this._rig.parentIndices[boneIndex]!;
-            if (parentIndex >= 0) {
-                quatInvert(this._scratchQuaternionC, 0, this._worldPose.rotations, parentIndex * 4);
-                quatMultiply(this._scratchQuaternionB, 0, this._scratchQuaternionC, 0, this._scratchQuaternionB, 0);
-            }
-            quatSlerp(
-                pose.rotations,
-                boneRotationOffset,
-                pose.rotations,
-                boneRotationOffset,
-                this._scratchQuaternionB,
-                0,
-                weight
-            );
-            quatNormalize(pose.rotations, boneRotationOffset, pose.rotations, boneRotationOffset);
-            this._worldPose.update(this._rig, pose);
+            this._applyBoneCorrection(boneIndex, pose, weight);
         }
+    }
+
+    private _applyBoneCorrection(boneIndex: number, pose: AnimationPose, weight: number): void {
+        const boneRotationOffset = boneIndex * 4;
+        quatFromTo(this._scratchQuaternion, 0, this._scratchVectors, 0, this._scratchVectors, 3, this._scratchVectors);
+        quatMultiply(
+            this._scratchQuaternionB,
+            0,
+            this._scratchQuaternion,
+            0,
+            this._worldPose.rotations,
+            boneRotationOffset
+        );
+        const parentIndex = this._rig.parentIndices[boneIndex]!;
+        if (parentIndex >= 0) {
+            quatInvert(this._scratchQuaternionC, 0, this._worldPose.rotations, parentIndex * 4);
+            quatMultiply(this._scratchQuaternionB, 0, this._scratchQuaternionC, 0, this._scratchQuaternionB, 0);
+        }
+        quatSlerp(
+            pose.rotations,
+            boneRotationOffset,
+            pose.rotations,
+            boneRotationOffset,
+            this._scratchQuaternionB,
+            0,
+            weight
+        );
+        quatNormalize(pose.rotations, boneRotationOffset, pose.rotations, boneRotationOffset);
+        this._worldPose.update(this._rig, pose);
     }
 
     private _applyTipRotation(job: AnimationCompiledIkJob, pose: AnimationPose, weight: number): void {

@@ -671,6 +671,36 @@ describe('SceneMaterialRegistry', () => {
         });
     });
 
+    it('warns and notifies deletion when creating a material with a duplicate id', () => {
+        const observables = new SceneMaterialObservables();
+        const registry = new SceneMaterialRegistry({ observables });
+
+        registry.create({ id: 'test-mat', shaderId: 'shader/first' });
+
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const deletedCallback = vi.fn();
+        observables.materialDeleted.addObserver(deletedCallback);
+
+        const handle = registry.create({ id: 'test-mat', shaderId: 'shader/second' });
+
+        // Overwrite happened — second material's shaderId is stored
+        expect(handle.shaderId).toBe('shader/second');
+        expect(registry.get('test-mat')?.shaderId).toBe('shader/second');
+
+        // console.warn was called with the material id
+        expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringContaining('test-mat')
+        );
+
+        // _notifyMaterialDeleted was called for the old material
+        expect(deletedCallback).toHaveBeenCalledWith(
+            expect.objectContaining({ materialId: 'test-mat' }),
+            expect.anything()
+        );
+
+        warnSpy.mockRestore();
+    });
+
     describe('material observables integration', () => {
         it('fires materialCreated on create', () => {
             const observables = new SceneMaterialObservables();

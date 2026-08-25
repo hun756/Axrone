@@ -1,8 +1,9 @@
 import type { IColorLike, IVec2Like } from '@axrone/numeric';
+import type { ReadonlyTuple2 } from '@axrone/utility';
 
 export type ShapeId = `shape_${number}`;
 
-export type ShapeVec2Tuple = readonly [number, number];
+export type ShapeVec2Tuple = ReadonlyTuple2;
 export type ShapePointInput = Readonly<IVec2Like> | ShapeVec2Tuple;
 
 export type ShapeColorTuple =

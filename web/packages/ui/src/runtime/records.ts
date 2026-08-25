@@ -2,6 +2,7 @@ import { normalizeCorners } from '../layout';
 import type {
     ReadonlyColor,
     ResolvedFocusPolicy,
+    ResolvedRichTextSpan,
     ResolvedTextBlock,
     ResolvedWidgetImage,
     ResolvedWidgetStyle,
@@ -87,8 +88,12 @@ export const compileWidgetText = (
     if (!input) {
         return null;
     }
+    const resolvedSpans = resolveSpans(input, context);
+    const effectiveValue = resolvedSpans.length > 0
+        ? resolvedSpans.map((span) => span.text).join('')
+        : input.value;
     return {
-        value: input.value,
+        value: effectiveValue,
         family: input.family ?? context.defaultFamily ?? '',
         size: Math.max(1, input.size ?? 16),
         weight: normalizeWeight(input.weight),
@@ -122,8 +127,53 @@ export const compileWidgetText = (
         caretColor: normalizeColor(input.caretColor, TRANSPARENT),
         caretWidth: Math.max(1, input.caretWidth ?? 1),
         caretInset: Math.max(0, input.caretInset ?? 1),
+        autoSize: input.autoSize ?? 'none',
+        minAutoSize: Math.max(1, input.minAutoSize ?? 6),
+        maxAutoSize: Math.max(1, input.maxAutoSize ?? 200),
+        spans: resolvedSpans,
     };
 };
+
+const resolveSpans = (
+    input: TextBlockInput,
+    context: TextCompileContext
+): readonly ResolvedRichTextSpan[] => {
+    const rawSpans = input.spans;
+    if (!rawSpans || rawSpans.length === 0) {
+        return EMPTY_SPANS;
+    }
+    const blockColor = normalizeColor(input.color, context.fallbackColor);
+    const blockOutlineColor = normalizeColor(input.outlineColor, TRANSPARENT);
+    const blockOutlineWidth = Math.max(0, input.outlineWidth ?? 0);
+    const blockSize = Math.max(1, input.size ?? 16);
+    const blockWeight = normalizeWeight(input.weight);
+    const blockStyle = input.style ?? 'normal';
+    const blockFamily = input.family ?? context.defaultFamily ?? '';
+    const blockUnderline = input.underline ?? false;
+    const blockStrikeThrough = input.strikeThrough ?? false;
+    const result: ResolvedRichTextSpan[] = [];
+    for (const span of rawSpans) {
+        result.push({
+            text: span.text,
+            color: span.color !== undefined ? normalizeColor(span.color, blockColor) : blockColor,
+            outlineColor: span.outlineColor !== undefined
+                ? normalizeColor(span.outlineColor, blockOutlineColor)
+                : blockOutlineColor,
+            outlineWidth: span.outlineWidth !== undefined
+                ? Math.max(0, span.outlineWidth)
+                : blockOutlineWidth,
+            size: span.size !== undefined ? Math.max(1, span.size) : blockSize,
+            weight: span.weight !== undefined ? normalizeWeight(span.weight) : blockWeight,
+            style: span.style ?? blockStyle,
+            family: span.family ?? blockFamily,
+            underline: span.underline ?? blockUnderline,
+            strikeThrough: span.strikeThrough ?? blockStrikeThrough,
+        });
+    }
+    return result;
+};
+
+const EMPTY_SPANS: readonly ResolvedRichTextSpan[] = Object.freeze([]);
 
 export const compileWidgetImage = (input: WidgetImageInput | null): ResolvedWidgetImage | null => {
     if (!input) {
@@ -181,4 +231,7 @@ export const compileWidgetFocus = (
     scope: input.scope ?? false,
     cycle: input.cycle ?? false,
     order: input.order ?? 0,
+    ringColor: normalizeColor(input.ringColor, '#60a5faff'),
+    ringWidth: input.ringWidth ?? 2,
+    ringOffset: input.ringOffset ?? 2,
 });

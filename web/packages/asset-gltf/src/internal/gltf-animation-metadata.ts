@@ -1,3 +1,4 @@
+import { EPSILON } from '@axrone/numeric';
 import { isPlainObject } from '@axrone/utility';
 import type {
     AnimationClipCompressionDefinition,
@@ -936,7 +937,7 @@ export const resolveFeatureExportSampleTimes = (
     for (let time = 0; time < duration; time += interval) {
         times.push(Math.max(0, Math.min(duration, time)));
     }
-    if (times.length === 0 || Math.abs((times[times.length - 1] ?? 0) - duration) > 1e-6) {
+    if (times.length === 0 || Math.abs((times[times.length - 1] ?? 0) - duration) > EPSILON) {
         times.push(duration);
     }
     return Object.freeze([...new Set(times)].sort((left, right) => left - right));

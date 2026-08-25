@@ -3,6 +3,8 @@ import { ObjectPool } from '@axrone/memory';
 import { IBatchable, IBatchGroup } from './interfaces';
 import { IMaterialInstance } from '../shader/interfaces';
 import { IBuffer, createBufferFactory } from '../buffer';
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
 
 interface InstanceData {
     worldMatrix: Float32Array;
@@ -16,6 +18,7 @@ export class BatchGroup implements IBatchGroup {
     readonly maxInstances: number;
     readonly isDynamic: boolean;
 
+    private readonly _ctx: IGLContext;
     private readonly gl: WebGL2RenderingContext;
     private readonly instancePool: ObjectPool<InstanceData>;
     private readonly instanceMap = new Map<string, IBatchable>();
@@ -26,14 +29,23 @@ export class BatchGroup implements IBatchGroup {
     private instanceCount = 0;
     private needsUpdate = true;
     private disposed = false;
+    private _instanceAttributesSetup = false;
+    private _lastProgram: WebGLProgram | null = null;
+    private _matrixScratch: Float32Array | null = null;
+    private _colorScratch: Float32Array | null = null;
+    private _customScratch: Float32Array | null = null;
+    private static readonly DEFAULT_COLOR = new Float32Array([1, 1, 1, 1]);
+    private static readonly DEFAULT_CUSTOM = new Float32Array([0, 0, 0, 0]);
 
     constructor(
-        gl: WebGL2RenderingContext,
+        source: ContextSource,
         material: IMaterialInstance,
         maxInstances: number = 1024,
         isDynamic: boolean = false
     ) {
-        this.gl = gl;
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
         this.material = material;
         this.maxInstances = maxInstances;
         this.isDynamic = isDynamic;
@@ -52,24 +64,28 @@ export class BatchGroup implements IBatchGroup {
             },
         });
 
-        const bufferFactory = createBufferFactory(gl);
+        const bufferFactory = createBufferFactory(ctx);
 
-        this.matrixBuffer = bufferFactory.createBuffer(gl.ARRAY_BUFFER, {
+        this.matrixBuffer = bufferFactory.createBuffer(this.gl.ARRAY_BUFFER, {
             initialData: new Float32Array(maxInstances * 16),
-            usage: isDynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW,
+            usage: isDynamic ? this.gl.DYNAMIC_DRAW : this.gl.STATIC_DRAW,
         });
 
-        this.colorBuffer = bufferFactory.createBuffer(gl.ARRAY_BUFFER, {
+        this.colorBuffer = bufferFactory.createBuffer(this.gl.ARRAY_BUFFER, {
             initialData: new Float32Array(maxInstances * 4),
-            usage: isDynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW,
+            usage: isDynamic ? this.gl.DYNAMIC_DRAW : this.gl.STATIC_DRAW,
         });
 
-        this.customBuffer = bufferFactory.createBuffer(gl.ARRAY_BUFFER, {
+        this.customBuffer = bufferFactory.createBuffer(this.gl.ARRAY_BUFFER, {
             initialData: new Float32Array(maxInstances * 4),
-            usage: isDynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW,
+            usage: isDynamic ? this.gl.DYNAMIC_DRAW : this.gl.STATIC_DRAW,
         });
 
         bufferFactory.dispose();
+    }
+
+    public get context(): IGLContext {
+        return this._ctx;
     }
 
     get instances(): readonly IBatchable[] {
@@ -129,9 +145,13 @@ export class BatchGroup implements IBatchGroup {
             return;
         }
 
-        const matrixData = new Float32Array(this.instanceCount * 16);
-        const colorData = new Float32Array(this.instanceCount * 4);
-        const customData = new Float32Array(this.instanceCount * 4);
+        const need = this.instanceCount;
+        if (!this._matrixScratch || this._matrixScratch.length < need * 16) this._matrixScratch = new Float32Array(need * 16);
+        if (!this._colorScratch || this._colorScratch.length < need * 4) this._colorScratch = new Float32Array(need * 4);
+        if (!this._customScratch || this._customScratch.length < need * 4) this._customScratch = new Float32Array(need * 4);
+        const matrixData = this._matrixScratch.subarray(0, need * 16);
+        const colorData = this._colorScratch.subarray(0, need * 4);
+        const customData = this._customScratch.subarray(0, need * 4);
 
         let index = 0;
         for (const instance of this.instanceMap.values()) {
@@ -141,12 +161,12 @@ export class BatchGroup implements IBatchGroup {
 
             const color =
                 (instance.material.getProperty('baseColor') as Float32Array) ||
-                new Float32Array([1, 1, 1, 1]);
+                BatchGroup.DEFAULT_COLOR;
             colorData.set(color, index * 4);
 
             const custom =
                 (instance.material.getProperty('customData') as Float32Array) ||
-                new Float32Array([0, 0, 0, 0]);
+                BatchGroup.DEFAULT_CUSTOM;
             customData.set(custom, index * 4);
 
             index++;
@@ -189,6 +209,8 @@ export class BatchGroup implements IBatchGroup {
         this.customBuffer.dispose();
         this.instanceMap.clear();
 
+        this._instanceAttributesSetup = false;
+        this._lastProgram = null;
         this.disposed = true;
     }
 
@@ -198,6 +220,7 @@ export class BatchGroup implements IBatchGroup {
 
     private setupInstanceAttributes(): void {
         const program = this.material.shader.shader.program;
+        if (this._instanceAttributesSetup && this._lastProgram === program) return;
 
         const matrixLocation = this.gl.getAttribLocation(program, 'instanceMatrix');
         if (matrixLocation !== -1) {
@@ -225,5 +248,8 @@ export class BatchGroup implements IBatchGroup {
             this.gl.vertexAttribPointer(customLocation, 4, this.gl.FLOAT, false, 0, 0);
             this.gl.vertexAttribDivisor(customLocation, 1);
         }
+
+        this._instanceAttributesSetup = true;
+        this._lastProgram = program;
     }
 }

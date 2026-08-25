@@ -1,13 +1,14 @@
 import {
-    collectMotionClipActivities,
     compileMotion,
     evaluateMotion,
     extractMotionRootDelta,
     resolveMotionDuration,
     type AnimationCompiledMotion,
     type AnimationMotionEvaluationContext,
+    BlendScratchContext,
 } from './blend-tree';
 import { collectMotionEvents } from './blend-tree';
+import { collectMotionClipActivities } from './blend-tree';
 import { assertNever, AnimationStateMachineError, AnimationValidationError } from './errors';
 import { AnimationParameterStore } from './parameters';
 import { blendFrame, type AnimationFrame } from './pose';
@@ -464,11 +465,6 @@ export const evaluateLayerRuntime = (
     return blendFrame(out, sourceFrame, targetFrame, runtime.transition.progress);
 };
 
-const layerRootDeltaSourceTranslation = new Float32Array(3);
-const layerRootDeltaTargetTranslation = new Float32Array(3);
-const layerRootDeltaSourceRotation = new Float32Array(4);
-const layerRootDeltaTargetRotation = new Float32Array(4);
-
 export const extractLayerRootDelta = (
     machine: AnimationCompiledStateMachine,
     runtime: AnimationLayerRuntime,
@@ -493,15 +489,17 @@ export const extractLayerRootDelta = (
             context.rig,
             context.parameters,
             outTranslation,
-            outRotation
+            outRotation,
+            context
         );
         return;
     }
 
-    const sourceTranslation = layerRootDeltaSourceTranslation;
-    const targetTranslation = layerRootDeltaTargetTranslation;
-    const sourceRotation = layerRootDeltaSourceRotation;
-    const targetRotation = layerRootDeltaTargetRotation;
+    const scratch = context.blendScratch.transitionRootDeltaScratch;
+    const sourceTranslation = scratch.sourceTranslation;
+    const targetTranslation = scratch.targetTranslation;
+    const sourceRotation = scratch.sourceRotation;
+    const targetRotation = scratch.targetRotation;
     const sourceState = machine.states[runtime.transition.sourceStateIndex]!;
     const targetState = machine.states[runtime.transition.targetStateIndex]!;
 
@@ -514,7 +512,8 @@ export const extractLayerRootDelta = (
         context.rig,
         context.parameters,
         sourceTranslation,
-        sourceRotation
+        sourceRotation,
+        context
     );
     extractMotionRootDelta(
         targetState.motion,
@@ -525,7 +524,8 @@ export const extractLayerRootDelta = (
         context.rig,
         context.parameters,
         targetTranslation,
-        targetRotation
+        targetRotation,
+        context
     );
 
     outTranslation[0] =

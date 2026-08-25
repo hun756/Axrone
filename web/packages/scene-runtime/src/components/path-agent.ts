@@ -2,11 +2,12 @@ import { Vec3 } from '@axrone/numeric';
 import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
+import type { Mutable } from '@axrone/utility';
 
-export type NavMeshAgentPathStatus = 'idle' | 'computing' | 'following' | 'arrived' | 'failed';
-export type NavMeshAgentObstacleAvoidanceQuality = 'none' | 'low' | 'medium' | 'high';
+export type PathAgentPathStatus = 'idle' | 'computing' | 'following' | 'arrived' | 'failed';
+export type PathAgentObstacleAvoidanceQuality = 'none' | 'low' | 'medium' | 'high';
 
-export interface NavMeshAgentConfig {
+export interface PathAgentConfig {
     readonly radius?: number;
     readonly height?: number;
     readonly speed?: number;
@@ -17,40 +18,40 @@ export interface NavMeshAgentConfig {
     readonly autoRepath?: boolean;
     readonly baseOffset?: number;
     readonly areaMask?: number;
-    readonly obstacleAvoidanceQuality?: NavMeshAgentObstacleAvoidanceQuality;
+    readonly obstacleAvoidanceQuality?: PathAgentObstacleAvoidanceQuality;
     readonly avoidancePriority?: number;
 }
 
-export interface NavMeshPath {
+export interface PathAgentPath {
     readonly corners: readonly Vec3[];
     readonly status: 'complete' | 'partial' | 'invalid';
 }
 
 /**
- * NavMeshAgent component enables AI-driven navigation on a NavMesh surface.
+ * PathAgent component enables AI-driven navigation on a navigation surface.
  * The agent automatically calculates paths to destinations and moves along them
  * while avoiding obstacles.
  *
  * @example
  * ```ts
- * const agent = new NavMeshAgent({
+ * const agent = new PathAgent({
  *     speed: 3.5,
  *     angularSpeed: 120,
  *     stoppingDistance: 0.5,
  * });
- * actor.addComponent(NavMeshAgent, agent);
+ * actor.addComponent(PathAgent, agent);
  *
  * // Set destination
  * agent.setDestination(new Vec3(10, 0, 5));
  * ```
  */
 @script({
-    scriptName: 'NavMeshAgent',
+    scriptName: 'PathAgent',
     priority: 300,
     executeInEditMode: false,
     singleton: false,
 })
-export class NavMeshAgent extends Component {
+export class PathAgent extends Component {
     private _radius: number;
     private _height: number;
     private _speed: number;
@@ -61,12 +62,12 @@ export class NavMeshAgent extends Component {
     private _autoRepath: boolean;
     private _baseOffset: number;
     private _areaMask: number;
-    private _obstacleAvoidanceQuality: NavMeshAgentObstacleAvoidanceQuality;
+    private _obstacleAvoidanceQuality: PathAgentObstacleAvoidanceQuality;
     private _avoidancePriority: number;
 
     private _destination: Vec3 | null = null;
-    private _path: NavMeshPath | null = null;
-    private _pathStatus: NavMeshAgentPathStatus = 'idle';
+    private _path: PathAgentPath | null = null;
+    private _pathStatus: PathAgentPathStatus = 'idle';
     private _currentCornerIndex: number = 0;
     private _velocity: Vec3 = Vec3.ZERO.clone();
     private _remainingDistance: number = 0;
@@ -74,7 +75,11 @@ export class NavMeshAgent extends Component {
     private _warpPending: boolean = false;
     private _warpTarget: Vec3 | null = null;
 
-    constructor(config: NavMeshAgentConfig = {}) {
+    // Pre-allocated temp vectors to avoid per-frame garbage in update()
+    private readonly _tempToCorner = new Vec3();
+    private readonly _tempVelocity = new Vec3();
+
+    constructor(config: PathAgentConfig = {}) {
         super();
         this._radius = 0.5;
         this._height = 2;
@@ -171,11 +176,11 @@ export class NavMeshAgent extends Component {
         this._areaMask = value >>> 0;
     }
 
-    get obstacleAvoidanceQuality(): NavMeshAgentObstacleAvoidanceQuality {
+    get obstacleAvoidanceQuality(): PathAgentObstacleAvoidanceQuality {
         return this._obstacleAvoidanceQuality;
     }
 
-    set obstacleAvoidanceQuality(value: NavMeshAgentObstacleAvoidanceQuality) {
+    set obstacleAvoidanceQuality(value: PathAgentObstacleAvoidanceQuality) {
         this._obstacleAvoidanceQuality = value;
     }
 
@@ -191,11 +196,11 @@ export class NavMeshAgent extends Component {
         return this._destination;
     }
 
-    get path(): NavMeshPath | null {
+    get path(): PathAgentPath | null {
         return this._path;
     }
 
-    get pathStatus(): NavMeshAgentPathStatus {
+    get pathStatus(): PathAgentPathStatus {
         return this._pathStatus;
     }
 
@@ -214,7 +219,9 @@ export class NavMeshAgent extends Component {
     set isStopped(value: boolean) {
         this._isStopped = value;
         if (value) {
-            this._velocity = Vec3.ZERO.clone();
+            this._velocity.x = 0;
+            this._velocity.y = 0;
+            this._velocity.z = 0;
         }
     }
 
@@ -222,8 +229,8 @@ export class NavMeshAgent extends Component {
         return this._path !== null && this._path.status !== 'invalid';
     }
 
-    get isOnNavMesh(): boolean {
-        // In a full implementation, this would check if the agent is on a valid NavMesh
+    get isOnPath(): boolean {
+        // In a full implementation, this would check if the agent is on a valid path network
         return true;
     }
 
@@ -266,7 +273,7 @@ export class NavMeshAgent extends Component {
         this._warpTarget = targetVec;
         this._warpPending = true;
 
-        // In a full implementation, this would validate the position is on the NavMesh
+        // In a full implementation, this would validate the position is on the path network
         // and update the transform
         return true;
     }
@@ -278,7 +285,9 @@ export class NavMeshAgent extends Component {
         this._path = null;
         this._pathStatus = 'idle';
         this._currentCornerIndex = 0;
-        this._velocity = Vec3.ZERO.clone();
+        this._velocity.x = 0;
+        this._velocity.y = 0;
+        this._velocity.z = 0;
         this._remainingDistance = 0;
     }
 
@@ -287,7 +296,9 @@ export class NavMeshAgent extends Component {
      */
     stop(clearPath: boolean = false): void {
         this._isStopped = true;
-        this._velocity = Vec3.ZERO.clone();
+        this._velocity.x = 0;
+        this._velocity.y = 0;
+        this._velocity.z = 0;
 
         if (clearPath) {
             this.resetPath();
@@ -347,26 +358,31 @@ export class NavMeshAgent extends Component {
     }
 
     override update(deltaTime: number): void {
-        if (this._isStopped || this._pathStatus !== 'following' || !this._path) {
-            return;
-        }
-
-        // Handle pending warp
+        // Handle pending warp before any early returns so warp works regardless of path status
         if (this._warpPending && this._warpTarget) {
-            // In a full implementation, this would update the transform
+            const transform = this.transform as Transform | undefined;
+            if (transform) {
+                transform.worldPosition = this._warpTarget.clone();
+            }
             this._warpPending = false;
             this._warpTarget = null;
+        }
+
+        if (this._isStopped || this._pathStatus !== 'following' || !this._path) {
+            return;
         }
 
         const nextCorner = this.getNextCorner();
         if (!nextCorner) {
             this._pathStatus = 'arrived';
-            this._velocity = Vec3.ZERO.clone();
+            this._velocity.x = 0;
+            this._velocity.y = 0;
+            this._velocity.z = 0;
             return;
         }
 
         const currentPosition = this.getWorldPosition();
-        const toCorner = Vec3.subtract(nextCorner, currentPosition, new Vec3());
+        const toCorner = Vec3.subtract(nextCorner, currentPosition, this._tempToCorner);
         const distanceToCorner = Vec3.len(toCorner);
 
         if (distanceToCorner <= this._stoppingDistance) {
@@ -374,7 +390,9 @@ export class NavMeshAgent extends Component {
 
             if (this._currentCornerIndex >= this._path.corners.length) {
                 this._pathStatus = 'arrived';
-                this._velocity = Vec3.ZERO.clone();
+                this._velocity.x = 0;
+                this._velocity.y = 0;
+                this._velocity.z = 0;
                 this._remainingDistance = 0;
                 return;
             }
@@ -395,7 +413,7 @@ export class NavMeshAgent extends Component {
                 currentSpeed + this._acceleration * deltaTime
             );
 
-            this._velocity = Vec3.multiplyScalar(toCorner, newSpeed, new Vec3());
+            this._velocity = Vec3.multiplyScalar(toCorner, newSpeed, this._tempVelocity);
         }
 
         this._updateRemainingDistance();
@@ -419,43 +437,44 @@ export class NavMeshAgent extends Component {
     }
 
     override deserialize(data: Record<string, any>): void {
-        const patch: NavMeshAgentConfig = {};
+        type MutableConfig = Mutable<PathAgentConfig>;
+        const patch: MutableConfig = {};
 
         if (typeof data.radius === 'number') {
-            (patch as any).radius = data.radius;
+            patch.radius = data.radius;
         }
         if (typeof data.height === 'number') {
-            (patch as any).height = data.height;
+            patch.height = data.height;
         }
         if (typeof data.speed === 'number') {
-            (patch as any).speed = data.speed;
+            patch.speed = data.speed;
         }
         if (typeof data.angularSpeed === 'number') {
-            (patch as any).angularSpeed = data.angularSpeed;
+            patch.angularSpeed = data.angularSpeed;
         }
         if (typeof data.acceleration === 'number') {
-            (patch as any).acceleration = data.acceleration;
+            patch.acceleration = data.acceleration;
         }
         if (typeof data.stoppingDistance === 'number') {
-            (patch as any).stoppingDistance = data.stoppingDistance;
+            patch.stoppingDistance = data.stoppingDistance;
         }
         if (typeof data.autoBraking === 'boolean') {
-            (patch as any).autoBraking = data.autoBraking;
+            patch.autoBraking = data.autoBraking;
         }
         if (typeof data.autoRepath === 'boolean') {
-            (patch as any).autoRepath = data.autoRepath;
+            patch.autoRepath = data.autoRepath;
         }
         if (typeof data.baseOffset === 'number') {
-            (patch as any).baseOffset = data.baseOffset;
+            patch.baseOffset = data.baseOffset;
         }
         if (typeof data.areaMask === 'number') {
-            (patch as any).areaMask = data.areaMask;
+            patch.areaMask = data.areaMask;
         }
         if (typeof data.obstacleAvoidanceQuality === 'string') {
-            (patch as any).obstacleAvoidanceQuality = data.obstacleAvoidanceQuality;
+            patch.obstacleAvoidanceQuality = data.obstacleAvoidanceQuality;
         }
         if (typeof data.avoidancePriority === 'number') {
-            (patch as any).avoidancePriority = data.avoidancePriority;
+            patch.avoidancePriority = data.avoidancePriority;
         }
 
         this._applyConfig(patch);
@@ -488,7 +507,7 @@ export class NavMeshAgent extends Component {
         this._remainingDistance = distance;
     }
 
-    private _applyConfig(config: NavMeshAgentConfig): void {
+    private _applyConfig(config: PathAgentConfig): void {
         if (typeof config.radius === 'number') {
             this._radius = Math.max(0.01, config.radius);
         }

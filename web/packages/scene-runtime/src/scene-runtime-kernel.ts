@@ -1,4 +1,5 @@
 import { createGameLoop, type GameLoop, type GameLoopSystem } from '@axrone/game-loop';
+import { getOrCreateGLContext } from '@axrone/render-webgl2';
 import { World } from '@axrone/ecs-runtime';
 import { SystemManager } from '@axrone/ecs-runtime';
 import type { ComponentRegistry } from '@axrone/ecs-runtime';
@@ -22,6 +23,7 @@ import {
     resolveSceneSkyLight,
 } from './scene-runtime-defaults';
 import { SceneSnapshotRuntime } from './scene-snapshot-runtime';
+import { PhysicsBridge3D, type PhysicsBridge3DOptions } from './components/physics-bridge-3d';
 
 type RuntimeRegistry<R extends ComponentRegistry> = SceneRegistry<R>;
 
@@ -30,6 +32,7 @@ export interface SceneRuntimeKernelOptions<
 > {
     readonly sceneId: string;
     readonly options?: SceneOptions<R>;
+    readonly physicsBridge?: PhysicsBridge3DOptions;
 }
 
 export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, never>> {
@@ -44,6 +47,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
     readonly renderRuntime: SceneRenderRuntime;
     readonly snapshots: SceneSnapshotRuntime;
     readonly lifecycle: SceneLifecycleRuntime;
+    readonly physicsBridge: PhysicsBridge3D;
 
     constructor(options: SceneRuntimeKernelOptions<R>) {
         const sceneOptions = options.options ?? {};
@@ -61,9 +65,11 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
         }) as RuntimeRegistry<R>;
         const componentCatalog = new SceneComponentCatalog(registry);
 
+        const ctx = getOrCreateGLContext(this.gl, this.canvas);
+
         let renderRuntime!: SceneRenderRuntime;
         this.assets = new SceneAssetRuntime({
-            gl: this.gl,
+            gl: ctx,
             defaultPassId: DEFAULT_SCENE_RENDER_PASS_ID,
             defaultClearColor,
             releaseBaseMesh: (meshId) => {
@@ -92,6 +98,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
             defaultClearColor,
             planning: sceneOptions.renderPlanning,
             pipeline: sceneOptions.renderPipeline,
+            stateCache: ctx.state,
             getActors: () => this.world.getAllActors(),
             createMeshResource: (definition) => this.assets.createMeshResource(definition),
             disposeMesh: (mesh) => this.assets.disposeMesh(mesh),
@@ -108,7 +115,9 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
         });
         this.snapshots.initializeRenderPasses(sceneOptions.renderPasses);
 
-        const loopSystems: readonly GameLoopSystem<SceneLoopState>[] = createSceneLoopSystems({
+        this.physicsBridge = new PhysicsBridge3D(this.world, options.physicsBridge);
+
+        const baseLoopSystems = createSceneLoopSystems({
             executePhase: (phase, delta) => {
                 this.systems.executePhase(phase, delta);
             },
@@ -125,6 +134,16 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
                 this.render(delta);
             },
         });
+
+        const loopSystems: readonly GameLoopSystem<SceneLoopState>[] = [
+            ...baseLoopSystems,
+            {
+                id: this.physicsBridge.id,
+                beforeUpdate: (ctx) => this.physicsBridge.beforeUpdate(ctx),
+                fixedUpdate: (ctx) => this.physicsBridge.fixedUpdate(ctx),
+                dispose: () => this.physicsBridge.dispose(),
+            },
+        ];
 
         this.loop = createGameLoop({
             state: { sceneId: options.sceneId },
