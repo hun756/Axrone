@@ -104,6 +104,7 @@ export class Actor<
 
     private readonly _eventBus: EventBus | null;
     private readonly _eventSubscriptions = new Set<() => void>();
+    private _indexChangeHandler: ((kind: 'tag' | 'layer', oldValue: string | number, newValue: string | number) => void) | null = null;
 
     private readonly _cleanupTasks = new Set<() => void>();
     private _updateFrame = 0;
@@ -279,6 +280,7 @@ export class Actor<
         const oldLayer = this._layer;
         this._layer = value as ActorLayer;
 
+        this._indexChangeHandler?.('layer', oldLayer as number, this._layer as number);
         this._emitEvent('actor:layerChanged', { oldLayer, newLayer: this._layer });
     }
 
@@ -298,6 +300,7 @@ export class Actor<
         const oldTag = this._tag;
         this._tag = value as ActorTag;
 
+        this._indexChangeHandler?.('tag', oldTag as string, this._tag as string);
         this._emitEvent('actor:tagChanged', { oldTag, newTag: this._tag });
     }
 
@@ -957,6 +960,11 @@ export class Actor<
             unsubscribe();
             this._eventSubscriptions.delete(unsubscribe);
         };
+    }
+
+    subscribeIndexChanges(handler: (kind: 'tag' | 'layer', oldValue: string | number, newValue: string | number) => void): () => void {
+        this._indexChangeHandler = handler;
+        return () => { this._indexChangeHandler = null; };
     }
 
     toString(): string {

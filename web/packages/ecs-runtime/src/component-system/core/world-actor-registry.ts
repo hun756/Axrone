@@ -7,13 +7,33 @@ export class WorldActorRegistry extends ActorRegistry<Entity, Actor> {
     private readonly _layerIndex = new Map<number, Set<Entity>>();
     private readonly _actorTagMap = new Map<Entity, string>();
     private readonly _actorLayerMap = new Map<Entity, number>();
+    private readonly _unsubscribers = new Map<Entity, () => void>();
 
     override register(entity: Entity, actor: Actor): void {
         super.register(entity, actor);
         this._indexActor(entity, actor.tag as string, actor.layer as number);
+        if (typeof actor.subscribeIndexChanges === 'function') {
+            const unsub = actor.subscribeIndexChanges((kind, oldValue, newValue) => {
+                if (kind === 'tag') {
+                    this._removeFromTagIndex(entity, oldValue as string);
+                    this._addToTagIndex(entity, newValue as string);
+                    this._actorTagMap.set(entity, newValue as string);
+                } else if (kind === 'layer') {
+                    this._removeFromLayerIndex(entity, oldValue as number);
+                    this._addToLayerIndex(entity, newValue as number);
+                    this._actorLayerMap.set(entity, newValue as number);
+                }
+            });
+            this._unsubscribers.set(entity, unsub);
+        }
     }
 
     override unregister(entity: Entity): Actor | undefined {
+        const unsub = this._unsubscribers.get(entity);
+        if (unsub) {
+            unsub();
+            this._unsubscribers.delete(entity);
+        }
         this._removeFromIndices(entity);
         return super.unregister(entity);
     }
@@ -24,18 +44,10 @@ export class WorldActorRegistry extends ActorRegistry<Entity, Actor> {
         this._layerIndex.clear();
         this._actorTagMap.clear();
         this._actorLayerMap.clear();
-    }
-
-    updateActorTag(entity: Entity, oldTag: string, newTag: string): void {
-        this._removeFromTagIndex(entity, oldTag);
-        this._addToTagIndex(entity, newTag);
-        this._actorTagMap.set(entity, newTag);
-    }
-
-    updateActorLayer(entity: Entity, oldLayer: number, newLayer: number): void {
-        this._removeFromLayerIndex(entity, oldLayer);
-        this._addToLayerIndex(entity, newLayer);
-        this._actorLayerMap.set(entity, newLayer);
+        for (const unsub of this._unsubscribers.values()) {
+            unsub();
+        }
+        this._unsubscribers.clear();
     }
 
     getByTag(tag: string): readonly Actor[] {
