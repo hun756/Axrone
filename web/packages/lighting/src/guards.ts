@@ -88,8 +88,8 @@ export const isPointLightDefinition = (value: unknown): value is PointLightDefin
         isFiniteNumber(value.intensity) &&
         isFiniteNumber(value.priority) &&
         value.position instanceof Vec3 &&
-        isFiniteNumber(value.range) &&
-        isFiniteNumber(value.attenuation) &&
+        isFiniteNumber(value.range) && value.range > 0 &&
+        isFiniteNumber(value.attenuation) && value.attenuation >= 0 &&
         (value.metadata === undefined || isLightingMetadata(value.metadata))
     );
 };
@@ -108,8 +108,8 @@ export const isSpotLightDefinition = (value: unknown): value is SpotLightDefinit
         isFiniteNumber(value.priority) &&
         value.position instanceof Vec3 &&
         value.direction instanceof Vec3 &&
-        isFiniteNumber(value.range) &&
-        isFiniteNumber(value.attenuation) &&
+        isFiniteNumber(value.range) && value.range > 0 &&
+        isFiniteNumber(value.attenuation) && value.attenuation >= 0 &&
         isFiniteNumber(value.innerConeCosine) &&
         isFiniteNumber(value.outerConeCosine) &&
         (value.metadata === undefined || isLightingMetadata(value.metadata))
