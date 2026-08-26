@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
     DEFAULT_SCENE_FOG_STATE,
     resolveSceneFogState,
-    type SceneFogState,
 } from '../fog-state';
 
 describe('SceneFogState', () => {
