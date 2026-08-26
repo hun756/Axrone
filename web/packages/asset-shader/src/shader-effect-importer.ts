@@ -310,6 +310,10 @@ const normalizeInspector = (
         step: ensureOptionalFiniteNumber(object.step, `${label}.step`),
         options: normalizeInspectorOptions(object.options, `${label}.options`),
         hidden: ensureOptionalBoolean(object.hidden, `${label}.hidden`),
+        order: ensureOptionalFiniteNumber(object.order, `${label}.order`),
+        tooltip: ensureOptionalString(object.tooltip, `${label}.tooltip`),
+        readOnly: ensureOptionalBoolean(object.readOnly, `${label}.readOnly`),
+        visibleWhen: ensureOptionalString(object.visibleWhen, `${label}.visibleWhen`),
     };
 };
 
