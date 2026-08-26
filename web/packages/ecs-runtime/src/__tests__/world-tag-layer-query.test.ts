@@ -76,9 +76,7 @@ describe('World tag and layer queries', () => {
             expect(world.getActorsByTag('TagA')).toHaveLength(1);
             expect(world.getActorsByTag('TagB')).toHaveLength(0);
 
-            const oldTag = actor.tag as string;
             actor.tag = 'TagB' as any;
-            (world as any)._actorRegistry.updateActorTag(actor.entity, oldTag, 'TagB');
 
             expect(world.getActorsByTag('TagA')).toHaveLength(0);
             expect(world.getActorsByTag('TagB')).toHaveLength(1);
@@ -136,9 +134,7 @@ describe('World tag and layer queries', () => {
             expect(world.getActorsByLayer(1)).toHaveLength(1);
             expect(world.getActorsByLayer(2)).toHaveLength(0);
 
-            const oldLayer = actor.layer as number;
             actor.layer = 2 as any;
-            (world as any)._actorRegistry.updateActorLayer(actor.entity, oldLayer, 2);
 
             expect(world.getActorsByLayer(1)).toHaveLength(0);
             expect(world.getActorsByLayer(2)).toHaveLength(1);
