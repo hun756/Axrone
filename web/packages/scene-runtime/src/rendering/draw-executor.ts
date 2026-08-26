@@ -1,4 +1,5 @@
 import type { SceneCameraFrameState } from '../camera-frame-state';
+import type { SceneFogState } from '../fog-state';
 import type { SceneLightingState } from '../lighting-collector';
 import {
     resolveSceneMaterialPass,
@@ -13,6 +14,7 @@ import type { SceneRenderStateApplier } from './render-state-applier';
 import type { SceneShaderResource } from '../shader-registry';
 import type { SceneFrameUniformBinder } from '../frame-uniform-binder';
 import type { SceneLightingUniformBinder } from '../lighting-uniform-binder';
+import type { SceneFogUniformBinder } from '../fog-uniform-binder';
 import type {
     SceneMaterialTextureBinder,
     SceneMaterialTextureUniformSetter,
@@ -26,6 +28,7 @@ export interface SceneDrawExecutorContext {
     readonly renderPass: SceneRenderPassResource;
     readonly cameraFrame: SceneCameraFrameState;
     readonly lighting: SceneLightingState;
+    readonly fog: SceneFogState;
     readonly elapsedSeconds: number;
     readonly deltaSeconds: number;
     readonly frame: number;
@@ -68,6 +71,7 @@ interface SceneDrawExecutorDependencies {
     >;
     readonly frameUniformBinder: Pick<SceneFrameUniformBinder, 'apply'>;
     readonly lightingUniformBinder: Pick<SceneLightingUniformBinder, 'apply'>;
+    readonly fogUniformBinder: Pick<SceneFogUniformBinder, 'apply'>;
     readonly skinningUniformBinder: Pick<SceneSkinningUniformBinder, 'apply'>;
     readonly materialTextureBinder: Pick<SceneMaterialTextureBinder, 'bind' | 'unbind'>;
     readonly uniformWriter: SceneUniformWriteTarget;
@@ -105,7 +109,7 @@ export class SceneDrawExecutor {
 
         frameState.markActiveRenderer(item.renderer.id);
 
-        const shader = this._resolveShader(material);
+        const shader = this._resolveShader(material, context.fog);
         if (!shader) {
             return;
         }
@@ -128,6 +132,7 @@ export class SceneDrawExecutor {
             viewportHeight: context.viewportHeight,
         });
         this._dependencies.lightingUniformBinder.apply(shader, item.renderer, context.lighting);
+        this._dependencies.fogUniformBinder.apply(shader, context.fog);
         this._dependencies.skinningUniformBinder.apply(shader, item.renderer);
 
         this._dependencies.materialTextureBinder.bind(
@@ -174,10 +179,11 @@ export class SceneDrawExecutor {
     }
 
     private _resolveShader(
-        material: SceneMaterialResource
+        material: SceneMaterialResource,
+        fog: SceneFogState
     ): SceneShaderResource | undefined {
         const resolver = this._dependencies.variantResolver;
-        if (!resolver || material.keywords.size === 0) {
+        if (!resolver || (material.keywords.size === 0 && !fog.enabled)) {
             return this._dependencies.resources.shaders.get(material.shaderId);
         }
 
@@ -186,6 +192,10 @@ export class SceneDrawExecutor {
             if (entry.enabled) {
                 enabledKeywords.push(keyword);
             }
+        }
+
+        if (fog.enabled && !enabledKeywords.includes('FOG')) {
+            enabledKeywords.push('FOG');
         }
 
         if (enabledKeywords.length === 0) {
