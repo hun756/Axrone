@@ -136,6 +136,73 @@ describe('@axrone/ui ui-asset-io', () => {
             expect(restored.canvas.safeAreaInset!.top).toBe(44);
             expect(restored.canvas.safeAreaInset!.bottom).toBe(34);
         });
+
+        it('round-trips widget material field preserving all keys', () => {
+            const materialData = { shader: 'pbr', roughness: 0.7, metalness: 0.3, textureSlots: { albedo: 'wood.png' } };
+            const original: UIAsset = {
+                ...createMinimalAsset(),
+                root: {
+                    role: 'root',
+                    enabled: true,
+                    interactive: false,
+                    material: materialData,
+                    children: [],
+                },
+            } as UIAsset;
+            const json = serializeUIAsset(original);
+            const restored = deserializeUIAsset(json);
+
+            expect(restored.root.material).toBeDefined();
+            expect(restored.root.material!['shader']).toBe('pbr');
+            expect(restored.root.material!['roughness']).toBe(0.7);
+            expect(restored.root.material!['metalness']).toBe(0.3);
+            expect(restored.root.material!['textureSlots']).toEqual({ albedo: 'wood.png' });
+        });
+
+        it('preserves null material through round-trip', () => {
+            const original: UIAsset = {
+                ...createMinimalAsset(),
+                root: {
+                    role: 'root',
+                    enabled: true,
+                    interactive: false,
+                    material: null,
+                    children: [],
+                },
+            } as UIAsset;
+            const json = serializeUIAsset(original);
+            const restored = deserializeUIAsset(json);
+
+            // null material is not a plain object, so it becomes undefined
+            expect(restored.root.material).toBeUndefined();
+        });
+
+        it('preserves nested child material through round-trip', () => {
+            const original: UIAsset = {
+                ...createMinimalAsset(),
+                root: {
+                    role: 'root',
+                    enabled: true,
+                    interactive: false,
+                    children: [
+                        {
+                            role: 'container',
+                            enabled: true,
+                            interactive: false,
+                            material: { type: 'transparent', opacity: 0.5 },
+                            children: [],
+                        },
+                    ],
+                },
+            } as UIAsset;
+            const json = serializeUIAsset(original);
+            const restored = deserializeUIAsset(json);
+
+            const child = restored.root.children[0];
+            expect(child.material).toBeDefined();
+            expect(child.material!['type']).toBe('transparent');
+            expect(child.material!['opacity']).toBe(0.5);
+        });
     });
 
     describe('deserializeUIAsset error handling', () => {
