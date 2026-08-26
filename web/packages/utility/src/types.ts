@@ -1,4 +1,4 @@
-export type Primitive = undefined | null | boolean | number | string | bigint | symbol;
+export type Primitive = undefined | null | boolean | number | string | bigint | symbol | Date | RegExp | Function;
 
 export type JsonPrimitive = string | number | boolean | null;
 
@@ -31,6 +31,10 @@ export type AbstractConstructor<TValue = unknown, TArgs extends any[] = any[]> =
 export type ArrayElement<TValue> = TValue extends readonly (infer TElement)[] ? TElement : never;
 export type NonEmptyReadonlyArray<TValue> = readonly [TValue, ...TValue[]];
 export type Mutable<TValue> = { -readonly [TKey in keyof TValue]: TValue[TKey] };
+
+export type IsNever<T> = [T] extends [never] ? true : false;
+export type IsAny<T> = 0 extends 1 & T ? true : false;
+export type IsUnknown<T> = IsAny<T> extends true ? false : unknown extends T ? true : false;
 
 export type TypedArray =
     | Int8Array
@@ -124,6 +128,16 @@ export type DeepReadonly<T> = T extends (...args: never[]) => unknown
               ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
               : T;
 
+export type DeepPartial<T> = T extends Primitive
+    ? T
+    : T extends readonly (infer U)[]
+      ? readonly DeepPartial<U>[]
+      : T extends Map<infer K, infer V>
+        ? Map<DeepPartial<K>, DeepPartial<V>>
+        : T extends Set<infer M>
+          ? Set<DeepPartial<M>>
+          : { [K in keyof T]?: DeepPartial<T[K]> };
+
 export type DeepReadonlyPartial<TValue> = TValue extends readonly (infer TElement)[]
     ? readonly DeepReadonlyPartial<TElement>[]
     : TValue extends (...args: never[]) => unknown
@@ -145,3 +159,14 @@ export type DeepMutable<T> = T extends (...args: never[]) => unknown
             : T extends Record<string | number | symbol, any>
               ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
               : T;
+
+// Nullable shorthand
+export type Nullable<T> = T | null;
+
+// Common callback signatures
+export type VoidCallback = () => void;
+export type ValueCallback<T> = (value: T) => void;
+export type Predicate<T> = (value: T) => boolean;
+
+// Easing function signature (used by tween, ui, animation)
+export type EasingFunction = (t: number) => number;

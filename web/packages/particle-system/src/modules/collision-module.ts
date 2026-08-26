@@ -81,6 +81,8 @@ export class CollisionModule extends BaseModule<'collision'> {
     private readonly _tempVec3A = new Vec3();
     private readonly _tempVec3B = new Vec3();
     private readonly _tempVec3C = new Vec3();
+    private readonly _tempVec3D = new Vec3();
+    private readonly _tempVec3E = new Vec3();
     private readonly _stats: CollisionStats = {
         totalChecks: 0,
         totalContacts: 0,
@@ -257,7 +259,7 @@ export class CollisionModule extends BaseModule<'collision'> {
             const plane = CollisionModule.createPlane(
                 'ground',
                 new Vec3(0, config.groundPlane.height, 0),
-                new Vec3(0, 1, 0),
+                Vec3.UP,
                 {
                     restitution: config.groundPlane.bounce,
                     friction: config.groundPlane.friction || 0.5,
@@ -382,13 +384,13 @@ export class CollisionModule extends BaseModule<'collision'> {
 
         if (distance < 0) {
             const penetration = Math.abs(distance);
-            const _tmp_plane = Vec3.multiplyScalar(plane.normal, distance, new Vec3());
-            const contactPoint = Vec3.subtract(position, _tmp_plane, new Vec3());
+            const _tmp_plane = Vec3.multiplyScalar(plane.normal, distance, this._tempVec3D);
+            const contactPoint = Vec3.subtract(position, _tmp_plane, this._tempVec3E);
 
             return {
                 particleIndex,
                 primitiveId: plane.id,
-                point: contactPoint,
+                point: contactPoint.clone(),
                 normal: plane.normal.clone(),
                 penetration,
                 materialProperties: plane.material,
@@ -411,22 +413,23 @@ export class CollisionModule extends BaseModule<'collision'> {
         if (collision) {
             const penetration = sphere.hollow ? distance - sphere.radius : sphere.radius - distance;
 
+            // normalize into _tempVec3D — safe to alias: toParticle == _tempVec3B, out == _tempVec3D
             const normal = sphere.hollow
-                ? Vec3.negate(Vec3.normalize(toParticle.clone(), new Vec3()), new Vec3())
-                : Vec3.normalize(toParticle.clone(), new Vec3());
+                ? Vec3.negate(Vec3.normalize(toParticle, this._tempVec3D), this._tempVec3D)
+                : Vec3.normalize(toParticle, this._tempVec3D);
 
             const _tmp_sphere = Vec3.multiplyScalar(
                 normal,
                 sphere.hollow ? sphere.radius : -sphere.radius,
-                new Vec3()
+                this._tempVec3D
             );
-            const contactPoint = Vec3.add(sphere.position, _tmp_sphere, new Vec3());
+            const contactPoint = Vec3.add(sphere.position, _tmp_sphere, this._tempVec3E);
 
             return {
                 particleIndex,
                 primitiveId: sphere.id,
-                point: contactPoint,
-                normal,
+                point: contactPoint.clone(),
+                normal: normal.clone(),
                 penetration: Math.abs(penetration),
                 materialProperties: sphere.material,
             };
@@ -476,15 +479,15 @@ export class CollisionModule extends BaseModule<'collision'> {
                 penetration = Math.min(dx, dy, dz);
             }
 
-            const _tmp_box_n = Vec3.multiplyScalar(normal, penetration, new Vec3());
-            const _tmp_box_lp = Vec3.add(localPos, _tmp_box_n, new Vec3());
-            const contactPoint = Vec3.add(box.position, _tmp_box_lp, new Vec3());
+            const _tmp_box_n = Vec3.multiplyScalar(normal, penetration, this._tempVec3D);
+            const _tmp_box_lp = Vec3.add(localPos, _tmp_box_n, this._tempVec3E);
+            const contactPoint = Vec3.add(box.position, _tmp_box_lp, this._tempVec3C);
 
             return {
                 particleIndex,
                 primitiveId: box.id,
-                point: contactPoint,
-                normal,
+                point: contactPoint.clone(),
+                normal: normal.clone(),
                 penetration: Math.abs(penetration),
                 materialProperties: box.material,
             };
@@ -517,17 +520,16 @@ export class CollisionModule extends BaseModule<'collision'> {
                 ? new Vec3(-localPos.x / radialDistance, 0, -localPos.z / radialDistance)
                 : new Vec3(localPos.x / radialDistance, 0, localPos.z / radialDistance);
 
-            const _tmp_cyl = new Vec3(
-                normal.x * (cylinder.hollow ? cylinder.radius : -cylinder.radius),
-                localPos.y,
-                normal.z * (cylinder.hollow ? cylinder.radius : -cylinder.radius)
-            );
-            const contactPoint = Vec3.add(cylinder.position, _tmp_cyl, new Vec3());
+            const _tmp_cyl = this._tempVec3D;
+            _tmp_cyl.x = normal.x * (cylinder.hollow ? cylinder.radius : -cylinder.radius);
+            _tmp_cyl.y = localPos.y;
+            _tmp_cyl.z = normal.z * (cylinder.hollow ? cylinder.radius : -cylinder.radius);
+            const contactPoint = Vec3.add(cylinder.position, _tmp_cyl, this._tempVec3E);
 
             return {
                 particleIndex,
                 primitiveId: cylinder.id,
-                point: contactPoint,
+                point: contactPoint.clone(),
                 normal,
                 penetration: Math.abs(penetration),
                 materialProperties: cylinder.material,
@@ -555,13 +557,19 @@ export class CollisionModule extends BaseModule<'collision'> {
             const i = contact.particleIndex;
             const i3 = i * 3;
 
-            const correction = Vec3.multiplyScalar(contact.normal, contact.penetration, new Vec3());
+            const correction = Vec3.multiplyScalar(
+                contact.normal,
+                contact.penetration,
+                this._tempVec3D
+            );
             positions[i3] += correction.x;
             positions[i3 + 1] += correction.y;
             positions[i3 + 2] += correction.z;
 
-            const velocity = new Vec3(velocities[i3], velocities[i3 + 1], velocities[i3 + 2]);
-            const normalVelocity = Vec3.dot(velocity, contact.normal);
+            this._tempVec3E.x = velocities[i3];
+            this._tempVec3E.y = velocities[i3 + 1];
+            this._tempVec3E.z = velocities[i3 + 2];
+            const normalVelocity = Vec3.dot(this._tempVec3E, contact.normal);
 
             if (normalVelocity < 0) {
                 const material = contact.materialProperties;
@@ -569,23 +577,34 @@ export class CollisionModule extends BaseModule<'collision'> {
                 const _tmp_ref = Vec3.multiplyScalar(
                     contact.normal,
                     normalVelocity * (1 + material.restitution),
-                    new Vec3()
+                    this._tempVec3C
                 );
-                const reflectedVelocity = Vec3.subtract(velocity, _tmp_ref, new Vec3());
+                // subtract: out aliases _tempVec3C (b) — safe: component-wise read-before-write
+                const reflectedVelocity = Vec3.subtract(
+                    this._tempVec3E,
+                    _tmp_ref,
+                    this._tempVec3C
+                );
 
                 const _tmp_proj = Vec3.multiplyScalar(
                     contact.normal,
                     Vec3.dot(reflectedVelocity, contact.normal),
-                    new Vec3()
+                    this._tempVec3D
                 );
-                const tangentVelocity = Vec3.subtract(reflectedVelocity, _tmp_proj, new Vec3());
+                // subtract: out aliases reflectedVelocity (_tempVec3C, a) — safe
+                const tangentVelocity = Vec3.subtract(
+                    reflectedVelocity,
+                    _tmp_proj,
+                    this._tempVec3C
+                );
 
                 const _tmp_tan = Vec3.multiplyScalar(
                     tangentVelocity,
                     1 - material.friction,
-                    new Vec3()
+                    this._tempVec3D
                 );
-                const finalVelocity = Vec3.add(_tmp_proj, _tmp_tan, new Vec3());
+                // add: reads _tempVec3C and _tempVec3D, writes _tempVec3E — no aliasing
+                const finalVelocity = Vec3.add(_tmp_proj, _tmp_tan, this._tempVec3E);
                 Vec3.multiplyScalar(finalVelocity, 1 - material.damping, finalVelocity);
 
                 velocities[i3] = finalVelocity.x;

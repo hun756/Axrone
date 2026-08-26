@@ -84,7 +84,7 @@ function createValidConfig(): IShaderConfiguration {
                 name: 'main',
                 stage: [ShaderStage.VERTEX, ShaderStage.FRAGMENT],
                 vertexShader: 'void main() { gl_Position = vec4(0); }',
-                fragmentShader: 'void main() { gl_FragColor = vec4(1); }',
+                fragmentShader: 'out vec4 o_FragColor; void main() { o_FragColor = vec4(1); }',
                 renderState: {},
             },
         ],

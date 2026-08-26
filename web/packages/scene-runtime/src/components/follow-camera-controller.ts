@@ -55,13 +55,6 @@ const computeSmoothingFactor = (damping: number, deltaSeconds: number): number =
     return 1 - Math.exp(-damping * deltaSeconds);
 };
 
-const copyVec3 = (source: Readonly<Vec3>, target: Vec3): Vec3 => {
-    target.x = source.x;
-    target.y = source.y;
-    target.z = source.z;
-    return target;
-};
-
 @script({
     scriptName: 'FollowCameraController',
     priority: 790,
@@ -104,7 +97,7 @@ export class FollowCameraController extends Component {
         this._elevation = clampElevation(config.elevation ?? 0.45);
         this._positionDamping = Math.max(0, config.positionDamping ?? 10);
         this._targetDamping = Math.max(0, config.targetDamping ?? 14);
-        copyVec3(this._target, this._smoothedTarget);
+        Vec3.copy(this._target, this._smoothedTarget);
     }
 
     get target(): Vec3 {
@@ -197,7 +190,7 @@ export class FollowCameraController extends Component {
         const deltaSeconds = Math.max(0, deltaTime / 1000);
 
         if (!this._initialized) {
-            copyVec3(desiredTarget, this._smoothedTarget);
+            Vec3.copy(desiredTarget, this._smoothedTarget);
             this._composeDesiredPosition(this._smoothedTarget, this._desiredPosition);
             this._applyCameraTransform(transform, this._desiredPosition, this._smoothedTarget);
             this._initialized = true;
@@ -301,10 +294,10 @@ export class FollowCameraController extends Component {
         }
 
         if (Math.abs(this._tempForward.y) < FOLLOW_PARALLEL_DOT_THRESHOLD) {
-            return copyVec3(Vec3.UP, this._tempUp);
+            return Vec3.copy(Vec3.UP, this._tempUp);
         }
 
-        return copyVec3(Vec3.FORWARD, this._tempUp);
+        return Vec3.copy(Vec3.FORWARD, this._tempUp);
     }
 
     private _applyCameraTransform(transform: Transform, position: Vec3, target: Vec3): void {

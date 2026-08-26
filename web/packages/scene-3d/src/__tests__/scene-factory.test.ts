@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, afterEach, describe, expect, it } from 'vitest';
-import { createSceneOptions, installWebGL2Constants, ManualScheduler } from './test-harness';
+import { createSceneOptions, installWebGL2Constants, ManualScheduler } from '../../../../tests/shared/test-harness';
 
 let Scene: typeof import('@axrone/scene-3d').Scene;
 let createScene: typeof import('@axrone/scene-3d').createScene;

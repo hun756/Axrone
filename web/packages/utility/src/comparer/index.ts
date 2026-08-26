@@ -19,7 +19,6 @@ export type {
     KeySelector,
     PropertyPath,
     ExtractPropertyType,
-    DeepPartial,
     KeysOfType,
     ComparerOptions,
     EqualityComparerOptions,

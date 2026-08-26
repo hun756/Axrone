@@ -1,7 +1,7 @@
 import { Vec4 } from '@axrone/numeric';
 import { describe, expect, it, vi } from 'vitest';
 import { SceneAssetRuntime } from '@axrone/scene-3d';
-import { createMockGL } from './test-harness';
+import { createMockGL } from '../../../../tests/shared/test-harness';
 
 describe('SceneAssetRuntime', () => {
     it('releases base mesh caches before replacing a mesh definition', () => {

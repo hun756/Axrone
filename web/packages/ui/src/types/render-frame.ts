@@ -42,6 +42,7 @@ export interface TextGlyphPlacement {
     readonly line: number;
     readonly text: string;
     readonly atlasEntry: GlyphAtlasEntry | null;
+    readonly spanIndex: number;
 }
 
 export interface TextLineLayout {
@@ -67,6 +68,7 @@ export interface TextClusterLayout {
     readonly text: string;
     readonly whitespace: boolean;
     readonly newline: boolean;
+    readonly spanIndex: number;
 }
 
 export interface TextCaretPlacement {
@@ -75,6 +77,13 @@ export interface TextCaretPlacement {
     readonly x: number;
     readonly y: number;
     readonly height: number;
+}
+
+/** Per-span rendering style carried by TextLayoutResult for rich text. */
+export interface TextSpanRenderStyle {
+    readonly color: ReadonlyColor;
+    readonly outlineColor: ReadonlyColor;
+    readonly outlineWidth: number;
 }
 
 export interface TextLayoutResult {
@@ -90,6 +99,7 @@ export interface TextLayoutResult {
     readonly truncated: boolean;
     readonly direction: ResolvedTextDirection;
     readonly text: string;
+    readonly spanStyles: readonly TextSpanRenderStyle[];
 }
 
 export interface QuadRenderCommand {

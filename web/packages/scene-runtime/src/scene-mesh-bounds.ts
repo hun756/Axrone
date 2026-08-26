@@ -3,9 +3,9 @@ import type { SceneMeshDefinition } from './types';
 
 const FLOAT_COMPONENT_TYPE = 0x1406;
 
-type BoundingSphereCenter = Readonly<BoundingSphere>['center'];
+export type BoundingSphereCenter = Readonly<BoundingSphere>['center'];
 
-const isBoundingSphereCenterTuple = (center: BoundingSphereCenter): center is readonly [number, number, number] =>
+export const isBoundingSphereCenterTuple = (center: BoundingSphereCenter): center is readonly [number, number, number] =>
     Array.isArray(center);
 
 const cloneCenter = (center: Readonly<BoundingSphere>['center']): readonly [number, number, number] =>

@@ -14,6 +14,7 @@ export * from './message-catalog';
 export * from './clone/index';
 export * from './comparer/index';
 export * from './base64/index';
+export * from './builder/index';
 
 // Singleton (selective exports to avoid conflicts with result.ts and types.ts)
 export {

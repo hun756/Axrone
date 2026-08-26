@@ -2,15 +2,55 @@ import { IVec2Like, IVec3Like, IVec4Like } from '@axrone/numeric';
 import { ObjectPool, ByteBuffer } from '@axrone/memory';
 import type { Brand, TypedArray } from '@axrone/utility';
 import { createBufferFactory, IBuffer, IBufferFactory } from './buffer';
+import type { ContextSource, IGLContext } from './context';
+import { resolveContext } from './context';
+import { GLContextError } from './context/errors';
+import { DisposalTracker, assertAlive } from './internal/disposable';
+
+const GL = {
+    // GL data types
+    BYTE: 0x1400,
+    UNSIGNED_BYTE: 0x1401,
+    SHORT: 0x1402,
+    UNSIGNED_SHORT: 0x1403,
+    INT: 0x1404,
+    UNSIGNED_INT: 0x1405,
+    FLOAT: 0x1406,
+    HALF_FLOAT: 0x140b,
+
+    // GL buffer usage
+    STATIC_DRAW: 0x88e4,
+    DYNAMIC_DRAW: 0x88e8,
+    STREAM_DRAW: 0x88e0,
+
+    // GL draw primitives
+    POINTS: 0x0000,
+    LINES: 0x0001,
+    LINE_LOOP: 0x0002,
+    LINE_STRIP: 0x0003,
+    TRIANGLES: 0x0004,
+    TRIANGLE_STRIP: 0x0005,
+    TRIANGLE_FAN: 0x0006,
+
+    // Half-float encoding bit masks (used in IEEE 754 half-precision conversion)
+    HALF_FLOAT_SIGN_BIT: 0x8000,
+    HALF_FLOAT_EXPONENT_MASK: 0x7c00,
+    HALF_FLOAT_MANTISSA_MASK: 0x200,
+    HALF_FLOAT_IMPLICIT_ONE: 0x800000,
+
+    // IEEE 754 float32 bit field masks (used to extract exponent/mantissa during half-float conversion)
+    FLOAT32_EXPONENT_BITS: 0xff,
+    FLOAT32_MANTISSA_BITS: 0x7fffff,
+} as const;
 
 type GLContext = Brand<WebGL2RenderingContext, 'GLContext'>;
 type GLBuffer = IBuffer;
 type GLVAO = Brand<WebGLVertexArrayObject, 'GLVAO'>;
 
-type GLDataType = 0x1400 | 0x1401 | 0x1402 | 0x1403 | 0x1404 | 0x1405 | 0x1406 | 0x140b;
-type GLUsage = 0x88e4 | 0x88e8 | 0x88e0;
-type GLPrimitive = 0x0000 | 0x0001 | 0x0002 | 0x0003 | 0x0004 | 0x0005 | 0x0006;
-type IndexType = 0x1401 | 0x1403 | 0x1405;
+type GLDataType = typeof GL.BYTE | typeof GL.UNSIGNED_BYTE | typeof GL.SHORT | typeof GL.UNSIGNED_SHORT | typeof GL.INT | typeof GL.UNSIGNED_INT | typeof GL.FLOAT | typeof GL.HALF_FLOAT;
+type GLUsage = typeof GL.STATIC_DRAW | typeof GL.DYNAMIC_DRAW | typeof GL.STREAM_DRAW;
+type GLPrimitive = typeof GL.POINTS | typeof GL.LINES | typeof GL.LINE_LOOP | typeof GL.LINE_STRIP | typeof GL.TRIANGLES | typeof GL.TRIANGLE_STRIP | typeof GL.TRIANGLE_FAN;
+type IndexType = typeof GL.UNSIGNED_BYTE | typeof GL.UNSIGNED_SHORT | typeof GL.UNSIGNED_INT;
 
 type ComponentCount = 1 | 2 | 3 | 4;
 type AlignedOffset = Brand<number, 'AlignedOffset'>;
@@ -24,14 +64,14 @@ interface TypeInfo {
 }
 
 type GLTypeInfo = {
-    readonly [0x1400]: TypeInfo & { bytes: 1; ctor: Int8ArrayConstructor; align: 1 };
-    readonly [0x1401]: TypeInfo & { bytes: 1; ctor: Uint8ArrayConstructor; align: 1 };
-    readonly [0x1402]: TypeInfo & { bytes: 2; ctor: Int16ArrayConstructor; align: 2 };
-    readonly [0x1403]: TypeInfo & { bytes: 2; ctor: Uint16ArrayConstructor; align: 2 };
-    readonly [0x1404]: TypeInfo & { bytes: 4; ctor: Int32ArrayConstructor; align: 4 };
-    readonly [0x1405]: TypeInfo & { bytes: 4; ctor: Uint32ArrayConstructor; align: 4 };
-    readonly [0x1406]: TypeInfo & { bytes: 4; ctor: Float32ArrayConstructor; align: 4 };
-    readonly [0x140b]: TypeInfo & { bytes: 2; ctor: Uint16ArrayConstructor; align: 2 };
+    readonly [GL.BYTE]: TypeInfo & { bytes: 1; ctor: Int8ArrayConstructor; align: 1 };
+    readonly [GL.UNSIGNED_BYTE]: TypeInfo & { bytes: 1; ctor: Uint8ArrayConstructor; align: 1 };
+    readonly [GL.SHORT]: TypeInfo & { bytes: 2; ctor: Int16ArrayConstructor; align: 2 };
+    readonly [GL.UNSIGNED_SHORT]: TypeInfo & { bytes: 2; ctor: Uint16ArrayConstructor; align: 2 };
+    readonly [GL.INT]: TypeInfo & { bytes: 4; ctor: Int32ArrayConstructor; align: 4 };
+    readonly [GL.UNSIGNED_INT]: TypeInfo & { bytes: 4; ctor: Uint32ArrayConstructor; align: 4 };
+    readonly [GL.FLOAT]: TypeInfo & { bytes: 4; ctor: Float32ArrayConstructor; align: 4 };
+    readonly [GL.HALF_FLOAT]: TypeInfo & { bytes: 2; ctor: Uint16ArrayConstructor; align: 2 };
 };
 
 interface Attribute<
@@ -162,7 +202,7 @@ class ResourcePoolAdapter<T> implements ResourcePool<T> {
         this.nextId = 1;
         try {
             (this.descriptorPool as any)[Symbol.dispose]?.();
-        } catch {
+        } catch { // best-effort
             // ignore disposal errors
         }
         return resources;
@@ -176,25 +216,31 @@ class ResourcePoolAdapter<T> implements ResourcePool<T> {
 }
 
 const TYPE_DESCRIPTORS: GLTypeInfo = {
-    0x1400: { bytes: 1, ctor: Int8Array, align: 1 },
-    0x1401: { bytes: 1, ctor: Uint8Array, align: 1 },
-    0x1402: { bytes: 2, ctor: Int16Array, align: 2 },
-    0x1403: { bytes: 2, ctor: Uint16Array, align: 2 },
-    0x1404: { bytes: 4, ctor: Int32Array, align: 4 },
-    0x1405: { bytes: 4, ctor: Uint32Array, align: 4 },
-    0x1406: { bytes: 4, ctor: Float32Array, align: 4 },
-    0x140b: { bytes: 2, ctor: Uint16Array, align: 2 },
+    [GL.BYTE]: { bytes: 1, ctor: Int8Array, align: 1 },
+    [GL.UNSIGNED_BYTE]: { bytes: 1, ctor: Uint8Array, align: 1 },
+    [GL.SHORT]: { bytes: 2, ctor: Int16Array, align: 2 },
+    [GL.UNSIGNED_SHORT]: { bytes: 2, ctor: Uint16Array, align: 2 },
+    [GL.INT]: { bytes: 4, ctor: Int32Array, align: 4 },
+    [GL.UNSIGNED_INT]: { bytes: 4, ctor: Uint32Array, align: 4 },
+    [GL.FLOAT]: { bytes: 4, ctor: Float32Array, align: 4 },
+    [GL.HALF_FLOAT]: { bytes: 2, ctor: Uint16Array, align: 2 },
 } as const;
 
 class BufferAllocator {
-    private readonly gl: GLContext;
+    private readonly _ctx: IGLContext;
+    private readonly gl: WebGL2RenderingContext;
     private readonly factory: IBufferFactory;
     private readonly vertexPool = new ResourcePoolAdapter<IBuffer>();
     private readonly indexPool = new ResourcePoolAdapter<IBuffer>();
 
-    constructor(gl: GLContext) {
-        this.gl = gl;
-        this.factory = createBufferFactory(gl);
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
+    constructor(source: ContextSource) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
+        this.factory = createBufferFactory(ctx);
     }
 
     createVertexBuffer<T extends readonly Attribute[]>(
@@ -211,7 +257,7 @@ class BufferAllocator {
 
         try {
             bb.release();
-        } catch {
+        } catch { // best-effort
             // ignore pool release errors
         }
 
@@ -220,7 +266,7 @@ class BufferAllocator {
 
     createIndexBuffer(
         data: Uint8Array | Uint16Array | Uint32Array,
-        usage: GLUsage = 0x88e4
+        usage: GLUsage = GL.STATIC_DRAW
     ): ResourceID {
         const ib = this.factory.createElementArrayBufferFromData(
             data as unknown as BufferSource,
@@ -286,35 +332,35 @@ class BufferAllocator {
 
     private writeValue(bb: ByteBuffer, offset: number, value: number, type: GLDataType): void {
         switch (type) {
-            case 0x1400:
+            case GL.BYTE:
                 bb.seek(offset);
                 bb.putInt8(value);
                 break;
-            case 0x1401:
+            case GL.UNSIGNED_BYTE:
                 bb.seek(offset);
                 bb.putUint8(value);
                 break;
-            case 0x1402:
+            case GL.SHORT:
                 bb.seek(offset);
                 bb.putInt16(value);
                 break;
-            case 0x1403:
+            case GL.UNSIGNED_SHORT:
                 bb.seek(offset);
                 bb.putUint16(value);
                 break;
-            case 0x1404:
+            case GL.INT:
                 bb.seek(offset);
                 bb.putInt32(value);
                 break;
-            case 0x1405:
+            case GL.UNSIGNED_INT:
                 bb.seek(offset);
                 bb.putUint32(value);
                 break;
-            case 0x1406:
+            case GL.FLOAT:
                 bb.seek(offset);
                 bb.putFloat32(value);
                 break;
-            case 0x140b:
+            case GL.HALF_FLOAT:
                 bb.seek(offset);
                 bb.putUint16(this.encodeF16(value));
                 break;
@@ -326,19 +372,19 @@ class BufferAllocator {
         new Float32Array(fbuf)[0] = f32;
         const bits = new Uint32Array(fbuf)[0];
 
-        const s = (bits >>> 16) & 0x8000;
-        const e = ((bits >>> 23) & 0xff) - 127;
-        const m = bits & 0x7fffff;
+        const s = (bits >>> 16) & GL.HALF_FLOAT_SIGN_BIT;
+        const e = ((bits >>> 23) & GL.FLOAT32_EXPONENT_BITS) - 127;
+        const m = bits & GL.FLOAT32_MANTISSA_BITS;
 
         return e === 128
-            ? s | 0x7c00 | (m ? 0x200 : 0)
+            ? s | GL.HALF_FLOAT_EXPONENT_MASK | (m ? GL.HALF_FLOAT_MANTISSA_MASK : 0)
             : e > 15
-              ? s | 0x7c00
+              ? s | GL.HALF_FLOAT_EXPONENT_MASK
               : e > -15
                 ? s | ((e + 15) << 10) | (m >>> 13)
                 : (() => {
                       const shift = -14 - e;
-                      return shift > 24 ? s : s | ((m | 0x800000) >>> (shift + 13));
+                      return shift > 24 ? s : s | ((m | GL.HALF_FLOAT_IMPLICIT_ONE) >>> (shift + 13));
                   })();
     }
 
@@ -376,17 +422,19 @@ class BufferAllocator {
 }
 
 class VertexArray<T extends readonly Attribute[]> {
-    private readonly gl: GLContext;
+    private readonly _ctx: IGLContext;
+    private readonly gl: WebGL2RenderingContext;
     private readonly vao: GLVAO;
     private readonly layout: Layout<T>;
+    private readonly allocator: BufferAllocator;
     private readonly vertexBuffer: ResourceID;
     private readonly indexBuffer?: ResourceID;
     private readonly indexConfig?: IndexConfig;
     private readonly vertexCount: number;
-    private disposed = false;
+    private readonly _disposal = new DisposalTracker();
 
     constructor(
-        gl: GLContext,
+        source: ContextSource,
         allocator: BufferAllocator,
         layout: Layout<T>,
         vertexBuffer: ResourceID,
@@ -394,25 +442,28 @@ class VertexArray<T extends readonly Attribute[]> {
         indexBuffer?: ResourceID,
         indexConfig?: IndexConfig
     ) {
-        this.gl = gl;
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
+        this.allocator = allocator;
         this.layout = layout;
         this.vertexBuffer = vertexBuffer;
         this.indexBuffer = indexBuffer;
         this.indexConfig = indexConfig;
         this.vertexCount = vertexCount;
 
-        const vao = gl.createVertexArray();
-        if (!vao) throw new Error('VAO allocation failed');
+        const vao = this.gl.createVertexArray();
+        if (!vao) throw new GLContextError('INVALID_OPERATION', 'en', { reason: 'VAO allocation failed' });
         this.vao = vao as GLVAO;
 
         this.configure(allocator);
     }
 
     private configure(allocator: BufferAllocator): void {
-        this.gl.bindVertexArray(this.vao as WebGLVertexArrayObject);
+        this._ctx.state.bindVertexArray(this.vao as WebGLVertexArrayObject);
 
         const vb = allocator.getVertexBuffer(this.vertexBuffer);
-        if (!vb) throw new Error('Invalid vertex buffer');
+        if (!vb) throw new GLContextError('INVALID_OPERATION', 'en', { reason: 'Invalid vertex buffer' });
 
         vb.bind();
 
@@ -434,21 +485,21 @@ class VertexArray<T extends readonly Attribute[]> {
 
         if (this.indexBuffer !== undefined) {
             const ib = allocator.getIndexBuffer(this.indexBuffer);
-            if (!ib) throw new Error('Invalid index buffer');
+            if (!ib) throw new GLContextError('INVALID_OPERATION', 'en', { reason: 'Invalid index buffer' });
             ib.bind();
         }
 
-        this.gl.bindVertexArray(null);
+        this._ctx.state.bindVertexArray(null);
     }
 
     bind(): this {
-        if (this.disposed) throw new Error('VAO disposed');
-        this.gl.bindVertexArray(this.vao as WebGLVertexArrayObject);
+        assertAlive(this._disposal, 'VertexArray');
+        this._ctx.state.bindVertexArray(this.vao as WebGLVertexArrayObject);
         return this;
     }
 
     unbind(): this {
-        this.gl.bindVertexArray(null);
+        this._ctx.state.bindVertexArray(null);
         return this;
     }
 
@@ -480,7 +531,7 @@ class VertexArray<T extends readonly Attribute[]> {
     }
 
     private getIndexByteSize(type: IndexType): number {
-        return type === 0x1401 ? 1 : type === 0x1403 ? 2 : 4;
+        return type === GL.UNSIGNED_BYTE ? 1 : type === GL.UNSIGNED_SHORT ? 2 : 4;
     }
 
     get isIndexed(): boolean {
@@ -492,20 +543,31 @@ class VertexArray<T extends readonly Attribute[]> {
     }
 
     dispose(): void {
-        if (this.disposed) return;
+        if (!this._disposal.markDisposed()) return;
         this.gl.deleteVertexArray(this.vao as WebGLVertexArrayObject);
-        this.disposed = true;
+
+        // Release the refCounts acquired in configure()
+        try { this.allocator.releaseVertexBuffer(this.vertexBuffer); } catch { /* best-effort */ }
+        if (this.indexBuffer !== undefined) {
+            try { this.allocator.releaseIndexBuffer(this.indexBuffer); } catch { /* best-effort */ }
+        }
     }
 }
 
 class VAORegistry {
-    private readonly gl: GLContext;
+    private readonly _ctx: IGLContext;
+    private readonly gl: WebGL2RenderingContext;
     private readonly allocator: BufferAllocator;
     private readonly registry = new ResourcePoolAdapter<VertexArray<any>>();
 
-    constructor(gl: GLContext) {
-        this.gl = gl;
-        this.allocator = new BufferAllocator(gl);
+    /** @deprecated Passing a raw WebGL2RenderingContext is deprecated. Prefer IGLContext. */
+
+
+    constructor(source: ContextSource) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this.gl = ctx.gl;
+        this.allocator = new BufferAllocator(ctx);
     }
 
     create<T extends readonly Attribute[]>(
@@ -523,17 +585,17 @@ class VAORegistry {
             indexConfig = {
                 type:
                     indices instanceof Uint8Array
-                        ? 0x1401
+                        ? GL.UNSIGNED_BYTE
                         : indices instanceof Uint16Array
-                          ? 0x1403
-                          : 0x1405,
+                          ? GL.UNSIGNED_SHORT
+                          : GL.UNSIGNED_INT,
                 count: indices.length,
                 offset: 0,
             };
         }
 
         const vao = new VertexArray(
-            this.gl,
+            this._ctx,
             this.allocator,
             layout,
             vertexBufferId,
@@ -574,7 +636,7 @@ const attr = <N extends string, T extends GLDataType, S extends ComponentCount>(
 
 const layout = <T extends readonly Attribute[]>(
     attributes: T,
-    usage: GLUsage = 0x88e4
+    usage: GLUsage = GL.STATIC_DRAW
 ): Layout<T> => {
     let offset = 0;
     const layoutAttrs = attributes.map((a) => {
@@ -601,43 +663,22 @@ const draw = (
 ): DrawCall => ({ primitive, first, count, instances });
 
 const createVAOFactory = () => {
-    const registries = new WeakMap<GLContext, VAORegistry>();
+    const registries = new WeakMap<IGLContext, VAORegistry>();
 
-    return (gl: GLContext) => {
-        let registry = registries.get(gl);
+    return (source: ContextSource) => {
+        const ctx = resolveContext(source);
+        let registry = registries.get(ctx);
         if (!registry) {
-            registry = new VAORegistry(gl);
-            registries.set(gl, registry);
+            registry = new VAORegistry(ctx);
+            registries.set(ctx, registry);
         }
         return registry;
     };
 };
 
-const GL = {
-    BYTE: 0x1400,
-    UNSIGNED_BYTE: 0x1401,
-    SHORT: 0x1402,
-    UNSIGNED_SHORT: 0x1403,
-    INT: 0x1404,
-    UNSIGNED_INT: 0x1405,
-    FLOAT: 0x1406,
-    HALF_FLOAT: 0x140b,
-
-    STATIC_DRAW: 0x88e4,
-    DYNAMIC_DRAW: 0x88e8,
-    STREAM_DRAW: 0x88e0,
-
-    POINTS: 0x0000,
-    LINES: 0x0001,
-    LINE_LOOP: 0x0002,
-    LINE_STRIP: 0x0003,
-    TRIANGLES: 0x0004,
-    TRIANGLE_STRIP: 0x0005,
-    TRIANGLE_FAN: 0x0006,
-} as const;
-
 export type {
     GLContext,
+    ContextSource,
     GLBuffer,
     GLVAO,
     GLDataType,

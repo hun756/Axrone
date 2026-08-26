@@ -1,4 +1,5 @@
 import type { Mat4, Quat, Vec2, Vec3, Vec4 } from '@axrone/numeric';
+import type { JsonValue } from '@axrone/utility';
 import type { RenderShaderEffectDefinition } from '@axrone/render-core/shader-effect';
 import type { ColorSpace, FilterMode, TextureFormat, WrapMode } from '@axrone/render-webgl2';
 
@@ -28,13 +29,8 @@ export type GltfUniformValue =
     | Quat
     | Mat4;
 
-export type GltfSerializedValue =
-    | string
-    | number
-    | boolean
-    | null
-    | readonly GltfSerializedValue[]
-    | { readonly [key: string]: GltfSerializedValue };
+// Backward-compat alias — structurally identical to `JsonValue` from `@axrone/utility`.
+export type GltfSerializedValue = JsonValue;
 
 export interface GltfVertexAttribute {
     readonly semantic: GltfMeshSemantic;

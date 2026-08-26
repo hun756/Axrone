@@ -145,7 +145,7 @@ export const RENDER_2D_SPRITE_EFFECT = {
         ],
     },
     fragment: {
-        precision: 'highp',
+        precision: 'mediump',
         outputs: [{ name: 'o_Color', type: 'vec4' }],
         includes: ['sprite.mask'],
         main: [

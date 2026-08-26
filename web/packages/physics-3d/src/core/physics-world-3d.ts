@@ -1,4 +1,4 @@
-import { Vec3, type IQuatLike, type IVec3Like } from '@axrone/numeric';
+import { Vec3, Quat, type IVec3Like } from '@axrone/numeric';
 import type {
     IAABBQueryCallback,
     ICollisionFilter,
@@ -73,34 +73,24 @@ import {
     type IShapeRayHit3D,
     type SupportedConstraintDef3D,
     type SupportedShapeDef3D,
-    addVec3,
     clamp,
-    cloneQuat,
-    cloneVec3,
     componentMax,
     componentMin,
-    crossVec3,
-    dotVec3,
+    cylinderConeLocalHalfExtents,
     expandAabb,
     getAxisVector,
     getBoxWorldExtents,
     getHeightFieldLocalVertex,
-    inverseRotateVec3,
     inverseTransformPoint3D,
+    inverseVec3,
     intersectsAabb,
-    lengthSquaredVec3,
-    lengthVec3,
     linePointDistanceSquared,
     makeFilter,
     makeMaterial,
-    multiplyQuat,
-    normalizeVec3,
+    midpointVec3,
     rayAabbHit,
     raySphereHit,
     rayTriangleHit,
-    rotateVec3,
-    scaleVec3,
-    subVec3,
     supportsQueryFilter,
     transformPoint3D,
 } from './physics-world-3d-shared';
@@ -330,7 +320,7 @@ export class PhysicsWorld3D implements Disposable {
             id: shapeId,
             bodyId,
             type: SHAPE_TYPE_CONVEX_HULL,
-            def: { ...def, vertices: def.vertices.map(cloneVec3), kind: SHAPE_TYPE_CONVEX_HULL },
+            def: { ...def, vertices: def.vertices.map(Vec3.copy), kind: SHAPE_TYPE_CONVEX_HULL },
             material: makeMaterial(material),
             isSensor: options?.isSensor ?? false,
             filter: makeFilter(filter),
@@ -352,7 +342,7 @@ export class PhysicsWorld3D implements Disposable {
             bodyId,
             type: SHAPE_TYPE_TRIANGLE_MESH,
             def: {
-                vertices: def.vertices.map(cloneVec3),
+                vertices: def.vertices.map(Vec3.copy),
                 indices: [...def.indices],
                 kind: SHAPE_TYPE_TRIANGLE_MESH,
             },
@@ -418,7 +408,7 @@ export class PhysicsWorld3D implements Disposable {
         return this._registerConstraint(
             this._constraintManager.createFixed(def),
             CONSTRAINT_TYPE_FIXED,
-            { ...def, localAnchorA: cloneVec3(def.localAnchorA), localAnchorB: cloneVec3(def.localAnchorB), kind: CONSTRAINT_TYPE_FIXED }
+            { ...def, localAnchorA: Vec3.copy(def.localAnchorA), localAnchorB: Vec3.copy(def.localAnchorB), kind: CONSTRAINT_TYPE_FIXED }
         );
     }
 
@@ -428,10 +418,10 @@ export class PhysicsWorld3D implements Disposable {
             CONSTRAINT_TYPE_HINGE,
             {
                 ...def,
-                localAnchorA: cloneVec3(def.localAnchorA),
-                localAnchorB: cloneVec3(def.localAnchorB),
-                localAxisA: cloneVec3(def.localAxisA),
-                localAxisB: cloneVec3(def.localAxisB),
+                localAnchorA: Vec3.copy(def.localAnchorA),
+                localAnchorB: Vec3.copy(def.localAnchorB),
+                localAxisA: Vec3.copy(def.localAxisA),
+                localAxisB: Vec3.copy(def.localAxisB),
                 kind: CONSTRAINT_TYPE_HINGE,
             }
         );
@@ -443,9 +433,9 @@ export class PhysicsWorld3D implements Disposable {
             CONSTRAINT_TYPE_SLIDER,
             {
                 ...def,
-                localAnchorA: cloneVec3(def.localAnchorA),
-                localAnchorB: cloneVec3(def.localAnchorB),
-                localAxisA: cloneVec3(def.localAxisA),
+                localAnchorA: Vec3.copy(def.localAnchorA),
+                localAnchorB: Vec3.copy(def.localAnchorB),
+                localAxisA: Vec3.copy(def.localAxisA),
                 kind: CONSTRAINT_TYPE_SLIDER,
             }
         );
@@ -455,7 +445,7 @@ export class PhysicsWorld3D implements Disposable {
         return this._registerConstraint(
             this._constraintManager.createSpring(def),
             CONSTRAINT_TYPE_SPRING,
-            { ...def, localAnchorA: cloneVec3(def.localAnchorA), localAnchorB: cloneVec3(def.localAnchorB), kind: CONSTRAINT_TYPE_SPRING }
+            { ...def, localAnchorA: Vec3.copy(def.localAnchorA), localAnchorB: Vec3.copy(def.localAnchorB), kind: CONSTRAINT_TYPE_SPRING }
         );
     }
 
@@ -466,12 +456,12 @@ export class PhysicsWorld3D implements Disposable {
             {
                 ...def,
                 localFrameA: {
-                    position: cloneVec3(def.localFrameA.position),
-                    rotation: cloneQuat(def.localFrameA.rotation),
+                    position: Vec3.copy(def.localFrameA.position),
+                    rotation: Quat.copy(def.localFrameA.rotation),
                 },
                 localFrameB: {
-                    position: cloneVec3(def.localFrameB.position),
-                    rotation: cloneQuat(def.localFrameB.rotation),
+                    position: Vec3.copy(def.localFrameB.position),
+                    rotation: Quat.copy(def.localFrameB.rotation),
                 },
                 kind: CONSTRAINT_TYPE_CONE_TWIST,
             }
@@ -485,21 +475,21 @@ export class PhysicsWorld3D implements Disposable {
             {
                 ...def,
                 localFrameA: {
-                    position: cloneVec3(def.localFrameA.position),
-                    rotation: cloneQuat(def.localFrameA.rotation),
+                    position: Vec3.copy(def.localFrameA.position),
+                    rotation: Quat.copy(def.localFrameA.rotation),
                 },
                 localFrameB: {
-                    position: cloneVec3(def.localFrameB.position),
-                    rotation: cloneQuat(def.localFrameB.rotation),
+                    position: Vec3.copy(def.localFrameB.position),
+                    rotation: Quat.copy(def.localFrameB.rotation),
                 },
-                linearLowerLimit: cloneVec3(def.linearLowerLimit),
-                linearUpperLimit: cloneVec3(def.linearUpperLimit),
-                angularLowerLimit: cloneVec3(def.angularLowerLimit),
-                angularUpperLimit: cloneVec3(def.angularUpperLimit),
-                ...(def.linearStiffness ? { linearStiffness: cloneVec3(def.linearStiffness) } : {}),
-                ...(def.angularStiffness ? { angularStiffness: cloneVec3(def.angularStiffness) } : {}),
-                ...(def.linearDamping ? { linearDamping: cloneVec3(def.linearDamping) } : {}),
-                ...(def.angularDamping ? { angularDamping: cloneVec3(def.angularDamping) } : {}),
+                linearLowerLimit: Vec3.copy(def.linearLowerLimit),
+                linearUpperLimit: Vec3.copy(def.linearUpperLimit),
+                angularLowerLimit: Vec3.copy(def.angularLowerLimit),
+                angularUpperLimit: Vec3.copy(def.angularUpperLimit),
+                ...(def.linearStiffness ? { linearStiffness: Vec3.copy(def.linearStiffness) } : {}),
+                ...(def.angularStiffness ? { angularStiffness: Vec3.copy(def.angularStiffness) } : {}),
+                ...(def.linearDamping ? { linearDamping: Vec3.copy(def.linearDamping) } : {}),
+                ...(def.angularDamping ? { angularDamping: Vec3.copy(def.angularDamping) } : {}),
                 kind: CONSTRAINT_TYPE_GENERIC,
             }
         );
@@ -621,7 +611,7 @@ export class PhysicsWorld3D implements Disposable {
                 hit: true,
                 bodyId: descriptor.bodyId,
                 shapeId: descriptor.id,
-                point: addVec3(origin, scaleVec3(direction, hit.fraction)),
+                point: Vec3.add(origin, Vec3.multiplyScalar(direction, hit.fraction)),
                 normal: hit.normal,
                 fraction: hit.fraction,
             });
@@ -644,7 +634,7 @@ export class PhysicsWorld3D implements Disposable {
         max: Readonly<IVec3Like>,
         filter?: IQueryFilter3D
     ): readonly ShapeId3D[] {
-        const queryBounds = { min: cloneVec3(min), max: cloneVec3(max) };
+        const queryBounds = { min: Vec3.copy(min), max: Vec3.copy(max) };
         const shapeIds: ShapeId3D[] = [];
 
         for (const descriptor of this._shapeDescriptors.values()) {
@@ -685,7 +675,7 @@ export class PhysicsWorld3D implements Disposable {
     shiftOrigin(newOrigin: Readonly<IVec3Like>): void {
         for (const bodyId of this._bodyManager.getBodyIds()) {
             const position = this._bodyManager.getPosition(bodyId);
-            this._bodyManager.setPosition(bodyId, subVec3(position, newOrigin));
+            this._bodyManager.setPosition(bodyId, Vec3.subtract(position, newOrigin));
         }
     }
 
@@ -891,14 +881,14 @@ export class PhysicsWorld3D implements Disposable {
             },
             get transform() {
                 return {
-                    position: cloneVec3(bodyWorld._bodyManager.getPosition(bodyId)),
-                    rotation: cloneQuat(bodyWorld._bodyManager.getRotation(bodyId)),
+                    position: Vec3.copy(bodyWorld._bodyManager.getPosition(bodyId)),
+                    rotation: Quat.copy(bodyWorld._bodyManager.getRotation(bodyId)),
                 };
             },
             get velocity() {
                 return {
-                    linear: cloneVec3(bodyWorld._bodyManager.getLinearVelocity(bodyId)),
-                    angular: cloneVec3(bodyWorld._bodyManager.getAngularVelocity(bodyId)),
+                    linear: Vec3.copy(bodyWorld._bodyManager.getLinearVelocity(bodyId)),
+                    angular: Vec3.copy(bodyWorld._bodyManager.getAngularVelocity(bodyId)),
                 };
             },
             get massData() {
@@ -948,21 +938,21 @@ export class PhysicsWorld3D implements Disposable {
                 bodyWorld._bodyManager.applyAngularImpulse(bodyId, impulse);
             },
             getPosition() {
-                return cloneVec3(bodyWorld._bodyManager.getPosition(bodyId));
+                return Vec3.copy(bodyWorld._bodyManager.getPosition(bodyId));
             },
             setPosition(position) {
                 bodyWorld._bodyManager.setPosition(bodyId, position);
             },
             getRotation() {
-                return cloneQuat(bodyWorld._bodyManager.getRotation(bodyId));
+                return Quat.copy(bodyWorld._bodyManager.getRotation(bodyId));
             },
             setRotation(rotation) {
                 bodyWorld._bodyManager.setRotation(bodyId, rotation);
             },
             getTransform() {
                 return {
-                    position: cloneVec3(bodyWorld._bodyManager.getPosition(bodyId)),
-                    rotation: cloneQuat(bodyWorld._bodyManager.getRotation(bodyId)),
+                    position: Vec3.copy(bodyWorld._bodyManager.getPosition(bodyId)),
+                    rotation: Quat.copy(bodyWorld._bodyManager.getRotation(bodyId)),
                 };
             },
             setTransform(position, rotation) {
@@ -970,13 +960,13 @@ export class PhysicsWorld3D implements Disposable {
                 bodyWorld._bodyManager.setRotation(bodyId, rotation);
             },
             getLinearVelocity() {
-                return cloneVec3(bodyWorld._bodyManager.getLinearVelocity(bodyId));
+                return Vec3.copy(bodyWorld._bodyManager.getLinearVelocity(bodyId));
             },
             setLinearVelocity(velocity) {
                 bodyWorld._bodyManager.setLinearVelocity(bodyId, velocity);
             },
             getAngularVelocity() {
-                return cloneVec3(bodyWorld._bodyManager.getAngularVelocity(bodyId));
+                return Vec3.copy(bodyWorld._bodyManager.getAngularVelocity(bodyId));
             },
             setAngularVelocity(velocity) {
                 bodyWorld._bodyManager.setAngularVelocity(bodyId, velocity);
@@ -996,23 +986,23 @@ export class PhysicsWorld3D implements Disposable {
                 );
             },
             getLocalVector(worldVector) {
-                return inverseRotateVec3(worldVector, bodyWorld._bodyManager.getRotation(bodyId));
+                return Quat.rotateVector(Quat.conjugate(bodyWorld._bodyManager.getRotation(bodyId)), worldVector);
             },
             getWorldVector(localVector) {
-                return rotateVec3(localVector, bodyWorld._bodyManager.getRotation(bodyId));
+                return Quat.rotateVector(bodyWorld._bodyManager.getRotation(bodyId), localVector);
             },
             getLinearVelocityAtPoint(point) {
-                const relativePoint = subVec3(point, bodyWorld._bodyManager.getPosition(bodyId));
-                return addVec3(
+                const relativePoint = Vec3.subtract(point, bodyWorld._bodyManager.getPosition(bodyId));
+                return Vec3.add(
                     bodyWorld._bodyManager.getLinearVelocity(bodyId),
-                    crossVec3(bodyWorld._bodyManager.getAngularVelocity(bodyId), relativePoint)
+                    Vec3.cross(bodyWorld._bodyManager.getAngularVelocity(bodyId), relativePoint)
                 );
             },
             getMass() {
                 return bodyWorld._bodyManager.getMass(bodyId) as Mass;
             },
             getInertiaTensor() {
-                return cloneVec3(bodyWorld._bodyManager.getInertiaTensor(bodyId));
+                return Vec3.copy(bodyWorld._bodyManager.getInertiaTensor(bodyId));
             },
             getMassData() {
                 return bodyWorld._getBodyMassData(bodyId);
@@ -1065,7 +1055,7 @@ export class PhysicsWorld3D implements Disposable {
                 );
             },
             getLocalCenter() {
-                return cloneVec3(bodyWorld._getBodyMassData(bodyId).center);
+                return Vec3.copy(bodyWorld._getBodyMassData(bodyId).center);
             },
         };
     }
@@ -1130,12 +1120,8 @@ export class PhysicsWorld3D implements Disposable {
         return {
             mass: mass as Mass,
             inverseMass: mass > 0 ? 1 / mass : 0,
-            inertiaTensor: cloneVec3(inertiaTensor),
-            inverseInertiaTensor: {
-                x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
-                y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
-                z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
-            },
+            inertiaTensor: Vec3.copy(inertiaTensor),
+            inverseInertiaTensor: inverseVec3(inertiaTensor),
             center: this._computeBodyMassData(bodyId).center,
         };
     }
@@ -1143,15 +1129,12 @@ export class PhysicsWorld3D implements Disposable {
     private _computeBodyMassData(bodyId: BodyId3D): IMassData3D {
         const shapes = this._shapeManager.getShapesForBody(bodyId);
         if (shapes.length === 0 || this._bodyManager.getBodyType(bodyId) !== BODY_TYPE_DYNAMIC) {
+            const inertiaTensor = this._bodyManager.getInertiaTensor(bodyId);
             return {
                 mass: this._bodyManager.getMass(bodyId) as Mass,
                 inverseMass: this._bodyManager.getInverseMass(bodyId),
-                inertiaTensor: cloneVec3(this._bodyManager.getInertiaTensor(bodyId)),
-                inverseInertiaTensor: {
-                    x: this._bodyManager.getInertiaTensor(bodyId).x > 0 ? 1 / this._bodyManager.getInertiaTensor(bodyId).x : 0,
-                    y: this._bodyManager.getInertiaTensor(bodyId).y > 0 ? 1 / this._bodyManager.getInertiaTensor(bodyId).y : 0,
-                    z: this._bodyManager.getInertiaTensor(bodyId).z > 0 ? 1 / this._bodyManager.getInertiaTensor(bodyId).z : 0,
-                },
+                inertiaTensor: Vec3.copy(inertiaTensor),
+                inverseInertiaTensor: inverseVec3(inertiaTensor),
                 center: { x: 0, y: 0, z: 0 },
             };
         }
@@ -1168,7 +1151,7 @@ export class PhysicsWorld3D implements Disposable {
             const massData = this._computeShapeMassData(descriptor, descriptor.material.density);
             shapeMassData.push(massData);
             totalMass += massData.mass;
-            center = addVec3(center, scaleVec3(massData.center, massData.mass));
+            center = Vec3.add(center, Vec3.multiplyScalar(massData.center, massData.mass));
         }
 
         if (totalMass <= 1e-10) {
@@ -1181,11 +1164,11 @@ export class PhysicsWorld3D implements Disposable {
             };
         }
 
-        center = scaleVec3(center, 1 / totalMass);
+        center = Vec3.multiplyScalar(center, 1 / totalMass);
 
         let inertiaTensor = { x: 0, y: 0, z: 0 };
         for (const massData of shapeMassData) {
-            const offset = subVec3(massData.center, center);
+            const offset = Vec3.subtract(massData.center, center);
             inertiaTensor = {
                 x:
                     inertiaTensor.x +
@@ -1206,11 +1189,7 @@ export class PhysicsWorld3D implements Disposable {
             mass: totalMass as Mass,
             inverseMass: totalMass > 0 ? 1 / totalMass : 0,
             inertiaTensor,
-            inverseInertiaTensor: {
-                x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
-                y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
-                z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
-            },
+            inverseInertiaTensor: inverseVec3(inertiaTensor),
             center,
         };
     }
@@ -1226,17 +1205,13 @@ export class PhysicsWorld3D implements Disposable {
                     mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor: { x: inertia, y: inertia, z: inertia },
-                    inverseInertiaTensor: {
-                        x: inertia > 0 ? 1 / inertia : 0,
-                        y: inertia > 0 ? 1 / inertia : 0,
-                        z: inertia > 0 ? 1 / inertia : 0,
-                    },
-                    center: cloneVec3(descriptor.def.center),
+                    inverseInertiaTensor: inverseVec3({ x: inertia, y: inertia, z: inertia }),
+                    center: Vec3.copy(descriptor.def.center),
                 };
             }
             case SHAPE_TYPE_BOX: {
                 const halfExtents = descriptor.def.halfExtents;
-                const fullExtents = scaleVec3(halfExtents, 2);
+                const fullExtents = Vec3.multiplyScalar(halfExtents, 2);
                 const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
                 const inertiaTensor = {
                     x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
@@ -1247,17 +1222,13 @@ export class PhysicsWorld3D implements Disposable {
                     mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor,
-                    inverseInertiaTensor: {
-                        x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
-                        y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
-                        z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
-                    },
-                    center: cloneVec3(descriptor.def.center),
+                    inverseInertiaTensor: inverseVec3(inertiaTensor),
+                    center: Vec3.copy(descriptor.def.center),
                 };
             }
             case SHAPE_TYPE_CAPSULE: {
-                const segment = subVec3(descriptor.def.p2, descriptor.def.p1);
-                const segmentLength = lengthVec3(segment);
+                const segment = Vec3.subtract(descriptor.def.p2, descriptor.def.p1);
+                const segmentLength = Vec3.len(segment);
                 const radius = descriptor.def.radius;
                 const cylinderMass = Math.PI * radius * radius * segmentLength * safeDensity;
                 const sphereMass = ((4 / 3) * Math.PI * radius * radius * radius) * safeDensity;
@@ -1267,12 +1238,8 @@ export class PhysicsWorld3D implements Disposable {
                     mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor: { x: inertia, y: inertia, z: inertia },
-                    inverseInertiaTensor: {
-                        x: inertia > 0 ? 1 / inertia : 0,
-                        y: inertia > 0 ? 1 / inertia : 0,
-                        z: inertia > 0 ? 1 / inertia : 0,
-                    },
-                    center: scaleVec3(addVec3(descriptor.def.p1, descriptor.def.p2), 0.5),
+                    inverseInertiaTensor: inverseVec3({ x: inertia, y: inertia, z: inertia }),
+                    center: midpointVec3(descriptor.def.p1, descriptor.def.p2),
                 };
             }
             case SHAPE_TYPE_CYLINDER: {
@@ -1292,12 +1259,8 @@ export class PhysicsWorld3D implements Disposable {
                     mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor,
-                    inverseInertiaTensor: {
-                        x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
-                        y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
-                        z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
-                    },
-                    center: cloneVec3(descriptor.def.center),
+                    inverseInertiaTensor: inverseVec3(inertiaTensor),
+                    center: Vec3.copy(descriptor.def.center),
                 };
             }
             case SHAPE_TYPE_CONE: {
@@ -1317,17 +1280,13 @@ export class PhysicsWorld3D implements Disposable {
                     mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor,
-                    inverseInertiaTensor: {
-                        x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
-                        y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
-                        z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
-                    },
-                    center: cloneVec3(descriptor.def.center),
+                    inverseInertiaTensor: inverseVec3(inertiaTensor),
+                    center: Vec3.copy(descriptor.def.center),
                 };
             }
             case SHAPE_TYPE_CONVEX_HULL: {
                 const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
-                const fullExtents = subVec3(bounds.max, bounds.min);
+                const fullExtents = Vec3.subtract(bounds.max, bounds.min);
                 const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
                 const inertiaTensor = {
                     x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
@@ -1338,17 +1297,13 @@ export class PhysicsWorld3D implements Disposable {
                     mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor,
-                    inverseInertiaTensor: {
-                        x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
-                        y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
-                        z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
-                    },
-                    center: scaleVec3(addVec3(bounds.min, bounds.max), 0.5),
+                    inverseInertiaTensor: inverseVec3(inertiaTensor),
+                    center: midpointVec3(bounds.min, bounds.max),
                 };
             }
             case SHAPE_TYPE_TRIANGLE_MESH: {
                 const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
-                const fullExtents = subVec3(bounds.max, bounds.min);
+                const fullExtents = Vec3.subtract(bounds.max, bounds.min);
                 const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
                 const inertiaTensor = {
                     x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
@@ -1359,17 +1314,13 @@ export class PhysicsWorld3D implements Disposable {
                     mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor,
-                    inverseInertiaTensor: {
-                        x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
-                        y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
-                        z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
-                    },
-                    center: scaleVec3(addVec3(bounds.min, bounds.max), 0.5),
+                    inverseInertiaTensor: inverseVec3(inertiaTensor),
+                    center: midpointVec3(bounds.min, bounds.max),
                 };
             }
             case SHAPE_TYPE_HEIGHTFIELD: {
                 const bounds = this._computeLocalHeightFieldBounds(descriptor.def);
-                const fullExtents = subVec3(bounds.max, bounds.min);
+                const fullExtents = Vec3.subtract(bounds.max, bounds.min);
                 const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
                 const inertiaTensor = {
                     x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
@@ -1380,12 +1331,8 @@ export class PhysicsWorld3D implements Disposable {
                     mass: mass as Mass,
                     inverseMass: mass > 0 ? 1 / mass : 0,
                     inertiaTensor,
-                    inverseInertiaTensor: {
-                        x: inertiaTensor.x > 0 ? 1 / inertiaTensor.x : 0,
-                        y: inertiaTensor.y > 0 ? 1 / inertiaTensor.y : 0,
-                        z: inertiaTensor.z > 0 ? 1 / inertiaTensor.z : 0,
-                    },
-                    center: scaleVec3(addVec3(bounds.min, bounds.max), 0.5),
+                    inverseInertiaTensor: inverseVec3(inertiaTensor),
+                    center: midpointVec3(bounds.min, bounds.max),
                 };
             }
             default:
@@ -1413,11 +1360,11 @@ export class PhysicsWorld3D implements Disposable {
             }
             case SHAPE_TYPE_BOX: {
                 const center = transformPoint3D(descriptor.def.center, position, rotation);
-                const worldRotation = multiplyQuat(rotation, descriptor.def.rotation ?? IDENTITY_ROTATION);
+                const worldRotation = Quat.multiply(rotation, descriptor.def.rotation ?? IDENTITY_ROTATION);
                 const extents = getBoxWorldExtents(descriptor.def.halfExtents, worldRotation);
                 return {
-                    min: subVec3(center, extents),
-                    max: addVec3(center, extents),
+                    min: Vec3.subtract(center, extents),
+                    max: Vec3.add(center, extents),
                 };
             }
             case SHAPE_TYPE_CAPSULE: {
@@ -1440,52 +1387,33 @@ export class PhysicsWorld3D implements Disposable {
             case SHAPE_TYPE_CYLINDER: {
                 const center = transformPoint3D(descriptor.def.center, position, rotation);
                 const axis = descriptor.def.axis ?? 1;
-                const localHalfExtents =
-                    axis === 0
-                        ? { x: descriptor.def.height * 0.5, y: descriptor.def.radius, z: descriptor.def.radius }
-                        : axis === 2
-                          ? { x: descriptor.def.radius, y: descriptor.def.radius, z: descriptor.def.height * 0.5 }
-                          : { x: descriptor.def.radius, y: descriptor.def.height * 0.5, z: descriptor.def.radius };
+                const localHalfExtents = cylinderConeLocalHalfExtents(axis, descriptor.def.radius, descriptor.def.height);
                 const extents = getBoxWorldExtents(localHalfExtents, rotation);
                 return {
-                    min: subVec3(center, extents),
-                    max: addVec3(center, extents),
+                    min: Vec3.subtract(center, extents),
+                    max: Vec3.add(center, extents),
                 };
             }
             case SHAPE_TYPE_CONE: {
                 const center = transformPoint3D(descriptor.def.center, position, rotation);
                 const axis = descriptor.def.axis ?? 1;
-                const localHalfExtents =
-                    axis === 0
-                        ? { x: descriptor.def.height * 0.5, y: descriptor.def.radius, z: descriptor.def.radius }
-                        : axis === 2
-                          ? { x: descriptor.def.radius, y: descriptor.def.radius, z: descriptor.def.height * 0.5 }
-                          : { x: descriptor.def.radius, y: descriptor.def.height * 0.5, z: descriptor.def.radius };
+                const localHalfExtents = cylinderConeLocalHalfExtents(axis, descriptor.def.radius, descriptor.def.height);
                 const extents = getBoxWorldExtents(localHalfExtents, rotation);
                 return {
-                    min: subVec3(center, extents),
-                    max: addVec3(center, extents),
+                    min: Vec3.subtract(center, extents),
+                    max: Vec3.add(center, extents),
                 };
             }
-            case SHAPE_TYPE_CONVEX_HULL: {
-                let bounds: IAabb3D | null = null;
-                for (const vertex of descriptor.def.vertices) {
-                    const worldVertex = transformPoint3D(vertex, position, rotation);
-                    bounds = bounds
-                        ? expandAabb(bounds, worldVertex)
-                        : { min: cloneVec3(worldVertex), max: cloneVec3(worldVertex) };
-                }
-                return bounds ?? { min: cloneVec3(position), max: cloneVec3(position) };
-            }
+            case SHAPE_TYPE_CONVEX_HULL:
             case SHAPE_TYPE_TRIANGLE_MESH: {
                 let bounds: IAabb3D | null = null;
                 for (const vertex of descriptor.def.vertices) {
                     const worldVertex = transformPoint3D(vertex, position, rotation);
                     bounds = bounds
                         ? expandAabb(bounds, worldVertex)
-                        : { min: cloneVec3(worldVertex), max: cloneVec3(worldVertex) };
+                        : { min: Vec3.copy(worldVertex), max: Vec3.copy(worldVertex) };
                 }
-                return bounds ?? { min: cloneVec3(position), max: cloneVec3(position) };
+                return bounds ?? { min: Vec3.copy(position), max: Vec3.copy(position) };
             }
             case SHAPE_TYPE_HEIGHTFIELD: {
                 const localBounds = this._computeLocalHeightFieldBounds(descriptor.def);
@@ -1504,12 +1432,12 @@ export class PhysicsWorld3D implements Disposable {
                     const worldCorner = transformPoint3D(corner, position, rotation);
                     bounds = bounds
                         ? expandAabb(bounds, worldCorner)
-                        : { min: cloneVec3(worldCorner), max: cloneVec3(worldCorner) };
+                        : { min: Vec3.copy(worldCorner), max: Vec3.copy(worldCorner) };
                 }
-                return bounds ?? { min: cloneVec3(position), max: cloneVec3(position) };
+                return bounds ?? { min: Vec3.copy(position), max: Vec3.copy(position) };
             }
             default:
-                return { min: cloneVec3(position), max: cloneVec3(position) };
+                return { min: Vec3.copy(position), max: Vec3.copy(position) };
         }
     }
 
@@ -1520,13 +1448,13 @@ export class PhysicsWorld3D implements Disposable {
         switch (descriptor.def.kind) {
             case SHAPE_TYPE_SPHERE: {
                 const center = transformPoint3D(descriptor.def.center, position, rotation);
-                return lengthSquaredVec3(subVec3(point, center)) <= descriptor.def.radius ** 2;
+                return Vec3.lengthSquared(Vec3.subtract(point, center)) <= descriptor.def.radius ** 2;
             }
             case SHAPE_TYPE_BOX: {
                 const bodyLocal = inverseTransformPoint3D(point, position, rotation);
-                const centered = subVec3(bodyLocal, descriptor.def.center);
+                const centered = Vec3.subtract(bodyLocal, descriptor.def.center);
                 const localRotation = descriptor.def.rotation ?? IDENTITY_ROTATION;
-                const localPoint = inverseRotateVec3(centered, localRotation);
+                const localPoint = Quat.rotateVector(Quat.conjugate(localRotation), centered);
                 return (
                     Math.abs(localPoint.x) <= descriptor.def.halfExtents.x &&
                     Math.abs(localPoint.y) <= descriptor.def.halfExtents.y &&
@@ -1542,7 +1470,7 @@ export class PhysicsWorld3D implements Disposable {
             }
             case SHAPE_TYPE_CYLINDER: {
                 const localPoint = inverseTransformPoint3D(point, position, rotation);
-                const centered = subVec3(localPoint, descriptor.def.center);
+                const centered = Vec3.subtract(localPoint, descriptor.def.center);
                 const axis = descriptor.def.axis ?? 1;
                 const halfHeight = descriptor.def.height * 0.5;
                 if (axis === 0) {
@@ -1564,7 +1492,7 @@ export class PhysicsWorld3D implements Disposable {
             }
             case SHAPE_TYPE_CONE: {
                 const localPoint = inverseTransformPoint3D(point, position, rotation);
-                const centered = subVec3(localPoint, descriptor.def.center);
+                const centered = Vec3.subtract(localPoint, descriptor.def.center);
                 const axis = descriptor.def.axis ?? 1;
                 const halfHeight = descriptor.def.height * 0.5;
                 const axial = axis === 0 ? centered.x : axis === 2 ? centered.z : centered.y;
@@ -1656,21 +1584,21 @@ export class PhysicsWorld3D implements Disposable {
                 return raySphereHit(origin, direction, center, descriptor.def.radius, maxFraction);
             }
             case SHAPE_TYPE_BOX: {
-                const worldRotation = multiplyQuat(rotation, descriptor.def.rotation ?? IDENTITY_ROTATION);
+                const worldRotation = Quat.multiply(rotation, descriptor.def.rotation ?? IDENTITY_ROTATION);
                 const center = transformPoint3D(descriptor.def.center, position, rotation);
                 const localOrigin = inverseTransformPoint3D(origin, center, worldRotation);
-                const localDirection = inverseRotateVec3(direction, worldRotation);
+                const localDirection = Quat.rotateVector(Quat.conjugate(worldRotation), direction);
                 const hit = rayAabbHit(
                     localOrigin,
                     localDirection,
-                    scaleVec3(descriptor.def.halfExtents, -1),
+                    Vec3.multiplyScalar(descriptor.def.halfExtents, -1),
                     descriptor.def.halfExtents,
                     maxFraction
                 );
                 if (!hit) {
                     return null;
                 }
-                return { fraction: hit.fraction, normal: rotateVec3(hit.normal, worldRotation) };
+                return { fraction: hit.fraction, normal: Quat.rotateVector(worldRotation, hit.normal) };
             }
             case SHAPE_TYPE_TRIANGLE_MESH: {
                 let closestHit: IShapeRayHit3D | null = null;
@@ -1768,21 +1696,21 @@ export class PhysicsWorld3D implements Disposable {
             case SHAPE_TYPE_CONE:
                 return transformPoint3D(descriptor.def.center, position, rotation);
             case SHAPE_TYPE_CAPSULE:
-                return transformPoint3D(scaleVec3(addVec3(descriptor.def.p1, descriptor.def.p2), 0.5), position, rotation);
+                return transformPoint3D(midpointVec3(descriptor.def.p1, descriptor.def.p2), position, rotation);
             case SHAPE_TYPE_CONVEX_HULL: {
                 const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
-                return transformPoint3D(scaleVec3(addVec3(bounds.min, bounds.max), 0.5), position, rotation);
+                return transformPoint3D(midpointVec3(bounds.min, bounds.max), position, rotation);
             }
             case SHAPE_TYPE_TRIANGLE_MESH: {
                 const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
-                return transformPoint3D(scaleVec3(addVec3(bounds.min, bounds.max), 0.5), position, rotation);
+                return transformPoint3D(midpointVec3(bounds.min, bounds.max), position, rotation);
             }
             case SHAPE_TYPE_HEIGHTFIELD: {
                 const bounds = this._computeLocalHeightFieldBounds(descriptor.def);
-                return transformPoint3D(scaleVec3(addVec3(bounds.min, bounds.max), 0.5), position, rotation);
+                return transformPoint3D(midpointVec3(bounds.min, bounds.max), position, rotation);
             }
             default:
-                return cloneVec3(position);
+                return Vec3.copy(position);
         }
     }
 
@@ -1811,7 +1739,7 @@ export class PhysicsWorld3D implements Disposable {
         for (const vertex of vertices) {
             bounds = bounds
                 ? expandAabb(bounds, vertex)
-                : { min: cloneVec3(vertex), max: cloneVec3(vertex) };
+                : { min: Vec3.copy(vertex), max: Vec3.copy(vertex) };
         }
         return bounds ?? { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
     }
@@ -1823,7 +1751,7 @@ export class PhysicsWorld3D implements Disposable {
                 const vertex = getHeightFieldLocalVertex(def, xIndex, zIndex);
                 bounds = bounds
                     ? expandAabb(bounds, vertex)
-                    : { min: cloneVec3(vertex), max: cloneVec3(vertex) };
+                    : { min: Vec3.copy(vertex), max: Vec3.copy(vertex) };
             }
         }
 

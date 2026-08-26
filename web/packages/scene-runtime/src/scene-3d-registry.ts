@@ -2,11 +2,19 @@ import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import { Camera } from './components/camera';
 import { DirectionalLight } from './components/directional-light';
 import { FollowCameraController } from './components/follow-camera-controller';
+import { LineRenderer } from './components/line-renderer';
 import { MeshRenderer } from './components/mesh-renderer';
 import { OrbitCameraController } from './components/orbit-camera-controller';
 import { PointLight } from './components/point-light';
 import { SpotLight } from './components/spot-light';
+import { AreaLight } from './components/area-light';
+import { ReflectionProbe } from './components/reflection-probe';
+import { LODGroup } from './components/lod-group';
+import { BillboardRenderer } from './components/billboard-renderer';
 import { Terrain } from './components/terrain';
+import { TrailRenderer } from './components/trail-renderer';
+import { ParticleSystem } from './components/particle-system';
+import { PathAgent } from './components/path-agent';
 import {
     CORE_SCENE_BUILT_IN_MANIFESTS,
     SCENE_CORE_BUILT_IN_MANIFEST,
@@ -34,9 +42,17 @@ const SCENE_3D_ONLY_BUILT_IN_REGISTRY_SOURCE: SceneBuiltInRegistrySource = Objec
     DirectionalLight,
     PointLight,
     SpotLight,
+    AreaLight,
+    ReflectionProbe,
+    LODGroup,
+    BillboardRenderer,
     Terrain,
     OrbitCameraController,
     FollowCameraController,
+    LineRenderer,
+    TrailRenderer,
+    ParticleSystem,
+    PathAgent,
 });
 
 const SCENE_3D_BUILT_IN_REGISTRY_SOURCE: SceneBuiltInRegistrySource = Object.freeze({
@@ -53,9 +69,17 @@ export const SCENE_3D_BUILT_IN_MANIFEST = createSceneBuiltInManifest({
         'DirectionalLight',
         'PointLight',
         'SpotLight',
+        'AreaLight',
+        'ReflectionProbe',
+        'LODGroup',
+        'BillboardRenderer',
         'Terrain',
         'OrbitCameraController',
         'FollowCameraController',
+        'LineRenderer',
+        'TrailRenderer',
+        'ParticleSystem',
+        'PathAgent',
     ] as const,
 });
 

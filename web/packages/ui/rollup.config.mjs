@@ -1,54 +1,21 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createPackageConfig } from '../../build/create-package-config.mjs';
+import { createMultiEntryConfig } from '../../build/create-package-config.mjs';
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url));
 
-export default [
-    ...createPackageConfig({ packageDir }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/types.ts',
-        outputBasename: 'types/index',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/errors.ts',
-        outputBasename: 'errors/index',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/runtime.ts',
-        outputBasename: 'runtime/index',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/layout.ts',
-        outputBasename: 'layout/index',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/render.ts',
-        outputBasename: 'render/index',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/text.ts',
-        outputBasename: 'text/index',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/font.ts',
-        outputBasename: 'font/index',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/widget.ts',
-        outputBasename: 'widget/index',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/controls.ts',
-        outputBasename: 'controls/index',
-    }),
-];
+export default createMultiEntryConfig({
+    packageDir,
+    entries: {
+        index: 'src/index.ts',
+        'types/index': 'src/types.ts',
+        'errors/index': 'src/errors.ts',
+        'runtime/index': 'src/runtime.ts',
+        'layout/index': 'src/layout.ts',
+        'render/index': 'src/render.ts',
+        'text/index': 'src/text.ts',
+        'font/index': 'src/font.ts',
+        'widget/index': 'src/widget.ts',
+        'controls/index': 'src/controls.ts',
+    },
+});

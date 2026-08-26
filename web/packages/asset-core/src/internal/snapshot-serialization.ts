@@ -2,7 +2,7 @@ import {
     AssetSnapshotError,
     resolveAssetMessage,
 } from '../errors';
-import { isPlainObject, isRecord } from '@axrone/utility';
+import { decode, encode, isPlainObject, isRecord } from '@axrone/utility';
 import type {
     AssetBinaryCodec,
     AssetBinaryPersistenceOptions,
@@ -24,18 +24,6 @@ import type {
 
 export const ASSET_SNAPSHOT_VERSION = 4 as const;
 const LEGACY_ASSET_SNAPSHOT_VERSIONS = Object.freeze([1, 2, 3] as const);
-
-const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-const BASE64_CODES = (() => {
-    const table = new Int16Array(123);
-    table.fill(-1);
-
-    for (let index = 0; index < BASE64_ALPHABET.length; index += 1) {
-        table[BASE64_ALPHABET.charCodeAt(index)!] = index;
-    }
-
-    return table;
-})();
 
 export const isAssetJsonValue = (value: unknown): value is AssetJsonValue => {
     if (
@@ -67,96 +55,6 @@ export const getBytes = (value: ArrayBuffer | ArrayBufferView | Uint8Array): Uin
         : value instanceof ArrayBuffer
           ? new Uint8Array(value)
           : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-
-const encodeBase64 = (bytes: Uint8Array): string => {
-    if (bytes.length === 0) {
-        return '';
-    }
-
-    let result = '';
-    let index = 0;
-
-    for (; index + 2 < bytes.length; index += 3) {
-        const block = (bytes[index]! << 16) | (bytes[index + 1]! << 8) | bytes[index + 2]!;
-        result +=
-            BASE64_ALPHABET[(block >>> 18) & 63] +
-            BASE64_ALPHABET[(block >>> 12) & 63] +
-            BASE64_ALPHABET[(block >>> 6) & 63] +
-            BASE64_ALPHABET[block & 63];
-    }
-
-    const remaining = bytes.length - index;
-    if (remaining === 1) {
-        const block = bytes[index]! << 16;
-        result +=
-            BASE64_ALPHABET[(block >>> 18) & 63] +
-            BASE64_ALPHABET[(block >>> 12) & 63] +
-            '==';
-    } else if (remaining === 2) {
-        const block = (bytes[index]! << 16) | (bytes[index + 1]! << 8);
-        result +=
-            BASE64_ALPHABET[(block >>> 18) & 63] +
-            BASE64_ALPHABET[(block >>> 12) & 63] +
-            BASE64_ALPHABET[(block >>> 6) & 63] +
-            '=';
-    }
-
-    return result;
-};
-
-const getBase64Code = (value: string): number => {
-    const code = value.charCodeAt(0);
-    return code < BASE64_CODES.length ? BASE64_CODES[code]! : -1;
-};
-
-const decodeBase64 = (value: string): Uint8Array => {
-    if (value.length === 0) {
-        return new Uint8Array(0);
-    }
-
-    if (value.length % 4 !== 0) {
-        throw new Error('Invalid base64 payload length');
-    }
-
-    const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
-    const output = new Uint8Array((value.length / 4) * 3 - padding);
-    let outputIndex = 0;
-
-    for (let index = 0; index < value.length; index += 4) {
-        const char0 = value[index]!;
-        const char1 = value[index + 1]!;
-        const char2 = value[index + 2]!;
-        const char3 = value[index + 3]!;
-        const code0 = getBase64Code(char0);
-        const code1 = getBase64Code(char1);
-        const code2 = char2 === '=' ? 0 : getBase64Code(char2);
-        const code3 = char3 === '=' ? 0 : getBase64Code(char3);
-        const isLastChunk = index + 4 === value.length;
-
-        if (
-            code0 < 0 ||
-            code1 < 0 ||
-            (char2 !== '=' && code2 < 0) ||
-            (char3 !== '=' && code3 < 0) ||
-            (!isLastChunk && (char2 === '=' || char3 === '='))
-        ) {
-            throw new Error('Invalid base64 payload');
-        }
-
-        const block = (code0 << 18) | (code1 << 12) | (code2 << 6) | code3;
-        output[outputIndex++] = (block >>> 16) & 255;
-
-        if (char2 !== '=') {
-            output[outputIndex++] = (block >>> 8) & 255;
-        }
-
-        if (char3 !== '=') {
-            output[outputIndex++] = block & 255;
-        }
-    }
-
-    return output;
-};
 
 const isBinaryCodec = <TData>(codec: AssetCodec<TData>): codec is AssetBinaryCodec<TData> =>
     codec.format === 'binary';
@@ -266,7 +164,7 @@ const serializeBinaryCompatible = <TKind extends string>(
             __asset: 'axrone.binary',
             storage: 'inline',
             encoding: 'base64',
-            data: encodeBase64(bytes),
+            data: encode(bytes),
             byteLength: bytes.length,
         });
     }
@@ -354,7 +252,7 @@ const deserializeBinaryCompatible = <TKind extends string>(
 
     if (value.storage === 'inline') {
         try {
-            const bytes = decodeBase64(value.data);
+            const bytes = decode(value.data);
 
             if (bytes.length !== value.byteLength) {
                 throw new Error('byte length mismatch');

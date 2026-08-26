@@ -7,6 +7,9 @@ import type {
     WebGL2RenderResourceHandle,
     WebGL2RenderTextureNativeHandle,
 } from './pipeline-contracts';
+import type { ContextSource, IGLContext } from './context';
+import { resolveContext } from './context';
+import { GLContextError } from './context/errors';
 
 interface WebGL2FormatInfo {
     readonly internalFormat: number;
@@ -130,7 +133,10 @@ const createTextureStorage = (
         gl.texParameteri(target, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
     }
 
-    if (target === gl.TEXTURE_2D || target === gl.TEXTURE_CUBE_MAP) {
+    const samplesForStorage = (descriptor as unknown as { samples?: number }).samples ?? 1;
+    if (samplesForStorage > 1 && target === gl.TEXTURE_2D && typeof (gl as unknown as { texStorage2DMultisample?: unknown }).texStorage2DMultisample === 'function') {
+        (gl as unknown as { texStorage2DMultisample: (t:number,s:number,f:number,w:number,h:number, fix:boolean)=>void }).texStorage2DMultisample(target, samplesForStorage, formatInfo.internalFormat, descriptor.width, descriptor.height, true);
+    } else if (target === gl.TEXTURE_2D || target === gl.TEXTURE_CUBE_MAP) {
         gl.texStorage2D(target, mipLevels, formatInfo.internalFormat, descriptor.width, descriptor.height);
     } else {
         gl.texStorage3D(
@@ -153,8 +159,11 @@ const createTextureStorage = (
 };
 
 export const createWebGL2RenderResourceAllocator = (
-    gl: WebGL2RenderingContext
-): RenderResourceAllocator<WebGL2RenderResourceHandle> => ({
+    source: ContextSource
+): RenderResourceAllocator<WebGL2RenderResourceHandle> => {
+    const ctx = resolveContext(source);
+    const gl = ctx.gl;
+    return {
     createTexture(descriptor, previous) {
         if (descriptor.usage.includes('present')) {
             if (previous?.kind === 'texture') {
@@ -163,9 +172,7 @@ export const createWebGL2RenderResourceAllocator = (
             return DEFAULT_FRAMEBUFFER_HANDLE;
         }
 
-        if ((descriptor.samples ?? 1) !== 1) {
-            throw new Error('WebGL2 render resource allocator does not support multisampled textures yet');
-        }
+        const samples = descriptor.samples ?? 1;
 
         if (previous?.kind === 'texture') {
             gl.deleteTexture(previous.texture);
@@ -173,7 +180,7 @@ export const createWebGL2RenderResourceAllocator = (
 
         const texture = gl.createTexture();
         if (!texture) {
-            throw new Error('Failed to allocate WebGL2 render texture');
+            throw new GLContextError('OUT_OF_MEMORY', 'en', { reason: 'Failed to allocate WebGL2 render texture' });
         }
 
         return createTextureStorage(gl, texture, descriptor);
@@ -183,4 +190,5 @@ export const createWebGL2RenderResourceAllocator = (
             gl.deleteTexture(native.texture);
         }
     },
-});
+    };
+};

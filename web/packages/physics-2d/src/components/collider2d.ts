@@ -3,6 +3,7 @@ import { Vec2 } from '@axrone/numeric';
 import type { CollisionFilter, ShapeId } from '../types';
 import type { PhysicsWorld2D } from '../core/physics-world';
 import { Rigidbody2D } from './rigidbody2d';
+import { PhysicsWorld2DComponent } from './physics-world-2d-component';
 
 export interface PhysicsMaterial2D {
     friction: number;
@@ -121,6 +122,12 @@ export abstract class Collider2D extends Component {
     protected abstract updateCollisionFilter(): void;
 
     protected getPhysicsWorld(): PhysicsWorld2D | null {
+        if (this._physicsWorld) return this._physicsWorld;
+        const worldComponent = PhysicsWorld2DComponent.instance;
+        if (worldComponent?.physicsWorld) {
+            this._physicsWorld = worldComponent.physicsWorld;
+            return this._physicsWorld;
+        }
         return null;
     }
 

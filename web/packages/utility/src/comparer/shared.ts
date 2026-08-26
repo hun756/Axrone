@@ -32,12 +32,6 @@ export type ExtractPropertyType<T, P extends PropertyPath<T>> = P extends readon
         ? T[P]
         : never;
 
-export type DeepPartial<T> = T extends object
-    ? {
-          [P in keyof T]?: DeepPartial<T[P]>;
-      }
-    : T;
-
 export type KeysOfType<T, V> = {
     [K in keyof T]-?: T[K] extends V ? K : never;
 }[keyof T];

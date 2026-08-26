@@ -1,9 +1,10 @@
 import { Component } from '@axrone/ecs-runtime';
 import { Transform } from '@axrone/ecs-runtime/components';
 import { script } from '@axrone/ecs-runtime/decorators';
-import { Vec2 } from '@axrone/numeric';
+import { Vec2, Quat } from '@axrone/numeric';
 import type { BodyId, BodyType } from '../types';
 import type { PhysicsWorld2D } from '../core/physics-world';
+import { PhysicsWorld2DComponent } from './physics-world-2d-component';
 
 export enum RigidbodyType2D {
     Static = 0,
@@ -39,6 +40,8 @@ export interface RigidbodyConfig2D {
     enableCaching: true,
 })
 export class Rigidbody2D extends Component {
+    private static readonly _tempQuat = Quat.IDENTITY.clone();
+
     private _bodyId: BodyId | null = null;
     private _physicsWorld: PhysicsWorld2D | null = null;
     private _transform: Transform | null = null;
@@ -253,13 +256,16 @@ export class Rigidbody2D extends Component {
         if (!this._bodyId || !this._physicsWorld) return;
         (this._physicsWorld as any).getBodyManager().setRotation(this._bodyId, angle);
         if (this._transform) {
+            const q = Rigidbody2D._tempQuat;
+            Quat.fromEuler(0, 0, angle, q);
+            this._transform.rotation = q;
         }
     }
 
     getPosition(): Vec2 {
         if (!this._bodyId || !this._physicsWorld) return Vec2.ZERO.clone();
         const pos = (this._physicsWorld as any).getBodyManager().getPosition(this._bodyId);
-        return new Vec2(pos.x, pos.y);
+        return Vec2.from(pos);
     }
 
     getRotation(): number {
@@ -323,20 +329,28 @@ export class Rigidbody2D extends Component {
     private syncFromPhysics(): void {
         if (!this._bodyId || !this._physicsWorld || !this._transform) return;
 
-        const pos = (this._physicsWorld as any).getBodyManager().getPosition(this._bodyId);
-        const rot = (this._physicsWorld as any).getBodyManager().getRotation(this._bodyId);
+        const bodyManager = (this._physicsWorld as any).getBodyManager();
+        const pos = bodyManager.getPosition(this._bodyId);
+        const rot = bodyManager.getRotation(this._bodyId);
 
         this._transform.position.x = pos.x;
         this._transform.position.y = pos.y;
+
+        const q = Rigidbody2D._tempQuat;
+        Quat.fromEuler(0, 0, rot, q);
+        this._transform.rotation = q;
     }
 
     private syncToPhysics(): void {
         if (!this._bodyId || !this._physicsWorld || !this._transform) return;
 
+        const bodyManager = (this._physicsWorld as any).getBodyManager();
         const pos = this._transform.position;
-        (this._physicsWorld as any)
-            .getBodyManager()
-            .setPosition(this._bodyId, { x: pos.x, y: pos.y });
+        bodyManager.setPosition(this._bodyId, { x: pos.x, y: pos.y });
+
+        const rot = this._transform.rotation;
+        const angle = Math.atan2(2 * (rot.w * rot.z + rot.x * rot.y), 1 - 2 * (rot.y * rot.y + rot.z * rot.z));
+        bodyManager.setRotation(this._bodyId, angle);
     }
 
     private updateBodyType(): void {
@@ -348,25 +362,41 @@ export class Rigidbody2D extends Component {
 
     private updateMass(): void {
         if (!this._bodyId || !this._physicsWorld) return;
+        const bodyManager = (this._physicsWorld as any).getBodyManager();
+        const currentInertia = bodyManager.getInertia(this._bodyId);
+        const currentCenter = bodyManager.getLocalCenter(this._bodyId);
+        bodyManager.setMassData(this._bodyId, this._mass, currentInertia, currentCenter);
     }
 
     private updateDamping(): void {
         if (!this._bodyId || !this._physicsWorld) return;
+        const bodyManager = (this._physicsWorld as any).getBodyManager();
+        bodyManager.setLinearDamping(this._bodyId, this._linearDamping);
+        bodyManager.setAngularDamping(this._bodyId, this._angularDamping);
     }
 
     private updateGravityScale(): void {
         if (!this._bodyId || !this._physicsWorld) return;
+        (this._physicsWorld as any).getBodyManager().setGravityScale(this._bodyId, this._gravityScale);
     }
 
     private updateFixedRotation(): void {
         if (!this._bodyId || !this._physicsWorld) return;
+        (this._physicsWorld as any).getBodyManager().setFixedRotation(this._bodyId, this._fixedRotation);
     }
 
     private updateBullet(): void {
         if (!this._bodyId || !this._physicsWorld) return;
+        (this._physicsWorld as any).getBodyManager().setBullet(this._bodyId, this._bullet);
     }
 
     private getPhysicsWorld(): PhysicsWorld2D | null {
+        if (this._physicsWorld) return this._physicsWorld;
+        const worldComponent = PhysicsWorld2DComponent.instance;
+        if (worldComponent?.physicsWorld) {
+            this._physicsWorld = worldComponent.physicsWorld;
+            return this._physicsWorld;
+        }
         return null;
     }
 

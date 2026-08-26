@@ -1154,11 +1154,10 @@ describe('Vec3 Test Suite', () => {
             });
         });
 
-        describe('randomBox instance method', () => {
+        describe('randomBox static method', () => {
             test('should generate vectors within box bounds', () => {
-                const v = new Vec3();
                 const samples = Array.from({ length: 100 }, () =>
-                    v.randomBox(-5, 5, -10, 10, -1, 1)
+                    Vec3.randomBox(-5, 5, -10, 10, -1, 1)
                 );
 
                 samples.forEach((sample) => {
@@ -1172,9 +1171,8 @@ describe('Vec3 Test Suite', () => {
             });
 
             test('should generate uniform distribution within bounds', () => {
-                const v = new Vec3();
                 const samples = Array.from({ length: 5000 }, () =>
-                    v.randomBox(0, 10, 0, 10, 0, 10)
+                    Vec3.randomBox(0, 10, 0, 10, 0, 10)
                 );
 
                 const meanX = samples.reduce((sum, s) => sum + s.x, 0) / samples.length;
@@ -1187,9 +1185,8 @@ describe('Vec3 Test Suite', () => {
             });
 
             test('should handle negative bounds correctly', () => {
-                const v = new Vec3();
                 const samples = Array.from({ length: 100 }, () =>
-                    v.randomBox(-10, -5, -20, -10, -1, 0)
+                    Vec3.randomBox(-10, -5, -20, -10, -1, 0)
                 );
 
                 samples.forEach((sample) => {
@@ -1203,11 +1200,10 @@ describe('Vec3 Test Suite', () => {
             });
         });
 
-        describe('randomBoxNormal instance method', () => {
+        describe('randomBoxNormal static method', () => {
             test('should generate vectors within box bounds using normal distribution', () => {
-                const v = new Vec3();
                 const samples = Array.from({ length: 200 }, () =>
-                    v.randomBoxNormal(-5, 5, -5, 5, -5, 5)
+                    Vec3.randomBoxNormal(-5, 5, -5, 5, -5, 5)
                 );
 
                 samples.forEach((sample) => {
@@ -1221,9 +1217,8 @@ describe('Vec3 Test Suite', () => {
             });
 
             test('should show normal distribution characteristics', () => {
-                const v = new Vec3();
                 const samples = Array.from({ length: 1000 }, () =>
-                    v.randomBoxNormal(0, 10, 0, 10, 0, 10)
+                    Vec3.randomBoxNormal(0, 10, 0, 10, 0, 10)
                 );
 
                 let centerCount = 0;

@@ -12,7 +12,11 @@ import {
     getShaderDataTypeSize,
 } from './utils';
 import { ByteBuffer } from '@axrone/memory';
-import { EPSILON, Mat4, Vec2, Vec3, Vec4 } from '@axrone/numeric';
+import { floatEquals, Mat4, Vec2, Vec3, Vec4 } from '@axrone/numeric';
+import type { ContextSource, IGLContext } from '../context';
+import { isGLContext, resolveContext, resolveContextNullable, resolveRawGL } from '../context';
+import { DisposalTracker } from '../internal/disposable';
+
 import {
     ShaderInstanceError,
     ShaderInstanceLifecycleError,
@@ -339,8 +343,6 @@ interface ShaderInstanceStats {
     readonly uploadSkipped: number;
 }
 
-const areFloatsEqual = (a: number, b: number): boolean => Math.abs(a - b) <= EPSILON;
-
 const isUniformValueEqual = (a: ShaderUniformValue, b: ShaderUniformValue): boolean => {
     if (a === b) return true;
     if (a === null || b === null) return false;
@@ -351,7 +353,7 @@ const isUniformValueEqual = (a: ShaderUniformValue, b: ShaderUniformValue): bool
     if (isFloat32Array(a) && isFloat32Array(b)) {
         if (a.length !== b.length) return false;
         for (let i = 0; i < a.length; i++) {
-            if (!areFloatsEqual(a[i] as number, b[i] as number)) return false;
+            if (!floatEquals(a[i] as number, b[i] as number)) return false;
         }
         return true;
     }
@@ -380,7 +382,7 @@ const isUniformValueEqual = (a: ShaderUniformValue, b: ShaderUniformValue): bool
             const av = a[i];
             const bv = b[i];
             if (typeof av === 'number' && typeof bv === 'number') {
-                if (!areFloatsEqual(av, bv)) return false;
+                if (!floatEquals(av, bv)) return false;
             } else if (av !== bv) {
                 return false;
             }
@@ -424,6 +426,7 @@ export class ShaderInstance implements IShaderInstance {
     public readonly textures = new Map<string, WebGLTexture>();
     public readonly uniformBuffers = new Map<string, ByteBuffer>();
 
+    private readonly _ctx: IGLContext | null;
     private readonly gl: WebGL2RenderingContext | null;
     private readonly uniformUploader: UniformUploader;
     private readonly uniformDescriptors: Map<string, UniformDescriptor> = new Map();
@@ -434,14 +437,27 @@ export class ShaderInstance implements IShaderInstance {
     private readonly dirtyUniforms: Set<string> = new Set();
     private readonly dirtyBuffers: Set<string> = new Set();
     private readonly boundTextureUnits: Set<number> = new Set();
-    private readonly glBufferHandles: Map<string, WebGLBuffer> = new Map();
+    private readonly glBufferHandles: Map<string, WebGLBuffer | null> = new Map();
+    private readonly uniformBufferCapacities: Map<string, number> = new Map();
 
     private uniformUpdateCount = 0;
     private programBindCount = 0;
     private stateChangeCount = 0;
     private uploadSkipped = 0;
-    private lastBoundProgram: WebGLProgram | null = null;
-    private disposed = false;
+    private readonly _disposal = new DisposalTracker();
+
+    /**
+     * Context-level mirror of the currently bound program. Per-instance
+     * `lastBoundProgram` caches cannot see binds performed by OTHER
+     * instances, so the skip decision must consult shared state (see bind()).
+     */
+    private static contextCurrentProgram: WebGLProgram | null = null;
+    private static _nextRecoveryId = 0;
+
+    private readonly _recoveryId: number;
+    private _registryUnsubscribe: (() => void) | null = null;
+    private _sortBuffer: UniformDescriptor[] = [];
+    private readonly _lastTextureSlots: Map<string, number> = new Map();
 
     private batchActive = false;
     private readonly batchBuffer: UniformBatchEntry[] = [];
@@ -450,20 +466,41 @@ export class ShaderInstance implements IShaderInstance {
     constructor(
         shader: ICompiledShader,
         variant: IShaderVariant,
-        gl?: WebGL2RenderingContext | null,
+        source?: ContextSource | null,
         options?: { batchCapacity?: number }
     ) {
         this.shader = shader;
         this.variant = variant;
-        this.gl = gl ?? null;
+        const ctx = resolveContextNullable(source);
+        this._ctx = ctx;
+        // Prefer ctx.gl, fallback to raw WebGL2RenderingContext if wrapper creation failed (e.g., mocked gl without canvas in tests)
+        const rawGL = !ctx && source && !isGLContext(source as unknown) ? (source as WebGL2RenderingContext) : null;
+        this.gl = ctx?.gl ?? rawGL ?? null;
         this.batchCapacity = Math.max(1, options?.batchCapacity ?? DEFAULT_BATCH_CAPACITY);
-        this.uniformUploader = this.gl ? new UniformUploader(this.gl) : new UniformUploader(assertContext(null));
+        const effectiveGL = this.gl ?? this._ctx?.gl ?? null;
+        this.uniformUploader = effectiveGL ? new UniformUploader(effectiveGL) : new UniformUploader(assertContext(null));
         this.buildDescriptors();
         this.initializeDefaultValues();
+        this._recoveryId = ShaderInstance._nextRecoveryId++;
+        if (this._ctx) {
+            this._registryUnsubscribe = this._ctx.registry.register(
+                { id: this._recoveryId, handleContextLost: () => this._onContextLost(), handleContextRestored: (ctx) => this._onContextRestored(ctx) },
+                'program'
+            );
+        }
+    }
+
+    public get context(): IGLContext | null {
+        return this._ctx;
+    }
+
+    /** Backward-compat alias: some callers may still expect .gl access */
+    public get glContext(): WebGL2RenderingContext | null {
+        return this.gl;
     }
 
     setUniform(name: string, value: ShaderUniformValue): void {
-        if (this.disposed) {
+        if (this._disposal.isDisposed) {
             throw new ShaderInstanceLifecycleError('PROGRAM_DISPOSED', 'en', { name });
         }
 
@@ -511,7 +548,7 @@ export class ShaderInstance implements IShaderInstance {
     }
 
     setUniformBlock(name: string, values: Readonly<Record<string, ShaderUniformValue>>): void {
-        if (this.disposed) {
+        if (this._disposal.isDisposed) {
             throw new ShaderInstanceLifecycleError('PROGRAM_DISPOSED', 'en', { name });
         }
         const binding = this.uniformBlockBindings.get(name);
@@ -533,7 +570,7 @@ export class ShaderInstance implements IShaderInstance {
     }
 
     setTexture(name: string, texture: WebGLTexture): void {
-        if (this.disposed) {
+        if (this._disposal.isDisposed) {
             throw new ShaderInstanceLifecycleError('PROGRAM_DISPOSED', 'en', { name });
         }
         if (!this.textureSlots.has(name)) {
@@ -546,7 +583,7 @@ export class ShaderInstance implements IShaderInstance {
     }
 
     setUniformBuffer(name: string, buffer: ByteBuffer): void {
-        if (this.disposed) {
+        if (this._disposal.isDisposed) {
             throw new ShaderInstanceLifecycleError('PROGRAM_DISPOSED', 'en', { name });
         }
         if (!this.uniformBlockBindings.has(name)) {
@@ -575,16 +612,25 @@ export class ShaderInstance implements IShaderInstance {
         this.batchBuffer.length = 0;
     }
 
-    bind(gl: WebGL2RenderingContext): void {
-        if (this.disposed) {
+    bind(source: ContextSource): void;
+    bind(gl: WebGL2RenderingContext): void;
+    bind(source: ContextSource | WebGL2RenderingContext): void {
+        if (this._disposal.isDisposed) {
             throw new ShaderInstanceLifecycleError('PROGRAM_DISPOSED', 'en', {
                 shader: this.shader.name,
             });
         }
+        const gl = resolveRawGL(source as ContextSource)!;
         const program = this.variant.shader.program;
-        if (this.lastBoundProgram !== program) {
-            gl.useProgram(program);
-            this.lastBoundProgram = program;
+        // FIX(upstream): lastBoundProgram cache is per-INSTANCE, but the GL
+        // program binding is CONTEXT-GLOBAL. When host code interleaves draws
+        // across instances (A → B → A), instance A's stale cache skips
+        // useProgram() while B is still current — every uniform upload then
+        // targets the wrong program ("location is not from the associated
+        // program"). Track the context-level current program instead.
+        if (ShaderInstance.contextCurrentProgram !== program) {
+            this._ctx?.state.useProgram(program) ?? gl.useProgram(program);
+            ShaderInstance.contextCurrentProgram = program;
             this.programBindCount++;
         }
 
@@ -593,10 +639,12 @@ export class ShaderInstance implements IShaderInstance {
         this.flushUniformBuffers(gl);
     }
 
-    unbind(gl: WebGL2RenderingContext): void {
+    unbind(source: ContextSource): void;
+    unbind(gl: WebGL2RenderingContext): void;
+    unbind(source: ContextSource | WebGL2RenderingContext): void {
+        const gl = resolveRawGL(source as ContextSource)!;
         for (const unit of this.boundTextureUnits) {
-            gl.activeTexture(gl.TEXTURE0 + unit);
-            gl.bindTexture(gl.TEXTURE_2D, null);
+            if (this._ctx) { this._ctx.state.activeTexture(unit); this._ctx.state.bindTexture(gl.TEXTURE_2D, null); } else { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, null); }
         }
         this.boundTextureUnits.clear();
     }
@@ -642,15 +690,19 @@ export class ShaderInstance implements IShaderInstance {
     }
 
     isDisposed(): boolean {
-        return this.disposed;
+        return this._disposal.isDisposed;
     }
 
     dispose(): void {
-        if (this.disposed) return;
-        this.disposed = true;
+        if (!this._disposal.markDisposed()) return;
+        this._registryUnsubscribe?.();
+        this._registryUnsubscribe = null;
+        if (ShaderInstance.contextCurrentProgram === this.variant.shader.program) {
+            ShaderInstance.contextCurrentProgram = null;
+        }
         if (this.gl) {
             for (const glBuffer of this.glBufferHandles.values()) {
-                this.gl.deleteBuffer(glBuffer);
+                if (glBuffer) this.gl.deleteBuffer(glBuffer);
             }
         }
         this.glBufferHandles.clear();
@@ -661,7 +713,6 @@ export class ShaderInstance implements IShaderInstance {
         this.dirtyBuffers.clear();
         this.boundTextureUnits.clear();
         this.batchBuffer.length = 0;
-        this.lastBoundProgram = null;
     }
 
     private buildDescriptors(): void {
@@ -734,16 +785,16 @@ export class ShaderInstance implements IShaderInstance {
 
         if (this.dirtyUniforms.size === 0) return;
 
-        const ordered = Array.from(this.dirtyUniforms)
-            .map((name) => this.uniformDescriptors.get(name))
-            .filter((d): d is UniformDescriptor => d !== undefined)
-            .sort(
-                (a, b) =>
-                    categoryOrder[a.category] - categoryOrder[b.category] ||
-                    a.name.localeCompare(b.name)
-            );
+        // Reuse sort buffer
+        const buf = this._sortBuffer;
+        buf.length = 0;
+        for (const name of this.dirtyUniforms) {
+            const d = this.uniformDescriptors.get(name);
+            if (d) buf.push(d);
+        }
+        buf.sort((a, b) => categoryOrder[a.category] - categoryOrder[b.category] || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
-        for (const descriptor of ordered) {
+        for (const descriptor of buf) {
             const value = this.uniforms.get(descriptor.name);
             if (value === undefined || descriptor.location === null) continue;
             this.uniformUploader.uploadUniform(
@@ -762,9 +813,12 @@ export class ShaderInstance implements IShaderInstance {
             const slot = this.textureSlots.get(textureName);
             const location = this.shader.uniformLocations.get(textureName);
             if (slot === undefined || !location) continue;
-            gl.activeTexture(gl.TEXTURE0 + slot);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.uniform1i(location, slot);
+            if (this._ctx) { this._ctx.state.activeTexture(slot); this._ctx.state.bindTexture(gl.TEXTURE_2D, texture); } else { gl.activeTexture(gl.TEXTURE0 + slot); gl.bindTexture(gl.TEXTURE_2D, texture); }
+            const lastSlot = this._lastTextureSlots.get(textureName);
+            if (lastSlot !== slot) {
+                gl.uniform1i(location, slot);
+                this._lastTextureSlots.set(textureName, slot);
+            }
             this.boundTextureUnits.add(slot);
         }
     }
@@ -785,16 +839,43 @@ export class ShaderInstance implements IShaderInstance {
                 }
                 this.glBufferHandles.set(bufferName, glBuffer);
             }
-            gl.bindBuffer(gl.UNIFORM_BUFFER, glBuffer);
             const source = buffer as unknown as { buffer?: ArrayBuffer; byteOffset?: number };
-            gl.bufferData(
-                gl.UNIFORM_BUFFER,
-                source.buffer ?? (buffer as unknown as ArrayBuffer),
-                gl.DYNAMIC_DRAW
-            );
-            gl.bindBufferBase(gl.UNIFORM_BUFFER, binding, glBuffer);
+            const data = source.buffer ?? (buffer as unknown as ArrayBuffer);
+            const size = data.byteLength;
+            this._ctx?.state.bindBuffer(gl.UNIFORM_BUFFER, glBuffer) ?? gl.bindBuffer(gl.UNIFORM_BUFFER, glBuffer);
+            const capacity = this.uniformBufferCapacities.get(bufferName) ?? 0;
+            if (capacity >= size && capacity > 0) {
+                gl.bufferSubData(gl.UNIFORM_BUFFER, 0, new Uint8Array(data, 0, size));
+            } else if (size > 0) {
+                gl.bufferData(gl.UNIFORM_BUFFER, data as ArrayBuffer, gl.DYNAMIC_DRAW);
+                this.uniformBufferCapacities.set(bufferName, size);
+            } else {
+                gl.bufferData(gl.UNIFORM_BUFFER, 0, gl.DYNAMIC_DRAW);
+                this.uniformBufferCapacities.set(bufferName, 0);
+            }
+            this._ctx?.state.bindBufferBase(gl.UNIFORM_BUFFER, binding, glBuffer) ?? gl.bindBufferBase(gl.UNIFORM_BUFFER, binding, glBuffer);
         }
         this.dirtyBuffers.clear();
+    }
+
+    private _onContextLost(): void {
+        // All GL buffer handles are destroyed by the context loss
+        for (const key of this.glBufferHandles.keys()) {
+            this.glBufferHandles.set(key, null);
+        }
+        this.uniformBufferCapacities.clear();
+        this.boundTextureUnits.clear();
+        this._lastTextureSlots.clear();
+    }
+
+    private _onContextRestored(ctx: IGLContext): void {
+        // Recreate UBO buffers with new context
+        for (const [name, glBuffer] of this.glBufferHandles) {
+            if (glBuffer === null) {
+                const newBuffer = ctx.gl.createBuffer();
+                this.glBufferHandles.set(name, newBuffer);
+            }
+        }
     }
 
     private writeBlockMember(

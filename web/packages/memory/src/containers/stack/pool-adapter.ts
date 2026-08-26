@@ -1,5 +1,5 @@
 import { MemoryPool as UtilityMemoryPool, MemoryPoolOptions } from '../../pool';
-import { StackNode, MemoryAddress } from './types';
+import { StackNode, MemoryAddress, NodeId } from './types';
 
 class PoolNode<T> implements StackNode<T> {
     public __poolId?: number;
@@ -7,19 +7,19 @@ class PoolNode<T> implements StackNode<T> {
     public __lastAccessed?: number;
     public __allocCount?: number;
 
-    public id: number = 0 as any;
+    public id: NodeId = 0 as NodeId;
     public value!: T;
     public next: PoolNode<T> | null = null;
     public refs: number = 0;
     public generation: number = 0;
-    public memAddr: MemoryAddress = 0 as any;
+    public memAddr: MemoryAddress = 0 as MemoryAddress;
 
     reset(): void {
         this.value = undefined as any;
         this.next = null;
         this.refs = 0;
         this.generation = 0;
-        this.memAddr = 0 as any;
+        this.memAddr = 0 as MemoryAddress;
     }
 }
 

@@ -1,8 +1,10 @@
-import type { IVec3Like } from '@axrone/numeric';
+import { Vec3, type IVec3Like } from '@axrone/numeric';
 import type { VelocityConfiguration } from '../core/configuration';
 import type { IParticleBuffer } from '../core/interfaces';
 import type { ParticleId } from '../types';
 import { BaseModule } from './base-module';
+
+const VELOCITY_CHANGE_THRESHOLD = 0.001;
 
 interface VelocityState {
     initialVelocity: IVec3Like;
@@ -204,9 +206,7 @@ export class VelocityModule extends BaseModule<'velocity'> {
         const radialVel = this._evaluateCurve(config.radial, normalizedAge);
 
         if (radialVel !== 0) {
-            const length = Math.sqrt(
-                position.x * position.x + position.y * position.y + position.z * position.z
-            );
+            const length = Vec3.len(position);
 
             if (length > 0.001) {
                 const invLength = 1 / length;
@@ -233,7 +233,7 @@ export class VelocityModule extends BaseModule<'velocity'> {
 
         const velocityMultiplier = this._evaluateCurve(config.velocityOverLifetime, normalizedAge);
 
-        if (Math.abs(velocityMultiplier - 1.0) > 0.001) {
+        if (Math.abs(velocityMultiplier - 1.0) > VELOCITY_CHANGE_THRESHOLD) {
             const factor = velocityMultiplier;
             state.currentVelocity.x *= factor;
             state.currentVelocity.y *= factor;
@@ -359,7 +359,7 @@ export class VelocityModule extends BaseModule<'velocity'> {
         let totalSpeed = 0;
         for (const state of this._particleStates.values()) {
             const vel = state.currentVelocity;
-            totalSpeed += Math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z);
+            totalSpeed += Vec3.len(vel);
         }
 
         return totalSpeed / this._particleStates.size;

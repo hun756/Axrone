@@ -1,81 +1,26 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createPackageConfig } from '../../build/create-package-config.mjs';
+import { createMultiEntryConfig } from '../../build/create-package-config.mjs';
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url));
 
-export default [
-    ...createPackageConfig({
-        packageDir,
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/core.ts',
-        outputBasename: 'core',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/world.ts',
-        outputBasename: 'world',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/actor.ts',
-        outputBasename: 'actor',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/component.ts',
-        outputBasename: 'component',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/decorators.ts',
-        outputBasename: 'decorators',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/components.ts',
-        outputBasename: 'components',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/systems.ts',
-        outputBasename: 'systems',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/observers.ts',
-        outputBasename: 'observers',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/memory.ts',
-        outputBasename: 'memory',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/archetype.ts',
-        outputBasename: 'archetype',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/types.ts',
-        outputBasename: 'types',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/storage.ts',
-        outputBasename: 'storage',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/query.ts',
-        outputBasename: 'query',
-    }),
-    ...createPackageConfig({
-        packageDir,
-        inputRelativePath: 'src/support.ts',
-        outputBasename: 'support',
-    }),
-];
+export default createMultiEntryConfig({
+    packageDir,
+    entries: {
+        index: 'src/index.ts',
+        core: 'src/core.ts',
+        world: 'src/world.ts',
+        actor: 'src/actor.ts',
+        component: 'src/component.ts',
+        decorators: 'src/decorators.ts',
+        components: 'src/components.ts',
+        systems: 'src/systems.ts',
+        observers: 'src/observers.ts',
+        memory: 'src/memory.ts',
+        archetype: 'src/archetype.ts',
+        types: 'src/types.ts',
+        storage: 'src/storage.ts',
+        query: 'src/query.ts',
+        support: 'src/support.ts',
+    },
+});

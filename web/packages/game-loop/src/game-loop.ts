@@ -9,7 +9,7 @@ import {
     type GameLoopSystemRunnerRuntime,
 } from './game-loop-system-runner';
 import { createAnimationFrameScheduler, isGameLoopScheduler } from './scheduler';
-import type { DeepReadonly } from '@axrone/utility';
+import type { DeepReadonly, Mutable } from '@axrone/utility';
 import type {
     AfterFrameContext,
     BeforeUpdateContext,
@@ -40,10 +40,6 @@ const DEFAULT_ERROR_POLICY: GameLoopErrorPolicy = 'continue';
 const DEFAULT_LOCALE = 'en';
 const TIME_STEP_EPSILON = 1e-7;
 const SNAPSHOT_VERSION = 1 as const;
-
-type Mutable<T> = {
-    -readonly [TKey in keyof T]: T[TKey];
-};
 
 const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);

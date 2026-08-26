@@ -2,6 +2,7 @@ import { Vec3 } from '@axrone/numeric';
 import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
+import type { Mutable } from '@axrone/utility';
 
 export type BillboardMode = 'spherical' | 'cylindrical' | 'velocity-oriented';
 
@@ -290,49 +291,50 @@ export class BillboardRenderer extends Component {
     }
 
     override deserialize(data: Record<string, any>): void {
-        const patch: BillboardRendererConfig = {};
+        type MutableBillboardConfig = Mutable<BillboardRendererConfig>;
+        const patch: MutableBillboardConfig = {};
 
         if (typeof data.textureId === 'string' || data.textureId === null) {
-            (patch as any).textureId = data.textureId;
+            patch.textureId = data.textureId;
         }
         if (typeof data.mode === 'string') {
-            (patch as any).mode = data.mode;
+            patch.mode = data.mode;
         }
         if (typeof data.width === 'number') {
-            (patch as any).width = data.width;
+            patch.width = data.width;
         }
         if (typeof data.height === 'number') {
-            (patch as any).height = data.height;
+            patch.height = data.height;
         }
         if (Array.isArray(data.pivot) && data.pivot.length === 3) {
-            (patch as any).pivot = data.pivot;
+            patch.pivot = data.pivot;
         }
         if (typeof data.screenSpace === 'boolean') {
-            (patch as any).screenSpace = data.screenSpace;
+            patch.screenSpace = data.screenSpace;
         }
         if (typeof data.sizeAttenuation === 'boolean') {
-            (patch as any).sizeAttenuation = data.sizeAttenuation;
+            patch.sizeAttenuation = data.sizeAttenuation;
         }
         if (typeof data.depthWrite === 'boolean') {
-            (patch as any).depthWrite = data.depthWrite;
+            patch.depthWrite = data.depthWrite;
         }
         if (typeof data.alphaTest === 'number') {
-            (patch as any).alphaTest = data.alphaTest;
+            patch.alphaTest = data.alphaTest;
         }
         if (Array.isArray(data.color) && data.color.length === 3) {
-            (patch as any).color = data.color;
+            patch.color = data.color;
         }
         if (typeof data.opacity === 'number') {
-            (patch as any).opacity = data.opacity;
+            patch.opacity = data.opacity;
         }
         if (typeof data.flipX === 'boolean') {
-            (patch as any).flipX = data.flipX;
+            patch.flipX = data.flipX;
         }
         if (typeof data.flipY === 'boolean') {
-            (patch as any).flipY = data.flipY;
+            patch.flipY = data.flipY;
         }
         if (Array.isArray(data.uvRect) && data.uvRect.length === 4) {
-            (patch as any).uvRect = data.uvRect;
+            patch.uvRect = data.uvRect;
         }
 
         this._applyConfig(patch);

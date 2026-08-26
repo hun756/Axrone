@@ -25,9 +25,17 @@ describe('SceneRegistry manifests', () => {
             'DirectionalLight',
             'PointLight',
             'SpotLight',
+            'AreaLight',
+            'ReflectionProbe',
+            'LODGroup',
+            'BillboardRenderer',
             'Terrain',
             'OrbitCameraController',
             'FollowCameraController',
+            'LineRenderer',
+            'TrailRenderer',
+            'ParticleSystem',
+            'PathAgent',
             'Animator',
         ]);
     });

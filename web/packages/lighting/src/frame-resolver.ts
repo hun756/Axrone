@@ -1,5 +1,5 @@
 import { Vec3 } from '@axrone/numeric';
-import type { Disposable } from '@axrone/utility';
+import type { Disposable, Mutable } from '@axrone/utility';
 import type { ReadonlyTuple3 } from '@axrone/utility';
 import { brandLightingRigId, brandLightingVersion } from './brands';
 import { LightKind, LightSortMode, LightTypeCode } from './constants';
@@ -22,10 +22,6 @@ import { DEFAULT_LIGHTING_CAPACITY, resolveLightingCapacity } from './validation
 
 type RankedDirectional = InternalLightRecord<'directional'>;
 type RankedLocal = InternalLightRecord<'point' | 'spot'>;
-
-type Mutable<T> = {
-    -readonly [K in keyof T]: T[K];
-};
 
 interface MutableLightingEnvironment {
     ambient: Vec3;
@@ -73,12 +69,6 @@ const createStats = (): MutableLightingSelectionStats => ({
     omittedLocalLightCount: 0,
 });
 
-const writeVec3 = (target: Vec3, source: Readonly<Vec3>): void => {
-    target.x = source.x;
-    target.y = source.y;
-    target.z = source.z;
-};
-
 const isVec3TupleInput = (value: Vec3Input): value is ReadonlyTuple3<number> => Array.isArray(value);
 
 const sameVec3Input = (camera: Vec3Input | undefined, lastCamera: Vec3, hasLastCamera: boolean): boolean => {
@@ -94,7 +84,7 @@ const sameVec3Input = (camera: Vec3Input | undefined, lastCamera: Vec3, hasLastC
         return camera[0] === lastCamera.x && camera[1] === lastCamera.y && camera[2] === lastCamera.z;
     }
 
-    return camera.x === lastCamera.x && camera.y === lastCamera.y && camera.z === lastCamera.z;
+    return camera.equals(lastCamera);
 };
 
 const writeCamera = (camera: Vec3, value: Vec3Input | undefined): boolean => {
@@ -118,13 +108,6 @@ const writeCamera = (camera: Vec3, value: Vec3Input | undefined): boolean => {
     return true;
 };
 
-const distanceSquared = (a: Readonly<Vec3>, b: Readonly<Vec3>): number => {
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
-    const dz = a.z - b.z;
-    return dx * dx + dy * dy + dz * dz;
-};
-
 const pointInfluence = (light: PointLightDefinition, camera: Readonly<Vec3> | null): number => {
     if (!camera) {
         return light.intensity;
@@ -135,8 +118,8 @@ const pointInfluence = (light: PointLightDefinition, camera: Readonly<Vec3> | nu
         return 0;
     }
 
-    const normalizedDistance = distanceSquared(light.position, camera) / radiusSq;
-    return light.intensity / (1 + light.attenuation * normalizedDistance * normalizedDistance);
+    const normalizedDistance = Vec3.distanceSquared(light.position, camera) / radiusSq;
+    return light.intensity / (1 + light.attenuation * normalizedDistance);
 };
 
 const spotInfluence = (light: SpotLightDefinition, camera: Readonly<Vec3> | null): number => {
@@ -152,22 +135,22 @@ const spotInfluence = (light: SpotLightDefinition, camera: Readonly<Vec3> | null
     const offsetX = camera.x - light.position.x;
     const offsetY = camera.y - light.position.y;
     const offsetZ = camera.z - light.position.z;
-    const length = Math.hypot(offsetX, offsetY, offsetZ);
+    const distance = Vec3.distance(light.position, camera);
 
-    if (length <= 1e-8) {
+    if (distance <= 1e-8) {
         return light.intensity;
     }
 
     const directionDot =
-        (offsetX / length) * light.direction.x +
-        (offsetY / length) * light.direction.y +
-        (offsetZ / length) * light.direction.z;
+        (offsetX / distance) * light.direction.x +
+        (offsetY / distance) * light.direction.y +
+        (offsetZ / distance) * light.direction.z;
 
     if (directionDot <= light.outerConeCosine) {
         return 0;
     }
 
-    const normalizedDistance = distanceSquared(light.position, camera) / radiusSq;
+    const normalizedDistance = Vec3.distanceSquared(light.position, camera) / radiusSq;
     const coneFactor =
         light.innerConeCosine <= light.outerConeCosine
             ? 1
@@ -180,7 +163,7 @@ const spotInfluence = (light: SpotLightDefinition, camera: Readonly<Vec3> | null
                   )
               );
 
-    return (light.intensity * coneFactor) / (1 + light.attenuation * normalizedDistance * normalizedDistance);
+    return (light.intensity * coneFactor) / (1 + light.attenuation * normalizedDistance);
 };
 
 const directionalScore = (light: DirectionalLightDefinition): number => light.priority * 1024 + light.intensity;
@@ -261,6 +244,7 @@ export class LightingFrameResolver implements Disposable {
     readonly #pointColorsBase: Float32Array;
     readonly #pointIntensitiesBase: Float32Array;
     readonly #pointRangesBase: Float32Array;
+    readonly #pointAttenuationsBase: Float32Array;
     readonly #spotPositionsBase: Float32Array;
     readonly #spotDirectionsBase: Float32Array;
     readonly #spotColorsBase: Float32Array;
@@ -274,6 +258,7 @@ export class LightingFrameResolver implements Disposable {
     readonly #localLightColorsBase: Float32Array;
     readonly #localLightIntensitiesBase: Float32Array;
     readonly #localLightRangesBase: Float32Array;
+    readonly #localLightAttenuationsBase: Float32Array;
     readonly #localLightInnerConeCosinesBase: Float32Array;
     readonly #localLightOuterConeCosinesBase: Float32Array;
 
@@ -285,6 +270,7 @@ export class LightingFrameResolver implements Disposable {
     readonly #pointColorsViews: readonly Float32Array[];
     readonly #pointIntensitiesViews: readonly Float32Array[];
     readonly #pointRangesViews: readonly Float32Array[];
+    readonly #pointAttenuationsViews: readonly Float32Array[];
     readonly #spotPositionsViews: readonly Float32Array[];
     readonly #spotDirectionsViews: readonly Float32Array[];
     readonly #spotColorsViews: readonly Float32Array[];
@@ -298,6 +284,7 @@ export class LightingFrameResolver implements Disposable {
     readonly #localLightColorsViews: readonly Float32Array[];
     readonly #localLightIntensitiesViews: readonly Float32Array[];
     readonly #localLightRangesViews: readonly Float32Array[];
+    readonly #localLightAttenuationsViews: readonly Float32Array[];
     readonly #localLightInnerConeCosinesViews: readonly Float32Array[];
     readonly #localLightOuterConeCosinesViews: readonly Float32Array[];
 
@@ -336,6 +323,7 @@ export class LightingFrameResolver implements Disposable {
         this.#pointColorsBase = new Float32Array(Math.max(1, this.#capacity.maxPointLights * 3));
         this.#pointIntensitiesBase = new Float32Array(Math.max(1, this.#capacity.maxPointLights));
         this.#pointRangesBase = new Float32Array(Math.max(1, this.#capacity.maxPointLights));
+        this.#pointAttenuationsBase = new Float32Array(Math.max(1, this.#capacity.maxPointLights));
         this.#spotPositionsBase = new Float32Array(Math.max(1, this.#capacity.maxSpotLights * 3));
         this.#spotDirectionsBase = new Float32Array(Math.max(1, this.#capacity.maxSpotLights * 3));
         this.#spotColorsBase = new Float32Array(Math.max(1, this.#capacity.maxSpotLights * 3));
@@ -349,6 +337,7 @@ export class LightingFrameResolver implements Disposable {
         this.#localLightColorsBase = new Float32Array(Math.max(1, this.#capacity.maxLocalLights * 3));
         this.#localLightIntensitiesBase = new Float32Array(Math.max(1, this.#capacity.maxLocalLights));
         this.#localLightRangesBase = new Float32Array(Math.max(1, this.#capacity.maxLocalLights));
+        this.#localLightAttenuationsBase = new Float32Array(Math.max(1, this.#capacity.maxLocalLights));
         this.#localLightInnerConeCosinesBase = new Float32Array(Math.max(1, this.#capacity.maxLocalLights));
         this.#localLightOuterConeCosinesBase = new Float32Array(Math.max(1, this.#capacity.maxLocalLights));
 
@@ -360,6 +349,7 @@ export class LightingFrameResolver implements Disposable {
         this.#pointColorsViews = createFloatViews(this.#pointColorsBase, this.#capacity.maxPointLights, 3);
         this.#pointIntensitiesViews = createFloatViews(this.#pointIntensitiesBase, this.#capacity.maxPointLights, 1);
         this.#pointRangesViews = createFloatViews(this.#pointRangesBase, this.#capacity.maxPointLights, 1);
+        this.#pointAttenuationsViews = createFloatViews(this.#pointAttenuationsBase, this.#capacity.maxPointLights, 1);
         this.#spotPositionsViews = createFloatViews(this.#spotPositionsBase, this.#capacity.maxSpotLights, 3);
         this.#spotDirectionsViews = createFloatViews(this.#spotDirectionsBase, this.#capacity.maxSpotLights, 3);
         this.#spotColorsViews = createFloatViews(this.#spotColorsBase, this.#capacity.maxSpotLights, 3);
@@ -373,6 +363,7 @@ export class LightingFrameResolver implements Disposable {
         this.#localLightColorsViews = createFloatViews(this.#localLightColorsBase, this.#capacity.maxLocalLights, 3);
         this.#localLightIntensitiesViews = createFloatViews(this.#localLightIntensitiesBase, this.#capacity.maxLocalLights, 1);
         this.#localLightRangesViews = createFloatViews(this.#localLightRangesBase, this.#capacity.maxLocalLights, 1);
+        this.#localLightAttenuationsViews = createFloatViews(this.#localLightAttenuationsBase, this.#capacity.maxLocalLights, 1);
         this.#localLightInnerConeCosinesViews = createFloatViews(this.#localLightInnerConeCosinesBase, this.#capacity.maxLocalLights, 1);
         this.#localLightOuterConeCosinesViews = createFloatViews(this.#localLightOuterConeCosinesBase, this.#capacity.maxLocalLights, 1);
 
@@ -412,6 +403,7 @@ export class LightingFrameResolver implements Disposable {
             pointColors: this.#pointColorsViews[0]!,
             pointIntensities: this.#pointIntensitiesViews[0]!,
             pointRanges: this.#pointRangesViews[0]!,
+            pointAttenuations: this.#pointAttenuationsViews[0]!,
             spotPositions: this.#spotPositionsViews[0]!,
             spotDirections: this.#spotDirectionsViews[0]!,
             spotColors: this.#spotColorsViews[0]!,
@@ -425,6 +417,7 @@ export class LightingFrameResolver implements Disposable {
             localLightColors: this.#localLightColorsViews[0]!,
             localLightIntensities: this.#localLightIntensitiesViews[0]!,
             localLightRanges: this.#localLightRangesViews[0]!,
+            localLightAttenuations: this.#localLightAttenuationsViews[0]!,
             localLightInnerConeCosines: this.#localLightInnerConeCosinesViews[0]!,
             localLightOuterConeCosines: this.#localLightOuterConeCosinesViews[0]!,
         };
@@ -622,6 +615,7 @@ export class LightingFrameResolver implements Disposable {
         this.#state.pointColors = this.#pointColorsViews[selectedPointCount]!;
         this.#state.pointIntensities = this.#pointIntensitiesViews[selectedPointCount]!;
         this.#state.pointRanges = this.#pointRangesViews[selectedPointCount]!;
+        this.#state.pointAttenuations = this.#pointAttenuationsViews[selectedPointCount]!;
         this.#state.spotPositions = this.#spotPositionsViews[selectedSpotCount]!;
         this.#state.spotDirections = this.#spotDirectionsViews[selectedSpotCount]!;
         this.#state.spotColors = this.#spotColorsViews[selectedSpotCount]!;
@@ -635,6 +629,7 @@ export class LightingFrameResolver implements Disposable {
         this.#state.localLightColors = this.#localLightColorsViews[selectedLocalLightCount]!;
         this.#state.localLightIntensities = this.#localLightIntensitiesViews[selectedLocalLightCount]!;
         this.#state.localLightRanges = this.#localLightRangesViews[selectedLocalLightCount]!;
+        this.#state.localLightAttenuations = this.#localLightAttenuationsViews[selectedLocalLightCount]!;
         this.#state.localLightInnerConeCosines = this.#localLightInnerConeCosinesViews[selectedLocalLightCount]!;
         this.#state.localLightOuterConeCosines = this.#localLightOuterConeCosinesViews[selectedLocalLightCount]!;
 
@@ -705,9 +700,9 @@ export class LightingFrameResolver implements Disposable {
     }
 
     #syncEnvironment(environment: LightingEnvironment): void {
-        writeVec3(this.#state.environment.ambient, environment.ambient);
-        writeVec3(this.#state.environment.sky, environment.sky);
-        writeVec3(this.#state.environment.ground, environment.ground);
+        Vec3.copy(environment.ambient, this.#state.environment.ambient);
+        Vec3.copy(environment.sky, this.#state.environment.sky);
+        Vec3.copy(environment.ground, this.#state.environment.ground);
         this.#state.environment.exposure = environment.exposure;
         this.#state.environment.gamma = environment.gamma;
     }
@@ -721,6 +716,7 @@ export class LightingFrameResolver implements Disposable {
         this.#pointColorsBase.fill(0);
         this.#pointIntensitiesBase.fill(0);
         this.#pointRangesBase.fill(0);
+        this.#pointAttenuationsBase.fill(0);
         this.#spotPositionsBase.fill(0);
         this.#spotDirectionsBase.fill(0);
         this.#spotColorsBase.fill(0);
@@ -734,6 +730,7 @@ export class LightingFrameResolver implements Disposable {
         this.#localLightColorsBase.fill(0);
         this.#localLightIntensitiesBase.fill(0);
         this.#localLightRangesBase.fill(0);
+        this.#localLightAttenuationsBase.fill(0);
         this.#localLightInnerConeCosinesBase.fill(0);
         this.#localLightOuterConeCosinesBase.fill(0);
     }
@@ -762,6 +759,7 @@ export class LightingFrameResolver implements Disposable {
         this.#pointColorsBase[offset + 2] = light.color.z;
         this.#pointIntensitiesBase[slot] = light.intensity;
         this.#pointRangesBase[slot] = light.range;
+        this.#pointAttenuationsBase[slot] = light.attenuation;
     }
 
     #writeSpot(light: SpotLightDefinition, slot: number): void {
@@ -792,6 +790,7 @@ export class LightingFrameResolver implements Disposable {
         this.#localLightColorsBase[offset + 2] = light.color.z;
         this.#localLightIntensitiesBase[slot] = light.intensity;
         this.#localLightRangesBase[slot] = light.range;
+        this.#localLightAttenuationsBase[slot] = light.attenuation;
         this.#localLightInnerConeCosinesBase[slot] = 0;
         this.#localLightOuterConeCosinesBase[slot] = 0;
     }

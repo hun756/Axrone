@@ -1,6 +1,9 @@
 import { ShaderInstance } from './instance';
 import { ShaderInstancePool } from './pool';
 import { UniformCache } from './uniform-cache';
+import type { ContextSource, IGLContext } from '../context';
+import { isGLContext, resolveContext, resolveContextNullable } from '../context';
+
 import {
     ShaderInstanceError,
     ShaderInstanceValidationError,
@@ -15,8 +18,12 @@ import type {
     ShaderUniformValue,
 } from './interfaces';
 
+export type ShaderInstanceManagerContextSource = ContextSource;
+
 export interface ShaderInstanceManagerOptions {
-    readonly gl: WebGL2RenderingContext;
+    readonly gl: ContextSource;
+    /** @deprecated use gl as ContextSource, context alias */
+    readonly context?: ContextSource;
     readonly pool?: {
         readonly initialCapacity?: number;
         readonly maxCapacity?: number;
@@ -58,7 +65,8 @@ const DEFAULT_CACHE_OPTIONS = {
 } as const;
 
 export class ShaderInstanceManager {
-    private readonly gl: WebGL2RenderingContext;
+    private readonly _ctx: IGLContext | null;
+    private readonly gl: WebGL2RenderingContext | null;
     private readonly pool: ShaderInstancePool;
     private readonly cache: UniformCache;
     private readonly tracked: WeakSet<ShaderInstance> = new WeakSet();
@@ -68,12 +76,27 @@ export class ShaderInstanceManager {
     private disposed = false;
 
     constructor(options: ShaderInstanceManagerOptions) {
-        this.gl = options.gl;
-        this.pool = new ShaderInstancePool(this.gl, {
+        const source: ContextSource = (options.context ?? options.gl) as ContextSource;
+        const ctx = resolveContextNullable(source);
+        this._ctx = ctx;
+        if (ctx) {
+            this.gl = ctx.gl;
+        } else if (source) {
+            this.gl = source as unknown as WebGL2RenderingContext;
+        } else {
+            this.gl = null;
+        }
+        // Prefer IGLContext if available, fallback to raw gl for PoolBucket tolerant path
+        const poolSource: ContextSource | null = (this._ctx as ContextSource | null) ?? (this.gl as unknown as ContextSource | null);
+        this.pool = new ShaderInstancePool(poolSource, {
             ...DEFAULT_POOL_OPTIONS,
             ...(options.pool ?? {}),
         });
         this.cache = new UniformCache(options.cache?.maxEntries ?? DEFAULT_CACHE_OPTIONS.maxEntries);
+    }
+
+    public get context(): IGLContext | null {
+        return this._ctx;
     }
 
     borrow(shader: ICompiledShader, variant: IShaderVariant): BorrowedShaderInstance {

@@ -31,6 +31,12 @@ const SOLVER_EPSILON = NUMERIC_SOLVER_EPSILON;
 const BAUMGARTE = 0.2;
 const POSITION_SLOP = 0.005;
 
+const _scratchA: IVec2Like = { x: 0, y: 0 };
+const _scratchB: IVec2Like = { x: 0, y: 0 };
+const _scratchC: IVec2Like = { x: 0, y: 0 };
+const _scratchD: IVec2Like = { x: 0, y: 0 };
+const _scratchE: IVec2Like = { x: 0, y: 0 };
+
 export class ConstraintSolver2D {
     private readonly _constraintManager: ConstraintManager2D;
     private readonly _bodyManager: BodyManager2D;
@@ -259,17 +265,25 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
-        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
-        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
-        const distance = Math.sqrt(Vec2.lengthSquared(delta));
+        Vec2.rotate(data.localAnchorA, bodyA.rotation, _scratchA);
+        Vec2.add(bodyA.position, _scratchA, _scratchB);
+        Vec2.rotate(data.localAnchorB, bodyB.rotation, _scratchA);
+        Vec2.add(bodyB.position, _scratchA, _scratchC);
+        Vec2.subtract(_scratchC, _scratchB, _scratchD);
+        const distance = Math.sqrt(Vec2.lengthSquared(_scratchD));
         if (distance <= SOLVER_EPSILON) {
             return;
         }
 
-        const ndir = { x: delta.x / distance, y: delta.y / distance };
-        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
+        const ndir = { x: _scratchD.x / distance, y: _scratchD.y / distance };
+        Vec2.subtract(data.localAnchorA, bodyA.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyA.rotation, _scratchE);
+        const rAx = _scratchE.x;
+        const rAy = _scratchE.y;
+        Vec2.subtract(data.localAnchorB, bodyB.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyB.rotation, _scratchE);
+        const rBx = _scratchE.x;
+        const rBy = _scratchE.y;
         const h = Math.max(dt, SOLVER_EPSILON);
 
         const error = distance - data.length;
@@ -287,8 +301,8 @@ export class ConstraintSolver2D {
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -ndir.x, y: -ndir.y }, angular: -Vec2.cross(rA, ndir) },
-                j2: { linear: { x: ndir.x, y: ndir.y }, angular: Vec2.cross(rB, ndir) },
+                j1: { linear: { x: -ndir.x, y: -ndir.y }, angular: -(rAx * ndir.y - rAy * ndir.x) },
+                j2: { linear: { x: ndir.x, y: ndir.y }, angular: rBx * ndir.y - rBy * ndir.x },
                 bias: -bias,
                 impulse: 0,
                 lowerLimit: -Infinity,
@@ -304,20 +318,30 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
-        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
-        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
-        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
+        Vec2.subtract(data.localAnchorA, bodyA.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyA.rotation, _scratchE);
+        const rAx = _scratchE.x;
+        const rAy = _scratchE.y;
+        Vec2.subtract(data.localAnchorB, bodyB.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyB.rotation, _scratchE);
+        const rBx = _scratchE.x;
+        const rBy = _scratchE.y;
+        Vec2.rotate(data.localAnchorA, bodyA.rotation, _scratchA);
+        Vec2.add(bodyA.position, _scratchA, _scratchB);
+        Vec2.rotate(data.localAnchorB, bodyB.rotation, _scratchA);
+        Vec2.add(bodyB.position, _scratchA, _scratchC);
+        Vec2.subtract(_scratchC, _scratchB, _scratchD);
+        const deltaX = _scratchD.x;
+        const deltaY = _scratchD.y;
         const h = Math.max(dt, SOLVER_EPSILON);
 
         const jacobians: JacobianRow[] = [
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -1, y: 0 }, angular: -rA.y },
-                j2: { linear: { x: 1, y: 0 }, angular: rB.y },
-                bias: -BAUMGARTE * delta.x / h,
+                j1: { linear: { x: -1, y: 0 }, angular: -rAy },
+                j2: { linear: { x: 1, y: 0 }, angular: rBy },
+                bias: -BAUMGARTE * deltaX / h,
                 impulse: 0,
                 lowerLimit: -Infinity,
                 upperLimit: Infinity,
@@ -325,9 +349,9 @@ export class ConstraintSolver2D {
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: 0, y: -1 }, angular: rA.x },
-                j2: { linear: { x: 0, y: 1 }, angular: -rB.x },
-                bias: -BAUMGARTE * delta.y / h,
+                j1: { linear: { x: 0, y: -1 }, angular: rAx },
+                j2: { linear: { x: 0, y: 1 }, angular: -rBx },
+                bias: -BAUMGARTE * deltaY / h,
                 impulse: 0,
                 lowerLimit: -Infinity,
                 upperLimit: Infinity,
@@ -379,22 +403,36 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
-        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
-        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
-        const worldAxisA = Vec2.normalize(Vec2.rotate(data.localAxisA, bodyA.rotation), { x: 1, y: 0 });
-        const perp = { x: -worldAxisA.y, y: worldAxisA.x };
-        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
-        const lateralError = Vec2.dot(perp, delta);
+        Vec2.subtract(data.localAnchorA, bodyA.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyA.rotation, _scratchE);
+        const rAx = _scratchE.x;
+        const rAy = _scratchE.y;
+        Vec2.subtract(data.localAnchorB, bodyB.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyB.rotation, _scratchE);
+        const rBx = _scratchE.x;
+        const rBy = _scratchE.y;
+        Vec2.rotate(data.localAnchorA, bodyA.rotation, _scratchA);
+        Vec2.add(bodyA.position, _scratchA, _scratchB);
+        Vec2.rotate(data.localAnchorB, bodyB.rotation, _scratchA);
+        Vec2.add(bodyB.position, _scratchA, _scratchC);
+        Vec2.subtract(_scratchC, _scratchB, _scratchD);
+        const deltaX = _scratchD.x;
+        const deltaY = _scratchD.y;
+        Vec2.rotate(data.localAxisA, bodyA.rotation, _scratchA);
+        Vec2.normalize(_scratchA, _scratchE);
+        const worldAxisAx = _scratchE.x;
+        const worldAxisAy = _scratchE.y;
+        const perpX = -worldAxisAy;
+        const perpY = worldAxisAx;
+        const lateralError = perpX * deltaX + perpY * deltaY;
         const h = Math.max(dt, SOLVER_EPSILON);
 
         const jacobians: JacobianRow[] = [
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -perp.x, y: -perp.y }, angular: -Vec2.cross(rA, perp) },
-                j2: { linear: { x: perp.x, y: perp.y }, angular: Vec2.cross(rB, perp) },
+                j1: { linear: { x: -perpX, y: -perpY }, angular: -(rAx * perpY - rAy * perpX) },
+                j2: { linear: { x: perpX, y: perpY }, angular: rBx * perpY - rBy * perpX },
                 bias: -BAUMGARTE * lateralError / h,
                 impulse: 0,
                 lowerLimit: -Infinity,
@@ -416,7 +454,7 @@ export class ConstraintSolver2D {
             });
         }
 
-        const translation = Vec2.dot(delta, worldAxisA);
+        const translation = deltaX * worldAxisAx + deltaY * worldAxisAy;
         if (data.enableLimit) {
             let limitError = 0;
             if (translation < data.lowerTranslation) {
@@ -428,8 +466,8 @@ export class ConstraintSolver2D {
                 jacobians.push({
                     bodyIdA,
                     bodyIdB,
-                    j1: { linear: { x: -worldAxisA.x, y: -worldAxisA.y }, angular: -Vec2.cross(rA, worldAxisA) },
-                    j2: { linear: { x: worldAxisA.x, y: worldAxisA.y }, angular: Vec2.cross(rB, worldAxisA) },
+                    j1: { linear: { x: -worldAxisAx, y: -worldAxisAy }, angular: -(rAx * worldAxisAy - rAy * worldAxisAx) },
+                    j2: { linear: { x: worldAxisAx, y: worldAxisAy }, angular: rBx * worldAxisAy - rBy * worldAxisAx },
                     bias: -BAUMGARTE * limitError / h,
                     impulse: 0,
                     lowerLimit: -Infinity,
@@ -442,8 +480,8 @@ export class ConstraintSolver2D {
             jacobians.push({
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -worldAxisA.x, y: -worldAxisA.y }, angular: -Vec2.cross(rA, worldAxisA) },
-                j2: { linear: { x: worldAxisA.x, y: worldAxisA.y }, angular: Vec2.cross(rB, worldAxisA) },
+                j1: { linear: { x: -worldAxisAx, y: -worldAxisAy }, angular: -(rAx * worldAxisAy - rAy * worldAxisAx) },
+                j2: { linear: { x: worldAxisAx, y: worldAxisAy }, angular: rBx * worldAxisAy - rBy * worldAxisAx },
                 bias: -data.motorSpeed,
                 impulse: 0,
                 lowerLimit: -data.maxMotorForce * h,
@@ -460,11 +498,21 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
-        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
-        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
-        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
+        Vec2.subtract(data.localAnchorA, bodyA.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyA.rotation, _scratchE);
+        const rAx = _scratchE.x;
+        const rAy = _scratchE.y;
+        Vec2.subtract(data.localAnchorB, bodyB.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyB.rotation, _scratchE);
+        const rBx = _scratchE.x;
+        const rBy = _scratchE.y;
+        Vec2.rotate(data.localAnchorA, bodyA.rotation, _scratchA);
+        Vec2.add(bodyA.position, _scratchA, _scratchB);
+        Vec2.rotate(data.localAnchorB, bodyB.rotation, _scratchA);
+        Vec2.add(bodyB.position, _scratchA, _scratchC);
+        Vec2.subtract(_scratchC, _scratchB, _scratchD);
+        const deltaX = _scratchD.x;
+        const deltaY = _scratchD.y;
         const angleError = bodyB.rotation - bodyA.rotation - data.referenceAngle;
         const h = Math.max(dt, SOLVER_EPSILON);
 
@@ -484,9 +532,9 @@ export class ConstraintSolver2D {
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -1, y: 0 }, angular: -rA.y },
-                j2: { linear: { x: 1, y: 0 }, angular: rB.y },
-                bias: -computeBias(delta.x),
+                j1: { linear: { x: -1, y: 0 }, angular: -rAy },
+                j2: { linear: { x: 1, y: 0 }, angular: rBy },
+                bias: -computeBias(deltaX),
                 impulse: 0,
                 lowerLimit: -Infinity,
                 upperLimit: Infinity,
@@ -495,9 +543,9 @@ export class ConstraintSolver2D {
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: 0, y: -1 }, angular: rA.x },
-                j2: { linear: { x: 0, y: 1 }, angular: -rB.x },
-                bias: -computeBias(delta.y),
+                j1: { linear: { x: 0, y: -1 }, angular: rAx },
+                j2: { linear: { x: 0, y: 1 }, angular: -rBx },
+                bias: -computeBias(deltaY),
                 impulse: 0,
                 lowerLimit: -Infinity,
                 upperLimit: Infinity,
@@ -523,22 +571,36 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
-        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
-        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
-        const worldAxisA = Vec2.normalize(Vec2.rotate(data.localAxisA, bodyA.rotation), { x: 1, y: 0 });
-        const perp = { x: -worldAxisA.y, y: worldAxisA.x };
-        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
-        const lateralError = Vec2.dot(perp, delta);
+        Vec2.subtract(data.localAnchorA, bodyA.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyA.rotation, _scratchE);
+        const rAx = _scratchE.x;
+        const rAy = _scratchE.y;
+        Vec2.subtract(data.localAnchorB, bodyB.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyB.rotation, _scratchE);
+        const rBx = _scratchE.x;
+        const rBy = _scratchE.y;
+        Vec2.rotate(data.localAnchorA, bodyA.rotation, _scratchA);
+        Vec2.add(bodyA.position, _scratchA, _scratchB);
+        Vec2.rotate(data.localAnchorB, bodyB.rotation, _scratchA);
+        Vec2.add(bodyB.position, _scratchA, _scratchC);
+        Vec2.subtract(_scratchC, _scratchB, _scratchD);
+        const deltaX = _scratchD.x;
+        const deltaY = _scratchD.y;
+        Vec2.rotate(data.localAxisA, bodyA.rotation, _scratchA);
+        Vec2.normalize(_scratchA, _scratchE);
+        const worldAxisAx = _scratchE.x;
+        const worldAxisAy = _scratchE.y;
+        const perpX = -worldAxisAy;
+        const perpY = worldAxisAx;
+        const lateralError = perpX * deltaX + perpY * deltaY;
         const h = Math.max(dt, SOLVER_EPSILON);
 
         const jacobians: JacobianRow[] = [
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -perp.x, y: -perp.y }, angular: -Vec2.cross(rA, perp) },
-                j2: { linear: { x: perp.x, y: perp.y }, angular: Vec2.cross(rB, perp) },
+                j1: { linear: { x: -perpX, y: -perpY }, angular: -(rAx * perpY - rAy * perpX) },
+                j2: { linear: { x: perpX, y: perpY }, angular: rBx * perpY - rBy * perpX },
                 bias: -BAUMGARTE * lateralError / h,
                 impulse: 0,
                 lowerLimit: -Infinity,
@@ -546,7 +608,7 @@ export class ConstraintSolver2D {
             },
         ];
 
-        const translation = Vec2.dot(delta, worldAxisA);
+        const translation = deltaX * worldAxisAx + deltaY * worldAxisAy;
         let axisError = 0;
         if (data.enableLimit) {
             if (translation < data.lowerTranslation) {
@@ -570,8 +632,8 @@ export class ConstraintSolver2D {
             jacobians.push({
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -worldAxisA.x, y: -worldAxisA.y }, angular: -Vec2.cross(rA, worldAxisA) },
-                j2: { linear: { x: worldAxisA.x, y: worldAxisA.y }, angular: Vec2.cross(rB, worldAxisA) },
+                j1: { linear: { x: -worldAxisAx, y: -worldAxisAy }, angular: -(rAx * worldAxisAy - rAy * worldAxisAx) },
+                j2: { linear: { x: worldAxisAx, y: worldAxisAy }, angular: rBx * worldAxisAy - rBy * worldAxisAx },
                 bias: -bias,
                 impulse: 0,
                 lowerLimit: -Infinity,
@@ -602,21 +664,29 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const rA = Vec2.rotate(Vec2.subtract({ x: 0, y: 0 }, bodyA.localCenter), bodyA.rotation);
-        const rB = Vec2.rotate(Vec2.subtract({ x: 0, y: 0 }, bodyB.localCenter), bodyB.rotation);
+        Vec2.subtract({ x: 0, y: 0 }, bodyA.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyA.rotation, _scratchE);
+        const rAx = _scratchE.x;
+        const rAy = _scratchE.y;
+        Vec2.subtract({ x: 0, y: 0 }, bodyB.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyB.rotation, _scratchE);
+        const rBx = _scratchE.x;
+        const rBy = _scratchE.y;
         const h = Math.max(dt, SOLVER_EPSILON);
 
-        const worldTarget = Vec2.add(bodyA.position, Vec2.rotate(data.linearOffset, bodyA.rotation));
-        const worldAnchorB = { x: bodyB.position.x, y: bodyB.position.y };
-        const delta = Vec2.subtract(worldAnchorB, worldTarget);
+        Vec2.rotate(data.linearOffset, bodyA.rotation, _scratchA);
+        Vec2.add(bodyA.position, _scratchA, _scratchB);
+        Vec2.subtract(bodyB.position, _scratchB, _scratchD);
+        const deltaX = _scratchD.x;
+        const deltaY = _scratchD.y;
 
         const jacobians: JacobianRow[] = [
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -1, y: 0 }, angular: -rA.y },
-                j2: { linear: { x: 1, y: 0 }, angular: rB.y },
-                bias: -BAUMGARTE * delta.x / h,
+                j1: { linear: { x: -1, y: 0 }, angular: -rAy },
+                j2: { linear: { x: 1, y: 0 }, angular: rBy },
+                bias: -BAUMGARTE * deltaX / h,
                 impulse: 0,
                 lowerLimit: -data.maxForce * h,
                 upperLimit: data.maxForce * h,
@@ -624,9 +694,9 @@ export class ConstraintSolver2D {
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: 0, y: -1 }, angular: rA.x },
-                j2: { linear: { x: 0, y: 1 }, angular: -rB.x },
-                bias: -BAUMGARTE * delta.y / h,
+                j1: { linear: { x: 0, y: -1 }, angular: rAx },
+                j2: { linear: { x: 0, y: 1 }, angular: -rBx },
+                bias: -BAUMGARTE * deltaY / h,
                 impulse: 0,
                 lowerLimit: -data.maxForce * h,
                 upperLimit: data.maxForce * h,
@@ -656,9 +726,15 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         this._ensureSolverBody(bodyIdB);
 
-        const anchorA = Vec2.add(bodyA.position, Vec2.rotate({ x: 0, y: 0 }, bodyA.rotation));
-        const rA = Vec2.rotate(Vec2.subtract({ x: 0, y: 0 }, bodyA.localCenter), bodyA.rotation);
-        const delta = Vec2.subtract(data.target, anchorA);
+        Vec2.rotate({ x: 0, y: 0 }, bodyA.rotation, _scratchA);
+        Vec2.add(bodyA.position, _scratchA, _scratchB);
+        Vec2.subtract({ x: 0, y: 0 }, bodyA.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyA.rotation, _scratchE);
+        const rAx = _scratchE.x;
+        const rAy = _scratchE.y;
+        Vec2.subtract(data.target, _scratchB, _scratchD);
+        const deltaX = _scratchD.x;
+        const deltaY = _scratchD.y;
         const h = Math.max(dt, SOLVER_EPSILON);
 
         let softness: number | undefined;
@@ -677,9 +753,9 @@ export class ConstraintSolver2D {
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -1, y: 0 }, angular: -rA.y },
+                j1: { linear: { x: -1, y: 0 }, angular: -rAy },
                 j2: { linear: { x: 1, y: 0 }, angular: 0 },
-                bias: -computeBias(delta.x),
+                bias: -computeBias(deltaX),
                 impulse: 0,
                 lowerLimit: -data.maxForce * h,
                 upperLimit: data.maxForce * h,
@@ -688,9 +764,9 @@ export class ConstraintSolver2D {
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: 0, y: -1 }, angular: rA.x },
+                j1: { linear: { x: 0, y: -1 }, angular: rAx },
                 j2: { linear: { x: 0, y: 1 }, angular: 0 },
-                bias: -computeBias(delta.y),
+                bias: -computeBias(deltaY),
                 impulse: 0,
                 lowerLimit: -data.maxForce * h,
                 upperLimit: data.maxForce * h,
@@ -727,18 +803,28 @@ export class ConstraintSolver2D {
         const bodyA = this._ensureSolverBody(bodyIdA);
         const bodyB = this._ensureSolverBody(bodyIdB);
 
-        const worldAnchorA = Vec2.add(bodyA.position, Vec2.rotate(data.localAnchorA, bodyA.rotation));
-        const worldAnchorB = Vec2.add(bodyB.position, Vec2.rotate(data.localAnchorB, bodyB.rotation));
-        const delta = Vec2.subtract(worldAnchorB, worldAnchorA);
-        const distance = Math.sqrt(Vec2.lengthSquared(delta));
+        Vec2.rotate(data.localAnchorA, bodyA.rotation, _scratchA);
+        Vec2.add(bodyA.position, _scratchA, _scratchB);
+        Vec2.rotate(data.localAnchorB, bodyB.rotation, _scratchA);
+        Vec2.add(bodyB.position, _scratchA, _scratchC);
+        Vec2.subtract(_scratchC, _scratchB, _scratchD);
+        const distance = Math.sqrt(Vec2.lengthSquared(_scratchD));
 
         if (distance <= data.maxLength + SOLVER_EPSILON) {
             return;
         }
 
-        const ndir = Vec2.normalize(delta, { x: 1, y: 0 });
-        const rA = Vec2.rotate(Vec2.subtract(data.localAnchorA, bodyA.localCenter), bodyA.rotation);
-        const rB = Vec2.rotate(Vec2.subtract(data.localAnchorB, bodyB.localCenter), bodyB.rotation);
+        Vec2.normalize(_scratchD, _scratchE);
+        const ndirX = _scratchE.x;
+        const ndirY = _scratchE.y;
+        Vec2.subtract(data.localAnchorA, bodyA.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyA.rotation, _scratchB);
+        const rAx = _scratchB.x;
+        const rAy = _scratchB.y;
+        Vec2.subtract(data.localAnchorB, bodyB.localCenter, _scratchA);
+        Vec2.rotate(_scratchA, bodyB.rotation, _scratchB);
+        const rBx = _scratchB.x;
+        const rBy = _scratchB.y;
         const error = distance - data.maxLength;
         const h = Math.max(dt, SOLVER_EPSILON);
 
@@ -746,8 +832,8 @@ export class ConstraintSolver2D {
             {
                 bodyIdA,
                 bodyIdB,
-                j1: { linear: { x: -ndir.x, y: -ndir.y }, angular: -Vec2.cross(rA, ndir) },
-                j2: { linear: { x: ndir.x, y: ndir.y }, angular: Vec2.cross(rB, ndir) },
+                j1: { linear: { x: -ndirX, y: -ndirY }, angular: -(rAx * ndirY - rAy * ndirX) },
+                j2: { linear: { x: ndirX, y: ndirY }, angular: rBx * ndirY - rBy * ndirX },
                 bias: -BAUMGARTE * error / h,
                 impulse: 0,
                 lowerLimit: 0,

@@ -1,3 +1,4 @@
+import type { Mutable } from '@axrone/utility';
 import { Vec4 } from '@axrone/numeric';
 import {
     ITexture,
@@ -7,6 +8,7 @@ import {
     ITextureCreateOptions,
     ITextureSamplerOptions,
     ITextureBuilder,
+    ColorSpace,
     TextureDimension,
     TextureFormat,
     TextureUsage,
@@ -19,8 +21,11 @@ import {
 import { WebGLTexture } from './texture';
 import { WebGLTextureSampler, SamplerFactory } from './sampler';
 import { TextureUtils, TextureValidation } from './utils';
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
 
 export class WebGLTextureManager implements ITextureManager {
+    private readonly _ctx: IGLContext;
     private readonly _gl: WebGL2RenderingContext;
     private readonly _textureCache = new Map<string, ITexture>();
     private readonly _samplerCache = new Map<string, ITextureSampler>();
@@ -40,15 +45,20 @@ export class WebGLTextureManager implements ITextureManager {
     private _maxMemoryUsage: number = 512 * 1024 * 1024;
     private _enableCache: boolean = true;
 
-    constructor(gl: WebGL2RenderingContext) {
-        this._gl = gl;
+    /** @deprecated Raw WebGL2RenderingContext overload is deprecated. Prefer IGLContext. */
+
+
+    constructor(source: ContextSource) {
+        const ctx = resolveContext(source);
+        this._ctx = ctx;
+        this._gl = ctx.gl;
         this._initializeDefaultTextures();
     }
 
     public createTexture(options: ITextureCreateOptions, data?: TextureDataSource): ITexture {
         TextureValidation.validateCreateOptions(options);
 
-        const texture = new WebGLTexture(this._gl, options, data);
+        const texture = new WebGLTexture(this._ctx, options, data);
         this._registerTexture(texture);
 
         return texture;
@@ -103,7 +113,7 @@ export class WebGLTextureManager implements ITextureManager {
             usage: TextureUsage.STATIC,
         };
 
-        const texture = new WebGLTexture(this._gl, options);
+        const texture = new WebGLTexture(this._ctx, options);
 
         if (data && data.length === 6) {
             for (let face = 0; face < 6; face++) {
@@ -133,7 +143,7 @@ export class WebGLTextureManager implements ITextureManager {
             usage: TextureUsage.STATIC,
         };
 
-        const texture = new WebGLTexture(this._gl, options);
+        const texture = new WebGLTexture(this._ctx, options);
 
         if (data) {
             for (let layer = 0; layer < Math.min(data.length, layers); layer++) {
@@ -149,7 +159,7 @@ export class WebGLTextureManager implements ITextureManager {
 
     public createSampler(options: ITextureSamplerOptions): ITextureSampler {
         TextureValidation.validateSamplerOptions(options);
-        return new WebGLTextureSampler(this._gl, options);
+        return new WebGLTextureSampler(this._ctx, options);
     }
 
     public getDefaultSampler(filterMode: FilterMode, wrapMode: WrapMode): ITextureSampler {
@@ -164,7 +174,7 @@ export class WebGLTextureManager implements ITextureManager {
                 wrapT: wrapMode,
             };
 
-            const sampler = new WebGLTextureSampler(this._gl, options);
+            const sampler = new WebGLTextureSampler(this._ctx, options);
             this._samplerCache.set(cacheKey, sampler);
         }
 
@@ -476,28 +486,8 @@ export class WebGLTextureManager implements ITextureManager {
 }
 
 class TextureBuilder implements ITextureBuilder {
-    private _options: {
-        width?: number;
-        height?: number;
-        depth?: number;
-        format?: TextureFormat;
-        dimension?: TextureDimension;
-        mipLevels?: number;
-        arrayLayers?: number;
-        samples?: number;
-        usage?: TextureUsage;
-        colorSpace?: any;
-        label?: string;
-    } = {};
-    private _samplerOptions: {
-        minFilter?: FilterMode;
-        magFilter?: FilterMode;
-        wrapS?: WrapMode;
-        wrapT?: WrapMode;
-        wrapR?: WrapMode;
-        borderColor?: Vec4;
-        maxAnisotropy?: number;
-    } = {};
+    private _options: Mutable<Partial<ITextureCreateOptions>> = {};
+    private _samplerOptions: Mutable<Partial<ITextureSamplerOptions>> = {};
     private _data: TextureDataSource = null;
 
     constructor(private _manager: WebGLTextureManager) {}
@@ -541,7 +531,7 @@ class TextureBuilder implements ITextureBuilder {
         return this;
     }
 
-    public colorSpace(space: any): ITextureBuilder {
+    public colorSpace(space: ColorSpace): ITextureBuilder {
         this._options.colorSpace = space;
         return this;
     }

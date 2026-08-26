@@ -92,6 +92,8 @@ void main() {
     v_TexCoord = a_TexCoord;
 }`,
             fragmentShader: `
+out vec4 o_FragColor;
+
 void main() {
     vec4 color = u_Color;
 
@@ -99,7 +101,7 @@ void main() {
         color *= texture(u_MainTexture, v_TexCoord);
     #endif
 
-    gl_FragColor = color;
+    o_FragColor = color;
 }`,
             renderState: {
                 depthTest: true,

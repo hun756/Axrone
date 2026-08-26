@@ -1,5 +1,9 @@
 import { ShaderDataType, ShaderStage } from './interfaces';
+
 import { Djb2 } from '@axrone/hash';
+import type { ContextSource, IGLContext } from '../context';
+import { resolveContext } from '../context';
+import { ShaderInstanceValidationError } from './errors';
 
 export const getShaderDataTypeSize = (type: ShaderDataType): number => {
     switch (type) {
@@ -40,7 +44,7 @@ export const getShaderDataTypeSize = (type: ShaderDataType): number => {
             return 4;
 
         default:
-            throw new Error(`Unknown shader data type: ${type}`);
+            throw new ShaderInstanceValidationError('INVALID_ARGUMENT', 'en', { reason: `Unknown shader data type: ${type}` });
     }
 };
 
@@ -81,11 +85,12 @@ export const getShaderDataTypeComponentCount = (type: ShaderDataType): number =>
             return 16;
 
         default:
-            throw new Error(`Unknown shader data type: ${type}`);
+            throw new ShaderInstanceValidationError('INVALID_ARGUMENT', 'en', { reason: `Unknown shader data type: ${type}` });
     }
 };
 
-export const getWebGLType = (gl: WebGL2RenderingContext, type: ShaderDataType): number => {
+export const getWebGLTypeForContext = (ctx: IGLContext, type: ShaderDataType): number => {
+    const gl = ctx.gl;
     switch (type) {
         case ShaderDataType.FLOAT:
         case ShaderDataType.VEC2:
@@ -94,39 +99,35 @@ export const getWebGLType = (gl: WebGL2RenderingContext, type: ShaderDataType): 
         case ShaderDataType.MAT2:
         case ShaderDataType.MAT3:
         case ShaderDataType.MAT4:
-            return gl.FLOAT;
-
+            return ctx.constants.FLOAT;
         case ShaderDataType.INT:
         case ShaderDataType.IVEC2:
         case ShaderDataType.IVEC3:
         case ShaderDataType.IVEC4:
-            return gl.INT;
-
+            return ctx.constants.INT;
         case ShaderDataType.UINT:
         case ShaderDataType.UVEC2:
         case ShaderDataType.UVEC3:
         case ShaderDataType.UVEC4:
-            return gl.UNSIGNED_INT;
-
+            return ctx.constants.UNSIGNED_INT;
         case ShaderDataType.BOOL:
         case ShaderDataType.BVEC2:
         case ShaderDataType.BVEC3:
         case ShaderDataType.BVEC4:
-            return gl.BOOL;
-
+            return ctx.constants.BOOL;
         case ShaderDataType.SAMPLER_2D:
-            return gl.SAMPLER_2D;
-
+            return ctx.constants.SAMPLER_2D;
         case ShaderDataType.SAMPLER_CUBE:
-            return gl.SAMPLER_CUBE;
-
+            return ctx.constants.SAMPLER_CUBE;
         case ShaderDataType.SAMPLER_2D_ARRAY:
-            return gl.SAMPLER_2D_ARRAY;
-
+            return ctx.constants.SAMPLER_2D_ARRAY;
         default:
-            throw new Error(`Unknown shader data type: ${type}`);
+            throw new ShaderInstanceValidationError('INVALID_ARGUMENT', 'en', { reason: `Unknown shader data type: ${type}` });
     }
 };
+
+export const getWebGLType = (source: ContextSource, type: ShaderDataType): number =>
+    getWebGLTypeForContext(resolveContext(source), type);
 
 export const MAX_VERTEX_ATTRIBUTES = 16;
 

@@ -2,6 +2,7 @@ import { Vec3 } from '@axrone/numeric';
 import { Transform } from '@axrone/ecs-runtime';
 import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
+import type { Mutable } from '@axrone/utility';
 
 export interface LODLevelConfig {
     readonly screenRelativeTransitionHeight: number;
@@ -277,11 +278,7 @@ export class LODGroup extends Component {
         }
 
         const worldPos = transform.worldPosition;
-        return new Vec3(
-            worldPos.x + this._localReferencePoint.x,
-            worldPos.y + this._localReferencePoint.y,
-            worldPos.z + this._localReferencePoint.z
-        );
+        return Vec3.add(worldPos, this._localReferencePoint);
     }
 
     override serialize(): Record<string, unknown> {
@@ -300,25 +297,26 @@ export class LODGroup extends Component {
     }
 
     override deserialize(data: Record<string, any>): void {
-        const patch: LODGroupConfig = {};
+        type MutableLODConfig = Mutable<LODGroupConfig>;
+        const patch: MutableLODConfig = {};
 
         if (Array.isArray(data.localReferencePoint) && data.localReferencePoint.length === 3) {
-            (patch as any).localReferencePoint = data.localReferencePoint;
+            patch.localReferencePoint = data.localReferencePoint;
         }
         if (typeof data.size === 'number') {
-            (patch as any).size = data.size;
+            patch.size = data.size;
         }
         if (typeof data.fadeMode === 'string') {
-            (patch as any).fadeMode = data.fadeMode;
+            patch.fadeMode = data.fadeMode;
         }
         if (typeof data.animateCrossFading === 'boolean') {
-            (patch as any).animateCrossFading = data.animateCrossFading;
+            patch.animateCrossFading = data.animateCrossFading;
         }
         if (typeof data.enabled === 'boolean') {
-            (patch as any).enabled = data.enabled;
+            patch.enabled = data.enabled;
         }
         if (Array.isArray(data.lodLevels)) {
-            (patch as any).lodLevels = data.lodLevels;
+            patch.lodLevels = data.lodLevels;
         }
 
         this._applyConfig(patch);

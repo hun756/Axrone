@@ -31,12 +31,8 @@ export class CharacterJoint3D extends Joint3D {
         return this._swingAxis;
     }
     set swingAxis(value: IVec3Like) {
-        const len = Math.sqrt(value.x * value.x + value.y * value.y + value.z * value.z);
-        if (len < 1e-6) return;
-        const invLen = 1 / len;
-        this._swingAxis.x = value.x * invLen;
-        this._swingAxis.y = value.y * invLen;
-        this._swingAxis.z = value.z * invLen;
+        if (Vec3.len(value) < 1e-6) return;
+        Vec3.normalize(value, this._swingAxis);
         this._updateConstraint();
     }
     get lowTwistLimit(): Readonly<ISoftJointLimit3D> {

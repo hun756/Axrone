@@ -69,12 +69,18 @@ export class BoxCollider2D extends Collider2D {
         this._shapeId = null;
     }
 
-    protected updateTrigger(): void {}
-    protected updateMaterial(): void {}
+    protected updateTrigger(): void {
+        this.recreateShape();
+    }
+    protected updateMaterial(): void {
+        this.recreateShape();
+    }
     protected updateOffset(): void {
         this.recreateShape();
     }
-    protected updateCollisionFilter(): void {}
+    protected updateCollisionFilter(): void {
+        this.recreateShape();
+    }
 
     private recreateShape(): void {
         this.destroyPhysicsShape();

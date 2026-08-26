@@ -10,11 +10,13 @@ import {
     createTorus,
 } from '@axrone/geometry';
 import {
+    ContextSource,
     FilterMode,
     TextureFormat,
     TextureFormatInfo,
     WrapMode,
     WebGLTextureManager,
+    resolveRawGL,
 } from '@axrone/render-webgl2';
 import {
     SceneMaterialError,
@@ -55,7 +57,7 @@ import type {
 } from './types';
 
 export interface SceneAssetRuntimeOptions {
-    readonly gl: WebGL2RenderingContext;
+    readonly gl: ContextSource;
     readonly defaultPassId: string;
     readonly defaultClearColor: Vec4;
     readonly releaseBaseMesh: (meshId: string) => void;
@@ -73,8 +75,9 @@ export class SceneAssetRuntime {
     private readonly _textureFactory: SceneTextureFactory;
 
     constructor(private readonly _options: SceneAssetRuntimeOptions) {
-        this._meshFactory = new SceneMeshFactory({ gl: _options.gl });
-        this._shaderFactory = new SceneShaderFactory({ gl: _options.gl });
+        const rawGL = resolveRawGL(_options.gl);
+        this._meshFactory = new SceneMeshFactory({ gl: rawGL });
+        this._shaderFactory = new SceneShaderFactory({ gl: rawGL });
         this._textureManager = new WebGLTextureManager(_options.gl);
         this._textureFactory = new SceneTextureFactory({
             textureManager: this._textureManager,
@@ -207,14 +210,16 @@ export class SceneAssetRuntime {
         const dependencies: SceneMaterialAdapterDependencies = {
             resolveTextures: (id: string): readonly SceneMaterialAdapterTextureEntry[] => {
                 const bindings = this.resources.getMaterialTextureBindings(id);
-                return bindings.map((binding) => ({
-                    textureId: binding.textureId,
-                    samplerId: binding.samplerId,
-                    unit: binding.unit,
-                    nativeTexture: binding.nativeTexture,
-                    width: binding.width,
-                    height: binding.height,
-                }));
+                return bindings
+                    .filter((binding): binding is typeof binding & { unit: number } => binding.unit !== null)
+                    .map((binding) => ({
+                        textureId: binding.textureId,
+                        samplerId: binding.samplerId,
+                        unit: binding.unit,
+                        nativeTexture: binding.nativeTexture,
+                        width: binding.width,
+                        height: binding.height,
+                    }));
             },
         };
 
@@ -467,7 +472,7 @@ export class SceneAssetRuntime {
         preferredFormats?: readonly TextureFormat[]
     ): readonly TextureFormat[] {
         return TextureFormatInfo.getContextSupportedCompressedFormats(
-            this._options.gl,
+            resolveRawGL(this._options.gl),
             preferredFormats
         );
     }

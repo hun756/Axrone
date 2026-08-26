@@ -22,7 +22,7 @@ export const enum BufferState {
     Released,
 }
 
-export type Nullable<T> = T | null;
+export type { Nullable } from '@axrone/utility';
 
 export type TypedArrayMap = {
     int8: Int8Array;
