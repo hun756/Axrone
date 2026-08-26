@@ -134,7 +134,7 @@ export class FontRegistry implements Disposable {
     registerFace(asset: FontFaceAsset): FontFaceId {
         this.ensureActive();
         const infoSource = isDynamicFontFaceAsset(asset) ? asset.runtime.info : asset;
-        const familyId = this.registerFamily({ name: infoSource.family });
+        this.registerFamily({ name: infoSource.family });
         const family = this.familiesByName.get(infoSource.family)!;
         const info: FontFaceInfo = {
             id: this.nextFaceId as FontFaceId,
@@ -170,7 +170,6 @@ export class FontRegistry implements Disposable {
         if (!this.defaultFamily) {
             this.defaultFamily = infoSource.family;
         }
-        void familyId;
         return info.id;
     }
 
