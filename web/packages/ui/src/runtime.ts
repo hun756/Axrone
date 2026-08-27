@@ -160,6 +160,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private canvasConfig: UICanvasConfig | null = null;
     private lastViewport: { readonly width: number; readonly height: number } | null = null;
     private readonly bindingTable = new Map<string, WidgetId>();
+    private readonly controllerListeners = new Map<number, Map<string, Set<(data: unknown) => void>>>();
     private readonly autoSizeCache = new Map<string, TextLayoutResult>();
     private readonly autoSizeCacheMaxSize = 64;
 
@@ -293,6 +294,62 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     }
 
     /**
+     * Registers a listener for a named controller event on a widget.
+     * Controllers emit semantic events (e.g. 'onDragStart') at meaningful
+     * interaction points. Listeners are called synchronously during emit.
+     */
+    onControllerEvent(widget: WidgetId, eventName: string, callback: (data: unknown) => void): void {
+        this.ensureActive();
+        this.requireWidget(widget);
+        let widgetListeners = this.controllerListeners.get(widget);
+        if (!widgetListeners) {
+            widgetListeners = new Map();
+            this.controllerListeners.set(widget, widgetListeners);
+        }
+        let eventListeners = widgetListeners.get(eventName);
+        if (!eventListeners) {
+            eventListeners = new Set();
+            widgetListeners.set(eventName, eventListeners);
+        }
+        eventListeners.add(callback);
+    }
+
+    /**
+     * Removes a previously registered controller event listener.
+     */
+    offControllerEvent(widget: WidgetId, eventName: string, callback: (data: unknown) => void): void {
+        this.ensureActive();
+        const widgetListeners = this.controllerListeners.get(widget);
+        if (!widgetListeners) return;
+        const eventListeners = widgetListeners.get(eventName);
+        if (!eventListeners) return;
+        eventListeners.delete(callback);
+        if (eventListeners.size === 0) {
+            widgetListeners.delete(eventName);
+        }
+        if (widgetListeners.size === 0) {
+            this.controllerListeners.delete(widget);
+        }
+    }
+
+    /**
+     * Emits a named controller event for a widget. Called by controllers at
+     * meaningful interaction points (drag start, drop, etc.). Returns true
+     * when at least one listener was invoked.
+     */
+    emitControllerEvent(widget: WidgetId, eventName: string, data?: unknown): boolean {
+        this.ensureActive();
+        const widgetListeners = this.controllerListeners.get(widget);
+        if (!widgetListeners) return false;
+        const eventListeners = widgetListeners.get(eventName);
+        if (!eventListeners || eventListeners.size === 0) return false;
+        for (const listener of [...eventListeners]) {
+            listener(data);
+        }
+        return true;
+    }
+
+    /**
      * Returns the controller state of a widget, or null when it has no
      * controller. Lets callers read live control values (a slider's value, a
      * toggle's checked flag) without reaching into runtime internals.
@@ -313,6 +370,18 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         const index = this.requireWidget(widget);
         const record = this.records[index]!;
         return cloneData(record.imageInput);
+    }
+
+    /**
+     * Returns a clone of the widget's current style input, or null when the
+     * widget has no style. Lets controllers read the authored visual state
+     * (e.g. current background color for animation start values).
+     */
+    getWidgetStyleInput(widget: WidgetId): WidgetStyleInput | null {
+        this.ensureActive();
+        const index = this.requireWidget(widget);
+        const record = this.records[index]!;
+        return cloneData(record.styleInput);
     }
 
     setViewport(width: number, height: number): this {
@@ -1629,6 +1698,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             ? this.registry.resolve(this.records[index]!.controller)
             : null;
         controller?.disposeState?.(this.states[index], this, index as WidgetId);
+        this.controllerListeners.delete(index);
         this.records[index] = null;
         this.layouts[index] = null;
         this.styles[index] = null;

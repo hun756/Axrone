@@ -74,6 +74,10 @@ export type { SceneLightingState } from './lighting-collector';
 export { SceneLightingCollector } from './lighting-collector';
 export { SceneLightingUniformBinder } from './lighting-uniform-binder';
 
+export type { SceneFogState, SceneFogMode } from './fog-state';
+export { DEFAULT_SCENE_FOG_STATE, resolveSceneFogState } from './fog-state';
+export { SceneFogUniformBinder } from './fog-uniform-binder';
+
 export type { SceneCameraFrameState } from './camera-frame-state';
 export { SceneCameraFrameStateCollector } from './camera-frame-state';
 export { selectSceneCamera } from './camera-selector';

@@ -55,6 +55,9 @@ export const clearShaderLibraries = (): void => {
     registry.clear();
 };
 
+/** Remove a single registered chunk by id. Returns true if the entry existed. */
+export const disposeShaderLibrary = (id: string): boolean => registry.delete(id);
+
 /** Concatenate a set of chunks by id, in order. Missing ids are skipped. */
 export const resolveShaderLibraries = (ids: readonly string[]): string =>
     ids

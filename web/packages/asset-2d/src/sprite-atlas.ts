@@ -24,6 +24,8 @@ export interface SpriteAtlasFrameDefinition {
     readonly pivot?: Asset2DVec2Like;
     readonly sliceBorder?: Asset2DBorderLike;
     readonly durationMs?: number;
+    readonly rotated?: boolean;
+    readonly trimOffset?: Asset2DVec2Like;
 }
 
 export interface SpriteAnimationFrameDefinition {

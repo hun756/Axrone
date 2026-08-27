@@ -5,6 +5,7 @@ import {
     DEFAULT_SCENE_WIDTH,
 } from './scene-runtime-defaults';
 import { SceneSnapshotFacade } from './scene-snapshot-facade';
+import type { SceneFogState } from './fog-state';
 
 export class SceneLifecycleFacade<
     R extends ComponentRegistry = Record<string, never>,
@@ -56,6 +57,12 @@ export class SceneLifecycleFacade<
         pixelRatio?: number
     ): this {
         this._kernel.lifecycle.resize(width, height, pixelRatio);
+        return this;
+    }
+
+    setFogState(fog: SceneFogState): this {
+        this.assertNotDisposed();
+        this._kernel.renderRuntime.setFogState(fog);
         return this;
     }
 

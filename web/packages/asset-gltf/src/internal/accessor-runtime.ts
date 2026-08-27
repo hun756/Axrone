@@ -145,7 +145,7 @@ export class GltfAccessorRuntime {
         }
 
         if (accessor.sparse) {
-            await this._applySparse(accessor, values, componentCount);
+            await this._applySparse(accessor, values, componentCount, index);
         }
 
         return Object.freeze({
@@ -229,6 +229,12 @@ export class GltfAccessorRuntime {
 
             for (let element = 0; element < sparseIndices.length; element += 1) {
                 const targetIndex = sparseIndices[element]!;
+                if (targetIndex >= accessor.count) {
+                    throw new GltfAccessorError(
+                        `Sparse index accessor ${index} has out-of-bounds target index ${targetIndex}`,
+                        index
+                    );
+                }
                 values[targetIndex] = readComponent(
                     sparseView,
                     element * stride,
@@ -243,7 +249,8 @@ export class GltfAccessorRuntime {
     private async _applySparse(
         accessor: GltfAccessorJson,
         target: Float32Array,
-        componentCount: number
+        componentCount: number,
+        accessorIndex: number
     ): Promise<void> {
         if (!accessor.sparse) {
             return;
@@ -265,6 +272,12 @@ export class GltfAccessorRuntime {
 
         for (let element = 0; element < sparseIndices.length; element += 1) {
             const targetIndex = sparseIndices[element]!;
+            if (targetIndex >= accessor.count) {
+                throw new GltfAccessorError(
+                    `Sparse accessor index ${targetIndex} exceeds accessor count ${accessor.count}`,
+                    accessorIndex
+                );
+            }
             const elementOffset = element * elementSize;
             for (let component = 0; component < componentCount; component += 1) {
                 const raw = readComponent(

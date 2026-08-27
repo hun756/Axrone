@@ -200,6 +200,7 @@ export interface WidgetSnapshot {
     readonly text?: TextBlockInput | null;
     readonly image?: WidgetImageInput | null;
     readonly focus?: WidgetFocusPolicyInput;
+    readonly material?: Readonly<Record<string, unknown>> | null;
     readonly children: readonly WidgetSnapshot[];
 }
 

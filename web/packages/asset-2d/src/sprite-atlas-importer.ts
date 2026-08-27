@@ -179,28 +179,47 @@ const normalizeCanonicalSpriteAtlasDefinition = (
 const normalizeTexturePackerFrame = (
     id: string,
     entry: TexturePackerAtlasFrameEntry
-): SpriteAtlasFrameDefinition => ({
-    id,
-    region: {
-        x: entry.frame.x,
-        y: entry.frame.y,
-        width: entry.frame.w,
-        height: entry.frame.h,
-    },
-    sourceSize: entry.sourceSize
-        ? {
-              width: entry.sourceSize.w,
-              height: entry.sourceSize.h,
-          }
-        : undefined,
-    pivot: entry.pivot
-        ? {
-              x: entry.pivot.x,
-              y: entry.pivot.y,
-          }
-        : undefined,
-    durationMs: isFiniteNumber(entry.duration) ? entry.duration : undefined,
-});
+): SpriteAtlasFrameDefinition => {
+    const rotated = entry.rotated === true;
+
+    return {
+        id,
+        region: rotated
+            ? {
+                  x: entry.frame.x,
+                  y: entry.frame.y,
+                  width: entry.frame.h,
+                  height: entry.frame.w,
+              }
+            : {
+                  x: entry.frame.x,
+                  y: entry.frame.y,
+                  width: entry.frame.w,
+                  height: entry.frame.h,
+              },
+        sourceSize: entry.sourceSize
+            ? {
+                  width: entry.sourceSize.w,
+                  height: entry.sourceSize.h,
+              }
+            : undefined,
+        pivot: entry.pivot
+            ? {
+                  x: entry.pivot.x,
+                  y: entry.pivot.y,
+              }
+            : undefined,
+        durationMs: isFiniteNumber(entry.duration) ? entry.duration : undefined,
+        rotated: rotated || undefined,
+        trimOffset:
+            entry.spriteSourceSize && (entry.spriteSourceSize.x !== 0 || entry.spriteSourceSize.y !== 0)
+                ? {
+                      x: entry.spriteSourceSize.x,
+                      y: entry.spriteSourceSize.y,
+                  }
+                : undefined,
+    };
+};
 
 const normalizeTexturePackerAtlasDefinition = (
     source: AssetImportSource,
@@ -218,13 +237,31 @@ const normalizeTexturePackerAtlasDefinition = (
     );
 
     const animations = meta.frameTags?.length
-        ? meta.frameTags.map((tag) => ({
-              id: tag.name,
-              loop: tag.direction !== 'reverse',
-              frames: Array.from(
-                  { length: Math.max(0, tag.to - tag.from + 1) },
-                  (_, index) => {
-                      const frameIndex = tag.direction === 'reverse' ? tag.to - index : tag.from + index;
+        ? meta.frameTags.map((tag) => {
+              const frameIndices: number[] = [];
+              const count = Math.max(0, tag.to - tag.from + 1);
+
+              if (tag.direction === 'reverse') {
+                  for (let index = 0; index < count; index += 1) {
+                      frameIndices.push(tag.to - index);
+                  }
+              } else if (tag.direction === 'pingpong') {
+                  for (let index = 0; index < count; index += 1) {
+                      frameIndices.push(tag.from + index);
+                  }
+                  for (let index = count - 2; index >= 1; index -= 1) {
+                      frameIndices.push(tag.from + index);
+                  }
+              } else {
+                  for (let index = 0; index < count; index += 1) {
+                      frameIndices.push(tag.from + index);
+                  }
+              }
+
+              return {
+                  id: tag.name,
+                  loop: true,
+                  frames: frameIndices.map((frameIndex) => {
                       const frame = frames[frameIndex];
                       if (!frame) {
                           throw new Error(
@@ -236,9 +273,9 @@ const normalizeTexturePackerAtlasDefinition = (
                           frameId: frame.id,
                           durationMs: frame.durationMs ?? 1000 / 12,
                       };
-                  }
-              ),
-          }))
+                  }),
+              };
+          })
         : undefined;
 
     const atlas = createSpriteAtlas({
@@ -255,6 +292,18 @@ const normalizeTexturePackerAtlasDefinition = (
     return serializeSpriteAtlasDefinition(atlas);
 };
 
+const parsedSourceCache = new WeakMap<AssetImportSource, unknown>();
+
+const readJsonLikeSourceCached = (source: AssetImportSource): unknown => {
+    const cached = parsedSourceCache.get(source);
+    if (cached !== undefined) {
+        return cached;
+    }
+    const parsed = readJsonLikeSource(source);
+    parsedSourceCache.set(source, parsed);
+    return parsed;
+};
+
 export const createSpriteAtlasJsonImporter = (): AssetImporter<Asset2DImportSchema> => ({
     id: 'asset-2d.sprite-atlas.json',
     priority: 20,
@@ -262,15 +311,15 @@ export const createSpriteAtlasJsonImporter = (): AssetImporter<Asset2DImportSche
     extensions: ['spriteatlas.json', 'atlas.json', 'json'],
     canImport: ({ source }) => {
         try {
-            return isCanonicalSpriteAtlasPayload(readJsonLikeSource(source));
+            return isCanonicalSpriteAtlasPayload(readJsonLikeSourceCached(source));
         } catch {
             return false;
         }
     },
     import: ({ source }) => {
-        const payload = readJsonLikeSource(source);
+        const payload = readJsonLikeSourceCached(source);
         if (!isCanonicalSpriteAtlasPayload(payload)) {
-            throw new Error('Source does not contain a canonical sprite atlas definition');
+            throw new Error('Source does not contain a canonical Sprite atlas definition');
         }
 
         const definition = normalizeCanonicalSpriteAtlasDefinition(source, payload);
@@ -297,14 +346,14 @@ export const createTexturePackerSpriteAtlasImporter = (): AssetImporter<Asset2DI
     extensions: ['json'],
     canImport: ({ source }) => {
         try {
-            const payload = readJsonLikeSource(source);
+            const payload = readJsonLikeSourceCached(source);
             return isTexturePackerAtlasPayload(payload);
         } catch {
             return false;
         }
     },
     import: ({ source }) => {
-        const payload = readJsonLikeSource(source);
+        const payload = readJsonLikeSourceCached(source);
         if (!isTexturePackerAtlasPayload(payload)) {
             throw new Error('Source does not contain a TexturePacker atlas payload');
         }

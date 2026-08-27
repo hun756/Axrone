@@ -33,6 +33,9 @@ import {
     stableStringify,
     type InternalAssetDisposer,
 } from './stored-asset';
+import { isLookupByKey, isAssetRecordValue } from './type-guards';
+
+const MAX_REVISION_HISTORY_SIZE = 50;
 
 export interface PreparedAssetWrite<
     TSchema extends AssetSchema,
@@ -90,23 +93,6 @@ interface AssetTransactionHost<TSchema extends AssetSchema> {
     ) => TransactionStoredAsset<TSchema> | undefined;
     readonly emitLeaf: (event: AssetLeafChangeEvent<TSchema>) => void;
 }
-
-const isLookupByKey = <TSchema extends AssetSchema>(
-    value: unknown
-): value is AssetLookupByKey<TSchema> =>
-    value !== null &&
-    typeof value === 'object' &&
-    typeof (value as AssetLookupByKey<TSchema>).key === 'string';
-
-const isAssetRecordValue = <TSchema extends AssetSchema>(
-    value: unknown
-): value is AssetRecord<TSchema> =>
-    value !== null &&
-    typeof value === 'object' &&
-    typeof (value as AssetRecord<TSchema>).kind === 'string' &&
-    typeof (value as AssetRecord<TSchema>).id === 'string' &&
-    typeof (value as AssetRecord<TSchema>).key === 'string' &&
-    'reference' in (value as AssetRecord<TSchema>);
 
 export class AssetTransactionRuntime<TSchema extends AssetSchema> {
     constructor(private readonly _host: AssetTransactionHost<TSchema>) {}
@@ -452,6 +438,15 @@ export class AssetTransactionRuntime<TSchema extends AssetSchema> {
 
         if (revisions.length < asset.revision) {
             revisions.length = asset.revision;
+        }
+
+        // Evict oldest revisions to cap memory. After splice, remaining entries
+        // retain their original `.revision` numbers but array indices no longer
+        // correspond to `revision - 1`. Consumers must iterate or search by id —
+        // positional indexing into this array is NOT safe after eviction.
+        if (revisions.length > MAX_REVISION_HISTORY_SIZE) {
+            const excess = revisions.length - MAX_REVISION_HISTORY_SIZE;
+            revisions.splice(0, excess);
         }
     }
 

@@ -144,7 +144,9 @@ const setFocused = (context: EditBoxContext, focused: boolean): boolean => {
 
 /**
  * Computes a character index from a pointer X coordinate within the value
- * widget's layout box. Uses proportional estimation based on text length.
+ * widget's layout box. Uses text layout caret positions for accurate
+ * nearest-caret distance search when available, falling back to proportional
+ * estimation when no layout data exists.
  */
 const resolveCursorIndex = (context: EditBoxContext, pointerX: number): number => {
     const props = context.props as EditBoxControllerProps;
@@ -161,17 +163,37 @@ const resolveCursorIndex = (context: EditBoxContext, pointerX: number): number =
         return state.value.length;
     }
 
-    const box = runtime.getLayoutBox(valueWidget);
-    const textLength = state.value.length;
-
-    if (textLength === 0 || box.width <= 0) {
+    const displayText = getDisplayText(state.value, asBoolean(props.password, false));
+    if (displayText.length === 0) {
         return 0;
     }
 
-    // Estimate character position proportionally within the layout box.
+    // Use text layout caret positions for accurate nearest-caret search.
+    const layout = runtime.getTextLayout(valueWidget);
+    const box = runtime.getLayoutBox(valueWidget);
+
+    if (layout && layout.carets.length > 0) {
+        let bestIndex = layout.carets[0].index;
+        let bestDistance = Number.POSITIVE_INFINITY;
+        for (const caret of layout.carets) {
+            const caretCenterX = box.contentX + caret.x;
+            const dx = caretCenterX - pointerX;
+            const distance = dx * dx;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestIndex = caret.index;
+            }
+        }
+        return bestIndex;
+    }
+
+    // Fallback: proportional estimation when no text layout is available.
+    if (box.width <= 0) {
+        return displayText.length;
+    }
     const relativeX = pointerX - box.x;
     const ratio = clamp(relativeX / box.width, 0, 1);
-    return Math.round(ratio * textLength);
+    return Math.round(ratio * displayText.length);
 };
 
 /**
