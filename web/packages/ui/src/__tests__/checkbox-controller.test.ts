@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { UIRuntime } from '../runtime';
 import { deserializeUIAsset } from '../runtime/ui-asset-io';
 import {
@@ -418,5 +418,45 @@ describe('checkbox-toggle controller — sprite mode', () => {
 		expect((image?.source as { resourceId?: string })?.resourceId).toBe('box_hover.png');
 		expect(image?.fit).toBe('fill');
 		expect(image?.sampling).toBe('nearest');
+	});
+});
+
+describe('checkbox-toggle controller — sentinel previousBoxColor', () => {
+	it('applies initial color directly without animation on first mount', () => {
+		// Even with a non-zero transitionDuration the first applyVisuals must
+		// skip animation (previousBoxColor starts as '' sentinel).
+		const runtime = createRuntime({
+			boxKey: 'checkbox-box',
+			markKey: 'checkbox-mark',
+			labelKey: 'checkbox-label',
+			states: { normal: '#334155ff', hover: '#475569ff', checked: '#0a74daff' },
+			transitionDuration: 0.5,
+		});
+
+		const snapshot = runtime.snapshot();
+		const boxNode = snapshot.root.children[0].children[0];
+		// Color applied immediately — no animation flash.
+		expect(boxNode.style.background).toBe('#334155ff');
+	});
+
+	it('reads widget actual current color for animation from after cancellation', () => {
+		const runtime = createRuntime({
+			boxKey: 'checkbox-box',
+			markKey: 'checkbox-mark',
+			labelKey: 'checkbox-label',
+			states: { normal: '#334155ff', hover: '#475569ff', checked: '#0a74daff' },
+			transitionDuration: 1,
+		});
+
+		// Spy on getWidgetStyleInput to confirm it is consulted when starting
+		// a color animation (the fix for rapid-toggle jump).
+		const spy = vi.spyOn(runtime, 'getWidgetStyleInput');
+
+		// Trigger a state change that enters the animation path.
+		hoverCheckbox(runtime);
+		runtime.commit();
+
+		expect(spy).toHaveBeenCalledWith(boxWidget(runtime));
+		spy.mockRestore();
 	});
 });
