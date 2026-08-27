@@ -1,5 +1,5 @@
 import type { UIRuntime } from '../runtime';
-import type { UIInputEvent, UIImageSource, WidgetId, WidgetImageInput } from '../types';
+import type { UIInputEvent, UIImageSource, WidgetId, WidgetImageInput, WidgetStrokeData } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { animateWidgetColor, Easing, type UIAnimationHandle } from './animation';
 
@@ -218,6 +218,62 @@ const applySpriteToChild = (
 };
 
 /**
+ * Normalized stroke coordinates for checkbox mark styles in 0–1 space.
+ * Derived from Editor SVG previews (14-unit viewBox):
+ *   check = polyline M2.8 7.6 L5.7 10.4 L11.2 3.4 → normalized to 14-unit space
+ *   cross = two diagonals
+ *   dash  = horizontal line
+ * Dot uses a filled circle (background + radius), not strokes.
+ */
+const CHECK_STROKE_POINTS: readonly (readonly [number, number])[] = Object.freeze([
+    [0.2, 0.543],
+    [0.407, 0.743],
+    [0.8, 0.243],
+]);
+
+const CROSS_STROKE_POINTS: readonly (readonly [number, number])[] = Object.freeze([
+    [0.25, 0.25],
+    [0.75, 0.75],
+]);
+
+const CROSS_STROKE_POINTS_2: readonly (readonly [number, number])[] = Object.freeze([
+    [0.75, 0.25],
+    [0.25, 0.75],
+]);
+
+const DASH_STROKE_POINTS: readonly (readonly [number, number])[] = Object.freeze([
+    [0.25, 0.5],
+    [0.75, 0.5],
+]);
+
+/**
+ * Resolves the stroke data for a given mark style. Returns null for 'dot' style
+ * which uses background fill instead of strokes.
+ */
+const resolveMarkStrokes = (
+    markStyle: CheckboxMarkStyle,
+    markColor: string,
+    markWeight: number,
+): readonly WidgetStrokeData[] | null => {
+    switch (markStyle) {
+        case 'check':
+            return [{ points: CHECK_STROKE_POINTS, color: markColor, weight: markWeight }];
+        case 'cross':
+            return [
+                { points: CROSS_STROKE_POINTS, color: markColor, weight: markWeight },
+                { points: CROSS_STROKE_POINTS_2, color: markColor, weight: markWeight },
+            ];
+        case 'dash':
+            return [{ points: DASH_STROKE_POINTS, color: markColor, weight: markWeight }];
+        case 'dot':
+            // Dot uses background fill, not strokes.
+            return null;
+        default:
+            return null;
+    }
+};
+
+/**
  * Pushes the visual state onto the box, mark, and label child widgets.
  * Returns true once at least the box widget was reached.
  */
@@ -313,6 +369,10 @@ const applyVisuals = (context: CheckboxContext): boolean => {
         const mark = runtime.getBoundWidget(markKey);
         if (mark !== null) {
             const markVisible = state.checked || state.indeterminate;
+            const markStyle = (asString(props.markStyle) || 'check') as CheckboxMarkStyle;
+            const markColor = (asString(props.markColor) || '#ffffffff') as `#${string}`;
+            const markWeight = asNumber(props.markWeight, 2);
+            const markSize = asNumber(props.markSize, NaN);
 
             if (transition === 'tint') {
                 const markTints = asRecord(props.markTints);
@@ -331,26 +391,42 @@ const applyVisuals = (context: CheckboxContext): boolean => {
                     runtime.updateWidget(mark, { enabled: false });
                 }
             } else {
-                const markColor = (asString(props.markColor) || '#ffffffff') as `#${string}`;
-                runtime.updateWidget(mark, {
-                    style: { background: markVisible ? markColor : '#00000000' },
-                    enabled: markVisible,
-                });
+                // Color transition mode: use strokes for mark styles (check/cross/dash)
+                // or background fill for dot style.
+                const strokes = markVisible ? resolveMarkStrokes(markStyle, markColor, markWeight) : null;
+                if (markStyle === 'dot') {
+                    // Dot uses background fill with radius for circular shape.
+                    runtime.updateWidget(mark, {
+                        style: {
+                            background: markVisible ? markColor : '#00000000',
+                            radius: Number.isFinite(markSize) ? markSize * 0.5 : 7,
+                            strokes: [],
+                        },
+                        enabled: markVisible,
+                    });
+                } else {
+                    // Stroke-based marks: transparent background, strokes render the shape.
+                    runtime.updateWidget(mark, {
+                        style: {
+                            background: '#00000000',
+                            strokes: strokes ?? [],
+                        },
+                        enabled: markVisible,
+                    });
+                }
             }
 
             // Apply markSize to mark child layout dimensions.
-            const markSize = asNumber(props.markSize, NaN);
+            // CRITICAL: Zero all insets to override any corrupted absolute coordinates
+            // from the asset. With 0.5/0.5 anchor + center pivot, zero insets ensure
+            // the mark is centered inside the box regardless of document corruption.
             if (Number.isFinite(markSize)) {
                 runtime.updateWidget(mark, {
-                    layout: { width: markSize, height: markSize },
-                });
-            }
-
-            // Apply markWeight as border-width on the mark child.
-            const markWeight = asNumber(props.markWeight, NaN);
-            if (Number.isFinite(markWeight)) {
-                runtime.updateWidget(mark, {
-                    style: { borderWidth: markWeight },
+                    layout: {
+                        width: markSize,
+                        height: markSize,
+                        inset: { left: 0, top: 0, right: 0, bottom: 0 },
+                    },
                 });
             }
 
