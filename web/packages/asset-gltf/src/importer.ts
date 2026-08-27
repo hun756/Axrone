@@ -863,5 +863,5 @@ export const createGltfImporter = <
         },
     };
 
-    return importer;
+    return importer as unknown as GltfImporter<TSchema>;
 };
