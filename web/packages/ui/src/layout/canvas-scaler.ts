@@ -1,5 +1,8 @@
 import type { UICanvasConfig } from '../types/ui-asset';
 
+/** Tracks scale modes that have already produced a console.warn so each mode warns at most once. */
+const warnedScaleModes = new Set<string>();
+
 /**
  * Result of computing how a UI canvas maps from its reference resolution
  * to the actual viewport.
@@ -120,6 +123,13 @@ export function resolveCanvasScale(
         }
 
         default: {
+            const modeKey = String((canvas as unknown as Record<string, unknown>)['scaleMode']);
+            if (!warnedScaleModes.has(modeKey)) {
+                warnedScaleModes.add(modeKey);
+                console.warn(
+                    `[ui/canvas-scaler] Unknown scale mode "${modeKey}". Falling back to "fill".`
+                );
+            }
             // Fallback: treat unknown mode as fill
             return {
                 scaleX: scaleW,
