@@ -587,9 +587,10 @@ export const preprocessGLSL = (
     }
 
     const frames: ConditionalFrame[] = [];
-    const isEmitting = () => frames.length === 0 || frames.every((frame) => frame.active);
+    let inactiveCount = 0;
+    const isEmitting = () => inactiveCount === 0;
     const parentActive = () =>
-        frames.length <= 1 ? true : frames.slice(0, -1).every((frame) => frame.active);
+        frames.length <= 1 ? true : frames[frames.length - 2]!.active && inactiveCount === (frames.length - 1);
 
     interface OutputLine {
         readonly text: string;
@@ -619,6 +620,7 @@ export const preprocessGLSL = (
                     parentActive: isEmitting(),
                     line,
                 });
+                if (!condition) inactiveCount += 1;
                 break;
             }
             case 'ifdef': {
@@ -630,6 +632,7 @@ export const preprocessGLSL = (
                     parentActive: condition ? true : isEmitting(),
                     line,
                 });
+                if (!condition) inactiveCount += 1;
                 break;
             }
             case 'ifndef': {
@@ -641,6 +644,7 @@ export const preprocessGLSL = (
                     parentActive: isEmitting(),
                     line,
                 });
+                if (!condition) inactiveCount += 1;
                 break;
             }
             case 'elif': {
@@ -657,6 +661,8 @@ export const preprocessGLSL = (
                 const condition = evaluate
                     ? evaluateDirectiveCondition(directive.rest, macros) !== 0
                     : false;
+                if (frame.active && !condition) inactiveCount += 1;
+                if (!frame.active && condition) inactiveCount -= 1;
                 frame.active = condition;
                 frame.taken = frame.taken || condition;
                 break;
@@ -671,7 +677,10 @@ export const preprocessGLSL = (
                     sink.reportError('PP_DUPLICATE_ELSE', 'duplicate #else', loc(line));
                     break;
                 }
-                frame.active = frame.parentActive && !frame.taken;
+                const newActive = frame.parentActive && !frame.taken;
+                if (frame.active && !newActive) inactiveCount += 1;
+                if (!frame.active && newActive) inactiveCount -= 1;
+                frame.active = newActive;
                 frame.taken = true;
                 frame.seenElse = true;
                 break;
@@ -681,7 +690,8 @@ export const preprocessGLSL = (
                     sink.reportError('PP_UNEXPECTED_ENDIF', '#endif without matching #if', loc(line));
                     break;
                 }
-                frames.pop();
+                const popped = frames.pop()!;
+                if (!popped.active) inactiveCount -= 1;
                 break;
             }
             case 'define': {
