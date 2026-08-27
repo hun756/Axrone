@@ -1,6 +1,7 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, UIImageSource, WidgetId, WidgetImageInput } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
+import { animateWidgetColor, Easing, type UIAnimationHandle } from './animation';
 
 /**
  * Declarative checkbox controller for `.ui.json` authored checkboxes.
@@ -87,6 +88,8 @@ export interface CheckboxControllerState {
     initialized: boolean;
     originalBoxSource: UIImageSource | null;
     originalMarkSource: UIImageSource | null;
+    boxAnimation: UIAnimationHandle | null;
+    previousBoxColor: string;
 }
 
 type CheckboxContext = WidgetControllerContext<
@@ -248,10 +251,58 @@ const applyVisuals = (context: CheckboxContext): boolean => {
                     : (visualState === 'hover'
                         ? (asString(states.hover) || DEFAULT_STATES.hover)
                         : (asString(states.normal) || DEFAULT_STATES.normal));
+
+                const duration = asNumber(props.transitionDuration, 0);
+                if (state.previousBoxColor === '') {
+                    // First run: sentinel — apply directly without animation
+                    // and record the initial color to avoid a mount flash.
+                    if (state.boxAnimation) {
+                        state.boxAnimation.cancel();
+                        state.boxAnimation = null;
+                    }
+                    runtime.updateWidget(box, {
+                        style: { background: bg as `#${string}` },
+                    });
+                    state.previousBoxColor = bg;
+                } else if (duration > 0 && state.previousBoxColor !== bg) {
+                    if (state.boxAnimation) {
+                        state.boxAnimation.cancel();
+                    }
+                    // Read the widget's actual current color so that a
+                    // cancelled mid-flight animation starts from where the
+                    // widget truly is, not from a stale target.
+                    const currentStyle = runtime.getWidgetStyleInput(box);
+                    const fromColor = (asString(currentStyle?.background) || state.previousBoxColor) as `#${string}`;
+                    state.boxAnimation = animateWidgetColor(
+                        runtime,
+                        box,
+                        'style.background',
+                        fromColor,
+                        bg as `#${string}`,
+                        duration,
+                        Easing.easeOutQuad
+                    );
+                    state.previousBoxColor = bg;
+                } else {
+                    if (state.boxAnimation) {
+                        state.boxAnimation.cancel();
+                        state.boxAnimation = null;
+                    }
+                    runtime.updateWidget(box, {
+                        style: { background: bg as `#${string}` },
+                    });
+                    state.previousBoxColor = bg;
+                }
+            }
+
+            // Apply boxSize to box child layout dimensions.
+            const boxSize = asNumber(props.boxSize, NaN);
+            if (Number.isFinite(boxSize)) {
                 runtime.updateWidget(box, {
-                    style: { background: bg as `#${string}` },
+                    layout: { width: boxSize, height: boxSize },
                 });
             }
+
             applied = true;
         }
     }
@@ -286,6 +337,23 @@ const applyVisuals = (context: CheckboxContext): boolean => {
                     enabled: markVisible,
                 });
             }
+
+            // Apply markSize to mark child layout dimensions.
+            const markSize = asNumber(props.markSize, NaN);
+            if (Number.isFinite(markSize)) {
+                runtime.updateWidget(mark, {
+                    layout: { width: markSize, height: markSize },
+                });
+            }
+
+            // Apply markWeight as border-width on the mark child.
+            const markWeight = asNumber(props.markWeight, NaN);
+            if (Number.isFinite(markWeight)) {
+                runtime.updateWidget(mark, {
+                    style: { borderWidth: markWeight },
+                });
+            }
+
             applied = true;
         }
     }
@@ -320,6 +388,24 @@ const applyVisuals = (context: CheckboxContext): boolean => {
     return applied || (!boxKey && !markKey && !labelKey);
 };
 
+/**
+ * Applies the zoom-scale press effect to the root widget.
+ * Uses opacity reduction as a visual proxy for scale since the UI
+ * animation system supports opacity interpolation.
+ */
+const applyZoomScale = (context: CheckboxContext, pressed: boolean): void => {
+    const props = context.props as CheckboxControllerProps;
+    const zoomScale = asNumber(props.zoomScale, NaN);
+    if (!Number.isFinite(zoomScale) || zoomScale >= 1) {
+        return;
+    }
+    // Map zoomScale (e.g. 0.9) to opacity reduction (e.g. 0.9 opacity).
+    const opacity = pressed ? zoomScale : 1;
+    context.runtime.updateWidget(context.widget, {
+        style: { opacity },
+    });
+};
+
 export const checkboxToggleController: WidgetController<
     typeof CHECKBOX_TOGGLE_CONTROLLER_TYPE,
     Record<string, unknown>,
@@ -338,6 +424,8 @@ export const checkboxToggleController: WidgetController<
             initialized: false,
             originalBoxSource: null,
             originalMarkSource: null,
+            boxAnimation: null,
+            previousBoxColor: '',
         };
     },
     mount: (context) => {
@@ -366,8 +454,13 @@ export const checkboxToggleController: WidgetController<
             props.indeterminate !== previous.indeterminate ||
             props.states !== previous.states ||
             props.transition !== previous.transition ||
+            props.transitionDuration !== previous.transitionDuration ||
+            props.zoomScale !== previous.zoomScale ||
             props.markColor !== previous.markColor ||
             props.markStyle !== previous.markStyle ||
+            props.markSize !== previous.markSize ||
+            props.markWeight !== previous.markWeight ||
+            props.boxSize !== previous.boxSize ||
             props.boxKey !== previous.boxKey ||
             props.markKey !== previous.markKey ||
             props.labelKey !== previous.labelKey ||
@@ -402,6 +495,7 @@ export const checkboxToggleController: WidgetController<
                 case 'down':
                     state.pressed = true;
                     applyVisuals(typed);
+                    applyZoomScale(typed, true);
                     return true;
                 case 'up': {
                     const wasPressed = state.pressed;
@@ -415,6 +509,7 @@ export const checkboxToggleController: WidgetController<
                         }
                     }
                     applyVisuals(typed);
+                    applyZoomScale(typed, false);
                     return true;
                 }
                 default:
@@ -436,6 +531,11 @@ export const checkboxToggleController: WidgetController<
         }
 
         return false;
+    },
+    disposeState: (state) => {
+        if (state.boxAnimation) {
+            state.boxAnimation.cancel();
+        }
     },
 };
 
