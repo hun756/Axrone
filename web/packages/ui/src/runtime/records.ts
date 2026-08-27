@@ -14,6 +14,7 @@ import type {
     WidgetKey,
     WidgetLayoutInput,
     WidgetRole,
+    WidgetStrokeData,
     WidgetStyleInput,
 } from '../types';
 import {
@@ -79,6 +80,7 @@ export const compileWidgetStyle = (input: WidgetStyleInput): ResolvedWidgetStyle
     borderWidth: Math.max(0, input.borderWidth ?? 0),
     radius: normalizeCorners(input.radius),
     color: normalizeColor(input.color, BLACK),
+    strokes: input.strokes ? [...input.strokes] : EMPTY_STROKES,
 });
 
 export const compileWidgetText = (
@@ -174,6 +176,7 @@ const resolveSpans = (
 };
 
 const EMPTY_SPANS: readonly ResolvedRichTextSpan[] = Object.freeze([]);
+const EMPTY_STROKES: readonly WidgetStrokeData[] = Object.freeze([]);
 
 export const compileWidgetImage = (input: WidgetImageInput | null): ResolvedWidgetImage | null => {
     if (!input) {

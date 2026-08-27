@@ -7,6 +7,7 @@ import type {
     CornerRadii,
     QuadRenderCommand,
     RectLike,
+    StrokeRenderCommand,
     TextGlyphPlacement,
     TextRenderCommand,
     UIFrame,
@@ -391,6 +392,37 @@ const blendColor = (
     color: QuadRenderCommand['color'] | TextRenderCommand['color'],
     opacity: number
 ): readonly [number, number, number, number] => [color.r, color.g, color.b, multiplyAlpha(color.a, opacity)];
+
+/**
+ * Converts a ColorInput (hex string, number, array, or ColorLike) to a
+ * normalized [r, g, b, a] tuple for stroke rendering.
+ */
+const normalizeStrokeColor = (color: StrokeRenderCommand['strokes'][number]['color']): readonly [number, number, number, number] => {
+    if (typeof color === 'string') {
+        // Parse hex string (#RRGGBB or #RRGGBBAA)
+        const hex = color.replace(/^#/, '');
+        const r = parseInt(hex.substring(0, 2), 16) / 255;
+        const g = parseInt(hex.substring(2, 4), 16) / 255;
+        const b = parseInt(hex.substring(4, 6), 16) / 255;
+        const a = hex.length >= 8 ? parseInt(hex.substring(6, 8), 16) / 255 : 1;
+        return [r, g, b, a];
+    }
+    if (typeof color === 'number') {
+        return [
+            ((color >>> 24) & 0xff) / 255,
+            ((color >>> 16) & 0xff) / 255,
+            ((color >>> 8) & 0xff) / 255,
+            (color & 0xff) / 255,
+        ];
+    }
+    if (Array.isArray(color)) {
+        return color.length === 3
+            ? [color[0], color[1], color[2], 1]
+            : [color[0], color[1], color[2], color[3]];
+    }
+    // ColorLike object
+    return [color.r, color.g, color.b, color.a ?? 1];
+};
 
 const IDENTITY_TRANSFORM = [1, 0, 0, 1, 0, 0] as const;
 
@@ -870,6 +902,16 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                     this.pushTextCommand(command, frame.viewportHeight);
                     continue;
                 }
+                if (command.kind === 'stroke') {
+                    this.flushImageBatch(frame.viewportHeight);
+                    this.flushTextBatch(frame.viewportHeight);
+                    if (!this.activeQuadClip || !sameClip(this.activeQuadClip, command.clip)) {
+                        this.flushQuadBatch(frame.viewportHeight);
+                        this.activeQuadClip = toClipState(command.clip);
+                    }
+                    this.pushStrokeCommand(command);
+                    continue;
+                }
                 this.flushQuadBatch(frame.viewportHeight);
                 this.flushImageBatch(frame.viewportHeight);
                 this.flushTextBatch(frame.viewportHeight);
@@ -1051,6 +1093,78 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.quadBatch[base + 22] = transform[5];
         this.quadCount += 1;
         this.statisticsState.quadCount += 1;
+    }
+
+    /**
+     * Converts each stroke segment into an oriented quad rendered through the
+     * existing quad pipeline. The normalized 0–1 points are mapped to the
+     * widget rect, and each segment becomes a thin rotated quad with the
+     * affine transform encoding direction and thickness.
+     */
+    private pushStrokeCommand(command: StrokeRenderCommand): void {
+        const widgetX = command.x;
+        const widgetY = command.y;
+        const widgetW = command.width;
+        const widgetH = command.height;
+        for (const stroke of command.strokes) {
+            const color = normalizeStrokeColor(stroke.color);
+            const weight = Math.max(0.5, stroke.weight);
+            const points = stroke.points;
+            for (let i = 0; i < points.length - 1; i++) {
+                const p0 = points[i];
+                const p1 = points[i + 1];
+                // Map normalized points to widget pixel space.
+                const x0 = widgetX + p0[0] * widgetW;
+                const y0 = widgetY + p0[1] * widgetH;
+                const x1 = widgetX + p1[0] * widgetW;
+                const y1 = widgetY + p1[1] * widgetH;
+                const dx = x1 - x0;
+                const dy = y1 - y0;
+                const segLen = Math.sqrt(dx * dx + dy * dy);
+                if (segLen < 0.001) continue;
+                const nx = -dy / segLen;
+                const ny = dx / segLen;
+                // Affine transform maps unit quad → oriented segment quad.
+                // Row0: (dx*W, nx*weight*H, x0*W + nx*weight*H*0.5)
+                // Row1: (dy*W, ny*weight*H, y0*W + ny*weight*H*0.5)
+                const t0 = dx * widgetW;
+                const t1 = dy * widgetW;
+                const t2 = nx * weight * widgetH * 0.5;
+                const t3 = ny * weight * widgetH * 0.5;
+                const t4 = x0 * widgetW + t2;
+                const t5 = y0 * widgetW + t3;
+                const base = this.quadCount * QUAD_FLOATS_PER_INSTANCE;
+                if (base + QUAD_FLOATS_PER_INSTANCE > this.quadBatch.length) {
+                    throw new Error('Quad batch capacity exceeded (stroke).');
+                }
+                this.quadBatch[base] = 0;
+                this.quadBatch[base + 1] = 0;
+                this.quadBatch[base + 2] = 1;
+                this.quadBatch[base + 3] = 1;
+                this.quadBatch[base + 4] = color[0];
+                this.quadBatch[base + 5] = color[1];
+                this.quadBatch[base + 6] = color[2];
+                this.quadBatch[base + 7] = color[3] * command.opacity;
+                // No border, no radius, no border width.
+                this.quadBatch[base + 8] = 0;
+                this.quadBatch[base + 9] = 0;
+                this.quadBatch[base + 10] = 0;
+                this.quadBatch[base + 11] = 0;
+                this.quadBatch[base + 12] = 0;
+                this.quadBatch[base + 13] = 0;
+                this.quadBatch[base + 14] = 0;
+                this.quadBatch[base + 15] = 0;
+                this.quadBatch[base + 16] = 0;
+                this.quadBatch[base + 17] = t0;
+                this.quadBatch[base + 18] = t1;
+                this.quadBatch[base + 19] = t2;
+                this.quadBatch[base + 20] = t3;
+                this.quadBatch[base + 21] = t4;
+                this.quadBatch[base + 22] = t5;
+                this.quadCount += 1;
+                this.statisticsState.quadCount += 1;
+            }
+        }
     }
 
     private pushTextCommand(command: TextRenderCommand, viewportHeight: number): void {
