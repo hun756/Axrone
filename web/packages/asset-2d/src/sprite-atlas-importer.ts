@@ -292,6 +292,18 @@ const normalizeTexturePackerAtlasDefinition = (
     return serializeSpriteAtlasDefinition(atlas);
 };
 
+const parsedSourceCache = new WeakMap<AssetImportSource, unknown>();
+
+const readJsonLikeSourceCached = (source: AssetImportSource): unknown => {
+    const cached = parsedSourceCache.get(source);
+    if (cached !== undefined) {
+        return cached;
+    }
+    const parsed = readJsonLikeSource(source);
+    parsedSourceCache.set(source, parsed);
+    return parsed;
+};
+
 export const createSpriteAtlasJsonImporter = (): AssetImporter<Asset2DImportSchema> => ({
     id: 'asset-2d.sprite-atlas.json',
     priority: 20,
@@ -299,15 +311,15 @@ export const createSpriteAtlasJsonImporter = (): AssetImporter<Asset2DImportSche
     extensions: ['spriteatlas.json', 'atlas.json', 'json'],
     canImport: ({ source }) => {
         try {
-            return isCanonicalSpriteAtlasPayload(readJsonLikeSource(source));
+            return isCanonicalSpriteAtlasPayload(readJsonLikeSourceCached(source));
         } catch {
             return false;
         }
     },
     import: ({ source }) => {
-        const payload = readJsonLikeSource(source);
+        const payload = readJsonLikeSourceCached(source);
         if (!isCanonicalSpriteAtlasPayload(payload)) {
-            throw new Error('Source does not contain a canonical sprite atlas definition');
+            throw new Error('Source does not contain a canonical Sprite atlas definition');
         }
 
         const definition = normalizeCanonicalSpriteAtlasDefinition(source, payload);
@@ -334,14 +346,14 @@ export const createTexturePackerSpriteAtlasImporter = (): AssetImporter<Asset2DI
     extensions: ['json'],
     canImport: ({ source }) => {
         try {
-            const payload = readJsonLikeSource(source);
+            const payload = readJsonLikeSourceCached(source);
             return isTexturePackerAtlasPayload(payload);
         } catch {
             return false;
         }
     },
     import: ({ source }) => {
-        const payload = readJsonLikeSource(source);
+        const payload = readJsonLikeSourceCached(source);
         if (!isTexturePackerAtlasPayload(payload)) {
             throw new Error('Source does not contain a TexturePacker atlas payload');
         }

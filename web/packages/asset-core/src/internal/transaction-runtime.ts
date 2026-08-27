@@ -33,6 +33,7 @@ import {
     stableStringify,
     type InternalAssetDisposer,
 } from './stored-asset';
+import { isLookupByKey, isAssetRecordValue } from './type-guards';
 
 const MAX_REVISION_HISTORY_SIZE = 50;
 
@@ -92,23 +93,6 @@ interface AssetTransactionHost<TSchema extends AssetSchema> {
     ) => TransactionStoredAsset<TSchema> | undefined;
     readonly emitLeaf: (event: AssetLeafChangeEvent<TSchema>) => void;
 }
-
-const isLookupByKey = <TSchema extends AssetSchema>(
-    value: unknown
-): value is AssetLookupByKey<TSchema> =>
-    value !== null &&
-    typeof value === 'object' &&
-    typeof (value as AssetLookupByKey<TSchema>).key === 'string';
-
-const isAssetRecordValue = <TSchema extends AssetSchema>(
-    value: unknown
-): value is AssetRecord<TSchema> =>
-    value !== null &&
-    typeof value === 'object' &&
-    typeof (value as AssetRecord<TSchema>).kind === 'string' &&
-    typeof (value as AssetRecord<TSchema>).id === 'string' &&
-    typeof (value as AssetRecord<TSchema>).key === 'string' &&
-    'reference' in (value as AssetRecord<TSchema>);
 
 export class AssetTransactionRuntime<TSchema extends AssetSchema> {
     constructor(private readonly _host: AssetTransactionHost<TSchema>) {}
