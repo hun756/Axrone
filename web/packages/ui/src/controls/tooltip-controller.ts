@@ -43,7 +43,6 @@ export interface TooltipControllerState {
     initialized: boolean;
     pendingShow: boolean;
     delayFrames: number;
-    delayFramesRemaining: number;
     entryTime: number;
     cachedTooltip: WidgetId | null;
     cachedTextWidget: WidgetId | null;
@@ -211,7 +210,6 @@ export const tooltipHostController: WidgetController<
         initialized: false,
         pendingShow: false,
         delayFrames: 0,
-        delayFramesRemaining: 0,
         entryTime: 0,
         cachedTooltip: null,
         cachedTextWidget: null,
