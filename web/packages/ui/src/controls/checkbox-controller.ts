@@ -26,6 +26,7 @@ import { animateWidgetColor, Easing, type UIAnimationHandle } from './animation'
  *     markSize: number,
  *     markWeight: number,
  *     labelPosition: 'left' | 'right' | 'hidden',
+ *     labelColor: string,      // omitted = keep the authored label color
  *     labelGap: number,
  *     boxSize: number,
  *   }
@@ -76,6 +77,7 @@ export interface CheckboxControllerProps {
     readonly markSize?: number;
     readonly markWeight?: number;
     readonly labelPosition?: 'left' | 'right' | 'hidden';
+    readonly labelColor?: string;
     readonly labelGap?: number;
     readonly boxSize?: number;
 }
@@ -131,6 +133,20 @@ const DEFAULT_STATES: Readonly<Record<CheckboxVisualState, string>> = Object.fre
     checked: '#0a74daff',
     disabled: '#1e293bff',
 });
+
+const TRANSITION_MODES: readonly CheckboxTransitionMode[] = Object.freeze(['color', 'tint', 'sprite']);
+
+/**
+ * Resolves the authored transition mode. Anything outside the supported set
+ * (legacy documents carried `"animation"`) falls back to `'color'` explicitly
+ * instead of relying on an `else` branch to absorb the typo silently.
+ */
+const resolveTransitionMode = (value: unknown): CheckboxTransitionMode => {
+    const mode = asString(value);
+    return (TRANSITION_MODES as readonly string[]).includes(mode)
+        ? (mode as CheckboxTransitionMode)
+        : 'color';
+};
 
 const isValidImageSource = (source: unknown): source is UIImageSource => {
     if (!source || typeof source !== 'object') return false;
@@ -283,8 +299,7 @@ const applyVisuals = (context: CheckboxContext): boolean => {
     const state = context.state;
 
     const visualState = resolveVisualState(state);
-    const transition: CheckboxTransitionMode =
-        (props.transition as CheckboxTransitionMode) ?? 'color';
+    const transition = resolveTransitionMode(props.transition);
 
     let applied = false;
 
@@ -416,10 +431,10 @@ const applyVisuals = (context: CheckboxContext): boolean => {
                 }
             }
 
-            // Apply markSize to mark child layout dimensions.
-            // CRITICAL: Zero all insets to override any corrupted absolute coordinates
-            // from the asset. With 0.5/0.5 anchor + center pivot, zero insets ensure
-            // the mark is centered inside the box regardless of document corruption.
+            // Apply markSize to mark child layout dimensions. The mark is centered
+            // inside the box by contract: boxSize/markSize are authoritative, so the
+            // insets are normalized to the anchor rather than trusted from the
+            // document (older assets carry stale baked pixel insets here).
             if (Number.isFinite(markSize)) {
                 runtime.updateWidget(mark, {
                     layout: {
@@ -441,10 +456,13 @@ const applyVisuals = (context: CheckboxContext): boolean => {
         if (label !== null) {
             const labelPosition = asString(props.labelPosition) || 'right';
             const isHidden = labelPosition === 'hidden';
+            // Left/right ordering is authored in the document (child order), not
+            // here; the runtime only owns visibility and the optional color override.
+            const labelColor = asString(props.labelColor);
             runtime.updateWidget(label, {
-                style: {
-                    color: '#e2e8f0ff',
-                },
+                style: labelColor
+                    ? { color: labelColor as `#${string}` }
+                    : {},
                 enabled: !isHidden,
             });
             applied = true;
@@ -541,6 +559,7 @@ export const checkboxToggleController: WidgetController<
             props.markKey !== previous.markKey ||
             props.labelKey !== previous.labelKey ||
             props.labelPosition !== previous.labelPosition ||
+            props.labelColor !== previous.labelColor ||
             props.labelGap !== previous.labelGap ||
             props.boxTints !== previous.boxTints ||
             props.markTints !== previous.markTints ||
