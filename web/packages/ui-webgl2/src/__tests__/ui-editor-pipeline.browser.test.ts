@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { UIRuntime, deserializeUIAsset } from '@axrone/ui';
+import { UIRuntime, checkboxToggleController, deserializeUIAsset } from '@axrone/ui';
 import { resolveCanvasScale } from '@axrone/ui/layout';
+import type { StrokeRenderCommand } from '@axrone/ui/types';
 import { WebGL2UIRenderer } from '../index';
 
 /**
@@ -696,5 +697,312 @@ describe('UI Editor preview pipeline (browser)', () => {
         renderer.dispose();
         runtime.dispose();
         gl.deleteTexture(texture);
+    });
+
+    /**
+     * Checkbox document as the Editor's `checkbox` preset authors it: a flow row
+     * with `alignItems: center`, a box child that owns an anchored mark child, and
+     * a text label. `corrupted` reproduces the shape found in real project files
+     * (Assets/UI-test.ui.json) where a multi-select drag baked root-space pixel
+     * insets into every composite child, so the children are absolute instead of
+     * flowing. Both shapes must render a visible tick.
+     */
+    const createCheckboxAssetJson = (corrupted: boolean): string => {
+        const rootInset = corrupted ? { left: 40, top: 40 } : { left: 40, top: 40 };
+        const boxLayout = corrupted
+            ? {
+                position: 'absolute',
+                inset: { left: 40, top: 40 },
+                width: 20,
+                height: 20,
+                display: 'overlay',
+                shrink: 0,
+            }
+            : { width: 20, height: 20, display: 'overlay', shrink: 0 };
+        const markLayout = corrupted
+            ? {
+                position: 'absolute',
+                inset: { left: 43, top: 43 },
+                width: 14,
+                height: 14,
+                anchor: { x: 0.5, y: 0.5, maxX: 0.5, maxY: 0.5, pivotX: 0.5, pivotY: 0.5 },
+            }
+            : {
+                position: 'absolute',
+                width: 14,
+                height: 14,
+                anchor: { x: 0.5, y: 0.5, maxX: 0.5, maxY: 0.5, pivotX: 0.5, pivotY: 0.5 },
+            };
+        const labelLayout = corrupted
+            ? { position: 'absolute', inset: { left: 68, top: 40 }, width: 'content', height: 'content' }
+            : { width: 'content', height: 'content' };
+        return JSON.stringify({
+            id: 'ui.checkbox-preset',
+            name: 'checkbox-preset',
+            version: 1,
+            canvas: {
+                referenceWidth: 400,
+                referenceHeight: 200,
+                scaleMode: 'match-width',
+                matchBias: 0.5,
+            },
+            bindings: {
+                root: 'root',
+                'widget-1': 'widget-1',
+                'widget-1-box': 'widget-1-box',
+                'widget-1-mark': 'widget-1-mark',
+                'widget-1-label': 'widget-1-label',
+            },
+            root: {
+                role: 'root',
+                key: 'root',
+                enabled: true,
+                interactive: false,
+                layout: { display: 'overlay', width: '100%', height: '100%' },
+                children: [
+                    {
+                        role: 'custom:checkbox',
+                        key: 'widget-1',
+                        enabled: true,
+                        interactive: true,
+                        controller: 'checkbox-toggle',
+                        props: {
+                            isOn: true,
+                            indeterminate: false,
+                            markStyle: 'check',
+                            boxSize: 20,
+                            markSize: 14,
+                            markWeight: 2,
+                            markColor: '#ffffffff',
+                            boxKey: 'widget-1-box',
+                            markKey: 'widget-1-mark',
+                            labelKey: 'widget-1-label',
+                            states: {
+                                normal: '#334155ff',
+                                hover: '#475569ff',
+                                checked: '#0a74daff',
+                                disabled: '#1e293bff',
+                            },
+                            transition: 'color',
+                            transitionDuration: 0,
+                            labelPosition: 'right',
+                            labelGap: 8,
+                        },
+                        layout: {
+                            width: 'content',
+                            height: 'content',
+                            direction: 'row',
+                            alignItems: 'center',
+                            gap: 8,
+                            position: 'absolute',
+                            inset: rootInset,
+                        },
+                        children: [
+                            {
+                                role: 'custom:checkbox-box',
+                                key: 'widget-1-box',
+                                enabled: true,
+                                interactive: false,
+                                layout: boxLayout,
+                                style: {
+                                    background: '#334155ff',
+                                    borderColor: '#475569ff',
+                                    borderWidth: 1,
+                                    radius: 4,
+                                },
+                                children: [
+                                    {
+                                        role: 'custom:checkbox-mark',
+                                        key: 'widget-1-mark',
+                                        enabled: false,
+                                        interactive: false,
+                                        layout: markLayout,
+                                        style: { background: '#00000000', radius: 2 },
+                                        children: [],
+                                    },
+                                ],
+                            },
+                            {
+                                role: 'text',
+                                key: 'widget-1-label',
+                                enabled: true,
+                                interactive: false,
+                                layout: labelLayout,
+                                style: { color: '#e2e8f0ff' },
+                                text: { value: 'Checkbox', size: 16 },
+                                children: [],
+                            },
+                        ],
+                    },
+                ],
+            },
+        });
+    };
+
+    type PixelProbe = {
+        readonly canvas: HTMLCanvasElement;
+        readonly scale: { scaleX: number; scaleY: number; offsetX: number; offsetY: number };
+        /** Samples a reference-space point and returns premultiplied RGBA. */
+        readonly sample: (refX: number, refY: number) => readonly [number, number, number, number];
+    };
+
+    const createPixelProbe = (
+        gl: WebGL2RenderingContext,
+        canvas: HTMLCanvasElement,
+        asset: { canvas: Record<string, number> },
+    ): PixelProbe => {
+        const scale = resolveCanvasScale(asset.canvas as never, canvas.width, canvas.height);
+        const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+        gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        const sample = (refX: number, refY: number): readonly [number, number, number, number] => {
+            const devX = refX * scale.scaleX + scale.offsetX;
+            const devY = refY * scale.scaleY + scale.offsetY;
+            const x = Math.max(0, Math.min(canvas.width - 1, Math.round(devX)));
+            // Framebuffer origin is bottom-left; layout origin is top-left.
+            const y = Math.max(0, Math.min(canvas.height - 1, Math.round(canvas.height - 1 - devY)));
+            const idx = (y * canvas.width + x) * 4;
+            return [pixels[idx], pixels[idx + 1], pixels[idx + 2], pixels[idx + 3]];
+        };
+        return { canvas, scale, sample };
+    };
+
+    /** Midpoints of every emitted stroke segment, in reference space. */
+    const strokeSegmentMidpoints = (
+        command: StrokeRenderCommand,
+    ): readonly { x: number; y: number }[] => {
+        const midpoints: { x: number; y: number }[] = [];
+        for (const stroke of command.strokes) {
+            for (let index = 0; index < stroke.points.length - 1; index += 1) {
+                const p0 = stroke.points[index];
+                const p1 = stroke.points[index + 1];
+                midpoints.push({
+                    x: command.x + ((p0[0] + p1[0]) / 2) * command.width,
+                    y: command.y + ((p0[1] + p1[1]) / 2) * command.height,
+                });
+            }
+        }
+        return midpoints;
+    };
+
+    const loadCheckboxRuntime = (corrupted: boolean) => {
+        const runtime = new UIRuntime();
+        runtime.registry.register(checkboxToggleController);
+        const asset = deserializeUIAsset(createCheckboxAssetJson(corrupted));
+        runtime.loadFromAsset(asset);
+        return { runtime, asset };
+    };
+
+    it('keeps the checkbox box and label cross-axis aligned and gap-correct', () => {
+        const { runtime } = loadCheckboxRuntime(false);
+        // Layout is resolved lazily; the controller also applies boxSize/markSize on mount.
+        runtime.commit();
+        const boxRect = runtime.getLayoutBox(runtime.getBoundWidget('widget-1-box')!);
+        const labelRect = runtime.getLayoutBox(runtime.getBoundWidget('widget-1-label')!);
+        const markRect = runtime.getLayoutBox(runtime.getBoundWidget('widget-1-mark')!);
+
+        expect(boxRect.width, 'box width follows boxSize').toBe(20);
+        expect(markRect.width, 'mark width follows markSize').toBe(14);
+
+        // alignItems: center must put both children on the same cross-axis centre.
+        expect(
+            Math.abs((boxRect.y + boxRect.height / 2) - (labelRect.y + labelRect.height / 2)),
+            `box center y ${boxRect.y + boxRect.height / 2} vs label center y ${labelRect.y + labelRect.height / 2}`,
+        ).toBeLessThan(0.5);
+        // The authored labelGap must hold between the box and the label.
+        expect(labelRect.x - (boxRect.x + boxRect.width), 'label gap').toBeCloseTo(8, 0);
+        // The mark is centered inside the box by controller contract.
+        expect(markRect.x, 'mark left').toBeGreaterThanOrEqual(boxRect.x - 0.001);
+        expect(markRect.x + markRect.width, 'mark right').toBeLessThanOrEqual(boxRect.x + boxRect.width + 0.001);
+        expect(markRect.y, 'mark top').toBeGreaterThanOrEqual(boxRect.y - 0.001);
+        expect(markRect.y + markRect.height, 'mark bottom').toBeLessThanOrEqual(boxRect.y + boxRect.height + 0.001);
+
+        runtime.dispose();
+    });
+
+    it('renders a checked editor-authored checkbox tick onto real pixels', () => {
+        const canvas = (window as any).createTestCanvas(800, 400) as HTMLCanvasElement;
+        const gl = (window as any).createWebGLContext(canvas, {
+            alpha: true,
+            antialias: false,
+            premultipliedAlpha: true,
+            preserveDrawingBuffer: true,
+        }) as WebGL2RenderingContext;
+        const renderer = new WebGL2UIRenderer({ gl });
+        const { runtime, asset } = loadCheckboxRuntime(false);
+
+        // The canvas must be a scaled view of the reference resolution, otherwise
+        // the test could not catch a stroke that ignores the camera transform.
+        expect(
+            resolveCanvasScale(asset.canvas, canvas.width, canvas.height).scaleX,
+            'reference space is scaled onto the canvas',
+        ).toBe(2);
+
+        const frame = runtime.commitToViewport(canvas.width, canvas.height);
+        const strokeCommands = frame.commands.filter(
+            (command) => command.kind === 'stroke',
+        ) as StrokeRenderCommand[];
+        expect(strokeCommands.length, 'checked mark emits a stroke command').toBe(1);
+        const strokeCommand = strokeCommands[0]!;
+        expect(strokeCommand.transform, 'stroke command carries the canvas transform').toBeDefined();
+        expect(strokeCommand.strokes[0]!.points.length, 'check polyline has three points').toBe(3);
+
+        renderer.render(frame);
+
+        const probe = createPixelProbe(gl, canvas, asset);
+        const midpoints = strokeSegmentMidpoints(strokeCommand);
+        expect(midpoints.length).toBe(2);
+        for (const point of midpoints) {
+            const [r, g, b, a] = probe.sample(point.x, point.y);
+            expect(
+                a,
+                `tick pixel at (${point.x.toFixed(2)}, ${point.y.toFixed(2)}) = rgba(${r}, ${g}, ${b}, ${a})`,
+            ).toBeGreaterThan(160);
+            expect(r, 'tick red channel (markColor #ffffff)').toBeGreaterThan(140);
+            expect(g, 'tick green channel (markColor #ffffff)').toBeGreaterThan(140);
+            expect(b, 'tick blue channel (markColor #ffffff)').toBeGreaterThan(140);
+        }
+
+        // Inside the box but clear of the polyline must stay the checked blue.
+        const boxRect = runtime.getLayoutBox(runtime.getBoundWidget('widget-1-box')!);
+        const [fr, , fb] = probe.sample(boxRect.x + 2.5, boxRect.y + boxRect.height / 2);
+        expect(fb, 'box fill blue channel').toBeGreaterThan(fr);
+
+        renderer.dispose();
+        runtime.dispose();
+    });
+
+    it('renders the checkbox tick inside the box for legacy documents with baked child insets', () => {
+        const canvas = (window as any).createTestCanvas(800, 400) as HTMLCanvasElement;
+        const gl = (window as any).createWebGLContext(canvas, {
+            alpha: true,
+            antialias: false,
+            premultipliedAlpha: true,
+            preserveDrawingBuffer: true,
+        }) as WebGL2RenderingContext;
+        const renderer = new WebGL2UIRenderer({ gl });
+        const { runtime, asset } = loadCheckboxRuntime(true);
+
+        const frame = runtime.commitToViewport(canvas.width, canvas.height);
+        const boxRect = runtime.getLayoutBox(runtime.getBoundWidget('widget-1-box')!);
+        const markRect = runtime.getLayoutBox(runtime.getBoundWidget('widget-1-mark')!);
+        // The mark must not be flung out of the box by the stale baked insets.
+        expect(markRect.x, 'legacy mark left stays in the box').toBeGreaterThanOrEqual(boxRect.x - 0.001);
+        expect(markRect.x + markRect.width, 'legacy mark right stays in the box').toBeLessThanOrEqual(boxRect.x + boxRect.width + 0.001);
+        expect(markRect.y, 'legacy mark top stays in the box').toBeGreaterThanOrEqual(boxRect.y - 0.001);
+        expect(markRect.y + markRect.height, 'legacy mark bottom stays in the box').toBeLessThanOrEqual(boxRect.y + boxRect.height + 0.001);
+
+        const strokeCommands = frame.commands.filter(
+            (command) => command.kind === 'stroke',
+        ) as StrokeRenderCommand[];
+        expect(strokeCommands.length, 'legacy checked mark emits a stroke command').toBe(1);
+
+        renderer.render(frame);
+        const probe = createPixelProbe(gl, canvas, asset);
+        for (const point of strokeSegmentMidpoints(strokeCommands[0]!)) {
+            expect(probe.sample(point.x, point.y)[3], 'legacy tick pixel alpha').toBeGreaterThan(160);
+        }
+
+        renderer.dispose();
+        runtime.dispose();
     });
 });
