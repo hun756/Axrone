@@ -683,6 +683,39 @@ describe('checkbox-toggle controller — real asset integration', () => {
 		expect(markStroke!.strokes[0].points.length).toBe(3); // check = 3 points
 	});
 
+	it('emits the stroke command in widget pixel space and scales it with the canvas', () => {
+		const runtime = createRealWorldRuntime();
+		clickRealWorldCheckbox(runtime);
+
+		const mark = runtime.getBoundWidget('widget-13-mark');
+		expect(mark).not.toBeNull();
+		const markRect = runtime.getLayoutBox(mark!);
+
+		// Reference-space geometry: the command rect is the mark's pixel box, so the
+		// renderer maps normalized points through it instead of re-scaling twice.
+		const reference = runtime.commit();
+		const referenceStroke = reference.commands.find(
+			(cmd): cmd is StrokeRenderCommand => cmd.kind === 'stroke',
+		);
+		expect(referenceStroke, 'stroke command in reference frame').toBeDefined();
+		expect(referenceStroke!.x).toBeCloseTo(markRect.x, 3);
+		expect(referenceStroke!.y).toBeCloseTo(markRect.y, 3);
+		expect(referenceStroke!.width).toBeCloseTo(markRect.width, 3);
+		expect(referenceStroke!.height).toBeCloseTo(markRect.height, 3);
+
+		// Viewport-space geometry: the canvas scale rides on `transform`, exactly as
+		// it does for quads, so ticks land where the scaled layout says they should.
+		const scaled = runtime.commitToViewport(3840, 2160);
+		const scaledStroke = scaled.commands.find(
+			(cmd): cmd is StrokeRenderCommand => cmd.kind === 'stroke',
+		);
+		const scaledQuad = scaled.commands.find((cmd) => cmd.kind === 'quad');
+		expect(scaledStroke?.transform, 'stroke command carries the canvas transform').toBeDefined();
+		expect(scaledStroke?.transform, 'stroke shares the quad canvas transform').toEqual(
+			scaledQuad?.kind === 'quad' ? scaledQuad.transform : undefined,
+		);
+	});
+
 	it('emits no stroke commands when unchecked (mark hidden)', () => {
 		const runtime = createRealWorldRuntime();
 
