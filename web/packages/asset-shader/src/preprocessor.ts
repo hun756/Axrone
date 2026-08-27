@@ -589,8 +589,6 @@ export const preprocessGLSL = (
     const frames: ConditionalFrame[] = [];
     let inactiveCount = 0;
     const isEmitting = () => inactiveCount === 0;
-    const parentActive = () =>
-        frames.length <= 1 ? true : frames[frames.length - 2]!.active && inactiveCount === (frames.length - 1);
 
     interface OutputLine {
         readonly text: string;
