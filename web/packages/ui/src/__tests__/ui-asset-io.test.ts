@@ -308,4 +308,60 @@ describe('@axrone/ui ui-asset-io', () => {
             expect(frame.metrics.widgetCount).toBeGreaterThanOrEqual(1);
         });
     });
+
+    describe('material deep freeze', () => {
+        it('deep-freezes nested material objects so mutation throws', () => {
+            const materialData = {
+                shader: 'pbr',
+                textureSlots: { albedo: 'wood.png', nested: { deep: true } },
+                layers: [{ opacity: 0.5 }],
+            };
+            const original: UIAsset = {
+                ...createMinimalAsset(),
+                root: {
+                    role: 'root',
+                    enabled: true,
+                    interactive: false,
+                    material: materialData,
+                    children: [],
+                },
+            } as UIAsset;
+            const json = serializeUIAsset(original);
+            const restored = deserializeUIAsset(json);
+
+            const mat = restored.root.material!;
+            // Top-level property is frozen.
+            expect(() => { (mat as Record<string, unknown>)['shader'] = 'unlit'; }).toThrow();
+            // Nested object is frozen.
+            expect(() => { (mat['textureSlots'] as Record<string, unknown>)['albedo'] = 'other'; }).toThrow();
+            // Deeply nested object is frozen.
+            expect(() => { (mat['textureSlots'] as Record<string, unknown>)['nested'] = {}; }).toThrow();
+            const nested = (mat['textureSlots'] as Record<string, unknown>)['nested'] as Record<string, unknown>;
+            expect(() => { nested['deep'] = false; }).toThrow();
+            // Array elements are frozen.
+            const layer = (mat['layers'] as Record<string, unknown>[])[0];
+            expect(() => { layer['opacity'] = 1; }).toThrow();
+        });
+
+        it('preserves material values while freezing', () => {
+            const materialData = { shader: 'pbr', roughness: 0.7, textureSlots: { albedo: 'wood.png' } };
+            const original: UIAsset = {
+                ...createMinimalAsset(),
+                root: {
+                    role: 'root',
+                    enabled: true,
+                    interactive: false,
+                    material: materialData,
+                    children: [],
+                },
+            } as UIAsset;
+            const json = serializeUIAsset(original);
+            const restored = deserializeUIAsset(json);
+
+            const mat = restored.root.material!;
+            expect(mat['shader']).toBe('pbr');
+            expect(mat['roughness']).toBe(0.7);
+            expect((mat['textureSlots'] as Record<string, unknown>)['albedo']).toBe('wood.png');
+        });
+    });
 });
