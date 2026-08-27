@@ -20,6 +20,7 @@ import {
     AssetTransactionRuntime,
     type PreparedAssetWrite,
 } from './internal/transaction-runtime';
+import { isLookupByKey, isAssetRecordValue } from './internal/type-guards';
 import {
     AssetConflictError,
     AssetConfigurationError,
@@ -85,23 +86,6 @@ export { isAssetDatabaseSnapshot };
 const DEFAULT_BINARY_INLINE_THRESHOLD_BYTES = 64 * 1024;
 const EMPTY_STRING_ARRAY = Object.freeze([]) as readonly string[];
 const RANDOM = createRandom();
-
-const isLookupByKey = <TSchema extends AssetSchema>(
-    value: unknown
-): value is AssetLookupByKey<TSchema> =>
-    value !== null &&
-    typeof value === 'object' &&
-    typeof (value as AssetLookupByKey<TSchema>).key === 'string';
-
-const isAssetRecordValue = <TSchema extends AssetSchema>(
-    value: unknown
-): value is AssetRecord<TSchema> =>
-    value !== null &&
-    typeof value === 'object' &&
-    typeof (value as AssetRecord<TSchema>).kind === 'string' &&
-    typeof (value as AssetRecord<TSchema>).id === 'string' &&
-    typeof (value as AssetRecord<TSchema>).key === 'string' &&
-    'reference' in (value as AssetRecord<TSchema>);
 
 export class AssetDatabase<TSchema extends AssetSchema = AssetSchema> {
     private readonly _assetsById = new Map<string, StoredAsset<TSchema>>();
@@ -599,15 +583,17 @@ export class AssetDatabase<TSchema extends AssetSchema = AssetSchema> {
                 }) as AssetSnapshotRecord<AssetKind<TSchema>>;
             });
 
+        const sourceBindings = this._catalog.snapshotSourceBindings();
+
         return Object.freeze({
             version: ASSET_SNAPSHOT_VERSION,
             locale: this._locale,
             capturedAtEpochMs: this._now(),
             assets: Object.freeze(assets),
-            ...(this._catalog.snapshotSourceBindings().length > 0
+            ...(sourceBindings.length > 0
                 ? {
                       sourceBindings: Object.freeze(
-                          this._catalog.snapshotSourceBindings().map(
+                          sourceBindings.map(
                               (binding) =>
                                   Object.freeze(binding) as AssetSnapshotSourceBindingRecord
                           )
