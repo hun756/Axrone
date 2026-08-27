@@ -17,6 +17,23 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Recursively freezes an object/array subtree so that no nested property can
+ * be mutated. Returns the same reference cast to Readonly for convenience.
+ */
+function deepFreeze<T>(value: T): Readonly<T> {
+    if (value === null || typeof value !== 'object') return value;
+    Object.freeze(value);
+    if (Array.isArray(value)) {
+        for (const item of value) deepFreeze(item);
+    } else {
+        for (const key of Object.keys(value)) {
+            deepFreeze((value as Record<string, unknown>)[key]);
+        }
+    }
+    return value;
+}
+
 function requireString(obj: Record<string, unknown>, key: string, context: string): string {
     const value = obj[key];
     if (typeof value !== 'string' || value.length === 0) {
@@ -110,6 +127,7 @@ function parseWidgetSnapshot(value: unknown, context: string): WidgetSnapshot {
         text: isPlainObject(value['text']) ? (value['text'] as unknown as WidgetSnapshot['text']) : undefined,
         image: isPlainObject(value['image']) ? (value['image'] as unknown as WidgetSnapshot['image']) : undefined,
         focus: isPlainObject(value['focus']) ? (value['focus'] as WidgetSnapshot['focus']) : undefined,
+        material: isPlainObject(value['material']) ? deepFreeze({ ...value['material'] }) as Record<string, unknown> : undefined,
         children,
     } as WidgetSnapshot;
 }
