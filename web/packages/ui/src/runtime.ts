@@ -645,6 +645,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
                 case 'quad':
                 case 'text':
                 case 'image':
+                case 'stroke':
                     return {
                         ...command,
                         clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
