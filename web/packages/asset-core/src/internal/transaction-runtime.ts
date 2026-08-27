@@ -440,6 +440,10 @@ export class AssetTransactionRuntime<TSchema extends AssetSchema> {
             revisions.length = asset.revision;
         }
 
+        // Evict oldest revisions to cap memory. After splice, remaining entries
+        // retain their original `.revision` numbers but array indices no longer
+        // correspond to `revision - 1`. Consumers must iterate or search by id —
+        // positional indexing into this array is NOT safe after eviction.
         if (revisions.length > MAX_REVISION_HISTORY_SIZE) {
             const excess = revisions.length - MAX_REVISION_HISTORY_SIZE;
             revisions.splice(0, excess);
