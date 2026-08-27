@@ -168,6 +168,7 @@ export interface StrokeRenderCommand {
     readonly opacity: number;
     readonly clip: RectLike | null;
     readonly strokes: readonly WidgetStrokeData[];
+    readonly transform?: AffineTransform2D;
 }
 
 export interface CustomRenderCommand<TPayload = unknown> {
