@@ -1096,19 +1096,23 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     }
 
     /**
-     * Converts each stroke segment into an oriented quad rendered through the
-     * existing quad pipeline. The normalized 0–1 points are mapped to the
-     * widget rect, and each segment becomes a thin rotated quad with the
-     * affine transform encoding direction and thickness.
+     * Converts each stroke segment into an oriented strip rendered through the
+     * existing quad pipeline. Normalized 0–1 points are mapped into the widget
+     * rect in pixels, the strip is emitted at its real pixel size so the
+     * rounded-rect SDF and its antialiasing stay in pixel units, and the command
+     * transform is composed on top of the segment transform so position and
+     * thickness scale together with the camera.
      */
     private pushStrokeCommand(command: StrokeRenderCommand): void {
         const widgetX = command.x;
         const widgetY = command.y;
         const widgetW = command.width;
         const widgetH = command.height;
+        const camera = command.transform ?? IDENTITY_TRANSFORM;
         for (const stroke of command.strokes) {
             const color = normalizeStrokeColor(stroke.color);
             const weight = Math.max(0.5, stroke.weight);
+            const halfWeight = weight * 0.5;
             const points = stroke.points;
             for (let i = 0; i < points.length - 1; i++) {
                 const p0 = points[i];
@@ -1122,25 +1126,36 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 const dy = y1 - y0;
                 const segLen = Math.sqrt(dx * dx + dy * dy);
                 if (segLen < 0.001) continue;
-                const nx = -dy / segLen;
-                const ny = dx / segLen;
-                // Affine transform maps unit quad → oriented segment quad.
-                // Row0: (dx*W, nx*weight*H, x0*W + nx*weight*H*0.5)
-                // Row1: (dy*W, ny*weight*H, y0*W + ny*weight*H*0.5)
-                const t0 = dx * widgetW;
-                const t1 = dy * widgetW;
-                const t2 = nx * weight * widgetH * 0.5;
-                const t3 = ny * weight * widgetH * 0.5;
-                const t4 = x0 * widgetW + t2;
-                const t5 = y0 * widgetW + t3;
+                const dirX = dx / segLen;
+                const dirY = dy / segLen;
+                const nx = -dirY;
+                const ny = dirX;
+                // Extend the strip by half the weight at both ends so adjacent
+                // segments overlap at their joint instead of leaving a notch.
+                const extent = segLen + weight;
+                // Segment transform: unit quad -> oriented strip in pixel space.
+                const s0 = dirX * extent;
+                const s2 = dirY * extent;
+                const s1 = nx * weight;
+                const s3 = ny * weight;
+                const s4 = x0 - dirX * halfWeight - nx * halfWeight;
+                const s5 = y0 - dirY * halfWeight - ny * halfWeight;
+                // Compose the camera on top of the segment transform.
+                const r0 = camera[0] * s0 + camera[1] * s2;
+                const r1 = camera[0] * s1 + camera[1] * s3;
+                const r2 = camera[2] * s0 + camera[3] * s2;
+                const r3 = camera[2] * s1 + camera[3] * s3;
+                const r4 = camera[0] * s4 + camera[1] * s5 + camera[4];
+                const r5 = camera[2] * s4 + camera[3] * s5 + camera[5];
                 const base = this.quadCount * QUAD_FLOATS_PER_INSTANCE;
                 if (base + QUAD_FLOATS_PER_INSTANCE > this.quadBatch.length) {
                     throw new Error('Quad batch capacity exceeded (stroke).');
                 }
+                // Local rect carries the strip's pixel size; the transform places it.
                 this.quadBatch[base] = 0;
                 this.quadBatch[base + 1] = 0;
-                this.quadBatch[base + 2] = 1;
-                this.quadBatch[base + 3] = 1;
+                this.quadBatch[base + 2] = extent;
+                this.quadBatch[base + 3] = weight;
                 this.quadBatch[base + 4] = color[0];
                 this.quadBatch[base + 5] = color[1];
                 this.quadBatch[base + 6] = color[2];
@@ -1155,12 +1170,12 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 this.quadBatch[base + 14] = 0;
                 this.quadBatch[base + 15] = 0;
                 this.quadBatch[base + 16] = 0;
-                this.quadBatch[base + 17] = t0;
-                this.quadBatch[base + 18] = t1;
-                this.quadBatch[base + 19] = t2;
-                this.quadBatch[base + 20] = t3;
-                this.quadBatch[base + 21] = t4;
-                this.quadBatch[base + 22] = t5;
+                this.quadBatch[base + 17] = r0;
+                this.quadBatch[base + 18] = r1;
+                this.quadBatch[base + 19] = r4;
+                this.quadBatch[base + 20] = r2;
+                this.quadBatch[base + 21] = r3;
+                this.quadBatch[base + 22] = r5;
                 this.quadCount += 1;
                 this.statisticsState.quadCount += 1;
             }
