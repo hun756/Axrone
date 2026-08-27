@@ -599,15 +599,17 @@ export class AssetDatabase<TSchema extends AssetSchema = AssetSchema> {
                 }) as AssetSnapshotRecord<AssetKind<TSchema>>;
             });
 
+        const sourceBindings = this._catalog.snapshotSourceBindings();
+
         return Object.freeze({
             version: ASSET_SNAPSHOT_VERSION,
             locale: this._locale,
             capturedAtEpochMs: this._now(),
             assets: Object.freeze(assets),
-            ...(this._catalog.snapshotSourceBindings().length > 0
+            ...(sourceBindings.length > 0
                 ? {
                       sourceBindings: Object.freeze(
-                          this._catalog.snapshotSourceBindings().map(
+                          sourceBindings.map(
                               (binding) =>
                                   Object.freeze(binding) as AssetSnapshotSourceBindingRecord
                           )

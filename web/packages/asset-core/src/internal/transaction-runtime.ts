@@ -34,6 +34,8 @@ import {
     type InternalAssetDisposer,
 } from './stored-asset';
 
+const MAX_REVISION_HISTORY_SIZE = 50;
+
 export interface PreparedAssetWrite<
     TSchema extends AssetSchema,
     TKind extends AssetKind<TSchema> = AssetKind<TSchema>,
@@ -452,6 +454,11 @@ export class AssetTransactionRuntime<TSchema extends AssetSchema> {
 
         if (revisions.length < asset.revision) {
             revisions.length = asset.revision;
+        }
+
+        if (revisions.length > MAX_REVISION_HISTORY_SIZE) {
+            const excess = revisions.length - MAX_REVISION_HISTORY_SIZE;
+            revisions.splice(0, excess);
         }
     }
 
