@@ -26,6 +26,7 @@ import type { Hierarchy } from '@axrone/ecs-runtime';
 import type { Transform } from '@axrone/ecs-runtime';
 import type { ColorSpace, FilterMode, TextureFormat, WrapMode } from '@axrone/render-webgl2';
 import type { SceneRuntimeProfile } from './scene-profile';
+import type { SceneRuntimeProfilerOptions } from './runtime-profiler';
 
 export type SceneMeshSemantic =
     | 'position'
@@ -453,6 +454,7 @@ export interface SceneOptions<R extends ComponentRegistry = Record<string, never
     readonly profile?: SceneRuntimeProfile<R>;
     readonly renderPlanning?: SceneRenderPlanningOptions;
     readonly renderPipeline?: SceneRenderPipelineSettings;
+    readonly profiler?: boolean | SceneRuntimeProfilerOptions;
     readonly worldConfig?: {
         readonly maxEntities?: number;
         readonly enableMetrics?: boolean;

@@ -1133,11 +1133,14 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 // Extend the strip by half the weight at both ends so adjacent
                 // segments overlap at their joint instead of leaving a notch.
                 const extent = segLen + weight;
-                // Segment transform: unit quad -> oriented strip in pixel space.
-                const s0 = dirX * extent;
-                const s2 = dirY * extent;
-                const s1 = nx * weight;
-                const s3 = ny * weight;
+                // Pure rotation + translation: the instance rect already carries the
+                // strip's own pixel extents (a_Rect.zw), and the shader feeds
+                // a_Rect.xy + a_Unit * a_Rect.zw through this transform. Folding
+                // extent/weight in here as well would scale them a second time.
+                const s0 = dirX;
+                const s2 = dirY;
+                const s1 = nx;
+                const s3 = ny;
                 const s4 = x0 - dirX * halfWeight - nx * halfWeight;
                 const s5 = y0 - dirY * halfWeight - ny * halfWeight;
                 // Compose the camera on top of the segment transform.

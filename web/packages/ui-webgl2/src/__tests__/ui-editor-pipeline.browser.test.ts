@@ -1005,4 +1005,319 @@ describe('UI Editor preview pipeline (browser)', () => {
         renderer.dispose();
         runtime.dispose();
     });
+
+    it('renders the content-sized editor preset tick inside its box through the editor camera path', () => {
+		// Mirrors the Editor's authored document: a content-sized checkbox row stack
+		// nested in the same container chain the presets emit, rendered with the
+		// Editor's own frame composition (commit + manual camera transform) instead
+		// of resolveCanvasScale, because that is the path the UI workspace takes.
+		const canvas = (window as any).createTestCanvas(1600, 900) as HTMLCanvasElement;
+		const gl = (window as any).createWebGLContext(canvas, {
+			alpha: true,
+			antialias: false,
+			premultipliedAlpha: true,
+			preserveDrawingBuffer: true,
+		}) as WebGL2RenderingContext;
+		const renderer = new WebGL2UIRenderer({ gl });
+
+		const asset = deserializeUIAsset(
+			JSON.stringify({
+				id: 'ui.preset-nested',
+				name: 'preset-nested',
+				version: 1,
+				canvas: {
+					referenceWidth: 1920,
+					referenceHeight: 1080,
+					scaleMode: 'match-width-or-height',
+					matchBias: 0.5,
+				},
+				bindings: {
+					root: 'root',
+					'cnt-1': 'cnt-1',
+					'cnt-2': 'cnt-2',
+					'chk-4': 'chk-4',
+					'chk-4-box': 'chk-4-box',
+					'chk-4-mark': 'chk-4-mark',
+					'chk-4-label': 'chk-4-label',
+				},
+				root: {
+					role: 'root',
+					key: 'root',
+					enabled: true,
+					interactive: false,
+					layout: { display: 'overlay', width: '100%', height: '100%' },
+					children: [
+						{
+							role: 'container',
+							key: 'cnt-1',
+							enabled: true,
+							interactive: false,
+							layout: {
+								width: 672,
+								height: 'content',
+								direction: 'row',
+								gap: 8,
+								padding: 8,
+								justifyContent: 'space-evenly',
+								alignItems: 'start',
+								flexWrap: 'wrap',
+							},
+							children: [
+								{
+									role: 'container',
+									key: 'cnt-2',
+									enabled: true,
+									interactive: false,
+									layout: { width: 240, height: 'content', direction: 'column', gap: 8, padding: 8 },
+									children: [
+										{
+											role: 'custom:checkbox',
+											key: 'chk-4',
+											enabled: true,
+											interactive: true,
+											controller: 'checkbox-toggle',
+											props: {
+												isOn: true,
+												indeterminate: false,
+												markStyle: 'check',
+												boxSize: 20,
+												markSize: 14,
+												markWeight: 2,
+												markColor: '#ffffffff',
+												boxKey: 'chk-4-box',
+												markKey: 'chk-4-mark',
+												labelKey: 'chk-4-label',
+												states: {
+													normal: '#334155ff',
+													hover: '#475569ff',
+													checked: '#0a74daff',
+													disabled: '#1e293bff',
+												},
+												transition: 'color',
+												transitionDuration: 0.15,
+												zoomScale: 0.9,
+												labelPosition: 'right',
+												labelGap: 8,
+											},
+											layout: {
+												display: 'stack',
+												width: 'content',
+												height: 'content',
+												direction: 'row',
+												alignItems: 'center',
+												gap: 8,
+											},
+											children: [
+												{
+													role: 'custom:checkbox-box',
+													key: 'chk-4-box',
+													enabled: true,
+													interactive: false,
+													layout: { width: 20, height: 20, display: 'overlay', shrink: 0 },
+													style: {
+														background: '#334155ff',
+														borderColor: '#475569ff',
+														borderWidth: 1,
+														radius: 4,
+													},
+													children: [
+														{
+															role: 'custom:checkbox-mark',
+															key: 'chk-4-mark',
+															enabled: true,
+															interactive: false,
+															layout: {
+																position: 'absolute',
+																width: 14,
+																height: 14,
+																anchor: {
+																	x: 0.5,
+																	y: 0.5,
+																	maxX: 0.5,
+																	maxY: 0.5,
+																	pivotX: 0.5,
+																	pivotY: 0.5,
+																},
+															},
+															style: { background: '#00000000', radius: 2 },
+															children: [],
+														},
+													],
+												},
+												{
+													role: 'text',
+													key: 'chk-4-label',
+													enabled: true,
+													interactive: false,
+													layout: { width: 'content', height: 'content' },
+													style: { color: '#e2e8f0ff' },
+													text: {
+														value: 'Checkbox',
+														size: 16,
+														family: 'Inter',
+														lineHeight: 20.8,
+													},
+													children: [],
+												},
+											],
+										},
+									],
+								},
+							],
+						},
+					],
+				},
+			}),
+		);
+
+		const runtime = new UIRuntime();
+		runtime.registry.register(checkboxToggleController);
+		runtime.loadFromAsset(asset);
+
+		// Exactly the Editor's renderPreview composition: commit at reference
+		// resolution, then attach one camera transform to every command. Use the
+		// real fit-zoom regime the UI workspace renders at, since an overscale that
+		// scales with the camera is invisible at 1:1.
+		const frame = runtime.commit();
+		const dpr = window.devicePixelRatio || 1;
+		const scale = 4.83 * dpr;
+		const cameraTransform = [scale, 0, 0, scale, 0, 0] as const;
+		const boxRect = runtime.getLayoutBox(runtime.getBoundWidget('chk-4-box')!);
+		const markRect = runtime.getLayoutBox(runtime.getBoundWidget('chk-4-mark')!);
+		const strokeCommands = frame.commands.filter(
+			(command) => command.kind === 'stroke',
+		) as StrokeRenderCommand[];
+		expect(strokeCommands.length, 'checked mark emits one stroke command').toBe(1);
+		const strokeCommand = strokeCommands[0]!;
+
+		// The tick must stay authored at mark size; anything larger is the
+		// overscale bug and the strip escapes the box.
+		expect(strokeCommand.width, 'stroke space is the mark rect, not an ancestor').toBeCloseTo(14, 2);
+		expect(strokeCommand.height).toBeCloseTo(14, 2);
+		expect(markRect.width).toBeCloseTo(14, 2);
+		expect(strokeCommand.x).toBeGreaterThanOrEqual(boxRect.x - 0.01);
+		expect(strokeCommand.y).toBeGreaterThanOrEqual(boxRect.y - 0.01);
+		expect(strokeCommand.x + strokeCommand.width).toBeLessThanOrEqual(
+			boxRect.x + boxRect.width + 0.01,
+		);
+		expect(strokeCommand.y + strokeCommand.height).toBeLessThanOrEqual(
+			boxRect.y + boxRect.height + 0.01,
+		);
+
+		// Render ONLY the stroke so every non-transparent pixel belongs to the tick.
+		// Deriving the painted bounds from the framebuffer cannot depend on how the
+		// strip is constructed, and reports real numbers when it escapes.
+		gl.viewport(0, 0, canvas.width, canvas.height);
+		gl.clearColor(0, 0, 0, 0);
+		gl.clear(gl.COLOR_BUFFER_BIT);
+		renderer.render({
+			viewportWidth: canvas.width,
+			viewportHeight: canvas.height,
+			metrics: frame.metrics,
+			commands: [{ ...strokeCommand, transform: cameraTransform } as never],
+		} as never);
+
+		const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+		gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+		let minX = Number.POSITIVE_INFINITY;
+		let maxX = Number.NEGATIVE_INFINITY;
+		let minY = Number.POSITIVE_INFINITY;
+		let maxY = Number.NEGATIVE_INFINITY;
+		let inked = 0;
+		for (let py = 0; py < canvas.height; py += 1) {
+			// Framebuffer origin is bottom-left; layout origin is top-left.
+			const refY = (canvas.height - 1 - py) / scale;
+			for (let px = 0; px < canvas.width; px += 1) {
+				if ((pixels[(py * canvas.width + px) * 4 + 3] ?? 0) < 8) continue;
+				inked += 1;
+				const refX = px / scale;
+				minX = Math.min(minX, refX);
+				maxX = Math.max(maxX, refX);
+				minY = Math.min(minY, refY);
+				maxY = Math.max(maxY, refY);
+			}
+		}
+		expect(inked, 'the tick actually paints something').toBeGreaterThan(0);
+
+		// Allow the stroke weight plus antialiasing as the only slop around the mark.
+		const slop = (strokeCommand.strokes[0]!.weight ?? 2) + 1;
+		// Independently replay the documented strip construction so a mismatch
+		// between intended and painted geometry is legible from the failure alone.
+		const expected = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+		for (const entry of strokeCommand.strokes) {
+			const w = Math.max(0.5, entry.weight);
+			const half = w * 0.5;
+			for (let i = 0; i < entry.points.length - 1; i += 1) {
+				const [ax, ay] = entry.points[i]!;
+				const [bx, by] = entry.points[i + 1]!;
+				const x0 = strokeCommand.x + ax * strokeCommand.width;
+				const y0 = strokeCommand.y + ay * strokeCommand.height;
+				const x1 = strokeCommand.x + bx * strokeCommand.width;
+				const y1 = strokeCommand.y + by * strokeCommand.height;
+				const dx = x1 - x0;
+				const dy = y1 - y0;
+				const segLen = Math.hypot(dx, dy);
+				if (segLen < 0.001) continue;
+				const dirX = dx / segLen;
+				const dirY = dy / segLen;
+				const nx = -dirY;
+				const ny = dirX;
+				const sx4 = x0 - dirX * half - nx * half;
+				const sy5 = y0 - dirY * half - ny * half;
+				const corners = [
+					[sx4, sy5],
+					[sx4 + dirX * (segLen + w), sy5 + dirY * (segLen + w)],
+					[sx4 + nx * w, sy5 + ny * w],
+					[sx4 + dirX * (segLen + w) + nx * w, sy5 + dirY * (segLen + w) + ny * w],
+				];
+				for (const [cx, cy] of corners) {
+					expected.minX = Math.min(expected.minX, cx);
+					expected.maxX = Math.max(expected.maxX, cx);
+					expected.minY = Math.min(expected.minY, cy);
+					expected.maxY = Math.max(expected.maxY, cy);
+				}
+			}
+		}
+		const report = JSON.stringify({
+			dpr,
+			scale,
+			mark: markRect,
+			stroke: {
+				x: strokeCommand.x,
+				y: strokeCommand.y,
+				width: strokeCommand.width,
+				height: strokeCommand.height,
+				weight: strokeCommand.strokes[0]!.weight,
+				points: strokeCommand.strokes[0]!.points,
+			},
+			expected,
+			painted: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+		});
+		expect(minX, `tick painted bounds escape the mark rect: ${report}`)
+			.toBeGreaterThanOrEqual(markRect.x - slop);
+		expect(minY, `tick painted bounds escape the mark rect: ${report}`)
+			.toBeGreaterThanOrEqual(markRect.y - slop);
+		expect(maxX, `tick painted bounds escape the mark rect: ${report}`)
+			.toBeLessThanOrEqual(markRect.x + markRect.width + slop);
+		expect(maxY, `tick painted bounds escape the mark rect: ${report}`)
+			.toBeLessThanOrEqual(markRect.y + markRect.height + slop);
+
+		// Pin the exact geometry, not just containment: an oriented strip whose
+		// extents get scaled twice stays invisible to a containment-only check if it
+		// happens to fold back over the box.
+		const tol = 1.5;
+		expect(minX, `painted left edge vs expected: ${report}`).toBeCloseTo(expected.minX, 0);
+		expect(maxX, `painted right edge vs expected: ${report}`).toBeCloseTo(expected.maxX, 0);
+		expect(minY, `painted top edge vs expected: ${report}`).toBeCloseTo(expected.minY, 0);
+		expect(maxY, `painted bottom edge vs expected: ${report}`).toBeCloseTo(expected.maxY, 0);
+		expect(maxX - minX, `painted width vs expected: ${report}`).toBeLessThan(
+			expected.maxX - expected.minX + tol * 2,
+		);
+		expect(maxY - minY, `painted height vs expected: ${report}`).toBeLessThan(
+			expected.maxY - expected.minY + tol * 2,
+		);
+
+		renderer.dispose();
+		runtime.dispose();
+	});
 });
