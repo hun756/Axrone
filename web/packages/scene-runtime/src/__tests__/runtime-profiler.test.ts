@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SceneRuntimeProfiler } from '../runtime-profiler';
+import {
+    SCENE_RUNTIME_PROFILER_PHASES,
+    SceneRuntimeProfiler,
+    type SceneRuntimeFrameRecord,
+} from '../runtime-profiler';
 
 const createPhaseMsExpectation = () => ({
     preUpdate: 0,
@@ -103,5 +107,80 @@ describe('SceneRuntimeProfiler', () => {
         } finally {
             profiler.dispose();
         }
+    });
+
+    it('notifies subscribers on frame commit and supports unsubscribe', () => {
+        const profiler = new SceneRuntimeProfiler({ enabled: true });
+        try {
+            const received: SceneRuntimeFrameRecord[] = [];
+            const unsubscribe = profiler.subscribe((record) => {
+                received.push(record);
+            });
+
+            profiler.beginFrame(1, 0, 16);
+            profiler.endFrame(16, 0);
+            expect(received).toHaveLength(1);
+            expect(received[0]!.frame).toBe(1);
+
+            unsubscribe();
+            profiler.beginFrame(2, 16, 16);
+            profiler.endFrame(32, 0);
+            expect(received).toHaveLength(1);
+        } finally {
+            profiler.dispose();
+        }
+    });
+
+    it('summarizes frame statistics over the buffer window', () => {
+        const profiler = new SceneRuntimeProfiler({ enabled: true });
+        try {
+            const frameTimes = [10, 20, 30, 40];
+            frameTimes.forEach((frameTime, index) => {
+                const start = index * 50;
+                profiler.beginFrame(index + 1, start, 16);
+                profiler.endFrame(start + frameTime, 0);
+            });
+
+            const summary = profiler.getSummary();
+            expect(summary).not.toBeNull();
+            expect(summary!.frameCount).toBe(4);
+            expect(summary!.minFrameTimeMs).toBeCloseTo(10, 5);
+            expect(summary!.maxFrameTimeMs).toBeCloseTo(40, 5);
+            expect(summary!.avgFrameTimeMs).toBeCloseTo(25, 5);
+            expect(summary!.p95FrameTimeMs).toBeCloseTo(40, 5);
+            for (const phase of SCENE_RUNTIME_PROFILER_PHASES) {
+                expect(summary!.avgPhaseMs[phase]).toBe(0);
+            }
+
+            const capped = profiler.getSummary(2);
+            expect(capped!.frameCount).toBe(2);
+            expect(capped!.minFrameTimeMs).toBeCloseTo(30, 5);
+        } finally {
+            profiler.dispose();
+        }
+    });
+
+    it('ignores attachments outside an open frame', () => {
+        const profiler = new SceneRuntimeProfiler({ enabled: true });
+        try {
+            profiler.attachRenderStats({ drawCalls: 9, trianglesSubmitted: 9 });
+            profiler.beginFrame(1, 0, 16);
+            profiler.endFrame(16, 0);
+            expect(profiler.getRecords()[0]!.render).toBeNull();
+        } finally {
+            profiler.dispose();
+        }
+    });
+
+    it('stops recording after dispose and clears state', () => {
+        const profiler = new SceneRuntimeProfiler({ enabled: true });
+        profiler.beginFrame(1, 0, 16);
+        profiler.endFrame(16, 0);
+        profiler.dispose();
+        expect(profiler.isDisposed).toBe(true);
+        expect(profiler.getRecords()).toHaveLength(0);
+        profiler.beginFrame(2, 16, 16);
+        profiler.endFrame(32, 0);
+        expect(profiler.getRecords()).toHaveLength(0);
     });
 });
