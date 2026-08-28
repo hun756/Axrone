@@ -64,7 +64,15 @@ export class SceneRuntimeProfiler {
     private readonly _capacity: number;
     private readonly _records: SceneRuntimeFrameRecord[] = [];
     private readonly _listeners = new Set<SceneRuntimeProfilerListener>();
+    private readonly _phaseAccumulator: Record<SceneRuntimeProfilerPhaseId, number> =
+        createEmptyPhaseAccumulator();
     private _enabled: boolean;
+    private _frameOpen = false;
+    private _frame = 0;
+    private _frameStartMs = 0;
+    private _deltaMs = 0;
+    private _pendingRender: SceneRuntimeRenderStats | null = null;
+    private _pendingPhysics: SceneRuntimePhysicsStats | null = null;
     private _disposed = false;
 
     constructor(options: SceneRuntimeProfilerOptions = {}) {
@@ -89,6 +97,7 @@ export class SceneRuntimeProfiler {
 
     disable(): void {
         this._enabled = false;
+        this._frameOpen = false;
     }
 
     subscribe(listener: SceneRuntimeProfilerListener): () => void {
@@ -96,6 +105,77 @@ export class SceneRuntimeProfiler {
         return () => {
             this._listeners.delete(listener);
         };
+    }
+
+    beginFrame(frame: number, nowMs: number, deltaMs: number): void {
+        if (this._disposed || !this._enabled) {
+            return;
+        }
+        this._frameOpen = true;
+        this._frame = frame;
+        this._frameStartMs = nowMs;
+        this._deltaMs = deltaMs;
+    }
+
+    timePhase<T>(phase: SceneRuntimeProfilerPhaseId, action: () => T): T {
+        if (this._disposed || !this._enabled || !this._frameOpen) {
+            return action();
+        }
+        const startedAt = performance.now();
+        try {
+            return action();
+        } finally {
+            this._phaseAccumulator[phase] += performance.now() - startedAt;
+        }
+    }
+
+    attachRenderStats(stats: SceneRuntimeRenderStats): void {
+        if (this._enabled && this._frameOpen) {
+            this._pendingRender = stats;
+        }
+    }
+
+    attachPhysicsStats(stats: SceneRuntimePhysicsStats): void {
+        if (this._enabled && this._frameOpen) {
+            this._pendingPhysics = stats;
+        }
+    }
+
+    endFrame(nowMs: number, fixedSteps: number): void {
+        if (this._disposed || !this._enabled || !this._frameOpen) {
+            return;
+        }
+        this._frameOpen = false;
+
+        const frameTimeMs = Math.max(0, nowMs - this._frameStartMs);
+        const record: SceneRuntimeFrameRecord = {
+            frame: this._frame,
+            timestampMs: nowMs,
+            frameTimeMs,
+            fps: frameTimeMs > 0 ? 1000 / frameTimeMs : 0,
+            deltaMs: this._deltaMs,
+            fixedSteps,
+            phaseMs: { ...this._phaseAccumulator },
+            render: this._pendingRender,
+            physics: this._pendingPhysics,
+            memoryUsedBytes: null,
+        };
+
+        const accumulator = this._phaseAccumulator;
+        for (const phase of SCENE_RUNTIME_PROFILER_PHASES) {
+            accumulator[phase] = 0;
+        }
+        this._pendingRender = null;
+        this._pendingPhysics = null;
+
+        this._records.push(record);
+        if (this._records.length > this._capacity) {
+            this._records.shift();
+        }
+
+        for (const listener of this._listeners) {
+            listener(record);
+        }
     }
 
     getRecords(): readonly SceneRuntimeFrameRecord[] {
@@ -112,6 +192,7 @@ export class SceneRuntimeProfiler {
         }
         this._listeners.clear();
         this._records.length = 0;
+        this._frameOpen = false;
         this._disposed = true;
     }
 }
