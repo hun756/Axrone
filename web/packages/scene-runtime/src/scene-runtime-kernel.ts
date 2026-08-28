@@ -138,7 +138,21 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
         });
         this.snapshots.initializeRenderPasses(sceneOptions.renderPasses);
 
-        this.physicsBridge = new PhysicsBridge3D(this.world, options.physicsBridge);
+        const profilerRequested =
+            sceneOptions.profiler === true ||
+            (typeof sceneOptions.profiler === 'object' && sceneOptions.profiler !== null);
+        this.physicsBridge = new PhysicsBridge3D(
+            this.world,
+            profilerRequested
+                ? {
+                      ...options.physicsBridge,
+                      worldConfig: {
+                          ...options.physicsBridge?.worldConfig,
+                          enableProfiler: true,
+                      },
+                  }
+                : options.physicsBridge
+        );
 
         const profilerOptions: SceneRuntimeProfilerOptions =
             typeof sceneOptions.profiler === 'object' && sceneOptions.profiler !== null
@@ -187,6 +201,24 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
         });
 
         const loopSystems: readonly GameLoopSystem<SceneLoopState>[] = [
+            {
+                id: 'scene.profiler',
+                priority: 1000,
+                beforeUpdate: (ctx) => {
+                    this.profiler.beginFrame(ctx.frame, ctx.now, ctx.delta);
+                },
+                afterFrame: (ctx) => {
+                    const physicsProfiler = this.physicsBridge.physicsWorld.getProfiler();
+                    if (physicsProfiler) {
+                        this.profiler.attachPhysicsStats({
+                            stepMs: physicsProfiler.stepTime,
+                            collisionMs: physicsProfiler.collisionTime,
+                            solveMs: physicsProfiler.solveTime,
+                        });
+                    }
+                    this.profiler.endFrame(ctx.now, ctx.fixedSteps);
+                },
+            },
             ...baseLoopSystems,
             {
                 id: this.physicsBridge.id,
@@ -221,6 +253,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
                 this.assets.dispose();
             },
             disposeWorld: () => {
+                this.profiler.dispose();
                 if (!this.world.isDisposed) {
                     this.world.clear();
                 }
