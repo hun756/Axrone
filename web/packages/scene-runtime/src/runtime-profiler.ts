@@ -182,6 +182,55 @@ export class SceneRuntimeProfiler {
         return this._records;
     }
 
+    getSummary(cap?: number): SceneRuntimeProfilerSummary | null {
+        const total = this._records.length;
+        if (total === 0) {
+            return null;
+        }
+
+        const windowSize =
+            cap !== undefined && cap > 0 ? Math.min(Math.floor(cap), total) : total;
+        const records = this._records.slice(total - windowSize);
+
+        let frameTimeSum = 0;
+        let minFrameTimeMs = Number.POSITIVE_INFINITY;
+        let maxFrameTimeMs = 0;
+        let fpsSum = 0;
+        const phaseSums = createEmptyPhaseAccumulator();
+
+        for (const record of records) {
+            frameTimeSum += record.frameTimeMs;
+            minFrameTimeMs = Math.min(minFrameTimeMs, record.frameTimeMs);
+            maxFrameTimeMs = Math.max(maxFrameTimeMs, record.frameTimeMs);
+            fpsSum += record.fps;
+            for (const phase of SCENE_RUNTIME_PROFILER_PHASES) {
+                phaseSums[phase] += record.phaseMs[phase];
+            }
+        }
+
+        const sortedFrameTimes = records
+            .map((record) => record.frameTimeMs)
+            .sort((a, b) => a - b);
+        const p95Index = Math.min(
+            sortedFrameTimes.length - 1,
+            Math.ceil(sortedFrameTimes.length * 0.95) - 1
+        );
+        const avgPhaseMs = createEmptyPhaseAccumulator();
+        for (const phase of SCENE_RUNTIME_PROFILER_PHASES) {
+            avgPhaseMs[phase] = phaseSums[phase] / windowSize;
+        }
+
+        return {
+            frameCount: windowSize,
+            avgFrameTimeMs: frameTimeSum / windowSize,
+            minFrameTimeMs,
+            maxFrameTimeMs,
+            p95FrameTimeMs: sortedFrameTimes[Math.max(0, p95Index)]!,
+            avgFps: fpsSum / windowSize,
+            avgPhaseMs,
+        };
+    }
+
     clear(): void {
         this._records.length = 0;
     }
