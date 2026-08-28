@@ -1,7 +1,7 @@
 import { createGameLoop, type GameLoop, type GameLoopSystem } from '@axrone/game-loop';
 import { getOrCreateGLContext } from '@axrone/render-webgl2';
 import { World } from '@axrone/ecs-runtime';
-import { SystemManager } from '@axrone/ecs-runtime';
+import { SystemManager, SystemPhase } from '@axrone/ecs-runtime';
 import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import { SceneActorLifecycleRunner } from './actor-lifecycle-runner';
 import { SceneComponentCatalog } from './component-catalog';
@@ -13,6 +13,11 @@ import { SceneActorRuntime } from './scene-actor-runtime';
 import { SceneAssetRuntime } from './scene-asset-runtime';
 import { SceneLifecycleRuntime } from './scene-lifecycle-runtime';
 import { resolveSceneRegistryFromProfile } from './scene-profile';
+import {
+    SceneRuntimeProfiler,
+    type SceneRuntimeProfilerOptions,
+    type SceneRuntimeProfilerPhaseId,
+} from './runtime-profiler';
 import {
     DEFAULT_SCENE_HEIGHT,
     DEFAULT_SCENE_RENDER_PASS_ID,
@@ -26,6 +31,23 @@ import { SceneSnapshotRuntime } from './scene-snapshot-runtime';
 import { PhysicsBridge3D, type PhysicsBridge3DOptions } from './components/physics-bridge-3d';
 
 type RuntimeRegistry<R extends ComponentRegistry> = SceneRegistry<R>;
+
+const resolveProfilerPhase = (
+    phase: SystemPhase
+): SceneRuntimeProfilerPhaseId | null => {
+    switch (phase) {
+        case SystemPhase.PreUpdate:
+            return 'preUpdate';
+        case SystemPhase.Update:
+            return 'update';
+        case SystemPhase.PostUpdate:
+            return 'postUpdate';
+        case SystemPhase.Render:
+            return 'render';
+        default:
+            return null;
+    }
+};
 
 export interface SceneRuntimeKernelOptions<
     R extends ComponentRegistry = Record<string, never>,
@@ -48,6 +70,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
     readonly snapshots: SceneSnapshotRuntime;
     readonly lifecycle: SceneLifecycleRuntime;
     readonly physicsBridge: PhysicsBridge3D;
+    readonly profiler: SceneRuntimeProfiler;
 
     constructor(options: SceneRuntimeKernelOptions<R>) {
         const sceneOptions = options.options ?? {};
@@ -117,21 +140,49 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
 
         this.physicsBridge = new PhysicsBridge3D(this.world, options.physicsBridge);
 
+        const profilerOptions: SceneRuntimeProfilerOptions =
+            typeof sceneOptions.profiler === 'object' && sceneOptions.profiler !== null
+                ? sceneOptions.profiler
+                : {};
+        this.profiler = new SceneRuntimeProfiler({
+            ...profilerOptions,
+            enabled: profilerOptions.enabled ?? sceneOptions.profiler === true,
+        });
+
         const baseLoopSystems = createSceneLoopSystems({
             executePhase: (phase, delta) => {
-                this.systems.executePhase(phase, delta);
+                const profilerPhase = resolveProfilerPhase(phase);
+                const execute = () => {
+                    this.systems.executePhase(phase, delta);
+                };
+                if (profilerPhase === null) {
+                    execute();
+                    return;
+                }
+                this.profiler.timePhase(profilerPhase, execute);
             },
             fixedUpdateActors: (delta) => {
-                this.actorLifecycleRunner.fixedUpdate(delta);
+                this.profiler.timePhase('fixedUpdate', () =>
+                    this.actorLifecycleRunner.fixedUpdate(delta)
+                );
             },
             updateActors: (delta) => {
-                this.actorLifecycleRunner.update(delta);
+                this.profiler.timePhase('update', () => this.actorLifecycleRunner.update(delta));
             },
             lateUpdateActors: (delta) => {
-                this.actorLifecycleRunner.lateUpdate(delta);
+                this.profiler.timePhase('update', () =>
+                    this.actorLifecycleRunner.lateUpdate(delta)
+                );
             },
             render: (delta) => {
-                this.render(delta);
+                this.profiler.timePhase('render', () => {
+                    this.render(delta);
+                });
+                const stats = this.renderRuntime.stats;
+                this.profiler.attachRenderStats({
+                    drawCalls: stats.drawCalls,
+                    trianglesSubmitted: stats.trianglesSubmitted,
+                });
             },
         });
 
