@@ -134,27 +134,43 @@ describe('SceneRuntimeProfiler', () => {
     it('summarizes frame statistics over the buffer window', () => {
         const profiler = new SceneRuntimeProfiler({ enabled: true });
         try {
-            const frameTimes = [10, 20, 30, 40];
-            frameTimes.forEach((frameTime, index) => {
-                const start = index * 50;
-                profiler.beginFrame(index + 1, start, 16);
-                profiler.endFrame(start + frameTime, 0);
+            const frameBegins = [0, 10, 30, 60];
+            frameBegins.forEach((begin, index) => {
+                profiler.beginFrame(index + 1, begin, 16);
+                profiler.endFrame(begin + 5, 0);
             });
 
             const summary = profiler.getSummary();
             expect(summary).not.toBeNull();
             expect(summary!.frameCount).toBe(4);
-            expect(summary!.minFrameTimeMs).toBeCloseTo(10, 5);
-            expect(summary!.maxFrameTimeMs).toBeCloseTo(40, 5);
-            expect(summary!.avgFrameTimeMs).toBeCloseTo(25, 5);
-            expect(summary!.p95FrameTimeMs).toBeCloseTo(40, 5);
+            expect(summary!.minFrameTimeMs).toBeCloseTo(5, 5);
+            expect(summary!.maxFrameTimeMs).toBeCloseTo(30, 5);
+            expect(summary!.avgFrameTimeMs).toBeCloseTo((5 + 10 + 20 + 30) / 4, 5);
+            expect(summary!.p95FrameTimeMs).toBeCloseTo(30, 5);
             for (const phase of SCENE_RUNTIME_PROFILER_PHASES) {
                 expect(summary!.avgPhaseMs[phase]).toBe(0);
             }
 
             const capped = profiler.getSummary(2);
             expect(capped!.frameCount).toBe(2);
-            expect(capped!.minFrameTimeMs).toBeCloseTo(30, 5);
+            expect(capped!.minFrameTimeMs).toBeCloseTo(20, 5);
+        } finally {
+            profiler.dispose();
+        }
+    });
+
+    it('measures frame duration wall-to-wall between frame begins', () => {
+        const profiler = new SceneRuntimeProfiler({ enabled: true });
+        try {
+            profiler.beginFrame(1, 0, 16);
+            profiler.endFrame(10, 0);
+            profiler.beginFrame(2, 100, 16);
+            profiler.endFrame(105, 0);
+
+            const records = profiler.getRecords();
+            expect(records[0]!.frameTimeMs).toBeCloseTo(10, 5);
+            expect(records[1]!.frameTimeMs).toBeCloseTo(100, 5);
+            expect(records[1]!.fps).toBeCloseTo(10, 5);
         } finally {
             profiler.dispose();
         }

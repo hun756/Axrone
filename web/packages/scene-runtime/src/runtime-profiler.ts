@@ -54,6 +54,9 @@ export type SceneRuntimeProfilerListener = (record: SceneRuntimeFrameRecord) => 
 
 const DEFAULT_CAPACITY = 300;
 const DEFAULT_MEMORY_SAMPLE_INTERVAL_MS = 250;
+// Game-loop context timestamps repeat within a frame, so frame duration must
+// be measured begin-to-begin. Cap covers long pauses (hidden tab, breakpoints).
+const MAX_FRAME_WALL_DELTA_MS = 5000;
 
 const createEmptyPhaseAccumulator = (): Record<SceneRuntimeProfilerPhaseId, number> => ({
     preUpdate: 0,
@@ -75,6 +78,8 @@ export class SceneRuntimeProfiler {
     private _frameOpen = false;
     private _frame = 0;
     private _frameStartMs = 0;
+    private _wallDeltaMs: number | null = null;
+    private _lastFrameBeginMs: number | null = null;
     private _deltaMs = 0;
     private _pendingRender: SceneRuntimeRenderStats | null = null;
     private _pendingPhysics: SceneRuntimePhysicsStats | null = null;
@@ -124,6 +129,14 @@ export class SceneRuntimeProfiler {
         if (this._disposed || !this._enabled) {
             return;
         }
+        this._wallDeltaMs =
+            this._lastFrameBeginMs !== null
+                ? Math.min(
+                      Math.max(0, nowMs - this._lastFrameBeginMs),
+                      MAX_FRAME_WALL_DELTA_MS
+                  )
+                : null;
+        this._lastFrameBeginMs = nowMs;
         this._frameOpen = true;
         this._frame = frame;
         this._frameStartMs = nowMs;
@@ -160,7 +173,8 @@ export class SceneRuntimeProfiler {
         }
         this._frameOpen = false;
 
-        const frameTimeMs = Math.max(0, nowMs - this._frameStartMs);
+        const frameTimeMs = this._wallDeltaMs ?? Math.max(0, nowMs - this._frameStartMs);
+        this._wallDeltaMs = null;
         const record: SceneRuntimeFrameRecord = {
             frame: this._frame,
             timestampMs: nowMs,
