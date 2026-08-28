@@ -1,3 +1,5 @@
+import { MemoryTracker, type MemorySampleEvent } from '@axrone/profiler';
+
 export const SCENE_RUNTIME_PROFILER_PHASES = [
     'preUpdate',
     'fixedUpdate',
@@ -51,6 +53,7 @@ export interface SceneRuntimeProfilerOptions {
 export type SceneRuntimeProfilerListener = (record: SceneRuntimeFrameRecord) => void;
 
 const DEFAULT_CAPACITY = 300;
+const DEFAULT_MEMORY_SAMPLE_INTERVAL_MS = 250;
 
 const createEmptyPhaseAccumulator = (): Record<SceneRuntimeProfilerPhaseId, number> => ({
     preUpdate: 0,
@@ -64,8 +67,10 @@ export class SceneRuntimeProfiler {
     private readonly _capacity: number;
     private readonly _records: SceneRuntimeFrameRecord[] = [];
     private readonly _listeners = new Set<SceneRuntimeProfilerListener>();
+    private readonly _memoryTracker: MemoryTracker;
     private readonly _phaseAccumulator: Record<SceneRuntimeProfilerPhaseId, number> =
         createEmptyPhaseAccumulator();
+    private _lastMemorySample: MemorySampleEvent | null = null;
     private _enabled: boolean;
     private _frameOpen = false;
     private _frame = 0;
@@ -81,6 +86,14 @@ export class SceneRuntimeProfiler {
                 ? Math.floor(options.capacity)
                 : DEFAULT_CAPACITY;
         this._enabled = options.enabled ?? false;
+        this._memoryTracker = new MemoryTracker({
+            onMemoryChange: (sample) => {
+                this._lastMemorySample = sample;
+            },
+        });
+        this._memoryTracker.startTracking({
+            intervalMs: options.memorySampleIntervalMs ?? DEFAULT_MEMORY_SAMPLE_INTERVAL_MS,
+        });
     }
 
     get isEnabled(): boolean {
@@ -158,7 +171,9 @@ export class SceneRuntimeProfiler {
             phaseMs: { ...this._phaseAccumulator },
             render: this._pendingRender,
             physics: this._pendingPhysics,
-            memoryUsedBytes: null,
+            memoryUsedBytes: this._lastMemorySample
+                ? Number(this._lastMemorySample.usedHeapSizeBytes)
+                : null,
         };
 
         const accumulator = this._phaseAccumulator;
@@ -239,6 +254,7 @@ export class SceneRuntimeProfiler {
         if (this._disposed) {
             return;
         }
+        this._memoryTracker.stopTracking();
         this._listeners.clear();
         this._records.length = 0;
         this._frameOpen = false;
