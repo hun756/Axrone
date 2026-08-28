@@ -407,13 +407,17 @@ const applyVisuals = (context: CheckboxContext): boolean => {
                 }
             } else {
                 // Color transition mode: use strokes for mark styles (check/cross/dash)
-                // or background fill for dot style.
-                const strokes = markVisible ? resolveMarkStrokes(markStyle, markColor, markWeight) : null;
+                // or background fill for dot style. A base image authored on the mark
+                // child replaces the default tick outright, so the procedural mark is
+                // suppressed instead of painted on top of the user's artwork.
+                const hasMarkImage = isValidImageSource(runtime.getWidgetImageInput(mark)?.source);
+                const proceduralMark = markVisible && !hasMarkImage;
+                const strokes = proceduralMark ? resolveMarkStrokes(markStyle, markColor, markWeight) : null;
                 if (markStyle === 'dot') {
                     // Dot uses background fill with radius for circular shape.
                     runtime.updateWidget(mark, {
                         style: {
-                            background: markVisible ? markColor : '#00000000',
+                            background: proceduralMark ? markColor : '#00000000',
                             radius: Number.isFinite(markSize) ? markSize * 0.5 : 7,
                             strokes: [],
                         },
