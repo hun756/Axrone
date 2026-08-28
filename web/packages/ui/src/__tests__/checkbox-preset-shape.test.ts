@@ -13,7 +13,10 @@ import type { StrokeRenderCommand } from '../types';
  * fixed-size overlay fixtures, so this shape was never covered and both the
  * mark centering and the label's cross-axis alignment regressed silently.
  */
-const createPresetShapedAsset = (textLineHeight: number): string =>
+const createPresetShapedAsset = (
+	textLineHeight: number,
+	markImage?: Record<string, unknown>,
+): string =>
 	JSON.stringify({
 		id: 'ui.preset-shape',
 		name: 'preset-shape',
@@ -80,6 +83,7 @@ const createPresetShapedAsset = (textLineHeight: number): string =>
 									key: 'chk-mark',
 									enabled: true,
 									interactive: false,
+									image: markImage ?? null,
 									layout: {
 										position: 'absolute',
 										width: 14,
@@ -107,10 +111,10 @@ const createPresetShapedAsset = (textLineHeight: number): string =>
 		},
 	});
 
-const commitPreset = (textLineHeight: number) => {
+const commitPreset = (textLineHeight: number, markImage?: Record<string, unknown>) => {
 	const runtime = new UIRuntime();
 	runtime.registry.register(checkboxToggleController);
-	runtime.loadFromAsset(deserializeUIAsset(createPresetShapedAsset(textLineHeight)));
+	runtime.loadFromAsset(deserializeUIAsset(createPresetShapedAsset(textLineHeight, markImage)));
 	const frame = runtime.commit();
 	const rect = (key: string) => {
 		const id = runtime.getBoundWidget(key);
@@ -172,5 +176,26 @@ describe('checkbox-toggle — editor preset shape (content-sized row stack)', ()
 		expect(degenerate.rect('chk-label')!.height).toBeLessThan(2);
 		centered.runtime.dispose();
 		degenerate.runtime.dispose();
+	});
+
+	it('lets a base tick image replace the default vector tick', () => {
+		const custom = commitPreset(20.8, {
+			source: {
+				kind: 'texture',
+				resourceId: 'Assets/tick.png',
+				width: 14,
+				height: 14,
+			},
+		});
+		const fallback = commitPreset(20.8);
+		// The artwork is the mark now, so no procedural strokes may leak through
+		// and paint a second tick on top of it.
+		expect(custom.strokes).toHaveLength(0);
+		expect(fallback.strokes).toHaveLength(1);
+		// The mark stays laid out and enabled so the image itself is visible.
+		const mark = custom.rect('chk-mark')!;
+		expect(mark.width).toBeCloseTo(14, 0);
+		custom.runtime.dispose();
+		fallback.runtime.dispose();
 	});
 });
