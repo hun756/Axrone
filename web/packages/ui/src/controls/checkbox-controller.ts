@@ -433,14 +433,18 @@ const applyVisuals = (context: CheckboxContext): boolean => {
 
             // Apply markSize to mark child layout dimensions. The mark is centered
             // inside the box by contract: boxSize/markSize are authoritative, so the
-            // insets are normalized to the anchor rather than trusted from the
-            // document (older assets carry stale baked pixel insets here).
+            // insets are dropped rather than zeroed — a zero inset still counts as
+            // "present" and would make layoutAbsoluteChild resolve from the inset and
+            // skip the anchor branch, pinning the mark to the box's top-left corner.
+            // Older assets carry stale baked pixel insets and sometimes no anchor.
             if (Number.isFinite(markSize)) {
                 runtime.updateWidget(mark, {
                     layout: {
                         width: markSize,
                         height: markSize,
-                        inset: { left: 0, top: 0, right: 0, bottom: 0 },
+                        position: 'absolute',
+                        anchor: { x: 0.5, y: 0.5, maxX: 0.5, maxY: 0.5, pivotX: 0.5, pivotY: 0.5 },
+                        inset: { left: undefined, top: undefined, right: undefined, bottom: undefined },
                     },
                 });
             }
