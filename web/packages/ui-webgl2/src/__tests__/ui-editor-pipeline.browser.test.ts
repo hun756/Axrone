@@ -1005,4 +1005,240 @@ describe('UI Editor preview pipeline (browser)', () => {
         renderer.dispose();
         runtime.dispose();
     });
+
+    it('renders the content-sized editor preset tick inside its box through the editor camera path', () => {
+		// Mirrors the Editor's authored document: a content-sized checkbox row stack
+		// nested in the same container chain the presets emit, rendered with the
+		// Editor's own frame composition (commit + manual camera transform) instead
+		// of resolveCanvasScale, because that is the path the UI workspace takes.
+		const canvas = (window as any).createTestCanvas(800, 400) as HTMLCanvasElement;
+		const gl = (window as any).createWebGLContext(canvas, {
+			alpha: true,
+			antialias: false,
+			premultipliedAlpha: true,
+			preserveDrawingBuffer: true,
+		}) as WebGL2RenderingContext;
+		const renderer = new WebGL2UIRenderer({ gl });
+
+		const asset = deserializeUIAsset(
+			JSON.stringify({
+				id: 'ui.preset-nested',
+				name: 'preset-nested',
+				version: 1,
+				canvas: {
+					referenceWidth: 1920,
+					referenceHeight: 1080,
+					scaleMode: 'match-width-or-height',
+					matchBias: 0.5,
+				},
+				bindings: {
+					root: 'root',
+					'cnt-1': 'cnt-1',
+					'cnt-2': 'cnt-2',
+					'chk-4': 'chk-4',
+					'chk-4-box': 'chk-4-box',
+					'chk-4-mark': 'chk-4-mark',
+					'chk-4-label': 'chk-4-label',
+				},
+				root: {
+					role: 'root',
+					key: 'root',
+					enabled: true,
+					interactive: false,
+					layout: { display: 'overlay', width: '100%', height: '100%' },
+					children: [
+						{
+							role: 'container',
+							key: 'cnt-1',
+							enabled: true,
+							interactive: false,
+							layout: {
+								width: 672,
+								height: 'content',
+								direction: 'row',
+								gap: 8,
+								padding: 8,
+								justifyContent: 'space-evenly',
+								alignItems: 'start',
+								flexWrap: 'wrap',
+							},
+							children: [
+								{
+									role: 'container',
+									key: 'cnt-2',
+									enabled: true,
+									interactive: false,
+									layout: { width: 240, height: 'content', direction: 'column', gap: 8, padding: 8 },
+									children: [
+										{
+											role: 'custom:checkbox',
+											key: 'chk-4',
+											enabled: true,
+											interactive: true,
+											controller: 'checkbox-toggle',
+											props: {
+												isOn: true,
+												indeterminate: false,
+												markStyle: 'check',
+												boxSize: 20,
+												markSize: 14,
+												markWeight: 2,
+												markColor: '#ffffffff',
+												boxKey: 'chk-4-box',
+												markKey: 'chk-4-mark',
+												labelKey: 'chk-4-label',
+												states: {
+													normal: '#334155ff',
+													hover: '#475569ff',
+													checked: '#0a74daff',
+													disabled: '#1e293bff',
+												},
+												transition: 'color',
+												transitionDuration: 0.15,
+												zoomScale: 0.9,
+												labelPosition: 'right',
+												labelGap: 8,
+											},
+											layout: {
+												display: 'stack',
+												width: 'content',
+												height: 'content',
+												direction: 'row',
+												alignItems: 'center',
+												gap: 8,
+											},
+											children: [
+												{
+													role: 'custom:checkbox-box',
+													key: 'chk-4-box',
+													enabled: true,
+													interactive: false,
+													layout: { width: 20, height: 20, display: 'overlay', shrink: 0 },
+													style: {
+														background: '#334155ff',
+														borderColor: '#475569ff',
+														borderWidth: 1,
+														radius: 4,
+													},
+													children: [
+														{
+															role: 'custom:checkbox-mark',
+															key: 'chk-4-mark',
+															enabled: true,
+															interactive: false,
+															layout: {
+																position: 'absolute',
+																width: 14,
+																height: 14,
+																anchor: {
+																	x: 0.5,
+																	y: 0.5,
+																	maxX: 0.5,
+																	maxY: 0.5,
+																	pivotX: 0.5,
+																	pivotY: 0.5,
+																},
+															},
+															style: { background: '#00000000', radius: 2 },
+															children: [],
+														},
+													],
+												},
+												{
+													role: 'text',
+													key: 'chk-4-label',
+													enabled: true,
+													interactive: false,
+													layout: { width: 'content', height: 'content' },
+													style: { color: '#e2e8f0ff' },
+													text: {
+														value: 'Checkbox',
+														size: 16,
+														family: 'Inter',
+														lineHeight: 20.8,
+													},
+													children: [],
+												},
+											],
+										},
+									],
+								},
+							],
+						},
+					],
+				},
+			}),
+		);
+
+		const runtime = new UIRuntime();
+		runtime.registry.register(checkboxToggleController);
+		runtime.loadFromAsset(asset);
+
+		// Exactly the Editor's renderPreview composition: commit at reference
+		// resolution, then attach one camera transform to every command.
+		const frame = runtime.commit();
+		const dpr = window.devicePixelRatio || 1;
+		const scale = 1 * dpr;
+		const cameraTransform = [scale, 0, 0, scale, 0, 0] as const;
+		renderer.render({
+			viewportWidth: canvas.width,
+			viewportHeight: canvas.height,
+			metrics: frame.metrics,
+			commands: frame.commands.map((cmd) => ({ ...cmd, transform: cameraTransform }) as never),
+		} as never);
+
+		const boxRect = runtime.getLayoutBox(runtime.getBoundWidget('chk-4-box')!);
+		const markRect = runtime.getLayoutBox(runtime.getBoundWidget('chk-4-mark')!);
+		const strokeCommands = frame.commands.filter(
+			(command) => command.kind === 'stroke',
+		) as StrokeRenderCommand[];
+		expect(strokeCommands.length, 'checked mark emits one stroke command').toBe(1);
+		const strokeCommand = strokeCommands[0]!;
+
+		// The tick must stay authored at mark size; anything larger is the
+		// overscale bug and the strip escapes the box.
+		expect(strokeCommand.width, 'stroke space is the mark rect, not an ancestor').toBeCloseTo(14, 2);
+		expect(strokeCommand.height).toBeCloseTo(14, 2);
+		expect(markRect.width).toBeCloseTo(14, 2);
+		expect(strokeCommand.x).toBeGreaterThanOrEqual(boxRect.x - 0.01);
+		expect(strokeCommand.y).toBeGreaterThanOrEqual(boxRect.y - 0.01);
+		expect(strokeCommand.x + strokeCommand.width).toBeLessThanOrEqual(
+			boxRect.x + boxRect.width + 0.01,
+		);
+		expect(strokeCommand.y + strokeCommand.height).toBeLessThanOrEqual(
+			boxRect.y + boxRect.height + 0.01,
+		);
+
+		// Sample in the same space the transform was built in.
+		const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+		gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+		const alphaAt = (refX: number, refY: number): number => {
+			const x = Math.max(0, Math.min(canvas.width - 1, Math.round(refX * scale)));
+			const y = Math.max(0, Math.min(canvas.height - 1, Math.round(canvas.height - 1 - refY * scale)));
+			return pixels[(y * canvas.width + x) * 4 + 3] ?? 0;
+		};
+
+		for (const point of strokeSegmentMidpoints(strokeCommand)) {
+			expect(
+				alphaAt(point.x, point.y),
+				`tick pixel drawn at (${point.x.toFixed(2)}, ${point.y.toFixed(2)})`,
+			).toBeGreaterThan(160);
+		}
+		// Nothing may be painted far outside the box: the giant-strip symptom.
+		const reach = Math.max(boxRect.width, boxRect.height) * 4;
+		for (const [dx, dy] of [
+			[reach, 0],
+			[-reach, 0],
+			[0, -reach],
+			[reach, -reach],
+		] as const) {
+			expect(
+				alphaAt(boxRect.x + boxRect.width / 2 + dx, boxRect.y + boxRect.height / 2 + dy),
+				`no tick ink ${dx},${dy} px outside the box`,
+			).toBe(0);
+		}
+
+		renderer.dispose();
+		runtime.dispose();
+	});
 });
