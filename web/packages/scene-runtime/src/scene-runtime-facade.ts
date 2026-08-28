@@ -10,6 +10,7 @@ import type {
     SceneRegistry,
 } from './types';
 import { SceneRuntimeKernel } from './scene-runtime-kernel';
+import type { SceneRuntimeProfiler } from './runtime-profiler';
 
 type RuntimeRegistry<R extends ComponentRegistry> = SceneRegistry<R>;
 
@@ -76,6 +77,11 @@ export class SceneRuntimeFacade<R extends ComponentRegistry = Record<string, nev
     removeSystem(systemId: string): boolean {
         this.assertNotDisposed();
         return this.systems.removeSystem(systemId as any);
+    }
+
+    getRuntimeProfiler(): SceneRuntimeProfiler {
+        this.assertNotDisposed();
+        return this._kernel.profiler;
     }
 
     protected assertNotDisposed(): void {

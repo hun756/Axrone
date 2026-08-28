@@ -107,6 +107,7 @@
         "@axrone/particle-system": "^0.1.0",
         "@axrone/physics-3d": "^0.1.0",
         "@axrone/physics-core": "^0.1.0",
+        "@axrone/profiler": "^0.1.0",
         "@axrone/render-2d": "^0.1.0",
         "@axrone/render-core": "^0.1.0",
         "@axrone/random": "^0.0.1",
