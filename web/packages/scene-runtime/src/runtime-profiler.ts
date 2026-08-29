@@ -1,4 +1,4 @@
-import { MemoryTracker, type MemorySampleEvent } from '@axrone/profiler';
+import { MemoryTracker, StackCaptureEngine, type MemorySampleEvent } from '@axrone/profiler';
 
 export const SCENE_RUNTIME_PROFILER_PHASES = [
     'preUpdate',
@@ -52,8 +52,19 @@ export interface SceneRuntimeProfilerOptions {
 
 export type SceneRuntimeProfilerListener = (record: SceneRuntimeFrameRecord) => void;
 
+export interface SceneRuntimeStackSampleFrame {
+    readonly fn: string;
+    readonly file?: string;
+}
+
+export interface SceneRuntimeStackSample {
+    readonly phase: SceneRuntimeProfilerPhaseId;
+    readonly frames: readonly SceneRuntimeStackSampleFrame[];
+}
+
 const DEFAULT_CAPACITY = 300;
 const DEFAULT_MEMORY_SAMPLE_INTERVAL_MS = 250;
+const DEFAULT_STACK_SAMPLE_CAPACITY = 4000;
 // Game-loop context timestamps repeat within a frame, so frame duration must
 // be measured begin-to-begin. Cap covers long pauses (hidden tab, breakpoints).
 const MAX_FRAME_WALL_DELTA_MS = 5000;
@@ -71,6 +82,8 @@ export class SceneRuntimeProfiler {
     private readonly _records: SceneRuntimeFrameRecord[] = [];
     private readonly _listeners = new Set<SceneRuntimeProfilerListener>();
     private readonly _memoryTracker: MemoryTracker;
+    private readonly _stackEngine = new StackCaptureEngine();
+    private readonly _stackSamples: SceneRuntimeStackSample[] = [];
     private readonly _phaseAccumulator: Record<SceneRuntimeProfilerPhaseId, number> =
         createEmptyPhaseAccumulator();
     private _lastMemorySample: MemorySampleEvent | null = null;
@@ -159,6 +172,34 @@ export class SceneRuntimeProfiler {
         if (this._enabled && this._frameOpen) {
             this._pendingRender = stats;
         }
+    }
+
+    capturePhaseSample(phase: SceneRuntimeProfilerPhaseId): void {
+        if (this._disposed || !this._enabled || !this._frameOpen) {
+            return;
+        }
+        const frames = this._stackEngine.captureStack(24);
+        if (frames.length === 0) {
+            return;
+        }
+        this._stackSamples.push({
+            phase,
+            frames: frames.map((frame) => ({
+                fn: frame.function,
+                file: frame.file,
+            })),
+        });
+        if (this._stackSamples.length > DEFAULT_STACK_SAMPLE_CAPACITY) {
+            this._stackSamples.shift();
+        }
+    }
+
+    getStackSamples(): readonly SceneRuntimeStackSample[] {
+        return this._stackSamples;
+    }
+
+    clearStackSamples(): void {
+        this._stackSamples.length = 0;
     }
 
     attachPhysicsStats(stats: SceneRuntimePhysicsStats): void {
@@ -262,6 +303,7 @@ export class SceneRuntimeProfiler {
 
     clear(): void {
         this._records.length = 0;
+        this._stackSamples.length = 0;
     }
 
     dispose(): void {

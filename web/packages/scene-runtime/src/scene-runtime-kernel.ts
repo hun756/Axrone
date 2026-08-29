@@ -173,22 +173,27 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
                     execute();
                     return;
                 }
+                this.profiler.capturePhaseSample(profilerPhase);
                 this.profiler.timePhase(profilerPhase, execute);
             },
             fixedUpdateActors: (delta) => {
+                this.profiler.capturePhaseSample('fixedUpdate');
                 this.profiler.timePhase('fixedUpdate', () =>
                     this.actorLifecycleRunner.fixedUpdate(delta)
                 );
             },
             updateActors: (delta) => {
+                this.profiler.capturePhaseSample('update');
                 this.profiler.timePhase('update', () => this.actorLifecycleRunner.update(delta));
             },
             lateUpdateActors: (delta) => {
+                this.profiler.capturePhaseSample('update');
                 this.profiler.timePhase('update', () =>
                     this.actorLifecycleRunner.lateUpdate(delta)
                 );
             },
             render: (delta) => {
+                this.profiler.capturePhaseSample('render');
                 this.profiler.timePhase('render', () => {
                     this.render(delta);
                 });

@@ -176,6 +176,40 @@ describe('SceneRuntimeProfiler', () => {
         }
     });
 
+    it('captures a stack sample at phase entry while recording', () => {
+        const profiler = new SceneRuntimeProfiler({ enabled: true });
+        try {
+            profiler.beginFrame(1, 0, 16);
+            profiler.capturePhaseSample('update');
+            profiler.endFrame(16, 0);
+
+            const samples = profiler.getStackSamples();
+            expect(samples).toHaveLength(1);
+            expect(samples[0]!.phase).toBe('update');
+            expect(samples[0]!.frames.length).toBeGreaterThan(0);
+            expect(typeof samples[0]!.frames[0]!.fn).toBe('string');
+
+            profiler.clearStackSamples();
+            expect(profiler.getStackSamples()).toHaveLength(0);
+        } finally {
+            profiler.dispose();
+        }
+    });
+
+    it('captures no stack samples while disabled or outside a frame', () => {
+        const profiler = new SceneRuntimeProfiler();
+        try {
+            profiler.capturePhaseSample('update');
+            expect(profiler.getStackSamples()).toHaveLength(0);
+
+            profiler.enable();
+            profiler.capturePhaseSample('update');
+            expect(profiler.getStackSamples()).toHaveLength(0);
+        } finally {
+            profiler.dispose();
+        }
+    });
+
     it('ignores attachments outside an open frame', () => {
         const profiler = new SceneRuntimeProfiler({ enabled: true });
         try {

@@ -229,6 +229,8 @@ export type {
 	SceneRuntimeProfilerPhaseId,
 	SceneRuntimeProfilerSummary,
 	SceneRuntimeRenderStats,
+	SceneRuntimeStackSample,
+	SceneRuntimeStackSampleFrame,
 } from './runtime-profiler';
 export {
 	SCENE_RUNTIME_PROFILER_PHASES,
