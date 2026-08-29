@@ -85,6 +85,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
 
     #playSequence = 0;
     #status: AudioSystemStatus = 'idle';
+    #contextState: AudioContextState = 'running';
     #disposed = false;
 
     constructor(options: AudioSystemOptions<TSchema> = {}) {
@@ -136,6 +137,11 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         }
 
         this.#syncListenerToContext();
+        this.#contextState = this.context.state;
+        this.#applyContextState(false);
+        // addEventListener, not context.onstatechange: a caller-supplied context may already
+        // have its own handler on the property, which this would silently replace.
+        this.context.addEventListener?.('statechange', this.#handleContextStateChange);
     }
 
     get status(): AudioSystemStatus {
@@ -792,6 +798,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
             return;
         }
 
+        this.context.removeEventListener?.('statechange', this.#handleContextStateChange);
         this.#clearSources();
         this.#listeners.clear();
         this.#buses.clear();
@@ -823,6 +830,57 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
             this.#disposePlayback(source);
         }
         this.#sources.clear();
+    }
+
+    /**
+     * Reflect browser-driven context transitions in `status`. Web Audio suspends on its own —
+     * autoplay policy, tab backgrounding, losing audio focus — and until now `status` only
+     * moved through an explicit suspend()/resume(), so a context the browser had suspended
+     * still reported 'running'. 'closed' is left to dispose(), which owns that transition.
+     */
+    #applyContextState(announce: boolean): void {
+        const nextStatus: AudioSystemStatus | undefined =
+            this.context.state === 'suspended'
+                ? 'suspended'
+                : this.context.state === 'running'
+                  ? this.#hasActivePlayback()
+                      ? 'running'
+                      : 'idle'
+                  : undefined;
+
+        if (nextStatus === undefined || nextStatus === this.#status) {
+            return;
+        }
+
+        const transitioned = this.#contextState !== this.context.state;
+        this.#contextState = this.context.state;
+        this.#status = nextStatus;
+
+        if (!announce || !transitioned) {
+            return;
+        }
+
+        this.#emit({
+            type: nextStatus === 'suspended' ? 'system:suspended' : 'system:resumed',
+            contextTime: this.context.currentTime,
+            systemStatus: this.#status,
+        });
+    }
+
+    readonly #handleContextStateChange = (): void => {
+        if (this.#disposed) {
+            return;
+        }
+        this.#applyContextState(true);
+    };
+
+    #hasActivePlayback(): boolean {
+        for (const source of this.#sources.values()) {
+            if (source.active) {
+                return true;
+            }
+        }
+        return false;
     }
 
     #syncListenerToContext(): void {
