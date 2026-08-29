@@ -688,3 +688,84 @@ describe('AudioSystem source upserts report only real changes', () => {
         expect(state.id).toBe('readable');
     });
 });
+
+// Web Audio suspends without being asked — autoplay policy, tab backgrounding, lost audio
+// focus. status only moved through explicit suspend()/resume(), so a context the browser had
+// suspended kept reporting 'running' to any game that asked.
+describe('AudioSystem tracks browser-driven context state', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const createOn = (state: AudioContextState = 'running') => {
+        const context = new FakeAudioContext();
+        context.state = state;
+        return { context, system: createAudioSystem({ context: context as unknown as AudioContext }) };
+    };
+
+    it('starts suspended when the context is suspended, without announcing it', () => {
+        const seen: string[] = [];
+        const context = new FakeAudioContext();
+        context.state = 'suspended';
+        const probe = createAudioSystem({ context: context as unknown as AudioContext });
+        probe.events.on('audio:*', (event) => seen.push(event.type));
+
+        // Nothing emitted during construction is guaranteed only if the same construction
+        // path also reports the right status.
+        expect(probe.status).toBe('suspended');
+        expect(seen.filter((type) => type.startsWith('system:'))).toEqual([]);
+    });
+
+    it('reports suspended and emits when the browser suspends mid-session', () => {
+        const { context, system } = createOn();
+        const seen: string[] = [];
+        system.events.on('system:suspended', () => seen.push('suspended'));
+
+        context.setState('suspended');
+
+        expect(system.status).toBe('suspended');
+        expect(seen).toEqual(['suspended']);
+    });
+
+    it('returns to idle and emits when the browser resumes with nothing playing', () => {
+        const { context, system } = createOn();
+        context.setState('suspended');
+        const seen: string[] = [];
+        system.events.on('system:resumed', () => seen.push('resumed'));
+
+        context.setState('running');
+
+        expect(system.status).toBe('idle');
+        expect(seen).toEqual(['resumed']);
+    });
+
+    it('reports running on resume while a voice is active', async () => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertSource({
+            id: 'pad',
+            clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer },
+        });
+        await system.playSource('pad');
+
+        context.setState('suspended');
+        expect(system.status).toBe('suspended');
+
+        context.setState('running');
+        expect(system.status).toBe('running');
+    });
+
+    it('ignores state changes after dispose', async () => {
+        const { context, system } = createOn();
+        const seen: string[] = [];
+        system.events.on('audio:*', (event) => seen.push(event.type));
+
+        await system.dispose();
+        seen.length = 0;
+        context.setState('suspended');
+
+        expect(seen).toEqual([]);
+        expect(system.status).toBe('disposed');
+    });
+});

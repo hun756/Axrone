@@ -199,6 +199,7 @@ export class FakeAudioContext {
     readonly pannerNodes: FakePannerNode[] = [];
     readonly bufferSourceNodes: FakeBufferSourceNode[] = [];
     readonly buffers: FakeAudioBuffer[] = [];
+    readonly #stateChangeListeners = new Set<() => void>();
 
     createGain(): GainNode {
         const node = new FakeGainNode();
@@ -235,15 +236,39 @@ export class FakeAudioContext {
     }
 
     async resume(): Promise<void> {
-        this.state = 'running';
+        this.setState('running');
     }
 
     async suspend(): Promise<void> {
-        this.state = 'suspended';
+        this.setState('suspended');
     }
 
     async close(): Promise<void> {
-        this.state = 'closed';
+        this.setState('closed');
+    }
+
+    addEventListener(type: string, listener: () => void): void {
+        if (type !== 'statechange') {
+            return;
+        }
+        this.#stateChangeListeners.add(listener);
+    }
+
+    removeEventListener(type: string, listener: () => void): void {
+        if (type === 'statechange') {
+            this.#stateChangeListeners.delete(listener);
+        }
+    }
+
+    /** Test hook: move the context to a state the browser would have chosen. */
+    setState(next: AudioContextState): void {
+        if (this.state === next) {
+            return;
+        }
+        this.state = next;
+        for (const listener of [...this.#stateChangeListeners]) {
+            listener();
+        }
     }
 
     advance(seconds: number): void {
