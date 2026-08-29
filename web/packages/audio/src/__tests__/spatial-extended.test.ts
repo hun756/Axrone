@@ -398,3 +398,70 @@ describe('syncPlaybackSpatialState — realm-agnostic panner detection', () => {
         expect(foreignStereo.pan.value).toBe(-0.4);
     });
 });
+
+// Snapping AudioParam.value once per frame is audible as zipper noise on a moving source.
+// Writes now ramp, and an unchanged value is skipped so a static voice costs nothing.
+describe('syncPlaybackSpatialState — ramps writes and skips unchanged', () => {
+    const makeRig = () => {
+        const gainNode = new FakeGainNode();
+        const attenuationNode = new FakeGainNode();
+        const stereo = new FakeStereoPannerNode();
+        return {
+            gainNode,
+            stereo,
+            playback: {
+                gainNode: gainNode as unknown as GainNode,
+                attenuationNode: attenuationNode as unknown as GainNode,
+                spatialNode: stereo as unknown as StereoPannerNode,
+            } as AudioSpatialPlaybackNodes,
+        };
+    };
+
+    const sourceOf = (volume: number, pan = 0): AudioSpatialSourceState => ({
+        muted: false,
+        volume,
+        pan,
+    });
+
+    it('snaps the first write because there is no baseline to ramp from', () => {
+        const { playback, gainNode } = makeRig();
+
+        syncPlaybackSpatialState(playback, sourceOf(0.8), undefined, 10);
+
+        expect(gainNode.gain.events.map((event) => event.type)).toEqual(['cancel', 'set']);
+        expect(gainNode.gain.value).toBe(0.8);
+    });
+
+    it('ramps a changed value towards the audio clock', () => {
+        const { playback, gainNode } = makeRig();
+        syncPlaybackSpatialState(playback, sourceOf(0.8), undefined, 10);
+
+        syncPlaybackSpatialState(playback, sourceOf(0.4), undefined, 20);
+
+        const last = gainNode.gain.events.at(-1)!;
+        expect(last.type).toBe('ramp');
+        if (last.type === 'ramp') {
+            expect(last.value).toBe(0.4);
+            expect(last.atTime).toBeGreaterThan(20);
+        }
+    });
+
+    it('writes nothing when neither gain nor pan moved', () => {
+        const { playback, gainNode, stereo } = makeRig();
+        syncPlaybackSpatialState(playback, sourceOf(0.8, 0.3), undefined, 10);
+        const writesBefore = gainNode.gain.events.length + stereo.pan.events.length;
+
+        syncPlaybackSpatialState(playback, sourceOf(0.8, 0.3), undefined, 20);
+
+        expect(gainNode.gain.events.length + stereo.pan.events.length).toBe(writesBefore);
+    });
+
+    it('still writes pan on a stereo panner when only pan changed', () => {
+        const { playback, stereo } = makeRig();
+        syncPlaybackSpatialState(playback, sourceOf(0.8, 0.3), undefined, 10);
+
+        syncPlaybackSpatialState(playback, sourceOf(0.8, -0.6), undefined, 20);
+
+        expect(stereo.pan.value).toBe(-0.6);
+    });
+});
