@@ -32,7 +32,6 @@ export type {
     AudioMessageResolver,
     AudioMixerSnapshot,
     AudioMixerSnapshotBusState,
-    AudioPatch,
     AudioPanningModel,
     AudioPcmClipAssetData,
     AudioPlaybackHandle,

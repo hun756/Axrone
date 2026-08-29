@@ -67,8 +67,6 @@ import type {
     AudioSystemStatus,
 } from './types';
 
-type AudioPatchToDefinition<TDefinition extends object> = Partial<TDefinition>;
-
 export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     readonly context: AudioContext;
     readonly destination: AudioNode;
@@ -213,7 +211,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     updateBus(id: AudioBusId | string, patch: AudioBusPatch): AudioBusState {
         return this.upsertBus({
             id,
-            ...(patch as AudioPatchToDefinition<Omit<AudioBusDefinition, 'id'>>),
+            ...patch,
         });
     }
 
@@ -263,7 +261,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     updateListener(id: AudioListenerId | string, patch: AudioListenerPatch): AudioListenerState {
         return this.upsertListener({
             id,
-            ...(patch as AudioPatchToDefinition<Omit<AudioListenerDescriptor, 'id'>>),
+            ...patch,
         });
     }
 
@@ -335,7 +333,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     updateSource(id: AudioSourceId | string, patch: AudioSourcePatch<TSchema>): AudioSourceState<TSchema> {
         return this.upsertSource({
             id,
-            ...(patch as AudioPatchToDefinition<Omit<AudioSourceDefinition<TSchema>, 'id'>>),
+            ...patch,
         });
     }
 
@@ -389,7 +387,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         if (hasOwnKeys(patch)) {
             this.upsertSource({
                 id: sourceId,
-                ...(patch as AudioPatchToDefinition<Omit<AudioSourceDefinition<TSchema>, 'id'>>),
+                ...patch,
             });
         }
 

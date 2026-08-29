@@ -20,14 +20,6 @@ export type AudioJsonObject = JsonObject;
 export type AudioJsonArray = JsonArray;
 export type AudioJsonValue = JsonValue;
 
-export type AudioPatch<T> = T extends (...args: never[]) => unknown
-    ? never
-    : T extends ReadonlyArray<infer TItem>
-      ? readonly TItem[]
-      : T extends object
-        ? { readonly [TKey in keyof T]?: AudioPatch<T[TKey]> }
-        : T;
-
 export interface AudioVector3 extends IVec3Like {}
 
 export type AudioDistanceModel = 'none' | 'linear' | 'inverse' | 'exponential';
@@ -142,7 +134,10 @@ export interface AudioBusDefinition {
     readonly metadata?: Readonly<Record<string, AudioJsonValue>>;
 }
 
-export type AudioBusPatch = AudioPatch<Omit<AudioBusDefinition, 'id'>>;
+// Patch aliases are shallow by design: the registries merge top-level fields and replace
+// nested objects wholesale, so a patch must carry a complete value for any object field.
+// `AudioBusPatch`, `AudioListenerPatch` and `AudioSourcePatch` all follow this contract.
+export type AudioBusPatch = Partial<Omit<AudioBusDefinition, 'id'>>;
 
 export interface AudioBusState {
     readonly id: AudioBusId;
@@ -181,7 +176,7 @@ export interface AudioListenerDescriptor {
     readonly metadata?: Readonly<Record<string, AudioJsonValue>>;
 }
 
-export type AudioListenerPatch = AudioPatch<Omit<AudioListenerDescriptor, 'id'>>;
+export type AudioListenerPatch = Partial<Omit<AudioListenerDescriptor, 'id'>>;
 
 export interface AudioListenerState {
     readonly id: AudioListenerId;
@@ -225,7 +220,7 @@ export interface AudioSourceDefinition<TSchema extends AudioAssetSchema = AudioA
     readonly metadata?: Readonly<Record<string, AudioJsonValue>>;
 }
 
-export type AudioSourcePatch<TSchema extends AudioAssetSchema = AudioAssetSchema> = AudioPatch<
+export type AudioSourcePatch<TSchema extends AudioAssetSchema = AudioAssetSchema> = Partial<
     Omit<AudioSourceDefinition<TSchema>, 'id'>
 >;
 
