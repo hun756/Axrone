@@ -312,3 +312,89 @@ describe('syncPlaybackSpatialState', () => {
         expect(panner.positionX.value).toBe(5);
     });
 });
+
+// A node created by another realm's AudioContext (Worker / OffscreenCanvas / iframe) has
+// the full PannerNode surface but a different constructor identity, so `instanceof`
+// rejects it and the source silently loses spatialization. Detection must key on shape.
+describe('syncPlaybackSpatialState — realm-agnostic panner detection', () => {
+    const makeSource = (pan: number): AudioSpatialSourceState => ({
+        muted: false,
+        volume: 1,
+        pan,
+        spatial: { mode: '3d', position: { x: 7, y: 8, z: 9 } },
+    });
+
+    const makeListener = (): AudioSpatialListenerState => ({
+        enabled: true,
+        position: { x: 0, y: 0, z: 0 },
+        forward: { x: 0, y: 0, z: -1 },
+        up: { x: 0, y: 1, z: 0 },
+    });
+
+    it('writes position to a foreign-realm panner that is not instanceof PannerNode', () => {
+        const foreignPanner = {
+            distanceModel: 'inverse',
+            panningModel: 'equalpower',
+            refDistance: 1,
+            maxDistance: 10000,
+            rolloffFactor: 1,
+            coneInnerAngle: 360,
+            coneOuterAngle: 360,
+            coneOuterGain: 0,
+            positionX: new FakeAudioParam(0),
+            positionY: new FakeAudioParam(0),
+            positionZ: new FakeAudioParam(0),
+            orientationX: new FakeAudioParam(1),
+            orientationY: new FakeAudioParam(0),
+            orientationZ: new FakeAudioParam(0),
+        };
+
+        expect(foreignPanner).not.toBeInstanceOf(PannerNode);
+
+        const playback: AudioSpatialPlaybackNodes = {
+            gainNode: new FakeGainNode() as unknown as GainNode,
+            attenuationNode: new FakeGainNode() as unknown as GainNode,
+            spatialNode: foreignPanner as unknown as PannerNode,
+        };
+
+        syncPlaybackSpatialState(playback, makeSource(0), makeListener());
+
+        expect(foreignPanner.positionX.value).toBe(7);
+        expect(foreignPanner.positionY.value).toBe(8);
+        expect(foreignPanner.positionZ.value).toBe(9);
+    });
+
+    it('still drives the legacy setPosition API when positionX is absent', () => {
+        const calls: number[][] = [];
+        const legacyPanner = {
+            distanceModel: 'inverse',
+            panningModel: 'equalpower',
+            setPosition: (x: number, y: number, z: number) => calls.push([x, y, z]),
+            setOrientation: (x: number, y: number, z: number) => calls.push([x, y, z]),
+        };
+
+        const playback: AudioSpatialPlaybackNodes = {
+            gainNode: new FakeGainNode() as unknown as GainNode,
+            attenuationNode: new FakeGainNode() as unknown as GainNode,
+            spatialNode: legacyPanner as unknown as PannerNode,
+        };
+
+        syncPlaybackSpatialState(playback, makeSource(0), makeListener());
+
+        expect(calls[0]).toEqual([7, 8, 9]);
+    });
+
+    it('writes pan on a foreign-realm stereo panner', () => {
+        const foreignStereo = { pan: new FakeAudioParam(0) };
+
+        const playback: AudioSpatialPlaybackNodes = {
+            gainNode: new FakeGainNode() as unknown as GainNode,
+            attenuationNode: new FakeGainNode() as unknown as GainNode,
+            spatialNode: foreignStereo as unknown as StereoPannerNode,
+        };
+
+        syncPlaybackSpatialState(playback, { muted: false, volume: 1, pan: -0.4 }, makeListener());
+
+        expect(foreignStereo.pan.value).toBe(-0.4);
+    });
+});
