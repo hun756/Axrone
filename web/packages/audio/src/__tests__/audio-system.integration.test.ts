@@ -440,3 +440,67 @@ describe('AudioSystem patch semantics — nested replacement is explicit', () =>
         );
     });
 });
+
+// A play request may carry a timed stop (durationSeconds) so only part of a long clip is
+// heard. pauseSource dropped it: resume restarted the node without a duration and the rest
+// of the clip played, turning a 0.5s sting into its full length.
+describe('AudioSystem sub-clip scheduling survives pause and resume', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const createSting = async (durationSeconds: number) => {
+        const context = new FakeAudioContext();
+        // 2 second clip
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertSource({
+            id: 'sting',
+            clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer },
+        });
+        await system.playSource('sting', { durationSeconds });
+        return { context, system };
+    };
+
+    it('resumes with only the time left in the sub-clip', async () => {
+        const { context, system } = await createSting(0.5);
+        const sourceNode = context.bufferSourceNodes.at(-1)!;
+        expect(sourceNode.startCalls.at(-1)?.duration).toBeCloseTo(0.5, 5);
+
+        context.advance(0.3);
+        system.pauseSource('sting');
+        await system.resumeSource('sting');
+
+        const resumedNode = context.bufferSourceNodes.at(-1)!;
+        expect(resumedNode).not.toBe(sourceNode);
+        expect(resumedNode.startCalls.at(-1)?.offset).toBeCloseTo(0.3, 5);
+        expect(resumedNode.startCalls.at(-1)?.duration).toBeCloseTo(0.2, 5);
+    });
+
+    it('resumes without a timed stop when the original play had none', async () => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertSource({
+            id: 'music',
+            clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer },
+        });
+        await system.playSource('music');
+
+        context.advance(0.4);
+        system.pauseSource('music');
+        await system.resumeSource('music');
+
+        expect(context.bufferSourceNodes.at(-1)!.startCalls.at(-1)?.duration).toBeUndefined();
+    });
+
+    it('clears a pending sub-clip stop when the source is stopped', async () => {
+        const { context, system } = await createSting(0.5);
+        context.advance(0.1);
+        system.pauseSource('sting');
+        system.stopSource('sting');
+
+        await system.playSource('sting');
+        expect(context.bufferSourceNodes.at(-1)!.startCalls.at(-1)?.duration).toBeUndefined();
+    });
+});
