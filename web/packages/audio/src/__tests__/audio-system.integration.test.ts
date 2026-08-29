@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { createRegisteredAudioClipSelector } from '../asset';
 import { createAudioSystem } from '../system';
 import {
     FakeAudioBuffer,
@@ -548,5 +549,61 @@ describe('AudioSystem snapshot type guards discriminate', () => {
         await target.restore(snapshot);
 
         expect(target.getBus('sfx')?.volume).toBe(0.4);
+    });
+});
+
+// The audit measured a play against an unresolvable clip reporting playbackState 'idle',
+// zero console errors and playbackErrorCount 0 — total silence. Resolution now happens
+// inside the guarded region, so every failure path emits source:error and throws a typed
+// AudioSourceError that carries the original cause.
+describe('AudioSystem playback failure reporting', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const createSystem = () =>
+        createAudioSystem({ context: new FakeAudioContext() as unknown as AudioContext });
+
+    it('emits source:error when a clip cannot be resolved', async () => {
+        const system = createSystem();
+        system.upsertSource({ id: 'ghost', clip: createRegisteredAudioClipSelector('nope') });
+
+        const errors: Array<{ operation: string; reason: unknown }> = [];
+        system.events.on('source:error', (event) => errors.push(event));
+
+        await expect(system.playSource('ghost')).rejects.toMatchObject({
+            code: 'audio.source.play-failed',
+        });
+
+        expect(errors).toHaveLength(1);
+        expect(errors[0].operation).toBe('play');
+        expect(system.getDiagnostics().counters.playbackErrorCount).toBe(1);
+    });
+
+    it('keeps the original failure reachable as the cause', async () => {
+        const system = createSystem();
+        system.upsertSource({ id: 'ghost2', clip: createRegisteredAudioClipSelector('nope') });
+
+        const error = await system.playSource('ghost2').then(
+            () => null,
+            (reason: unknown) => reason as Error & { cause?: Error }
+        );
+
+        expect(error).not.toBeNull();
+        expect(error!.cause?.constructor.name).toBe('AudioAssetError');
+    });
+
+    it('reports a resume failure with the resume operation', async () => {
+        const system = createSystem();
+        system.upsertSource({ id: 'resumer', clip: createRegisteredAudioClipSelector('nope') });
+
+        const errors: string[] = [];
+        system.events.on('source:error', (event) => errors.push(event.operation));
+
+        await expect(system.resumeSource('resumer')).rejects.toMatchObject({
+            code: 'audio.source.resume-failed',
+        });
+
+        expect(errors).toEqual(['resume']);
     });
 });
