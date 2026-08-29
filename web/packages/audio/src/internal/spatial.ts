@@ -12,6 +12,7 @@ import {
     DEFAULT_LISTENER_UP,
     isFiniteNumber,
     isObject,
+    isVector3Equal,
     normalizeVector3,
 } from './shared';
 
@@ -83,6 +84,68 @@ export const cloneSpatialization = (
         coneOuterAngle: value.coneOuterAngle,
         coneOuterGain: value.coneOuterGain,
     };
+};
+
+/**
+ * Optional vectors need reference equality first: isVector3Equal deliberately reports an
+ * absent side as unequal, and both sides being absent is the common case for a 3d spatial
+ * that sets no orientation. Without this it would compare as changed on every frame.
+ */
+const isOptionalVector3Equal = (
+    left: AudioVector3 | undefined,
+    right: AudioVector3 | undefined
+): boolean => left === right || isVector3Equal(left, right);
+
+export const isAttenuationEqual = (
+    left: AudioSpatialAttenuation | undefined,
+    right: AudioSpatialAttenuation | undefined
+): boolean => {
+    if (left === right) {
+        return true;
+    }
+    if (!left || !right) {
+        return false;
+    }
+
+    return (
+        left.model === right.model &&
+        left.refDistance === right.refDistance &&
+        left.maxDistance === right.maxDistance &&
+        left.rolloffFactor === right.rolloffFactor &&
+        left.minGain === right.minGain
+    );
+};
+
+export const isSpatializationEqual = (
+    left: AudioSpatialization | undefined,
+    right: AudioSpatialization | undefined
+): boolean => {
+    if (left === right) {
+        return true;
+    }
+    if (!left || !right || left.mode !== right.mode) {
+        return false;
+    }
+    if (!isOptionalVector3Equal(left.position, right.position)) {
+        return false;
+    }
+    if (!isAttenuationEqual(left.attenuation, right.attenuation)) {
+        return false;
+    }
+    if (left.mode === '2d' && right.mode === '2d') {
+        return left.pan === right.pan;
+    }
+    if (left.mode === '3d' && right.mode === '3d') {
+        return (
+            isOptionalVector3Equal(left.orientation, right.orientation) &&
+            left.panningModel === right.panningModel &&
+            left.coneInnerAngle === right.coneInnerAngle &&
+            left.coneOuterAngle === right.coneOuterAngle &&
+            left.coneOuterGain === right.coneOuterGain
+        );
+    }
+
+    return false;
 };
 
 export const normalizeAttenuation = (

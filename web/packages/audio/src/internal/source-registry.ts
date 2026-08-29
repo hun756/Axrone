@@ -1,4 +1,4 @@
-import { toAudioClipSelector } from '../asset';
+import { toAudioClipSelector, isClipSelectorEqual } from '../asset';
 import { AudioSourceError } from '../errors';
 import {
     MASTER_AUDIO_BUS_ID,
@@ -16,8 +16,9 @@ import type { InternalPlayback, InternalSource } from './runtime';
 import {
     cloneMetadata,
     isFiniteNumber,
+    isMetadataEqual,
 } from './shared';
-import { cloneSpatialization } from './spatial';
+import { cloneSpatialization, isSpatializationEqual } from './spatial';
 
 export interface AudioSourceRegistryOptions {
     readonly normalizeGain: (
@@ -39,6 +40,16 @@ export class AudioSourceRegistry<TSchema extends AudioAssetSchema = AudioAssetSc
 
     #sourceSequence = 0;
     #oneShotSequence = 0;
+    #mutationSequence = 0;
+
+    /**
+     * Advances only when an upsert actually changed a field. Lets callers detect real edits
+     * without the registry widening its return type, so a per-frame re-upsert of an
+     * unchanged descriptor costs nothing beyond the lookup.
+     */
+    get mutationSequence(): number {
+        return this.#mutationSequence;
+    }
 
     constructor(options: AudioSourceRegistryOptions) {
         this.#normalizeGain = options.normalizeGain;
@@ -75,6 +86,7 @@ export class AudioSourceRegistry<TSchema extends AudioAssetSchema = AudioAssetSc
                 ? normalizeAudioSourceId(definition.id)
                 : this.#nextManagedId();
         let source = this.#sources.get(id);
+        const isNew = source === undefined;
 
         if (!source) {
             source = {
@@ -98,52 +110,90 @@ export class AudioSourceRegistry<TSchema extends AudioAssetSchema = AudioAssetSc
             this.#sources.set(id, source);
         }
 
+        let changed = isNew;
+
         if (definition.busId !== undefined) {
             const nextBusId = normalizeAudioBusId(definition.busId);
             options.requireBus(nextBusId);
             if (source.busId !== nextBusId) {
                 source.busId = nextBusId;
+                changed = true;
                 if (source.active) {
                     options.reconnectPlaybackOutput?.(source.active, nextBusId);
                 }
             }
         }
         if (definition.clip !== undefined) {
-            source.clip = toAudioClipSelector(definition.clip);
+            const nextClip = toAudioClipSelector(definition.clip);
+            if (!isClipSelectorEqual(source.clip, nextClip)) {
+                source.clip = nextClip;
+                changed = true;
+            }
         }
         if (definition.volume !== undefined) {
-            source.volume = this.#normalizeGain(definition.volume, 'audio.invalid-gain');
+            const nextVolume = this.#normalizeGain(definition.volume, 'audio.invalid-gain');
+            if (source.volume !== nextVolume) {
+                source.volume = nextVolume;
+                changed = true;
+            }
         }
-        if (definition.muted !== undefined) {
+        if (definition.muted !== undefined && source.muted !== definition.muted) {
             source.muted = definition.muted;
+            changed = true;
         }
-        if (definition.loop !== undefined) {
+        if (definition.loop !== undefined && source.loop !== definition.loop) {
             source.loop = definition.loop;
+            changed = true;
         }
-        if (definition.autoplay !== undefined) {
+        if (definition.autoplay !== undefined && source.autoplay !== definition.autoplay) {
             source.autoplay = definition.autoplay;
+            changed = true;
         }
         if (definition.playbackRate !== undefined) {
-            source.playbackRate = this.#normalizePlaybackRate(definition.playbackRate);
+            const nextRate = this.#normalizePlaybackRate(definition.playbackRate);
+            if (source.playbackRate !== nextRate) {
+                source.playbackRate = nextRate;
+                changed = true;
+            }
         }
-        if (definition.detuneCents !== undefined && isFiniteNumber(definition.detuneCents)) {
+        if (
+            definition.detuneCents !== undefined &&
+            isFiniteNumber(definition.detuneCents) &&
+            source.detuneCents !== definition.detuneCents
+        ) {
             source.detuneCents = definition.detuneCents;
+            changed = true;
         }
         if (definition.pan !== undefined) {
-            source.pan = this.#normalizePan(definition.pan);
+            const nextPan = this.#normalizePan(definition.pan);
+            if (source.pan !== nextPan) {
+                source.pan = nextPan;
+                changed = true;
+            }
         }
         if (definition.spatial !== undefined) {
-            source.spatial = cloneSpatialization(definition.spatial);
+            if (!isSpatializationEqual(source.spatial, definition.spatial)) {
+                source.spatial = cloneSpatialization(definition.spatial);
+                changed = true;
+            }
         }
         if (definition.startOffsetSeconds !== undefined) {
             const offset = this.#normalizeTime(definition.startOffsetSeconds);
-            source.startOffsetSeconds = offset;
-            if (!source.active) {
-                source.currentOffsetSeconds = offset;
+            if (source.startOffsetSeconds !== offset) {
+                source.startOffsetSeconds = offset;
+                changed = true;
+                if (!source.active) {
+                    source.currentOffsetSeconds = offset;
+                }
             }
         }
-        if (definition.metadata !== undefined) {
+        if (definition.metadata !== undefined && !isMetadataEqual(source.metadata, definition.metadata)) {
             source.metadata = cloneMetadata(definition.metadata);
+            changed = true;
+        }
+
+        if (changed) {
+            this.#mutationSequence += 1;
         }
 
         return source;

@@ -126,6 +126,34 @@ export const toAudioClipSelector = <TSchema extends AudioAssetSchema = AudioAsse
     };
 };
 
+/**
+ * Whether two resolved clip selectors point at the same clip. A per-frame descriptor re-upsert
+ * must not look like a clip change, so `registered` compares by id while the inline and asset
+ * payloads compare by reference — a stable caller hands back the same object every time.
+ */
+export const isClipSelectorEqual = <TSchema extends AudioAssetSchema = AudioAssetSchema>(
+    left: AudioClipSelector<TSchema> | undefined,
+    right: AudioClipSelector<TSchema> | undefined
+): boolean => {
+    if (left === right) {
+        return true;
+    }
+    if (!left || !right || left.kind !== right.kind) {
+        return false;
+    }
+
+    switch (left.kind) {
+        case 'registered':
+            return right.kind === 'registered' && left.clipId === right.clipId;
+        case 'inline':
+            return right.kind === 'inline' && left.clip === right.clip;
+        case 'asset':
+            return right.kind === 'asset' && left.selector === right.selector;
+        default:
+            return false;
+    }
+};
+
 export const toAudioClipSelectorFromRecord = <TSchema extends AudioAssetSchema = AudioAssetSchema>(
     value: AudioClipAssetSelector<TSchema> | AssetRecord<TSchema>
 ): AudioClipSelector<TSchema> => {

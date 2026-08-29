@@ -306,6 +306,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
 
     upsertSource(definition: AudioSourceDefinition<TSchema>): AudioSourceState<TSchema> {
         this.#assertNotDisposed();
+        const mutationsBefore = this.#sources.mutationSequence;
         const source = this.#sources.upsert(definition, {
             requireBus: (id) => {
                 this.#buses.require(id);
@@ -314,6 +315,12 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
                 this.#reconnectPlaybackOutput(playback, nextBusId);
             },
         });
+
+        // A per-frame re-upsert of an unchanged descriptor must not look like an edit: it
+        // used to emit source:upserted, re-sync the voice and re-arm autoplay every frame.
+        if (this.#sources.mutationSequence === mutationsBefore) {
+            return this.#snapshotSource(source);
+        }
 
         this.#syncSource(source);
         if (source.autoplay && source.playbackState === 'idle' && source.clip) {
