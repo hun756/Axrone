@@ -504,3 +504,49 @@ describe('AudioSystem sub-clip scheduling survives pause and resume', () => {
         expect(context.bufferSourceNodes.at(-1)!.startCalls.at(-1)?.duration).toBeUndefined();
     });
 });
+
+// AudioMixerSnapshot and AudioSystemSnapshot both carry a `buses` array, so the mixer guard
+// accepted a whole system snapshot and applied it bus-by-bus. The two shapes now carry
+// explicit discriminators, which also matters because snapshots are the save/load format.
+describe('AudioSystem snapshot type guards discriminate', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const createSystem = () =>
+        createAudioSystem({ context: new FakeAudioContext() as unknown as AudioContext });
+
+    it('rejects a system snapshot handed to applyMixerSnapshot', () => {
+        const system = createSystem();
+
+        expect(() => system.applyMixerSnapshot(system.snapshot() as never)).toThrow(
+            /snapshot/i
+        );
+    });
+
+    it('rejects a mixer snapshot handed to restore', async () => {
+        const system = createSystem();
+
+        await expect(system.restore(system.captureMixerSnapshot() as never)).rejects.toThrow(
+            /snapshot/i
+        );
+    });
+
+    it('carries a discriminator on every snapshot it produces', () => {
+        const system = createSystem();
+
+        expect(system.captureMixerSnapshot().kind).toBe('audio.mixer-snapshot');
+        expect(system.snapshot().kind).toBe('audio.system-snapshot');
+    });
+
+    it('still round-trips its own system snapshot through restore', async () => {
+        const system = createSystem();
+        system.upsertBus({ id: 'sfx', volume: 0.4 });
+        const snapshot = system.snapshot();
+
+        const target = createSystem();
+        await target.restore(snapshot);
+
+        expect(target.getBus('sfx')?.volume).toBe(0.4);
+    });
+});
