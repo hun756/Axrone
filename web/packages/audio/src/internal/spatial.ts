@@ -28,6 +28,8 @@ export interface AudioSpatialPlaybackNodes {
     readonly gainNode: GainNode;
     readonly attenuationNode: GainNode;
     readonly spatialNode?: StereoPannerNode | PannerNode;
+    /** Present on a 3d voice that has a pan; a PannerNode cannot carry one itself. */
+    readonly panNode?: StereoPannerNode;
     /** Last written value per param; lets a sync skip writes for values that did not move. */
     lastSourceGain?: number;
     lastAttenuationGain?: number;
@@ -406,5 +408,15 @@ export const syncPlaybackSpatialState = (
     );
     if (isPannerNode(playback.spatialNode)) {
         applyPannerState(playback.spatialNode, source.spatial, position, orientation);
+    }
+    if (playback.panNode) {
+        // Audio3DSpatialization has no pan of its own — spatial.pan is a 2D concept — so the
+        // 3d stage carries the source-level offset alone.
+        playback.lastPan = rampParam(
+            playback.panNode.pan,
+            clamp(source.pan, -1, 1),
+            playback.lastPan,
+            atTime
+        );
     }
 };

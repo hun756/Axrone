@@ -55,6 +55,9 @@ export interface InternalPlayback<TSchema extends AudioAssetSchema = AudioAssetS
     readonly gainNode: GainNode;
     readonly attenuationNode: GainNode;
     readonly spatialNode?: StereoPannerNode | PannerNode;
+    /** Explicit left/right offset, inserted after a 3d PannerNode which cannot itself take one. */
+    readonly panNode?: StereoPannerNode;
+    /** Whatever last feeds the bus, so a bus reconnection does not need to know the chain shape. */
     readonly outputNode: AudioNode;
     readonly clip: AudioClipRecord<TSchema>;
     readonly durationSeconds?: number;
