@@ -368,3 +368,75 @@ describe('AudioSystem integration', () => {
         expect(sourceNode!.connections.length).toBe(0);
     });
 });
+
+// The old recursive AudioPatch type made every nested field optional, so the incomplete
+// spatial patch below compiled while the registry replaced spatial wholesale — silently
+// destroying position, orientation and panningModel. The patch aliases are now honest
+// shallow Partials, which turns that data loss into a type error.
+describe('AudioSystem patch semantics — nested replacement is explicit', () => {
+    const createFixture = () => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        return {
+            system: createAudioSystem({ context: context as unknown as AudioContext }),
+            clip: { kind: 'buffer' as const, buffer: buffer as unknown as AudioBuffer },
+        };
+    };
+
+    it('leaves sibling spatial fields intact when a top-level primitive is patched', () => {
+        const { system, clip } = createFixture();
+        system.upsertSource({
+            id: 'p',
+            clip,
+            spatial: {
+                mode: '3d',
+                position: { x: 1, y: 2, z: 3 },
+                orientation: { x: 0, y: 0, z: -1 },
+                panningModel: 'HRTF',
+            },
+        });
+
+        const updated = system.updateSource('p', { volume: 0.25 });
+
+        expect(updated.volume).toBe(0.25);
+        expect(updated.spatial).toEqual({
+            mode: '3d',
+            position: { x: 1, y: 2, z: 3 },
+            orientation: { x: 0, y: 0, z: -1 },
+            panningModel: 'HRTF',
+        });
+    });
+
+    it('replaces spatial wholesale when a complete value is supplied', () => {
+        const { system, clip } = createFixture();
+        system.upsertSource({
+            id: 'q',
+            clip,
+            spatial: { mode: '3d', position: { x: 1, y: 2, z: 3 }, panningModel: 'HRTF' },
+        });
+
+        const updated = system.updateSource('q', {
+            spatial: { mode: '2d', position: { x: 8, y: 0, z: 0 }, pan: 0.5 },
+        });
+
+        expect(updated.spatial).toEqual({ mode: '2d', position: { x: 8, y: 0, z: 0 }, pan: 0.5 });
+    });
+
+    it('rejects an incomplete spatial patch at compile time', () => {
+        const { system, clip } = createFixture();
+        system.upsertSource({ id: 'r', clip });
+
+        // Self-validating: if the patch type ever regresses to deep-partial this line stops
+        // erroring, and the unused-directive error breaks the build.
+        // @ts-expect-error spatial requires a complete AudioSpatialization (mode is mandatory)
+        system.updateSource('r', { spatial: { attenuation: { refDistance: 5 } } });
+
+        // The guard is the compiler, not the runtime — the call above still executes, and
+        // cloneSpatialization keys on `mode === '2d'`, so an incomplete value coerces into a
+        // 3d spatial that has lost position, orientation and panningModel. Pinning the exact
+        // shape keeps the contract honest: a future real deep merge changes this on purpose.
+        expect(JSON.stringify(system.getSource('r')?.spatial)).toBe(
+            '{"mode":"3d","attenuation":{"refDistance":5}}'
+        );
+    });
+});
