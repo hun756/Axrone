@@ -769,3 +769,41 @@ describe('AudioSystem tracks browser-driven context state', () => {
         expect(system.status).toBe('disposed');
     });
 });
+
+// A PannerNode takes a position, not a left/right offset, and playback used to allocate
+// either a Panner or a StereoPanner — so `pan` on a 3D source did nothing, silently.
+describe('AudioSystem 3D sources honour an authored pan', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const play3D = async (pan?: number) => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertSource({
+            id: 'positional',
+            clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer },
+            ...(pan === undefined ? {} : { pan }),
+            spatial: { mode: '3d', position: { x: 3, y: 0, z: 0 } },
+        });
+        await system.playSource('positional');
+        system.refreshSpatialAudio();
+        return { context, system };
+    };
+
+    it('routes a non-zero pan through a dedicated stereo stage', async () => {
+        const { context } = await play3D(-0.6);
+
+        expect(context.pannerNodes).toHaveLength(1);
+        expect(context.stereoPannerNodes.some((node) => node.pan.value === -0.6)).toBe(true);
+    });
+
+    it('spends no extra node on a 3D voice that has no pan', async () => {
+        const { context } = await play3D();
+
+        // only the master bus creates a stereo panner at construction
+        expect(context.stereoPannerNodes).toHaveLength(1);
+        expect(context.pannerNodes).toHaveLength(1);
+    });
+});
