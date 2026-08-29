@@ -201,3 +201,52 @@ describe('toAudioClipSelectorFromRecord', () => {
     });
 });
 
+// AssetSelector<TSchema> is a closed union (asset-core types.ts:126-134):
+// string | AssetReference | AssetVersionedReference | AssetRecord | AssetLookupByKey.
+// Anything outside it can never resolve, but toAudioClipSelector wrapped it as an asset
+// selector anyway and the failure surfaced later, in the async decode path, detached from
+// the call that caused it.
+describe('toAudioClipSelector — rejects inputs that can never resolve', () => {
+    const rejected: Array<[string, unknown]> = [
+        ['a number', 42],
+        ['a boolean', true],
+        ['an empty string', ''],
+        ['a whitespace-only string', '   '],
+        ['an array', []],
+        ['an empty object', {}],
+        ['an object with unrelated keys', { wrong: 'shape' }],
+        ['a reference without a token', { kind: 'audioClip', id: 'asset-1' }],
+        ['a malformed registered selector', { kind: 'registered', clipId: 7 }],
+        ['a malformed asset wrapper', { kind: 'asset' }],
+    ];
+
+    for (const [label, input] of rejected) {
+        it(`returns undefined for ${label}`, () => {
+            expect(toAudioClipSelector(input as never)).toBeUndefined();
+        });
+    }
+});
+
+describe('toAudioClipSelector — still accepts every valid AssetSelector member', () => {
+    it('accepts a non-empty string as an asset key', () => {
+        expect(toAudioClipSelector('music/track-01')).toEqual({
+            kind: 'asset',
+            selector: 'music/track-01',
+        });
+    });
+
+    it('accepts AssetLookupByKey', () => {
+        const lookup = { key: 'music/track-01', kind: 'audioClip' };
+        expect(toAudioClipSelector(lookup as never)?.kind).toBe('asset');
+    });
+
+    it('accepts an AssetReference produced by createAudioClipAssetReference', () => {
+        const reference = createAudioClipAssetReference('clip-1' as never);
+        expect(toAudioClipSelector(reference)?.kind).toBe('asset');
+    });
+
+    it('accepts a full AssetRecord-shaped selector', () => {
+        const record = { kind: 'audioClip', data: { kind: 'url', url: 'https://x/y.mp3' } };
+        expect(toAudioClipSelector(record as never)?.kind).toBe('asset');
+    });
+});
