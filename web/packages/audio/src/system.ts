@@ -395,31 +395,35 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
             throw this.#configurationError({ code: 'audio.invalid-clip', value: source.clip });
         }
 
-        if (this.#autoResume && this.context.state === 'suspended') {
-            await this.resume();
-        }
-
-        if (source.active) {
-            if (replace === false) {
-                return this.#createPlaybackHandle(sourceId, source.playSequence);
-            }
-            this.stopSource(sourceId);
-        }
-
-        const clip = await this.#clips.resolveSelector(source.clip);
-        const bus = this.#buses.require(source.busId);
-        const normalizedOffset = this.#normalizeOffset(
-            offsetSeconds ?? source.currentOffsetSeconds,
-            clip,
-            source.loop
-        );
-        const normalizedWhen =
-            when !== undefined ? this.#normalizeTime(when) : this.context.currentTime;
-        const normalizedDuration =
-            durationSeconds !== undefined ? this.#normalizeTime(durationSeconds) : undefined;
-        const sequence = ++this.#playSequence;
-
+        let sequence = 0;
+        // Everything fallible sits in one try so that no failure path can end up silent:
+        // a clip that cannot be fetched or decoded used to reject from outside this block,
+        // emitting no source:error and leaving playbackErrorCount at zero.
         try {
+            if (this.#autoResume && this.context.state === 'suspended') {
+                await this.resume();
+            }
+
+            if (source.active) {
+                if (replace === false) {
+                    return this.#createPlaybackHandle(sourceId, source.playSequence);
+                }
+                this.stopSource(sourceId);
+            }
+
+            const clip = await this.#clips.resolveSelector(source.clip);
+            const bus = this.#buses.require(source.busId);
+            const normalizedOffset = this.#normalizeOffset(
+                offsetSeconds ?? source.currentOffsetSeconds,
+                clip,
+                source.loop
+            );
+            const normalizedWhen =
+                when !== undefined ? this.#normalizeTime(when) : this.context.currentTime;
+            const normalizedDuration =
+                durationSeconds !== undefined ? this.#normalizeTime(durationSeconds) : undefined;
+            sequence = ++this.#playSequence;
+
             source.active = this.#playbackRuntime.startPlayback(source, {
                 sequence,
                 clip,
@@ -431,6 +435,13 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
                     this.#handleEnded(source.id, sequence);
                 },
             });
+
+            source.playSequence = sequence;
+            source.playbackState = 'playing';
+            source.currentOffsetSeconds = normalizedOffset;
+            source.durationSeconds = clip.durationSeconds;
+            // The new node owns the timed stop now; the captured window is spent.
+            source.resumeDurationSeconds = undefined;
         } catch (error) {
             source.playbackState = 'stopped';
             this.#emit({
@@ -443,19 +454,12 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
                 source: this.getSource(sourceId),
             });
             throw new AudioSourceError(
-                'audio.source.play-failed',
-                `Failed to play audio source ${sourceId}`,
+                operation === 'resume' ? 'audio.source.resume-failed' : 'audio.source.play-failed',
+                `Failed to ${operation} audio source ${sourceId}`,
                 sourceId,
                 { cause: error instanceof Error ? error : new Error(String(error)) }
             );
         }
-
-        source.playSequence = sequence;
-        source.playbackState = 'playing';
-        source.currentOffsetSeconds = normalizedOffset;
-        source.durationSeconds = clip.durationSeconds;
-        // The new node owns the timed stop now; the captured window is spent.
-        source.resumeDurationSeconds = undefined;
 
         this.#syncSource(source);
         this.#emit({
