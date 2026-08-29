@@ -288,7 +288,11 @@ export interface AudioMixerSnapshotBusState {
     readonly pan?: number;
 }
 
+// Snapshots are the save/load format, so both kinds carry an explicit discriminant in the
+// serialized shape rather than relying on structural inference — a mixer snapshot and a
+// system snapshot both have a `buses` array and were previously indistinguishable.
 export interface AudioMixerSnapshot {
+    readonly kind: 'audio.mixer-snapshot';
     readonly id?: AudioSnapshotId | string;
     readonly buses: readonly AudioMixerSnapshotBusState[];
 }
@@ -299,6 +303,7 @@ export interface AudioSnapshotTransitionOptions {
 }
 
 export interface AudioSystemSnapshot<TSchema extends AudioAssetSchema = AudioAssetSchema> {
+    readonly kind: 'audio.system-snapshot';
     readonly version: 1;
     readonly status: Exclude<AudioSystemStatus, 'disposed'>;
     readonly capturedAtEpochMs: number;

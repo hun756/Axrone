@@ -603,6 +603,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     snapshot(): AudioSystemSnapshot<TSchema> {
         this.#assertNotDisposed();
         const snapshot = Object.freeze({
+            kind: 'audio.system-snapshot' as const,
             version: 1,
             status: this.#status as Exclude<AudioSystemStatus, 'disposed'>,
             capturedAtEpochMs: Date.now(),
@@ -998,12 +999,15 @@ export const createAudioSystem = <TSchema extends AudioAssetSchema = AudioAssetS
 ): AudioSystem<TSchema> => new AudioSystem(options);
 
 export const isAudioMixerSnapshot = (value: unknown): value is AudioMixerSnapshot =>
-    isObject(value) && Array.isArray(value.buses);
+    isObject(value) &&
+    value.kind === 'audio.mixer-snapshot' &&
+    Array.isArray(value.buses);
 
 export const isAudioSystemSnapshot = <TSchema extends AudioAssetSchema = AudioAssetSchema>(
     value: unknown
 ): value is AudioSystemSnapshot<TSchema> =>
     isObject(value) &&
+    value.kind === 'audio.system-snapshot' &&
     value.version === 1 &&
     Array.isArray(value.buses) &&
     Array.isArray(value.listeners) &&
