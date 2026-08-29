@@ -79,7 +79,13 @@ export interface InternalSource<TSchema extends AudioAssetSchema = AudioAssetSch
     metadata: Readonly<Record<string, AudioJsonValue>>;
     playbackState: AudioSourceState<TSchema>['playbackState'];
     currentOffsetSeconds: number;
+    /** Clip length, surfaced through AudioSourceState. */
     durationSeconds?: number;
+    /**
+     * Seconds left of a timed sub-clip stop, captured on pause. Web Audio nodes cannot be
+     * paused, so resume rebuilds the node from an offset and needs the remaining window.
+     */
+    resumeDurationSeconds?: number;
     playSequence: number;
     active?: InternalPlayback<TSchema>;
 }

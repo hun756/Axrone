@@ -454,6 +454,8 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         source.playbackState = 'playing';
         source.currentOffsetSeconds = normalizedOffset;
         source.durationSeconds = clip.durationSeconds;
+        // The new node owns the timed stop now; the captured window is spent.
+        source.resumeDurationSeconds = undefined;
 
         this.#syncSource(source);
         this.#emit({
@@ -491,6 +493,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         }
 
         source.currentOffsetSeconds = this.#currentOffsetForSource(source);
+        source.resumeDurationSeconds = this.#remainingDurationForSource(source);
         source.playbackState = 'paused';
         source.active.control = 'pausing';
         this.#emit({
@@ -527,6 +530,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
                     source.id,
                     {
                     offsetSeconds: source.currentOffsetSeconds,
+                    durationSeconds: source.resumeDurationSeconds,
                     replace: true,
                     },
                     'source:resumed',
@@ -539,6 +543,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         this.#assertNotDisposed();
         const source = this.#sources.require(id);
         source.currentOffsetSeconds = 0;
+        source.resumeDurationSeconds = undefined;
         source.playbackState = 'stopped';
         this.#emit({
             type: 'source:stopped',
@@ -824,6 +829,16 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
 
     #reconnectPlaybackOutput(playback: InternalPlayback<TSchema>, nextBusId: string): void {
         this.#playbackRuntime.reconnectPlayback(playback, this.#buses.require(nextBusId).gainNode);
+    }
+
+    #remainingDurationForSource(source: InternalSource<TSchema>): number | undefined {
+        const playback = source.active;
+        if (!playback || playback.durationSeconds === undefined) {
+            return undefined;
+        }
+
+        const elapsed = Math.max(0, source.currentOffsetSeconds - playback.startOffsetSeconds);
+        return Math.max(0, playback.durationSeconds - elapsed);
     }
 
     #currentOffsetForSource(source: InternalSource<TSchema>): number {
