@@ -128,3 +128,4 @@ export {
 } from './system';
 
 export { AudioComponentBinder } from './component-binder';
+export type { AudioBinderCommandFailure } from './component-binder';
