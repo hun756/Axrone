@@ -11,6 +11,7 @@ import {
     DEFAULT_LISTENER_POSITION,
     DEFAULT_LISTENER_UP,
     isFiniteNumber,
+    isObject,
     normalizeVector3,
 } from './shared';
 
@@ -42,11 +43,19 @@ export const DEFAULT_ATTENUATION = Object.freeze({
     minGain: 0,
 } satisfies Required<AudioSpatialAttenuation>);
 
+// Shape checks, not `instanceof`: a node from another realm's AudioContext (Worker,
+// OffscreenCanvas, iframe) exposes the full API but a different constructor identity, and
+// rejecting it silently drops spatialization for that source. distanceModel/coneInnerAngle
+// exist on legacy *and* modern panners, so keying on them also keeps the legacy
+// setPosition branch reachable — which instanceof made untestable.
+const hasPannerShape = (value: Record<PropertyKey, unknown>): boolean =>
+    'distanceModel' in value || 'coneInnerAngle' in value;
+
 const isStereoPannerNode = (value: unknown): value is StereoPannerNode =>
-    typeof StereoPannerNode !== 'undefined' && value instanceof StereoPannerNode;
+    isObject(value) && 'pan' in value && !hasPannerShape(value);
 
 const isPannerNode = (value: unknown): value is PannerNode =>
-    typeof PannerNode !== 'undefined' && value instanceof PannerNode;
+    isObject(value) && hasPannerShape(value);
 
 export const cloneSpatialization = (
     value: AudioSpatialization | undefined
