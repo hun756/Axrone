@@ -14,6 +14,7 @@ import {
     isObject,
     isVector3Equal,
     normalizeVector3,
+    setParamValue,
 } from './shared';
 
 export interface AudioSpatialListenerState {
@@ -27,6 +28,10 @@ export interface AudioSpatialPlaybackNodes {
     readonly gainNode: GainNode;
     readonly attenuationNode: GainNode;
     readonly spatialNode?: StereoPannerNode | PannerNode;
+    /** Last written value per param; lets a sync skip writes for values that did not move. */
+    lastSourceGain?: number;
+    lastAttenuationGain?: number;
+    lastPan?: number;
 }
 
 export interface AudioSpatialSourceState {
@@ -309,17 +314,54 @@ export const applyPannerState = (
     }).setOrientation?.(orientation.x, orientation.y, orientation.z);
 };
 
+/**
+ * Write a spatial param with a short ramp instead of snapping `param.value`. Discontinuous
+ * writes are audible as zipper noise on any moving source; the first write of a param has no
+ * known baseline so it snaps, and an unchanged value is skipped entirely.
+ */
+const SPATIAL_SMOOTHING_SECONDS = 0.016;
+
+const rampParam = (
+    param: AudioParam,
+    value: number,
+    previous: number | undefined,
+    atTime: number
+): number => {
+    if (previous === value) {
+        return previous;
+    }
+
+    setParamValue(param, value, atTime, previous === undefined ? 0 : SPATIAL_SMOOTHING_SECONDS);
+    return value;
+};
+
 export const syncPlaybackSpatialState = (
     playback: AudioSpatialPlaybackNodes,
     source: AudioSpatialSourceState,
-    listener?: AudioSpatialListenerState
+    listener?: AudioSpatialListenerState,
+    atTime = 0
 ): void => {
-    playback.gainNode.gain.value = source.muted ? 0 : source.volume;
+    playback.lastSourceGain = rampParam(
+        playback.gainNode.gain,
+        source.muted ? 0 : source.volume,
+        playback.lastSourceGain,
+        atTime
+    );
 
     if (!source.spatial) {
-        playback.attenuationNode.gain.value = 1;
+        playback.lastAttenuationGain = rampParam(
+            playback.attenuationNode.gain,
+            1,
+            playback.lastAttenuationGain,
+            atTime
+        );
         if (isStereoPannerNode(playback.spatialNode)) {
-            playback.spatialNode.pan.value = source.pan;
+            playback.lastPan = rampParam(
+                playback.spatialNode.pan,
+                source.pan,
+                playback.lastPan,
+                atTime
+            );
         }
         return;
     }
@@ -327,15 +369,25 @@ export const syncPlaybackSpatialState = (
     if (source.spatial.mode === '2d') {
         const position = normalizeVector3(source.spatial.position, DEFAULT_LISTENER_POSITION);
         const listenerPosition = listener?.position ?? DEFAULT_LISTENER_POSITION;
-        playback.attenuationNode.gain.value = listener?.enabled
-            ? attenuationGainForDistance(distance2D(position, listenerPosition), source.spatial.attenuation)
-            : 1;
+        playback.lastAttenuationGain = rampParam(
+            playback.attenuationNode.gain,
+            listener?.enabled
+                ? attenuationGainForDistance(distance2D(position, listenerPosition), source.spatial.attenuation)
+                : 1,
+            playback.lastAttenuationGain,
+            atTime
+        );
         if (isStereoPannerNode(playback.spatialNode)) {
-            playback.spatialNode.pan.value = effectivePanFor2D(
-                position,
-                listenerPosition,
-                source.pan + (source.spatial.pan ?? 0),
-                source.spatial.attenuation
+            playback.lastPan = rampParam(
+                playback.spatialNode.pan,
+                effectivePanFor2D(
+                    position,
+                    listenerPosition,
+                    source.pan + (source.spatial.pan ?? 0),
+                    source.spatial.attenuation
+                ),
+                playback.lastPan,
+                atTime
             );
         }
         return;
@@ -344,9 +396,14 @@ export const syncPlaybackSpatialState = (
     const position = normalizeVector3(source.spatial.position, DEFAULT_LISTENER_POSITION);
     const orientation = normalizeVector3(source.spatial.orientation, DEFAULT_LISTENER_FORWARD);
     const listenerPosition = listener?.position ?? DEFAULT_LISTENER_POSITION;
-    playback.attenuationNode.gain.value = listener?.enabled
-        ? attenuationGainForDistance(distance3D(position, listenerPosition), source.spatial.attenuation)
-        : 1;
+    playback.lastAttenuationGain = rampParam(
+        playback.attenuationNode.gain,
+        listener?.enabled
+            ? attenuationGainForDistance(distance3D(position, listenerPosition), source.spatial.attenuation)
+            : 1,
+        playback.lastAttenuationGain,
+        atTime
+    );
     if (isPannerNode(playback.spatialNode)) {
         applyPannerState(playback.spatialNode, source.spatial, position, orientation);
     }

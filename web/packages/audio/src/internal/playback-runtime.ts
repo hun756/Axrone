@@ -99,7 +99,7 @@ export class AudioPlaybackRuntime<TSchema extends AudioAssetSchema = AudioAssetS
 
         source.active.sourceNode.playbackRate.value = source.playbackRate;
         source.active.sourceNode.detune.value = source.detuneCents;
-        syncPlaybackSpatialState(source.active, source, listener);
+        syncPlaybackSpatialState(source.active, source, listener, this.context.currentTime);
     }
 
     reconnectPlayback(playback: InternalPlayback<TSchema>, busNode: AudioNode): void {
