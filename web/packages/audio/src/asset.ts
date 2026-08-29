@@ -41,6 +41,26 @@ export const isAudioClipAssetData = (value: unknown): value is AudioClipAssetDat
     }
 };
 
+// AssetSelector<TSchema> is a closed union (asset-core types.ts:126-134):
+//   string | AssetReference | AssetVersionedReference | AssetRecord | AssetLookupByKey
+// so membership is decidable from the shape. A custom AudioAssetResolver is typed to
+// receive that union and cannot legally handle anything else, which is what makes this
+// check safe to enforce here rather than deferring to the resolver.
+const isAssetSelectorShape = (value: unknown): boolean => {
+    if (typeof value === 'string') {
+        return value.trim().length > 0;
+    }
+    if (!isObject(value) || Array.isArray(value)) {
+        return false;
+    }
+
+    const isReference = 'token' in value && typeof value.token === 'string';
+    const isLookupByKey = 'key' in value && typeof value.key === 'string';
+    const isRecord = 'kind' in value && 'data' in value;
+
+    return isReference || isLookupByKey || isRecord;
+};
+
 export const isAudioClipSelector = <TSchema extends AudioAssetSchema = AudioAssetSchema>(
     value: unknown
 ): value is AudioClipSelector<TSchema> => {
@@ -50,9 +70,9 @@ export const isAudioClipSelector = <TSchema extends AudioAssetSchema = AudioAsse
 
     switch (value.kind) {
         case 'registered':
-            return typeof value.clipId === 'string';
+            return typeof value.clipId === 'string' && value.clipId.trim().length > 0;
         case 'asset':
-            return 'selector' in value;
+            return 'selector' in value && isAssetSelectorShape(value.selector);
         case 'inline':
             return isAudioClipAssetData(value.clip);
         default:
@@ -91,6 +111,13 @@ export const toAudioClipSelector = <TSchema extends AudioAssetSchema = AudioAsse
 
     if (isAudioClipAssetData(value)) {
         return createInlineAudioClipSelector(value) as AudioClipSelector<TSchema>;
+    }
+
+    // Anything that is not a recognisable asset selector stops here: returning undefined
+    // makes registerClip/resolveClip throw audio.invalid-clip synchronously, at the call
+    // that caused it, instead of wrapping garbage and failing during async decode.
+    if (!isAssetSelectorShape(value)) {
+        return undefined;
     }
 
     return {

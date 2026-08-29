@@ -9,6 +9,7 @@ import {
     toAudioClipSelectorFromRecord,
 } from '../asset';
 import { FakeAudioBuffer, installFakeAudioGlobals } from './helpers/fake-audio-context';
+import { createAudioClipAssetReference } from '../reference';
 
 beforeAll(() => {
     installFakeAudioGlobals();
@@ -173,11 +174,16 @@ describe('toAudioClipSelector', () => {
         expect(selector!.kind).toBe('inline');
     });
 
-    it('wraps an asset selector shape as asset kind', () => {
-        const assetSelector = { kind: 'audioClip' as any, id: 'asset-1' } as any;
-        const selector = toAudioClipSelector(assetSelector);
+    it('wraps a valid asset selector shape as asset kind', () => {
+        const reference = createAudioClipAssetReference('clip-1' as never);
+        const selector = toAudioClipSelector(reference);
         expect(selector).toBeDefined();
         expect(selector!.kind).toBe('asset');
+    });
+
+    it('rejects a kind+id pair that is not an AssetReference because it has no token', () => {
+        // Used to be accepted and wrapped, then failed during async decode far from here.
+        expect(toAudioClipSelector({ kind: 'audioClip', id: 'asset-1' } as never)).toBeUndefined();
     });
 });
 
@@ -194,3 +200,4 @@ describe('toAudioClipSelectorFromRecord', () => {
         expect(selector.kind).toBe('asset');
     });
 });
+
