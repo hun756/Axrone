@@ -27,8 +27,12 @@ export const asAudioSnapshotId = (value: string): AudioSnapshotId => value as Au
 
 export const MASTER_AUDIO_BUS_ID = asAudioBusId('master');
 
+// Bus ids are retyped by hand across the Editor catalog, the Rust whitelist and scene
+// documents, so casing is author noise rather than identity — folding it keeps "Master"
+// and "master" on one mixer channel. The other ids stay case-sensitive: source ids double
+// as scene-node handles and clip ids as asset keys, where callers expect exact strings.
 export const normalizeAudioBusId = (value: string | AudioBusId): AudioBusId =>
-    asAudioBusId(normalizeIdentifier(String(value), 'Audio bus id'));
+    asAudioBusId(normalizeIdentifier(String(value), 'Audio bus id').toLowerCase());
 
 export const normalizeAudioClipId = (value: string | AudioClipId): AudioClipId =>
     asAudioClipId(normalizeIdentifier(String(value), 'Audio clip id'));
