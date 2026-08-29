@@ -607,3 +607,84 @@ describe('AudioSystem playback failure reporting', () => {
         expect(errors).toEqual(['resume']);
     });
 });
+
+// The binder re-applies every component descriptor each frame. Before change detection that
+// produced one source:upserted per source per frame — the audit measured 1800 events from 30
+// idle sources over 60 frames — and re-armed autoplay on each pass.
+describe('AudioSystem source upserts report only real changes', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const createFixture = () => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        return {
+            system: createAudioSystem({ context: context as unknown as AudioContext }),
+            clip: { kind: 'buffer' as const, buffer: buffer as unknown as AudioBuffer },
+        };
+    };
+
+    const countUpserts = (system: ReturnType<typeof createAudioSystem>) => {
+        let upserts = 0;
+        system.events.on('source:upserted', () => {
+            upserts += 1;
+        });
+        return () => upserts;
+    };
+
+    it('emits nothing when an identical descriptor is re-applied 60 times', () => {
+        const { system, clip } = createFixture();
+        const descriptor = { id: 'static', clip, volume: 0.5, pan: 0.2, loop: true };
+        system.upsertSource(descriptor);
+        const upserts = countUpserts(system);
+
+        for (let frame = 0; frame < 60; frame += 1) {
+            system.upsertSource(descriptor);
+        }
+
+        expect(upserts()).toBe(0);
+    });
+
+    it('treats an equal-valued spatial block rebuilt as a new object as unchanged', () => {
+        const { system, clip } = createFixture();
+        const spatial = () => ({
+            mode: '3d' as const,
+            position: { x: 1, y: 2, z: 3 },
+            orientation: { x: 0, y: 0, z: -1 },
+            attenuation: { model: 'inverse' as const, refDistance: 2, maxDistance: 200 },
+            panningModel: 'HRTF' as const,
+        });
+        system.upsertSource({ id: 'mover', clip, spatial: spatial() });
+        const upserts = countUpserts(system);
+
+        for (let frame = 0; frame < 60; frame += 1) {
+            system.upsertSource({ id: 'mover', clip, spatial: spatial() });
+        }
+
+        expect(upserts()).toBe(0);
+    });
+
+    it('emits exactly once when a moved position is applied', () => {
+        const { system, clip } = createFixture();
+        system.upsertSource({ id: 'mover2', clip, spatial: { mode: '3d', position: { x: 1, y: 2, z: 3 } } });
+        const upserts = countUpserts(system);
+
+        system.upsertSource({ id: 'mover2', clip, spatial: { mode: '3d', position: { x: 1, y: 2, z: 4 } } });
+        system.upsertSource({ id: 'mover2', clip, spatial: { mode: '3d', position: { x: 1, y: 2, z: 4 } } });
+
+        expect(upserts()).toBe(1);
+    });
+
+    it('still returns the full state for an unchanged upsert', () => {
+        const { system, clip } = createFixture();
+        system.upsertSource({ id: 'readable', clip, volume: 0.75 });
+        const upserts = countUpserts(system);
+
+        const state = system.upsertSource({ id: 'readable', clip, volume: 0.75 });
+
+        expect(upserts()).toBe(0);
+        expect(state.volume).toBe(0.75);
+        expect(state.id).toBe('readable');
+    });
+});
