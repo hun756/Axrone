@@ -536,6 +536,8 @@ export interface AudioDiagnosticsSnapshot<TSchema extends AudioAssetSchema = Aud
     readonly listenerCount: number;
     readonly sourceCount: number;
     readonly activePlaybackCount: number;
+    /** How many times the maxRealVoices ceiling forced a voice to give way. */
+    readonly voiceStealCount: number;
     readonly counters: AudioDiagnosticsCounters;
     readonly lastEvent?: AudioRuntimeEvent<TSchema>;
 }

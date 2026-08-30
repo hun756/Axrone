@@ -27,6 +27,8 @@ export interface AudioDiagnosticsState {
     readonly listenerCount: number;
     readonly sourceCount: number;
     readonly activePlaybackCount: number;
+    /** Owned by the system rather than derived from events, so it is passed through. */
+    readonly voiceStealCount: number;
 }
 
 export class AudioObservabilityRuntime<TSchema extends AudioAssetSchema = AudioAssetSchema> {
@@ -75,6 +77,7 @@ export class AudioObservabilityRuntime<TSchema extends AudioAssetSchema = AudioA
             listenerCount: state.listenerCount,
             sourceCount: state.sourceCount,
             activePlaybackCount: state.activePlaybackCount,
+            voiceStealCount: state.voiceStealCount,
             counters: Object.freeze({ ...this.#counters }),
             lastEvent: this.#lastEvent,
         });

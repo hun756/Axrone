@@ -194,11 +194,13 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
             busCount: this.listBuses().length,
             listenerCount: this.listListeners().length,
             sourceCount: this.listSources().length,
-            activePlaybackCount: [...this.#sources.values()].filter((source) => !!source.active).length,
+            activePlaybackCount: this.#occupantVoiceCount(),
+            voiceStealCount: this.#voiceStealCount,
         });
     }
 
     resetDiagnostics(): void {
+        this.#voiceStealCount = 0;
         this.#observability.reset();
     }
 
