@@ -73,8 +73,11 @@ describe('AudioSystem integration', () => {
 
         await system.playSource('laser');
 
-        const musicBusGain = context.gainNodes[1];
-        const sfxBusGain = context.gainNodes[2];
+        // Node creation order: [0] system global-volume gain, [1] master bus, then buses in
+        // upsert order. The differential assertion is the durable guard if that shifts again.
+        const firstBusOffset = 2;
+        const musicBusGain = context.gainNodes[firstBusOffset];
+        const sfxBusGain = context.gainNodes[firstBusOffset + 1];
         const playbackPanner = context.stereoPannerNodes.at(-1);
 
         expect(playbackPanner?.connections[0]).toBe(musicBusGain);
@@ -82,6 +85,7 @@ describe('AudioSystem integration', () => {
 
         system.updateSource('laser', { busId: 'sfx' });
 
+        expect(playbackPanner?.connections[0]).not.toBe(musicBusGain);
         expect(playbackPanner?.connections[0]).toBe(sfxBusGain);
         expect(system.getSource('laser')?.busId).toBe('sfx');
     });
@@ -807,3 +811,4 @@ describe('AudioSystem 3D sources honour an authored pan', () => {
         expect(context.pannerNodes).toHaveLength(1);
     });
 });
+
