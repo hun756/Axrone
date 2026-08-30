@@ -354,6 +354,20 @@ export interface AudioSystemOptions<TSchema extends AudioAssetSchema = AudioAsse
     readonly context?: AudioContext;
     readonly createContext?: () => AudioContext;
     readonly destination?: AudioNode;
+    /**
+     * Hardware preference, honoured only for a context this system creates — a supplied
+     * `context` is already bound to its device. Rejected loudly rather than coerced,
+     * because silently resampling a requested 96 kHz is a lie about the output path.
+     */
+    readonly sampleRate?: number;
+    /** Output latency target. The real knob Web Audio exposes; a fixed DSP buffer size is not. */
+    readonly latencyHint?: AudioContextLatencyCategory;
+    /**
+     * Ceiling on simultaneous playing voices. Exceeding it degrades the browser audio
+     * thread silently — dropouts, not an error — so the system steals instead.
+     * Omitted or 0 means unlimited.
+     */
+    readonly maxRealVoices?: number;
     readonly locale?: string;
     readonly messageResolver?: AudioMessageResolver;
     readonly assetDatabase?: AssetDatabase<TSchema>;
