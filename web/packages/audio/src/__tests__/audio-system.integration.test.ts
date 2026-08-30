@@ -812,3 +812,107 @@ describe('AudioSystem 3D sources honour an authored pan', () => {
     });
 });
 
+// globalVolume used to be stored, clamped and snapshotted but reached no node: master gain is
+// owned by the bus registry, so the one knob a settings menu would bind did nothing.
+describe('AudioSystem listener globalVolume drives output', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    it('attenuates the whole mix to silence at zero', () => {
+        const context = new FakeAudioContext();
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+
+        system.upsertListener({ id: 'main', active: true, globalVolume: 0 });
+
+        // gainNodes[0] is the system-level global gain stage.
+        expect(context.gainNodes[0].gain.value).toBe(0);
+        expect(system.activeListener?.globalVolume).toBe(0);
+    });
+
+    it('restores unity when the active listener volume returns to one', () => {
+        const context = new FakeAudioContext();
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertListener({ id: 'main', active: true, globalVolume: 0.25 });
+        expect(context.gainNodes[0].gain.value).toBe(0.25);
+
+        system.upsertListener({ id: 'main', active: true, globalVolume: 1 });
+
+        expect(context.gainNodes[0].gain.value).toBe(1);
+    });
+
+    it('follows the active listener when a different one takes over', () => {
+        const context = new FakeAudioContext();
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertListener({ id: 'quiet', active: true, globalVolume: 0.1 });
+        system.upsertListener({ id: 'loud', globalVolume: 0.9 });
+
+        system.setActiveListener('loud');
+
+        expect(context.gainNodes[0].gain.value).toBe(0.9);
+    });
+});
+
+// Exceeding a browser's simultaneous-voice capacity degrades the audio thread silently —
+// dropouts, no error — so the ceiling has to be enforced by the system, not discovered by QA.
+describe('AudioSystem real-voice ceiling', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const playMany = async (maxRealVoices: number, plays: number) => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const system = createAudioSystem({
+            context: context as unknown as AudioContext,
+            maxRealVoices,
+        });
+        for (let i = 0; i < plays; i += 1) {
+            system.upsertSource({
+                id: `v${i}`,
+                clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer },
+                volume: 0.2 + i / 100,
+            });
+            await system.playSource(`v${i}`);
+        }
+        return { context, system };
+    };
+
+    it('never holds more playing voices than the ceiling', async () => {
+        const { system } = await playMany(3, 12);
+
+        expect(system.getDiagnostics().activePlaybackCount).toBeLessThanOrEqual(3);
+    });
+
+    it('counts every steal it performs', async () => {
+        const { system } = await playMany(3, 12);
+
+        expect(system.getDiagnostics().voiceStealCount).toBe(9);
+    });
+
+    it('spends far fewer audio nodes than one chain per request', async () => {
+        const { context } = await playMany(4, 40);
+
+        // 40 unbounded plays would allocate ~160 nodes (source + 2 gains + panner each).
+        expect(context.bufferSourceNodes.length).toBe(40);
+        expect(context.gainNodes.length).toBeLessThan(40 * 4);
+    });
+
+    it('leaves the loudest voices standing', async () => {
+        const { system } = await playMany(2, 5);
+
+        const audible = ['v3', 'v4'].filter((id) => system.getSource(id)?.playbackState === 'playing');
+        expect(audible).toEqual(['v3', 'v4']);
+    });
+
+    it('is unlimited when the ceiling is omitted', async () => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertSource({ id: 'only', clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer } });
+        await system.playSource('only');
+
+        expect(system.getDiagnostics().voiceStealCount).toBe(0);
+        expect(system.getDiagnostics().activePlaybackCount).toBe(1);
+    });
+});
