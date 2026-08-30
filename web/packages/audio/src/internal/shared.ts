@@ -110,7 +110,14 @@ export const effectivePlaybackRate = (playbackRate: number, detuneCents: number)
 
 export const hasOwnKeys = (value: object): boolean => Object.keys(value).length > 0;
 
-export const resolveContextFactory = (): (() => AudioContext) => {
+export interface AudioContextHardwareOptions {
+    readonly sampleRate?: number;
+    readonly latencyHint?: AudioContextLatencyCategory;
+}
+
+export const resolveContextFactory = (
+    hardware: AudioContextHardwareOptions = {}
+): (() => AudioContext) => {
     const GlobalAudioContext =
         (globalThis as { AudioContext?: typeof AudioContext }).AudioContext ??
         (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -119,7 +126,21 @@ export const resolveContextFactory = (): (() => AudioContext) => {
         throw new AudioUnavailableError('No AudioContext implementation is available');
     }
 
-    return () => new GlobalAudioContext();
+    const contextOptions: AudioContextOptions = {};
+    if (hardware.sampleRate !== undefined) {
+        contextOptions.sampleRate = hardware.sampleRate;
+    }
+    if (hardware.latencyHint !== undefined) {
+        contextOptions.latencyHint = hardware.latencyHint;
+    }
+
+    // Passing an explicit undefined differs from omitting a key, so only build the
+    // options object when the caller actually asked for something.
+    if (Object.keys(contextOptions).length === 0) {
+        return () => new GlobalAudioContext();
+    }
+
+    return () => new GlobalAudioContext(contextOptions);
 };
 
 export const sleep = async (ms: number): Promise<void> => {
