@@ -25,6 +25,7 @@ import {
     isFiniteNumber,
     isObject,
     resolveContextFactory,
+    setParamValue,
     withRetry,
 } from './internal/shared';
 import {
@@ -67,6 +68,10 @@ import type {
     AudioSystemStatus,
 } from './types';
 
+// A volume change that lands as one discontinuous step is audible as a click, so the global
+// gain eases over roughly one frame instead.
+const GLOBAL_VOLUME_SMOOTHING_SECONDS = 0.016;
+
 export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     readonly context: AudioContext;
     readonly destination: AudioNode;
@@ -82,18 +87,39 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     readonly #observability = new AudioObservabilityRuntime<TSchema>();
     readonly #playbackRuntime: AudioPlaybackRuntime<TSchema>;
     readonly #sources: AudioSourceRegistry<TSchema>;
+    readonly #sink: AudioNode;
+    readonly #globalGain: GainNode;
+    readonly #maxRealVoices: number;
 
     #playSequence = 0;
     #status: AudioSystemStatus = 'idle';
     #contextState: AudioContextState = 'running';
+    #appliedGlobalVolume?: number;
+    #voiceStealCount = 0;
     #disposed = false;
 
     constructor(options: AudioSystemOptions<TSchema> = {}) {
         const ownsContext = !options.context;
-        const context = options.context ?? (options.createContext ?? resolveContextFactory())();
+        // sampleRate/latencyHint can only be honoured for a context we create; one supplied
+        // by the caller is already bound to its device. Unsupported rates are left to the
+        // browser to reject with its own RangeError rather than guessed at here.
+        const context =
+            options.context ??
+            (options.createContext ??
+                resolveContextFactory({
+                    sampleRate: options.sampleRate,
+                    latencyHint: options.latencyHint,
+                }))();
         this.context = context;
-        this.destination = options.destination ?? context.destination;
+        this.#sink = options.destination ?? context.destination;
+        // Buses feed this gain rather than the sink directly so the active listener's
+        // globalVolume has somewhere to live; Web Audio has no listener gain of its own.
+        this.#globalGain = context.createGain();
+        this.#globalGain.gain.value = 1;
+        this.#globalGain.connect(this.#sink);
+        this.destination = this.#globalGain;
         this.#ownsContext = ownsContext;
+        this.#maxRealVoices = Math.max(0, options.maxRealVoices ?? 0);
         this.#messageResolver = options.messageResolver ?? DEFAULT_AUDIO_MESSAGE_RESOLVER;
         this.#locale = options.locale ?? 'en';
         this.#autoResume = options.autoResume ?? true;
@@ -435,6 +461,12 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
                 when !== undefined ? this.#normalizeTime(when) : this.context.currentTime;
             const normalizedDuration =
                 durationSeconds !== undefined ? this.#normalizeTime(durationSeconds) : undefined;
+            while (this.#maxRealVoices > 0 && this.#occupantVoiceCount() >= this.#maxRealVoices) {
+                if (!this.#stealQuietestVoice()) {
+                    break;
+                }
+            }
+
             sequence = ++this.#playSequence;
 
             source.active = this.#playbackRuntime.startPlayback(source, {
@@ -884,6 +916,17 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     }
 
     #syncListenerToContext(): void {
+        const audible = this.#listeners.audibleRuntime();
+        const nextVolume = audible?.globalVolume ?? 1;
+        if (nextVolume !== this.#appliedGlobalVolume) {
+            setParamValue(
+                this.#globalGain.gain,
+                nextVolume,
+                this.context.currentTime,
+                this.#appliedGlobalVolume === undefined ? 0 : GLOBAL_VOLUME_SMOOTHING_SECONDS
+            );
+            this.#appliedGlobalVolume = nextVolume;
+        }
         this.#listeners.syncToContext(this.context.listener);
     }
 
@@ -899,6 +942,54 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
 
     #reconnectPlaybackOutput(playback: InternalPlayback<TSchema>, nextBusId: string): void {
         this.#playbackRuntime.reconnectPlayback(playback, this.#buses.require(nextBusId).gainNode);
+    }
+
+    #occupantVoiceCount(): number {
+        let count = 0;
+        for (const source of this.#sources.values()) {
+            if (source.active?.control === 'playing') {
+                count += 1;
+            }
+        }
+        return count;
+    }
+
+    #voiceLoudness(source: InternalSource<TSchema>): number {
+        if (source.muted) {
+            return 0;
+        }
+        const attenuation = source.active?.attenuationNode.gain.value;
+        return source.volume * (isFiniteNumber(attenuation) ? attenuation : 1);
+    }
+
+    #stealQuietestVoice(): boolean {
+        let victim: InternalSource<TSchema> | undefined;
+        let quietest = Number.POSITIVE_INFINITY;
+
+        for (const candidate of this.#sources.values()) {
+            if (candidate.active?.control !== 'playing') {
+                continue;
+            }
+            const loudness = this.#voiceLoudness(candidate);
+            if (
+                loudness < quietest ||
+                (loudness === quietest && victim && candidate.playSequence < victim.playSequence)
+            ) {
+                quietest = loudness;
+                victim = candidate;
+            }
+        }
+
+        if (!victim) {
+            return false;
+        }
+
+        this.#voiceStealCount += 1;
+        this.stopSource(victim.id);
+        // Dispose through the normal path: dropping `active` alone would leak the node chain,
+        // since the later onended returns early once the slot is gone.
+        this.#disposePlayback(victim);
+        return true;
     }
 
     #remainingDurationForSource(source: InternalSource<TSchema>): number | undefined {
