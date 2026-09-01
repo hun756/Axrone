@@ -259,7 +259,12 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
     implements ReadonlyPriorityQueue<T, P, O>
 {
     readonly #store: Node<T, P>[];
-    readonly #indexByHandle: Map<PriorityQueueHandle, number>;
+    // P2-2: Numeric index array replaces Map<handle, index> for better cache locality.
+    // Array[handle] = store index, or -1 if the handle has been removed.
+    // Handles are sequential integers starting at 1, so they index directly into this array.
+    // This avoids Map overhead (hash computation, bucket allocation, pointer chasing) and
+    // provides O(1) lookup with excellent CPU cache behavior due to contiguous memory layout.
+    readonly #handleToIndex: number[];
     readonly #order: O;
     readonly #orderFactor: InternalOrder;
     readonly #comparator: Comparator<P>;
@@ -289,7 +294,7 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
             };
 
             queue.#store[index] = node;
-            queue.#indexByHandle.set(node.handle, index);
+            queue.#bindHandle(node.handle, index);
         }
 
         queue.#nextHandle = source.#nextHandle;
@@ -423,7 +428,7 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
         this.#equality = options?.equality ?? defaultEquality;
         this.#prioritySelector = options?.priority;
         this.#store = [];
-        this.#indexByHandle = new Map();
+        this.#handleToIndex = [];
         this.#nextHandle = 1;
         this.#nextSequence = 1;
 
@@ -443,7 +448,7 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
                 };
 
                 this.#store[index] = node;
-                this.#indexByHandle.set(handle, index);
+                this.#bindHandle(handle, index);
             }
 
             if (items.length > 1) {
@@ -478,7 +483,7 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
 
     public clear(): this {
         this.#store.length = 0;
-        this.#indexByHandle.clear();
+        this.#handleToIndex.length = 0;
         return this;
     }
 
@@ -505,13 +510,14 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
     }
 
     public has(handle: PriorityQueueHandle): boolean {
-        return this.#indexByHandle.has(handle);
+        const h = handle as number;
+        return h > 0 && h < this.#handleToIndex.length && this.#handleToIndex[h] >= 0;
     }
 
     public get(handle: PriorityQueueHandle): PriorityQueueSnapshotEntry<T, P> | undefined {
-        const index = this.#indexByHandle.get(handle);
+        const index = this.#lookupHandle(handle);
 
-        if (index === undefined) {
+        if (index < 0) {
             return undefined;
         }
 
@@ -586,7 +592,7 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
                 };
 
                 store[index] = node;
-                this.#indexByHandle.set(handle, index);
+                this.#bindHandle(handle, index);
             }
 
             if (incoming > 1) {
@@ -619,7 +625,7 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
 
                 const targetIndex = offset + index;
                 store[targetIndex] = node;
-                this.#indexByHandle.set(handle, targetIndex);
+                this.#bindHandle(handle, targetIndex);
             }
 
             this.#heapify();
@@ -664,7 +670,7 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
                 };
 
                 store[index] = node;
-                this.#indexByHandle.set(handle, index);
+                this.#bindHandle(handle, index);
             }
 
             this.#heapify();
@@ -693,7 +699,7 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
 
                 const targetIndex = offset + index;
                 store[targetIndex] = node;
-                this.#indexByHandle.set(handle, targetIndex);
+                this.#bindHandle(handle, targetIndex);
             }
 
             this.#heapify();
@@ -740,7 +746,7 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
         }
 
         const removed = store[0]!;
-        this.#indexByHandle.delete(removed.handle);
+        this.#unbindHandle(removed.handle);
 
         const handle = this.#allocateHandle();
         const node: Node<T, P> = {
@@ -751,16 +757,16 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
         };
 
         store[0] = node;
-        this.#indexByHandle.set(handle, 0);
+        this.#bindHandle(handle, 0);
         this.#siftDown(0);
 
         return this.#snapshot(removed);
     }
 
     public remove(handle: PriorityQueueHandle): PriorityQueueSnapshotEntry<T, P> | undefined {
-        const index = this.#indexByHandle.get(handle);
+        const index = this.#lookupHandle(handle);
 
-        if (index === undefined) {
+        if (index < 0) {
             return undefined;
         }
 
@@ -782,9 +788,9 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
     }
 
     public updatePriority(handle: PriorityQueueHandle, priority: P): boolean {
-        const index = this.#indexByHandle.get(handle);
+        const index = this.#lookupHandle(handle);
 
-        if (index === undefined) {
+        if (index < 0) {
             return false;
         }
 
@@ -792,9 +798,9 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
     }
 
     public updateValue(handle: PriorityQueueHandle, value: T): boolean {
-        const index = this.#indexByHandle.get(handle);
+        const index = this.#lookupHandle(handle);
 
-        if (index === undefined) {
+        if (index < 0) {
             return false;
         }
 
@@ -805,9 +811,9 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
     public update(handle: PriorityQueueHandle, value: T, priority: P): boolean;
     public update(handle: PriorityQueueHandle, value: T): boolean;
     public update(handle: PriorityQueueHandle, value: T, priority?: P): boolean {
-        const index = this.#indexByHandle.get(handle);
+        const index = this.#lookupHandle(handle);
 
-        if (index === undefined) {
+        if (index < 0) {
             return false;
         }
 
@@ -1076,6 +1082,34 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
         return this.peekEntry();
     }
 
+    #lookupHandle(handle: PriorityQueueHandle): number {
+        const h = handle as number;
+        if (h <= 0 || h >= this.#handleToIndex.length) {
+            return -1;
+        }
+        return this.#handleToIndex[h];
+    }
+
+    #bindHandle(handle: PriorityQueueHandle, index: number): void {
+        const h = handle as number;
+        // Grow the array if needed; fill gaps with -1 (invalid/removed sentinel)
+        if (h >= this.#handleToIndex.length) {
+            const prev = this.#handleToIndex.length;
+            this.#handleToIndex.length = h + 1;
+            for (let i = prev; i < h; i++) {
+                this.#handleToIndex[i] = -1;
+            }
+        }
+        this.#handleToIndex[h] = index;
+    }
+
+    #unbindHandle(handle: PriorityQueueHandle): void {
+        const h = handle as number;
+        if (h > 0 && h < this.#handleToIndex.length) {
+            this.#handleToIndex[h] = -1;
+        }
+    }
+
     #allocateHandle(): PriorityQueueHandle {
         if (this.#nextHandle >= Number.MAX_SAFE_INTEGER) {
             this.#nextHandle = 1;
@@ -1146,7 +1180,7 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
 
         const index = this.#store.length;
         this.#store.push(node);
-        this.#indexByHandle.set(handle, index);
+        this.#bindHandle(handle, index);
 
         if (index > 0) {
             this.#siftUp(index);
@@ -1165,16 +1199,16 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
 
         if (length === 1) {
             const node = store.pop()!;
-            this.#indexByHandle.delete(node.handle);
+            this.#unbindHandle(node.handle);
             return node;
         }
 
         const root = store[0]!;
         const tail = store.pop()!;
 
-        this.#indexByHandle.delete(root.handle);
+        this.#unbindHandle(root.handle);
         store[0] = tail;
-        this.#indexByHandle.set(tail.handle, 0);
+        this.#bindHandle(tail.handle, 0);
         this.#siftDown(0);
 
         return root;
@@ -1184,7 +1218,7 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
         const store = this.#store;
         const removed = store[index]!;
 
-        this.#indexByHandle.delete(removed.handle);
+        this.#unbindHandle(removed.handle);
 
         if (store.length === 1) {
             store.pop();
@@ -1195,7 +1229,7 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
 
         if (index < store.length) {
             store[index] = tail;
-            this.#indexByHandle.set(tail.handle, index);
+            this.#bindHandle(tail.handle, index);
 
             const parent = (index - 1) >> 1;
 
@@ -1228,12 +1262,12 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
             }
 
             store[index] = parent;
-            this.#indexByHandle.set(parent.handle, index);
+            this.#bindHandle(parent.handle, index);
             index = parentIndex;
         }
 
         store[index] = item;
-        this.#indexByHandle.set(item.handle, index);
+        this.#bindHandle(item.handle, index);
     }
 
     #siftDown(index: number): void {
@@ -1261,12 +1295,12 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
             }
 
             store[index] = bestChild;
-            this.#indexByHandle.set(bestChild.handle, index);
+            this.#bindHandle(bestChild.handle, index);
             index = bestIndex;
         }
 
         store[index] = item;
-        this.#indexByHandle.set(item.handle, index);
+        this.#bindHandle(item.handle, index);
     }
 }
 
