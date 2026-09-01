@@ -503,5 +503,46 @@ describe('Stack Module', () => {
             expect(stack2.size).toBe(4);
             expect(stack3.size).toBe(2);
         });
+
+        it('H8: immutable snapshot is not corrupted by origin mutation', () => {
+            const mutable = new OptimizedArrayStack<number>({ capacity: 10 });
+            mutable.push(1);
+            mutable.push(2);
+            mutable.push(3);
+
+            // Create immutable snapshot from mutable state
+            const snapshot = ImmutableStack.fromIterable(mutable.toArray());
+
+            // Mutate origin — pops should NOT affect snapshot
+            mutable.pop();
+            mutable.pop();
+            mutable.clear();
+
+            // Snapshot must retain full chain
+            const [v1, s1] = snapshot.pop();
+            expect(v1).toBe(3);
+            const [v2, s2] = s1.pop();
+            expect(v2).toBe(2);
+            const [v3, s3] = s2.pop();
+            expect(v3).toBe(1);
+            expect(s3.isEmpty).toBe(true);
+        });
+
+        it('H8: chained immutable pushes preserve all values', () => {
+            const s0 = ImmutableStack.empty<number>();
+            const s1 = s0.push(10);
+            const s2 = s1.push(20);
+            const s3 = s2.push(30);
+
+            // All intermediate snapshots must be readable
+            expect(s1.toArray()).toEqual([10]);
+            expect(s2.toArray()).toEqual([20, 10]);
+            expect(s3.toArray()).toEqual([30, 20, 10]);
+
+            // Pop from s3 must yield correct chain
+            const [v, rest] = s3.pop();
+            expect(v).toBe(30);
+            expect(rest.toArray()).toEqual([20, 10]);
+        });
     });
 });
