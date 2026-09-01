@@ -269,6 +269,7 @@ export abstract class AbstractStack<T> implements ReadonlyStackInterface<T> {
     }
 
     protected updateChecksum(): void {
+        if (!this._config.enableIntegrityChecks) return;
         this._checksum = this.hash();
     }
 

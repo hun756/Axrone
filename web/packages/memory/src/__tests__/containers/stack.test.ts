@@ -347,11 +347,18 @@ describe('Stack Module', () => {
             expect(stack.generation).toBeGreaterThan(gen1);
         });
 
-        it('checksum changes on mutation', () => {
-            const stack = new OptimizedArrayStack<number>();
+        it('checksum changes on mutation when integrity checks enabled', () => {
+            const stack = new OptimizedArrayStack<number>({ enableIntegrityChecks: true });
             const cs1 = stack.checksum;
             stack.push(1);
             expect(stack.checksum).not.toBe(cs1);
+        });
+
+        it('checksum stays untouched without integrity checks', () => {
+            const stack = new OptimizedArrayStack<number>();
+            stack.push(1);
+            stack.pop();
+            expect(stack.checksum).toBe(0);
         });
 
         it('serialize and deserialize', () => {
