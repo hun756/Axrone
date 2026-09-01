@@ -862,15 +862,7 @@ export class BinaryMinHeap<T> implements BinaryHeapOperations<T>, Iterable<T> {
     }
 
     contains(item: T): boolean {
-        const items = this.#heap.toArray();
-
-        for (let index = 0; index < items.length; index++) {
-            if (items[index] === item) {
-                return true;
-            }
-        }
-
-        return false;
+        return this.#heap.contains(item);
     }
 
     toArray(): T[] {
