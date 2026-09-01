@@ -141,7 +141,7 @@ export class TypedArrayPool<T extends TypedArray> {
             autoExpand: options.autoExpand ?? true,
             compactionThreshold: options.compactionThreshold ?? 32,
             compactionTriggerRatio: options.compactionTriggerRatio ?? 0.3,
-            enableMetrics: options.enableMetrics ?? true,
+            enableMetrics: options.enableMetrics ?? false,
             enableInstrumentation: options.enableInstrumentation ?? false,
             name: options.name ?? `TypedArrayPool<${options.arrayConstructor.name}>`,
             maxObjectAge: options.maxObjectAge ?? 300000,

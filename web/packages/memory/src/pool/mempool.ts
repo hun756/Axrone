@@ -109,7 +109,7 @@ export class MemoryPool<T extends PoolableObject>
             onRelease: options.onRelease ?? (() => undefined),
             onEvict: options.onEvict ?? (() => undefined),
             onOutOfMemory: options.onOutOfMemory ?? (() => undefined),
-            enableMetrics: options.enableMetrics ?? true,
+            enableMetrics: options.enableMetrics ?? false,
             enableInstrumentation: options.enableInstrumentation ?? false,
             name: options.name ?? `MemoryPool-${this.#id}`,
             maxObjectAge: options.maxObjectAge ?? 0,

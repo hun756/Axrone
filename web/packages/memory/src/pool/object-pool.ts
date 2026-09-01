@@ -100,7 +100,7 @@ export class ObjectPool<T extends {}> implements Disposable {
             autoExpand: options.autoExpand ?? true,
             compactionThreshold: options.compactionThreshold ?? 64,
             compactionTriggerRatio: options.compactionTriggerRatio ?? 0.3,
-            enableMetrics: options.enableMetrics ?? true,
+            enableMetrics: options.enableMetrics ?? false,
             enableInstrumentation: options.enableInstrumentation ?? false,
             name: options.name ?? `ObjectPool-${Date.now()}`,
             maxObjectAge: options.maxObjectAge ?? 0,

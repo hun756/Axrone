@@ -73,7 +73,7 @@ export class BufferPool {
             autoExpand: options.autoExpand ?? true,
             evictionPolicy: options.evictionPolicy ?? 'lru',
             ttl: options.ttl ?? 0,
-            enableMetrics: options.enableMetrics ?? true,
+            enableMetrics: options.enableMetrics ?? false,
             enableInstrumentation: options.enableInstrumentation ?? false,
             name: options.name ?? 'BufferPool',
             highWatermarkRatio: options.highWatermarkRatio ?? 0.85,
