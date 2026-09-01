@@ -311,4 +311,164 @@ describe('MemoryPool', () => {
         pool.release(obj);
         expect(resetCalled).toBe(false);
     });
+
+    describe('onOutOfMemory callback', () => {
+        it('should call onOutOfMemory when pool is fully depleted with no eviction', () => {
+            const onOutOfMemory = vi.fn();
+            const pool = createPool({
+                initialCapacity: 2,
+                maxCapacity: 2,
+                autoExpand: false,
+                evictionPolicy: 'none',
+                onOutOfMemory,
+            });
+
+            const obj1 = pool.acquire();
+            const obj2 = pool.acquire();
+
+            // Pool is now fully depleted — next acquire should trigger onOutOfMemory
+            expect(() => pool.acquire()).toThrow(MemoryPoolError);
+            expect(onOutOfMemory).toHaveBeenCalledTimes(1);
+            expect(onOutOfMemory).toHaveBeenCalledWith(1, 0);
+
+            pool.release(obj1);
+            pool.release(obj2);
+        });
+
+        it('should call onOutOfMemory with correct requested and available args', () => {
+            const onOutOfMemory = vi.fn();
+            const pool = createPool({
+                initialCapacity: 1,
+                maxCapacity: 1,
+                autoExpand: false,
+                evictionPolicy: 'none',
+                onOutOfMemory,
+            });
+
+            pool.acquire();
+            expect(() => pool.acquire()).toThrow();
+            expect(onOutOfMemory).toHaveBeenCalledWith(1, 0);
+        });
+
+        it('should not call onOutOfMemory when pool can still expand', () => {
+            const onOutOfMemory = vi.fn();
+            const pool = createPool({
+                initialCapacity: 1,
+                maxCapacity: 10,
+                autoExpand: true,
+                onOutOfMemory,
+            });
+
+            // Should auto-expand without triggering onOutOfMemory
+            const obj1 = pool.acquire();
+            const obj2 = pool.acquire();
+            expect(onOutOfMemory).not.toHaveBeenCalled();
+
+            pool.release(obj1);
+            pool.release(obj2);
+        });
+    });
+
+    describe('Expansion strategies', () => {
+        it('fibonacci strategy grows pool following fibonacci sequence', () => {
+            const pool = createPool({
+                initialCapacity: 4,
+                maxCapacity: 100,
+                autoExpand: true,
+                expansionStrategy: 'fibonacci',
+            });
+
+            // Initial capacity is 4. Acquire all 4 to fill the pool.
+            const objs: TestObject[] = [];
+            for (let i = 0; i < 4; i++) {
+                objs.push(pool.acquire());
+            }
+            expect(pool.getTotalCount()).toBe(4);
+
+            // 5th acquire triggers expansion. Fibonacci above 4 is 5.
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(5);
+
+            // 6th acquire triggers another expansion. Fibonacci above 5 is 8.
+            // Pool now has 8 total slots, 6 allocated, 2 free.
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(8);
+
+            // 2 more acquires use the remaining free slots (no expansion).
+            objs.push(pool.acquire());
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(8);
+            expect(pool.getAllocatedCount()).toBe(8);
+
+            // 9th acquire triggers expansion. Fibonacci above 8 is 13.
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(13);
+
+            objs.forEach((o) => pool.release(o));
+        });
+
+        it('prime strategy grows pool to prime-based capacity', () => {
+            const pool = createPool({
+                initialCapacity: 4,
+                maxCapacity: 200,
+                autoExpand: true,
+                expansionStrategy: 'prime',
+                expansionFactor: 2,
+            });
+
+            const objs: TestObject[] = [];
+            for (let i = 0; i < 4; i++) {
+                objs.push(pool.acquire());
+            }
+
+            // 5th acquire triggers expansion.
+            // prime(4 * 2) = prime(8) = 11 (next prime >= 8)
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(11);
+
+            objs.forEach((o) => pool.release(o));
+        });
+
+        it('fixed strategy grows pool by fixed increment', () => {
+            const pool = createPool({
+                initialCapacity: 4,
+                maxCapacity: 100,
+                autoExpand: true,
+                expansionStrategy: 'fixed',
+                expansionRate: 8,
+            });
+
+            const objs: TestObject[] = [];
+            for (let i = 0; i < 4; i++) {
+                objs.push(pool.acquire());
+            }
+
+            // 5th acquire triggers expansion: 4 + 8 = 12
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(12);
+
+            objs.forEach((o) => pool.release(o));
+        });
+
+        it('multiplicative strategy grows pool by factor', () => {
+            const pool = createPool({
+                initialCapacity: 4,
+                maxCapacity: 100,
+                autoExpand: true,
+                expansionStrategy: 'multiplicative',
+                expansionFactor: 2,
+            });
+
+            const objs: TestObject[] = [];
+            for (let i = 0; i < 4; i++) {
+                objs.push(pool.acquire());
+            }
+
+            // 5th acquire triggers expansion: ceil(4 * 2) = 8
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(8);
+
+            objs.forEach((o) => pool.release(o));
+        });
+    });
 });

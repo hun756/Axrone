@@ -411,6 +411,75 @@ describe('Stack Module', () => {
             expect(values).toEqual([3, 2, 1]);
         });
 
+        it('iterator captures snapshot — push during iteration does not add new elements', () => {
+            const stack = new OptimizedArrayStack<number>();
+            stack.push(1);
+            stack.push(2);
+            stack.push(3);
+
+            const iter = stack[Symbol.iterator]();
+            const collected: number[] = [];
+
+            // First element
+            const first = iter.next();
+            expect(first.done).toBe(false);
+            collected.push(first.value);
+
+            // Push a new element mid-iteration
+            stack.push(99);
+
+            // Continue iteration — should only see the original 3 elements
+            let result = iter.next();
+            while (!result.done) {
+                collected.push(result.value);
+                result = iter.next();
+            }
+
+            // Iterator walked the original chain: 3, 2, 1
+            // The pushed 99 sits at the new head but the iterator started
+            // from the old head (3) and followed the original next pointers.
+            expect(collected).toEqual([3, 2, 1]);
+        });
+
+        it('iterator captures snapshot — pop during iteration does not remove elements', () => {
+            const stack = new OptimizedArrayStack<number>();
+            stack.push(1);
+            stack.push(2);
+            stack.push(3);
+
+            const iter = stack[Symbol.iterator]();
+            const collected: number[] = [];
+
+            // First element (head = node with value 3)
+            const first = iter.next();
+            expect(first.done).toBe(false);
+            collected.push(first.value);
+
+            // Pop removes the head (value 3), but iterator already advanced
+            // past it — it holds a reference to node(3) which still points to node(2)
+            stack.pop();
+
+            let result = iter.next();
+            while (!result.done) {
+                collected.push(result.value);
+                result = iter.next();
+            }
+
+            // Iterator still walks the original chain: 3, 2, 1
+            expect(collected).toEqual([3, 2, 1]);
+        });
+
+        it('iterator from empty stack after push yields only the snapshot', () => {
+            const stack = new OptimizedArrayStack<number>();
+            // Create iterator on empty stack
+            const iter = stack[Symbol.iterator]();
+            expect(iter.next().done).toBe(true);
+
+            // Push after iterator creation — iterator should still be done
+            stack.push(42);
+            expect(iter.next().done).toBe(true);
+        });
+
         it('dispose prevents further operations', async () => {
             const stack = new OptimizedArrayStack<number>();
             stack.push(1);

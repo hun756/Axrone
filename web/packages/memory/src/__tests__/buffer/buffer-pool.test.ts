@@ -273,4 +273,76 @@ describe('Professional BufferPool', () => {
             expect(raw2).toBe(raw3);
         });
     });
+
+    describe('Bucket overflow — fallback to direct allocation', () => {
+        it('should fall back to direct allocation when bucket is exhausted', () => {
+            BufferPool.resetInstance();
+
+            const onOutOfMemory = vi.fn();
+            const exhaustPool = BufferPool.getInstance({
+                initialCapacityPerBucket: 2,
+                maxCapacityPerBucket: 4,
+                autoExpand: false,
+                evictionPolicy: 'none',
+                preallocate: false,
+                enableMetrics: true,
+                name: 'ExhaustPool',
+                onOutOfMemory,
+            });
+
+            // Allocate all 4 slots in the 512-byte bucket (bucket index for 512 = ceil(log2(512)) - 5 = 9 - 5 = 4)
+            const buffers: ArrayBuffer[] = [];
+            for (let i = 0; i < 4; i++) {
+                buffers.push(exhaustPool.allocate(512));
+            }
+
+            // 5th allocation should trigger fallback to direct allocation
+            const fallbackBuffer = exhaustPool.allocate(512);
+            expect(fallbackBuffer).toBeTruthy();
+            expect(fallbackBuffer.byteLength).toBe(512);
+            expect(onOutOfMemory).toHaveBeenCalled();
+
+            // The fallback buffer is a direct allocation — it is NOT tracked by the pool,
+            // so releasing it should be a no-op (no error thrown)
+            expect(() => exhaustPool.release(fallbackBuffer)).not.toThrow();
+
+            buffers.forEach((b) => exhaustPool.release(b));
+            exhaustPool.dispose();
+            BufferPool.resetInstance();
+        });
+
+        it('should still return a usable buffer when pool is exhausted', () => {
+            BufferPool.resetInstance();
+
+            const exhaustPool = BufferPool.getInstance({
+                initialCapacityPerBucket: 2,
+                maxCapacityPerBucket: 2,
+                autoExpand: false,
+                evictionPolicy: 'none',
+                preallocate: false,
+                name: 'SmallPool',
+            });
+
+            // Exhaust the 1024-byte bucket
+            const b1 = exhaustPool.allocate(1024);
+            const b2 = exhaustPool.allocate(1024);
+
+            // This should fall back to direct allocation
+            const b3 = exhaustPool.allocate(1024);
+            expect(b3).toBeTruthy();
+            expect(b3.byteLength).toBe(1024);
+
+            // The fallback buffer should be writable
+            const view = new Uint8Array(b3);
+            view[0] = 42;
+            expect(view[0]).toBe(42);
+
+            exhaustPool.release(b1);
+            exhaustPool.release(b2);
+            // b3 is not tracked by pool, release is a no-op
+            exhaustPool.release(b3);
+            exhaustPool.dispose();
+            BufferPool.resetInstance();
+        });
+    });
 });
