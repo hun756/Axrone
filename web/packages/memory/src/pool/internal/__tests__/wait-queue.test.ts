@@ -98,6 +98,26 @@ describe('WaitQueue', () => {
         expect(queue.size).toBe(1);
     });
 
+    it('should clear timer when removing entry with timer', async () => {
+        vi.useFakeTimers();
+        const queue = new WaitQueue<PoolableObject>();
+        let timerFired = false;
+
+        const entry = queue.push(() => {}, () => {});
+        entry.timer = setTimeout(() => {
+            timerFired = true;
+        }, 100);
+
+        const removed = queue.remove((e) => e === entry);
+        expect(removed).toBe(entry);
+
+        // Advance past the timer deadline — it should NOT have fired
+        await vi.advanceTimersByTimeAsync(150);
+        expect(timerFired).toBe(false);
+
+        vi.useRealTimers();
+    });
+
     it('clears pending timers when an entry is popped', async () => {
         vi.useFakeTimers();
         const queue = new WaitQueue<PoolableObject>();

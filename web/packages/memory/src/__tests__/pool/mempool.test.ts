@@ -454,6 +454,33 @@ describe('MemoryPool', () => {
         });
     });
 
+    it('should resolve waiter when object is released', async () => {
+        const pool = createPool({ initialCapacity: 1, maxCapacity: 1 });
+        const obj1 = pool.acquire();
+
+        // Start async acquire — will wait because pool is at max capacity
+        const acquirePromise = pool.acquireAsync();
+
+        // Release obj1 — should resolve the waiter with the same object
+        pool.release(obj1);
+
+        const obj2 = await acquirePromise;
+        expect(obj2).toBe(obj1);
+    });
+
+    it('should reject pending waiters on dispose', async () => {
+        const pool = createPool({ initialCapacity: 1, maxCapacity: 1 });
+        pool.acquire(); // Fill pool to capacity
+
+        // Start async acquire — will wait because pool is full
+        const acquirePromise = pool.acquireAsync();
+
+        // Dispose pool — should reject the pending waiter
+        pool[Symbol.dispose]();
+
+        await expect(acquirePromise).rejects.toThrow(MemoryPoolError);
+    });
+
     describe('dispose onEvict notification', () => {
         it('should call onEvict for each allocated object when pool is disposed', () => {
             const evicted: TestObject[] = [];
