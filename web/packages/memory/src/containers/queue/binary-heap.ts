@@ -1,12 +1,10 @@
-import { EmptyQueueError, InvalidCapacityError } from './errors';
+import { EmptyQueueError } from './errors';
 import {
-    Capacity,
     Comparator,
-    HeapIndex,
     QueueSize,
     BinaryHeapOperations,
 } from './types';
-import { createCapacity, createQueueSize, defaultComparator } from './utils';
+import { createQueueSize, defaultComparator } from './utils';
 import { heapSiftUp, heapSiftDown, heapHeapify, NO_OP_MOVE } from '../../internal/heap-sift';
 import type { HeapComesBefore } from '../../internal/heap-sift';
 
@@ -785,17 +783,8 @@ export class BinaryHeap<T, O extends HeapOrder = 'min'> implements ReadonlyBinar
 
 export class BinaryMinHeap<T> implements BinaryHeapOperations<T>, Iterable<T> {
     #heap: BinaryHeap<T, 'min'>;
-    #comparator: Comparator<T>;
-    #capacity: number;
 
-    constructor(comparator: Comparator<T>, initialCapacity?: Capacity) {
-        this.#comparator = comparator;
-        this.#capacity = initialCapacity === undefined ? 16 : (initialCapacity as number);
-
-        if (!Number.isInteger(this.#capacity) || this.#capacity < 0) {
-            throw new InvalidCapacityError(this.#capacity);
-        }
-
+    constructor(comparator: Comparator<T>) {
         this.#heap = new BinaryHeap<T, 'min'>({
             order: 'min',
             comparator,
@@ -810,12 +799,7 @@ export class BinaryMinHeap<T> implements BinaryHeapOperations<T>, Iterable<T> {
         return this.#heap.isEmpty();
     }
 
-    get capacity(): Capacity {
-        return createCapacity(this.#capacity);
-    }
-
     insert(item: T): void {
-        this.#growToFit(this.#heap.size + 1);
         this.#heap.push(item);
     }
 
@@ -839,28 +823,6 @@ export class BinaryMinHeap<T> implements BinaryHeapOperations<T>, Iterable<T> {
         this.#heap.clear();
     }
 
-    ensureCapacity(capacity: Capacity): void {
-        const required = capacity as number;
-
-        if (required <= this.#capacity) {
-            return;
-        }
-
-        this.#growToFit(required);
-    }
-
-    trimExcess(): void {
-        const targetCapacity = Math.max(1, this.#heap.size);
-
-        if (targetCapacity < this.#capacity) {
-            this.#heap = BinaryHeap.from(this.#heap.toArray(), {
-                order: 'min',
-                comparator: this.#comparator,
-            });
-            this.#capacity = targetCapacity;
-        }
-    }
-
     contains(item: T): boolean {
         return this.#heap.contains(item);
     }
@@ -875,15 +837,6 @@ export class BinaryMinHeap<T> implements BinaryHeapOperations<T>, Iterable<T> {
 
     [Symbol.iterator](): Iterator<T> {
         return this.#heap[Symbol.iterator]();
-    }
-
-    #growToFit(requiredCapacity: number): void {
-        if (requiredCapacity <= this.#capacity) {
-            return;
-        }
-
-        const doubled = this.#capacity > 0 ? this.#capacity * 2 : 1;
-        this.#capacity = Math.max(requiredCapacity, doubled, this.#capacity + 1, 1);
     }
 }
 
