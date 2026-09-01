@@ -5,7 +5,6 @@ export abstract class StackError extends Error {
     abstract readonly severity: 'low' | 'medium' | 'high' | 'critical';
     abstract readonly recoverable: boolean;
     readonly timestamp = performance.now();
-    readonly stackTrace = Error().stack;
 }
 
 export class StackCapacityError extends StackError {
