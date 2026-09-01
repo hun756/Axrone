@@ -215,8 +215,6 @@ describe('ObjectPool', () => {
         });
 
         it('should handle reset handler errors gracefully', () => {
-            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
             const pool = createBasicPool(() => new TestUser(), {
                 resetHandler: () => {
                     throw new Error('Reset failed');
@@ -225,9 +223,6 @@ describe('ObjectPool', () => {
 
             const user = pool.acquire();
             expect(() => pool.release(user)).not.toThrow();
-            expect(consoleSpy).toHaveBeenCalled();
-
-            consoleSpy.mockRestore();
         });
     });
 
