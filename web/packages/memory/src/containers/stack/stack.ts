@@ -212,7 +212,6 @@ class ImmutableStack<T> extends AbstractStack<T> implements ImmutableStackInterf
         StackConfiguration<any>,
         ImmutableStack<any>
     >();
-    private static nodeIdCounter = 0;
 
     private constructor(
         head: StackNode<T> | null,
@@ -254,7 +253,7 @@ class ImmutableStack<T> extends AbstractStack<T> implements ImmutableStackInterf
         const transformedValue = this._config.transformFn(value);
         // Use non-pooled plain objects to avoid aliasing corruption
         const node: StackNode<T | U> = {
-            id: createNodeId(++ImmutableStack.nodeIdCounter),
+            id: createNodeId(),
             value: transformedValue,
             next: this._head,
             refs: 1,
