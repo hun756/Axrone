@@ -12,6 +12,7 @@ import {
 import { BufferPool } from './buffer-pool';
 import { BufferView } from './buffer-view';
 import { BufferUtils } from './utils';
+import { writeVarInt, readVarInt, writeJson, readJson } from './varint';
 
 /**
  * Pooled, endianness-aware binary buffer for reading and writing typed data.
@@ -827,47 +828,22 @@ export class ByteBuffer implements IByteBuffer {
     putVarInt(value: number): this {
         this.checkState();
         this.checkReadOnly();
-
-        let temp = value >>> 0;
-
-        do {
-            let b = temp & 0x7f;
-            temp >>>= 7;
-            if (temp !== 0) {
-                b |= 0x80;
-            }
-            this.putUint8(b);
-        } while (temp !== 0);
-
+        writeVarInt(this, value);
         return this;
     }
 
     getVarInt(): number {
         this.checkState();
-
-        let result = 0;
-        let shift = 0;
-        let b: number;
-
-        do {
-            if (shift >= 32) {
-                throw new BufferUnderflowError('VarInt is too big');
-            }
-
-            b = this.getUint8();
-            result |= (b & 0x7f) << shift;
-            shift += 7;
-        } while ((b & 0x80) !== 0);
-
-        return result >>> 0;
+        return readVarInt(this);
     }
 
     putJson<T>(value: T): this {
-        return this.putString(JSON.stringify(value));
+        writeJson(this, value);
+        return this;
     }
 
     getJson<T>(): T {
-        return JSON.parse(this.getString());
+        return readJson<T>(this);
     }
 
     hash(): number {
