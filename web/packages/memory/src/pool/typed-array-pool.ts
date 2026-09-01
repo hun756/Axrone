@@ -66,7 +66,6 @@ export interface TypedArrayPoolStats {
         readonly totalMemory: number;
         readonly averageLength: number;
         readonly lengthDistribution: Map<number, number>;
-        readonly alignmentUtilization: number;
         readonly wasteRatio: number;
     };
     readonly performanceStats: {
@@ -118,7 +117,6 @@ export class TypedArrayPool<T extends TypedArray> {
         totalMemoryAllocated: 0,
         bucketsHit: new Map<number, number>(),
         oversizedRequests: 0,
-        alignmentMisses: 0,
     };
 
     constructor(options: TypedArrayPoolOptions<T>) {
@@ -250,7 +248,6 @@ export class TypedArrayPool<T extends TypedArray> {
                 totalMemory: this._stats.totalMemoryAllocated,
                 averageLength: totalArrays > 0 ? totalMemory / totalArrays : 0,
                 lengthDistribution: new Map(this._stats.bucketsHit),
-                alignmentUtilization: this._calculateAlignmentUtilization(),
                 wasteRatio: this._calculateWasteRatio(),
             },
             performanceStats: {
@@ -271,7 +268,6 @@ export class TypedArrayPool<T extends TypedArray> {
         this._stats.totalMemoryAllocated = 0;
         this._stats.bucketsHit.clear();
         this._stats.oversizedRequests = 0;
-        this._stats.alignmentMisses = 0;
 
         this._performanceTracker.allocationTimes = new CircularBuffer<number>(1000);
         this._performanceTracker.zeroingTimes = new CircularBuffer<number>(1000);
@@ -453,15 +449,6 @@ export class TypedArrayPool<T extends TypedArray> {
         const avg = buffer.reduce((a, b) => a + b, 0) / buffer.size;
 
         return { min, max, avg, samples: buffer.size };
-    }
-
-    private _calculateAlignmentUtilization(): number {
-        if (this._options.alignment <= 1) return 1.0;
-
-        const totalMisses = this._stats.alignmentMisses;
-        const totalAllocations = this._stats.totalAllocations;
-
-        return totalAllocations > 0 ? 1.0 - totalMisses / totalAllocations : 1.0;
     }
 
     private _calculateWasteRatio(): number {

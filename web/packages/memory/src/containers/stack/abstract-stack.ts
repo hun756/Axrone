@@ -1,7 +1,7 @@
 import { StackIntegrityError } from './errors';
 import { StackMemoryPool as MemoryPool } from './pool-adapter';
 import { StackIterator } from './stack-iterator';
-import { createStackSize, __variance, createStackCapacity } from './stack-core';
+import { createStackSize, createStackCapacity } from './stack-core';
 import { ReadonlyStackInterface, StackConfiguration } from './interfaces';
 import { StackSize, StackNode, StackCapacity, StackResult, NodeId } from './types';
 import { Fnv1a32 } from '@axrone/hash';
@@ -16,17 +16,12 @@ export abstract class AbstractStack<T> implements ReadonlyStackInterface<T> {
     protected readonly _memoryPool: MemoryPool;
 
     private _operationCount = 0;
-    readonly [__variance] = undefined as any;
 
     constructor(config: StackConfiguration<T> = {}) {
         this._capacity = config.capacity ? createStackCapacity(config.capacity) : null;
         this._config = {
             capacity: config.capacity ?? 1000,
-            enablePooling: config.enablePooling ?? true,
-            enableAlignment: config.enableAlignment ?? false,
             enableIntegrityChecks: config.enableIntegrityChecks ?? false,
-            cachePolicy: config.cachePolicy ?? 'none',
-            serializationStrategy: config.serializationStrategy ?? 'json',
             compareFn: config.compareFn ?? Object.is,
             hashFn: config.hashFn ?? this.defaultHashFn,
             serializeFn: config.serializeFn ?? this.defaultSerializeFn,

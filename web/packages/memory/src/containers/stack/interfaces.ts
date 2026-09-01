@@ -3,11 +3,7 @@ import { Variance, StackSize, StackCapacity, StackResult } from './types';
 
 export interface StackConfiguration<T> {
     readonly capacity?: number;
-    readonly enablePooling?: boolean;
-    readonly enableAlignment?: boolean;
     readonly enableIntegrityChecks?: boolean;
-    readonly cachePolicy?: 'lru' | 'lfu' | 'none';
-    readonly serializationStrategy?: 'json' | 'binary' | 'custom';
     readonly compareFn?: (a: T, b: T) => boolean;
     readonly hashFn?: (value: T) => number;
     readonly serializeFn?: (value: T) => ArrayBuffer;

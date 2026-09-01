@@ -73,9 +73,7 @@ export class MemoryPool<T extends PoolableObject>
         name: string;
     };
 
-    #nextId = 0;
     #isDisposed = false;
-    #reentrancyDepth = 0;
     #lruIndex: LruSlotIndex | null = null;
     #metrics: PoolMetricsCollector;
     #allocator: AllocationSelector;
@@ -172,7 +170,7 @@ export class MemoryPool<T extends PoolableObject>
     }
 
     #preallocate(): void {
-        this.#nextId = this.#slotFactory.preallocate(
+        this.#slotFactory.preallocate(
             this.#slots,
             this.#freeList,
             this.#options.initialCapacity
@@ -181,7 +179,7 @@ export class MemoryPool<T extends PoolableObject>
     }
 
     #reserve(capacity: number): void {
-        this.#nextId = this.#slotFactory.reserve(this.#slots, this.#freeList, capacity);
+        this.#slotFactory.reserve(this.#slots, this.#freeList, capacity);
     }
 
     #getNextFreeId(): number {
@@ -356,9 +354,7 @@ export class MemoryPool<T extends PoolableObject>
                 obj.__poolStatus = 'allocated';
                 slot.lastAccessed = Date.now();
                 slot.allocCount++;
-                this.#reentrancyDepth++;
                 queueMicrotask(() => {
-                    this.#reentrancyDepth--;
                     try {
                         waiter.resolve(obj);
                     } catch (e) {
@@ -431,7 +427,6 @@ export class MemoryPool<T extends PoolableObject>
         this.#slots.length = 0;
         this.#freeList.clear();
         if (this.#lruIndex) this.#lruIndex.clear();
-        this.#nextId = 0;
         this.#initializeCapacity();
         this.#metrics.resetAggregate();
     }
@@ -512,7 +507,6 @@ export class MemoryPool<T extends PoolableObject>
         for (const s of newSlots) this.#slots.push(s);
         this.#freeList.clear();
         for (const id of newFreeList) this.#freeList.add(id);
-        this.#nextId = targetCapacity;
         this.#metrics.recordContraction();
     }
 
@@ -557,7 +551,6 @@ export class MemoryPool<T extends PoolableObject>
         const timer = this.#metrics.newTimer();
         try {
             this.#planner.compact(this.#slots, this.#freeList);
-            this.#nextId = this.#slots.length;
         } finally {
             if (timer) this.#metrics.recordCompactionTime(timer.stop());
         }
@@ -726,7 +719,6 @@ export class MemoryPool<T extends PoolableObject>
             this.#options.preallocate,
             (id, withObj) => this.#slotFactory.create(id, withObj)
         );
-        this.#nextId = Math.max(this.#nextId, newCapacity);
     }
 
     #shrink(newCapacity: number): void {

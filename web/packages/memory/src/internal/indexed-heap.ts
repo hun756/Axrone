@@ -25,7 +25,6 @@ interface HeapNode<K, V> {
     key: K;
     value: V;
     handle: HeapHandle<K, V>;
-    heapIndex: number;
 }
 
 export class HeapHandle<K = unknown, V = unknown> {
@@ -68,7 +67,6 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
     readonly #isMinHeap: boolean;
     #nodes: HeapNode<K, V>[];
     #handleToIndex: Map<HeapHandle<K, V>, number>;
-    #freeNodeIndices: number[];
     #size: number = 0;
     #nextHandleId: number = 1;
     #modCount: number = 0;
@@ -84,7 +82,6 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
         const initialCapacity = Math.max(0, options.initialCapacity ?? 0);
         this.#nodes = new Array(initialCapacity);
         this.#handleToIndex = new Map();
-        this.#freeNodeIndices = [];
     }
 
     get size(): number {
@@ -111,7 +108,6 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
                 this.#nodes[i] = undefined as unknown as HeapNode<K, V>;
             }
             this.#handleToIndex.clear();
-            this.#freeNodeIndices.length = 0;
             this.#size = 0;
         }
         this.#modCount++;
@@ -296,18 +292,14 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
     }
 
     #insertAtEnd(key: K, value: V, handle: HeapHandle<K, V>): void {
-        const recycled = this.#freeNodeIndices.pop();
         const heapIndex = this.#size;
         const node: HeapNode<K, V> = {
             key,
             value,
             handle,
-            heapIndex,
         };
 
-        if (recycled !== undefined) {
-            this.#nodes[recycled] = node;
-        } else if (heapIndex < this.#nodes.length) {
+        if (heapIndex < this.#nodes.length) {
             this.#nodes[heapIndex] = node;
         } else {
             this.#nodes.push(node);

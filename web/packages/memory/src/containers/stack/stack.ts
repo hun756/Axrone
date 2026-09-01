@@ -14,7 +14,7 @@ import {
     ExtractSuccess,
     ExtractError,
 } from './types';
-import { __variance, createNodeId, createStackCapacity, createStackSize } from './stack-core';
+import { createNodeId, createStackCapacity, createStackSize } from './stack-core';
 
 import {
     StackCapacityError,
@@ -33,7 +33,6 @@ import {
 
 class OptimizedArrayStack<T> extends AbstractStack<T> implements MutableStackInterface<T> {
     private _disposed = false;
-    readonly [__variance] = undefined as any;
 
     push(value: T): StackResult<this, StackCapacityError> {
         if (this._disposed) {
@@ -213,7 +212,6 @@ class ImmutableStack<T> extends AbstractStack<T> implements ImmutableStackInterf
         StackConfiguration<any>,
         ImmutableStack<any>
     >();
-    readonly [__variance] = undefined as any;
 
     private constructor(
         head: StackNode<T> | null,

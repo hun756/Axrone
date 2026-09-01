@@ -1,8 +1,6 @@
 import { StackIntegrityError } from './errors';
 import type { NodeId, StackCapacity, StackSize } from './types';
 
-export const __variance: unique symbol = Symbol('stack.variance') as typeof __variance;
-
 const CAPACITY_MASK = 0x7fffffff;
 const SIZE_MASK = 0x7fffffff;
 const NODE_ID_MASK = 0xffffffff;

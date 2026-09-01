@@ -1,10 +1,4 @@
-import {
-    ByteOrder,
-    SeekOrigin,
-    BufferState,
-    TypedArrayMap,
-    TypedArrayConstructorMap,
-} from './types';
+import { ByteOrder, SeekOrigin, BufferState, TypedArrayMap } from './types';
 import { IByteBuffer, IReadableBuffer, IWritableBuffer } from './interfaces';
 import { BUFFER_DEFAULTS, STRING_DEFAULTS, PERFORMANCE_DEFAULTS } from './constants';
 import {
@@ -32,7 +26,6 @@ export class ByteBuffer implements IByteBuffer {
     private view: DataView;
     private u8Array: Uint8Array;
     private pos: number;
-    private readonly typedArrayCache: Map<keyof TypedArrayMap, TypedArrayMap[keyof TypedArrayMap]>;
     private byteOrder: ByteOrder;
     private markPos: number;
     private limitPos: number;
@@ -106,7 +99,6 @@ export class ByteBuffer implements IByteBuffer {
         this.limitPos = buffer.byteLength;
         this.byteOrder = order;
         this.readOnly = false;
-        this.typedArrayCache = new Map();
         this.state = BufferState.Empty;
     }
 
@@ -208,8 +200,6 @@ export class ByteBuffer implements IByteBuffer {
         if (limitTracksCapacity) {
             this.limitPos = newBuffer.byteLength;
         }
-
-        this.typedArrayCache.clear();
     }
 
     private checkReadableBytes(count: number): void {
@@ -251,7 +241,6 @@ export class ByteBuffer implements IByteBuffer {
 
         ByteBuffer.pool.release(this.buffer);
         this.state = BufferState.Released;
-        this.typedArrayCache.clear();
     }
 
     fillBytes(value: number, count: number): this {
@@ -558,20 +547,6 @@ export class ByteBuffer implements IByteBuffer {
         }
 
         return this;
-    }
-
-    private getTypedArray<K extends keyof TypedArrayMap>(
-        key: K,
-        constructor: TypedArrayConstructorMap[K]
-    ): TypedArrayMap[K] {
-        this.checkState();
-
-        let array = this.typedArrayCache.get(key) as TypedArrayMap[K];
-        if (!array) {
-            array = new constructor(this.buffer);
-            this.typedArrayCache.set(key, array);
-        }
-        return array;
     }
 
     putInt8(value: number): this {
