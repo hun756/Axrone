@@ -6,17 +6,16 @@ import {
     __state_brand,
     LazyState,
 } from './lazy-core';
-
-const UNINITIALIZED = 'uninitialized' as const;
-const COMPUTING = 'computing' as const;
-const RESOLVED = 'resolved' as const;
-const FAULTED = 'faulted' as const;
+import {
+    computeDeferredSync,
+    computeDeferredAsync,
+} from '@axrone/utility';
 
 export class LazyImpl<T> implements ILazy<T> {
     readonly [__lazy_brand] = true as const;
     readonly [__state_brand]!: 'LazyCore';
 
-    state: LazyState = UNINITIALIZED;
+    state: LazyState = 'uninitialized';
     hasValue = false;
     exception: Error | null = null;
     value!: T;
@@ -49,26 +48,9 @@ export class LazyImpl<T> implements ILazy<T> {
     }
 
     private getValue(): T {
-        if (this.hasValue) return this.value;
-        if (this.exception) throw this.exception;
-
-        if (this.state === COMPUTING) {
-            throw new Error('Circular dependency detected in lazy evaluation');
-        }
-
-        this.state = COMPUTING;
-
-        try {
-            this.value = this.factory!();
-            this.hasValue = true;
-            this.state = RESOLVED;
-            this.factory = null;
-            return this.value;
-        } catch (error) {
-            this.exception = error instanceof Error ? error : new Error(String(error));
-            this.state = FAULTED;
-            throw this.exception;
-        }
+        return computeDeferredSync(this, {
+            circularError: () => new Error('Circular dependency detected in lazy evaluation'),
+        });
     }
 
     map<U>(selector: (value: T) => U): ILazy<U> {
@@ -142,7 +124,7 @@ export class LazyAsyncImpl<T> implements ILazyAsync<T> {
     readonly [__async_brand] = true as const;
     readonly [__state_brand]!: 'LazyAsyncCore';
 
-    state: LazyState = UNINITIALIZED;
+    state: LazyState = 'uninitialized';
     hasValue = false;
     exception: Error | null = null;
     value!: T;
@@ -176,27 +158,9 @@ export class LazyAsyncImpl<T> implements ILazyAsync<T> {
     }
 
     private getValue(): Promise<T> {
-        if (this.promise) return this.promise;
-        if (this.hasValue) return Promise.resolve(this.value);
-        if (this.exception) return Promise.reject(this.exception);
-
-        this.state = COMPUTING;
-
-        this.promise = this.factory!()
-            .then((result) => {
-                this.value = result;
-                this.hasValue = true;
-                this.state = RESOLVED;
-                this.factory = null;
-                return result;
-            })
-            .catch((error) => {
-                this.exception = error instanceof Error ? error : new Error(String(error));
-                this.state = FAULTED;
-                throw this.exception;
-            });
-
-        return this.promise;
+        return computeDeferredAsync(this, {
+            cacheRejectedPromise: true, // Lazy caches rejections (unlike singleton which allows retry)
+        });
     }
 
     map<U>(selector: (value: T) => U): ILazyAsync<U> {
@@ -305,3 +269,4 @@ export class LazyAsyncImpl<T> implements ILazyAsync<T> {
         return new LazyImpl(() => this.getValue());
     }
 }
+
