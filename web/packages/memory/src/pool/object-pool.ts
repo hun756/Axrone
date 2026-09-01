@@ -424,7 +424,13 @@ export class ObjectPool<T extends {}> implements Disposable {
         return (wrapper: PoolableWrapper<T>) => {
             try {
                 return this._options.validateHandler!(wrapper.value);
-            } catch {
+            } catch (error) {
+                if (this._options.enableInstrumentation) {
+                    console.debug(
+                        `validateHandler error in pool "${this._options.name}":`,
+                        error
+                    );
+                }
                 return false;
             }
         };
@@ -439,7 +445,9 @@ export class ObjectPool<T extends {}> implements Disposable {
             try {
                 this._options.onAcquireHandler!(wrapper.value);
             } catch (error) {
-                console.warn(`onAcquire handler error in pool "${this._options.name}":`, error);
+                if (this._options.enableInstrumentation) {
+                    console.debug(`onAcquire handler error in pool "${this._options.name}":`, error);
+                }
             }
         };
     }
@@ -453,7 +461,9 @@ export class ObjectPool<T extends {}> implements Disposable {
             try {
                 this._options.onReleaseHandler!(wrapper.value);
             } catch (error) {
-                console.warn(`onRelease handler error in pool "${this._options.name}":`, error);
+                if (this._options.enableInstrumentation) {
+                    console.debug(`onRelease handler error in pool "${this._options.name}":`, error);
+                }
             }
         };
     }
@@ -467,7 +477,9 @@ export class ObjectPool<T extends {}> implements Disposable {
             try {
                 this._options.onEvictHandler!(wrapper.value);
             } catch (error) {
-                console.warn(`onEvict handler error in pool "${this._options.name}":`, error);
+                if (this._options.enableInstrumentation) {
+                    console.debug(`onEvict handler error in pool "${this._options.name}":`, error);
+                }
             }
         };
     }

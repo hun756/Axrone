@@ -34,8 +34,8 @@ export class WaitQueue<T extends PoolableObject> {
             if (entry.timer !== null) clearTimeout(entry.timer);
             try {
                 entry.reject(reason);
-            } catch (e) {
-                console.error('Error rejecting wait queue entry:', e);
+            } catch {
+                // Swallow — reject may throw if the promise is already settled
             }
         }
     }

@@ -131,6 +131,12 @@ export interface TypedArrayPoolStats {
  * @stable
  */
 export class TypedArrayPool<T extends TypedArray> {
+    /**
+     * Default estimate for average bucket utilization (75%), used in waste
+     * calculations when per-bucket utilization data is unavailable.
+     */
+    private static readonly DEFAULT_UTILIZATION_ESTIMATE = 0.75;
+
     private readonly _pools: Map<number, MemoryPool<PoolableTypedArray<T>>>;
     private readonly _poolByObject = new WeakMap<
         PoolableTypedArray<T>,
@@ -144,6 +150,7 @@ export class TypedArrayPool<T extends TypedArray> {
         zeroOnRelease: boolean;
         growthStrategy: 'exact' | 'bucket' | 'exponential';
         growthFactor: number;
+        enableMetrics: boolean;
     };
     private readonly _buckets: readonly number[];
     private _performanceTracker: {
@@ -209,7 +216,7 @@ export class TypedArrayPool<T extends TypedArray> {
     }
 
     acquire(length: number = this._options.defaultLength): PoolableTypedArray<T> {
-        const startTime = performance.now();
+        const startTime = this._options.enableMetrics ? performance.now() : 0;
 
         const bucketSize = this._findBestBucket(length);
 
@@ -235,24 +242,31 @@ export class TypedArrayPool<T extends TypedArray> {
             );
         }
 
-        const allocationTime = performance.now() - startTime;
-        this._trackPerformance('allocation', allocationTime);
+        if (this._options.enableMetrics) {
+            this._trackPerformance('allocation', performance.now() - startTime);
+        }
 
         return pooled;
     }
 
     release(pooledArray: PoolableTypedArray<T>): void {
-        const startTime = performance.now();
+        const startTime = this._options.enableMetrics ? performance.now() : 0;
 
         if (this._options.validateIntegrity && !this._validateArray(pooledArray)) {
-            console.warn('TypedArrayPool: Invalid array detected during release');
+            if (this._options.enableInstrumentation) {
+                console.debug('TypedArrayPool: Invalid array detected during release');
+            }
             return;
         }
 
         if (this._options.zeroOnRelease) {
-            const zeroStart = performance.now();
-            pooledArray.zero();
-            this._trackPerformance('zeroing', performance.now() - zeroStart);
+            if (this._options.enableMetrics) {
+                const zeroStart = performance.now();
+                pooledArray.zero();
+                this._trackPerformance('zeroing', performance.now() - zeroStart);
+            } else {
+                pooledArray.zero();
+            }
         }
 
         this._stats.totalReleases++;
@@ -262,17 +276,20 @@ export class TypedArrayPool<T extends TypedArray> {
             ownerPool.release(pooledArray);
         }
 
-        const releaseTime = performance.now() - startTime;
-        this._trackPerformance('allocation', releaseTime); // Track as negative allocation time
+        if (this._options.enableMetrics) {
+            this._trackPerformance('allocation', performance.now() - startTime); // Track as negative allocation time
+        }
     }
 
     acquireWithData(source: ArrayLike<number>): PoolableTypedArray<T> {
-        const startTime = performance.now();
+        const startTime = this._options.enableMetrics ? performance.now() : 0;
 
         const pooled = this.acquire(source.length);
         pooled.copyFrom(source);
 
-        this._trackPerformance('copy', performance.now() - startTime);
+        if (this._options.enableMetrics) {
+            this._trackPerformance('copy', performance.now() - startTime);
+        }
         return pooled;
     }
 

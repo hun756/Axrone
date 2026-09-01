@@ -331,17 +331,21 @@ export class MemoryPool<T extends PoolableObject>
             try {
                 this.#options.onRelease(obj);
             } catch (e) {
-                console.error(`Error in onRelease handler for pool "${this.#options.name}":`, e);
+                if (this.#options.enableInstrumentation) {
+                    console.debug(`Error in onRelease handler for pool "${this.#options.name}":`, e);
+                }
             }
 
             if (this.#options.resetOnRecycle) {
                 try {
                     obj.reset();
                 } catch (e) {
-                    console.error(
-                        `Error in reset method for object in pool "${this.#options.name}":`,
-                        e
-                    );
+                    if (this.#options.enableInstrumentation) {
+                        console.debug(
+                            `Error in reset method for object in pool "${this.#options.name}":`,
+                            e
+                        );
+                    }
                 }
             }
 
@@ -359,10 +363,12 @@ export class MemoryPool<T extends PoolableObject>
                     try {
                         waiter.resolve(obj);
                     } catch (e) {
-                        console.error(
-                            `Error notifying async waiter in pool "${this.#options.name}":`,
-                            e
-                        );
+                        if (this.#options.enableInstrumentation) {
+                            console.debug(
+                                `Error notifying async waiter in pool "${this.#options.name}":`,
+                                e
+                            );
+                        }
                     }
                 });
                 return;
@@ -401,7 +407,9 @@ export class MemoryPool<T extends PoolableObject>
             try {
                 this.release(obj);
             } catch (e) {
-                console.error('Error releasing object during releaseAll:', e);
+                if (this.#options.enableInstrumentation) {
+                    console.debug('Error releasing object during releaseAll:', e);
+                }
             }
         }
     }
@@ -596,7 +604,9 @@ export class MemoryPool<T extends PoolableObject>
                 try {
                     this.#options.onEvict(slot.obj);
                 } catch (e) {
-                    console.error(`Error in onEvict handler during dispose:`, e);
+                    if (this.#options.enableInstrumentation) {
+                        console.debug(`Error in onEvict handler during dispose:`, e);
+                    }
                 }
             }
         }
@@ -775,7 +785,9 @@ export class MemoryPool<T extends PoolableObject>
         try {
             this.#options.onEvict(obj);
         } catch (e) {
-            console.error(`Error in onEvict handler for pool "${this.#options.name}":`, e);
+            if (this.#options.enableInstrumentation) {
+                console.debug(`Error in onEvict handler for pool "${this.#options.name}":`, e);
+            }
         }
 
         slot.status = 'free';
@@ -849,10 +861,12 @@ export class MemoryPool<T extends PoolableObject>
             obj.__lastAccessed = Date.now();
             obj.__allocCount = 0;
         } catch (e) {
-            console.error(
-                `Error creating async object for pool "${this.#options.name}":`,
-                e
-            );
+            if (this.#options.enableInstrumentation) {
+                console.debug(
+                    `Error creating async object for pool "${this.#options.name}":`,
+                    e
+                );
+            }
         }
     }
 }
