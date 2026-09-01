@@ -10,6 +10,7 @@ import {
 } from './lazy-core';
 import { LazyImpl, LazyAsyncImpl } from './lazy-impl';
 import { LazyFactoryImpl } from './lazy-factory';
+import { LruMap } from '../internal/lru-map';
 
 export const create = <T>(valueFactory: () => T): ILazy<T> =>
     new LazyImpl(valueFactory, valueFactory);
@@ -133,35 +134,30 @@ export const memoizeAsync = <TArgs extends readonly unknown[], TResult>(
     maxCacheSize = Infinity
 ): ((...args: TArgs) => Promise<TResult>) => {
     const cache = new Map<string, Promise<TResult>>();
-    const accessOrder: string[] = [];
+    const lru = new LruMap<string, true>({
+        capacity: maxCacheSize === Infinity ? Number.MAX_SAFE_INTEGER : maxCacheSize,
+        order: 'least-recently-used',
+    });
     const getKey = keySelector ?? ((...args) => JSON.stringify(args));
-
-    const evictLRU = () => {
-        if (accessOrder.length > 0) {
-            const oldest = accessOrder.shift()!;
-            cache.delete(oldest);
-        }
-    };
-
-    const updateAccess = (key: string) => {
-        const index = accessOrder.indexOf(key);
-        if (index !== -1) accessOrder.splice(index, 1);
-        accessOrder.push(key);
-    };
 
     return (...args: TArgs): Promise<TResult> => {
         const key = getKey(...args);
 
         if (cache.has(key)) {
-            updateAccess(key);
+            lru.touch(key);
             return cache.get(key)!;
         }
 
-        if (cache.size >= maxCacheSize) evictLRU();
+        if (cache.size >= maxCacheSize) {
+            const oldest = lru.pop();
+            if (oldest) {
+                cache.delete(oldest.key);
+            }
+        }
 
         const promise = fn(...args);
         cache.set(key, promise);
-        accessOrder.push(key);
+        lru.set(key, true);
 
         return promise;
     };
