@@ -48,6 +48,67 @@ describe('TypedArrayPool', () => {
             // After release with zeroOnRelease, the array should be zeroed
             expect(arr.array[0]).toBe(0);
         });
+
+        it('re-releases into the owning bucket pool', () => {
+            const pool = new TypedArrayPool({
+                arrayConstructor: Float32Array,
+                sizeBuckets: [64, 256],
+                preallocate: false,
+                initialCapacity: 1,
+                maxCapacity: 4,
+                allocationStrategy: 'first-available',
+            });
+            const arr = pool.acquire(64);
+            arr.array[0] = 42;
+            pool.release(arr);
+
+            const again = pool.acquire(64);
+            expect(again).toBe(arr);
+            expect(again.array[0]).toBe(0);
+        });
+    });
+
+    describe('growth strategies', () => {
+        it('supports exact strategy for uncached sizes', () => {
+            const pool = new TypedArrayPool({
+                arrayConstructor: Float32Array,
+                growthStrategy: 'exact',
+                sizeBuckets: [64, 256],
+                maxPoolableLength: 10000,
+                preallocate: false,
+            });
+
+            const arr = pool.acquire(1000);
+            expect(arr.length).toBe(1000);
+            arr.fill(1.5);
+            expect(() => pool.release(arr)).not.toThrow();
+            expect(pool.acquire(1000).length).toBe(1000);
+        });
+
+        it('supports exponential strategy for uncached sizes', () => {
+            const pool = new TypedArrayPool({
+                arrayConstructor: Float32Array,
+                growthStrategy: 'exponential',
+                growthFactor: 2,
+                sizeBuckets: [64, 256],
+                maxPoolableLength: 10000,
+                preallocate: false,
+            });
+
+            const arr = pool.acquire(300);
+            expect(arr.length).toBe(300);
+            expect(() => pool.release(arr)).not.toThrow();
+        });
+
+        it('fails fast when request exceeds pooled capacity', () => {
+            const pool = new TypedArrayPool({
+                arrayConstructor: Float32Array,
+                sizeBuckets: [64, 256],
+                maxPoolableLength: 10000,
+            });
+
+            expect(() => pool.acquire(1000)).toThrow(/exceeds pooled capacity/);
+        });
     });
 
     describe('acquireWithData()', () => {

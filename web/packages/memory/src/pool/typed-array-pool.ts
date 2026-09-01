@@ -92,6 +92,10 @@ export interface TypedArrayPoolStats {
 
 export class TypedArrayPool<T extends TypedArray> {
     private readonly _pools: Map<number, MemoryPool<PoolableTypedArray<T>>>;
+    private readonly _poolByObject = new WeakMap<
+        PoolableTypedArray<T>,
+        MemoryPool<PoolableTypedArray<T>>
+    >();
     private readonly _options: Partial<TypedArrayPoolOptions<T>> & {
         arrayConstructor: TypedArrayConstructor<T>;
         defaultLength: number;
@@ -167,11 +171,6 @@ export class TypedArrayPool<T extends TypedArray> {
         const startTime = performance.now();
 
         const bucketSize = this._findBestBucket(length);
-        const pool = this._pools.get(bucketSize);
-
-        if (!pool) {
-            throw new Error(`No pool available for bucket size ${bucketSize}`);
-        }
 
         this._stats.totalAllocations++;
         this._stats.bucketsHit.set(bucketSize, (this._stats.bucketsHit.get(bucketSize) ?? 0) + 1);
@@ -181,10 +180,18 @@ export class TypedArrayPool<T extends TypedArray> {
             return this._createOversizedArray(length);
         }
 
-        const pooled = pool.acquire();
+        let pool = this._pools.get(bucketSize);
+        if (!pool) {
+            pool = this._createBucketPool(bucketSize);
+        }
 
-        if (pooled.length !== length) {
-            pooled.resize(length);
+        const pooled = pool.acquire();
+        this._poolByObject.set(pooled, pool);
+
+        if (pooled.length !== length && !pooled.resize(length)) {
+            throw new Error(
+                `Requested typed array length ${length} exceeds pooled capacity ${pooled.length}`
+            );
         }
 
         const allocationTime = performance.now() - startTime;
@@ -209,11 +216,9 @@ export class TypedArrayPool<T extends TypedArray> {
 
         this._stats.totalReleases++;
 
-        const bucketSize = this._findBestBucket(pooledArray.length);
-        const pool = this._pools.get(bucketSize);
-
-        if (pool && pooledArray.length <= this._options.maxPoolableLength) {
-            pool.release(pooledArray);
+        const ownerPool = this._poolByObject.get(pooledArray);
+        if (ownerPool && pooledArray.length <= this._options.maxPoolableLength) {
+            ownerPool.release(pooledArray);
         }
 
         const releaseTime = performance.now() - startTime;
@@ -280,14 +285,20 @@ export class TypedArrayPool<T extends TypedArray> {
 
     private _initializePools(): void {
         for (const bucketSize of this._buckets) {
-            const poolOptions: MemoryPoolOptions<PoolableTypedArray<T>> = {
-                ...this._options,
-                factory: () => this._createPoolableArray(bucketSize),
-                name: `${this._options.name}[${bucketSize}]`,
-            };
-
-            this._pools.set(bucketSize, new MemoryPool(poolOptions));
+            this._createBucketPool(bucketSize);
         }
+    }
+
+    private _createBucketPool(bucketSize: number): MemoryPool<PoolableTypedArray<T>> {
+        const poolOptions: MemoryPoolOptions<PoolableTypedArray<T>> = {
+            ...this._options,
+            factory: () => this._createPoolableArray(bucketSize),
+            name: `${this._options.name}[${bucketSize}]`,
+        };
+
+        const pool = new MemoryPool(poolOptions);
+        this._pools.set(bucketSize, pool);
+        return pool;
     }
 
     private _createPoolableArray(length: number): PoolableTypedArray<T> {
