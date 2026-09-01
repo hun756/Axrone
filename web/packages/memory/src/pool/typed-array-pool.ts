@@ -483,6 +483,7 @@ export const TypedArrayPools = {
         name: 'Float32Pool',
         alignment: 16, // SIMD alignment
         enableMetrics: true,
+        preallocate: false,
     }),
 
     Float64: new TypedArrayPool({
@@ -492,6 +493,7 @@ export const TypedArrayPools = {
         name: 'Float64Pool',
         alignment: 16,
         enableMetrics: true,
+        preallocate: false,
     }),
 
     Uint32: new TypedArrayPool({
@@ -501,6 +503,7 @@ export const TypedArrayPools = {
         name: 'Uint32Pool',
         alignment: 16,
         enableMetrics: true,
+        preallocate: false,
     }),
 
     Uint16: new TypedArrayPool({
@@ -509,6 +512,7 @@ export const TypedArrayPools = {
         sizeBuckets: [128, 512, 2048, 8192, 32768, 131072],
         name: 'Uint16Pool',
         enableMetrics: true,
+        preallocate: false,
     }),
 
     Uint8: new TypedArrayPool({
@@ -517,5 +521,6 @@ export const TypedArrayPools = {
         sizeBuckets: [256, 1024, 4096, 16384, 65536, 262144],
         name: 'Uint8Pool',
         enableMetrics: true,
+        preallocate: false,
     }),
 } as const;

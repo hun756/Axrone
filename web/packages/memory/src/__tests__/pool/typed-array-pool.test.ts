@@ -314,4 +314,14 @@ describe('TypedArrayPools singletons', () => {
     it('Uint8 singleton is available', () => {
         expect(TypedArrayPools.Uint8).toBeInstanceOf(TypedArrayPool);
     });
+
+    it('defers array creation until first acquire', () => {
+        expect(TypedArrayPools.Uint8.getStats().arrayStats.totalArrays).toBe(0);
+
+        const arr = TypedArrayPools.Uint8.acquire(256);
+        expect(arr.length).toBe(256);
+        expect(TypedArrayPools.Uint8.getStats().arrayStats.totalArrays).toBeGreaterThan(0);
+
+        TypedArrayPools.Uint8.release(arr);
+    });
 });
