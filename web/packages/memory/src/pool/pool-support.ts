@@ -8,6 +8,46 @@ export interface PoolableObject {
     reset(): void;
 }
 
+/**
+ * Controls how a memory pool grows when it needs more capacity.
+ *
+ * Each strategy produces a different sequence of pool sizes, trading off
+ * predictability, memory overhead, and allocator-friendliness.
+ *
+ * - `'fixed'` — Adds a constant number of slots per expansion (controlled by
+ *   `expansionRate`, defaulting to 32). Growth is linear: N, N+k, N+2k, …
+ *   Best for workloads with a known, stable object count where overshooting
+ *   would waste memory. Predictable and simple, but may require many expansion
+ *   cycles for rapidly growing workloads.
+ *
+ * - `'multiplicative'` — Multiplies current capacity by `expansionFactor`
+ *   (default 2×). Growth is exponential: N, 2N, 4N, 8N, …
+ *   This is the default strategy and suits most general-purpose pools. It
+ *   gives O(log N) expansions total and amortises allocation cost well. The
+ *   downside is that power-of-two sizes can cause hash-table clustering if
+ *   pool indices are used as hash keys.
+ *
+ * - `'fibonacci'` — Expands to the next Fibonacci number above current
+ *   capacity: … 34, 55, 89, 144, 233, 377, …
+ *   The golden-ratio growth (~1.618×) is gentler than 2× doubling, so the pool
+ *   overshoots less on each expansion. Fibonacci sizes also appear in
+ *   natural/generative workloads (particle systems, fractal geometry, spatial
+ *   subdivision). Retained as a user-selectable option for these specialised
+ *   cases.
+ *
+ * - `'prime'` — Expands to the next prime number above `current * expansionFactor`.
+ *   Prime-sized capacities are hash-table-friendly: when pool slot indices feed
+ *   into modular hashing (e.g. open-addressing hash maps built on top of the
+ *   pool), prime table sizes guarantee uniform distribution for any hash
+ *   function, avoiding the clustering that power-of-two sizes cause. Prime
+ *   growth also produces irregular expansion steps that can reduce resonance
+ *   with periodic allocation patterns, leading to smoother GC pressure in
+ *   long-running applications.
+ *
+ * @see {@link MemoryPoolOptions.expansionStrategy}
+ * @see {@link MemoryPoolOptions.expansionFactor}
+ * @see {@link MemoryPoolOptions.expansionRate}
+ */
 export type PoolExpansionStrategy = 'fixed' | 'multiplicative' | 'fibonacci' | 'prime';
 
 export type PoolAllocationStrategy =
