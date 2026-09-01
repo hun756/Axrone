@@ -273,7 +273,13 @@ export class BufferPool {
             } else {
                 return null;
             }
-        } catch {
+        } catch (error) {
+            if (this.options.enableInstrumentation) {
+                console.debug(
+                    `tryAllocate failed for bucket ${bucketIndex}:`,
+                    error
+                );
+            }
             return null;
         }
     }
