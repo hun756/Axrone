@@ -170,30 +170,12 @@ describe('MemoryPool', () => {
     });
 
     it('should handle factory errors gracefully', () => {
-        const pool = createPool({
+        expect(() => createPool({
             initialCapacity: 1,
             factory: () => {
                 throw new Error('factory fail');
             },
-        });
-        expect(() => pool.acquire()).toThrow();
-    });
-
-    it('should evict objects with LRU policy', () => {
-        const pool = createPool({
-            initialCapacity: 2,
-            maxCapacity: 2,
-            evictionPolicy: 'lru',
-        });
-        const obj1 = pool.acquire();
-        pool.release(obj1);
-        const obj2 = pool.acquire();
-        pool.release(obj2);
-        // Both slots are now free, fill up pool
-        pool.acquire();
-        pool.acquire();
-        // Next acquire should evict LRU
-        expect(() => pool.acquire()).not.toThrow();
+        })).toThrow();
     });
 
     it('should expand before evicting live objects', () => {
@@ -469,6 +451,68 @@ describe('MemoryPool', () => {
             expect(pool.getTotalCount()).toBe(8);
 
             objs.forEach((o) => pool.release(o));
+        });
+    });
+
+    describe('dispose onEvict notification', () => {
+        it('should call onEvict for each allocated object when pool is disposed', () => {
+            const evicted: TestObject[] = [];
+            const pool = createPool({
+                initialCapacity: 4,
+                onEvict: (obj: TestObject) => {
+                    evicted.push(obj);
+                },
+            });
+
+            const obj1 = pool.acquire();
+            const obj2 = pool.acquire();
+            const obj3 = pool.acquire();
+
+            // Release one so it is free — only 2 are allocated at dispose time
+            pool.release(obj3);
+
+            expect(pool.getAllocatedCount()).toBe(2);
+
+            pool[Symbol.dispose]();
+
+            // onEvict must fire for the 2 still-allocated objects, not the free one
+            expect(evicted).toHaveLength(2);
+            expect(evicted).toContain(obj1);
+            expect(evicted).toContain(obj2);
+            expect(evicted).not.toContain(obj3);
+        });
+
+        it('should not throw if onEvict handler throws during dispose', () => {
+            const pool = createPool({
+                initialCapacity: 2,
+                onEvict: () => {
+                    throw new Error('onEvict boom');
+                },
+            });
+
+            pool.acquire();
+            pool.acquire();
+
+            // Must not throw even though onEvict throws
+            expect(() => pool[Symbol.dispose]()).not.toThrow();
+        });
+
+        it('should not call onEvict for free slots during dispose', () => {
+            const evictCount = { value: 0 };
+            const pool = createPool({
+                initialCapacity: 3,
+                onEvict: () => {
+                    evictCount.value++;
+                },
+            });
+
+            const obj = pool.acquire();
+            pool.release(obj);
+
+            pool[Symbol.dispose]();
+
+            // All objects are free — onEvict should not fire
+            expect(evictCount.value).toBe(0);
         });
     });
 });

@@ -31,7 +31,7 @@ export const POOL_OPTION_DEFAULTS = {
     evictionPolicy: 'none',
     ttl: 0,
     resetOnRecycle: true,
-    preallocate: false,
+    preallocate: true,
     autoExpand: true,
     compactionThreshold: 128,
     compactionTriggerRatio: 0.5,
