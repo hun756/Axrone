@@ -22,8 +22,11 @@ import { BufferUtils } from './utils';
 export class ByteBuffer implements IByteBuffer {
     private static readonly DEFAULT_ORDER = ByteOrder.Big;
     private static readonly VIEW_CACHE_CAPACITY = PERFORMANCE_DEFAULTS.CACHE_SIZE ?? 256;
-    private static readonly pool = BufferPool.getInstance();
     private static readonly viewCache = new Map<string, WeakMap<ByteBuffer, BufferView<any>>>();
+
+    private static get pool(): BufferPool {
+        return BufferPool.getInstance();
+    }
 
     private buffer: ArrayBuffer;
     private view: DataView;

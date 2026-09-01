@@ -1,4 +1,4 @@
-import { BufferPool, BufferPoolOptions } from '../../buffering';
+import { BufferPool, BufferPoolOptions, ByteBuffer } from '../../buffering';
 
 describe('Professional BufferPool', () => {
     let pool: BufferPool;
@@ -241,6 +241,33 @@ describe('Professional BufferPool', () => {
 
             hookPool.dispose();
             BufferPool.resetInstance();
+        });
+    });
+
+    describe('Singleton lifecycle', () => {
+        beforeEach(() => {
+            BufferPool.resetInstance();
+        });
+
+        afterEach(() => {
+            BufferPool.resetInstance();
+        });
+
+        it('re-pools buffers through ByteBuffer after singleton reset', () => {
+            const b1 = ByteBuffer.alloc(64);
+            b1.release();
+
+            BufferPool.resetInstance();
+
+            const b2 = ByteBuffer.alloc(64);
+            const raw2 = b2.getBuffer();
+            b2.release();
+
+            const b3 = ByteBuffer.alloc(64);
+            const raw3 = b3.getBuffer();
+            b3.release();
+
+            expect(raw2).toBe(raw3);
         });
     });
 });

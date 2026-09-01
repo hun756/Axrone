@@ -55,7 +55,7 @@ export interface BufferPoolOptions {
 }
 
 export class BufferPool {
-    private static instance: BufferPool;
+    private static instance: BufferPool | undefined;
     private readonly pools: Map<number, ObjectPool<PoolableArrayBuffer>>;
     private readonly options: Required<BufferPoolOptions>;
     private readonly bucketSizes: number[];
@@ -104,7 +104,7 @@ export class BufferPool {
     static resetInstance(): void {
         if (BufferPool.instance) {
             BufferPool.instance.dispose();
-            BufferPool.instance = undefined as any;
+            BufferPool.instance = undefined;
         }
     }
 
