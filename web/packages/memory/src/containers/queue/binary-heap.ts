@@ -4,7 +4,7 @@ import {
     QueueSize,
     BinaryHeapOperations,
 } from './types';
-import { createQueueSize, defaultComparator } from './utils';
+import { createQueueSize } from './utils';
 import { heapSiftUp, heapSiftDown, heapHeapify, NO_OP_MOVE } from '../../internal/heap-sift';
 import type { HeapComesBefore } from '../../internal/heap-sift';
 

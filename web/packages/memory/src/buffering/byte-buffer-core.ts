@@ -1,5 +1,5 @@
 import { ByteOrder, SeekOrigin, BufferState, TypedArrayMap } from './types';
-import { IByteBuffer, IReadableBuffer, IWritableBuffer } from './interfaces';
+import { IByteBuffer, IReadableBuffer } from './interfaces';
 import { BUFFER_DEFAULTS, STRING_DEFAULTS, PERFORMANCE_DEFAULTS } from './constants';
 import {
     BufferOverflowError,
