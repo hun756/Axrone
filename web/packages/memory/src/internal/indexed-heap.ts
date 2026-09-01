@@ -1,4 +1,6 @@
 import type { Comparator, HeapOrder } from '../containers/queue/binary-heap';
+import { heapSiftUp, heapSiftDown } from './heap-sift';
+import type { HeapComesBefore, HeapOnMove } from './heap-sift';
 
 export type { Comparator, HeapOrder };
 
@@ -70,6 +72,8 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
     #size: number = 0;
     #nextHandleId: number = 1;
     #modCount: number = 0;
+    readonly #comesBeforeFn: HeapComesBefore<HeapNode<K, V>>;
+    readonly #onMoveFn: HeapOnMove<HeapNode<K, V>>;
 
     constructor(options: IndexedHeapOptions<K, V>) {
         const compare = options.compare;
@@ -82,6 +86,10 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
         const initialCapacity = Math.max(0, options.initialCapacity ?? 0);
         this.#nodes = new Array(initialCapacity);
         this.#handleToIndex = new Map();
+        this.#comesBeforeFn = (a: HeapNode<K, V>, b: HeapNode<K, V>): boolean =>
+            this.#comesBeforeByKey(a.key, b.key);
+        this.#onMoveFn = (node: HeapNode<K, V>, newIndex: number): void =>
+            this.#handleToIndex.set(node.handle, newIndex);
     }
 
     get size(): number {
@@ -309,52 +317,11 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
     }
 
     #siftUp(startIndex: number): void {
-        const nodes = this.#nodes;
-        const item = nodes[startIndex]!;
-        let index = startIndex;
-
-        while (index > 0) {
-            const parentIndex = (index - 1) >>> 1;
-            const parent = nodes[parentIndex]!;
-            if (!this.#comesBeforeByKey(item.key, parent.key)) break;
-            nodes[index] = parent;
-            this.#handleToIndex.set(parent.handle, index);
-            index = parentIndex;
-        }
-        nodes[index] = item;
-        this.#handleToIndex.set(item.handle, index);
+        heapSiftUp(this.#nodes, startIndex, this.#comesBeforeFn, this.#onMoveFn);
     }
 
     #siftDown(startIndex: number): void {
-        const nodes = this.#nodes;
-        const size = this.#size;
-        const half = size >>> 1;
-        const item = nodes[startIndex]!;
-        let index = startIndex;
-
-        while (index < half) {
-            let bestIndex = (index << 1) + 1;
-            const left = nodes[bestIndex]!;
-            let bestKey = left.key;
-            const rightIndex = bestIndex + 1;
-
-            if (rightIndex < size) {
-                const right = nodes[rightIndex]!;
-                if (this.#comesBeforeByKey(right.key, bestKey)) {
-                    bestIndex = rightIndex;
-                    bestKey = right.key;
-                }
-            }
-
-            if (!this.#comesBeforeByKey(bestKey, item.key)) break;
-
-            const best = nodes[bestIndex]!;
-            nodes[index] = best;
-            this.#handleToIndex.set(best.handle, index);
-            index = bestIndex;
-        }
-        nodes[index] = item;
-        this.#handleToIndex.set(item.handle, index);
+        heapSiftDown(this.#nodes, this.#size, startIndex, this.#comesBeforeFn, this.#onMoveFn);
     }
 
     #comesBefore(i: number, j: number): boolean {

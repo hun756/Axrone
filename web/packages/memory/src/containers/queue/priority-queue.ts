@@ -1,5 +1,7 @@
 import type { Comparator, Equality, HeapOrder } from './binary-heap';
 import { defaultPrimitiveComparator } from './binary-heap';
+import { heapSiftUp, heapSiftDown, heapHeapify } from '../../internal/heap-sift';
+import type { HeapComesBefore, HeapOnMove } from '../../internal/heap-sift';
 
 declare const __priorityQueueHandle: unique symbol;
 
@@ -289,6 +291,8 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
     readonly #comparator: Comparator<P>;
     readonly #equality: Equality<T>;
     readonly #prioritySelector: PrioritySelector<T, P> | undefined;
+    readonly #comesBeforeFn: HeapComesBefore<Node<T, P>>;
+    readonly #onMoveFn: HeapOnMove<Node<T, P>>;
     #nextHandle: number;
     #nextSequence: number;
 
@@ -446,6 +450,14 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
         );
         this.#equality = options?.equality ?? defaultEquality;
         this.#prioritySelector = options?.priority;
+        this.#comesBeforeFn = (left: Node<T, P>, right: Node<T, P>): boolean => {
+            const cmp = this.#comparator(left.priority, right.priority);
+            if (cmp !== 0) return cmp * this.#orderFactor < 0;
+            return left.sequence < right.sequence;
+        };
+        this.#onMoveFn = (node: Node<T, P>, newIndex: number): void => {
+            this.#handleToIndex[node.handle as number] = newIndex;
+        };
         this.#store = [];
         this.#handleToIndex = [];
         this.#nextHandle = 1;
@@ -1263,63 +1275,15 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
     }
 
     #heapify(): void {
-        for (let index = (this.#store.length >> 1) - 1; index >= 0; index--) {
-            this.#siftDown(index);
-        }
+        heapHeapify(this.#store, this.#comesBeforeFn, this.#onMoveFn);
     }
 
     #siftUp(index: number): void {
-        const store = this.#store;
-        const item = store[index]!;
-
-        while (index > 0) {
-            const parentIndex = (index - 1) >> 1;
-            const parent = store[parentIndex]!;
-
-            if (!this.#comesBefore(item, parent)) {
-                break;
-            }
-
-            store[index] = parent;
-            this.#bindHandle(parent.handle, index);
-            index = parentIndex;
-        }
-
-        store[index] = item;
-        this.#bindHandle(item.handle, index);
+        heapSiftUp(this.#store, index, this.#comesBeforeFn, this.#onMoveFn);
     }
 
     #siftDown(index: number): void {
-        const store = this.#store;
-        const length = store.length;
-        const item = store[index]!;
-        const half = length >> 1;
-
-        while (index < half) {
-            let bestIndex = (index << 1) + 1;
-            let bestChild = store[bestIndex]!;
-            const rightIndex = bestIndex + 1;
-
-            if (rightIndex < length) {
-                const right = store[rightIndex]!;
-
-                if (this.#comesBefore(right, bestChild)) {
-                    bestIndex = rightIndex;
-                    bestChild = right;
-                }
-            }
-
-            if (!this.#comesBefore(bestChild, item)) {
-                break;
-            }
-
-            store[index] = bestChild;
-            this.#bindHandle(bestChild.handle, index);
-            index = bestIndex;
-        }
-
-        store[index] = item;
-        this.#bindHandle(item.handle, index);
+        heapSiftDown(this.#store, this.#store.length, index, this.#comesBeforeFn, this.#onMoveFn);
     }
 }
 
