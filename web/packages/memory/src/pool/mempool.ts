@@ -207,16 +207,15 @@ export class MemoryPool<T extends PoolableObject>
                 this.#metrics.recordAllocation(false, false);
 
                 let replenished = false;
-                if (this.#options.evictionPolicy !== 'none') {
-                    replenished = this.#tryEvictObject();
-                }
                 if (
-                    !replenished &&
                     this.#options.autoExpand &&
                     this.#slots.length < this.#options.maxCapacity
                 ) {
                     this.#expand();
                     replenished = this.#freeList.size > 0;
+                }
+                if (!replenished && this.#options.evictionPolicy !== 'none') {
+                    replenished = this.#tryEvictObject();
                 }
                 if (!replenished) {
                     this.#options.onOutOfMemory(1, 0);

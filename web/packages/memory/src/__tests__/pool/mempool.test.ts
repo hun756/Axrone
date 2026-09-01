@@ -192,6 +192,19 @@ describe('MemoryPool', () => {
         expect(() => pool.acquire()).not.toThrow();
     });
 
+    it('should expand before evicting live objects', () => {
+        const pool = createPool({ initialCapacity: 2, evictionPolicy: 'lru' });
+        const a = pool.acquire();
+        const b = pool.acquire();
+        pool.acquire();
+
+        expect(pool.isFromPool(a)).toBe(true);
+        expect(pool.isFromPool(b)).toBe(true);
+        expect(a.__poolStatus).toBe('allocated');
+        expect(b.__poolStatus).toBe('allocated');
+        expect(pool.getAllocatedCount()).toBe(3);
+    });
+
     it('should not leak memory on rapid acquire/release cycles', () => {
         const pool = createPool({ initialCapacity: 10, maxCapacity: 100 });
         for (let i = 0; i < 1000; ++i) {
