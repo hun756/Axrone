@@ -22,6 +22,7 @@
     },
     "dependencies": {
         "@axrone/event": "^0.1.0",
+        "@axrone/memory": "^0.1.0",
         "@axrone/utility": "^0.0.1"
     }
 }
