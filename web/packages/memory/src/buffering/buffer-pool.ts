@@ -231,10 +231,12 @@ export class BufferPool {
                 const poolableBuffer = pool.acquire();
                 buffer = poolableBuffer.buffer;
             } catch (error) {
-                console.warn(
-                    `Pool exhausted for bucket ${bucketIndex}, falling back to direct allocation:`,
-                    error
-                );
+                if (this.options.enableInstrumentation) {
+                    console.debug(
+                        `Pool exhausted for bucket ${bucketIndex}, falling back to direct allocation:`,
+                        error
+                    );
+                }
                 this.options.onOutOfMemory(requestedSize, bucketIndex);
                 buffer = new ArrayBuffer(actualSize);
             }
@@ -288,7 +290,9 @@ export class BufferPool {
         try {
             pool.release(entry.wrapper);
         } catch (error) {
-            console.warn(`Failed to release buffer to pool:`, error);
+            if (this.options.enableInstrumentation) {
+                console.debug(`Failed to release buffer to pool:`, error);
+            }
         }
     }
 
