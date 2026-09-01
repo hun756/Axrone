@@ -8,13 +8,24 @@ class PoolableArrayBuffer implements PoolableObject {
     __lastAccessed?: number;
     __allocCount?: number;
 
+    /**
+     * @param buffer - The underlying ArrayBuffer to pool.
+     * @param size - The byte length of the buffer.
+     * @param zeroOnRelease - When true (default), the buffer is zeroed on reset
+     *   to prevent stale data from leaking between consumers. Set to false for
+     *   a performance gain when the consumer always overwrites the full buffer
+     *   before reading, making the zero-fill redundant.
+     */
     constructor(
         public readonly buffer: ArrayBuffer,
-        public readonly size: number
+        public readonly size: number,
+        public readonly zeroOnRelease: boolean = true
     ) {}
 
     reset(): void {
-        new Uint8Array(this.buffer).fill(0);
+        if (this.zeroOnRelease) {
+            new Uint8Array(this.buffer).fill(0);
+        }
     }
 }
 
@@ -42,6 +53,16 @@ export interface BufferPoolOptions {
     readonly highWatermarkRatio?: number;
 
     readonly lowWatermarkRatio?: number;
+
+    /**
+     * When true (default), buffers are zero-filled on release back to the pool.
+     * This prevents stale data from leaking between consumers but adds a small
+     * performance cost proportional to buffer size. Set to false when callers
+     * always overwrite the entire buffer before reading, making the zero-fill
+     * redundant.
+     * @default true
+     */
+    readonly zeroOnRelease?: boolean;
 
     readonly validator?: (buffer: ArrayBuffer) => boolean;
 
@@ -78,6 +99,7 @@ export class BufferPool {
             name: options.name ?? 'BufferPool',
             highWatermarkRatio: options.highWatermarkRatio ?? 0.85,
             lowWatermarkRatio: options.lowWatermarkRatio ?? 0.25,
+            zeroOnRelease: options.zeroOnRelease ?? true,
             validator: options.validator ?? (() => true),
             onAcquire: options.onAcquire ?? (() => {}),
             onRelease: options.onRelease ?? (() => {}),
@@ -133,7 +155,7 @@ export class BufferPool {
                 expansionStrategy: 'multiplicative',
                 expansionFactor: 1.5,
 
-                factory: () => new PoolableArrayBuffer(new ArrayBuffer(bucketSize), bucketSize),
+                factory: () => new PoolableArrayBuffer(new ArrayBuffer(bucketSize), bucketSize, this.options.zeroOnRelease),
 
                 resetHandler: (buffer: PoolableArrayBuffer) => buffer.reset(),
 
