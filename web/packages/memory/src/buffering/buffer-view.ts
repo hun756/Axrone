@@ -233,8 +233,8 @@ export class BufferView<T extends keyof TypedArrayMap> implements IReadableBuffe
 
     toTypedArray(): TypedArrayMap[T] {
         const ArrayConstructor = this.getTypedArrayConstructor();
-        const arrayBuffer = this.buffer.asReadOnlyBuffer();
-        return new ArrayConstructor(arrayBuffer as any, 0, this.capacity);
+        const arrayBuffer = this.buffer.getBuffer();
+        return new ArrayConstructor(arrayBuffer, 0, this.capacity);
     }
 
     private getTypedArrayConstructor(): new (

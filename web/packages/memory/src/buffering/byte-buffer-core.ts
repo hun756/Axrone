@@ -146,6 +146,11 @@ export class ByteBuffer implements IByteBuffer {
         return this.pooled;
     }
 
+    getBuffer(): ArrayBuffer {
+        this.checkState();
+        return this.buffer;
+    }
+
     private checkState(): void {
         if (this.state === BufferState.Released) {
             throw new BufferReleasedError();

@@ -47,5 +47,6 @@ export interface IByteBuffer extends IWritableBuffer {
     compact(): this;
     duplicate(): IByteBuffer;
     asReadOnlyBuffer(): IReadableBuffer;
+    getBuffer(): ArrayBuffer;
     seek(offset: number, origin?: any): this;
 }
