@@ -614,6 +614,18 @@ export class MemoryPool<T extends PoolableObject>
                 this.#options.name
             )
         );
+
+        // Notify onEvict for all currently allocated objects before tearing down
+        for (const slot of this.#slots) {
+            if (slot && slot.status === 'allocated' && slot.obj) {
+                try {
+                    this.#options.onEvict(slot.obj);
+                } catch (e) {
+                    console.error(`Error in onEvict handler during dispose:`, e);
+                }
+            }
+        }
+
         this.#slots.length = 0;
         this.#freeList.clear();
         if (this.#lruIndex) this.#lruIndex.clear();
