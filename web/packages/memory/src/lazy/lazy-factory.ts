@@ -25,7 +25,12 @@ export class LazyFactoryImpl<TArgs extends readonly unknown[], TResult>
         this.keySelector = keySelector;
         this.maxCacheSize = maxCacheSize;
         this.accessOrder = new LruMap<string, true>({
-            capacity: Number.isFinite(maxCacheSize) && maxCacheSize > 0 ? maxCacheSize : 1024,
+            capacity:
+                maxCacheSize === Number.POSITIVE_INFINITY
+                    ? Number.MAX_SAFE_INTEGER
+                    : Number.isFinite(maxCacheSize) && maxCacheSize > 0
+                      ? maxCacheSize
+                      : 1024,
             order: 'least-recently-used',
         });
     }
