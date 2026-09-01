@@ -19,7 +19,7 @@ export interface IReadableBuffer {
     getFloat64(): number;
     getBigInt64(): bigint;
     getBigUint64(): bigint;
-    getString(): string;
+    getString(encoding?: 'utf8' | 'utf16'): string;
     slice(begin?: number, end?: number): IReadableBuffer;
 }
 

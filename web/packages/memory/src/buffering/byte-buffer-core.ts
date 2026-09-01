@@ -469,7 +469,7 @@ export class ByteBuffer implements IByteBuffer {
         this.checkState();
         this.checkReadOnly();
 
-        const bytes = BufferUtils.encodeString(str);
+        const bytes = BufferUtils.encodeString(str, encoding);
 
         if (bytes.length > STRING_DEFAULTS.MAX_WRITE_LENGTH) {
             throw new BufferOverflowError(
@@ -481,7 +481,7 @@ export class ByteBuffer implements IByteBuffer {
         return this.put(bytes);
     }
 
-    getString(): string {
+    getString(encoding: 'utf8' | 'utf16' = 'utf8'): string {
         this.checkState();
 
         const length = this.getInt32();
@@ -493,7 +493,7 @@ export class ByteBuffer implements IByteBuffer {
         const bytes = this.u8Array.subarray(this.pos, this.pos + length);
         this.movePosition(length);
 
-        return BufferUtils.decodeString(bytes);
+        return BufferUtils.decodeString(bytes, encoding);
     }
 
     putCString(str: string): this {

@@ -84,6 +84,31 @@ describe('ByteBuffer Advanced', () => {
         });
     });
 
+    describe('putString() / getString()', () => {
+        it('roundtrips utf8 strings', () => {
+            const b = ByteBuffer.alloc(64);
+            b.putString('hello world');
+            b.rewind();
+            expect(b.getString()).toBe('hello world');
+        });
+
+        it('honors utf16 encoding', () => {
+            const b = ByteBuffer.alloc(64);
+            b.putString('héllo wörld', 'utf16');
+            b.rewind();
+            expect(b.getString('utf16')).toBe('héllo wörld');
+        });
+
+        it('decodes utf16 from an odd byte offset', () => {
+            const b = ByteBuffer.alloc(64);
+            b.putUint8(0xaa);
+            b.putString('héllo', 'utf16');
+            b.rewind();
+            expect(b.getUint8()).toBe(0xaa);
+            expect(b.getString('utf16')).toBe('héllo');
+        });
+    });
+
     describe('putJson() / getJson()', () => {
         it('roundtrips simple object', () => {
             const b = ByteBuffer.alloc(256);
