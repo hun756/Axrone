@@ -1,4 +1,4 @@
-import type { TypedArray } from '@axrone/utility';
+import type { TypedArray, NumericTypedArray } from '@axrone/utility';
 import { MemoryPool, MemoryPoolOptions, PoolableObject } from './mempool';
 import { POOL_OPTION_DEFAULTS } from './pool-support';
 import { CircularBuffer } from './internal/circular-buffer';
@@ -346,11 +346,15 @@ export class TypedArrayPool<T extends TypedArray> {
             buffer,
 
             zero(): void {
-                (array as any).fill(0);
+                (array as { fill(value: number): unknown }).fill(0);
             },
 
-            fill(value: number, start?: number, end?: number): any {
-                (array as any).fill(value, start, end);
+            fill(value: number, start?: number, end?: number): PoolableTypedArray<T> {
+                (array as { fill(value: number, start?: number, end?: number): unknown }).fill(
+                    value,
+                    start,
+                    end
+                );
                 return this;
             },
 
@@ -358,12 +362,16 @@ export class TypedArrayPool<T extends TypedArray> {
                 if (newLength === array.length) return true;
                 if (newLength > array.length) return false; // Can't expand existing buffer
 
-                (this as any).array = new (this.array.constructor as any)(
-                    buffer,
-                    0,
-                    newLength
-                ) as T;
-                (this as any).length = newLength;
+                const mutableThis = this as {
+                    array: T;
+                    length: number;
+                };
+                mutableThis.array = new (array.constructor as new (
+                    buffer: ArrayBuffer,
+                    byteOffset?: number,
+                    length?: number
+                ) => T)(buffer, 0, newLength);
+                mutableThis.length = newLength;
                 return true;
             },
 
@@ -377,8 +385,8 @@ export class TypedArrayPool<T extends TypedArray> {
                     length ?? Math.min(source.length - sourceOffset, array.length - targetOffset);
 
                 if (source instanceof array.constructor) {
-                    array.set(
-                        (source as any).subarray(sourceOffset, sourceOffset + copyLength),
+                    (array as NumericTypedArray).set(
+                        (source as NumericTypedArray).subarray(sourceOffset, sourceOffset + copyLength),
                         targetOffset
                     );
                 } else {

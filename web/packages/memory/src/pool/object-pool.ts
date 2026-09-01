@@ -38,6 +38,10 @@ class ObjectPoolError extends Error {
     }
 }
 
+interface MaybeResettable {
+    reset?(): void;
+}
+
 const createWrapper = <T>(value: T, resetHandler?: (obj: T) => void): PoolableWrapper<T> => {
     const wrapper: PoolableWrapper<T> = {
         value,
@@ -45,8 +49,8 @@ const createWrapper = <T>(value: T, resetHandler?: (obj: T) => void): PoolableWr
         reset(): void {
             if (resetHandler) {
                 resetHandler(value);
-            } else if (typeof (value as any)?.reset === 'function') {
-                (value as any).reset();
+            } else if (typeof (value as MaybeResettable).reset === 'function') {
+                (value as MaybeResettable).reset!();
             }
         },
     };

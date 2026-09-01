@@ -9,6 +9,7 @@ import {
     type PoolableObject,
     type PoolPerformanceMetrics,
     type PoolSlot,
+    type ResolvedMemoryPoolOptions,
 } from './pool-support';
 import { LruSlotIndex } from './internal/lru-slot-index';
 import { PoolMetricsCollector } from './internal/pool-metrics';
@@ -69,35 +70,7 @@ export class MemoryPool<T extends PoolableObject>
     readonly #id: number;
     readonly #slots: PoolSlot<T>[] = [];
     readonly #freeList: Set<number> = new Set();
-    readonly #options: MemoryPoolOptions<T> & {
-        initialCapacity: number;
-        maxCapacity: number;
-        minFree: number;
-        highWatermarkRatio: number;
-        lowWatermarkRatio: number;
-        expansionStrategy: 'fixed' | 'multiplicative' | 'fibonacci' | 'prime';
-        expansionFactor: number;
-        expansionRate: number;
-        allocationStrategy:
-            | 'first-available'
-            | 'least-recently-used'
-            | 'most-recently-used'
-            | 'round-robin';
-        evictionPolicy: 'none' | 'lru' | 'ttl' | 'fifo';
-        ttl: number;
-        resetOnRecycle: boolean;
-        validator: (obj: T) => boolean;
-        preallocate: boolean;
-        autoExpand: boolean;
-        compactionThreshold: number;
-        compactionTriggerRatio: number;
-        onAcquire: (obj: T) => void;
-        onRelease: (obj: T) => void;
-        onEvict: (obj: T) => void;
-        onOutOfMemory: (requested: number, available: number) => void;
-        enableMetrics: boolean;
-        name: string;
-    };
+    readonly #options: ResolvedMemoryPoolOptions<T>;
 
     #isDisposed = false;
     #lruIndex: LruSlotIndex | null = null;
@@ -111,7 +84,7 @@ export class MemoryPool<T extends PoolableObject>
     constructor(options: MemoryPoolOptions<T>) {
         this.#id = ++MemoryPool.#poolIdCounter & MAX_POOL_ID;
 
-        const resolved = {
+        const resolved: ResolvedMemoryPoolOptions<T> = {
             initialCapacity: options.initialCapacity ?? POOL_OPTION_DEFAULTS.initialCapacity,
             maxCapacity: options.maxCapacity ?? POOL_OPTION_DEFAULTS.maxCapacity,
             minFree: options.minFree ?? POOL_OPTION_DEFAULTS.minFree,
@@ -148,8 +121,8 @@ export class MemoryPool<T extends PoolableObject>
             asyncFactory: options.asyncFactory,
             estimatedObjectSize: options.estimatedObjectSize,
         };
-        validateMemoryPoolOptions(resolved as any);
-        this.#options = resolved as any;
+        validateMemoryPoolOptions(resolved);
+        this.#options = resolved;
 
         this.#metrics = new PoolMetricsCollector(
             this.#options.name,
@@ -724,11 +697,11 @@ export class MemoryPool<T extends PoolableObject>
         }
         let index = 0;
         return {
-            next(): IteratorResult<T> {
+            next(): IteratorResult<T, undefined> {
                 if (index < allocated.length) {
                     return { value: allocated[index++], done: false };
                 }
-                return { value: undefined as any, done: true };
+                return { value: undefined, done: true };
             },
         };
     }

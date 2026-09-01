@@ -1,4 +1,4 @@
-import { ByteOrder, TypedArrayMap, PrimitiveTypeMap } from './types';
+import { ByteOrder, TypedArrayMap, PrimitiveTypeMap, TypedArrayConstructorMap } from './types';
 import { IReadableBuffer, IByteBuffer } from './interfaces';
 
 export class BufferView<T extends keyof TypedArrayMap> implements IReadableBuffer {
@@ -242,7 +242,7 @@ export class BufferView<T extends keyof TypedArrayMap> implements IReadableBuffe
         byteOffset?: number,
         length?: number
     ) => TypedArrayMap[T] {
-        const constructors = {
+        const constructors: TypedArrayConstructorMap = {
             int8: Int8Array,
             uint8: Uint8Array,
             int16: Int16Array,
@@ -253,8 +253,8 @@ export class BufferView<T extends keyof TypedArrayMap> implements IReadableBuffe
             float64: Float64Array,
             bigint64: BigInt64Array,
             biguint64: BigUint64Array,
-        } as const;
-        return constructors[this.arrayType] as any;
+        };
+        return constructors[this.arrayType];
     }
 
     *[Symbol.iterator](): Iterator<PrimitiveTypeMap[T]> {

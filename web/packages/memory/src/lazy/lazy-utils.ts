@@ -79,8 +79,11 @@ export const traverseAsync = <T, U>(
 
 export const race = <T extends readonly ILazyAsync<unknown>[]>(
     ...lazies: T
-): ILazyAsync<ExtractLazyAsyncType<T[number]>> =>
-    new LazyAsyncImpl(() => Promise.race(lazies.map((lazy) => lazy.force()))) as any;
+): ILazyAsync<ExtractLazyAsyncType<T[number]>> => {
+    type ResultType = ExtractLazyAsyncType<T[number]>;
+    const typedLazies = lazies as readonly ILazyAsync<ResultType>[];
+    return new LazyAsyncImpl(() => Promise.race(typedLazies.map((lazy) => lazy.force())));
+};
 
 export const all = <T extends readonly ILazyAsync<unknown>[]>(
     lazies: T
@@ -88,8 +91,13 @@ export const all = <T extends readonly ILazyAsync<unknown>[]>(
 
 export const allSettled = <T extends readonly ILazyAsync<unknown>[]>(
     lazies: T
-): ILazyAsync<PromiseSettledResult<ExtractLazyAsyncType<T[number]>>[]> =>
-    new LazyAsyncImpl(() => Promise.allSettled(lazies.map((lazy) => lazy.force()))) as any;
+): ILazyAsync<PromiseSettledResult<ExtractLazyAsyncType<T[number]>>[]> => {
+    type ResultType = ExtractLazyAsyncType<T[number]>;
+    const typedLazies = lazies as readonly ILazyAsync<ResultType>[];
+    return new LazyAsyncImpl(() =>
+        Promise.allSettled(typedLazies.map((lazy) => lazy.force()))
+    );
+};
 
 export const when = <T>(condition: boolean, lazyValue: ILazy<T>): ILazy<T | undefined> => {
     const factory = () => (condition ? lazyValue.force() : undefined);
