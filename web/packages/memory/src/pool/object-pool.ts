@@ -54,6 +54,25 @@ const createWrapper = <T>(value: T, resetHandler?: (obj: T) => void): PoolableWr
     return wrapper;
 };
 
+/**
+ * Object pool that wraps plain objects in a PoolableObject-compatible wrapper.
+ *
+ * Delegates to an internal {@link MemoryPool} while hiding the wrapper indirection from callers.
+ * Acquired objects are the raw values produced by the factory; the pool internally wraps them
+ * to track lifecycle metadata. Uses WeakMap/WeakSet to map between raw objects and their wrappers.
+ *
+ * This is the recommended pool for general-purpose objects that don't already implement
+ * {@link PoolableObject}. For typed arrays, use {@link TypedArrayPool} instead.
+ *
+ * @example
+ * const pool = new ObjectPool({
+ *   factory: () => ({ x: 0, y: 0, reset() { this.x = 0; this.y = 0; } }),
+ *   maxCapacity: 512,
+ * });
+ * const obj = pool.acquire();  // { x: 0, y: 0 }
+ * obj.x = 10;
+ * pool.release(obj);           // reset() called automatically
+ */
 export class ObjectPool<T extends {}> implements Disposable {
     private readonly _pool: MemoryPool<PoolableWrapper<T>>;
     private readonly _options: Required<

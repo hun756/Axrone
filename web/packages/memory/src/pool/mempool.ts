@@ -35,6 +35,32 @@ export {
 
 const MAX_POOL_ID = 2 ** 31 - 1;
 
+/**
+ * High-performance, slot-based object pool with configurable allocation, eviction, and expansion.
+ *
+ * Objects are managed through a flat slot array with a free-list for O(1) acquire/release.
+ * Supports multiple allocation strategies (first-available, LRU, MRU, round-robin), eviction
+ * policies (none, LRU, TTL, FIFO), and expansion strategies (fixed, multiplicative, fibonacci, prime).
+ * Objects must implement {@link PoolableObject} to receive pool lifecycle metadata (__poolId, __poolStatus).
+ *
+ * Key features:
+ * - Auto-expansion with configurable max capacity and watermark-based contraction.
+ * - Async acquire/release with wait-queue for backpressure handling.
+ * - Optional metrics collection for monitoring hit ratios, allocation times, and fragmentation.
+ * - Supports both sync and async object factories.
+ *
+ * @example
+ * const pool = new MemoryPool({
+ *   factory: () => new MyObject(),
+ *   maxCapacity: 1024,
+ *   evictionPolicy: 'lru',
+ *   resetOnRecycle: true,
+ * });
+ * const obj = pool.acquire();
+ * // ... use obj ...
+ * pool.release(obj);
+ * pool[Symbol.dispose]();
+ */
 export class MemoryPool<T extends PoolableObject>
     implements MemoryPoolOperations<T>, AsyncMemoryPoolOperations<T>, Iterable<T>
 {

@@ -90,6 +90,28 @@ export interface TypedArrayPoolStats {
     };
 }
 
+/**
+ * Pool for typed arrays, organized into size buckets for efficient reuse.
+ *
+ * Maintains a separate {@link MemoryPool} per bucket size (default: powers of two from 64 to
+ * maxPoolableLength). Acquired arrays can be resized down (but not up) within their bucket
+ * capacity. Supports optional memory alignment (e.g., 16-byte for SIMD), zero-on-release
+ * for safety, and integrity validation.
+ *
+ * Requests larger than maxPoolableLength bypass pooling and allocate directly. The
+ * {@link TypedArrayPools} export provides pre-configured instances for common typed array types.
+ *
+ * @example
+ * const pool = new TypedArrayPool({
+ *   arrayConstructor: Float32Array,
+ *   defaultLength: 1024,
+ *   sizeBuckets: [64, 256, 1024, 4096],
+ *   alignment: 16,
+ * });
+ * const arr = pool.acquire(512);   // from 1024-bucket, resized to 512
+ * arr.array[0] = 3.14;
+ * pool.release(arr);               // zeroed and returned to bucket
+ */
 export class TypedArrayPool<T extends TypedArray> {
     private readonly _pools: Map<number, MemoryPool<PoolableTypedArray<T>>>;
     private readonly _poolByObject = new WeakMap<

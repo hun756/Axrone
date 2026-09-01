@@ -255,6 +255,25 @@ class NodeIterator<T, P, R> implements IterableIterator<R> {
     }
 }
 
+/**
+ * Binary-heap priority queue with handle-based API for O(log n) priority updates and removals.
+ *
+ * Each enqueued item receives an opaque {@link PriorityQueueHandle} that can be used to update
+ * its priority or remove it without scanning the queue. Uses a numeric index array (not a Map)
+ * for handle-to-index lookup, providing excellent cache locality. Supports both min-heap and
+ * max-heap orderings, FIFO tie-breaking via sequence numbers, and batch enqueue with adaptive
+ * heapify threshold.
+ *
+ * Static factories: {@link PriorityQueue.min}, {@link PriorityQueue.max}, {@link PriorityQueue.fromEntries},
+ * {@link PriorityQueue.fromValues}, {@link PriorityQueue.deserialize}.
+ *
+ * @example
+ * const pq = PriorityQueue.min<{ task: string }, number>({ priority: (e) => e.priority });
+ * const h1 = pq.enqueue({ task: 'low' }, 10);
+ * const h2 = pq.enqueue({ task: 'high' }, 1);
+ * pq.updatePriority(h1, 0);  // promote h1 to highest priority
+ * const top = pq.dequeue();  // { task: 'low' }
+ */
 export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
     implements ReadonlyPriorityQueue<T, P, O>
 {

@@ -207,6 +207,22 @@ class OptimizedArrayStack<T> extends AbstractStack<T> implements MutableStackInt
     }
 }
 
+/**
+ * Persistent (immutable) stack where push and pop return new stack instances.
+ *
+ * Each mutation creates a new stack that shares structure with the original via linked nodes,
+ * avoiding full copies. The empty stack is cached per configuration via a WeakMap for efficiency.
+ * Suitable for undo/redo stacks, expression evaluation, and any scenario requiring structural
+ * sharing or safe concurrent reads.
+ *
+ * For a mutable stack with better write performance, use {@link OptimizedArrayStack}.
+ *
+ * @example
+ * const s0 = ImmutableStack.empty<number>();
+ * const s1 = s0.push(1).push(2).push(3);
+ * const [top, s2] = s1.pop();   // top = 3, s2 has [1, 2]
+ * const s3 = s1.push(99);       // s1 unchanged, s3 has [1, 2, 3, 99]
+ */
 class ImmutableStack<T> extends AbstractStack<T> implements ImmutableStackInterface<T> {
     private static readonly EMPTY_CACHE = new WeakMap<
         StackConfiguration<any>,

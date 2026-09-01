@@ -75,6 +75,23 @@ export interface BufferPoolOptions {
     readonly onOutOfMemory?: (requestedSize: number, bucketIndex: number) => void;
 }
 
+/**
+ * Singleton pool for ArrayBuffer instances, organized into power-of-two size buckets.
+ *
+ * Maintains a set of ObjectPool instances, one per bucket size (32B, 64B, 128B, ... up to
+ * MAX_CAPACITY). Requests are rounded up to the nearest bucket size, ensuring that returned
+ * buffers are always a power-of-two size. This avoids fragmentation and enables fast bucket
+ * lookup via log2 arithmetic.
+ *
+ * The singleton pattern ensures a single shared pool across the engine. Use `getInstance()`
+ * to access and `resetInstance()` to tear down (e.g., in tests).
+ *
+ * @example
+ * const pool = BufferPool.getInstance({ evictionPolicy: 'lru', maxCapacityPerBucket: 256 });
+ * const buf = pool.allocate(100);  // returns a 128-byte ArrayBuffer from the 128-bucket
+ * // ... use buf ...
+ * pool.release(buf);               // return to pool
+ */
 export class BufferPool {
     private static instance: BufferPool | undefined;
     private readonly pools: Map<number, ObjectPool<PoolableArrayBuffer>>;

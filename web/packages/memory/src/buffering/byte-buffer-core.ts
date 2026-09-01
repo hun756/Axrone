@@ -13,6 +13,28 @@ import { BufferPool } from './buffer-pool';
 import { BufferView } from './buffer-view';
 import { BufferUtils } from './utils';
 
+/**
+ * Pooled, endianness-aware binary buffer for reading and writing typed data.
+ *
+ * Wraps an ArrayBuffer with position/limit/capacity semantics (similar to Java's ByteBuffer).
+ * Supports automatic pooling via BufferPool for zero-allocation hot paths, configurable
+ * byte order (big/little endian), and typed array views. Buffers can be allocated from
+ * the pool ({@link ByteBuffer.alloc}) or wrap existing memory ({@link ByteBuffer.wrap}).
+ *
+ * Key patterns:
+ * - Use `alloc()` for pooled buffers, `directBuffer()` for non-pooled, `wrap()` for existing memory.
+ * - Call `flip()` after writing to prepare for reading; call `compact()` to discard read bytes.
+ * - Always call `release()` on pooled buffers to return them to the pool.
+ *
+ * @example
+ * const buf = ByteBuffer.alloc(64);
+ * buf.putInt32(42).putFloat64(3.14).putString("hello");
+ * buf.flip();
+ * const n = buf.getInt32();     // 42
+ * const f = buf.getFloat64();   // 3.14
+ * const s = buf.getString();    // "hello"
+ * buf.release();
+ */
 export class ByteBuffer implements IByteBuffer {
     private static readonly DEFAULT_ORDER = ByteOrder.Big;
     private static readonly VIEW_CACHE_CAPACITY = PERFORMANCE_DEFAULTS.CACHE_SIZE ?? 256;

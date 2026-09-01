@@ -55,6 +55,26 @@ export class LruHandle<K = unknown, V = unknown> {
     }
 }
 
+/**
+ * Fixed-capacity map with heap-based LRU (or MRU) eviction in O(log n) per operation.
+ *
+ * Uses an {@link IndexedHeap} internally to track recency, enabling O(log n) touch and eviction
+ * instead of the O(1) amortized but O(n) worst-case of linked-list LRU caches. Each entry
+ * receives an {@link LruHandle} for direct removal or inspection. Supports custom key equality,
+ * configurable capacity, and both least-recently-used and most-recently-used eviction orders.
+ *
+ * Recency counters are monotonically increasing with automatic wraparound normalization to
+ * prevent integer overflow in long-running applications.
+ *
+ * @example
+ * const lru = new LruMap<string, number>({ capacity: 3, order: 'least-recently-used' });
+ * lru.set('a', 1);
+ * lru.set('b', 2);
+ * lru.set('c', 3);
+ * lru.get('a');           // touch 'a', making it most-recent
+ * lru.set('d', 4);        // evicts 'b' (least-recently used)
+ * lru.has('b');           // false
+ */
 export class LruMap<K, V> {
     readonly #heap: IndexedHeap<number, LruHandle<K, V>>;
     readonly #isLru: boolean;
