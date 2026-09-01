@@ -2,11 +2,13 @@
     "name": "@axrone/utility",
     "version": "0.0.1",
     "description": "Utility package for Axrone - Result monad and other helpers",
+    "sideEffects": false,
     "main": "./dist/index.js",
     "module": "./dist/index.mjs",
     "types": "./dist/index.d.ts",
     "exports": {
         ".": {
+            "types": "./dist/index.d.ts",
             "import": "./dist/index.mjs",
             "require": "./dist/index.js"
         }
