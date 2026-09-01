@@ -196,8 +196,6 @@ export class TypedArrayPool<T extends TypedArray> {
             enableInstrumentation:
                 options.enableInstrumentation ?? POOL_OPTION_DEFAULTS.enableInstrumentation,
             name: options.name ?? `TypedArrayPool<${options.arrayConstructor.name}>`,
-            maxObjectAge: options.maxObjectAge ?? 300000,
-            threadSafe: options.threadSafe ?? POOL_OPTION_DEFAULTS.threadSafe,
             sizeBuckets: options.sizeBuckets,
             initializeArray: options.initializeArray,
             validateIntegrity: options.validateIntegrity,
@@ -521,7 +519,7 @@ export class TypedArrayPool<T extends TypedArray> {
         let totalUsed = 0;
 
         for (const [bucketSize, hitCount] of this._stats.bucketsHit) {
-            const avgUtilization = bucketSize * 0.75; // Assume 75% average utilization
+            const avgUtilization = bucketSize * TypedArrayPool.DEFAULT_UTILIZATION_ESTIMATE;
             totalWaste += (bucketSize - avgUtilization) * hitCount;
             totalUsed += avgUtilization * hitCount;
         }
