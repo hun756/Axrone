@@ -1,12 +1,43 @@
-import type { Comparator, Equality, HeapOrder } from './binary-heap';
+import type { Comparator, Equality } from './binary-heap';
 import { defaultPrimitiveComparator } from './binary-heap';
 import { heapSiftUp, heapSiftDown, heapHeapify } from '../../internal/heap-sift';
 import type { HeapComesBefore, HeapOnMove } from '../../internal/heap-sift';
+import {
+    PriorityQueueError,
+    PriorityQueueComparatorError,
+    PriorityQueuePriorityError,
+    PriorityQueueHandleError,
+    PriorityQueueSerializationError,
+} from './priority-queue-errors';
+import {
+    isFunction,
+    isObject,
+    defaultEquality,
+    ensureComparator,
+    normalizeOrder,
+    internalOrderOf,
+    toHandle,
+    collectEntries,
+    collectValues,
+    ensureSerialized,
+    siftUpThreshold,
+    NodeIterator,
+} from './priority-queue-helpers';
+import type { InternalOrder, Node } from './priority-queue-helpers';
+
+// Re-export for backward compatibility
+export {
+    PriorityQueueError,
+    PriorityQueueComparatorError,
+    PriorityQueuePriorityError,
+    PriorityQueueHandleError,
+    PriorityQueueSerializationError,
+} from './priority-queue-errors';
 
 declare const __priorityQueueHandle: unique symbol;
 
 /** @stable */
-export type PriorityOrder = HeapOrder;
+export type PriorityOrder = 'min' | 'max';
 
 /** @stable */
 export type PrimitivePriority = number | bigint | string | Date;
@@ -73,205 +104,6 @@ export interface ReadonlyPriorityQueue<T, P, O extends PriorityOrder = PriorityO
     values(): IterableIterator<T>;
 }
 
-/** @stable */
-export class PriorityQueueError extends Error {
-    public override readonly name: string = 'PriorityQueueError';
-
-    constructor(message: string) {
-        super(message);
-        Object.setPrototypeOf(this, new.target.prototype);
-    }
-}
-
-/** @stable */
-export class PriorityQueueComparatorError extends PriorityQueueError {
-    public override readonly name: string = 'PriorityQueueComparatorError';
-
-    constructor(message = 'A valid comparator function is required for this priority queue.') {
-        super(message);
-    }
-}
-
-/** @stable */
-export class PriorityQueuePriorityError extends PriorityQueueError {
-    public override readonly name: string = 'PriorityQueuePriorityError';
-
-    constructor(message = 'A priority selector or explicit priority value is required for this operation.') {
-        super(message);
-    }
-}
-
-/** @stable */
-export class PriorityQueueHandleError extends PriorityQueueError {
-    public override readonly name: string = 'PriorityQueueHandleError';
-
-    constructor(message = 'The provided priority queue handle is invalid or does not exist.') {
-        super(message);
-    }
-}
-
-/** @stable */
-export class PriorityQueueSerializationError extends PriorityQueueError {
-    public override readonly name: string = 'PriorityQueueSerializationError';
-
-    constructor(message = 'Invalid priority queue serialization payload.') {
-        super(message);
-    }
-}
-
-const InternalOrder = {
-    Min: 1,
-    Max: -1,
-} as const;
-type InternalOrder = (typeof InternalOrder)[keyof typeof InternalOrder];
-
-type Node<T, P> = {
-    value: T;
-    priority: P;
-    handle: PriorityQueueHandle;
-    sequence: number;
-};
-
-const isFunction = (value: unknown): value is (...args: readonly unknown[]) => unknown =>
-    typeof value === 'function';
-
-const isObject = (value: unknown): value is Record<PropertyKey, unknown> =>
-    value !== null && typeof value === 'object';
-
-const isEntryLike = <T, P>(value: unknown): value is PriorityQueueEntry<T, P> =>
-    isObject(value) && 'value' in value && 'priority' in value;
-
-const defaultEquality = <T>(left: T, right: T): boolean => Object.is(left, right);
-
-const ensureComparator = <P>(comparator: unknown): Comparator<P> => {
-    if (!isFunction(comparator)) {
-        throw new PriorityQueueComparatorError();
-    }
-
-    return comparator as Comparator<P>;
-};
-
-const normalizeOrder = (order: PriorityOrder | undefined): PriorityOrder =>
-    order === 'min' ? 'min' : 'max';
-
-const internalOrderOf = (order: PriorityOrder): InternalOrder =>
-    order === 'max' ? InternalOrder.Max : InternalOrder.Min;
-
-const toHandle = (value: number): PriorityQueueHandle => value as PriorityQueueHandle;
-
-const collectEntries = <T, P>(
-    source: QueueLike<PriorityQueueEntry<T, P>> | undefined
-): PriorityQueueEntry<T, P>[] => {
-    if (source === undefined) {
-        return [];
-    }
-
-    if (Array.isArray(source)) {
-        return source.slice();
-    }
-
-    const length = (source as ArrayLike<PriorityQueueEntry<T, P>>).length;
-
-    if (typeof length === 'number') {
-        const result = new Array<PriorityQueueEntry<T, P>>(length);
-
-        for (let index = 0; index < length; index++) {
-            result[index] = (source as ArrayLike<PriorityQueueEntry<T, P>>)[index]!;
-        }
-
-        return result;
-    }
-
-    const result: PriorityQueueEntry<T, P>[] = [];
-
-    for (const entry of source as Iterable<PriorityQueueEntry<T, P>>) {
-        result.push(entry);
-    }
-
-    return result;
-};
-
-const collectValues = <T>(source: QueueLike<T>): T[] => {
-    if (Array.isArray(source)) {
-        return source.slice();
-    }
-
-    const length = (source as ArrayLike<T>).length;
-
-    if (typeof length === 'number') {
-        const result = new Array<T>(length);
-
-        for (let index = 0; index < length; index++) {
-            result[index] = (source as ArrayLike<T>)[index]!;
-        }
-
-        return result;
-    }
-
-    const result: T[] = [];
-
-    for (const value of source as Iterable<T>) {
-        result.push(value);
-    }
-
-    return result;
-};
-
-const ensureSerialized = <T, P>(value: unknown): PriorityQueueSerialized<T, P> => {
-    if (!isObject(value)) {
-        throw new PriorityQueueSerializationError();
-    }
-
-    if (value.kind !== 'PriorityQueue' || value.version !== 1) {
-        throw new PriorityQueueSerializationError();
-    }
-
-    if (value.order !== 'min' && value.order !== 'max') {
-        throw new PriorityQueueSerializationError();
-    }
-
-    if (!Array.isArray(value.items)) {
-        throw new PriorityQueueSerializationError();
-    }
-
-    for (let index = 0; index < value.items.length; index++) {
-        if (!isEntryLike<T, P>(value.items[index])) {
-            throw new PriorityQueueSerializationError();
-        }
-    }
-
-    return value as PriorityQueueSerialized<T, P>;
-};
-
-const siftUpThreshold = (baseLength: number, incoming: number): number =>
-    Math.ceil(baseLength / Math.log2(baseLength + incoming + 1));
-
-class NodeIterator<T, P, R> implements IterableIterator<R> {
-    readonly #store: Node<T, P>[];
-    readonly #select: (node: Node<T, P>) => R;
-    #index = 0;
-
-    constructor(store: Node<T, P>[], select: (node: Node<T, P>) => R) {
-        this.#store = store;
-        this.#select = select;
-    }
-
-    next(): IteratorResult<R> {
-        const index = this.#index;
-
-        if (index >= this.#store.length) {
-            return { value: undefined as unknown as R, done: true };
-        }
-
-        this.#index = index + 1;
-        return { value: this.#select(this.#store[index]!), done: false };
-    }
-
-    [Symbol.iterator](): this {
-        return this;
-    }
-}
-
 /**
  * Binary-heap priority queue with handle-based API for O(log n) priority updates and removals.
  *
@@ -297,11 +129,6 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
     implements ReadonlyPriorityQueue<T, P, O>
 {
     readonly #store: Node<T, P>[];
-    // P2-2: Numeric index array replaces Map<handle, index> for better cache locality.
-    // Array[handle] = store index, or -1 if the handle has been removed.
-    // Handles are sequential integers starting at 1, so they index directly into this array.
-    // This avoids Map overhead (hash computation, bucket allocation, pointer chasing) and
-    // provides O(1) lookup with excellent CPU cache behavior due to contiguous memory layout.
     readonly #handleToIndex: number[];
     readonly #order: O;
     readonly #orderFactor: InternalOrder;
@@ -1140,7 +967,6 @@ export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
 
     #bindHandle(handle: PriorityQueueHandle, index: number): void {
         const h = handle as number;
-        // Grow the array if needed; fill gaps with -1 (invalid/removed sentinel)
         if (h >= this.#handleToIndex.length) {
             const prev = this.#handleToIndex.length;
             this.#handleToIndex.length = h + 1;

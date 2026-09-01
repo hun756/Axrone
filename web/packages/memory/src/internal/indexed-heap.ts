@@ -1,6 +1,8 @@
 import type { Comparator, HeapOrder } from '../containers/queue/binary-heap';
 import { heapSiftUp, heapSiftDown } from './heap-sift';
 import type { HeapComesBefore, HeapOnMove } from './heap-sift';
+import { getParentIndex, numericComparator } from '../containers/queue/utils';
+import type { HeapIndex } from '../containers/queue/types';
 
 export type { Comparator, HeapOrder };
 
@@ -225,7 +227,7 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
             this.#size = lastIndex;
 
             if (index > 0) {
-                const parentIndex = (index - 1) >>> 1;
+                const parentIndex = getParentIndex(index as HeapIndex) as number;
                 if (this.#comesBefore(index, parentIndex)) {
                     this.#siftUp(index);
                 } else {
@@ -338,4 +340,4 @@ export const createMinHeap = <K, V>(compare: Comparator<K>): IndexedHeap<K, V> =
 export const createMaxHeap = <K, V>(compare: Comparator<K>): IndexedHeap<K, V> =>
     new IndexedHeap<K, V>({ compare, order: 'max' });
 
-export const numericCompare = (a: number, b: number): number => a - b;
+export const numericCompare = numericComparator;
