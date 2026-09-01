@@ -136,11 +136,10 @@ describe('Stack Module', () => {
         it('push and pop single element', () => {
             const stack = new OptimizedArrayStack<number>();
             const pushResult = stack.push(42);
-            expect(pushResult.tag).toBe('success');
+            expect(pushResult).toBe(stack);
             expect(stack.size).toBe(1);
             const popResult = stack.pop();
-            expect(popResult.tag).toBe('success');
-            expect(popResult.value).toBe(42);
+            expect(popResult).toBe(42);
             expect(stack.size).toBe(0);
         });
 
@@ -150,29 +149,28 @@ describe('Stack Module', () => {
             stack.push(2);
             stack.push(3);
             expect(stack.size).toBe(3);
-            expect(stack.pop().value).toBe(3);
-            expect(stack.pop().value).toBe(2);
-            expect(stack.pop().value).toBe(1);
+            expect(stack.pop()).toBe(3);
+            expect(stack.pop()).toBe(2);
+            expect(stack.pop()).toBe(1);
         });
 
         it('pop empty stack returns undefined', () => {
             const stack = new OptimizedArrayStack<number>();
             const result = stack.pop();
-            expect(result.tag).toBe('success');
-            expect(result.value).toBeUndefined();
+            expect(result).toBeUndefined();
         });
 
         it('peek returns top element without removing', () => {
             const stack = new OptimizedArrayStack<string>();
             stack.push('a');
             stack.push('b');
-            expect(stack.peek().value).toBe('b');
+            expect(stack.peek()).toBe('b');
             expect(stack.size).toBe(2);
         });
 
         it('peek empty stack returns undefined', () => {
             const stack = new OptimizedArrayStack<number>();
-            expect(stack.peek().value).toBeUndefined();
+            expect(stack.peek()).toBeUndefined();
         });
 
         it('peekUnsafe returns top element', () => {
@@ -188,15 +186,13 @@ describe('Stack Module', () => {
             stack.push(2);
             stack.push(3);
             const result = stack.peekMany(2);
-            expect(result.tag).toBe('success');
-            expect(result.value).toEqual([3, 2]);
+            expect(result).toEqual([3, 2]);
         });
 
-        it('peekMany with invalid count returns failure', () => {
+        it('peekMany with invalid count throws', () => {
             const stack = new OptimizedArrayStack<number>();
             stack.push(1);
-            const result = stack.peekMany(5);
-            expect(result.tag).toBe('failure');
+            expect(() => stack.peekMany(5)).toThrow(StackIntegrityError);
         });
 
         it('contains checks for element existence', () => {
@@ -260,7 +256,7 @@ describe('Stack Module', () => {
         it('pushMany adds multiple elements', () => {
             const stack = new OptimizedArrayStack<number>();
             const result = stack.pushMany([1, 2, 3, 4]);
-            expect(result.tag).toBe('success');
+            expect(result).toBe(stack);
             expect(stack.size).toBe(4);
         });
 
@@ -271,8 +267,7 @@ describe('Stack Module', () => {
             stack.push(3);
             stack.push(4);
             const result = stack.popMany(2);
-            expect(result.tag).toBe('success');
-            expect(result.value).toEqual([4, 3]);
+            expect(result).toEqual([4, 3]);
             expect(stack.size).toBe(2);
         });
 
@@ -282,32 +277,30 @@ describe('Stack Module', () => {
             stack.push(2);
             stack.push(3);
             const result = stack.swap();
-            expect(result.tag).toBe('success');
-            expect(stack.pop().value).toBe(2);
-            expect(stack.pop().value).toBe(3);
+            expect(result).toBe(stack);
+            expect(stack.pop()).toBe(2);
+            expect(stack.pop()).toBe(3);
         });
 
-        it('swap with insufficient elements returns failure', () => {
+        it('swap with insufficient elements throws', () => {
             const stack = new OptimizedArrayStack<number>();
             stack.push(1);
-            const result = stack.swap();
-            expect(result.tag).toBe('failure');
+            expect(() => stack.swap()).toThrow(StackIntegrityError);
         });
 
         it('duplicate duplicates top element', () => {
             const stack = new OptimizedArrayStack<number>();
             stack.push(42);
             const result = stack.duplicate();
-            expect(result.tag).toBe('success');
+            expect(result).toBe(stack);
             expect(stack.size).toBe(2);
-            expect(stack.pop().value).toBe(42);
-            expect(stack.pop().value).toBe(42);
+            expect(stack.pop()).toBe(42);
+            expect(stack.pop()).toBe(42);
         });
 
-        it('duplicate on empty stack returns failure', () => {
+        it('duplicate on empty stack throws', () => {
             const stack = new OptimizedArrayStack<number>();
-            const result = stack.duplicate();
-            expect(result.tag).toBe('failure');
+            expect(() => stack.duplicate()).toThrow(StackIntegrityError);
         });
 
         it('capacity enforcement', () => {
@@ -315,18 +308,13 @@ describe('Stack Module', () => {
             stack.push(1);
             stack.push(2);
             stack.push(3);
-            const result = stack.push(4);
-            expect(result.tag).toBe('failure');
-            if (result.tag === 'failure') {
-                expect(result.error).toBeInstanceOf(StackCapacityError);
-            }
+            expect(() => stack.push(4)).toThrow(StackCapacityError);
         });
 
         it('pushMany respects capacity', () => {
             const stack = new OptimizedArrayStack<number>({ capacity: 3 });
             stack.push(1);
-            const result = stack.pushMany([2, 3, 4]);
-            expect(result.tag).toBe('failure');
+            expect(() => stack.pushMany([2, 3, 4])).toThrow(StackCapacityError);
         });
 
         it('isEmpty and isFull', () => {
@@ -395,8 +383,7 @@ describe('Stack Module', () => {
             stack.push(1);
             stack.push(2);
             const result = stack.validate();
-            expect(result.tag).toBe('success');
-            expect(result.value).toBe(true);
+            expect(result).toBe(true);
         });
 
         it('Symbol.iterator allows for...of', () => {
@@ -500,7 +487,7 @@ describe('Stack Module', () => {
             const stack2 = stack1.push(1);
             expect(stack1.size).toBe(0);
             expect(stack2.size).toBe(1);
-            expect(stack2.peek().value).toBe(1);
+            expect(stack2.peek()).toBe(1);
         });
 
         it('pop returns tuple of value and new stack', () => {

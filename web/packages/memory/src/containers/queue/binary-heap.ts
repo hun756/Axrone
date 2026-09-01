@@ -10,14 +10,19 @@ import type { HeapComesBefore } from '../../internal/heap-sift';
 
 export type { Comparator } from './types';
 
+/** @stable */
 export type HeapOrder = 'min' | 'max';
 
+/** @stable */
 export type CompareSign = -1 | 0 | 1;
 
+/** @stable */
 export type Equality<T> = (left: T, right: T) => boolean;
 
+/** @stable */
 export type HeapPrimitive = number | bigint | string | Date;
 
+/** @stable */
 export type HeapSerialized<T> = Readonly<{
     readonly kind: 'BinaryHeap';
     readonly version: 1;
@@ -25,8 +30,10 @@ export type HeapSerialized<T> = Readonly<{
     readonly items: readonly T[];
 }>;
 
+/** @stable */
 export type HeapLike<T> = Iterable<T> | ArrayLike<T>;
 
+/** @stable */
 export interface BinaryHeapOptions<T, O extends HeapOrder = HeapOrder> {
     readonly order?: O;
     readonly comparator?: Comparator<T>;
@@ -34,6 +41,7 @@ export interface BinaryHeapOptions<T, O extends HeapOrder = HeapOrder> {
     readonly items?: HeapLike<T>;
 }
 
+/** @stable */
 export interface ReadonlyBinaryHeap<T, O extends HeapOrder = HeapOrder> extends Iterable<T> {
     readonly size: number;
     readonly order: O;
@@ -47,6 +55,7 @@ export interface ReadonlyBinaryHeap<T, O extends HeapOrder = HeapOrder> extends 
     values(): IterableIterator<T>;
 }
 
+/** @stable */
 export class HeapError extends Error {
     public override readonly name: string = 'HeapError';
 
@@ -56,6 +65,7 @@ export class HeapError extends Error {
     }
 }
 
+/** @stable */
 export class HeapComparatorError extends HeapError {
     public override readonly name: string = 'HeapComparatorError';
 
@@ -64,6 +74,7 @@ export class HeapComparatorError extends HeapError {
     }
 }
 
+/** @stable */
 export class HeapIndexError extends HeapError {
     public override readonly name: string = 'HeapIndexError';
 
@@ -72,6 +83,7 @@ export class HeapIndexError extends HeapError {
     }
 }
 
+/** @stable */
 export class HeapSerializationError extends HeapError {
     public override readonly name: string = 'HeapSerializationError';
 
@@ -189,6 +201,10 @@ const siftUpThreshold = (baseLength: number, incoming: number): number => {
     return Math.ceil(baseLength / denom);
 };
 
+/**
+ * Array-backed binary heap with configurable min/max ordering and serialization support.
+ * @stable
+ */
 export class BinaryHeap<T, O extends HeapOrder = 'min'> implements ReadonlyBinaryHeap<T, O> {
     readonly #store: T[];
     readonly #order: O;

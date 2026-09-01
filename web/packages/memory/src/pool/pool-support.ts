@@ -1,5 +1,7 @@
+/** @stable */
 export type PoolObjectStatus = 'free' | 'allocated' | 'reserved';
 
+/** @stable */
 export interface PoolableObject {
     __poolId?: number;
     __poolStatus?: PoolObjectStatus;
@@ -47,17 +49,22 @@ export interface PoolableObject {
  * @see {@link MemoryPoolOptions.expansionStrategy}
  * @see {@link MemoryPoolOptions.expansionFactor}
  * @see {@link MemoryPoolOptions.expansionRate}
+ *
+ * @stable
  */
 export type PoolExpansionStrategy = 'fixed' | 'multiplicative' | 'fibonacci' | 'prime';
 
+/** @stable */
 export type PoolAllocationStrategy =
     | 'first-available'
     | 'least-recently-used'
     | 'most-recently-used'
     | 'round-robin';
 
+/** @stable */
 export type PoolEvictionPolicy = 'none' | 'lru' | 'ttl' | 'fifo';
 
+/** @stable */
 export const POOL_OPTION_DEFAULTS = {
     initialCapacity: 32,
     maxCapacity: 4096,
@@ -81,6 +88,7 @@ export const POOL_OPTION_DEFAULTS = {
     threadSafe: false,
 } as const;
 
+/** @stable */
 export interface MemoryPoolOptions<T extends PoolableObject> {
     readonly initialCapacity?: number;
     readonly maxCapacity?: number;
@@ -113,6 +121,7 @@ export interface MemoryPoolOptions<T extends PoolableObject> {
     readonly estimatedObjectSize?: number;
 }
 
+/** @stable */
 export interface PoolPerformanceMetrics {
     readonly name: string;
     readonly capacity: number;
@@ -154,6 +163,7 @@ export interface PoolPerformanceMetrics {
     };
 }
 
+/** @stable */
 export interface MemoryPoolOperations<T extends PoolableObject> {
     acquire(): T;
     release(obj: T): void;
@@ -171,6 +181,7 @@ export interface MemoryPoolOperations<T extends PoolableObject> {
     [Symbol.dispose](): void;
 }
 
+/** @stable */
 export interface AsyncMemoryPoolOperations<T extends PoolableObject> {
     acquireAsync(): Promise<T>;
     releaseAsync(obj: T): Promise<void>;
@@ -180,6 +191,7 @@ export interface AsyncMemoryPoolOperations<T extends PoolableObject> {
     drainAsync(): Promise<void>;
 }
 
+/** @stable */
 export const MemoryPoolErrorCode = {
     POOL_DEPLETED: 'POOL_DEPLETED',
     POOL_DISPOSED: 'POOL_DISPOSED',
@@ -193,9 +205,11 @@ export const MemoryPoolErrorCode = {
     INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
+/** @stable */
 export type MemoryPoolErrorCode =
     (typeof MemoryPoolErrorCode)[keyof typeof MemoryPoolErrorCode];
 
+/** @stable */
 export class MemoryPoolError extends Error {
     readonly code: MemoryPoolErrorCode;
     readonly poolName?: string;
@@ -218,6 +232,7 @@ export class MemoryPoolError extends Error {
     }
 }
 
+/** @stable */
 export type PoolSlot<T extends PoolableObject> = {
     obj: T | undefined;
     status: PoolObjectStatus;

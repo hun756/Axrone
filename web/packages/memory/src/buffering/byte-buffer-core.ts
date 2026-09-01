@@ -34,6 +34,8 @@ import { BufferUtils } from './utils';
  * const f = buf.getFloat64();   // 3.14
  * const s = buf.getString();    // "hello"
  * buf.release();
+ *
+ * @stable
  */
 export class ByteBuffer implements IByteBuffer {
     private static readonly DEFAULT_ORDER = ByteOrder.Big;

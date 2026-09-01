@@ -29,6 +29,10 @@ class PoolableArrayBuffer implements PoolableObject {
     }
 }
 
+/**
+ * Configuration options for BufferPool.
+ * @stable
+ */
 export interface BufferPoolOptions {
     readonly initialCapacityPerBucket?: number;
 
@@ -91,6 +95,8 @@ export interface BufferPoolOptions {
  * const buf = pool.allocate(100);  // returns a 128-byte ArrayBuffer from the 128-bucket
  * // ... use buf ...
  * pool.release(buf);               // return to pool
+ *
+ * @stable
  */
 export class BufferPool {
     private static instance: BufferPool | undefined;

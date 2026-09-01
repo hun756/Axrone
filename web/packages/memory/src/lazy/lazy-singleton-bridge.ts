@@ -32,6 +32,8 @@ import { LazyImpl, LazyAsyncImpl } from './lazy-impl';
  *
  * The singleton delegates to the lazy for value computation. Disposal is a
  * no-op since lazy doesn't have lifecycle management. A key is auto-generated.
+ *
+ * @beta
  */
 export function lazyToSingleton<T>(
     lazy: ILazy<T>,
@@ -48,6 +50,8 @@ export function lazyToSingleton<T>(
  *
  * The singleton delegates to the lazy async for value computation. Disposal
  * is a no-op since lazy doesn't have lifecycle management.
+ *
+ * @beta
  */
 export function lazyAsyncToAsyncSingleton<T>(
     lazy: ILazyAsync<T>,
@@ -69,6 +73,8 @@ export function lazyAsyncToAsyncSingleton<T>(
  * The lazy delegates to the singleton for value computation. The singleton's
  * lifecycle features (dispose, key, accessCount) are not exposed through the
  * lazy interface.
+ *
+ * @beta
  */
 export function singletonToLazy<T>(singleton: ISingleton<T>): ILazy<T> {
     return new LazyImpl(() => singleton.getInstance());
@@ -78,6 +84,8 @@ export function singletonToLazy<T>(singleton: ISingleton<T>): ILazy<T> {
  * Wrap an `IAsyncSingleton<T>` as an `ILazyAsync<T>`.
  *
  * The lazy delegates to the singleton for value computation.
+ *
+ * @beta
  */
 export function asyncSingletonToLazyAsync<T>(singleton: IAsyncSingleton<T>): ILazyAsync<T> {
     return new LazyAsyncImpl(() => singleton.getInstance());

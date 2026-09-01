@@ -1,5 +1,6 @@
 import { ByteOrder } from './types';
 
+/** @stable */
 export interface IReadableBuffer {
     readonly capacity: number;
     readonly position: number;
@@ -23,6 +24,7 @@ export interface IReadableBuffer {
     slice(begin?: number, end?: number): IReadableBuffer;
 }
 
+/** @stable */
 export interface IWritableBuffer extends IReadableBuffer {
     putInt8(value: number): this;
     putUint8(value: number): this;
@@ -38,6 +40,7 @@ export interface IWritableBuffer extends IReadableBuffer {
     put(source: any | Uint8Array | number[], sourceOffset?: number, length?: number): this;
 }
 
+/** @stable */
 export interface IByteBuffer extends IWritableBuffer {
     clear(): this;
     flip(): this;

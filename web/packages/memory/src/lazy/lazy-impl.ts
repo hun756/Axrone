@@ -11,6 +11,10 @@ import {
     computeDeferredAsync,
 } from '@axrone/utility';
 
+/**
+ * Concrete synchronous lazy implementation with deferred computation and caching.
+ * @stable
+ */
 export class LazyImpl<T> implements ILazy<T> {
     readonly [__lazy_brand] = true as const;
     readonly [__state_brand]!: 'LazyCore';
@@ -120,6 +124,10 @@ export class LazyImpl<T> implements ILazy<T> {
     }
 }
 
+/**
+ * Concrete asynchronous lazy implementation with deferred promise computation.
+ * @stable
+ */
 export class LazyAsyncImpl<T> implements ILazyAsync<T> {
     readonly [__async_brand] = true as const;
     readonly [__state_brand]!: 'LazyAsyncCore';

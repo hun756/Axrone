@@ -3,8 +3,10 @@ import { Comparator, HeapHandle, IndexedHeap, createMaxHeap, createMinHeap } fro
 declare const __lruEntryBrand: unique symbol;
 declare const __lruHandleBrand: unique symbol;
 
+/** @stable */
 export type LruOrder = 'least-recently-used' | 'most-recently-used';
 
+/** @stable */
 export interface LruOptions<K, V> {
     readonly capacity?: number;
     readonly order?: LruOrder;
@@ -12,6 +14,7 @@ export interface LruOptions<K, V> {
     readonly initial?: ReadonlyArray<readonly [K, V]>;
 }
 
+/** @stable */
 export interface LruEntryView<K, V> {
     readonly key: K;
     readonly value: V;
@@ -23,6 +26,10 @@ interface LruInternalEntry<K, V> {
     value: V;
 }
 
+/**
+ * Opaque handle to an LRU map entry for direct removal or inspection.
+ * @stable
+ */
 export class LruHandle<K = unknown, V = unknown> {
     readonly #brand: { readonly [__lruHandleBrand]: true } = null as never;
     readonly #id: number;
@@ -74,6 +81,8 @@ export class LruHandle<K = unknown, V = unknown> {
  * lru.get('a');           // touch 'a', making it most-recent
  * lru.set('d', 4);        // evicts 'b' (least-recently used)
  * lru.has('b');           // false
+ *
+ * @stable
  */
 export class LruMap<K, V> {
     readonly #heap: IndexedHeap<number, LruHandle<K, V>>;

@@ -6,8 +6,10 @@ export const __value_brand: unique symbol = Symbol('__value_brand');
 
 export type Nominal<T, K> = T & { readonly [__state_brand]: K };
 
+/** @stable */
 export type LazyState = 'uninitialized' | 'computing' | 'resolved' | 'faulted';
 
+/** @stable */
 export interface ILazyMetadata<T> {
     readonly state: LazyState;
     readonly hasValue: boolean;
@@ -16,6 +18,7 @@ export interface ILazyMetadata<T> {
     factory: (() => T) | null;
 }
 
+/** @stable */
 export interface ILazyAsyncMetadata<T> {
     readonly state: LazyState;
     readonly hasValue: boolean;
@@ -25,6 +28,7 @@ export interface ILazyAsyncMetadata<T> {
     promise: Promise<T> | null;
 }
 
+/** @stable */
 export interface ILazyFactoryMetadata<TArgs extends readonly unknown[], TResult> {
     readonly factory: (...args: TArgs) => TResult;
     readonly cache: Map<string, TResult>;
@@ -33,13 +37,17 @@ export interface ILazyFactoryMetadata<TArgs extends readonly unknown[], TResult>
     readonly accessOrder: { readonly size: number; clear(): void };
 }
 
+/** @stable */
 export type LazyCore<T> = Nominal<ILazyMetadata<T>, 'LazyCore'>;
+/** @stable */
 export type LazyAsyncCore<T> = Nominal<ILazyAsyncMetadata<T>, 'LazyAsyncCore'>;
+/** @stable */
 export type LazyFactoryCore<TArgs extends readonly unknown[], TResult> = Nominal<
     ILazyFactoryMetadata<TArgs, TResult>,
     'LazyFactoryCore'
 >;
 
+/** @stable */
 export interface ILazy<T> extends LazyCore<T> {
     readonly [__lazy_brand]: true;
     readonly value: T;
@@ -62,6 +70,7 @@ export interface ILazy<T> extends LazyCore<T> {
     toAsync(): ILazyAsync<T>;
 }
 
+/** @stable */
 export interface ILazyAsync<T> {
     readonly [__async_brand]: true;
     readonly [__state_brand]: 'LazyAsyncCore';
@@ -96,6 +105,7 @@ export interface ILazyAsync<T> {
     toLazy(): ILazy<Promise<T>>;
 }
 
+/** @stable */
 export interface ILazyFactory<TArgs extends readonly unknown[], TResult>
     extends LazyFactoryCore<TArgs, TResult> {
     readonly [__factory_brand]: true;
@@ -109,27 +119,38 @@ export interface ILazyFactory<TArgs extends readonly unknown[], TResult>
     clear(): void;
 }
 
+/** @stable */
 export type ExtractLazyType<T> = T extends ILazy<infer U> ? U : never;
+/** @stable */
 export type ExtractLazyAsyncType<T> = T extends ILazyAsync<infer U> ? U : never;
+/** @stable */
 export type LazyMap<T> = T extends ILazy<infer U> ? U : T extends ILazyAsync<infer V> ? V : T;
+/** @stable */
 export type UnwrapLazyDeep<T> =
     T extends ILazy<infer U>
         ? UnwrapLazyDeep<U>
         : T extends ILazyAsync<infer V>
           ? UnwrapLazyDeep<V>
           : T;
+/** @stable */
 export type LazyAll<T extends readonly unknown[]> = {
     readonly [K in keyof T]: ILazy<LazyMap<T[K]>>;
 };
+/** @stable */
 export type AsyncAll<T extends readonly unknown[]> = {
     readonly [K in keyof T]: ILazyAsync<LazyMap<T[K]>>;
 };
+/** @stable */
 export type UnwrapAll<T extends readonly unknown[]> = { readonly [K in keyof T]: LazyMap<T[K]> };
+/** @stable */
 export type IsLazyType<T> = T extends ILazy<unknown> ? true : false;
+/** @stable */
 export type IsAsyncType<T> = T extends ILazyAsync<unknown> ? true : false;
+/** @stable */
 export type FilterLazyTypes<T extends readonly unknown[]> = {
     [K in keyof T]: T[K] extends ILazy<unknown> ? T[K] : never;
 }[number];
+/** @stable */
 export type LazyComputation<T, F> = F extends (...args: any[]) => infer R
     ? T extends ILazy<infer U>
         ? ILazy<R>

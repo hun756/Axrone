@@ -1,6 +1,10 @@
 import { ByteOrder } from './types';
 import { Djb2, Fnv1a32, Crc32 } from '@axrone/hash';
 
+/**
+ * Static utility methods for encoding, hashing, and endianness detection.
+ * @stable
+ */
 export class BufferUtils {
     private static readonly textEncoder = new TextEncoder();
     private static readonly textDecoder = new TextDecoder();

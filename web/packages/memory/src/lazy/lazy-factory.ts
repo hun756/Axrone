@@ -4,6 +4,10 @@ import { LruMap } from '../internal/lru-map';
 
 const TRUE = true as const;
 
+/**
+ * Cached lazy factory with LRU eviction, producing ILazy/ILazyAsync per argument set.
+ * @stable
+ */
 export class LazyFactoryImpl<TArgs extends readonly unknown[], TResult>
     implements ILazyFactory<TArgs, TResult>
 {

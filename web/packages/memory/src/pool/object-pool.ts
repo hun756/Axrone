@@ -1,11 +1,19 @@
 import { MemoryPool, MemoryPoolOptions, PoolableObject } from './mempool';
 import { POOL_OPTION_DEFAULTS } from './pool-support';
 
+/**
+ * Wrapper interface that adapts a plain object to the PoolableObject lifecycle contract.
+ * @stable
+ */
 export interface PoolableWrapper<T> extends PoolableObject {
     readonly value: T;
     readonly isWrapped: true;
 }
 
+/**
+ * Configuration options for ObjectPool.
+ * @stable
+ */
 export interface ObjectPoolOptions<T>
     extends Omit<MemoryPoolOptions<PoolableWrapper<T>>, 'factory' | 'asyncFactory'> {
     readonly factory: () => T;
@@ -76,6 +84,8 @@ const createWrapper = <T>(value: T, resetHandler?: (obj: T) => void): PoolableWr
  * const obj = pool.acquire();  // { x: 0, y: 0 }
  * obj.x = 10;
  * pool.release(obj);           // reset() called automatically
+ *
+ * @stable
  */
 export class ObjectPool<T extends {}> implements Disposable {
     private readonly _pool: MemoryPool<PoolableWrapper<T>>;

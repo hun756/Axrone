@@ -5,27 +5,34 @@ import type { HeapComesBefore, HeapOnMove } from '../../internal/heap-sift';
 
 declare const __priorityQueueHandle: unique symbol;
 
+/** @stable */
 export type PriorityOrder = HeapOrder;
 
+/** @stable */
 export type PrimitivePriority = number | bigint | string | Date;
 
+/** @stable */
 export type PrioritySelector<T, P> = (value: T) => P;
 
+/** @stable */
 export type PriorityQueueHandle = number & {
     readonly [__priorityQueueHandle]: true;
 };
 
+/** @stable */
 export type PriorityQueueEntry<T, P> = Readonly<{
     value: T;
     priority: P;
 }>;
 
+/** @stable */
 export type PriorityQueueSnapshotEntry<T, P> = Readonly<{
     value: T;
     priority: P;
     handle: PriorityQueueHandle;
 }>;
 
+/** @stable */
 export type PriorityQueueSerialized<T, P> = Readonly<{
     kind: 'PriorityQueue';
     version: 1;
@@ -33,8 +40,10 @@ export type PriorityQueueSerialized<T, P> = Readonly<{
     items: readonly PriorityQueueEntry<T, P>[];
 }>;
 
+/** @stable */
 export type QueueLike<T> = Iterable<T> | ArrayLike<T>;
 
+/** @stable */
 export interface PriorityQueueOptions<T, P, O extends PriorityOrder = PriorityOrder> {
     readonly order?: O;
     readonly comparator?: Comparator<P>;
@@ -43,6 +52,7 @@ export interface PriorityQueueOptions<T, P, O extends PriorityOrder = PriorityOr
     readonly items?: QueueLike<PriorityQueueEntry<T, P>>;
 }
 
+/** @stable */
 export interface ReadonlyPriorityQueue<T, P, O extends PriorityOrder = PriorityOrder>
     extends Iterable<T> {
     readonly size: number;
@@ -63,6 +73,7 @@ export interface ReadonlyPriorityQueue<T, P, O extends PriorityOrder = PriorityO
     values(): IterableIterator<T>;
 }
 
+/** @stable */
 export class PriorityQueueError extends Error {
     public override readonly name: string = 'PriorityQueueError';
 
@@ -72,6 +83,7 @@ export class PriorityQueueError extends Error {
     }
 }
 
+/** @stable */
 export class PriorityQueueComparatorError extends PriorityQueueError {
     public override readonly name: string = 'PriorityQueueComparatorError';
 
@@ -80,6 +92,7 @@ export class PriorityQueueComparatorError extends PriorityQueueError {
     }
 }
 
+/** @stable */
 export class PriorityQueuePriorityError extends PriorityQueueError {
     public override readonly name: string = 'PriorityQueuePriorityError';
 
@@ -88,6 +101,7 @@ export class PriorityQueuePriorityError extends PriorityQueueError {
     }
 }
 
+/** @stable */
 export class PriorityQueueHandleError extends PriorityQueueError {
     public override readonly name: string = 'PriorityQueueHandleError';
 
@@ -96,6 +110,7 @@ export class PriorityQueueHandleError extends PriorityQueueError {
     }
 }
 
+/** @stable */
 export class PriorityQueueSerializationError extends PriorityQueueError {
     public override readonly name: string = 'PriorityQueueSerializationError';
 
@@ -275,6 +290,8 @@ class NodeIterator<T, P, R> implements IterableIterator<R> {
  * const h2 = pq.enqueue({ task: 'high' }, 1);
  * pq.updatePriority(h1, 0);  // promote h1 to highest priority
  * const top = pq.dequeue();  // { task: 'low' }
+ *
+ * @stable
  */
 export class PriorityQueue<T, P = number, O extends PriorityOrder = 'max'>
     implements ReadonlyPriorityQueue<T, P, O>

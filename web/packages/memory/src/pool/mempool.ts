@@ -61,6 +61,8 @@ const MAX_POOL_ID = 2 ** 31 - 1;
  * // ... use obj ...
  * pool.release(obj);
  * pool[Symbol.dispose]();
+ *
+ * @stable
  */
 export class MemoryPool<T extends PoolableObject>
     implements MemoryPoolOperations<T>, AsyncMemoryPoolOperations<T>, Iterable<T>

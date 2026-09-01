@@ -6,13 +6,25 @@ const SERIALIZED_TAG = 'CircularBuffer@1' as const;
 declare const __capacityBrand: unique symbol;
 type Capacity = number & { readonly [__capacityBrand]: never };
 
+/**
+ * Overflow behavior for CircularBuffer: 'overwrite' drops oldest items, 'reject' throws.
+ * @stable
+ */
 type OverflowPolicy = 'overwrite' | 'reject';
 
+/**
+ * Configuration options for CircularBuffer.
+ * @stable
+ */
 type CircularBufferOptions<T> = Readonly<{
     overflowPolicy?: OverflowPolicy;
     onOverflow?: (item: T) => void;
 }>;
 
+/**
+ * Serialized representation of a CircularBuffer for JSON round-tripping.
+ * @stable
+ */
 type SerializedCircularBuffer<T> = Readonly<{
     $tag: typeof SERIALIZED_TAG;
     capacity: number;
@@ -48,6 +60,10 @@ class BufferEmptyError extends CircularBufferError {
     }
 }
 
+/**
+ * Read-only view of a CircularBuffer.
+ * @stable
+ */
 interface ReadonlyCircularBuffer<T> extends Iterable<T> {
     readonly capacity: number;
     readonly size: number;
@@ -86,6 +102,10 @@ interface ReadonlyCircularBuffer<T> extends Iterable<T> {
     asReadonly(): ReadonlyCircularBuffer<T>;
 }
 
+/**
+ * Fixed-capacity ring buffer with O(1) push/pop at both ends and configurable overflow policy.
+ * @stable
+ */
 class CircularBuffer<T> implements ReadonlyCircularBuffer<T> {
     readonly #buf: (T | undefined)[];
     readonly #cap: number;
@@ -482,6 +502,10 @@ class CircularBuffer<T> implements ReadonlyCircularBuffer<T> {
     }
 }
 
+/**
+ * Factory function to create a CircularBuffer instance.
+ * @stable
+ */
 function createCircularBuffer<T>(
     capacity: number,
     options?: CircularBufferOptions<T>

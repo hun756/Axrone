@@ -1,6 +1,10 @@
 import { ByteOrder, TypedArrayMap, PrimitiveTypeMap, TypedArrayConstructorMap } from './types';
 import { IReadableBuffer, IByteBuffer } from './interfaces';
 
+/**
+ * Typed-array view over a ByteBuffer, providing element-scoped read/write operations.
+ * @stable
+ */
 export class BufferView<T extends keyof TypedArrayMap> implements IReadableBuffer {
     private readonly buffer: IByteBuffer;
     private readonly arrayType: T;

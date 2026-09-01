@@ -5,12 +5,20 @@ import { CircularBuffer } from './internal/circular-buffer';
 
 export type { TypedArray, TypedArray as TypedArrayType };
 
+/**
+ * Constructor signature for typed array types.
+ * @stable
+ */
 export type TypedArrayConstructor<T extends TypedArray> = {
     new (length: number): T;
     new (buffer: ArrayBuffer, byteOffset?: number, length?: number): T;
     BYTES_PER_ELEMENT: number;
 };
 
+/**
+ * A typed array wrapper with pool lifecycle metadata.
+ * @stable
+ */
 export interface PoolableTypedArray<T extends TypedArray> extends PoolableObject {
     readonly array: T;
     readonly byteLength: number;
@@ -36,6 +44,10 @@ export interface PoolableTypedArray<T extends TypedArray> extends PoolableObject
     subarray(start?: number, end?: number): T;
 }
 
+/**
+ * Configuration options for TypedArrayPool.
+ * @stable
+ */
 export interface TypedArrayPoolOptions<T extends TypedArray>
     extends Omit<MemoryPoolOptions<PoolableTypedArray<T>>, 'factory'> {
     readonly arrayConstructor: TypedArrayConstructor<T>;
@@ -59,6 +71,10 @@ export interface TypedArrayPoolOptions<T extends TypedArray>
     readonly growthFactor?: number;
 }
 
+/**
+ * Statistics for a TypedArrayPool instance.
+ * @stable
+ */
 export interface TypedArrayPoolStats {
     readonly poolMetrics: ReturnType<MemoryPool<any>['getMetrics']>;
     readonly arrayStats: {
@@ -111,6 +127,8 @@ export interface TypedArrayPoolStats {
  * const arr = pool.acquire(512);   // from 1024-bucket, resized to 512
  * arr.array[0] = 3.14;
  * pool.release(arr);               // zeroed and returned to bucket
+ *
+ * @stable
  */
 export class TypedArrayPool<T extends TypedArray> {
     private readonly _pools: Map<number, MemoryPool<PoolableTypedArray<T>>>;
@@ -495,6 +513,10 @@ export class TypedArrayPool<T extends TypedArray> {
     }
 }
 
+/**
+ * Pre-configured TypedArrayPool instances for common typed array types.
+ * @stable
+ */
 export const TypedArrayPools = {
     Float32: new TypedArrayPool({
         arrayConstructor: Float32Array,
