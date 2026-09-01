@@ -15,7 +15,9 @@ export class WaitQueue<T extends PoolableObject> {
     }
 
     pop(): WaitQueueEntry<T> | undefined {
-        return this.#entries.shift();
+        const entry = this.#entries.shift();
+        if (entry && entry.timer !== null) clearTimeout(entry.timer);
+        return entry;
     }
 
     remove(predicate: (entry: WaitQueueEntry<T>) => boolean): WaitQueueEntry<T> | null {

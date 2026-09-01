@@ -87,14 +87,29 @@ describe('WaitQueue', () => {
     it('size reflects queue length', () => {
         const queue = new WaitQueue<PoolableObject>();
         expect(queue.size).toBe(0);
-        
+
         queue.push(() => {}, () => {});
         expect(queue.size).toBe(1);
-        
+
         queue.push(() => {}, () => {});
         expect(queue.size).toBe(2);
-        
+
         queue.pop();
         expect(queue.size).toBe(1);
+    });
+
+    it('clears pending timers when an entry is popped', async () => {
+        const queue = new WaitQueue<PoolableObject>();
+        let fired = false;
+
+        const entry = queue.push(() => {}, () => {});
+        entry.timer = setTimeout(() => {
+            fired = true;
+        }, 5);
+
+        queue.pop();
+        await new Promise((resolve) => setTimeout(resolve, 25));
+
+        expect(fired).toBe(false);
     });
 });
