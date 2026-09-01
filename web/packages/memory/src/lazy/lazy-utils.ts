@@ -169,15 +169,24 @@ export const memoizeAsync = <TArgs extends readonly unknown[], TResult>(
 
 export const delay = <T>(lazyValue: ILazy<T>, milliseconds: number): ILazyAsync<T> =>
     new LazyAsyncImpl(
-        () => new Promise((resolve) => setTimeout(() => resolve(lazyValue.force()), milliseconds))
+        () =>
+            new Promise<T>((resolve, reject) => {
+                setTimeout(() => {
+                    try {
+                        resolve(lazyValue.force());
+                    } catch (error) {
+                        reject(error instanceof Error ? error : new Error(String(error)));
+                    }
+                }, milliseconds);
+            })
     );
 
 export const delayAsync = <T>(lazyAsync: ILazyAsync<T>, milliseconds: number): ILazyAsync<T> =>
     new LazyAsyncImpl(
         () =>
-            new Promise<T>((resolve) => {
-                setTimeout(async () => {
-                    resolve(await lazyAsync.force());
+            new Promise<T>((resolve, reject) => {
+                setTimeout(() => {
+                    lazyAsync.force().then(resolve, reject);
                 }, milliseconds);
             })
     );

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { LazyAsyncImpl } from '../lazy/lazy-impl';
+import { LazyAsyncImpl, LazyImpl } from '../lazy/lazy-impl';
+import { delay, delayAsync } from '../lazy/lazy-utils';
 
 describe('LazyAsyncImpl', () => {
     describe('basic async evaluation and caching', () => {
@@ -41,6 +42,22 @@ describe('LazyAsyncImpl', () => {
             expect(lazy.exception).toBe(error);
 
             await expect(lazy.force()).rejects.toThrow('async fail');
+        });
+    });
+
+    describe('delay helpers', () => {
+        it('delayAsync propagates force rejection', async () => {
+            const failing = new LazyAsyncImpl(() => Promise.reject(new Error('boom')));
+            const delayed = delayAsync(failing, 1);
+            await expect(delayed.force()).rejects.toThrow('boom');
+        });
+
+        it('delay propagates sync force throw', async () => {
+            const failing = new LazyImpl(() => {
+                throw new Error('sync boom');
+            });
+            const delayed = delay(failing, 1);
+            await expect(delayed.force()).rejects.toThrow('sync boom');
         });
     });
 
