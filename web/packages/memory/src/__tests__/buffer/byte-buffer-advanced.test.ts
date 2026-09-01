@@ -61,6 +61,29 @@ describe('ByteBuffer Advanced', () => {
         });
     });
 
+    describe('growth', () => {
+        it('preserves writes across buffer growth', () => {
+            const b = ByteBuffer.alloc(8);
+            const values: number[] = [];
+            for (let i = 0; i < 100; i++) {
+                values.push(i & 0xff);
+                b.putUint8(i & 0xff);
+            }
+            expect(b.position).toBe(100);
+            b.flip();
+            for (let i = 0; i < 100; i++) {
+                expect(b.getUint8()).toBe(values[i]);
+            }
+        });
+
+        it('keeps an explicit limit below the grown capacity', () => {
+            const b = ByteBuffer.alloc(8);
+            b.setLimit(4);
+            b.putAll([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+            expect(b.position).toBe(4);
+        });
+    });
+
     describe('putJson() / getJson()', () => {
         it('roundtrips simple object', () => {
             const b = ByteBuffer.alloc(256);

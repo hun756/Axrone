@@ -180,6 +180,9 @@ export class ByteBuffer implements IByteBuffer {
             throw new BufferOverflowError('Required capacity exceeds maximum allowed');
         }
 
+        const oldCapacity = this.buffer.byteLength;
+        const limitTracksCapacity = this.limitPos === oldCapacity;
+
         const newBuffer = this.pooled
             ? ByteBuffer.pool.allocate(newCapacity)
             : new ArrayBuffer(newCapacity);
@@ -193,6 +196,10 @@ export class ByteBuffer implements IByteBuffer {
         this.buffer = newBuffer;
         this.view = new DataView(newBuffer);
         this.u8Array = new Uint8Array(newBuffer);
+
+        if (limitTracksCapacity) {
+            this.limitPos = newBuffer.byteLength;
+        }
 
         this.typedArrayCache.clear();
     }
