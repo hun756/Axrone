@@ -1,6 +1,7 @@
 import {
     MemoryPoolError,
     MemoryPoolErrorCode,
+    POOL_OPTION_DEFAULTS,
     validateMemoryPoolOptions,
     type AsyncMemoryPoolOperations,
     type MemoryPoolOperations,
@@ -87,33 +88,39 @@ export class MemoryPool<T extends PoolableObject>
         this.#id = ++MemoryPool.#poolIdCounter & MAX_POOL_ID;
 
         const resolved = {
-            initialCapacity: options.initialCapacity ?? 32,
-            maxCapacity: options.maxCapacity ?? 4096,
-            minFree: options.minFree ?? 0,
-            highWatermarkRatio: options.highWatermarkRatio ?? 0.8,
-            lowWatermarkRatio: options.lowWatermarkRatio ?? 0.2,
-            expansionStrategy: options.expansionStrategy ?? 'multiplicative',
-            expansionFactor: options.expansionFactor ?? 2,
-            expansionRate: options.expansionRate ?? 0,
-            allocationStrategy: options.allocationStrategy ?? 'first-available',
-            evictionPolicy: options.evictionPolicy ?? 'none',
-            ttl: options.ttl ?? 0,
+            initialCapacity: options.initialCapacity ?? POOL_OPTION_DEFAULTS.initialCapacity,
+            maxCapacity: options.maxCapacity ?? POOL_OPTION_DEFAULTS.maxCapacity,
+            minFree: options.minFree ?? POOL_OPTION_DEFAULTS.minFree,
+            highWatermarkRatio:
+                options.highWatermarkRatio ?? POOL_OPTION_DEFAULTS.highWatermarkRatio,
+            lowWatermarkRatio: options.lowWatermarkRatio ?? POOL_OPTION_DEFAULTS.lowWatermarkRatio,
+            expansionStrategy:
+                options.expansionStrategy ?? POOL_OPTION_DEFAULTS.expansionStrategy,
+            expansionFactor: options.expansionFactor ?? POOL_OPTION_DEFAULTS.expansionFactor,
+            expansionRate: options.expansionRate ?? POOL_OPTION_DEFAULTS.expansionRate,
+            allocationStrategy:
+                options.allocationStrategy ?? POOL_OPTION_DEFAULTS.allocationStrategy,
+            evictionPolicy: options.evictionPolicy ?? POOL_OPTION_DEFAULTS.evictionPolicy,
+            ttl: options.ttl ?? POOL_OPTION_DEFAULTS.ttl,
             factory: options.factory,
-            resetOnRecycle: options.resetOnRecycle ?? true,
+            resetOnRecycle: options.resetOnRecycle ?? POOL_OPTION_DEFAULTS.resetOnRecycle,
             validator: options.validator ?? (() => true),
-            preallocate: options.preallocate ?? false,
-            autoExpand: options.autoExpand ?? true,
-            compactionThreshold: options.compactionThreshold ?? 128,
-            compactionTriggerRatio: options.compactionTriggerRatio ?? 0.5,
+            preallocate: options.preallocate ?? POOL_OPTION_DEFAULTS.preallocate,
+            autoExpand: options.autoExpand ?? POOL_OPTION_DEFAULTS.autoExpand,
+            compactionThreshold:
+                options.compactionThreshold ?? POOL_OPTION_DEFAULTS.compactionThreshold,
+            compactionTriggerRatio:
+                options.compactionTriggerRatio ?? POOL_OPTION_DEFAULTS.compactionTriggerRatio,
             onAcquire: options.onAcquire ?? (() => undefined),
             onRelease: options.onRelease ?? (() => undefined),
             onEvict: options.onEvict ?? (() => undefined),
             onOutOfMemory: options.onOutOfMemory ?? (() => undefined),
-            enableMetrics: options.enableMetrics ?? false,
-            enableInstrumentation: options.enableInstrumentation ?? false,
+            enableMetrics: options.enableMetrics ?? POOL_OPTION_DEFAULTS.enableMetrics,
+            enableInstrumentation:
+                options.enableInstrumentation ?? POOL_OPTION_DEFAULTS.enableInstrumentation,
             name: options.name ?? `MemoryPool-${this.#id}`,
-            maxObjectAge: options.maxObjectAge ?? 0,
-            threadSafe: options.threadSafe ?? false,
+            maxObjectAge: options.maxObjectAge ?? POOL_OPTION_DEFAULTS.maxObjectAge,
+            threadSafe: options.threadSafe ?? POOL_OPTION_DEFAULTS.threadSafe,
             asyncFactory: options.asyncFactory,
             estimatedObjectSize: options.estimatedObjectSize,
         };

@@ -1,5 +1,6 @@
 import type { TypedArray } from '@axrone/utility';
 import { MemoryPool, MemoryPoolOptions, PoolableObject } from './mempool';
+import { POOL_OPTION_DEFAULTS } from './pool-support';
 import { CircularBuffer } from './internal/circular-buffer';
 
 export type { TypedArray, TypedArray as TypedArrayType };
@@ -134,22 +135,24 @@ export class TypedArrayPool<T extends TypedArray> {
             minFree: options.minFree ?? 4,
             highWatermarkRatio: options.highWatermarkRatio ?? 0.85,
             lowWatermarkRatio: options.lowWatermarkRatio ?? 0.25,
-            expansionStrategy: options.expansionStrategy ?? 'multiplicative',
+            expansionStrategy:
+                options.expansionStrategy ?? POOL_OPTION_DEFAULTS.expansionStrategy,
             expansionFactor: options.expansionFactor ?? 1.5,
-            expansionRate: options.expansionRate ?? 0,
+            expansionRate: options.expansionRate ?? POOL_OPTION_DEFAULTS.expansionRate,
             allocationStrategy: options.allocationStrategy ?? 'least-recently-used',
             evictionPolicy: options.evictionPolicy ?? 'lru',
-            ttl: options.ttl ?? 0,
-            resetOnRecycle: options.resetOnRecycle ?? true,
+            ttl: options.ttl ?? POOL_OPTION_DEFAULTS.ttl,
+            resetOnRecycle: options.resetOnRecycle ?? POOL_OPTION_DEFAULTS.resetOnRecycle,
             preallocate: options.preallocate ?? true,
-            autoExpand: options.autoExpand ?? true,
+            autoExpand: options.autoExpand ?? POOL_OPTION_DEFAULTS.autoExpand,
             compactionThreshold: options.compactionThreshold ?? 32,
             compactionTriggerRatio: options.compactionTriggerRatio ?? 0.3,
-            enableMetrics: options.enableMetrics ?? false,
-            enableInstrumentation: options.enableInstrumentation ?? false,
+            enableMetrics: options.enableMetrics ?? POOL_OPTION_DEFAULTS.enableMetrics,
+            enableInstrumentation:
+                options.enableInstrumentation ?? POOL_OPTION_DEFAULTS.enableInstrumentation,
             name: options.name ?? `TypedArrayPool<${options.arrayConstructor.name}>`,
             maxObjectAge: options.maxObjectAge ?? 300000,
-            threadSafe: options.threadSafe ?? false,
+            threadSafe: options.threadSafe ?? POOL_OPTION_DEFAULTS.threadSafe,
             sizeBuckets: options.sizeBuckets,
             initializeArray: options.initializeArray,
             validateIntegrity: options.validateIntegrity,

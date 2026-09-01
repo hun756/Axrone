@@ -1,4 +1,5 @@
 import { MemoryPool, MemoryPoolOptions, PoolableObject } from './mempool';
+import { POOL_OPTION_DEFAULTS } from './pool-support';
 
 export interface PoolableWrapper<T> extends PoolableObject {
     readonly value: T;
@@ -85,26 +86,29 @@ export class ObjectPool<T extends {}> implements Disposable {
         this._options = {
             initialCapacity: options.initialCapacity ?? 16,
             maxCapacity: options.maxCapacity ?? 1024,
-            minFree: options.minFree ?? 0,
+            minFree: options.minFree ?? POOL_OPTION_DEFAULTS.minFree,
             highWatermarkRatio: options.highWatermarkRatio ?? 0.85,
             lowWatermarkRatio: options.lowWatermarkRatio ?? 0.15,
-            expansionStrategy: options.expansionStrategy ?? 'multiplicative',
+            expansionStrategy:
+                options.expansionStrategy ?? POOL_OPTION_DEFAULTS.expansionStrategy,
             expansionFactor: options.expansionFactor ?? 1.5,
-            expansionRate: options.expansionRate ?? 0,
-            allocationStrategy: options.allocationStrategy ?? 'first-available',
+            expansionRate: options.expansionRate ?? POOL_OPTION_DEFAULTS.expansionRate,
+            allocationStrategy:
+                options.allocationStrategy ?? POOL_OPTION_DEFAULTS.allocationStrategy,
             evictionPolicy: options.evictionPolicy ?? 'lru',
-            ttl: options.ttl ?? 0,
+            ttl: options.ttl ?? POOL_OPTION_DEFAULTS.ttl,
             factory: options.factory,
-            resetOnRecycle: options.resetOnRecycle ?? true,
-            preallocate: options.preallocate ?? false,
-            autoExpand: options.autoExpand ?? true,
+            resetOnRecycle: options.resetOnRecycle ?? POOL_OPTION_DEFAULTS.resetOnRecycle,
+            preallocate: options.preallocate ?? POOL_OPTION_DEFAULTS.preallocate,
+            autoExpand: options.autoExpand ?? POOL_OPTION_DEFAULTS.autoExpand,
             compactionThreshold: options.compactionThreshold ?? 64,
             compactionTriggerRatio: options.compactionTriggerRatio ?? 0.3,
-            enableMetrics: options.enableMetrics ?? false,
-            enableInstrumentation: options.enableInstrumentation ?? false,
+            enableMetrics: options.enableMetrics ?? POOL_OPTION_DEFAULTS.enableMetrics,
+            enableInstrumentation:
+                options.enableInstrumentation ?? POOL_OPTION_DEFAULTS.enableInstrumentation,
             name: options.name ?? `ObjectPool-${Date.now()}`,
-            maxObjectAge: options.maxObjectAge ?? 0,
-            threadSafe: options.threadSafe ?? false,
+            maxObjectAge: options.maxObjectAge ?? POOL_OPTION_DEFAULTS.maxObjectAge,
+            threadSafe: options.threadSafe ?? POOL_OPTION_DEFAULTS.threadSafe,
             asyncFactory: options.asyncFactory,
             resetHandler: options.resetHandler,
             validateHandler: options.validateHandler,

@@ -18,6 +18,29 @@ export type PoolAllocationStrategy =
 
 export type PoolEvictionPolicy = 'none' | 'lru' | 'ttl' | 'fifo';
 
+export const POOL_OPTION_DEFAULTS = {
+    initialCapacity: 32,
+    maxCapacity: 4096,
+    minFree: 0,
+    highWatermarkRatio: 0.8,
+    lowWatermarkRatio: 0.2,
+    expansionStrategy: 'multiplicative',
+    expansionFactor: 2,
+    expansionRate: 0,
+    allocationStrategy: 'first-available',
+    evictionPolicy: 'none',
+    ttl: 0,
+    resetOnRecycle: true,
+    preallocate: false,
+    autoExpand: true,
+    compactionThreshold: 128,
+    compactionTriggerRatio: 0.5,
+    enableMetrics: false,
+    enableInstrumentation: false,
+    maxObjectAge: 0,
+    threadSafe: false,
+} as const;
+
 export interface MemoryPoolOptions<T extends PoolableObject> {
     readonly initialCapacity?: number;
     readonly maxCapacity?: number;
