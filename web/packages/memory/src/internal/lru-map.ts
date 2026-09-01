@@ -295,13 +295,49 @@ export class LruMap<K, V> {
 
     #nextRecency(): number {
         this.#sequence = (this.#sequence + 1) >>> 0;
-        if (this.#sequence === 0) this.#sequence = 1;
+        if (this.#sequence === 0) {
+            // Wraparound detected — normalize all heap entries to prevent wrong eviction order
+            this.#normalizeRecency();
+            // After normalization, sequence is set to N (number of entries)
+            // Next call will increment to N+1, ensuring new entries have highest recency
+        }
         return this.#sequence;
+    }
+
+    #normalizeRecency(): void {
+        // Drain heap into array, reassign recency 1..N, rebuild heap
+        const entries: Array<{ handle: LruHandle<K, V>; recency: number }> = [];
+        while (!this.#heap.isEmpty) {
+            const heapHandle = this.#heap.pop();
+            if (!heapHandle) break;
+            const entry = this.#handleToEntry.get(heapHandle.value);
+            if (entry) {
+                entries.push({ handle: heapHandle.value, recency: 0 });
+            }
+        }
+
+        // Reassign recency 1..N and rebuild
+        for (let i = 0; i < entries.length; i++) {
+            const newRecency = i + 1;
+            const handle = entries[i].handle;
+            this.#handleToRecency.set(handle, newRecency);
+
+            const heapHandle = this.#heap.push(newRecency, handle);
+            this.#handleToHeapHandle.set(handle, heapHandle);
+        }
+
+        // Set sequence to N so next recency will be N+1
+        this.#sequence = entries.length;
     }
 
     #createHandle(): LruHandle<K, V> {
         const h = new LruHandle<K, V>(this.#nextHandleId++, this);
         if (this.#nextHandleId > Number.MAX_SAFE_INTEGER) this.#nextHandleId = 1;
         return h;
+    }
+
+    /** @internal Test seam for H10 wraparound verification */
+    _debugSetSequence(n: number): void {
+        this.#sequence = n;
     }
 }
