@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WaitQueue } from '../wait-queue';
 import type { PoolableObject } from '../../pool-support';
 
@@ -99,6 +99,7 @@ describe('WaitQueue', () => {
     });
 
     it('clears pending timers when an entry is popped', async () => {
+        vi.useFakeTimers();
         const queue = new WaitQueue<PoolableObject>();
         let fired = false;
 
@@ -108,8 +109,9 @@ describe('WaitQueue', () => {
         }, 5);
 
         queue.pop();
-        await new Promise((resolve) => setTimeout(resolve, 25));
+        await vi.advanceTimersByTimeAsync(25);
 
         expect(fired).toBe(false);
+        vi.useRealTimers();
     });
 });
