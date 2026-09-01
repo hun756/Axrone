@@ -118,8 +118,6 @@ export class MemoryPool<T extends PoolableObject>
             enableInstrumentation:
                 options.enableInstrumentation ?? POOL_OPTION_DEFAULTS.enableInstrumentation,
             name: options.name ?? `MemoryPool-${this.#id}`,
-            maxObjectAge: options.maxObjectAge ?? POOL_OPTION_DEFAULTS.maxObjectAge,
-            threadSafe: options.threadSafe ?? POOL_OPTION_DEFAULTS.threadSafe,
             asyncFactory: options.asyncFactory,
             estimatedObjectSize: options.estimatedObjectSize,
         };

@@ -140,8 +140,6 @@ export class ObjectPool<T extends {}> implements Disposable {
             enableInstrumentation:
                 options.enableInstrumentation ?? POOL_OPTION_DEFAULTS.enableInstrumentation,
             name: options.name ?? `ObjectPool-${Date.now()}`,
-            maxObjectAge: options.maxObjectAge ?? POOL_OPTION_DEFAULTS.maxObjectAge,
-            threadSafe: options.threadSafe ?? POOL_OPTION_DEFAULTS.threadSafe,
             asyncFactory: options.asyncFactory,
             resetHandler: options.resetHandler,
             validateHandler: options.validateHandler,

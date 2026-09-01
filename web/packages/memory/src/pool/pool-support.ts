@@ -84,8 +84,6 @@ export const POOL_OPTION_DEFAULTS = {
     compactionTriggerRatio: 0.5,
     enableMetrics: false,
     enableInstrumentation: false,
-    maxObjectAge: 0,
-    threadSafe: false,
 } as const;
 
 /** @stable */
@@ -115,8 +113,6 @@ export interface MemoryPoolOptions<T extends PoolableObject> {
     readonly enableMetrics?: boolean;
     readonly enableInstrumentation?: boolean;
     readonly name?: string;
-    readonly maxObjectAge?: number;
-    readonly threadSafe?: boolean;
     readonly asyncFactory?: () => Promise<T>;
     readonly estimatedObjectSize?: number;
 }
