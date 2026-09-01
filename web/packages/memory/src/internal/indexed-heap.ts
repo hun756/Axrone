@@ -88,8 +88,9 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
         this.#handleToIndex = new Map();
         this.#comesBeforeFn = (a: HeapNode<K, V>, b: HeapNode<K, V>): boolean =>
             this.#comesBeforeByKey(a.key, b.key);
-        this.#onMoveFn = (node: HeapNode<K, V>, newIndex: number): void =>
+        this.#onMoveFn = (node: HeapNode<K, V>, newIndex: number): void => {
             this.#handleToIndex.set(node.handle, newIndex);
+        };
     }
 
     get size(): number {

@@ -20,7 +20,13 @@
 // ---------------------------------------------------------------------------
 
 /** Core deferred-computation states shared by sync lazy and singleton. */
-export type DeferredSyncState = 'uninitialized' | 'computing' | 'resolved' | 'faulted';
+export type DeferredSyncState =
+    | 'uninitialized'
+    | 'computing'
+    | 'resolved'
+    | 'disposing'
+    | 'disposed'
+    | 'faulted';
 
 /** Core deferred-computation states shared by async lazy and singleton. */
 export type DeferredAsyncState = 'uninitialized' | 'computing' | 'resolved' | 'faulted';
