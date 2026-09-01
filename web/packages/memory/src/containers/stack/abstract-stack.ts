@@ -3,9 +3,13 @@ import { StackMemoryPool as MemoryPool } from './pool-adapter';
 import { StackIterator } from './stack-iterator';
 import { createStackSize, createStackCapacity } from './stack-core';
 import { ReadonlyStackInterface, StackConfiguration } from './interfaces';
-import { StackSize, StackNode, StackCapacity, StackResult, NodeId } from './types';
+import { StackSize, StackNode, StackCapacity, NodeId } from './types';
 import { Fnv1a32 } from '@axrone/hash';
 
+/**
+ * Base class providing shared stack logic for mutable and immutable variants.
+ * @beta
+ */
 export abstract class AbstractStack<T> implements ReadonlyStackInterface<T> {
     protected _size: StackSize = createStackSize(0);
     protected _head: StackNode<T> | null = null;
@@ -52,23 +56,17 @@ export abstract class AbstractStack<T> implements ReadonlyStackInterface<T> {
         return this._checksum;
     }
 
-    peek(): StackResult<T | undefined> {
-        if (this._head === null) {
-            return { tag: 'success', value: undefined, cost: 1 };
-        }
-        return { tag: 'success', value: this._head.value, cost: 1 };
+    peek(): T | undefined {
+        return this._head?.value;
     }
 
     peekUnsafe(): T | undefined {
         return this._head?.value;
     }
 
-    peekMany(count: number): StackResult<readonly T[], StackIntegrityError> {
+    peekMany(count: number): readonly T[] {
         if (count < 0 || count > this._size) {
-            return {
-                tag: 'failure',
-                error: new StackIntegrityError('Invalid peek count', { count, size: this._size }),
-            };
+            throw new StackIntegrityError('Invalid peek count', { count, size: this._size });
         }
 
         const result: T[] = [];
@@ -81,7 +79,7 @@ export abstract class AbstractStack<T> implements ReadonlyStackInterface<T> {
             remaining--;
         }
 
-        return { tag: 'success', value: Object.freeze(result), cost: count };
+        return Object.freeze(result);
     }
 
     contains(value: T): boolean {
@@ -201,9 +199,9 @@ export abstract class AbstractStack<T> implements ReadonlyStackInterface<T> {
         return h.digest() as unknown as number;
     }
 
-    validate(): StackResult<boolean, StackIntegrityError> {
+    validate(): boolean {
         if (!this._config.enableIntegrityChecks) {
-            return { tag: 'success', value: true, cost: 0 };
+            return true;
         }
 
         let count = 0;
@@ -212,51 +210,39 @@ export abstract class AbstractStack<T> implements ReadonlyStackInterface<T> {
 
         while (current !== null) {
             if (visited.has(current.id)) {
-                return {
-                    tag: 'failure',
-                    error: new StackIntegrityError('Cycle detected in stack', {
-                        nodeId: current.id,
-                    }),
-                };
+                throw new StackIntegrityError('Cycle detected in stack', {
+                    nodeId: current.id,
+                });
             }
 
             visited.add(current.id);
 
             if (!this._config.validateFn(current.value)) {
-                return {
-                    tag: 'failure',
-                    error: new StackIntegrityError('Invalid value detected', {
-                        nodeId: current.id,
-                        value: current.value,
-                    }),
-                };
+                throw new StackIntegrityError('Invalid value detected', {
+                    nodeId: current.id,
+                    value: current.value,
+                });
             }
 
             current = current.next;
             count++;
 
             if (count > this._size) {
-                return {
-                    tag: 'failure',
-                    error: new StackIntegrityError('Size mismatch detected', {
-                        counted: count,
-                        expected: this._size,
-                    }),
-                };
+                throw new StackIntegrityError('Size mismatch detected', {
+                    counted: count,
+                    expected: this._size,
+                });
             }
         }
 
         if (count !== this._size) {
-            return {
-                tag: 'failure',
-                error: new StackIntegrityError('Size mismatch', {
-                    counted: count,
-                    expected: this._size,
-                }),
-            };
+            throw new StackIntegrityError('Size mismatch', {
+                counted: count,
+                expected: this._size,
+            });
         }
 
-        return { tag: 'success', value: true, cost: count };
+        return true;
     }
 
     [Symbol.iterator](): IterableIterator<T> {

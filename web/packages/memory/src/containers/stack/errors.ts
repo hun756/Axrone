@@ -1,5 +1,6 @@
 import { StackSize, StackCapacity } from './types';
 
+/** @stable */
 export abstract class StackError extends Error {
     abstract readonly code: string;
     abstract readonly severity: 'low' | 'medium' | 'high' | 'critical';
@@ -7,6 +8,7 @@ export abstract class StackError extends Error {
     readonly timestamp = performance.now();
 }
 
+/** @stable */
 export class StackCapacityError extends StackError {
     readonly code = 'E_CAPACITY_EXCEEDED';
     readonly severity = 'high' as const;
@@ -20,6 +22,7 @@ export class StackCapacityError extends StackError {
     }
 }
 
+/** @stable */
 export class StackIntegrityError extends StackError {
     readonly code = 'E_INTEGRITY_VIOLATION';
     readonly severity = 'critical' as const;
@@ -32,6 +35,7 @@ export class StackIntegrityError extends StackError {
     }
 }
 
+/** @stable */
 export class StackMemoryError extends StackError {
     readonly code = 'E_MEMORY_EXHAUSTED';
     readonly severity = 'critical' as const;
@@ -44,4 +48,5 @@ export class StackMemoryError extends StackError {
     }
 }
 
+/** @stable */
 export type StackErrorUnion = StackCapacityError | StackIntegrityError | StackMemoryError;
