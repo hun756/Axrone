@@ -282,17 +282,11 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
         }
     }
 
-    [Symbol.iterator](): Iterator<IndexedHeapEntryView<K, V>> {
-        const snapshot = this.toSortedArray();
-        let index = 0;
-        return {
-            next(): IteratorResult<IndexedHeapEntryView<K, V>> {
-                if (index >= snapshot.length) {
-                    return { value: undefined as unknown as IndexedHeapEntryView<K, V>, done: true };
-                }
-                return { value: snapshot[index++], done: false };
-            },
-        };
+    *[Symbol.iterator](): Iterator<IndexedHeapEntryView<K, V>> {
+        for (let i = 0; i < this.#size; i++) {
+            const node = this.#nodes[i]!;
+            yield { key: node.key, value: node.value };
+        }
     }
 
     #viewAt(heapIndex: number): IndexedHeapEntryView<K, V> {
