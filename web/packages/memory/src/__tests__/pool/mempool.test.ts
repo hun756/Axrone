@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryPool, MemoryPoolError, PoolableObject } from './../../pool/mempool';
 
 describe('MemoryPool', () => {
@@ -114,10 +114,14 @@ describe('MemoryPool', () => {
     });
 
     it('should support tryAcquireAsync with timeout', async () => {
+        vi.useFakeTimers();
         const pool = createPool({ initialCapacity: 1, maxCapacity: 1, autoExpand: false });
         pool.acquire();
-        const result = await pool.tryAcquireAsync(50);
+        const promise = pool.tryAcquireAsync(50);
+        await vi.advanceTimersByTimeAsync(50);
+        const result = await promise;
         expect(result).toBeNull();
+        vi.useRealTimers();
     });
 
     it('should force compact and not throw', () => {
@@ -229,6 +233,7 @@ describe('MemoryPool', () => {
     });
 
     it('should support asyncFactory and preallocate', async () => {
+        vi.useFakeTimers();
         let created = 0;
         const pool = new MemoryPool<TestObject>({
             initialCapacity: 2,
@@ -240,11 +245,13 @@ describe('MemoryPool', () => {
             factory: () => new TestObject(),
         });
         // Wait for preallocation
-        await new Promise((r) => setTimeout(r, 50));
+        await vi.advanceTimersByTimeAsync(50);
         expect(created).toBeGreaterThanOrEqual(2);
+        vi.useRealTimers();
     });
 
     it('should respect TTL eviction policy', async () => {
+        vi.useFakeTimers();
         const pool = createPool({
             initialCapacity: 1,
             evictionPolicy: 'ttl',
@@ -252,8 +259,9 @@ describe('MemoryPool', () => {
         });
         const obj = pool.acquire();
         pool.release(obj);
-        await new Promise((r) => setTimeout(r, 20));
+        await vi.advanceTimersByTimeAsync(20);
         expect(() => pool.acquire()).not.toThrow();
+        vi.useRealTimers();
     });
 
     it('should not allow operations after dispose', () => {

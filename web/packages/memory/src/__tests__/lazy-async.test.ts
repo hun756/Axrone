@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LazyAsyncImpl, LazyImpl } from '../lazy/lazy-impl';
 import { delay, delayAsync } from '../lazy/lazy-utils';
 
@@ -46,10 +46,15 @@ describe('LazyAsyncImpl', () => {
     });
 
     describe('delay helpers', () => {
+        beforeEach(() => { vi.useFakeTimers(); });
+        afterEach(() => { vi.useRealTimers(); });
+
         it('delayAsync propagates force rejection', async () => {
             const failing = new LazyAsyncImpl(() => Promise.reject(new Error('boom')));
             const delayed = delayAsync(failing, 1);
-            await expect(delayed.force()).rejects.toThrow('boom');
+            const promise = delayed.force();
+            vi.advanceTimersByTime(10);
+            await expect(promise).rejects.toThrow('boom');
         });
 
         it('delay propagates sync force throw', async () => {
@@ -57,7 +62,9 @@ describe('LazyAsyncImpl', () => {
                 throw new Error('sync boom');
             });
             const delayed = delay(failing, 1);
-            await expect(delayed.force()).rejects.toThrow('sync boom');
+            const promise = delayed.force();
+            vi.advanceTimersByTime(10);
+            await expect(promise).rejects.toThrow('sync boom');
         });
     });
 
@@ -156,10 +163,15 @@ describe('LazyAsyncImpl', () => {
     });
 
     describe('timeout()', () => {
+        beforeEach(() => { vi.useFakeTimers(); });
+        afterEach(() => { vi.useRealTimers(); });
+
         it('resolves when factory completes before timeout', async () => {
             const lazy = new LazyAsyncImpl(() => Promise.resolve(42));
             const withTimeout = lazy.timeout(1000);
-            await expect(withTimeout.force()).resolves.toBe(42);
+            const promise = withTimeout.force();
+            await vi.advanceTimersByTimeAsync(0);
+            await expect(promise).resolves.toBe(42);
         });
 
         it('rejects when factory exceeds timeout', async () => {
@@ -167,7 +179,9 @@ describe('LazyAsyncImpl', () => {
                 () => new Promise((resolve) => setTimeout(() => resolve(42), 5000))
             );
             const withTimeout = lazy.timeout(10);
-            await expect(withTimeout.force()).rejects.toThrow(/timed out/);
+            const promise = withTimeout.force();
+            vi.advanceTimersByTime(10);
+            await expect(promise).rejects.toThrow(/timed out/);
         });
     });
 

@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BufferPool, BufferPoolOptions, ByteBuffer } from '../../buffering';
 
 describe('Professional BufferPool', () => {
@@ -187,6 +188,7 @@ describe('Professional BufferPool', () => {
 
     describe('Advanced Features', () => {
         it('should respect TTL when configured', async () => {
+            vi.useFakeTimers();
             BufferPool.resetInstance();
 
             const options: BufferPoolOptions = {
@@ -199,7 +201,7 @@ describe('Professional BufferPool', () => {
             const buffer = ttlPool.allocate(512);
             ttlPool.release(buffer);
 
-            await new Promise((resolve) => setTimeout(resolve, 150));
+            await vi.advanceTimersByTimeAsync(150);
 
             const buffers = [];
             for (let i = 0; i < 50; i++) {
@@ -214,6 +216,7 @@ describe('Professional BufferPool', () => {
             buffers.forEach((buf) => ttlPool.release(buf));
             ttlPool.dispose();
             BufferPool.resetInstance();
+            vi.useRealTimers();
         });
 
         it('should call lifecycle hooks when configured', () => {
