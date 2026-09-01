@@ -205,6 +205,19 @@ describe('MemoryPool', () => {
         expect(pool.getAllocatedCount()).toBe(3);
     });
 
+    it('should keep free list consistent across shrink compaction', () => {
+        const pool = createPool({ initialCapacity: 8, preallocate: true });
+        pool.acquire();
+        pool.acquire();
+        pool.resize(4);
+
+        const obj = pool.acquire();
+        expect(obj).toBeDefined();
+        expect(pool.getAllocatedCount()).toBe(3);
+        expect(pool.getTotalCount()).toBe(4);
+        expect(() => pool.release(obj)).not.toThrow();
+    });
+
     it('should not leak memory on rapid acquire/release cycles', () => {
         const pool = createPool({ initialCapacity: 10, maxCapacity: 100 });
         for (let i = 0; i < 1000; ++i) {

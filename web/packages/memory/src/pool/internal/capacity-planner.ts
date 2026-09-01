@@ -112,6 +112,8 @@ export class CapacityPlanner {
             if (slot !== undefined) compacted.push(slot);
         }
 
+        freeList.clear();
+
         for (let i = 0; i < compacted.length; i++) {
             const slot = compacted[i];
             if (slot.obj) slot.obj.__poolId = i;
