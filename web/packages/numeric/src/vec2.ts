@@ -52,6 +52,8 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return new Vec2(x, y);
     }
 
+    static copy<T extends IVec2Like, V extends IVec2Like>(source: Readonly<T>, out: V): V;
+    static copy<T extends IVec2Like>(source: Readonly<T>): IVec2Like;
     static copy<T extends IVec2Like, V extends IVec2Like>(source: Readonly<T>, out?: V): V {
         if (out) {
             out.x = source.x;
@@ -190,6 +192,15 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
+    static divide<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out: V
+    ): V;
+    static divide<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): IVec2Like;
     static divide<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,
@@ -480,6 +491,17 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
+    static lerpUnClamped<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out: V
+    ): V;
+    static lerpUnClamped<T extends IVec2Like, U extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number
+    ): IVec2Like;
     static lerpUnClamped<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,

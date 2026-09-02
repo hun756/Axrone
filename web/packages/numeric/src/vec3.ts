@@ -61,6 +61,8 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return new Vec3(this.x, this.y, this.z);
     }
 
+    static copy<T extends IVec3Like, V extends IVec3Like>(source: Readonly<T>, out: V): V;
+    static copy<T extends IVec3Like>(source: Readonly<T>): IVec3Like;
     static copy<T extends IVec3Like, V extends IVec3Like>(source: Readonly<T>, out?: V): V {
         if (out) {
             out.x = source.x;
@@ -189,6 +191,15 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         }
     }
 
+    static divide<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out: V
+    ): V;
+    static divide<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): IVec3Like;
     static divide<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         a: Readonly<T>,
         b: Readonly<U>,
