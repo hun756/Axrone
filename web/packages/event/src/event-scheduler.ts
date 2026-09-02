@@ -106,7 +106,13 @@ function normalizePositiveInteger(value: number | undefined, fallback: number): 
 
 function normalizeConcurrencyLimit(value: number | undefined, fallback: number): number {
     if (value === Infinity || fallback === Infinity) {
-        return value === undefined ? fallback : value;
+        if (value === undefined) {
+            return fallback;
+        }
+        if (!Number.isFinite(value)) {
+            throw new Error('concurrencyLimit must be a finite number or Infinity');
+        }
+        return value;
     }
 
     return normalizePositiveInteger(value, fallback);
@@ -233,8 +239,6 @@ export class EventScheduler {
             maxRetries: this.enableRetries ? this.maxRetries : 0,
             state: TaskState.PENDING,
         };
-
-        promise.catch(() => {});
 
         if (this.enableMetrics) {
             this.taskMetrics.set(taskId, {
