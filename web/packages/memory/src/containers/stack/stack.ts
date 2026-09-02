@@ -14,7 +14,7 @@ import {
     ExtractSuccess,
     ExtractError,
 } from './types';
-import { __variance, createNodeId, createStackCapacity, createStackSize } from './stack-core';
+import { createNodeId, createStackCapacity, createStackSize } from './stack-core';
 
 import {
     StackCapacityError,
@@ -31,23 +31,23 @@ import {
     ReadonlyStackInterface,
 } from './interfaces';
 
+/**
+ * Mutable stack backed by a linked list with an internal node memory pool.
+ * @beta
+ */
 class OptimizedArrayStack<T> extends AbstractStack<T> implements MutableStackInterface<T> {
     private _disposed = false;
-    readonly [__variance] = undefined as any;
 
-    push(value: T): StackResult<this, StackCapacityError> {
+    push(value: T): this {
         if (this._disposed) {
             throw new StackIntegrityError('Cannot operate on disposed stack');
         }
 
         if (this.isFull) {
-            return {
-                tag: 'failure',
-                error: new StackCapacityError(this._size, this._capacity!, 'push'),
-            };
+            throw new StackCapacityError(this._size, this._capacity!, 'push');
         }
 
-        return { tag: 'success', value: this.pushUnsafe(value), cost: 1 };
+        return this.pushUnsafe(value);
     }
 
     pushUnsafe(value: T): this {
@@ -62,31 +62,24 @@ class OptimizedArrayStack<T> extends AbstractStack<T> implements MutableStackInt
         return this;
     }
 
-    pushMany(values: readonly T[]): StackResult<this, StackCapacityError> {
+    pushMany(values: readonly T[]): this {
         if (this._capacity && this._size + values.length > this._capacity) {
-            return {
-                tag: 'failure',
-                error: new StackCapacityError(
-                    createStackSize(this._size + values.length),
-                    this._capacity,
-                    'pushMany'
-                ),
-            };
+            throw new StackCapacityError(
+                createStackSize(this._size + values.length),
+                this._capacity,
+                'pushMany'
+            );
         }
 
         for (const value of values) {
             this.pushUnsafe(value);
         }
 
-        return { tag: 'success', value: this, cost: values.length };
+        return this;
     }
 
-    pop(): StackResult<T | undefined> {
-        if (this.isEmpty) {
-            return { tag: 'success', value: undefined, cost: 0 };
-        }
-
-        return { tag: 'success', value: this.popUnsafe(), cost: 1 };
+    pop(): T | undefined {
+        return this.popUnsafe();
     }
 
     popUnsafe(): T | undefined {
@@ -104,7 +97,7 @@ class OptimizedArrayStack<T> extends AbstractStack<T> implements MutableStackInt
         return value;
     }
 
-    popMany(count: number): StackResult<readonly T[]> {
+    popMany(count: number): readonly T[] {
         const actualCount = Math.min(count, this._size);
         const result: T[] = new Array(actualCount);
 
@@ -115,17 +108,14 @@ class OptimizedArrayStack<T> extends AbstractStack<T> implements MutableStackInt
             }
         }
 
-        return { tag: 'success', value: Object.freeze(result), cost: actualCount };
+        return Object.freeze(result);
     }
 
-    swap(): StackResult<this, StackIntegrityError> {
+    swap(): this {
         if (this._size < 2) {
-            return {
-                tag: 'failure',
-                error: new StackIntegrityError('Insufficient elements for swap', {
-                    size: this._size,
-                }),
-            };
+            throw new StackIntegrityError('Insufficient elements for swap', {
+                size: this._size,
+            });
         }
 
         const first = this.popUnsafe()!;
@@ -133,19 +123,16 @@ class OptimizedArrayStack<T> extends AbstractStack<T> implements MutableStackInt
         this.pushUnsafe(first);
         this.pushUnsafe(second);
 
-        return { tag: 'success', value: this, cost: 4 };
+        return this;
     }
 
-    duplicate(): StackResult<this, StackCapacityError | StackIntegrityError> {
+    duplicate(): this {
         if (this.isEmpty) {
-            return {
-                tag: 'failure',
-                error: new StackIntegrityError('Cannot duplicate empty stack'),
-            };
+            throw new StackIntegrityError('Cannot duplicate empty stack');
         }
 
         const value = this.peekUnsafe()!;
-        return this.push(value) as StackResult<this, StackCapacityError | StackIntegrityError>;
+        return this.push(value);
     }
 
     clear(): this {
@@ -208,12 +195,29 @@ class OptimizedArrayStack<T> extends AbstractStack<T> implements MutableStackInt
     }
 }
 
+/**
+ * Persistent (immutable) stack where push and pop return new stack instances.
+ *
+ * Each mutation creates a new stack that shares structure with the original via linked nodes,
+ * avoiding full copies. The empty stack is cached per configuration via a WeakMap for efficiency.
+ * Suitable for undo/redo stacks, expression evaluation, and any scenario requiring structural
+ * sharing or safe concurrent reads.
+ *
+ * For a mutable stack with better write performance, use {@link OptimizedArrayStack}.
+ *
+ * @example
+ * const s0 = ImmutableStack.empty<number>();
+ * const s1 = s0.push(1).push(2).push(3);
+ * const [top, s2] = s1.pop();   // top = 3, s2 has [1, 2]
+ * const s3 = s1.push(99);       // s1 unchanged, s3 has [1, 2, 3, 99]
+ *
+ * @stable
+ */
 class ImmutableStack<T> extends AbstractStack<T> implements ImmutableStackInterface<T> {
     private static readonly EMPTY_CACHE = new WeakMap<
         StackConfiguration<any>,
         ImmutableStack<any>
     >();
-    readonly [__variance] = undefined as any;
 
     private constructor(
         head: StackNode<T> | null,
@@ -253,7 +257,15 @@ class ImmutableStack<T> extends AbstractStack<T> implements ImmutableStackInterf
 
     push<U extends T>(value: U): ImmutableStack<T | U> {
         const transformedValue = this._config.transformFn(value);
-        const node = this._memoryPool.allocate(transformedValue, this._head, this._generation + 1);
+        // Use non-pooled plain objects to avoid aliasing corruption
+        const node: StackNode<T | U> = {
+            id: createNodeId(),
+            value: transformedValue,
+            next: this._head,
+            refs: 1,
+            generation: this._generation + 1,
+            memAddr: 0 as MemoryAddress,
+        };
 
         return new ImmutableStack(
             node,

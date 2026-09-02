@@ -1,15 +1,24 @@
-import type { TypedArray } from '@axrone/utility';
+import type { TypedArray, NumericTypedArray } from '@axrone/utility';
 import { MemoryPool, MemoryPoolOptions, PoolableObject } from './mempool';
+import { POOL_OPTION_DEFAULTS } from './pool-support';
 import { CircularBuffer } from './internal/circular-buffer';
 
 export type { TypedArray, TypedArray as TypedArrayType };
 
+/**
+ * Constructor signature for typed array types.
+ * @stable
+ */
 export type TypedArrayConstructor<T extends TypedArray> = {
     new (length: number): T;
     new (buffer: ArrayBuffer, byteOffset?: number, length?: number): T;
     BYTES_PER_ELEMENT: number;
 };
 
+/**
+ * A typed array wrapper with pool lifecycle metadata.
+ * @stable
+ */
 export interface PoolableTypedArray<T extends TypedArray> extends PoolableObject {
     readonly array: T;
     readonly byteLength: number;
@@ -35,6 +44,10 @@ export interface PoolableTypedArray<T extends TypedArray> extends PoolableObject
     subarray(start?: number, end?: number): T;
 }
 
+/**
+ * Configuration options for TypedArrayPool.
+ * @stable
+ */
 export interface TypedArrayPoolOptions<T extends TypedArray>
     extends Omit<MemoryPoolOptions<PoolableTypedArray<T>>, 'factory'> {
     readonly arrayConstructor: TypedArrayConstructor<T>;
@@ -58,6 +71,10 @@ export interface TypedArrayPoolOptions<T extends TypedArray>
     readonly growthFactor?: number;
 }
 
+/**
+ * Statistics for a TypedArrayPool instance.
+ * @stable
+ */
 export interface TypedArrayPoolStats {
     readonly poolMetrics: ReturnType<MemoryPool<any>['getMetrics']>;
     readonly arrayStats: {
@@ -65,7 +82,6 @@ export interface TypedArrayPoolStats {
         readonly totalMemory: number;
         readonly averageLength: number;
         readonly lengthDistribution: Map<number, number>;
-        readonly alignmentUtilization: number;
         readonly wasteRatio: number;
     };
     readonly performanceStats: {
@@ -90,8 +106,42 @@ export interface TypedArrayPoolStats {
     };
 }
 
+/**
+ * Pool for typed arrays, organized into size buckets for efficient reuse.
+ *
+ * Maintains a separate {@link MemoryPool} per bucket size (default: powers of two from 64 to
+ * maxPoolableLength). Acquired arrays can be resized down (but not up) within their bucket
+ * capacity. Supports optional memory alignment (e.g., 16-byte for SIMD), zero-on-release
+ * for safety, and integrity validation.
+ *
+ * Requests larger than maxPoolableLength bypass pooling and allocate directly. The
+ * {@link TypedArrayPools} export provides pre-configured instances for common typed array types.
+ *
+ * @example
+ * const pool = new TypedArrayPool({
+ *   arrayConstructor: Float32Array,
+ *   defaultLength: 1024,
+ *   sizeBuckets: [64, 256, 1024, 4096],
+ *   alignment: 16,
+ * });
+ * const arr = pool.acquire(512);   // from 1024-bucket, resized to 512
+ * arr.array[0] = 3.14;
+ * pool.release(arr);               // zeroed and returned to bucket
+ *
+ * @stable
+ */
 export class TypedArrayPool<T extends TypedArray> {
+    /**
+     * Default estimate for average bucket utilization (75%), used in waste
+     * calculations when per-bucket utilization data is unavailable.
+     */
+    private static readonly DEFAULT_UTILIZATION_ESTIMATE = 0.75;
+
     private readonly _pools: Map<number, MemoryPool<PoolableTypedArray<T>>>;
+    private readonly _poolByObject = new WeakMap<
+        PoolableTypedArray<T>,
+        MemoryPool<PoolableTypedArray<T>>
+    >();
     private readonly _options: Partial<TypedArrayPoolOptions<T>> & {
         arrayConstructor: TypedArrayConstructor<T>;
         defaultLength: number;
@@ -100,6 +150,7 @@ export class TypedArrayPool<T extends TypedArray> {
         zeroOnRelease: boolean;
         growthStrategy: 'exact' | 'bucket' | 'exponential';
         growthFactor: number;
+        enableMetrics: boolean;
     };
     private readonly _buckets: readonly number[];
     private _performanceTracker: {
@@ -113,7 +164,6 @@ export class TypedArrayPool<T extends TypedArray> {
         totalMemoryAllocated: 0,
         bucketsHit: new Map<number, number>(),
         oversizedRequests: 0,
-        alignmentMisses: 0,
     };
 
     constructor(options: TypedArrayPoolOptions<T>) {
@@ -130,22 +180,22 @@ export class TypedArrayPool<T extends TypedArray> {
             minFree: options.minFree ?? 4,
             highWatermarkRatio: options.highWatermarkRatio ?? 0.85,
             lowWatermarkRatio: options.lowWatermarkRatio ?? 0.25,
-            expansionStrategy: options.expansionStrategy ?? 'multiplicative',
+            expansionStrategy:
+                options.expansionStrategy ?? POOL_OPTION_DEFAULTS.expansionStrategy,
             expansionFactor: options.expansionFactor ?? 1.5,
-            expansionRate: options.expansionRate ?? 0,
+            expansionRate: options.expansionRate ?? POOL_OPTION_DEFAULTS.expansionRate,
             allocationStrategy: options.allocationStrategy ?? 'least-recently-used',
             evictionPolicy: options.evictionPolicy ?? 'lru',
-            ttl: options.ttl ?? 0,
-            resetOnRecycle: options.resetOnRecycle ?? true,
+            ttl: options.ttl ?? POOL_OPTION_DEFAULTS.ttl,
+            resetOnRecycle: options.resetOnRecycle ?? POOL_OPTION_DEFAULTS.resetOnRecycle,
             preallocate: options.preallocate ?? true,
-            autoExpand: options.autoExpand ?? true,
+            autoExpand: options.autoExpand ?? POOL_OPTION_DEFAULTS.autoExpand,
             compactionThreshold: options.compactionThreshold ?? 32,
             compactionTriggerRatio: options.compactionTriggerRatio ?? 0.3,
-            enableMetrics: options.enableMetrics ?? true,
-            enableInstrumentation: options.enableInstrumentation ?? false,
+            enableMetrics: options.enableMetrics ?? POOL_OPTION_DEFAULTS.enableMetrics,
+            enableInstrumentation:
+                options.enableInstrumentation ?? POOL_OPTION_DEFAULTS.enableInstrumentation,
             name: options.name ?? `TypedArrayPool<${options.arrayConstructor.name}>`,
-            maxObjectAge: options.maxObjectAge ?? 300000,
-            threadSafe: options.threadSafe ?? false,
             sizeBuckets: options.sizeBuckets,
             initializeArray: options.initializeArray,
             validateIntegrity: options.validateIntegrity,
@@ -164,14 +214,9 @@ export class TypedArrayPool<T extends TypedArray> {
     }
 
     acquire(length: number = this._options.defaultLength): PoolableTypedArray<T> {
-        const startTime = performance.now();
+        const startTime = this._options.enableMetrics ? performance.now() : 0;
 
         const bucketSize = this._findBestBucket(length);
-        const pool = this._pools.get(bucketSize);
-
-        if (!pool) {
-            throw new Error(`No pool available for bucket size ${bucketSize}`);
-        }
 
         this._stats.totalAllocations++;
         this._stats.bucketsHit.set(bucketSize, (this._stats.bucketsHit.get(bucketSize) ?? 0) + 1);
@@ -181,52 +226,68 @@ export class TypedArrayPool<T extends TypedArray> {
             return this._createOversizedArray(length);
         }
 
-        const pooled = pool.acquire();
-
-        if (pooled.length !== length) {
-            pooled.resize(length);
+        let pool = this._pools.get(bucketSize);
+        if (!pool) {
+            pool = this._createBucketPool(bucketSize);
         }
 
-        const allocationTime = performance.now() - startTime;
-        this._trackPerformance('allocation', allocationTime);
+        const pooled = pool.acquire();
+        this._poolByObject.set(pooled, pool);
+
+        if (pooled.length !== length && !pooled.resize(length)) {
+            throw new Error(
+                `Requested typed array length ${length} exceeds pooled capacity ${pooled.length}`
+            );
+        }
+
+        if (this._options.enableMetrics) {
+            this._trackPerformance('allocation', performance.now() - startTime);
+        }
 
         return pooled;
     }
 
     release(pooledArray: PoolableTypedArray<T>): void {
-        const startTime = performance.now();
+        const startTime = this._options.enableMetrics ? performance.now() : 0;
 
         if (this._options.validateIntegrity && !this._validateArray(pooledArray)) {
-            console.warn('TypedArrayPool: Invalid array detected during release');
+            if (this._options.enableInstrumentation) {
+                console.debug('TypedArrayPool: Invalid array detected during release');
+            }
             return;
         }
 
         if (this._options.zeroOnRelease) {
-            const zeroStart = performance.now();
-            pooledArray.zero();
-            this._trackPerformance('zeroing', performance.now() - zeroStart);
+            if (this._options.enableMetrics) {
+                const zeroStart = performance.now();
+                pooledArray.zero();
+                this._trackPerformance('zeroing', performance.now() - zeroStart);
+            } else {
+                pooledArray.zero();
+            }
         }
 
         this._stats.totalReleases++;
 
-        const bucketSize = this._findBestBucket(pooledArray.length);
-        const pool = this._pools.get(bucketSize);
-
-        if (pool && pooledArray.length <= this._options.maxPoolableLength) {
-            pool.release(pooledArray);
+        const ownerPool = this._poolByObject.get(pooledArray);
+        if (ownerPool && pooledArray.length <= this._options.maxPoolableLength) {
+            ownerPool.release(pooledArray);
         }
 
-        const releaseTime = performance.now() - startTime;
-        this._trackPerformance('allocation', releaseTime); // Track as negative allocation time
+        if (this._options.enableMetrics) {
+            this._trackPerformance('allocation', performance.now() - startTime); // Track as negative allocation time
+        }
     }
 
     acquireWithData(source: ArrayLike<number>): PoolableTypedArray<T> {
-        const startTime = performance.now();
+        const startTime = this._options.enableMetrics ? performance.now() : 0;
 
         const pooled = this.acquire(source.length);
         pooled.copyFrom(source);
 
-        this._trackPerformance('copy', performance.now() - startTime);
+        if (this._options.enableMetrics) {
+            this._trackPerformance('copy', performance.now() - startTime);
+        }
         return pooled;
     }
 
@@ -242,7 +303,6 @@ export class TypedArrayPool<T extends TypedArray> {
                 totalMemory: this._stats.totalMemoryAllocated,
                 averageLength: totalArrays > 0 ? totalMemory / totalArrays : 0,
                 lengthDistribution: new Map(this._stats.bucketsHit),
-                alignmentUtilization: this._calculateAlignmentUtilization(),
                 wasteRatio: this._calculateWasteRatio(),
             },
             performanceStats: {
@@ -263,7 +323,6 @@ export class TypedArrayPool<T extends TypedArray> {
         this._stats.totalMemoryAllocated = 0;
         this._stats.bucketsHit.clear();
         this._stats.oversizedRequests = 0;
-        this._stats.alignmentMisses = 0;
 
         this._performanceTracker.allocationTimes = new CircularBuffer<number>(1000);
         this._performanceTracker.zeroingTimes = new CircularBuffer<number>(1000);
@@ -280,14 +339,20 @@ export class TypedArrayPool<T extends TypedArray> {
 
     private _initializePools(): void {
         for (const bucketSize of this._buckets) {
-            const poolOptions: MemoryPoolOptions<PoolableTypedArray<T>> = {
-                ...this._options,
-                factory: () => this._createPoolableArray(bucketSize),
-                name: `${this._options.name}[${bucketSize}]`,
-            };
-
-            this._pools.set(bucketSize, new MemoryPool(poolOptions));
+            this._createBucketPool(bucketSize);
         }
+    }
+
+    private _createBucketPool(bucketSize: number): MemoryPool<PoolableTypedArray<T>> {
+        const poolOptions: MemoryPoolOptions<PoolableTypedArray<T>> = {
+            ...this._options,
+            factory: () => this._createPoolableArray(bucketSize),
+            name: `${this._options.name}[${bucketSize}]`,
+        };
+
+        const pool = new MemoryPool(poolOptions);
+        this._pools.set(bucketSize, pool);
+        return pool;
     }
 
     private _createPoolableArray(length: number): PoolableTypedArray<T> {
@@ -314,11 +379,15 @@ export class TypedArrayPool<T extends TypedArray> {
             buffer,
 
             zero(): void {
-                (array as any).fill(0);
+                (array as { fill(value: number): unknown }).fill(0);
             },
 
-            fill(value: number, start?: number, end?: number): any {
-                (array as any).fill(value, start, end);
+            fill(value: number, start?: number, end?: number): PoolableTypedArray<T> {
+                (array as { fill(value: number, start?: number, end?: number): unknown }).fill(
+                    value,
+                    start,
+                    end
+                );
                 return this;
             },
 
@@ -326,12 +395,16 @@ export class TypedArrayPool<T extends TypedArray> {
                 if (newLength === array.length) return true;
                 if (newLength > array.length) return false; // Can't expand existing buffer
 
-                (this as any).array = new (this.array.constructor as any)(
-                    buffer,
-                    0,
-                    newLength
-                ) as T;
-                (this as any).length = newLength;
+                const mutableThis = this as {
+                    array: T;
+                    length: number;
+                };
+                mutableThis.array = new (array.constructor as new (
+                    buffer: ArrayBuffer,
+                    byteOffset?: number,
+                    length?: number
+                ) => T)(buffer, 0, newLength);
+                mutableThis.length = newLength;
                 return true;
             },
 
@@ -345,8 +418,8 @@ export class TypedArrayPool<T extends TypedArray> {
                     length ?? Math.min(source.length - sourceOffset, array.length - targetOffset);
 
                 if (source instanceof array.constructor) {
-                    array.set(
-                        (source as any).subarray(sourceOffset, sourceOffset + copyLength),
+                    (array as NumericTypedArray).set(
+                        (source as NumericTypedArray).subarray(sourceOffset, sourceOffset + copyLength),
                         targetOffset
                     );
                 } else {
@@ -441,21 +514,12 @@ export class TypedArrayPool<T extends TypedArray> {
         return { min, max, avg, samples: buffer.size };
     }
 
-    private _calculateAlignmentUtilization(): number {
-        if (this._options.alignment <= 1) return 1.0;
-
-        const totalMisses = this._stats.alignmentMisses;
-        const totalAllocations = this._stats.totalAllocations;
-
-        return totalAllocations > 0 ? 1.0 - totalMisses / totalAllocations : 1.0;
-    }
-
     private _calculateWasteRatio(): number {
         let totalWaste = 0;
         let totalUsed = 0;
 
         for (const [bucketSize, hitCount] of this._stats.bucketsHit) {
-            const avgUtilization = bucketSize * 0.75; // Assume 75% average utilization
+            const avgUtilization = bucketSize * TypedArrayPool.DEFAULT_UTILIZATION_ESTIMATE;
             totalWaste += (bucketSize - avgUtilization) * hitCount;
             totalUsed += avgUtilization * hitCount;
         }
@@ -464,6 +528,10 @@ export class TypedArrayPool<T extends TypedArray> {
     }
 }
 
+/**
+ * Pre-configured TypedArrayPool instances for common typed array types.
+ * @stable
+ */
 export const TypedArrayPools = {
     Float32: new TypedArrayPool({
         arrayConstructor: Float32Array,
@@ -472,6 +540,7 @@ export const TypedArrayPools = {
         name: 'Float32Pool',
         alignment: 16, // SIMD alignment
         enableMetrics: true,
+        preallocate: false,
     }),
 
     Float64: new TypedArrayPool({
@@ -481,6 +550,7 @@ export const TypedArrayPools = {
         name: 'Float64Pool',
         alignment: 16,
         enableMetrics: true,
+        preallocate: false,
     }),
 
     Uint32: new TypedArrayPool({
@@ -490,6 +560,7 @@ export const TypedArrayPools = {
         name: 'Uint32Pool',
         alignment: 16,
         enableMetrics: true,
+        preallocate: false,
     }),
 
     Uint16: new TypedArrayPool({
@@ -498,6 +569,7 @@ export const TypedArrayPools = {
         sizeBuckets: [128, 512, 2048, 8192, 32768, 131072],
         name: 'Uint16Pool',
         enableMetrics: true,
+        preallocate: false,
     }),
 
     Uint8: new TypedArrayPool({
@@ -506,5 +578,6 @@ export const TypedArrayPools = {
         sizeBuckets: [256, 1024, 4096, 16384, 65536, 262144],
         name: 'Uint8Pool',
         enableMetrics: true,
+        preallocate: false,
     }),
 } as const;

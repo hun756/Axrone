@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { AlignedMemoryManager, PooledMemoryManager, ParticleMemoryManager } from '../../core/memory';
+import { BufferPool } from '@axrone/memory';
 
 describe('AlignedMemoryManager', () => {
     it('allocate() returns buffer with aligned size', () => {
@@ -78,15 +79,19 @@ describe('AlignedMemoryManager', () => {
 });
 
 describe('PooledMemoryManager', () => {
-    it('allocate() picks smallest fitting pool size', () => {
-        const mgr = new PooledMemoryManager([64, 256, 1024]);
-        const buf = mgr.allocate(50)!;
-        expect(buf).not.toBeNull();
-        expect(buf.byteLength).toBe(64); // pool size 64
+    afterEach(() => {
+        BufferPool.resetInstance();
     });
 
-    it('allocate() falls back to direct allocation for oversized requests', () => {
-        const mgr = new PooledMemoryManager([64, 256]);
+    it('allocate() picks smallest fitting power-of-two bucket', () => {
+        const mgr = new PooledMemoryManager();
+        const buf = mgr.allocate(50)!;
+        expect(buf).not.toBeNull();
+        expect(buf.byteLength).toBe(64); // next power of two >= 50
+    });
+
+    it('allocate() handles oversized requests via BufferPool', () => {
+        const mgr = new PooledMemoryManager();
         const buf = mgr.allocate(512)!;
         expect(buf).not.toBeNull();
         expect(buf.byteLength).toBeGreaterThanOrEqual(512);
@@ -97,8 +102,8 @@ describe('PooledMemoryManager', () => {
         expect(mgr.allocate(0)).toBeNull();
     });
 
-    it('deallocate() returns buffer to pool (up to 100 cap)', () => {
-        const mgr = new PooledMemoryManager([64]);
+    it('deallocate() returns buffer to pool for reuse', () => {
+        const mgr = new PooledMemoryManager();
         const buf = mgr.allocate(10)!;
         mgr.deallocate(buf);
         // After deallocation, allocating again should reuse the pooled buffer
@@ -113,7 +118,7 @@ describe('PooledMemoryManager', () => {
     });
 
     it('reallocate() copies data correctly', () => {
-        const mgr = new PooledMemoryManager([64, 256]);
+        const mgr = new PooledMemoryManager();
         const buf = mgr.allocate(4)!;
         new Uint8Array(buf).set([10, 20, 30, 40]);
 
@@ -126,23 +131,31 @@ describe('PooledMemoryManager', () => {
         expect(data[3]).toBe(40);
     });
 
-    it('reallocate() with unknown buffer returns null', () => {
+    it('reallocate() with unknown buffer still allocates new buffer', () => {
         const mgr = new PooledMemoryManager();
-        expect(mgr.reallocate(new ArrayBuffer(16), 32)).toBeNull();
+        // With BufferPool backing, reallocate doesn't track old buffers via a Map,
+        // so it always allocates a new buffer and attempts to deallocate the old one
+        const unknown = new ArrayBuffer(16);
+        const result = mgr.reallocate(unknown, 32);
+        expect(result).not.toBeNull();
+        expect(result!.byteLength).toBeGreaterThanOrEqual(32);
     });
 
     it('getStats() returns fragmentation ratio', () => {
-        const mgr = new PooledMemoryManager([64]);
+        const mgr = new PooledMemoryManager();
         const buf = mgr.allocate(10)!;
         mgr.deallocate(buf);
         const stats = mgr.getStats();
         expect(stats.allocationCount).toBe(0);
-        // Fragmentation: pooled bytes / total allocated
         expect(stats.fragmentationRatio).toBeGreaterThanOrEqual(0);
     });
 });
 
 describe('ParticleMemoryManager', () => {
+    afterEach(() => {
+        BufferPool.resetInstance();
+    });
+
     it('allocateTypedArray() acquires from correct pool', () => {
         const mgr = new ParticleMemoryManager();
         const pooled = mgr.allocateTypedArray(Float32Array, 16);

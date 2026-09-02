@@ -15,6 +15,16 @@ import type {
 import type { DeepReadonlyPartial } from '@axrone/utility';
 import type { ColorInput, CornerInput, CornerRadii, EdgeInsets, ReadonlyColor, WidgetLayoutInput } from './layout';
 
+/**
+ * A polyline stroke in normalized 0–1 space, rendered inside the widget rect.
+ * Used by controllers (e.g. checkbox) to draw vector shapes (check, cross, dash).
+ */
+export interface WidgetStrokeData {
+    readonly points: readonly (readonly [number, number])[];
+    readonly color: ColorInput;
+    readonly weight: number;
+}
+
 export interface WidgetStyleInput {
     readonly visible?: boolean;
     readonly opacity?: number;
@@ -24,6 +34,8 @@ export interface WidgetStyleInput {
     readonly borderWidth?: number;
     readonly radius?: CornerInput;
     readonly color?: ColorInput;
+    /** Optional polyline strokes rendered inside the widget rect (normalized 0–1 coordinates). */
+    readonly strokes?: readonly WidgetStrokeData[];
 }
 
 export interface ResolvedWidgetStyle {
@@ -35,6 +47,7 @@ export interface ResolvedWidgetStyle {
     readonly borderWidth: number;
     readonly radius: CornerRadii;
     readonly color: ReadonlyColor;
+    readonly strokes: readonly WidgetStrokeData[];
 }
 
 export type TextAutoSizeMode = 'none' | 'shrink-to-fit';

@@ -1,10 +1,19 @@
 import { MemoryPool, MemoryPoolOptions, PoolableObject } from './mempool';
+import { POOL_OPTION_DEFAULTS } from './pool-support';
 
+/**
+ * Wrapper interface that adapts a plain object to the PoolableObject lifecycle contract.
+ * @stable
+ */
 export interface PoolableWrapper<T> extends PoolableObject {
     readonly value: T;
     readonly isWrapped: true;
 }
 
+/**
+ * Configuration options for ObjectPool.
+ * @stable
+ */
 export interface ObjectPoolOptions<T>
     extends Omit<MemoryPoolOptions<PoolableWrapper<T>>, 'factory' | 'asyncFactory'> {
     readonly factory: () => T;
@@ -37,6 +46,10 @@ class ObjectPoolError extends Error {
     }
 }
 
+interface MaybeResettable {
+    reset?(): void;
+}
+
 const createWrapper = <T>(value: T, resetHandler?: (obj: T) => void): PoolableWrapper<T> => {
     const wrapper: PoolableWrapper<T> = {
         value,
@@ -44,8 +57,8 @@ const createWrapper = <T>(value: T, resetHandler?: (obj: T) => void): PoolableWr
         reset(): void {
             if (resetHandler) {
                 resetHandler(value);
-            } else if (typeof (value as any)?.reset === 'function') {
-                (value as any).reset();
+            } else if (typeof (value as MaybeResettable).reset === 'function') {
+                (value as MaybeResettable).reset!();
             }
         },
     };
@@ -53,6 +66,27 @@ const createWrapper = <T>(value: T, resetHandler?: (obj: T) => void): PoolableWr
     return wrapper;
 };
 
+/**
+ * Object pool that wraps plain objects in a PoolableObject-compatible wrapper.
+ *
+ * Delegates to an internal {@link MemoryPool} while hiding the wrapper indirection from callers.
+ * Acquired objects are the raw values produced by the factory; the pool internally wraps them
+ * to track lifecycle metadata. Uses WeakMap/WeakSet to map between raw objects and their wrappers.
+ *
+ * This is the recommended pool for general-purpose objects that don't already implement
+ * {@link PoolableObject}. For typed arrays, use {@link TypedArrayPool} instead.
+ *
+ * @example
+ * const pool = new ObjectPool({
+ *   factory: () => ({ x: 0, y: 0, reset() { this.x = 0; this.y = 0; } }),
+ *   maxCapacity: 512,
+ * });
+ * const obj = pool.acquire();  // { x: 0, y: 0 }
+ * obj.x = 10;
+ * pool.release(obj);           // reset() called automatically
+ *
+ * @stable
+ */
 export class ObjectPool<T extends {}> implements Disposable {
     private readonly _pool: MemoryPool<PoolableWrapper<T>>;
     private readonly _options: Required<
@@ -85,26 +119,27 @@ export class ObjectPool<T extends {}> implements Disposable {
         this._options = {
             initialCapacity: options.initialCapacity ?? 16,
             maxCapacity: options.maxCapacity ?? 1024,
-            minFree: options.minFree ?? 0,
+            minFree: options.minFree ?? POOL_OPTION_DEFAULTS.minFree,
             highWatermarkRatio: options.highWatermarkRatio ?? 0.85,
             lowWatermarkRatio: options.lowWatermarkRatio ?? 0.15,
-            expansionStrategy: options.expansionStrategy ?? 'multiplicative',
+            expansionStrategy:
+                options.expansionStrategy ?? POOL_OPTION_DEFAULTS.expansionStrategy,
             expansionFactor: options.expansionFactor ?? 1.5,
-            expansionRate: options.expansionRate ?? 0,
-            allocationStrategy: options.allocationStrategy ?? 'first-available',
+            expansionRate: options.expansionRate ?? POOL_OPTION_DEFAULTS.expansionRate,
+            allocationStrategy:
+                options.allocationStrategy ?? POOL_OPTION_DEFAULTS.allocationStrategy,
             evictionPolicy: options.evictionPolicy ?? 'lru',
-            ttl: options.ttl ?? 0,
+            ttl: options.ttl ?? POOL_OPTION_DEFAULTS.ttl,
             factory: options.factory,
-            resetOnRecycle: options.resetOnRecycle ?? true,
-            preallocate: options.preallocate ?? false,
-            autoExpand: options.autoExpand ?? true,
+            resetOnRecycle: options.resetOnRecycle ?? POOL_OPTION_DEFAULTS.resetOnRecycle,
+            preallocate: options.preallocate ?? POOL_OPTION_DEFAULTS.preallocate,
+            autoExpand: options.autoExpand ?? POOL_OPTION_DEFAULTS.autoExpand,
             compactionThreshold: options.compactionThreshold ?? 64,
             compactionTriggerRatio: options.compactionTriggerRatio ?? 0.3,
-            enableMetrics: options.enableMetrics ?? true,
-            enableInstrumentation: options.enableInstrumentation ?? false,
+            enableMetrics: options.enableMetrics ?? POOL_OPTION_DEFAULTS.enableMetrics,
+            enableInstrumentation:
+                options.enableInstrumentation ?? POOL_OPTION_DEFAULTS.enableInstrumentation,
             name: options.name ?? `ObjectPool-${Date.now()}`,
-            maxObjectAge: options.maxObjectAge ?? 0,
-            threadSafe: options.threadSafe ?? false,
             asyncFactory: options.asyncFactory,
             resetHandler: options.resetHandler,
             validateHandler: options.validateHandler,
@@ -387,7 +422,13 @@ export class ObjectPool<T extends {}> implements Disposable {
         return (wrapper: PoolableWrapper<T>) => {
             try {
                 return this._options.validateHandler!(wrapper.value);
-            } catch {
+            } catch (error) {
+                if (this._options.enableInstrumentation) {
+                    console.debug(
+                        `validateHandler error in pool "${this._options.name}":`,
+                        error
+                    );
+                }
                 return false;
             }
         };
@@ -402,7 +443,9 @@ export class ObjectPool<T extends {}> implements Disposable {
             try {
                 this._options.onAcquireHandler!(wrapper.value);
             } catch (error) {
-                console.warn(`onAcquire handler error in pool "${this._options.name}":`, error);
+                if (this._options.enableInstrumentation) {
+                    console.debug(`onAcquire handler error in pool "${this._options.name}":`, error);
+                }
             }
         };
     }
@@ -416,7 +459,9 @@ export class ObjectPool<T extends {}> implements Disposable {
             try {
                 this._options.onReleaseHandler!(wrapper.value);
             } catch (error) {
-                console.warn(`onRelease handler error in pool "${this._options.name}":`, error);
+                if (this._options.enableInstrumentation) {
+                    console.debug(`onRelease handler error in pool "${this._options.name}":`, error);
+                }
             }
         };
     }
@@ -430,7 +475,9 @@ export class ObjectPool<T extends {}> implements Disposable {
             try {
                 this._options.onEvictHandler!(wrapper.value);
             } catch (error) {
-                console.warn(`onEvict handler error in pool "${this._options.name}":`, error);
+                if (this._options.enableInstrumentation) {
+                    console.debug(`onEvict handler error in pool "${this._options.name}":`, error);
+                }
             }
         };
     }

@@ -1,6 +1,7 @@
 import {
     MemoryPoolError,
     MemoryPoolErrorCode,
+    POOL_OPTION_DEFAULTS,
     validateMemoryPoolOptions,
     type AsyncMemoryPoolOperations,
     type MemoryPoolOperations,
@@ -8,6 +9,7 @@ import {
     type PoolableObject,
     type PoolPerformanceMetrics,
     type PoolSlot,
+    type ResolvedMemoryPoolOptions,
 } from './pool-support';
 import { LruSlotIndex } from './internal/lru-slot-index';
 import { PoolMetricsCollector } from './internal/pool-metrics';
@@ -34,6 +36,34 @@ export {
 
 const MAX_POOL_ID = 2 ** 31 - 1;
 
+/**
+ * High-performance, slot-based object pool with configurable allocation, eviction, and expansion.
+ *
+ * Objects are managed through a flat slot array with a free-list for O(1) acquire/release.
+ * Supports multiple allocation strategies (first-available, LRU, MRU, round-robin), eviction
+ * policies (none, LRU, TTL, FIFO), and expansion strategies (fixed, multiplicative, fibonacci, prime).
+ * Objects must implement {@link PoolableObject} to receive pool lifecycle metadata (__poolId, __poolStatus).
+ *
+ * Key features:
+ * - Auto-expansion with configurable max capacity and watermark-based contraction.
+ * - Async acquire/release with wait-queue for backpressure handling.
+ * - Optional metrics collection for monitoring hit ratios, allocation times, and fragmentation.
+ * - Supports both sync and async object factories.
+ *
+ * @example
+ * const pool = new MemoryPool({
+ *   factory: () => new MyObject(),
+ *   maxCapacity: 1024,
+ *   evictionPolicy: 'lru',
+ *   resetOnRecycle: true,
+ * });
+ * const obj = pool.acquire();
+ * // ... use obj ...
+ * pool.release(obj);
+ * pool[Symbol.dispose]();
+ *
+ * @stable
+ */
 export class MemoryPool<T extends PoolableObject>
     implements MemoryPoolOperations<T>, AsyncMemoryPoolOperations<T>, Iterable<T>
 {
@@ -42,39 +72,9 @@ export class MemoryPool<T extends PoolableObject>
     readonly #id: number;
     readonly #slots: PoolSlot<T>[] = [];
     readonly #freeList: Set<number> = new Set();
-    readonly #options: MemoryPoolOptions<T> & {
-        initialCapacity: number;
-        maxCapacity: number;
-        minFree: number;
-        highWatermarkRatio: number;
-        lowWatermarkRatio: number;
-        expansionStrategy: 'fixed' | 'multiplicative' | 'fibonacci' | 'prime';
-        expansionFactor: number;
-        expansionRate: number;
-        allocationStrategy:
-            | 'first-available'
-            | 'least-recently-used'
-            | 'most-recently-used'
-            | 'round-robin';
-        evictionPolicy: 'none' | 'lru' | 'ttl' | 'fifo';
-        ttl: number;
-        resetOnRecycle: boolean;
-        validator: (obj: T) => boolean;
-        preallocate: boolean;
-        autoExpand: boolean;
-        compactionThreshold: number;
-        compactionTriggerRatio: number;
-        onAcquire: (obj: T) => void;
-        onRelease: (obj: T) => void;
-        onEvict: (obj: T) => void;
-        onOutOfMemory: (requested: number, available: number) => void;
-        enableMetrics: boolean;
-        name: string;
-    };
+    readonly #options: ResolvedMemoryPoolOptions<T>;
 
-    #nextId = 0;
     #isDisposed = false;
-    #reentrancyDepth = 0;
     #lruIndex: LruSlotIndex | null = null;
     #metrics: PoolMetricsCollector;
     #allocator: AllocationSelector;
@@ -86,39 +86,43 @@ export class MemoryPool<T extends PoolableObject>
     constructor(options: MemoryPoolOptions<T>) {
         this.#id = ++MemoryPool.#poolIdCounter & MAX_POOL_ID;
 
-        const resolved = {
-            initialCapacity: options.initialCapacity ?? 32,
-            maxCapacity: options.maxCapacity ?? 4096,
-            minFree: options.minFree ?? 0,
-            highWatermarkRatio: options.highWatermarkRatio ?? 0.8,
-            lowWatermarkRatio: options.lowWatermarkRatio ?? 0.2,
-            expansionStrategy: options.expansionStrategy ?? 'multiplicative',
-            expansionFactor: options.expansionFactor ?? 2,
-            expansionRate: options.expansionRate ?? 0,
-            allocationStrategy: options.allocationStrategy ?? 'first-available',
-            evictionPolicy: options.evictionPolicy ?? 'none',
-            ttl: options.ttl ?? 0,
+        const resolved: ResolvedMemoryPoolOptions<T> = {
+            initialCapacity: options.initialCapacity ?? POOL_OPTION_DEFAULTS.initialCapacity,
+            maxCapacity: options.maxCapacity ?? POOL_OPTION_DEFAULTS.maxCapacity,
+            minFree: options.minFree ?? POOL_OPTION_DEFAULTS.minFree,
+            highWatermarkRatio:
+                options.highWatermarkRatio ?? POOL_OPTION_DEFAULTS.highWatermarkRatio,
+            lowWatermarkRatio: options.lowWatermarkRatio ?? POOL_OPTION_DEFAULTS.lowWatermarkRatio,
+            expansionStrategy:
+                options.expansionStrategy ?? POOL_OPTION_DEFAULTS.expansionStrategy,
+            expansionFactor: options.expansionFactor ?? POOL_OPTION_DEFAULTS.expansionFactor,
+            expansionRate: options.expansionRate ?? POOL_OPTION_DEFAULTS.expansionRate,
+            allocationStrategy:
+                options.allocationStrategy ?? POOL_OPTION_DEFAULTS.allocationStrategy,
+            evictionPolicy: options.evictionPolicy ?? POOL_OPTION_DEFAULTS.evictionPolicy,
+            ttl: options.ttl ?? POOL_OPTION_DEFAULTS.ttl,
             factory: options.factory,
-            resetOnRecycle: options.resetOnRecycle ?? true,
+            resetOnRecycle: options.resetOnRecycle ?? POOL_OPTION_DEFAULTS.resetOnRecycle,
             validator: options.validator ?? (() => true),
-            preallocate: options.preallocate ?? false,
-            autoExpand: options.autoExpand ?? true,
-            compactionThreshold: options.compactionThreshold ?? 128,
-            compactionTriggerRatio: options.compactionTriggerRatio ?? 0.5,
+            preallocate: options.preallocate ?? POOL_OPTION_DEFAULTS.preallocate,
+            autoExpand: options.autoExpand ?? POOL_OPTION_DEFAULTS.autoExpand,
+            compactionThreshold:
+                options.compactionThreshold ?? POOL_OPTION_DEFAULTS.compactionThreshold,
+            compactionTriggerRatio:
+                options.compactionTriggerRatio ?? POOL_OPTION_DEFAULTS.compactionTriggerRatio,
             onAcquire: options.onAcquire ?? (() => undefined),
             onRelease: options.onRelease ?? (() => undefined),
             onEvict: options.onEvict ?? (() => undefined),
             onOutOfMemory: options.onOutOfMemory ?? (() => undefined),
-            enableMetrics: options.enableMetrics ?? true,
-            enableInstrumentation: options.enableInstrumentation ?? false,
+            enableMetrics: options.enableMetrics ?? POOL_OPTION_DEFAULTS.enableMetrics,
+            enableInstrumentation:
+                options.enableInstrumentation ?? POOL_OPTION_DEFAULTS.enableInstrumentation,
             name: options.name ?? `MemoryPool-${this.#id}`,
-            maxObjectAge: options.maxObjectAge ?? 0,
-            threadSafe: options.threadSafe ?? false,
             asyncFactory: options.asyncFactory,
             estimatedObjectSize: options.estimatedObjectSize,
         };
-        validateMemoryPoolOptions(resolved as any);
-        this.#options = resolved as any;
+        validateMemoryPoolOptions(resolved);
+        this.#options = resolved;
 
         this.#metrics = new PoolMetricsCollector(
             this.#options.name,
@@ -165,7 +169,7 @@ export class MemoryPool<T extends PoolableObject>
     }
 
     #preallocate(): void {
-        this.#nextId = this.#slotFactory.preallocate(
+        this.#slotFactory.preallocate(
             this.#slots,
             this.#freeList,
             this.#options.initialCapacity
@@ -174,7 +178,7 @@ export class MemoryPool<T extends PoolableObject>
     }
 
     #reserve(capacity: number): void {
-        this.#nextId = this.#slotFactory.reserve(this.#slots, this.#freeList, capacity);
+        this.#slotFactory.reserve(this.#slots, this.#freeList, capacity);
     }
 
     #getNextFreeId(): number {
@@ -207,16 +211,15 @@ export class MemoryPool<T extends PoolableObject>
                 this.#metrics.recordAllocation(false, false);
 
                 let replenished = false;
-                if (this.#options.evictionPolicy !== 'none') {
-                    replenished = this.#tryEvictObject();
-                }
                 if (
-                    !replenished &&
                     this.#options.autoExpand &&
                     this.#slots.length < this.#options.maxCapacity
                 ) {
                     this.#expand();
                     replenished = this.#freeList.size > 0;
+                }
+                if (!replenished && this.#options.evictionPolicy !== 'none') {
+                    replenished = this.#tryEvictObject();
                 }
                 if (!replenished) {
                     this.#options.onOutOfMemory(1, 0);
@@ -326,17 +329,21 @@ export class MemoryPool<T extends PoolableObject>
             try {
                 this.#options.onRelease(obj);
             } catch (e) {
-                console.error(`Error in onRelease handler for pool "${this.#options.name}":`, e);
+                if (this.#options.enableInstrumentation) {
+                    console.debug(`Error in onRelease handler for pool "${this.#options.name}":`, e);
+                }
             }
 
             if (this.#options.resetOnRecycle) {
                 try {
                     obj.reset();
                 } catch (e) {
-                    console.error(
-                        `Error in reset method for object in pool "${this.#options.name}":`,
-                        e
-                    );
+                    if (this.#options.enableInstrumentation) {
+                        console.debug(
+                            `Error in reset method for object in pool "${this.#options.name}":`,
+                            e
+                        );
+                    }
                 }
             }
 
@@ -350,16 +357,16 @@ export class MemoryPool<T extends PoolableObject>
                 obj.__poolStatus = 'allocated';
                 slot.lastAccessed = Date.now();
                 slot.allocCount++;
-                this.#reentrancyDepth++;
                 queueMicrotask(() => {
-                    this.#reentrancyDepth--;
                     try {
                         waiter.resolve(obj);
                     } catch (e) {
-                        console.error(
-                            `Error notifying async waiter in pool "${this.#options.name}":`,
-                            e
-                        );
+                        if (this.#options.enableInstrumentation) {
+                            console.debug(
+                                `Error notifying async waiter in pool "${this.#options.name}":`,
+                                e
+                            );
+                        }
                     }
                 });
                 return;
@@ -398,7 +405,9 @@ export class MemoryPool<T extends PoolableObject>
             try {
                 this.release(obj);
             } catch (e) {
-                console.error('Error releasing object during releaseAll:', e);
+                if (this.#options.enableInstrumentation) {
+                    console.debug('Error releasing object during releaseAll:', e);
+                }
             }
         }
     }
@@ -425,7 +434,6 @@ export class MemoryPool<T extends PoolableObject>
         this.#slots.length = 0;
         this.#freeList.clear();
         if (this.#lruIndex) this.#lruIndex.clear();
-        this.#nextId = 0;
         this.#initializeCapacity();
         this.#metrics.resetAggregate();
     }
@@ -506,7 +514,6 @@ export class MemoryPool<T extends PoolableObject>
         for (const s of newSlots) this.#slots.push(s);
         this.#freeList.clear();
         for (const id of newFreeList) this.#freeList.add(id);
-        this.#nextId = targetCapacity;
         this.#metrics.recordContraction();
     }
 
@@ -551,7 +558,6 @@ export class MemoryPool<T extends PoolableObject>
         const timer = this.#metrics.newTimer();
         try {
             this.#planner.compact(this.#slots, this.#freeList);
-            this.#nextId = this.#slots.length;
         } finally {
             if (timer) this.#metrics.recordCompactionTime(timer.stop());
         }
@@ -589,6 +595,20 @@ export class MemoryPool<T extends PoolableObject>
                 this.#options.name
             )
         );
+
+        // Notify onEvict for all currently allocated objects before tearing down
+        for (const slot of this.#slots) {
+            if (slot && slot.status === 'allocated' && slot.obj) {
+                try {
+                    this.#options.onEvict(slot.obj);
+                } catch (e) {
+                    if (this.#options.enableInstrumentation) {
+                        console.debug(`Error in onEvict handler during dispose:`, e);
+                    }
+                }
+            }
+        }
+
         this.#slots.length = 0;
         this.#freeList.clear();
         if (this.#lruIndex) this.#lruIndex.clear();
@@ -687,11 +707,11 @@ export class MemoryPool<T extends PoolableObject>
         }
         let index = 0;
         return {
-            next(): IteratorResult<T> {
+            next(): IteratorResult<T, undefined> {
                 if (index < allocated.length) {
                     return { value: allocated[index++], done: false };
                 }
-                return { value: undefined as any, done: true };
+                return { value: undefined, done: true };
             },
         };
     }
@@ -720,7 +740,6 @@ export class MemoryPool<T extends PoolableObject>
             this.#options.preallocate,
             (id, withObj) => this.#slotFactory.create(id, withObj)
         );
-        this.#nextId = Math.max(this.#nextId, newCapacity);
     }
 
     #shrink(newCapacity: number): void {
@@ -764,7 +783,9 @@ export class MemoryPool<T extends PoolableObject>
         try {
             this.#options.onEvict(obj);
         } catch (e) {
-            console.error(`Error in onEvict handler for pool "${this.#options.name}":`, e);
+            if (this.#options.enableInstrumentation) {
+                console.debug(`Error in onEvict handler for pool "${this.#options.name}":`, e);
+            }
         }
 
         slot.status = 'free';
@@ -838,10 +859,12 @@ export class MemoryPool<T extends PoolableObject>
             obj.__lastAccessed = Date.now();
             obj.__allocCount = 0;
         } catch (e) {
-            console.error(
-                `Error creating async object for pool "${this.#options.name}":`,
-                e
-            );
+            if (this.#options.enableInstrumentation) {
+                console.debug(
+                    `Error creating async object for pool "${this.#options.name}":`,
+                    e
+                );
+            }
         }
     }
 }

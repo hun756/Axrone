@@ -11,7 +11,10 @@ import {
     DEFAULT_LISTENER_POSITION,
     DEFAULT_LISTENER_UP,
     isFiniteNumber,
+    isObject,
+    isVector3Equal,
     normalizeVector3,
+    setParamValue,
 } from './shared';
 
 export interface AudioSpatialListenerState {
@@ -25,6 +28,12 @@ export interface AudioSpatialPlaybackNodes {
     readonly gainNode: GainNode;
     readonly attenuationNode: GainNode;
     readonly spatialNode?: StereoPannerNode | PannerNode;
+    /** Present on a 3d voice that has a pan; a PannerNode cannot carry one itself. */
+    readonly panNode?: StereoPannerNode;
+    /** Last written value per param; lets a sync skip writes for values that did not move. */
+    lastSourceGain?: number;
+    lastAttenuationGain?: number;
+    lastPan?: number;
 }
 
 export interface AudioSpatialSourceState {
@@ -42,11 +51,19 @@ export const DEFAULT_ATTENUATION = Object.freeze({
     minGain: 0,
 } satisfies Required<AudioSpatialAttenuation>);
 
+// Shape checks, not `instanceof`: a node from another realm's AudioContext (Worker,
+// OffscreenCanvas, iframe) exposes the full API but a different constructor identity, and
+// rejecting it silently drops spatialization for that source. distanceModel/coneInnerAngle
+// exist on legacy *and* modern panners, so keying on them also keeps the legacy
+// setPosition branch reachable — which instanceof made untestable.
+const hasPannerShape = (value: Record<PropertyKey, unknown>): boolean =>
+    'distanceModel' in value || 'coneInnerAngle' in value;
+
 const isStereoPannerNode = (value: unknown): value is StereoPannerNode =>
-    typeof StereoPannerNode !== 'undefined' && value instanceof StereoPannerNode;
+    isObject(value) && 'pan' in value && !hasPannerShape(value);
 
 const isPannerNode = (value: unknown): value is PannerNode =>
-    typeof PannerNode !== 'undefined' && value instanceof PannerNode;
+    isObject(value) && hasPannerShape(value);
 
 export const cloneSpatialization = (
     value: AudioSpatialization | undefined
@@ -74,6 +91,68 @@ export const cloneSpatialization = (
         coneOuterAngle: value.coneOuterAngle,
         coneOuterGain: value.coneOuterGain,
     };
+};
+
+/**
+ * Optional vectors need reference equality first: isVector3Equal deliberately reports an
+ * absent side as unequal, and both sides being absent is the common case for a 3d spatial
+ * that sets no orientation. Without this it would compare as changed on every frame.
+ */
+const isOptionalVector3Equal = (
+    left: AudioVector3 | undefined,
+    right: AudioVector3 | undefined
+): boolean => left === right || isVector3Equal(left, right);
+
+export const isAttenuationEqual = (
+    left: AudioSpatialAttenuation | undefined,
+    right: AudioSpatialAttenuation | undefined
+): boolean => {
+    if (left === right) {
+        return true;
+    }
+    if (!left || !right) {
+        return false;
+    }
+
+    return (
+        left.model === right.model &&
+        left.refDistance === right.refDistance &&
+        left.maxDistance === right.maxDistance &&
+        left.rolloffFactor === right.rolloffFactor &&
+        left.minGain === right.minGain
+    );
+};
+
+export const isSpatializationEqual = (
+    left: AudioSpatialization | undefined,
+    right: AudioSpatialization | undefined
+): boolean => {
+    if (left === right) {
+        return true;
+    }
+    if (!left || !right || left.mode !== right.mode) {
+        return false;
+    }
+    if (!isOptionalVector3Equal(left.position, right.position)) {
+        return false;
+    }
+    if (!isAttenuationEqual(left.attenuation, right.attenuation)) {
+        return false;
+    }
+    if (left.mode === '2d' && right.mode === '2d') {
+        return left.pan === right.pan;
+    }
+    if (left.mode === '3d' && right.mode === '3d') {
+        return (
+            isOptionalVector3Equal(left.orientation, right.orientation) &&
+            left.panningModel === right.panningModel &&
+            left.coneInnerAngle === right.coneInnerAngle &&
+            left.coneOuterAngle === right.coneOuterAngle &&
+            left.coneOuterGain === right.coneOuterGain
+        );
+    }
+
+    return false;
 };
 
 export const normalizeAttenuation = (
@@ -237,17 +316,54 @@ export const applyPannerState = (
     }).setOrientation?.(orientation.x, orientation.y, orientation.z);
 };
 
+/**
+ * Write a spatial param with a short ramp instead of snapping `param.value`. Discontinuous
+ * writes are audible as zipper noise on any moving source; the first write of a param has no
+ * known baseline so it snaps, and an unchanged value is skipped entirely.
+ */
+const SPATIAL_SMOOTHING_SECONDS = 0.016;
+
+const rampParam = (
+    param: AudioParam,
+    value: number,
+    previous: number | undefined,
+    atTime: number
+): number => {
+    if (previous === value) {
+        return previous;
+    }
+
+    setParamValue(param, value, atTime, previous === undefined ? 0 : SPATIAL_SMOOTHING_SECONDS);
+    return value;
+};
+
 export const syncPlaybackSpatialState = (
     playback: AudioSpatialPlaybackNodes,
     source: AudioSpatialSourceState,
-    listener?: AudioSpatialListenerState
+    listener?: AudioSpatialListenerState,
+    atTime = 0
 ): void => {
-    playback.gainNode.gain.value = source.muted ? 0 : source.volume;
+    playback.lastSourceGain = rampParam(
+        playback.gainNode.gain,
+        source.muted ? 0 : source.volume,
+        playback.lastSourceGain,
+        atTime
+    );
 
     if (!source.spatial) {
-        playback.attenuationNode.gain.value = 1;
+        playback.lastAttenuationGain = rampParam(
+            playback.attenuationNode.gain,
+            1,
+            playback.lastAttenuationGain,
+            atTime
+        );
         if (isStereoPannerNode(playback.spatialNode)) {
-            playback.spatialNode.pan.value = source.pan;
+            playback.lastPan = rampParam(
+                playback.spatialNode.pan,
+                source.pan,
+                playback.lastPan,
+                atTime
+            );
         }
         return;
     }
@@ -255,15 +371,25 @@ export const syncPlaybackSpatialState = (
     if (source.spatial.mode === '2d') {
         const position = normalizeVector3(source.spatial.position, DEFAULT_LISTENER_POSITION);
         const listenerPosition = listener?.position ?? DEFAULT_LISTENER_POSITION;
-        playback.attenuationNode.gain.value = listener?.enabled
-            ? attenuationGainForDistance(distance2D(position, listenerPosition), source.spatial.attenuation)
-            : 1;
+        playback.lastAttenuationGain = rampParam(
+            playback.attenuationNode.gain,
+            listener?.enabled
+                ? attenuationGainForDistance(distance2D(position, listenerPosition), source.spatial.attenuation)
+                : 1,
+            playback.lastAttenuationGain,
+            atTime
+        );
         if (isStereoPannerNode(playback.spatialNode)) {
-            playback.spatialNode.pan.value = effectivePanFor2D(
-                position,
-                listenerPosition,
-                source.pan + (source.spatial.pan ?? 0),
-                source.spatial.attenuation
+            playback.lastPan = rampParam(
+                playback.spatialNode.pan,
+                effectivePanFor2D(
+                    position,
+                    listenerPosition,
+                    source.pan + (source.spatial.pan ?? 0),
+                    source.spatial.attenuation
+                ),
+                playback.lastPan,
+                atTime
             );
         }
         return;
@@ -272,10 +398,25 @@ export const syncPlaybackSpatialState = (
     const position = normalizeVector3(source.spatial.position, DEFAULT_LISTENER_POSITION);
     const orientation = normalizeVector3(source.spatial.orientation, DEFAULT_LISTENER_FORWARD);
     const listenerPosition = listener?.position ?? DEFAULT_LISTENER_POSITION;
-    playback.attenuationNode.gain.value = listener?.enabled
-        ? attenuationGainForDistance(distance3D(position, listenerPosition), source.spatial.attenuation)
-        : 1;
+    playback.lastAttenuationGain = rampParam(
+        playback.attenuationNode.gain,
+        listener?.enabled
+            ? attenuationGainForDistance(distance3D(position, listenerPosition), source.spatial.attenuation)
+            : 1,
+        playback.lastAttenuationGain,
+        atTime
+    );
     if (isPannerNode(playback.spatialNode)) {
         applyPannerState(playback.spatialNode, source.spatial, position, orientation);
+    }
+    if (playback.panNode) {
+        // Audio3DSpatialization has no pan of its own — spatial.pan is a 2D concept — so the
+        // 3d stage carries the source-level offset alone.
+        playback.lastPan = rampParam(
+            playback.panNode.pan,
+            clamp(source.pan, -1, 1),
+            playback.lastPan,
+            atTime
+        );
     }
 };

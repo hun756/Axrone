@@ -23,6 +23,10 @@ class PoolNode<T> implements StackNode<T> {
     }
 }
 
+/**
+ * Internal adapter bridging stack node allocation to the general-purpose MemoryPool.
+ * @beta
+ */
 export class StackMemoryPool {
     static #instanceCounter = 0;
     readonly #pool: UtilityMemoryPool<PoolNode<any>>;

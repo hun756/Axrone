@@ -1,5 +1,5 @@
 import type { UIRuntime } from '../runtime';
-import type { UIInputEvent, UIImageSource, WidgetId, WidgetImageInput } from '../types';
+import type { UIInputEvent, UIImageSource, WidgetId, WidgetImageInput, WidgetStrokeData } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { animateWidgetColor, Easing, type UIAnimationHandle } from './animation';
 
@@ -26,6 +26,7 @@ import { animateWidgetColor, Easing, type UIAnimationHandle } from './animation'
  *     markSize: number,
  *     markWeight: number,
  *     labelPosition: 'left' | 'right' | 'hidden',
+ *     labelColor: string,      // omitted = keep the authored label color
  *     labelGap: number,
  *     boxSize: number,
  *   }
@@ -76,6 +77,7 @@ export interface CheckboxControllerProps {
     readonly markSize?: number;
     readonly markWeight?: number;
     readonly labelPosition?: 'left' | 'right' | 'hidden';
+    readonly labelColor?: string;
     readonly labelGap?: number;
     readonly boxSize?: number;
 }
@@ -131,6 +133,20 @@ const DEFAULT_STATES: Readonly<Record<CheckboxVisualState, string>> = Object.fre
     checked: '#0a74daff',
     disabled: '#1e293bff',
 });
+
+const TRANSITION_MODES: readonly CheckboxTransitionMode[] = Object.freeze(['color', 'tint', 'sprite']);
+
+/**
+ * Resolves the authored transition mode. Anything outside the supported set
+ * (legacy documents carried `"animation"`) falls back to `'color'` explicitly
+ * instead of relying on an `else` branch to absorb the typo silently.
+ */
+const resolveTransitionMode = (value: unknown): CheckboxTransitionMode => {
+    const mode = asString(value);
+    return (TRANSITION_MODES as readonly string[]).includes(mode)
+        ? (mode as CheckboxTransitionMode)
+        : 'color';
+};
 
 const isValidImageSource = (source: unknown): source is UIImageSource => {
     if (!source || typeof source !== 'object') return false;
@@ -218,6 +234,62 @@ const applySpriteToChild = (
 };
 
 /**
+ * Normalized stroke coordinates for checkbox mark styles in 0–1 space.
+ * Derived from Editor SVG previews (14-unit viewBox):
+ *   check = polyline M2.8 7.6 L5.7 10.4 L11.2 3.4 → normalized to 14-unit space
+ *   cross = two diagonals
+ *   dash  = horizontal line
+ * Dot uses a filled circle (background + radius), not strokes.
+ */
+const CHECK_STROKE_POINTS: readonly (readonly [number, number])[] = Object.freeze([
+    [0.2, 0.543],
+    [0.407, 0.743],
+    [0.8, 0.243],
+]);
+
+const CROSS_STROKE_POINTS: readonly (readonly [number, number])[] = Object.freeze([
+    [0.25, 0.25],
+    [0.75, 0.75],
+]);
+
+const CROSS_STROKE_POINTS_2: readonly (readonly [number, number])[] = Object.freeze([
+    [0.75, 0.25],
+    [0.25, 0.75],
+]);
+
+const DASH_STROKE_POINTS: readonly (readonly [number, number])[] = Object.freeze([
+    [0.25, 0.5],
+    [0.75, 0.5],
+]);
+
+/**
+ * Resolves the stroke data for a given mark style. Returns null for 'dot' style
+ * which uses background fill instead of strokes.
+ */
+const resolveMarkStrokes = (
+    markStyle: CheckboxMarkStyle,
+    markColor: string,
+    markWeight: number,
+): readonly WidgetStrokeData[] | null => {
+    switch (markStyle) {
+        case 'check':
+            return [{ points: CHECK_STROKE_POINTS, color: markColor, weight: markWeight }];
+        case 'cross':
+            return [
+                { points: CROSS_STROKE_POINTS, color: markColor, weight: markWeight },
+                { points: CROSS_STROKE_POINTS_2, color: markColor, weight: markWeight },
+            ];
+        case 'dash':
+            return [{ points: DASH_STROKE_POINTS, color: markColor, weight: markWeight }];
+        case 'dot':
+            // Dot uses background fill, not strokes.
+            return null;
+        default:
+            return null;
+    }
+};
+
+/**
  * Pushes the visual state onto the box, mark, and label child widgets.
  * Returns true once at least the box widget was reached.
  */
@@ -227,8 +299,7 @@ const applyVisuals = (context: CheckboxContext): boolean => {
     const state = context.state;
 
     const visualState = resolveVisualState(state);
-    const transition: CheckboxTransitionMode =
-        (props.transition as CheckboxTransitionMode) ?? 'color';
+    const transition = resolveTransitionMode(props.transition);
 
     let applied = false;
 
@@ -313,6 +384,10 @@ const applyVisuals = (context: CheckboxContext): boolean => {
         const mark = runtime.getBoundWidget(markKey);
         if (mark !== null) {
             const markVisible = state.checked || state.indeterminate;
+            const markStyle = (asString(props.markStyle) || 'check') as CheckboxMarkStyle;
+            const markColor = (asString(props.markColor) || '#ffffffff') as `#${string}`;
+            const markWeight = asNumber(props.markWeight, 2);
+            const markSize = asNumber(props.markSize, NaN);
 
             if (transition === 'tint') {
                 const markTints = asRecord(props.markTints);
@@ -331,26 +406,50 @@ const applyVisuals = (context: CheckboxContext): boolean => {
                     runtime.updateWidget(mark, { enabled: false });
                 }
             } else {
-                const markColor = (asString(props.markColor) || '#ffffffff') as `#${string}`;
-                runtime.updateWidget(mark, {
-                    style: { background: markVisible ? markColor : '#00000000' },
-                    enabled: markVisible,
-                });
+                // Color transition mode: use strokes for mark styles (check/cross/dash)
+                // or background fill for dot style. A base image authored on the mark
+                // child replaces the default tick outright, so the procedural mark is
+                // suppressed instead of painted on top of the user's artwork.
+                const hasMarkImage = isValidImageSource(runtime.getWidgetImageInput(mark)?.source);
+                const proceduralMark = markVisible && !hasMarkImage;
+                const strokes = proceduralMark ? resolveMarkStrokes(markStyle, markColor, markWeight) : null;
+                if (markStyle === 'dot') {
+                    // Dot uses background fill with radius for circular shape.
+                    runtime.updateWidget(mark, {
+                        style: {
+                            background: proceduralMark ? markColor : '#00000000',
+                            radius: Number.isFinite(markSize) ? markSize * 0.5 : 7,
+                            strokes: [],
+                        },
+                        enabled: markVisible,
+                    });
+                } else {
+                    // Stroke-based marks: transparent background, strokes render the shape.
+                    runtime.updateWidget(mark, {
+                        style: {
+                            background: '#00000000',
+                            strokes: strokes ?? [],
+                        },
+                        enabled: markVisible,
+                    });
+                }
             }
 
-            // Apply markSize to mark child layout dimensions.
-            const markSize = asNumber(props.markSize, NaN);
+            // Apply markSize to mark child layout dimensions. The mark is centered
+            // inside the box by contract: boxSize/markSize are authoritative, so the
+            // insets are dropped rather than zeroed — a zero inset still counts as
+            // "present" and would make layoutAbsoluteChild resolve from the inset and
+            // skip the anchor branch, pinning the mark to the box's top-left corner.
+            // Older assets carry stale baked pixel insets and sometimes no anchor.
             if (Number.isFinite(markSize)) {
                 runtime.updateWidget(mark, {
-                    layout: { width: markSize, height: markSize },
-                });
-            }
-
-            // Apply markWeight as border-width on the mark child.
-            const markWeight = asNumber(props.markWeight, NaN);
-            if (Number.isFinite(markWeight)) {
-                runtime.updateWidget(mark, {
-                    style: { borderWidth: markWeight },
+                    layout: {
+                        width: markSize,
+                        height: markSize,
+                        position: 'absolute',
+                        anchor: { x: 0.5, y: 0.5, maxX: 0.5, maxY: 0.5, pivotX: 0.5, pivotY: 0.5 },
+                        inset: { left: undefined, top: undefined, right: undefined, bottom: undefined },
+                    },
                 });
             }
 
@@ -365,10 +464,13 @@ const applyVisuals = (context: CheckboxContext): boolean => {
         if (label !== null) {
             const labelPosition = asString(props.labelPosition) || 'right';
             const isHidden = labelPosition === 'hidden';
+            // Left/right ordering is authored in the document (child order), not
+            // here; the runtime only owns visibility and the optional color override.
+            const labelColor = asString(props.labelColor);
             runtime.updateWidget(label, {
-                style: {
-                    color: '#e2e8f0ff',
-                },
+                style: labelColor
+                    ? { color: labelColor as `#${string}` }
+                    : {},
                 enabled: !isHidden,
             });
             applied = true;
@@ -465,6 +567,7 @@ export const checkboxToggleController: WidgetController<
             props.markKey !== previous.markKey ||
             props.labelKey !== previous.labelKey ||
             props.labelPosition !== previous.labelPosition ||
+            props.labelColor !== previous.labelColor ||
             props.labelGap !== previous.labelGap ||
             props.boxTints !== previous.boxTints ||
             props.markTints !== previous.markTints ||

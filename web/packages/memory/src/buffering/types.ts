@@ -1,19 +1,23 @@
+/** @stable */
 export const enum ByteOrder {
     Little,
     Big,
 }
 
+/** @stable */
 export const enum SeekOrigin {
     Begin,
     Current,
     End,
 }
 
+/** @stable */
 export const enum Endianness {
     Little = 0,
     Big = 1,
 }
 
+/** @stable */
 export const enum BufferState {
     Allocate,
     Empty,
@@ -24,6 +28,7 @@ export const enum BufferState {
 
 export type { Nullable } from '@axrone/utility';
 
+/** @stable */
 export type TypedArrayMap = {
     int8: Int8Array;
     uint8: Uint8Array;
@@ -37,6 +42,7 @@ export type TypedArrayMap = {
     biguint64: BigUint64Array;
 };
 
+/** @stable */
 export type PrimitiveTypeMap = {
     int8: number;
     uint8: number;
@@ -50,6 +56,7 @@ export type PrimitiveTypeMap = {
     biguint64: bigint;
 };
 
+/** @stable */
 export type TypedArrayConstructorMap = {
     [K in keyof TypedArrayMap]: {
         new (buffer: ArrayBuffer, byteOffset?: number, length?: number): TypedArrayMap[K];

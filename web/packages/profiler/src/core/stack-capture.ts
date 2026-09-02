@@ -38,9 +38,11 @@ export class StackCaptureEngine {
     private generateStackTrace(_maxDepth: number): string {
         try {
             const error = new Error();
+            // V8 yields an empty stack when the captureStackTrace filter
+            // function is absent from the call stack; this.constructor never
+            // is (only captureStack runs), so capture unfiltered instead.
             if (typeof Error.captureStackTrace === 'function') {
-                Error.captureStackTrace(error, this.constructor as unknown as Function);
-                return error.stack ?? '';
+                Error.captureStackTrace(error);
             }
             return error.stack ?? '';
         } catch {

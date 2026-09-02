@@ -73,6 +73,7 @@ import type {
     ResolvedWidgetStyle,
     RectLike,
     SizeLike,
+    StrokeRenderCommand,
     TextLayoutResult,
     TextLayoutConstraint,
     TextRenderCommand,
@@ -644,6 +645,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
                 case 'quad':
                 case 'text':
                 case 'image':
+                case 'stroke':
                     return {
                         ...command,
                         clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
@@ -1130,6 +1132,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         let visibleWidgetCount = 0;
         let textCommandCount = 0;
         let imageCommandCount = 0;
+        let strokeCommandCount = 0;
         let customCommandCount = 0;
         let glyphCount = 0;
         const visit = (index: number, clip: LayoutBox | null): void => {
@@ -1161,6 +1164,22 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
                     clip: nextClip,
                 };
                 commands.push(quad);
+            }
+            if (style.strokes.length > 0) {
+                const stroke: StrokeRenderCommand = {
+                    kind: 'stroke',
+                    widget: index as WidgetId,
+                    x: box.x,
+                    y: box.y,
+                    width: box.width,
+                    height: box.height,
+                    zIndex,
+                    opacity: style.opacity,
+                    clip: nextClip,
+                    strokes: style.strokes,
+                };
+                strokeCommandCount += 1;
+                commands.push(stroke);
             }
             const image = this.images[index];
             if (image) {
@@ -1318,6 +1337,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             customCommandCount,
             imageCommandCount,
             textCommandCount,
+            strokeCommandCount,
             glyphCount,
             layoutPasses: this.lastLayoutPasses,
         };

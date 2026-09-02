@@ -6,7 +6,7 @@ import {
 	checkboxToggleController,
 	getCheckboxChecked,
 } from '../controls/checkbox-controller';
-import type { WidgetId } from '../types';
+import type { StrokeRenderCommand, WidgetId } from '../types';
 
 const createCheckboxAssetJson = (
 	props: Record<string, unknown>,
@@ -458,5 +458,275 @@ describe('checkbox-toggle controller — sentinel previousBoxColor', () => {
 
 		expect(spy).toHaveBeenCalledWith(boxWidget(runtime));
 		spy.mockRestore();
+	});
+});
+
+/**
+ * Integration test using the real asset structure from Assets/UI-test.ui.json.
+ * The mark child has corrupted absolute insets (left:375, top:188) that must be
+ * zeroed by the controller. This proves S1+S2 fixes together resolve S3 (dead
+ * clicks appear to produce no feedback because the mark is displaced and has no
+ * tick shape).
+ */
+describe('checkbox-toggle controller — real asset integration', () => {
+	const createRealWorldCheckboxAssetJson = (): string =>
+		JSON.stringify({
+			id: 'ui.UI/test',
+			name: 'UI/test',
+			version: 1,
+			canvas: {
+				referenceWidth: 1920,
+				referenceHeight: 1080,
+				scaleMode: 'match-width-or-height',
+				matchBias: 0.45,
+			},
+			bindings: {
+				root: 'root',
+				'widget-13': 'widget-13',
+				'widget-13-box': 'widget-13-box',
+				'widget-13-mark': 'widget-13-mark',
+				'widget-13-label': 'widget-13-label',
+			},
+			root: {
+				role: 'root',
+				key: 'root',
+				enabled: true,
+				interactive: false,
+				layout: { display: 'overlay', width: '100%', height: '100%' },
+				children: [
+					{
+						role: 'custom:checkbox',
+						key: 'widget-13',
+						enabled: true,
+						interactive: true,
+						controller: 'checkbox-toggle',
+						props: {
+							isOn: false,
+							indeterminate: false,
+							markStyle: 'check',
+							boxSize: 20,
+							markSize: 14,
+							markWeight: 2,
+							markColor: '#ffffffff',
+							boxKey: 'widget-13-box',
+							markKey: 'widget-13-mark',
+							labelKey: 'widget-13-label',
+							states: {
+								normal: '#334155ff',
+								hover: '#475569ff',
+								checked: '#0a74daff',
+								disabled: '#1e293bff',
+							},
+							transition: 'animation',
+							transitionDuration: 0.15,
+							zoomScale: 0.9,
+							labelPosition: 'right',
+							labelGap: 8,
+						},
+						layout: {
+							width: 120,
+							height: 24,
+							direction: 'row',
+							alignItems: 'center',
+							gap: 8,
+							position: 'absolute',
+							inset: { left: 372, top: 185 },
+						},
+						children: [
+							{
+								role: 'custom:checkbox-box',
+								key: 'widget-13-box',
+								enabled: true,
+								interactive: false,
+								layout: {
+									width: 20,
+									height: 20,
+									display: 'overlay',
+									shrink: 0,
+									position: 'absolute',
+									inset: { left: 0, top: 0 },
+								},
+								style: {
+									background: '#334155ff',
+									borderColor: '#475569ff',
+									borderWidth: 1,
+									radius: 4,
+								},
+								children: [
+									{
+										role: 'custom:checkbox-mark',
+										key: 'widget-13-mark',
+										enabled: true,
+										interactive: false,
+										layout: {
+											position: 'absolute',
+											width: 14,
+											height: 14,
+											anchor: {
+												x: 0.5,
+												y: 0.5,
+												maxX: 0.5,
+												maxY: 0.5,
+												pivotX: 0.5,
+												pivotY: 0.5,
+											},
+											// CORRUPTED: absolute canvas coordinates
+											// from editor manipulation.
+											inset: { left: 375, top: 188 },
+										},
+										style: { background: '#00000000', radius: 2 },
+										children: [],
+									},
+								],
+							},
+							{
+								role: 'text',
+								key: 'widget-13-label',
+								enabled: true,
+								interactive: false,
+								layout: {
+									width: 'content',
+									height: 'content',
+									position: 'absolute',
+									inset: { left: 28, top: 2 },
+								},
+								style: { color: '#e2e8f0ff' },
+								text: { value: 'Checkbox', size: 16 },
+								children: [],
+							},
+						],
+					},
+				],
+			},
+		});
+
+	const createRealWorldRuntime = (): UIRuntime => {
+		const runtime = new UIRuntime();
+		runtime.registry.register(checkboxToggleController);
+		runtime.loadFromAsset(
+			deserializeUIAsset(createRealWorldCheckboxAssetJson()),
+		);
+		runtime.commit();
+		return runtime;
+	};
+
+	const realWorldPointer = (phase: 'down' | 'up', x: number, y: number) =>
+		({
+			type: 'pointer' as const,
+			phase,
+			x,
+			y,
+			pointerId: 1,
+			button: 0,
+			buttons: phase === 'up' ? 0 : 1,
+			deltaX: 0,
+			deltaY: 0,
+			altKey: false,
+			ctrlKey: false,
+			shiftKey: false,
+			metaKey: false,
+		});
+
+	const clickRealWorldCheckbox = (runtime: UIRuntime) => {
+		runtime.dispatchInput(realWorldPointer('down', 382, 195));
+		runtime.dispatchInput(realWorldPointer('up', 382, 195));
+	};
+
+	it('toggles checked state on pointer down+up despite corrupted asset insets', () => {
+		const runtime = createRealWorldRuntime();
+		const checkbox = runtime.getBoundWidget('widget-13')!;
+
+		// Initially unchecked.
+		expect(getCheckboxChecked(runtime, checkbox)).toBe(false);
+
+		// Dispatch pointer down+up at the checkbox area.
+		clickRealWorldCheckbox(runtime);
+		runtime.commit();
+
+		// State toggled to checked.
+		expect(getCheckboxChecked(runtime, checkbox)).toBe(true);
+	});
+
+	it('zeros mark insets (overrides corrupted asset) so mark centers inside box', () => {
+		const runtime = createRealWorldRuntime();
+
+		// After mount, the controller should have zeroed the mark insets.
+		const snapshot = runtime.snapshot();
+		const checkboxNode = snapshot.root.children[0];
+		const boxNode = checkboxNode.children[0];
+		const markNode = boxNode.children[0];
+
+		// The mark's layout inset must be zeroed by the controller.
+		const markInset = markNode.layout?.inset as Record<string, number> | undefined;
+		expect(markInset?.left ?? 0).toBe(0);
+		expect(markInset?.top ?? 0).toBe(0);
+	});
+
+	it('emits stroke render commands for markStyle=check after toggle', () => {
+		const runtime = createRealWorldRuntime();
+
+		// Click to check.
+		clickRealWorldCheckbox(runtime);
+
+		// Commit and inspect frame commands.
+		const frame = runtime.commit();
+		const strokeCommands = frame.commands.filter(
+			(cmd): cmd is StrokeRenderCommand => cmd.kind === 'stroke',
+		);
+
+		// At least one stroke command should be emitted (for the mark widget).
+		expect(strokeCommands.length).toBeGreaterThanOrEqual(1);
+
+		// The stroke command should carry check-mark stroke data.
+		const markStroke = strokeCommands.find((cmd) => cmd.strokes.length > 0);
+		expect(markStroke).toBeDefined();
+		expect(markStroke!.strokes[0].points.length).toBe(3); // check = 3 points
+	});
+
+	it('emits the stroke command in widget pixel space and scales it with the canvas', () => {
+		const runtime = createRealWorldRuntime();
+		clickRealWorldCheckbox(runtime);
+
+		const mark = runtime.getBoundWidget('widget-13-mark');
+		expect(mark).not.toBeNull();
+		const markRect = runtime.getLayoutBox(mark!);
+
+		// Reference-space geometry: the command rect is the mark's pixel box, so the
+		// renderer maps normalized points through it instead of re-scaling twice.
+		const reference = runtime.commit();
+		const referenceStroke = reference.commands.find(
+			(cmd): cmd is StrokeRenderCommand => cmd.kind === 'stroke',
+		);
+		expect(referenceStroke, 'stroke command in reference frame').toBeDefined();
+		expect(referenceStroke!.x).toBeCloseTo(markRect.x, 3);
+		expect(referenceStroke!.y).toBeCloseTo(markRect.y, 3);
+		expect(referenceStroke!.width).toBeCloseTo(markRect.width, 3);
+		expect(referenceStroke!.height).toBeCloseTo(markRect.height, 3);
+
+		// Viewport-space geometry: the canvas scale rides on `transform`, exactly as
+		// it does for quads, so ticks land where the scaled layout says they should.
+		const scaled = runtime.commitToViewport(3840, 2160);
+		const scaledStroke = scaled.commands.find(
+			(cmd): cmd is StrokeRenderCommand => cmd.kind === 'stroke',
+		);
+		const scaledQuad = scaled.commands.find((cmd) => cmd.kind === 'quad');
+		expect(scaledStroke?.transform, 'stroke command carries the canvas transform').toBeDefined();
+		expect(scaledStroke?.transform, 'stroke shares the quad canvas transform').toEqual(
+			scaledQuad?.kind === 'quad' ? scaledQuad.transform : undefined,
+		);
+	});
+
+	it('emits no stroke commands when unchecked (mark hidden)', () => {
+		const runtime = createRealWorldRuntime();
+
+		// Don't click — leave unchecked.
+		const frame = runtime.commit();
+		const strokeCommands = frame.commands.filter(
+			(cmd): cmd is StrokeRenderCommand => cmd.kind === 'stroke',
+		);
+
+		// No stroke commands should be emitted for the unchecked mark.
+		const markStrokes = strokeCommands.filter((cmd) => cmd.strokes.length > 0);
+		expect(markStrokes.length).toBe(0);
 	});
 });

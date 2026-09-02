@@ -9,6 +9,7 @@ import {
     toAudioClipSelectorFromRecord,
 } from '../asset';
 import { FakeAudioBuffer, installFakeAudioGlobals } from './helpers/fake-audio-context';
+import { createAudioClipAssetReference } from '../reference';
 
 beforeAll(() => {
     installFakeAudioGlobals();
@@ -173,11 +174,16 @@ describe('toAudioClipSelector', () => {
         expect(selector!.kind).toBe('inline');
     });
 
-    it('wraps an asset selector shape as asset kind', () => {
-        const assetSelector = { kind: 'audioClip' as any, id: 'asset-1' } as any;
-        const selector = toAudioClipSelector(assetSelector);
+    it('wraps a valid asset selector shape as asset kind', () => {
+        const reference = createAudioClipAssetReference('clip-1' as never);
+        const selector = toAudioClipSelector(reference);
         expect(selector).toBeDefined();
         expect(selector!.kind).toBe('asset');
+    });
+
+    it('rejects a kind+id pair that is not an AssetReference because it has no token', () => {
+        // Used to be accepted and wrapped, then failed during async decode far from here.
+        expect(toAudioClipSelector({ kind: 'audioClip', id: 'asset-1' } as never)).toBeUndefined();
     });
 });
 
@@ -192,5 +198,55 @@ describe('toAudioClipSelectorFromRecord', () => {
         const raw = { id: 'asset-1', revision: 1 } as any;
         const selector = toAudioClipSelectorFromRecord(raw);
         expect(selector.kind).toBe('asset');
+    });
+});
+
+// AssetSelector<TSchema> is a closed union (asset-core types.ts:126-134):
+// string | AssetReference | AssetVersionedReference | AssetRecord | AssetLookupByKey.
+// Anything outside it can never resolve, but toAudioClipSelector wrapped it as an asset
+// selector anyway and the failure surfaced later, in the async decode path, detached from
+// the call that caused it.
+describe('toAudioClipSelector — rejects inputs that can never resolve', () => {
+    const rejected: Array<[string, unknown]> = [
+        ['a number', 42],
+        ['a boolean', true],
+        ['an empty string', ''],
+        ['a whitespace-only string', '   '],
+        ['an array', []],
+        ['an empty object', {}],
+        ['an object with unrelated keys', { wrong: 'shape' }],
+        ['a reference without a token', { kind: 'audioClip', id: 'asset-1' }],
+        ['a malformed registered selector', { kind: 'registered', clipId: 7 }],
+        ['a malformed asset wrapper', { kind: 'asset' }],
+    ];
+
+    for (const [label, input] of rejected) {
+        it(`returns undefined for ${label}`, () => {
+            expect(toAudioClipSelector(input as never)).toBeUndefined();
+        });
+    }
+});
+
+describe('toAudioClipSelector — still accepts every valid AssetSelector member', () => {
+    it('accepts a non-empty string as an asset key', () => {
+        expect(toAudioClipSelector('music/track-01')).toEqual({
+            kind: 'asset',
+            selector: 'music/track-01',
+        });
+    });
+
+    it('accepts AssetLookupByKey', () => {
+        const lookup = { key: 'music/track-01', kind: 'audioClip' };
+        expect(toAudioClipSelector(lookup as never)?.kind).toBe('asset');
+    });
+
+    it('accepts an AssetReference produced by createAudioClipAssetReference', () => {
+        const reference = createAudioClipAssetReference('clip-1' as never);
+        expect(toAudioClipSelector(reference)?.kind).toBe('asset');
+    });
+
+    it('accepts a full AssetRecord-shaped selector', () => {
+        const record = { kind: 'audioClip', data: { kind: 'url', url: 'https://x/y.mp3' } };
+        expect(toAudioClipSelector(record as never)?.kind).toBe('asset');
     });
 });

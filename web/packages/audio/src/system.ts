@@ -25,6 +25,7 @@ import {
     isFiniteNumber,
     isObject,
     resolveContextFactory,
+    setParamValue,
     withRetry,
 } from './internal/shared';
 import {
@@ -67,7 +68,9 @@ import type {
     AudioSystemStatus,
 } from './types';
 
-type AudioPatchToDefinition<TDefinition extends object> = Partial<TDefinition>;
+// A volume change that lands as one discontinuous step is audible as a click, so the global
+// gain eases over roughly one frame instead.
+const GLOBAL_VOLUME_SMOOTHING_SECONDS = 0.016;
 
 export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     readonly context: AudioContext;
@@ -84,17 +87,39 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     readonly #observability = new AudioObservabilityRuntime<TSchema>();
     readonly #playbackRuntime: AudioPlaybackRuntime<TSchema>;
     readonly #sources: AudioSourceRegistry<TSchema>;
+    readonly #sink: AudioNode;
+    readonly #globalGain: GainNode;
+    readonly #maxRealVoices: number;
 
     #playSequence = 0;
     #status: AudioSystemStatus = 'idle';
+    #contextState: AudioContextState = 'running';
+    #appliedGlobalVolume?: number;
+    #voiceStealCount = 0;
     #disposed = false;
 
     constructor(options: AudioSystemOptions<TSchema> = {}) {
         const ownsContext = !options.context;
-        const context = options.context ?? (options.createContext ?? resolveContextFactory())();
+        // sampleRate/latencyHint can only be honoured for a context we create; one supplied
+        // by the caller is already bound to its device. Unsupported rates are left to the
+        // browser to reject with its own RangeError rather than guessed at here.
+        const context =
+            options.context ??
+            (options.createContext ??
+                resolveContextFactory({
+                    sampleRate: options.sampleRate,
+                    latencyHint: options.latencyHint,
+                }))();
         this.context = context;
-        this.destination = options.destination ?? context.destination;
+        this.#sink = options.destination ?? context.destination;
+        // Buses feed this gain rather than the sink directly so the active listener's
+        // globalVolume has somewhere to live; Web Audio has no listener gain of its own.
+        this.#globalGain = context.createGain();
+        this.#globalGain.gain.value = 1;
+        this.#globalGain.connect(this.#sink);
+        this.destination = this.#globalGain;
         this.#ownsContext = ownsContext;
+        this.#maxRealVoices = Math.max(0, options.maxRealVoices ?? 0);
         this.#messageResolver = options.messageResolver ?? DEFAULT_AUDIO_MESSAGE_RESOLVER;
         this.#locale = options.locale ?? 'en';
         this.#autoResume = options.autoResume ?? true;
@@ -138,6 +163,11 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         }
 
         this.#syncListenerToContext();
+        this.#contextState = this.context.state;
+        this.#applyContextState(false);
+        // addEventListener, not context.onstatechange: a caller-supplied context may already
+        // have its own handler on the property, which this would silently replace.
+        this.context.addEventListener?.('statechange', this.#handleContextStateChange);
     }
 
     get status(): AudioSystemStatus {
@@ -164,11 +194,13 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
             busCount: this.listBuses().length,
             listenerCount: this.listListeners().length,
             sourceCount: this.listSources().length,
-            activePlaybackCount: [...this.#sources.values()].filter((source) => !!source.active).length,
+            activePlaybackCount: this.#occupantVoiceCount(),
+            voiceStealCount: this.#voiceStealCount,
         });
     }
 
     resetDiagnostics(): void {
+        this.#voiceStealCount = 0;
         this.#observability.reset();
     }
 
@@ -213,7 +245,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     updateBus(id: AudioBusId | string, patch: AudioBusPatch): AudioBusState {
         return this.upsertBus({
             id,
-            ...(patch as AudioPatchToDefinition<Omit<AudioBusDefinition, 'id'>>),
+            ...patch,
         });
     }
 
@@ -263,7 +295,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     updateListener(id: AudioListenerId | string, patch: AudioListenerPatch): AudioListenerState {
         return this.upsertListener({
             id,
-            ...(patch as AudioPatchToDefinition<Omit<AudioListenerDescriptor, 'id'>>),
+            ...patch,
         });
     }
 
@@ -308,6 +340,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
 
     upsertSource(definition: AudioSourceDefinition<TSchema>): AudioSourceState<TSchema> {
         this.#assertNotDisposed();
+        const mutationsBefore = this.#sources.mutationSequence;
         const source = this.#sources.upsert(definition, {
             requireBus: (id) => {
                 this.#buses.require(id);
@@ -316,6 +349,12 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
                 this.#reconnectPlaybackOutput(playback, nextBusId);
             },
         });
+
+        // A per-frame re-upsert of an unchanged descriptor must not look like an edit: it
+        // used to emit source:upserted, re-sync the voice and re-arm autoplay every frame.
+        if (this.#sources.mutationSequence === mutationsBefore) {
+            return this.#snapshotSource(source);
+        }
 
         this.#syncSource(source);
         if (source.autoplay && source.playbackState === 'idle' && source.clip) {
@@ -335,7 +374,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     updateSource(id: AudioSourceId | string, patch: AudioSourcePatch<TSchema>): AudioSourceState<TSchema> {
         return this.upsertSource({
             id,
-            ...(patch as AudioPatchToDefinition<Omit<AudioSourceDefinition<TSchema>, 'id'>>),
+            ...patch,
         });
     }
 
@@ -389,7 +428,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         if (hasOwnKeys(patch)) {
             this.upsertSource({
                 id: sourceId,
-                ...(patch as AudioPatchToDefinition<Omit<AudioSourceDefinition<TSchema>, 'id'>>),
+                ...patch,
             });
         }
 
@@ -397,31 +436,41 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
             throw this.#configurationError({ code: 'audio.invalid-clip', value: source.clip });
         }
 
-        if (this.#autoResume && this.context.state === 'suspended') {
-            await this.resume();
-        }
-
-        if (source.active) {
-            if (replace === false) {
-                return this.#createPlaybackHandle(sourceId, source.playSequence);
-            }
-            this.stopSource(sourceId);
-        }
-
-        const clip = await this.#clips.resolveSelector(source.clip);
-        const bus = this.#buses.require(source.busId);
-        const normalizedOffset = this.#normalizeOffset(
-            offsetSeconds ?? source.currentOffsetSeconds,
-            clip,
-            source.loop
-        );
-        const normalizedWhen =
-            when !== undefined ? this.#normalizeTime(when) : this.context.currentTime;
-        const normalizedDuration =
-            durationSeconds !== undefined ? this.#normalizeTime(durationSeconds) : undefined;
-        const sequence = ++this.#playSequence;
-
+        let sequence = 0;
+        // Everything fallible sits in one try so that no failure path can end up silent:
+        // a clip that cannot be fetched or decoded used to reject from outside this block,
+        // emitting no source:error and leaving playbackErrorCount at zero.
         try {
+            if (this.#autoResume && this.context.state === 'suspended') {
+                await this.resume();
+            }
+
+            if (source.active) {
+                if (replace === false) {
+                    return this.#createPlaybackHandle(sourceId, source.playSequence);
+                }
+                this.stopSource(sourceId);
+            }
+
+            const clip = await this.#clips.resolveSelector(source.clip);
+            const bus = this.#buses.require(source.busId);
+            const normalizedOffset = this.#normalizeOffset(
+                offsetSeconds ?? source.currentOffsetSeconds,
+                clip,
+                source.loop
+            );
+            const normalizedWhen =
+                when !== undefined ? this.#normalizeTime(when) : this.context.currentTime;
+            const normalizedDuration =
+                durationSeconds !== undefined ? this.#normalizeTime(durationSeconds) : undefined;
+            while (this.#maxRealVoices > 0 && this.#occupantVoiceCount() >= this.#maxRealVoices) {
+                if (!this.#stealQuietestVoice()) {
+                    break;
+                }
+            }
+
+            sequence = ++this.#playSequence;
+
             source.active = this.#playbackRuntime.startPlayback(source, {
                 sequence,
                 clip,
@@ -433,6 +482,13 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
                     this.#handleEnded(source.id, sequence);
                 },
             });
+
+            source.playSequence = sequence;
+            source.playbackState = 'playing';
+            source.currentOffsetSeconds = normalizedOffset;
+            source.durationSeconds = clip.durationSeconds;
+            // The new node owns the timed stop now; the captured window is spent.
+            source.resumeDurationSeconds = undefined;
         } catch (error) {
             source.playbackState = 'stopped';
             this.#emit({
@@ -445,17 +501,12 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
                 source: this.getSource(sourceId),
             });
             throw new AudioSourceError(
-                'audio.source.play-failed',
-                `Failed to play audio source ${sourceId}`,
+                operation === 'resume' ? 'audio.source.resume-failed' : 'audio.source.play-failed',
+                `Failed to ${operation} audio source ${sourceId}`,
                 sourceId,
                 { cause: error instanceof Error ? error : new Error(String(error)) }
             );
         }
-
-        source.playSequence = sequence;
-        source.playbackState = 'playing';
-        source.currentOffsetSeconds = normalizedOffset;
-        source.durationSeconds = clip.durationSeconds;
 
         this.#syncSource(source);
         this.#emit({
@@ -493,6 +544,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         }
 
         source.currentOffsetSeconds = this.#currentOffsetForSource(source);
+        source.resumeDurationSeconds = this.#remainingDurationForSource(source);
         source.playbackState = 'paused';
         source.active.control = 'pausing';
         this.#emit({
@@ -529,6 +581,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
                     source.id,
                     {
                     offsetSeconds: source.currentOffsetSeconds,
+                    durationSeconds: source.resumeDurationSeconds,
                     replace: true,
                     },
                     'source:resumed',
@@ -541,6 +594,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         this.#assertNotDisposed();
         const source = this.#sources.require(id);
         source.currentOffsetSeconds = 0;
+        source.resumeDurationSeconds = undefined;
         source.playbackState = 'stopped';
         this.#emit({
             type: 'source:stopped',
@@ -600,6 +654,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     snapshot(): AudioSystemSnapshot<TSchema> {
         this.#assertNotDisposed();
         const snapshot = Object.freeze({
+            kind: 'audio.system-snapshot' as const,
             version: 1,
             status: this.#status as Exclude<AudioSystemStatus, 'disposed'>,
             capturedAtEpochMs: Date.now(),
@@ -777,6 +832,7 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
             return;
         }
 
+        this.context.removeEventListener?.('statechange', this.#handleContextStateChange);
         this.#clearSources();
         this.#listeners.clear();
         this.#buses.clear();
@@ -810,7 +866,69 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
         this.#sources.clear();
     }
 
+    /**
+     * Reflect browser-driven context transitions in `status`. Web Audio suspends on its own —
+     * autoplay policy, tab backgrounding, losing audio focus — and until now `status` only
+     * moved through an explicit suspend()/resume(), so a context the browser had suspended
+     * still reported 'running'. 'closed' is left to dispose(), which owns that transition.
+     */
+    #applyContextState(announce: boolean): void {
+        const nextStatus: AudioSystemStatus | undefined =
+            this.context.state === 'suspended'
+                ? 'suspended'
+                : this.context.state === 'running'
+                  ? this.#hasActivePlayback()
+                      ? 'running'
+                      : 'idle'
+                  : undefined;
+
+        if (nextStatus === undefined || nextStatus === this.#status) {
+            return;
+        }
+
+        const transitioned = this.#contextState !== this.context.state;
+        this.#contextState = this.context.state;
+        this.#status = nextStatus;
+
+        if (!announce || !transitioned) {
+            return;
+        }
+
+        this.#emit({
+            type: nextStatus === 'suspended' ? 'system:suspended' : 'system:resumed',
+            contextTime: this.context.currentTime,
+            systemStatus: this.#status,
+        });
+    }
+
+    readonly #handleContextStateChange = (): void => {
+        if (this.#disposed) {
+            return;
+        }
+        this.#applyContextState(true);
+    };
+
+    #hasActivePlayback(): boolean {
+        for (const source of this.#sources.values()) {
+            if (source.active) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     #syncListenerToContext(): void {
+        const audible = this.#listeners.audibleRuntime();
+        const nextVolume = audible?.globalVolume ?? 1;
+        if (nextVolume !== this.#appliedGlobalVolume) {
+            setParamValue(
+                this.#globalGain.gain,
+                nextVolume,
+                this.context.currentTime,
+                this.#appliedGlobalVolume === undefined ? 0 : GLOBAL_VOLUME_SMOOTHING_SECONDS
+            );
+            this.#appliedGlobalVolume = nextVolume;
+        }
         this.#listeners.syncToContext(this.context.listener);
     }
 
@@ -826,6 +944,64 @@ export class AudioSystem<TSchema extends AudioAssetSchema = AudioAssetSchema> {
 
     #reconnectPlaybackOutput(playback: InternalPlayback<TSchema>, nextBusId: string): void {
         this.#playbackRuntime.reconnectPlayback(playback, this.#buses.require(nextBusId).gainNode);
+    }
+
+    #occupantVoiceCount(): number {
+        let count = 0;
+        for (const source of this.#sources.values()) {
+            if (source.active?.control === 'playing') {
+                count += 1;
+            }
+        }
+        return count;
+    }
+
+    #voiceLoudness(source: InternalSource<TSchema>): number {
+        if (source.muted) {
+            return 0;
+        }
+        const attenuation = source.active?.attenuationNode.gain.value;
+        return source.volume * (isFiniteNumber(attenuation) ? attenuation : 1);
+    }
+
+    #stealQuietestVoice(): boolean {
+        let victim: InternalSource<TSchema> | undefined;
+        let quietest = Number.POSITIVE_INFINITY;
+
+        for (const candidate of this.#sources.values()) {
+            if (candidate.active?.control !== 'playing') {
+                continue;
+            }
+            const loudness = this.#voiceLoudness(candidate);
+            if (
+                loudness < quietest ||
+                (loudness === quietest && victim && candidate.playSequence < victim.playSequence)
+            ) {
+                quietest = loudness;
+                victim = candidate;
+            }
+        }
+
+        if (!victim) {
+            return false;
+        }
+
+        this.#voiceStealCount += 1;
+        this.stopSource(victim.id);
+        // Dispose through the normal path: dropping `active` alone would leak the node chain,
+        // since the later onended returns early once the slot is gone.
+        this.#disposePlayback(victim);
+        return true;
+    }
+
+    #remainingDurationForSource(source: InternalSource<TSchema>): number | undefined {
+        const playback = source.active;
+        if (!playback || playback.durationSeconds === undefined) {
+            return undefined;
+        }
+
+        const elapsed = Math.max(0, source.currentOffsetSeconds - playback.startOffsetSeconds);
+        return Math.max(0, playback.durationSeconds - elapsed);
     }
 
     #currentOffsetForSource(source: InternalSource<TSchema>): number {
@@ -985,12 +1161,15 @@ export const createAudioSystem = <TSchema extends AudioAssetSchema = AudioAssetS
 ): AudioSystem<TSchema> => new AudioSystem(options);
 
 export const isAudioMixerSnapshot = (value: unknown): value is AudioMixerSnapshot =>
-    isObject(value) && Array.isArray(value.buses);
+    isObject(value) &&
+    value.kind === 'audio.mixer-snapshot' &&
+    Array.isArray(value.buses);
 
 export const isAudioSystemSnapshot = <TSchema extends AudioAssetSchema = AudioAssetSchema>(
     value: unknown
 ): value is AudioSystemSnapshot<TSchema> =>
     isObject(value) &&
+    value.kind === 'audio.system-snapshot' &&
     value.version === 1 &&
     Array.isArray(value.buses) &&
     Array.isArray(value.listeners) &&

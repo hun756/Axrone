@@ -77,3 +77,21 @@ export {
     mapAsync,
     combineAsync,
 } from './singleton/index';
+
+// Shared deferred-computation engine (@internal — used by @axrone/memory lazy module)
+export {
+    createDeferredSyncState,
+    computeDeferredSync,
+    resetDeferredSync,
+    createDeferredAsyncState,
+    computeDeferredAsync,
+    resetDeferredAsync,
+} from './internal/deferred-core';
+export type {
+    DeferredSyncState,
+    DeferredAsyncState,
+    DeferredSyncStateContainer,
+    DeferredAsyncStateContainer,
+    ComputeSyncOptions,
+    ComputeAsyncOptions,
+} from './internal/deferred-core';

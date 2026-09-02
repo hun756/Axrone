@@ -3,10 +3,10 @@ import {
     CircularBuffer,
     CircularBufferError,
     BufferEmptyError,
-    BufferOverflowError,
-    InvalidCapacityError,
     createCircularBuffer,
 } from '../circular-buffer';
+import { BufferOverflowError } from '../../../buffering/errors';
+import { InvalidCapacityError } from '../../../containers/queue/errors';
 
 describe('CircularBuffer', () => {
     describe('construction', () => {

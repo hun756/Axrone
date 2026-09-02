@@ -8,16 +8,31 @@ class PoolableArrayBuffer implements PoolableObject {
     __lastAccessed?: number;
     __allocCount?: number;
 
+    /**
+     * @param buffer - The underlying ArrayBuffer to pool.
+     * @param size - The byte length of the buffer.
+     * @param zeroOnRelease - When true (default), the buffer is zeroed on reset
+     *   to prevent stale data from leaking between consumers. Set to false for
+     *   a performance gain when the consumer always overwrites the full buffer
+     *   before reading, making the zero-fill redundant.
+     */
     constructor(
         public readonly buffer: ArrayBuffer,
-        public readonly size: number
+        public readonly size: number,
+        public readonly zeroOnRelease: boolean = true
     ) {}
 
     reset(): void {
-        new Uint8Array(this.buffer).fill(0);
+        if (this.zeroOnRelease) {
+            new Uint8Array(this.buffer).fill(0);
+        }
     }
 }
 
+/**
+ * Configuration options for BufferPool.
+ * @stable
+ */
 export interface BufferPoolOptions {
     readonly initialCapacityPerBucket?: number;
 
@@ -43,6 +58,16 @@ export interface BufferPoolOptions {
 
     readonly lowWatermarkRatio?: number;
 
+    /**
+     * When true (default), buffers are zero-filled on release back to the pool.
+     * This prevents stale data from leaking between consumers but adds a small
+     * performance cost proportional to buffer size. Set to false when callers
+     * always overwrite the entire buffer before reading, making the zero-fill
+     * redundant.
+     * @default true
+     */
+    readonly zeroOnRelease?: boolean;
+
     readonly validator?: (buffer: ArrayBuffer) => boolean;
 
     readonly onAcquire?: (buffer: ArrayBuffer) => void;
@@ -54,8 +79,27 @@ export interface BufferPoolOptions {
     readonly onOutOfMemory?: (requestedSize: number, bucketIndex: number) => void;
 }
 
+/**
+ * Singleton pool for ArrayBuffer instances, organized into power-of-two size buckets.
+ *
+ * Maintains a set of ObjectPool instances, one per bucket size (32B, 64B, 128B, ... up to
+ * MAX_CAPACITY). Requests are rounded up to the nearest bucket size, ensuring that returned
+ * buffers are always a power-of-two size. This avoids fragmentation and enables fast bucket
+ * lookup via log2 arithmetic.
+ *
+ * The singleton pattern ensures a single shared pool across the engine. Use `getInstance()`
+ * to access and `resetInstance()` to tear down (e.g., in tests).
+ *
+ * @example
+ * const pool = BufferPool.getInstance({ evictionPolicy: 'lru', maxCapacityPerBucket: 256 });
+ * const buf = pool.allocate(100);  // returns a 128-byte ArrayBuffer from the 128-bucket
+ * // ... use buf ...
+ * pool.release(buf);               // return to pool
+ *
+ * @stable
+ */
 export class BufferPool {
-    private static instance: BufferPool;
+    private static instance: BufferPool | undefined;
     private readonly pools: Map<number, ObjectPool<PoolableArrayBuffer>>;
     private readonly options: Required<BufferPoolOptions>;
     private readonly bucketSizes: number[];
@@ -73,11 +117,12 @@ export class BufferPool {
             autoExpand: options.autoExpand ?? true,
             evictionPolicy: options.evictionPolicy ?? 'lru',
             ttl: options.ttl ?? 0,
-            enableMetrics: options.enableMetrics ?? true,
+            enableMetrics: options.enableMetrics ?? false,
             enableInstrumentation: options.enableInstrumentation ?? false,
             name: options.name ?? 'BufferPool',
             highWatermarkRatio: options.highWatermarkRatio ?? 0.85,
             lowWatermarkRatio: options.lowWatermarkRatio ?? 0.25,
+            zeroOnRelease: options.zeroOnRelease ?? true,
             validator: options.validator ?? (() => true),
             onAcquire: options.onAcquire ?? (() => {}),
             onRelease: options.onRelease ?? (() => {}),
@@ -104,7 +149,7 @@ export class BufferPool {
     static resetInstance(): void {
         if (BufferPool.instance) {
             BufferPool.instance.dispose();
-            BufferPool.instance = undefined as any;
+            BufferPool.instance = undefined;
         }
     }
 
@@ -133,7 +178,7 @@ export class BufferPool {
                 expansionStrategy: 'multiplicative',
                 expansionFactor: 1.5,
 
-                factory: () => new PoolableArrayBuffer(new ArrayBuffer(bucketSize), bucketSize),
+                factory: () => new PoolableArrayBuffer(new ArrayBuffer(bucketSize), bucketSize, this.options.zeroOnRelease),
 
                 resetHandler: (buffer: PoolableArrayBuffer) => buffer.reset(),
 
@@ -192,10 +237,12 @@ export class BufferPool {
                 const poolableBuffer = pool.acquire();
                 buffer = poolableBuffer.buffer;
             } catch (error) {
-                console.warn(
-                    `Pool exhausted for bucket ${bucketIndex}, falling back to direct allocation:`,
-                    error
-                );
+                if (this.options.enableInstrumentation) {
+                    console.debug(
+                        `Pool exhausted for bucket ${bucketIndex}, falling back to direct allocation:`,
+                        error
+                    );
+                }
                 this.options.onOutOfMemory(requestedSize, bucketIndex);
                 buffer = new ArrayBuffer(actualSize);
             }
@@ -226,7 +273,13 @@ export class BufferPool {
             } else {
                 return null;
             }
-        } catch {
+        } catch (error) {
+            if (this.options.enableInstrumentation) {
+                console.debug(
+                    `tryAllocate failed for bucket ${bucketIndex}:`,
+                    error
+                );
+            }
             return null;
         }
     }
@@ -249,7 +302,9 @@ export class BufferPool {
         try {
             pool.release(entry.wrapper);
         } catch (error) {
-            console.warn(`Failed to release buffer to pool:`, error);
+            if (this.options.enableInstrumentation) {
+                console.debug(`Failed to release buffer to pool:`, error);
+            }
         }
     }
 

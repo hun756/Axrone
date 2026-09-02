@@ -24,6 +24,7 @@ import type {
     WidgetFocusPolicyInput,
     WidgetImageInput,
     WidgetStyleInput,
+    WidgetStrokeData,
 } from './widget';
 
 export interface TextLayoutConstraint {
@@ -156,6 +157,20 @@ export interface ImageRenderCommand {
     readonly fillCenter?: boolean;
 }
 
+export interface StrokeRenderCommand {
+    readonly kind: 'stroke';
+    readonly widget: WidgetId;
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+    readonly zIndex: number;
+    readonly opacity: number;
+    readonly clip: RectLike | null;
+    readonly strokes: readonly WidgetStrokeData[];
+    readonly transform?: AffineTransform2D;
+}
+
 export interface CustomRenderCommand<TPayload = unknown> {
     readonly kind: 'custom';
     readonly widget: WidgetId;
@@ -168,6 +183,7 @@ export type RenderCommand<TPayload = unknown> =
     | QuadRenderCommand
     | ImageRenderCommand
     | TextRenderCommand
+    | StrokeRenderCommand
     | CustomRenderCommand<TPayload>;
 
 export interface UIFrameMetrics {
@@ -177,6 +193,7 @@ export interface UIFrameMetrics {
     readonly customCommandCount: number;
     readonly imageCommandCount: number;
     readonly textCommandCount: number;
+    readonly strokeCommandCount: number;
     readonly glyphCount: number;
     readonly layoutPasses: number;
 }

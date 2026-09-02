@@ -61,6 +61,54 @@ describe('ByteBuffer Advanced', () => {
         });
     });
 
+    describe('growth', () => {
+        it('preserves writes across buffer growth', () => {
+            const b = ByteBuffer.alloc(8);
+            const values: number[] = [];
+            for (let i = 0; i < 100; i++) {
+                values.push(i & 0xff);
+                b.putUint8(i & 0xff);
+            }
+            expect(b.position).toBe(100);
+            b.flip();
+            for (let i = 0; i < 100; i++) {
+                expect(b.getUint8()).toBe(values[i]);
+            }
+        });
+
+        it('keeps an explicit limit below the grown capacity', () => {
+            const b = ByteBuffer.alloc(8);
+            b.setLimit(4);
+            b.putAll([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+            expect(b.position).toBe(4);
+        });
+    });
+
+    describe('putString() / getString()', () => {
+        it('roundtrips utf8 strings', () => {
+            const b = ByteBuffer.alloc(64);
+            b.putString('hello world');
+            b.rewind();
+            expect(b.getString()).toBe('hello world');
+        });
+
+        it('honors utf16 encoding', () => {
+            const b = ByteBuffer.alloc(64);
+            b.putString('héllo wörld', 'utf16');
+            b.rewind();
+            expect(b.getString('utf16')).toBe('héllo wörld');
+        });
+
+        it('decodes utf16 from an odd byte offset', () => {
+            const b = ByteBuffer.alloc(64);
+            b.putUint8(0xaa);
+            b.putString('héllo', 'utf16');
+            b.rewind();
+            expect(b.getUint8()).toBe(0xaa);
+            expect(b.getString('utf16')).toBe('héllo');
+        });
+    });
+
     describe('putJson() / getJson()', () => {
         it('roundtrips simple object', () => {
             const b = ByteBuffer.alloc(256);

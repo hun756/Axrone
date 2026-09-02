@@ -1,12 +1,21 @@
-import { LruMap, type LruOrder } from '../../internal/lru-map';
+import type { LruOrder } from '../../internal/lru-map';
 import type { PoolSlot, PoolableObject } from '../pool-support';
 
+/**
+ * Monotonic-counter LRU/MRU index for free-slot tracking.
+ *
+ * Performance: upsert is O(1) — a single counter increment + Map.set —
+ * compared to the previous LruMap (IndexedHeap + 4 Maps) which was O(log n).
+ * pickAndRemove is O(n) over the number of tracked free slots, which is
+ * acceptable because eviction is infrequent relative to allocation churn.
+ * rebuild is O(n) over total pool slots.
+ */
 export class LruSlotIndex {
-    readonly #map: LruMap<number, number>;
     readonly #order: LruOrder;
+    #counter: number = 0;
+    #map: Map<number, number> = new Map();
 
-    constructor(capacity: number, order: LruOrder) {
-        this.#map = new LruMap<number, number>({ capacity, order });
+    constructor(_capacity: number, order: LruOrder) {
         this.#order = order;
     }
 
@@ -20,10 +29,11 @@ export class LruSlotIndex {
 
     clear(): void {
         this.#map.clear();
+        this.#counter = 0;
     }
 
-    upsert(slotId: number, lastAccessed: number): void {
-        this.#map.set(slotId, lastAccessed);
+    upsert(slotId: number, _lastAccessed?: number): void {
+        this.#map.set(slotId, ++this.#counter);
     }
 
     remove(slotId: number): void {
@@ -31,16 +41,30 @@ export class LruSlotIndex {
     }
 
     pickAndRemove(): number | null {
-        const entry = this.#map.pop();
-        return entry?.key ?? null;
+        if (this.#map.size === 0) return null;
+
+        const isLRU = this.#order === 'least-recently-used';
+        let targetKey = -1;
+        let targetRecency = isLRU ? Infinity : -Infinity;
+
+        for (const [key, recency] of this.#map) {
+            if (isLRU ? recency < targetRecency : recency > targetRecency) {
+                targetRecency = recency;
+                targetKey = key;
+            }
+        }
+
+        this.#map.delete(targetKey);
+        return targetKey;
     }
 
     rebuild<T extends PoolableObject>(slots: ReadonlyArray<PoolSlot<T> | undefined>): void {
         this.#map.clear();
+        this.#counter = 0;
         for (let i = 0; i < slots.length; i++) {
             const slot = slots[i];
             if (slot && slot.status === 'free') {
-                this.#map.set(i, slot.lastAccessed);
+                this.#map.set(i, ++this.#counter);
             }
         }
     }

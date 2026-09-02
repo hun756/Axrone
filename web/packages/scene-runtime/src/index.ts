@@ -220,3 +220,19 @@ export {
 	ScenePrefabValidationError,
 	SceneShaderError,
 } from './errors';
+
+export type {
+	SceneRuntimeFrameRecord,
+	SceneRuntimePhysicsStats,
+	SceneRuntimeProfilerListener,
+	SceneRuntimeProfilerOptions,
+	SceneRuntimeProfilerPhaseId,
+	SceneRuntimeProfilerSummary,
+	SceneRuntimeRenderStats,
+	SceneRuntimeStackSample,
+	SceneRuntimeStackSampleFrame,
+} from './runtime-profiler';
+export {
+	SCENE_RUNTIME_PROFILER_PHASES,
+	SceneRuntimeProfiler,
+} from './runtime-profiler';

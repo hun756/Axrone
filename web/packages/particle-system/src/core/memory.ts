@@ -4,6 +4,7 @@ import {
     TypedArrayPool as UtilityTypedArrayPool,
     TypedArrayPools,
     PoolableTypedArray,
+    BufferPool,
 } from '@axrone/memory';
 
 export class ParticleMemoryManager implements IMemoryManager {
@@ -221,76 +222,39 @@ export class AlignedMemoryManager implements IMemoryManager {
 }
 
 export class PooledMemoryManager implements IMemoryManager {
-    private readonly _pools = new Map<number, ArrayBuffer[]>();
-    private readonly _allocations = new Map<ArrayBuffer, number>();
-    private readonly _poolSizes: readonly number[];
-    private _totalAllocated = 0;
-    private _totalUsed = 0;
+    private readonly _bufferPool: BufferPool;
     private _allocationCount = 0;
+    private _totalUsed = 0;
 
-    constructor(poolSizes: readonly number[] = [64, 256, 1024, 4096, 16384, 65536]) {
-        this._poolSizes = [...poolSizes].sort((a, b) => a - b);
-        for (const size of this._poolSizes) {
-            this._pools.set(size, []);
-        }
+    /**
+     * @param _poolSizes - Kept for backward-compatible constructor signature.
+     *   BufferPool uses power-of-two buckets (32, 64, 128, ..., 2^36) so custom
+     *   pool sizes are no longer needed.
+     */
+    constructor(_poolSizes?: readonly number[]) {
+        this._bufferPool = BufferPool.getInstance();
     }
 
-    allocate(size: number, alignment: number = 16): ArrayBuffer | null {
+    allocate(size: number, _alignment: number = 16): ArrayBuffer | null {
         if (size <= 0) return null;
 
-        const alignedSize = this._alignSize(size, alignment);
-        const poolSize = this._findPoolSize(alignedSize);
+        const buffer = this._bufferPool.tryAllocate(size);
+        if (!buffer) return null;
 
-        if (poolSize) {
-            const pool = this._pools.get(poolSize)!;
-            let buffer = pool.pop();
-
-            if (!buffer) {
-                try {
-                    buffer = new ArrayBuffer(poolSize);
-                } catch {
-                    throw ParticleSystemException.memoryAllocationFailed(poolSize);
-                }
-            }
-
-            this._allocations.set(buffer, poolSize);
-            this._totalUsed += alignedSize;
-            this._allocationCount++;
-            return buffer;
-        }
-
-        try {
-            const buffer = new ArrayBuffer(alignedSize);
-            this._allocations.set(buffer, alignedSize);
-            this._totalAllocated += alignedSize;
-            this._totalUsed += alignedSize;
-            this._allocationCount++;
-            return buffer;
-        } catch {
-            throw ParticleSystemException.memoryAllocationFailed(alignedSize);
-        }
+        this._allocationCount++;
+        this._totalUsed += buffer.byteLength;
+        return buffer;
     }
 
     deallocate(buffer: ArrayBuffer): void {
-        const size = this._allocations.get(buffer);
-        if (!size) return;
+        if (!buffer || buffer.byteLength === 0) return;
 
-        this._allocations.delete(buffer);
-        this._totalUsed -= buffer.byteLength;
-        this._allocationCount--;
-
-        const pool = this._pools.get(size);
-        if (pool && pool.length < 100) {
-            pool.push(buffer);
-        } else if (!pool) {
-            this._totalAllocated -= size;
-        }
+        this._bufferPool.release(buffer);
+        this._allocationCount = Math.max(0, this._allocationCount - 1);
+        this._totalUsed = Math.max(0, this._totalUsed - buffer.byteLength);
     }
 
     reallocate(buffer: ArrayBuffer, newSize: number): ArrayBuffer | null {
-        const oldSize = this._allocations.get(buffer);
-        if (!oldSize) return null;
-
         const newBuffer = this.allocate(newSize);
         if (!newBuffer) return null;
 
@@ -302,28 +266,14 @@ export class PooledMemoryManager implements IMemoryManager {
     }
 
     getStats() {
-        const totalPooled = Array.from(this._pools.entries()).reduce(
-            (sum, [size, pool]) => sum + size * pool.length,
-            0
-        );
+        const poolStats = this._bufferPool.getStats();
 
         return {
-            totalAllocated: this._totalAllocated + totalPooled,
+            totalAllocated: poolStats.totalMemoryUsage,
             totalUsed: this._totalUsed,
             allocationCount: this._allocationCount,
-            fragmentationRatio: totalPooled / (this._totalAllocated + totalPooled),
+            fragmentationRatio: 1 - poolStats.overallHitRatio,
         } as const;
-    }
-
-    private _alignSize(size: number, alignment: number): number {
-        return Math.ceil(size / alignment) * alignment;
-    }
-
-    private _findPoolSize(size: number): number | null {
-        for (const poolSize of this._poolSizes) {
-            if (poolSize >= size) return poolSize;
-        }
-        return null;
     }
 }
 

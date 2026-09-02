@@ -60,12 +60,64 @@ export const normalizeVector3 = (value: AudioVector3 | undefined, fallback: Audi
     return next;
 };
 
+/**
+ * Shallow metadata equality without allocating key arrays: `cloneMetadata` freezes its
+ * result and copies values by reference, so two metadata blocks are equivalent exactly when
+ * they hold the same keys bound to the same value references. for-in is used over
+ * Object.keys deliberately — this runs on a per-frame path.
+ */
+export const isMetadataEqual = (
+    stored: Readonly<Record<string, AudioJsonValue>>,
+    incoming: Readonly<Record<string, AudioJsonValue>>
+): boolean => {
+    if (stored === incoming) {
+        return true;
+    }
+
+    let storedCount = 0;
+    for (const _key in stored) {
+        storedCount += 1;
+    }
+    let incomingCount = 0;
+    for (const _key in incoming) {
+        incomingCount += 1;
+    }
+    if (storedCount !== incomingCount) {
+        return false;
+    }
+
+    for (const key in incoming) {
+        if (!(key in stored) || stored[key] !== incoming[key]) {
+            return false;
+        }
+    }
+
+    return true;
+};
+
+export const isVector3Equal = (
+    left: AudioVector3 | undefined,
+    right: AudioVector3 | undefined
+): boolean =>
+    left !== undefined &&
+    right !== undefined &&
+    left.x === right.x &&
+    left.y === right.y &&
+    left.z === right.z;
+
 export const effectivePlaybackRate = (playbackRate: number, detuneCents: number): number =>
     playbackRate * 2 ** (detuneCents / 1200);
 
 export const hasOwnKeys = (value: object): boolean => Object.keys(value).length > 0;
 
-export const resolveContextFactory = (): (() => AudioContext) => {
+export interface AudioContextHardwareOptions {
+    readonly sampleRate?: number;
+    readonly latencyHint?: AudioContextLatencyCategory;
+}
+
+export const resolveContextFactory = (
+    hardware: AudioContextHardwareOptions = {}
+): (() => AudioContext) => {
     const GlobalAudioContext =
         (globalThis as { AudioContext?: typeof AudioContext }).AudioContext ??
         (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -74,7 +126,21 @@ export const resolveContextFactory = (): (() => AudioContext) => {
         throw new AudioUnavailableError('No AudioContext implementation is available');
     }
 
-    return () => new GlobalAudioContext();
+    const contextOptions: AudioContextOptions = {};
+    if (hardware.sampleRate !== undefined) {
+        contextOptions.sampleRate = hardware.sampleRate;
+    }
+    if (hardware.latencyHint !== undefined) {
+        contextOptions.latencyHint = hardware.latencyHint;
+    }
+
+    // Passing an explicit undefined differs from omitting a key, so only build the
+    // options object when the caller actually asked for something.
+    if (Object.keys(contextOptions).length === 0) {
+        return () => new GlobalAudioContext();
+    }
+
+    return () => new GlobalAudioContext(contextOptions);
 };
 
 export const sleep = async (ms: number): Promise<void> => {

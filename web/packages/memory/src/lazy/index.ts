@@ -35,3 +35,11 @@ export {
     emptyAsync,
     never,
 } from './lazy-utils';
+
+// Bridge conversions between lazy and singleton (@axrone/utility)
+export {
+    lazyToSingleton,
+    lazyAsyncToAsyncSingleton,
+    singletonToLazy,
+    asyncSingletonToLazyAsync,
+} from './lazy-singleton-bridge';
