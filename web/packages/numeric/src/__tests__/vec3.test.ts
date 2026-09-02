@@ -130,11 +130,15 @@ describe('Vec3 Test Suite', () => {
                 expect(v.z).toBe(3.14159);
             });
 
-            test('should handle extreme values', () => {
-                const v = new Vec3(Number.MAX_VALUE, Number.MIN_VALUE, Number.POSITIVE_INFINITY);
+            test('should reject non-finite values', () => {
+                expect(() => new Vec3(Number.MAX_VALUE, Number.MIN_VALUE, Number.POSITIVE_INFINITY)).toThrow(/must be a finite number/);
+                expect(() => new Vec3(0, 0, Infinity)).toThrow(/must be a finite number/);
+                expect(() => new Vec3(NaN, 0, 0)).toThrow(/must be a finite number/);
+
+                // Valid extreme values should work
+                const v = new Vec3(Number.MAX_VALUE, Number.MIN_VALUE, 0);
                 expect(v.x).toBe(Number.MAX_VALUE);
                 expect(v.y).toBe(Number.MIN_VALUE);
-                expect(v.z).toBe(Number.POSITIVE_INFINITY);
             });
         });
 
@@ -1338,18 +1342,12 @@ describe('Vec3 Test Suite', () => {
             expect(result.x).toBe(2e-20);
         });
 
-        test('should handle infinity values', () => {
-            const inf = new Vec3(Infinity, -Infinity, 0);
-            expect(inf.x).toBe(Infinity);
-            expect(inf.y).toBe(-Infinity);
-            expect(inf.z).toBe(0);
+        test('should reject infinity values', () => {
+            expect(() => new Vec3(Infinity, -Infinity, 0)).toThrow(/must be a finite number/);
         });
 
-        test('should handle NaN values appropriately', () => {
-            const nan = new Vec3(NaN, 1, 2);
-            expect(isNaN(nan.x)).toBe(true);
-            expect(nan.y).toBe(1);
-            expect(nan.z).toBe(2);
+        test('should reject NaN values', () => {
+            expect(() => new Vec3(NaN, 1, 2)).toThrow(/must be a finite number/);
         });
 
         test('should maintain precision in chained operations', () => {

@@ -1,5 +1,5 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON, HALF_PI, PI_2 } from './common';
+import { EPSILON, HALF_PI, PI_2, ensureFinite } from './common';
 import { IVec2Like } from './vec2';
 import { clamp01 } from './clamp';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
@@ -53,7 +53,12 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
                 throw new RangeError('Matrix values array must have at least 4 elements');
             }
 
-            this.data = [values[0], values[1], values[2], values[3]] as Matrix2Data;
+            this.data = [
+                ensureFinite(values[0], 'Mat2.data[0]'),
+                ensureFinite(values[1], 'Mat2.data[1]'),
+                ensureFinite(values[2], 'Mat2.data[2]'),
+                ensureFinite(values[3], 'Mat2.data[3]'),
+            ] as Matrix2Data;
         } else {
             // Identity matrix
             this.data = [1, 0, 0, 1] as Matrix2Data;

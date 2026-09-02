@@ -974,18 +974,12 @@ describe('Vec4 Unit Tests', () => {
             expectNumberClose(mixed.length(), 1);
         });
 
-        test('should handle NaN inputs gracefully', () => {
-            const withNaN = new Vec4(NaN, 1, 2, 3);
-
-            expect(isNaN(withNaN.length())).toBe(true);
-            expect(isNaN(Vec4.dot(withNaN, Vec4.ONE))).toBe(true);
+        test('should reject NaN inputs', () => {
+            expect(() => new Vec4(NaN, 1, 2, 3)).toThrow(/must be a finite number/);
         });
 
-        test('should handle Infinity inputs', () => {
-            const withInfinity = new Vec4(Infinity, 1, 2, 3);
-
-            expect(withInfinity.length()).toBe(Infinity);
-            expect(() => withInfinity.normalize()).toThrow();
+        test('should reject Infinity inputs', () => {
+            expect(() => new Vec4(Infinity, 1, 2, 3)).toThrow(/must be a finite number/);
         });
 
         test('should maintain precision with repeated operations', () => {

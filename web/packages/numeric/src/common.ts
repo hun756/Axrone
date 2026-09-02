@@ -1,4 +1,3 @@
-import { BoxMullerFactory } from './box-muller';
 import type { EqualityComparer } from '@axrone/utility';
 import { Fnv1a32 } from '@axrone/hash';
 
@@ -55,10 +54,3 @@ export class NumberEqualityComparer implements EqualityComparer<number> {
         return new Fnv1a32().updateF32(obj).digest();
     }
 }
-
-// general box-muller optimization
-export const standardNormalDist = BoxMullerFactory.createStandard({
-    algorithm: 'polar',
-    useCache: true,
-    optimizeFor: 'speed',
-});

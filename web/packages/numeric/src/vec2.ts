@@ -1,5 +1,5 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON, HALF_PI, PI_2 } from './common';
+import { EPSILON, HALF_PI, PI_2, ensureFinite } from './common';
 import { clamp01, clampNegOneOne } from './clamp';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 import {
@@ -20,7 +20,10 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     constructor(
         public x: number = 0,
         public y: number = 0
-    ) {}
+    ) {
+        ensureFinite(x, 'Vec2.x');
+        ensureFinite(y, 'Vec2.y');
+    }
 
     static readonly ZERO: Readonly<Vec2> = Object.freeze(new Vec2(0, 0));
     static readonly ONE: Readonly<Vec2> = Object.freeze(new Vec2(1, 1));
@@ -203,11 +206,14 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
 
     static negate<T extends IVec2Like, V extends IVec2Like>(a: Readonly<T>, out?: V): V {
         if (out) {
-            out.x = -a.x;
-            out.y = -a.y;
+            out.x = a.x === 0 ? 0 : -a.x;
+            out.y = a.y === 0 ? 0 : -a.y;
             return out;
         } else {
-            return { x: -a.x, y: -a.y } as V;
+            return {
+                x: a.x === 0 ? 0 : -a.x,
+                y: a.y === 0 ? 0 : -a.y,
+            } as V;
         }
     }
 
@@ -671,19 +677,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
                 x: Math.cos(angle) * scale,
                 y: Math.sin(angle) * scale,
             } as V;
-        }
-    }
-
-    static randomNormal<T extends IVec2Like, V extends IVec2Like>(scale: number = 1, out?: V): V {
-        const x = sampleStandardNormal() * scale;
-        const y = sampleStandardNormal() * scale;
-
-        if (out) {
-            out.x = x;
-            out.y = y;
-            return out;
-        } else {
-            return { x, y } as V;
         }
     }
 

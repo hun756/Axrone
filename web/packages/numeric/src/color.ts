@@ -2,6 +2,7 @@ import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from
 import { EPSILON, ensureFinite } from './common';
 import { clamp, clamp01 } from './clamp';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
+import { rand } from '@axrone/random';
 
 export interface IColorLike {
     r: number;
@@ -1142,27 +1143,27 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     }
 
     static random(alpha: number = 1): Color {
-        return new Color(Math.random(), Math.random(), Math.random(), alpha);
+        return new Color(rand.float(), rand.float(), rand.float(), alpha);
     }
 
     static randomHue(saturation: number = 1, lightness: number = 0.5, alpha: number = 1): Color {
-        return Color.fromHSL(Math.random() * 360, saturation, lightness, alpha);
+        return Color.fromHSL(rand.float() * 360, saturation, lightness, alpha);
     }
 
     static randomPastel(alpha: number = 1): Color {
         return Color.fromHSL(
-            Math.random() * 360,
-            0.3 + Math.random() * 0.4,
-            0.7 + Math.random() * 0.3,
+            rand.float() * 360,
+            0.3 + rand.float() * 0.4,
+            0.7 + rand.float() * 0.3,
             alpha
         );
     }
 
     static randomVibrant(alpha: number = 1): Color {
         return Color.fromHSL(
-            Math.random() * 360,
-            0.8 + Math.random() * 0.2,
-            0.4 + Math.random() * 0.3,
+            rand.float() * 360,
+            0.8 + rand.float() * 0.2,
+            0.4 + rand.float() * 0.3,
             alpha
         );
     }
