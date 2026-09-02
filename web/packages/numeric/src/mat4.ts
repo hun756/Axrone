@@ -846,6 +846,13 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         far: number,
         out?: V
     ): MatrixOperationReturnType<V, Mat4> {
+        if (Math.abs(left - right) < EPSILON) {
+            throw new Error('Left and right planes cannot be equal');
+        }
+        if (Math.abs(bottom - top) < EPSILON) {
+            throw new Error('Bottom and top planes cannot be equal');
+        }
+
         const lr = 1.0 / (left - right);
         const bt = 1.0 / (bottom - top);
         const nf = 1.0 / (near - far);
@@ -957,7 +964,22 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
 
         len = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2);
         if (len < EPSILON) {
-            x0 = x1 = x2 = 0;
+            // up is parallel to view direction; use alternative up vector
+            const altUpX = Math.abs(upY) < 0.9 ? 0 : 1;
+            const altUpY = Math.abs(upY) < 0.9 ? 1 : 0;
+            const altUpZ = 0;
+            x0 = z1 * altUpZ - z2 * altUpY;
+            x1 = z2 * altUpX - z0 * altUpZ;
+            x2 = z0 * altUpY - z1 * altUpX;
+            len = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2);
+            if (len < EPSILON) {
+                x0 = x1 = x2 = 0;
+            } else {
+                len = 1 / len;
+                x0 *= len;
+                x1 *= len;
+                x2 *= len;
+            }
         } else {
             len = 1 / len;
             x0 *= len;
