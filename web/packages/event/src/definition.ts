@@ -21,15 +21,12 @@ export type EventNames<T extends EventMap> = EventKey<T>;
 
 export type OptionalData<T> = [T] extends [undefined] ? T | void : T;
 
-export function isValidEventName(eventName: unknown): eventName is string {
     return typeof eventName === 'string' && eventName.length > 0;
 }
 
-export function isValidCallback<T = unknown>(callback: unknown): callback is EventCallback<T> {
     return typeof callback === 'function';
 }
 
-export function isValidPriority(priority: unknown): priority is EventPriority {
     return priority === 'high' || priority === 'normal' || priority === 'low';
 }
 

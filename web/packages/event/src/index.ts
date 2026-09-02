@@ -11,9 +11,6 @@ export type {
 } from './definition';
 
 export {
-    isValidEventName,
-    isValidCallback,
-    isValidPriority,
     PRIORITY_VALUES,
     DEFAULT_PRIORITY,
     DEFAULT_OPTIONS,
