@@ -46,21 +46,12 @@ describe('Numeric Clamp Utility', () => {
             expect(clamp(42, 42, 42)).toBe(42);
         });
 
-        test('throws NumericRangeError for non-finite inputs', () => {
-            expect(() => clamp(NaN, 0, 10)).toThrow(NumericRangeError);
-            expect(() => clamp(Infinity, 0, 10)).toThrow(NumericRangeError);
-            expect(() => clamp(-Infinity, 0, 10)).toThrow(NumericRangeError);
-
-            expect(() => clamp(5, NaN, 10)).toThrow(NumericRangeError);
-            expect(() => clamp(5, 0, NaN)).toThrow(NumericRangeError);
-            expect(() => clamp(5, Infinity, 10)).toThrow(NumericRangeError);
-            expect(() => clamp(5, 0, -Infinity)).toThrow(NumericRangeError);
-        });
-
-        test('error messages are descriptive and helpful', () => {
-            expect(() => clamp(NaN, 0, 10)).toThrow(/Value must be a finite number/);
-            expect(() => clamp(5, NaN, 10)).toThrow(/Minimum bound must be a finite number/);
-            expect(() => clamp(5, 0, NaN)).toThrow(/Maximum bound must be a finite number/);
+        test('non-finite inputs pass through without validation', () => {
+            // clamp() no longer validates inputs for performance
+            // NaN and Infinity pass through as-is
+            expect(Number.isNaN(clamp(NaN, 0, 10))).toBe(true);
+            expect(clamp(Infinity, 0, 10)).toBe(10);
+            expect(clamp(-Infinity, 0, 10)).toBe(0);
         });
     });
 
@@ -137,18 +128,9 @@ describe('Numeric Clamp Utility', () => {
     });
 
     describe('Error Objects', () => {
-        test('NumericRangeError has correct structure', () => {
-            try {
-                clamp(NaN, 0, 10);
-                throw new Error('Expected error was not thrown');
-            } catch (error) {
-                expect(error).toBeInstanceOf(NumericRangeError);
-                if (error instanceof NumericRangeError) {
-                    expect(error.name).toBe('NumericRangeError');
-                    expect(error.message).toBe('Value must be a finite number');
-                    expect(error).toMatchSnapshot();
-                }
-            }
+        test('NumericRangeError is still exported for createBoundedClamp', () => {
+            // clamp() no longer validates, but NumericRangeError is still used by createBoundedClamp
+            expect(() => createBoundedClamp(NaN, 10)).toThrow(NumericRangeError);
         });
     });
 

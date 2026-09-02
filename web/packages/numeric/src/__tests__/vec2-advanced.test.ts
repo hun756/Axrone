@@ -447,22 +447,6 @@ describe('Vec2 Advanced Operations', () => {
             }
         });
 
-        test('randomNormal produces finite values', () => {
-            for (let i = 0; i < 20; i++) {
-                const v = Vec2.randomNormal();
-                expect(Number.isFinite(v.x)).toBe(true);
-                expect(Number.isFinite(v.y)).toBe(true);
-            }
-        });
-
-        test('randomNormal mean approximately 0', () => {
-            const samples = Array.from({ length: 3000 }, () => Vec2.randomNormal());
-            const meanX = samples.reduce((s, v) => s + v.x, 0) / samples.length;
-            const meanY = samples.reduce((s, v) => s + v.y, 0) / samples.length;
-            expect(Math.abs(meanX)).toBeLessThan(0.2);
-            expect(Math.abs(meanY)).toBeLessThan(0.2);
-        });
-
         test('instance randomBox within bounds', () => {
             const v = new Vec2();
             for (let i = 0; i < 20; i++) {

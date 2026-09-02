@@ -1,5 +1,5 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON, HALF_PI, PI_2 } from './common';
+import { EPSILON, HALF_PI, PI_2, ensureFinite } from './common';
 import { IVec3Like } from './vec3';
 import { IVec4Like } from './vec4';
 import { IQuatLike } from './quat';
@@ -57,22 +57,22 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             }
 
             this.data = [
-                values[0],
-                values[1],
-                values[2],
-                values[3],
-                values[4],
-                values[5],
-                values[6],
-                values[7],
-                values[8],
-                values[9],
-                values[10],
-                values[11],
-                values[12],
-                values[13],
-                values[14],
-                values[15],
+                ensureFinite(values[0], 'Mat4.data[0]'),
+                ensureFinite(values[1], 'Mat4.data[1]'),
+                ensureFinite(values[2], 'Mat4.data[2]'),
+                ensureFinite(values[3], 'Mat4.data[3]'),
+                ensureFinite(values[4], 'Mat4.data[4]'),
+                ensureFinite(values[5], 'Mat4.data[5]'),
+                ensureFinite(values[6], 'Mat4.data[6]'),
+                ensureFinite(values[7], 'Mat4.data[7]'),
+                ensureFinite(values[8], 'Mat4.data[8]'),
+                ensureFinite(values[9], 'Mat4.data[9]'),
+                ensureFinite(values[10], 'Mat4.data[10]'),
+                ensureFinite(values[11], 'Mat4.data[11]'),
+                ensureFinite(values[12], 'Mat4.data[12]'),
+                ensureFinite(values[13], 'Mat4.data[13]'),
+                ensureFinite(values[14], 'Mat4.data[14]'),
+                ensureFinite(values[15], 'Mat4.data[15]'),
             ] as Matrix4Data;
         } else {
             this.data = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] as Matrix4Data;

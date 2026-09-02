@@ -1,5 +1,5 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON, HALF_PI, PI_2 } from './common';
+import { EPSILON, HALF_PI, PI_2, ensureFinite } from './common';
 import { IVec2Like } from './vec2';
 import { IVec3Like } from './vec3';
 import { clamp01 } from './clamp';
@@ -59,15 +59,15 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
             }
 
             this.data = [
-                values[0],
-                values[1],
-                values[2],
-                values[3],
-                values[4],
-                values[5],
-                values[6],
-                values[7],
-                values[8],
+                ensureFinite(values[0], 'Mat3.data[0]'),
+                ensureFinite(values[1], 'Mat3.data[1]'),
+                ensureFinite(values[2], 'Mat3.data[2]'),
+                ensureFinite(values[3], 'Mat3.data[3]'),
+                ensureFinite(values[4], 'Mat3.data[4]'),
+                ensureFinite(values[5], 'Mat3.data[5]'),
+                ensureFinite(values[6], 'Mat3.data[6]'),
+                ensureFinite(values[7], 'Mat3.data[7]'),
+                ensureFinite(values[8], 'Mat3.data[8]'),
             ] as Matrix3Data;
         } else {
             // Identity matrix
@@ -400,32 +400,6 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
                 V,
                 Mat3
             >;
-        }
-    }
-
-    static rotate2D<V extends IMat3Like | undefined = undefined>(
-        angle: number,
-        out?: V
-    ): MatrixOperationReturnType<V, Mat3> {
-        const c = Math.cos(angle);
-        const s = Math.sin(angle);
-
-        if (out) {
-            const outData = asMutableMatrix3Data((out as IMutableMat3).data);
-
-            outData[0] = c;
-            outData[1] = -s;
-            outData[2] = 0;
-            outData[3] = s;
-            outData[4] = c;
-            outData[5] = 0;
-            outData[6] = 0;
-            outData[7] = 0;
-            outData[8] = 1;
-
-            return out as MatrixOperationReturnType<V, Mat3>;
-        } else {
-            return new Mat3([c, -s, 0, s, c, 0, 0, 0, 1]) as MatrixOperationReturnType<V, Mat3>;
         }
     }
 

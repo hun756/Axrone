@@ -181,22 +181,24 @@ describe('Quaternion Mathematics Library', () => {
                 QuaternionTestUtils.expectQuaternionEquals(q, { x: 1, y: 2, z: 3, w: 4 });
             });
 
-            test('constructor handles edge values', () => {
-                const cases = [
-                    [0, 0, 0, 0],
-                    [Infinity, 0, 0, 0],
-                    [-Infinity, 0, 0, 0],
-                    [Number.MAX_VALUE, 0, 0, 0],
-                    [Number.MIN_VALUE, 0, 0, 0],
-                ];
+            test('constructor rejects non-finite values', () => {
+                expect(() => new Quat(Infinity, 0, 0, 0)).toThrow(/must be a finite number/);
+                expect(() => new Quat(-Infinity, 0, 0, 0)).toThrow(/must be a finite number/);
+                expect(() => new Quat(NaN, 0, 0, 0)).toThrow(/must be a finite number/);
+                expect(() => new Quat(0, NaN, 0, 0)).toThrow(/must be a finite number/);
 
-                cases.forEach(([x, y, z, w]) => {
-                    const q = new Quat(x, y, z, w);
-                    expect(q.x).toBe(x);
-                    expect(q.y).toBe(y);
-                    expect(q.z).toBe(z);
-                    expect(q.w).toBe(w);
-                });
+                // Valid edge values should work
+                const q1 = new Quat(0, 0, 0, 0);
+                expect(q1.x).toBe(0);
+                expect(q1.y).toBe(0);
+                expect(q1.z).toBe(0);
+                expect(q1.w).toBe(0);
+
+                const q2 = new Quat(Number.MAX_VALUE, 0, 0, 0);
+                expect(q2.x).toBe(Number.MAX_VALUE);
+
+                const q3 = new Quat(Number.MIN_VALUE, 0, 0, 0);
+                expect(q3.x).toBe(Number.MIN_VALUE);
             });
         });
 
@@ -1166,112 +1168,6 @@ describe('Quaternion Mathematics Library', () => {
                 instanceResult,
                 TEST_PRECISION.HIGH
             );
-        });
-    });
-
-    describe('Look-At Rotation', () => {
-        test('fromLookAt creates normalized quaternion', () => {
-            const eye = { x: 0, y: 0, z: 0 };
-            const target = { x: 1, y: 0, z: 0 };
-            const up = { x: 0, y: 1, z: 0 };
-
-            const lookAt = Quat.fromLookAt(eye, target, up);
-            QuaternionTestUtils.expectNormalized(lookAt, TEST_PRECISION.HIGH);
-            QuaternionTestUtils.expectValidQuaternion(lookAt);
-        });
-
-        test('fromLookAt with various directions', () => {
-            const testCases = [
-                {
-                    name: 'Look along +X axis',
-                    eye: { x: 0, y: 0, z: 0 },
-                    target: { x: 1, y: 0, z: 0 },
-                    up: { x: 0, y: 1, z: 0 },
-                },
-                {
-                    name: 'Look along +Y axis',
-                    eye: { x: 0, y: 0, z: 0 },
-                    target: { x: 0, y: 1, z: 0 },
-                    up: { x: 0, y: 0, z: 1 },
-                },
-                {
-                    name: 'Look along +Z axis',
-                    eye: { x: 0, y: 0, z: 0 },
-                    target: { x: 0, y: 0, z: 1 },
-                    up: { x: 0, y: 1, z: 0 },
-                },
-                {
-                    name: 'Look diagonally',
-                    eye: { x: 1, y: 1, z: 1 },
-                    target: { x: 2, y: 2, z: 2 },
-                    up: { x: 0, y: 1, z: 0 },
-                },
-            ];
-
-            testCases.forEach(({ name, eye, target, up }) => {
-                const lookAt = Quat.fromLookAt(eye, target, up);
-                QuaternionTestUtils.expectNormalized(lookAt, TEST_PRECISION.HIGH);
-                QuaternionTestUtils.expectValidQuaternion(lookAt);
-            });
-        });
-
-        test('fromLookAt with output parameter', () => {
-            const eye = { x: 0, y: 0, z: 0 };
-            const target = { x: 1, y: 1, z: 1 };
-            const up = { x: 0, y: 1, z: 0 };
-            const output = new Quat(999, 999, 999, 999);
-
-            const result = Quat.fromLookAt(eye, target, up, output);
-
-            expect(result).toBe(output);
-            QuaternionTestUtils.expectNormalized(output, TEST_PRECISION.HIGH);
-        });
-
-        test('fromLookAt error conditions', () => {
-            const eye = { x: 0, y: 0, z: 0 };
-            const up = { x: 0, y: 1, z: 0 };
-
-            expect(() => Quat.fromLookAt(eye, eye, up)).toThrow(
-                'Eye and target positions are too close'
-            );
-
-            expect(() => Quat.fromLookAt(eye, { x: EPSILON / 2, y: 0, z: 0 }, up)).toThrow(
-                'Eye and target positions are too close'
-            );
-
-            const target = { x: 0, y: 1, z: 0 };
-            expect(() => Quat.fromLookAt(eye, target, up)).toThrow(
-                'Forward and up vectors are parallel'
-            );
-
-            const downTarget = { x: 0, y: -1, z: 0 };
-            expect(() => Quat.fromLookAt(eye, downTarget, up)).toThrow(
-                'Forward and up vectors are parallel'
-            );
-        });
-
-        test('fromLookAt consistency with matrix conventions', () => {
-            const eye = { x: 0, y: 0, z: 0 };
-            const target = { x: 1, y: 0, z: 0 };
-            const up = { x: 0, y: 1, z: 0 };
-
-            const lookAt = Quat.fromLookAt(eye, target, up);
-
-            const testVector = { x: 0, y: 0, z: 1 };
-            const rotated = Quat.rotateVector(lookAt, testVector);
-
-            expect(Number.isFinite(rotated.x)).toBe(true);
-            expect(Number.isFinite(rotated.y)).toBe(true);
-            expect(Number.isFinite(rotated.z)).toBe(true);
-            expect(Number.isNaN(rotated.x)).toBe(false);
-            expect(Number.isNaN(rotated.y)).toBe(false);
-            expect(Number.isNaN(rotated.z)).toBe(false);
-
-            const originalLength = Math.sqrt(
-                testVector.x ** 2 + testVector.y ** 2 + testVector.z ** 2
-            );
-            const rotatedLength = Math.sqrt(rotated.x ** 2 + rotated.y ** 2 + rotated.z ** 2);
-            expect(rotatedLength).toBeCloseTo(originalLength, TEST_PRECISION.HIGH);
         });
     });
 

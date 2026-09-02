@@ -1,5 +1,5 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON, HALF_PI, PI_2 } from './common';
+import { EPSILON, HALF_PI, PI_2, ensureFinite } from './common';
 import { clampNegOneOne, clamp01 } from './clamp';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 import {
@@ -24,7 +24,12 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         public y: number = 0,
         public z: number = 0,
         public w: number = 0
-    ) {}
+    ) {
+        ensureFinite(x, 'Vec4.x');
+        ensureFinite(y, 'Vec4.y');
+        ensureFinite(z, 'Vec4.z');
+        ensureFinite(w, 'Vec4.w');
+    }
 
     static readonly ZERO: Readonly<Vec4> = Object.freeze(new Vec4(0, 0, 0, 0));
     static readonly ONE: Readonly<Vec4> = Object.freeze(new Vec4(1, 1, 1, 1));

@@ -1,5 +1,5 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON } from './common';
+import { EPSILON, ensureFinite } from './common';
 import { clamp01 } from './clamp';
 import { IVec3Like } from './vec3';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
@@ -23,7 +23,12 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         public y: number = 0,
         public z: number = 0,
         public w: number = 1
-    ) {}
+    ) {
+        ensureFinite(x, 'Quat.x');
+        ensureFinite(y, 'Quat.y');
+        ensureFinite(z, 'Quat.z');
+        ensureFinite(w, 'Quat.w');
+    }
 
     static readonly ZERO: Readonly<Quat> = Object.freeze(new Quat(0, 0, 0, 0));
     static readonly IDENTITY: Readonly<Quat> = Object.freeze(new Quat(0, 0, 0, 1));
@@ -397,101 +402,6 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
             return out;
         } else {
             return { x: roll, y: pitch, z: yaw } as V;
-        }
-    }
-
-    static fromLookAt<T extends IVec3Like, U extends IVec3Like, V extends IQuatLike>(
-        eye: Readonly<T>,
-        target: Readonly<U>,
-        up: Readonly<IVec3Like>,
-        out?: V
-    ): V {
-        const fx = target.x - eye.x;
-        const fy = target.y - eye.y;
-        const fz = target.z - eye.z;
-
-        const flen = Math.sqrt(fx * fx + fy * fy + fz * fz);
-        if (flen < EPSILON) {
-            throw new Error('Eye and target positions are too close');
-        }
-
-        const forward = { x: fx / flen, y: fy / flen, z: fz / flen };
-
-        const rx = forward.y * up.z - forward.z * up.y;
-        const ry = forward.z * up.x - forward.x * up.z;
-        const rz = forward.x * up.y - forward.y * up.x;
-
-        const rlen = Math.sqrt(rx * rx + ry * ry + rz * rz);
-        if (rlen < EPSILON) {
-            throw new Error('Forward and up vectors are parallel');
-        }
-
-        const right = { x: rx / rlen, y: ry / rlen, z: rz / rlen };
-
-        const upx = right.y * forward.z - right.z * forward.y;
-        const upy = right.z * forward.x - right.x * forward.z;
-        const upz = right.x * forward.y - right.y * forward.x;
-
-        const m00 = right.x,
-            m01 = upx,
-            m02 = forward.x;
-        const m10 = right.y,
-            m11 = upy,
-            m12 = forward.y;
-        const m20 = right.z,
-            m21 = upz,
-            m22 = forward.z;
-
-        const trace = m00 + m11 + m22;
-        let qw, qx, qy, qz;
-
-        if (trace > 0) {
-            const s = Math.sqrt(trace + 1.0) * 2; // s = 4 * qw
-            qw = 0.25 * s;
-            qx = (m21 - m12) / s;
-            qy = (m02 - m20) / s;
-            qz = (m10 - m01) / s;
-        } else if (m00 > m11 && m00 > m22) {
-            const s = Math.sqrt(1.0 + m00 - m11 - m22) * 2; // s = 4 * qx
-            qw = (m21 - m12) / s;
-            qx = 0.25 * s;
-            qy = (m01 + m10) / s;
-            qz = (m02 + m20) / s;
-        } else if (m11 > m22) {
-            const s = Math.sqrt(1.0 + m11 - m00 - m22) * 2; // s = 4 * qy
-            qw = (m02 - m20) / s;
-            qx = (m01 + m10) / s;
-            qy = 0.25 * s;
-            qz = (m12 + m21) / s;
-        } else {
-            const s = Math.sqrt(1.0 + m22 - m00 - m11) * 2; // s = 4 * qz
-            qw = (m10 - m01) / s;
-            qx = (m02 + m20) / s;
-            qy = (m12 + m21) / s;
-            qz = 0.25 * s;
-        }
-
-        const qlen = Math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw);
-        if (qlen < EPSILON) {
-            qx = 0;
-            qy = 0;
-            qz = 0;
-            qw = 1;
-        } else {
-            qx /= qlen;
-            qy /= qlen;
-            qz /= qlen;
-            qw /= qlen;
-        }
-
-        if (out) {
-            out.x = qx;
-            out.y = qy;
-            out.z = qz;
-            out.w = qw;
-            return out;
-        } else {
-            return { x: qx, y: qy, z: qz, w: qw } as V;
         }
     }
 
