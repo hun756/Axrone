@@ -45,6 +45,7 @@ export interface EventOptions {
     readonly concurrencyLimit?: number;
     readonly bufferSize?: number;
     readonly gcIntervalMs?: number;
+    readonly bufferOverflow?: 'throw' | 'drop-oldest' | 'drop-newest';
 }
 
 export const DEFAULT_OPTIONS = Object.freeze({
@@ -54,6 +55,7 @@ export const DEFAULT_OPTIONS = Object.freeze({
     concurrencyLimit: Infinity,
     bufferSize: 1000,
     gcIntervalMs: 60000,
+    bufferOverflow: 'drop-oldest',
 } satisfies Required<EventOptions>);
 
 export const MEMORY_USAGE_SYMBOLS = Object.freeze({

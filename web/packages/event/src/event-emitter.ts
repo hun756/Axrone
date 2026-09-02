@@ -159,7 +159,18 @@ function normalizeOptions(options: EventOptions): Required<EventOptions> {
         ),
         bufferSize: normalizeBufferSize(options.bufferSize, DEFAULT_OPTIONS.bufferSize),
         gcIntervalMs: normalizeGcInterval(options.gcIntervalMs, DEFAULT_OPTIONS.gcIntervalMs),
+        bufferOverflow: normalizeBufferOverflow(options.bufferOverflow, DEFAULT_OPTIONS.bufferOverflow),
     };
+}
+
+function normalizeBufferOverflow(
+    value: unknown,
+    fallback: 'throw' | 'drop-oldest' | 'drop-newest'
+): 'throw' | 'drop-oldest' | 'drop-newest' {
+    if (value === 'throw' || value === 'drop-oldest' || value === 'drop-newest') {
+        return value;
+    }
+    return fallback;
 }
 
 function createListenerBucket(): ListenerBucket {
@@ -951,7 +962,19 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         }
 
         if (bucket.size >= this.#options.bufferSize) {
-            throw new EventQueueFullError(eventName, this.#options.bufferSize);
+            const policy = this.#options.bufferOverflow;
+
+            if (policy === 'throw') {
+                throw new EventQueueFullError(eventName, this.#options.bufferSize);
+            }
+
+            if (policy === 'drop-newest') {
+                return;
+            }
+
+            if (policy === 'drop-oldest') {
+                this.#dropOldestBufferedEvent(bucket);
+            }
         }
 
         const eventId = ++this.#bufferedEventId;
@@ -966,6 +989,18 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         bucket[priority].push(queuedEvent);
         bucket.size += 1;
         this.#bufferedEventCount += 1;
+    }
+
+    #dropOldestBufferedEvent(bucket: BufferedBucket): void {
+        for (const priority of ['high', 'normal', 'low'] as const) {
+            const queue = bucket[priority];
+            if (queue.length > 0) {
+                queue.shift();
+                bucket.size -= 1;
+                this.#bufferedEventCount -= 1;
+                return;
+            }
+        }
     }
 
     async #processBufferedEvents(): Promise<void> {
