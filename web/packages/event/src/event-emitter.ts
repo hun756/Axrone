@@ -292,7 +292,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         this.#ensureRuntime();
 
         const id = this.#registerListener(event, callback, {
-            once: false,
+            once: options.once ?? false,
             priority: options.priority ?? DEFAULT_PRIORITY,
         });
 
