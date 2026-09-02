@@ -101,6 +101,15 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
     static add<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
         a: Readonly<T>,
         b: Readonly<U>,
+        out: V
+    ): V;
+    static add<T extends IVec4Like, U extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): IVec4Like;
+    static add<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
         out?: V
     ): V {
         if (out) {
@@ -328,6 +337,8 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         return v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w;
     }
 
+    static normalize<T extends IVec4Like, U extends IVec4Like>(v: Readonly<T>, out: U): U;
+    static normalize<T extends IVec4Like>(v: Readonly<T>): IVec4Like;
     static normalize<T extends IVec4Like, U extends IVec4Like>(v: Readonly<T>, out?: U): U {
         const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
         if (length < EPSILON) {
