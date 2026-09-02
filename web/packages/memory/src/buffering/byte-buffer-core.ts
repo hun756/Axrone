@@ -1,11 +1,5 @@
-import {
-    ByteOrder,
-    SeekOrigin,
-    BufferState,
-    TypedArrayMap,
-    TypedArrayConstructorMap,
-} from './types';
-import { IByteBuffer, IReadableBuffer, IWritableBuffer } from './interfaces';
+import { ByteOrder, SeekOrigin, BufferState, TypedArrayMap } from './types';
+import { IByteBuffer, IReadableBuffer } from './interfaces';
 import { BUFFER_DEFAULTS, STRING_DEFAULTS, PERFORMANCE_DEFAULTS } from './constants';
 import {
     BufferOverflowError,
@@ -18,18 +12,45 @@ import {
 import { BufferPool } from './buffer-pool';
 import { BufferView } from './buffer-view';
 import { BufferUtils } from './utils';
+import { writeVarInt, readVarInt, writeJson, readJson } from './varint';
 
+/**
+ * Pooled, endianness-aware binary buffer for reading and writing typed data.
+ *
+ * Wraps an ArrayBuffer with position/limit/capacity semantics (similar to Java's ByteBuffer).
+ * Supports automatic pooling via BufferPool for zero-allocation hot paths, configurable
+ * byte order (big/little endian), and typed array views. Buffers can be allocated from
+ * the pool ({@link ByteBuffer.alloc}) or wrap existing memory ({@link ByteBuffer.wrap}).
+ *
+ * Key patterns:
+ * - Use `alloc()` for pooled buffers, `directBuffer()` for non-pooled, `wrap()` for existing memory.
+ * - Call `flip()` after writing to prepare for reading; call `compact()` to discard read bytes.
+ * - Always call `release()` on pooled buffers to return them to the pool.
+ *
+ * @example
+ * const buf = ByteBuffer.alloc(64);
+ * buf.putInt32(42).putFloat64(3.14).putString("hello");
+ * buf.flip();
+ * const n = buf.getInt32();     // 42
+ * const f = buf.getFloat64();   // 3.14
+ * const s = buf.getString();    // "hello"
+ * buf.release();
+ *
+ * @stable
+ */
 export class ByteBuffer implements IByteBuffer {
     private static readonly DEFAULT_ORDER = ByteOrder.Big;
     private static readonly VIEW_CACHE_CAPACITY = PERFORMANCE_DEFAULTS.CACHE_SIZE ?? 256;
-    private static readonly pool = BufferPool.getInstance();
     private static readonly viewCache = new Map<string, WeakMap<ByteBuffer, BufferView<any>>>();
+
+    private static get pool(): BufferPool {
+        return BufferPool.getInstance();
+    }
 
     private buffer: ArrayBuffer;
     private view: DataView;
     private u8Array: Uint8Array;
     private pos: number;
-    private readonly typedArrayCache: Map<keyof TypedArrayMap, TypedArrayMap[keyof TypedArrayMap]>;
     private byteOrder: ByteOrder;
     private markPos: number;
     private limitPos: number;
@@ -103,7 +124,6 @@ export class ByteBuffer implements IByteBuffer {
         this.limitPos = buffer.byteLength;
         this.byteOrder = order;
         this.readOnly = false;
-        this.typedArrayCache = new Map();
         this.state = BufferState.Empty;
     }
 
@@ -146,6 +166,11 @@ export class ByteBuffer implements IByteBuffer {
         return this.pooled;
     }
 
+    getBuffer(): ArrayBuffer {
+        this.checkState();
+        return this.buffer;
+    }
+
     private checkState(): void {
         if (this.state === BufferState.Released) {
             throw new BufferReleasedError();
@@ -180,6 +205,9 @@ export class ByteBuffer implements IByteBuffer {
             throw new BufferOverflowError('Required capacity exceeds maximum allowed');
         }
 
+        const oldCapacity = this.buffer.byteLength;
+        const limitTracksCapacity = this.limitPos === oldCapacity;
+
         const newBuffer = this.pooled
             ? ByteBuffer.pool.allocate(newCapacity)
             : new ArrayBuffer(newCapacity);
@@ -194,7 +222,9 @@ export class ByteBuffer implements IByteBuffer {
         this.view = new DataView(newBuffer);
         this.u8Array = new Uint8Array(newBuffer);
 
-        this.typedArrayCache.clear();
+        if (limitTracksCapacity) {
+            this.limitPos = newBuffer.byteLength;
+        }
     }
 
     private checkReadableBytes(count: number): void {
@@ -236,7 +266,6 @@ export class ByteBuffer implements IByteBuffer {
 
         ByteBuffer.pool.release(this.buffer);
         this.state = BufferState.Released;
-        this.typedArrayCache.clear();
     }
 
     fillBytes(value: number, count: number): this {
@@ -462,7 +491,7 @@ export class ByteBuffer implements IByteBuffer {
         this.checkState();
         this.checkReadOnly();
 
-        const bytes = BufferUtils.encodeString(str);
+        const bytes = BufferUtils.encodeString(str, encoding);
 
         if (bytes.length > STRING_DEFAULTS.MAX_WRITE_LENGTH) {
             throw new BufferOverflowError(
@@ -474,7 +503,7 @@ export class ByteBuffer implements IByteBuffer {
         return this.put(bytes);
     }
 
-    getString(): string {
+    getString(encoding: 'utf8' | 'utf16' = 'utf8'): string {
         this.checkState();
 
         const length = this.getInt32();
@@ -486,7 +515,7 @@ export class ByteBuffer implements IByteBuffer {
         const bytes = this.u8Array.subarray(this.pos, this.pos + length);
         this.movePosition(length);
 
-        return BufferUtils.decodeString(bytes);
+        return BufferUtils.decodeString(bytes, encoding);
     }
 
     putCString(str: string): this {
@@ -543,20 +572,6 @@ export class ByteBuffer implements IByteBuffer {
         }
 
         return this;
-    }
-
-    private getTypedArray<K extends keyof TypedArrayMap>(
-        key: K,
-        constructor: TypedArrayConstructorMap[K]
-    ): TypedArrayMap[K] {
-        this.checkState();
-
-        let array = this.typedArrayCache.get(key) as TypedArrayMap[K];
-        if (!array) {
-            array = new constructor(this.buffer);
-            this.typedArrayCache.set(key, array);
-        }
-        return array;
     }
 
     putInt8(value: number): this {
@@ -813,47 +828,22 @@ export class ByteBuffer implements IByteBuffer {
     putVarInt(value: number): this {
         this.checkState();
         this.checkReadOnly();
-
-        let temp = value >>> 0;
-
-        do {
-            let b = temp & 0x7f;
-            temp >>>= 7;
-            if (temp !== 0) {
-                b |= 0x80;
-            }
-            this.putUint8(b);
-        } while (temp !== 0);
-
+        writeVarInt(this, value);
         return this;
     }
 
     getVarInt(): number {
         this.checkState();
-
-        let result = 0;
-        let shift = 0;
-        let b: number;
-
-        do {
-            if (shift >= 32) {
-                throw new BufferUnderflowError('VarInt is too big');
-            }
-
-            b = this.getUint8();
-            result |= (b & 0x7f) << shift;
-            shift += 7;
-        } while ((b & 0x80) !== 0);
-
-        return result >>> 0;
+        return readVarInt(this);
     }
 
     putJson<T>(value: T): this {
-        return this.putString(JSON.stringify(value));
+        writeJson(this, value);
+        return this;
     }
 
     getJson<T>(): T {
-        return JSON.parse(this.getString());
+        return readJson<T>(this);
     }
 
     hash(): number {

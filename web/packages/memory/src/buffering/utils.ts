@@ -1,6 +1,10 @@
 import { ByteOrder } from './types';
-import { Djb2, Fnv1a32, Crc32 } from '@axrone/hash';
+import { Djb2, Fnv1a32 } from '@axrone/hash';
 
+/**
+ * Static utility methods for encoding, hashing, and endianness detection.
+ * @stable
+ */
 export class BufferUtils {
     private static readonly textEncoder = new TextEncoder();
     private static readonly textDecoder = new TextDecoder();
@@ -50,7 +54,10 @@ export class BufferUtils {
 
     static decodeString(bytes: Uint8Array, encoding: 'utf8' | 'utf16' = 'utf8'): string {
         if (encoding === 'utf16') {
-            const view = new Uint16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 2);
+            const view =
+                bytes.byteOffset % 2 === 0
+                    ? new Uint16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >> 1)
+                    : new Uint16Array(bytes.slice().buffer, 0, bytes.byteLength >> 1);
             return String.fromCharCode(...view);
         }
         return BufferUtils.textDecoder.decode(bytes);

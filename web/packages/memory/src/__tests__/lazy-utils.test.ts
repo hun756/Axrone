@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     create,
     createAsync,
@@ -142,13 +142,18 @@ describe('lazy-utils', () => {
     });
 
     describe('race()', () => {
+        beforeEach(() => { vi.useFakeTimers(); });
+        afterEach(() => { vi.useRealTimers(); });
+
         it('resolves with first completed lazy', async () => {
             const fast = createAsync(() => Promise.resolve('fast'));
             const slow = createAsync(
                 () => new Promise((resolve) => setTimeout(() => resolve('slow'), 1000))
             );
             const result = race(fast, slow);
-            await expect(result.force()).resolves.toBe('fast');
+            const promise = result.force();
+            await vi.advanceTimersByTimeAsync(0);
+            await expect(promise).resolves.toBe('fast');
         });
     });
 
@@ -237,24 +242,36 @@ describe('lazy-utils', () => {
     });
 
     describe('delay() / delayAsync()', () => {
+        beforeEach(() => { vi.useFakeTimers(); });
+        afterEach(() => { vi.useRealTimers(); });
+
         it('delay defers evaluation', async () => {
             const lazy = fromValue(42);
             const delayed = delay(lazy, 10);
-            await expect(delayed.force()).resolves.toBe(42);
+            const promise = delayed.force();
+            await vi.advanceTimersByTimeAsync(10);
+            await expect(promise).resolves.toBe(42);
         });
 
         it('delayAsync defers async evaluation', async () => {
             const lazy = createAsync(() => Promise.resolve(99));
             const delayed = delayAsync(lazy, 10);
-            await expect(delayed.force()).resolves.toBe(99);
+            const promise = delayed.force();
+            await vi.advanceTimersByTimeAsync(10);
+            await expect(promise).resolves.toBe(99);
         });
     });
 
     describe('withTimeout() / withRetry()', () => {
+        beforeEach(() => { vi.useFakeTimers(); });
+        afterEach(() => { vi.useRealTimers(); });
+
         it('withTimeout delegates to timeout()', async () => {
             const lazy = createAsync(() => Promise.resolve(42));
             const result = withTimeout(lazy, 1000);
-            await expect(result.force()).resolves.toBe(42);
+            const promise = result.force();
+            await vi.advanceTimersByTimeAsync(0);
+            await expect(promise).resolves.toBe(42);
         });
 
         it('withRetry delegates to retry()', async () => {

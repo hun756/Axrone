@@ -4,6 +4,10 @@ import { LruMap } from '../internal/lru-map';
 
 const TRUE = true as const;
 
+/**
+ * Cached lazy factory with LRU eviction, producing ILazy/ILazyAsync per argument set.
+ * @stable
+ */
 export class LazyFactoryImpl<TArgs extends readonly unknown[], TResult>
     implements ILazyFactory<TArgs, TResult>
 {
@@ -25,7 +29,12 @@ export class LazyFactoryImpl<TArgs extends readonly unknown[], TResult>
         this.keySelector = keySelector;
         this.maxCacheSize = maxCacheSize;
         this.accessOrder = new LruMap<string, true>({
-            capacity: Number.isFinite(maxCacheSize) && maxCacheSize > 0 ? maxCacheSize : 1024,
+            capacity:
+                maxCacheSize === Number.POSITIVE_INFINITY
+                    ? Number.MAX_SAFE_INTEGER
+                    : Number.isFinite(maxCacheSize) && maxCacheSize > 0
+                      ? maxCacheSize
+                      : 1024,
             order: 'least-recently-used',
         });
     }

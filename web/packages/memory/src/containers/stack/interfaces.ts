@@ -1,13 +1,9 @@
-import { StackIntegrityError, StackCapacityError } from './errors';
-import { Variance, StackSize, StackCapacity, StackResult } from './types';
+import { Variance, StackSize, StackCapacity } from './types';
 
+/** @stable */
 export interface StackConfiguration<T> {
     readonly capacity?: number;
-    readonly enablePooling?: boolean;
-    readonly enableAlignment?: boolean;
     readonly enableIntegrityChecks?: boolean;
-    readonly cachePolicy?: 'lru' | 'lfu' | 'none';
-    readonly serializationStrategy?: 'json' | 'binary' | 'custom';
     readonly compareFn?: (a: T, b: T) => boolean;
     readonly hashFn?: (value: T) => number;
     readonly serializeFn?: (value: T) => ArrayBuffer;
@@ -16,6 +12,7 @@ export interface StackConfiguration<T> {
     readonly transformFn?: (value: T) => T;
 }
 
+/** @stable */
 export interface ReadonlyStackInterface<out T> extends Iterable<T>, Variance<{}, 'out'> {
     readonly size: StackSize;
     readonly capacity: StackCapacity | null;
@@ -24,9 +21,9 @@ export interface ReadonlyStackInterface<out T> extends Iterable<T>, Variance<{},
     readonly generation: number;
     readonly checksum: number;
 
-    peek(): StackResult<T | undefined>;
+    peek(): T | undefined;
     peekUnsafe(): T | undefined;
-    peekMany(count: number): StackResult<readonly T[], StackIntegrityError>;
+    peekMany(count: number): readonly T[];
     contains(value: T): boolean;
     indexOf(value: T): number;
     toArray(): readonly T[];
@@ -35,24 +32,26 @@ export interface ReadonlyStackInterface<out T> extends Iterable<T>, Variance<{},
     serialize(): ArrayBuffer;
     equals(other: ReadonlyStackInterface<T>): boolean;
     hash(): number;
-    validate(): StackResult<boolean, StackIntegrityError>;
+    validate(): boolean;
 }
 
+/** @stable */
 export interface MutableStackInterface<T> extends ReadonlyStackInterface<T> {
-    push(value: T): StackResult<this, StackCapacityError>;
+    push(value: T): this;
     pushUnsafe(value: T): this;
-    pushMany(values: readonly T[]): StackResult<this, StackCapacityError>;
-    pop(): StackResult<T | undefined>;
+    pushMany(values: readonly T[]): this;
+    pop(): T | undefined;
     popUnsafe(): T | undefined;
-    popMany(count: number): StackResult<readonly T[]>;
-    swap(): StackResult<this, StackIntegrityError>;
-    duplicate(): StackResult<this, StackCapacityError | StackIntegrityError>;
+    popMany(count: number): readonly T[];
+    swap(): this;
+    duplicate(): this;
     clear(): this;
     compact(): this;
     defragment(): Promise<this>;
     dispose(): Promise<void>;
 }
 
+/** @stable */
 export interface ImmutableStackInterface<out T> extends ReadonlyStackInterface<T> {
     push<U extends T>(value: U): ImmutableStackInterface<T | U>;
     pushMany<U extends readonly T[]>(values: U): ImmutableStackInterface<T>;

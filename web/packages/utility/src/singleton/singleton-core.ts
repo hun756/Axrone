@@ -7,7 +7,7 @@ export type Nominal<T, K> = T & { readonly [__singleton_state_brand]: K };
 
 export type SingletonState =
     | 'uninitialized'
-    | 'initializing'
+    | 'computing'
     | 'resolved'
     | 'disposing'
     | 'disposed'

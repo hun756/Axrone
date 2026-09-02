@@ -10,7 +10,7 @@ import { __async_singleton_brand, __singleton_state_brand } from './singleton-co
 import { SingletonError } from './singleton-errors';
 
 const UNINITIALIZED: SingletonState = 'uninitialized';
-const INITIALIZING: SingletonState = 'initializing';
+const COMPUTING: SingletonState = 'computing';
 const RESOLVED: SingletonState = 'resolved';
 const DISPOSING: SingletonState = 'disposing';
 const DISPOSED: SingletonState = 'disposed';
@@ -154,7 +154,7 @@ export class AsyncSingletonImpl<T> implements IAsyncSingleton<T> {
             throw SingletonError.invalidOperation('Cannot reset while disposing', this.key);
         }
 
-        if (this.state === INITIALIZING) {
+        if (this.state === COMPUTING) {
             throw SingletonError.invalidOperation('Cannot reset while initializing', this.key);
         }
 
@@ -177,7 +177,7 @@ export class AsyncSingletonImpl<T> implements IAsyncSingleton<T> {
             return;
         }
 
-        if (this.state === INITIALIZING) {
+        if (this.state === COMPUTING) {
             throw SingletonError.invalidOperation('Cannot dispose while initializing', this.key);
         }
 
@@ -209,7 +209,7 @@ export class AsyncSingletonImpl<T> implements IAsyncSingleton<T> {
             return;
         }
 
-        if (this.state === INITIALIZING && this.promise) {
+        if (this.state === COMPUTING && this.promise) {
             try {
                 await this.promise;
             } catch {
@@ -259,7 +259,7 @@ export class AsyncSingletonImpl<T> implements IAsyncSingleton<T> {
             throw SingletonError.disposed(this.key);
         }
 
-        this.state = INITIALIZING;
+        this.state = COMPUTING;
 
         let lastError: Error | null = null;
         const maxAttempts = this.retryCount + 1;

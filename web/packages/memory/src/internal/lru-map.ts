@@ -3,8 +3,10 @@ import { Comparator, HeapHandle, IndexedHeap, createMaxHeap, createMinHeap } fro
 declare const __lruEntryBrand: unique symbol;
 declare const __lruHandleBrand: unique symbol;
 
+/** @stable */
 export type LruOrder = 'least-recently-used' | 'most-recently-used';
 
+/** @stable */
 export interface LruOptions<K, V> {
     readonly capacity?: number;
     readonly order?: LruOrder;
@@ -12,6 +14,7 @@ export interface LruOptions<K, V> {
     readonly initial?: ReadonlyArray<readonly [K, V]>;
 }
 
+/** @stable */
 export interface LruEntryView<K, V> {
     readonly key: K;
     readonly value: V;
@@ -23,6 +26,10 @@ interface LruInternalEntry<K, V> {
     value: V;
 }
 
+/**
+ * Opaque handle to an LRU map entry for direct removal or inspection.
+ * @stable
+ */
 export class LruHandle<K = unknown, V = unknown> {
     readonly #brand: { readonly [__lruHandleBrand]: true } = null as never;
     readonly #id: number;
@@ -55,6 +62,28 @@ export class LruHandle<K = unknown, V = unknown> {
     }
 }
 
+/**
+ * Fixed-capacity map with heap-based LRU (or MRU) eviction in O(log n) per operation.
+ *
+ * Uses an {@link IndexedHeap} internally to track recency, enabling O(log n) touch and eviction
+ * instead of the O(1) amortized but O(n) worst-case of linked-list LRU caches. Each entry
+ * receives an {@link LruHandle} for direct removal or inspection. Supports custom key equality,
+ * configurable capacity, and both least-recently-used and most-recently-used eviction orders.
+ *
+ * Recency counters are monotonically increasing with automatic wraparound normalization to
+ * prevent integer overflow in long-running applications.
+ *
+ * @example
+ * const lru = new LruMap<string, number>({ capacity: 3, order: 'least-recently-used' });
+ * lru.set('a', 1);
+ * lru.set('b', 2);
+ * lru.set('c', 3);
+ * lru.get('a');           // touch 'a', making it most-recent
+ * lru.set('d', 4);        // evicts 'b' (least-recently used)
+ * lru.has('b');           // false
+ *
+ * @stable
+ */
 export class LruMap<K, V> {
     readonly #heap: IndexedHeap<number, LruHandle<K, V>>;
     readonly #isLru: boolean;
@@ -295,13 +324,49 @@ export class LruMap<K, V> {
 
     #nextRecency(): number {
         this.#sequence = (this.#sequence + 1) >>> 0;
-        if (this.#sequence === 0) this.#sequence = 1;
+        if (this.#sequence === 0) {
+            // Wraparound detected — normalize all heap entries to prevent wrong eviction order
+            this.#normalizeRecency();
+            // After normalization, sequence is set to N (number of entries)
+            // Next call will increment to N+1, ensuring new entries have highest recency
+        }
         return this.#sequence;
+    }
+
+    #normalizeRecency(): void {
+        // Drain heap into array, reassign recency 1..N, rebuild heap
+        const entries: Array<{ handle: LruHandle<K, V>; recency: number }> = [];
+        while (!this.#heap.isEmpty) {
+            const heapHandle = this.#heap.pop();
+            if (!heapHandle) break;
+            const entry = this.#handleToEntry.get(heapHandle.value);
+            if (entry) {
+                entries.push({ handle: heapHandle.value, recency: 0 });
+            }
+        }
+
+        // Reassign recency 1..N and rebuild
+        for (let i = 0; i < entries.length; i++) {
+            const newRecency = i + 1;
+            const handle = entries[i].handle;
+            this.#handleToRecency.set(handle, newRecency);
+
+            const heapHandle = this.#heap.push(newRecency, handle);
+            this.#handleToHeapHandle.set(handle, heapHandle);
+        }
+
+        // Set sequence to N so next recency will be N+1
+        this.#sequence = entries.length;
     }
 
     #createHandle(): LruHandle<K, V> {
         const h = new LruHandle<K, V>(this.#nextHandleId++, this);
         if (this.#nextHandleId > Number.MAX_SAFE_INTEGER) this.#nextHandleId = 1;
         return h;
+    }
+
+    /** @internal Test seam for H10 wraparound verification */
+    _debugSetSequence(n: number): void {
+        this.#sequence = n;
     }
 }

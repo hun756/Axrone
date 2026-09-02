@@ -153,17 +153,45 @@ export class PoolMetricsCollector {
         estimatedMemoryUsage: number,
         fragmentationRatio: number
     ): PoolPerformanceMetrics {
+        const allocated = capacity - available;
+
         if (!this.#enabled) {
-            throw new MemoryPoolError(
-                'Metrics are disabled for this pool',
-                MemoryPoolErrorCode.INVALID_OPERATION,
-                this.#name
-            );
+            return {
+                name: this.#name,
+                capacity,
+                available,
+                allocated,
+                reserved: 0,
+                highWaterMark: 0,
+                allocations: 0,
+                releases: 0,
+                creations: 0,
+                evictions: 0,
+                expansions: 0,
+                contractions: 0,
+                validationFailures: 0,
+                fastPath: 0,
+                slowPath: 0,
+                averageAllocationTime: 0,
+                averageReleaseTime: 0,
+                peakMemoryUsage: estimatedMemoryUsage,
+                fragmentationRatio,
+                utilizationRatio: capacity > 0 ? allocated / capacity : 0,
+                turnoverRate: 0,
+                missRate: 0,
+                hitRatio: 0,
+                allocationsPerSecond: 0,
+                releasesPerSecond: 0,
+                lastCompactionDuration: 0,
+                compactionCount: 0,
+                lastResizeDuration: 0,
+                objectCreationTime: { min: 0, max: 0, avg: 0 },
+                objectLifetime: { min: 0, max: 0, avg: 0 },
+            };
         }
 
         const now = Date.now();
         const timeWindow = (now - this.#metrics.startTime) / 1000;
-        const allocated = capacity - available;
         this.#metrics.lastUpdateTime = now;
 
         const avg = (m: { count: number; total: number }) =>

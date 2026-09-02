@@ -1,6 +1,5 @@
 import { BinaryMinHeap } from '../../containers/queue/binary-heap';
 import {
-    createCapacity,
     createQueueSize,
     defaultComparator,
     numericComparator,
@@ -10,20 +9,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 describe('BinaryMinHeap', () => {
     describe('Constructor', () => {
-        it('should create empty heap with default capacity', () => {
+        it('should create empty heap', () => {
             const heap = new BinaryMinHeap<number>(numericComparator);
 
             expect(heap.size).toBe(createQueueSize(0));
             expect(heap.isEmpty).toBe(true);
-            expect(heap.capacity).toBeGreaterThan(createCapacity(0));
-        });
-
-        it('should create heap with custom capacity', () => {
-            const customCapacity = createCapacity(64);
-            const heap = new BinaryMinHeap<number>(numericComparator, customCapacity);
-
-            expect(heap.size).toBe(createQueueSize(0));
-            expect(heap.capacity).toBe(customCapacity);
         });
 
         it('should use custom comparator correctly', () => {
@@ -137,49 +127,6 @@ describe('BinaryMinHeap', () => {
             expect(heap.isEmpty).toBe(true);
             expect(heap.size).toBe(createQueueSize(0));
             expect(() => heap.peek()).toThrow(EmptyQueueError);
-        });
-    });
-
-    describe('Capacity Management', () => {
-        let heap: BinaryMinHeap<number>;
-
-        beforeEach(() => {
-            heap = new BinaryMinHeap<number>(numericComparator, createCapacity(4));
-        });
-
-        it('should ensure capacity grows when needed', () => {
-            const initialCapacity = heap.capacity;
-
-            for (let i = 0; i < (initialCapacity as number) + 5; i++) {
-                heap.insert(i);
-            }
-
-            expect(heap.capacity).toBeGreaterThan(initialCapacity);
-            expect(heap.size).toBe(createQueueSize((initialCapacity as number) + 5));
-        });
-
-        it('should manually ensure capacity', () => {
-            const newCapacity = createCapacity(100);
-            heap.ensureCapacity(newCapacity);
-
-            expect(heap.capacity).toBeGreaterThanOrEqual(newCapacity);
-        });
-
-        it('should trim excess capacity', () => {
-            for (let i = 0; i < 20; i++) {
-                heap.insert(i);
-            }
-
-            const largeCapacity = heap.capacity;
-
-            for (let i = 0; i < 15; i++) {
-                heap.extract();
-            }
-
-            heap.trimExcess();
-
-            expect(heap.capacity).toBeLessThan(largeCapacity);
-            expect(heap.capacity).toBeGreaterThanOrEqual(heap.size);
         });
     });
 
