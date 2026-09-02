@@ -227,10 +227,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         const vx = v.x;
         const vy = v.y;
 
-        if (Math.abs(vx) < EPSILON || Math.abs(vy) < EPSILON) {
-            throw new Error('Inversion of zero or near-zero value');
-        }
-
         if (out) {
             out.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
             out.y = Math.abs(vy) < EPSILON ? defaultValue : 1 / vy;

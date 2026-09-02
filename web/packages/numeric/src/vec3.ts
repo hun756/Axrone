@@ -253,10 +253,6 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         const vy = v.y;
         const vz = v.z;
 
-        if (Math.abs(vx) < EPSILON || Math.abs(vy) < EPSILON || Math.abs(vz) < EPSILON) {
-            throw new Error('Inversion of zero or near-zero value');
-        }
-
         if (out) {
             out.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
             out.y = Math.abs(vy) < EPSILON ? defaultValue : 1 / vy;

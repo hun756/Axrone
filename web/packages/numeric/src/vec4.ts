@@ -278,15 +278,6 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         const vz = v.z;
         const vw = v.w;
 
-        if (
-            Math.abs(vx) < EPSILON ||
-            Math.abs(vy) < EPSILON ||
-            Math.abs(vz) < EPSILON ||
-            Math.abs(vw) < EPSILON
-        ) {
-            throw new Error('Inversion of zero or near-zero value');
-        }
-
         if (out) {
             out.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
             out.y = Math.abs(vy) < EPSILON ? defaultValue : 1 / vy;
