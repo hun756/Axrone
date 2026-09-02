@@ -5,6 +5,9 @@ import { IVec3Like } from './vec3';
 import { clamp01 } from './clamp';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
+// Module-level scratch Mat3 for allocation-free intermediate calculations
+const _scratchMat3 = new Mat3();
+
 declare const __matrix3Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
 declare const __vec2Brand: unique symbol;
@@ -610,8 +613,10 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
         U extends IMat3Like,
         V extends IVec3Like | undefined = undefined,
     >(normal: Readonly<T>, m: Readonly<U>, out?: V): V extends undefined ? T : V {
-        const invTranspose = Mat3.transpose(Mat3.invert(m));
-        return Mat3.transformVec3(normal, invTranspose, out);
+        // Use scratch to avoid allocations: invert into scratch, then transpose into scratch
+        Mat3.invert(m, _scratchMat3);
+        Mat3.transpose(_scratchMat3, _scratchMat3);
+        return Mat3.transformVec3(normal, _scratchMat3, out);
     }
 
     static transformNormalWithIT<

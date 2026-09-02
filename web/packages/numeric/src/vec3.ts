@@ -447,32 +447,34 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         const sinTheta = Math.sin(angle);
         const oneMinusCos = 1 - cosTheta;
 
-        const axisNorm = Vec3.normalize(axis);
-        const dotProduct = Vec3.dot(v, axisNorm);
-        const crossProduct = Vec3.cross(axisNorm, v);
+        // Inline normalize to avoid allocation
+        const axisLen = Math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
+        if (axisLen < EPSILON) {
+            throw new Error('Cannot rotate around zero-length axis');
+        }
+        const invLen = 1 / axisLen;
+        const ax = axis.x * invLen;
+        const ay = axis.y * invLen;
+        const az = axis.z * invLen;
+
+        // Inline dot product
+        const dotProduct = v.x * ax + v.y * ay + v.z * az;
+
+        // Inline cross product (axis × v)
+        const cx = ay * v.z - az * v.y;
+        const cy = az * v.x - ax * v.z;
+        const cz = ax * v.y - ay * v.x;
 
         if (out) {
-            out.x =
-                v.x * cosTheta + crossProduct.x * sinTheta + axisNorm.x * dotProduct * oneMinusCos;
-            out.y =
-                v.y * cosTheta + crossProduct.y * sinTheta + axisNorm.y * dotProduct * oneMinusCos;
-            out.z =
-                v.z * cosTheta + crossProduct.z * sinTheta + axisNorm.z * dotProduct * oneMinusCos;
+            out.x = v.x * cosTheta + cx * sinTheta + ax * dotProduct * oneMinusCos;
+            out.y = v.y * cosTheta + cy * sinTheta + ay * dotProduct * oneMinusCos;
+            out.z = v.z * cosTheta + cz * sinTheta + az * dotProduct * oneMinusCos;
             return out;
         } else {
             return {
-                x:
-                    v.x * cosTheta +
-                    crossProduct.x * sinTheta +
-                    axisNorm.x * dotProduct * oneMinusCos,
-                y:
-                    v.y * cosTheta +
-                    crossProduct.y * sinTheta +
-                    axisNorm.y * dotProduct * oneMinusCos,
-                z:
-                    v.z * cosTheta +
-                    crossProduct.z * sinTheta +
-                    axisNorm.z * dotProduct * oneMinusCos,
+                x: v.x * cosTheta + cx * sinTheta + ax * dotProduct * oneMinusCos,
+                y: v.y * cosTheta + cy * sinTheta + ay * dotProduct * oneMinusCos,
+                z: v.z * cosTheta + cz * sinTheta + az * dotProduct * oneMinusCos,
             } as V;
         }
     }
