@@ -65,6 +65,7 @@ interface InternalSubscription<T = unknown> {
     readonly unregisterToken?: object;
     lastExecuted?: number;
     executionCount: number;
+    disposed: boolean;
 }
 
 interface ListenerBucket {
@@ -884,6 +885,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             createdAt: Date.now(),
             unregisterToken,
             weak,
+            disposed: false,
         };
 
         bucket[options.priority].push(subscription);
@@ -1054,6 +1056,10 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
         return this.#scheduler.schedule(
             async () => {
+                if (subscription.disposed) {
+                    return;
+                }
+
                 const callback = this.#resolveCallback(subscription);
 
                 if (!callback) {
@@ -1151,6 +1157,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     }
 
     #deleteSubscription(subscription: InternalSubscription<any>): boolean {
+        subscription.disposed = true;
         const bucket = this.#events.get(subscription.event);
         this.#subscriptionIndex.delete(subscription.id);
 
