@@ -100,6 +100,8 @@ const PRIORITY_TO_TASK_PRIORITY = Object.freeze({
     low: TaskPriority.LOW,
 } satisfies Readonly<Record<EventPriority, TaskPriority>>);
 
+const MAX_EMIT_DEPTH = 32;
+
 function normalizeMaxListeners(value: number | undefined, fallback: number): number {
     if (value === Infinity) {
         return Infinity;
@@ -242,6 +244,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     #weakRegistry?: FinalizationRegistry<symbol>;
     #tapListeners = new Set<EventTap>();
     #bufferProcessing: Promise<void> | null = null;
+    #emitDepth = new Map<string, number>();
 
     constructor(options: EventOptions = {}) {
         this.#options = normalizeOptions(options);
@@ -372,25 +375,36 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         const priority = options.priority ?? DEFAULT_PRIORITY;
         const startTime = performance.now();
 
-        if (this.#isPaused) {
-            try {
-                this.#enqueueBufferedEvent(eventName, data, priority);
-                this.#recordEmitMetric(eventName, 0);
-                return true;
-            } catch (error) {
-                this.#recordEmitMetric(eventName, performance.now() - startTime);
-                throw error;
-            }
+        const currentDepth = this.#emitDepth.get(eventName) ?? 0;
+        if (currentDepth >= MAX_EMIT_DEPTH) {
+            console.warn(
+                `EventEmitter: Re-entrancy depth exceeded for event "${eventName}" (max ${MAX_EMIT_DEPTH}). Dropping emit.`
+            );
+            return false;
         }
 
-        const tapContext: Omit<EventTapContext, 'phase'> = {
-            event: eventName,
-            data,
-            priority,
-            sync: false,
-        };
+        this.#emitDepth.set(eventName, currentDepth + 1);
 
-        this.#emitTaps({ ...tapContext, phase: 'start' });
+        try {
+            if (this.#isPaused) {
+                try {
+                    this.#enqueueBufferedEvent(eventName, data, priority);
+                    this.#recordEmitMetric(eventName, 0);
+                    return true;
+                } catch (error) {
+                    this.#recordEmitMetric(eventName, performance.now() - startTime);
+                    throw error;
+                }
+            }
+
+            const tapContext: Omit<EventTapContext, 'phase'> = {
+                event: eventName,
+                data,
+                priority,
+                sync: false,
+            };
+
+            this.#emitTaps({ ...tapContext, phase: 'start' });
 
         try {
             const snapshot = this.#snapshotListeners(eventName);
@@ -407,6 +421,12 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         } finally {
             this.#recordEmitMetric(eventName, performance.now() - startTime);
             this.#emitTaps({ ...tapContext, phase: 'end' });
+            const depth = this.#emitDepth.get(eventName) ?? 1;
+            if (depth <= 1) {
+                this.#emitDepth.delete(eventName);
+            } else {
+                this.#emitDepth.set(eventName, depth - 1);
+            }
         }
     }
 
@@ -421,23 +441,34 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         const priority = options.priority ?? DEFAULT_PRIORITY;
         const startTime = performance.now();
 
-        if (this.#isPaused) {
-            try {
-                this.#enqueueBufferedEvent(eventName, data, priority);
-                this.#recordEmitMetric(eventName, 0);
-                return true;
-            } catch (error) {
-                this.#recordEmitMetric(eventName, performance.now() - startTime);
-                throw error;
-            }
+        const currentDepth = this.#emitDepth.get(eventName) ?? 0;
+        if (currentDepth >= MAX_EMIT_DEPTH) {
+            console.warn(
+                `EventEmitter: Re-entrancy depth exceeded for event "${eventName}" (max ${MAX_EMIT_DEPTH}). Dropping emit.`
+            );
+            return false;
         }
 
-        const tapContext: Omit<EventTapContext, 'phase'> = {
-            event: eventName,
-            data,
-            priority,
-            sync: true,
-        };
+        this.#emitDepth.set(eventName, currentDepth + 1);
+
+        try {
+            if (this.#isPaused) {
+                try {
+                    this.#enqueueBufferedEvent(eventName, data, priority);
+                    this.#recordEmitMetric(eventName, 0);
+                    return true;
+                } catch (error) {
+                    this.#recordEmitMetric(eventName, performance.now() - startTime);
+                    throw error;
+                }
+            }
+
+            const tapContext: Omit<EventTapContext, 'phase'> = {
+                event: eventName,
+                data,
+                priority,
+                sync: true,
+            };
 
         this.#emitTaps({ ...tapContext, phase: 'start' });
 
@@ -541,6 +572,12 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         } finally {
             this.#recordEmitMetric(eventName, performance.now() - startTime);
             this.#emitTaps({ ...tapContext, phase: 'end' });
+            const depth = this.#emitDepth.get(eventName) ?? 1;
+            if (depth <= 1) {
+                this.#emitDepth.delete(eventName);
+            } else {
+                this.#emitDepth.set(eventName, depth - 1);
+            }
         }
     }
 
