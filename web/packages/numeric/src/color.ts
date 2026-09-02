@@ -278,11 +278,19 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         );
     }
 
+    /**
+     * Creates a Color from RGB values in the 0-1 range.
+     * For 0-255 range, use fromRGBBytes instead.
+     */
     static fromRGB(r: number, g: number, b: number, a: number = 1): Color {
-        if (r > 1 || g > 1 || b > 1) {
-            return new Color(r / 255, g / 255, b / 255, a > 1 ? a / 255 : a);
-        }
         return new Color(r, g, b, a);
+    }
+
+    /**
+     * Creates a Color from RGB values in the 0-255 range.
+     */
+    static fromRGBBytes(r: number, g: number, b: number, a: number = 255): Color {
+        return new Color(r / 255, g / 255, b / 255, a / 255);
     }
 
     static fromHSL(h: number, s: number, l: number, a: number = 1): Color {

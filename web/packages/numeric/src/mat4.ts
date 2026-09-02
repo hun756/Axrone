@@ -96,15 +96,13 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
     }
 
     static fromArray(arr: ArrayLike<number>, offset: number = 0): Mat4 {
-        if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
-            if (offset < 0) {
-                throw new RangeError('Offset cannot be negative');
-            }
-            if (arr.length < offset + 16) {
-                throw new RangeError(
-                    `Array must have at least ${offset + 16} elements when using offset ${offset}`
-                );
-            }
+        if (offset < 0) {
+            throw new RangeError('Offset cannot be negative');
+        }
+        if (arr.length < offset + 16) {
+            throw new RangeError(
+                `Array must have at least ${offset + 16} elements when using offset ${offset}`
+            );
         }
 
         const values = Array.isArray(arr)

@@ -87,15 +87,13 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
     }
 
     static fromArray(arr: ArrayLike<number>, offset: number = 0): Mat3 {
-        if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
-            if (offset < 0) {
-                throw new RangeError('Offset cannot be negative');
-            }
-            if (arr.length < offset + 9) {
-                throw new RangeError(
-                    `Array must have at least ${offset + 9} elements when using offset ${offset}`
-                );
-            }
+        if (offset < 0) {
+            throw new RangeError('Offset cannot be negative');
+        }
+        if (arr.length < offset + 9) {
+            throw new RangeError(
+                `Array must have at least ${offset + 9} elements when using offset ${offset}`
+            );
         }
 
         const values = Array.isArray(arr)

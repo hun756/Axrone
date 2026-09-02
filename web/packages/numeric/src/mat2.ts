@@ -75,15 +75,13 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
     }
 
     static fromArray(arr: ArrayLike<number>, offset: number = 0): Mat2 {
-        if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
-            if (offset < 0) {
-                throw new RangeError('Offset cannot be negative');
-            }
-            if (arr.length < offset + 4) {
-                throw new RangeError(
-                    `Array must have at least ${offset + 4} elements when using offset ${offset}`
-                );
-            }
+        if (offset < 0) {
+            throw new RangeError('Offset cannot be negative');
+        }
+        if (arr.length < offset + 4) {
+            throw new RangeError(
+                `Array must have at least ${offset + 4} elements when using offset ${offset}`
+            );
         }
 
         const values = Array.isArray(arr)
