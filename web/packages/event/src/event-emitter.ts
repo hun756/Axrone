@@ -1077,16 +1077,13 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     }
 
     #ensureRuntime(): void {
-        if (!this.#isDisposed) {
-            return;
+        if (this.#isDisposed) {
+            throw new Error('EventEmitter has been disposed and cannot be reused');
         }
+    }
 
-        this.#isDisposed = false;
-        this.#scheduler = this.#createScheduler();
-
-        if (this.#options.gcIntervalMs > 0) {
-            this.#startGc();
-        }
+    get isDisposed(): boolean {
+        return this.#isDisposed;
     }
 
     #scheduleDispatch<K extends EventKey<T>>(
