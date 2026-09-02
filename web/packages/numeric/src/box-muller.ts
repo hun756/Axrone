@@ -207,7 +207,7 @@ export const BoxMullerFactory = {
 
 export const sampleStandardNormal = (): number => {
     let u1 = rand.float();
-    if (u1 <= 0) u1 = Number.MIN_VALUE;
+    while (u1 <= 0) u1 = rand.float();
     const u2 = rand.float();
     const mag = Math.sqrt(-2.0 * Math.log(u1));
     const theta = TWO_PI * u2;
