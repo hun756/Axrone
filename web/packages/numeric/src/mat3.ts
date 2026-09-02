@@ -5,9 +5,6 @@ import { IVec3Like } from './vec3';
 import { clamp01 } from './clamp';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
-// Module-level scratch Mat3 for allocation-free intermediate calculations
-const _scratchMat3 = new Mat3();
-
 declare const __matrix3Brand: unique symbol;
 declare const __mutableBrand: unique symbol;
 declare const __vec2Brand: unique symbol;
@@ -49,6 +46,22 @@ const ensureMatrix3Data = <T extends ArrayLike<number>>(data: T): T & Matrix3Dat
 
 export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable {
     private static _hasher = new Fnv1a32();
+    private static _scratch1: Mat3 | null = null;
+    private static _scratch2: Mat3 | null = null;
+
+    private static get _scratchMat3_1(): Mat3 {
+        if (!Mat3._scratch1) {
+            Mat3._scratch1 = new Mat3();
+        }
+        return Mat3._scratch1;
+    }
+
+    private static get _scratchMat3_2(): Mat3 {
+        if (!Mat3._scratch2) {
+            Mat3._scratch2 = new Mat3();
+        }
+        return Mat3._scratch2;
+    }
 
     public readonly data: Matrix3Data;
 
@@ -589,10 +602,12 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
         U extends IMat3Like,
         V extends IVec3Like | undefined = undefined,
     >(normal: Readonly<T>, m: Readonly<U>, out?: V): V extends undefined ? T : V {
-        // Use scratch to avoid allocations: invert into scratch, then transpose into scratch
-        Mat3.invert(m, _scratchMat3);
-        Mat3.transpose(_scratchMat3, _scratchMat3);
-        return Mat3.transformVec3(normal, _scratchMat3, out);
+        // Use scratch to avoid allocations: invert into scratch1, transpose into scratch2
+        const scratch1 = Mat3._scratchMat3_1;
+        const scratch2 = Mat3._scratchMat3_2;
+        Mat3.invert(m, scratch1);
+        Mat3.transpose(scratch1, scratch2);
+        return Mat3.transformVec3(normal, scratch2, out);
     }
 
     static transformNormalWithIT<

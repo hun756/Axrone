@@ -63,8 +63,10 @@ describe('Vec2 Advanced Operations', () => {
             expectVecClose(Vec2.inverseSafe({ x: 2, y: 4 }), { x: 0.5, y: 0.25 });
         });
 
-        test('static inverseSafe throws on zero', () => {
-            expect(() => Vec2.inverseSafe({ x: 0, y: 1 })).toThrow('zero or near-zero');
+        test('static inverseSafe uses defaultValue for zero components', () => {
+            const result = Vec2.inverseSafe({ x: 0, y: 1 }, undefined, 99);
+            expect(Math.abs(result.x - 99)).toBeLessThan(EPSILON);
+            expect(Math.abs(result.y - 1)).toBeLessThan(EPSILON);
         });
 
         test('instance inverseSafe uses default for zero components', () => {
