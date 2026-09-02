@@ -1,5 +1,5 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON } from './common';
+import { EPSILON, ensureFinite } from './common';
 import { clamp, clamp01 } from './clamp';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
@@ -162,6 +162,12 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         public b: number = 0,
         public a: number = 1
     ) {
+        // Validate inputs to catch NaN/Infinity early
+        ensureFinite(r, 'Color.r');
+        ensureFinite(g, 'Color.g');
+        ensureFinite(b, 'Color.b');
+        ensureFinite(a, 'Color.a');
+
         this.r = clamp01(r);
         this.g = clamp01(g);
         this.b = clamp01(b);
