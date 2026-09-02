@@ -944,6 +944,56 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         mode: ColorBlendMode,
         out?: V
     ): V {
+        // HSL blend modes require full-color conversion
+        if (
+            mode === ColorBlendMode.HUE ||
+            mode === ColorBlendMode.SATURATION ||
+            mode === ColorBlendMode.COLOR ||
+            mode === ColorBlendMode.LUMINOSITY
+        ) {
+            const baseHSL = base instanceof Color ? base.toHSL() : Color.from(base).toHSL();
+            const overlayHSL =
+                overlay instanceof Color ? overlay.toHSL() : Color.from(overlay).toHSL();
+
+            let h: number, s: number, l: number;
+
+            switch (mode) {
+                case ColorBlendMode.HUE:
+                    h = overlayHSL.h;
+                    s = baseHSL.s;
+                    l = baseHSL.l;
+                    break;
+                case ColorBlendMode.SATURATION:
+                    h = baseHSL.h;
+                    s = overlayHSL.s;
+                    l = baseHSL.l;
+                    break;
+                case ColorBlendMode.COLOR:
+                    h = overlayHSL.h;
+                    s = overlayHSL.s;
+                    l = baseHSL.l;
+                    break;
+                case ColorBlendMode.LUMINOSITY:
+                    h = baseHSL.h;
+                    s = baseHSL.s;
+                    l = overlayHSL.l;
+                    break;
+            }
+
+            const result = Color.fromHSL(h!, s!, l!, overlayHSL.a);
+
+            if (out) {
+                out.r = result.r;
+                out.g = result.g;
+                out.b = result.b;
+                out.a = result.a;
+                return out;
+            } else {
+                return { r: result.r, g: result.g, b: result.b, a: result.a } as V;
+            }
+        }
+
+        // Per-channel blend modes
         const blendFunc = BLEND_FUNCTIONS[mode];
         if (!blendFunc) {
             throw new Error(`Unsupported blend mode: ${mode}`);
@@ -1209,10 +1259,11 @@ const BLEND_FUNCTIONS: Readonly<Record<ColorBlendMode, BlendFn>> = Object.freeze
     [ColorBlendMode.LIGHTEN]: (a, b) => Math.max(a, b),
     [ColorBlendMode.DIFFERENCE]: (a, b) => Math.abs(a - b),
     [ColorBlendMode.EXCLUSION]: (a, b) => a + b - 2 * a * b,
-    [ColorBlendMode.HUE]: (_a, b) => b,
-    [ColorBlendMode.SATURATION]: (_a, b) => b,
-    [ColorBlendMode.COLOR]: (_a, b) => b,
-    [ColorBlendMode.LUMINOSITY]: (_a, b) => b,
+    // HSL blend modes handled in blend() method
+    [ColorBlendMode.HUE]: (_a, _b) => _b,
+    [ColorBlendMode.SATURATION]: (_a, _b) => _b,
+    [ColorBlendMode.COLOR]: (_a, _b) => _b,
+    [ColorBlendMode.LUMINOSITY]: (_a, _b) => _b,
 });
 
 export class ColorComparer implements Comparer<Color> {
