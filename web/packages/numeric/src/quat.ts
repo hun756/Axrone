@@ -310,11 +310,21 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         angle: number,
         out?: V
     ): V {
+        // Normalize axis to ensure unit quaternion output
+        const axisLen = Math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
+        if (axisLen < EPSILON) {
+            throw new Error('Cannot create rotation from zero-length axis');
+        }
+        const invLen = 1 / axisLen;
+        const ax = axis.x * invLen;
+        const ay = axis.y * invLen;
+        const az = axis.z * invLen;
+
         const halfAngle = angle * 0.5;
         const sinHalfAngle = Math.sin(halfAngle);
-        const x = axis.x * sinHalfAngle;
-        const y = axis.y * sinHalfAngle;
-        const z = axis.z * sinHalfAngle;
+        const x = ax * sinHalfAngle;
+        const y = ay * sinHalfAngle;
+        const z = az * sinHalfAngle;
         const w = Math.cos(halfAngle);
 
         if (out) {
