@@ -52,8 +52,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return new Vec2(x, y);
     }
 
-    static copy<T extends IVec2Like, V extends IVec2Like>(source: Readonly<T>, out: V): V;
-    static copy<T extends IVec2Like>(source: Readonly<T>): IVec2Like;
     static copy<T extends IVec2Like, V extends IVec2Like>(source: Readonly<T>, out?: V): V {
         if (out) {
             out.x = source.x;
@@ -81,15 +79,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         hasher.updateF32(this.x).updateF32(this.y);
     }
 
-    static add<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
-        out: V
-    ): V;
-    static add<T extends IVec2Like, U extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>
-    ): IVec2Like;
     static add<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,
@@ -121,15 +110,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     static subtract<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,
-        out: V
-    ): V;
-    static subtract<T extends IVec2Like, U extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>
-    ): IVec2Like;
-    static subtract<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
         out?: V
     ): V {
         if (out) {
@@ -158,15 +138,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     static multiply<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,
-        out: V
-    ): V;
-    static multiply<T extends IVec2Like, U extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>
-    ): IVec2Like;
-    static multiply<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
         out?: V
     ): V {
         if (out) {
@@ -192,15 +163,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static divide<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
-        out: V
-    ): V;
-    static divide<T extends IVec2Like, U extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>
-    ): IVec2Like;
     static divide<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,
@@ -313,8 +275,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return v.x * v.x + v.y * v.y;
     }
 
-    static normalize<T extends IVec2Like, V extends IVec2Like>(v: Readonly<T>, out: V): V;
-    static normalize<T extends IVec2Like>(v: Readonly<T>): IVec2Like;
     static normalize<T extends IVec2Like, V extends IVec2Like>(v: Readonly<T>, out?: V): V {
         const length = Math.sqrt(v.x * v.x + v.y * v.y);
         if (length < EPSILON) {
@@ -386,8 +346,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return (angle * 180) / Math.PI;
     }
 
-    static rotate<T extends IVec2Like, V extends IVec2Like>(v: Readonly<T>, angle: number, out: V): V;
-    static rotate<T extends IVec2Like>(v: Readonly<T>, angle: number): IVec2Like;
     static rotate<T extends IVec2Like, V extends IVec2Like>(v: Readonly<T>, angle: number, out?: V): V {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
@@ -470,17 +428,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
-        out: V
-    ): V;
-    static lerp<T extends IVec2Like, U extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
-        t: number
-    ): IVec2Like;
-    static lerp<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
-        t: number,
         out?: V
     ): V {
         const t1 = clamp01(t);
@@ -497,17 +444,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
-        out: V
-    ): V;
-    static lerpUnClamped<T extends IVec2Like, U extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
-        t: number
-    ): IVec2Like;
-    static lerpUnClamped<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
-        t: number,
         out?: V
     ): V {
         if (out) {
@@ -519,17 +455,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static slerp<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
-        t: number,
-        out: V
-    ): V;
-    static slerp<T extends IVec2Like, U extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
-        t: number
-    ): IVec2Like;
     static slerp<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,
@@ -572,17 +497,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
-    static smoothStep<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
-        t: number,
-        out: V
-    ): V;
-    static smoothStep<T extends IVec2Like, U extends IVec2Like>(
-        a: Readonly<T>,
-        b: Readonly<U>,
-        t: number
-    ): IVec2Like;
     static smoothStep<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: Readonly<U>,
