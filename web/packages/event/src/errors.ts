@@ -15,7 +15,6 @@ export class EventError extends BaseError {
     }
 }
 
-export class EventNotFoundError extends EventError {
     readonly eventName: string;
 
     constructor(eventName: string) {

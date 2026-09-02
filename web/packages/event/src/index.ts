@@ -23,7 +23,6 @@ export {
 export {
     BaseError,
     EventError,
-    EventNotFoundError,
     EventQueueFullError,
     EventHandlerError,
 } from './errors';
