@@ -535,6 +535,17 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
+        out: V
+    ): V;
+    static slerp<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number
+    ): IVec3Like;
+    static slerp<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
         out?: V
     ): V {
         const t1 = clamp01(t);
@@ -577,6 +588,17 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         }
     }
 
+    static smoothStep<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out: V
+    ): V;
+    static smoothStep<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number
+    ): IVec3Like;
     static smoothStep<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         a: Readonly<T>,
         b: Readonly<U>,
