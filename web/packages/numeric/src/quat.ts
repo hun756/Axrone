@@ -16,6 +16,8 @@ export interface IQuatLike {
 }
 
 export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
+    private static _hasher = new Fnv1a32();
+
     constructor(
         public x: number = 0,
         public y: number = 0,
@@ -83,7 +85,8 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
     }
 
     getHashCode(): number {
-        return new Fnv1a32()
+        return Quat._hasher
+            .reset()
             .updateF32(this.x)
             .updateF32(this.y)
             .updateF32(this.z)

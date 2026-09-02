@@ -16,6 +16,8 @@ export interface IVec3Like {
 }
 
 export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
+    private static _hasher = new Fnv1a32();
+
     constructor(
         public x: number = 0,
         public y: number = 0,
@@ -85,7 +87,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     }
 
     getHashCode(): number {
-        return new Fnv1a32().updateF32(this.x).updateF32(this.y).updateF32(this.z).digest();
+        return Vec3._hasher.reset().updateF32(this.x).updateF32(this.y).updateF32(this.z).digest();
     }
 
     hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {

@@ -15,6 +15,8 @@ export interface IVec2Like {
 }
 
 export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
+    private static _hasher = new Fnv1a32();
+
     constructor(
         public x: number = 0,
         public y: number = 0
@@ -72,7 +74,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     }
 
     getHashCode(): number {
-        return new Fnv1a32().updateF32(this.x).updateF32(this.y).digest();
+        return Vec2._hasher.reset().updateF32(this.x).updateF32(this.y).digest();
     }
 
     hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {

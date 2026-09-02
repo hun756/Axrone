@@ -156,6 +156,8 @@ const D65_Y = 1.0;
 const D65_Z = 1.08883;
 
 export class Color implements IColorLike, ICloneable<Color>, Equatable {
+    private static _hasher = new Fnv1a32();
+
     constructor(
         public r: number = 0,
         public g: number = 0,
@@ -425,7 +427,8 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     }
 
     getHashCode(): number {
-        return new Fnv1a32()
+        return Color._hasher
+            .reset()
             .updateF32(this.r)
             .updateF32(this.g)
             .updateF32(this.b)

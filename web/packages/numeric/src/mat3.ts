@@ -48,6 +48,8 @@ const ensureMatrix3Data = <T extends ArrayLike<number>>(data: T): T & Matrix3Dat
 };
 
 export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable {
+    private static _hasher = new Fnv1a32();
+
     public readonly data: Matrix3Data;
 
     constructor(values?: ArrayLike<number>) {
@@ -158,7 +160,7 @@ export class Mat3 implements IMat3Like<Matrix3Data>, ICloneable<Mat3>, Equatable
     }
 
     getHashCode(): number {
-        const h = new Fnv1a32();
+        const h = Mat3._hasher.reset();
         for (let i = 0; i < 9; i++) h.updateF32(this.data[i]!);
         return h.digest();
     }

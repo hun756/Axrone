@@ -46,6 +46,8 @@ const ensureMatrix4Data = <T extends ArrayLike<number>>(data: T): T & Matrix4Dat
 };
 
 export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable {
+    private static _hasher = new Fnv1a32();
+
     public readonly data: Matrix4Data;
 
     constructor(values?: ArrayLike<number>) {
@@ -219,7 +221,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
     }
 
     getHashCode(): number {
-        const h = new Fnv1a32();
+        const h = Mat4._hasher.reset();
         for (let i = 0; i < 16; i++) h.updateF32(this.data[i]!);
         return h.digest();
     }
