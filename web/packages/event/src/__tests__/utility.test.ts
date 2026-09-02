@@ -9,7 +9,6 @@ import {
     isEventEmitter,
     mergeEmitters,
     namespaceEvents,
-    TypedEventRegistry,
     type EventMap,
 } from '@axrone/event';
 
@@ -338,11 +337,8 @@ describe('EventEmitter - Features', () => {
         });
     });
 
-    describe('TypedEventRegistry', () => {
-        let registry: TypedEventRegistry<TestEvents>;
 
         beforeEach(() => {
-            registry = new TypedEventRegistry<TestEvents>();
         });
 
         it('should register and retrieve events correctly', () => {
@@ -640,7 +636,6 @@ describe('EventEmitter - Features', () => {
     describe('Integration Tests', () => {
         it('should work together in complex scenarios', async () => {
             const source = createTypedEmitter<TestEvents>();
-            const registry = new TypedEventRegistry<TestEvents>();
             const group = new EventGroup(source);
 
             const eventSymbol = registry.register('test:event');

@@ -702,7 +702,6 @@ export function namespaceEvents<Prefix extends string, T extends EventMap>(
     return namespaced;
 }
 
-export class TypedEventRegistry<T extends EventMap> {
     readonly #registry = new Map<EventKey<T>, symbol>();
     readonly #symbolToEvent = new Map<symbol, EventKey<T>>();
 

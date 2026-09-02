@@ -62,7 +62,6 @@ export {
     createEventProxy,
     mergeEmitters,
     namespaceEvents,
-    TypedEventRegistry,
 } from './extras';
 
 export { performance } from './performance';
