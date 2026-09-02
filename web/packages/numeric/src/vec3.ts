@@ -535,6 +535,11 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         }
 
         const sinTheta = Math.sin(theta);
+
+        if (Math.abs(sinTheta) < EPSILON) {
+            return Vec3.lerp(a, b, t1, out);
+        }
+
         const ratioA = Math.sin((1 - t1) * theta) / sinTheta;
         const ratioB = Math.sin(t1 * theta) / sinTheta;
 
