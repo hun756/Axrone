@@ -45,7 +45,6 @@ export interface EventOptions {
     readonly captureRejections?: boolean;
     readonly maxListeners?: number;
     readonly weakReferences?: boolean;
-    readonly immediateDispatch?: boolean;
     readonly concurrencyLimit?: number;
     readonly bufferSize?: number;
     readonly gcIntervalMs?: number;
@@ -55,7 +54,6 @@ export const DEFAULT_OPTIONS = Object.freeze({
     captureRejections: false,
     maxListeners: 10,
     weakReferences: false,
-    immediateDispatch: true,
     concurrencyLimit: Infinity,
     bufferSize: 1000,
     gcIntervalMs: 60000,

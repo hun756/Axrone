@@ -151,10 +151,6 @@ function normalizeOptions(options: EventOptions): Required<EventOptions> {
             typeof options.weakReferences === 'boolean'
                 ? options.weakReferences
                 : DEFAULT_OPTIONS.weakReferences,
-        immediateDispatch:
-            typeof options.immediateDispatch === 'boolean'
-                ? options.immediateDispatch
-                : DEFAULT_OPTIONS.immediateDispatch,
         concurrencyLimit: normalizeConcurrency(
             options.concurrencyLimit,
             DEFAULT_OPTIONS.concurrencyLimit

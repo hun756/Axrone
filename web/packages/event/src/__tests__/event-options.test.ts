@@ -18,7 +18,6 @@ describe('EventEmitter - Event Options', () => {
                 captureRejections: false,
                 maxListeners: 20,
                 weakReferences: true,
-                immediateDispatch: false,
                 concurrencyLimit: 8,
                 bufferSize: 500,
                 gcIntervalMs: 30000,
@@ -26,7 +25,6 @@ describe('EventEmitter - Event Options', () => {
             expect(completeOptions.captureRejections).toBe(false);
             expect(completeOptions.maxListeners).toBe(20);
             expect(completeOptions.weakReferences).toBe(true);
-            expect(completeOptions.immediateDispatch).toBe(false);
             expect(completeOptions.concurrencyLimit).toBe(8);
             expect(completeOptions.bufferSize).toBe(500);
             expect(completeOptions.gcIntervalMs).toBe(30000);
@@ -46,7 +44,6 @@ describe('EventEmitter - Event Options', () => {
             expect(options.maxListeners).toBe(10);
             expect(options.captureRejections).toBeUndefined();
             expect(options.weakReferences).toBeUndefined();
-            expect(options.immediateDispatch).toBeUndefined();
             expect(options.concurrencyLimit).toBeUndefined();
             expect(options.bufferSize).toBeUndefined();
             expect(options.gcIntervalMs).toBeUndefined();
@@ -57,7 +54,6 @@ describe('EventEmitter - Event Options', () => {
                 captureRejections: true,
                 maxListeners: 25,
                 weakReferences: false,
-                immediateDispatch: true,
                 concurrencyLimit: Infinity,
                 bufferSize: 1000,
                 gcIntervalMs: 60000,
@@ -66,7 +62,6 @@ describe('EventEmitter - Event Options', () => {
             expect(typeof options.captureRejections).toBe('boolean');
             expect(typeof options.maxListeners).toBe('number');
             expect(typeof options.weakReferences).toBe('boolean');
-            expect(typeof options.immediateDispatch).toBe('boolean');
             expect(typeof options.concurrencyLimit).toBe('number');
             expect(typeof options.bufferSize).toBe('number');
             expect(typeof options.gcIntervalMs).toBe('number');
@@ -93,7 +88,6 @@ describe('EventEmitter - Event Options', () => {
                 if ('maxListeners' in obj && typeof obj.maxListeners !== 'number') return false;
                 if ('weakReferences' in obj && typeof obj.weakReferences !== 'boolean')
                     return false;
-                if ('immediateDispatch' in obj && typeof obj.immediateDispatch !== 'boolean')
                     return false;
                 if ('concurrencyLimit' in obj && typeof obj.concurrencyLimit !== 'number')
                     return false;
@@ -115,7 +109,6 @@ describe('DEFAULT_OPTIONS Constant', () => {
         expect(DEFAULT_OPTIONS.captureRejections).toBe(false);
         expect(DEFAULT_OPTIONS.maxListeners).toBe(10);
         expect(DEFAULT_OPTIONS.weakReferences).toBe(false);
-        expect(DEFAULT_OPTIONS.immediateDispatch).toBe(true);
         expect(DEFAULT_OPTIONS.concurrencyLimit).toBe(Infinity);
         expect(DEFAULT_OPTIONS.bufferSize).toBe(1000);
         expect(DEFAULT_OPTIONS.gcIntervalMs).toBe(60000);
@@ -126,7 +119,6 @@ describe('DEFAULT_OPTIONS Constant', () => {
             'captureRejections',
             'maxListeners',
             'weakReferences',
-            'immediateDispatch',
             'concurrencyLimit',
             'bufferSize',
             'gcIntervalMs',
@@ -148,7 +140,6 @@ describe('DEFAULT_OPTIONS Constant', () => {
         expect(DEFAULT_OPTIONS.captureRejections).toBe(false);
         expect(DEFAULT_OPTIONS.weakReferences).toBe(false);
 
-        expect(DEFAULT_OPTIONS.immediateDispatch).toBe(true);
         expect(DEFAULT_OPTIONS.concurrencyLimit).toBe(Infinity);
 
         expect(DEFAULT_OPTIONS.maxListeners).toBeGreaterThan(0);
@@ -160,7 +151,6 @@ describe('DEFAULT_OPTIONS Constant', () => {
         expect(typeof DEFAULT_OPTIONS.captureRejections).toBe('boolean');
         expect(typeof DEFAULT_OPTIONS.maxListeners).toBe('number');
         expect(typeof DEFAULT_OPTIONS.weakReferences).toBe('boolean');
-        expect(typeof DEFAULT_OPTIONS.immediateDispatch).toBe('boolean');
         expect(typeof DEFAULT_OPTIONS.concurrencyLimit).toBe('number');
         expect(typeof DEFAULT_OPTIONS.bufferSize).toBe('number');
         expect(typeof DEFAULT_OPTIONS.gcIntervalMs).toBe('number');
@@ -178,8 +168,6 @@ describe('DEFAULT_OPTIONS Constant', () => {
                     userOptions.captureRejections ?? DEFAULT_OPTIONS.captureRejections,
                 maxListeners: userOptions.maxListeners ?? DEFAULT_OPTIONS.maxListeners,
                 weakReferences: userOptions.weakReferences ?? DEFAULT_OPTIONS.weakReferences,
-                immediateDispatch:
-                    userOptions.immediateDispatch ?? DEFAULT_OPTIONS.immediateDispatch,
                 concurrencyLimit: userOptions.concurrencyLimit ?? DEFAULT_OPTIONS.concurrencyLimit,
                 bufferSize: userOptions.bufferSize ?? DEFAULT_OPTIONS.bufferSize,
                 gcIntervalMs: userOptions.gcIntervalMs ?? DEFAULT_OPTIONS.gcIntervalMs,
