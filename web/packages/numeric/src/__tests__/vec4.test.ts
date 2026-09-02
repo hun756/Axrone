@@ -325,10 +325,14 @@ describe('Vec4 Unit Tests', () => {
                 expectVectorClose(result, { x: 0.5, y: 1, z: 2, w: 4 });
             });
 
-            test('should throw error for inverse of zero', () => {
+            test('should use defaultValue for inverse of zero components', () => {
                 const a = new Vec4(2, 0, 0.5, 1);
+                const result = Vec4.inverseSafe(a, undefined, 99);
 
-                expect(() => Vec4.inverseSafe(a)).toThrow('Inversion of zero or near-zero value');
+                expect(Math.abs(result.x - 0.5)).toBeLessThan(EPSILON);
+                expect(Math.abs(result.y - 99)).toBeLessThan(EPSILON);
+                expect(Math.abs(result.z - 2)).toBeLessThan(EPSILON);
+                expect(Math.abs(result.w - 1)).toBeLessThan(EPSILON);
             });
         });
     });
