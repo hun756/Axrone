@@ -451,6 +451,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             this.#removeOnceSubscriptions(snapshot);
 
             let hadAsyncCallbacks = false;
+            const errors: Error[] = [];
 
             for (const subscription of snapshot) {
                 const callback = this.#resolveCallback(subscription);
@@ -486,11 +487,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                                 const wrapped = new EventHandlerError(eventName, error);
 
                                 if (this.#options.captureRejections) {
-                                    try {
-                                        this.#handleCapturedErrorSync(eventName, wrapped);
-                                    } catch (handlerError) {
-                                        this.#reportAsyncError(handlerError);
-                                    }
+                                    errors.push(wrapped);
                                 } else {
                                     this.#reportAsyncError(wrapped);
                                 }
@@ -511,12 +508,24 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                     );
 
                     const wrapped = new EventHandlerError(eventName, error);
+                    errors.push(wrapped);
+                }
+            }
 
-                    if (this.#options.captureRejections) {
-                        this.#handleCapturedErrorSync(eventName, wrapped);
-                    } else {
-                        throw wrapped;
+            if (errors.length > 0) {
+                const errorEvent = 'error' as EventKey<T>;
+
+                if (this.has(errorEvent)) {
+                    for (const err of errors) {
+                        this.emitSync(errorEvent, err as T[typeof errorEvent]);
                     }
+                } else if (errors.length === 1) {
+                    throw errors[0];
+                } else {
+                    throw new EventHandlerError(
+                        eventName,
+                        new AggregateError(errors, `${errors.length} handlers failed`)
+                    );
                 }
             }
 
