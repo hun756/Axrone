@@ -233,6 +233,11 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         }
     }
 
+    /**
+     * @deprecated Mat2 (2x2 matrix) cannot represent 2D affine translations.
+     * This method always throws an error. Use Mat3.translate for 2D affine transformations.
+     * This method exists only for API compatibility and will be removed in a future version.
+     */
     static translate<T extends IVec2Like, V extends IMat2Like | undefined = undefined>(
         v: Readonly<T>,
         out?: V
