@@ -1270,20 +1270,27 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         onto: Readonly<U>,
         out?: V
     ): V {
-        const projection = Vec4.project(v, onto);
+        const dotProduct = Vec4.dot(v, onto);
+        const ontoLengthSq = Vec4.lengthSquared(onto);
+
+        if (ontoLengthSq < EPSILON) {
+            throw new Error('Cannot project onto zero-length vector');
+        }
+
+        const scalar = dotProduct / ontoLengthSq;
 
         if (out) {
-            out.x = v.x - projection.x;
-            out.y = v.y - projection.y;
-            out.z = v.z - projection.z;
-            out.w = v.w - projection.w;
+            out.x = v.x - onto.x * scalar;
+            out.y = v.y - onto.y * scalar;
+            out.z = v.z - onto.z * scalar;
+            out.w = v.w - onto.w * scalar;
             return out;
         } else {
             return {
-                x: v.x - projection.x,
-                y: v.y - projection.y,
-                z: v.z - projection.z,
-                w: v.w - projection.w,
+                x: v.x - onto.x * scalar,
+                y: v.y - onto.y * scalar,
+                z: v.z - onto.z * scalar,
+                w: v.w - onto.w * scalar,
             } as V;
         }
     }

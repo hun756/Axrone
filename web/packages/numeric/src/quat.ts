@@ -4,6 +4,10 @@ import { clamp01 } from './clamp';
 import { IVec3Like } from './vec3';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
+// Module-level scratch quats for allocation-free intermediate calculations
+const _scratch1: IQuatLike = { x: 0, y: 0, z: 0, w: 1 };
+const _scratch2: IQuatLike = { x: 0, y: 0, z: 0, w: 1 };
+
 export interface IQuatLike {
     x: number;
     y: number;
@@ -606,14 +610,11 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
     >(q1: Readonly<T>, q2: Readonly<U>, s1: Readonly<V>, s2: Readonly<W>, t: number, out?: O): O {
         const t1 = clamp01(t);
 
-        const temp1 = {} as IQuatLike;
-        Quat.slerp(q1, q2, t1, temp1);
-
-        const temp2 = {} as IQuatLike;
-        Quat.slerp(s1, s2, t1, temp2);
+        Quat.slerp(q1, q2, t1, _scratch1);
+        Quat.slerp(s1, s2, t1, _scratch2);
 
         const h = 2 * t1 * (1 - t1);
-        return Quat.slerp(temp1, temp2, h, out);
+        return Quat.slerp(_scratch1, _scratch2, h, out);
     }
 
     add<T extends IQuatLike>(b: Readonly<T>): Quat {

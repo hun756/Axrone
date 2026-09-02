@@ -1084,18 +1084,25 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         onto: Readonly<U>,
         out?: V
     ): V {
-        const projection = Vec3.project(v, onto);
+        const dotProduct = Vec3.dot(v, onto);
+        const ontoLengthSq = Vec3.lengthSquared(onto);
+
+        if (ontoLengthSq < EPSILON) {
+            throw new Error('Cannot project onto zero-length vector');
+        }
+
+        const scalar = dotProduct / ontoLengthSq;
 
         if (out) {
-            out.x = v.x - projection.x;
-            out.y = v.y - projection.y;
-            out.z = v.z - projection.z;
+            out.x = v.x - onto.x * scalar;
+            out.y = v.y - onto.y * scalar;
+            out.z = v.z - onto.z * scalar;
             return out;
         } else {
             return {
-                x: v.x - projection.x,
-                y: v.y - projection.y,
-                z: v.z - projection.z,
+                x: v.x - onto.x * scalar,
+                y: v.y - onto.y * scalar,
+                z: v.z - onto.z * scalar,
             } as V;
         }
     }
