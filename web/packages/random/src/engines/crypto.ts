@@ -101,6 +101,8 @@ export class CryptoEngine implements IRandomEngine {
                             .map((b) => hex[b])
                             .join('')
                 ),
+                0n,
+                0n,
             ],
             counter: this.counter,
             engine: this.engineType,

@@ -72,7 +72,7 @@ export class Xoroshiro128PlusPlus implements IRandomEngine {
 
     public getState = (): IRandomState => {
         return {
-            vector: [this.s0, this.s1, 0n, 0n],
+            vector: [this.s0, this.s1, 0n, 0n, 0n, 0n],
             counter: this.counter,
             engine: this.engineType,
         };

@@ -39,7 +39,7 @@ export const enum Endianness {
 }
 
 export type SeedSource = number | string | Uint8Array | Int32Array | BigInt64Array | null;
-export type RandomStateVector = [UInt64, UInt64, UInt64, UInt64];
+export type RandomStateVector = [UInt64, UInt64, UInt64, UInt64, UInt64, UInt64];
 
 export interface IRandomState {
     readonly vector: RandomStateVector;

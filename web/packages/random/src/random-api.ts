@@ -388,6 +388,8 @@ export class Random implements IRandomGenerator {
                 currentState.vector[1] ^ (currentState.counter << 1n),
                 currentState.vector[2] ^ (currentState.counter << 2n),
                 currentState.vector[3] ^ (currentState.counter << 3n),
+                currentState.vector[4] ^ (currentState.counter << 4n),
+                currentState.vector[5] ^ (currentState.counter << 5n),
             ];
             this.setSeed(new BigInt64Array(derivedSeed));
         }
@@ -416,6 +418,8 @@ export class Random implements IRandomGenerator {
                 currentState.vector[1] ^ (currentState.counter << 1n),
                 currentState.vector[2] ^ (currentState.counter << 2n),
                 currentState.vector[3] ^ (currentState.counter << 3n),
+                currentState.vector[4] ^ (currentState.counter << 4n),
+                currentState.vector[5] ^ (currentState.counter << 5n),
             ],
             counter: 0n,
             engine: currentState.engine,

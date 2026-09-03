@@ -41,7 +41,7 @@ export class SplitMix64Engine implements IRandomEngine {
 
     public getState = (): IRandomState => {
         return {
-            vector: [this.state, 0n, 0n, 0n],
+            vector: [this.state, 0n, 0n, 0n, 0n, 0n],
             counter: this.counter,
             engine: this.engineType,
         };

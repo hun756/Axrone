@@ -74,7 +74,7 @@ export class PCGEngine implements IRandomEngine {
 
     public getState = (): IRandomState => {
         return {
-            vector: [this.state, this.inc, 0n, 0n],
+            vector: [this.state, this.inc, 0n, 0n, 0n, 0n],
             counter: this.counter,
             engine: this.engineType,
         };
