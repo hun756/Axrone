@@ -303,7 +303,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         targetEvent?: string
     ): UnsubscribeFn {
         return pipeToEmitter(
-            (callback) => this.on(event, callback),
+            (callback) => this.on(event, callback as EventCallback<T[K]>),
             emitter,
             targetEvent ?? (event as string)
         );
@@ -436,35 +436,34 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
         this.#emitDepth.set(eventName, currentDepth + 1);
 
-        try {
-            if (this.#isPaused) {
-                const tapContext: Omit<EventTapContext, 'phase'> = {
-                    event: eventName,
-                    data,
-                    priority,
-                    sync: false,
-                };
-                this.#emitTaps({ ...tapContext, phase: 'start' });
-                try {
-                    this.#enqueueBufferedEvent(eventName, data, priority);
-                    this.#recordEmitMetric(eventName, 0, 'buffered');
-                    this.#emitTaps({ ...tapContext, phase: 'end' });
-                    return true;
-                } catch (error) {
-                    this.#recordEmitMetric(eventName, startTime, 'buffered');
-                    this.#emitTaps({ ...tapContext, phase: 'end' });
-                    throw error;
-                }
-            }
-
+        if (this.#isPaused) {
             const tapContext: Omit<EventTapContext, 'phase'> = {
                 event: eventName,
                 data,
                 priority,
                 sync: false,
             };
-
             this.#emitTaps({ ...tapContext, phase: 'start' });
+            try {
+                this.#enqueueBufferedEvent(eventName, data, priority);
+                this.#recordEmitMetric(eventName, 0, 'buffered');
+                this.#emitTaps({ ...tapContext, phase: 'end' });
+                return true;
+            } catch (error) {
+                this.#recordEmitMetric(eventName, startTime, 'buffered');
+                this.#emitTaps({ ...tapContext, phase: 'end' });
+                throw error;
+            }
+        }
+
+        const tapContext: Omit<EventTapContext, 'phase'> = {
+            event: eventName,
+            data,
+            priority,
+            sync: false,
+        };
+
+        this.#emitTaps({ ...tapContext, phase: 'start' });
 
         try {
             const snapshot = this.#snapshotListeners(eventName);
@@ -651,33 +650,26 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
         this.#emitDepth.set(eventName, currentDepth + 1);
 
-        try {
-            if (this.#isPaused) {
-                try {
-                    const tapContext: Omit<EventTapContext, 'phase'> = {
-                        event: eventName,
-                        data,
-                        priority,
-                        sync: true,
-                    };
-                    this.#emitTaps({ ...tapContext, phase: 'start' });
-                    this.#enqueueBufferedEvent(eventName, data, priority);
-                    this.#recordEmitMetric(eventName, 0, 'buffered');
-                    this.#emitTaps({ ...tapContext, phase: 'end' });
-                    return true;
-                } catch (error) {
-                    this.#recordEmitMetric(eventName, startTime, 'buffered');
-                    this.#emitTaps({ ...tapContext, phase: 'end' });
-                    throw error;
-                }
-            }
+        const tapContext: Omit<EventTapContext, 'phase'> = {
+            event: eventName,
+            data,
+            priority,
+            sync: true,
+        };
 
-            const tapContext: Omit<EventTapContext, 'phase'> = {
-                event: eventName,
-                data,
-                priority,
-                sync: true,
-            };
+        if (this.#isPaused) {
+            try {
+                this.#emitTaps({ ...tapContext, phase: 'start' });
+                this.#enqueueBufferedEvent(eventName, data, priority);
+                this.#recordEmitMetric(eventName, 0, 'buffered');
+                this.#emitTaps({ ...tapContext, phase: 'end' });
+                return true;
+            } catch (error) {
+                this.#recordEmitMetric(eventName, startTime, 'buffered');
+                this.#emitTaps({ ...tapContext, phase: 'end' });
+                throw error;
+            }
+        }
 
         this.#emitTaps({ ...tapContext, phase: 'start' });
 
