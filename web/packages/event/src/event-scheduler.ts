@@ -1,6 +1,6 @@
 import { Queue } from '@axrone/memory';
 import { performance } from './internal/performance';
-import { normalizePositiveInteger, normalizeDuration } from './internal/normalize';
+import { normalizePositiveInteger, normalizeDuration, normalizeConcurrency } from './internal/normalize';
 import { toError } from './internal/utils';
 
 declare const __taskBrand: unique symbol;
@@ -96,20 +96,6 @@ const TASK_PRIORITY_ORDER = [
     TaskPriority.IDLE,
 ] as const;
 
-function normalizeConcurrencyLimit(value: number | undefined, fallback: number): number {
-    if (value === Infinity || fallback === Infinity) {
-        if (value === undefined) {
-            return fallback;
-        }
-        if (!Number.isFinite(value)) {
-            throw new Error('concurrencyLimit must be a finite number or Infinity');
-        }
-        return value;
-    }
-
-    return normalizePositiveInteger(value, fallback);
-}
-
 export class EventScheduler {
     private readonly id: SchedulerId;
     private readonly concurrencyLimit: number;
@@ -148,7 +134,7 @@ export class EventScheduler {
     constructor(options: ISchedulerOptions = {}) {
         this.id =
             `scheduler_${Date.now()}_${Math.random().toString(36).substring(2, 11)}` as SchedulerId;
-        this.concurrencyLimit = normalizeConcurrencyLimit(options.concurrencyLimit, Infinity);
+        this.concurrencyLimit = normalizeConcurrency(options.concurrencyLimit, Infinity);
         this.maxQueueSize = normalizePositiveInteger(options.maxQueueSize, 10000);
         this.enableMetrics = options.enableMetrics ?? false;
         this.enableRetries = options.enableRetries ?? false;
