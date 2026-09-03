@@ -72,3 +72,25 @@ export const factorial = (() => {
         return result;
     };
 })();
+
+// Log-gamma via Lanczos approximation (g=7). Accurate to ~1e-15.
+// ln(Gamma(x)) for x > 0. For integer n: ln(n!) = logGamma(n+1).
+const LANCZOS_G = 7;
+const LANCZOS_C = [
+    0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313,
+    -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6,
+    1.1934154765285962e-6,
+];
+
+export const logGamma = (x: number): number => {
+    if (x < 0.5) {
+        return Math.log(PI / Math.sin(PI * x)) - logGamma(1 - x);
+    }
+    x -= 1;
+    let sum = LANCZOS_C[0];
+    for (let i = 1; i < LANCZOS_G + 2; i++) {
+        sum += LANCZOS_C[i] / (x + i);
+    }
+    const t = x + LANCZOS_G + 0.5;
+    return 0.5 * Math.log(TWO_PI) + (x + 0.5) * Math.log(t) - t + Math.log(sum);
+};

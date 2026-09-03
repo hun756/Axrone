@@ -1,5 +1,5 @@
 import { IDistribution, IRandomState, RandomResult, DistributionSample } from '../types';
-import { validatePositive, PI, factorial } from '../constants';
+import { validatePositive, PI, logGamma } from '../constants';
 import { createEngineFactory } from '../engines';
 import {
     sampleManyFromDistribution,
@@ -55,7 +55,7 @@ export class PoissonDistribution implements IDistribution<number> {
                 const v = engine.next01();
                 const y = alpha - beta * x;
                 const lhs = y + Math.log(v / Math.pow(1.0 + Math.exp(y), 2));
-                const rhs = k + n * Math.log(this.lambda) - Math.log(factorial(n));
+                const rhs = k + n * Math.log(this.lambda) - logGamma(n + 1);
 
                 if (lhs <= rhs) {
                     return [n, engine.getState()];
@@ -80,7 +80,7 @@ export class PoissonDistribution implements IDistribution<number> {
         if (!Number.isInteger(k) || k < 0) {
             throw new RangeError('Value must be a non-negative integer');
         }
-        return (Math.pow(this.lambda, k) * Math.exp(-this.lambda)) / factorial(k);
+        return Math.exp(k * Math.log(this.lambda) - this.lambda - logGamma(k + 1));
     };
 
     public cumulativeProbability = (k: number): number => {
