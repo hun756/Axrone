@@ -152,7 +152,7 @@ export class EventScheduler {
         this.maxQueueSize = normalizePositiveInteger(options.maxQueueSize, 10000);
         this.enableMetrics = options.enableMetrics ?? false;
         this.enableRetries = options.enableRetries ?? false;
-        this.maxRetries = Math.max(0, Math.trunc(options.maxRetries ?? 3));
+        this.maxRetries = Number.isFinite(options.maxRetries) ? Math.max(0, Math.trunc(options.maxRetries!)) : 3;
         this.retryDelay = normalizeDuration(options.retryDelay, 1000);
         this.taskTimeout = normalizeDuration(options.taskTimeout, 30000);
         this.gcIntervalMs = normalizeDuration(options.gcIntervalMs, 0);
