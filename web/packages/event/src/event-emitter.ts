@@ -1,4 +1,12 @@
-import { performance } from './performance';
+import { performance } from './internal/performance';
+import {
+    normalizeMaxListeners,
+    normalizeConcurrency,
+    normalizeBufferSize,
+    normalizeGcInterval,
+    normalizeBufferOverflow,
+} from './internal/normalize';
+import { isPromiseLike, toError, rethrowAsync, pipeToEmitter } from './internal/utils';
 import {
     EventCallback,
     EventPriority,
@@ -109,46 +117,6 @@ const PRIORITY_TO_TASK_PRIORITY = Object.freeze({
 
 const MAX_EMIT_DEPTH = 32;
 
-function normalizeMaxListeners(value: number | undefined, fallback: number): number {
-    if (value === Infinity) {
-        return Infinity;
-    }
-
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return fallback;
-    }
-
-    return Math.max(0, Math.trunc(value));
-}
-
-function normalizeConcurrency(value: number | undefined, fallback: number): number {
-    if (value === Infinity || (value === undefined && fallback === Infinity)) {
-        return value ?? fallback;
-    }
-
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return fallback;
-    }
-
-    return Math.max(1, Math.trunc(value));
-}
-
-function normalizeBufferSize(value: number | undefined, fallback: number): number {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return fallback;
-    }
-
-    return Math.max(1, Math.trunc(value));
-}
-
-function normalizeGcInterval(value: number | undefined, fallback: number): number {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return fallback;
-    }
-
-    return Math.max(0, Math.trunc(value));
-}
-
 function normalizeOptions(options: EventOptions): Required<EventOptions> {
     return {
         captureRejections:
@@ -169,16 +137,6 @@ function normalizeOptions(options: EventOptions): Required<EventOptions> {
         bufferOverflow: normalizeBufferOverflow(options.bufferOverflow, DEFAULT_OPTIONS.bufferOverflow),
         metrics: typeof options.metrics === 'boolean' ? options.metrics : DEFAULT_OPTIONS.metrics,
     };
-}
-
-function normalizeBufferOverflow(
-    value: unknown,
-    fallback: 'throw' | 'drop-oldest' | 'drop-newest'
-): 'throw' | 'drop-oldest' | 'drop-newest' {
-    if (value === 'throw' || value === 'drop-oldest' || value === 'drop-newest') {
-        return value;
-    }
-    return fallback;
 }
 
 function createListenerBucket(): ListenerBucket {
@@ -253,18 +211,6 @@ function determineDominantEmitMode(emit: MetricsAccumulator['emit']): EmitMode {
         return 'async';
     }
     return 'buffered';
-}
-
-function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
-    return (
-        (typeof value === 'object' || typeof value === 'function') &&
-        value !== null &&
-        typeof (value as PromiseLike<T>).then === 'function'
-    );
-}
-
-function toError(error: unknown): Error {
-    return error instanceof Error ? error : new Error(String(error));
 }
 
 export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitter<T> {
@@ -356,8 +302,11 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         emitter: IEventPublisher<any>,
         targetEvent?: string
     ): UnsubscribeFn {
-        const actualTargetEvent = targetEvent ?? (event as string);
-        return this.on(event, (data) => emitter.emit(actualTargetEvent as any, data).then(() => undefined));
+        return pipeToEmitter(
+            (callback) => this.on(event, callback),
+            emitter,
+            targetEvent ?? (event as string)
+        );
     }
 
     public off<K extends EventKey<T>>(event: K, callback?: EventCallback<T[K]>): boolean {
@@ -1277,6 +1226,8 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 this.#buffer.delete(eventName);
             }
         }
+
+        this.#scheduler?.runGarbageCollection(this.#options.gcIntervalMs);
     }
 
     dispose(): void {
@@ -1302,6 +1253,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     #createScheduler(): EventScheduler {
         return new EventScheduler({
             concurrencyLimit: this.#options.concurrencyLimit,
+            gcIntervalMs: 0,
         });
     }
 
@@ -1399,18 +1351,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     }
 
     #reportAsyncError(error: unknown): void {
-        const failure = toError(error);
-
-        if (typeof queueMicrotask === 'function') {
-            queueMicrotask(() => {
-                throw failure;
-            });
-            return;
-        }
-
-        void Promise.resolve().then(() => {
-            throw failure;
-        });
+        rethrowAsync(error);
     }
 
     #hasListeners(eventName: string): boolean {

@@ -1,14 +1,7 @@
 import { EventMap, EventKey, EventCallback, UnsubscribeFn, EventPriority } from './definition';
 import { IEventEmitter, EventEmitter } from './event-emitter';
 import { SubscriptionOptions } from './interfaces';
-
-function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
-    return (
-        (typeof value === 'object' || typeof value === 'function') &&
-        value !== null &&
-        typeof (value as PromiseLike<T>).then === 'function'
-    );
-}
+import { isPromiseLike } from './internal/utils';
 
 export function createHooks<T extends EventMap>(): {
     on: <K extends EventKey<T>>(
