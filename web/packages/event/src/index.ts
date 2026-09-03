@@ -65,6 +65,4 @@ export {
     namespaceEvents,
 } from './extras';
 
-export { performance } from './performance';
-
 export { createHooks, EventUtils } from './utility';
