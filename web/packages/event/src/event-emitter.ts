@@ -350,6 +350,63 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         return this.#deleteSubscription(subscription);
     }
 
+    /**
+     * Asynchronously dispatch an event to all currently-subscribed listeners.
+     *
+     * **Dispatch semantics — snapshot model.** The listener set is captured
+     * at the moment this method is called, and dispatch iterates only that
+     * snapshot. Concretely:
+     *
+     * - *Snapshot at dispatch start.* The snapshot is built from the
+     *   listener bucket in priority order (high → normal → low) before any
+     *   handler runs. The set of listeners that will fire is fixed for the
+     *   lifetime of this `emit`.
+     * - *Mutations during dispatch are deferred.* Subscriptions added via
+     *   `on()` / `once()` during this `emit` are stored in the bucket but
+     *   are NOT in the snapshot, so they do not fire in this dispatch —
+     *   they become visible to the next `emit`.
+     * - *`off()` during dispatch.* Removing a listener via `off()` /
+     *   `offById()` while this `emit` is in-flight sets the subscription's
+     *   `disposed` flag. Both the async fast-path (`concurrencyLimit ===
+     *   Infinity`) and the scheduler path re-check this flag before
+     *   invocation, so a listener removed during the current dispatch is
+     *   skipped for the remainder of this `emit`. The snapshot itself is
+     *   not re-read — the bucket, not the snapshot, is the source of truth
+     *   for "still subscribed". This is the snapshot model: a fixed list
+     *   at start, not a live-growing list.
+     * - *`once` removal is post-dispatch.* A `once` listener fires on the
+     *   first matching emit after registration and is unregistered only
+     *   after its handler returns (or throws). It is NEVER removed before
+     *   being invoked in this `emit`, even if `off()` is called on it from
+     *   inside its own handler.
+     * - *Re-entrant emits complete in full.* A handler that calls `emit()`
+     *   for the same event runs a nested, full dispatch that snapshots
+     *   and completes before the outer iteration resumes. There is no
+     *   implicit short-circuit or skip of the outer iteration.
+     * - *Re-entrancy is bounded.* Nested emits for the same event are
+     *   capped at `MAX_EMIT_DEPTH` (32). Deeper recursion is dropped and
+     *   logged once.
+     *
+     * **Divergence from `@axrone/observer`.** This snapshot model differs
+     * deliberately from `@axrone/observer`'s `Subject`, which iterates a
+     * live, growing array and therefore FIRES listeners added
+     * mid-dispatch. Use `Subject` for observer-style live fan-out; use
+     * `EventEmitter` for stable per-emit fan-out (the common case for
+     * game and event systems).
+     *
+     * @typeParam K - Event key, narrowed against `T`.
+     * @param event - The event to dispatch.
+     * @param data - The payload delivered to every listener.
+     * @param options - Per-emit overrides; `priority` is accepted for
+     *   parity but does not change the dispatch order within the
+     *   snapshot.
+     * @returns A promise that resolves to `true` if at least one listener
+     *   was invoked, `false` if the emitter was paused, had no listeners,
+     *   exceeded re-entrancy depth, or the snapshot was empty. Rejects
+     *   with collected handler errors (an `EventHandlerError` or
+     *   `AggregateError`) when `captureRejections` is disabled and at
+     *   least one handler threw.
+     */
     public async emit<K extends EventKey<T>>(
         event: K,
         data: T[K],
@@ -506,6 +563,65 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         }
     }
 
+    /**
+     * Synchronously dispatch an event to all currently-subscribed listeners.
+     *
+     * **Dispatch semantics — snapshot model.** The listener set is captured
+     * at the moment this method is called, and dispatch iterates only that
+     * snapshot. Concretely:
+     *
+     * - *Snapshot at dispatch start.* The snapshot is built from the
+     *   listener bucket in priority order (high → normal → low) before any
+     *   handler runs. The set of listeners that will fire is fixed for the
+     *   lifetime of this `emitSync`.
+     * - *Mutations during dispatch are deferred.* Subscriptions added via
+     *   `on()` / `once()` during this `emitSync` are stored in the bucket
+     *   but are NOT in the snapshot, so they do not fire in this
+     *   dispatch — they become visible to the next emit.
+     * - *`off()` during dispatch is a no-op for the current dispatch.*
+     *   Unlike the async `emit()` path, the sync fast-path does NOT
+     *   re-check the `disposed` flag before invocation. A listener
+     *   removed via `off()` / `offById()` while this `emitSync` is
+     *   in-flight will STILL be invoked once, because the snapshot — not
+     *   the live bucket — determines what fires. (If the snapshot
+     *   callback was wrapped in a `WeakRef` and the underlying callback
+     *   has been garbage-collected, the listener is skipped — but that
+     *   is a separate `WeakRef`-resolution failure, not a removal
+     *   effect.)
+     * - *`once` removal is post-dispatch.* A `once` listener fires on the
+     *   first matching emit after registration and is unregistered only
+     *   after its handler returns (or throws). It is NEVER removed before
+     *   being invoked in this `emitSync`, even if `off()` is called on it
+     *   from inside its own handler.
+     * - *Async handlers are warned, not awaited.* If a handler returns a
+     *   thenable, this method returns immediately and a warning is
+     *   logged to the console; the promise's outcome is observed in the
+     *   background and routed through `captureRejections` or
+     *   `reportAsyncError`. For awaitable semantics, use `emit()`.
+     * - *Re-entrancy is bounded.* Nested `emitSync` calls for the same
+     *   event are capped at `MAX_EMIT_DEPTH` (32). Deeper recursion is
+     *   dropped and logged once.
+     *
+     * **Divergence from `@axrone/observer`.** This snapshot model differs
+     * deliberately from `@axrone/observer`'s `Subject`, which iterates a
+     * live, growing array and therefore FIRES listeners added
+     * mid-dispatch. Use `Subject` for observer-style live fan-out; use
+     * `EventEmitter` for stable per-emit fan-out (the common case for
+     * game and event systems).
+     *
+     * @typeParam K - Event key, narrowed against `T`.
+     * @param event - The event to dispatch.
+     * @param data - The payload delivered to every listener.
+     * @param options - Per-emit overrides; `priority` is accepted for
+     *   parity but does not change the dispatch order within the
+     *   snapshot.
+     * @returns `true` if at least one listener was invoked (or any
+     *   handler returned a thenable, in which case that promise is
+     *   still pending), `false` if the emitter was paused, had no
+     *   listeners, exceeded re-entrancy depth, or the snapshot was
+     *   empty. Throws collected handler errors as `EventHandlerError` /
+     *   `AggregateError` when at least one handler threw synchronously.
+     */
     public emitSync<K extends EventKey<T>>(
         event: K,
         data: T[K],
