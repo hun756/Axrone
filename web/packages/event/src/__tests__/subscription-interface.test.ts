@@ -177,6 +177,7 @@ describe('EventEmitter - Subscription Interfaces', () => {
             const metrics: EventMetrics = {
                 emit: {
                     count: 100,
+                    mode: 'sync',
                     timing: { avg: 2.0, max: 10.0, min: 0.5, total: 200.0 },
                 },
                 execution: {
@@ -202,6 +203,7 @@ describe('EventEmitter - Subscription Interfaces', () => {
             const emptyMetrics: EventMetrics = {
                 emit: {
                     count: 0,
+                    mode: 'sync',
                     timing: { avg: 0, max: 0, min: 0, total: 0 },
                 },
                 execution: {
@@ -222,7 +224,7 @@ describe('EventEmitter - Subscription Interfaces', () => {
 
         it('should support metrics aggregation across time windows', () => {
             const window1: EventMetrics = {
-                emit: { count: 50, timing: { avg: 2.0, max: 8.0, min: 0.5, total: 100.0 } },
+                emit: { count: 50, mode: 'sync', timing: { avg: 2.0, max: 8.0, min: 0.5, total: 100.0 } },
                 execution: {
                     count: 48,
                     errors: 1,
@@ -231,7 +233,7 @@ describe('EventEmitter - Subscription Interfaces', () => {
             };
 
             const window2: EventMetrics = {
-                emit: { count: 75, timing: { avg: 3.0, max: 12.0, min: 0.8, total: 225.0 } },
+                emit: { count: 75, mode: 'sync', timing: { avg: 3.0, max: 12.0, min: 0.8, total: 225.0 } },
                 execution: {
                     count: 72,
                     errors: 2,
@@ -242,6 +244,7 @@ describe('EventEmitter - Subscription Interfaces', () => {
             const aggregated: EventMetrics = {
                 emit: {
                     count: window1.emit.count + window2.emit.count,
+                    mode: 'sync',
                     timing: {
                         avg:
                             (window1.emit.timing.total + window2.emit.timing.total) /

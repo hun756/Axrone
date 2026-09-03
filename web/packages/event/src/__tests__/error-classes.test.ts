@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
     BaseError,
     EventError,
-    EventNotFoundError,
     EventQueueFullError,
     EventHandlerError,
 } from '@axrone/event';
@@ -11,7 +10,6 @@ describe('EventEmitter - Error Classes', () => {
     describe('Error Inheritance', () => {
         it('should maintain proper inheritance chain', () => {
             const eventError = new EventError('test');
-            const notFoundError = new EventNotFoundError('test-event');
             const queueError = new EventQueueFullError('test-event', 100);
             const handlerError = new EventHandlerError('test-event', new Error('test'));
 
@@ -22,7 +20,6 @@ describe('EventEmitter - Error Classes', () => {
             expect(notFoundError instanceof Error).toBe(true);
             expect(notFoundError instanceof BaseError).toBe(true);
             expect(notFoundError instanceof EventError).toBe(true);
-            expect(notFoundError instanceof EventNotFoundError).toBe(true);
 
             expect(queueError instanceof EventError).toBe(true);
             expect(handlerError instanceof EventError).toBe(true);
@@ -30,7 +27,6 @@ describe('EventEmitter - Error Classes', () => {
 
         it('should have correct error names', () => {
             expect(new EventError('test').name).toBe('EventError');
-            expect(new EventNotFoundError('test').name).toBe('EventError');
             expect(new EventQueueFullError('test', 100).name).toBe('EventError');
             expect(new EventHandlerError('test', new Error()).name).toBe('EventError');
         });
@@ -49,9 +45,7 @@ describe('EventEmitter - Error Classes', () => {
             (Error as any).captureStackTrace = originalCaptureStackTrace;
         });
     });
-    describe('EventNotFoundError', () => {
         it('should store event name and generate correct message', () => {
-            const error = new EventNotFoundError('user:login');
 
             expect(error.eventName).toBe('user:login');
             expect(error.message).toBe('Event "user:login" not found');
@@ -59,7 +53,6 @@ describe('EventEmitter - Error Classes', () => {
 
         it('should handle special characters in event names', () => {
             const specialEventName = 'user:login@domain.com#123';
-            const error = new EventNotFoundError(specialEventName);
 
             expect(error.eventName).toBe(specialEventName);
             expect(error.message).toContain(specialEventName);
@@ -130,20 +123,17 @@ describe('EventEmitter - Error Classes', () => {
 
         it('should work without ErrorOptions', () => {
             expect(() => new EventError('Test')).not.toThrow();
-            expect(() => new EventNotFoundError('test')).not.toThrow();
         });
     });
 
     describe('Edge Cases', () => {
         it('should handle empty strings gracefully', () => {
-            expect(() => new EventNotFoundError('')).not.toThrow();
             expect(() => new EventQueueFullError('', 0)).not.toThrow();
             expect(() => new EventHandlerError('', '')).not.toThrow();
         });
 
         it('should handle Unicode event names', () => {
             const unicodeEvent = '用户:登录🎉';
-            const error = new EventNotFoundError(unicodeEvent);
 
             expect(error.eventName).toBe(unicodeEvent);
             expect(error.message).toContain(unicodeEvent);
@@ -151,7 +141,6 @@ describe('EventEmitter - Error Classes', () => {
 
         it('should handle very long event names', () => {
             const longEventName = 'a'.repeat(10000);
-            const error = new EventNotFoundError(longEventName);
 
             expect(error.eventName).toBe(longEventName);
             expect(error.message.length).toBeGreaterThan(10000);
@@ -167,7 +156,6 @@ describe('EventEmitter - Error Classes', () => {
 
     describe('Serialization Support', () => {
         it('should be JSON serializable (excluding circular references)', () => {
-            const error = new EventNotFoundError('test-event');
 
             expect(() =>
                 JSON.stringify({
@@ -191,7 +179,6 @@ describe('EventEmitter - Error Classes', () => {
         //     const start = performance.now();
 
         //     for (let i = 0; i < 1000; i++) {
-        //         new EventNotFoundError(`event-${i}`);
         //         new EventQueueFullError(`queue-${i}`, i);
         //         new EventHandlerError(`handler-${i}`, new Error(`error-${i}`));
         //     }
@@ -219,18 +206,14 @@ describe('EventEmitter - Error Classes', () => {
             let caughtError: unknown = null;
 
             try {
-                throw new EventNotFoundError('missing-event');
             } catch (error) {
                 caughtError = error;
             }
 
-            expect(caughtError).toBeInstanceOf(EventNotFoundError);
-            expect((caughtError as EventNotFoundError).eventName).toBe('missing-event');
         });
 
         it('should support error filtering by type', () => {
             const errors = [
-                new EventNotFoundError('event1'),
                 new EventQueueFullError('event2', 100),
                 new EventHandlerError('event3', new Error('test')),
                 new Error('regular error'),
@@ -248,7 +231,6 @@ describe('EventEmitter - Error Classes', () => {
 
             try {
                 try {
-                    throw new EventNotFoundError('test');
                 } catch (error) {
                     throw new EventHandlerError('wrapper', error);
                 }
@@ -265,14 +247,12 @@ describe('EventEmitter - Error Classes', () => {
     describe('Error Recovery Patterns', () => {
         it('should support error classification for recovery strategies', () => {
             function getRecoveryStrategy(error: unknown): string {
-                if (error instanceof EventNotFoundError) return 'REGISTER_EVENT';
                 if (error instanceof EventQueueFullError) return 'PROCESS_QUEUE';
                 if (error instanceof EventHandlerError) return 'SKIP_HANDLER';
                 if (error instanceof EventError) return 'GENERAL_RECOVERY';
                 return 'UNKNOWN';
             }
 
-            expect(getRecoveryStrategy(new EventNotFoundError('test'))).toBe('REGISTER_EVENT');
             expect(getRecoveryStrategy(new EventQueueFullError('test', 100))).toBe('PROCESS_QUEUE');
             expect(getRecoveryStrategy(new EventHandlerError('test', new Error()))).toBe(
                 'SKIP_HANDLER'

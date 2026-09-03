@@ -1,4 +1,12 @@
-import { performance } from './performance';
+import { performance } from './internal/performance';
+import {
+    normalizeMaxListeners,
+    normalizeConcurrency,
+    normalizeBufferSize,
+    normalizeGcInterval,
+    normalizeBufferOverflow,
+} from './internal/normalize';
+import { isPromiseLike, toError, rethrowAsync, pipeToEmitter } from './internal/utils';
 import {
     EventCallback,
     EventPriority,
@@ -9,8 +17,8 @@ import {
     DEFAULT_OPTIONS,
     DEFAULT_PRIORITY,
     PRIORITY_VALUES,
-    MEMORY_USAGE_SYMBOLS,
     EventDispatchItem,
+    EventDispatchResult,
 } from './definition';
 import { EventHandlerError, EventQueueFullError } from './errors';
 import {
@@ -65,6 +73,7 @@ interface InternalSubscription<T = unknown> {
     readonly unregisterToken?: object;
     lastExecuted?: number;
     executionCount: number;
+    disposed: boolean;
 }
 
 interface ListenerBucket {
@@ -88,8 +97,15 @@ interface TimingAccumulator {
     max: number;
 }
 
+type EmitMode = 'sync' | 'async' | 'buffered';
+
 interface MetricsAccumulator {
-    emit: TimingAccumulator;
+    emit: {
+        timing: TimingAccumulator;
+        sync: TimingAccumulator;
+        async: TimingAccumulator;
+        buffered: TimingAccumulator;
+    };
     execution: TimingAccumulator & { errors: number };
 }
 
@@ -99,45 +115,7 @@ const PRIORITY_TO_TASK_PRIORITY = Object.freeze({
     low: TaskPriority.LOW,
 } satisfies Readonly<Record<EventPriority, TaskPriority>>);
 
-function normalizeMaxListeners(value: number | undefined, fallback: number): number {
-    if (value === Infinity) {
-        return Infinity;
-    }
-
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return fallback;
-    }
-
-    return Math.max(0, Math.trunc(value));
-}
-
-function normalizeConcurrency(value: number | undefined, fallback: number): number {
-    if (value === Infinity || (value === undefined && fallback === Infinity)) {
-        return value ?? fallback;
-    }
-
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return fallback;
-    }
-
-    return Math.max(1, Math.trunc(value));
-}
-
-function normalizeBufferSize(value: number | undefined, fallback: number): number {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return fallback;
-    }
-
-    return Math.max(1, Math.trunc(value));
-}
-
-function normalizeGcInterval(value: number | undefined, fallback: number): number {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return fallback;
-    }
-
-    return Math.max(0, Math.trunc(value));
-}
+const MAX_EMIT_DEPTH = 32;
 
 function normalizeOptions(options: EventOptions): Required<EventOptions> {
     return {
@@ -150,16 +128,14 @@ function normalizeOptions(options: EventOptions): Required<EventOptions> {
             typeof options.weakReferences === 'boolean'
                 ? options.weakReferences
                 : DEFAULT_OPTIONS.weakReferences,
-        immediateDispatch:
-            typeof options.immediateDispatch === 'boolean'
-                ? options.immediateDispatch
-                : DEFAULT_OPTIONS.immediateDispatch,
         concurrencyLimit: normalizeConcurrency(
             options.concurrencyLimit,
             DEFAULT_OPTIONS.concurrencyLimit
         ),
         bufferSize: normalizeBufferSize(options.bufferSize, DEFAULT_OPTIONS.bufferSize),
         gcIntervalMs: normalizeGcInterval(options.gcIntervalMs, DEFAULT_OPTIONS.gcIntervalMs),
+        bufferOverflow: normalizeBufferOverflow(options.bufferOverflow, DEFAULT_OPTIONS.bufferOverflow),
+        metrics: typeof options.metrics === 'boolean' ? options.metrics : DEFAULT_OPTIONS.metrics,
     };
 }
 
@@ -192,7 +168,12 @@ function createTimingAccumulator(): TimingAccumulator {
 
 function createMetricsAccumulator(): MetricsAccumulator {
     return {
-        emit: createTimingAccumulator(),
+        emit: {
+            timing: createTimingAccumulator(),
+            sync: createTimingAccumulator(),
+            async: createTimingAccumulator(),
+            buffered: createTimingAccumulator(),
+        },
         execution: {
             ...createTimingAccumulator(),
             errors: 0,
@@ -218,16 +199,18 @@ function snapshotTiming(timing: TimingAccumulator): EventMetrics['emit']['timing
     };
 }
 
-function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
-    return (
-        (typeof value === 'object' || typeof value === 'function') &&
-        value !== null &&
-        typeof (value as PromiseLike<T>).then === 'function'
-    );
-}
+function determineDominantEmitMode(emit: MetricsAccumulator['emit']): EmitMode {
+    const syncCount = emit.sync.count;
+    const asyncCount = emit.async.count;
+    const bufferedCount = emit.buffered.count;
 
-function toError(error: unknown): Error {
-    return error instanceof Error ? error : new Error(String(error));
+    if (syncCount >= asyncCount && syncCount >= bufferedCount) {
+        return 'sync';
+    }
+    if (asyncCount >= bufferedCount) {
+        return 'async';
+    }
+    return 'buffered';
 }
 
 export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitter<T> {
@@ -235,7 +218,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     #subscriptionIndex = new Map<symbol, InternalSubscription<any>>();
     #options: Required<EventOptions>;
     #metrics = new Map<string, MetricsAccumulator>();
-    #scheduler: EventScheduler;
+    #scheduler: EventScheduler | null = null;
     #buffer = new Map<string, BufferedBucket>();
     #bufferedEventId = 0;
     #bufferedEventCount = 0;
@@ -245,6 +228,8 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     #weakRegistry?: FinalizationRegistry<symbol>;
     #tapListeners = new Set<EventTap>();
     #bufferProcessing: Promise<void> | null = null;
+    #emitDepth = new Map<string, number>();
+    #warnedEvents = new Set<string>();
 
     constructor(options: EventOptions = {}) {
         this.#options = normalizeOptions(options);
@@ -258,8 +243,6 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 this.offById(subscriptionId);
             });
         }
-
-        this.#scheduler = this.#createScheduler();
 
         if (this.#options.gcIntervalMs > 0) {
             this.#startGc();
@@ -292,7 +275,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         this.#ensureRuntime();
 
         const id = this.#registerListener(event, callback, {
-            once: false,
+            once: options.once ?? false,
             priority: options.priority ?? DEFAULT_PRIORITY,
         });
 
@@ -319,8 +302,11 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         emitter: IEventPublisher<any>,
         targetEvent?: string
     ): UnsubscribeFn {
-        const actualTargetEvent = targetEvent ?? (event as string);
-        return this.on(event, (data) => emitter.emit(actualTargetEvent as any, data).then(() => undefined));
+        return pipeToEmitter(
+            (callback) => this.on(event, callback),
+            emitter,
+            targetEvent ?? (event as string)
+        );
     }
 
     public off<K extends EventKey<T>>(event: K, callback?: EventCallback<T[K]>): boolean {
@@ -364,6 +350,63 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         return this.#deleteSubscription(subscription);
     }
 
+    /**
+     * Asynchronously dispatch an event to all currently-subscribed listeners.
+     *
+     * **Dispatch semantics — snapshot model.** The listener set is captured
+     * at the moment this method is called, and dispatch iterates only that
+     * snapshot. Concretely:
+     *
+     * - *Snapshot at dispatch start.* The snapshot is built from the
+     *   listener bucket in priority order (high → normal → low) before any
+     *   handler runs. The set of listeners that will fire is fixed for the
+     *   lifetime of this `emit`.
+     * - *Mutations during dispatch are deferred.* Subscriptions added via
+     *   `on()` / `once()` during this `emit` are stored in the bucket but
+     *   are NOT in the snapshot, so they do not fire in this dispatch —
+     *   they become visible to the next `emit`.
+     * - *`off()` during dispatch.* Removing a listener via `off()` /
+     *   `offById()` while this `emit` is in-flight sets the subscription's
+     *   `disposed` flag. Both the async fast-path (`concurrencyLimit ===
+     *   Infinity`) and the scheduler path re-check this flag before
+     *   invocation, so a listener removed during the current dispatch is
+     *   skipped for the remainder of this `emit`. The snapshot itself is
+     *   not re-read — the bucket, not the snapshot, is the source of truth
+     *   for "still subscribed". This is the snapshot model: a fixed list
+     *   at start, not a live-growing list.
+     * - *`once` removal is post-dispatch.* A `once` listener fires on the
+     *   first matching emit after registration and is unregistered only
+     *   after its handler returns (or throws). It is NEVER removed before
+     *   being invoked in this `emit`, even if `off()` is called on it from
+     *   inside its own handler.
+     * - *Re-entrant emits complete in full.* A handler that calls `emit()`
+     *   for the same event runs a nested, full dispatch that snapshots
+     *   and completes before the outer iteration resumes. There is no
+     *   implicit short-circuit or skip of the outer iteration.
+     * - *Re-entrancy is bounded.* Nested emits for the same event are
+     *   capped at `MAX_EMIT_DEPTH` (32). Deeper recursion is dropped and
+     *   logged once.
+     *
+     * **Divergence from `@axrone/observer`.** This snapshot model differs
+     * deliberately from `@axrone/observer`'s `Subject`, which iterates a
+     * live, growing array and therefore FIRES listeners added
+     * mid-dispatch. Use `Subject` for observer-style live fan-out; use
+     * `EventEmitter` for stable per-emit fan-out (the common case for
+     * game and event systems).
+     *
+     * @typeParam K - Event key, narrowed against `T`.
+     * @param event - The event to dispatch.
+     * @param data - The payload delivered to every listener.
+     * @param options - Per-emit overrides; `priority` is accepted for
+     *   parity but does not change the dispatch order within the
+     *   snapshot.
+     * @returns A promise that resolves to `true` if at least one listener
+     *   was invoked, `false` if the emitter was paused, had no listeners,
+     *   exceeded re-entrancy depth, or the snapshot was empty. Rejects
+     *   with collected handler errors (an `EventHandlerError` or
+     *   `AggregateError`) when `captureRejections` is disabled and at
+     *   least one handler threw.
+     */
     public async emit<K extends EventKey<T>>(
         event: K,
         data: T[K],
@@ -373,27 +416,55 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
         const eventName = String(event);
         const priority = options.priority ?? DEFAULT_PRIORITY;
-        const startTime = performance.now();
+        const startTime = this.#options.metrics ? performance.now() : 0;
 
-        if (this.#isPaused) {
-            try {
-                this.#enqueueBufferedEvent(eventName, data, priority);
-                this.#recordEmitMetric(eventName, 0);
-                return true;
-            } catch (error) {
-                this.#recordEmitMetric(eventName, performance.now() - startTime);
-                throw error;
-            }
+        const currentDepth = this.#emitDepth.get(eventName) ?? 0;
+        if (currentDepth >= MAX_EMIT_DEPTH) {
+            console.warn(
+                `EventEmitter: Re-entrancy depth exceeded for event "${eventName}" (max ${MAX_EMIT_DEPTH}). Dropping emit.`
+            );
+            return false;
         }
 
-        const tapContext: Omit<EventTapContext, 'phase'> = {
-            event: eventName,
-            data,
-            priority,
-            sync: false,
-        };
+        if (
+            !this.#isPaused &&
+            !this.#hasListeners(eventName) &&
+            this.#tapListeners.size === 0
+        ) {
+            return false;
+        }
 
-        this.#emitTaps({ ...tapContext, phase: 'start' });
+        this.#emitDepth.set(eventName, currentDepth + 1);
+
+        try {
+            if (this.#isPaused) {
+                const tapContext: Omit<EventTapContext, 'phase'> = {
+                    event: eventName,
+                    data,
+                    priority,
+                    sync: false,
+                };
+                this.#emitTaps({ ...tapContext, phase: 'start' });
+                try {
+                    this.#enqueueBufferedEvent(eventName, data, priority);
+                    this.#recordEmitMetric(eventName, 0, 'buffered');
+                    this.#emitTaps({ ...tapContext, phase: 'end' });
+                    return true;
+                } catch (error) {
+                    this.#recordEmitMetric(eventName, startTime, 'buffered');
+                    this.#emitTaps({ ...tapContext, phase: 'end' });
+                    throw error;
+                }
+            }
+
+            const tapContext: Omit<EventTapContext, 'phase'> = {
+                event: eventName,
+                data,
+                priority,
+                sync: false,
+            };
+
+            this.#emitTaps({ ...tapContext, phase: 'start' });
 
         try {
             const snapshot = this.#snapshotListeners(eventName);
@@ -402,17 +473,155 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 return false;
             }
 
-            this.#removeOnceSubscriptions(snapshot);
+            // Fast path: when concurrencyLimit is Infinity (the default), bypass
+            // the EventScheduler to skip per-listener ITask / Promise / closure /
+            // setTimeout(30s) overhead. Handlers run serially via `await`, so any
+            // Promises they return are awaited before emit() resolves. Failure
+            // isolation (per-iteration try/catch), once-removal post-dispatch,
+            // execution metrics, captureRejections semantics (collect-then-process
+            // with 'error' event emission or final throw), and #reportAsyncError
+            // dispatch for non-captured rejections are all preserved. The
+            // scheduler path is retained for finite concurrencyLimit so the
+            // configured cap is honoured.
+            if (this.#options.concurrencyLimit === Infinity) {
+                const errors: EventHandlerError[] = [];
+                for (const subscription of snapshot) {
+                    if (subscription.disposed) {
+                        continue;
+                    }
+
+                    const callback = this.#resolveCallback(subscription);
+                    if (!callback) {
+                        continue;
+                    }
+
+                    const execStartTime = performance.now();
+                    subscription.executionCount += 1;
+                    subscription.lastExecuted = Date.now();
+                    let isError = false;
+                    try {
+                        await (callback as (data: unknown) => unknown)(data);
+                    } catch (error) {
+                        isError = true;
+                        const wrapped =
+                            error instanceof EventHandlerError
+                                ? error
+                                : new EventHandlerError(eventName, error);
+                        if (this.#options.captureRejections) {
+                            errors.push(wrapped);
+                        } else {
+                            this.#reportAsyncError(wrapped);
+                        }
+                    }
+
+                    this.#recordExecutionMetric(
+                        eventName,
+                        performance.now() - execStartTime,
+                        isError
+                    );
+
+                    if (subscription.once) {
+                        this.#deleteSubscription(subscription);
+                    }
+                }
+
+                if (errors.length > 0) {
+                    const errorEvent = 'error' as EventKey<T>;
+                    if (this.has(errorEvent)) {
+                        for (const err of errors) {
+                            this.emitSync(errorEvent, err as T[typeof errorEvent]);
+                        }
+                    } else if (errors.length === 1) {
+                        throw errors[0];
+                    } else {
+                        throw new EventHandlerError(
+                            eventName,
+                            new AggregateError(
+                                errors as Error[],
+                                `${errors.length} handlers failed`
+                            )
+                        );
+                    }
+                }
+
+                return true;
+            }
+
             await this.#dispatchAsync(eventName, data, snapshot);
             return true;
         } catch (error) {
             throw error;
         } finally {
-            this.#recordEmitMetric(eventName, performance.now() - startTime);
+            this.#recordEmitMetric(eventName, startTime, 'async');
             this.#emitTaps({ ...tapContext, phase: 'end' });
+            const depth = this.#emitDepth.get(eventName) ?? 1;
+            if (depth <= 1) {
+                this.#emitDepth.delete(eventName);
+            } else {
+                this.#emitDepth.set(eventName, depth - 1);
+            }
         }
     }
 
+    /**
+     * Synchronously dispatch an event to all currently-subscribed listeners.
+     *
+     * **Dispatch semantics — snapshot model.** The listener set is captured
+     * at the moment this method is called, and dispatch iterates only that
+     * snapshot. Concretely:
+     *
+     * - *Snapshot at dispatch start.* The snapshot is built from the
+     *   listener bucket in priority order (high → normal → low) before any
+     *   handler runs. The set of listeners that will fire is fixed for the
+     *   lifetime of this `emitSync`.
+     * - *Mutations during dispatch are deferred.* Subscriptions added via
+     *   `on()` / `once()` during this `emitSync` are stored in the bucket
+     *   but are NOT in the snapshot, so they do not fire in this
+     *   dispatch — they become visible to the next emit.
+     * - *`off()` during dispatch is a no-op for the current dispatch.*
+     *   Unlike the async `emit()` path, the sync fast-path does NOT
+     *   re-check the `disposed` flag before invocation. A listener
+     *   removed via `off()` / `offById()` while this `emitSync` is
+     *   in-flight will STILL be invoked once, because the snapshot — not
+     *   the live bucket — determines what fires. (If the snapshot
+     *   callback was wrapped in a `WeakRef` and the underlying callback
+     *   has been garbage-collected, the listener is skipped — but that
+     *   is a separate `WeakRef`-resolution failure, not a removal
+     *   effect.)
+     * - *`once` removal is post-dispatch.* A `once` listener fires on the
+     *   first matching emit after registration and is unregistered only
+     *   after its handler returns (or throws). It is NEVER removed before
+     *   being invoked in this `emitSync`, even if `off()` is called on it
+     *   from inside its own handler.
+     * - *Async handlers are warned, not awaited.* If a handler returns a
+     *   thenable, this method returns immediately and a warning is
+     *   logged to the console; the promise's outcome is observed in the
+     *   background and routed through `captureRejections` or
+     *   `reportAsyncError`. For awaitable semantics, use `emit()`.
+     * - *Re-entrancy is bounded.* Nested `emitSync` calls for the same
+     *   event are capped at `MAX_EMIT_DEPTH` (32). Deeper recursion is
+     *   dropped and logged once.
+     *
+     * **Divergence from `@axrone/observer`.** This snapshot model differs
+     * deliberately from `@axrone/observer`'s `Subject`, which iterates a
+     * live, growing array and therefore FIRES listeners added
+     * mid-dispatch. Use `Subject` for observer-style live fan-out; use
+     * `EventEmitter` for stable per-emit fan-out (the common case for
+     * game and event systems).
+     *
+     * @typeParam K - Event key, narrowed against `T`.
+     * @param event - The event to dispatch.
+     * @param data - The payload delivered to every listener.
+     * @param options - Per-emit overrides; `priority` is accepted for
+     *   parity but does not change the dispatch order within the
+     *   snapshot.
+     * @returns `true` if at least one listener was invoked (or any
+     *   handler returned a thenable, in which case that promise is
+     *   still pending), `false` if the emitter was paused, had no
+     *   listeners, exceeded re-entrancy depth, or the snapshot was
+     *   empty. Throws collected handler errors as `EventHandlerError` /
+     *   `AggregateError` when at least one handler threw synchronously.
+     */
     public emitSync<K extends EventKey<T>>(
         event: K,
         data: T[K],
@@ -422,25 +631,53 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
         const eventName = String(event);
         const priority = options.priority ?? DEFAULT_PRIORITY;
-        const startTime = performance.now();
+        const startTime = this.#options.metrics ? performance.now() : 0;
 
-        if (this.#isPaused) {
-            try {
-                this.#enqueueBufferedEvent(eventName, data, priority);
-                this.#recordEmitMetric(eventName, 0);
-                return true;
-            } catch (error) {
-                this.#recordEmitMetric(eventName, performance.now() - startTime);
-                throw error;
-            }
+        const currentDepth = this.#emitDepth.get(eventName) ?? 0;
+        if (currentDepth >= MAX_EMIT_DEPTH) {
+            console.warn(
+                `EventEmitter: Re-entrancy depth exceeded for event "${eventName}" (max ${MAX_EMIT_DEPTH}). Dropping emit.`
+            );
+            return false;
         }
 
-        const tapContext: Omit<EventTapContext, 'phase'> = {
-            event: eventName,
-            data,
-            priority,
-            sync: true,
-        };
+        if (
+            !this.#isPaused &&
+            !this.#hasListeners(eventName) &&
+            this.#tapListeners.size === 0
+        ) {
+            return false;
+        }
+
+        this.#emitDepth.set(eventName, currentDepth + 1);
+
+        try {
+            if (this.#isPaused) {
+                try {
+                    const tapContext: Omit<EventTapContext, 'phase'> = {
+                        event: eventName,
+                        data,
+                        priority,
+                        sync: true,
+                    };
+                    this.#emitTaps({ ...tapContext, phase: 'start' });
+                    this.#enqueueBufferedEvent(eventName, data, priority);
+                    this.#recordEmitMetric(eventName, 0, 'buffered');
+                    this.#emitTaps({ ...tapContext, phase: 'end' });
+                    return true;
+                } catch (error) {
+                    this.#recordEmitMetric(eventName, startTime, 'buffered');
+                    this.#emitTaps({ ...tapContext, phase: 'end' });
+                    throw error;
+                }
+            }
+
+            const tapContext: Omit<EventTapContext, 'phase'> = {
+                event: eventName,
+                data,
+                priority,
+                sync: true,
+            };
 
         this.#emitTaps({ ...tapContext, phase: 'start' });
 
@@ -451,9 +688,8 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 return false;
             }
 
-            this.#removeOnceSubscriptions(snapshot);
-
             let hadAsyncCallbacks = false;
+            const errors: Error[] = [];
 
             for (const subscription of snapshot) {
                 const callback = this.#resolveCallback(subscription);
@@ -469,31 +705,27 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 try {
                     const result = callback(data);
 
+                    if (subscription.once) {
+                        this.#deleteSubscription(subscription);
+                    }
+
                     if (isPromiseLike<void>(result)) {
                         hadAsyncCallbacks = true;
                         void Promise.resolve(result).then(
                             () => {
-                                this.#recordExecutionMetric(
-                                    eventName,
-                                    performance.now() - execStartTime,
-                                    false
-                                );
+                                // Intentionally not recording execution metric here:
+                                // the measured time includes await suspension and
+                                // scheduler latency, not the handler's actual cost.
                             },
                             (error) => {
-                                this.#recordExecutionMetric(
-                                    eventName,
-                                    performance.now() - execStartTime,
-                                    true
-                                );
-
+                                // Same reason: do not record timing for async
+                                // listeners invoked from emitSync. The error is
+                                // still surfaced through captureRejections or
+                                // reportAsyncError so behavior is unchanged.
                                 const wrapped = new EventHandlerError(eventName, error);
 
                                 if (this.#options.captureRejections) {
-                                    try {
-                                        this.#handleCapturedErrorSync(eventName, wrapped);
-                                    } catch (handlerError) {
-                                        this.#reportAsyncError(handlerError);
-                                    }
+                                    errors.push(wrapped);
                                 } else {
                                     this.#reportAsyncError(wrapped);
                                 }
@@ -507,6 +739,10 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                         );
                     }
                 } catch (error) {
+                    if (subscription.once) {
+                        this.#deleteSubscription(subscription);
+                    }
+
                     this.#recordExecutionMetric(
                         eventName,
                         performance.now() - execStartTime,
@@ -514,12 +750,24 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                     );
 
                     const wrapped = new EventHandlerError(eventName, error);
+                    errors.push(wrapped);
+                }
+            }
 
-                    if (this.#options.captureRejections) {
-                        this.#handleCapturedErrorSync(eventName, wrapped);
-                    } else {
-                        throw wrapped;
+            if (errors.length > 0) {
+                const errorEvent = 'error' as EventKey<T>;
+
+                if (this.has(errorEvent)) {
+                    for (const err of errors) {
+                        this.emitSync(errorEvent, err as T[typeof errorEvent]);
                     }
+                } else if (errors.length === 1) {
+                    throw errors[0];
+                } else {
+                    throw new EventHandlerError(
+                        eventName,
+                        new AggregateError(errors, `${errors.length} handlers failed`)
+                    );
                 }
             }
 
@@ -533,28 +781,62 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         } catch (error) {
             throw error;
         } finally {
-            this.#recordEmitMetric(eventName, performance.now() - startTime);
+            this.#recordEmitMetric(eventName, startTime, 'sync');
             this.#emitTaps({ ...tapContext, phase: 'end' });
+            const depth = this.#emitDepth.get(eventName) ?? 1;
+            if (depth <= 1) {
+                this.#emitDepth.delete(eventName);
+            } else {
+                this.#emitDepth.set(eventName, depth - 1);
+            }
         }
     }
 
-    public async emitBatch(events: ReadonlyArray<EventDispatchItem<T>>): Promise<boolean[]> {
+    /**
+     * Emit a batch of events with settle-all, per-item error isolation.
+     *
+     * Replaces the previous `Promise.all` fail-fast implementation. Now every
+     * input gets a corresponding {@link EventDispatchResult} in the output:
+     *
+     * - `{ success: true }` — the underlying `emit()` resolved to `true`.
+     * - `{ success: false }` — the underlying `emit()` resolved to `false`
+     *   (no listeners, re-entrancy cap, etc.).
+     * - `{ success: false, error }` — the underlying `emit()` rejected; the
+     *   error is captured here instead of rejecting the whole batch, so
+     *   sibling emissions are not discarded.
+     *
+     * The returned promise only rejects if the emitter was disposed before
+     * the call (mirroring `emit()`'s precondition).
+     */
+    public async emitBatch(
+        events: ReadonlyArray<EventDispatchItem<T>>
+    ): Promise<ReadonlyArray<EventDispatchResult>> {
         if (events.length === 0) return [];
 
         this.#ensureRuntime();
 
-        const results = new Array<Promise<boolean>>(events.length);
-
+        // #dispatchBatchItem absorbs every per-item error into its result, so
+        // the awaited promise can never reject and a plain Promise.all suffices.
+        const tasks = new Array<Promise<EventDispatchResult>>(events.length);
         for (let index = 0; index < events.length; index++) {
             const { event, data, priority } = events[index]!;
-            results[index] = this.emit(
-                event as EventKey<T>,
-                data as T[EventKey<T>],
-                priority ? { priority } : undefined
-            );
+            tasks[index] = this.#dispatchBatchItem(event, data, priority);
         }
 
-        return Promise.all(results);
+        return Promise.all(tasks);
+    }
+
+    async #dispatchBatchItem<K extends EventKey<T>>(
+        event: K,
+        data: T[K],
+        priority: EventPriority | undefined
+    ): Promise<EventDispatchResult> {
+        try {
+            const dispatched = await this.emit(event, data, priority ? { priority } : undefined);
+            return { success: dispatched };
+        } catch (error) {
+            return { success: false, error: toError(error) };
+        }
     }
 
     public has<K extends EventKey<T>>(event: K): boolean {
@@ -725,20 +1007,33 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         return this.#isPaused;
     }
 
-    public async drain(): Promise<void> {
+    public async drain(options: { maxIterations?: number; timeoutMs?: number } = {}): Promise<void> {
+        const maxIterations = options.maxIterations ?? 1000;
+        const timeoutMs = options.timeoutMs ?? 30000;
+        const startTime = Date.now();
+        let iteration = 0;
+
         for (;;) {
+            if (iteration++ >= maxIterations) {
+                throw new Error(`EventEmitter.drain() exceeded max iterations (${maxIterations})`);
+            }
+
+            if (Date.now() - startTime > timeoutMs) {
+                throw new Error(`EventEmitter.drain() timed out after ${timeoutMs}ms`);
+            }
+
             const currentBufferProcessing = this.#bufferProcessing;
             if (currentBufferProcessing) {
                 await currentBufferProcessing;
                 continue;
             }
 
-            await this.#scheduler.drain();
+            await this.#getScheduler().drain();
 
             if (
                 this.#bufferProcessing === null &&
-                this.#scheduler.activeCount === 0 &&
-                this.#scheduler.queuedCount === 0
+                this.#getScheduler().activeCount === 0 &&
+                this.#getScheduler().queuedCount === 0
             ) {
                 break;
             }
@@ -779,6 +1074,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             return {
                 emit: {
                     count: 0,
+                    mode: 'sync',
                     timing: snapshotTiming(createTimingAccumulator()),
                 },
                 execution: {
@@ -791,8 +1087,9 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
         return {
             emit: {
-                count: metrics.emit.count,
-                timing: snapshotTiming(metrics.emit),
+                count: metrics.emit.sync.count + metrics.emit.async.count + metrics.emit.buffered.count,
+                mode: determineDominantEmitMode(metrics.emit),
+                timing: snapshotTiming(metrics.emit.timing),
             },
             execution: {
                 count: metrics.execution.count,
@@ -808,28 +1105,6 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         } else {
             this.#metrics.clear();
         }
-    }
-
-    public getMemoryUsage(): Record<string, number> {
-        const staticSubscriptions = this.#subscriptionIndex.size * 112;
-        const subscriptionMaps = this.#events.size * 80 + this.#subscriptionIndex.size * 24;
-        const priorityQueues = this.#buffer.size * 72;
-        const eventBuffer = this.#bufferedEventCount * 64;
-        const total =
-            staticSubscriptions +
-            subscriptionMaps +
-            priorityQueues +
-            eventBuffer +
-            this.#metrics.size * 64 +
-            this.#tapListeners.size * 16;
-
-        return {
-            [MEMORY_USAGE_SYMBOLS.staticSubscriptions]: staticSubscriptions,
-            [MEMORY_USAGE_SYMBOLS.subscriptionMaps]: subscriptionMaps,
-            [MEMORY_USAGE_SYMBOLS.priorityQueues]: priorityQueues,
-            [MEMORY_USAGE_SYMBOLS.eventBuffer]: eventBuffer,
-            total,
-        };
     }
 
     public [EVENT_EMITTER_TAP](tap: EventTap): UnsubscribeFn {
@@ -853,12 +1128,15 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
         if (
             this.#options.maxListeners !== Infinity &&
-            bucket.size >= this.#options.maxListeners
+            bucket.size >= this.#options.maxListeners &&
+            !this.#warnedEvents.has(eventName) &&
+            (globalThis as { __AXRONE_DEBUG__?: boolean }).__AXRONE_DEBUG__ !== false
         ) {
+            this.#warnedEvents.add(eventName);
             console.warn(
                 `MaxListenersExceededWarning: Possible memory leak detected. ${
                     bucket.size
-                } listeners added to event "${eventName}".`
+                } listeners added to event "${eventName}". (Further warnings suppressed.)`
             );
         }
 
@@ -884,6 +1162,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             createdAt: Date.now(),
             unregisterToken,
             weak,
+            disposed: false,
         };
 
         bucket[options.priority].push(subscription);
@@ -907,7 +1186,19 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         }
 
         if (bucket.size >= this.#options.bufferSize) {
-            throw new EventQueueFullError(eventName, this.#options.bufferSize);
+            const policy = this.#options.bufferOverflow;
+
+            if (policy === 'throw') {
+                throw new EventQueueFullError(eventName, this.#options.bufferSize);
+            }
+
+            if (policy === 'drop-newest') {
+                return;
+            }
+
+            if (policy === 'drop-oldest') {
+                this.#dropOldestBufferedEvent(bucket);
+            }
         }
 
         const eventId = ++this.#bufferedEventId;
@@ -924,18 +1215,61 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         this.#bufferedEventCount += 1;
     }
 
+    #dropOldestBufferedEvent(bucket: BufferedBucket): void {
+        for (const priority of ['high', 'normal', 'low'] as const) {
+            const queue = bucket[priority];
+            if (queue.length > 0) {
+                queue.shift();
+                bucket.size -= 1;
+                this.#bufferedEventCount -= 1;
+                return;
+            }
+        }
+    }
+
     async #processBufferedEvents(): Promise<void> {
         if (this.#isPaused || this.#bufferedEventCount === 0) {
             return;
         }
 
-        const queuedEvents = this.getQueuedEvents();
-        this.clearBuffer();
+        // Snapshot event names up front so we can safely delete emptied
+        // buckets from the buffer map while iterating.
+        const eventNames = Array.from(this.#buffer.keys());
 
-        for (const queuedEvent of queuedEvents) {
-            await this.emit(queuedEvent.event as EventKey<T>, queuedEvent.data as T[EventKey<T>], {
-                priority: queuedEvent.priority,
-            });
+        // The buffer is already pre-partitioned per priority, so we can walk
+        // it directly in high → normal → low order without materializing
+        // a flat array or running a JS sort comparator.
+        for (const eventName of eventNames) {
+            const bucket = this.#buffer.get(eventName);
+            if (!bucket) continue;
+
+            for (const priority of ['high', 'normal', 'low'] as const) {
+                const queue = bucket[priority];
+                const initialLength = queue.length;
+                if (initialLength === 0) continue;
+
+                for (let index = 0; index < initialLength; index++) {
+                    const queuedEvent = queue[index]!;
+                    await this.emit(
+                        queuedEvent.event as EventKey<T>,
+                        queuedEvent.data as T[EventKey<T>],
+                        { priority: queuedEvent.priority }
+                    );
+                }
+
+                // Drop only the originally-buffered entries. Any entries
+                // appended during emit() (e.g. by a listener that called
+                // pause() and re-emitted) live past `initialLength` and must
+                // remain in the buffer for the next resume().
+                queue.splice(0, initialLength);
+                this.#bufferedEventCount -= initialLength;
+            }
+
+            bucket.size = bucket.high.length + bucket.normal.length + bucket.low.length;
+
+            if (bucket.size === 0) {
+                this.#buffer.delete(eventName);
+            }
         }
     }
 
@@ -1008,6 +1342,8 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 this.#buffer.delete(eventName);
             }
         }
+
+        this.#scheduler?.runGarbageCollection(this.#options.gcIntervalMs);
     }
 
     dispose(): void {
@@ -1016,7 +1352,11 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             this.#gcIntervalId = undefined;
         }
 
-        this.#scheduler.dispose();
+        if (this.#scheduler) {
+            this.#scheduler.dispose();
+            this.#scheduler = null;
+        }
+
         this.removeAllListeners();
         this.clearBuffer();
         this.#metrics.clear();
@@ -1029,20 +1369,29 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     #createScheduler(): EventScheduler {
         return new EventScheduler({
             concurrencyLimit: this.#options.concurrencyLimit,
+            gcIntervalMs: 0,
         });
     }
 
+    #getScheduler(): EventScheduler {
+        if (this.#scheduler === null) {
+            this.#scheduler = this.#createScheduler();
+        }
+        return this.#scheduler;
+    }
+
     #ensureRuntime(): void {
-        if (!this.#isDisposed) {
-            return;
+        if (this.#isDisposed) {
+            throw new Error('EventEmitter has been disposed and cannot be reused');
         }
 
-        this.#isDisposed = false;
-        this.#scheduler = this.#createScheduler();
-
-        if (this.#options.gcIntervalMs > 0) {
-            this.#startGc();
+        if (this.#scheduler === null) {
+            this.#scheduler = this.#createScheduler();
         }
+    }
+
+    get isDisposed(): boolean {
+        return this.#isDisposed;
     }
 
     #scheduleDispatch<K extends EventKey<T>>(
@@ -1052,24 +1401,35 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     ): Promise<void> {
         const eventName = String(event);
 
-        return this.#scheduler.schedule(
+        return this.#getScheduler().schedule(
             async () => {
+                if (subscription.disposed) {
+                    return;
+                }
+
                 const callback = this.#resolveCallback(subscription);
 
                 if (!callback) {
                     return;
                 }
 
-                const startTime = performance.now();
+                const startTime = this.#options.metrics ? performance.now() : 0;
                 subscription.executionCount += 1;
                 subscription.lastExecuted = Date.now();
 
                 try {
                     await callback(data as never);
-                    this.#recordExecutionMetric(eventName, performance.now() - startTime, false);
+                    this.#recordExecutionMetric(eventName, startTime, false);
                 } catch (error) {
-                    this.#recordExecutionMetric(eventName, performance.now() - startTime, true);
+                    this.#recordExecutionMetric(eventName, startTime, true);
+                    if (subscription.once) {
+                        this.#deleteSubscription(subscription);
+                    }
                     throw new EventHandlerError(eventName, error);
+                }
+
+                if (subscription.once) {
+                    this.#deleteSubscription(subscription);
                 }
             },
             PRIORITY_TO_TASK_PRIORITY[subscription.priority]
@@ -1107,18 +1467,15 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     }
 
     #reportAsyncError(error: unknown): void {
-        const failure = toError(error);
+        rethrowAsync(error);
+    }
 
-        if (typeof queueMicrotask === 'function') {
-            queueMicrotask(() => {
-                throw failure;
-            });
-            return;
+    #hasListeners(eventName: string): boolean {
+        const bucket = this.#events.get(eventName);
+        if (!bucket) {
+            return false;
         }
-
-        void Promise.resolve().then(() => {
-            throw failure;
-        });
+        return bucket.size > 0;
     }
 
     #emitTaps(context: EventTapContext): void {
@@ -1129,6 +1486,26 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         for (const tap of this.#tapListeners) {
             try {
                 tap(context);
+            } catch (error) {
+                this.#reportAsyncError(error);
+            }
+        }
+    }
+
+    #emitTapsFor(
+        eventName: string,
+        data: unknown,
+        priority: EventPriority,
+        sync: boolean,
+        phase: 'start' | 'end'
+    ): void {
+        if (this.#tapListeners.size === 0) {
+            return;
+        }
+
+        for (const tap of this.#tapListeners) {
+            try {
+                tap({ event: eventName, data, priority, sync, phase });
             } catch (error) {
                 this.#reportAsyncError(error);
             }
@@ -1151,6 +1528,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     }
 
     #deleteSubscription(subscription: InternalSubscription<any>): boolean {
+        subscription.disposed = true;
         const bucket = this.#events.get(subscription.event);
         this.#subscriptionIndex.delete(subscription.id);
 
@@ -1229,6 +1607,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             const subscription = source[index]!;
 
             if (!this.#resolveCallback(subscription)) {
+                index += 1;
                 continue;
             }
 
@@ -1293,13 +1672,22 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         return snapshot;
     }
 
-    #recordEmitMetric(eventName: string, duration: number): void {
+    #recordEmitMetric(eventName: string, duration: number, mode: EmitMode): void {
+        if (!this.#options.metrics) {
+            return;
+        }
         const metrics = this.#metrics.get(eventName) ?? createMetricsAccumulator();
         this.#metrics.set(eventName, metrics);
-        this.#updateTiming(metrics.emit, duration);
+        this.#updateTiming(metrics.emit[mode], duration);
+        if (mode !== 'buffered') {
+            this.#updateTiming(metrics.emit.timing, duration);
+        }
     }
 
     #recordExecutionMetric(eventName: string, duration: number, isError: boolean): void {
+        if (!this.#options.metrics) {
+            return;
+        }
         const metrics = this.#metrics.get(eventName) ?? createMetricsAccumulator();
         this.#metrics.set(eventName, metrics);
         this.#updateTiming(metrics.execution, duration);

@@ -1,5 +1,7 @@
 import { Queue } from '@axrone/memory';
-import { performance } from './performance';
+import { performance } from './internal/performance';
+import { normalizePositiveInteger, normalizeDuration } from './internal/normalize';
+import { toError } from './internal/utils';
 
 declare const __taskBrand: unique symbol;
 declare const __schedulerBrand: unique symbol;
@@ -7,21 +9,23 @@ declare const __schedulerBrand: unique symbol;
 export type TaskId = number & { readonly [__taskBrand]: true };
 export type SchedulerId = string & { readonly [__schedulerBrand]: true };
 
-export const enum TaskPriority {
-    IMMEDIATE = 0,
-    HIGH = 1,
-    NORMAL = 2,
-    LOW = 3,
-    IDLE = 4,
-}
+export const TaskPriority = {
+    IMMEDIATE: 0,
+    HIGH: 1,
+    NORMAL: 2,
+    LOW: 3,
+    IDLE: 4,
+} as const;
+export type TaskPriority = (typeof TaskPriority)[keyof typeof TaskPriority];
 
-export const enum TaskState {
-    PENDING = 0,
-    RUNNING = 1,
-    COMPLETED = 2,
-    FAILED = 3,
-    CANCELLED = 4,
-}
+export const TaskState = {
+    PENDING: 0,
+    RUNNING: 1,
+    COMPLETED: 2,
+    FAILED: 3,
+    CANCELLED: 4,
+} as const;
+export type TaskState = (typeof TaskState)[keyof typeof TaskState];
 
 export interface ITaskMetrics {
     readonly id: TaskId;
@@ -92,40 +96,18 @@ const TASK_PRIORITY_ORDER = [
     TaskPriority.IDLE,
 ] as const;
 
-function normalizePositiveInteger(value: number | undefined, fallback: number): number {
-    if (value === Infinity) {
-        return Infinity;
-    }
-
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return fallback;
-    }
-
-    return Math.max(1, Math.trunc(value));
-}
-
 function normalizeConcurrencyLimit(value: number | undefined, fallback: number): number {
     if (value === Infinity || fallback === Infinity) {
-        return value === undefined ? fallback : value;
+        if (value === undefined) {
+            return fallback;
+        }
+        if (!Number.isFinite(value)) {
+            throw new Error('concurrencyLimit must be a finite number or Infinity');
+        }
+        return value;
     }
 
     return normalizePositiveInteger(value, fallback);
-}
-
-function normalizeDuration(value: number | undefined, fallback: number): number {
-    if (value === Infinity) {
-        return 0;
-    }
-
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return fallback;
-    }
-
-    return Math.max(0, Math.trunc(value));
-}
-
-function toError(error: unknown): Error {
-    return error instanceof Error ? error : new Error(String(error));
 }
 
 export class EventScheduler {
@@ -168,12 +150,12 @@ export class EventScheduler {
             `scheduler_${Date.now()}_${Math.random().toString(36).substring(2, 11)}` as SchedulerId;
         this.concurrencyLimit = normalizeConcurrencyLimit(options.concurrencyLimit, Infinity);
         this.maxQueueSize = normalizePositiveInteger(options.maxQueueSize, 10000);
-        this.enableMetrics = options.enableMetrics ?? true;
+        this.enableMetrics = options.enableMetrics ?? false;
         this.enableRetries = options.enableRetries ?? false;
-        this.maxRetries = Math.max(0, Math.trunc(options.maxRetries ?? 3));
+        this.maxRetries = Number.isFinite(options.maxRetries) ? Math.max(0, Math.trunc(options.maxRetries!)) : 3;
         this.retryDelay = normalizeDuration(options.retryDelay, 1000);
         this.taskTimeout = normalizeDuration(options.taskTimeout, 30000);
-        this.gcIntervalMs = Math.max(1000, normalizeDuration(options.gcIntervalMs, 60000));
+        this.gcIntervalMs = normalizeDuration(options.gcIntervalMs, 0);
         this.name = options.name ?? `EventScheduler-${this.id}`;
 
         if (this.gcIntervalMs > 0) {
@@ -233,8 +215,6 @@ export class EventScheduler {
             maxRetries: this.enableRetries ? this.maxRetries : 0,
             state: TaskState.PENDING,
         };
-
-        promise.catch(() => {});
 
         if (this.enableMetrics) {
             this.taskMetrics.set(taskId, {
@@ -301,8 +281,8 @@ export class EventScheduler {
             totalProcessed: this.completedCount + this.failedCount,
             averageExecutionTime:
                 this.completedCount > 0 ? this.totalExecutionTime / this.completedCount : 0,
-            throughputPerSecond: throughput,
-            memoryUsage: this.calculateMemoryUsage(),
+            throughputPerSecond: this.enableMetrics ? throughput : 0,
+            memoryUsage: this.enableMetrics ? this.calculateMemoryUsage() : 0,
         };
     }
 
@@ -538,11 +518,12 @@ export class EventScheduler {
         }
     }
 
-    private runGarbageCollection(): void {
+    public runGarbageCollection(effectiveIntervalMs?: number): void {
         if (this.isDisposed) return;
 
         const now = performance.now();
-        const cutoffTime = now - this.gcIntervalMs * 2;
+        const intervalMs = effectiveIntervalMs ?? (this.gcIntervalMs > 0 ? this.gcIntervalMs : 120000);
+        const cutoffTime = now - intervalMs * 2;
 
         this.taskMetrics.forEach((metrics, taskId) => {
             if (metrics.completedAt && metrics.completedAt < cutoffTime) {
