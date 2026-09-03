@@ -185,10 +185,6 @@ export class EventGroup<T extends EventMap> implements IEventEmitter<T> {
         return this.#emitter.getMetrics(event);
     }
 
-    getMemoryUsage(): Record<string, number> {
-        return this.#emitter.getMemoryUsage();
-    }
-
     getQueuedEvents<K extends EventKey<T>>(event: K): ReadonlyArray<QueuedEvent<T[K]>>;
     getQueuedEvents(): ReadonlyArray<QueuedEvent<T[EventKey<T>]>>;
     getQueuedEvents<K extends EventKey<T>>(event?: K): ReadonlyArray<QueuedEvent<any>> {

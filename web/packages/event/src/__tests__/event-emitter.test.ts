@@ -725,26 +725,6 @@ describe('EventEmitter - Main Implementation', () => {
             emitter.dispose();
         });
 
-        it('should provide memory usage information', () => {
-            for (let i = 0; i < 10; i++) {
-                emitter.on('test:event', () => {});
-            }
-
-            const memoryUsage = emitter.getMemoryUsage();
-
-            expect(memoryUsage).toHaveProperty('total');
-            expect(typeof memoryUsage.total).toBe('number');
-            expect(memoryUsage.total).toBeGreaterThan(0);
-
-            const allKeys = [
-                ...Object.keys(memoryUsage),
-                ...Object.getOwnPropertySymbols(memoryUsage),
-            ];
-            expect(allKeys.length).toBeGreaterThan(1);
-
-            expect(Object.getOwnPropertySymbols(memoryUsage).length).toBe(4);
-        });
-
         it('should reset metrics correctly', async () => {
             emitter.on('test:event', () => {});
 

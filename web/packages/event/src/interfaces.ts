@@ -135,6 +135,4 @@ export interface IEventObserver<T extends EventMap = EventMap> {
     hasSubscription(subscriptionId: symbol): boolean;
 
     getMetrics<K extends EventKey<T>>(event: K): EventMetrics;
-
-    getMemoryUsage(): Record<string, number>;
 }

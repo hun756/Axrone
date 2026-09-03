@@ -16,7 +16,6 @@ export {
     PRIORITY_VALUES,
     DEFAULT_PRIORITY,
     DEFAULT_OPTIONS,
-    MEMORY_USAGE_SYMBOLS,
 } from './definition';
 
 export {

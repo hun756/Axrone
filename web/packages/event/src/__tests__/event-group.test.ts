@@ -281,20 +281,13 @@ describe('EventGroup - Comprehensive', () => {
         });
     });
 
-    describe('getMetrics() and getMemoryUsage()', () => {
+    describe('getMetrics()', () => {
         it('should delegate getMetrics to base emitter', async () => {
             group.on('test:event', () => {});
             await group.emit('test:event', { value: 1 });
 
             const metrics = group.getMetrics('test:event');
             expect(metrics.emit.count).toBe(1);
-        });
-
-        it('should delegate getMemoryUsage to base emitter', () => {
-            group.on('test:event', vi.fn());
-            const usage = group.getMemoryUsage();
-            expect(usage).toHaveProperty('total');
-            expect(usage.total).toBeGreaterThan(0);
         });
     });
 

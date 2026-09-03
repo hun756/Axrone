@@ -120,10 +120,3 @@ export const DEFAULT_OPTIONS = Object.freeze({
     bufferOverflow: 'drop-oldest',
     metrics: false,
 } satisfies Required<EventOptions>);
-
-export const MEMORY_USAGE_SYMBOLS = Object.freeze({
-    staticSubscriptions: Symbol('staticSubscriptions'),
-    subscriptionMaps: Symbol('subscriptionMaps'),
-    priorityQueues: Symbol('priorityQueues'),
-    eventBuffer: Symbol('eventBuffer'),
-} as const);

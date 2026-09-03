@@ -309,7 +309,6 @@ describe('EventEmitter - Core Interfaces', () => {
                 getSubscriptions: vi.fn(),
                 hasSubscription: vi.fn(),
                 getMetrics: vi.fn(),
-                getMemoryUsage: vi.fn(),
             };
         });
 
@@ -360,7 +359,7 @@ describe('EventEmitter - Core Interfaces', () => {
             expect(hasSubscription).toBe(true);
         });
 
-        it('should handle metrics and memory usage', () => {
+        it('should handle metrics', () => {
             const mockMetrics: EventMetrics = {
                 emit: {
                     count: 10,
@@ -374,17 +373,9 @@ describe('EventEmitter - Core Interfaces', () => {
                 },
             };
 
-            const mockMemoryUsage = {
-                subscriptions: 1024,
-                queue: 512,
-                total: 1536,
-            };
-
             mockObserver.getMetrics.mockReturnValue(mockMetrics);
-            mockObserver.getMemoryUsage.mockReturnValue(mockMemoryUsage);
 
             expect(mockObserver.getMetrics('test:event')).toEqual(mockMetrics);
-            expect(mockObserver.getMemoryUsage()).toEqual(mockMemoryUsage);
         });
 
         it('should handle maxListeners property correctly', () => {
@@ -421,7 +412,6 @@ describe('EventEmitter - Core Interfaces', () => {
                 getSubscriptions: vi.fn(),
                 hasSubscription: vi.fn(),
                 getMetrics: vi.fn(),
-                getMemoryUsage: vi.fn(),
 
                 // IEventBuffer
                 getQueuedEvents: vi.fn(),
@@ -523,7 +513,6 @@ describe('EventEmitter - Core Interfaces', () => {
                 'getSubscriptions',
                 'hasSubscription',
                 'getMetrics',
-                'getMemoryUsage',
                 // IEventBuffer
                 'getQueuedEvents',
                 'getPendingCount',

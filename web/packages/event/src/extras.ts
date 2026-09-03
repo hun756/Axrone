@@ -623,9 +623,6 @@ export function namespaceEvents<Prefix extends string, T extends EventMap>(
         getMetrics<K extends NamespacedKey>(event: K) {
             return actualSource.getMetrics(resolveSourceEvent(event) as SourceKey);
         },
-        getMemoryUsage(): Record<string, number> {
-            return actualSource.getMemoryUsage();
-        },
         getQueuedEvents<K extends NamespacedKey>(
             event?: K
         ): ReadonlyArray<QueuedEvent<any>> {

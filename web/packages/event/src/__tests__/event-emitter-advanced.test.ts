@@ -332,34 +332,6 @@ describe('EventEmitter - Advanced Methods', () => {
         });
     });
 
-    describe('getMemoryUsage()', () => {
-        it('should return symbol-keyed memory breakdown', () => {
-            emitter.on('test:event', vi.fn());
-            emitter.on('test:other', vi.fn());
-
-            const usage = emitter.getMemoryUsage();
-
-            expect(usage).toHaveProperty('total');
-            expect(typeof usage.total).toBe('number');
-            expect(usage.total).toBeGreaterThan(0);
-
-            const symbols = Object.getOwnPropertySymbols(usage);
-            expect(symbols).toHaveLength(4);
-        });
-
-        it('should scale with subscription count', () => {
-            emitter.maxListeners = 200;
-            const usage1 = emitter.getMemoryUsage();
-
-            for (let i = 0; i < 100; i++) {
-                emitter.on('test:event', vi.fn());
-            }
-
-            const usage2 = emitter.getMemoryUsage();
-            expect(usage2.total).toBeGreaterThan(usage1.total);
-        });
-    });
-
     describe('getQueuedEvents() - merged overload', () => {
         it('should return sorted merged buffer across all events', async () => {
             emitter.pause();

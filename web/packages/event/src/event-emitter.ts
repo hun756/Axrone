@@ -9,7 +9,6 @@ import {
     DEFAULT_OPTIONS,
     DEFAULT_PRIORITY,
     PRIORITY_VALUES,
-    MEMORY_USAGE_SYMBOLS,
     EventDispatchItem,
     EventDispatchResult,
 } from './definition';
@@ -273,7 +272,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     #subscriptionIndex = new Map<symbol, InternalSubscription<any>>();
     #options: Required<EventOptions>;
     #metrics = new Map<string, MetricsAccumulator>();
-    #scheduler: EventScheduler;
+    #scheduler: EventScheduler | null = null;
     #buffer = new Map<string, BufferedBucket>();
     #bufferedEventId = 0;
     #bufferedEventCount = 0;
@@ -298,8 +297,6 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 this.offById(subscriptionId);
             });
         }
-
-        this.#scheduler = this.#createScheduler();
 
         if (this.#options.gcIntervalMs > 0) {
             this.#startGc();
@@ -966,12 +963,12 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 continue;
             }
 
-            await this.#scheduler.drain();
+            await this.#getScheduler().drain();
 
             if (
                 this.#bufferProcessing === null &&
-                this.#scheduler.activeCount === 0 &&
-                this.#scheduler.queuedCount === 0
+                this.#getScheduler().activeCount === 0 &&
+                this.#getScheduler().queuedCount === 0
             ) {
                 break;
             }
@@ -1043,28 +1040,6 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         } else {
             this.#metrics.clear();
         }
-    }
-
-    public getMemoryUsage(): Record<string, number> {
-        const staticSubscriptions = this.#subscriptionIndex.size * 112;
-        const subscriptionMaps = this.#events.size * 80 + this.#subscriptionIndex.size * 24;
-        const priorityQueues = this.#buffer.size * 72;
-        const eventBuffer = this.#bufferedEventCount * 64;
-        const total =
-            staticSubscriptions +
-            subscriptionMaps +
-            priorityQueues +
-            eventBuffer +
-            this.#metrics.size * 64 +
-            this.#tapListeners.size * 16;
-
-        return {
-            [MEMORY_USAGE_SYMBOLS.staticSubscriptions]: staticSubscriptions,
-            [MEMORY_USAGE_SYMBOLS.subscriptionMaps]: subscriptionMaps,
-            [MEMORY_USAGE_SYMBOLS.priorityQueues]: priorityQueues,
-            [MEMORY_USAGE_SYMBOLS.eventBuffer]: eventBuffer,
-            total,
-        };
     }
 
     public [EVENT_EMITTER_TAP](tap: EventTap): UnsubscribeFn {
@@ -1310,7 +1285,11 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             this.#gcIntervalId = undefined;
         }
 
-        this.#scheduler.dispose();
+        if (this.#scheduler) {
+            this.#scheduler.dispose();
+            this.#scheduler = null;
+        }
+
         this.removeAllListeners();
         this.clearBuffer();
         this.#metrics.clear();
@@ -1326,9 +1305,20 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         });
     }
 
+    #getScheduler(): EventScheduler {
+        if (this.#scheduler === null) {
+            this.#scheduler = this.#createScheduler();
+        }
+        return this.#scheduler;
+    }
+
     #ensureRuntime(): void {
         if (this.#isDisposed) {
             throw new Error('EventEmitter has been disposed and cannot be reused');
+        }
+
+        if (this.#scheduler === null) {
+            this.#scheduler = this.#createScheduler();
         }
     }
 
@@ -1343,7 +1333,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     ): Promise<void> {
         const eventName = String(event);
 
-        return this.#scheduler.schedule(
+        return this.#getScheduler().schedule(
             async () => {
                 if (subscription.disposed) {
                     return;
