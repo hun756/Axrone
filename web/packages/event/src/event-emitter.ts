@@ -1262,6 +1262,26 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         }
     }
 
+    #emitTapsFor(
+        eventName: string,
+        data: unknown,
+        priority: EventPriority,
+        sync: boolean,
+        phase: 'start' | 'end'
+    ): void {
+        if (this.#tapListeners.size === 0) {
+            return;
+        }
+
+        for (const tap of this.#tapListeners) {
+            try {
+                tap({ event: eventName, data, priority, sync, phase });
+            } catch (error) {
+                this.#reportAsyncError(error);
+            }
+        }
+    }
+
     #resolveCallback<TData>(subscription: InternalSubscription<TData>): EventCallback<TData> | undefined {
         if (!subscription.weak) {
             return subscription.callback as EventCallback<TData>;
