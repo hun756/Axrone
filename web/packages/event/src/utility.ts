@@ -82,8 +82,10 @@ export const EventUtils = {
                 try {
                     const result = callback(dataToEmit);
                     if (isPromiseLike<void>(result)) {
-                        // Prevent unhandled rejection when the callback returns a rejected promise
-                        result.catch(() => undefined);
+                        // Log instead of silently discarding — silent catches hide listener bugs
+                        result.catch((err: unknown) => {
+                            console.warn('[event] deferred listener rejected:', err);
+                        });
                     }
                 } catch {
                     // Prevent synchronous throws from propagating through the timer
