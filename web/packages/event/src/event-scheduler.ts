@@ -174,7 +174,7 @@ export class EventScheduler {
             `scheduler_${Date.now()}_${Math.random().toString(36).substring(2, 11)}` as SchedulerId;
         this.concurrencyLimit = normalizeConcurrencyLimit(options.concurrencyLimit, Infinity);
         this.maxQueueSize = normalizePositiveInteger(options.maxQueueSize, 10000);
-        this.enableMetrics = options.enableMetrics ?? true;
+        this.enableMetrics = options.enableMetrics ?? false;
         this.enableRetries = options.enableRetries ?? false;
         this.maxRetries = Math.max(0, Math.trunc(options.maxRetries ?? 3));
         this.retryDelay = normalizeDuration(options.retryDelay, 1000);
@@ -305,8 +305,8 @@ export class EventScheduler {
             totalProcessed: this.completedCount + this.failedCount,
             averageExecutionTime:
                 this.completedCount > 0 ? this.totalExecutionTime / this.completedCount : 0,
-            throughputPerSecond: throughput,
-            memoryUsage: this.calculateMemoryUsage(),
+            throughputPerSecond: this.enableMetrics ? throughput : 0,
+            memoryUsage: this.enableMetrics ? this.calculateMemoryUsage() : 0,
         };
     }
 
