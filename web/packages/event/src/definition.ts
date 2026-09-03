@@ -34,15 +34,6 @@ export type EventNames<T extends EventMap> = EventKey<T>;
 
 export type OptionalData<T> = [T] extends [undefined] ? T | void : T;
 
-    return typeof eventName === 'string' && eventName.length > 0;
-}
-
-    return typeof callback === 'function';
-}
-
-    return priority === 'high' || priority === 'normal' || priority === 'low';
-}
-
 export const PRIORITY_VALUES = Object.freeze({
     high: 0,
     normal: 1,

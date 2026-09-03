@@ -15,14 +15,6 @@ export class EventError extends BaseError {
     }
 }
 
-    readonly eventName: string;
-
-    constructor(eventName: string) {
-        super(`Event "${eventName}" not found`);
-        this.eventName = eventName;
-    }
-}
-
 export class EventQueueFullError extends EventError {
     readonly eventName: string;
 
