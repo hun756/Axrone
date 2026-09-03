@@ -51,42 +51,50 @@ export class Xoshiro256PlusPlus implements IRandomEngine {
     public jumpAhead = (steps: UInt64 = 1n): void => {
         if (steps <= 0n) return;
 
-        if (steps < 16n) {
+        // For small steps, loop directly
+        if (steps < 0x10000n) {
             for (let i = 0n; i < steps; i++) {
                 this.nextUint64();
             }
             return;
         }
 
+        // For large steps, use the canonical jump polynomial (2^128 steps) repeatedly
         const JUMP = [
             0x180ec6d33cfd0aban,
             0xd5a61266f0c9392cn,
             0xa9582618e03fc9aan,
             0x39abdc4529b1661cn,
         ];
+        const jumpsNeeded = steps >> 128n;
+        const remainder = steps & ((1n << 128n) - 1n);
 
-        let s0 = 0n;
-        let s1 = 0n;
-        let s2 = 0n;
-        let s3 = 0n;
-
-        for (const jump of JUMP) {
-            for (let b = 0n; b < 64n; b++) {
-                if ((jump & (1n << b)) !== 0n) {
-                    s0 ^= this.s0;
-                    s1 ^= this.s1;
-                    s2 ^= this.s2;
-                    s3 ^= this.s3;
+        for (let j = 0n; j < jumpsNeeded; j++) {
+            let s0 = 0n;
+            let s1 = 0n;
+            let s2 = 0n;
+            let s3 = 0n;
+            for (const jump of JUMP) {
+                for (let b = 0n; b < 64n; b++) {
+                    if ((jump & (1n << b)) !== 0n) {
+                        s0 ^= this.s0;
+                        s1 ^= this.s1;
+                        s2 ^= this.s2;
+                        s3 ^= this.s3;
+                    }
+                    this.nextUint64();
                 }
-                this.nextUint64();
             }
+            this.s0 = s0;
+            this.s1 = s1;
+            this.s2 = s2;
+            this.s3 = s3;
         }
 
-        this.s0 = s0;
-        this.s1 = s1;
-        this.s2 = s2;
-        this.s3 = s3;
-        this.counter += steps - 1n;
+        // Handle remainder
+        for (let i = 0n; i < remainder; i++) {
+            this.nextUint64();
+        }
     };
 
     public getState = (): IRandomState => {
