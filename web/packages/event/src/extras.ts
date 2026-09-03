@@ -6,6 +6,7 @@ import {
     EventCallback,
     EventKey,
     EventDispatchItem,
+    EventDispatchResult,
 } from './definition';
 import { EventError } from './errors';
 import { IEventEmitter, EventEmitter } from './event-emitter';
@@ -583,7 +584,9 @@ export function namespaceEvents<Prefix extends string, T extends EventMap>(
         ): boolean {
             return actualSource.emitSync(resolveSourceEvent(event) as SourceKey, data as any, options);
         },
-        emitBatch(events: ReadonlyArray<EventDispatchItem<NamespacedMap>>): Promise<boolean[]> {
+        emitBatch(
+            events: ReadonlyArray<EventDispatchItem<NamespacedMap>>
+        ): Promise<ReadonlyArray<EventDispatchResult>> {
             return actualSource.emitBatch(
                 events.map(({ event, data, priority }) => ({
                     event: resolveSourceEvent(event as NamespacedKey) as SourceKey,
