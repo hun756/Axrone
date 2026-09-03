@@ -1,3 +1,4 @@
+import { clamp } from '@axrone/numeric';
 import { RenderTextureRegistry } from './graph';
 import { MutableObjectArena, ReusableList } from './memory';
 import { getRenderPostEffectCost } from './render-frame-budget-manager';
@@ -108,9 +109,6 @@ interface RenderPassPlanningInput {
     readonly activeProbes: ReadonlyRenderList<RenderReflectionProbe>;
     readonly probeUpdates: ReadonlyRenderList<RenderReflectionProbe>;
 }
-
-const clamp = (value: number, min: number, max: number): number =>
-    value < min ? min : value > max ? max : value;
 
 const requiresSceneDepthPostProcessInput = (
     effect: ResolvedPostProcessEffect

@@ -1,4 +1,4 @@
-import { Vec3 } from '@axrone/numeric';
+import { Vec3, clamp } from '@axrone/numeric';
 
 /**
  * Fog density mode enumeration matching Unity/Godot conventions.
@@ -23,9 +23,6 @@ export const DEFAULT_SCENE_FOG_STATE: SceneFogState = Object.freeze({
     density: 0.015,
     range: Object.freeze([0, 300]),
 }) as SceneFogState;
-
-const clamp = (value: number, min: number, max: number): number =>
-    Math.min(max, Math.max(min, value));
 
 const asBoolean = (value: unknown, fallback: boolean): boolean =>
     typeof value === 'boolean' ? value : fallback;

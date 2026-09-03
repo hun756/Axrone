@@ -1,4 +1,5 @@
 import { Component, Transform, script } from '@axrone/ecs-runtime';
+import { clamp } from '@axrone/numeric';
 import type { ParticleSystem as CoreParticleSystem } from '@axrone/particle-system';
 import { createCoreParticleSystem, syncCoreRenderData, spawnToCoreBuffer } from './particle-system-bridge';
 
@@ -182,9 +183,6 @@ const DEFAULT_SIZE_CURVE: readonly number[] = Object.freeze([0.35, 1, 0.75, 0.05
 
 const MAX_PARTICLES_HARD_LIMIT = 4096;
 const DEG_TO_RAD = Math.PI / 180;
-
-const clamp = (value: number, min: number, max: number): number =>
-    Math.min(max, Math.max(min, value));
 
 const hexToRgb = (hex: string): [number, number, number] => {
     const normalized = hex.replace('#', '');

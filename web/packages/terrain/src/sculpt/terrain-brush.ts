@@ -1,3 +1,4 @@
+import { clamp01 } from '@axrone/numeric';
 import { TerrainError, TerrainErrorCode } from '../errors';
 import type {
     ResolvedTerrainBrushOptions,
@@ -23,7 +24,6 @@ export interface TerrainBrushStamp {
 
 const smoothstep = (t: number): number => t * t * (3 - 2 * t);
 
-const clamp01 = (value: number): number => (value < 0 ? 0 : value > 1 ? 1 : value);
 
 /**
  * Applies a single brush stamp in place. Returns `true` when at least one
