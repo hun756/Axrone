@@ -1,4 +1,4 @@
-import { Color } from '@axrone/numeric';
+import { Color, clamp01 } from "@axrone/numeric";
 import type { IColorLike, IVec2Like } from '@axrone/numeric';
 import {
     DEFAULT_GRADIENT_LOOKUP_SIZE,
@@ -6,7 +6,6 @@ import {
     applyGradientSpread,
     assertFiniteNumber,
     assertPositiveNumber,
-    clamp01,
     formatPointKey,
     hashString,
     normalizeNumberKey,

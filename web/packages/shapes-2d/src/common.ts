@@ -1,6 +1,5 @@
 import type { IVec2Like } from '@axrone/numeric';
 import { GEOMETRIC_EPSILON, clamp, clamp01 } from "@axrone/numeric";
-export { clamp, clamp01 };
 import { Fnv1a32 } from '@axrone/hash';
 import type {
     GradientSpread,
