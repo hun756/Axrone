@@ -235,6 +235,23 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
         return this;
     }
 
+    dispose(): void {
+        this.stop();
+
+        if (this._animFrameId !== undefined) {
+            cancelAnimationFrame(this._animFrameId);
+            this._animFrameId = undefined;
+        }
+
+        this._lastTime = undefined;
+        this._props.clear();
+        this._velocity = Object.create(null);
+        this._propertyAccessors.clear();
+        this._isRunning = false;
+        this._autoUpdate = false;
+        super.dispose();
+    }
+
     private _startInternalLoop(): void {
         if (this._animFrameId !== undefined) return;
         this._tick();
