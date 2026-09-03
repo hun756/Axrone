@@ -5,8 +5,8 @@ import type {
     AudioSpatialization,
     AudioVector3,
 } from '../types';
+import { clamp } from '@axrone/numeric';
 import {
-    clamp,
     DEFAULT_LISTENER_FORWARD,
     DEFAULT_LISTENER_POSITION,
     DEFAULT_LISTENER_UP,

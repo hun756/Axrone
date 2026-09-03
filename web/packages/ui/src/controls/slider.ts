@@ -1,9 +1,9 @@
 import type { UIRuntime } from '../runtime';
 import type { UIKeyEvent, UIPointerEvent } from '../types';
 import type { UISliderHandle, UISliderOptions } from './types';
+import { clamp } from '@axrone/numeric';
 import {
     attachToParent,
-    clamp,
     createTextBlock,
     disposeWidget,
     formatNumericValue,

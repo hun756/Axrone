@@ -1,5 +1,5 @@
 // Part 1
-import { Vec3, Quat, type IVec3Like } from '@axrone/numeric';
+import { Vec3, Quat, clamp, type IVec3Like } from '@axrone/numeric';
 import type {
     ContactId,
     ICollisionFilter,
@@ -39,7 +39,6 @@ import {
     type SupportedConstraintDef3D,
     type SupportedShapeDef3D,
     buildOrthonormalBasis,
-    clamp,
     inverseTransformPoint3D,
     midpointVec3,
     shouldShapeFiltersCollide,

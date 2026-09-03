@@ -1,8 +1,8 @@
+import { clamp } from '@axrone/numeric';
 import {
     applyDeadzone,
     applyScalarProcessors,
     applyVectorProcessors,
-    clamp,
     EPSILON,
     magnitude,
 } from './shared';

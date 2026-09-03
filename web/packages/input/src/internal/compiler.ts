@@ -1,7 +1,7 @@
 import { InputConfigurationError } from '../errors';
+import { clamp } from '@axrone/numeric';
 import { parseInputControlPath } from '../reference';
 import {
-    clamp,
     DEFAULT_HOLD_DURATION_MS,
     DEFAULT_MULTI_TAP_COUNT,
     DEFAULT_MULTI_TAP_DELAY_MS,
