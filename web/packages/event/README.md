@@ -480,8 +480,8 @@ toward zero overhead; these are the knobs that matter.
 ## Reference
 
 For a deep review of the package's invariants, lifecycle guarantees,
-and the audit trail behind the public API, see
-[`docs/architecture/EVENT_PACKAGE_DEEP_AUDIT.md`](../../../docs/architecture/EVENT_PACKAGE_DEEP_AUDIT.md).
+and the audit trail behind the public API, see the `docs/architecture/`
+directory in the repository root.
 
 ## License
 
