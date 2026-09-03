@@ -2,9 +2,9 @@ import { Component } from '@axrone/ecs-runtime';
 import type { ComponentConfig } from '@axrone/ecs-runtime';
 import type { Transform } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
-import { Vec3 } from '@axrone/numeric';
+import { Vec3, clamp } from '@axrone/numeric';
 import { toAudioClipSelector } from './asset';
-import { clamp, cloneMetadata, isFiniteNumber } from './internal/shared';
+import { cloneMetadata, isFiniteNumber } from './internal/shared';
 import { cloneSpatialization } from './internal/spatial';
 import {
     MASTER_AUDIO_BUS_ID,

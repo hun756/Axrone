@@ -1,7 +1,7 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
-import { clamp } from './internals';
+import { clamp } from '@axrone/numeric';
 
 /**
  * Declarative dropdown-select controller for `.ui.json` authored dropdowns.

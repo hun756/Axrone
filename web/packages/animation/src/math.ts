@@ -3,8 +3,6 @@ import { clamp } from '@axrone/numeric';
 
 export const ANIMATION_EPSILON = 1e-6;
 
-export { clamp };
-
 export const toFloat32Array = (value: readonly number[] | Float32Array): Float32Array =>
     value instanceof Float32Array ? new Float32Array(value) : new Float32Array(value);
 

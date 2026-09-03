@@ -5,8 +5,6 @@ import type { UIControlTheme, UIHandle, UIParentTarget, UISlotHandle } from './t
 
 export const DEFAULT_SELECTION_COLOR = '#2563eb55';
 
-export { clamp };
-
 export const resolveParentWidget = <TRuntime>(runtime: UIRuntime<TRuntime>, parent: UIParentTarget): WidgetId => {
     if (parent === null || parent === undefined) {
         return runtime.root;

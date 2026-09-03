@@ -1,6 +1,7 @@
 import { AnimationSamplingError, AnimationValidationError } from './errors';
 import { freezeTuple3 } from './internal';
-import { clamp, quatCopy, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, toFloat32Array, vec3Copy, vec3Lerp } from './math';
+import { clamp } from '@axrone/numeric';
+import { quatCopy, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, toFloat32Array, vec3Copy, vec3Lerp } from './math';
 import type { AnimationCurveLayout, AnimationFrame } from './pose';
 import type { AnimationRig } from './rig';
 import {

@@ -153,8 +153,6 @@ export const DEFAULT_MATERIAL: IMaterial = {
 };
 export const DEFAULT_FILTER: ICollisionFilter3D = { categoryBits: 1, maskBits: 0xffff, groupIndex: 0 };
 
-export { clamp };
-
 export function componentMin(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
     return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), z: Math.min(a.z, b.z) };
 }

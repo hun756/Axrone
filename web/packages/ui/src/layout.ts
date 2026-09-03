@@ -1,4 +1,5 @@
-import { clamp, resolveLength } from './layout/normalization';
+import { clamp } from '@axrone/numeric';
+import { resolveLength } from './layout/normalization';
 import type {
     AlignMode,
     EdgeInsets,

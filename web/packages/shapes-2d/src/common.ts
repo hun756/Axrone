@@ -19,8 +19,6 @@ export const DEFAULT_GRADIENT_LOOKUP_SIZE = 256;
 export const DEFAULT_REGISTRY_MAX_SHAPES = 2048;
 export const DEFAULT_REGISTRY_MAX_COMPILED = 4096;
 
-export { clamp, clamp01 };
-
 export const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);
 

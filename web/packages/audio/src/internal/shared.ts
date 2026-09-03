@@ -1,4 +1,3 @@
-import { clamp } from '@axrone/numeric';
 import { AudioUnavailableError } from '../errors';
 import { cloneAudioVector3 } from '../reference';
 import type {
@@ -44,8 +43,6 @@ export const isObject = (value: unknown): value is Record<PropertyKey, unknown> 
 
 export const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);
-
-export { clamp };
 
 export const cloneMetadata = (
     value: Readonly<Record<string, AudioJsonValue>> | undefined

@@ -1,7 +1,8 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
-import { clamp, normalizeRange, normalizeSteppedValue } from './internals';
+import { clamp } from '@axrone/numeric';
+import { normalizeRange, normalizeSteppedValue } from './internals';
 
 /**
  * Declarative slider controller for `.ui.json` authored sliders.
