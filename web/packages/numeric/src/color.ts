@@ -929,6 +929,14 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         }
     }
 
+    /**
+     * Converts a color to grayscale using Rec.601 coefficients (0.299R + 0.587G + 0.114B)
+     * on **gamma-encoded sRGB** values. Use this for display-referred operations like
+     * desaturation effects or rendering pipeline conversions.
+     *
+     * For WCAG contrast calculations or any physically-correct luminance measurement,
+     * use {@link luminance} instead, which linearizes the color first.
+     */
     static grayscale<T extends IColorLike, U extends IColorLike>(color: Readonly<T>, out?: U): U {
         const gray = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
 
@@ -1025,6 +1033,14 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         }
     }
 
+    /**
+     * Computes the **photometric luminance** using Rec.709 coefficients (0.2126R + 0.7152G + 0.0722B)
+     * on **linearized sRGB** values. This is the correct luminance for WCAG contrast ratio
+     * calculations and any physically-meaningful brightness measurement.
+     *
+     * For display-referred grayscale conversion, use {@link grayscale} instead, which
+     * works on gamma-encoded values directly.
+     */
     static luminance<T extends IColorLike>(color: Readonly<T>): number {
         const r = _sRGBToLinear(color.r);
         const g = _sRGBToLinear(color.g);
