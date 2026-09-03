@@ -1,4 +1,5 @@
 import { Component, Transform, script } from '@axrone/ecs-runtime';
+import { clamp, Color } from '@axrone/numeric';
 import type { ParticleSystem as CoreParticleSystem } from '@axrone/particle-system';
 import { createCoreParticleSystem, syncCoreRenderData, spawnToCoreBuffer } from './particle-system-bridge';
 
@@ -183,16 +184,13 @@ const DEFAULT_SIZE_CURVE: readonly number[] = Object.freeze([0.35, 1, 0.75, 0.05
 const MAX_PARTICLES_HARD_LIMIT = 4096;
 const DEG_TO_RAD = Math.PI / 180;
 
-const clamp = (value: number, min: number, max: number): number =>
-    Math.min(max, Math.max(min, value));
-
 const hexToRgb = (hex: string): [number, number, number] => {
-    const normalized = hex.replace('#', '');
-    const value = parseInt(normalized, 16);
-    if (Number.isNaN(value)) {
+    try {
+        const c = Color.fromHex(hex);
+        return [c.r, c.g, c.b];
+    } catch {
         return [1, 1, 1];
     }
-    return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255];
 };
 
 /** Catmull-Rom segment interpolation used by the curve evaluators. */

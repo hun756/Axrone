@@ -1,4 +1,4 @@
-import { Vec3, Quat, type IVec3Like } from '@axrone/numeric';
+import { Vec3, Quat, clamp, type IVec3Like } from '@axrone/numeric';
 import type {
     IAABBQueryCallback,
     ICollisionFilter,
@@ -73,7 +73,6 @@ import {
     type IShapeRayHit3D,
     type SupportedConstraintDef3D,
     type SupportedShapeDef3D,
-    clamp,
     componentMax,
     componentMin,
     cylinderConeLocalHalfExtents,

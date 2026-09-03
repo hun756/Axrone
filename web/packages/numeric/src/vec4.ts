@@ -17,6 +17,8 @@ export interface IVec4Like {
 }
 
 export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
+    private static _hasher = new Fnv1a32();
+
     constructor(
         public x: number = 0,
         public y: number = 0,
@@ -59,6 +61,8 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         return new Vec4(x, y, z, w);
     }
 
+    static copy<T extends IVec4Like, V extends IVec4Like>(source: Readonly<T>, out: V): V;
+    static copy<T extends IVec4Like>(source: Readonly<T>): IVec4Like;
     static copy<T extends IVec4Like, V extends IVec4Like>(source: Readonly<T>, out?: V): V {
         if (out) {
             out.x = source.x;
@@ -86,7 +90,8 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
     }
 
     getHashCode(): number {
-        return new Fnv1a32()
+        return Vec4._hasher
+            .reset()
             .updateF32(this.x)
             .updateF32(this.y)
             .updateF32(this.z)
@@ -197,6 +202,15 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
     static divide<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
         a: Readonly<T>,
         b: Readonly<U>,
+        out: V
+    ): V;
+    static divide<T extends IVec4Like, U extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): IVec4Like;
+    static divide<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
         out?: V
     ): V {
         if (
@@ -216,6 +230,28 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
             return out;
         } else {
             return { x: a.x / b.x, y: a.y / b.y, z: a.z / b.z, w: a.w / b.w } as V;
+        }
+    }
+
+    static divideSafe<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V,
+        defaultValue: number = 0
+    ): V {
+        if (out) {
+            out.x = Math.abs(b.x) < EPSILON ? defaultValue : a.x / b.x;
+            out.y = Math.abs(b.y) < EPSILON ? defaultValue : a.y / b.y;
+            out.z = Math.abs(b.z) < EPSILON ? defaultValue : a.z / b.z;
+            out.w = Math.abs(b.w) < EPSILON ? defaultValue : a.w / b.w;
+            return out;
+        } else {
+            return {
+                x: Math.abs(b.x) < EPSILON ? defaultValue : a.x / b.x,
+                y: Math.abs(b.y) < EPSILON ? defaultValue : a.y / b.y,
+                z: Math.abs(b.z) < EPSILON ? defaultValue : a.z / b.z,
+                w: Math.abs(b.w) < EPSILON ? defaultValue : a.w / b.w,
+            } as V;
         }
     }
 
@@ -278,15 +314,6 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         const vz = v.z;
         const vw = v.w;
 
-        if (
-            Math.abs(vx) < EPSILON ||
-            Math.abs(vy) < EPSILON ||
-            Math.abs(vz) < EPSILON ||
-            Math.abs(vw) < EPSILON
-        ) {
-            throw new Error('Inversion of zero or near-zero value');
-        }
-
         if (out) {
             out.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
             out.y = Math.abs(vy) < EPSILON ? defaultValue : 1 / vy;
@@ -341,6 +368,36 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
         if (length < EPSILON) {
             throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        if (out) {
+            out.x = v.x / length;
+            out.y = v.y / length;
+            out.z = v.z / length;
+            out.w = v.w / length;
+            return out;
+        } else {
+            return {
+                x: v.x / length,
+                y: v.y / length,
+                z: v.z / length,
+                w: v.w / length,
+            } as U;
+        }
+    }
+
+    static normalizeSafe<T extends IVec4Like, U extends IVec4Like>(v: Readonly<T>, out?: U): U {
+        const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
+        if (length < EPSILON) {
+            if (out) {
+                out.x = 0;
+                out.y = 0;
+                out.z = 0;
+                out.w = 0;
+                return out;
+            } else {
+                return { x: 0, y: 0, z: 0, w: 0 } as U;
+            }
         }
 
         if (out) {
@@ -601,6 +658,17 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
+        out: V
+    ): V;
+    static slerp<T extends IVec4Like, U extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number
+    ): IVec4Like;
+    static slerp<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
         out?: V
     ): V {
         const t1 = clamp01(t);
@@ -621,6 +689,11 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         }
 
         const sinTheta = Math.sin(theta);
+
+        if (Math.abs(sinTheta) < EPSILON) {
+            return Vec4.lerp(a, b, t1, out);
+        }
+
         const ratioA = Math.sin((1 - t1) * theta) / sinTheta;
         const ratioB = Math.sin(t1 * theta) / sinTheta;
 
@@ -640,6 +713,17 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         }
     }
 
+    static smoothStep<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out: V
+    ): V;
+    static smoothStep<T extends IVec4Like, U extends IVec4Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number
+    ): IVec4Like;
     static smoothStep<T extends IVec4Like, U extends IVec4Like, V extends IVec4Like>(
         a: Readonly<T>,
         b: Readonly<U>,
@@ -1263,20 +1347,27 @@ export class Vec4 implements IVec4Like, ICloneable<Vec4>, Equatable {
         onto: Readonly<U>,
         out?: V
     ): V {
-        const projection = Vec4.project(v, onto);
+        const dotProduct = Vec4.dot(v, onto);
+        const ontoLengthSq = Vec4.lengthSquared(onto);
+
+        if (ontoLengthSq < EPSILON) {
+            throw new Error('Cannot project onto zero-length vector');
+        }
+
+        const scalar = dotProduct / ontoLengthSq;
 
         if (out) {
-            out.x = v.x - projection.x;
-            out.y = v.y - projection.y;
-            out.z = v.z - projection.z;
-            out.w = v.w - projection.w;
+            out.x = v.x - onto.x * scalar;
+            out.y = v.y - onto.y * scalar;
+            out.z = v.z - onto.z * scalar;
+            out.w = v.w - onto.w * scalar;
             return out;
         } else {
             return {
-                x: v.x - projection.x,
-                y: v.y - projection.y,
-                z: v.z - projection.z,
-                w: v.w - projection.w,
+                x: v.x - onto.x * scalar,
+                y: v.y - onto.y * scalar,
+                z: v.z - onto.z * scalar,
+                w: v.w - onto.w * scalar,
             } as V;
         }
     }

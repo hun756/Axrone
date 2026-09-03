@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { clamp } from '@axrone/numeric';
 import {
-	clamp,
 	normalizeRange,
 	normalizeSteppedValue,
 	countStepDecimals,
@@ -12,7 +12,10 @@ import {
 	resolveFontFamily,
 } from '../controls/internals';
 import { resolveTheme } from '../controls/theme';
+import type { UIParentTarget } from '../controls/types';
 import { UIRuntime } from '../runtime';
+
+const asParent = (value: unknown): UIParentTarget => value as UIParentTarget;
 
 describe('@axrone/ui controls internals', () => {
 	describe('clamp', () => {
@@ -133,17 +136,17 @@ describe('@axrone/ui controls internals', () => {
 		});
 
 		it('returns the numeric id directly', () => {
-			expect(resolveParentWidget(runtime, 42)).toBe(42);
+			expect(resolveParentWidget(runtime, asParent(42))).toBe(42);
 		});
 
 		it('returns content from a handle with content', () => {
 			const handle = { root: 10, content: 20, dispose: () => {} };
-			expect(resolveParentWidget(runtime, handle)).toBe(20);
+			expect(resolveParentWidget(runtime, asParent(handle))).toBe(20);
 		});
 
 		it('returns root from a handle without content', () => {
 			const handle = { root: 10, dispose: () => {} };
-			expect(resolveParentWidget(runtime, handle)).toBe(10);
+			expect(resolveParentWidget(runtime, asParent(handle))).toBe(10);
 		});
 	});
 

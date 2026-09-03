@@ -309,7 +309,7 @@ describe('Color - Extended Coverage', () => {
             });
 
             test('0-255 range', () => {
-                const c = Color.fromRGB(255, 128, 0);
+                const c = Color.fromRGBBytes(255, 128, 0);
                 expect(c.r).toBeCloseTo(1, 4);
                 expect(c.g).toBeCloseTo(128 / 255, 4);
                 expect(c.b).toBeCloseTo(0, 4);

@@ -1,4 +1,4 @@
-import { Vec3, Quat } from '@axrone/numeric';
+import { Vec3, Quat, clamp } from '@axrone/numeric';
 import type { IQuatLike, IVec3Like } from '@axrone/numeric';
 import type {
     ContactId,
@@ -152,10 +152,6 @@ export const DEFAULT_MATERIAL: IMaterial = {
     density: 1 as unknown as Density,
 };
 export const DEFAULT_FILTER: ICollisionFilter3D = { categoryBits: 1, maskBits: 0xffff, groupIndex: 0 };
-
-export function clamp(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value));
-}
 
 export function componentMin(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
     return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), z: Math.min(a.z, b.z) };

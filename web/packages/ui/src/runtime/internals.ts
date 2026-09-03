@@ -1,3 +1,4 @@
+import { clamp, Color } from '@axrone/numeric';
 import type {
     ColorInput,
     LayoutBox,
@@ -20,16 +21,6 @@ export const EMPTY_FOCUS_INPUT: WidgetFocusPolicyInput = Object.freeze({});
 export const TRANSPARENT: ReadonlyColor = Object.freeze({ r: 0, g: 0, b: 0, a: 0 });
 export const BLACK: ReadonlyColor = Object.freeze({ r: 0, g: 0, b: 0, a: 1 });
 export const WHITE: ReadonlyColor = Object.freeze({ r: 1, g: 1, b: 1, a: 1 });
-
-export const clamp = (value: number, min: number, max: number): number => {
-    if (value < min) {
-        return min;
-    }
-    if (value > max) {
-        return max;
-    }
-    return value;
-};
 
 const isColorLike = (
     value: ColorInput
@@ -67,24 +58,11 @@ const colorFromNumber = (value: number): ReadonlyColor => ({
 });
 
 const colorFromHex = (value: string): ReadonlyColor => {
-    const hex = value.replace('#', '').trim();
-    if (hex.length === 3) {
-        return {
-            r: Number.parseInt(hex[0] + hex[0], 16) / 255,
-            g: Number.parseInt(hex[1] + hex[1], 16) / 255,
-            b: Number.parseInt(hex[2] + hex[2], 16) / 255,
-            a: 1,
-        };
+    try {
+        return Color.fromHex(value);
+    } catch {
+        return TRANSPARENT;
     }
-    if (hex.length === 6 || hex.length === 8) {
-        return {
-            r: Number.parseInt(hex.slice(0, 2), 16) / 255,
-            g: Number.parseInt(hex.slice(2, 4), 16) / 255,
-            b: Number.parseInt(hex.slice(4, 6), 16) / 255,
-            a: hex.length === 8 ? Number.parseInt(hex.slice(6, 8), 16) / 255 : 1,
-        };
-    }
-    return TRANSPARENT;
 };
 
 export const normalizeColor = (input: ColorInput | undefined, fallback: ReadonlyColor): ReadonlyColor => {

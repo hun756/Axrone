@@ -23,8 +23,14 @@ export const roundFloat32ForJson = (value: number): number => {
     return Math.round(value * magnitude) / magnitude;
 };
 
-const asSerializedArray = (value: readonly unknown[]): readonly SerializedValue[] =>
-    value.map((item) => encodeValue(item));
+const asSerializedArray = (
+    value: readonly unknown[],
+    seen: WeakSet<object>,
+    depth: number
+): readonly SerializedValue[] =>
+    value.map((item) => encodeValue(item, seen, depth));
+
+const MAX_DEPTH = 100;
 
 /**
  * Encodes an arbitrary runtime value into a JSON-serializable envelope.
@@ -32,8 +38,18 @@ const asSerializedArray = (value: readonly unknown[]): readonly SerializedValue[
  * Numeric value objects (Vec2, Vec3, Vec4, Quat, Mat4) and typed arrays are
  * wrapped in `{ $type, value }` envelopes so they survive a JSON round-trip
  * and can be reconstructed by a matching decoder.
+ *
+ * Cycle detection and depth limiting prevent infinite recursion on object graphs.
  */
-export const encodeValue = (value: unknown): SerializedValue => {
+export const encodeValue = (
+    value: unknown,
+    seen: WeakSet<object> = new WeakSet(),
+    depth: number = 0
+): SerializedValue => {
+    if (depth > MAX_DEPTH) {
+        throw new Error(`encodeValue: maximum depth (${MAX_DEPTH}) exceeded`);
+    }
+
     if (value === undefined || value === null) {
         return null;
     }
@@ -82,15 +98,20 @@ export const encodeValue = (value: unknown): SerializedValue => {
     }
 
     if (Array.isArray(value)) {
-        return asSerializedArray(value);
+        return asSerializedArray(value, seen, depth + 1);
     }
 
     if (typeof value === 'object') {
+        if (seen.has(value)) {
+            throw new Error('encodeValue: circular reference detected');
+        }
+        seen.add(value);
+
         const encoded: Record<string, SerializedValue> = {};
 
         for (const [key, entry] of Object.entries(value)) {
             if (Object.hasOwn(value, key)) {
-                encoded[key] = encodeValue(entry);
+                encoded[key] = encodeValue(entry, seen, depth + 1);
             }
         }
 

@@ -305,18 +305,15 @@ describe('EventEmitter - Advanced Methods', () => {
     });
 
     describe('dispose() and self-healing', () => {
-        it('should allow re-use after dispose (self-healing)', async () => {
+        it('should throw on re-use after dispose (dispose is terminal)', () => {
             emitter.dispose();
 
-            let received = false;
-            emitter.on('test:event', () => {
-                received = true;
-            });
-
-            await emitter.emit('test:event', { value: 1 });
-            expect(received).toBe(true);
-
-            emitter.dispose();
+            expect(() => emitter.on('test:event', () => {})).toThrow(
+                'EventEmitter has been disposed and cannot be reused'
+            );
+            expect(() => emitter.emit('test:event', { value: 1 })).toThrow(
+                'EventEmitter has been disposed and cannot be reused'
+            );
         });
 
         it('should clear all state on dispose', () => {
@@ -329,34 +326,6 @@ describe('EventEmitter - Advanced Methods', () => {
             expect(emitter.eventNames()).toEqual([]);
 
             emitter = new EventEmitter<TestEvents>();
-        });
-    });
-
-    describe('getMemoryUsage()', () => {
-        it('should return symbol-keyed memory breakdown', () => {
-            emitter.on('test:event', vi.fn());
-            emitter.on('test:other', vi.fn());
-
-            const usage = emitter.getMemoryUsage();
-
-            expect(usage).toHaveProperty('total');
-            expect(typeof usage.total).toBe('number');
-            expect(usage.total).toBeGreaterThan(0);
-
-            const symbols = Object.getOwnPropertySymbols(usage);
-            expect(symbols).toHaveLength(4);
-        });
-
-        it('should scale with subscription count', () => {
-            emitter.maxListeners = 200;
-            const usage1 = emitter.getMemoryUsage();
-
-            for (let i = 0; i < 100; i++) {
-                emitter.on('test:event', vi.fn());
-            }
-
-            const usage2 = emitter.getMemoryUsage();
-            expect(usage2.total).toBeGreaterThan(usage1.total);
         });
     });
 

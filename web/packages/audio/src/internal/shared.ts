@@ -44,9 +44,6 @@ export const isObject = (value: unknown): value is Record<PropertyKey, unknown> 
 export const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);
 
-export const clamp = (value: number, min: number, max: number): number =>
-    Math.min(max, Math.max(min, value));
-
 export const cloneMetadata = (
     value: Readonly<Record<string, AudioJsonValue>> | undefined
 ): Readonly<Record<string, AudioJsonValue>> => Object.freeze({ ...(value ?? {}) });

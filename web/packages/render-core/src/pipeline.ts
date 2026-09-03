@@ -1,3 +1,4 @@
+import { clamp } from '@axrone/numeric';
 import {
     RenderExecutionError,
     RenderPipelineError,
@@ -179,9 +180,6 @@ const DEFAULT_LIGHT_BAKING: NormalizedLightBakingSettings = Object.freeze({
 const DEFAULT_GI: RenderGlobalIlluminationSettings = Object.freeze({
     mode: 'disabled',
 });
-
-const clamp = (value: number, min: number, max: number): number =>
-    value < min ? min : value > max ? max : value;
 
 const ensureFinite = (value: number, fallback: number): number =>
     Number.isFinite(value) ? value : fallback;

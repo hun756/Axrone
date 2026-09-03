@@ -97,7 +97,7 @@ const GRADIENT_3D: GradientTable3D = Object.freeze([
 
 const fade = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10);
 const lerp = (a: number, b: number, t: number): number => a + t * (b - a);
-const fastFloor = (x: number): number => (x > 0 ? Math.floor(x) : Math.floor(x) - 1);
+const fastFloor = (x: number): number => Math.floor(x);
 
 const shufflePermutation = (values: readonly number[], seed: number): PermutationTable => {
     const random = new Random(seed);
@@ -151,7 +151,7 @@ class GradientCalculator {
     }
 
     static gradient3D(hash: number, x: number, y: number, z: number): number {
-        return this.dot3D(GRADIENT_3D[hash & 11], x, y, z);
+        return this.dot3D(GRADIENT_3D[hash % 12], x, y, z);
     }
 }
 

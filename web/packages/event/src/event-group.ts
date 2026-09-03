@@ -1,33 +1,28 @@
-import { EventMap, EventKey, EventCallback, UnsubscribeFn, EventPriority } from './definition';
+import { EventMap, EventKey, EventCallback, UnsubscribeFn } from './definition';
 import { IEventEmitter, EventEmitter } from './event-emitter';
-import {
-    SubscriptionOptions,
-    IEventPublisher,
-    Subscription,
-    EventMetrics,
-    QueuedEvent,
-} from './interfaces';
+import { SubscriptionOptions, Subscription } from './interfaces';
+import { ForwardingEmitter } from './internal/forwarding-emitter';
 
 interface TrackedSubscription {
     readonly event: string;
     readonly callback: EventCallback<any>;
 }
 
-export class EventGroup<T extends EventMap> implements IEventEmitter<T> {
+export class EventGroup<T extends EventMap> extends ForwardingEmitter<T> {
     readonly #emitter: IEventEmitter<T>;
+    readonly #ownsEmitter: boolean;
     readonly #subscriptions: Set<symbol> = new Set();
     readonly #tracked = new Map<symbol, TrackedSubscription>();
+    #disposed = false;
 
     constructor(baseEmitter?: IEventEmitter<T>) {
+        super();
         this.#emitter = baseEmitter ?? new EventEmitter<T>();
+        this.#ownsEmitter = baseEmitter === undefined;
     }
 
-    get maxListeners(): number {
-        return this.#emitter.maxListeners;
-    }
-
-    set maxListeners(value: number) {
-        this.#emitter.maxListeners = value;
+    protected get target(): IEventEmitter<T> {
+        return this.#emitter;
     }
 
     on<K extends EventKey<T>>(
@@ -94,36 +89,6 @@ export class EventGroup<T extends EventMap> implements IEventEmitter<T> {
         return this.#unsubscribeTracked(subscriptionId);
     }
 
-    pipe<K extends EventKey<T>>(
-        event: K,
-        emitter: IEventPublisher<any>,
-        targetEvent?: string
-    ): UnsubscribeFn {
-        return this.on(event, (data) =>
-            emitter.emit((targetEvent ?? (event as string)) as any, data).then(() => undefined)
-        );
-    }
-
-    emit<K extends EventKey<T>>(
-        event: K,
-        data: T[K],
-        options?: { priority?: EventPriority }
-    ): Promise<boolean> {
-        return this.#emitter.emit(event, data, options);
-    }
-
-    emitSync<K extends EventKey<T>>(
-        event: K,
-        data: T[K],
-        options?: { priority?: EventPriority }
-    ): boolean {
-        return this.#emitter.emitSync(event, data, options);
-    }
-
-    emitBatch(events: Parameters<IEventEmitter<T>['emitBatch']>[0]): Promise<boolean[]> {
-        return this.#emitter.emitBatch(events);
-    }
-
     has<K extends EventKey<T>>(event: K): boolean {
         return this.listenerCount(event) > 0;
     }
@@ -176,44 +141,6 @@ export class EventGroup<T extends EventMap> implements IEventEmitter<T> {
         return this.#subscriptions.has(subscriptionId);
     }
 
-    getMetrics<K extends EventKey<T>>(event: K): EventMetrics {
-        return this.#emitter.getMetrics(event);
-    }
-
-    getMemoryUsage(): Record<string, number> {
-        return this.#emitter.getMemoryUsage();
-    }
-
-    getQueuedEvents<K extends EventKey<T>>(event: K): ReadonlyArray<QueuedEvent<T[K]>>;
-    getQueuedEvents(): ReadonlyArray<QueuedEvent<T[EventKey<T>]>>;
-    getQueuedEvents<K extends EventKey<T>>(event?: K): ReadonlyArray<QueuedEvent<any>> {
-        return event ? this.#emitter.getQueuedEvents(event) : this.#emitter.getQueuedEvents();
-    }
-
-    getPendingCount<K extends EventKey<T>>(event?: K): number {
-        return this.#emitter.getPendingCount(event);
-    }
-
-    getBufferSize(): number {
-        return this.#emitter.getBufferSize();
-    }
-
-    clearBuffer<K extends EventKey<T>>(event?: K): number {
-        return this.#emitter.clearBuffer(event);
-    }
-
-    pause(): void {
-        this.#emitter.pause();
-    }
-
-    resume(): void {
-        this.#emitter.resume();
-    }
-
-    isPaused(): boolean {
-        return this.#emitter.isPaused();
-    }
-
     removeAllListeners<K extends EventKey<T>>(event?: K): this {
         const ids = this.#collectSubscriptionIds(event ? String(event) : undefined);
 
@@ -255,24 +182,18 @@ export class EventGroup<T extends EventMap> implements IEventEmitter<T> {
         return count;
     }
 
-    resetMaxListeners(): void {
-        this.#emitter.resetMaxListeners();
-    }
-
-    async drain(): Promise<void> {
-        return this.#emitter.drain();
-    }
-
-    async flush<K extends EventKey<T>>(event: K): Promise<void> {
-        return this.#emitter.flush(event);
-    }
-
-    resetMetrics<K extends EventKey<T>>(event?: K): void {
-        this.#emitter.resetMetrics(event);
-    }
-
     dispose(): void {
+        if (this.#disposed) return;
+
         this.removeAllListeners();
+
+        if (this.#ownsEmitter) {
+            this.#emitter.dispose();
+        }
+
+        this.#subscriptions.clear();
+        this.#tracked.clear();
+        this.#disposed = true;
     }
 
     #trackSubscription(id: symbol, event: string, callback: EventCallback<any>): void {

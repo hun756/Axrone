@@ -80,18 +80,8 @@ export class SceneUniformWriter implements SceneUniformWriteTarget {
             return;
         }
 
-        if (value instanceof Vec4) {
-            this._gl.uniform4f(location, value.x, value.y, value.z, value.w);
-            return;
-        }
-
-        if (value instanceof Vec3) {
-            this._gl.uniform3f(location, value.x, value.y, value.z);
-            return;
-        }
-
-        if (value instanceof Vec2) {
-            this._gl.uniform2f(location, value.x, value.y);
+        if (value instanceof Vec4 || value instanceof Vec3 || value instanceof Vec2) {
+            this._writeVectorUniform(location, uniformType, value);
             return;
         }
 
@@ -122,6 +112,45 @@ export class SceneUniformWriter implements SceneUniformWriteTarget {
 
         if (typeof value === 'number') {
             this._writeNumericUniform(location, uniformType, value);
+        }
+    }
+
+    private _writeVectorUniform(
+        location: WebGLUniformLocation,
+        uniformType: number | undefined,
+        value: Vec2 | Vec3 | Vec4
+    ): void {
+        if (uniformType !== undefined) {
+            switch (uniformType) {
+                case this._gl.FLOAT_VEC4:
+                    if (value instanceof Vec4) {
+                        this._gl.uniform4f(location, value.x, value.y, value.z, value.w);
+                    } else if (value instanceof Vec3) {
+                        this._gl.uniform4f(location, value.x, value.y, value.z, 1.0);
+                    } else {
+                        this._gl.uniform4f(location, value.x, value.y, 0.0, 1.0);
+                    }
+                    return;
+                case this._gl.FLOAT_VEC3:
+                    if (value instanceof Vec4) {
+                        this._gl.uniform3f(location, value.x, value.y, value.z);
+                    } else if (value instanceof Vec3) {
+                        this._gl.uniform3f(location, value.x, value.y, value.z);
+                    } else {
+                        this._gl.uniform3f(location, value.x, value.y, 0.0);
+                    }
+                    return;
+                case this._gl.FLOAT_VEC2:
+                    this._gl.uniform2f(location, value.x, value.y);
+                    return;
+            }
+        }
+        if (value instanceof Vec4) {
+            this._gl.uniform4f(location, value.x, value.y, value.z, value.w);
+        } else if (value instanceof Vec3) {
+            this._gl.uniform3f(location, value.x, value.y, value.z);
+        } else {
+            this._gl.uniform2f(location, value.x, value.y);
         }
     }
 

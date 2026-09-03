@@ -1,4 +1,5 @@
 import { Component, script } from '@axrone/ecs-runtime';
+import { clamp } from '@axrone/numeric';
 
 export type UIHostRenderMode = 'screen-overlay' | 'world-space';
 
@@ -40,7 +41,7 @@ const clampNumber = (value: unknown, fallback: number, min: number, max: number)
     if (typeof value !== 'number' || !Number.isFinite(value)) {
         return fallback;
     }
-    return Math.max(min, Math.min(max, value));
+    return clamp(value, min, max);
 };
 
 /**

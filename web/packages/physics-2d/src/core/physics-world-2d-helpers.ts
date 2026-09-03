@@ -1,4 +1,6 @@
+import { clamp } from '@axrone/numeric';
 import type { IVec2Like } from '@axrone/numeric';
+
 import type {
     BodyId,
     ShapeId,
@@ -133,9 +135,6 @@ export function distanceSquared(a: Readonly<IVec2Like>, b: Readonly<IVec2Like>):
     return dx * dx + dy * dy;
 }
 
-export function clamp(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value));
-}
 
 export function normalizeBounds(min: Readonly<IVec2Like>, max: Readonly<IVec2Like>): IAabb2D {
     return {

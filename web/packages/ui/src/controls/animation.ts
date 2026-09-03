@@ -6,6 +6,7 @@
  * This module is self-contained — it does NOT depend on @axrone/tween.
  */
 
+import { Color } from '@axrone/numeric';
 import type { UIRuntime } from '../runtime';
 import type { WidgetId } from '../types';
 
@@ -63,46 +64,12 @@ const TRANSPARENT: RGBA = { r: 0, g: 0, b: 0, a: 0 };
  * Returns null when the format is unrecognized.
  */
 const parseHexColor = (hex: string): RGBA | null => {
-    const cleaned = hex.startsWith('#') ? hex.slice(1) : hex;
-    let r: number;
-    let g: number;
-    let b: number;
-    let a: number;
-
-    switch (cleaned.length) {
-        case 3:
-            r = Number.parseInt(cleaned[0] + cleaned[0], 16);
-            g = Number.parseInt(cleaned[1] + cleaned[1], 16);
-            b = Number.parseInt(cleaned[2] + cleaned[2], 16);
-            a = 255;
-            break;
-        case 4:
-            r = Number.parseInt(cleaned[0] + cleaned[0], 16);
-            g = Number.parseInt(cleaned[1] + cleaned[1], 16);
-            b = Number.parseInt(cleaned[2] + cleaned[2], 16);
-            a = Number.parseInt(cleaned[3] + cleaned[3], 16);
-            break;
-        case 6:
-            r = Number.parseInt(cleaned.slice(0, 2), 16);
-            g = Number.parseInt(cleaned.slice(2, 4), 16);
-            b = Number.parseInt(cleaned.slice(4, 6), 16);
-            a = 255;
-            break;
-        case 8:
-            r = Number.parseInt(cleaned.slice(0, 2), 16);
-            g = Number.parseInt(cleaned.slice(2, 4), 16);
-            b = Number.parseInt(cleaned.slice(4, 6), 16);
-            a = Number.parseInt(cleaned.slice(6, 8), 16);
-            break;
-        default:
-            return null;
-    }
-
-    if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b) || Number.isNaN(a)) {
+    try {
+        const c = Color.fromHex(hex);
+        return { r: c.r * 255, g: c.g * 255, b: c.b * 255, a: c.a * 255 };
+    } catch {
         return null;
     }
-
-    return { r, g, b, a };
 };
 
 /**

@@ -1,3 +1,4 @@
+import { clamp } from '@axrone/numeric';
 import {
     AudioConfigurationError,
     DEFAULT_AUDIO_MESSAGE_RESOLVER,
@@ -19,7 +20,6 @@ import type {
 } from './internal/runtime';
 import { AudioSourceRegistry } from './internal/source-registry';
 import {
-    clamp,
     effectivePlaybackRate,
     hasOwnKeys,
     isFiniteNumber,

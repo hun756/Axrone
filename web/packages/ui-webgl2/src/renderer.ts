@@ -14,6 +14,7 @@ import type {
 } from '@axrone/ui/types';
 import type { UIFrameSink } from '@axrone/ui/render';
 import { DisposedUIError } from '@axrone/ui/errors';
+import { Color } from '@axrone/numeric';
 import type {
     WebGL2UICustomCommandContext,
     WebGL2UIMaterialImageContext,
@@ -399,13 +400,12 @@ const blendColor = (
  */
 const normalizeStrokeColor = (color: StrokeRenderCommand['strokes'][number]['color']): readonly [number, number, number, number] => {
     if (typeof color === 'string') {
-        // Parse hex string (#RRGGBB or #RRGGBBAA)
-        const hex = color.replace(/^#/, '');
-        const r = parseInt(hex.substring(0, 2), 16) / 255;
-        const g = parseInt(hex.substring(2, 4), 16) / 255;
-        const b = parseInt(hex.substring(4, 6), 16) / 255;
-        const a = hex.length >= 8 ? parseInt(hex.substring(6, 8), 16) / 255 : 1;
-        return [r, g, b, a];
+        try {
+            const c = Color.fromHex(color);
+            return [c.r, c.g, c.b, c.a] as const;
+        } catch {
+            return [1, 1, 1, 1] as const;
+        }
     }
     if (typeof color === 'number') {
         return [

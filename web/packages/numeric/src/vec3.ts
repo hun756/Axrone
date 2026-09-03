@@ -16,6 +16,8 @@ export interface IVec3Like {
 }
 
 export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
+    private static _hasher = new Fnv1a32();
+
     constructor(
         public x: number = 0,
         public y: number = 0,
@@ -61,6 +63,8 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return new Vec3(this.x, this.y, this.z);
     }
 
+    static copy<T extends IVec3Like, V extends IVec3Like>(source: Readonly<T>, out: V): V;
+    static copy<T extends IVec3Like>(source: Readonly<T>): IVec3Like;
     static copy<T extends IVec3Like, V extends IVec3Like>(source: Readonly<T>, out?: V): V {
         if (out) {
             out.x = source.x;
@@ -83,7 +87,7 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     }
 
     getHashCode(): number {
-        return new Fnv1a32().updateF32(this.x).updateF32(this.y).updateF32(this.z).digest();
+        return Vec3._hasher.reset().updateF32(this.x).updateF32(this.y).updateF32(this.z).digest();
     }
 
     hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {
@@ -183,6 +187,15 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
     static divide<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         a: Readonly<T>,
         b: Readonly<U>,
+        out: V
+    ): V;
+    static divide<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>
+    ): IVec3Like;
+    static divide<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
         out?: V
     ): V {
         if (Math.abs(b.x) < EPSILON || Math.abs(b.y) < EPSILON || Math.abs(b.z) < EPSILON) {
@@ -196,6 +209,26 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             return out;
         } else {
             return { x: a.x / b.x, y: a.y / b.y, z: a.z / b.z } as V;
+        }
+    }
+
+    static divideSafe<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V,
+        defaultValue: number = 0
+    ): V {
+        if (out) {
+            out.x = Math.abs(b.x) < EPSILON ? defaultValue : a.x / b.x;
+            out.y = Math.abs(b.y) < EPSILON ? defaultValue : a.y / b.y;
+            out.z = Math.abs(b.z) < EPSILON ? defaultValue : a.z / b.z;
+            return out;
+        } else {
+            return {
+                x: Math.abs(b.x) < EPSILON ? defaultValue : a.x / b.x,
+                y: Math.abs(b.y) < EPSILON ? defaultValue : a.y / b.y,
+                z: Math.abs(b.z) < EPSILON ? defaultValue : a.z / b.z,
+            } as V;
         }
     }
 
@@ -253,10 +286,6 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         const vy = v.y;
         const vz = v.z;
 
-        if (Math.abs(vx) < EPSILON || Math.abs(vy) < EPSILON || Math.abs(vz) < EPSILON) {
-            throw new Error('Inversion of zero or near-zero value');
-        }
-
         if (out) {
             out.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
             out.y = Math.abs(vy) < EPSILON ? defaultValue : 1 / vy;
@@ -306,6 +335,29 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
         if (length < EPSILON) {
             throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        if (out) {
+            out.x = v.x / length;
+            out.y = v.y / length;
+            out.z = v.z / length;
+            return out;
+        } else {
+            return { x: v.x / length, y: v.y / length, z: v.z / length } as U;
+        }
+    }
+
+    static normalizeSafe<T extends IVec3Like, U extends IVec3Like>(v: Readonly<T>, out?: U): U {
+        const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+        if (length < EPSILON) {
+            if (out) {
+                out.x = 0;
+                out.y = 0;
+                out.z = 0;
+                return out;
+            } else {
+                return { x: 0, y: 0, z: 0 } as U;
+            }
         }
 
         if (out) {
@@ -440,32 +492,34 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         const sinTheta = Math.sin(angle);
         const oneMinusCos = 1 - cosTheta;
 
-        const axisNorm = Vec3.normalize(axis);
-        const dotProduct = Vec3.dot(v, axisNorm);
-        const crossProduct = Vec3.cross(axisNorm, v);
+        // Inline normalize to avoid allocation
+        const axisLen = Math.sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z);
+        if (axisLen < EPSILON) {
+            throw new Error('Cannot rotate around zero-length axis');
+        }
+        const invLen = 1 / axisLen;
+        const ax = axis.x * invLen;
+        const ay = axis.y * invLen;
+        const az = axis.z * invLen;
+
+        // Inline dot product
+        const dotProduct = v.x * ax + v.y * ay + v.z * az;
+
+        // Inline cross product (axis × v)
+        const cx = ay * v.z - az * v.y;
+        const cy = az * v.x - ax * v.z;
+        const cz = ax * v.y - ay * v.x;
 
         if (out) {
-            out.x =
-                v.x * cosTheta + crossProduct.x * sinTheta + axisNorm.x * dotProduct * oneMinusCos;
-            out.y =
-                v.y * cosTheta + crossProduct.y * sinTheta + axisNorm.y * dotProduct * oneMinusCos;
-            out.z =
-                v.z * cosTheta + crossProduct.z * sinTheta + axisNorm.z * dotProduct * oneMinusCos;
+            out.x = v.x * cosTheta + cx * sinTheta + ax * dotProduct * oneMinusCos;
+            out.y = v.y * cosTheta + cy * sinTheta + ay * dotProduct * oneMinusCos;
+            out.z = v.z * cosTheta + cz * sinTheta + az * dotProduct * oneMinusCos;
             return out;
         } else {
             return {
-                x:
-                    v.x * cosTheta +
-                    crossProduct.x * sinTheta +
-                    axisNorm.x * dotProduct * oneMinusCos,
-                y:
-                    v.y * cosTheta +
-                    crossProduct.y * sinTheta +
-                    axisNorm.y * dotProduct * oneMinusCos,
-                z:
-                    v.z * cosTheta +
-                    crossProduct.z * sinTheta +
-                    axisNorm.z * dotProduct * oneMinusCos,
+                x: v.x * cosTheta + cx * sinTheta + ax * dotProduct * oneMinusCos,
+                y: v.y * cosTheta + cy * sinTheta + ay * dotProduct * oneMinusCos,
+                z: v.z * cosTheta + cz * sinTheta + az * dotProduct * oneMinusCos,
             } as V;
         }
     }
@@ -515,6 +569,17 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         a: Readonly<T>,
         b: Readonly<U>,
         t: number,
+        out: V
+    ): V;
+    static slerp<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number
+    ): IVec3Like;
+    static slerp<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
         out?: V
     ): V {
         const t1 = clamp01(t);
@@ -535,6 +600,11 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         }
 
         const sinTheta = Math.sin(theta);
+
+        if (Math.abs(sinTheta) < EPSILON) {
+            return Vec3.lerp(a, b, t1, out);
+        }
+
         const ratioA = Math.sin((1 - t1) * theta) / sinTheta;
         const ratioB = Math.sin(t1 * theta) / sinTheta;
 
@@ -552,6 +622,17 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         }
     }
 
+    static smoothStep<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number,
+        out: V
+    ): V;
+    static smoothStep<T extends IVec3Like, U extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        t: number
+    ): IVec3Like;
     static smoothStep<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
         a: Readonly<T>,
         b: Readonly<U>,
@@ -1072,18 +1153,25 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         onto: Readonly<U>,
         out?: V
     ): V {
-        const projection = Vec3.project(v, onto);
+        const dotProduct = Vec3.dot(v, onto);
+        const ontoLengthSq = Vec3.lengthSquared(onto);
+
+        if (ontoLengthSq < EPSILON) {
+            throw new Error('Cannot project onto zero-length vector');
+        }
+
+        const scalar = dotProduct / ontoLengthSq;
 
         if (out) {
-            out.x = v.x - projection.x;
-            out.y = v.y - projection.y;
-            out.z = v.z - projection.z;
+            out.x = v.x - onto.x * scalar;
+            out.y = v.y - onto.y * scalar;
+            out.z = v.z - onto.z * scalar;
             return out;
         } else {
             return {
-                x: v.x - projection.x,
-                y: v.y - projection.y,
-                z: v.z - projection.z,
+                x: v.x - onto.x * scalar,
+                y: v.y - onto.y * scalar,
+                z: v.z - onto.z * scalar,
             } as V;
         }
     }

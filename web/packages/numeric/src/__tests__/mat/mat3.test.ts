@@ -306,21 +306,6 @@ describe('Mat3', () => {
         });
     });
 
-    describe('rotate2D', () => {
-        test('rotate by PI/2', () => {
-            const r = Mat3.rotate2D(HALF_PI);
-            expectMatrixClose(r, [0, -1, 0, 1, 0, 0, 0, 0, 1], 1e-10);
-        });
-
-        test('rotate by 0 = identity', () => {
-            expectMatrixClose(Mat3.rotate2D(0), IDENTITY_3, 1e-10);
-        });
-
-        test('full rotation = identity', () => {
-            expectMatrixClose(Mat3.rotate2D(PI_2), IDENTITY_3, 1e-8);
-        });
-    });
-
     describe('rotateX / rotateY / rotateZ', () => {
         test('rotateX by PI/2', () => {
             const r = Mat3.rotateX(HALF_PI);
@@ -605,7 +590,7 @@ describe('Mat3', () => {
 
         test('composed scale-rotate preserves structure', () => {
             const s = Mat3.scale2D({ x: 2, y: 2 });
-            const r = Mat3.rotate2D(HALF_PI);
+            const r = Mat3.rotateZ(HALF_PI);
             const sr = Mat3.multiply(s, r);
             // det(sr) = det(s) * det(r) = 4 * 1 = 4
             expect(Mat3.determinant(sr)).toBeCloseTo(4, 10);

@@ -6,11 +6,11 @@ import type {
     AudioListenerState,
 } from '../types';
 import type { InternalListener } from './runtime';
+import { clamp } from '@axrone/numeric';
 import {
     DEFAULT_LISTENER_FORWARD,
     DEFAULT_LISTENER_POSITION,
     DEFAULT_LISTENER_UP,
-    clamp,
     cloneMetadata,
     normalizeDspBuffer,
     normalizeSampleRate,

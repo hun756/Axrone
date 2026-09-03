@@ -91,35 +91,16 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
             expect(v.y).toBe(-2.718);
         });
 
-        test('constructor coerces parameters to numbers', () => {
-            // @ts-ignore - Intentionally testing type coercion
-            const v = new Vec2('5', '10');
+        test('constructor rejects non-finite values', () => {
+            expect(() => new Vec2(Infinity, 0)).toThrow(/must be a finite number/);
+            expect(() => new Vec2(-Infinity, 0)).toThrow(/must be a finite number/);
+            expect(() => new Vec2(NaN, 0)).toThrow(/must be a finite number/);
+            expect(() => new Vec2(0, NaN)).toThrow(/must be a finite number/);
 
-            // Vec2 constructor does not perform string conversion,
-            // it takes the value given as parameter as it is.
-            expect(v.x).toBe('5');
-            expect(v.y).toBe('10');
-        });
-
-        test.each([
-            ['Infinity', Infinity, Infinity],
-            ['NaN', NaN, NaN],
-            ['MAX_VALUE', Number.MAX_VALUE, Number.MAX_VALUE],
-            ['MIN_VALUE', Number.MIN_VALUE, Number.MIN_VALUE],
-        ])('constructor correctly handles %s', (_, x, y) => {
-            const v = new Vec2(x, y);
-
-            if (Number.isNaN(x)) {
-                expect(Number.isNaN(v.x)).toBe(true);
-            } else {
-                expect(v.x).toBe(x);
-            }
-
-            if (Number.isNaN(y)) {
-                expect(Number.isNaN(v.y)).toBe(true);
-            } else {
-                expect(v.y).toBe(y);
-            }
+            // Valid edge values should work
+            const v1 = new Vec2(Number.MAX_VALUE, Number.MIN_VALUE);
+            expect(v1.x).toBe(Number.MAX_VALUE);
+            expect(v1.y).toBe(Number.MIN_VALUE);
         });
     });
 
@@ -351,18 +332,13 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
                 });
             });
 
-            test('preserves NaN and Infinity values', () => {
-                const vNaN = new Vec2(NaN, NaN);
-                const vInf = new Vec2(Infinity, -Infinity);
+            test('clone() preserves valid values', () => {
+                const v1 = new Vec2(3.14, -2.718);
+                const cloned = v1.clone();
 
-                const clonedNaN = vNaN.clone();
-                const clonedInf = vInf.clone();
-
-                expect(Number.isNaN(clonedNaN.x)).toBe(true);
-                expect(Number.isNaN(clonedNaN.y)).toBe(true);
-
-                expect(clonedInf.x).toBe(Infinity);
-                expect(clonedInf.y).toBe(-Infinity);
+                expect(cloned.x).toBe(3.14);
+                expect(cloned.y).toBe(-2.718);
+                expect(cloned).not.toBe(v1);
             });
         });
     });

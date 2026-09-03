@@ -17,6 +17,7 @@ import type {
     WidgetStrokeData,
     WidgetStyleInput,
 } from '../types';
+import { clamp } from '@axrone/numeric';
 import {
     BLACK,
     EMPTY_FOCUS_INPUT,
@@ -25,7 +26,6 @@ import {
     EMPTY_STYLE_INPUT,
     TRANSPARENT,
     WHITE,
-    clamp,
     cloneData,
     normalizeColor,
     normalizeIndex,

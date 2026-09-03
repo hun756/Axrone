@@ -1,3 +1,4 @@
+import { clamp } from '@axrone/numeric';
 import {
     InputConfigurationError,
     InputContextError,
@@ -52,7 +53,6 @@ import {
     applyDeadzone,
     applyScalarProcessors,
     applyVectorProcessors,
-    clamp,
     createAxisStateStore,
     createAxisStateView,
     createButtonStateStore,

@@ -15,7 +15,7 @@ class PoolNode<T> implements StackNode<T> {
     public memAddr: MemoryAddress = 0 as MemoryAddress;
 
     reset(): void {
-        this.value = undefined as any;
+        this.value = undefined as unknown as T;
         this.next = null;
         this.refs = 0;
         this.generation = 0;
@@ -54,18 +54,18 @@ export class StackMemoryPool {
 
     allocate<T>(value: T, next: StackNode<T> | null, generation: number): StackNode<T> {
         const node = this.#pool.acquire() as PoolNode<T>;
-        node.id = this.#idCounter() as any;
+        node.id = this.#idCounter() as unknown as NodeId;
         node.value = value;
         node.next = next as PoolNode<T> | null;
         node.refs = 1;
         node.generation = generation;
-        node.memAddr = (node.__poolId ?? 0) as any;
+        node.memAddr = (node.__poolId ?? 0) as unknown as MemoryAddress;
 
         return node as unknown as StackNode<T>;
     }
 
     deallocate<T>(node: StackNode<T>): void {
-        if ((node as any).refs > 1) return;
+        if ((node as unknown as PoolNode<T>).refs > 1) return;
 
         try {
             this.#pool.release(node as unknown as PoolNode<any>);
@@ -89,7 +89,7 @@ export class StackMemoryPool {
                 totalAllocated: m.allocations,
                 totalDeallocated: m.releases,
                 poolSizes: [{ sizeKey: 'capacity', poolSize: m.capacity }],
-                fragmentation: (m as any).fragmentationRatio ?? 0,
+                fragmentation: m.fragmentationRatio ?? 0,
             };
         } catch (e) {
             return { totalAllocated: 0, totalDeallocated: 0, poolSizes: [], fragmentation: 0 };
