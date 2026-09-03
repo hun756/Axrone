@@ -1,5 +1,5 @@
 import { Component, Transform, script } from '@axrone/ecs-runtime';
-import { clamp } from '@axrone/numeric';
+import { clamp, Color } from '@axrone/numeric';
 import type { ParticleSystem as CoreParticleSystem } from '@axrone/particle-system';
 import { createCoreParticleSystem, syncCoreRenderData, spawnToCoreBuffer } from './particle-system-bridge';
 
@@ -185,12 +185,12 @@ const MAX_PARTICLES_HARD_LIMIT = 4096;
 const DEG_TO_RAD = Math.PI / 180;
 
 const hexToRgb = (hex: string): [number, number, number] => {
-    const normalized = hex.replace('#', '');
-    const value = parseInt(normalized, 16);
-    if (Number.isNaN(value)) {
+    try {
+        const c = Color.fromHex(hex);
+        return [c.r, c.g, c.b];
+    } catch {
         return [1, 1, 1];
     }
-    return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255];
 };
 
 /** Catmull-Rom segment interpolation used by the curve evaluators. */

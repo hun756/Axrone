@@ -1,4 +1,4 @@
-import { Vec3, clamp } from '@axrone/numeric';
+import { Vec3, clamp, Color } from '@axrone/numeric';
 
 /**
  * Fog density mode enumeration matching Unity/Godot conventions.
@@ -38,33 +38,12 @@ const asString = (value: unknown, fallback: string): string =>
     typeof value === 'string' ? value : fallback;
 
 const parseHexColorToVec3 = (value: string, fallback: Vec3): Vec3 => {
-    const normalized = value.trim();
-    if (!normalized.startsWith('#')) {
+    try {
+        const c = Color.fromHex(value);
+        return new Vec3(c.r, c.g, c.b);
+    } catch {
         return fallback;
     }
-
-    const hex = normalized.slice(1);
-    if (hex.length === 3) {
-        const r = Number.parseInt(hex[0].repeat(2), 16);
-        const g = Number.parseInt(hex[1].repeat(2), 16);
-        const b = Number.parseInt(hex[2].repeat(2), 16);
-        if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
-            return fallback;
-        }
-        return new Vec3(r / 255, g / 255, b / 255);
-    }
-
-    if (hex.length === 6) {
-        const r = Number.parseInt(hex.slice(0, 2), 16);
-        const g = Number.parseInt(hex.slice(2, 4), 16);
-        const b = Number.parseInt(hex.slice(4, 6), 16);
-        if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
-            return fallback;
-        }
-        return new Vec3(r / 255, g / 255, b / 255);
-    }
-
-    return fallback;
 };
 
 const resolveFogMode = (value: unknown): SceneFogMode => {

@@ -1,4 +1,4 @@
-import { clamp } from '@axrone/numeric';
+import { clamp, Color } from '@axrone/numeric';
 import type {
     ColorInput,
     LayoutBox,
@@ -60,24 +60,11 @@ const colorFromNumber = (value: number): ReadonlyColor => ({
 });
 
 const colorFromHex = (value: string): ReadonlyColor => {
-    const hex = value.replace('#', '').trim();
-    if (hex.length === 3) {
-        return {
-            r: Number.parseInt(hex[0] + hex[0], 16) / 255,
-            g: Number.parseInt(hex[1] + hex[1], 16) / 255,
-            b: Number.parseInt(hex[2] + hex[2], 16) / 255,
-            a: 1,
-        };
+    try {
+        return Color.fromHex(value);
+    } catch {
+        return TRANSPARENT;
     }
-    if (hex.length === 6 || hex.length === 8) {
-        return {
-            r: Number.parseInt(hex.slice(0, 2), 16) / 255,
-            g: Number.parseInt(hex.slice(2, 4), 16) / 255,
-            b: Number.parseInt(hex.slice(4, 6), 16) / 255,
-            a: hex.length === 8 ? Number.parseInt(hex.slice(6, 8), 16) / 255 : 1,
-        };
-    }
-    return TRANSPARENT;
 };
 
 export const normalizeColor = (input: ColorInput | undefined, fallback: ReadonlyColor): ReadonlyColor => {
