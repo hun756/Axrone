@@ -416,7 +416,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
         const eventName = String(event);
         const priority = options.priority ?? DEFAULT_PRIORITY;
-        const startTime = performance.now();
+        const startTime = this.#options.metrics ? performance.now() : 0;
 
         const currentDepth = this.#emitDepth.get(eventName) ?? 0;
         if (currentDepth >= MAX_EMIT_DEPTH) {
@@ -451,7 +451,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                     this.#emitTaps({ ...tapContext, phase: 'end' });
                     return true;
                 } catch (error) {
-                    this.#recordEmitMetric(eventName, performance.now() - startTime, 'buffered');
+                    this.#recordEmitMetric(eventName, startTime, 'buffered');
                     this.#emitTaps({ ...tapContext, phase: 'end' });
                     throw error;
                 }
@@ -552,7 +552,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         } catch (error) {
             throw error;
         } finally {
-            this.#recordEmitMetric(eventName, performance.now() - startTime, 'async');
+            this.#recordEmitMetric(eventName, startTime, 'async');
             this.#emitTaps({ ...tapContext, phase: 'end' });
             const depth = this.#emitDepth.get(eventName) ?? 1;
             if (depth <= 1) {
@@ -631,7 +631,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
         const eventName = String(event);
         const priority = options.priority ?? DEFAULT_PRIORITY;
-        const startTime = performance.now();
+        const startTime = this.#options.metrics ? performance.now() : 0;
 
         const currentDepth = this.#emitDepth.get(eventName) ?? 0;
         if (currentDepth >= MAX_EMIT_DEPTH) {
@@ -666,7 +666,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                     this.#emitTaps({ ...tapContext, phase: 'end' });
                     return true;
                 } catch (error) {
-                    this.#recordEmitMetric(eventName, performance.now() - startTime, 'buffered');
+                    this.#recordEmitMetric(eventName, startTime, 'buffered');
                     this.#emitTaps({ ...tapContext, phase: 'end' });
                     throw error;
                 }
@@ -781,7 +781,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         } catch (error) {
             throw error;
         } finally {
-            this.#recordEmitMetric(eventName, performance.now() - startTime, 'sync');
+            this.#recordEmitMetric(eventName, startTime, 'sync');
             this.#emitTaps({ ...tapContext, phase: 'end' });
             const depth = this.#emitDepth.get(eventName) ?? 1;
             if (depth <= 1) {
@@ -1413,15 +1413,15 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                     return;
                 }
 
-                const startTime = performance.now();
+                const startTime = this.#options.metrics ? performance.now() : 0;
                 subscription.executionCount += 1;
                 subscription.lastExecuted = Date.now();
 
                 try {
                     await callback(data as never);
-                    this.#recordExecutionMetric(eventName, performance.now() - startTime, false);
+                    this.#recordExecutionMetric(eventName, startTime, false);
                 } catch (error) {
-                    this.#recordExecutionMetric(eventName, performance.now() - startTime, true);
+                    this.#recordExecutionMetric(eventName, startTime, true);
                     if (subscription.once) {
                         this.#deleteSubscription(subscription);
                     }
