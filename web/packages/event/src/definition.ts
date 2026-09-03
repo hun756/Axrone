@@ -12,6 +12,19 @@ export type EventDispatchItem<T extends EventMap> = {
     };
 }[EventKey<T>];
 
+/**
+ * Per-item result returned by {@link IEventPublisher.emitBatch}.
+ *
+ * - `success: true` — the underlying emit resolved to `true` (had at least one listener).
+ * - `success: false`, no `error` — the underlying emit resolved to `false` (no listeners or no-op).
+ * - `success: false`, with `error` — the underlying emit rejected; the error is captured here
+ *   instead of rejecting the whole batch (settle-all semantics).
+ */
+export interface EventDispatchResult {
+    readonly success: boolean;
+    readonly error?: Error;
+}
+
 export type ExtractEventData<
     TEventMap extends EventMap,
     TEventKey extends EventKey<TEventMap>,

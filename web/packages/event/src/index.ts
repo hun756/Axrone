@@ -8,6 +8,8 @@ export type {
     EventNames,
     OptionalData,
     EventOptions,
+    EventDispatchItem,
+    EventDispatchResult,
 } from './definition';
 
 export {
