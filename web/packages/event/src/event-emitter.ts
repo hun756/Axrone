@@ -785,8 +785,21 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         return this.#isPaused;
     }
 
-    public async drain(): Promise<void> {
+    public async drain(options: { maxIterations?: number; timeoutMs?: number } = {}): Promise<void> {
+        const maxIterations = options.maxIterations ?? 1000;
+        const timeoutMs = options.timeoutMs ?? 30000;
+        const startTime = Date.now();
+        let iteration = 0;
+
         for (;;) {
+            if (iteration++ >= maxIterations) {
+                throw new Error(`EventEmitter.drain() exceeded max iterations (${maxIterations})`);
+            }
+
+            if (Date.now() - startTime > timeoutMs) {
+                throw new Error(`EventEmitter.drain() timed out after ${timeoutMs}ms`);
+            }
+
             const currentBufferProcessing = this.#bufferProcessing;
             if (currentBufferProcessing) {
                 await currentBufferProcessing;
