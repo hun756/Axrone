@@ -1,7 +1,8 @@
 import type { UIRuntime } from '../runtime';
 import type { PercentageString } from '../types';
 import type { UIProgressBarHandle, UIProgressBarOptions } from './types';
-import { attachToParent, clamp, createTextBlock, disposeWidget, formatNumericValue, normalizeRange } from './internals';
+import { clamp } from '@axrone/numeric';
+import { attachToParent, createTextBlock, disposeWidget, formatNumericValue, normalizeRange } from './internals';
 import { resolveTheme, resolveVariantPalette } from './theme';
 
 export const createUIProgressBar = <TRuntime>(

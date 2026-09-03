@@ -22,8 +22,6 @@ export const TRANSPARENT: ReadonlyColor = Object.freeze({ r: 0, g: 0, b: 0, a: 0
 export const BLACK: ReadonlyColor = Object.freeze({ r: 0, g: 0, b: 0, a: 1 });
 export const WHITE: ReadonlyColor = Object.freeze({ r: 1, g: 1, b: 1, a: 1 });
 
-export { clamp };
-
 const isColorLike = (
     value: ColorInput
 ): value is { readonly r: number; readonly g: number; readonly b: number; readonly a?: number } =>

@@ -1,4 +1,3 @@
-import { clamp } from '@axrone/numeric';
 import { UIError, UIErrorCode } from '../errors';
 import type {
     Anchor,
@@ -28,7 +27,6 @@ const DEFAULT_ANCHOR: Anchor = Object.freeze({
 const AUTO_LENGTH: ResolvedLength = Object.freeze({ kind: 'auto', value: 0 });
 const CONTENT_LENGTH: ResolvedLength = Object.freeze({ kind: 'content', value: 0 });
 
-export { clamp };
 
 const isEdgeRecord = (
     value: EdgeInput

@@ -1,4 +1,5 @@
-import { clamp, quatAccumulateWeighted, quatFinalizeWeighted, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Lerp } from './math';
+import { clamp } from '@axrone/numeric';
+import { quatAccumulateWeighted, quatFinalizeWeighted, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Lerp } from './math';
 import { AnimationFrame, AnimationMask } from './pose-frame';
 import { type BlendWeight, asBlendWeight, unblendWeight } from './blend-types';
 

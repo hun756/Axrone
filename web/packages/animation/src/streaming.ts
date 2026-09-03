@@ -1,5 +1,5 @@
+import { clamp } from '@axrone/numeric';
 import { AnimationClip } from './clip';
-import { clamp } from './math';
 import type { AnimationControllerClipActivity } from './types';
 
 export type AnimationClipStreamingChunkStatus = 'idle' | 'requested' | 'loaded' | 'failed';

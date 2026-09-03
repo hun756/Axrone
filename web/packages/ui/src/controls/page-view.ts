@@ -1,7 +1,8 @@
 import type { UIRuntime } from '../runtime';
 import type { WidgetId } from '../types';
 import type { UIPageViewHandle, UIPageViewOptions } from './types';
-import { attachToParent, clamp, disposeWidget } from './internals';
+import { clamp } from '@axrone/numeric';
+import { attachToParent, disposeWidget } from './internals';
 import { resolveTheme } from './theme';
 
 export const createUIPageView = <TRuntime>(
