@@ -11,6 +11,7 @@ import {
     PRIORITY_VALUES,
     MEMORY_USAGE_SYMBOLS,
     EventDispatchItem,
+    EventDispatchResult,
 } from './definition';
 import { EventHandlerError, EventQueueFullError } from './errors';
 import {
@@ -89,8 +90,15 @@ interface TimingAccumulator {
     max: number;
 }
 
+type EmitMode = 'sync' | 'async' | 'buffered';
+
 interface MetricsAccumulator {
-    emit: TimingAccumulator;
+    emit: {
+        timing: TimingAccumulator;
+        sync: TimingAccumulator;
+        async: TimingAccumulator;
+        buffered: TimingAccumulator;
+    };
     execution: TimingAccumulator & { errors: number };
 }
 
@@ -203,7 +211,12 @@ function createTimingAccumulator(): TimingAccumulator {
 
 function createMetricsAccumulator(): MetricsAccumulator {
     return {
-        emit: createTimingAccumulator(),
+        emit: {
+            timing: createTimingAccumulator(),
+            sync: createTimingAccumulator(),
+            async: createTimingAccumulator(),
+            buffered: createTimingAccumulator(),
+        },
         execution: {
             ...createTimingAccumulator(),
             errors: 0,
@@ -227,6 +240,20 @@ function snapshotTiming(timing: TimingAccumulator): EventMetrics['emit']['timing
         min: Number.isFinite(timing.min) ? timing.min : 0,
         total: timing.total,
     };
+}
+
+function determineDominantEmitMode(emit: MetricsAccumulator['emit']): EmitMode {
+    const syncCount = emit.sync.count;
+    const asyncCount = emit.async.count;
+    const bufferedCount = emit.buffered.count;
+
+    if (syncCount >= asyncCount && syncCount >= bufferedCount) {
+        return 'sync';
+    }
+    if (asyncCount >= bufferedCount) {
+        return 'async';
+    }
+    return 'buffered';
 }
 
 function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
@@ -417,11 +444,11 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 this.#emitTaps({ ...tapContext, phase: 'start' });
                 try {
                     this.#enqueueBufferedEvent(eventName, data, priority);
-                    this.#recordEmitMetric(eventName, 0);
+                    this.#recordEmitMetric(eventName, 0, 'buffered');
                     this.#emitTaps({ ...tapContext, phase: 'end' });
                     return true;
                 } catch (error) {
-                    this.#recordEmitMetric(eventName, performance.now() - startTime);
+                    this.#recordEmitMetric(eventName, performance.now() - startTime, 'buffered');
                     this.#emitTaps({ ...tapContext, phase: 'end' });
                     throw error;
                 }
@@ -443,12 +470,86 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 return false;
             }
 
+            // Fast path: when concurrencyLimit is Infinity (the default), bypass
+            // the EventScheduler to skip per-listener ITask / Promise / closure /
+            // setTimeout(30s) overhead. Handlers run serially via `await`, so any
+            // Promises they return are awaited before emit() resolves. Failure
+            // isolation (per-iteration try/catch), once-removal post-dispatch,
+            // execution metrics, captureRejections semantics (collect-then-process
+            // with 'error' event emission or final throw), and #reportAsyncError
+            // dispatch for non-captured rejections are all preserved. The
+            // scheduler path is retained for finite concurrencyLimit so the
+            // configured cap is honoured.
+            if (this.#options.concurrencyLimit === Infinity) {
+                const errors: EventHandlerError[] = [];
+                for (const subscription of snapshot) {
+                    if (subscription.disposed) {
+                        continue;
+                    }
+
+                    const callback = this.#resolveCallback(subscription);
+                    if (!callback) {
+                        continue;
+                    }
+
+                    const execStartTime = performance.now();
+                    subscription.executionCount += 1;
+                    subscription.lastExecuted = Date.now();
+                    let isError = false;
+                    try {
+                        await (callback as (data: unknown) => unknown)(data);
+                    } catch (error) {
+                        isError = true;
+                        const wrapped =
+                            error instanceof EventHandlerError
+                                ? error
+                                : new EventHandlerError(eventName, error);
+                        if (this.#options.captureRejections) {
+                            errors.push(wrapped);
+                        } else {
+                            this.#reportAsyncError(wrapped);
+                        }
+                    }
+
+                    this.#recordExecutionMetric(
+                        eventName,
+                        performance.now() - execStartTime,
+                        isError
+                    );
+
+                    if (subscription.once) {
+                        this.#deleteSubscription(subscription);
+                    }
+                }
+
+                if (errors.length > 0) {
+                    const errorEvent = 'error' as EventKey<T>;
+                    if (this.has(errorEvent)) {
+                        for (const err of errors) {
+                            this.emitSync(errorEvent, err as T[typeof errorEvent]);
+                        }
+                    } else if (errors.length === 1) {
+                        throw errors[0];
+                    } else {
+                        throw new EventHandlerError(
+                            eventName,
+                            new AggregateError(
+                                errors as Error[],
+                                `${errors.length} handlers failed`
+                            )
+                        );
+                    }
+                }
+
+                return true;
+            }
+
             await this.#dispatchAsync(eventName, data, snapshot);
             return true;
         } catch (error) {
             throw error;
         } finally {
-            this.#recordEmitMetric(eventName, performance.now() - startTime);
+            this.#recordEmitMetric(eventName, performance.now() - startTime, 'async');
             this.#emitTaps({ ...tapContext, phase: 'end' });
             const depth = this.#emitDepth.get(eventName) ?? 1;
             if (depth <= 1) {
@@ -499,11 +600,11 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                     };
                     this.#emitTaps({ ...tapContext, phase: 'start' });
                     this.#enqueueBufferedEvent(eventName, data, priority);
-                    this.#recordEmitMetric(eventName, 0);
+                    this.#recordEmitMetric(eventName, 0, 'buffered');
                     this.#emitTaps({ ...tapContext, phase: 'end' });
                     return true;
                 } catch (error) {
-                    this.#recordEmitMetric(eventName, performance.now() - startTime);
+                    this.#recordEmitMetric(eventName, performance.now() - startTime, 'buffered');
                     this.#emitTaps({ ...tapContext, phase: 'end' });
                     throw error;
                 }
@@ -550,19 +651,15 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                         hadAsyncCallbacks = true;
                         void Promise.resolve(result).then(
                             () => {
-                                this.#recordExecutionMetric(
-                                    eventName,
-                                    performance.now() - execStartTime,
-                                    false
-                                );
+                                // Intentionally not recording execution metric here:
+                                // the measured time includes await suspension and
+                                // scheduler latency, not the handler's actual cost.
                             },
                             (error) => {
-                                this.#recordExecutionMetric(
-                                    eventName,
-                                    performance.now() - execStartTime,
-                                    true
-                                );
-
+                                // Same reason: do not record timing for async
+                                // listeners invoked from emitSync. The error is
+                                // still surfaced through captureRejections or
+                                // reportAsyncError so behavior is unchanged.
                                 const wrapped = new EventHandlerError(eventName, error);
 
                                 if (this.#options.captureRejections) {
@@ -622,7 +719,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         } catch (error) {
             throw error;
         } finally {
-            this.#recordEmitMetric(eventName, performance.now() - startTime);
+            this.#recordEmitMetric(eventName, performance.now() - startTime, 'sync');
             this.#emitTaps({ ...tapContext, phase: 'end' });
             const depth = this.#emitDepth.get(eventName) ?? 1;
             if (depth <= 1) {
@@ -633,23 +730,51 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         }
     }
 
-    public async emitBatch(events: ReadonlyArray<EventDispatchItem<T>>): Promise<boolean[]> {
+    /**
+     * Emit a batch of events with settle-all, per-item error isolation.
+     *
+     * Replaces the previous `Promise.all` fail-fast implementation. Now every
+     * input gets a corresponding {@link EventDispatchResult} in the output:
+     *
+     * - `{ success: true }` — the underlying `emit()` resolved to `true`.
+     * - `{ success: false }` — the underlying `emit()` resolved to `false`
+     *   (no listeners, re-entrancy cap, etc.).
+     * - `{ success: false, error }` — the underlying `emit()` rejected; the
+     *   error is captured here instead of rejecting the whole batch, so
+     *   sibling emissions are not discarded.
+     *
+     * The returned promise only rejects if the emitter was disposed before
+     * the call (mirroring `emit()`'s precondition).
+     */
+    public async emitBatch(
+        events: ReadonlyArray<EventDispatchItem<T>>
+    ): Promise<ReadonlyArray<EventDispatchResult>> {
         if (events.length === 0) return [];
 
         this.#ensureRuntime();
 
-        const results = new Array<Promise<boolean>>(events.length);
-
+        // #dispatchBatchItem absorbs every per-item error into its result, so
+        // the awaited promise can never reject and a plain Promise.all suffices.
+        const tasks = new Array<Promise<EventDispatchResult>>(events.length);
         for (let index = 0; index < events.length; index++) {
             const { event, data, priority } = events[index]!;
-            results[index] = this.emit(
-                event as EventKey<T>,
-                data as T[EventKey<T>],
-                priority ? { priority } : undefined
-            );
+            tasks[index] = this.#dispatchBatchItem(event, data, priority);
         }
 
-        return Promise.all(results);
+        return Promise.all(tasks);
+    }
+
+    async #dispatchBatchItem<K extends EventKey<T>>(
+        event: K,
+        data: T[K],
+        priority: EventPriority | undefined
+    ): Promise<EventDispatchResult> {
+        try {
+            const dispatched = await this.emit(event, data, priority ? { priority } : undefined);
+            return { success: dispatched };
+        } catch (error) {
+            return { success: false, error: toError(error) };
+        }
     }
 
     public has<K extends EventKey<T>>(event: K): boolean {
@@ -887,6 +1012,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             return {
                 emit: {
                     count: 0,
+                    mode: 'sync',
                     timing: snapshotTiming(createTimingAccumulator()),
                 },
                 execution: {
@@ -899,8 +1025,9 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
         return {
             emit: {
-                count: metrics.emit.count,
-                timing: snapshotTiming(metrics.emit),
+                count: metrics.emit.sync.count + metrics.emit.async.count + metrics.emit.buffered.count,
+                mode: determineDominantEmitMode(metrics.emit),
+                timing: snapshotTiming(metrics.emit.timing),
             },
             execution: {
                 count: metrics.execution.count,
@@ -1065,13 +1192,44 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             return;
         }
 
-        const queuedEvents = this.getQueuedEvents();
-        this.clearBuffer();
+        // Snapshot event names up front so we can safely delete emptied
+        // buckets from the buffer map while iterating.
+        const eventNames = Array.from(this.#buffer.keys());
 
-        for (const queuedEvent of queuedEvents) {
-            await this.emit(queuedEvent.event as EventKey<T>, queuedEvent.data as T[EventKey<T>], {
-                priority: queuedEvent.priority,
-            });
+        // The buffer is already pre-partitioned per priority, so we can walk
+        // it directly in high → normal → low order without materializing
+        // a flat array or running a JS sort comparator.
+        for (const eventName of eventNames) {
+            const bucket = this.#buffer.get(eventName);
+            if (!bucket) continue;
+
+            for (const priority of ['high', 'normal', 'low'] as const) {
+                const queue = bucket[priority];
+                const initialLength = queue.length;
+                if (initialLength === 0) continue;
+
+                for (let index = 0; index < initialLength; index++) {
+                    const queuedEvent = queue[index]!;
+                    await this.emit(
+                        queuedEvent.event as EventKey<T>,
+                        queuedEvent.data as T[EventKey<T>],
+                        { priority: queuedEvent.priority }
+                    );
+                }
+
+                // Drop only the originally-buffered entries. Any entries
+                // appended during emit() (e.g. by a listener that called
+                // pause() and re-emitted) live past `initialLength` and must
+                // remain in the buffer for the next resume().
+                queue.splice(0, initialLength);
+                this.#bufferedEventCount -= initialLength;
+            }
+
+            bucket.size = bucket.high.length + bucket.normal.length + bucket.low.length;
+
+            if (bucket.size === 0) {
+                this.#buffer.delete(eventName);
+            }
         }
     }
 
@@ -1467,13 +1625,16 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         return snapshot;
     }
 
-    #recordEmitMetric(eventName: string, duration: number): void {
+    #recordEmitMetric(eventName: string, duration: number, mode: EmitMode): void {
         if (!this.#options.metrics) {
             return;
         }
         const metrics = this.#metrics.get(eventName) ?? createMetricsAccumulator();
         this.#metrics.set(eventName, metrics);
-        this.#updateTiming(metrics.emit, duration);
+        this.#updateTiming(metrics.emit[mode], duration);
+        if (mode !== 'buffered') {
+            this.#updateTiming(metrics.emit.timing, duration);
+        }
     }
 
     #recordExecutionMetric(eventName: string, duration: number, isError: boolean): void {
