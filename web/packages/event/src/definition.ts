@@ -87,6 +87,14 @@ export interface EventOptions {
      * @default 'drop-oldest'
      */
     readonly bufferOverflow?: 'throw' | 'drop-oldest' | 'drop-newest';
+    /**
+     * If true, the emitter collects per-event and per-execution timing metrics
+     * accessible via {@link EventEmitter.getMetrics}. When false, all metric
+     * recording is skipped — no `performance.now()` calls, no Map lookups,
+     * no accumulator updates. Strongly recommended for hot paths.
+     * @default false
+     */
+    readonly metrics?: boolean;
 }
 
 export const DEFAULT_OPTIONS = Object.freeze({
@@ -97,6 +105,7 @@ export const DEFAULT_OPTIONS = Object.freeze({
     bufferSize: 1000,
     gcIntervalMs: 60000,
     bufferOverflow: 'drop-oldest',
+    metrics: false,
 } satisfies Required<EventOptions>);
 
 export const MEMORY_USAGE_SYMBOLS = Object.freeze({

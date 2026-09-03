@@ -160,6 +160,7 @@ function normalizeOptions(options: EventOptions): Required<EventOptions> {
         bufferSize: normalizeBufferSize(options.bufferSize, DEFAULT_OPTIONS.bufferSize),
         gcIntervalMs: normalizeGcInterval(options.gcIntervalMs, DEFAULT_OPTIONS.gcIntervalMs),
         bufferOverflow: normalizeBufferOverflow(options.bufferOverflow, DEFAULT_OPTIONS.bufferOverflow),
+        metrics: typeof options.metrics === 'boolean' ? options.metrics : DEFAULT_OPTIONS.metrics,
     };
 }
 
@@ -1467,12 +1468,18 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     }
 
     #recordEmitMetric(eventName: string, duration: number): void {
+        if (!this.#options.metrics) {
+            return;
+        }
         const metrics = this.#metrics.get(eventName) ?? createMetricsAccumulator();
         this.#metrics.set(eventName, metrics);
         this.#updateTiming(metrics.emit, duration);
     }
 
     #recordExecutionMetric(eventName: string, duration: number, isError: boolean): void {
+        if (!this.#options.metrics) {
+            return;
+        }
         const metrics = this.#metrics.get(eventName) ?? createMetricsAccumulator();
         this.#metrics.set(eventName, metrics);
         this.#updateTiming(metrics.execution, duration);
