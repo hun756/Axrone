@@ -256,6 +256,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
     #tapListeners = new Set<EventTap>();
     #bufferProcessing: Promise<void> | null = null;
     #emitDepth = new Map<string, number>();
+    #warnedEvents = new Set<string>();
 
     constructor(options: EventOptions = {}) {
         this.#options = normalizeOptions(options);
@@ -912,12 +913,15 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
         if (
             this.#options.maxListeners !== Infinity &&
-            bucket.size >= this.#options.maxListeners
+            bucket.size >= this.#options.maxListeners &&
+            !this.#warnedEvents.has(eventName) &&
+            (globalThis as { __AXRONE_DEBUG__?: boolean }).__AXRONE_DEBUG__ !== false
         ) {
+            this.#warnedEvents.add(eventName);
             console.warn(
                 `MaxListenersExceededWarning: Possible memory leak detected. ${
                     bucket.size
-                } listeners added to event "${eventName}".`
+                } listeners added to event "${eventName}". (Further warnings suppressed.)`
             );
         }
 
