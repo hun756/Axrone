@@ -18,6 +18,7 @@ const allowedPackageDependencies = new Set([
     '@axrone/asset-core',
     '@axrone/ecs-runtime',
     '@axrone/event',
+    '@axrone/memory',
     '@axrone/numeric',
     '@axrone/utility',
 ]);

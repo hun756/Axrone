@@ -1,5 +1,5 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON, ensureFinite } from './common';
+import { EPSILON } from './common';
 import { clamp01 } from './clamp';
 import { IVec3Like } from './vec3';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
@@ -23,12 +23,7 @@ export class Quat implements IQuatLike, ICloneable<Quat>, Equatable {
         public y: number = 0,
         public z: number = 0,
         public w: number = 1
-    ) {
-        ensureFinite(x, 'Quat.x');
-        ensureFinite(y, 'Quat.y');
-        ensureFinite(z, 'Quat.z');
-        ensureFinite(w, 'Quat.w');
-    }
+    ) {}
 
     static readonly ZERO: Readonly<Quat> = Object.freeze(new Quat(0, 0, 0, 0));
     static readonly IDENTITY: Readonly<Quat> = Object.freeze(new Quat(0, 0, 0, 1));
