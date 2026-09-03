@@ -400,7 +400,12 @@ export class Random implements IRandomGenerator {
     };
 
     public setState = (state: IRandomState): void => {
-        if (this.engine.getState().engine !== state.engine) {
+        try {
+            if (this.engine.getState().engine !== state.engine) {
+                this.engine = createEngineFactory(state.engine)();
+            }
+        } catch {
+            // Engine doesn't support getState (e.g., CryptoEngine) — switch if needed
             this.engine = createEngineFactory(state.engine)();
         }
 
