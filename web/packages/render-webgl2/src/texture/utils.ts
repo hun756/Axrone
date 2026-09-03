@@ -902,7 +902,6 @@ export class TextureUtils {
             return new Vec4(1, 1, 1, 1);
         }
     }
-    }
 
     public static isExtensionAvailableForContext(ctx: IGLContext, name: string): boolean {
         return ctx.extensions.has(name as any);
