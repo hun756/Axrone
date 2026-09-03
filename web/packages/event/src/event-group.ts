@@ -1,4 +1,4 @@
-import { EventMap, EventKey, EventCallback, UnsubscribeFn, EventPriority } from './definition';
+import { EventMap, EventKey, EventCallback, UnsubscribeFn, EventPriority, EventDispatchResult } from './definition';
 import { IEventEmitter, EventEmitter } from './event-emitter';
 import {
     SubscriptionOptions,
@@ -15,11 +15,14 @@ interface TrackedSubscription {
 
 export class EventGroup<T extends EventMap> implements IEventEmitter<T> {
     readonly #emitter: IEventEmitter<T>;
+    readonly #ownsEmitter: boolean;
     readonly #subscriptions: Set<symbol> = new Set();
     readonly #tracked = new Map<symbol, TrackedSubscription>();
+    #disposed = false;
 
     constructor(baseEmitter?: IEventEmitter<T>) {
         this.#emitter = baseEmitter ?? new EventEmitter<T>();
+        this.#ownsEmitter = baseEmitter === undefined;
     }
 
     get maxListeners(): number {
@@ -120,7 +123,9 @@ export class EventGroup<T extends EventMap> implements IEventEmitter<T> {
         return this.#emitter.emitSync(event, data, options);
     }
 
-    emitBatch(events: Parameters<IEventEmitter<T>['emitBatch']>[0]): Promise<boolean[]> {
+    emitBatch(
+        events: Parameters<IEventEmitter<T>['emitBatch']>[0]
+    ): Promise<ReadonlyArray<EventDispatchResult>> {
         return this.#emitter.emitBatch(events);
     }
 
@@ -272,7 +277,17 @@ export class EventGroup<T extends EventMap> implements IEventEmitter<T> {
     }
 
     dispose(): void {
+        if (this.#disposed) return;
+
         this.removeAllListeners();
+
+        if (this.#ownsEmitter) {
+            this.#emitter.dispose();
+        }
+
+        this.#subscriptions.clear();
+        this.#tracked.clear();
+        this.#disposed = true;
     }
 
     #trackSubscription(id: symbol, event: string, callback: EventCallback<any>): void {
