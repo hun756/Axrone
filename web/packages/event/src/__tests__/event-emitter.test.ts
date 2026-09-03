@@ -542,7 +542,7 @@ describe('EventEmitter - Main Implementation', () => {
 
             const results = await emitter.emitBatch(events);
 
-            expect(results).toEqual([true, true, true]);
+            expect(results).toEqual([{ success: true }, { success: true }, { success: true }]);
             expect(emissionCount).toBe(3);
         });
 
@@ -555,6 +555,48 @@ describe('EventEmitter - Main Implementation', () => {
 
             const unsubscribed = emitter.batchUnsubscribe([]);
             expect(unsubscribed).toBe(0);
+        });
+
+        it('should isolate per-item failures (settle-all semantics)', async () => {
+            // Pre-P1-18 the previous Promise.all implementation would reject the
+            // whole batch on the first throwing emit, discarding sibling
+            // results. With settle-all, every input gets a result and the
+            // returned promise always resolves.
+            let goodCount = 0;
+            let noListenerCount = 0;
+            let threwCount = 0;
+
+            emitter.on('test:success', () => {
+                goodCount++;
+            });
+            emitter.on('test:error', () => {
+                threwCount++;
+            });
+            emitter.on('test:batch', () => {
+                noListenerCount++;
+            });
+
+            const events = [
+                { event: 'test:success' as const, data: { data: 'a' } },
+                { event: 'test:error' as const, data: { shouldFail: true, message: 'boom' } },
+                { event: 'test:batch' as const, data: { index: 99 } },
+                { event: 'test:nonexistent' as const, data: { foo: 1 } as any },
+            ];
+
+            const results = await emitter.emitBatch(events);
+
+            expect(results).toHaveLength(events.length);
+            expect(results[0]).toEqual({ success: true });
+            expect(results[1]?.success).toBe(false);
+            expect(results[1]?.error).toBeInstanceOf(EventHandlerError);
+            expect(results[2]).toEqual({ success: true });
+            expect(results[3]?.success).toBe(false);
+            expect(results[3]?.error).toBeUndefined();
+
+            // Sibling emissions still ran despite one item throwing.
+            expect(goodCount).toBe(1);
+            expect(threwCount).toBe(1);
+            expect(noListenerCount).toBe(1);
         });
     });
 

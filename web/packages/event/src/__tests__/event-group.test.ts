@@ -198,7 +198,7 @@ describe('EventGroup - Comprehensive', () => {
                 { event: 'test:event' as const, data: { value: 3 } },
             ]);
 
-            expect(results).toEqual([true, true, true]);
+            expect(results).toEqual([{ success: true }, { success: true }, { success: true }]);
             expect(count).toBe(3);
         });
     });
