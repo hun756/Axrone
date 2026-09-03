@@ -6,10 +6,13 @@ import {
     NormalDistribution,
     PoissonDistribution,
 } from '../distributions';
+import { createEngineFactory } from '../engines';
 import type {
     DistributionSample,
     IDistribution,
+    IRandomEngine,
     IRandomState,
+    RandomEngineType,
 } from '../types';
 
 type NormalAlgorithm = 'standard' | 'polar' | 'ziggurat';
@@ -21,7 +24,19 @@ interface RandomDistributionHost {
 }
 
 export class RandomDistributionRuntime {
+    private _cachedEngine: IRandomEngine | null = null;
+    private _cachedEngineType: RandomEngineType | null = null;
+
     constructor(private readonly _host: RandomDistributionHost) {}
+
+    private _getEngine(state: IRandomState): IRandomEngine {
+        if (this._cachedEngineType !== state.engine) {
+            this._cachedEngine = createEngineFactory(state.engine)();
+            this._cachedEngineType = state.engine;
+        }
+        this._cachedEngine!.setState(state);
+        return this._cachedEngine!;
+    }
 
     public normal(mean: number = 0, stdDev: number = 1): number {
         return this.distribution<number>(
