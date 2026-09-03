@@ -1,3 +1,4 @@
+import { clamp } from '@axrone/numeric';
 import type {
     ColorInput,
     LayoutBox,
@@ -21,15 +22,7 @@ export const TRANSPARENT: ReadonlyColor = Object.freeze({ r: 0, g: 0, b: 0, a: 0
 export const BLACK: ReadonlyColor = Object.freeze({ r: 0, g: 0, b: 0, a: 1 });
 export const WHITE: ReadonlyColor = Object.freeze({ r: 1, g: 1, b: 1, a: 1 });
 
-export const clamp = (value: number, min: number, max: number): number => {
-    if (value < min) {
-        return min;
-    }
-    if (value > max) {
-        return max;
-    }
-    return value;
-};
+export { clamp };
 
 const isColorLike = (
     value: ColorInput

@@ -20,7 +20,7 @@ import type {
     InputVector2,
     InputVector2State,
 } from '../types';
-import { EPSILON as NUMERIC_EPSILON } from '@axrone/numeric';
+import { EPSILON as NUMERIC_EPSILON, clamp } from '@axrone/numeric';
 import { isRecord } from '@axrone/utility';
 
 export { isRecord };
@@ -370,18 +370,6 @@ export const isEventTargetLike = (
     isRecord(value) &&
     typeof value.addEventListener === 'function' &&
     typeof value.removeEventListener === 'function';
-
-export const clamp = (value: number, min: number, max: number): number => {
-    if (value < min) {
-        return min;
-    }
-
-    if (value > max) {
-        return max;
-    }
-
-    return value;
-};
 
 export const toFiniteNumber = (value: unknown, fallback: number): number => {
     if (typeof value !== 'number' || !Number.isFinite(value)) {

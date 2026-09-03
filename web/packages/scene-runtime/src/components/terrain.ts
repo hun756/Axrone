@@ -1,4 +1,5 @@
 import { Component, script } from '@axrone/ecs-runtime';
+import { clamp } from '@axrone/numeric';
 import {
     DEFAULT_TERRAIN_NOISE_OPTIONS,
     TERRAIN_MAX_FOLIAGE_LAYERS,
@@ -61,9 +62,6 @@ const normalizeResolution = (value: unknown, fallback: TerrainResolution): Terra
     const parsed = Number(value);
     return isTerrainResolution(parsed) ? parsed : fallback;
 };
-
-const clamp = (value: number, min: number, max: number): number =>
-    value < min ? min : value > max ? max : value;
 
 const normalizeFinite = (value: unknown, fallback: number): number => {
     const parsed = Number(value);

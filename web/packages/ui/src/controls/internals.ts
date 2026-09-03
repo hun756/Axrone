@@ -1,18 +1,11 @@
+import { clamp } from '@axrone/numeric';
 import type { UIRuntime } from '../runtime';
 import type { ColorInput, TextBlockInput, WidgetId } from '../types';
 import type { UIControlTheme, UIHandle, UIParentTarget, UISlotHandle } from './types';
 
 export const DEFAULT_SELECTION_COLOR = '#2563eb55';
 
-export const clamp = (value: number, min: number, max: number): number => {
-    if (value < min) {
-        return min;
-    }
-    if (value > max) {
-        return max;
-    }
-    return value;
-};
+export { clamp };
 
 export const resolveParentWidget = <TRuntime>(runtime: UIRuntime<TRuntime>, parent: UIParentTarget): WidgetId => {
     if (parent === null || parent === undefined) {
