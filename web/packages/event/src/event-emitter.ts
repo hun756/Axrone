@@ -395,6 +395,14 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             return false;
         }
 
+        if (
+            !this.#isPaused &&
+            !this.#hasListeners(eventName) &&
+            this.#tapListeners.size === 0
+        ) {
+            return false;
+        }
+
         this.#emitDepth.set(eventName, currentDepth + 1);
 
         try {
@@ -466,6 +474,14 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             console.warn(
                 `EventEmitter: Re-entrancy depth exceeded for event "${eventName}" (max ${MAX_EMIT_DEPTH}). Dropping emit.`
             );
+            return false;
+        }
+
+        if (
+            !this.#isPaused &&
+            !this.#hasListeners(eventName) &&
+            this.#tapListeners.size === 0
+        ) {
             return false;
         }
 
@@ -1246,6 +1262,14 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         void Promise.resolve().then(() => {
             throw failure;
         });
+    }
+
+    #hasListeners(eventName: string): boolean {
+        const bucket = this.#events.get(eventName);
+        if (!bucket) {
+            return false;
+        }
+        return bucket.size > 0;
     }
 
     #emitTaps(context: EventTapContext): void {
