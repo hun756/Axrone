@@ -1,10 +1,19 @@
 
+/**
+ * Animation-package-private SoA (Struct-of-Arrays) math kernel.
+ *
+ * All functions take (target: Float32Array, targetOffset, source, sourceOffset, ...)
+ * signatures to support zero-allocation pose blending. This is NOT a duplicate of
+ * @axrone/numeric — that package uses class-based vector/quaternion types which are
+ * wrong shape for the per-frame hot data plane (pose-blend, skinning, IK).
+ *
+ * Unique value-add vs @axrone/numeric: quatAccumulateWeighted, quatFinalizeWeighted,
+ * quatFromTo, plus defensive fallbacks (writes identity on degenerate input) instead
+ * of throwing. Do not re-export from the package index; keep this internal.
+ */
 import { clamp } from '@axrone/numeric';
 
 export const ANIMATION_EPSILON = 1e-6;
-
-export const toFloat32Array = (value: readonly number[] | Float32Array): Float32Array =>
-    value instanceof Float32Array ? new Float32Array(value) : new Float32Array(value);
 
 export const vec3Set = (
     target: Float32Array,
