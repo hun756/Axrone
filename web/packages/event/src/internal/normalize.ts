@@ -107,3 +107,19 @@ export function normalizeConcurrency(value: number | undefined, fallback: number
     }
     return normalizePositiveInteger(value, fallback);
 }
+
+/**
+ * Normalize a buffer size option. Uses the positive-integer policy: `Infinity`
+ * and non-finite values collapse to `fallback`.
+ */
+export function normalizeBufferSize(value: number | undefined, fallback: number): number {
+    return normalizePositiveInteger(value, fallback);
+}
+
+/**
+ * Normalize a GC interval in milliseconds. Uses the duration policy: `Infinity`
+ * collapses to `0` (do not start the GC timer), non-finite values to `fallback`.
+ */
+export function normalizeGcInterval(value: number | undefined, fallback: number): number {
+    return normalizeDuration(value, fallback);
+}

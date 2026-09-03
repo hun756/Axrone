@@ -305,18 +305,15 @@ describe('EventEmitter - Advanced Methods', () => {
     });
 
     describe('dispose() and self-healing', () => {
-        it('should allow re-use after dispose (self-healing)', async () => {
+        it('should throw on re-use after dispose (dispose is terminal)', () => {
             emitter.dispose();
 
-            let received = false;
-            emitter.on('test:event', () => {
-                received = true;
-            });
-
-            await emitter.emit('test:event', { value: 1 });
-            expect(received).toBe(true);
-
-            emitter.dispose();
+            expect(() => emitter.on('test:event', () => {})).toThrow(
+                'EventEmitter has been disposed and cannot be reused'
+            );
+            expect(() => emitter.emit('test:event', { value: 1 })).toThrow(
+                'EventEmitter has been disposed and cannot be reused'
+            );
         });
 
         it('should clear all state on dispose', () => {
