@@ -433,7 +433,7 @@ export const quatFromTo = (
     ty *= invToLength;
     tz *= invToLength;
 
-    const dot = numericClamp(fx * tx + fy * ty + fz * tz, -1, 1);
+    const dot = clamp(fx * tx + fy * ty + fz * tz, -1, 1);
     if (dot >= 1 - ANIMATION_EPSILON) {
         quatIdentity(target, targetOffset);
         return;

@@ -1,7 +1,7 @@
 import { AnimationSamplingError, AnimationValidationError } from './errors';
 import { freezeTuple3 } from './internal';
 import { clamp } from '@axrone/numeric';
-import { quatCopy, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, toFloat32Array, vec3Copy, vec3Lerp } from './math';
+import { quatCopy, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Copy, vec3Lerp } from './math';
 import type { AnimationCurveLayout, AnimationFrame } from './pose';
 import type { AnimationRig } from './rig';
 import {
@@ -572,8 +572,8 @@ export class AnimationClip {
 
         for (let trackIndex = 0; trackIndex < definition.tracks.length; trackIndex += 1) {
             const track = definition.tracks[trackIndex]!;
-            const times = toFloat32Array(track.times);
-            const values = toFloat32Array(track.values);
+            const times = new Float32Array(track.times);
+            const values = new Float32Array(track.values);
             const { keyframeCount, valueComponentCount, sampleStride } = resolveTrackStride(
                 track,
                 times,
