@@ -32,7 +32,6 @@ const InternalOrder = {
 } as const;
 
 export type InternalOrder = (typeof InternalOrder)[keyof typeof InternalOrder];
-export { InternalOrder };
 
 export const isFunction = (value: unknown): value is (...args: readonly unknown[]) => unknown =>
     typeof value === 'function';
