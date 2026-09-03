@@ -1322,6 +1322,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             const subscription = source[index]!;
 
             if (!this.#resolveCallback(subscription)) {
+                index += 1;
                 continue;
             }
 
