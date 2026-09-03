@@ -38,13 +38,54 @@ export const PRIORITY_VALUES = Object.freeze({
 
 export const DEFAULT_PRIORITY: EventPriority = 'normal';
 
+/**
+ * Configuration options for {@link EventEmitter}.
+ */
 export interface EventOptions {
+    /**
+     * If true, async handler rejections are captured and dispatched as
+     * an `error` event instead of being reported as unhandled rejections.
+     * @default false
+     */
     readonly captureRejections?: boolean;
+    /**
+     * Maximum number of listeners per event before a one-time warning is emitted.
+     * Set to `Infinity` to disable the check.
+     * @default 10
+     */
     readonly maxListeners?: number;
+    /**
+     * If true, listener callbacks are held via `WeakRef`. The caller MUST
+     * retain a strong reference to the callback — otherwise the listener
+     * is silently collected at the next GC and the subscription stops firing.
+     * This is intended for long-lived named callbacks, not inline lambdas.
+     * @default false
+     */
     readonly weakReferences?: boolean;
+    /**
+     * Maximum number of async listener invocations running concurrently.
+     * Set to `Infinity` for unbounded concurrency.
+     * @default Infinity
+     */
     readonly concurrencyLimit?: number;
+    /**
+     * Maximum number of events buffered per event name while paused.
+     * @default 1000
+     */
     readonly bufferSize?: number;
+    /**
+     * Garbage-collection interval in milliseconds for sweeping dead weak refs,
+     * stale metrics, and empty buckets. Set to 0 to disable.
+     * @default 60000
+     */
     readonly gcIntervalMs?: number;
+    /**
+     * Policy when `bufferSize` is exceeded for a paused event:
+     * - `throw`: raise an {@link EventQueueFullError}
+     * - `drop-oldest`: evict the oldest buffered event
+     * - `drop-newest`: silently drop the new event
+     * @default 'drop-oldest'
+     */
     readonly bufferOverflow?: 'throw' | 'drop-oldest' | 'drop-newest';
 }
 
