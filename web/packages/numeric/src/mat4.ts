@@ -6,17 +6,6 @@ import { IQuatLike } from './quat';
 import { clamp01 } from './clamp';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
-declare const __matrix4Brand: unique symbol;
-declare const __mutableBrand: unique symbol;
-declare const __vec3Brand: unique symbol;
-declare const __vec4Brand: unique symbol;
-
-type Matrix4Data = number[] & { readonly [__matrix4Brand]: true };
-type MutableMatrix4Data = number[] & {
-    readonly [__matrix4Brand]: true;
-    readonly [__mutableBrand]: true;
-};
-
 export interface IMat4Like<TData extends ArrayLike<number> = ArrayLike<number>> {
     readonly data: TData;
 }
@@ -25,30 +14,20 @@ interface IMutableMat4<TData extends number[] = number[]> extends IMat4Like<TDat
     data: TData;
 }
 
-type InferMatrixData<T> = T extends { data: infer U } ? U : never;
+type MatrixOperationReturnType<TOut extends IMat4Like | undefined, TDefault extends IMat4Like> = TOut extends IMutableMat4<infer U>
+    ? TOut
+    : TOut extends undefined
+        ? Mat4
+        : never;
 
-type IsMatrix4Compatible<T> = T extends { data: ArrayLike<number> } ? true : false;
-
-type IsMutableMatrix4<T> = T extends { data: number[] } ? true : false;
-
-type MatrixOperationReturnType<
-    TOut extends IMat4Like | undefined,
-    TDefault extends IMat4Like,
-    TSecond extends IMat4Like = TDefault,
-> = TOut extends IMutableMat4<infer U> ? TOut : TOut extends undefined ? Mat4 : never;
-
-const asMutableMatrix4Data = <T extends number[]>(data: T): T & MutableMatrix4Data => {
-    return data as T & MutableMatrix4Data;
+const asMutableData = <T extends number[]>(data: T): T => {
+    return data;
 };
 
-const ensureMatrix4Data = <T extends ArrayLike<number>>(data: T): T & Matrix4Data => {
-    return data as T & Matrix4Data;
-};
-
-export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable {
+export class Mat4 implements IMat4Like<number[]>, ICloneable<Mat4>, Equatable {
     private static _hasher = new Fnv1a32();
 
-    public readonly data: Matrix4Data;
+    public readonly data: number[];
 
     constructor(values?: ArrayLike<number>) {
         if (values) {
@@ -73,9 +52,9 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
                 ensureFinite(values[13], 'Mat4.data[13]'),
                 ensureFinite(values[14], 'Mat4.data[14]'),
                 ensureFinite(values[15], 'Mat4.data[15]'),
-            ] as Matrix4Data;
+            ];
         } else {
-            this.data = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] as Matrix4Data;
+            this.data = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
         }
     }
 
@@ -90,7 +69,8 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
 
     static copy<T extends IMat4Like, V extends IMat4Like>(source: Readonly<T>, out?: V): V {
         if (out) {
-            for (let i = 0; i < 16; i++) (out as unknown as IMutableMat4).data[i] = source.data[i];
+            const outData = (out as IMutableMat4).data;
+            for (let i = 0; i < 16; i++) outData[i] = source.data[i];
             return out;
         }
 
@@ -107,9 +87,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             );
         }
 
-        const values = Array.isArray(arr)
-            ? arr.slice(offset, offset + 16)
-            : Array.from(arr).slice(offset, offset + 16);
+        const values = Array.isArray(arr) ? arr.slice(offset, offset + 16) : Array.from(arr).slice(offset, offset + 16);
 
         return new Mat4(values);
     }
@@ -274,7 +252,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             b33 = b.data[15];
 
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
 
             outData[0] = a00 * b00 + a01 * b10 + a02 * b20 + a03 * b30;
             outData[1] = a00 * b01 + a01 * b11 + a02 * b21 + a03 * b31;
@@ -327,7 +305,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         out?: V
     ): MatrixOperationReturnType<V, T> {
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
 
             outData[0] = m.data[0];
             outData[1] = m.data[4];
@@ -378,6 +356,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         const a03 = a[1] * a[6] - a[2] * a[5];
         const a04 = a[1] * a[7] - a[3] * a[5];
         const a05 = a[2] * a[7] - a[3] * a[6];
+
         const b00 = a[8] * a[13] - a[9] * a[12];
         const b01 = a[8] * a[14] - a[10] * a[12];
         const b02 = a[8] * a[15] - a[11] * a[12];
@@ -400,6 +379,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         const a03 = a[1] * a[6] - a[2] * a[5];
         const a04 = a[1] * a[7] - a[3] * a[5];
         const a05 = a[2] * a[7] - a[3] * a[6];
+
         const b00 = a[8] * a[13] - a[9] * a[12];
         const b01 = a[8] * a[14] - a[10] * a[12];
         const b02 = a[8] * a[15] - a[11] * a[12];
@@ -416,7 +396,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         det = 1.0 / det;
 
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
 
             outData[0] = (a[5] * b05 - a[6] * b04 + a[7] * b03) * det;
             outData[1] = (-a[1] * b05 + a[2] * b04 - a[3] * b03) * det;
@@ -463,7 +443,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         out?: V
     ): MatrixOperationReturnType<V, Mat4> {
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
 
             outData[0] = 1;
             outData[1] = 0;
@@ -510,7 +490,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         out?: V
     ): MatrixOperationReturnType<V, Mat4> {
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
 
             outData[0] = v.x;
             outData[1] = 0;
@@ -560,7 +540,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         const s = Math.sin(angle);
 
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
 
             outData[0] = 1;
             outData[1] = 0;
@@ -610,7 +590,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         const s = Math.sin(angle);
 
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
 
             outData[0] = c;
             outData[1] = 0;
@@ -660,7 +640,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         const s = Math.sin(angle);
 
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
 
             outData[0] = c;
             outData[1] = -s;
@@ -734,7 +714,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         const m22 = z * z * oneMinusC + c;
 
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
 
             outData[0] = m00;
             outData[1] = m01;
@@ -795,7 +775,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         const nf = 1.0 / (near - far);
 
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
 
             outData[0] = f / aspect;
             outData[1] = 0;
@@ -858,7 +838,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         const nf = 1.0 / (near - far);
 
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
 
             outData[0] = -2 * lr;
             outData[1] = 0;
@@ -927,7 +907,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
             Math.abs(eyeZ - centerZ) < EPSILON
         ) {
             if (out) {
-                const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+                const outData = asMutableData((out as IMutableMat4).data);
                 outData[0] = 1;
                 outData[1] = 0;
                 outData[2] = 0;
@@ -964,7 +944,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
 
         len = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2);
         if (len < EPSILON) {
-            // up is parallel to view direction; use alternative up vector
+            // Try alternative up vector to avoid degenerate basis
             const altUpX = Math.abs(upY) < 0.9 ? 0 : 1;
             const altUpY = Math.abs(upY) < 0.9 ? 1 : 0;
             const altUpZ = 0;
@@ -1002,7 +982,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         }
 
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
 
             outData[0] = x0;
             outData[1] = x1;
@@ -1104,13 +1084,13 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         const t1 = clamp01(t);
 
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
             for (let i = 0; i < 16; i++) {
                 outData[i] = a.data[i] + (b.data[i] - a.data[i]) * t1;
             }
             return out as MatrixOperationReturnType<V, T>;
         } else {
-            const result = new Array(16);
+            const result: number[] = new Array(16);
             for (let i = 0; i < 16; i++) {
                 result[i] = a.data[i] + (b.data[i] - a.data[i]) * t1;
             }
@@ -1124,13 +1104,13 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         V extends IMat4Like | undefined = undefined,
     >(a: Readonly<T>, b: Readonly<U>, t: number, out?: V): MatrixOperationReturnType<V, T> {
         if (out) {
-            const outData = asMutableMatrix4Data((out as IMutableMat4).data);
+            const outData = asMutableData((out as IMutableMat4).data);
             for (let i = 0; i < 16; i++) {
                 outData[i] = a.data[i] + (b.data[i] - a.data[i]) * t;
             }
             return out as MatrixOperationReturnType<V, T>;
         } else {
-            const result = new Array(16);
+            const result: number[] = new Array(16);
             for (let i = 0; i < 16; i++) {
                 result[i] = a.data[i] + (b.data[i] - a.data[i]) * t;
             }
@@ -1207,7 +1187,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         const wz = nw * z2;
 
         const result = out || new Mat4();
-        const data = asMutableMatrix4Data((result as IMutableMat4).data);
+        const data = asMutableData((result as IMutableMat4).data);
 
         data[0] = 1 - (yy + zz);
         data[1] = xy - wz;
@@ -1277,7 +1257,7 @@ export class Mat4 implements IMat4Like<Matrix4Data>, ICloneable<Mat4>, Equatable
         const tz = translation.z;
 
         const result = (out as IMutableMat4) || (new Mat4() as IMutableMat4);
-        const data = asMutableMatrix4Data(result.data);
+        const data = asMutableData(result.data);
 
         data[0] = (1 - (yy + zz)) * sx;
         data[1] = (xy - wz) * sy;
@@ -1352,8 +1332,6 @@ export class Mat4Comparer implements Comparer<Mat4> {
                 for (let i = 0; i < 16; i++) {
                     const absA = Math.abs(a.data[i]);
                     const absB = Math.abs(b.data[i]);
-                    maxA = Math.max(maxA, absA);
-                    minA = Math.min(minA, absA);
                     maxB = Math.max(maxB, absB);
                     minB = Math.min(minB, absB);
                 }

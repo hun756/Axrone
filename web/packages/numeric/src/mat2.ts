@@ -4,16 +4,6 @@ import { IVec2Like } from './vec2';
 import { clamp01 } from './clamp';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
 
-declare const __matrix2Brand: unique symbol;
-declare const __mutableBrand: unique symbol;
-declare const __vec2Brand: unique symbol;
-
-type Matrix2Data = number[] & { readonly [__matrix2Brand]: true };
-type MutableMatrix2Data = number[] & {
-    readonly [__matrix2Brand]: true;
-    readonly [__mutableBrand]: true;
-};
-
 export interface IMat2Like<TData extends ArrayLike<number> = ArrayLike<number>> {
     readonly data: TData;
 }
@@ -22,30 +12,20 @@ interface IMutableMat2<TData extends number[] = number[]> extends IMat2Like<TDat
     data: TData;
 }
 
-type InferMatrixData<T> = T extends { data: infer U } ? U : never;
+type MatrixOperationReturnType<TOut extends IMat2Like | undefined, TDefault extends IMat2Like> = TOut extends IMutableMat2<infer U>
+    ? TOut
+    : TOut extends undefined
+        ? Mat2
+        : never;
 
-type IsMatrix2Compatible<T> = T extends { data: ArrayLike<number> } ? true : false;
-
-type IsMutableMatrix2<T> = T extends { data: number[] } ? true : false;
-
-type MatrixOperationReturnType<
-    TOut extends IMat2Like | undefined,
-    TDefault extends IMat2Like,
-    TSecond extends IMat2Like = TDefault,
-> = TOut extends IMutableMat2<infer U> ? TOut : TOut extends undefined ? Mat2 : never;
-
-const asMutableMatrix2Data = <T extends number[]>(data: T): T & MutableMatrix2Data => {
-    return data as T & MutableMatrix2Data;
+const asMutableData = <T extends number[]>(data: T): T => {
+    return data;
 };
 
-const ensureMatrix2Data = <T extends ArrayLike<number>>(data: T): T & Matrix2Data => {
-    return data as T & Matrix2Data;
-};
-
-export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable {
+export class Mat2 implements IMat2Like<number[]>, ICloneable<Mat2>, Equatable {
     private static _hasher = new Fnv1a32();
 
-    public readonly data: Matrix2Data;
+    public readonly data: number[];
 
     constructor(values?: ArrayLike<number>) {
         if (values) {
@@ -58,10 +38,9 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
                 ensureFinite(values[1], 'Mat2.data[1]'),
                 ensureFinite(values[2], 'Mat2.data[2]'),
                 ensureFinite(values[3], 'Mat2.data[3]'),
-            ] as Matrix2Data;
+            ];
         } else {
-            // Identity matrix
-            this.data = [1, 0, 0, 1] as Matrix2Data;
+            this.data = [1, 0, 0, 1];
         }
     }
 
@@ -74,7 +53,8 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
 
     static copy<T extends IMat2Like, V extends IMat2Like>(source: Readonly<T>, out?: V): V {
         if (out) {
-            for (let i = 0; i < 4; i++) (out as unknown as IMutableMat2).data[i] = source.data[i];
+            const outData = (out as IMutableMat2).data;
+            for (let i = 0; i < 4; i++) outData[i] = source.data[i];
             return out;
         }
 
@@ -91,9 +71,7 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
             );
         }
 
-        const values = Array.isArray(arr)
-            ? arr.slice(offset, offset + 4)
-            : Array.from(arr).slice(offset, offset + 4);
+        const values = Array.isArray(arr) ? arr.slice(offset, offset + 4) : Array.from(arr).slice(offset, offset + 4);
 
         return new Mat2(values);
     }
@@ -154,7 +132,7 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
             b11 = b.data[3];
 
         if (out) {
-            const outData = asMutableMatrix2Data((out as IMutableMat2).data);
+            const outData = asMutableData((out as IMutableMat2).data);
 
             outData[0] = a00 * b00 + a01 * b10;
             outData[1] = a00 * b01 + a01 * b11;
@@ -177,7 +155,7 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         out?: V
     ): MatrixOperationReturnType<V, T> {
         if (out) {
-            const outData = asMutableMatrix2Data((out as IMutableMat2).data);
+            const outData = asMutableData((out as IMutableMat2).data);
 
             outData[0] = m.data[0];
             outData[1] = m.data[2];
@@ -186,12 +164,7 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
 
             return out as MatrixOperationReturnType<V, T>;
         } else {
-            return new Mat2([
-                m.data[0],
-                m.data[2],
-                m.data[1],
-                m.data[3],
-            ]) as MatrixOperationReturnType<V, T>;
+            return new Mat2([m.data[0], m.data[2], m.data[1], m.data[3]]) as MatrixOperationReturnType<V, T>;
         }
     }
 
@@ -220,7 +193,7 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         det = 1.0 / det;
 
         if (out) {
-            const outData = asMutableMatrix2Data((out as IMutableMat2).data);
+            const outData = asMutableData((out as IMutableMat2).data);
 
             outData[0] = a11 * det;
             outData[1] = -a01 * det;
@@ -229,12 +202,7 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
 
             return out as MatrixOperationReturnType<V, T>;
         } else {
-            return new Mat2([
-                a11 * det,
-                -a01 * det,
-                -a10 * det,
-                a00 * det,
-            ]) as MatrixOperationReturnType<V, T>;
+            return new Mat2([a11 * det, -a01 * det, -a10 * det, a00 * det]) as MatrixOperationReturnType<V, T>;
         }
     }
 
@@ -260,7 +228,7 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         out?: V
     ): MatrixOperationReturnType<V, Mat2> {
         if (out) {
-            const outData = asMutableMatrix2Data((out as IMutableMat2).data);
+            const outData = asMutableData((out as IMutableMat2).data);
 
             outData[0] = v.x;
             outData[1] = 0;
@@ -278,7 +246,7 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         out?: V
     ): MatrixOperationReturnType<V, Mat2> {
         if (out) {
-            const outData = asMutableMatrix2Data((out as IMutableMat2).data);
+            const outData = asMutableData((out as IMutableMat2).data);
 
             outData[0] = scale;
             outData[1] = 0;
@@ -299,7 +267,7 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         const s = Math.sin(angle);
 
         if (out) {
-            const outData = asMutableMatrix2Data((out as IMutableMat2).data);
+            const outData = asMutableData((out as IMutableMat2).data);
 
             outData[0] = c;
             outData[1] = -s;
@@ -318,7 +286,7 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         out?: V
     ): MatrixOperationReturnType<V, Mat2> {
         if (out) {
-            const outData = asMutableMatrix2Data((out as IMutableMat2).data);
+            const outData = asMutableData((out as IMutableMat2).data);
 
             outData[0] = 1;
             outData[1] = shearX;
@@ -359,13 +327,13 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         const t1 = clamp01(t);
 
         if (out) {
-            const outData = asMutableMatrix2Data((out as IMutableMat2).data);
+            const outData = asMutableData((out as IMutableMat2).data);
             for (let i = 0; i < 4; i++) {
                 outData[i] = a.data[i] + (b.data[i] - a.data[i]) * t1;
             }
             return out as MatrixOperationReturnType<V, T>;
         } else {
-            const result = new Array(4);
+            const result: number[] = new Array(4);
             for (let i = 0; i < 4; i++) {
                 result[i] = a.data[i] + (b.data[i] - a.data[i]) * t1;
             }
@@ -379,13 +347,13 @@ export class Mat2 implements IMat2Like<Matrix2Data>, ICloneable<Mat2>, Equatable
         V extends IMat2Like | undefined = undefined,
     >(a: Readonly<T>, b: Readonly<U>, t: number, out?: V): MatrixOperationReturnType<V, T> {
         if (out) {
-            const outData = asMutableMatrix2Data((out as IMutableMat2).data);
+            const outData = asMutableData((out as IMutableMat2).data);
             for (let i = 0; i < 4; i++) {
                 outData[i] = a.data[i] + (b.data[i] - a.data[i]) * t;
             }
             return out as MatrixOperationReturnType<V, T>;
         } else {
-            const result = new Array(4);
+            const result: number[] = new Array(4);
             for (let i = 0; i < 4; i++) {
                 result[i] = a.data[i] + (b.data[i] - a.data[i]) * t;
             }
