@@ -424,7 +424,6 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 return false;
             }
 
-            this.#removeOnceSubscriptions(snapshot);
             await this.#dispatchAsync(eventName, data, snapshot);
             return true;
         } catch (error) {
@@ -490,8 +489,6 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 return false;
             }
 
-            this.#removeOnceSubscriptions(snapshot);
-
             let hadAsyncCallbacks = false;
             const errors: Error[] = [];
 
@@ -508,6 +505,10 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
                 try {
                     const result = callback(data);
+
+                    if (subscription.once) {
+                        this.#deleteSubscription(subscription);
+                    }
 
                     if (isPromiseLike<void>(result)) {
                         hadAsyncCallbacks = true;
@@ -543,6 +544,10 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                         );
                     }
                 } catch (error) {
+                    if (subscription.once) {
+                        this.#deleteSubscription(subscription);
+                    }
+
                     this.#recordExecutionMetric(
                         eventName,
                         performance.now() - execStartTime,
@@ -1149,7 +1154,14 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                     this.#recordExecutionMetric(eventName, performance.now() - startTime, false);
                 } catch (error) {
                     this.#recordExecutionMetric(eventName, performance.now() - startTime, true);
+                    if (subscription.once) {
+                        this.#deleteSubscription(subscription);
+                    }
                     throw new EventHandlerError(eventName, error);
+                }
+
+                if (subscription.once) {
+                    this.#deleteSubscription(subscription);
                 }
             },
             PRIORITY_TO_TASK_PRIORITY[subscription.priority]
