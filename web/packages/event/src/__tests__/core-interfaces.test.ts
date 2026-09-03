@@ -194,7 +194,11 @@ describe('EventEmitter - Core Interfaces', () => {
         });
 
         it('should handle batch emit operations', async () => {
-            mockPublisher.emitBatch.mockResolvedValue([true, false, true]);
+            mockPublisher.emitBatch.mockResolvedValue([
+                { success: true },
+                { success: false },
+                { success: true },
+            ]);
 
             const events = [
                 { event: 'test:batch' as const, data: { index: 1 } },
@@ -205,7 +209,7 @@ describe('EventEmitter - Core Interfaces', () => {
             const results = await mockPublisher.emitBatch(events);
 
             expect(mockPublisher.emitBatch).toHaveBeenCalledWith(events);
-            expect(results).toEqual([true, false, true]);
+            expect(results).toEqual([{ success: true }, { success: false }, { success: true }]);
         });
 
         it('should handle emit failures gracefully', async () => {
@@ -360,6 +364,7 @@ describe('EventEmitter - Core Interfaces', () => {
             const mockMetrics: EventMetrics = {
                 emit: {
                     count: 10,
+                    mode: 'sync',
                     timing: { avg: 2.5, max: 10.0, min: 0.5, total: 25.0 },
                 },
                 execution: {

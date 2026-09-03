@@ -5,6 +5,7 @@ import {
     EventKey,
     UnsubscribeFn,
     EventDispatchItem,
+    EventDispatchResult,
 } from './definition';
 
 interface TimingSnapshot {
@@ -33,6 +34,7 @@ export interface SubscriptionOptions {
 export interface EventMetrics {
     readonly emit: {
         readonly count: number;
+        readonly mode: 'sync' | 'async' | 'buffered';
         readonly timing: TimingSnapshot;
     };
     readonly execution: {
@@ -87,7 +89,16 @@ export interface IEventPublisher<T extends EventMap = EventMap> {
         options?: { priority?: EventPriority }
     ): boolean;
 
-    emitBatch(events: ReadonlyArray<EventDispatchItem<T>>): Promise<boolean[]>;
+    /**
+     * Emit a batch of events with settle-all semantics.
+     *
+     * Each item's emit runs concurrently and is isolated from sibling failures:
+     * an individual rejection is captured in the per-item {@link EventDispatchResult.error}
+     * field, and the returned promise resolves with a result for every input item
+     * (same length, same order). The returned promise itself only rejects if the
+     * emitter has been disposed before the call.
+     */
+    emitBatch(events: ReadonlyArray<EventDispatchItem<T>>): Promise<ReadonlyArray<EventDispatchResult>>;
 }
 
 export interface IEventBuffer<T extends EventMap = EventMap> {
