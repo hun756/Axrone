@@ -11,11 +11,13 @@ export class CryptoEngine implements IRandomEngine {
     private counter: UInt64;
     private readonly engineType = RandomEngineType.CRYPTO;
     private readonly buffer: Uint8Array;
+    private readonly dataView: DataView;
     private bufferPosition: number;
     private readonly bufferSize = 1024;
 
     constructor() {
         this.buffer = new Uint8Array(this.bufferSize);
+        this.dataView = new DataView(this.buffer.buffer);
         this.bufferPosition = this.bufferSize;
 
         this.s0 = 0n;
@@ -38,7 +40,7 @@ export class CryptoEngine implements IRandomEngine {
             this.refillBuffer();
         }
 
-        const value = new DataView(this.buffer.buffer).getUint32(this.bufferPosition, true);
+        const value = this.dataView.getUint32(this.bufferPosition, true);
         this.bufferPosition += 4;
 
         return value >>> 0;
@@ -51,9 +53,8 @@ export class CryptoEngine implements IRandomEngine {
             this.refillBuffer();
         }
 
-        const view = new DataView(this.buffer.buffer);
-        const lo = BigInt(view.getUint32(this.bufferPosition, true));
-        const hi = BigInt(view.getUint32(this.bufferPosition + 4, true));
+        const lo = BigInt(this.dataView.getUint32(this.bufferPosition, true));
+        const hi = BigInt(this.dataView.getUint32(this.bufferPosition + 4, true));
         this.bufferPosition += 8;
 
         return ((hi << 32n) | lo) & UINT64_MAX;

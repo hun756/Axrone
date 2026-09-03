@@ -4,6 +4,7 @@
     "main": "./dist/index.js",
     "module": "./dist/index.mjs",
     "types": "./dist/index.d.ts",
+    "sideEffects": false,
     "files": [
         "dist"
     ],
@@ -18,6 +19,9 @@
         "build": "rollup -c rollup.config.mjs",
         "clean": "rimraf dist",
         "test": "vitest run"
+    },
+    "engines": {
+        "node": ">=18"
     },
     "license": "ISC"
 }

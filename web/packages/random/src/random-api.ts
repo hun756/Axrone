@@ -164,9 +164,10 @@ export class Random implements IRandomGenerator {
 
     public uuid = (): string => {
         const bytes = new Uint8Array(16);
+        const view = new DataView(bytes.buffer);
 
-        for (let i = 0; i < 16; i++) {
-            bytes[i] = this.int(0, 255);
+        for (let i = 0; i < 4; i++) {
+            view.setUint32(i * 4, this.engine.nextUint32(), true);
         }
 
         bytes[6] = (bytes[6] & 0x0f) | 0x40;
@@ -201,9 +202,15 @@ export class Random implements IRandomGenerator {
         validateInteger(length, 'length');
 
         const result = new Uint8Array(length);
+        const view = new DataView(result.buffer);
+        let i = 0;
 
-        for (let i = 0; i < length; i++) {
-            result[i] = this.int(0, 255);
+        for (; i + 4 <= length; i += 4) {
+            view.setUint32(i, this.engine.nextUint32(), true);
+        }
+
+        for (; i < length; i++) {
+            result[i] = this.engine.nextUint32() & 0xff;
         }
 
         return result;
@@ -346,12 +353,22 @@ export class Random implements IRandomGenerator {
             throw new Error('Cannot analyze empty sequence');
         }
 
-        const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-        const variance =
-            values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+        let sum = 0;
+        let sumSq = 0;
+        let min = values[0];
+        let max = values[0];
+
+        for (let i = 0; i < values.length; i++) {
+            const v = values[i];
+            sum += v;
+            sumSq += v * v;
+            if (v < min) min = v;
+            if (v > max) max = v;
+        }
+
+        const mean = sum / values.length;
+        const variance = sumSq / values.length - mean * mean;
         const standardDeviation = Math.sqrt(variance);
-        const min = Math.min(...values);
-        const max = Math.max(...values);
 
         return {
             mean,
