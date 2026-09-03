@@ -216,6 +216,26 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         }
     }
 
+    static divideSafe<T extends IVec3Like, U extends IVec3Like, V extends IVec3Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V,
+        defaultValue: number = 0
+    ): V {
+        if (out) {
+            out.x = Math.abs(b.x) < EPSILON ? defaultValue : a.x / b.x;
+            out.y = Math.abs(b.y) < EPSILON ? defaultValue : a.y / b.y;
+            out.z = Math.abs(b.z) < EPSILON ? defaultValue : a.z / b.z;
+            return out;
+        } else {
+            return {
+                x: Math.abs(b.x) < EPSILON ? defaultValue : a.x / b.x,
+                y: Math.abs(b.y) < EPSILON ? defaultValue : a.y / b.y,
+                z: Math.abs(b.z) < EPSILON ? defaultValue : a.z / b.z,
+            } as V;
+        }
+    }
+
     static divideScalar<T extends IVec3Like, V extends IVec3Like>(
         a: Readonly<T>,
         b: number,
@@ -319,6 +339,29 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
         if (length < EPSILON) {
             throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        if (out) {
+            out.x = v.x / length;
+            out.y = v.y / length;
+            out.z = v.z / length;
+            return out;
+        } else {
+            return { x: v.x / length, y: v.y / length, z: v.z / length } as U;
+        }
+    }
+
+    static normalizeSafe<T extends IVec3Like, U extends IVec3Like>(v: Readonly<T>, out?: U): U {
+        const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+        if (length < EPSILON) {
+            if (out) {
+                out.x = 0;
+                out.y = 0;
+                out.z = 0;
+                return out;
+            } else {
+                return { x: 0, y: 0, z: 0 } as U;
+            }
         }
 
         if (out) {

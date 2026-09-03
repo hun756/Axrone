@@ -186,6 +186,24 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
+    static divideSafe<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V,
+        defaultValue: number = 0
+    ): V {
+        if (out) {
+            out.x = Math.abs(b.x) < EPSILON ? defaultValue : a.x / b.x;
+            out.y = Math.abs(b.y) < EPSILON ? defaultValue : a.y / b.y;
+            return out;
+        } else {
+            return {
+                x: Math.abs(b.x) < EPSILON ? defaultValue : a.x / b.x,
+                y: Math.abs(b.y) < EPSILON ? defaultValue : a.y / b.y,
+            } as V;
+        }
+    }
+
     static divideScalar<T extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: number,
@@ -287,6 +305,30 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         const length = Math.sqrt(v.x * v.x + v.y * v.y);
         if (length < EPSILON) {
             throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        if (out) {
+            out.x = v.x / length;
+            out.y = v.y / length;
+            return out;
+        } else {
+            return { x: v.x / length, y: v.y / length } as V;
+        }
+    }
+
+    static normalizeSafe<T extends IVec2Like, V extends IVec2Like>(
+        v: Readonly<T>,
+        out?: V
+    ): V {
+        const length = Math.sqrt(v.x * v.x + v.y * v.y);
+        if (length < EPSILON) {
+            if (out) {
+                out.x = 0;
+                out.y = 0;
+                return out;
+            } else {
+                return { x: 0, y: 0 } as V;
+            }
         }
 
         if (out) {
