@@ -21,28 +21,39 @@ describe('@axrone/ui GlyphAtlas LRU eviction', () => {
         });
 
         // Fill page 1: 32px wide, each glyph 10px → 3 glyphs per row.
-        atlas.ensure(makeGlyph(65)); // A
+        const entryA = atlas.ensure(makeGlyph(65)); // A
+        const page1Id = entryA.page;
         atlas.ensure(makeGlyph(66)); // B
         atlas.ensure(makeGlyph(67)); // C
         // Row full (30px used, next would be 40 > 32). Page 1 has 3 entries.
 
         // Fill page 2.
-        atlas.ensure(makeGlyph(68)); // D → new row on same page? No, cursorY+10=10, rowHeight=10, still fits.
-        // Actually page is 32x32. After first row: cursorX=30, rowHeight=10, cursorY=0.
-        // 4th glyph: cursorX(30)+10=40 > 32 → wrap: cursorX=0, cursorY=10, rowHeight=0.
-        // cursorY(10)+10=20 ≤ 32 → fits on same page.
+        const entryD = atlas.ensure(makeGlyph(68)); // D
+        const page2Id = entryD.page;
         atlas.ensure(makeGlyph(69)); // E → cursorX=10
         atlas.ensure(makeGlyph(70)); // F → cursorX=20
         atlas.ensure(makeGlyph(71)); // G → cursorX=30
         atlas.ensure(makeGlyph(72)); // H → wraps to row 2: cursorX=0, cursorY=20
         atlas.ensure(makeGlyph(73)); // I → cursorX=10
         atlas.ensure(makeGlyph(74)); // J → cursorX=20
-        atlas.ensure(makeGlyph(75)); // K → wraps to row 3: cursorX=0, cursorY=30 — wait, cursorY(20)+10=30 ≤ 32, so still fits
+        atlas.ensure(makeGlyph(75)); // K → wraps to row 3: cursorX=0, cursorY=30
 
-        // At this point page 1 should be full (or we created page 2).
-        // Let's just verify eviction triggers when we force a 3rd page.
+        // At this point we have 2 pages. Verify exact page count.
         const pagesBefore = atlas.snapshot().length;
-        expect(pagesBefore).toBeLessThanOrEqual(2);
+        expect(pagesBefore).toBe(2);
+
+        // Force a 3rd page → should evict page 1 (LRU)
+        atlas.tick(); // advance frame so page 1 is older
+        for (let i = 0; i < 20; i++) {
+            atlas.ensure(makeGlyph(200 + i));
+        }
+
+        // Verify exact eviction: page 1 (the LRU) should be among the evicted
+        expect(evicted.length).toBeGreaterThanOrEqual(1);
+        expect(evicted[0].id).toBe(page1Id);
+
+        // Verify the evicted page snapshot has entries
+        expect(evicted[0].entries.length).toBeGreaterThan(0);
     });
 
     it('removes evicted page entries from the global lookup', () => {
@@ -95,23 +106,27 @@ describe('@axrone/ui GlyphAtlas LRU eviction', () => {
         const page1Id = entryA.page;
 
         // Fill enough to create page 2.
-        for (let i = 0; i < 15; i += 1) {
+        const entryD = atlas.ensure(makeGlyph(100));
+        const page2Id = entryD.page;
+        for (let i = 1; i < 9; i++) {
             atlas.ensure(makeGlyph(100 + i));
         }
 
         // Touch page 1 again to make it recently used.
         atlas.get(65, 16);
+        atlas.tick();
 
-        // Now fill more to force page 3 creation → should evict LRU.
-        for (let i = 0; i < 30; i += 1) {
+        // Now fill more to force page 3 creation → should evict page 2 (LRU).
+        for (let i = 0; i < 20; i++) {
             atlas.ensure(makeGlyph(200 + i));
         }
 
-        // The evicted page should NOT be the one we just touched.
-        const evictedIds = evicted.map((p) => p.id);
-        // Page 1 was touched recently, so it should survive if page 2 is older.
-        // This depends on exact timing, but at minimum we verify eviction happened.
+        // The evicted page should include page 2 (the LRU), not page 1 (touched).
         expect(evicted.length).toBeGreaterThanOrEqual(1);
+        expect(evicted[0].id).toBe(page2Id);
+
+        // Verify the evicted page snapshot has entries
+        expect(evicted[0].entries.length).toBeGreaterThan(0);
     });
 
     it('never evicts below 1 page even with maxPages=0', () => {
