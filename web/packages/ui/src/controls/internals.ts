@@ -5,6 +5,33 @@ import type { UIControlTheme, UIHandle, UIParentTarget, UISlotHandle } from './t
 
 export const DEFAULT_SELECTION_COLOR = '#2563eb55';
 
+// ─── Coercion helpers ────────────────────────────────────────────────────────
+// Canonical as* helpers used by all controllers. Button uses asStringOrNull
+// for null-returning semantics; the other 10 controllers use asString with
+// trimmed string semantics (returns empty string for non-strings).
+
+/** Coerces unknown to string | null. Returns null for non-strings or empty/whitespace-only strings. */
+export const asStringOrNull = (value: unknown): string | null =>
+    typeof value === 'string' && value.trim() !== '' ? value : null;
+
+/** Coerces unknown to trimmed string. Returns empty string for non-strings. */
+export const asString = (value: unknown): string =>
+    typeof value === 'string' ? value.trim() : '';
+
+/** Coerces unknown to number with fallback. Returns fallback for non-finite numbers. */
+export const asNumber = (value: unknown, fallback: number): number =>
+    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
+/** Coerces unknown to boolean with fallback. Returns fallback for non-booleans. */
+export const asBoolean = (value: unknown, fallback: boolean): boolean =>
+    typeof value === 'boolean' ? value : fallback;
+
+/** Coerces unknown to Record<string, unknown>. Returns empty object for non-objects or arrays. */
+export const asRecord = (value: unknown): Record<string, unknown> =>
+    value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+
 export const resolveParentWidget = <TRuntime>(runtime: UIRuntime<TRuntime>, parent: UIParentTarget): WidgetId => {
     if (parent === null || parent === undefined) {
         return runtime.root;

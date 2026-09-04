@@ -1,6 +1,7 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
+import { asString, asNumber, asBoolean, asRecord } from './internals';
 
 /**
  * Declarative toggle-switch controller for `.ui.json` authored toggles.
@@ -44,20 +45,6 @@ type ToggleContext = WidgetControllerContext<
     ToggleControllerState,
     UIRuntime
 >;
-
-const asBoolean = (value: unknown, fallback: boolean): boolean =>
-    typeof value === 'boolean' ? value : fallback;
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
-
-const asRecord = (value: unknown): Record<string, unknown> =>
-    value && typeof value === 'object' && !Array.isArray(value)
-        ? (value as Record<string, unknown>)
-        : {};
 
 const DEFAULT_ON_COLOR = '#0a74daff';
 const DEFAULT_OFF_COLOR = '#334155ff';

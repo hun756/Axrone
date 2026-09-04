@@ -2,6 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { ColorHexString, UIInputEvent, UIImageSource, WidgetId, WidgetImageInput, WidgetStrokeData } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { animateWidgetColor, Easing, type UIAnimationHandle } from './animation';
+import { asString, asNumber, asBoolean, asRecord } from './internals';
 
 /**
  * Declarative checkbox controller for `.ui.json` authored checkboxes.
@@ -98,20 +99,6 @@ type CheckboxContext = WidgetControllerContext<
     CheckboxControllerState,
     UIRuntime
 >;
-
-const asBoolean = (value: unknown, fallback: boolean): boolean =>
-    typeof value === 'boolean' ? value : fallback;
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
-
-const asRecord = (value: unknown): Record<string, unknown> =>
-    value && typeof value === 'object' && !Array.isArray(value)
-        ? (value as Record<string, unknown>)
-        : {};
 
 /**
  * Resolves the visual state from interaction state alone.

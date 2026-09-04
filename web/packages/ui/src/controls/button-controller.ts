@@ -1,6 +1,7 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, UIImageSource, WidgetId, WidgetImageInput } from '../types';
 import type { WidgetController } from '../widget';
+import { asStringOrNull, asRecord } from './internals';
 
 /**
  * Declarative button-feedback controller for `.ui.json` authored buttons.
@@ -67,14 +68,6 @@ export const BUTTON_STATE_OPACITY: Readonly<Record<ButtonVisualState, number>> =
 	pressed: 0.6,
 	disabled: 0.45,
 });
-
-const asRecord = (value: unknown): Record<string, unknown> =>
-	value && typeof value === 'object' && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
-
-const asString = (value: unknown): string | null =>
-	typeof value === 'string' && value.trim() !== '' ? value : null;
 
 const resolveVisualState = (state: ButtonFeedbackState): ButtonVisualState =>
 	state.pressed ? 'pressed' : state.hovered ? 'hover' : 'normal';
@@ -179,7 +172,7 @@ export const buttonFeedbackController: WidgetController<
 
 		if (transition === 'tint') {
 			const tints = asRecord(props.tints);
-			const tintValue = asString(tints[visualState]);
+			const tintValue = asStringOrNull(tints[visualState]);
 			if (tintValue) {
 				context.runtime.updateWidget(context.widget as WidgetId, {
 					image: { tint: tintValue } as Partial<WidgetImageInput>,
@@ -208,13 +201,13 @@ export const buttonFeedbackController: WidgetController<
 		const states = asRecord(props.states);
 		const stylePatch: Record<string, unknown> = {};
 		if (transition === 'opacity') {
-			const normalColor = asString(states.normal);
+			const normalColor = asStringOrNull(states.normal);
 			if (normalColor) {
 				stylePatch.background = normalColor;
 			}
 			stylePatch.opacity = BUTTON_STATE_OPACITY[visualState];
 		} else {
-			const stateColor = asString(states[visualState]);
+			const stateColor = asStringOrNull(states[visualState]);
 			if (stateColor) {
 				stylePatch.background = stateColor;
 				stylePatch.opacity = 1;

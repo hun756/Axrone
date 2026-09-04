@@ -2,6 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
+import { asString, asNumber, asBoolean } from './internals';
 
 /**
  * Declarative edit-box controller for `.ui.json` authored text inputs.
@@ -49,15 +50,6 @@ type EditBoxContext = WidgetControllerContext<
     EditBoxControllerState,
     UIRuntime
 >;
-
-const asBoolean = (value: unknown, fallback: boolean): boolean =>
-    typeof value === 'boolean' ? value : fallback;
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
 
 const DEFAULT_FOCUS_COLOR = '#0a74daff';
 const DEFAULT_BLUR_COLOR = '#334155ff';

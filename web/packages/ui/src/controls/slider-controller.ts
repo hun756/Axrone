@@ -2,7 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
-import { normalizeRange, normalizeSteppedValue } from './internals';
+import { normalizeRange, normalizeSteppedValue, asString, asNumber } from './internals';
 
 /**
  * Declarative slider controller for `.ui.json` authored sliders.
@@ -46,12 +46,6 @@ type SliderContext = WidgetControllerContext<
     SliderControllerState,
     UIRuntime
 >;
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
 
 /** Resolves the authored range, guarding against inverted or missing bounds. */
 const resolveRange = (props: SliderControllerProps) =>

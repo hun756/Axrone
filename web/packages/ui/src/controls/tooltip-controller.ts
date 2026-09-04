@@ -1,6 +1,7 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
+import { asString, asNumber } from './internals';
 
 /**
  * Declarative tooltip-host controller for `.ui.json` authored widgets.
@@ -52,12 +53,6 @@ type TooltipContext = WidgetControllerContext<
     TooltipControllerState,
     UIRuntime
 >;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
 /**
  * Resolves the tooltip popup widget from the binding table and caches it.

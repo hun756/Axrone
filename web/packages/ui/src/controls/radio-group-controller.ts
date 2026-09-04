@@ -1,7 +1,7 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
-import { isPointInside } from './internals';
+import { isPointInside, asString, asNumber } from './internals';
 
 /**
  * Declarative radio-group controller for `.ui.json` authored radio groups.
@@ -45,12 +45,6 @@ type RadioGroupContext = WidgetControllerContext<
     RadioGroupControllerState,
     UIRuntime
 >;
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
 
 const DEFAULT_SELECTED_COLOR = '#0a74daff';
 const DEFAULT_UNSELECTED_COLOR = '#475569ff';

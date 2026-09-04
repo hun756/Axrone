@@ -1,7 +1,7 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
-import { isPointInside } from './internals';
+import { isPointInside, asString, asNumber } from './internals';
 
 /**
  * Declarative tab-view controller for `.ui.json` authored tabbed interfaces.
@@ -48,12 +48,6 @@ type TabContext = WidgetControllerContext<
     TabControllerState,
     UIRuntime
 >;
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
 
 const DEFAULT_ACTIVE_COLOR = '#0a74daff';
 const DEFAULT_INACTIVE_COLOR = '#334155ff';
