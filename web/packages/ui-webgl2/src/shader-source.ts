@@ -45,11 +45,15 @@ export const normalizeShaderSource = (source: string): string => {
     let restored = parts.join('');
 
     // Fix #version directive: ensure newline after 'es' before next token.
-    const versionEnd = restored.indexOf('es') + 2;
-    if (versionEnd > 2 && versionEnd < restored.length) {
-        const after = restored[versionEnd];
-        if (after !== '\n' && after !== ' ' && after !== '\t' && after !== '\r') {
-            restored = restored.slice(0, versionEnd) + '\n' + restored.slice(versionEnd);
+    // Use a precise regex to avoid matching 'es' inside comments or identifiers.
+    const versionMatch = /^#version\s+300\s+es\b/m.exec(restored);
+    if (versionMatch) {
+        const versionEnd = versionMatch.index + versionMatch[0].length;
+        if (versionEnd < restored.length) {
+            const after = restored[versionEnd];
+            if (after !== '\n' && after !== ' ' && after !== '\t' && after !== '\r') {
+                restored = restored.slice(0, versionEnd) + '\n' + restored.slice(versionEnd);
+            }
         }
     }
 

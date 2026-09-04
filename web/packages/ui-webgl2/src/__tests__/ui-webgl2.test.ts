@@ -20,6 +20,7 @@ import {
 import { orientQuadTowardCamera, createUIWorldQuadRenderer } from '../world-quad';
 import { createUIWorldSurface } from '../world-surface';
 import { dispatchWorldPointerToUIRuntime, intersectRayWithUIQuad } from '../world-input';
+import { normalizeShaderSource } from '../shader-source';
 
 /** Column-major identity with an optional translation. */
 const columnMajorIdentity = (tx = 0, ty = 0, tz = 0): Float32Array =>
@@ -2068,15 +2069,9 @@ describe('atlas page eviction flushes text batch', () => {
                 },
             ],
         };
-        // Render the frame — this batches the glyph and sets activeTextPageKey.
         renderer.render(frame);
-        // The text batch was flushed at end of frame, so drawArraysInstanced was called.
         const drawCallsAfterFirst = (gl.drawArraysInstanced as ReturnType<typeof vi.fn>).mock.calls.length;
         expect(drawCallsAfterFirst).toBeGreaterThan(0);
-        // Now render another frame but evict the page mid-frame.
-        // We simulate this by rendering a new frame, then calling eviction during it.
-        // Since eviction is synchronous, we call it right after render starts.
-        // Instead, test the direct path: render, then evict the page.
         const snapshot: GlyphAtlasPageSnapshot = {
             id: entry.page as number,
             width: entry.pageWidth,
@@ -2084,8 +2079,21 @@ describe('atlas page eviction flushes text batch', () => {
             entries: [entry],
         };
         renderer.handleAtlasPageEviction(snapshot);
-        // The page should be removed from the renderer's page map.
         expect(renderer.getStats().atlasPageCount).toBe(0);
         renderer.dispose();
+    });
+});
+
+describe('normalizeShaderSource version directive', () => {
+    it('locates the #version directive precisely without matching es in comments', () => {
+        const corrupted = '// testprecision esprecision mediump float;\n#version 300 esprecision mediump float;\nvoid main() {}';
+        const result = normalizeShaderSource(corrupted);
+        expect(result).toContain('#version 300 es');
+        expect(result.indexOf('#version 300 es')).toBeGreaterThan(0);
+    });
+
+    it('returns intact source unchanged', () => {
+        const intact = '#version 300 es\nprecision mediump float;\nvoid main() {}';
+        expect(normalizeShaderSource(intact)).toBe(intact);
     });
 });
