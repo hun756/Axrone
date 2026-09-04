@@ -1236,7 +1236,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             page.uploadedGlyphs.add(glyphKey);
             this.statisticsState.uploadedGlyphCount += 1;
             // Drop CPU bitmap after GPU upload to prevent memory retention
-            (entry as any).data = null;
+            entry.data = null;
         }
         return page;
     }
