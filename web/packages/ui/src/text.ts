@@ -234,11 +234,7 @@ export class TextLayoutEngine implements Disposable {
             }
             if (direction === 'rtl') {
                 for (let index = glyphs.length - 1; index >= 0 && glyphs[index].line === lineIndex; index -= 1) {
-                    const glyph = glyphs[index];
-                    glyphs[index] = {
-                        ...glyph,
-                        x: x + line.width - (glyph.x - x + glyph.advance),
-                    };
+                    glyphs[index].x = x + line.width - (glyphs[index].x - x + glyphs[index].advance);
                 }
             }
             lineLayouts.push({
