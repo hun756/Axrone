@@ -1,42 +1,52 @@
-using Axrone.Memory.Lifetime;
+using Enterprise.Patterns.Singleton;
 
 namespace Axrone.Memory.Tests;
 
 public class AsyncSingletonTests
 {
     [Fact]
-    public async Task GetInstanceAsync_ReturnsSameValue()
+    public async Task GetValueAsync_ReturnsSameValue()
     {
         var singleton = new AsyncSingleton<SimpleService>(
             ct => new ValueTask<SimpleService>(new SimpleService()));
 
-        var a = await singleton.GetInstanceAsync();
-        var b = await singleton.GetInstanceAsync();
+        var a = await singleton.GetValueAsync();
+        var b = await singleton.GetValueAsync();
         a.Should().BeSameAs(b);
     }
 
     [Fact]
-    public async Task IsInitialized_TrueAfterSuccess()
+    public async Task IsValueCreated_TrueAfterSuccess()
     {
         var singleton = new AsyncSingleton<SimpleService>(
             ct => new ValueTask<SimpleService>(new SimpleService()));
 
-        singleton.IsInitialized.Should().BeFalse();
-        await singleton.GetInstanceAsync();
-        singleton.IsInitialized.Should().BeTrue();
+        singleton.IsValueCreated.Should().BeFalse();
+        await singleton.GetValueAsync();
+        singleton.IsValueCreated.Should().BeTrue();
     }
 
     [Fact]
-    public async Task Fault_CachesException()
+    public async Task State_TransitionsToInitialized()
+    {
+        var singleton = new AsyncSingleton<SimpleService>(
+            ct => new ValueTask<SimpleService>(new SimpleService()));
+
+        singleton.State.Should().Be(SingletonLifecycleState.Uninitialized);
+        await singleton.GetValueAsync();
+        singleton.State.Should().Be(SingletonLifecycleState.Initialized);
+    }
+
+    [Fact]
+    public async Task Factory_Throws_TransitionsToFaulted()
     {
         var singleton = new AsyncSingleton<SimpleService>(
             ct => throw new InvalidOperationException("fail"));
 
-        await singleton.Invoking(s => s.GetInstanceAsync().AsTask())
-            .Should().ThrowAsync<InvalidOperationException>();
+        await singleton.Invoking(s => s.GetValueAsync().AsTask())
+            .Should().ThrowAsync<SingletonInitializationException>();
 
-        singleton.IsFaulted.Should().BeTrue();
-        singleton.IsInitialized.Should().BeFalse();
+        singleton.State.Should().Be(SingletonLifecycleState.Faulted);
     }
 
     [Fact]
@@ -46,7 +56,7 @@ public class AsyncSingletonTests
         var singleton = new AsyncSingleton<AsyncDisposableService>(
             ct => new ValueTask<AsyncDisposableService>(service));
 
-        await singleton.GetInstanceAsync();
+        await singleton.GetValueAsync();
         await singleton.DisposeAsync();
 
         service.WasDisposed.Should().BeTrue();
@@ -58,21 +68,21 @@ public class AsyncSingletonTests
         var singleton = new AsyncSingleton<SimpleService>(
             ct => new ValueTask<SimpleService>(new SimpleService()));
 
-        await singleton.GetInstanceAsync();
+        await singleton.GetValueAsync();
         await singleton.DisposeAsync();
         await singleton.DisposeAsync();
     }
 
     [Fact]
-    public async Task GetInstanceAsync_AfterDispose_ThrowsObjectDisposedException()
+    public async Task GetValueAsync_AfterDispose_ThrowsSingletonDisposedException()
     {
         var singleton = new AsyncSingleton<SimpleService>(
             ct => new ValueTask<SimpleService>(new SimpleService()));
 
         await singleton.DisposeAsync();
 
-        await singleton.Invoking(s => s.GetInstanceAsync().AsTask())
-            .Should().ThrowAsync<ObjectDisposedException>();
+        await singleton.Invoking(s => s.GetValueAsync().AsTask())
+            .Should().ThrowAsync<SingletonDisposedException>();
     }
 
     [Fact]
@@ -86,7 +96,7 @@ public class AsyncSingletonTests
             });
 
         var tasks = Enumerable.Range(0, 10)
-            .Select(_ => singleton.GetInstanceAsync().AsTask())
+            .Select(_ => singleton.GetValueAsync().AsTask())
             .ToArray();
 
         var results = await Task.WhenAll(tasks);
@@ -97,19 +107,38 @@ public class AsyncSingletonTests
     [Fact]
     public void Constructor_NullFactory_ThrowsArgumentNullException()
     {
-        var act = () => new AsyncSingleton<SimpleService>(null!);
+        var act = () => new AsyncSingleton<SimpleService>((Func<CancellationToken, ValueTask<SimpleService>>)null!);
         act.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
-    public async Task GetInstanceAsync_DispatchesLifecycleHooks()
+    public async Task Constructor_WithSyncFactory_Works()
     {
-        var singleton = new AsyncSingleton<AsyncLifecycleService>(
-            ct => new ValueTask<AsyncLifecycleService>(new AsyncLifecycleService()));
+        var singleton = new AsyncSingleton<SimpleService>(
+            () => Task.FromResult(new SimpleService()));
 
-        var instance = await singleton.GetInstanceAsync();
+        var instance = await singleton.GetValueAsync();
+        instance.Should().NotBeNull();
+    }
 
-        instance.InitializeCalled.Should().BeTrue();
-        instance.InitializeAsyncCalled.Should().BeTrue();
+    [Fact]
+    public async Task Constructor_WithAsyncFactoryInterface_Works()
+    {
+        var factory = new TestAsyncFactory();
+        var singleton = new AsyncSingleton<SimpleService>(factory);
+
+        var instance = await singleton.GetValueAsync();
+        instance.Should().NotBeNull();
+        factory.CreateCount.Should().Be(1);
+    }
+
+    private sealed class TestAsyncFactory : IAsyncSingletonFactory<SimpleService>
+    {
+        public int CreateCount { get; private set; }
+        public ValueTask<SimpleService> CreateAsync(CancellationToken cancellationToken = default)
+        {
+            CreateCount++;
+            return new ValueTask<SimpleService>(new SimpleService());
+        }
     }
 }

@@ -1,170 +1,111 @@
-using Axrone.Memory.Lifetime;
+using Enterprise.Patterns.Singleton;
 
 namespace Axrone.Memory.Tests;
 
 public class SingletonScopeTests
 {
     [Fact]
-    public void Register_Resolve_ReturnsSameInstance()
+    public void Get_FromLocalScope_ReturnsLocalInstance()
     {
-        using var scope = new SingletonScope("test");
-        scope.Register<SimpleService>("svc", () => new SimpleService());
-
-        var a = scope.Resolve<SimpleService>("svc");
-        var b = scope.Resolve<SimpleService>("svc");
-        a.Should().BeSameAs(b);
+        var parent = new SingletonRegistry();
+        var child = new SingletonScope(parent);
+        var expected = new SimpleService();
+        child.RegisterInstance(expected);
+        child.Get<SimpleService>().Should().BeSameAs(expected);
     }
 
     [Fact]
-    public void Resolve_UnknownKey_ThrowsKeyNotFound()
+    public void Get_NotInLocal_FallsBackToParent()
     {
-        using var scope = new SingletonScope("test");
-        scope.Invoking(s => s.Resolve<SimpleService>("missing"))
-            .Should().Throw<KeyNotFoundException>();
+        var parent = new SingletonRegistry();
+        var expected = new SimpleService();
+        parent.RegisterInstance(expected);
+        var child = new SingletonScope(parent);
+        child.Get<SimpleService>().Should().BeSameAs(expected);
     }
 
     [Fact]
-    public void Child_FallsBackToParent()
+    public void Get_NotInEither_ThrowsKeyNotFoundException()
     {
-        using var parent = new SingletonScope("parent");
-        parent.Register<SimpleService>("svc", () => new SimpleService());
+        var parent = new SingletonRegistry();
+        var child = new SingletonScope(parent);
+        var act = () => child.Get<UntouchedService>();
+        act.Should().Throw<KeyNotFoundException>();
+    }
 
-        using var child = parent.CreateChild("child");
-        var instance = child.Resolve<SimpleService>("svc");
+    [Fact]
+    public void TryGet_InLocal_ReturnsTrue()
+    {
+        var parent = new SingletonRegistry();
+        var child = new SingletonScope(parent);
+        child.Register<SimpleService>(() => new SimpleService());
+        child.TryGet<SimpleService>(out var instance).Should().BeTrue();
         instance.Should().NotBeNull();
     }
 
     [Fact]
-    public void TryResolve_ReturnsFalse_WhenMissing()
+    public void TryGet_InParent_ReturnsTrue()
     {
-        using var scope = new SingletonScope("test");
-        scope.TryResolve<SimpleService>("missing", out var result).Should().BeFalse();
-        result.Should().BeNull();
+        var parent = new SingletonRegistry();
+        parent.Register<SimpleService>(() => new SimpleService());
+        var child = new SingletonScope(parent);
+        child.TryGet<SimpleService>(out var instance).Should().BeTrue();
+        instance.Should().NotBeNull();
     }
 
     [Fact]
-    public void Activate_SetsCurrent()
+    public void Contains_InLocal_ReturnsTrue()
     {
-        using var scope = new SingletonScope("ambient");
-
-        using (scope.Activate())
-        {
-            SingletonScope.Current.Should().BeSameAs(scope);
-        }
-
-        SingletonScope.Current.Should().NotBeSameAs(scope);
+        var parent = new SingletonRegistry();
+        var child = new SingletonScope(parent);
+        child.Register<SimpleService>(() => new SimpleService());
+        child.Contains<SimpleService>().Should().BeTrue();
     }
 
     [Fact]
-    public void Disposer_CalledOnDispose()
+    public void Contains_InParent_ReturnsTrue()
     {
-        bool disposed = false;
-        var scope = new SingletonScope("test");
-        scope.Register<SimpleService>("svc", () => new SimpleService(), _ => disposed = true);
-        _ = scope.Resolve<SimpleService>("svc");
-        scope.Dispose();
-        disposed.Should().BeTrue();
+        var parent = new SingletonRegistry();
+        parent.Register<SimpleService>(() => new SimpleService());
+        var child = new SingletonScope(parent);
+        child.Contains<SimpleService>().Should().BeTrue();
     }
 
     [Fact]
-    public void TypedRegister_Resolve_ReturnsSameInstance()
+    public void CreateChildScope_ReturnsNewScope()
     {
-        using var scope = new SingletonScope("typed-test");
-        scope.Register<SimpleService>(() => new SimpleService());
-
-        using (scope.Activate())
-        {
-            var a = SingletonScope.Resolve<SimpleService>();
-            var b = SingletonScope.Resolve<SimpleService>();
-            a.Should().BeSameAs(b);
-        }
+        var parent = new SingletonRegistry();
+        var child = new SingletonScope(parent);
+        var grandchild = child.CreateChildScope();
+        grandchild.Should().NotBeNull();
     }
 
     [Fact]
-    public void TypedResolve_UnknownType_ThrowsKeyNotFound()
+    public void Dispose_DisposesLocalInstances()
     {
-        using var scope = new SingletonScope("typed-missing");
-        using (scope.Activate())
-        {
-            scope.Invoking(_ => SingletonScope.Resolve<FactoryService>())
-                .Should().Throw<KeyNotFoundException>();
-        }
+        var parent = new SingletonRegistry();
+        var child = new SingletonScope(parent);
+        var service = new DisposableService();
+        child.RegisterInstance(service);
+        child.Dispose();
+        service.WasDisposed.Should().BeTrue();
     }
 
     [Fact]
-    public void Dispose_IsIdempotent()
+    public void Get_AfterDispose_ThrowsSingletonDisposedException()
     {
-        var scope = new SingletonScope("idempotent");
-        scope.Register<SimpleService>("svc", () => new SimpleService());
-        _ = scope.Resolve<SimpleService>("svc");
-
-        scope.Dispose();
-        scope.Dispose();
+        var parent = new SingletonRegistry();
+        var child = new SingletonScope(parent);
+        child.Register<SimpleService>(() => new SimpleService());
+        child.Dispose();
+        var act = () => child.Get<SimpleService>();
+        act.Should().Throw<SingletonDisposedException>();
     }
 
     [Fact]
-    public void Activate_NestedScopes_RestoresPrevious()
+    public void Register_NullParent_ThrowsArgumentNullException()
     {
-        using var outer = new SingletonScope("outer");
-        using var inner = new SingletonScope("inner");
-
-        using (outer.Activate())
-        {
-            SingletonScope.Current.Should().BeSameAs(outer);
-
-            using (inner.Activate())
-            {
-                SingletonScope.Current.Should().BeSameAs(inner);
-            }
-
-            SingletonScope.Current.Should().BeSameAs(outer);
-        }
-    }
-
-    [Fact]
-    public void TryResolve_Typed_ReturnsTrue_WhenRegistered()
-    {
-        using var scope = new SingletonScope("typed-try");
-        scope.Register<SimpleService>(() => new SimpleService());
-
-        using (scope.Activate())
-        {
-            SingletonScope.TryResolve<SimpleService>(out var instance).Should().BeTrue();
-            instance.Should().NotBeNull();
-        }
-    }
-
-    [Fact]
-    public void TryResolve_Typed_ReturnsFalse_WhenNotRegistered()
-    {
-        using var scope = new SingletonScope("typed-try-missing");
-        using (scope.Activate())
-        {
-            SingletonScope.TryResolve<FactoryService>(out var instance).Should().BeFalse();
-            instance.Should().BeNull();
-        }
-    }
-
-    [Fact]
-    public void Global_Scope_IsAlwaysAvailable()
-    {
-        SingletonScope.Global.Should().NotBeNull();
-        SingletonScope.Global.Name.Should().Be("global");
-    }
-
-    [Fact]
-    public void Register_NullKey_ThrowsArgumentNullException()
-    {
-        using var scope = new SingletonScope("null-key");
-        var act = () => scope.Register<SimpleService>(null!, () => new SimpleService());
-        act.Should().Throw<ArgumentNullException>();
-    }
-
-    [Fact]
-    public void Register_NullFactory_ThrowsArgumentNullException()
-    {
-        using var scope = new SingletonScope("null-factory");
-        var act = () => scope.Register<SimpleService>("svc", null!);
+        var act = () => new SingletonScope(null!);
         act.Should().Throw<ArgumentNullException>();
     }
 }
