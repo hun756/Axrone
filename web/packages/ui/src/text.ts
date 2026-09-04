@@ -22,22 +22,22 @@ interface TextLayoutEngineOptions {
 }
 
 interface MeasuredClusterGlyph {
-    readonly codePoint: number;
-    readonly advance: number;
-    readonly width: number;
-    readonly height: number;
-    readonly atlasEntry: ReturnType<FontRegistry['ensureGlyph']>;
+    codePoint: number;
+    advance: number;
+    width: number;
+    height: number;
+    atlasEntry: ReturnType<FontRegistry['ensureGlyph']>;
 }
 
 interface MeasuredCluster {
-    readonly index: number;
-    readonly text: string;
-    readonly glyphs: readonly MeasuredClusterGlyph[];
-    readonly width: number;
-    readonly whitespace: boolean;
-    readonly newline: boolean;
-    readonly breakOpportunity: boolean;
-    readonly spanIndex: number;
+    index: number;
+    text: string;
+    glyphs: MeasuredClusterGlyph[];
+    width: number;
+    whitespace: boolean;
+    newline: boolean;
+    breakOpportunity: boolean;
+    spanIndex: number;
 }
 
 interface ClusterLine {
@@ -291,7 +291,9 @@ export class TextLayoutEngine implements Disposable {
 
     private measureClusters(block: ResolvedTextBlock, faceId: FontFaceId | null, locale: string): MeasuredCluster[] {
         const segments = createGraphemeSegments(block.value, locale);
-        const result: MeasuredCluster[] = [];
+        // Reuse module-scoped scratch buffers for the measurement loop to
+        // avoid per-call allocations on the layout hot path.
+        scratchClusters.length = 0;
         const spanMap = block.spans.length > 0 ? buildSpanOffsetMap(block) : null;
         let charOffset = 0;
         for (let index = 0; index < segments.length; index += 1) {
@@ -299,7 +301,7 @@ export class TextLayoutEngine implements Disposable {
             const newline = segment === '\n';
             const whitespace = isWhitespace(segment);
             const codePoints = Array.from(segment).map((char) => char.codePointAt(0) ?? 32);
-            const glyphs: MeasuredClusterGlyph[] = [];
+            scratchGlyphs.length = 0;
             let width = 0;
             const spanIndex = spanMap !== null ? resolveSpanIndexAtOffset(spanMap, charOffset) : 0;
             for (let glyphIndex = 0; glyphIndex < codePoints.length; glyphIndex += 1) {
@@ -307,7 +309,7 @@ export class TextLayoutEngine implements Disposable {
                 const nextCodePoint = glyphIndex < codePoints.length - 1 ? codePoints[glyphIndex + 1] : undefined;
                 const measurement = this.fonts.measureGlyph(faceId, codePoint, block.size, nextCodePoint);
                 const advance = measurement.advance + (glyphIndex < codePoints.length - 1 ? block.letterSpacing : 0);
-                glyphs.push({
+                scratchGlyphs.push({
                     codePoint,
                     advance,
                     width: measurement.width,
@@ -316,19 +318,43 @@ export class TextLayoutEngine implements Disposable {
                 });
                 width += advance;
             }
-            result.push({
-                index,
-                text: segment,
-                glyphs,
-                width,
-                whitespace,
-                newline,
-                breakOpportunity: block.wrap === 'grapheme' || whitespace || segment === '-' || segment === '/',
-                spanIndex,
-            });
+            // Reuse or create the scratch cluster object at this index.
+            let cluster = scratchClusters[index];
+            if (!cluster) {
+                cluster = { index: 0, text: '', glyphs: [], width: 0, whitespace: false, newline: false, breakOpportunity: false, spanIndex: 0 };
+                scratchClusters[index] = cluster;
+            }
+            cluster.index = index;
+            cluster.text = segment;
+            cluster.glyphs.length = 0;
+            for (let g = 0; g < scratchGlyphs.length; g += 1) {
+                cluster.glyphs.push(scratchGlyphs[g]);
+            }
+            cluster.width = width;
+            cluster.whitespace = whitespace;
+            cluster.newline = newline;
+            cluster.breakOpportunity = block.wrap === 'grapheme' || whitespace || segment === '-' || segment === '/';
+            cluster.spanIndex = spanIndex;
             charOffset += segment.length;
         }
-        return result;
+        scratchClusters.length = segments.length;
+        // Copy out: callers (layoutText) retain results in the layout cache,
+        // so the scratch buffers must not alias the returned data.
+        const out: MeasuredCluster[] = new Array(segments.length);
+        for (let i = 0; i < segments.length; i += 1) {
+            const src = scratchClusters[i];
+            out[i] = {
+                index: src.index,
+                text: src.text,
+                glyphs: src.glyphs.slice(),
+                width: src.width,
+                whitespace: src.whitespace,
+                newline: src.newline,
+                breakOpportunity: src.breakOpportunity,
+                spanIndex: src.spanIndex,
+            };
+        }
+        return out;
     }
 
     private measureLine(
@@ -481,3 +507,9 @@ const buildSpanStyles = (block: ResolvedTextBlock): readonly TextSpanRenderStyle
 };
 
 const EMPTY_SPAN_STYLES: readonly TextSpanRenderStyle[] = Object.freeze([]);
+
+// Module-scoped scratch buffers reused across measureClusters calls.
+// Each call resets the objects in-place; results are consumed synchronously
+// within layoutText and never retained beyond the measure() call.
+const scratchClusters: MeasuredCluster[] = [];
+const scratchGlyphs: MeasuredClusterGlyph[] = [];
