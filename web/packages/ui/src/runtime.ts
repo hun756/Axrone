@@ -662,6 +662,12 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         // RenderCommand declares clip/transform readonly, but the frame and its
         // commands are owned by this call — mutate in place to avoid rebuilding
         // every command array on each commitToViewport().
+        //
+        // SAFETY: The frame returned by renderFrame() is freshly built this call
+        // (a new commands array with new command objects). It has a single
+        // consumer — the caller of commitToViewport() — and is never frozen or
+        // shared. Mutating clip/transform in place is therefore safe and avoids
+        // allocating a parallel command array on every viewport commit.
         for (const command of frame.commands) {
             const mutable = command as { clip: RectLike | null; transform?: unknown };
             mutable.clip = command.clip ? scaleClipRect(command.clip, scaleResult) : null;

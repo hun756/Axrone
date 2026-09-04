@@ -83,11 +83,40 @@ export class AutoSizeService {
      * Resolves the largest font size ≤ maxSize whose layout fits the given
      * constraints, using analytical scaling instead of a binary search.
      *
-     * Layout dimensions scale ~linearly with font size, so the measured
-     * overflow/headroom ratio estimates the fitting size directly. Bounded to
-     * at most 4 full measures (down-scale refinement, one headroom nudge, a
-     * min-size bottom-out) versus the previous 8-iteration binary search that
-     * re-measured the whole text on every step.
+     * ## Analytical linearity assumption
+     * Layout dimensions scale approximately linearly with font size for a
+     * given text block and wrap width. The measured overflow/headroom ratio
+     * therefore estimates the fitting size directly: `nextSize = currentSize ×
+     * min(1, containerDimension / layoutDimension)`. This holds well for
+     * single-line text and for multi-line paragraphs where re-wrapping at a
+     * slightly smaller size does not change the line count. When re-wrapping
+     * does change the line count (e.g. a long word just barely fits or a
+     * paragraph gains/loses a line), the linear estimate can overshoot by
+     * one candidate step.
+     *
+     * ## 4-measure cap
+     * At most 4 full text measurements are performed:
+     * 1. Initial measure at maxSize.
+     * 2. Up to 2 down-scale refinements (overflow ratio estimation).
+     * 3. One headroom nudge (recover conservative estimates after re-wrapping).
+     * If the down-scale loop still does not fit, a final measure at minSize
+     * bottoms out (counted within the 2 refinements since the loop exits
+     * early). This is a hard cap — no path exceeds 4 measures versus the
+     * previous 8-iteration binary search.
+     *
+     * ## Refinement nudges
+     * After the down-scale loop, if headroom remains (ratio > 1.001), a
+     * conservative nudge toward the original maxSize recovers size that the
+     * 0.995 safety factor left on the table. The nudge is itself bounded by
+     * one additional measure and a fit check.
+     *
+     * ## When results differ from the legacy binary search
+     * The binary search converged on the largest feasible integer-pixel size
+     * by exhaustive halving. The analytical approach may stop one candidate
+     * step short when re-wrapping creates a discontinuity (e.g. CJK/latin
+     * mixed text where a single character wrap changes the line count). In
+     * practice the chosen size is within one step of the reference maximum
+     * feasible size and never overflows the box.
      */
     private resolveShrinkToFitLayout(
         host: AutoSizeHost,
