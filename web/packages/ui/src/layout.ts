@@ -71,7 +71,11 @@ export class UILayoutEngine<TNode> {
     private layoutPasses = 0;
     private viewportWidth = 0;
     private viewportHeight = 0;
-    private readonly measureCache = new Map<TNode, SizeLike>();
+    private readonly measureCache = new Map<string, SizeLike>();
+
+    private static measureCacheKey(node: unknown, availableWidth: number, availableHeight: number): string {
+        return `${String(node)}|${availableWidth}|${availableHeight}`;
+    }
 
     compute(adapter: LayoutTreeAdapter<TNode>, viewport: Readonly<SizeLike>): void {
         this.layoutPasses = 0;
@@ -115,7 +119,8 @@ export class UILayoutEngine<TNode> {
         availableWidth: number,
         availableHeight: number
     ): SizeLike {
-        const cached = this.measureCache.get(node);
+        const cacheKey = UILayoutEngine.measureCacheKey(node, availableWidth, availableHeight);
+        const cached = this.measureCache.get(cacheKey);
         if (cached) {
             return cached;
         }
@@ -165,7 +170,7 @@ export class UILayoutEngine<TNode> {
             width: clamp(width, layout.minWidth, layout.maxWidth),
             height: clamp(height, layout.minHeight, layout.maxHeight),
         };
-        this.measureCache.set(node, result);
+        this.measureCache.set(cacheKey, result);
         return result;
     }
 
