@@ -344,7 +344,7 @@ interface TexturePage {
     readonly width: number;
     readonly height: number;
     readonly format: FontGlyphBitmapFormat;
-    readonly uploadedGlyphs: Set<string>;
+    readonly uploadedGlyphs: Set<number>;
 }
 
 interface WebGL2UICapturedTextureUnitState {
@@ -385,7 +385,8 @@ const toUint8Array = (value: ArrayBuffer | ArrayBufferView): Uint8Array => {
     return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 };
 
-const createUploadedGlyphKey = (entry: GlyphAtlasEntry): string => `${entry.codePoint}:${entry.rasterSize ?? 0}`;
+const createUploadedGlyphKey = (entry: GlyphAtlasEntry): number =>
+    (entry.codePoint << 16) | (entry.rasterSize ?? 0);
 
 const multiplyAlpha = (alpha: number, opacity: number): number => alpha * opacity;
 
@@ -779,7 +780,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     private readonly imageInstanceBuffer: WebGLBuffer | null;
     private readonly textStaticBuffer: WebGLBuffer | null;
     private readonly textInstanceBuffer: WebGLBuffer | null;
-    private readonly pages = new Map<string, TexturePage>();
+    private readonly pages = new Map<number, TexturePage>();
     private readonly quadBatch: Float32Array;
     private readonly imageBatch: Float32Array;
     private readonly textBatch: Float32Array;
@@ -800,7 +801,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     private textCount = 0;
     private activeImageTexture: WebGLTexture | null = null;
     private activeImageSampler: WebGLSampler | null = null;
-    private activeTextPageKey: string | null = null;
+    private activeTextPageKey: number | null = null;
     private activeQuadClip: ClipState | null = null;
     private activeImageClip: ClipState | null = null;
     private activeTextClip: ClipState | null = null;
@@ -1292,7 +1293,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         if (!entry) {
             return true;
         }
-        const pageKey = `${entry.faceId as number}:${entry.page as number}`;
+        const pageKey = ((entry.faceId as number) << 16) | (entry.page as number);
         if (this.activeTextPageKey !== null && this.activeTextPageKey !== pageKey) {
             return false;
         }
@@ -1468,7 +1469,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 width: entry.pageWidth,
                 height: entry.pageHeight,
                 format: entry.format,
-                uploadedGlyphs: new Set<string>(),
+                uploadedGlyphs: new Set<number>(),
             };
             this.pages.set(key, page);
         }
