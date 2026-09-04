@@ -492,7 +492,8 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             ),
         };
         this.records[index] = merged;
-        this.applyRecord(index, previousProps, previousController, false);
+        const styleOnly = !patch.layout && !patch.text && !patch.image && !patch.focus && !patch.controller && !patch.role && patch.enabled === undefined && patch.interactive === undefined;
+        this.applyRecord(index, previousProps, previousController, false, styleOnly);
         return this;
     }
 
@@ -867,7 +868,8 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         index: number,
         previousProps: Readonly<Record<string, unknown>> | null,
         previousController: string | null,
-        initial: boolean
+        initial: boolean,
+        styleOnly = false
     ): void {
         const record = this.records[index];
         if (!record) {
@@ -897,7 +899,9 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             this.states[index] = nextResolvedController.createState?.(record.props, this, index as WidgetId);
             nextResolvedController.mount?.(this.createControllerContext(index));
         }
-        this.layoutDirty = true;
+        if (!styleOnly) {
+            this.layoutDirty = true;
+        }
         this.focusDirty = true;
     }
 
