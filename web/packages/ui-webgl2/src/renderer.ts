@@ -378,13 +378,6 @@ void main() {
     o_Color = color;
 }`;
 
-interface ClipState {
-    readonly x: number;
-    readonly y: number;
-    readonly width: number;
-    readonly height: number;
-}
-
 interface TexturePage {
     readonly texture: WebGLTexture;
     readonly width: number;
@@ -475,8 +468,17 @@ const createGLStateShadow = (): GLStateShadow => ({
 
 const UNIT_QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
-const toClipState = (clip: RectLike | null): ClipState | null =>
-    clip === null ? null : { x: clip.x, y: clip.y, width: clip.width, height: clip.height };
+const sameClipRect = (stored: RectLike | null, incoming: RectLike | null): boolean => {
+    if (stored === null || incoming === null) {
+        return stored === null && incoming === null;
+    }
+    return (
+        stored.x === incoming.x &&
+        stored.y === incoming.y &&
+        stored.width === incoming.width &&
+        stored.height === incoming.height
+    );
+};
 
 const toUint8Array = (value: ArrayBuffer | ArrayBufferView): Uint8Array => {
     if (value instanceof ArrayBuffer) {
@@ -548,17 +550,7 @@ const normalizeStrokeColor = (color: StrokeRenderCommand['strokes'][number]['col
 
 const IDENTITY_TRANSFORM = [1, 0, 0, 1, 0, 0] as const;
 
-const sameClip = (left: ClipState | null, right: RectLike | null): boolean => {
-    if (left === null || right === null) {
-        return left === null && right === null;
-    }
-    return (
-        left.x === right.x &&
-        left.y === right.y &&
-        left.width === right.width &&
-        left.height === right.height
-    );
-};
+
 
 function readGLParameter<TValue>(
     gl: WebGL2RenderingContext,
@@ -763,9 +755,9 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     private activeImageTexture: WebGLTexture | null = null;
     private activeImageSampler: WebGLSampler | null = null;
     private activeTextPageKey: number | null = null;
-    private activeQuadClip: ClipState | null = null;
-    private activeImageClip: ClipState | null = null;
-    private activeTextClip: ClipState | null = null;
+    private activeQuadClip: RectLike | null = null;
+    private activeImageClip: RectLike | null = null;
+    private activeTextClip: RectLike | null = null;
     private currentFrame: UIFrame<TPayload> | null = null;
     private disposed = false;
     private contextLost = false;
@@ -906,9 +898,9 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
 
             for (const command of frame.commands) {
                 if (command.kind === 'quad') {
-                    if (!sameClip(this.activeQuadClip, command.clip)) {
+                    if (!sameClipRect(this.activeQuadClip, command.clip)) {
                         this.flushQuadBatch(frame.viewportHeight);
-                        this.activeQuadClip = toClipState(command.clip);
+                        this.activeQuadClip = command.clip ?? null;
                     }
                     this.pushQuad(command, frame.viewportHeight);
                     continue;
@@ -922,9 +914,9 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                     continue;
                 }
                 if (command.kind === 'stroke') {
-                    if (!this.activeQuadClip || !sameClip(this.activeQuadClip, command.clip)) {
+                    if (!this.activeQuadClip || !sameClipRect(this.activeQuadClip, command.clip)) {
                         this.flushQuadBatch(frame.viewportHeight);
-                        this.activeQuadClip = toClipState(command.clip);
+                        this.activeQuadClip = command.clip ?? null;
                     }
                     this.pushStrokeCommand(command, frame.viewportHeight);
                     continue;
@@ -1235,7 +1227,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             this.statisticsState.imageCount += 1;
             this.flushImageBatch(frame.viewportHeight);
             this.statisticsState.materialImageCount += 1;
-            this.applyClip(toClipState(command.clip), frame.viewportHeight);
+            this.applyClip(command.clip ?? null, frame.viewportHeight);
             resource.render({
                 gl: this.gl,
                 frame,
@@ -1249,7 +1241,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             command,
             resource.texture,
             resource.sampler ?? null,
-            toClipState(command.clip),
+            command.clip ?? null,
             frame,
             command.x,
             command.y,
@@ -1305,7 +1297,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         );
         const fillCenter = command.fillCenter !== false;
         const sampler = resource.sampler ?? null;
-        const clip = toClipState(command.clip);
+        const clip = command.clip ?? null;
         for (let row = 0; row < sliceRowsScratch.length; row += 1) {
             const vertical = sliceRowsScratch[row];
             if (vertical.size <= 0 || vertical.uvSize <= 0) {
@@ -1342,7 +1334,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         command: ImageRenderCommand,
         texture: WebGLTexture,
         sampler: WebGLSampler | null,
-        clip: ClipState | null,
+        clip: RectLike | null,
         frame: Readonly<UIFrame<TPayload>>,
         x: number,
         y: number,
@@ -1356,7 +1348,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         if (
             (this.activeImageTexture !== null && this.activeImageTexture !== texture) ||
             (this.activeImageSampler !== sampler) ||
-            (this.activeImageClip !== null && !sameClip(this.activeImageClip, command.clip))
+            (this.activeImageClip !== null && !sameClipRect(this.activeImageClip, command.clip))
         ) {
             this.flushImageBatch(frame.viewportHeight);
         }
@@ -1405,7 +1397,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         if (this.activeTextPageKey !== null && this.activeTextPageKey !== pageKey) {
             return false;
         }
-        if (this.activeTextClip !== null && !sameClip(this.activeTextClip, command.clip)) {
+        if (this.activeTextClip !== null && !sameClipRect(this.activeTextClip, command.clip)) {
             return false;
         }
         const page = this.ensureGlyphPage(entry);
@@ -1417,7 +1409,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             return false;
         }
         this.activeTextPageKey = pageKey;
-        this.activeTextClip = toClipState(command.clip);
+        this.activeTextClip = command.clip ?? null;
         this.textBatch[base] = command.x + glyph.x;
         this.textBatch[base + 1] = command.y + glyph.y;
         this.textBatch[base + 2] = glyph.width;
@@ -1536,7 +1528,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.activeTextPageKey = null;
     }
 
-    private applyClip(clip: ClipState | null, viewportHeight: number): void {
+    private applyClip(clip: RectLike | null, viewportHeight: number): void {
         this.captureGLState(GL_STATE_SCISSOR_TEST);
         this.glTouchedGroups |= GL_STATE_SCISSOR_TEST;
         if (clip === null) {
