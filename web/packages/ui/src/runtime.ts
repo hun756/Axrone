@@ -165,6 +165,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private readonly controllerResolveCache = new Map<string, WidgetController<any, any, any> | null>();
     private readonly autoSizeCache = new Map<string, TextLayoutResult>();
     private readonly autoSizeCacheMaxSize = 64;
+    private readonly dirtyNodes = new Set<number>();
 
     private readonly inputHost: UIInputDispatchHost = {
         getPressed: () => this.pressed,
@@ -631,6 +632,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
                 { width: this.viewportWidth, height: this.viewportHeight }
             );
             this.layoutDirty = false;
+            this.dirtyNodes.clear();
             this.lastLayoutPasses = this.layoutEngine.getLayoutPassCount();
         }
         // Render frame at reference resolution
@@ -1037,7 +1039,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     }
 
     private markTreeChanged(index: number): void {
-        void index;
+        this.dirtyNodes.add(index);
         this.layoutDirty = true;
         this.focusDirty = true;
     }
