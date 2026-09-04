@@ -57,7 +57,7 @@ describe('UniformDistribution', () => {
         const d = new UniformDistribution(0, 1);
         const [_, nextState] = d.sample(getTestState());
         expect(nextState).toBeDefined();
-        expect(nextState.vector).toHaveLength(4);
+        expect(nextState.vector).toHaveLength(6);
     });
 });
 
