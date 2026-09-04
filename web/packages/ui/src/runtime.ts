@@ -56,12 +56,14 @@ import {
     mergeTextInput,
 } from './runtime/internals';
 import { TextLayoutEngine } from './text';
+import { LruCache, createCacheKey } from './text/internals';
 import { WidgetRegistry, type WidgetController } from './widget';
 import type {
     ColorInput,
     CustomRenderCommand,
     FocusMoveDirection,
     FontRegistryOptions,
+    FontWeight,
     ImageRenderCommand,
     LayoutBox,
     QuadRenderCommand,
@@ -163,8 +165,9 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private readonly bindingTable = new Map<string, WidgetId>();
     private readonly controllerListeners = new Map<number, Map<string, Set<(data: unknown) => void>>>();
     private readonly controllerResolveCache = new Map<string, WidgetController<any, any, any> | null>();
-    private readonly autoSizeCache = new Map<string, TextLayoutResult>();
-    private readonly autoSizeCacheMaxSize = 64;
+    // Shared LRU implementation (TextLayoutEngine uses the same class) instead
+    // of a hand-rolled Map with ad-hoc half-eviction.
+    private readonly autoSizeCache = new LruCache<string, TextLayoutResult>(64);
     private readonly dirtyNodes = new Set<number>();
 
     private readonly inputHost: UIInputDispatchHost = {
@@ -496,6 +499,81 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         this.records[index] = merged;
         const styleOnly = !patch.layout && !patch.text && !patch.image && !patch.focus && !patch.controller && !patch.role && patch.enabled === undefined && patch.interactive === undefined;
         this.applyRecord(index, previousProps, previousController, false, styleOnly);
+        return this;
+    }
+
+    /**
+     * Updates a widget's scroll content offset without triggering a full
+     * relayout pass.
+     *
+     * Scrolling is a pure translation: children keep their measured sizes and
+     * relative arrangement, so the widget's resolved layout offset is updated
+     * in place and the subtree boxes are translated by the delta. The widget's
+     * layoutInput is kept in sync (when it already authors content offsets) so
+     * a later full relayout produces the same geometry. Per-frame scroll
+     * updates must use this instead of updateWidget, which marks the whole
+     * tree dirty and re-measures everything.
+     */
+    setContentOffset(widget: WidgetId, offsetX: number, offsetY: number): this {
+        this.ensureActive();
+        const index = this.requireWidget(widget);
+        const layout = this.layouts[index];
+        if (!layout) {
+            return this;
+        }
+        const deltaX = offsetX - layout.contentOffsetX;
+        const deltaY = offsetY - layout.contentOffsetY;
+        if (deltaX === 0 && deltaY === 0) {
+            return this;
+        }
+        this.layouts[index] = { ...layout, contentOffsetX: offsetX, contentOffsetY: offsetY };
+        const record = this.records[index];
+        if (
+            record &&
+            (record.layoutInput.contentOffsetX !== undefined || record.layoutInput.contentOffsetY !== undefined)
+        ) {
+            this.records[index] = {
+                ...record,
+                layoutInput: { ...record.layoutInput, contentOffsetX: offsetX, contentOffsetY: offsetY },
+            };
+        }
+        // The content origin moves opposite to the offset; children follow it.
+        const contentShiftX = -deltaX;
+        const contentShiftY = -deltaY;
+        this.contentX[index] += contentShiftX;
+        this.contentY[index] += contentShiftY;
+        for (let child = this.firstChild[index]; child !== 0; child = this.nextSibling[child]) {
+            this.translateSubtreeBoxes(child, contentShiftX, contentShiftY);
+        }
+        return this;
+    }
+
+    /**
+     * Translates an already-laid-out widget subtree by a pixel delta without
+     * invalidating layout. Used for per-frame scroll-driven repositioning
+     * (scrollbar thumbs). When the widget is positioned via numeric inset
+     * top/left, the authored layoutInput inset is shifted by the same delta so
+     * a later full relayout agrees with the translated position.
+     */
+    translateWidgetBox(widget: WidgetId, dx: number, dy: number): this {
+        this.ensureActive();
+        const index = this.requireWidget(widget);
+        if (dx === 0 && dy === 0) {
+            return this;
+        }
+        const record = this.records[index];
+        const inset = record?.layoutInput.inset;
+        if (inset && (typeof inset.top === 'number' || typeof inset.left === 'number')) {
+            const nextInset = { ...inset };
+            if (typeof nextInset.top === 'number') {
+                nextInset.top += dy;
+            }
+            if (typeof nextInset.left === 'number') {
+                nextInset.left += dx;
+            }
+            this.records[index] = { ...record, layoutInput: { ...record.layoutInput, inset: nextInset } };
+        }
+        this.translateSubtreeBoxes(index, dx, dy);
         return this;
     }
 
@@ -1046,6 +1124,21 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         this.focusDirty = true;
     }
 
+    /** Translates the stored boxes of a subtree by a pixel delta (no relayout). */
+    private translateSubtreeBoxes(index: number, dx: number, dy: number): void {
+        const stack = [index];
+        while (stack.length > 0) {
+            const current = stack.pop()!;
+            this.boxX[current] += dx;
+            this.boxY[current] += dy;
+            this.contentX[current] += dx;
+            this.contentY[current] += dy;
+            for (let child = this.firstChild[current]; child !== 0; child = this.nextSibling[child]) {
+                stack.push(child);
+            }
+        }
+    }
+
     private createControllerContext(index: number): WidgetEventContext<Record<string, unknown>, UIRuntime<TPayload>> & {
         readonly state: unknown;
     } {
@@ -1365,8 +1458,21 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             return this.textEngine.measure(text, constraints);
         }
 
-        // Build cache key from text properties and constraints.
-        const cacheKey = `${text.value}\0${text.family}\0${text.size}\0${text.weight}\0${text.style}\0${constraints.width}\0${constraints.height}`;
+        // Build the cache key with the same createCacheKey format the
+        // TextLayoutEngine uses (plus the autosize parameters that shape the
+        // result), so both caches stay consistent as the block type evolves.
+        const faceId = this.fonts.resolveFace({
+            family: text.family,
+            weight: text.weight as FontWeight,
+            style: text.style,
+            locale: text.locale,
+        });
+        const cacheKey = `${createCacheKey(
+            text,
+            faceId,
+            constraints.width ?? Number.POSITIVE_INFINITY,
+            constraints.height ?? Number.POSITIVE_INFINITY
+        )}|autosize|${text.autoSize}|${text.minAutoSize}|${text.maxAutoSize}`;
         const cached = this.autoSizeCache.get(cacheKey);
         if (cached) {
             return cached;
@@ -1378,59 +1484,105 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         if (!Number.isFinite(maxWidth) && !Number.isFinite(maxHeight)) {
             return this.textEngine.measure(text, constraints);
         }
-        const authoredSize = text.size;
-        const maxSize = Math.min(authoredSize, text.maxAutoSize);
+        const maxSize = Math.min(text.size, text.maxAutoSize);
         const minSize = text.minAutoSize;
         if (minSize >= maxSize) {
             const clampedBlock: ResolvedTextBlock = { ...text, size: minSize, autoSize: 'none' };
             return this.textEngine.measure(clampedBlock, constraints);
         }
-        // First check if the authored size already fits — if so, use it directly.
-        const initialLayout = this.textEngine.measure(text, constraints);
-        const fitsWidth = initialLayout.width <= (Number.isFinite(maxWidth) ? maxWidth : Number.POSITIVE_INFINITY);
-        const fitsHeight = initialLayout.height <= (Number.isFinite(maxHeight) ? maxHeight : Number.POSITIVE_INFINITY);
-        if (fitsWidth && fitsHeight) {
-            return initialLayout;
+        const result = this.resolveShrinkToFitLayout(text, constraints, minSize, maxSize, maxWidth, maxHeight);
+
+        // Store result in the autosize cache (eviction handled by the LRU).
+        this.autoSizeCache.set(cacheKey, result);
+        return result;
+    }
+
+    /**
+     * Resolves the largest font size ≤ maxSize whose layout fits the given
+     * constraints, using analytical scaling instead of a binary search.
+     *
+     * Layout dimensions scale ~linearly with font size, so the measured
+     * overflow/headroom ratio estimates the fitting size directly. Bounded to
+     * at most 4 full measures (down-scale refinement, one headroom nudge, a
+     * min-size bottom-out) versus the previous 8-iteration binary search that
+     * re-measured the whole text on every step.
+     */
+    private resolveShrinkToFitLayout(
+        text: ResolvedTextBlock,
+        constraints: TextLayoutConstraint,
+        minSize: number,
+        maxSize: number,
+        maxWidth: number,
+        maxHeight: number
+    ): TextLayoutResult {
+        const measureAt = (size: number): TextLayoutResult =>
+            this.textEngine.measure({ ...text, size, autoSize: 'none' }, constraints);
+
+        let size = maxSize;
+        let layout = measureAt(size);
+        if (this.textLayoutFits(layout, maxWidth, maxHeight)) {
+            return layout;
         }
-        // Binary search for the largest font size that fits within the constraints.
-        let lo = minSize;
-        let hi = maxSize;
-        let bestSize = minSize;
-        const maxIter = 8;
-        for (let iter = 0; iter < maxIter && hi - lo > 0.5; iter += 1) {
-            const mid = (lo + hi) * 0.5;
-            const scaledBlock: ResolvedTextBlock = { ...text, size: mid, autoSize: 'none' };
-            const scaledLayout = this.textEngine.measure(scaledBlock, constraints);
-            const scaledFitsWidth = scaledLayout.width <= (Number.isFinite(maxWidth) ? maxWidth : Number.POSITIVE_INFINITY);
-            const scaledFitsHeight = scaledLayout.height <= (Number.isFinite(maxHeight) ? maxHeight : Number.POSITIVE_INFINITY);
-            if (scaledFitsWidth && scaledFitsHeight) {
-                bestSize = mid;
-                lo = mid;
-            } else {
-                hi = mid;
+
+        // Down-scale: the overflow ratio directly estimates the fitting size.
+        // The 0.995 safety factor absorbs non-linear effects (letter spacing,
+        // re-wrapping); the 0.25px floor prevents sub-pixel thrash.
+        for (let refinement = 0; refinement < 2; refinement += 1) {
+            const ratio = Math.min(1, this.textScaleRatio(layout, maxWidth, maxHeight));
+            if (ratio >= 1) {
+                break;
+            }
+            const estimated = size * ratio * 0.995;
+            const next = estimated >= size - 0.25 ? Math.max(minSize, size - 0.5) : Math.max(minSize, estimated);
+            if (next === size) {
+                break;
+            }
+            size = next;
+            layout = measureAt(size);
+            if (this.textLayoutFits(layout, maxWidth, maxHeight)) {
+                break;
             }
         }
-        if (bestSize >= maxSize - 0.5) {
-            const clampedBlock = { ...text, size: maxSize };
-            return this.textEngine.measure(clampedBlock, constraints);
-        }
-        const finalBlock: ResolvedTextBlock = { ...text, size: bestSize, autoSize: 'none' };
-        const result = this.textEngine.measure(finalBlock, constraints);
 
-        // Store result in cache, evicting oldest half if over capacity.
-        if (this.autoSizeCache.size >= this.autoSizeCacheMaxSize) {
-            const keysToDelete = Math.ceil(this.autoSizeCacheMaxSize / 2);
-            const keys = this.autoSizeCache.keys();
-            for (let i = 0; i < keysToDelete; i++) {
-                const key = keys.next().value;
-                if (key !== undefined) {
-                    this.autoSizeCache.delete(key);
+        if (!this.textLayoutFits(layout, maxWidth, maxHeight)) {
+            // Estimates still overshoot; bottom out at the smallest size.
+            return measureAt(minSize);
+        }
+
+        // Recover conservative estimates: re-wrapping can free a whole line,
+        // leaving real headroom between the scaled estimate and the true fit.
+        if (size < maxSize) {
+            const headroom = this.textScaleRatio(layout, maxWidth, maxHeight);
+            if (headroom > 1.001) {
+                const nudged = Math.min(maxSize, size * headroom * 0.995);
+                if (nudged > size + 0.25) {
+                    const nudgedLayout = measureAt(nudged);
+                    if (this.textLayoutFits(nudgedLayout, maxWidth, maxHeight)) {
+                        return nudgedLayout;
+                    }
                 }
             }
         }
-        this.autoSizeCache.set(cacheKey, result);
+        return layout;
+    }
 
-        return result;
+    /** Headroom factor: >1 when the layout could grow, ≤1 when it overflows. */
+    private textScaleRatio(layout: TextLayoutResult, maxWidth: number, maxHeight: number): number {
+        let ratio = Number.POSITIVE_INFINITY;
+        if (Number.isFinite(maxWidth) && layout.width > 0) {
+            ratio = Math.min(ratio, maxWidth / layout.width);
+        }
+        if (Number.isFinite(maxHeight) && layout.height > 0) {
+            ratio = Math.min(ratio, maxHeight / layout.height);
+        }
+        return Number.isFinite(ratio) ? ratio : 1;
+    }
+
+    private textLayoutFits(layout: TextLayoutResult, maxWidth: number, maxHeight: number): boolean {
+        return (
+            layout.width <= (Number.isFinite(maxWidth) ? maxWidth : Number.POSITIVE_INFINITY) &&
+            layout.height <= (Number.isFinite(maxHeight) ? maxHeight : Number.POSITIVE_INFINITY)
+        );
     }
 
     private resolveTextLayoutForRender(index: number): TextLayoutResult | null {

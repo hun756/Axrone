@@ -300,29 +300,31 @@ export const createUIScrollView = <TRuntime>(
     runtime.appendChild(root, scrollbarTrackV);
     runtime.appendChild(root, scrollbarTrackH);
 
+    // Per-frame scroll bookkeeping: remember which structural values were last
+    // pushed so scroll ticks only translate boxes instead of re-laying out the
+    // whole tree. NaN forces the first pass through the structural path.
+    let lastDisabled = state.disabled;
+    let lastThumbHeightV = NaN;
+    let lastThumbTopV = NaN;
+    let lastShowV: boolean | null = null;
+    let lastThumbWidthH = NaN;
+    let lastThumbLeftH = NaN;
+    let lastShowH: boolean | null = null;
+
     const applyOffsets = (): void => {
-        runtime.updateWidget(root, {
-            enabled: !state.disabled,
-            interactive: !state.disabled,
-            focus: {
-                focusable: !state.disabled,
-                ...(options.focus ?? {}),
-            },
-        });
-        runtime.updateWidget(content, {
-            layout: {
-                ...(options.contentLayout ?? {}),
-                position: 'absolute',
-                inset: { top: 0, left: 0 },
-                width: options.contentLayout?.width ?? '100%',
-                height: options.contentLayout?.height ?? 'content',
-                display: options.contentLayout?.display ?? 'stack',
-                direction: options.contentLayout?.direction ?? 'column',
-                gap: options.contentLayout?.gap ?? 10,
-                contentOffsetX: state.scrollX,
-                contentOffsetY: state.scrollY,
-            },
-        });
+        if (state.disabled !== lastDisabled) {
+            lastDisabled = state.disabled;
+            runtime.updateWidget(root, {
+                enabled: !state.disabled,
+                interactive: !state.disabled,
+                focus: {
+                    focusable: !state.disabled,
+                    ...(options.focus ?? {}),
+                },
+            });
+        }
+        // Scroll is a pure translation — dedicated path, no full relayout.
+        runtime.setContentOffset(content, state.scrollX, state.scrollY);
 
         // Update scrollbar thumb positions and sizes
         const viewport = runtime.getLayoutBox(root);
@@ -334,21 +336,29 @@ export const createUIScrollView = <TRuntime>(
             const thumbHeightRatio = viewport.contentHeight / contentBox.height;
             const thumbHeight = Math.max(20, viewport.contentHeight * thumbHeightRatio);
             const trackHeight = viewport.contentHeight - 8; // account for inset padding
-            const thumbY = ratioY * (trackHeight - thumbHeight);
+            const thumbTop = ratioY * (trackHeight - thumbHeight) + 4; // +4 for track inset
 
-            runtime.updateWidget(scrollbarThumbV, {
-                layout: {
-                    position: 'absolute',
-                    width: '100%',
-                    height: thumbHeight,
-                    inset: { top: thumbY + 4 }, // +4 for track inset
-                },
-            });
+            if (thumbHeight !== lastThumbHeightV || Number.isNaN(lastThumbTopV)) {
+                runtime.updateWidget(scrollbarThumbV, {
+                    layout: {
+                        position: 'absolute',
+                        width: '100%',
+                        height: thumbHeight,
+                        inset: { top: thumbTop },
+                    },
+                });
+            } else {
+                runtime.translateWidgetBox(scrollbarThumbV, 0, thumbTop - lastThumbTopV);
+            }
+            lastThumbHeightV = thumbHeight;
+            lastThumbTopV = thumbTop;
 
             // Hide vertical scrollbar when content fits within viewport
-            runtime.updateWidget(scrollbarTrackV, {
-                enabled: contentBox.height > viewport.contentHeight,
-            });
+            const showV = contentBox.height > viewport.contentHeight;
+            if (showV !== lastShowV) {
+                runtime.updateWidget(scrollbarTrackV, { enabled: showV });
+                lastShowV = showV;
+            }
         }
 
         if (viewport.contentWidth > 0 && contentBox.width > 0) {
@@ -357,21 +367,29 @@ export const createUIScrollView = <TRuntime>(
             const thumbWidthRatio = viewport.contentWidth / contentBox.width;
             const thumbWidth = Math.max(20, viewport.contentWidth * thumbWidthRatio);
             const trackWidth = viewport.contentWidth - 8;
-            const thumbX = ratioX * (trackWidth - thumbWidth);
+            const thumbLeft = ratioX * (trackWidth - thumbWidth) + 4; // +4 for track inset
 
-            runtime.updateWidget(scrollbarThumbH, {
-                layout: {
-                    position: 'absolute',
-                    height: '100%',
-                    width: thumbWidth,
-                    inset: { left: thumbX + 4 },
-                },
-            });
+            if (thumbWidth !== lastThumbWidthH || Number.isNaN(lastThumbLeftH)) {
+                runtime.updateWidget(scrollbarThumbH, {
+                    layout: {
+                        position: 'absolute',
+                        height: '100%',
+                        width: thumbWidth,
+                        inset: { left: thumbLeft },
+                    },
+                });
+            } else {
+                runtime.translateWidgetBox(scrollbarThumbH, thumbLeft - lastThumbLeftH, 0);
+            }
+            lastThumbWidthH = thumbWidth;
+            lastThumbLeftH = thumbLeft;
 
             // Hide horizontal scrollbar when content fits within viewport
-            runtime.updateWidget(scrollbarTrackH, {
-                enabled: contentBox.width > viewport.contentWidth,
-            });
+            const showH = contentBox.width > viewport.contentWidth;
+            if (showH !== lastShowH) {
+                runtime.updateWidget(scrollbarTrackH, { enabled: showH });
+                lastShowH = showH;
+            }
         }
     };
 
