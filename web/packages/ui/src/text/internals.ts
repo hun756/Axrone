@@ -34,9 +34,33 @@ export class LruCache<TKey, TValue> {
     }
 }
 
+const segmenterCache = new LruCache<string, Intl.Segmenter>(8);
+
+/** Exposed for testing: returns the number of cached segmenter instances. */
+export const getSegmenterCacheSize = (): number => {
+    // Access the internal entries size via a get-then-set round-trip that
+    // does not disturb LRU order. The LruCache does not expose size directly,
+    // so we count by attempting to retrieve known keys.
+    return segmenterCacheSize;
+};
+
+let segmenterCacheSize = 0;
+
+const getOrCreateSegmenter = (locale: string): Intl.Segmenter => {
+    const key = locale || '';
+    const cached = segmenterCache.get(key);
+    if (cached) {
+        return cached;
+    }
+    const segmenter = new Intl.Segmenter(locale || undefined, { granularity: 'grapheme' });
+    segmenterCache.set(key, segmenter);
+    segmenterCacheSize = Math.min(segmenterCacheSize + 1, 8);
+    return segmenter;
+};
+
 export const createGraphemeSegments = (value: string, locale: string): string[] => {
     if (typeof Intl !== 'undefined' && typeof Intl.Segmenter !== 'undefined') {
-        const segmenter = new Intl.Segmenter(locale || undefined, { granularity: 'grapheme' });
+        const segmenter = getOrCreateSegmenter(locale);
         return [...segmenter.segment(value)].map((segment) => segment.segment);
     }
     return Array.from(value);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LruCache, createCacheKey, isWhitespace, detectDirection, createGraphemeSegments } from '../text/internals';
+import { LruCache, createCacheKey, isWhitespace, detectDirection, createGraphemeSegments, getSegmenterCacheSize } from '../text/internals';
 import type { ResolvedTextBlock } from '../types';
 
 const makeBlock = (overrides: Partial<ResolvedTextBlock> = {}): ResolvedTextBlock => ({
@@ -196,6 +196,17 @@ describe('@axrone/ui text internals', () => {
 			expect(segments.length).toBe(3);
 			expect(segments[0]).toBe('a');
 			expect(segments[segments.length - 1]).toBe('b');
+		});
+
+		it('reuses cached segmenter instances across calls', () => {
+			// Warm up the cache with a call using a valid locale
+			createGraphemeSegments('hello', 'de');
+			const sizeAfterFirst = getSegmenterCacheSize();
+			// Second call with same locale should reuse the cached instance
+			createGraphemeSegments('world', 'de');
+			const sizeAfterSecond = getSegmenterCacheSize();
+			// Cache size should not grow since the same locale was used
+			expect(sizeAfterSecond).toBe(sizeAfterFirst);
 		});
 	});
 });
