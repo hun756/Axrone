@@ -36,7 +36,7 @@ export class Xoroshiro128PlusPlus implements IRandomEngine {
 
     public nextUint64 = (): UInt64 => {
         const [lo, hi] = this.nextUint64Internal();
-        return (BigInt(hi) << 32n) | BigInt(lo >>> 0);
+        return (BigInt(hi >>> 0) << 32n) | BigInt(lo >>> 0);
     };
 
     private nextUint64Internal = (): [number, number] => {
