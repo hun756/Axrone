@@ -3,6 +3,7 @@ import type { ColorHexString, UIInputEvent, UIImageSource, WidgetId, WidgetImage
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { animateWidgetColor, Easing, type UIAnimationHandle } from './animation';
 import { asString, asNumber, asBoolean, asRecord, isValidImageSource, toImageSource, extractSourceInput, type ImageSourceInput } from './internals';
+import { defaultUIControlTheme } from './theme';
 
 /**
  * Declarative checkbox controller for `.ui.json` authored checkboxes.
@@ -114,7 +115,7 @@ const resolveVisualState = (
 const DEFAULT_STATES: Readonly<Record<CheckboxVisualState, string>> = Object.freeze({
     normal: '#334155ff',
     hover: '#475569ff',
-    checked: '#0a74daff',
+    checked: defaultUIControlTheme.accentColor,
     disabled: '#1e293bff',
 });
 

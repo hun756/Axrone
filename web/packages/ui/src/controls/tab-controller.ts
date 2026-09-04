@@ -3,6 +3,7 @@ import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
 import { isPointInside, asString, asNumber } from './internals';
+import { defaultUIControlTheme } from './theme';
 
 /**
  * Declarative tab-view controller for `.ui.json` authored tabbed interfaces.
@@ -50,7 +51,7 @@ type TabContext = WidgetControllerContext<
     UIRuntime
 >;
 
-const DEFAULT_ACTIVE_COLOR = '#0a74daff';
+const DEFAULT_ACTIVE_COLOR = defaultUIControlTheme.accentColor;
 const DEFAULT_INACTIVE_COLOR = '#334155ff';
 const DEFAULT_ACTIVE_TEXT_COLOR = '#ffffffff';
 const DEFAULT_INACTIVE_TEXT_COLOR = '#94a3b8ff';

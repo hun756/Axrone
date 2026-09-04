@@ -3,6 +3,7 @@ import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
 import { isPointInside, asString, asNumber } from './internals';
+import { defaultUIControlTheme } from './theme';
 
 /**
  * Declarative radio-group controller for `.ui.json` authored radio groups.
@@ -47,7 +48,7 @@ type RadioGroupContext = WidgetControllerContext<
     UIRuntime
 >;
 
-const DEFAULT_SELECTED_COLOR = '#0a74daff';
+const DEFAULT_SELECTED_COLOR = defaultUIControlTheme.accentColor;
 const DEFAULT_UNSELECTED_COLOR = '#475569ff';
 
 /** Resolves the dot widget key for a given index. */

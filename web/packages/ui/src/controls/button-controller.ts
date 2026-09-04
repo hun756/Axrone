@@ -18,7 +18,7 @@ import { asStringOrNull, asRecord, isValidImageSource, toImageSource, extractSou
  * Props contract:
  *
  *   props: {
- *     states:     { normal: '#0a74daff', hover: '#1b85ebff', ... },
+ *     states:     { normal: '<theme.accentColor>', hover: '<theme.accentHoverColor>', ... },
  *     transition: 'color' | 'opacity' | 'tint' | 'sprite' | 'none',
  *     tints:      { normal: '#ffffffff', hover: '#cccccccc', ... },
  *     sprites:    { normal: { kind:'texture', resourceId:'btn_normal.png', ... }, ... }

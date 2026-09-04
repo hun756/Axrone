@@ -3,6 +3,7 @@ import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
 import { asString, asNumber, asBoolean } from './internals';
+import { defaultUIControlTheme } from './theme';
 
 /**
  * Declarative edit-box controller for `.ui.json` authored text inputs.
@@ -18,7 +19,7 @@ import { asString, asNumber, asBoolean } from './internals';
  *     maxLength,        // max character count (default: Infinity)
  *     placeholderKey,   // named binding -> placeholder text widget
  *     valueKey,         // named binding -> value text widget
- *     focusColor,       // border color when focused (default: '#0a74daff')
+ *     focusColor,       // border color when focused (default: theme.accentColor)
  *     blurColor,        // border color when not focused (default: '#334155ff')
  *   }
  *
@@ -51,7 +52,7 @@ type EditBoxContext = WidgetControllerContext<
     UIRuntime
 >;
 
-const DEFAULT_FOCUS_COLOR = '#0a74daff';
+const DEFAULT_FOCUS_COLOR = defaultUIControlTheme.accentColor;
 const DEFAULT_BLUR_COLOR = '#334155ff';
 const PASSWORD_BULLET = '\u2022';
 

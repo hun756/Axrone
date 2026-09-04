@@ -2,6 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { asString, asNumber, asBoolean, asRecord } from './internals';
+import { defaultUIControlTheme } from './theme';
 
 /**
  * Declarative toggle-switch controller for `.ui.json` authored toggles.
@@ -13,7 +14,7 @@ import { asString, asNumber, asBoolean, asRecord } from './internals';
  *     isOn: boolean,
  *     trackKey,   // the track background widget
  *     thumbKey,   // the thumb circle widget
- *     states: { on: '#0a74daff', off: '#334155ff' },
+ *     states: { on: '<theme.accentColor>', off: '#334155ff' },
  *     thumbOnAnchor: 0.85,   // thumb X anchor when on (0-1)
  *     thumbOffAnchor: 0.15,  // thumb X anchor when off (0-1)
  *   }
@@ -46,7 +47,7 @@ type ToggleContext = WidgetControllerContext<
     UIRuntime
 >;
 
-const DEFAULT_ON_COLOR = '#0a74daff';
+const DEFAULT_ON_COLOR = defaultUIControlTheme.accentColor;
 const DEFAULT_OFF_COLOR = '#334155ff';
 
 /**
