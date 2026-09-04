@@ -18,6 +18,7 @@ import {
 import { NodeFlag } from './runtime/node-flags';
 import { ControllerEventBus, type ControllerEventHandler } from './runtime/controller-event-bus';
 import { FocusController, type FocusControllerHost } from './runtime/focus-controller';
+import { AutoSizeService } from './runtime/autosize-service';
 import {
     type StoredWidgetRecord,
     compileWidgetFocus,
@@ -57,14 +58,12 @@ import {
     mergeTextInput,
 } from './runtime/internals';
 import { TextLayoutEngine } from './text';
-import { LruCache, createCacheKey } from './text/internals';
 import { WidgetRegistry, type WidgetController } from './widget';
 import type {
     ColorInput,
     CustomRenderCommand,
     FocusMoveDirection,
     FontRegistryOptions,
-    FontWeight,
     ImageRenderCommand,
     LayoutBox,
     QuadRenderCommand,
@@ -164,9 +163,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private readonly bindingTable = new Map<string, WidgetId>();
     private readonly controllerEventBus = new ControllerEventBus();
     private readonly controllerResolveCache = new Map<string, WidgetController<any, any, any> | null>();
-    // Shared LRU implementation (TextLayoutEngine uses the same class) instead
-    // of a hand-rolled Map with ad-hoc half-eviction.
-    private readonly autoSizeCache = new LruCache<string, TextLayoutResult>(64);
+    private readonly autoSizeService = new AutoSizeService();
     private readonly dirtyNodes = new Set<number>();
     private structuralDirty = false;
 
@@ -1464,135 +1461,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         text: ResolvedTextBlock,
         constraints: TextLayoutConstraint
     ): TextLayoutResult {
-        if (text.autoSize !== 'shrink-to-fit') {
-            return this.textEngine.measure(text, constraints);
-        }
-
-        // Build the cache key with the same createCacheKey format the
-        // TextLayoutEngine uses (plus the autosize parameters that shape the
-        // result), so both caches stay consistent as the block type evolves.
-        const faceId = this.fonts.resolveFace({
-            family: text.family,
-            weight: text.weight as FontWeight,
-            style: text.style,
-            locale: text.locale,
-        });
-        const cacheKey = `${createCacheKey(
-            text,
-            faceId,
-            constraints.width ?? Number.POSITIVE_INFINITY,
-            constraints.height ?? Number.POSITIVE_INFINITY
-        )}|autosize|${text.autoSize}|${text.minAutoSize}|${text.maxAutoSize}`;
-        const cached = this.autoSizeCache.get(cacheKey);
-        if (cached) {
-            return cached;
-        }
-
-        const maxWidth = constraints.width ?? Number.POSITIVE_INFINITY;
-        const maxHeight = constraints.height ?? Number.POSITIVE_INFINITY;
-        // When either constraint is unbounded, text already fits by definition — no-op.
-        if (!Number.isFinite(maxWidth) && !Number.isFinite(maxHeight)) {
-            return this.textEngine.measure(text, constraints);
-        }
-        const maxSize = Math.min(text.size, text.maxAutoSize);
-        const minSize = text.minAutoSize;
-        if (minSize >= maxSize) {
-            const clampedBlock: ResolvedTextBlock = { ...text, size: minSize, autoSize: 'none' };
-            return this.textEngine.measure(clampedBlock, constraints);
-        }
-        const result = this.resolveShrinkToFitLayout(text, constraints, minSize, maxSize, maxWidth, maxHeight);
-
-        // Store result in the autosize cache (eviction handled by the LRU).
-        this.autoSizeCache.set(cacheKey, result);
-        return result;
-    }
-
-    /**
-     * Resolves the largest font size ≤ maxSize whose layout fits the given
-     * constraints, using analytical scaling instead of a binary search.
-     *
-     * Layout dimensions scale ~linearly with font size, so the measured
-     * overflow/headroom ratio estimates the fitting size directly. Bounded to
-     * at most 4 full measures (down-scale refinement, one headroom nudge, a
-     * min-size bottom-out) versus the previous 8-iteration binary search that
-     * re-measured the whole text on every step.
-     */
-    private resolveShrinkToFitLayout(
-        text: ResolvedTextBlock,
-        constraints: TextLayoutConstraint,
-        minSize: number,
-        maxSize: number,
-        maxWidth: number,
-        maxHeight: number
-    ): TextLayoutResult {
-        const measureAt = (size: number): TextLayoutResult =>
-            this.textEngine.measure({ ...text, size, autoSize: 'none' }, constraints);
-
-        let size = maxSize;
-        let layout = measureAt(size);
-        if (this.textLayoutFits(layout, maxWidth, maxHeight)) {
-            return layout;
-        }
-
-        // Down-scale: the overflow ratio directly estimates the fitting size.
-        // The 0.995 safety factor absorbs non-linear effects (letter spacing,
-        // re-wrapping); the 0.25px floor prevents sub-pixel thrash.
-        for (let refinement = 0; refinement < 2; refinement += 1) {
-            const ratio = Math.min(1, this.textScaleRatio(layout, maxWidth, maxHeight));
-            if (ratio >= 1) {
-                break;
-            }
-            const estimated = size * ratio * 0.995;
-            const next = estimated >= size - 0.25 ? Math.max(minSize, size - 0.5) : Math.max(minSize, estimated);
-            if (next === size) {
-                break;
-            }
-            size = next;
-            layout = measureAt(size);
-            if (this.textLayoutFits(layout, maxWidth, maxHeight)) {
-                break;
-            }
-        }
-
-        if (!this.textLayoutFits(layout, maxWidth, maxHeight)) {
-            // Estimates still overshoot; bottom out at the smallest size.
-            return measureAt(minSize);
-        }
-
-        // Recover conservative estimates: re-wrapping can free a whole line,
-        // leaving real headroom between the scaled estimate and the true fit.
-        if (size < maxSize) {
-            const headroom = this.textScaleRatio(layout, maxWidth, maxHeight);
-            if (headroom > 1.001) {
-                const nudged = Math.min(maxSize, size * headroom * 0.995);
-                if (nudged > size + 0.25) {
-                    const nudgedLayout = measureAt(nudged);
-                    if (this.textLayoutFits(nudgedLayout, maxWidth, maxHeight)) {
-                        return nudgedLayout;
-                    }
-                }
-            }
-        }
-        return layout;
-    }
-
-    /** Headroom factor: >1 when the layout could grow, ≤1 when it overflows. */
-    private textScaleRatio(layout: TextLayoutResult, maxWidth: number, maxHeight: number): number {
-        let ratio = Number.POSITIVE_INFINITY;
-        if (Number.isFinite(maxWidth) && layout.width > 0) {
-            ratio = Math.min(ratio, maxWidth / layout.width);
-        }
-        if (Number.isFinite(maxHeight) && layout.height > 0) {
-            ratio = Math.min(ratio, maxHeight / layout.height);
-        }
-        return Number.isFinite(ratio) ? ratio : 1;
-    }
-
-    private textLayoutFits(layout: TextLayoutResult, maxWidth: number, maxHeight: number): boolean {
-        return (
-            layout.width <= (Number.isFinite(maxWidth) ? maxWidth : Number.POSITIVE_INFINITY) &&
-            layout.height <= (Number.isFinite(maxHeight) ? maxHeight : Number.POSITIVE_INFINITY)
-        );
+        return this.autoSizeService.measure(this, text, constraints);
     }
 
     private resolveTextLayoutForRender(index: number): TextLayoutResult | null {
