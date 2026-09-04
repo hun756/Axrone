@@ -63,10 +63,13 @@ export const normalizeColor = (
         return colorFromHex(input);
     }
     if (Array.isArray(input)) {
+        if (input.length >= 4) {
+            return { r: input[0], g: input[1], b: input[2], a: input[3] };
+        }
         if (input.length === 3) {
             return { r: input[0], g: input[1], b: input[2], a: 1 };
         }
-        return { r: input[0], g: input[1], b: input[2], a: input[3] };
+        return fallback;
     }
     if (!isColorLike(input)) {
         return fallback;
