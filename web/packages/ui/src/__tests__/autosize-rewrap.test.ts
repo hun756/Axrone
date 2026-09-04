@@ -118,9 +118,9 @@ describe('AutoSizeService shrink-to-fit rewrap equivalence', () => {
 		maxSize: number
 	) => {
 		if (!reference) return;
-		// The analytical result's effective size should be within 1px of the reference.
+		// The analytical result's effective size should be within 1.5px of the reference.
 		const effectiveSize = findEffectiveSize(textEngine, text, constraint, analyticalResult, minSize, maxSize);
-		expect(effectiveSize).toBeGreaterThanOrEqual(reference.size - 1.5);
+		expect(Math.abs(effectiveSize - reference.size)).toBeLessThanOrEqual(1.5);
 	};
 
 	it('long single word in narrow container never overflows and is near-optimal', () => {
