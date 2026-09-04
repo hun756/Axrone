@@ -20,6 +20,11 @@ export interface GlyphAtlasSource {
     readonly distanceRange?: number;
 }
 
+export interface GlyphAtlasOptions {
+    readonly maxPages?: number;
+    readonly onEvictPage?: (page: GlyphAtlasPageSnapshot) => void;
+}
+
 interface AtlasPage {
     readonly id: GlyphAtlasPageId;
     readonly width: number;
@@ -28,6 +33,7 @@ interface AtlasPage {
     cursorY: number;
     rowHeight: number;
     readonly entries: Map<string, GlyphAtlasEntry>;
+    lastAccess: number;
 }
 
 export class GlyphAtlas {
@@ -35,25 +41,36 @@ export class GlyphAtlas {
     private readonly width: number;
     private readonly height: number;
     private readonly padding: number;
+    private readonly maxPages: number;
+    private readonly onEvictPage: GlyphAtlasOptions['onEvictPage'];
     private readonly pages: AtlasPage[] = [];
     private readonly entries = new Map<string, GlyphAtlasEntry>();
     private nextPageId = 1;
+    private frameCounter = 0;
 
-    constructor(faceId: FontFaceId, width: number, height: number, padding: number) {
+    constructor(faceId: FontFaceId, width: number, height: number, padding: number, options?: GlyphAtlasOptions) {
         this.faceId = faceId;
         this.width = Math.max(8, Math.floor(width));
         this.height = Math.max(8, Math.floor(height));
         this.padding = Math.max(0, Math.floor(padding));
+        this.maxPages = Math.max(1, options?.maxPages ?? 4);
+        this.onEvictPage = options?.onEvictPage;
     }
 
     get(codePoint: number, rasterSize?: number): GlyphAtlasEntry | null {
-        return this.entries.get(createAtlasEntryKey(codePoint, rasterSize)) ?? null;
+        const entry = this.entries.get(createAtlasEntryKey(codePoint, rasterSize));
+        if (entry) {
+            this.touchPage(entry.page);
+            return entry;
+        }
+        return null;
     }
 
     ensure(glyph: GlyphAtlasSource): GlyphAtlasEntry {
         const key = createAtlasEntryKey(glyph.codePoint, glyph.rasterSize);
         const existing = this.entries.get(key);
         if (existing) {
+            this.touchPage(existing.page);
             return existing;
         }
         const width = Math.max(1, Math.ceil(glyph.width));
@@ -127,6 +144,7 @@ export class GlyphAtlas {
                 cursorY: 0,
                 rowHeight: 0,
                 entries: new Map<string, GlyphAtlasEntry>(),
+                lastAccess: 0,
             };
             for (const entry of pageSnapshot.entries) {
                 const key = createAtlasEntryKey(entry.codePoint, entry.rasterSize);
@@ -140,12 +158,54 @@ export class GlyphAtlas {
             maxPageId = Math.max(maxPageId, pageSnapshot.id);
         }
         this.nextPageId = maxPageId + 1;
+        this.evictIfNeeded();
+    }
+
+    /** Advance the internal frame counter; call once per render frame. */
+    tick(): void {
+        this.frameCounter += 1;
     }
 
     clear(): void {
         this.pages.length = 0;
         this.entries.clear();
         this.nextPageId = 1;
+    }
+
+    private touchPage(pageId: GlyphAtlasPageId): void {
+        for (const page of this.pages) {
+            if (page.id === pageId) {
+                page.lastAccess = this.frameCounter;
+                return;
+            }
+        }
+    }
+
+    private evictIfNeeded(): void {
+        while (this.pages.length > this.maxPages) {
+            let lruIndex = 0;
+            let lruAccess = Infinity;
+            for (let i = 0; i < this.pages.length; i += 1) {
+                if (this.pages[i].lastAccess < lruAccess) {
+                    lruAccess = this.pages[i].lastAccess;
+                    lruIndex = i;
+                }
+            }
+            const evicted = this.pages[lruIndex];
+            // Remove all entries belonging to the evicted page from the global map.
+            for (const [entryKey] of evicted.entries) {
+                this.entries.delete(entryKey);
+            }
+            this.pages.splice(lruIndex, 1);
+            if (this.onEvictPage) {
+                this.onEvictPage({
+                    id: evicted.id as number,
+                    width: evicted.width,
+                    height: evicted.height,
+                    entries: [...evicted.entries.values()],
+                });
+            }
+        }
     }
 
     private createPage(): AtlasPage {
@@ -157,9 +217,11 @@ export class GlyphAtlas {
             cursorY: 0,
             rowHeight: 0,
             entries: new Map<string, GlyphAtlasEntry>(),
+            lastAccess: this.frameCounter,
         };
         this.nextPageId += 1;
         this.pages.push(page);
+        this.evictIfNeeded();
         return page;
     }
 }
