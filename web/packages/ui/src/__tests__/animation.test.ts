@@ -60,24 +60,21 @@ describe('animation tick error handling', () => {
 		});
 		const runtime = createMockRuntime({ updateWidget });
 
-		// Spy on global error handler to catch the rethrown error.
-		const errorSpy = vi.spyOn(window, 'onerror');
-
-		const handle = animate(runtime, {
-			targets: [{ widget: 42 as WidgetId, property: 'style.opacity', from: 1, to: 0 }],
-			duration: 0.1,
-			easing: Easing.linear,
+		// Stub requestAnimationFrame to invoke callback synchronously
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 0;
 		});
 
-		return new Promise<void>((resolve) => {
-			requestAnimationFrame(() => {
-				// The animation should NOT have completed because the error was rethrown.
-				// The error propagates to the browser's error handler.
-				expect(updateWidget).toHaveBeenCalled();
-				expect(handle.isComplete).toBe(false);
-				errorSpy.mockRestore();
-				resolve();
+		// The error should propagate synchronously
+		expect(() => {
+			animate(runtime, {
+				targets: [{ widget: 42 as WidgetId, property: 'style.opacity', from: 1, to: 0 }],
+				duration: 0.1,
+				easing: Easing.linear,
 			});
-		});
+		}).toThrow('Unexpected interpolation failure');
+
+		vi.unstubAllGlobals();
 	});
 });
