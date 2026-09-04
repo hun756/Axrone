@@ -242,7 +242,11 @@ for (const budget of activeBudgets) {
         });
 
         pushMedianBudgetFailure(failures, label, 'frameTimeMs', frameTime, budget.maxFrameTimeMedianMs);
-        pushMedianBudgetFailure(failures, label, 'frameTimeP99Ms', { median: frameTime.p99 }, budget.maxFrameTimeP99Ms);
+        if (typeof budget.maxFrameTimeP99Ms === 'number' && Number.isFinite(budget.maxFrameTimeP99Ms) && frameTime.p99 > budget.maxFrameTimeP99Ms) {
+            failures.push(
+                `${label} frameTimeP99Ms p99 ${frameTime.p99.toFixed(2)} ms exceeds budget ${budget.maxFrameTimeP99Ms.toFixed(2)} ms.`,
+            );
+        }
         pushMedianBudgetFailure(failures, label, 'drawCallsPerFrame', { median: drawCalls.median }, budget.maxDrawCallsPerFrame);
         pushMedianBudgetFailure(failures, label, 'getParameterPerFrame', { median: getParams.median }, budget.maxGetParameterPerFrameMedian);
         continue;
