@@ -689,9 +689,7 @@ try {
             });
         }
 
-        const frameTimes = uiRawRuns.flatMap((r) =>
-            Array.from({ length: r.frames?.measured ?? 0 }, () => r.frameTimeMs?.median ?? 0)
-        );
+        const frameTimes = uiRawRuns.map((r) => r.frameTimeMs?.median ?? 0);
         const drawCalls = uiRawRuns.map((r) => r.drawCallsPerFrame?.median ?? 0);
         const getParams = uiRawRuns.map((r) => r.getParameterPerFrame?.median ?? 0);
 
@@ -709,7 +707,7 @@ try {
             scenario: uiWidgetsScenario,
             summary: {
                 runCount: uiRawRuns.length,
-                frameTimeMs: summarizeValues(frameTimes.length > 0 ? frameTimes : uiRawRuns.map((r) => r.frameTimeMs?.median ?? 0)),
+                frameTimeMs: summarizeValues(frameTimes),
                 drawCallsPerFrame: summarizeValues(drawCalls),
                 getParameterPerFrame: summarizeValues(getParams),
             },
