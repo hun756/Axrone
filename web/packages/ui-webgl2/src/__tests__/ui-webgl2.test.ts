@@ -289,6 +289,7 @@ const createMockWebGL2Context = () => {
             }
         }),
         bufferData: vi.fn(),
+        bufferSubData: vi.fn(),
         enableVertexAttribArray: vi.fn(),
         vertexAttribPointer: vi.fn(),
         vertexAttribDivisor: vi.fn(),
@@ -857,8 +858,8 @@ describe('@axrone/ui-webgl2', () => {
 
         renderer.render(frame);
 
-        const dynamicFloatUploads = gl.bufferData.mock.calls
-            .map((call) => call[1])
+        const dynamicFloatUploads = gl.bufferSubData.mock.calls
+            .map((call) => call[2])
             .filter((value): value is Float32Array => value instanceof Float32Array && value.length === 26);
 
         expect(dynamicFloatUploads).toHaveLength(1);

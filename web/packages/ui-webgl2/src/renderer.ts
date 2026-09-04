@@ -347,28 +347,85 @@ interface TexturePage {
     readonly uploadedGlyphs: Set<number>;
 }
 
-interface WebGL2UICapturedTextureUnitState {
-    readonly textureBinding2D: WebGLTexture | null | undefined;
-    readonly samplerBinding: WebGLSampler | null | undefined;
+/**
+ * External GL state groups the renderer may clobber during a frame.
+ *
+ * Each group is captured lazily — only when (and before) the renderer first
+ * writes to it — and restored after the frame only when it was actually
+ * touched. This replaces the previous eager capture (~30 getParameter calls,
+ * two active-texture round trips, and several tuple allocations per frame)
+ * with a zero-allocation fast path that reads at most 15 state values and
+ * skips groups the frame never touched entirely.
+ */
+const GL_STATE_FRAMEBUFFER = 1 << 0;
+const GL_STATE_VIEWPORT = 1 << 1;
+const GL_STATE_SCISSOR_BOX = 1 << 2;
+const GL_STATE_SCISSOR_TEST = 1 << 3;
+const GL_STATE_PROGRAM = 1 << 4;
+const GL_STATE_VERTEX_ARRAY = 1 << 5;
+const GL_STATE_ARRAY_BUFFER = 1 << 6;
+const GL_STATE_UNPACK_ALIGNMENT = 1 << 7;
+const GL_STATE_CULL_FACE = 1 << 8;
+const GL_STATE_DEPTH_TEST = 1 << 9;
+const GL_STATE_BLEND = 1 << 10;
+const GL_STATE_BLEND_FUNC = 1 << 11;
+const GL_STATE_ACTIVE_TEXTURE = 1 << 12;
+const GL_STATE_UNIT0_TEXTURE = 1 << 13;
+const GL_STATE_UNIT0_SAMPLER = 1 << 14;
+
+interface GLStateShadow {
+    framebuffer: WebGLFramebuffer | null;
+    program: WebGLProgram | null;
+    vertexArray: WebGLVertexArrayObject | null;
+    arrayBuffer: WebGLBuffer | null;
+    viewportX: number | undefined;
+    viewportY: number | undefined;
+    viewportWidth: number | undefined;
+    viewportHeight: number | undefined;
+    scissorX: number | undefined;
+    scissorY: number | undefined;
+    scissorWidth: number | undefined;
+    scissorHeight: number | undefined;
+    scissorTest: boolean | undefined;
+    cullFace: boolean | undefined;
+    depthTest: boolean | undefined;
+    blend: boolean | undefined;
+    blendSrcRgb: number | undefined;
+    blendDstRgb: number | undefined;
+    blendSrcAlpha: number | undefined;
+    blendDstAlpha: number | undefined;
+    unpackAlignment: number | undefined;
+    activeTexture: number;
+    unit0Texture: WebGLTexture | null;
+    unit0Sampler: WebGLSampler | null;
 }
 
-interface WebGL2UIRenderStateSnapshot {
-    readonly viewport: readonly [number, number, number, number] | null;
-    readonly scissorBox: readonly [number, number, number, number] | null;
-    readonly framebufferBinding: WebGLFramebuffer | null | undefined;
-    readonly currentProgram: WebGLProgram | null | undefined;
-    readonly vertexArrayBinding: WebGLVertexArrayObject | null | undefined;
-    readonly arrayBufferBinding: WebGLBuffer | null | undefined;
-    readonly unpackAlignment: number | undefined;
-    readonly cullFaceEnabled: boolean | undefined;
-    readonly depthTestEnabled: boolean | undefined;
-    readonly blendEnabled: boolean | undefined;
-    readonly scissorTestEnabled: boolean | undefined;
-    readonly blendFunc: readonly [number, number, number, number] | null;
-    readonly activeTexture: number | undefined;
-    readonly unit0: WebGL2UICapturedTextureUnitState;
-    readonly activeUnit: WebGL2UICapturedTextureUnitState;
-}
+const createGLStateShadow = (): GLStateShadow => ({
+    framebuffer: null,
+    program: null,
+    vertexArray: null,
+    arrayBuffer: null,
+    viewportX: undefined,
+    viewportY: undefined,
+    viewportWidth: undefined,
+    viewportHeight: undefined,
+    scissorX: undefined,
+    scissorY: undefined,
+    scissorWidth: undefined,
+    scissorHeight: undefined,
+    scissorTest: undefined,
+    cullFace: undefined,
+    depthTest: undefined,
+    blend: undefined,
+    blendSrcRgb: undefined,
+    blendDstRgb: undefined,
+    blendSrcAlpha: undefined,
+    blendDstAlpha: undefined,
+    unpackAlignment: undefined,
+    activeTexture: 0,
+    unit0Texture: null,
+    unit0Sampler: null,
+});
 
 const UNIT_QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
@@ -399,10 +456,20 @@ const writeBlendedColor = (
     color: QuadRenderCommand['color'] | TextRenderCommand['color'],
     opacity: number
 ): void => {
+    // Runtime-authored commands always carry resolved color objects; the
+    // scalar/array branch only serves hand-built commands.
+    if (typeof color === 'string' || typeof color === 'number' || Array.isArray(color)) {
+        const resolved = normalizeStrokeColor(color);
+        batch[offset] = resolved[0];
+        batch[offset + 1] = resolved[1];
+        batch[offset + 2] = resolved[2];
+        batch[offset + 3] = multiplyAlpha(resolved[3], opacity);
+        return;
+    }
     batch[offset] = color.r;
     batch[offset + 1] = color.g;
     batch[offset + 2] = color.b;
-    batch[offset + 3] = multiplyAlpha(color.a, opacity);
+    batch[offset + 3] = multiplyAlpha(color.a ?? 1, opacity);
 };
 
 /**
@@ -426,13 +493,14 @@ const normalizeStrokeColor = (color: StrokeRenderCommand['strokes'][number]['col
             (color & 0xff) / 255,
         ];
     }
-    if (Array.isArray(color)) {
-        return color.length === 3
-            ? [color[0], color[1], color[2], 1]
-            : [color[0], color[1], color[2], color[3]];
+    // Object branch first: Array.isArray cannot narrow readonly tuple members
+    // out of the union, but the `in` check cleanly separates object from tuple.
+    if ('r' in color) {
+        return [color.r, color.g, color.b, color.a ?? 1];
     }
-    // ColorLike object
-    return [color.r, color.g, color.b, color.a ?? 1];
+    return color.length === 3
+        ? [color[0], color[1], color[2], 1]
+        : [color[0], color[1], color[2], color[3]];
 };
 
 const IDENTITY_TRANSFORM = [1, 0, 0, 1, 0, 0] as const;
@@ -496,92 +564,6 @@ const readGLEnabled = (
     }
 };
 
-const captureGLTextureUnitState = (
-    gl: WebGL2RenderingContext,
-    unit: number
-): WebGL2UICapturedTextureUnitState => {
-    if (typeof gl.activeTexture !== 'function') {
-        return {
-            textureBinding2D: undefined,
-            samplerBinding: undefined,
-        };
-    }
-
-    const previousUnit = readGLParameter<number>(gl, gl.ACTIVE_TEXTURE, gl.TEXTURE0);
-    gl.activeTexture(unit);
-    const snapshot = {
-        textureBinding2D: readGLParameter<WebGLTexture | null | undefined>(
-            gl,
-            gl.TEXTURE_BINDING_2D,
-            undefined,
-        ),
-        samplerBinding: readGLParameter<WebGLSampler | null | undefined>(
-            gl,
-            gl.SAMPLER_BINDING,
-            undefined,
-        ),
-    };
-    gl.activeTexture(previousUnit);
-    return snapshot;
-};
-
-const captureGLState = (gl: WebGL2RenderingContext): WebGL2UIRenderStateSnapshot => {
-    const activeTexture = readGLParameter<number>(gl, gl.ACTIVE_TEXTURE, undefined);
-    const viewport = readGLParameter<Int32Array | readonly number[]>(gl, gl.VIEWPORT, null);
-    const scissorBox = readGLParameter<Int32Array | readonly number[]>(gl, gl.SCISSOR_BOX, null);
-    const blendSrcRgb = readGLParameter<number>(gl, gl.BLEND_SRC_RGB, undefined);
-    const blendDstRgb = readGLParameter<number>(gl, gl.BLEND_DST_RGB, undefined);
-    const blendSrcAlpha = readGLParameter<number>(gl, gl.BLEND_SRC_ALPHA, undefined);
-    const blendDstAlpha = readGLParameter<number>(gl, gl.BLEND_DST_ALPHA, undefined);
-
-    return {
-        viewport:
-            viewport && viewport.length >= 4
-                ? [viewport[0] ?? 0, viewport[1] ?? 0, viewport[2] ?? 0, viewport[3] ?? 0]
-                : null,
-        scissorBox:
-            scissorBox && scissorBox.length >= 4
-                ? [scissorBox[0] ?? 0, scissorBox[1] ?? 0, scissorBox[2] ?? 0, scissorBox[3] ?? 0]
-                : null,
-        framebufferBinding: readGLParameter<WebGLFramebuffer | null | undefined>(
-            gl,
-            gl.FRAMEBUFFER_BINDING,
-            undefined,
-        ),
-        currentProgram: readGLParameter<WebGLProgram | null | undefined>(
-            gl,
-            gl.CURRENT_PROGRAM,
-            undefined,
-        ),
-        vertexArrayBinding: readGLParameter<WebGLVertexArrayObject | null | undefined>(
-            gl,
-            gl.VERTEX_ARRAY_BINDING,
-            undefined,
-        ),
-        arrayBufferBinding: readGLParameter<WebGLBuffer | null | undefined>(
-            gl,
-            gl.ARRAY_BUFFER_BINDING,
-            undefined,
-        ),
-        unpackAlignment: readGLParameter<number>(gl, gl.UNPACK_ALIGNMENT, undefined),
-        cullFaceEnabled: readGLEnabled(gl, gl.CULL_FACE),
-        depthTestEnabled: readGLEnabled(gl, gl.DEPTH_TEST),
-        blendEnabled: readGLEnabled(gl, gl.BLEND),
-        scissorTestEnabled: readGLEnabled(gl, gl.SCISSOR_TEST),
-        blendFunc:
-            blendSrcRgb !== undefined &&
-            blendDstRgb !== undefined &&
-            blendSrcAlpha !== undefined &&
-            blendDstAlpha !== undefined
-                ? [blendSrcRgb, blendDstRgb, blendSrcAlpha, blendDstAlpha]
-                : null,
-        activeTexture,
-        unit0: captureGLTextureUnitState(gl, gl.TEXTURE0),
-        activeUnit:
-            activeTexture !== undefined ? captureGLTextureUnitState(gl, activeTexture) : captureGLTextureUnitState(gl, gl.TEXTURE0),
-    };
-};
-
 const restoreGLEnableState = (
     gl: WebGL2RenderingContext,
     capability: number,
@@ -597,83 +579,6 @@ const restoreGLEnableState = (
     gl.disable(capability);
 };
 
-const restoreGLTextureUnitState = (
-    gl: WebGL2RenderingContext,
-    unit: number,
-    snapshot: WebGL2UICapturedTextureUnitState
-): void => {
-    if (typeof gl.activeTexture !== 'function') {
-        return;
-    }
-
-    gl.activeTexture(unit);
-    if (snapshot.textureBinding2D !== undefined) {
-        gl.bindTexture(gl.TEXTURE_2D, snapshot.textureBinding2D ?? null);
-    }
-    if (snapshot.samplerBinding !== undefined) {
-        gl.bindSampler?.(unit - gl.TEXTURE0, snapshot.samplerBinding ?? null);
-    }
-};
-
-const restoreGLState = (
-    gl: WebGL2RenderingContext,
-    snapshot: WebGL2UIRenderStateSnapshot
-): void => {
-    if (snapshot.framebufferBinding !== undefined) {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, snapshot.framebufferBinding ?? null);
-    }
-    if (snapshot.viewport !== null) {
-        gl.viewport(
-            snapshot.viewport[0],
-            snapshot.viewport[1],
-            snapshot.viewport[2],
-            snapshot.viewport[3]
-        );
-    }
-    restoreGLEnableState(gl, gl.CULL_FACE, snapshot.cullFaceEnabled);
-    restoreGLEnableState(gl, gl.DEPTH_TEST, snapshot.depthTestEnabled);
-    restoreGLEnableState(gl, gl.BLEND, snapshot.blendEnabled);
-    restoreGLEnableState(gl, gl.SCISSOR_TEST, snapshot.scissorTestEnabled);
-    if (snapshot.scissorTestEnabled && snapshot.scissorBox !== null) {
-        gl.scissor(
-            snapshot.scissorBox[0],
-            snapshot.scissorBox[1],
-            snapshot.scissorBox[2],
-            snapshot.scissorBox[3]
-        );
-    }
-    if (snapshot.blendFunc !== null) {
-        if (typeof gl.blendFuncSeparate === 'function') {
-            gl.blendFuncSeparate(
-                snapshot.blendFunc[0],
-                snapshot.blendFunc[1],
-                snapshot.blendFunc[2],
-                snapshot.blendFunc[3]
-            );
-        } else {
-            gl.blendFunc(snapshot.blendFunc[0], snapshot.blendFunc[1]);
-        }
-    }
-    if (snapshot.currentProgram !== undefined) {
-        gl.useProgram(snapshot.currentProgram ?? null);
-    }
-    if (snapshot.vertexArrayBinding !== undefined) {
-        gl.bindVertexArray(snapshot.vertexArrayBinding ?? null);
-    }
-    if (snapshot.arrayBufferBinding !== undefined) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, snapshot.arrayBufferBinding ?? null);
-    }
-    if (snapshot.unpackAlignment !== undefined) {
-        gl.pixelStorei?.(gl.UNPACK_ALIGNMENT, snapshot.unpackAlignment);
-    }
-    restoreGLTextureUnitState(gl, gl.TEXTURE0, snapshot.unit0);
-    if (snapshot.activeTexture !== undefined && snapshot.activeTexture !== gl.TEXTURE0) {
-        restoreGLTextureUnitState(gl, snapshot.activeTexture, snapshot.activeUnit);
-        gl.activeTexture(snapshot.activeTexture);
-    } else if (snapshot.activeTexture !== undefined) {
-        gl.activeTexture(snapshot.activeTexture);
-    }
-};
 
 /**
  * Restores newline separators in shader source that has been flattened
@@ -817,6 +722,10 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     private activeTextClip: ClipState | null = null;
     private currentFrame: UIFrame<TPayload> | null = null;
     private disposed = false;
+    private readonly glShadow: GLStateShadow = createGLStateShadow();
+    private glCapturedGroups = 0;
+    private glTouchedGroups = 0;
+    private currentGLTextureUnit = -1;
 
     constructor(options: WebGL2UIRendererOptions<TPayload>) {
         this.gl = options.gl;
@@ -863,7 +772,6 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
 
     render(frame: Readonly<UIFrame<TPayload>>, options?: WebGL2UIRenderOptions): void {
         this.ensureActive();
-        const previousState = captureGLState(this.gl);
         this.currentFrame = frame as UIFrame<TPayload>;
         this.statisticsState.drawCalls = 0;
         this.statisticsState.quadCount = 0;
@@ -884,8 +792,11 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
 
         try {
             if (options && 'framebuffer' in options) {
-                // Offscreen target (world-space UI). captureGLState/restoreGLState
-                // already round-trip the framebuffer binding.
+                // Offscreen target (world-space UI). The previously bound
+                // framebuffer is captured lazily here and restored on the way
+                // out by restoreGLState().
+                this.captureGLState(GL_STATE_FRAMEBUFFER);
+                this.glTouchedGroups |= GL_STATE_FRAMEBUFFER;
                 this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, options.framebuffer ?? null);
             }
             this.prepareFrame(frame.viewportWidth, frame.viewportHeight);
@@ -929,6 +840,9 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                             height: frame.viewportHeight,
                         },
                     });
+                    // Custom renderers may rebind the active texture unit;
+                    // force re-issue on the next unit-sensitive call.
+                    this.currentGLTextureUnit = -1;
                 }
             }
 
@@ -937,7 +851,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             this.flushTextBatch(frame.viewportHeight);
         } finally {
             this.currentFrame = null;
-            restoreGLState(this.gl, previousState);
+            this.restoreGLState();
         }
     }
 
@@ -1065,10 +979,28 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     }
 
     private prepareFrame(width: number, height: number): void {
+        // Pin all rendering to texture unit 0 so glyph uploads and texture
+        // binds never clobber the external context's active-unit bindings.
+        this.captureGLState(GL_STATE_ACTIVE_TEXTURE);
+        if (this.glShadow.activeTexture !== this.gl.TEXTURE0) {
+            this.gl.activeTexture(this.gl.TEXTURE0);
+            this.glTouchedGroups |= GL_STATE_ACTIVE_TEXTURE;
+        }
+        this.currentGLTextureUnit = this.gl.TEXTURE0;
+        this.captureGLState(GL_STATE_VIEWPORT);
+        this.glTouchedGroups |= GL_STATE_VIEWPORT;
         this.gl.viewport(0, 0, width, height);
+        this.captureGLState(GL_STATE_CULL_FACE);
+        this.glTouchedGroups |= GL_STATE_CULL_FACE;
         this.gl.disable(this.gl.CULL_FACE);
+        this.captureGLState(GL_STATE_DEPTH_TEST);
+        this.glTouchedGroups |= GL_STATE_DEPTH_TEST;
         this.gl.disable(this.gl.DEPTH_TEST);
+        this.captureGLState(GL_STATE_BLEND);
+        this.glTouchedGroups |= GL_STATE_BLEND;
         this.gl.enable(this.gl.BLEND);
+        this.captureGLState(GL_STATE_BLEND_FUNC);
+        this.glTouchedGroups |= GL_STATE_BLEND_FUNC;
         this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
     }
 
@@ -1336,8 +1268,12 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             return;
         }
         this.applyClip(this.activeQuadClip, viewportHeight);
+        this.captureGLState(GL_STATE_PROGRAM);
+        this.glTouchedGroups |= GL_STATE_PROGRAM;
         this.gl.useProgram(this.quadProgram);
         this.gl.uniform2f(this.quadViewportUniform, this.currentFrame.viewportWidth, this.currentFrame.viewportHeight);
+        this.captureGLState(GL_STATE_VERTEX_ARRAY | GL_STATE_ARRAY_BUFFER);
+        this.glTouchedGroups |= GL_STATE_VERTEX_ARRAY | GL_STATE_ARRAY_BUFFER;
         this.gl.bindVertexArray(this.quadVao);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.quadInstanceBuffer);
         this.gl.bufferSubData(
@@ -1358,12 +1294,17 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             return;
         }
         this.applyClip(this.activeImageClip, viewportHeight);
+        this.captureGLState(GL_STATE_PROGRAM);
+        this.glTouchedGroups |= GL_STATE_PROGRAM;
         this.gl.useProgram(this.imageProgram);
         this.gl.uniform2f(this.imageViewportUniform, this.currentFrame.viewportWidth, this.currentFrame.viewportHeight);
-        this.gl.activeTexture(this.gl.TEXTURE0);
-        this.gl.bindTexture(this.gl.TEXTURE_2D, this.activeImageTexture);
+        this.bindUnit0Texture(this.activeImageTexture);
+        this.captureGLState(GL_STATE_UNIT0_SAMPLER);
+        this.glTouchedGroups |= GL_STATE_UNIT0_SAMPLER;
         this.gl.bindSampler?.(0, this.activeImageSampler);
         this.gl.uniform1i(this.imageTextureUniform, 0);
+        this.captureGLState(GL_STATE_VERTEX_ARRAY | GL_STATE_ARRAY_BUFFER);
+        this.glTouchedGroups |= GL_STATE_VERTEX_ARRAY | GL_STATE_ARRAY_BUFFER;
         this.gl.bindVertexArray(this.imageVao);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.imageInstanceBuffer);
         this.gl.bufferSubData(
@@ -1390,11 +1331,14 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             return;
         }
         this.applyClip(this.activeTextClip, viewportHeight);
+        this.captureGLState(GL_STATE_PROGRAM);
+        this.glTouchedGroups |= GL_STATE_PROGRAM;
         this.gl.useProgram(this.textProgram);
         this.gl.uniform2f(this.textViewportUniform, this.currentFrame.viewportWidth, this.currentFrame.viewportHeight);
-        this.gl.activeTexture(this.gl.TEXTURE0);
-        this.gl.bindTexture(this.gl.TEXTURE_2D, page.texture);
+        this.bindUnit0Texture(page.texture);
         this.gl.uniform1i(this.textAtlasUniform, 0);
+        this.captureGLState(GL_STATE_VERTEX_ARRAY | GL_STATE_ARRAY_BUFFER);
+        this.glTouchedGroups |= GL_STATE_VERTEX_ARRAY | GL_STATE_ARRAY_BUFFER;
         this.gl.bindVertexArray(this.textVao);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.textInstanceBuffer);
         this.gl.bufferSubData(
@@ -1410,16 +1354,185 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     }
 
     private applyClip(clip: ClipState | null, viewportHeight: number): void {
+        this.captureGLState(GL_STATE_SCISSOR_TEST);
+        this.glTouchedGroups |= GL_STATE_SCISSOR_TEST;
         if (clip === null) {
             this.gl.disable(this.gl.SCISSOR_TEST);
             return;
         }
+        this.captureGLState(GL_STATE_SCISSOR_BOX);
+        this.glTouchedGroups |= GL_STATE_SCISSOR_BOX;
         this.gl.enable(this.gl.SCISSOR_TEST);
         const x = Math.max(0, Math.floor(clip.x));
         const y = Math.max(0, Math.floor(viewportHeight - (clip.y + clip.height)));
         const width = Math.max(0, Math.ceil(clip.width));
         const height = Math.max(0, Math.ceil(clip.height));
         this.gl.scissor(x, y, width, height);
+    }
+
+    /**
+     * Captures the external GL state for the given groups if (and only if)
+     * they have not been captured yet this frame. Called immediately before
+     * the renderer clobbers the corresponding state, so untouched groups are
+     * never read and never restored.
+     */
+    private captureGLState(groups: number): void {
+        const pending = groups & ~this.glCapturedGroups;
+        if (pending === 0) {
+            return;
+        }
+        const gl = this.gl;
+        const shadow = this.glShadow;
+        if ((pending & GL_STATE_FRAMEBUFFER) !== 0) {
+            shadow.framebuffer = readGLParameter<WebGLFramebuffer | null>(gl, gl.FRAMEBUFFER_BINDING, null);
+        }
+        if ((pending & GL_STATE_VIEWPORT) !== 0) {
+            const viewport = readGLParameter<Int32Array | readonly number[] | null>(gl, gl.VIEWPORT, null);
+            const valid = viewport !== null && viewport.length >= 4;
+            shadow.viewportX = valid ? viewport![0] ?? 0 : undefined;
+            shadow.viewportY = valid ? viewport![1] ?? 0 : undefined;
+            shadow.viewportWidth = valid ? viewport![2] ?? 0 : undefined;
+            shadow.viewportHeight = valid ? viewport![3] ?? 0 : undefined;
+        }
+        if ((pending & GL_STATE_SCISSOR_BOX) !== 0) {
+            const scissorBox = readGLParameter<Int32Array | readonly number[] | null>(gl, gl.SCISSOR_BOX, null);
+            const valid = scissorBox !== null && scissorBox.length >= 4;
+            shadow.scissorX = valid ? scissorBox![0] ?? 0 : undefined;
+            shadow.scissorY = valid ? scissorBox![1] ?? 0 : undefined;
+            shadow.scissorWidth = valid ? scissorBox![2] ?? 0 : undefined;
+            shadow.scissorHeight = valid ? scissorBox![3] ?? 0 : undefined;
+        }
+        if ((pending & GL_STATE_SCISSOR_TEST) !== 0) {
+            shadow.scissorTest = readGLEnabled(gl, gl.SCISSOR_TEST);
+        }
+        if ((pending & GL_STATE_PROGRAM) !== 0) {
+            shadow.program = readGLParameter<WebGLProgram | null>(gl, gl.CURRENT_PROGRAM, null);
+        }
+        if ((pending & GL_STATE_VERTEX_ARRAY) !== 0) {
+            shadow.vertexArray = readGLParameter<WebGLVertexArrayObject | null>(gl, gl.VERTEX_ARRAY_BINDING, null);
+        }
+        if ((pending & GL_STATE_ARRAY_BUFFER) !== 0) {
+            shadow.arrayBuffer = readGLParameter<WebGLBuffer | null>(gl, gl.ARRAY_BUFFER_BINDING, null);
+        }
+        if ((pending & GL_STATE_UNPACK_ALIGNMENT) !== 0) {
+            shadow.unpackAlignment = readGLParameter<number>(gl, gl.UNPACK_ALIGNMENT, undefined);
+        }
+        if ((pending & GL_STATE_CULL_FACE) !== 0) {
+            shadow.cullFace = readGLEnabled(gl, gl.CULL_FACE);
+        }
+        if ((pending & GL_STATE_DEPTH_TEST) !== 0) {
+            shadow.depthTest = readGLEnabled(gl, gl.DEPTH_TEST);
+        }
+        if ((pending & GL_STATE_BLEND) !== 0) {
+            shadow.blend = readGLEnabled(gl, gl.BLEND);
+        }
+        if ((pending & GL_STATE_BLEND_FUNC) !== 0) {
+            shadow.blendSrcRgb = readGLParameter<number>(gl, gl.BLEND_SRC_RGB, undefined);
+            shadow.blendDstRgb = readGLParameter<number>(gl, gl.BLEND_DST_RGB, undefined);
+            shadow.blendSrcAlpha = readGLParameter<number>(gl, gl.BLEND_SRC_ALPHA, undefined);
+            shadow.blendDstAlpha = readGLParameter<number>(gl, gl.BLEND_DST_ALPHA, undefined);
+        }
+        if ((pending & GL_STATE_ACTIVE_TEXTURE) !== 0) {
+            shadow.activeTexture = readGLParameter<number>(gl, gl.ACTIVE_TEXTURE, gl.TEXTURE0);
+        }
+        if ((pending & GL_STATE_UNIT0_TEXTURE) !== 0) {
+            shadow.unit0Texture = readGLParameter<WebGLTexture | null>(gl, gl.TEXTURE_BINDING_2D, null);
+        }
+        if ((pending & GL_STATE_UNIT0_SAMPLER) !== 0) {
+            shadow.unit0Sampler = readGLParameter<WebGLSampler | null>(gl, gl.SAMPLER_BINDING, null);
+        }
+        this.glCapturedGroups |= pending;
+    }
+
+    /** Activates texture unit 0, issuing the call only when the tracked unit differs. */
+    private ensureActiveUnit0(): void {
+        if (this.currentGLTextureUnit === this.gl.TEXTURE0) {
+            return;
+        }
+        this.captureGLState(GL_STATE_ACTIVE_TEXTURE);
+        this.gl.activeTexture(this.gl.TEXTURE0);
+        this.currentGLTextureUnit = this.gl.TEXTURE0;
+        this.glTouchedGroups |= GL_STATE_ACTIVE_TEXTURE;
+    }
+
+    /** Binds a texture on unit 0, capturing the external binding beforehand. */
+    private bindUnit0Texture(texture: WebGLTexture | null): void {
+        this.ensureActiveUnit0();
+        this.captureGLState(GL_STATE_UNIT0_TEXTURE);
+        this.glTouchedGroups |= GL_STATE_UNIT0_TEXTURE;
+        this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+    }
+
+    /**
+     * Restores the external GL state clobbered during the frame. Only groups
+     * the renderer actually wrote to are restored; the shadow is reset so the
+     * next frame captures fresh external values.
+     */
+    private restoreGLState(): void {
+        const gl = this.gl;
+        const shadow = this.glShadow;
+        const touched = this.glTouchedGroups;
+        if ((touched & GL_STATE_FRAMEBUFFER) !== 0) {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, shadow.framebuffer);
+        }
+        if ((touched & GL_STATE_VIEWPORT) !== 0 && shadow.viewportX !== undefined) {
+            gl.viewport(shadow.viewportX, shadow.viewportY ?? 0, shadow.viewportWidth ?? 0, shadow.viewportHeight ?? 0);
+        }
+        if ((touched & GL_STATE_CULL_FACE) !== 0) {
+            restoreGLEnableState(gl, gl.CULL_FACE, shadow.cullFace);
+        }
+        if ((touched & GL_STATE_DEPTH_TEST) !== 0) {
+            restoreGLEnableState(gl, gl.DEPTH_TEST, shadow.depthTest);
+        }
+        if ((touched & GL_STATE_BLEND) !== 0) {
+            restoreGLEnableState(gl, gl.BLEND, shadow.blend);
+        }
+        if ((touched & GL_STATE_BLEND_FUNC) !== 0 && shadow.blendSrcRgb !== undefined) {
+            if (
+                shadow.blendDstRgb !== undefined &&
+                shadow.blendSrcAlpha !== undefined &&
+                shadow.blendDstAlpha !== undefined &&
+                typeof gl.blendFuncSeparate === 'function'
+            ) {
+                gl.blendFuncSeparate(shadow.blendSrcRgb, shadow.blendDstRgb, shadow.blendSrcAlpha, shadow.blendDstAlpha);
+            } else if (shadow.blendDstRgb !== undefined) {
+                gl.blendFunc(shadow.blendSrcRgb, shadow.blendDstRgb);
+            }
+        }
+        if ((touched & GL_STATE_SCISSOR_TEST) !== 0) {
+            restoreGLEnableState(gl, gl.SCISSOR_TEST, shadow.scissorTest);
+        }
+        if ((touched & GL_STATE_SCISSOR_BOX) !== 0 && shadow.scissorX !== undefined) {
+            gl.scissor(shadow.scissorX, shadow.scissorY ?? 0, shadow.scissorWidth ?? 0, shadow.scissorHeight ?? 0);
+        }
+        if ((touched & GL_STATE_PROGRAM) !== 0) {
+            gl.useProgram(shadow.program);
+        }
+        if ((touched & GL_STATE_VERTEX_ARRAY) !== 0) {
+            gl.bindVertexArray(shadow.vertexArray);
+        }
+        if ((touched & GL_STATE_ARRAY_BUFFER) !== 0) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, shadow.arrayBuffer);
+        }
+        if ((touched & GL_STATE_UNPACK_ALIGNMENT) !== 0 && shadow.unpackAlignment !== undefined) {
+            gl.pixelStorei?.(gl.UNPACK_ALIGNMENT, shadow.unpackAlignment);
+        }
+        if ((touched & (GL_STATE_UNIT0_TEXTURE | GL_STATE_UNIT0_SAMPLER)) !== 0) {
+            // The unit-0 bindings must be restored while unit 0 is active.
+            this.ensureActiveUnit0();
+            if ((touched & GL_STATE_UNIT0_TEXTURE) !== 0) {
+                gl.bindTexture(gl.TEXTURE_2D, shadow.unit0Texture);
+            }
+            if ((touched & GL_STATE_UNIT0_SAMPLER) !== 0) {
+                gl.bindSampler?.(0, shadow.unit0Sampler);
+            }
+        }
+        if ((touched & GL_STATE_ACTIVE_TEXTURE) !== 0) {
+            gl.activeTexture(shadow.activeTexture);
+            this.currentGLTextureUnit = shadow.activeTexture;
+        }
+        this.glCapturedGroups = 0;
+        this.glTouchedGroups = 0;
     }
 
     private ensureGlyphPage(entry: GlyphAtlasEntry): TexturePage | null {
@@ -1430,7 +1543,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             if (!texture) {
                 return null;
             }
-            this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+            this.bindUnit0Texture(texture);
             const internalFormat = entry.format === 'rgba8' ? this.gl.RGBA8 : this.gl.R8;
             const format = entry.format === 'rgba8' ? this.gl.RGBA : this.gl.RED;
             this.gl.texParameteri(
@@ -1445,6 +1558,8 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             );
             this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
             this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+            this.captureGLState(GL_STATE_UNPACK_ALIGNMENT);
+            this.glTouchedGroups |= GL_STATE_UNPACK_ALIGNMENT;
             this.gl.pixelStorei?.(this.gl.UNPACK_ALIGNMENT, 1);
             this.gl.texImage2D(
                 this.gl.TEXTURE_2D,
@@ -1472,7 +1587,9 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 return null;
             }
             const packed = this.packGlyphData(entry);
-            this.gl.bindTexture(this.gl.TEXTURE_2D, page.texture);
+            this.bindUnit0Texture(page.texture);
+            this.captureGLState(GL_STATE_UNPACK_ALIGNMENT);
+            this.glTouchedGroups |= GL_STATE_UNPACK_ALIGNMENT;
             this.gl.pixelStorei?.(this.gl.UNPACK_ALIGNMENT, 1);
             this.gl.texSubImage2D(
                 this.gl.TEXTURE_2D,
