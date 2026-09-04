@@ -26,6 +26,9 @@ interface RandomDistributionHost {
 export class RandomDistributionRuntime {
     private _cachedEngine: IRandomEngine | null = null;
     private _cachedEngineType: RandomEngineType | null = null;
+    private _boxMullerSpare: number | null = null;
+    private _boxMullerMean: number = 0;
+    private _boxMullerStdDev: number = 1;
 
     constructor(private readonly _host: RandomDistributionHost) {}
 
@@ -39,9 +42,36 @@ export class RandomDistributionRuntime {
     }
 
     public normal(mean: number = 0, stdDev: number = 1): number {
-        return this.distribution<number>(
-            new NormalDistribution(mean, stdDev, this._host.getNormalAlgorithm())
-        );
+        // Use cached spare value if params match
+        if (this._boxMullerSpare !== null && this._boxMullerMean === mean && this._boxMullerStdDev === stdDev) {
+            const spare = this._boxMullerSpare;
+            this._boxMullerSpare = null;
+            return spare;
+        }
+
+        // Draw a pair using Box-Muller, cache the spare
+        const state = this._host.getState();
+        const engine = this._getEngine(state);
+
+        let u1 = engine.next01();
+        if (u1 <= 0) u1 = Number.MIN_VALUE;
+        const u2 = engine.next01();
+
+        const r = Math.sqrt(-2.0 * Math.log(u1));
+        const theta = 2.0 * Math.PI * u2;
+
+        const z0 = mean + stdDev * r * Math.cos(theta);
+        const z1 = mean + stdDev * r * Math.sin(theta);
+
+        // Cache spare for next call
+        this._boxMullerSpare = z1;
+        this._boxMullerMean = mean;
+        this._boxMullerStdDev = stdDev;
+
+        // Update host state
+        this._host.setState(engine.getState());
+
+        return z0;
     }
 
     public exponential(lambda: number = 1): number {
