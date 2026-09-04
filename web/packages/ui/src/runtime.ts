@@ -19,6 +19,7 @@ import { NodeFlag } from './runtime/node-flags';
 import { ControllerEventBus, type ControllerEventHandler } from './runtime/controller-event-bus';
 import { FocusController, type FocusControllerHost } from './runtime/focus-controller';
 import { AutoSizeService } from './runtime/autosize-service';
+import { RenderCommandBuilder, type RenderCommandBuilderHost } from './runtime/render-command-builder';
 import {
     type StoredWidgetRecord,
     compileWidgetFocus,
@@ -33,19 +34,12 @@ import {
     dispatchPointerEvent,
     dispatchTextEvent,
 } from './runtime/runtime-input';
-import {
-    buildCaretCommand,
-    buildLineDecorationCommands,
-    buildSelectionCommands,
-    measureImageContent,
-    resolveImageCommand,
-} from './runtime/runtime-frame';
+import { measureImageContent } from './runtime/runtime-frame';
 import {
     EMPTY_FOCUS_INPUT,
     EMPTY_LAYOUT_INPUT,
     EMPTY_RECORD_OBJECT,
     EMPTY_STYLE_INPUT,
-    TRANSPARENT,
     cloneData,
     intersectRect,
     intersectsPoint,
@@ -61,12 +55,9 @@ import { TextLayoutEngine } from './text';
 import { WidgetRegistry, type WidgetController } from './widget';
 import type {
     ColorInput,
-    CustomRenderCommand,
     FocusMoveDirection,
     FontRegistryOptions,
-    ImageRenderCommand,
     LayoutBox,
-    QuadRenderCommand,
     RenderCommand,
     ResolvedFocusPolicy,
     ResolvedWidgetImage,
@@ -75,10 +66,8 @@ import type {
     ResolvedWidgetStyle,
     RectLike,
     SizeLike,
-    StrokeRenderCommand,
     TextLayoutResult,
     TextLayoutConstraint,
-    TextRenderCommand,
     UIFrame,
     UIFrameMetrics,
     UIInputEvent,
@@ -164,6 +153,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private readonly controllerEventBus = new ControllerEventBus();
     private readonly controllerResolveCache = new Map<string, WidgetController<any, any, any> | null>();
     private readonly autoSizeService = new AutoSizeService();
+    private readonly renderCommandBuilder = new RenderCommandBuilder<TPayload>();
     private readonly dirtyNodes = new Set<number>();
     private structuralDirty = false;
 
@@ -1237,223 +1227,34 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     }
 
     private renderFrame(): UIFrame<TPayload> {
-        const commands: RenderCommand<TPayload>[] = [];
-        let visibleWidgetCount = 0;
-        let textCommandCount = 0;
-        let imageCommandCount = 0;
-        let strokeCommandCount = 0;
-        let customCommandCount = 0;
-        let glyphCount = 0;
-        const visit = (index: number, clip: LayoutBox | null): void => {
-            if (!this.isVisible(index)) {
-                return;
-            }
-            visibleWidgetCount += 1;
-            const style = this.styles[index]!;
-            const box = this.readBox(index);
-            const nextClip = style.clip ? intersectRect(clip, box) : clip;
-            if (style.clip && nextClip === null) {
-                return;
-            }
-            const zIndex = this.layouts[index]!.zIndex;
-            if (style.background.a > 0 || (style.borderWidth > 0 && style.borderColor.a > 0)) {
-                const quad: QuadRenderCommand = {
-                    kind: 'quad',
-                    widget: index as WidgetId,
-                    x: box.x,
-                    y: box.y,
-                    width: box.width,
-                    height: box.height,
-                    zIndex,
-                    color: style.background,
-                    borderColor: style.borderColor,
-                    borderWidth: style.borderWidth,
-                    radius: style.radius,
-                    opacity: style.opacity,
-                    clip: nextClip,
-                };
-                commands.push(quad);
-            }
-            if (style.strokes.length > 0) {
-                const stroke: StrokeRenderCommand = {
-                    kind: 'stroke',
-                    widget: index as WidgetId,
-                    x: box.x,
-                    y: box.y,
-                    width: box.width,
-                    height: box.height,
-                    zIndex,
-                    opacity: style.opacity,
-                    clip: nextClip,
-                    strokes: style.strokes,
-                };
-                strokeCommandCount += 1;
-                commands.push(stroke);
-            }
-            const image = this.images[index];
-            if (image) {
-                const imageCommand = resolveImageCommand(index, box, image, style, nextClip, zIndex);
-                if (imageCommand) {
-                    imageCommandCount += 1;
-                    commands.push(imageCommand);
-                }
-            }
-            const textLayout = this.resolveTextLayoutForRender(index);
-            if (textLayout) {
-                const textStyle = this.texts[index]!;
-                if (textStyle.selectionColor.a > 0) {
-                    for (const quad of buildSelectionCommands(index, box, textStyle, textLayout, nextClip, zIndex, style.opacity)) {
-                        commands.push(quad);
-                    }
-                }
-                if (textLayout.glyphs.length > 0) {
-                    if (textStyle.shadowColor.a > 0 && (textStyle.shadowOffsetX !== 0 || textStyle.shadowOffsetY !== 0)) {
-                        const shadowCommand: TextRenderCommand = {
-                            kind: 'text',
-                            widget: index as WidgetId,
-                            x: box.contentX + textStyle.shadowOffsetX,
-                            y: box.contentY + textStyle.shadowOffsetY,
-                            zIndex,
-                            color: textStyle.shadowColor,
-                            outlineColor: TRANSPARENT,
-                            outlineWidth: 0,
-                            edgeSoftness: textStyle.edgeSoftness,
-                            opacity: style.opacity,
-                            clip: nextClip,
-                            layout: textLayout,
-                        };
-                        textCommandCount += 1;
-                        glyphCount += textLayout.glyphs.length;
-                        commands.push(shadowCommand);
-                    }
-                    for (const quad of buildLineDecorationCommands(index, box, textStyle, textLayout, nextClip, zIndex, style.opacity)) {
-                        commands.push(quad);
-                    }
-                    const textCommand: TextRenderCommand = {
-                        kind: 'text',
-                        widget: index as WidgetId,
-                        x: box.contentX,
-                        y: box.contentY,
-                        zIndex,
-                        color: this.texts[index]!.color,
-                        outlineColor: this.texts[index]!.outlineColor,
-                        outlineWidth: this.texts[index]!.outlineWidth,
-                        edgeSoftness: this.texts[index]!.edgeSoftness,
-                        opacity: style.opacity,
-                        clip: nextClip,
-                        layout: textLayout,
-                    };
-                    textCommandCount += 1;
-                    glyphCount += textLayout.glyphs.length;
-                    commands.push(textCommand);
-                }
-                const caretCommand = buildCaretCommand(index, box, textStyle, textLayout, nextClip, zIndex, style.opacity);
-                if (caretCommand) {
-                    commands.push(caretCommand);
-                }
-            }
-            const controller = this.resolveControllerCached(this.records[index]!.controller);
-            controller?.render?.({
-                runtime: this,
-                widget: index as WidgetId,
-                props: this.records[index]!.props,
-                state: this.states[index],
-                push: (payload: TPayload) => {
-                    const command: CustomRenderCommand<TPayload> = {
-                        kind: 'custom',
-                        widget: index as WidgetId,
-                        zIndex,
-                        clip: nextClip,
-                        payload,
-                    };
-                    customCommandCount += 1;
-                    commands.push(command);
-                },
-            });
-            for (let child = this.firstChild[index]; child !== 0; child = this.nextSibling[child]) {
-                visit(child, nextClip);
-            }
-        };
-        visit(this.rootId, null);
-        commands.sort((left, right) => {
-            if (left.zIndex !== right.zIndex) {
-                return left.zIndex - right.zIndex;
-            }
-            return this.sequence[left.widget as number] - this.sequence[right.widget as number];
-        });
+        return this.renderCommandBuilder.build(this.getRenderHost());
+    }
 
-        // ── Focus ring overlay ──────────────────────────────────────────────
-        const focusedWidget = this.focusController.getFocused();
-        if (focusedWidget !== null) {
-            const focusIndex = focusedWidget as number;
-            const focusPolicy = this.focuses[focusIndex];
-            if (focusPolicy && (this.flags[focusIndex] & NodeFlag.Allocated) !== 0) {
-                const focusBox = this.readBox(focusIndex);
-                const ringOffset = focusPolicy.ringOffset;
-                const ringWidth = focusPolicy.ringWidth;
-                const ringColor = focusPolicy.ringColor;
-
-                // Compute the parent clip by walking up the ancestor chain.
-                // The focus ring should be clipped by ancestor clip rects, not the widget's own.
-                let parentClip: LayoutBox | null = null;
-                for (let ancestor = this.parent[focusIndex]; ancestor !== 0; ancestor = this.parent[ancestor]) {
-                    if (!this.isVisible(ancestor)) {
-                        continue;
-                    }
-                    const ancestorStyle = this.styles[ancestor];
-                    if (ancestorStyle && ancestorStyle.clip) {
-                        const ancestorBox = this.readBox(ancestor);
-                        parentClip = parentClip === null ? ancestorBox : intersectRect(parentClip, ancestorBox);
-                        if (parentClip === null) {
-                            break;
-                        }
-                    }
-                }
-
-                const focusStyle = this.styles[focusIndex];
-                const baseRadius = focusStyle?.radius ?? { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 };
-                const ringExpansion = ringOffset + ringWidth;
-
-                const focusRingQuad: QuadRenderCommand = {
-                    kind: 'quad',
-                    widget: focusIndex as WidgetId,
-                    x: focusBox.x - ringExpansion,
-                    y: focusBox.y - ringExpansion,
-                    width: focusBox.width + ringExpansion * 2,
-                    height: focusBox.height + ringExpansion * 2,
-                    zIndex: Number.MAX_SAFE_INTEGER,
-                    color: TRANSPARENT,
-                    borderColor: ringColor,
-                    borderWidth: ringWidth,
-                    radius: {
-                        topLeft: baseRadius.topLeft + ringExpansion,
-                        topRight: baseRadius.topRight + ringExpansion,
-                        bottomRight: baseRadius.bottomRight + ringExpansion,
-                        bottomLeft: baseRadius.bottomLeft + ringExpansion,
-                    },
-                    opacity: 1,
-                    clip: parentClip,
-                };
-                commands.push(focusRingQuad);
-            }
-        }
-
-        const metrics: UIFrameMetrics = {
-            widgetCount: this.getWidgetCount(),
-            visibleWidgetCount,
-            renderCount: commands.length,
-            customCommandCount,
-            imageCommandCount,
-            textCommandCount,
-            strokeCommandCount,
-            glyphCount,
-            layoutPasses: this.lastLayoutPasses,
-        };
+    private getRenderHost(): RenderCommandBuilderHost<TPayload> {
         return {
+            flags: this.flags,
+            parent: this.parent,
+            firstChild: this.firstChild,
+            nextSibling: this.nextSibling,
+            sequence: this.sequence,
+            styles: this.styles,
+            layouts: this.layouts,
+            images: this.images,
+            texts: this.texts,
+            focuses: this.focuses,
+            records: this.records as Array<{ controller: string | null; props: Record<string, unknown> } | null>,
+            states: this.states,
+            rootId: this.rootId,
             viewportWidth: this.viewportWidth,
             viewportHeight: this.viewportHeight,
-            commands,
-            metrics,
+            lastLayoutPasses: this.lastLayoutPasses,
+            isVisible: (index) => this.isVisible(index),
+            readBox: (index) => this.readBox(index),
+            resolveTextLayoutForRender: (index) => this.resolveTextLayoutForRender(index),
+            resolveControllerCached: (name) => this.resolveControllerCached(name),
+            getFocused: () => this.focusController.getFocused(),
+            getWidgetCount: () => this.getWidgetCount(),
+            getRuntime: () => this,
         };
     }
 
