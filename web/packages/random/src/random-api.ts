@@ -67,10 +67,15 @@ export class Random implements IRandomGenerator {
             return min + Math.floor(range * this.engine.next01());
         }
 
+        // Use rejection sampling for large ranges to avoid modulo bias
         const bigRange = BigInt(range);
-        const value = (this.engine.nextUint64() % bigRange) + BigInt(min);
+        const limit = (BigInt(1) << 64n) - ((BigInt(1) << 64n) % bigRange);
+        let value: bigint;
+        do {
+            value = this.engine.nextUint64();
+        } while (value >= limit);
 
-        return Number(value);
+        return Number((value % bigRange) + BigInt(min));
     };
 
     public boolean = (probability: number = 0.5): boolean => {
