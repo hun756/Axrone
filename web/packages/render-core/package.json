@@ -53,6 +53,11 @@
             "types": "./dist/shader-effect.d.ts",
             "import": "./dist/shader-effect.mjs",
             "require": "./dist/shader-effect.js"
+        },
+        "./nine-slice": {
+            "types": "./dist/nine-slice.d.ts",
+            "import": "./dist/nine-slice.mjs",
+            "require": "./dist/nine-slice.js"
         }
     },
     "scripts": {

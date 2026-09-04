@@ -1,3 +1,4 @@
+import { clamp } from '@axrone/numeric';
 import type { UICanvasConfig } from '../types/ui-asset';
 
 /** Tracks scale modes that have already produced a console.warn so each mode warns at most once. */
@@ -84,7 +85,7 @@ export function resolveCanvasScale(
         }
 
         case 'match-width-or-height': {
-            const bias = Math.max(0, Math.min(1, canvas.matchBias));
+            const bias = clamp(canvas.matchBias, 0, 1);
             const scale = scaleW * (1 - bias) + scaleH * bias;
             const effectiveW = refW * scale;
             const effectiveH = refH * scale;

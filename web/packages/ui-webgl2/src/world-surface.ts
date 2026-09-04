@@ -6,6 +6,7 @@
  * surface separate from the renderer lets a single renderer instance serve both
  * the screen overlay and any number of world-space hosts.
  */
+import { LazyGLStateGuard, GL_STATE_UNIT0_TEXTURE, GL_STATE_FRAMEBUFFER } from './gl-state';
 export interface UIWorldSurface extends Disposable {
     readonly texture: WebGLTexture;
     readonly framebuffer: WebGLFramebuffer;
@@ -31,8 +32,8 @@ export function createUIWorldSurface(
     width: number,
     height: number
 ): UIWorldSurface {
-    const texture = gl.createTexture();
-    const framebuffer = gl.createFramebuffer();
+    let texture = gl.createTexture();
+    let framebuffer = gl.createFramebuffer();
     if (!texture || !framebuffer) {
         throw new Error('Failed to allocate the world-space UI surface.');
     }
@@ -40,11 +41,10 @@ export function createUIWorldSurface(
     let currentWidth = 0;
     let currentHeight = 0;
     let disposed = false;
+    let contextLost = false;
 
-    const previousTexture = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
-    const previousFramebuffer = gl.getParameter(
-        gl.FRAMEBUFFER_BINDING
-    ) as WebGLFramebuffer | null;
+    const guard = new LazyGLStateGuard();
+    guard.capture(gl, GL_STATE_UNIT0_TEXTURE | GL_STATE_FRAMEBUFFER);
 
     const allocate = (nextWidth: number, nextHeight: number): void => {
         const clampedWidth = clampSurfaceSize(nextWidth);
@@ -83,12 +83,48 @@ export function createUIWorldSurface(
     allocate(width, height);
 
     // Leave the context exactly as it was found.
-    gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer);
-    gl.bindTexture(gl.TEXTURE_2D, previousTexture);
+    guard.restore(gl);
+
+    const handleContextLost = (event: Event): void => {
+        event.preventDefault();
+        contextLost = true;
+        guard.invalidate();
+    };
+
+    const handleContextRestored = (): void => {
+        try {
+            // Delete stale GPU handles before recreating to avoid leaking
+            // the previous texture/framebuffer objects.
+            try { gl.deleteTexture(texture); } catch { /* best-effort */ }
+            try { gl.deleteFramebuffer(framebuffer); } catch { /* best-effort */ }
+            texture = gl.createTexture();
+            framebuffer = gl.createFramebuffer();
+            if (!texture || !framebuffer) {
+                contextLost = true;
+                return;
+            }
+            currentWidth = 0;
+            currentHeight = 0;
+            allocate(currentWidth || width, currentHeight || height);
+            contextLost = false;
+        } catch {
+            contextLost = true;
+        }
+    };
+
+    const canvas = gl.canvas as HTMLCanvasElement | undefined;
+    if (canvas && typeof canvas.addEventListener === 'function') {
+        canvas.addEventListener('webglcontextlost', handleContextLost);
+        canvas.addEventListener('webglcontextrestored', handleContextRestored);
+    }
 
     const surface: UIWorldSurface = {
-        texture,
-        framebuffer,
+        get texture() {
+            return texture!;
+        },
+        get framebuffer() {
+            return framebuffer!;
+        },
         get width() {
             return currentWidth;
         },
@@ -96,22 +132,25 @@ export function createUIWorldSurface(
             return currentHeight;
         },
         resize(nextWidth: number, nextHeight: number): void {
-            if (disposed) {
+            if (disposed || contextLost) {
                 return;
             }
-            const restoreTexture = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
-            const restoreFramebuffer = gl.getParameter(
-                gl.FRAMEBUFFER_BINDING
-            ) as WebGLFramebuffer | null;
+            // Invalidate so capture re-reads current GL bindings instead of
+            // reusing stale construction-time values.
+            guard.invalidate();
+            guard.capture(gl, GL_STATE_UNIT0_TEXTURE | GL_STATE_FRAMEBUFFER);
             allocate(nextWidth, nextHeight);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, restoreFramebuffer);
-            gl.bindTexture(gl.TEXTURE_2D, restoreTexture);
+            guard.restore(gl);
         },
         dispose(): void {
             if (disposed) {
                 return;
             }
             disposed = true;
+            if (canvas && typeof canvas.removeEventListener === 'function') {
+                canvas.removeEventListener('webglcontextlost', handleContextLost);
+                canvas.removeEventListener('webglcontextrestored', handleContextRestored);
+            }
             gl.deleteFramebuffer(framebuffer);
             gl.deleteTexture(texture);
         },

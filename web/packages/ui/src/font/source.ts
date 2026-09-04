@@ -6,46 +6,30 @@ import type {
     FontGlyphMetric,
     FontStyle,
     FontWeight,
+    GlyphAtlasEntry,
     KerningPairKey,
     RetryPolicy,
     StaticFontFaceAsset,
 } from '../types';
+import { normalizeWeight } from '../runtime/internals';
 
-export const normalizeWeight = (weight: FontWeight | undefined): number => {
-    switch (weight) {
-        case 'thin':
-            return 100;
-        case 'extralight':
-            return 200;
-        case 'light':
-            return 300;
-        case 'normal':
-            return 400;
-        case 'medium':
-            return 500;
-        case 'semibold':
-            return 600;
-        case 'bold':
-            return 700;
-        case 'extrabold':
-            return 800;
-        case 'black':
-            return 900;
-        case undefined:
-            return 400;
-        default:
-            return weight;
-    }
-};
+export { normalizeWeight };
 
 export const normalizeStyle = (style: FontStyle | undefined): FontStyle => style ?? 'normal';
 
-export const toByteArray = (value: ArrayBuffer | ArrayBufferView): Uint8Array => {
+/**
+ * Converts an ArrayBuffer or ArrayBufferView to a Uint8Array.
+ * Canonical implementation shared with the WebGL renderer.
+ */
+export const toUint8Array = (value: ArrayBuffer | ArrayBufferView): Uint8Array => {
     if (value instanceof ArrayBuffer) {
         return new Uint8Array(value);
     }
     return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 };
+
+/** @deprecated Use {@link toUint8Array} instead. */
+export const toByteArray = toUint8Array;
 
 export const toOwnedArrayBuffer = (value: ArrayBuffer | ArrayBufferView): ArrayBuffer => {
     const bytes = toByteArray(value);
@@ -74,6 +58,14 @@ export const applyRetryDelay = (policy: RetryPolicy | undefined, attempt: number
 export const isDynamicFontFaceAsset = (asset: FontFaceAsset): asset is DynamicFontFaceAsset => asset.kind === 'dynamic';
 
 export const createAtlasEntryKey = (codePoint: number, rasterSize?: number): string => `${codePoint}:${rasterSize ?? 0}`;
+
+/**
+ * Creates a numeric key for an uploaded glyph atlas entry.
+ * Uses arithmetic instead of bitwise ops to avoid 32-bit overflow
+ * for codePoint > 0xFFFF (emoji, CJK Extension B, etc.).
+ */
+export const createUploadedGlyphKey = (entry: GlyphAtlasEntry): number =>
+    entry.codePoint * 65536 + (entry.rasterSize ?? 0);
 
 export const detectBinaryFormatFromContentType = (contentType: string | undefined): FontBinaryFormat | null => {
     if (!contentType) {

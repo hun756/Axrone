@@ -1,6 +1,8 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
+import { asString, asNumber, asBoolean, asRecord } from './internals';
+import { defaultUIControlTheme } from './theme';
 
 /**
  * Declarative toggle-switch controller for `.ui.json` authored toggles.
@@ -12,7 +14,7 @@ import type { WidgetController, WidgetControllerContext } from '../widget';
  *     isOn: boolean,
  *     trackKey,   // the track background widget
  *     thumbKey,   // the thumb circle widget
- *     states: { on: '#0a74daff', off: '#334155ff' },
+ *     states: { on: '<theme.accentColor>', off: '#334155ff' },
  *     thumbOnAnchor: 0.85,   // thumb X anchor when on (0-1)
  *     thumbOffAnchor: 0.15,  // thumb X anchor when off (0-1)
  *   }
@@ -37,7 +39,6 @@ export interface ToggleControllerState {
     on: boolean;
     hovered: boolean;
     pressed: boolean;
-    initialized: boolean;
 }
 
 type ToggleContext = WidgetControllerContext<
@@ -46,21 +47,7 @@ type ToggleContext = WidgetControllerContext<
     UIRuntime
 >;
 
-const asBoolean = (value: unknown, fallback: boolean): boolean =>
-    typeof value === 'boolean' ? value : fallback;
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
-
-const asRecord = (value: unknown): Record<string, unknown> =>
-    value && typeof value === 'object' && !Array.isArray(value)
-        ? (value as Record<string, unknown>)
-        : {};
-
-const DEFAULT_ON_COLOR = '#0a74daff';
+const DEFAULT_ON_COLOR = defaultUIControlTheme.accentColor;
 const DEFAULT_OFF_COLOR = '#334155ff';
 
 /**
@@ -129,12 +116,11 @@ export const toggleSwitchController: WidgetController<
             on: asBoolean(toggleProps.isOn, false),
             hovered: false,
             pressed: false,
-            initialized: false,
         };
     },
     mount: (context) => {
         const typed = context as ToggleContext;
-        typed.state.initialized = applyVisuals(typed);
+        applyVisuals(typed);
     },
     update: (context, previousProps) => {
         const typed = context as ToggleContext;

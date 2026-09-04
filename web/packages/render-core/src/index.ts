@@ -5,3 +5,4 @@ export * from './graph';
 export * from './post-process';
 export * from './pipeline';
 export * from './shader-effect';
+export * from './nine-slice';

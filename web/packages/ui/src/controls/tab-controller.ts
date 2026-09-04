@@ -1,7 +1,9 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
-import { isPointInside } from './internals';
+import { clamp } from '@axrone/numeric';
+import { isPointInside, asString, asNumber } from './internals';
+import { defaultUIControlTheme } from './theme';
 
 /**
  * Declarative tab-view controller for `.ui.json` authored tabbed interfaces.
@@ -41,7 +43,6 @@ export interface TabControllerProps {
 
 export interface TabControllerState {
     selectedIndex: number;
-    initialized: boolean;
 }
 
 type TabContext = WidgetControllerContext<
@@ -50,13 +51,7 @@ type TabContext = WidgetControllerContext<
     UIRuntime
 >;
 
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
-
-const DEFAULT_ACTIVE_COLOR = '#0a74daff';
+const DEFAULT_ACTIVE_COLOR = defaultUIControlTheme.accentColor;
 const DEFAULT_INACTIVE_COLOR = '#334155ff';
 const DEFAULT_ACTIVE_TEXT_COLOR = '#ffffffff';
 const DEFAULT_INACTIVE_TEXT_COLOR = '#94a3b8ff';
@@ -149,15 +144,14 @@ export const tabViewController: WidgetController<
         const tabProps = props as TabControllerProps;
         const count = Math.max(0, asNumber(tabProps.tabCount, 0) | 0);
         const rawIndex = asNumber(tabProps.selectedIndex, 0);
-        const clampedIndex = count > 0 ? Math.min(Math.max(rawIndex, 0), count - 1) : 0;
+        const clampedIndex = count > 0 ? clamp(rawIndex, 0, count - 1) : 0;
         return {
             selectedIndex: clampedIndex,
-            initialized: false,
         };
     },
     mount: (context) => {
         const typed = context as TabContext;
-        typed.state.initialized = applyVisuals(typed);
+        applyVisuals(typed);
     },
     update: (context, previousProps) => {
         const typed = context as TabContext;
@@ -176,7 +170,7 @@ export const tabViewController: WidgetController<
         ) {
             const count = Math.max(0, asNumber(props.tabCount, 0) | 0);
             const authored = asNumber(props.selectedIndex, typed.state.selectedIndex);
-            typed.state.selectedIndex = count > 0 ? Math.min(Math.max(authored, 0), count - 1) : 0;
+            typed.state.selectedIndex = count > 0 ? clamp(authored, 0, count - 1) : 0;
             applyVisuals(typed);
         }
     },

@@ -1,6 +1,7 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
+import { asString, asNumber } from './internals';
 
 /**
  * Declarative tooltip-host controller for `.ui.json` authored widgets.
@@ -26,6 +27,11 @@ import type { WidgetController, WidgetControllerContext } from '../widget';
  */
 export const TOOLTIP_HOST_CONTROLLER_TYPE = 'tooltip-host';
 
+// ─── Tooltip constants ───────────────────────────────────────────────────────
+const FRAME_INTERVAL_MS = 1000 / 60;
+const TOOLTIP_DEFAULT_OFFSET = 8;
+const TOOLTIP_FPS = 60;
+
 export type TooltipPosition = 'top' | 'bottom' | 'left' | 'right';
 
 export interface TooltipControllerProps {
@@ -40,7 +46,6 @@ export interface TooltipControllerProps {
 export interface TooltipControllerState {
     visible: boolean;
     hovered: boolean;
-    initialized: boolean;
     pendingShow: boolean;
     delayFrames: number;
     entryTime: number;
@@ -53,12 +58,6 @@ type TooltipContext = WidgetControllerContext<
     TooltipControllerState,
     UIRuntime
 >;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
 /**
  * Resolves the tooltip popup widget from the binding table and caches it.
@@ -102,7 +101,7 @@ const resolveTextWidget = (context: TooltipContext): WidgetId | null => {
 const applyTooltipPosition = (context: TooltipContext, tooltipWidget: WidgetId): void => {
     const props = context.props as TooltipControllerProps;
     const position: TooltipPosition = (props.position as TooltipPosition) ?? 'top';
-    const offset = asNumber(props.offset, 8);
+    const offset = asNumber(props.offset, TOOLTIP_DEFAULT_OFFSET);
 
     switch (position) {
         case 'top':
@@ -207,7 +206,6 @@ export const tooltipHostController: WidgetController<
     createState: () => ({
         visible: false,
         hovered: false,
-        initialized: false,
         pendingShow: false,
         delayFrames: 0,
         entryTime: 0,
@@ -228,7 +226,7 @@ export const tooltipHostController: WidgetController<
         // so the event-driven delay check can compare elapsed time against it.
         const props = typed.props as TooltipControllerProps;
         const delaySeconds = asNumber(props.delay, 0);
-        typed.state.delayFrames = Math.round(delaySeconds * 60);
+        typed.state.delayFrames = Math.round(delaySeconds * TOOLTIP_FPS);
 
         // Start with the tooltip hidden.
         const tooltipWidget = typed.state.cachedTooltip;
@@ -236,7 +234,6 @@ export const tooltipHostController: WidgetController<
             typed.runtime.updateWidget(tooltipWidget, { enabled: false });
         }
 
-        typed.state.initialized = true;
     },
     update: (context, previousProps) => {
         const typed = context as TooltipContext;
@@ -256,7 +253,7 @@ export const tooltipHostController: WidgetController<
         // Convert seconds to frames at ~60fps.
         if (props.delay !== previous.delay) {
             const delaySeconds = asNumber(props.delay, 0);
-            typed.state.delayFrames = Math.round(delaySeconds * 60);
+            typed.state.delayFrames = Math.round(delaySeconds * TOOLTIP_FPS);
         }
 
         // If the tooltip is currently visible and relevant props changed,
@@ -314,7 +311,7 @@ export const tooltipHostController: WidgetController<
                     // input events, so the delay is evaluated lazily here.
                     if (state.pendingShow && state.delayFrames > 0) {
                         const elapsed = performance.now() - state.entryTime;
-                        const delayMs = state.delayFrames * (1000 / 60);
+                        const delayMs = state.delayFrames * FRAME_INTERVAL_MS;
                         if (elapsed >= delayMs) {
                             showTooltip(typed);
                         }

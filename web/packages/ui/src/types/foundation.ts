@@ -1,4 +1,5 @@
 import type { Brand } from '@axrone/utility';
+import type { IRectLike } from '@axrone/numeric';
 
 export type WidgetId = Brand<number, 'WidgetId'>;
 export type FontFaceId = Brand<number, 'FontFaceId'>;
@@ -76,7 +77,12 @@ export interface SizeLike {
     readonly height: number;
 }
 
-export interface RectLike extends Vec2Like, SizeLike {}
+/**
+ * Canonical rectangle type: position (x, y) + size (width, height).
+ * Re-exported from `@axrone/numeric` (`IRectLike`) as the single source of truth
+ * shared with `@axrone/render-2d` (as `Render2DRectLike`).
+ */
+export type RectLike = IRectLike;
 
 export interface UVRect {
     readonly x: number;

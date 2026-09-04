@@ -6,7 +6,8 @@
  * This module is self-contained — it does NOT depend on @axrone/tween.
  */
 
-import { Color } from '@axrone/numeric';
+import { clamp, Color } from '@axrone/numeric';
+import { UIError, WidgetNotFoundError, type UIErrorCode } from '../errors';
 import type { UIRuntime } from '../runtime';
 import type { WidgetId } from '../types';
 
@@ -77,7 +78,7 @@ const parseHexColor = (hex: string): RGBA | null => {
  */
 const formatHexColor = (color: RGBA): `#${string}` => {
     const toHex = (value: number): string => {
-        const clamped = Math.max(0, Math.min(255, Math.round(value)));
+        const clamped = clamp(Math.round(value), 0, 255);
         return clamped.toString(16).padStart(2, '0');
     };
     return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}${toHex(color.a)}` as `#${string}`;
@@ -231,7 +232,16 @@ export const animate = (runtime: UIRuntime, config: UIAnimationConfig): UIAnimat
                 const start = startValues[i];
                 writeInterpolatedValue(runtime, target.widget, target.property, start, target.to, easedProgress);
             }
-        } catch {
+        } catch (error) {
+            // Narrow: swallow only disposal-related errors (widget disposed
+            // mid-animation). Rethrow everything else so unexpected errors
+            // propagate to the caller/scheduler instead of being silently lost.
+            const isDisposalError =
+                error instanceof WidgetNotFoundError ||
+                (error instanceof UIError && error.code === ('UI_DISPOSED' as UIErrorCode));
+            if (!isDisposalError) {
+                throw error;
+            }
             // A target widget was disposed mid-animation — cancel silently.
             if (animationId !== null) {
                 cancelAnimationFrame(animationId);

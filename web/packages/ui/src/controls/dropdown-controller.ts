@@ -2,6 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
+import { asString, asNumber } from './internals';
 
 /**
  * Declarative dropdown-select controller for `.ui.json` authored dropdowns.
@@ -38,7 +39,6 @@ export interface DropdownControllerState {
     selectedIndex: number;
     isOpen: boolean;
     hoveredIndex: number;
-    initialized: boolean;
     /** Cached container widget resolved from itemContainerKey. */
     cachedContainer: WidgetId | null;
     /** Cached direct-child item widgets inside the container. */
@@ -50,12 +50,6 @@ type DropdownContext = WidgetControllerContext<
     DropdownControllerState,
     UIRuntime
 >;
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
 
 const asArray = (value: unknown): readonly string[] =>
     Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
@@ -233,7 +227,6 @@ export const dropdownController: WidgetController<
             selectedIndex,
             isOpen: false,
             hoveredIndex: -1,
-            initialized: false,
             cachedContainer: null,
             cachedItems: [],
         };
@@ -244,7 +237,6 @@ export const dropdownController: WidgetController<
         applySelection(typed);
         applyPopupVisibility(typed);
         applyChevron(typed);
-        typed.state.initialized = true;
     },
     update: (context, previousProps) => {
         const typed = context as DropdownContext;

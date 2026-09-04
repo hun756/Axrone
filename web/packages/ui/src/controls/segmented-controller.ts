@@ -1,7 +1,8 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
-import { isPointInside } from './internals';
+import { clamp } from '@axrone/numeric';
+import { isPointInside, asString, asNumber } from './internals';
 
 /**
  * Declarative segmented-control controller for `.ui.json` authored tab selectors.
@@ -35,7 +36,6 @@ export interface SegmentedControllerProps {
 export interface SegmentedControllerState {
     selectedIndex: number;
     hoveredIndex: number;
-    initialized: boolean;
 }
 
 type SegmentedContext = WidgetControllerContext<
@@ -43,12 +43,6 @@ type SegmentedContext = WidgetControllerContext<
     SegmentedControllerState,
     UIRuntime
 >;
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
 
 const DEFAULT_SELECTED_BACKGROUND = '#334155ff';
 const DEFAULT_UNSELECTED_BACKGROUND = '#00000000';
@@ -119,16 +113,15 @@ export const segmentedController: WidgetController<
         const segProps = props as SegmentedControllerProps;
         const count = Math.max(0, asNumber(segProps.segmentCount, 0) | 0);
         const rawIndex = asNumber(segProps.selectedIndex, 0);
-        const clampedIndex = count > 0 ? Math.min(Math.max(rawIndex, 0), count - 1) : 0;
+        const clampedIndex = count > 0 ? clamp(rawIndex, 0, count - 1) : 0;
         return {
             selectedIndex: clampedIndex,
             hoveredIndex: -1,
-            initialized: false,
         };
     },
     mount: (context) => {
         const typed = context as SegmentedContext;
-        typed.state.initialized = applyVisuals(typed);
+        applyVisuals(typed);
     },
     update: (context, previousProps) => {
         const typed = context as SegmentedContext;
@@ -144,7 +137,7 @@ export const segmentedController: WidgetController<
         ) {
             const count = Math.max(0, asNumber(props.segmentCount, 0) | 0);
             const authored = asNumber(props.selectedIndex, typed.state.selectedIndex);
-            typed.state.selectedIndex = count > 0 ? Math.min(Math.max(authored, 0), count - 1) : 0;
+            typed.state.selectedIndex = count > 0 ? clamp(authored, 0, count - 1) : 0;
             applyVisuals(typed);
         }
     },

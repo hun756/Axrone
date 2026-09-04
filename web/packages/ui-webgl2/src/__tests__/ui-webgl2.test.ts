@@ -1,6 +1,6 @@
 import { createGameLoop } from '@axrone/game-loop';
 import { describe, expect, it, vi } from 'vitest';
-import type { GlyphAtlasEntry, TextLayoutResult, UIAsset, UIFrame, UIFrameMetrics, WidgetId } from '@axrone/ui/types';
+import type { GlyphAtlasEntry, GlyphAtlasPageSnapshot, TextLayoutResult, UIAsset, UIFrame, UIFrameMetrics, WidgetId } from '@axrone/ui/types';
 import { UIHost, createLazySceneUIWidgetRef } from '@axrone/scene-runtime/scene-facade';
 import {
     WebGL2UIRenderer,
@@ -17,8 +17,10 @@ import {
     getUIHostRuntime,
     resolveUIWidgetRef,
 } from '../scene-host';
-import { orientQuadTowardCamera } from '../world-quad';
+import { orientQuadTowardCamera, createUIWorldQuadRenderer } from '../world-quad';
+import { createUIWorldSurface } from '../world-surface';
 import { dispatchWorldPointerToUIRuntime, intersectRayWithUIQuad } from '../world-input';
+import { normalizeShaderSource } from '../shader-source';
 
 /** Column-major identity with an optional translation. */
 const columnMajorIdentity = (tx = 0, ty = 0, tz = 0): Float32Array =>
@@ -289,6 +291,7 @@ const createMockWebGL2Context = () => {
             }
         }),
         bufferData: vi.fn(),
+        bufferSubData: vi.fn(),
         enableVertexAttribArray: vi.fn(),
         vertexAttribPointer: vi.fn(),
         vertexAttribDivisor: vi.fn(),
@@ -857,8 +860,8 @@ describe('@axrone/ui-webgl2', () => {
 
         renderer.render(frame);
 
-        const dynamicFloatUploads = gl.bufferData.mock.calls
-            .map((call) => call[1])
+        const dynamicFloatUploads = gl.bufferSubData.mock.calls
+            .map((call) => call[2])
             .filter((value): value is Float32Array => value instanceof Float32Array && value.length === 26);
 
         expect(dynamicFloatUploads).toHaveLength(1);
@@ -1015,6 +1018,44 @@ describe('@axrone/ui-webgl2', () => {
 
         expect(gl.texSubImage2D).toHaveBeenCalledTimes(2);
         expect(renderer.getStats().uploadedGlyphCount).toBe(2);
+    });
+
+    it('creates distinct glyph pages for faceId >= 65536 without overflow', () => {
+        const gl = createMockWebGL2Context();
+        const renderer = new WebGL2UIRenderer({ gl });
+        const baseEntry = createGlyphEntry();
+        const smallFaceEntry: GlyphAtlasEntry = { ...baseEntry, faceId: 1 as GlyphAtlasEntry['faceId'], page: 0 as GlyphAtlasEntry['page'] };
+        const largeFaceEntry: GlyphAtlasEntry = { ...baseEntry, faceId: 70000 as GlyphAtlasEntry['faceId'], page: 0 as GlyphAtlasEntry['page'] };
+        const frame: UIFrame<never> = {
+            viewportWidth: 160,
+            viewportHeight: 96,
+            metrics: { ...createMetrics(), renderCount: 1, textCommandCount: 2, glyphCount: 2, customCommandCount: 0 },
+            commands: [
+                {
+                    kind: 'text',
+                    widget: 1 as WidgetId,
+                    x: 0, y: 0, zIndex: 0,
+                    color: { r: 1, g: 1, b: 1, a: 1 },
+                    outlineColor: { r: 0, g: 0, b: 0, a: 0 },
+                    outlineWidth: 0, edgeSoftness: 0, opacity: 1, clip: null,
+                    layout: { ...createTextLayout(smallFaceEntry), glyphs: [{ ...createTextLayout(smallFaceEntry).glyphs[0], atlasEntry: smallFaceEntry }] },
+                },
+                {
+                    kind: 'text',
+                    widget: 2 as WidgetId,
+                    x: 0, y: 20, zIndex: 1,
+                    color: { r: 1, g: 1, b: 1, a: 1 },
+                    outlineColor: { r: 0, g: 0, b: 0, a: 0 },
+                    outlineWidth: 0, edgeSoftness: 0, opacity: 1, clip: null,
+                    layout: { ...createTextLayout(largeFaceEntry), glyphs: [{ ...createTextLayout(largeFaceEntry).glyphs[0], atlasEntry: largeFaceEntry }] },
+                },
+            ],
+        };
+        renderer.render(frame);
+        // Both glyphs uploaded separately means distinct page keys.
+        expect(renderer.getStats().uploadedGlyphCount).toBe(2);
+        expect(renderer.getStats().atlasPageCount).toBe(2);
+        renderer.dispose();
     });
 });
 
@@ -1843,5 +1884,243 @@ describe('dispatchWorldPointerToUIRuntime', () => {
         expect(
             dispatchWorldPointerToUIRuntime(null, { u: 0.5, v: 0.5, distance: 1 }, { phase: 'down' }, 320, 180)
         ).toBe(false);
+    });
+});
+
+describe('stroke batch flush re-emit', () => {
+    it('preserves all stroke segments when the quad batch overflows', () => {
+        const gl = createMockWebGL2Context();
+        const segmentCount = 5;
+        const renderer = new WebGL2UIRenderer({ gl, quadBatchCapacity: 2 });
+        const points: [number, number][] = [];
+        for (let i = 0; i <= segmentCount; i++) {
+            points.push([i / segmentCount, 0.5]);
+        }
+        const frame: UIFrame = {
+            viewportWidth: 160,
+            viewportHeight: 120,
+            metrics: createMetrics(),
+            commands: [
+                {
+                    kind: 'stroke',
+                    widget: 1 as WidgetId,
+                    x: 0,
+                    y: 0,
+                    width: 100,
+                    height: 100,
+                    zIndex: 0,
+                    opacity: 1,
+                    clip: null,
+                    strokes: [
+                        {
+                            color: { r: 1, g: 0, b: 0, a: 1 },
+                            weight: 2,
+                            points,
+                        },
+                    ],
+                },
+            ],
+        };
+        renderer.render(frame);
+        // drawArraysInstanced is called each time the batch flushes + final flush.
+        // With 5 segments and capacity 2: flush at 2, flush at 2, flush remaining 1 = 3 draw calls.
+        expect(gl.drawArraysInstanced).toHaveBeenCalledTimes(3);
+        // All 5 segments must be rendered (statistics track total quads emitted).
+        expect(renderer.getStats().quadCount).toBe(segmentCount);
+        renderer.dispose();
+    });
+});
+
+describe('world-quad active texture preservation', () => {
+    it('restores the caller active texture unit after draw', () => {
+        const gl = createMockWebGL2Context();
+        const callerUnit = gl.TEXTURE1;
+        // Simulate caller having TEXTURE1 active before draw.
+        gl.activeTexture(callerUnit);
+        const quadRenderer = createUIWorldQuadRenderer(gl);
+        const texture = gl.createTexture()!;
+        const vp = columnMajorIdentity();
+        quadRenderer.draw(texture, {
+            modelMatrix: vp,
+            viewProjection: vp,
+            width: 64,
+            height: 64,
+        });
+        // The last activeTexture call must restore the caller's unit.
+        const activeTextureCalls = (gl.activeTexture as ReturnType<typeof vi.fn>).mock.calls;
+        const lastCall = activeTextureCalls[activeTextureCalls.length - 1][0];
+        expect(lastCall).toBe(callerUnit);
+        quadRenderer.dispose();
+    });
+});
+
+describe('world-surface resize guard invalidation', () => {
+    it('restores the current caller framebuffer binding after resize, not the construction-time one', () => {
+        const gl = createMockWebGL2Context();
+        const callerFbo = { id: 'caller-fbo' } as unknown as WebGLFramebuffer;
+        // Construction captures null framebuffer.
+        const surface = createUIWorldSurface(gl, 64, 64);
+        // External code binds a different framebuffer.
+        gl.bindFramebuffer(gl.FRAMEBUFFER, callerFbo);
+        // Resize should capture and restore the CURRENT caller binding.
+        surface.resize(128, 128);
+        // After resize+restore, the framebuffer should be back to the caller's binding.
+        const bindFramebufferCalls = (gl.bindFramebuffer as ReturnType<typeof vi.fn>).mock.calls;
+        const lastBind = bindFramebufferCalls[bindFramebufferCalls.length - 1];
+        expect(lastBind[1]).toBe(callerFbo);
+        surface.dispose();
+    });
+});
+
+describe('context loss handling', () => {
+    const createMockCanvas = () => {
+        const listeners = new Map<string, Set<(event: Event) => void>>();
+        return {
+            width: 320,
+            height: 180,
+            addEventListener: vi.fn((type: string, listener: (event: Event) => void) => {
+                if (!listeners.has(type)) listeners.set(type, new Set());
+                listeners.get(type)!.add(listener);
+            }),
+            removeEventListener: vi.fn((type: string, listener: (event: Event) => void) => {
+                listeners.get(type)?.delete(listener);
+            }),
+            dispatchEvent(event: Event) {
+                for (const listener of listeners.get(event.type) ?? []) {
+                    listener(event);
+                }
+                return true;
+            },
+        };
+    };
+
+    const createGLWithCanvas = () => {
+        const gl = createMockWebGL2Context();
+        const canvas = createMockCanvas();
+        (gl as unknown as { canvas: object }).canvas = canvas;
+        return { gl, canvas };
+    };
+
+    it('skips world-quad draw while context is lost and recreates resources on restore', () => {
+        const { gl, canvas } = createGLWithCanvas();
+        const quadRenderer = createUIWorldQuadRenderer(gl);
+        const vp = columnMajorIdentity();
+        const texture = gl.createTexture()!;
+
+        // Dispatch context lost.
+        canvas.dispatchEvent(new Event('webglcontextlost'));
+
+        // Draw should be skipped.
+        const drawCallsBefore = (gl.drawArrays as ReturnType<typeof vi.fn>).mock.calls.length;
+        quadRenderer.draw(texture, { modelMatrix: vp, viewProjection: vp, width: 32, height: 32 });
+        expect((gl.drawArrays as ReturnType<typeof vi.fn>).mock.calls.length).toBe(drawCallsBefore);
+
+        // Dispatch context restored.
+        canvas.dispatchEvent(new Event('webglcontextrestored'));
+
+        // Draw should work again.
+        quadRenderer.draw(texture, { modelMatrix: vp, viewProjection: vp, width: 32, height: 32 });
+        expect((gl.drawArrays as ReturnType<typeof vi.fn>).mock.calls.length).toBe(drawCallsBefore + 1);
+
+        quadRenderer.dispose();
+        // Listeners removed.
+        expect(canvas.removeEventListener).toHaveBeenCalledWith('webglcontextlost', expect.any(Function));
+        expect(canvas.removeEventListener).toHaveBeenCalledWith('webglcontextrestored', expect.any(Function));
+    });
+
+    it('skips world-surface resize while context is lost and recreates on restore', () => {
+        const { gl, canvas } = createGLWithCanvas();
+        const surface = createUIWorldSurface(gl, 64, 64);
+
+        canvas.dispatchEvent(new Event('webglcontextlost'));
+
+        const texImageCallsBefore = (gl.texImage2D as ReturnType<typeof vi.fn>).mock.calls.length;
+        surface.resize(128, 128);
+        // No new texImage2D calls because resize is skipped.
+        expect((gl.texImage2D as ReturnType<typeof vi.fn>).mock.calls.length).toBe(texImageCallsBefore);
+
+        canvas.dispatchEvent(new Event('webglcontextrestored'));
+        // After restore, resources are recreated (new texture allocated).
+        expect((gl.texImage2D as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(texImageCallsBefore);
+
+        surface.dispose();
+        expect(canvas.removeEventListener).toHaveBeenCalledWith('webglcontextlost', expect.any(Function));
+    });
+});
+
+describe('atlas page eviction flushes text batch', () => {
+    it('flushes batched glyphs before deleting the evicted active text page', () => {
+        const gl = createMockWebGL2Context();
+        const renderer = new WebGL2UIRenderer({ gl });
+        const entry = createGlyphEntry();
+        const frame: UIFrame<never> = {
+            viewportWidth: 160,
+            viewportHeight: 120,
+            metrics: { ...createMetrics(), renderCount: 1, textCommandCount: 1, glyphCount: 1, customCommandCount: 0 },
+            commands: [
+                {
+                    kind: 'text',
+                    widget: 1 as WidgetId,
+                    x: 0, y: 0, zIndex: 0,
+                    color: { r: 1, g: 1, b: 1, a: 1 },
+                    outlineColor: { r: 0, g: 0, b: 0, a: 0 },
+                    outlineWidth: 0, edgeSoftness: 0, opacity: 1, clip: null,
+                    layout: createTextLayout(entry),
+                },
+            ],
+        };
+        renderer.render(frame);
+        const drawCallsAfterFirst = (gl.drawArraysInstanced as ReturnType<typeof vi.fn>).mock.calls.length;
+        expect(drawCallsAfterFirst).toBeGreaterThan(0);
+        const snapshot: GlyphAtlasPageSnapshot = {
+            id: entry.page as number,
+            width: entry.pageWidth,
+            height: entry.pageHeight,
+            entries: [entry],
+        };
+        renderer.handleAtlasPageEviction(snapshot);
+        expect(renderer.getStats().atlasPageCount).toBe(0);
+        renderer.dispose();
+    });
+});
+
+describe('normalizeShaderSource version directive', () => {
+    it('locates the #version directive precisely without matching es in comments', () => {
+        const corrupted = '// testprecision esprecision mediump float;\n#version 300 esprecision mediump float;\nvoid main() {}';
+        const result = normalizeShaderSource(corrupted);
+        expect(result).toContain('#version 300 es');
+        expect(result.indexOf('#version 300 es')).toBeGreaterThan(0);
+    });
+
+    it('returns intact source unchanged', () => {
+        const intact = '#version 300 es\nprecision mediump float;\nvoid main() {}';
+        expect(normalizeShaderSource(intact)).toBe(intact);
+    });
+});
+
+describe('writeStrokeColor out-parameter API', () => {
+    it('writes correct RGBA values into caller buffer from a hex string', async () => {
+        const { writeStrokeColor } = await import('../webgl-utils');
+        const out = new Float32Array(4);
+        writeStrokeColor('#ff8040', out);
+        expect(out[0]).toBeCloseTo(1, 1);
+        expect(out[1]).toBeCloseTo(0.502, 1);
+        expect(out[2]).toBeCloseTo(0.251, 1);
+        expect(out[3]).toBeCloseTo(1, 1);
+    });
+
+    it('writes into caller buffer at specified offset without aliasing', async () => {
+        const { writeStrokeColor } = await import('../webgl-utils');
+        const out = new Float32Array(8);
+        writeStrokeColor('#ff0000', out, 0);
+        writeStrokeColor('#00ff00', out, 4);
+        // First color preserved (no scratch aliasing)
+        expect(out[0]).toBeCloseTo(1, 1);
+        expect(out[1]).toBeCloseTo(0, 1);
+        expect(out[2]).toBeCloseTo(0, 1);
+        // Second color written correctly
+        expect(out[4]).toBeCloseTo(0, 1);
+        expect(out[5]).toBeCloseTo(1, 1);
+        expect(out[6]).toBeCloseTo(0, 1);
     });
 });

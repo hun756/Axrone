@@ -8,6 +8,7 @@ import {
 } from './errors';
 import { FontRegistry, ensureDefaultUIFont } from './font';
 import { UILayoutEngine, compileLayoutInput } from './layout';
+import type { LayoutTreeAdapter } from './layout';
 import {
     type CanvasScaleResult,
     resolveCanvasScale,
@@ -15,6 +16,10 @@ import {
     mapViewportPointToCanvas,
 } from './layout/canvas-scaler';
 import { NodeFlag } from './runtime/node-flags';
+import { ControllerEventBus, type ControllerEventHandler } from './runtime/controller-event-bus';
+import { FocusController, type FocusControllerHost } from './runtime/focus-controller';
+import { AutoSizeService } from './runtime/autosize-service';
+import { RenderCommandBuilder, type RenderCommandBuilderHost } from './runtime/render-command-builder';
 import {
     type StoredWidgetRecord,
     compileWidgetFocus,
@@ -28,22 +33,13 @@ import {
     dispatchKeyEvent,
     dispatchPointerEvent,
     dispatchTextEvent,
-    moveFocusDirectional,
-    moveFocusLinear,
 } from './runtime/runtime-input';
-import {
-    buildCaretCommand,
-    buildLineDecorationCommands,
-    buildSelectionCommands,
-    measureImageContent,
-    resolveImageCommand,
-} from './runtime/runtime-frame';
+import { measureImageContent } from './runtime/runtime-frame';
 import {
     EMPTY_FOCUS_INPUT,
     EMPTY_LAYOUT_INPUT,
     EMPTY_RECORD_OBJECT,
     EMPTY_STYLE_INPUT,
-    TRANSPARENT,
     cloneData,
     intersectRect,
     intersectsPoint,
@@ -56,15 +52,12 @@ import {
     mergeTextInput,
 } from './runtime/internals';
 import { TextLayoutEngine } from './text';
-import { WidgetRegistry } from './widget';
+import { WidgetRegistry, type WidgetController } from './widget';
 import type {
     ColorInput,
-    CustomRenderCommand,
     FocusMoveDirection,
     FontRegistryOptions,
-    ImageRenderCommand,
     LayoutBox,
-    QuadRenderCommand,
     RenderCommand,
     ResolvedFocusPolicy,
     ResolvedWidgetImage,
@@ -73,10 +66,8 @@ import type {
     ResolvedWidgetStyle,
     RectLike,
     SizeLike,
-    StrokeRenderCommand,
     TextLayoutResult,
     TextLayoutConstraint,
-    TextRenderCommand,
     UIFrame,
     UIFrameMetrics,
     UIInputEvent,
@@ -142,16 +133,18 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private contentY = new Float32Array(16);
     private contentWidth = new Float32Array(16);
     private contentHeight = new Float32Array(16);
+    /** Per-widget translation offset X (absolute, set by translateWidgetBox). Uses number[] for full precision. */
+    private translateX: number[] = new Array(16).fill(0);
+    /** Per-widget translation offset Y (absolute, set by translateWidgetBox). Uses number[] for full precision. */
+    private translateY: number[] = new Array(16).fill(0);
     private freeList: number[] = [];
-    private focusOrder: WidgetId[] = [];
     private rootId: WidgetId;
     private nextId = 1;
     private nextSequence = 1;
     private liveCount = 0;
     private hovered: WidgetId | null = null;
-    private focused: WidgetId | null = null;
     private pressed: WidgetId | null = null;
-    private focusDirty = true;
+    private focusController = new FocusController();
     private layoutDirty = true;
     private disposed = false;
     private viewportWidth: number;
@@ -161,16 +154,19 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private canvasConfig: UICanvasConfig | null = null;
     private lastViewport: { readonly width: number; readonly height: number } | null = null;
     private readonly bindingTable = new Map<string, WidgetId>();
-    private readonly controllerListeners = new Map<number, Map<string, Set<(data: unknown) => void>>>();
-    private readonly autoSizeCache = new Map<string, TextLayoutResult>();
-    private readonly autoSizeCacheMaxSize = 64;
+    private readonly controllerEventBus = new ControllerEventBus();
+    private readonly controllerResolveCache = new Map<string, WidgetController<any, any, any> | null>();
+    private readonly autoSizeService = new AutoSizeService();
+    private readonly renderCommandBuilder = new RenderCommandBuilder<TPayload>();
+    private readonly dirtyNodes = new Set<number>();
+    private structuralDirty = false;
 
     private readonly inputHost: UIInputDispatchHost = {
         getPressed: () => this.pressed,
         setPressed: (widget) => {
             this.pressed = widget;
         },
-        getFocused: () => this.focused,
+        getFocused: () => this.focusController.getFocused(),
         hitTest: (x, y) => this.hitTest(x, y),
         updateHover: (target, event) => this.updateHover(target, event),
         bubbleEvent: (index, event) => this.bubbleEvent(index, event),
@@ -302,17 +298,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     onControllerEvent(widget: WidgetId, eventName: string, callback: (data: unknown) => void): void {
         this.ensureActive();
         this.requireWidget(widget);
-        let widgetListeners = this.controllerListeners.get(widget);
-        if (!widgetListeners) {
-            widgetListeners = new Map();
-            this.controllerListeners.set(widget, widgetListeners);
-        }
-        let eventListeners = widgetListeners.get(eventName);
-        if (!eventListeners) {
-            eventListeners = new Set();
-            widgetListeners.set(eventName, eventListeners);
-        }
-        eventListeners.add(callback);
+        this.controllerEventBus.on(widget, eventName, callback as ControllerEventHandler);
     }
 
     /**
@@ -320,17 +306,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
      */
     offControllerEvent(widget: WidgetId, eventName: string, callback: (data: unknown) => void): void {
         this.ensureActive();
-        const widgetListeners = this.controllerListeners.get(widget);
-        if (!widgetListeners) return;
-        const eventListeners = widgetListeners.get(eventName);
-        if (!eventListeners) return;
-        eventListeners.delete(callback);
-        if (eventListeners.size === 0) {
-            widgetListeners.delete(eventName);
-        }
-        if (widgetListeners.size === 0) {
-            this.controllerListeners.delete(widget);
-        }
+        this.controllerEventBus.off(widget, eventName, callback as ControllerEventHandler);
     }
 
     /**
@@ -340,14 +316,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
      */
     emitControllerEvent(widget: WidgetId, eventName: string, data?: unknown): boolean {
         this.ensureActive();
-        const widgetListeners = this.controllerListeners.get(widget);
-        if (!widgetListeners) return false;
-        const eventListeners = widgetListeners.get(eventName);
-        if (!eventListeners || eventListeners.size === 0) return false;
-        for (const listener of [...eventListeners]) {
-            listener(data);
-        }
-        return true;
+        return this.controllerEventBus.emit(widget, eventName, data);
     }
 
     /**
@@ -492,7 +461,72 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             ),
         };
         this.records[index] = merged;
-        this.applyRecord(index, previousProps, previousController, false);
+        const styleOnly = !patch.layout && !patch.text && !patch.image && !patch.focus && !patch.controller && !patch.role && patch.enabled === undefined && patch.interactive === undefined;
+        this.applyRecord(index, previousProps, previousController, false, styleOnly);
+        return this;
+    }
+
+    /**
+     * Updates a widget's scroll content offset without triggering a full
+     * relayout pass.
+     *
+     * Scrolling is a pure translation: children keep their measured sizes and
+     * relative arrangement, so the widget's resolved layout offset is updated
+     * in place and the subtree boxes are translated by the delta. The widget's
+     * layoutInput is kept in sync (when it already authors content offsets) so
+     * a later full relayout produces the same geometry. Per-frame scroll
+     * updates must use this instead of updateWidget, which marks the whole
+     * tree dirty and re-measures everything.
+     */
+    setContentOffset(widget: WidgetId, offsetX: number, offsetY: number): this {
+        this.ensureActive();
+        const index = this.requireWidget(widget);
+        const layout = this.layouts[index];
+        if (!layout) {
+            return this;
+        }
+        const deltaX = offsetX - layout.contentOffsetX;
+        const deltaY = offsetY - layout.contentOffsetY;
+        if (deltaX === 0 && deltaY === 0) {
+            return this;
+        }
+        this.layouts[index] = { ...layout, contentOffsetX: offsetX, contentOffsetY: offsetY };
+        const record = this.records[index];
+        if (
+            record &&
+            (record.layoutInput.contentOffsetX !== undefined || record.layoutInput.contentOffsetY !== undefined)
+        ) {
+            this.records[index] = {
+                ...record,
+                layoutInput: { ...record.layoutInput, contentOffsetX: offsetX, contentOffsetY: offsetY },
+            };
+        }
+        // The content origin moves opposite to the offset; children follow it.
+        const contentShiftX = -deltaX;
+        const contentShiftY = -deltaY;
+        this.contentX[index] += contentShiftX;
+        this.contentY[index] += contentShiftY;
+        for (let child = this.firstChild[index]; child !== 0; child = this.nextSibling[child]) {
+            this.translateSubtreeBoxes(child, contentShiftX, contentShiftY);
+        }
+        return this;
+    }
+
+    /**
+     * Translates an already-laid-out widget subtree by a pixel delta without
+     * invalidating layout. Used for per-frame scroll-driven repositioning
+     * (scrollbar thumbs). The translation is stored as an absolute offset
+     * (not by mutating insets) to prevent float drift across repeated calls.
+     * A later full relayout will clear the translation offset.
+     */
+    translateWidgetBox(widget: WidgetId, dx: number, dy: number): this {
+        this.ensureActive();
+        const index = this.requireWidget(widget);
+        if (dx === 0 && dy === 0) {
+            return this;
+        }
+        // Store translation as absolute offset (accumulated)
+        this.translateSubtreeOffsets(index, dx, dy);
         return this;
     }
 
@@ -516,7 +550,8 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             this.destroyNode(traversal[offset]);
         }
         this.layoutDirty = true;
-        this.focusDirty = true;
+        this.focusController.markDirty();
+        this.structuralDirty = true;
         return this;
     }
 
@@ -570,25 +605,18 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             this.setViewport(viewport.width ?? this.viewportWidth, viewport.height ?? this.viewportHeight);
         }
         if (this.layoutDirty) {
-            this.layoutEngine.compute(
-                {
-                    root: this.rootId,
-                    getLayout: (node) => this.layouts[node as number]!,
-                    getFirstChild: (node) => {
-                        const child = this.firstChild[node as number];
-                        return child === 0 ? null : (child as WidgetId);
-                    },
-                    getNextSibling: (node) => {
-                        const sibling = this.nextSibling[node as number];
-                        return sibling === 0 ? null : (sibling as WidgetId);
-                    },
-                    measureContent: (node, constraints) => this.measureContent(node as number, constraints),
-                    setBox: (node, box) => this.writeBox(node as number, box),
-                    isVisible: (node) => this.isVisible(node as number),
-                },
-                { width: this.viewportWidth, height: this.viewportHeight }
-            );
+            const adapter = this.createLayoutAdapter();
+            const viewportSize = { width: this.viewportWidth, height: this.viewportHeight };
+            if (this.canScopedRelayout()) {
+                this.scopedRelayout(adapter, viewportSize);
+            } else {
+                this.layoutEngine.compute(adapter, viewportSize);
+                // Clear translation offsets after full layout (they're baked into the new boxes)
+                this.clearTranslationOffsets();
+            }
             this.layoutDirty = false;
+            this.dirtyNodes.clear();
+            this.structuralDirty = false;
             this.lastLayoutPasses = this.layoutEngine.getLayoutPassCount();
         }
         return this.renderFrame();
@@ -610,25 +638,16 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         }
         // Ensure layout is computed at reference resolution
         if (this.layoutDirty) {
-            this.layoutEngine.compute(
-                {
-                    root: this.rootId,
-                    getLayout: (node) => this.layouts[node as number]!,
-                    getFirstChild: (node) => {
-                        const child = this.firstChild[node as number];
-                        return child === 0 ? null : (child as WidgetId);
-                    },
-                    getNextSibling: (node) => {
-                        const sibling = this.nextSibling[node as number];
-                        return sibling === 0 ? null : (sibling as WidgetId);
-                    },
-                    measureContent: (node, constraints) => this.measureContent(node as number, constraints),
-                    setBox: (node, box) => this.writeBox(node as number, box),
-                    isVisible: (node) => this.isVisible(node as number),
-                },
-                { width: this.viewportWidth, height: this.viewportHeight }
-            );
+            const adapter = this.createLayoutAdapter();
+            const viewportSize = { width: this.viewportWidth, height: this.viewportHeight };
+            if (this.canScopedRelayout()) {
+                this.scopedRelayout(adapter, viewportSize);
+            } else {
+                this.layoutEngine.compute(adapter, viewportSize);
+            }
             this.layoutDirty = false;
+            this.dirtyNodes.clear();
+            this.structuralDirty = false;
             this.lastLayoutPasses = this.layoutEngine.getLayoutPassCount();
         }
         // Render frame at reference resolution
@@ -640,30 +659,26 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         // carried by `transform` and applied once by the renderer. Pre-scaling the
         // geometry here as well would double-apply the scale. Clip rects are the
         // exception: they feed the scissor test, which operates in viewport space.
-        const scaledCommands = frame.commands.map((command) => {
-            switch (command.kind) {
-                case 'quad':
-                case 'text':
-                case 'image':
-                case 'stroke':
-                    return {
-                        ...command,
-                        clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
-                        transform,
-                    };
-                case 'custom':
-                    return {
-                        ...command,
-                        clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
-                    };
-                default:
-                    return command;
+        // RenderCommand declares clip/transform readonly, but the frame and its
+        // commands are owned by this call — mutate in place to avoid rebuilding
+        // every command array on each commitToViewport().
+        //
+        // SAFETY: The frame returned by renderFrame() is freshly built this call
+        // (a new commands array with new command objects). It has a single
+        // consumer — the caller of commitToViewport() — and is never frozen or
+        // shared. Mutating clip/transform in place is therefore safe and avoids
+        // allocating a parallel command array on every viewport commit.
+        for (const command of frame.commands) {
+            const mutable = command as { clip: RectLike | null; transform?: unknown };
+            mutable.clip = command.clip ? scaleClipRect(command.clip, scaleResult) : null;
+            if (command.kind === 'quad' || command.kind === 'text' || command.kind === 'image' || command.kind === 'stroke') {
+                mutable.transform = transform;
             }
-        });
+        }
         return {
             viewportWidth: actualWidth,
             viewportHeight: actualHeight,
-            commands: scaledCommands,
+            commands: frame.commands,
             metrics: frame.metrics,
         };
     }
@@ -698,7 +713,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             case 'text':
                 return dispatchTextEvent(this.inputHost, event);
             case 'focus':
-                if (!event.focused && this.focused) {
+                if (!event.focused && this.focusController.getFocused()) {
                     this.setFocus(null, 'window');
                 }
                 return false;
@@ -716,48 +731,44 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             }
             widget = target as WidgetId;
         }
-        if (this.focused === widget) {
-            return true;
-        }
-        const previous = this.focused;
-        this.focused = widget;
-        if (previous !== null) {
-            this.emitFocusChange(previous as number, false, reason, direction);
-        }
-        if (widget !== null) {
-            this.emitFocusChange(widget as number, true, reason, direction);
-        }
-        return true;
+        const previous = this.focusController.getFocused();
+        const changed = this.focusController.setFocus(widget, this.getFocusHost(), {
+            reason,
+            direction,
+            onFocusedChange: (next, prev) => {
+                if (prev !== null) {
+                    this.emitFocusChange(prev as number, false, reason, direction);
+                }
+                if (next !== null) {
+                    this.emitFocusChange(next as number, true, reason, direction);
+                }
+            },
+        });
+        return changed;
     }
 
     /** Returns the currently focused widget, or null if nothing is focused. */
     getFocused(): WidgetId | null {
-        return this.focused;
+        return this.focusController.getFocused();
     }
 
     moveFocus(direction: FocusMoveDirection): WidgetId | null {
         this.ensureActive();
-        const candidates = this.getFocusableCandidates();
-        if (candidates.length === 0) {
-            return null;
-        }
-        const current = this.focused ? (this.focused as number) : 0;
-        const scopeRoot = current === 0 ? this.rootId : this.findScopeRoot(current);
-        const scoped = scopeRoot === this.rootId
-            ? candidates
-            : candidates.filter((candidate) => this.isAncestor(scopeRoot as number, candidate as number));
-        const targetList = scoped.length > 0 ? scoped : candidates;
-        let next: WidgetId | null = null;
-        if (direction === 'forward' || direction === 'backward') {
-            const cycle = this.focuses[scopeRoot as number]?.cycle ?? false;
-            next = moveFocusLinear(targetList, direction, this.focused, cycle);
-        } else {
-            next = moveFocusDirectional(targetList, direction, this.focused, (index) => this.readBox(index));
-        }
-        if (next) {
-            this.setFocus(next, 'navigation', direction);
-        }
-        return next;
+        return this.focusController.moveFocus(direction, this.getFocusHost(), (w, r, d) => this.setFocus(w, r, d));
+    }
+
+    private getFocusHost(): FocusControllerHost {
+        return {
+            flags: this.flags,
+            parent: this.parent,
+            sequence: this.sequence,
+            focuses: this.focuses,
+            rootId: this.rootId,
+            nextId: this.nextId,
+            isFocusable: (index) => this.isFocusable(index),
+            isAncestor: (ancestor, candidate) => this.isAncestor(ancestor, candidate),
+            readBox: (index) => this.readBox(index),
+        };
     }
 
     snapshot(): UIRuntimeSnapshot {
@@ -799,12 +810,20 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         return this;
     }
 
+    /**
+     * Disposes the runtime, releasing all resources.
+     *
+     * NOTE: Controller re-registration after dispose is unsupported. The
+     * controller resolve cache is cleared here; any controllers registered
+     * before dispose become unreachable.
+     */
     dispose(): void {
         if (!this.disposed) {
             this.clear();
             this.fonts.dispose();
             this.textEngine.dispose();
             this.registry.clear();
+            this.controllerResolveCache.clear();
             this.disposed = true;
         }
     }
@@ -867,7 +886,8 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         index: number,
         previousProps: Readonly<Record<string, unknown>> | null,
         previousController: string | null,
-        initial: boolean
+        initial: boolean,
+        styleOnly = false
     ): void {
         const record = this.records[index];
         if (!record) {
@@ -897,8 +917,11 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             this.states[index] = nextResolvedController.createState?.(record.props, this, index as WidgetId);
             nextResolvedController.mount?.(this.createControllerContext(index));
         }
-        this.layoutDirty = true;
-        this.focusDirty = true;
+        if (!styleOnly) {
+            this.layoutDirty = true;
+            this.dirtyNodes.add(index);
+        }
+        this.focusController.markDirty();
     }
 
     private updateFlags(index: number): void {
@@ -955,6 +978,10 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         this.contentY = this.growTypedArray(this.contentY, nextCapacity);
         this.contentWidth = this.growTypedArray(this.contentWidth, nextCapacity);
         this.contentHeight = this.growTypedArray(this.contentHeight, nextCapacity);
+        this.translateX.length = nextCapacity;
+        this.translateY.length = nextCapacity;
+        this.translateX.fill(0, this.records.length);
+        this.translateY.fill(0, this.records.length);
         this.records.length = nextCapacity;
         this.layouts.length = nextCapacity;
         this.styles.length = nextCapacity;
@@ -1044,9 +1071,106 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     }
 
     private markTreeChanged(index: number): void {
-        void index;
+        this.dirtyNodes.add(index);
         this.layoutDirty = true;
-        this.focusDirty = true;
+        this.focusController.markDirty();
+        this.structuralDirty = true;
+    }
+
+    private createLayoutAdapter(): LayoutTreeAdapter<number> {
+        return {
+            root: this.rootId,
+            getLayout: (node) => this.layouts[node as number]!,
+            getFirstChild: (node) => {
+                const child = this.firstChild[node as number];
+                return child === 0 ? null : (child as WidgetId);
+            },
+            getNextSibling: (node) => {
+                const sibling = this.nextSibling[node as number];
+                return sibling === 0 ? null : (sibling as WidgetId);
+            },
+            measureContent: (node, constraints) => this.measureContent(node as number, constraints),
+            setBox: (node, box) => this.writeBox(node as number, box),
+            isVisible: (node) => this.isVisible(node as number),
+        };
+    }
+
+    /**
+     * Returns true when scoped relayout is safe:
+     * - dirtyNodes is non-empty
+     * - no structural changes (insert/remove/reparent) since last commit
+     * - root is not among the dirty nodes
+     * - dirtyNodes.size <= 50% of live node count
+     */
+    private canScopedRelayout(): boolean {
+        if (this.dirtyNodes.size === 0 || this.structuralDirty) {
+            return false;
+        }
+        if (this.dirtyNodes.has(this.rootId)) {
+            return false;
+        }
+        return this.dirtyNodes.size <= this.liveCount * 0.5;
+    }
+
+    private scopedRelayout(adapter: LayoutTreeAdapter<number>, viewport: Readonly<SizeLike>): void {
+        // Collect unique parents of dirty nodes. Re-laying out the parent
+        // (rather than the dirty node itself) ensures that siblings are
+        // re-positioned when a dirty node's measured size changes.
+        const parents = new Set<number>();
+        for (const nodeId of this.dirtyNodes) {
+            const parent = this.parent[nodeId];
+            if (parent !== 0) {
+                parents.add(parent);
+            }
+        }
+        // Sort parents by depth ascending so grandparents are processed before
+        // their descendants. This prevents stale availWidth propagation when
+        // a dirty grandparent is processed after its descendant.
+        const sortedParents = Array.from(parents).sort((left, right) => this.depth[left] - this.depth[right]);
+        for (const parentId of sortedParents) {
+            const box = this.readBox(parentId);
+            const grandparent = this.parent[parentId];
+            const gpBox = grandparent !== 0 ? this.readBox(grandparent) : null;
+            const availWidth = gpBox ? gpBox.contentWidth : viewport.width;
+            const availHeight = gpBox ? gpBox.contentHeight : viewport.height;
+            this.layoutEngine.computeSubtree(adapter, viewport, parentId, box.x, box.y, availWidth, availHeight);
+        }
+    }
+
+    /** Translates the stored boxes of a subtree by a pixel delta (no relayout). */
+    private translateSubtreeBoxes(index: number, dx: number, dy: number): void {
+        const stack = [index];
+        while (stack.length > 0) {
+            const current = stack.pop()!;
+            this.boxX[current] += dx;
+            this.boxY[current] += dy;
+            this.contentX[current] += dx;
+            this.contentY[current] += dy;
+            for (let child = this.firstChild[current]; child !== 0; child = this.nextSibling[child]) {
+                stack.push(child);
+            }
+        }
+    }
+
+    /** Accumulates translation offsets for a subtree (prevents float drift). */
+    private translateSubtreeOffsets(index: number, dx: number, dy: number): void {
+        const stack = [index];
+        while (stack.length > 0) {
+            const current = stack.pop()!;
+            this.translateX[current] += dx;
+            this.translateY[current] += dy;
+            for (let child = this.firstChild[current]; child !== 0; child = this.nextSibling[child]) {
+                stack.push(child);
+            }
+        }
+    }
+
+    /** Clears translation offsets for live widgets only (called after full layout). */
+    private clearTranslationOffsets(): void {
+        for (let i = 0; i < this.records.length; i++) {
+            this.translateX[i] = 0;
+            this.translateY[i] = 0;
+        }
     }
 
     private createControllerContext(index: number): WidgetEventContext<Record<string, unknown>, UIRuntime<TPayload>> & {
@@ -1116,236 +1240,59 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
 
     private readBox(index: number): LayoutBox {
         return {
-            x: this.boxX[index],
-            y: this.boxY[index],
+            x: this.boxX[index] + this.translateX[index],
+            y: this.boxY[index] + this.translateY[index],
             width: this.boxWidth[index],
             height: this.boxHeight[index],
-            contentX: this.contentX[index],
-            contentY: this.contentY[index],
+            contentX: this.contentX[index] + this.translateX[index],
+            contentY: this.contentY[index] + this.translateY[index],
             contentWidth: this.contentWidth[index],
             contentHeight: this.contentHeight[index],
         };
     }
 
-    private renderFrame(): UIFrame<TPayload> {
-        const commands: RenderCommand<TPayload>[] = [];
-        let visibleWidgetCount = 0;
-        let textCommandCount = 0;
-        let imageCommandCount = 0;
-        let strokeCommandCount = 0;
-        let customCommandCount = 0;
-        let glyphCount = 0;
-        const visit = (index: number, clip: LayoutBox | null): void => {
-            if (!this.isVisible(index)) {
-                return;
-            }
-            visibleWidgetCount += 1;
-            const style = this.styles[index]!;
-            const box = this.readBox(index);
-            const nextClip = style.clip ? intersectRect(clip, box) : clip;
-            if (style.clip && nextClip === null) {
-                return;
-            }
-            const zIndex = this.layouts[index]!.zIndex;
-            if (style.background.a > 0 || (style.borderWidth > 0 && style.borderColor.a > 0)) {
-                const quad: QuadRenderCommand = {
-                    kind: 'quad',
-                    widget: index as WidgetId,
-                    x: box.x,
-                    y: box.y,
-                    width: box.width,
-                    height: box.height,
-                    zIndex,
-                    color: style.background,
-                    borderColor: style.borderColor,
-                    borderWidth: style.borderWidth,
-                    radius: style.radius,
-                    opacity: style.opacity,
-                    clip: nextClip,
-                };
-                commands.push(quad);
-            }
-            if (style.strokes.length > 0) {
-                const stroke: StrokeRenderCommand = {
-                    kind: 'stroke',
-                    widget: index as WidgetId,
-                    x: box.x,
-                    y: box.y,
-                    width: box.width,
-                    height: box.height,
-                    zIndex,
-                    opacity: style.opacity,
-                    clip: nextClip,
-                    strokes: style.strokes,
-                };
-                strokeCommandCount += 1;
-                commands.push(stroke);
-            }
-            const image = this.images[index];
-            if (image) {
-                const imageCommand = resolveImageCommand(index, box, image, style, nextClip, zIndex);
-                if (imageCommand) {
-                    imageCommandCount += 1;
-                    commands.push(imageCommand);
-                }
-            }
-            const textLayout = this.resolveTextLayoutForRender(index);
-            if (textLayout) {
-                const textStyle = this.texts[index]!;
-                if (textStyle.selectionColor.a > 0) {
-                    for (const quad of buildSelectionCommands(index, box, textStyle, textLayout, nextClip, zIndex, style.opacity)) {
-                        commands.push(quad);
-                    }
-                }
-                if (textLayout.glyphs.length > 0) {
-                    if (textStyle.shadowColor.a > 0 && (textStyle.shadowOffsetX !== 0 || textStyle.shadowOffsetY !== 0)) {
-                        const shadowCommand: TextRenderCommand = {
-                            kind: 'text',
-                            widget: index as WidgetId,
-                            x: box.contentX + textStyle.shadowOffsetX,
-                            y: box.contentY + textStyle.shadowOffsetY,
-                            zIndex,
-                            color: textStyle.shadowColor,
-                            outlineColor: TRANSPARENT,
-                            outlineWidth: 0,
-                            edgeSoftness: textStyle.edgeSoftness,
-                            opacity: style.opacity,
-                            clip: nextClip,
-                            layout: textLayout,
-                        };
-                        textCommandCount += 1;
-                        glyphCount += textLayout.glyphs.length;
-                        commands.push(shadowCommand);
-                    }
-                    for (const quad of buildLineDecorationCommands(index, box, textStyle, textLayout, nextClip, zIndex, style.opacity)) {
-                        commands.push(quad);
-                    }
-                    const textCommand: TextRenderCommand = {
-                        kind: 'text',
-                        widget: index as WidgetId,
-                        x: box.contentX,
-                        y: box.contentY,
-                        zIndex,
-                        color: this.texts[index]!.color,
-                        outlineColor: this.texts[index]!.outlineColor,
-                        outlineWidth: this.texts[index]!.outlineWidth,
-                        edgeSoftness: this.texts[index]!.edgeSoftness,
-                        opacity: style.opacity,
-                        clip: nextClip,
-                        layout: textLayout,
-                    };
-                    textCommandCount += 1;
-                    glyphCount += textLayout.glyphs.length;
-                    commands.push(textCommand);
-                }
-                const caretCommand = buildCaretCommand(index, box, textStyle, textLayout, nextClip, zIndex, style.opacity);
-                if (caretCommand) {
-                    commands.push(caretCommand);
-                }
-            }
-            const controller = this.records[index]!.controller
-                ? this.registry.resolve(this.records[index]!.controller)
-                : null;
-            controller?.render?.({
-                runtime: this,
-                widget: index as WidgetId,
-                props: this.records[index]!.props,
-                state: this.states[index],
-                push: (payload: TPayload) => {
-                    const command: CustomRenderCommand<TPayload> = {
-                        kind: 'custom',
-                        widget: index as WidgetId,
-                        zIndex,
-                        clip: nextClip,
-                        payload,
-                    };
-                    customCommandCount += 1;
-                    commands.push(command);
-                },
-            });
-            for (let child = this.firstChild[index]; child !== 0; child = this.nextSibling[child]) {
-                visit(child, nextClip);
-            }
-        };
-        visit(this.rootId, null);
-        commands.sort((left, right) => {
-            if (left.zIndex !== right.zIndex) {
-                return left.zIndex - right.zIndex;
-            }
-            return this.sequence[left.widget as number] - this.sequence[right.widget as number];
-        });
-
-        // ── Focus ring overlay ──────────────────────────────────────────────
-        if (this.focused !== null) {
-            const focusIndex = this.focused as number;
-            const focusPolicy = this.focuses[focusIndex];
-            if (focusPolicy && (this.flags[focusIndex] & NodeFlag.Allocated) !== 0) {
-                const focusBox = this.readBox(focusIndex);
-                const ringOffset = focusPolicy.ringOffset;
-                const ringWidth = focusPolicy.ringWidth;
-                const ringColor = focusPolicy.ringColor;
-
-                // Compute the parent clip by walking up the ancestor chain.
-                // The focus ring should be clipped by ancestor clip rects, not the widget's own.
-                let parentClip: LayoutBox | null = null;
-                for (let ancestor = this.parent[focusIndex]; ancestor !== 0; ancestor = this.parent[ancestor]) {
-                    if (!this.isVisible(ancestor)) {
-                        continue;
-                    }
-                    const ancestorStyle = this.styles[ancestor];
-                    if (ancestorStyle && ancestorStyle.clip) {
-                        const ancestorBox = this.readBox(ancestor);
-                        parentClip = parentClip === null ? ancestorBox : intersectRect(parentClip, ancestorBox);
-                        if (parentClip === null) {
-                            break;
-                        }
-                    }
-                }
-
-                const focusStyle = this.styles[focusIndex];
-                const baseRadius = focusStyle?.radius ?? { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 };
-                const ringExpansion = ringOffset + ringWidth;
-
-                const focusRingQuad: QuadRenderCommand = {
-                    kind: 'quad',
-                    widget: focusIndex as WidgetId,
-                    x: focusBox.x - ringExpansion,
-                    y: focusBox.y - ringExpansion,
-                    width: focusBox.width + ringExpansion * 2,
-                    height: focusBox.height + ringExpansion * 2,
-                    zIndex: Number.MAX_SAFE_INTEGER,
-                    color: TRANSPARENT,
-                    borderColor: ringColor,
-                    borderWidth: ringWidth,
-                    radius: {
-                        topLeft: baseRadius.topLeft + ringExpansion,
-                        topRight: baseRadius.topRight + ringExpansion,
-                        bottomRight: baseRadius.bottomRight + ringExpansion,
-                        bottomLeft: baseRadius.bottomLeft + ringExpansion,
-                    },
-                    opacity: 1,
-                    clip: parentClip,
-                };
-                commands.push(focusRingQuad);
-            }
+    private resolveControllerCached(controllerName: string | null): WidgetController<any, any, any> | null {
+        if (!controllerName) {
+            return null;
         }
+        const cached = this.controllerResolveCache.get(controllerName);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const resolved = this.registry.resolve(controllerName);
+        this.controllerResolveCache.set(controllerName, resolved);
+        return resolved;
+    }
 
-        const metrics: UIFrameMetrics = {
-            widgetCount: this.getWidgetCount(),
-            visibleWidgetCount,
-            renderCount: commands.length,
-            customCommandCount,
-            imageCommandCount,
-            textCommandCount,
-            strokeCommandCount,
-            glyphCount,
-            layoutPasses: this.lastLayoutPasses,
-        };
+    private renderFrame(): UIFrame<TPayload> {
+        return this.renderCommandBuilder.build(this.getRenderHost());
+    }
+
+    private getRenderHost(): RenderCommandBuilderHost<TPayload> {
         return {
+            flags: this.flags,
+            parent: this.parent,
+            firstChild: this.firstChild,
+            nextSibling: this.nextSibling,
+            sequence: this.sequence,
+            styles: this.styles,
+            layouts: this.layouts,
+            images: this.images,
+            texts: this.texts,
+            focuses: this.focuses,
+            records: this.records as Array<{ controller: string | null; props: Record<string, unknown> } | null>,
+            states: this.states,
+            rootId: this.rootId,
             viewportWidth: this.viewportWidth,
             viewportHeight: this.viewportHeight,
-            commands,
-            metrics,
+            lastLayoutPasses: this.lastLayoutPasses,
+            isVisible: (index) => this.isVisible(index),
+            readBox: (index) => this.readBox(index),
+            resolveTextLayoutForRender: (index) => this.resolveTextLayoutForRender(index),
+            resolveControllerCached: (name) => this.resolveControllerCached(name),
+            getFocused: () => this.focusController.getFocused(),
+            getWidgetCount: () => this.getWidgetCount(),
+            getRuntime: () => this,
         };
     }
 
@@ -1353,76 +1300,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         text: ResolvedTextBlock,
         constraints: TextLayoutConstraint
     ): TextLayoutResult {
-        if (text.autoSize !== 'shrink-to-fit') {
-            return this.textEngine.measure(text, constraints);
-        }
-
-        // Build cache key from text properties and constraints.
-        const cacheKey = `${text.value}\0${text.family}\0${text.size}\0${text.weight}\0${text.style}\0${constraints.width}\0${constraints.height}`;
-        const cached = this.autoSizeCache.get(cacheKey);
-        if (cached) {
-            return cached;
-        }
-
-        const maxWidth = constraints.width ?? Number.POSITIVE_INFINITY;
-        const maxHeight = constraints.height ?? Number.POSITIVE_INFINITY;
-        // When either constraint is unbounded, text already fits by definition — no-op.
-        if (!Number.isFinite(maxWidth) && !Number.isFinite(maxHeight)) {
-            return this.textEngine.measure(text, constraints);
-        }
-        const authoredSize = text.size;
-        const maxSize = Math.min(authoredSize, text.maxAutoSize);
-        const minSize = text.minAutoSize;
-        if (minSize >= maxSize) {
-            const clampedBlock: ResolvedTextBlock = { ...text, size: minSize, autoSize: 'none' };
-            return this.textEngine.measure(clampedBlock, constraints);
-        }
-        // First check if the authored size already fits — if so, use it directly.
-        const initialLayout = this.textEngine.measure(text, constraints);
-        const fitsWidth = initialLayout.width <= (Number.isFinite(maxWidth) ? maxWidth : Number.POSITIVE_INFINITY);
-        const fitsHeight = initialLayout.height <= (Number.isFinite(maxHeight) ? maxHeight : Number.POSITIVE_INFINITY);
-        if (fitsWidth && fitsHeight) {
-            return initialLayout;
-        }
-        // Binary search for the largest font size that fits within the constraints.
-        let lo = minSize;
-        let hi = maxSize;
-        let bestSize = minSize;
-        const maxIter = 8;
-        for (let iter = 0; iter < maxIter && hi - lo > 0.5; iter += 1) {
-            const mid = (lo + hi) * 0.5;
-            const scaledBlock: ResolvedTextBlock = { ...text, size: mid, autoSize: 'none' };
-            const scaledLayout = this.textEngine.measure(scaledBlock, constraints);
-            const scaledFitsWidth = scaledLayout.width <= (Number.isFinite(maxWidth) ? maxWidth : Number.POSITIVE_INFINITY);
-            const scaledFitsHeight = scaledLayout.height <= (Number.isFinite(maxHeight) ? maxHeight : Number.POSITIVE_INFINITY);
-            if (scaledFitsWidth && scaledFitsHeight) {
-                bestSize = mid;
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-        }
-        if (bestSize >= maxSize - 0.5) {
-            const clampedBlock = { ...text, size: maxSize };
-            return this.textEngine.measure(clampedBlock, constraints);
-        }
-        const finalBlock: ResolvedTextBlock = { ...text, size: bestSize, autoSize: 'none' };
-        const result = this.textEngine.measure(finalBlock, constraints);
-
-        // Store result in cache, evicting oldest half if over capacity.
-        if (this.autoSizeCache.size >= this.autoSizeCacheMaxSize) {
-            const keysToDelete = Math.ceil(this.autoSizeCacheMaxSize / 2);
-            const keys = this.autoSizeCache.keys();
-            for (let i = 0; i < keysToDelete; i++) {
-                const key = keys.next().value;
-                if (key !== undefined) {
-                    this.autoSizeCache.delete(key);
-                }
-            }
-        }
-        this.autoSizeCache.set(cacheKey, result);
-
-        return result;
+        return this.autoSizeService.measure(this, text, constraints);
     }
 
     private resolveTextLayoutForRender(index: number): TextLayoutResult | null {
@@ -1614,43 +1492,6 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         }
     }
 
-    private getFocusableCandidates(): WidgetId[] {
-        if (this.focusDirty) {
-            const candidates: WidgetId[] = [];
-            for (let index = 1; index < this.nextId; index += 1) {
-                if ((this.flags[index] & NodeFlag.Allocated) === 0 || !this.isFocusable(index)) {
-                    continue;
-                }
-                candidates.push(index as WidgetId);
-            }
-            candidates.sort((left, right) => {
-                const leftIndex = left as number;
-                const rightIndex = right as number;
-                const leftFocus = this.focuses[leftIndex]!;
-                const rightFocus = this.focuses[rightIndex]!;
-                if (leftFocus.tabIndex !== rightFocus.tabIndex) {
-                    return leftFocus.tabIndex - rightFocus.tabIndex;
-                }
-                if (leftFocus.order !== rightFocus.order) {
-                    return leftFocus.order - rightFocus.order;
-                }
-                return this.sequence[leftIndex] - this.sequence[rightIndex];
-            });
-            this.focusOrder = candidates;
-            this.focusDirty = false;
-        }
-        return this.focusOrder;
-    }
-
-    private findScopeRoot(index: number): WidgetId {
-        for (let current = index; current !== 0; current = this.parent[current]) {
-            if (this.focuses[current]?.scope) {
-                return current as WidgetId;
-            }
-        }
-        return this.rootId;
-    }
-
     private snapshotNode(index: number): WidgetSnapshot {
         const record = this.records[index]!;
         const children: WidgetSnapshot[] = [];
@@ -1705,8 +1546,9 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     }
 
     private destroyNode(index: number): void {
-        if (this.focused && this.isAncestor(index, this.focused as number)) {
-            this.focused = null;
+        const focusedWidget = this.focusController.getFocused();
+        if (focusedWidget && this.isAncestor(index, focusedWidget as number)) {
+            this.focusController.clearFocus();
         }
         if (this.hovered && this.isAncestor(index, this.hovered as number)) {
             this.hovered = null;
@@ -1718,7 +1560,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             ? this.registry.resolve(this.records[index]!.controller)
             : null;
         controller?.disposeState?.(this.states[index], this, index as WidgetId);
-        this.controllerListeners.delete(index);
+        this.controllerEventBus.clear(index as WidgetId);
         this.records[index] = null;
         this.layouts[index] = null;
         this.styles[index] = null;

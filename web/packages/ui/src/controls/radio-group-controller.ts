@@ -1,7 +1,9 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
-import { isPointInside } from './internals';
+import { clamp } from '@axrone/numeric';
+import { isPointInside, asString, asNumber } from './internals';
+import { defaultUIControlTheme } from './theme';
 
 /**
  * Declarative radio-group controller for `.ui.json` authored radio groups.
@@ -38,7 +40,6 @@ export interface RadioGroupControllerProps {
 export interface RadioGroupControllerState {
     selectedIndex: number;
     hoveredIndex: number;
-    initialized: boolean;
 }
 
 type RadioGroupContext = WidgetControllerContext<
@@ -47,13 +48,7 @@ type RadioGroupContext = WidgetControllerContext<
     UIRuntime
 >;
 
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
-
-const DEFAULT_SELECTED_COLOR = '#0a74daff';
+const DEFAULT_SELECTED_COLOR = defaultUIControlTheme.accentColor;
 const DEFAULT_UNSELECTED_COLOR = '#475569ff';
 
 /** Resolves the dot widget key for a given index. */
@@ -136,16 +131,15 @@ export const radioGroupController: WidgetController<
         const radioProps = props as RadioGroupControllerProps;
         const count = Math.max(0, asNumber(radioProps.itemCount, 0) | 0);
         const rawIndex = asNumber(radioProps.selectedIndex, 0);
-        const clampedIndex = count > 0 ? Math.min(Math.max(rawIndex, 0), count - 1) : 0;
+        const clampedIndex = count > 0 ? clamp(rawIndex, 0, count - 1) : 0;
         return {
             selectedIndex: clampedIndex,
             hoveredIndex: -1,
-            initialized: false,
         };
     },
     mount: (context) => {
         const typed = context as RadioGroupContext;
-        typed.state.initialized = applyVisuals(typed);
+        applyVisuals(typed);
     },
     update: (context, previousProps) => {
         const typed = context as RadioGroupContext;
@@ -162,7 +156,7 @@ export const radioGroupController: WidgetController<
         ) {
             const count = Math.max(0, asNumber(props.itemCount, 0) | 0);
             const authored = asNumber(props.selectedIndex, typed.state.selectedIndex);
-            typed.state.selectedIndex = count > 0 ? Math.min(Math.max(authored, 0), count - 1) : 0;
+            typed.state.selectedIndex = count > 0 ? clamp(authored, 0, count - 1) : 0;
             applyVisuals(typed);
         }
     },

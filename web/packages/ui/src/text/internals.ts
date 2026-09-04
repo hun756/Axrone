@@ -32,11 +32,34 @@ export class LruCache<TKey, TValue> {
     clear(): void {
         this.entries.clear();
     }
+
+    /** Returns the current number of entries in the cache. */
+    get size(): number {
+        return this.entries.size;
+    }
 }
+
+const segmenterCache = new LruCache<string, Intl.Segmenter>(8);
+
+/** Exposed for testing: returns the number of cached segmenter instances. */
+export const getSegmenterCacheSize = (): number => {
+    return segmenterCache.size;
+};
+
+const getOrCreateSegmenter = (locale: string): Intl.Segmenter => {
+    const key = locale || '';
+    const cached = segmenterCache.get(key);
+    if (cached) {
+        return cached;
+    }
+    const segmenter = new Intl.Segmenter(locale || undefined, { granularity: 'grapheme' });
+    segmenterCache.set(key, segmenter);
+    return segmenter;
+};
 
 export const createGraphemeSegments = (value: string, locale: string): string[] => {
     if (typeof Intl !== 'undefined' && typeof Intl.Segmenter !== 'undefined') {
-        const segmenter = new Intl.Segmenter(locale || undefined, { granularity: 'grapheme' });
+        const segmenter = getOrCreateSegmenter(locale);
         return [...segmenter.segment(value)].map((segment) => segment.segment);
     }
     return Array.from(value);

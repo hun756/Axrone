@@ -1,3 +1,4 @@
+import { clamp } from '@axrone/numeric';
 import { InvalidUIAssetError } from '../errors';
 import type { UICanvasConfig, UICanvasScaleMode, UIAsset, UISafeAreaInset } from '../types/ui-asset';
 import type { WidgetSerializableKey } from '../types/foundation';
@@ -88,7 +89,7 @@ function parseCanvasConfig(value: unknown, context: string): UICanvasConfig {
     }
     const rawBias = value['matchBias'];
     const matchBias = typeof rawBias === 'number' && Number.isFinite(rawBias)
-        ? Math.max(0, Math.min(1, rawBias))
+        ? clamp(rawBias, 0, 1)
         : 0.5;
     const safeAreaInset = parseSafeAreaInset(value['safeAreaInset'], `${context}.canvas`);
 

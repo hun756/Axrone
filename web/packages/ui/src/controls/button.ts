@@ -1,7 +1,8 @@
 import type { UIRuntime } from '../runtime';
 import type { UIButtonHandle, UIButtonOptions } from './types';
-import { attachToParent, createTextBlock, disposeWidget, isPointInside } from './internals';
+import { attachToParent, createTextBlock, isPointInside } from './internals';
 import { resolveTheme, resolveVariantPalette } from './theme';
+import { createStatefulControl } from './stateful-control';
 
 export const createUIButton = <TRuntime>(
     runtime: UIRuntime<TRuntime>,
@@ -22,6 +23,52 @@ export const createUIButton = <TRuntime>(
     };
 
     let handle: UIButtonHandle;
+    let applyRef: () => void = () => {};
+    const apply = () => applyRef();
+
+    const sc = createStatefulControl<typeof state>(runtime, {
+        state,
+        apply,
+        handlers: {
+            pointerEnter: () => {
+                if (state.disabled) return false;
+                state.hovered = true;
+                apply();
+                return true;
+            },
+            pointerLeave: () => {
+                if (state.disabled) return false;
+                state.hovered = false;
+                apply();
+                return true;
+            },
+            pointerDown: () => {
+                if (state.disabled) return false;
+                state.pressed = true;
+                runtime.setFocus(root, 'pointer');
+                apply();
+                return true;
+            },
+            pointerUp: (event) => {
+                if (state.disabled) return false;
+                const shouldPress = state.pressed && isPointInside(runtime, root, event.x, event.y);
+                state.pressed = false;
+                apply();
+                if (shouldPress) {
+                    state.onPress?.(handle);
+                }
+                return true;
+            },
+            keyDown: (event) => {
+                if (state.disabled) return false;
+                if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) {
+                    state.onPress?.(handle);
+                    return true;
+                }
+                return false;
+            },
+        },
+    });
 
     const root = runtime.createWidget({
         role: 'button',
@@ -40,69 +87,12 @@ export const createUIButton = <TRuntime>(
             padding: [12, 20],
             ...(options.layout ?? {}),
         },
-        handlers: {
-            pointerEnter: () => {
-                if (state.disabled) {
-                    return false;
-                }
-                state.hovered = true;
-                apply();
-                return true;
-            },
-            pointerLeave: () => {
-                if (state.disabled) {
-                    return false;
-                }
-                state.hovered = false;
-                apply();
-                return true;
-            },
-            pointerDown: () => {
-                if (state.disabled) {
-                    return false;
-                }
-                state.pressed = true;
-                runtime.setFocus(root, 'pointer');
-                apply();
-                return true;
-            },
-            pointerUp: (event) => {
-                if (state.disabled) {
-                    return false;
-                }
-                const shouldPress = state.pressed && isPointInside(runtime, root, event.x, event.y);
-                state.pressed = false;
-                apply();
-                if (shouldPress) {
-                    state.onPress?.(handle);
-                }
-                return true;
-            },
-            keyDown: (event) => {
-                if (state.disabled) {
-                    return false;
-                }
-                if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) {
-                    state.onPress?.(handle);
-                    return true;
-                }
-                return false;
-            },
-            focus: () => {
-                state.focused = true;
-                apply();
-            },
-            blur: () => {
-                state.focused = false;
-                state.pressed = false;
-                apply();
-            },
-        },
+        handlers: sc.handlers,
     });
 
     attachToParent(runtime, options.parent, root);
 
-    const apply = (): void => {
+    applyRef = (): void => {
         const currentPalette = palette();
         const background = state.disabled
             ? theme.surfaceDisabledColor
@@ -114,13 +104,8 @@ export const createUIButton = <TRuntime>(
         const borderColor = state.focused ? theme.focusColor : currentPalette.border;
         const textColor = state.disabled ? theme.textMutedColor : baseText.color ?? currentPalette.text;
 
+        sc.syncDisabled(root, options.focus ?? {});
         runtime.updateWidget(root, {
-            enabled: !state.disabled,
-            interactive: !state.disabled,
-            focus: {
-                focusable: !state.disabled,
-                ...(options.focus ?? {}),
-            },
             style: {
                 ...baseStyle,
                 background,
@@ -153,10 +138,7 @@ export const createUIButton = <TRuntime>(
             return state.disabled;
         },
         setDisabled(disabled) {
-            state.disabled = disabled;
-            state.pressed = false;
-            state.hovered = false;
-            apply();
+            sc.setDisabled(disabled, root, options.focus ?? {});
         },
         setVariant(variant) {
             state.variant = variant;
@@ -171,7 +153,7 @@ export const createUIButton = <TRuntime>(
             }
         },
         dispose() {
-            disposeWidget(runtime, root);
+            sc.dispose(root);
         },
     };
 

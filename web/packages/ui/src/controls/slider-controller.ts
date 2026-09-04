@@ -2,7 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
-import { normalizeRange, normalizeSteppedValue } from './internals';
+import { normalizeRange, normalizeSteppedValue, asString, asNumber } from './internals';
 
 /**
  * Declarative slider controller for `.ui.json` authored sliders.
@@ -39,8 +39,6 @@ export interface SliderControllerProps {
 export interface SliderControllerState {
     value: number;
     dragging: boolean;
-    /** Set once the authored value has been pushed to the visuals. */
-    initialized: boolean;
 }
 
 type SliderContext = WidgetControllerContext<
@@ -48,12 +46,6 @@ type SliderContext = WidgetControllerContext<
     SliderControllerState,
     UIRuntime
 >;
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
 
 /** Resolves the authored range, guarding against inverted or missing bounds. */
 const resolveRange = (props: SliderControllerProps) =>
@@ -176,7 +168,6 @@ export const sliderController: WidgetController<
                 resolveStep(sliderProps)
             ),
             dragging: false,
-            initialized: false,
         };
     },
     mount: (context) => {
@@ -184,7 +175,7 @@ export const sliderController: WidgetController<
         // Called again by the runtime once the binding table exists, so the
         // fill/handle lookups succeed even though widgets are built first.
         const range = resolveRange(typed.props as SliderControllerProps);
-        typed.state.initialized = applyVisuals(
+        applyVisuals(
             typed,
             resolveRatio(typed.state.value, range.min, range.max)
         );
