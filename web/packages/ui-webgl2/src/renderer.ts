@@ -29,11 +29,18 @@ const IMAGE_FLOATS_PER_INSTANCE = 22;
 const TEXT_FLOATS_PER_INSTANCE = 26;
 
 type SliceSpan = {
-    readonly offset: number;
-    readonly size: number;
-    readonly uvOffset: number;
-    readonly uvSize: number;
+    offset: number;
+    size: number;
+    uvOffset: number;
+    uvSize: number;
 };
+
+const createSliceSpan = (): SliceSpan => ({ offset: 0, size: 0, uvOffset: 0, uvSize: 0 });
+
+// Scratch spans reused across sliced commands — computed and consumed within a
+// single pushSlicedImage call, so no reentrancy hazard exists.
+const sliceColumnsScratch: readonly [SliceSpan, SliceSpan, SliceSpan] = [createSliceSpan(), createSliceSpan(), createSliceSpan()];
+const sliceRowsScratch: readonly [SliceSpan, SliceSpan, SliceSpan] = [createSliceSpan(), createSliceSpan(), createSliceSpan()];
 
 const resolveSliceSpans = (
     extent: number,
@@ -41,29 +48,30 @@ const resolveSliceSpans = (
     endBorder: number,
     sourceExtent: number,
     uvOffset: number,
-    uvExtent: number
-): readonly SliceSpan[] => {
+    uvExtent: number,
+    out: readonly [SliceSpan, SliceSpan, SliceSpan]
+): void => {
     const totalBorder = startBorder + endBorder;
     const scale = totalBorder > extent && totalBorder > 0 ? extent / totalBorder : 1;
     const start = startBorder * scale;
     const end = endBorder * scale;
     const startUv = sourceExtent > 0 ? startBorder / sourceExtent : 0;
     const endUv = sourceExtent > 0 ? endBorder / sourceExtent : 0;
-    return [
-        { offset: 0, size: start, uvOffset, uvSize: startUv },
-        {
-            offset: start,
-            size: Math.max(0, extent - start - end),
-            uvOffset: uvOffset + startUv,
-            uvSize: Math.max(0, uvExtent - startUv - endUv),
-        },
-        {
-            offset: extent - end,
-            size: end,
-            uvOffset: uvOffset + uvExtent - endUv,
-            uvSize: endUv,
-        },
-    ];
+    const first = out[0];
+    const middle = out[1];
+    const last = out[2];
+    first.offset = 0;
+    first.size = start;
+    first.uvOffset = uvOffset;
+    first.uvSize = startUv;
+    middle.offset = start;
+    middle.size = Math.max(0, extent - start - end);
+    middle.uvOffset = uvOffset + startUv;
+    middle.uvSize = Math.max(0, uvExtent - startUv - endUv);
+    last.offset = extent - end;
+    last.size = end;
+    last.uvOffset = uvOffset + uvExtent - endUv;
+    last.uvSize = endUv;
 };
 
 const ZERO_RADII: CornerRadii = Object.freeze({
@@ -77,35 +85,37 @@ const sliceImageCommand = (
     command: ImageRenderCommand,
     border: EdgeInsets
 ): readonly ImageRenderCommand[] => {
-    const columns = resolveSliceSpans(
+    resolveSliceSpans(
         command.width,
         border.left,
         border.right,
         Math.max(1, command.source.width),
         command.uvRect.x,
-        command.uvRect.width
+        command.uvRect.width,
+        sliceColumnsScratch
     );
-    const rows = resolveSliceSpans(
+    resolveSliceSpans(
         command.height,
         border.top,
         border.bottom,
         Math.max(1, command.source.height),
         command.uvRect.y,
-        command.uvRect.height
+        command.uvRect.height,
+        sliceRowsScratch
     );
     const fillCenter = command.fillCenter !== false;
     const slices: ImageRenderCommand[] = [];
-    for (let row = 0; row < rows.length; row += 1) {
-        for (let column = 0; column < columns.length; column += 1) {
+    for (let row = 0; row < sliceRowsScratch.length; row += 1) {
+        const vertical = sliceRowsScratch[row];
+        if (vertical.size <= 0 || vertical.uvSize <= 0) {
+            continue;
+        }
+        for (let column = 0; column < sliceColumnsScratch.length; column += 1) {
             if (row === 1 && column === 1 && !fillCenter) {
                 continue;
             }
-            const horizontal = columns[column];
-            const vertical = rows[row];
-            if (horizontal.size <= 0 || vertical.size <= 0) {
-                continue;
-            }
-            if (horizontal.uvSize <= 0 || vertical.uvSize <= 0) {
+            const horizontal = sliceColumnsScratch[column];
+            if (horizontal.size <= 0 || horizontal.uvSize <= 0) {
                 continue;
             }
             slices.push({
@@ -1140,9 +1150,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             border &&
             (border.left > 0 || border.top > 0 || border.right > 0 || border.bottom > 0)
         ) {
-            for (const slice of sliceImageCommand(command, border)) {
-                this.pushImageQuad(slice, frame);
-            }
+            this.pushSlicedImage(command, border, frame);
             return;
         }
         this.pushImageQuad(command, frame);
@@ -1157,8 +1165,8 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         if (!resource) {
             return;
         }
-        this.statisticsState.imageCount += 1;
         if (resource.kind === 'material') {
+            this.statisticsState.imageCount += 1;
             this.flushImageBatch(frame.viewportHeight);
             this.statisticsState.materialImageCount += 1;
             this.applyClip(toClipState(command.clip), frame.viewportHeight);
@@ -1171,29 +1179,137 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             } satisfies WebGL2UIMaterialImageContext<TPayload>);
             return;
         }
+        this.pushImageInstance(
+            command,
+            resource.texture,
+            resource.sampler ?? null,
+            toClipState(command.clip),
+            frame,
+            command.x,
+            command.y,
+            command.width,
+            command.height,
+            command.uvRect.x,
+            command.uvRect.y,
+            command.uvRect.width,
+            command.uvRect.height
+        );
+    }
+
+    /**
+     * Expands a nine-slice image directly into the image instance batch: the
+     * resource resolves once and each emitted cell writes raw instance floats.
+     * This avoids the nine spread-copied commands, two span arrays and nine
+     * uv rect objects the slice-command path allocated per panel per frame.
+     * Material-backed sources keep the slice-command path because material
+     * renderers consume full commands.
+     */
+    private pushSlicedImage(command: ImageRenderCommand, border: EdgeInsets, frame: Readonly<UIFrame<TPayload>>): void {
+        const resource = this.resolveImageResource?.(command.source, {
+            gl: this.gl,
+            frame,
+            command,
+        });
+        if (!resource) {
+            return;
+        }
+        if (resource.kind === 'material') {
+            for (const slice of sliceImageCommand(command, border)) {
+                this.pushImageQuad(slice, frame);
+            }
+            return;
+        }
+        resolveSliceSpans(
+            command.width,
+            border.left,
+            border.right,
+            Math.max(1, command.source.width),
+            command.uvRect.x,
+            command.uvRect.width,
+            sliceColumnsScratch
+        );
+        resolveSliceSpans(
+            command.height,
+            border.top,
+            border.bottom,
+            Math.max(1, command.source.height),
+            command.uvRect.y,
+            command.uvRect.height,
+            sliceRowsScratch
+        );
+        const fillCenter = command.fillCenter !== false;
+        const sampler = resource.sampler ?? null;
+        const clip = toClipState(command.clip);
+        for (let row = 0; row < sliceRowsScratch.length; row += 1) {
+            const vertical = sliceRowsScratch[row];
+            if (vertical.size <= 0 || vertical.uvSize <= 0) {
+                continue;
+            }
+            for (let column = 0; column < sliceColumnsScratch.length; column += 1) {
+                if (row === 1 && column === 1 && !fillCenter) {
+                    continue;
+                }
+                const horizontal = sliceColumnsScratch[column];
+                if (horizontal.size <= 0 || horizontal.uvSize <= 0) {
+                    continue;
+                }
+                this.pushImageInstance(
+                    command,
+                    resource.texture,
+                    sampler,
+                    clip,
+                    frame,
+                    command.x + horizontal.offset,
+                    command.y + vertical.offset,
+                    horizontal.size,
+                    vertical.size,
+                    horizontal.uvOffset,
+                    vertical.uvOffset,
+                    horizontal.uvSize,
+                    vertical.uvSize
+                );
+            }
+        }
+    }
+
+    private pushImageInstance(
+        command: ImageRenderCommand,
+        texture: WebGLTexture,
+        sampler: WebGLSampler | null,
+        clip: ClipState | null,
+        frame: Readonly<UIFrame<TPayload>>,
+        x: number,
+        y: number,
+        width: number,
+        height: number,
+        uvX: number,
+        uvY: number,
+        uvWidth: number,
+        uvHeight: number
+    ): void {
         if (
-            (this.activeImageTexture !== null && this.activeImageTexture !== resource.texture) ||
-            (this.activeImageSampler !== (resource.sampler ?? null)) ||
+            (this.activeImageTexture !== null && this.activeImageTexture !== texture) ||
+            (this.activeImageSampler !== sampler) ||
             (this.activeImageClip !== null && !sameClip(this.activeImageClip, command.clip))
         ) {
             this.flushImageBatch(frame.viewportHeight);
         }
-        const base = this.imageCount * IMAGE_FLOATS_PER_INSTANCE;
+        let base = this.imageCount * IMAGE_FLOATS_PER_INSTANCE;
         if (base + IMAGE_FLOATS_PER_INSTANCE > this.imageBatch.length) {
             this.flushImageBatch(frame.viewportHeight);
-            return this.pushImageQuad(command, frame);
+            base = 0;
         }
-        this.activeImageTexture = resource.texture;
-        this.activeImageSampler = resource.sampler ?? null;
-        this.activeImageClip = toClipState(command.clip);
-        this.imageBatch[base] = command.x;
-        this.imageBatch[base + 1] = command.y;
-        this.imageBatch[base + 2] = command.width;
-        this.imageBatch[base + 3] = command.height;
-        this.imageBatch[base + 4] = command.uvRect.x;
-        this.imageBatch[base + 5] = command.uvRect.y;
-        this.imageBatch[base + 6] = command.uvRect.width;
-        this.imageBatch[base + 7] = command.uvRect.height;
+        this.activeImageTexture = texture;
+        this.activeImageSampler = sampler;
+        this.activeImageClip = clip;
+        this.imageBatch[base] = x;
+        this.imageBatch[base + 1] = y;
+        this.imageBatch[base + 2] = width;
+        this.imageBatch[base + 3] = height;
+        this.imageBatch[base + 4] = uvX;
+        this.imageBatch[base + 5] = uvY;
+        this.imageBatch[base + 6] = uvWidth;
+        this.imageBatch[base + 7] = uvHeight;
         writeBlendedColor(this.imageBatch, base + 8, command.tint, command.opacity);
         this.imageBatch[base + 12] = command.radius.topLeft;
         this.imageBatch[base + 13] = command.radius.topRight;
@@ -1207,6 +1323,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.imageBatch[base + 20] = transform[3];
         this.imageBatch[base + 21] = transform[5];
         this.imageCount += 1;
+        this.statisticsState.imageCount += 1;
     }
 
     private pushGlyph(
