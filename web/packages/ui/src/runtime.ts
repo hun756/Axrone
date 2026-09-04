@@ -17,6 +17,7 @@ import {
 } from './layout/canvas-scaler';
 import { NodeFlag } from './runtime/node-flags';
 import { ControllerEventBus, type ControllerEventHandler } from './runtime/controller-event-bus';
+import { FocusController, type FocusControllerHost } from './runtime/focus-controller';
 import {
     type StoredWidgetRecord,
     compileWidgetFocus,
@@ -30,8 +31,6 @@ import {
     dispatchKeyEvent,
     dispatchPointerEvent,
     dispatchTextEvent,
-    moveFocusDirectional,
-    moveFocusLinear,
 } from './runtime/runtime-input';
 import {
     buildCaretCommand,
@@ -147,15 +146,13 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private contentWidth = new Float32Array(16);
     private contentHeight = new Float32Array(16);
     private freeList: number[] = [];
-    private focusOrder: WidgetId[] = [];
     private rootId: WidgetId;
     private nextId = 1;
     private nextSequence = 1;
     private liveCount = 0;
     private hovered: WidgetId | null = null;
-    private focused: WidgetId | null = null;
     private pressed: WidgetId | null = null;
-    private focusDirty = true;
+    private focusController = new FocusController();
     private layoutDirty = true;
     private disposed = false;
     private viewportWidth: number;
@@ -178,7 +175,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         setPressed: (widget) => {
             this.pressed = widget;
         },
-        getFocused: () => this.focused,
+        getFocused: () => this.focusController.getFocused(),
         hitTest: (x, y) => this.hitTest(x, y),
         updateHover: (target, event) => this.updateHover(target, event),
         bubbleEvent: (index, event) => this.bubbleEvent(index, event),
@@ -573,7 +570,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             this.destroyNode(traversal[offset]);
         }
         this.layoutDirty = true;
-        this.focusDirty = true;
+        this.focusController.markDirty();
         this.structuralDirty = true;
         return this;
     }
@@ -728,7 +725,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             case 'text':
                 return dispatchTextEvent(this.inputHost, event);
             case 'focus':
-                if (!event.focused && this.focused) {
+                if (!event.focused && this.focusController.getFocused()) {
                     this.setFocus(null, 'window');
                 }
                 return false;
@@ -746,48 +743,44 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             }
             widget = target as WidgetId;
         }
-        if (this.focused === widget) {
-            return true;
-        }
-        const previous = this.focused;
-        this.focused = widget;
-        if (previous !== null) {
-            this.emitFocusChange(previous as number, false, reason, direction);
-        }
-        if (widget !== null) {
-            this.emitFocusChange(widget as number, true, reason, direction);
-        }
-        return true;
+        const previous = this.focusController.getFocused();
+        const changed = this.focusController.setFocus(widget, this.getFocusHost(), {
+            reason,
+            direction,
+            onFocusedChange: (next, prev) => {
+                if (prev !== null) {
+                    this.emitFocusChange(prev as number, false, reason, direction);
+                }
+                if (next !== null) {
+                    this.emitFocusChange(next as number, true, reason, direction);
+                }
+            },
+        });
+        return changed;
     }
 
     /** Returns the currently focused widget, or null if nothing is focused. */
     getFocused(): WidgetId | null {
-        return this.focused;
+        return this.focusController.getFocused();
     }
 
     moveFocus(direction: FocusMoveDirection): WidgetId | null {
         this.ensureActive();
-        const candidates = this.getFocusableCandidates();
-        if (candidates.length === 0) {
-            return null;
-        }
-        const current = this.focused ? (this.focused as number) : 0;
-        const scopeRoot = current === 0 ? this.rootId : this.findScopeRoot(current);
-        const scoped = scopeRoot === this.rootId
-            ? candidates
-            : candidates.filter((candidate) => this.isAncestor(scopeRoot as number, candidate as number));
-        const targetList = scoped.length > 0 ? scoped : candidates;
-        let next: WidgetId | null = null;
-        if (direction === 'forward' || direction === 'backward') {
-            const cycle = this.focuses[scopeRoot as number]?.cycle ?? false;
-            next = moveFocusLinear(targetList, direction, this.focused, cycle);
-        } else {
-            next = moveFocusDirectional(targetList, direction, this.focused, (index) => this.readBox(index));
-        }
-        if (next) {
-            this.setFocus(next, 'navigation', direction);
-        }
-        return next;
+        return this.focusController.moveFocus(direction, this.getFocusHost(), (w, r, d) => this.setFocus(w, r, d));
+    }
+
+    private getFocusHost(): FocusControllerHost {
+        return {
+            flags: this.flags,
+            parent: this.parent,
+            sequence: this.sequence,
+            focuses: this.focuses,
+            rootId: this.rootId,
+            nextId: this.nextId,
+            isFocusable: (index) => this.isFocusable(index),
+            isAncestor: (ancestor, candidate) => this.isAncestor(ancestor, candidate),
+            readBox: (index) => this.readBox(index),
+        };
     }
 
     snapshot(): UIRuntimeSnapshot {
@@ -932,7 +925,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             this.layoutDirty = true;
             this.dirtyNodes.add(index);
         }
-        this.focusDirty = true;
+        this.focusController.markDirty();
     }
 
     private updateFlags(index: number): void {
@@ -1080,7 +1073,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private markTreeChanged(index: number): void {
         this.dirtyNodes.add(index);
         this.layoutDirty = true;
-        this.focusDirty = true;
+        this.focusController.markDirty();
         this.structuralDirty = true;
     }
 
@@ -1393,8 +1386,9 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         });
 
         // ── Focus ring overlay ──────────────────────────────────────────────
-        if (this.focused !== null) {
-            const focusIndex = this.focused as number;
+        const focusedWidget = this.focusController.getFocused();
+        if (focusedWidget !== null) {
+            const focusIndex = focusedWidget as number;
             const focusPolicy = this.focuses[focusIndex];
             if (focusPolicy && (this.flags[focusIndex] & NodeFlag.Allocated) !== 0) {
                 const focusBox = this.readBox(focusIndex);
@@ -1790,43 +1784,6 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         }
     }
 
-    private getFocusableCandidates(): WidgetId[] {
-        if (this.focusDirty) {
-            const candidates: WidgetId[] = [];
-            for (let index = 1; index < this.nextId; index += 1) {
-                if ((this.flags[index] & NodeFlag.Allocated) === 0 || !this.isFocusable(index)) {
-                    continue;
-                }
-                candidates.push(index as WidgetId);
-            }
-            candidates.sort((left, right) => {
-                const leftIndex = left as number;
-                const rightIndex = right as number;
-                const leftFocus = this.focuses[leftIndex]!;
-                const rightFocus = this.focuses[rightIndex]!;
-                if (leftFocus.tabIndex !== rightFocus.tabIndex) {
-                    return leftFocus.tabIndex - rightFocus.tabIndex;
-                }
-                if (leftFocus.order !== rightFocus.order) {
-                    return leftFocus.order - rightFocus.order;
-                }
-                return this.sequence[leftIndex] - this.sequence[rightIndex];
-            });
-            this.focusOrder = candidates;
-            this.focusDirty = false;
-        }
-        return this.focusOrder;
-    }
-
-    private findScopeRoot(index: number): WidgetId {
-        for (let current = index; current !== 0; current = this.parent[current]) {
-            if (this.focuses[current]?.scope) {
-                return current as WidgetId;
-            }
-        }
-        return this.rootId;
-    }
-
     private snapshotNode(index: number): WidgetSnapshot {
         const record = this.records[index]!;
         const children: WidgetSnapshot[] = [];
@@ -1881,8 +1838,9 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     }
 
     private destroyNode(index: number): void {
-        if (this.focused && this.isAncestor(index, this.focused as number)) {
-            this.focused = null;
+        const focusedWidget = this.focusController.getFocused();
+        if (focusedWidget && this.isAncestor(index, focusedWidget as number)) {
+            this.focusController.clearFocus();
         }
         if (this.hovered && this.isAncestor(index, this.hovered as number)) {
             this.hovered = null;
