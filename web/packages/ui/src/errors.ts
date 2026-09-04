@@ -1,15 +1,16 @@
-export const enum UIErrorCode {
-    InvalidArgument = 'UI_INVALID_ARGUMENT',
-    WidgetNotFound = 'UI_WIDGET_NOT_FOUND',
-    TreeIntegrity = 'UI_TREE_INTEGRITY',
-    FontLoadFailed = 'UI_FONT_LOAD_FAILED',
-    FontFamilyNotFound = 'UI_FONT_FAMILY_NOT_FOUND',
-    FontFaceNotFound = 'UI_FONT_FACE_NOT_FOUND',
-    Disposed = 'UI_DISPOSED',
-    DuplicateController = 'UI_DUPLICATE_CONTROLLER',
-    InvalidSnapshot = 'UI_INVALID_SNAPSHOT',
-    InvalidAsset = 'UI_INVALID_ASSET',
-}
+export const UIErrorCode = {
+    InvalidArgument: 'UI_INVALID_ARGUMENT',
+    WidgetNotFound: 'UI_WIDGET_NOT_FOUND',
+    TreeIntegrity: 'UI_TREE_INTEGRITY',
+    FontLoadFailed: 'UI_FONT_LOAD_FAILED',
+    FontFamilyNotFound: 'UI_FONT_FAMILY_NOT_FOUND',
+    FontFaceNotFound: 'UI_FONT_FACE_NOT_FOUND',
+    Disposed: 'UI_DISPOSED',
+    DuplicateController: 'UI_DUPLICATE_CONTROLLER',
+    InvalidSnapshot: 'UI_INVALID_SNAPSHOT',
+    InvalidAsset: 'UI_INVALID_ASSET',
+} as const;
+export type UIErrorCode = (typeof UIErrorCode)[keyof typeof UIErrorCode];
 
 export class UIError extends Error {
     readonly code: UIErrorCode;
