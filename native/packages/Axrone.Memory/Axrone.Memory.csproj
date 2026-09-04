@@ -17,7 +17,7 @@
   <PropertyGroup Label="SuppressedRules">
     <!-- CA1724: Type name conflicts with namespace — intentional module naming -->
     <NoWarn>$(NoWarn);CA1724</NoWarn>
-    <!-- CA1000: Static members on generic types — intentional for Singleton/KeyedSingleton API -->
+    <!-- CA1000: Static members on generic types — intentional for Singleton&lt;T&gt;/SingletonAuto&lt;T&gt; API -->
     <NoWarn>$(NoWarn);CA1000</NoWarn>
     <!-- CA1031: Catching general exceptions — intentional for shutdown teardown -->
     <NoWarn>$(NoWarn);CA1031</NoWarn>

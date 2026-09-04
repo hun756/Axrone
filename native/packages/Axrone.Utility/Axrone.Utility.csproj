@@ -3,7 +3,7 @@
   <PropertyGroup>
     <RootNamespace>Axrone.Utility</RootNamespace>
     <AssemblyName>Axrone.Utility</AssemblyName>
-    <Description>Core utility types for the Axrone engine: Result monad, disposable patterns, deep clone, floating-point comparison, Base64, singleton lifecycle, and message catalogs.</Description>
+    <Description>Core utility types for the Axrone engine: Result monad, disposable patterns, deep clone, floating-point comparison, Base64, and message catalogs.</Description>
   </PropertyGroup>
 
   <PropertyGroup Label="AotCompatibility">
@@ -24,7 +24,7 @@
     <NoWarn>$(NoWarn);CA1055;CA1054;CA1056;CA1057</NoWarn>
     <!-- CA1716: Reserved keyword conflict — OrElse is intentional Result API -->
     <NoWarn>$(NoWarn);CA1716</NoWarn>
-    <!-- CA1000: Static members on generic types — intentional for Singleton.FromValue -->
+    <!-- CA1000: Static members on generic types — intentional for Result&lt;T&gt; API -->
     <NoWarn>$(NoWarn);CA1000</NoWarn>
     <!-- CA1815: Struct Equals/GetHashCode — DisposalTracker is a lightweight tracker -->
     <NoWarn>$(NoWarn);CA1815</NoWarn>
