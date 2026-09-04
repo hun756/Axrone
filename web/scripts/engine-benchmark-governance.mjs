@@ -90,10 +90,10 @@ const fail = (message) => {
 };
 
 const scenarioKey = ({ workload, comparisonMode, objectCount }) =>
-    `${workload}|${comparisonMode}|${objectCount}`;
+    [workload, comparisonMode, objectCount > 0 ? objectCount : ''].filter(Boolean).join('|');
 
 const scenarioLabel = ({ workload, comparisonMode, objectCount }) =>
-    `${workload}/${comparisonMode}/${objectCount.toLocaleString('en-US')}`;
+    [workload, comparisonMode, objectCount > 0 ? objectCount.toLocaleString('en-US') : ''].filter(Boolean).join('/');
 
 const formatNumber = (value) => value.toFixed(2).padStart(8, ' ');
 
