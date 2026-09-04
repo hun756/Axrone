@@ -8,6 +8,7 @@ import {
 } from './errors';
 import { FontRegistry, ensureDefaultUIFont } from './font';
 import { UILayoutEngine, compileLayoutInput } from './layout';
+import type { LayoutTreeAdapter } from './layout';
 import {
     type CanvasScaleResult,
     resolveCanvasScale,
@@ -169,6 +170,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     // of a hand-rolled Map with ad-hoc half-eviction.
     private readonly autoSizeCache = new LruCache<string, TextLayoutResult>(64);
     private readonly dirtyNodes = new Set<number>();
+    private structuralDirty = false;
 
     private readonly inputHost: UIInputDispatchHost = {
         getPressed: () => this.pressed,
@@ -598,6 +600,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         }
         this.layoutDirty = true;
         this.focusDirty = true;
+        this.structuralDirty = true;
         return this;
     }
 
@@ -651,25 +654,16 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             this.setViewport(viewport.width ?? this.viewportWidth, viewport.height ?? this.viewportHeight);
         }
         if (this.layoutDirty) {
-            this.layoutEngine.compute(
-                {
-                    root: this.rootId,
-                    getLayout: (node) => this.layouts[node as number]!,
-                    getFirstChild: (node) => {
-                        const child = this.firstChild[node as number];
-                        return child === 0 ? null : (child as WidgetId);
-                    },
-                    getNextSibling: (node) => {
-                        const sibling = this.nextSibling[node as number];
-                        return sibling === 0 ? null : (sibling as WidgetId);
-                    },
-                    measureContent: (node, constraints) => this.measureContent(node as number, constraints),
-                    setBox: (node, box) => this.writeBox(node as number, box),
-                    isVisible: (node) => this.isVisible(node as number),
-                },
-                { width: this.viewportWidth, height: this.viewportHeight }
-            );
+            const adapter = this.createLayoutAdapter();
+            const viewportSize = { width: this.viewportWidth, height: this.viewportHeight };
+            if (this.canScopedRelayout()) {
+                this.scopedRelayout(adapter, viewportSize);
+            } else {
+                this.layoutEngine.compute(adapter, viewportSize);
+            }
             this.layoutDirty = false;
+            this.dirtyNodes.clear();
+            this.structuralDirty = false;
             this.lastLayoutPasses = this.layoutEngine.getLayoutPassCount();
         }
         return this.renderFrame();
@@ -691,26 +685,16 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         }
         // Ensure layout is computed at reference resolution
         if (this.layoutDirty) {
-            this.layoutEngine.compute(
-                {
-                    root: this.rootId,
-                    getLayout: (node) => this.layouts[node as number]!,
-                    getFirstChild: (node) => {
-                        const child = this.firstChild[node as number];
-                        return child === 0 ? null : (child as WidgetId);
-                    },
-                    getNextSibling: (node) => {
-                        const sibling = this.nextSibling[node as number];
-                        return sibling === 0 ? null : (sibling as WidgetId);
-                    },
-                    measureContent: (node, constraints) => this.measureContent(node as number, constraints),
-                    setBox: (node, box) => this.writeBox(node as number, box),
-                    isVisible: (node) => this.isVisible(node as number),
-                },
-                { width: this.viewportWidth, height: this.viewportHeight }
-            );
+            const adapter = this.createLayoutAdapter();
+            const viewportSize = { width: this.viewportWidth, height: this.viewportHeight };
+            if (this.canScopedRelayout()) {
+                this.scopedRelayout(adapter, viewportSize);
+            } else {
+                this.layoutEngine.compute(adapter, viewportSize);
+            }
             this.layoutDirty = false;
             this.dirtyNodes.clear();
+            this.structuralDirty = false;
             this.lastLayoutPasses = this.layoutEngine.getLayoutPassCount();
         }
         // Render frame at reference resolution
@@ -972,6 +956,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         }
         if (!styleOnly) {
             this.layoutDirty = true;
+            this.dirtyNodes.add(index);
         }
         this.focusDirty = true;
     }
@@ -1122,6 +1107,63 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         this.dirtyNodes.add(index);
         this.layoutDirty = true;
         this.focusDirty = true;
+        this.structuralDirty = true;
+    }
+
+    private createLayoutAdapter(): LayoutTreeAdapter<number> {
+        return {
+            root: this.rootId,
+            getLayout: (node) => this.layouts[node as number]!,
+            getFirstChild: (node) => {
+                const child = this.firstChild[node as number];
+                return child === 0 ? null : (child as WidgetId);
+            },
+            getNextSibling: (node) => {
+                const sibling = this.nextSibling[node as number];
+                return sibling === 0 ? null : (sibling as WidgetId);
+            },
+            measureContent: (node, constraints) => this.measureContent(node as number, constraints),
+            setBox: (node, box) => this.writeBox(node as number, box),
+            isVisible: (node) => this.isVisible(node as number),
+        };
+    }
+
+    /**
+     * Returns true when scoped relayout is safe:
+     * - dirtyNodes is non-empty
+     * - no structural changes (insert/remove/reparent) since last commit
+     * - root is not among the dirty nodes
+     * - dirtyNodes.size <= 50% of live node count
+     */
+    private canScopedRelayout(): boolean {
+        if (this.dirtyNodes.size === 0 || this.structuralDirty) {
+            return false;
+        }
+        if (this.dirtyNodes.has(this.rootId)) {
+            return false;
+        }
+        return this.dirtyNodes.size <= this.liveCount * 0.5;
+    }
+
+    private scopedRelayout(adapter: LayoutTreeAdapter<number>, viewport: Readonly<SizeLike>): void {
+        // Collect unique parents of dirty nodes. Re-laying out the parent
+        // (rather than the dirty node itself) ensures that siblings are
+        // re-positioned when a dirty node's measured size changes.
+        const parents = new Set<number>();
+        for (const nodeId of this.dirtyNodes) {
+            const parent = this.parent[nodeId];
+            if (parent !== 0) {
+                parents.add(parent);
+            }
+        }
+        for (const parentId of parents) {
+            const box = this.readBox(parentId);
+            const grandparent = this.parent[parentId];
+            const gpBox = grandparent !== 0 ? this.readBox(grandparent) : null;
+            const availWidth = gpBox ? gpBox.contentWidth : viewport.width;
+            const availHeight = gpBox ? gpBox.contentHeight : viewport.height;
+            this.layoutEngine.computeSubtree(adapter, viewport, parentId, box.x, box.y, availWidth, availHeight);
+        }
     }
 
     /** Translates the stored boxes of a subtree by a pixel delta (no relayout). */

@@ -81,6 +81,30 @@ export class UILayoutEngine<TNode> {
         this.layoutNode(adapter, adapter.root, 0, 0, viewport.width, viewport.height, viewport.width, viewport.height);
     }
 
+    /**
+     * Re-layout a single subtree using its existing box position and size as
+     * constraints. This is an optimization for style/position-only changes
+     * where the parent's allocation has not changed.
+     */
+    computeSubtree(
+        adapter: LayoutTreeAdapter<TNode>,
+        viewport: Readonly<SizeLike>,
+        node: TNode,
+        x: number,
+        y: number,
+        availableWidth: number,
+        availableHeight: number
+    ): void {
+        this.viewportWidth = viewport.width;
+        this.viewportHeight = viewport.height;
+        // Clear the measure cache so re-measured nodes pick up updated layout inputs.
+        this.measureCache.clear();
+        // Do NOT force the node's size — let it measure itself within the
+        // available space so that updated layout properties (e.g. width change)
+        // are honoured.
+        this.layoutNode(adapter, node, x, y, availableWidth, availableHeight);
+    }
+
     getLayoutPassCount(): number {
         return this.layoutPasses;
     }
