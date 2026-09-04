@@ -5,7 +5,6 @@ import type {
     GlyphAtlasEntry,
     GlyphAtlasPageSnapshot,
     ImageRenderCommand,
-    CornerRadii,
     QuadRenderCommand,
     RectLike,
     StrokeRenderCommand,
@@ -26,6 +25,7 @@ import type {
 import { createProgram } from './shader-source';
 import { QUAD_VERTEX_SOURCE, QUAD_FRAGMENT_SOURCE, TEXT_VERTEX_SOURCE, TEXT_FRAGMENT_SOURCE, IMAGE_VERTEX_SOURCE, IMAGE_FRAGMENT_SOURCE } from './shaders';
 import { UNIT_QUAD, writeBlendedColor, normalizeStrokeColor } from './webgl-utils';
+import { resolveSliceSpans, sliceImageCommand, createSliceSpanTriple, ZERO_RADII } from './nine-slice';
 import {
     GL_STATE_FRAMEBUFFER,
     GL_STATE_VIEWPORT,
@@ -89,115 +89,10 @@ const TEXT_INSTANCE_ATTRIBUTES: readonly InstanceAttributeLayout[] = [
     { location: 7, size: 3, floatOffset: 23 },
 ];
 
-type SliceSpan = {
-    offset: number;
-    size: number;
-    uvOffset: number;
-    uvSize: number;
-};
-
-const createSliceSpan = (): SliceSpan => ({ offset: 0, size: 0, uvOffset: 0, uvSize: 0 });
-
 // Scratch spans reused across sliced commands — computed and consumed within a
 // single pushSlicedImage call, so no reentrancy hazard exists.
-const sliceColumnsScratch: readonly [SliceSpan, SliceSpan, SliceSpan] = [createSliceSpan(), createSliceSpan(), createSliceSpan()];
-const sliceRowsScratch: readonly [SliceSpan, SliceSpan, SliceSpan] = [createSliceSpan(), createSliceSpan(), createSliceSpan()];
-
-const resolveSliceSpans = (
-    extent: number,
-    startBorder: number,
-    endBorder: number,
-    sourceExtent: number,
-    uvOffset: number,
-    uvExtent: number,
-    out: readonly [SliceSpan, SliceSpan, SliceSpan]
-): void => {
-    const totalBorder = startBorder + endBorder;
-    const scale = totalBorder > extent && totalBorder > 0 ? extent / totalBorder : 1;
-    const start = startBorder * scale;
-    const end = endBorder * scale;
-    const startUv = sourceExtent > 0 ? startBorder / sourceExtent : 0;
-    const endUv = sourceExtent > 0 ? endBorder / sourceExtent : 0;
-    const first = out[0];
-    const middle = out[1];
-    const last = out[2];
-    first.offset = 0;
-    first.size = start;
-    first.uvOffset = uvOffset;
-    first.uvSize = startUv;
-    middle.offset = start;
-    middle.size = Math.max(0, extent - start - end);
-    middle.uvOffset = uvOffset + startUv;
-    middle.uvSize = Math.max(0, uvExtent - startUv - endUv);
-    last.offset = extent - end;
-    last.size = end;
-    last.uvOffset = uvOffset + uvExtent - endUv;
-    last.uvSize = endUv;
-};
-
-const ZERO_RADII: CornerRadii = Object.freeze({
-    topLeft: 0,
-    topRight: 0,
-    bottomRight: 0,
-    bottomLeft: 0,
-});
-
-const sliceImageCommand = (
-    command: ImageRenderCommand,
-    border: EdgeInsets
-): readonly ImageRenderCommand[] => {
-    resolveSliceSpans(
-        command.width,
-        border.left,
-        border.right,
-        Math.max(1, command.source.width),
-        command.uvRect.x,
-        command.uvRect.width,
-        sliceColumnsScratch
-    );
-    resolveSliceSpans(
-        command.height,
-        border.top,
-        border.bottom,
-        Math.max(1, command.source.height),
-        command.uvRect.y,
-        command.uvRect.height,
-        sliceRowsScratch
-    );
-    const fillCenter = command.fillCenter !== false;
-    const slices: ImageRenderCommand[] = [];
-    for (let row = 0; row < sliceRowsScratch.length; row += 1) {
-        const vertical = sliceRowsScratch[row];
-        if (vertical.size <= 0 || vertical.uvSize <= 0) {
-            continue;
-        }
-        for (let column = 0; column < sliceColumnsScratch.length; column += 1) {
-            if (row === 1 && column === 1 && !fillCenter) {
-                continue;
-            }
-            const horizontal = sliceColumnsScratch[column];
-            if (horizontal.size <= 0 || horizontal.uvSize <= 0) {
-                continue;
-            }
-            slices.push({
-                ...command,
-                x: command.x + horizontal.offset,
-                y: command.y + vertical.offset,
-                width: horizontal.size,
-                height: vertical.size,
-                uvRect: {
-                    x: horizontal.uvOffset,
-                    y: vertical.uvOffset,
-                    width: horizontal.uvSize,
-                    height: vertical.uvSize,
-                },
-                radius: ZERO_RADII,
-                border: undefined,
-            });
-        }
-    }
-    return slices;
-};
+const sliceColumnsScratch = createSliceSpanTriple();
+const sliceRowsScratch = createSliceSpanTriple();
 
 interface TexturePage {
     readonly texture: WebGLTexture;
@@ -837,7 +732,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             return;
         }
         if (resource.kind === 'material') {
-            for (const slice of sliceImageCommand(command, border)) {
+            for (const slice of sliceImageCommand(command, border, sliceColumnsScratch, sliceRowsScratch)) {
                 this.pushImageQuad(slice, frame);
             }
             return;
