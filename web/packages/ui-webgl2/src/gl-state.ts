@@ -298,7 +298,7 @@ export class LazyGLStateGuard {
             gl.pixelStorei?.(gl.UNPACK_ALIGNMENT, this.shadow.unpackAlignment);
         }
         if ((touched & (GL_STATE_UNIT0_TEXTURE | GL_STATE_UNIT0_SAMPLER)) !== 0) {
-            if ((touched & GL_STATE_ACTIVE_TEXTURE) !== 0 || true) {
+            if ((touched & GL_STATE_ACTIVE_TEXTURE) !== 0) {
                 gl.activeTexture(gl.TEXTURE0);
             }
             if ((touched & GL_STATE_UNIT0_TEXTURE) !== 0) {
