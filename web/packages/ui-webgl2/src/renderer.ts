@@ -189,6 +189,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     private glCapturedGroups = 0;
     private glTouchedGroups = 0;
     private currentGLTextureUnit = -1;
+    private lastViewportHeight = 0;
 
     constructor(options: WebGL2UIRendererOptions<TPayload>) {
         this.gl = options.gl;
@@ -298,15 +299,18 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             return;
         }
         const pageKey = (evictedEntry.faceId as number) * 65536 + (snapshot.id as number);
+        // If the evicted page was the active text page, flush any batched
+        // glyphs before deleting the texture so they are not silently dropped.
+        if (this.activeTextPageKey === pageKey && this.textCount > 0) {
+            this.flushTextBatch(this.lastViewportHeight);
+        }
         const page = this.pages.get(pageKey);
         if (page) {
             this.gl.deleteTexture(page.texture);
             this.pages.delete(pageKey);
         }
-        // If the evicted page was the active text page, reset the batch so
-        // subsequent glyphs do not try to flush into a stale page key.
+        // Reset the active text page key if it matched the evicted page.
         if (this.activeTextPageKey === pageKey) {
-            this.textCount = 0;
             this.activeTextPageKey = null;
         }
     }
@@ -318,6 +322,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             // restored and resources are recreated.
             return;
         }
+        this.lastViewportHeight = frame.viewportHeight;
         this.currentFrame = frame as UIFrame<TPayload>;
         this.statisticsState.drawCalls = 0;
         this.statisticsState.quadCount = 0;
