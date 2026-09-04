@@ -17,6 +17,7 @@ import type {
     ResolvedLayout,
 } from '../types';
 import type { WidgetController } from '../widget';
+import type { UIRuntime } from '../runtime';
 import { NodeFlag } from './node-flags';
 import {
     buildCaretCommand,
@@ -57,7 +58,7 @@ export interface RenderCommandBuilderHost<TPayload = unknown> {
     resolveControllerCached(controllerName: string | null): WidgetController<any, any, any> | null;
     getFocused(): WidgetId | null;
     getWidgetCount(): number;
-    getRuntime(): any;
+    getRuntime(): UIRuntime<TPayload>;
 }
 
 /**
