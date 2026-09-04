@@ -38,7 +38,6 @@ export interface DropdownControllerState {
     selectedIndex: number;
     isOpen: boolean;
     hoveredIndex: number;
-    initialized: boolean;
     /** Cached container widget resolved from itemContainerKey. */
     cachedContainer: WidgetId | null;
     /** Cached direct-child item widgets inside the container. */
@@ -233,7 +232,6 @@ export const dropdownController: WidgetController<
             selectedIndex,
             isOpen: false,
             hoveredIndex: -1,
-            initialized: false,
             cachedContainer: null,
             cachedItems: [],
         };
@@ -244,7 +242,6 @@ export const dropdownController: WidgetController<
         applySelection(typed);
         applyPopupVisibility(typed);
         applyChevron(typed);
-        typed.state.initialized = true;
     },
     update: (context, previousProps) => {
         const typed = context as DropdownContext;

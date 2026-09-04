@@ -35,7 +35,6 @@ export interface SegmentedControllerProps {
 export interface SegmentedControllerState {
     selectedIndex: number;
     hoveredIndex: number;
-    initialized: boolean;
 }
 
 type SegmentedContext = WidgetControllerContext<
@@ -123,12 +122,11 @@ export const segmentedController: WidgetController<
         return {
             selectedIndex: clampedIndex,
             hoveredIndex: -1,
-            initialized: false,
         };
     },
     mount: (context) => {
         const typed = context as SegmentedContext;
-        typed.state.initialized = applyVisuals(typed);
+        applyVisuals(typed);
     },
     update: (context, previousProps) => {
         const typed = context as SegmentedContext;

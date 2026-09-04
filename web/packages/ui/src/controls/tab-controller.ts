@@ -41,7 +41,6 @@ export interface TabControllerProps {
 
 export interface TabControllerState {
     selectedIndex: number;
-    initialized: boolean;
 }
 
 type TabContext = WidgetControllerContext<
@@ -152,12 +151,11 @@ export const tabViewController: WidgetController<
         const clampedIndex = count > 0 ? Math.min(Math.max(rawIndex, 0), count - 1) : 0;
         return {
             selectedIndex: clampedIndex,
-            initialized: false,
         };
     },
     mount: (context) => {
         const typed = context as TabContext;
-        typed.state.initialized = applyVisuals(typed);
+        applyVisuals(typed);
     },
     update: (context, previousProps) => {
         const typed = context as TabContext;

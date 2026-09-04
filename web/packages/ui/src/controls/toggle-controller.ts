@@ -37,7 +37,6 @@ export interface ToggleControllerState {
     on: boolean;
     hovered: boolean;
     pressed: boolean;
-    initialized: boolean;
 }
 
 type ToggleContext = WidgetControllerContext<
@@ -129,12 +128,11 @@ export const toggleSwitchController: WidgetController<
             on: asBoolean(toggleProps.isOn, false),
             hovered: false,
             pressed: false,
-            initialized: false,
         };
     },
     mount: (context) => {
         const typed = context as ToggleContext;
-        typed.state.initialized = applyVisuals(typed);
+        applyVisuals(typed);
     },
     update: (context, previousProps) => {
         const typed = context as ToggleContext;

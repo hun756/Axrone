@@ -40,7 +40,6 @@ export interface TooltipControllerProps {
 export interface TooltipControllerState {
     visible: boolean;
     hovered: boolean;
-    initialized: boolean;
     pendingShow: boolean;
     delayFrames: number;
     entryTime: number;
@@ -207,7 +206,6 @@ export const tooltipHostController: WidgetController<
     createState: () => ({
         visible: false,
         hovered: false,
-        initialized: false,
         pendingShow: false,
         delayFrames: 0,
         entryTime: 0,
@@ -236,7 +234,6 @@ export const tooltipHostController: WidgetController<
             typed.runtime.updateWidget(tooltipWidget, { enabled: false });
         }
 
-        typed.state.initialized = true;
     },
     update: (context, previousProps) => {
         const typed = context as TooltipContext;

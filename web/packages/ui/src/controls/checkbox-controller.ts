@@ -87,7 +87,6 @@ export interface CheckboxControllerState {
     indeterminate: boolean;
     hovered: boolean;
     pressed: boolean;
-    initialized: boolean;
     originalBoxSource: UIImageSource | null;
     originalMarkSource: UIImageSource | null;
     boxAnimation: UIAnimationHandle | null;
@@ -523,7 +522,6 @@ export const checkboxToggleController: WidgetController<
             indeterminate: asBoolean(checkboxProps.indeterminate, false),
             hovered: false,
             pressed: false,
-            initialized: false,
             originalBoxSource: null,
             originalMarkSource: null,
             boxAnimation: null,
@@ -544,7 +542,7 @@ export const checkboxToggleController: WidgetController<
             typed.state.originalMarkSource = captureOriginalSource(runtime, markKey);
         }
 
-        typed.state.initialized = applyVisuals(typed);
+        applyVisuals(typed);
     },
     update: (context, previousProps) => {
         const typed = context as CheckboxContext;

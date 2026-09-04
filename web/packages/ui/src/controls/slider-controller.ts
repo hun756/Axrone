@@ -39,8 +39,6 @@ export interface SliderControllerProps {
 export interface SliderControllerState {
     value: number;
     dragging: boolean;
-    /** Set once the authored value has been pushed to the visuals. */
-    initialized: boolean;
 }
 
 type SliderContext = WidgetControllerContext<
@@ -176,7 +174,6 @@ export const sliderController: WidgetController<
                 resolveStep(sliderProps)
             ),
             dragging: false,
-            initialized: false,
         };
     },
     mount: (context) => {
@@ -184,7 +181,7 @@ export const sliderController: WidgetController<
         // Called again by the runtime once the binding table exists, so the
         // fill/handle lookups succeed even though widgets are built first.
         const range = resolveRange(typed.props as SliderControllerProps);
-        typed.state.initialized = applyVisuals(
+        applyVisuals(
             typed,
             resolveRatio(typed.state.value, range.min, range.max)
         );

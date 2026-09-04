@@ -42,7 +42,6 @@ export interface EditBoxControllerState {
     focused: boolean;
     selectionStart: number;
     selectionEnd: number;
-    initialized: boolean;
 }
 
 type EditBoxContext = WidgetControllerContext<
@@ -277,13 +276,11 @@ export const editBoxController: WidgetController<
             focused: false,
             selectionStart: 0,
             selectionEnd: 0,
-            initialized: false,
         };
     },
     mount: (context) => {
         const typed = context as EditBoxContext;
         applyVisuals(typed);
-        typed.state.initialized = true;
     },
     update: (context, previousProps) => {
         const typed = context as EditBoxContext;

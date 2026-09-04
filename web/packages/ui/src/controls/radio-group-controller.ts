@@ -38,7 +38,6 @@ export interface RadioGroupControllerProps {
 export interface RadioGroupControllerState {
     selectedIndex: number;
     hoveredIndex: number;
-    initialized: boolean;
 }
 
 type RadioGroupContext = WidgetControllerContext<
@@ -140,12 +139,11 @@ export const radioGroupController: WidgetController<
         return {
             selectedIndex: clampedIndex,
             hoveredIndex: -1,
-            initialized: false,
         };
     },
     mount: (context) => {
         const typed = context as RadioGroupContext;
-        typed.state.initialized = applyVisuals(typed);
+        applyVisuals(typed);
     },
     update: (context, previousProps) => {
         const typed = context as RadioGroupContext;
