@@ -212,6 +212,21 @@ describe('@axrone/ui text internals', () => {
 			// Cache size should not grow since the same locale was used
 			expect(sizeAfterSecond).toBe(sizeAfterFirst);
 		});
+
+		it('size reflects actual entry count after evictions', () => {
+			// Use a small LruCache to test eviction tracking
+			const cache = new LruCache<string, number>(3);
+			cache.set('a', 1);
+			cache.set('b', 2);
+			cache.set('c', 3);
+			expect(cache.size).toBe(3);
+			// Adding a 4th entry evicts the LRU entry
+			cache.set('d', 4);
+			// Size must reflect actual entries (3), not high-water mark (4)
+			expect(cache.size).toBe(3);
+			expect(cache.get('a')).toBeUndefined();
+			expect(cache.get('d')).toBe(4);
+		});
 	});
 
 	describe('measureClusters scratch buffers', () => {

@@ -32,19 +32,19 @@ export class LruCache<TKey, TValue> {
     clear(): void {
         this.entries.clear();
     }
+
+    /** Returns the current number of entries in the cache. */
+    get size(): number {
+        return this.entries.size;
+    }
 }
 
 const segmenterCache = new LruCache<string, Intl.Segmenter>(8);
 
 /** Exposed for testing: returns the number of cached segmenter instances. */
 export const getSegmenterCacheSize = (): number => {
-    // Access the internal entries size via a get-then-set round-trip that
-    // does not disturb LRU order. The LruCache does not expose size directly,
-    // so we count by attempting to retrieve known keys.
-    return segmenterCacheSize;
+    return segmenterCache.size;
 };
-
-let segmenterCacheSize = 0;
 
 const getOrCreateSegmenter = (locale: string): Intl.Segmenter => {
     const key = locale || '';
@@ -54,7 +54,6 @@ const getOrCreateSegmenter = (locale: string): Intl.Segmenter => {
     }
     const segmenter = new Intl.Segmenter(locale || undefined, { granularity: 'grapheme' });
     segmenterCache.set(key, segmenter);
-    segmenterCacheSize = Math.min(segmenterCacheSize + 1, 8);
     return segmenter;
 };
 
