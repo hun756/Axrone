@@ -28,6 +28,42 @@ const QUAD_FLOATS_PER_INSTANCE = 23;
 const IMAGE_FLOATS_PER_INSTANCE = 22;
 const TEXT_FLOATS_PER_INSTANCE = 26;
 
+/** Instance attribute layout: vertex location, component count, float offset. */
+interface InstanceAttributeLayout {
+    readonly location: number;
+    readonly size: number;
+    readonly floatOffset: number;
+}
+
+const QUAD_INSTANCE_ATTRIBUTES: readonly InstanceAttributeLayout[] = [
+    { location: 1, size: 4, floatOffset: 0 },
+    { location: 2, size: 4, floatOffset: 4 },
+    { location: 3, size: 4, floatOffset: 8 },
+    { location: 4, size: 4, floatOffset: 12 },
+    { location: 5, size: 1, floatOffset: 16 },
+    { location: 6, size: 3, floatOffset: 17 },
+    { location: 7, size: 3, floatOffset: 20 },
+];
+
+const IMAGE_INSTANCE_ATTRIBUTES: readonly InstanceAttributeLayout[] = [
+    { location: 1, size: 4, floatOffset: 0 },
+    { location: 2, size: 4, floatOffset: 4 },
+    { location: 3, size: 4, floatOffset: 8 },
+    { location: 4, size: 4, floatOffset: 12 },
+    { location: 5, size: 3, floatOffset: 16 },
+    { location: 6, size: 3, floatOffset: 19 },
+];
+
+const TEXT_INSTANCE_ATTRIBUTES: readonly InstanceAttributeLayout[] = [
+    { location: 1, size: 4, floatOffset: 0 },
+    { location: 2, size: 4, floatOffset: 4 },
+    { location: 3, size: 4, floatOffset: 8 },
+    { location: 4, size: 4, floatOffset: 12 },
+    { location: 5, size: 4, floatOffset: 16 },
+    { location: 6, size: 3, floatOffset: 20 },
+    { location: 7, size: 3, floatOffset: 23 },
+];
+
 type SliceSpan = {
     offset: number;
     size: number;
@@ -688,23 +724,26 @@ const createProgram = (
 
 export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayload> {
     private readonly gl: WebGL2RenderingContext;
-    private readonly quadProgram: WebGLProgram;
-    private readonly imageProgram: WebGLProgram;
-    private readonly textProgram: WebGLProgram;
-    private readonly quadViewportUniform: WebGLUniformLocation | null;
-    private readonly imageViewportUniform: WebGLUniformLocation | null;
-    private readonly imageTextureUniform: WebGLUniformLocation | null;
-    private readonly textViewportUniform: WebGLUniformLocation | null;
-    private readonly textAtlasUniform: WebGLUniformLocation | null;
-    private readonly quadVao: WebGLVertexArrayObject | null;
-    private readonly imageVao: WebGLVertexArrayObject | null;
-    private readonly textVao: WebGLVertexArrayObject | null;
-    private readonly quadStaticBuffer: WebGLBuffer | null;
-    private readonly quadInstanceBuffer: WebGLBuffer | null;
-    private readonly imageStaticBuffer: WebGLBuffer | null;
-    private readonly imageInstanceBuffer: WebGLBuffer | null;
-    private readonly textStaticBuffer: WebGLBuffer | null;
-    private readonly textInstanceBuffer: WebGLBuffer | null;
+    // GPU-dependent handles are mutable: they are re-created wholesale after a
+    // WebGL context loss/restore cycle (see createGpuResources). Assigned via
+    // createGpuResources() in the constructor, hence the definite assignment.
+    private quadProgram!: WebGLProgram;
+    private imageProgram!: WebGLProgram;
+    private textProgram!: WebGLProgram;
+    private quadViewportUniform!: WebGLUniformLocation | null;
+    private imageViewportUniform!: WebGLUniformLocation | null;
+    private imageTextureUniform!: WebGLUniformLocation | null;
+    private textViewportUniform!: WebGLUniformLocation | null;
+    private textAtlasUniform!: WebGLUniformLocation | null;
+    private quadVao!: WebGLVertexArrayObject | null;
+    private imageVao!: WebGLVertexArrayObject | null;
+    private textVao!: WebGLVertexArrayObject | null;
+    private quadStaticBuffer!: WebGLBuffer | null;
+    private quadInstanceBuffer!: WebGLBuffer | null;
+    private imageStaticBuffer!: WebGLBuffer | null;
+    private imageInstanceBuffer!: WebGLBuffer | null;
+    private textStaticBuffer!: WebGLBuffer | null;
+    private textInstanceBuffer!: WebGLBuffer | null;
     private readonly pages = new Map<number, TexturePage>();
     private readonly quadBatch: Float32Array;
     private readonly imageBatch: Float32Array;
@@ -732,6 +771,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     private activeTextClip: ClipState | null = null;
     private currentFrame: UIFrame<TPayload> | null = null;
     private disposed = false;
+    private contextLost = false;
     private readonly glShadow: GLStateShadow = createGLStateShadow();
     private glCapturedGroups = 0;
     private glTouchedGroups = 0;
@@ -742,29 +782,80 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.resolveImageResource = options.resolveImageResource;
         this.customCommandRenderer = options.customCommandRenderer;
         this.atlasFilter = options.atlasFilter ?? 'linear';
-        this.quadProgram = createProgram(this.gl, QUAD_VERTEX_SOURCE, QUAD_FRAGMENT_SOURCE);
-        this.imageProgram = createProgram(this.gl, IMAGE_VERTEX_SOURCE, IMAGE_FRAGMENT_SOURCE);
-        this.textProgram = createProgram(this.gl, TEXT_VERTEX_SOURCE, TEXT_FRAGMENT_SOURCE);
-        this.quadViewportUniform = this.gl.getUniformLocation(this.quadProgram, 'u_Viewport');
-        this.imageViewportUniform = this.gl.getUniformLocation(this.imageProgram, 'u_Viewport');
-        this.imageTextureUniform = this.gl.getUniformLocation(this.imageProgram, 'u_Image');
-        this.textViewportUniform = this.gl.getUniformLocation(this.textProgram, 'u_Viewport');
-        this.textAtlasUniform = this.gl.getUniformLocation(this.textProgram, 'u_Atlas');
         this.quadBatch = new Float32Array((options.quadBatchCapacity ?? 1024) * QUAD_FLOATS_PER_INSTANCE);
         this.imageBatch = new Float32Array((options.imageBatchCapacity ?? 1024) * IMAGE_FLOATS_PER_INSTANCE);
         this.textBatch = new Float32Array((options.glyphBatchCapacity ?? 4096) * TEXT_FLOATS_PER_INSTANCE);
-        this.quadStaticBuffer = this.gl.createBuffer();
-        this.quadInstanceBuffer = this.gl.createBuffer();
-        this.imageStaticBuffer = this.gl.createBuffer();
-        this.imageInstanceBuffer = this.gl.createBuffer();
-        this.textStaticBuffer = this.gl.createBuffer();
-        this.textInstanceBuffer = this.gl.createBuffer();
-        this.quadVao = this.gl.createVertexArray();
-        this.imageVao = this.gl.createVertexArray();
-        this.textVao = this.gl.createVertexArray();
+        this.createGpuResources();
+        this.attachContextLossHandlers();
+    }
+
+    /**
+     * Creates every GPU-dependent object: programs, uniform locations, static
+     * and instance buffers, VAOs and their vertex layouts. Called by the
+     * constructor and again after a webglcontextrestored event. CPU-side batch
+     * storage intentionally lives outside so it survives context loss.
+     */
+    private createGpuResources(): void {
+        const gl = this.gl;
+        this.quadProgram = createProgram(gl, QUAD_VERTEX_SOURCE, QUAD_FRAGMENT_SOURCE);
+        this.imageProgram = createProgram(gl, IMAGE_VERTEX_SOURCE, IMAGE_FRAGMENT_SOURCE);
+        this.textProgram = createProgram(gl, TEXT_VERTEX_SOURCE, TEXT_FRAGMENT_SOURCE);
+        this.quadViewportUniform = gl.getUniformLocation(this.quadProgram, 'u_Viewport');
+        this.imageViewportUniform = gl.getUniformLocation(this.imageProgram, 'u_Viewport');
+        this.imageTextureUniform = gl.getUniformLocation(this.imageProgram, 'u_Image');
+        this.textViewportUniform = gl.getUniformLocation(this.textProgram, 'u_Viewport');
+        this.textAtlasUniform = gl.getUniformLocation(this.textProgram, 'u_Atlas');
+        this.quadStaticBuffer = gl.createBuffer();
+        this.quadInstanceBuffer = gl.createBuffer();
+        this.imageStaticBuffer = gl.createBuffer();
+        this.imageInstanceBuffer = gl.createBuffer();
+        this.textStaticBuffer = gl.createBuffer();
+        this.textInstanceBuffer = gl.createBuffer();
+        this.quadVao = gl.createVertexArray();
+        this.imageVao = gl.createVertexArray();
+        this.textVao = gl.createVertexArray();
         this.initializeQuadPipeline();
         this.initializeImagePipeline();
         this.initializeTextPipeline();
+    }
+
+    private readonly handleContextLost = (event: Event): void => {
+        // Preventing default keeps the context alive for a potential restore.
+        event.preventDefault();
+        this.contextLost = true;
+        // Every GPU handle — including glyph page textures — is now invalid.
+        // Dropping the pages forces re-upload after restore instead of reusing
+        // stale texture handles.
+        this.pages.clear();
+    };
+
+    private readonly handleContextRestored = (): void => {
+        try {
+            this.createGpuResources();
+            this.contextLost = false;
+        } catch (error) {
+            // A failed restore must not throw inside the browser event handler;
+            // rendering stays disabled until a successful recreation.
+            this.contextLost = true;
+            // eslint-disable-next-line no-console
+            console.error('[WebGL2UIRenderer] Failed to restore GPU resources after context loss.', error);
+        }
+    };
+
+    private attachContextLossHandlers(): void {
+        const canvas = this.gl.canvas as HTMLCanvasElement | undefined;
+        if (canvas && typeof canvas.addEventListener === 'function') {
+            canvas.addEventListener('webglcontextlost', this.handleContextLost);
+            canvas.addEventListener('webglcontextrestored', this.handleContextRestored);
+        }
+    }
+
+    private detachContextLossHandlers(): void {
+        const canvas = this.gl.canvas as HTMLCanvasElement | undefined;
+        if (canvas && typeof canvas.removeEventListener === 'function') {
+            canvas.removeEventListener('webglcontextlost', this.handleContextLost);
+            canvas.removeEventListener('webglcontextrestored', this.handleContextRestored);
+        }
     }
 
     getStats(): WebGL2UIRendererStatistics {
@@ -782,6 +873,11 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
 
     render(frame: Readonly<UIFrame<TPayload>>, options?: WebGL2UIRenderOptions): void {
         this.ensureActive();
+        if (this.contextLost) {
+            // GPU resources are invalid; skip the frame until the context is
+            // restored and resources are recreated.
+            return;
+        }
         this.currentFrame = frame as UIFrame<TPayload>;
         this.statisticsState.drawCalls = 0;
         this.statisticsState.quadCount = 0;
@@ -869,6 +965,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         if (this.disposed) {
             return;
         }
+        this.detachContextLossHandlers();
         for (const page of this.pages.values()) {
             this.gl.deleteTexture(page.texture);
         }
@@ -892,100 +989,72 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.dispose();
     }
 
+    /**
+     * Shared VAO/buffer setup for the quad/image/text pipelines. Each pipeline
+     * differs only by its instance stride and attribute table.
+     */
+    private initializeInstancePipeline(
+        vao: WebGLVertexArrayObject | null,
+        staticBuffer: WebGLBuffer | null,
+        instanceBuffer: WebGLBuffer | null,
+        batchByteLength: number,
+        instanceStrideBytes: number,
+        attributes: readonly InstanceAttributeLayout[]
+    ): void {
+        const gl = this.gl;
+        gl.bindVertexArray(vao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, staticBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, UNIT_QUAD, gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, batchByteLength, gl.DYNAMIC_DRAW);
+        for (const attribute of attributes) {
+            gl.enableVertexAttribArray(attribute.location);
+            gl.vertexAttribPointer(
+                attribute.location,
+                attribute.size,
+                gl.FLOAT,
+                false,
+                instanceStrideBytes,
+                attribute.floatOffset * 4
+            );
+            gl.vertexAttribDivisor(attribute.location, 1);
+        }
+        gl.bindVertexArray(null);
+    }
+
     private initializeQuadPipeline(): void {
-        const stride = QUAD_FLOATS_PER_INSTANCE * 4;
-        this.gl.bindVertexArray(this.quadVao);
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.quadStaticBuffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, UNIT_QUAD, this.gl.STATIC_DRAW);
-        this.gl.enableVertexAttribArray(0);
-        this.gl.vertexAttribPointer(0, 2, this.gl.FLOAT, false, 8, 0);
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.quadInstanceBuffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, this.quadBatch.byteLength, this.gl.DYNAMIC_DRAW);
-        this.gl.enableVertexAttribArray(1);
-        this.gl.vertexAttribPointer(1, 4, this.gl.FLOAT, false, stride, 0);
-        this.gl.vertexAttribDivisor(1, 1);
-        this.gl.enableVertexAttribArray(2);
-        this.gl.vertexAttribPointer(2, 4, this.gl.FLOAT, false, stride, 16);
-        this.gl.vertexAttribDivisor(2, 1);
-        this.gl.enableVertexAttribArray(3);
-        this.gl.vertexAttribPointer(3, 4, this.gl.FLOAT, false, stride, 32);
-        this.gl.vertexAttribDivisor(3, 1);
-        this.gl.enableVertexAttribArray(4);
-        this.gl.vertexAttribPointer(4, 4, this.gl.FLOAT, false, stride, 48);
-        this.gl.vertexAttribDivisor(4, 1);
-        this.gl.enableVertexAttribArray(5);
-        this.gl.vertexAttribPointer(5, 1, this.gl.FLOAT, false, stride, 64);
-        this.gl.vertexAttribDivisor(5, 1);
-        this.gl.enableVertexAttribArray(6);
-        this.gl.vertexAttribPointer(6, 3, this.gl.FLOAT, false, stride, 68);
-        this.gl.vertexAttribDivisor(6, 1);
-        this.gl.enableVertexAttribArray(7);
-        this.gl.vertexAttribPointer(7, 3, this.gl.FLOAT, false, stride, 80);
-        this.gl.vertexAttribDivisor(7, 1);
-        this.gl.bindVertexArray(null);
+        this.initializeInstancePipeline(
+            this.quadVao,
+            this.quadStaticBuffer,
+            this.quadInstanceBuffer,
+            this.quadBatch.byteLength,
+            QUAD_FLOATS_PER_INSTANCE * 4,
+            QUAD_INSTANCE_ATTRIBUTES
+        );
     }
 
     private initializeImagePipeline(): void {
-        const stride = IMAGE_FLOATS_PER_INSTANCE * 4;
-        this.gl.bindVertexArray(this.imageVao);
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.imageStaticBuffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, UNIT_QUAD, this.gl.STATIC_DRAW);
-        this.gl.enableVertexAttribArray(0);
-        this.gl.vertexAttribPointer(0, 2, this.gl.FLOAT, false, 8, 0);
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.imageInstanceBuffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, this.imageBatch.byteLength, this.gl.DYNAMIC_DRAW);
-        this.gl.enableVertexAttribArray(1);
-        this.gl.vertexAttribPointer(1, 4, this.gl.FLOAT, false, stride, 0);
-        this.gl.vertexAttribDivisor(1, 1);
-        this.gl.enableVertexAttribArray(2);
-        this.gl.vertexAttribPointer(2, 4, this.gl.FLOAT, false, stride, 16);
-        this.gl.vertexAttribDivisor(2, 1);
-        this.gl.enableVertexAttribArray(3);
-        this.gl.vertexAttribPointer(3, 4, this.gl.FLOAT, false, stride, 32);
-        this.gl.vertexAttribDivisor(3, 1);
-        this.gl.enableVertexAttribArray(4);
-        this.gl.vertexAttribPointer(4, 4, this.gl.FLOAT, false, stride, 48);
-        this.gl.vertexAttribDivisor(4, 1);
-        this.gl.enableVertexAttribArray(5);
-        this.gl.vertexAttribPointer(5, 3, this.gl.FLOAT, false, stride, 64);
-        this.gl.vertexAttribDivisor(5, 1);
-        this.gl.enableVertexAttribArray(6);
-        this.gl.vertexAttribPointer(6, 3, this.gl.FLOAT, false, stride, 76);
-        this.gl.vertexAttribDivisor(6, 1);
-        this.gl.bindVertexArray(null);
+        this.initializeInstancePipeline(
+            this.imageVao,
+            this.imageStaticBuffer,
+            this.imageInstanceBuffer,
+            this.imageBatch.byteLength,
+            IMAGE_FLOATS_PER_INSTANCE * 4,
+            IMAGE_INSTANCE_ATTRIBUTES
+        );
     }
 
     private initializeTextPipeline(): void {
-        const stride = TEXT_FLOATS_PER_INSTANCE * 4;
-        this.gl.bindVertexArray(this.textVao);
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.textStaticBuffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, UNIT_QUAD, this.gl.STATIC_DRAW);
-        this.gl.enableVertexAttribArray(0);
-        this.gl.vertexAttribPointer(0, 2, this.gl.FLOAT, false, 8, 0);
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.textInstanceBuffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, this.textBatch.byteLength, this.gl.DYNAMIC_DRAW);
-        this.gl.enableVertexAttribArray(1);
-        this.gl.vertexAttribPointer(1, 4, this.gl.FLOAT, false, stride, 0);
-        this.gl.vertexAttribDivisor(1, 1);
-        this.gl.enableVertexAttribArray(2);
-        this.gl.vertexAttribPointer(2, 4, this.gl.FLOAT, false, stride, 16);
-        this.gl.vertexAttribDivisor(2, 1);
-        this.gl.enableVertexAttribArray(3);
-        this.gl.vertexAttribPointer(3, 4, this.gl.FLOAT, false, stride, 32);
-        this.gl.vertexAttribDivisor(3, 1);
-        this.gl.enableVertexAttribArray(4);
-        this.gl.vertexAttribPointer(4, 4, this.gl.FLOAT, false, stride, 48);
-        this.gl.vertexAttribDivisor(4, 1);
-        this.gl.enableVertexAttribArray(5);
-        this.gl.vertexAttribPointer(5, 4, this.gl.FLOAT, false, stride, 64);
-        this.gl.vertexAttribDivisor(5, 1);
-        this.gl.enableVertexAttribArray(6);
-        this.gl.vertexAttribPointer(6, 3, this.gl.FLOAT, false, stride, 80);
-        this.gl.vertexAttribDivisor(6, 1);
-        this.gl.enableVertexAttribArray(7);
-        this.gl.vertexAttribPointer(7, 3, this.gl.FLOAT, false, stride, 92);
-        this.gl.vertexAttribDivisor(7, 1);
-        this.gl.bindVertexArray(null);
+        this.initializeInstancePipeline(
+            this.textVao,
+            this.textStaticBuffer,
+            this.textInstanceBuffer,
+            this.textBatch.byteLength,
+            TEXT_FLOATS_PER_INSTANCE * 4,
+            TEXT_INSTANCE_ATTRIBUTES
+        );
     }
 
     private prepareFrame(width: number, height: number): void {
