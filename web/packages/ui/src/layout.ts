@@ -71,9 +71,11 @@ export class UILayoutEngine<TNode> {
     private layoutPasses = 0;
     private viewportWidth = 0;
     private viewportHeight = 0;
+    private readonly measureCache = new Map<TNode, SizeLike>();
 
     compute(adapter: LayoutTreeAdapter<TNode>, viewport: Readonly<SizeLike>): void {
         this.layoutPasses = 0;
+        this.measureCache.clear();
         this.viewportWidth = viewport.width;
         this.viewportHeight = viewport.height;
         this.layoutNode(adapter, adapter.root, 0, 0, viewport.width, viewport.height, viewport.width, viewport.height);
@@ -89,6 +91,10 @@ export class UILayoutEngine<TNode> {
         availableWidth: number,
         availableHeight: number
     ): SizeLike {
+        const cached = this.measureCache.get(node);
+        if (cached) {
+            return cached;
+        }
         this.layoutPasses += 1;
         if (!adapter.isVisible(node)) {
             return { width: 0, height: 0 };
@@ -131,10 +137,12 @@ export class UILayoutEngine<TNode> {
                 height = width / layout.aspectRatio;
             }
         }
-        return {
+        const result = {
             width: clamp(width, layout.minWidth, layout.maxWidth),
             height: clamp(height, layout.minHeight, layout.maxHeight),
         };
+        this.measureCache.set(node, result);
+        return result;
     }
 
     private measureChildren(
