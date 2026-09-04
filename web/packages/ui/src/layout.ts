@@ -203,9 +203,10 @@ export class UILayoutEngine<TNode> {
         forcedHeight?: number
     ): SizeLike {
         const layout = adapter.getLayout(node);
+        const base = this.measureNode(adapter, node, availableWidth, availableHeight);
         const measured = {
-            width: forcedWidth ?? this.measureNode(adapter, node, availableWidth, availableHeight).width,
-            height: forcedHeight ?? this.measureNode(adapter, node, availableWidth, availableHeight).height,
+            width: forcedWidth ?? base.width,
+            height: forcedHeight ?? base.height,
         };
         const box = createBox(
             x,
