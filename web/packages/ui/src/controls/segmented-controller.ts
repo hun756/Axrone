@@ -1,6 +1,7 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
+import { clamp } from '@axrone/numeric';
 import { isPointInside, asString, asNumber } from './internals';
 
 /**
@@ -112,7 +113,7 @@ export const segmentedController: WidgetController<
         const segProps = props as SegmentedControllerProps;
         const count = Math.max(0, asNumber(segProps.segmentCount, 0) | 0);
         const rawIndex = asNumber(segProps.selectedIndex, 0);
-        const clampedIndex = count > 0 ? Math.min(Math.max(rawIndex, 0), count - 1) : 0;
+        const clampedIndex = count > 0 ? clamp(rawIndex, 0, count - 1) : 0;
         return {
             selectedIndex: clampedIndex,
             hoveredIndex: -1,
@@ -136,7 +137,7 @@ export const segmentedController: WidgetController<
         ) {
             const count = Math.max(0, asNumber(props.segmentCount, 0) | 0);
             const authored = asNumber(props.selectedIndex, typed.state.selectedIndex);
-            typed.state.selectedIndex = count > 0 ? Math.min(Math.max(authored, 0), count - 1) : 0;
+            typed.state.selectedIndex = count > 0 ? clamp(authored, 0, count - 1) : 0;
             applyVisuals(typed);
         }
     },

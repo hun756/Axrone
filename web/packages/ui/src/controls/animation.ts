@@ -6,7 +6,7 @@
  * This module is self-contained — it does NOT depend on @axrone/tween.
  */
 
-import { Color } from '@axrone/numeric';
+import { clamp, Color } from '@axrone/numeric';
 import type { UIRuntime } from '../runtime';
 import type { WidgetId } from '../types';
 
@@ -77,7 +77,7 @@ const parseHexColor = (hex: string): RGBA | null => {
  */
 const formatHexColor = (color: RGBA): `#${string}` => {
     const toHex = (value: number): string => {
-        const clamped = Math.max(0, Math.min(255, Math.round(value)));
+        const clamped = clamp(Math.round(value), 0, 255);
         return clamped.toString(16).padStart(2, '0');
     };
     return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}${toHex(color.a)}` as `#${string}`;
