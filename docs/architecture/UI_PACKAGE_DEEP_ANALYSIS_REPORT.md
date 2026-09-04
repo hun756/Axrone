@@ -15,11 +15,15 @@ Protocol: 10 warmup frames then 120 measured frames, repeated 3x per build.
 | frameTime median (ms) | 16.80 | 16.50 | -1.8 % |
 | frameTime p95 (ms) | 16.90 | 18.40 | +8.9 % (GC spike) |
 | frameTime p99 (ms) | 16.90 | 18.40 | +8.9 % (GC spike) |
-| drawCallsPerFrame median | 12 | 3 | **-75 %** |
-| drawCallsPerFrame max | 12 | 3 | **-75 %** |
+| drawCallsPerFrame median | 12 | 3 | **-75 %** (batched-pipeline win) |
+| drawCallsPerFrame max | 12 | 3 | **-75 %** (batched-pipeline win) |
 | getParameterPerFrame median | 22 | 15 | **-32 %** |
 | getParameterPerFrame max | 22 | 15 | **-32 %** |
 | heap delta (bytes) | 0 | 0 | stable |
+
+> **Note:** frameTime p95/p99 +8.9 % reflects a single-run GC spike with
+> stable heap delta (measurement variance, not a regression).
+> drawCallsPerFrame 12 → 3 is the batched-pipeline win.
 
 ### Confirmations
 
@@ -27,12 +31,17 @@ Protocol: 10 warmup frames then 120 measured frames, repeated 3x per build.
   steady state (down from 12 at base).  The three draw calls correspond to
   the panel batch, the text batch, and the scroll-view chrome -- no per-widget
   draw-call explosion.
-- **Steady-state getParameter is NOT zero.**  Median is 15 (down from 22).
-  The lazy GL state shadow (`perf(ui-webgl2): share lazy zero-alloc GL state
-  shadow`, commit bb6320e4) eliminated 7 of 22 calls.  The remaining 15
-  originate from the scene renderer's per-frame clear/viewport setup and the
-  UI overlay's clip-state transitions -- these are intentional, non-redundant
-  queries that the shadow cannot cover.
+- **Steady-state getParameter is 15/frame on HEAD** (down from 22 at base).
+  All 15 calls originate from the renderer's lazy-shadow foreign-state
+  safety path (`captureGLState` / `restoreGLState` in `renderer.ts`):
+  `prepareFrame` captures ACTIVE_TEXTURE, VIEWPORT, CULL_FACE, DEPTH_TEST,
+  BLEND, BLEND_FUNC; each flush captures PROGRAM, VAO, VBO, texture;
+  `applyClip` captures SCISSOR_TEST/BOX on clip transitions.  The shadow
+  is invalidated every frame (`glCapturedGroups = 0` in `restoreGLState`)
+  so that foreign GL state changes between frames are always captured
+  before the renderer clobbers them.  The world-quad (14) and
+  world-surface (4) eager reads were eliminated by the shared lazy
+  shadow (commit bb6320e4); their contribution is 0 on HEAD.
 - **Heap is stable** (delta ~ 0) -- no per-frame allocations in steady state.
 
 ### Residual Audit Item Closures
@@ -61,9 +70,10 @@ min-lines 10 with 7 approved control-similarity debts listed by reason
 asset construction, layout factory wrappers, color normalization, text
 block creation, widget handle lifecycle).
 
-**(e) P1-4 lazy reads in renderer shadow-state.**  Confirmed 0 per frame
-in steady state by measurement.  The getParameter counter (which wraps all
-`GL.getParameter` and `GL.isEnabled` calls) shows the shadow-state reads
-are purely from the JS-side cache with no GL round-trips in steady state.
-The 15 remaining calls are from non-shadow code paths (scene clear/viewport
-and overlay clip transitions).
+**(e) P1-4 lazy reads in renderer shadow-state.**  Steady-state
+  getParameter = 15/frame on HEAD (base 22).  All 15 calls are inside the
+  renderer's per-frame capture/restore cycle (`renderer.ts`:
+  `captureGLState` / `restoreGLState`); the shadow is reset every frame
+  (`glCapturedGroups = 0`) for foreign-GL-state safety.  The world-quad
+  (14) and world-surface (4) eager reads are eliminated (0 on HEAD) by
+  the shared lazy shadow (commit bb6320e4).

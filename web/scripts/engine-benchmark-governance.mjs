@@ -81,7 +81,7 @@ const scenarioBudgets = [
         maxFrameTimeMedianMs: 25,
         maxFrameTimeP99Ms: 120,
         maxDrawCallsPerFrame: 5,
-        maxGetParameterPerFrameMedian: 20,
+        maxGetParameterPerFrameMedian: 18,
     },
 ];
 
