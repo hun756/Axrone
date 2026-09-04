@@ -163,6 +163,56 @@ describe.each(SEEDED_ENGINES)('$name', ({ factory }) => {
     });
 });
 
+// ─── Contract tests: stream continuity and jump equivalence ─────────────────
+
+describe.each(SEEDED_ENGINES)('$name contract tests', ({ factory }) => {
+    it('stream continuity: save → restore → next draws match uninterrupted stream', () => {
+        const engine = factory(42);
+        // Advance to some arbitrary point
+        for (let i = 0; i < 10; i++) engine.nextUint32();
+
+        // Save state
+        const saved = engine.getState();
+
+        // Draw expected continuation
+        const expected = [engine.nextUint32(), engine.nextUint32(), engine.nextUint32()];
+
+        // Restore state
+        engine.setState(saved);
+
+        // Draw actual continuation
+        const actual = [engine.nextUint32(), engine.nextUint32(), engine.nextUint32()];
+
+        expect(actual).toEqual(expected);
+    });
+
+    it('jumpAhead(n) produces same next value as n manual draws', () => {
+        const steps = 100n;
+
+        const engine1 = factory(99);
+        for (let i = 0n; i < steps; i++) engine1.nextUint64();
+        const expected = engine1.nextUint64();
+
+        const engine2 = factory(99);
+        engine2.jumpAhead(steps);
+        const actual = engine2.nextUint64();
+
+        expect(actual).toBe(expected);
+    });
+
+    it('clone produces identical continuation from same point', () => {
+        const engine = factory(77);
+        for (let i = 0; i < 5; i++) engine.nextUint32();
+
+        const cloned = engine.clone();
+
+        const expected = [engine.nextUint32(), engine.nextUint32()];
+        const actual = [cloned.nextUint32(), cloned.nextUint32()];
+
+        expect(actual).toEqual(expected);
+    });
+});
+
 // ─── CryptoEngine (non-deterministic) ───────────────────────────────────────
 
 describe('CryptoEngine', () => {
@@ -204,40 +254,38 @@ describe('CryptoEngine', () => {
         expect(seqA).not.toEqual(seqB);
     });
 
-    it('getState returns valid state shape', () => {
+    it('getState throws (non-reproducible)', () => {
         const engine = new CryptoEngine();
-        engine.nextUint32();
-        const state = engine.getState();
-        expect(state.vector).toHaveLength(4);
-        expect(typeof state.counter).toBe('bigint');
-        expect(state.engine).toBe(RandomEngineType.CRYPTO);
+        expect(() => engine.getState()).toThrow('non-reproducible');
     });
 
-    it('setState restores counter', () => {
+    it('setState throws (non-reproducible)', () => {
         const engine = new CryptoEngine();
-        engine.nextUint32();
-        engine.nextUint32();
-        const state = engine.getState();
-        expect(state.counter).toBe(2n);
-
-        engine.setState(state);
-        expect(engine.getState().counter).toBe(2n);
+        const fakeState = {
+            vector: [0n, 0n, 0n, 0n, 0n, 0n],
+            counter: 0n,
+            engine: RandomEngineType.CRYPTO,
+        };
+        expect(() => engine.setState(fakeState)).toThrow('non-reproducible');
     });
 
-    it('clone produces a working engine', () => {
+    it('clone produces identical continuation', () => {
         const engine = new CryptoEngine();
         engine.nextUint32();
+        engine.nextUint32();
+
         const cloned = engine.clone();
-        const v = cloned.nextUint32();
-        expect(typeof v).toBe('number');
-        expect(Number.isFinite(v)).toBe(true);
+
+        const expected = [engine.nextUint32(), engine.nextUint32()];
+        const actual = [cloned.nextUint32(), cloned.nextUint32()];
+
+        expect(actual).toEqual(expected);
     });
 
     it('jumpAhead advances counter', () => {
         const engine = new CryptoEngine();
         engine.jumpAhead(100n);
-        const state = engine.getState();
-        expect(state.counter).toBe(100n);
+        expect(engine['counter']).toBe(100n);
     });
 
     it('jumpAhead(0n) is a no-op', () => {
