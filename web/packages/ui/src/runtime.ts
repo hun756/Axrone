@@ -133,6 +133,10 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private contentY = new Float32Array(16);
     private contentWidth = new Float32Array(16);
     private contentHeight = new Float32Array(16);
+    /** Per-widget translation offset X (absolute, set by translateWidgetBox). Uses number[] for full precision. */
+    private translateX: number[] = new Array(16).fill(0);
+    /** Per-widget translation offset Y (absolute, set by translateWidgetBox). Uses number[] for full precision. */
+    private translateY: number[] = new Array(16).fill(0);
     private freeList: number[] = [];
     private rootId: WidgetId;
     private nextId = 1;
@@ -511,9 +515,9 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     /**
      * Translates an already-laid-out widget subtree by a pixel delta without
      * invalidating layout. Used for per-frame scroll-driven repositioning
-     * (scrollbar thumbs). When the widget is positioned via numeric inset
-     * top/left, the authored layoutInput inset is shifted by the same delta so
-     * a later full relayout agrees with the translated position.
+     * (scrollbar thumbs). The translation is stored as an absolute offset
+     * (not by mutating insets) to prevent float drift across repeated calls.
+     * A later full relayout will clear the translation offset.
      */
     translateWidgetBox(widget: WidgetId, dx: number, dy: number): this {
         this.ensureActive();
@@ -521,19 +525,8 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         if (dx === 0 && dy === 0) {
             return this;
         }
-        const record = this.records[index];
-        const inset = record?.layoutInput.inset;
-        if (inset && (typeof inset.top === 'number' || typeof inset.left === 'number')) {
-            const nextInset = { ...inset };
-            if (typeof nextInset.top === 'number') {
-                nextInset.top += dy;
-            }
-            if (typeof nextInset.left === 'number') {
-                nextInset.left += dx;
-            }
-            this.records[index] = { ...record, layoutInput: { ...record.layoutInput, inset: nextInset } };
-        }
-        this.translateSubtreeBoxes(index, dx, dy);
+        // Store translation as absolute offset (accumulated)
+        this.translateSubtreeOffsets(index, dx, dy);
         return this;
     }
 
@@ -618,6 +611,8 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
                 this.scopedRelayout(adapter, viewportSize);
             } else {
                 this.layoutEngine.compute(adapter, viewportSize);
+                // Clear translation offsets after full layout (they're baked into the new boxes)
+                this.clearTranslationOffsets();
             }
             this.layoutDirty = false;
             this.dirtyNodes.clear();
@@ -977,6 +972,10 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         this.contentY = this.growTypedArray(this.contentY, nextCapacity);
         this.contentWidth = this.growTypedArray(this.contentWidth, nextCapacity);
         this.contentHeight = this.growTypedArray(this.contentHeight, nextCapacity);
+        this.translateX.length = nextCapacity;
+        this.translateY.length = nextCapacity;
+        this.translateX.fill(0, this.records.length);
+        this.translateY.fill(0, this.records.length);
         this.records.length = nextCapacity;
         this.layouts.length = nextCapacity;
         this.styles.length = nextCapacity;
@@ -1147,6 +1146,27 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         }
     }
 
+    /** Accumulates translation offsets for a subtree (prevents float drift). */
+    private translateSubtreeOffsets(index: number, dx: number, dy: number): void {
+        const stack = [index];
+        while (stack.length > 0) {
+            const current = stack.pop()!;
+            this.translateX[current] += dx;
+            this.translateY[current] += dy;
+            for (let child = this.firstChild[current]; child !== 0; child = this.nextSibling[child]) {
+                stack.push(child);
+            }
+        }
+    }
+
+    /** Clears all translation offsets (called after full layout). */
+    private clearTranslationOffsets(): void {
+        for (let i = 0; i < this.translateX.length; i++) {
+            this.translateX[i] = 0;
+            this.translateY[i] = 0;
+        }
+    }
+
     private createControllerContext(index: number): WidgetEventContext<Record<string, unknown>, UIRuntime<TPayload>> & {
         readonly state: unknown;
     } {
@@ -1214,12 +1234,12 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
 
     private readBox(index: number): LayoutBox {
         return {
-            x: this.boxX[index],
-            y: this.boxY[index],
+            x: this.boxX[index] + this.translateX[index],
+            y: this.boxY[index] + this.translateY[index],
             width: this.boxWidth[index],
             height: this.boxHeight[index],
-            contentX: this.contentX[index],
-            contentY: this.contentY[index],
+            contentX: this.contentX[index] + this.translateX[index],
+            contentY: this.contentY[index] + this.translateY[index],
             contentWidth: this.contentWidth[index],
             contentHeight: this.contentHeight[index],
         };
