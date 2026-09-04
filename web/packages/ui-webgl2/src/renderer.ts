@@ -390,10 +390,17 @@ const createUploadedGlyphKey = (entry: GlyphAtlasEntry): number =>
 
 const multiplyAlpha = (alpha: number, opacity: number): number => alpha * opacity;
 
-const blendColor = (
+const writeBlendedColor = (
+    batch: Float32Array,
+    offset: number,
     color: QuadRenderCommand['color'] | TextRenderCommand['color'],
     opacity: number
-): readonly [number, number, number, number] => [color.r, color.g, color.b, multiplyAlpha(color.a, opacity)];
+): void => {
+    batch[offset] = color.r;
+    batch[offset + 1] = color.g;
+    batch[offset + 2] = color.b;
+    batch[offset + 3] = multiplyAlpha(color.a, opacity);
+};
 
 /**
  * Converts a ColorInput (hex string, number, array, or ColorLike) to a
@@ -1068,14 +1075,12 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             this.flushQuadBatch(viewportHeight);
             base = 0;
         }
-        const fill = blendColor(command.color, command.opacity);
-        const border = blendColor(command.borderColor, command.opacity);
         this.quadBatch[base] = command.x;
         this.quadBatch[base + 1] = command.y;
         this.quadBatch[base + 2] = command.width;
         this.quadBatch[base + 3] = command.height;
-        this.quadBatch.set(fill, base + 4);
-        this.quadBatch.set(border, base + 8);
+        writeBlendedColor(this.quadBatch, base + 4, command.color, command.opacity);
+        writeBlendedColor(this.quadBatch, base + 8, command.borderColor, command.opacity);
         this.quadBatch[base + 12] = command.radius.topLeft;
         this.quadBatch[base + 13] = command.radius.topRight;
         this.quadBatch[base + 14] = command.radius.bottomRight;
@@ -1184,12 +1189,10 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     }
 
     private pushTextCommand(command: TextRenderCommand, viewportHeight: number): void {
-        const color = blendColor(command.color, command.opacity);
-        const outlineColor = blendColor(command.outlineColor, command.opacity);
         for (const glyph of command.layout.glyphs) {
-            if (!this.pushGlyph(command, glyph, color, outlineColor, viewportHeight)) {
+            if (!this.pushGlyph(command, glyph, viewportHeight)) {
                 this.flushTextBatch(viewportHeight);
-                if (!this.pushGlyph(command, glyph, color, outlineColor, viewportHeight)) {
+                if (!this.pushGlyph(command, glyph, viewportHeight)) {
                     throw new Error('Glyph batch capacity exceeded.');
                 }
             }
@@ -1248,12 +1251,6 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.activeImageTexture = resource.texture;
         this.activeImageSampler = resource.sampler ?? null;
         this.activeImageClip = toClipState(command.clip);
-        const tint = [
-            command.tint.r,
-            command.tint.g,
-            command.tint.b,
-            multiplyAlpha(command.tint.a, command.opacity),
-        ] as const;
         this.imageBatch[base] = command.x;
         this.imageBatch[base + 1] = command.y;
         this.imageBatch[base + 2] = command.width;
@@ -1262,7 +1259,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.imageBatch[base + 5] = command.uvRect.y;
         this.imageBatch[base + 6] = command.uvRect.width;
         this.imageBatch[base + 7] = command.uvRect.height;
-        this.imageBatch.set(tint, base + 8);
+        writeBlendedColor(this.imageBatch, base + 8, command.tint, command.opacity);
         this.imageBatch[base + 12] = command.radius.topLeft;
         this.imageBatch[base + 13] = command.radius.topRight;
         this.imageBatch[base + 14] = command.radius.bottomRight;
@@ -1280,8 +1277,6 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     private pushGlyph(
         command: TextRenderCommand,
         glyph: TextGlyphPlacement,
-        color: readonly [number, number, number, number],
-        outlineColor: readonly [number, number, number, number],
         viewportHeight: number
     ): boolean {
         const entry = glyph.atlasEntry;
@@ -1313,8 +1308,8 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.textBatch[base + 5] = entry.v0;
         this.textBatch[base + 6] = entry.u1 - entry.u0;
         this.textBatch[base + 7] = entry.v1 - entry.v0;
-        this.textBatch.set(color, base + 8);
-        this.textBatch.set(outlineColor, base + 12);
+        writeBlendedColor(this.textBatch, base + 8, command.color, command.opacity);
+        writeBlendedColor(this.textBatch, base + 12, command.outlineColor, command.opacity);
         this.textBatch[base + 16] = entry.format === 'sdf8' ? 1 : 0;
         this.textBatch[base + 17] = entry.distanceRange;
         this.textBatch[base + 18] = command.outlineWidth;
