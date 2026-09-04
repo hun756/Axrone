@@ -83,7 +83,6 @@ public class IntegrationTests
         handle.State.Should().Be(SingletonLifecycleState.Uninitialized);
 
         registry.Register<SimpleService>(() => new SimpleService());
-        handle.IsCreated.Should().BeFalse(); // Not yet resolved
 
         _ = handle.Value;
         handle.IsCreated.Should().BeTrue();

@@ -11,15 +11,8 @@ internal sealed class MpmcRingBuffer<TItem>
 
     private readonly Cell[] _storage;
     private readonly int _mask;
-
-    [StructLayout(LayoutKind.Explicit, Size = 128)]
-    private struct AlignedCounter
-    {
-        [FieldOffset(0)] public nint Value;
-    }
-
-    private AlignedCounter _producerIndex;
-    private AlignedCounter _consumerIndex;
+    private nint _producerIndex;
+    private nint _consumerIndex;
 
     public MpmcRingBuffer(int bufferCapacity)
     {
@@ -45,14 +38,14 @@ internal sealed class MpmcRingBuffer<TItem>
 
         while (true)
         {
-            nint current = Volatile.Read(ref _producerIndex.Value);
+            nint current = Volatile.Read(ref _producerIndex);
             ref Cell cell = ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(storage), (int)(current & mask));
             nint sequence = Volatile.Read(ref cell.Sequence);
             nint difference = sequence - current;
 
             if (difference == 0)
             {
-                if (Interlocked.CompareExchange(ref _producerIndex.Value, current + 1, current) == current)
+                if (Interlocked.CompareExchange(ref _producerIndex, current + 1, current) == current)
                 {
                     cell.Element = item;
                     Volatile.Write(ref cell.Sequence, current + 1);
@@ -74,14 +67,14 @@ internal sealed class MpmcRingBuffer<TItem>
 
         while (true)
         {
-            nint current = Volatile.Read(ref _consumerIndex.Value);
+            nint current = Volatile.Read(ref _consumerIndex);
             ref Cell cell = ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(storage), (int)(current & mask));
             nint sequence = Volatile.Read(ref cell.Sequence);
             nint difference = sequence - (current + 1);
 
             if (difference == 0)
             {
-                if (Interlocked.CompareExchange(ref _consumerIndex.Value, current + 1, current) == current)
+                if (Interlocked.CompareExchange(ref _consumerIndex, current + 1, current) == current)
                 {
                     item = cell.Element!;
                     cell.Element = default;
