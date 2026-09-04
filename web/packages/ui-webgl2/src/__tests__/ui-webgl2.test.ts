@@ -17,7 +17,7 @@ import {
     getUIHostRuntime,
     resolveUIWidgetRef,
 } from '../scene-host';
-import { orientQuadTowardCamera } from '../world-quad';
+import { orientQuadTowardCamera, createUIWorldQuadRenderer } from '../world-quad';
 import { dispatchWorldPointerToUIRuntime, intersectRayWithUIQuad } from '../world-input';
 
 /** Column-major identity with an optional translation. */
@@ -1926,5 +1926,28 @@ describe('stroke batch flush re-emit', () => {
         // All 5 segments must be rendered (statistics track total quads emitted).
         expect(renderer.getStats().quadCount).toBe(segmentCount);
         renderer.dispose();
+    });
+});
+
+describe('world-quad active texture preservation', () => {
+    it('restores the caller active texture unit after draw', () => {
+        const gl = createMockWebGL2Context();
+        const callerUnit = gl.TEXTURE1;
+        // Simulate caller having TEXTURE1 active before draw.
+        gl.activeTexture(callerUnit);
+        const quadRenderer = createUIWorldQuadRenderer(gl);
+        const texture = gl.createTexture()!;
+        const vp = columnMajorIdentity();
+        quadRenderer.draw(texture, {
+            modelMatrix: vp,
+            viewProjection: vp,
+            width: 64,
+            height: 64,
+        });
+        // The last activeTexture call must restore the caller's unit.
+        const activeTextureCalls = (gl.activeTexture as ReturnType<typeof vi.fn>).mock.calls;
+        const lastCall = activeTextureCalls[activeTextureCalls.length - 1][0];
+        expect(lastCall).toBe(callerUnit);
+        quadRenderer.dispose();
     });
 });

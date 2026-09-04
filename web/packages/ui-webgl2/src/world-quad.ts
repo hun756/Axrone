@@ -137,11 +137,14 @@ export function createUIWorldQuadRenderer(gl: WebGL2RenderingContext): UIWorldQu
                 return;
             }
 
-            // ── activate texture unit zero before capturing so the shadow reads the correct binding ──
+            // ── capture the caller's active texture unit FIRST so the shadow records it ──
+            drawGuard.capture(gl, GL_STATE_ACTIVE_TEXTURE);
+
+            // ── switch to unit 0 for our texture bind ──
             gl.activeTexture(gl.TEXTURE0);
 
-            // ── capture the state this pass mutates (lazy — zero getParameter at steady state) ──
-            drawGuard.capture(gl, DRAW_GROUPS);
+            // ── capture the remaining groups (unit0 binding, program, etc.) ──
+            drawGuard.capture(gl, DRAW_GROUPS & ~GL_STATE_ACTIVE_TEXTURE);
 
             gl.useProgram(program);
             gl.bindVertexArray(vao);
