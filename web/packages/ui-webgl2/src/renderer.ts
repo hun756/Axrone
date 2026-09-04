@@ -882,8 +882,6 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
 
             for (const command of frame.commands) {
                 if (command.kind === 'quad') {
-                    this.flushImageBatch(frame.viewportHeight);
-                    this.flushTextBatch(frame.viewportHeight);
                     if (!sameClip(this.activeQuadClip, command.clip)) {
                         this.flushQuadBatch(frame.viewportHeight);
                         this.activeQuadClip = toClipState(command.clip);
@@ -892,20 +890,14 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                     continue;
                 }
                 if (command.kind === 'image') {
-                    this.flushQuadBatch(frame.viewportHeight);
-                    this.flushTextBatch(frame.viewportHeight);
                     this.pushImageCommand(command, frame);
                     continue;
                 }
                 if (command.kind === 'text') {
-                    this.flushQuadBatch(frame.viewportHeight);
-                    this.flushImageBatch(frame.viewportHeight);
                     this.pushTextCommand(command, frame.viewportHeight);
                     continue;
                 }
                 if (command.kind === 'stroke') {
-                    this.flushImageBatch(frame.viewportHeight);
-                    this.flushTextBatch(frame.viewportHeight);
                     if (!this.activeQuadClip || !sameClip(this.activeQuadClip, command.clip)) {
                         this.flushQuadBatch(frame.viewportHeight);
                         this.activeQuadClip = toClipState(command.clip);
