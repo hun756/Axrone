@@ -88,6 +88,10 @@ export class GlyphAtlas {
         }
         if (page.cursorY + paddedHeight > page.height) {
             page = this.createPage();
+            if (this.pages.length > this.maxPages) {
+                const usedIndex = this.pages.indexOf(page);
+                this.evictIfNeeded(usedIndex);
+            }
         }
         const x = page.cursorX + this.padding;
         const y = page.cursorY + this.padding;
@@ -181,15 +185,21 @@ export class GlyphAtlas {
         }
     }
 
-    private evictIfNeeded(): void {
+    private evictIfNeeded(skipPageIndex = -1): void {
         while (this.pages.length > this.maxPages) {
-            let lruIndex = 0;
+            let lruIndex = -1;
             let lruAccess = Infinity;
             for (let i = 0; i < this.pages.length; i += 1) {
+                if (i === skipPageIndex) {
+                    continue;
+                }
                 if (this.pages[i].lastAccess < lruAccess) {
                     lruAccess = this.pages[i].lastAccess;
                     lruIndex = i;
                 }
+            }
+            if (lruIndex < 0) {
+                break;
             }
             const evicted = this.pages[lruIndex];
             // Remove all entries belonging to the evicted page from the global map.
@@ -221,7 +231,6 @@ export class GlyphAtlas {
         };
         this.nextPageId += 1;
         this.pages.push(page);
-        this.evictIfNeeded();
         return page;
     }
 }

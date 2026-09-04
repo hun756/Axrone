@@ -150,4 +150,34 @@ describe('@axrone/ui GlyphAtlas LRU eviction', () => {
         // Verify that eviction happened and the callback was invoked.
         expect(evicted.length).toBeGreaterThanOrEqual(1);
     });
+
+    it('does not evict the just-created page when at maxPages with frameCounter 0', () => {
+        const evicted: GlyphAtlasPageSnapshot[] = [];
+        const atlas = new GlyphAtlas(1 as any, 32, 32, 0, {
+            maxPages: 1,
+            onEvictPage: (page) => evicted.push(page),
+        });
+
+        // All at frameCounter 0: fill page 1 to capacity.
+        // 32px page, 10px glyph, 0 padding → 3 per row, 3 rows = 9 glyphs.
+        const firstEntry = atlas.ensure(makeGlyph(65));
+        for (let i = 0; i < 8; i += 1) {
+            atlas.ensure(makeGlyph(66 + i));
+        }
+
+        // This glyph overflows page 1 → creates page 2. Without the fix,
+        // evictIfNeeded picks page 2 (or page 1 by index 0 tie) and the
+        // entry ends up on an untracked page.
+        const overflowEntry = atlas.ensure(makeGlyph(200));
+
+        // The entry must be resident in a tracked page.
+        expect(atlas.get(200, 16)).toBe(overflowEntry);
+
+        // The pages array must contain exactly maxPages entries.
+        expect(atlas.snapshot().length).toBe(1);
+
+        // The evicted page should be page 1 (the old one), not the new page.
+        expect(evicted.length).toBe(1);
+        expect(evicted[0].id).toBe(firstEntry.page);
+    });
 });
