@@ -388,6 +388,9 @@ const toUint8Array = (value: ArrayBuffer | ArrayBufferView): Uint8Array => {
 const createUploadedGlyphKey = (entry: GlyphAtlasEntry): number =>
     (entry.codePoint << 16) | (entry.rasterSize ?? 0);
 
+const createGlyphPageKey = (entry: GlyphAtlasEntry): number =>
+    ((entry.faceId as number) << 16) | (entry.page as number);
+
 const multiplyAlpha = (alpha: number, opacity: number): number => alpha * opacity;
 
 const writeBlendedColor = (
@@ -1283,7 +1286,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         if (!entry) {
             return true;
         }
-        const pageKey = ((entry.faceId as number) << 16) | (entry.page as number);
+        const pageKey = createGlyphPageKey(entry);
         if (this.activeTextPageKey !== null && this.activeTextPageKey !== pageKey) {
             return false;
         }
@@ -1420,7 +1423,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     }
 
     private ensureGlyphPage(entry: GlyphAtlasEntry): TexturePage | null {
-        const key = `${entry.faceId as number}:${entry.page as number}`;
+        const key = createGlyphPageKey(entry);
         let page = this.pages.get(key);
         if (!page) {
             const texture = this.gl.createTexture();
