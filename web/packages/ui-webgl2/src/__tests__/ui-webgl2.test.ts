@@ -1846,3 +1846,47 @@ describe('dispatchWorldPointerToUIRuntime', () => {
         ).toBe(false);
     });
 });
+
+describe('stroke batch flush re-emit', () => {
+    it('preserves all stroke segments when the quad batch overflows', () => {
+        const gl = createMockWebGL2Context();
+        const segmentCount = 5;
+        const renderer = new WebGL2UIRenderer({ gl, quadBatchCapacity: 2 });
+        const points: [number, number][] = [];
+        for (let i = 0; i <= segmentCount; i++) {
+            points.push([i / segmentCount, 0.5]);
+        }
+        const frame: UIFrame = {
+            viewportWidth: 160,
+            viewportHeight: 120,
+            metrics: createMetrics(),
+            commands: [
+                {
+                    kind: 'stroke',
+                    widget: 1 as WidgetId,
+                    x: 0,
+                    y: 0,
+                    width: 100,
+                    height: 100,
+                    zIndex: 0,
+                    opacity: 1,
+                    clip: null,
+                    strokes: [
+                        {
+                            color: { r: 1, g: 0, b: 0, a: 1 },
+                            weight: 2,
+                            points,
+                        },
+                    ],
+                },
+            ],
+        };
+        renderer.render(frame);
+        // drawArraysInstanced is called each time the batch flushes + final flush.
+        // With 5 segments and capacity 2: flush at 2, flush at 2, flush remaining 1 = 3 draw calls.
+        expect(gl.drawArraysInstanced).toHaveBeenCalledTimes(3);
+        // All 5 segments must be rendered (statistics track total quads emitted).
+        expect(renderer.getStats().quadCount).toBe(segmentCount);
+        renderer.dispose();
+    });
+});

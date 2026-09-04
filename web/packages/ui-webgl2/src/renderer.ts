@@ -606,10 +606,10 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 const r3 = camera[2] * s1 + camera[3] * s3;
                 const r4 = camera[0] * s4 + camera[1] * s5 + camera[4];
                 const r5 = camera[2] * s4 + camera[3] * s5 + camera[5];
-                const base = this.quadCount * QUAD_FLOATS_PER_INSTANCE;
+                let base = this.quadCount * QUAD_FLOATS_PER_INSTANCE;
                 if (base + QUAD_FLOATS_PER_INSTANCE > this.quadBatch.length) {
                     this.flushQuadBatch(viewportHeight);
-                    continue;
+                    base = 0;
                 }
                 // Local rect carries the strip's pixel size; the transform places it.
                 this.quadBatch[base] = 0;
