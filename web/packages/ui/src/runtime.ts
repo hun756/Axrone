@@ -16,6 +16,7 @@ import {
     mapViewportPointToCanvas,
 } from './layout/canvas-scaler';
 import { NodeFlag } from './runtime/node-flags';
+import { ControllerEventBus, type ControllerEventHandler } from './runtime/controller-event-bus';
 import {
     type StoredWidgetRecord,
     compileWidgetFocus,
@@ -164,7 +165,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private canvasConfig: UICanvasConfig | null = null;
     private lastViewport: { readonly width: number; readonly height: number } | null = null;
     private readonly bindingTable = new Map<string, WidgetId>();
-    private readonly controllerListeners = new Map<number, Map<string, Set<(data: unknown) => void>>>();
+    private readonly controllerEventBus = new ControllerEventBus();
     private readonly controllerResolveCache = new Map<string, WidgetController<any, any, any> | null>();
     // Shared LRU implementation (TextLayoutEngine uses the same class) instead
     // of a hand-rolled Map with ad-hoc half-eviction.
@@ -309,17 +310,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     onControllerEvent(widget: WidgetId, eventName: string, callback: (data: unknown) => void): void {
         this.ensureActive();
         this.requireWidget(widget);
-        let widgetListeners = this.controllerListeners.get(widget);
-        if (!widgetListeners) {
-            widgetListeners = new Map();
-            this.controllerListeners.set(widget, widgetListeners);
-        }
-        let eventListeners = widgetListeners.get(eventName);
-        if (!eventListeners) {
-            eventListeners = new Set();
-            widgetListeners.set(eventName, eventListeners);
-        }
-        eventListeners.add(callback);
+        this.controllerEventBus.on(widget, eventName, callback as ControllerEventHandler);
     }
 
     /**
@@ -327,17 +318,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
      */
     offControllerEvent(widget: WidgetId, eventName: string, callback: (data: unknown) => void): void {
         this.ensureActive();
-        const widgetListeners = this.controllerListeners.get(widget);
-        if (!widgetListeners) return;
-        const eventListeners = widgetListeners.get(eventName);
-        if (!eventListeners) return;
-        eventListeners.delete(callback);
-        if (eventListeners.size === 0) {
-            widgetListeners.delete(eventName);
-        }
-        if (widgetListeners.size === 0) {
-            this.controllerListeners.delete(widget);
-        }
+        this.controllerEventBus.off(widget, eventName, callback as ControllerEventHandler);
     }
 
     /**
@@ -347,14 +328,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
      */
     emitControllerEvent(widget: WidgetId, eventName: string, data?: unknown): boolean {
         this.ensureActive();
-        const widgetListeners = this.controllerListeners.get(widget);
-        if (!widgetListeners) return false;
-        const eventListeners = widgetListeners.get(eventName);
-        if (!eventListeners || eventListeners.size === 0) return false;
-        for (const listener of [...eventListeners]) {
-            listener(data);
-        }
-        return true;
+        return this.controllerEventBus.emit(widget, eventName, data);
     }
 
     /**
@@ -1920,7 +1894,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             ? this.registry.resolve(this.records[index]!.controller)
             : null;
         controller?.disposeState?.(this.states[index], this, index as WidgetId);
-        this.controllerListeners.delete(index);
+        this.controllerEventBus.clear(index as WidgetId);
         this.records[index] = null;
         this.layouts[index] = null;
         this.styles[index] = null;
