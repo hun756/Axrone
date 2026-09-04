@@ -15,7 +15,6 @@ import type {
 } from '@axrone/ui/types';
 import type { UIFrameSink } from '@axrone/ui/render';
 import { DisposedUIError } from '@axrone/ui/errors';
-import { Color } from '@axrone/numeric';
 import type {
     WebGL2UICustomCommandContext,
     WebGL2UIMaterialImageContext,
@@ -25,6 +24,7 @@ import type {
     WebGL2UIRenderOptions,
 } from './types';
 import { createProgram } from './shader-source';
+import { UNIT_QUAD, writeBlendedColor, normalizeStrokeColor } from './webgl-utils';
 import {
     GL_STATE_FRAMEBUFFER,
     GL_STATE_VIEWPORT,
@@ -425,8 +425,6 @@ interface TexturePage {
  * same definitions.
  */
 
-const UNIT_QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
-
 const sameClipRect = (stored: RectLike | null, incoming: RectLike | null): boolean => {
     if (stored === null || incoming === null) {
         return stored === null && incoming === null;
@@ -451,61 +449,6 @@ const createUploadedGlyphKey = (entry: GlyphAtlasEntry): number =>
 
 const createGlyphPageKey = (entry: GlyphAtlasEntry): number =>
     ((entry.faceId as number) << 16) | (entry.page as number);
-
-const multiplyAlpha = (alpha: number, opacity: number): number => alpha * opacity;
-
-const writeBlendedColor = (
-    batch: Float32Array,
-    offset: number,
-    color: QuadRenderCommand['color'] | TextRenderCommand['color'],
-    opacity: number
-): void => {
-    // Runtime-authored commands always carry resolved color objects; the
-    // scalar/array branch only serves hand-built commands.
-    if (typeof color === 'string' || typeof color === 'number' || Array.isArray(color)) {
-        const resolved = normalizeStrokeColor(color);
-        batch[offset] = resolved[0];
-        batch[offset + 1] = resolved[1];
-        batch[offset + 2] = resolved[2];
-        batch[offset + 3] = multiplyAlpha(resolved[3], opacity);
-        return;
-    }
-    batch[offset] = color.r;
-    batch[offset + 1] = color.g;
-    batch[offset + 2] = color.b;
-    batch[offset + 3] = multiplyAlpha(color.a ?? 1, opacity);
-};
-
-/**
- * Converts a ColorInput (hex string, number, array, or ColorLike) to a
- * normalized [r, g, b, a] tuple for stroke rendering.
- */
-const normalizeStrokeColor = (color: StrokeRenderCommand['strokes'][number]['color']): readonly [number, number, number, number] => {
-    if (typeof color === 'string') {
-        try {
-            const c = Color.fromHex(color);
-            return [c.r, c.g, c.b, c.a] as const;
-        } catch {
-            return [1, 1, 1, 1] as const;
-        }
-    }
-    if (typeof color === 'number') {
-        return [
-            ((color >>> 24) & 0xff) / 255,
-            ((color >>> 16) & 0xff) / 255,
-            ((color >>> 8) & 0xff) / 255,
-            (color & 0xff) / 255,
-        ];
-    }
-    // Object branch first: Array.isArray cannot narrow readonly tuple members
-    // out of the union, but the `in` check cleanly separates object from tuple.
-    if ('r' in color) {
-        return [color.r, color.g, color.b, color.a ?? 1];
-    }
-    return color.length === 3
-        ? [color[0], color[1], color[2], 1]
-        : [color[0], color[1], color[2], color[3]];
-};
 
 const IDENTITY_TRANSFORM = [1, 0, 0, 1, 0, 0] as const;
 

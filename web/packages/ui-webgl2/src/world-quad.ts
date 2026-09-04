@@ -8,6 +8,7 @@
  */
 import { LazyGLStateGuard, GL_STATE_PROGRAM, GL_STATE_VERTEX_ARRAY, GL_STATE_ARRAY_BUFFER, GL_STATE_ACTIVE_TEXTURE, GL_STATE_UNIT0_TEXTURE, GL_STATE_BLEND, GL_STATE_BLEND_FUNC, GL_STATE_DEPTH_TEST, GL_STATE_DEPTH_WRITEMASK, GL_STATE_CULL_FACE } from './gl-state';
 import { compileShader } from './shader-source';
+import { UNIT_QUAD } from './webgl-utils';
 export interface UIWorldQuadDrawOptions {
     /** Entity world matrix, 4x4 column-major. */
     readonly modelMatrix: Float32Array;
@@ -56,8 +57,6 @@ void main() {
         discard;
     }
 }`;
-
-const UNIT_QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
 /**
  * Rebuilds a quad model matrix so it squarely faces the camera, keeping the
