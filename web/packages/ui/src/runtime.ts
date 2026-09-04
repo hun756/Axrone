@@ -1118,7 +1118,11 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
                 parents.add(parent);
             }
         }
-        for (const parentId of parents) {
+        // Sort parents by depth ascending so grandparents are processed before
+        // their descendants. This prevents stale availWidth propagation when
+        // a dirty grandparent is processed after its descendant.
+        const sortedParents = Array.from(parents).sort((left, right) => this.depth[left] - this.depth[right]);
+        for (const parentId of sortedParents) {
             const box = this.readBox(parentId);
             const grandparent = this.parent[parentId];
             const gpBox = grandparent !== 0 ? this.readBox(grandparent) : null;

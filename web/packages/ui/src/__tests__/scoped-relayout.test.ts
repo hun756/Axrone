@@ -201,4 +201,58 @@ describe('T-24: Scoped relayout correctness', () => {
         expect(box.width).toBe(100);
         expect(box.height).toBe(50);
     });
+
+    it('relayout dirty parents in depth order produces same layout as full compute', () => {
+        // Build a tree: root -> grandparent -> parent -> child
+        // Mark both grandparent and child as dirty (via layout changes)
+        // The scoped relayout should process grandparent before parent
+        // to avoid stale availWidth propagation.
+
+        // Runtime A: uses scoped relayout
+        const rtA = createTestRuntime();
+        const grandparent = rtA.createWidget({
+            layout: { display: 'stack', direction: 'column', width: 400, height: 300, gap: 5 },
+        });
+        const parent = rtA.createWidget({
+            layout: { display: 'stack', direction: 'column', width: 300, height: 200, gap: 5 },
+        });
+        const child = rtA.createWidget({
+            layout: { width: 100, height: 50 },
+        });
+        rtA.appendChild(rtA.root, grandparent);
+        rtA.appendChild(grandparent, parent);
+        rtA.appendChild(parent, child);
+        rtA.commit();
+
+        // Change both grandparent and child layout (adverse order: child first)
+        rtA.updateWidget(child, { layout: { width: 150, height: 60 } });
+        rtA.updateWidget(grandparent, { layout: { display: 'stack', direction: 'column', width: 350, height: 250, gap: 5 } });
+        rtA.commit();
+
+        // Runtime B: identical final state, full compute from scratch
+        const rtB = createTestRuntime();
+        const gpB = rtB.createWidget({
+            layout: { display: 'stack', direction: 'column', width: 350, height: 250, gap: 5 },
+        });
+        const pB = rtB.createWidget({
+            layout: { display: 'stack', direction: 'column', width: 300, height: 200, gap: 5 },
+        });
+        const cB = rtB.createWidget({
+            layout: { width: 150, height: 60 },
+        });
+        rtB.appendChild(rtB.root, gpB);
+        rtB.appendChild(gpB, pB);
+        rtB.appendChild(pB, cB);
+        rtB.commit();
+
+        // Compare layouts
+        const listA = [grandparent, parent, child].map(w => rtA.getLayoutBox(w));
+        const listB = [gpB, pB, cB].map(w => rtB.getLayoutBox(w));
+        for (let i = 0; i < listA.length; i++) {
+            expect(listA[i].x).toBeCloseTo(listB[i].x);
+            expect(listA[i].y).toBeCloseTo(listB[i].y);
+            expect(listA[i].width).toBeCloseTo(listB[i].width);
+            expect(listA[i].height).toBeCloseTo(listB[i].height);
+        }
+    });
 });
