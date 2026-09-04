@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { animate, Easing } from '../controls/animation';
 import { UIError, UIErrorCode, WidgetNotFoundError } from '../errors';
 import type { UIRuntime } from '../runtime';
@@ -11,6 +11,10 @@ const createMockRuntime = (overrides: Partial<UIRuntime> = {}): UIRuntime => ({
 } as unknown as UIRuntime);
 
 describe('animation tick error handling', () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
 	it('cancels silently when widget is disposed mid-animation (WidgetNotFoundError)', () => {
 		const updateWidget = vi.fn().mockImplementationOnce(() => {
 			throw new WidgetNotFoundError(42);
@@ -74,7 +78,5 @@ describe('animation tick error handling', () => {
 				easing: Easing.linear,
 			});
 		}).toThrow('Unexpected interpolation failure');
-
-		vi.unstubAllGlobals();
 	});
 });
