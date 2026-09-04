@@ -7,6 +7,7 @@
  */
 
 import { clamp, Color } from '@axrone/numeric';
+import { UIError, WidgetNotFoundError, type UIErrorCode } from '../errors';
 import type { UIRuntime } from '../runtime';
 import type { WidgetId } from '../types';
 
@@ -231,7 +232,16 @@ export const animate = (runtime: UIRuntime, config: UIAnimationConfig): UIAnimat
                 const start = startValues[i];
                 writeInterpolatedValue(runtime, target.widget, target.property, start, target.to, easedProgress);
             }
-        } catch {
+        } catch (error) {
+            // Narrow: swallow only disposal-related errors (widget disposed
+            // mid-animation). Rethrow everything else so unexpected errors
+            // propagate to the caller/scheduler instead of being silently lost.
+            const isDisposalError =
+                error instanceof WidgetNotFoundError ||
+                (error instanceof UIError && error.code === ('UI_DISPOSED' as UIErrorCode));
+            if (!isDisposalError) {
+                throw error;
+            }
             // A target widget was disposed mid-animation — cancel silently.
             if (animationId !== null) {
                 cancelAnimationFrame(animationId);
