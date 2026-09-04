@@ -1,6 +1,6 @@
 {
     "name": "@axrone/ui-webgl2",
-    "version": "0.0.1",
+    "version": "0.1.0",
     "main": "./dist/index.js",
     "module": "./dist/index.mjs",
     "types": "./dist/index.d.ts",
@@ -45,6 +45,6 @@
         "@axrone/numeric": "^0.0.1",
         "@axrone/render-core": "^0.1.0",
         "@axrone/scene-runtime": "^0.1.0",
-        "@axrone/ui": "^0.0.1"
+        "@axrone/ui": "^0.1.0"
     }
 }
