@@ -93,6 +93,10 @@ export function createUIWorldSurface(
 
     const handleContextRestored = (): void => {
         try {
+            // Delete stale GPU handles before recreating to avoid leaking
+            // the previous texture/framebuffer objects.
+            try { gl.deleteTexture(texture); } catch { /* best-effort */ }
+            try { gl.deleteFramebuffer(framebuffer); } catch { /* best-effort */ }
             texture = gl.createTexture();
             framebuffer = gl.createFramebuffer();
             if (!texture || !framebuffer) {
