@@ -723,6 +723,8 @@ try {
                 const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * p) - 1));
                 return sorted[idx];
             };
+            // NOTE: with minRunCount=3, p99 === max. The percentile only
+            // differentiates once run count reaches 5+.
             return { median: pct(0.5), p95: pct(0.95), p99: pct(0.99), max: sorted[sorted.length - 1] ?? 0 };
         };
 
