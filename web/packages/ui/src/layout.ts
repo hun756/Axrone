@@ -71,11 +71,7 @@ export class UILayoutEngine<TNode> {
     private layoutPasses = 0;
     private viewportWidth = 0;
     private viewportHeight = 0;
-    private readonly measureCache = new Map<TNode, Map<string, SizeLike>>();
-
-    private static constraintKey(availableWidth: number, availableHeight: number): string {
-        return `${availableWidth}|${availableHeight}`;
-    }
+    private readonly measureCache = new Map<TNode, Map<number, Map<number, SizeLike>>>();
 
     compute(adapter: LayoutTreeAdapter<TNode>, viewport: Readonly<SizeLike>): void {
         this.layoutPasses = 0;
@@ -119,12 +115,14 @@ export class UILayoutEngine<TNode> {
         availableWidth: number,
         availableHeight: number
     ): SizeLike {
-        const constraintKey = UILayoutEngine.constraintKey(availableWidth, availableHeight);
         let nodeCache = this.measureCache.get(node);
         if (nodeCache) {
-            const cached = nodeCache.get(constraintKey);
-            if (cached) {
-                return cached;
+            const widthCache = nodeCache.get(availableWidth);
+            if (widthCache) {
+                const cached = widthCache.get(availableHeight);
+                if (cached) {
+                    return cached;
+                }
             }
         }
         this.layoutPasses += 1;
@@ -177,7 +175,12 @@ export class UILayoutEngine<TNode> {
             nodeCache = new Map();
             this.measureCache.set(node, nodeCache);
         }
-        nodeCache.set(constraintKey, result);
+        let widthCache = nodeCache.get(availableWidth);
+        if (!widthCache) {
+            widthCache = new Map();
+            nodeCache.set(availableWidth, widthCache);
+        }
+        widthCache.set(availableHeight, result);
         return result;
     }
 
