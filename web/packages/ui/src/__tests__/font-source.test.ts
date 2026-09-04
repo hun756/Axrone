@@ -49,11 +49,11 @@ describe('@axrone/ui font source utilities', () => {
 
 	describe('createAtlasEntryKey', () => {
 		it('creates a deterministic key from codePoint and rasterSize', () => {
-			expect(createAtlasEntryKey(65, 16)).toBe('65:16');
+			expect(createAtlasEntryKey(65, 16)).toBe(65 * 256 + 16);
 		});
 
 		it('defaults rasterSize to 0', () => {
-			expect(createAtlasEntryKey(65)).toBe('65:0');
+			expect(createAtlasEntryKey(65)).toBe(65 * 256);
 		});
 	});
 
