@@ -475,9 +475,6 @@ const createGLStateShadow = (): GLStateShadow => ({
 
 const UNIT_QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
-const clipKey = (clip: RectLike | null): string =>
-    clip === null ? 'none' : `${clip.x}|${clip.y}|${clip.width}|${clip.height}`;
-
 const toClipState = (clip: RectLike | null): ClipState | null =>
     clip === null ? null : { x: clip.x, y: clip.y, width: clip.width, height: clip.height };
 
