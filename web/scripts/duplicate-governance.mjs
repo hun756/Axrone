@@ -22,7 +22,7 @@ const jscpdIgnoreGlobs = [
 // Extracts template-literal / string contents that look like GLSL from .ts
 // sources, writes them to a temp dir as pseudo-.glsl files, and runs a
 // dedicated jscpd pass over them.
-const glslMarkerPattern = /(?:#version\s|precision\s+(?:low|med|high)p|\bvec[234]\b|\bfloat\s+\w+\s*\()/;
+const glslMarkerPattern = /(?:#version\s|precision\s+(?:low|med|high)p|\bvec[234]\b|\bfloat\s+\w+\s*\(|\bmat[234]\b|\bu?ivec[234]\b|\bsampler(?:2D|3D|Cube)\b|\bvoid\s+main\s*\(|#define\s+\w+|\bin\s+(?:vec|float|int|out)\b)/;
 const templateLiteralPattern = /`([^`]*?)`/gs;
 const glslScanPackages = ['packages/ui', 'packages/ui-webgl2'];
 const glslTempDir = path.resolve(workspaceDir, '.tmp', 'duplicate-governance', 'glsl-extracts');
