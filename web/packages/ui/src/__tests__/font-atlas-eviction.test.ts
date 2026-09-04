@@ -29,7 +29,6 @@ describe('@axrone/ui GlyphAtlas LRU eviction', () => {
 
         // Fill page 2.
         const entryD = atlas.ensure(makeGlyph(68)); // D
-        const page2Id = entryD.page;
         atlas.ensure(makeGlyph(69)); // E → cursorX=10
         atlas.ensure(makeGlyph(70)); // F → cursorX=20
         atlas.ensure(makeGlyph(71)); // G → cursorX=30
@@ -144,13 +143,15 @@ describe('@axrone/ui GlyphAtlas LRU eviction', () => {
         });
 
         // Frame 0: fill page 1.
-        atlas.ensure(makeGlyph(65));
+        const page1Entry = atlas.ensure(makeGlyph(65));
+        const page1Id = page1Entry.page;
         atlas.tick();
 
         // Frame 1: fill page 2.
         for (let i = 0; i < 15; i += 1) {
             atlas.ensure(makeGlyph(100 + i));
         }
+        const page2Id = atlas.ensure(makeGlyph(100)).page;
         atlas.tick();
 
         // Frame 2: touch page 1 (glyph 65).
@@ -162,8 +163,9 @@ describe('@axrone/ui GlyphAtlas LRU eviction', () => {
             atlas.ensure(makeGlyph(200 + i));
         }
 
-        // Verify that eviction happened and the callback was invoked.
         expect(evicted.length).toBeGreaterThanOrEqual(1);
+        expect(evicted[0].id).toBe(page2Id);
+        expect(evicted[0].id).not.toBe(page1Id);
     });
 
     it('does not evict the just-created page when at maxPages with frameCounter 0', () => {
