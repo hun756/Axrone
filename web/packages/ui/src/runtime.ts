@@ -1165,9 +1165,9 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         }
     }
 
-    /** Clears all translation offsets (called after full layout). */
+    /** Clears translation offsets for live widgets only (called after full layout). */
     private clearTranslationOffsets(): void {
-        for (let i = 0; i < this.translateX.length; i++) {
+        for (let i = 0; i < this.records.length; i++) {
             this.translateX[i] = 0;
             this.translateY[i] = 0;
         }
