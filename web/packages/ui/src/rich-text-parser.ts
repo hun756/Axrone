@@ -1,6 +1,7 @@
 import type { RichTextSpan } from './types/widget';
 import type { ColorInput } from './types/layout';
 import type { FontStyle, FontWeight } from './types/foundation';
+import { normalizeWeight } from './runtime/internals';
 
 interface ActiveStyle {
     readonly tag: string;
@@ -49,15 +50,20 @@ const parseTagContent = (content: string): ParsedTag | null => {
             }
             case 'weight': {
                 const value = rawValue.replace(/^["']|["']$/g, '').toLowerCase();
-                const validWeights: readonly FontWeight[] = [
-                    100, 200, 300, 400, 500, 600, 700, 800, 900,
-                    'thin', 'extralight', 'light', 'normal', 'medium',
-                    'semibold', 'bold', 'extrabold', 'black',
-                ];
-                if (!validWeights.includes(value as FontWeight)) {
+                // Try to parse as a number first (e.g., '400')
+                const numericWeight = Number(value);
+                let weightValue: FontWeight;
+                if (Number.isFinite(numericWeight)) {
+                    weightValue = numericWeight as FontWeight;
+                } else {
+                    weightValue = value as FontWeight;
+                }
+                // Validate by checking if normalizeWeight returns a valid weight (100-900)
+                const normalized = normalizeWeight(weightValue);
+                if (normalized < 100 || normalized > 900) {
                     return null;
                 }
-                return { tagName, closing: false, patch: { weight: value as FontWeight } };
+                return { tagName, closing: false, patch: { weight: weightValue } };
             }
             default:
                 return null;

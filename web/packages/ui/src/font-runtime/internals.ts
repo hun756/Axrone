@@ -1,5 +1,6 @@
 import { FontLoadError } from '../errors';
 import type { DynamicFontRuntimeInfo, FontStyle, FontWeight } from '../types';
+import { normalizeWeight } from '../runtime/internals';
 
 export const METRIC_EM_SIZE = 1000;
 const MIN_RASTER_SIZE = 8;
@@ -9,10 +10,7 @@ export type CanvasLike = HTMLCanvasElement | OffscreenCanvas;
 export type CanvasRenderingContext2DLike = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 export const normalizeWeightToken = (weight: FontWeight | undefined): string => {
-    if (weight === undefined) {
-        return '400';
-    }
-    return String(weight);
+    return String(normalizeWeight(weight));
 };
 
 export const normalizeStyleToken = (style: FontStyle | undefined): string => style ?? 'normal';

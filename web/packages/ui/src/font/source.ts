@@ -10,33 +10,9 @@ import type {
     RetryPolicy,
     StaticFontFaceAsset,
 } from '../types';
+import { normalizeWeight } from '../runtime/internals';
 
-export const normalizeWeight = (weight: FontWeight | undefined): number => {
-    switch (weight) {
-        case 'thin':
-            return 100;
-        case 'extralight':
-            return 200;
-        case 'light':
-            return 300;
-        case 'normal':
-            return 400;
-        case 'medium':
-            return 500;
-        case 'semibold':
-            return 600;
-        case 'bold':
-            return 700;
-        case 'extrabold':
-            return 800;
-        case 'black':
-            return 900;
-        case undefined:
-            return 400;
-        default:
-            return weight;
-    }
-};
+export { normalizeWeight };
 
 export const normalizeStyle = (style: FontStyle | undefined): FontStyle => style ?? 'normal';
 
