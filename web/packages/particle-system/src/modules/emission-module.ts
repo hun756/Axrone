@@ -46,7 +46,7 @@ export class EmissionModule extends BaseModule<'emission'> {
             this._performPrewarm();
         }
 
-        this._seedOffset = Math.floor(Math.random() * 10000);
+        this._seedOffset = Math.floor(this._random.float() * 10000);
     }
 
     protected onDestroy(): void {
@@ -219,11 +219,11 @@ export class EmissionModule extends BaseModule<'emission'> {
 
         const baseLifetime = this._evaluateCurve(config.startLifetime, normalizedTime);
         const lifetimeVariance = baseLifetime * config.startLifetimeMultiplier;
-        const lifetime = Math.max(0.1, baseLifetime + (Math.random() * 2 - 1) * lifetimeVariance);
+        const lifetime = Math.max(0.1, baseLifetime + (this._random.float() * 2 - 1) * lifetimeVariance);
 
         const baseSize = this._evaluateCurve(config.startSize, normalizedTime);
         const sizeVariance = baseSize * config.startSizeMultiplier;
-        const size = Math.max(0.01, baseSize + (Math.random() * 2 - 1) * sizeVariance);
+        const size = Math.max(0.01, baseSize + (this._random.float() * 2 - 1) * sizeVariance);
 
         const color = this._generateInitialColor(normalizedTime);
 
@@ -319,11 +319,11 @@ export class EmissionModule extends BaseModule<'emission'> {
                 if (!curve.curveMin || !curve.curveMax) return curve.constant;
                 const min = this._sampleCurve(curve.curveMin, time);
                 const max = this._sampleCurve(curve.curveMax, time);
-                return (min + Math.random() * (max - min)) * curve.curveMultiplier;
+                return (min + this._random.float() * (max - min)) * curve.curveMultiplier;
 
             case 3:
                 const range = curve.constantMax - curve.constantMin;
-                return curve.constantMin + Math.random() * range;
+                return curve.constantMin + this._random.float() * range;
 
             default:
                 return curve.constant;

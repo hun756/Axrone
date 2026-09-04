@@ -2,6 +2,7 @@ import type { ParticleId, ModuleId } from '../types';
 import type { IModule, IParticleBuffer, IParticleData } from '../core/interfaces';
 import type { ModuleConfigurationMap, ModuleType } from '../core/configuration';
 import { ParticleSystemException } from '../core/error';
+import { createRandom, type Random } from '@axrone/random';
 
 export abstract class BaseModule<T extends ModuleType = ModuleType> implements IModule<T> {
     private static _nextId = 1;
@@ -9,6 +10,7 @@ export abstract class BaseModule<T extends ModuleType = ModuleType> implements I
     protected readonly _id: ModuleId;
     protected readonly _type: T;
     protected readonly _dependencies: readonly ModuleId[];
+    protected readonly _random: Random;
     protected _priority: number;
     protected _enabled: boolean;
     protected _configuration: ModuleConfigurationMap[T];
@@ -26,6 +28,7 @@ export abstract class BaseModule<T extends ModuleType = ModuleType> implements I
         this._priority = priority;
         this._enabled = configuration.enabled;
         this._dependencies = dependencies;
+        this._random = createRandom();
     }
 
     get id(): ModuleId {

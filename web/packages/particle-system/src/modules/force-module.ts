@@ -292,7 +292,7 @@ export class ForceModule extends BaseModule<'force'> {
 
     private _initializeNoise(): void {
         for (let i = 0; i < this._noiseOffsets.length; i++) {
-            this._noiseOffsets[i] = Math.random() * 1000;
+            this._noiseOffsets[i] = this._random.float() * 1000;
         }
     }
 

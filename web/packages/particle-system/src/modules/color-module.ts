@@ -226,9 +226,9 @@ export class ColorModule extends BaseModule<'color'> {
         baseColor: { r: number; g: number; b: number; a: number },
         variation: number
     ): { r: number; g: number; b: number; a: number } {
-        const randomR = (Math.random() - 0.5) * variation;
-        const randomG = (Math.random() - 0.5) * variation;
-        const randomB = (Math.random() - 0.5) * variation;
+        const randomR = (this._random.float() - 0.5) * variation;
+        const randomG = (this._random.float() - 0.5) * variation;
+        const randomB = (this._random.float() - 0.5) * variation;
 
         return {
             r: baseColor.r + randomR,
