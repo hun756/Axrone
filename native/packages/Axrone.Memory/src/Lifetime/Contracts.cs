@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 
-namespace Enterprise.Patterns.Singleton;
+namespace Axrone.Memory.Lifetime;
 
 public interface ISingleton<out T>
 {

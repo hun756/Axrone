@@ -1,4 +1,4 @@
-namespace Enterprise.Patterns.Singleton;
+namespace Axrone.Memory.Lifetime;
 
 public class SingletonException : Exception
 {

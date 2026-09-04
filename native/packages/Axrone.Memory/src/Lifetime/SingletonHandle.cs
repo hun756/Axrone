@@ -1,4 +1,4 @@
-namespace Enterprise.Patterns.Singleton;
+namespace Axrone.Memory.Lifetime;
 
 public readonly struct SingletonHandle<T> : IEquatable<SingletonHandle<T>> where T : class
 {

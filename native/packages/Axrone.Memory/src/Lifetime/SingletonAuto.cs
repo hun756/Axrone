@@ -1,4 +1,4 @@
-namespace Enterprise.Patterns.Singleton;
+namespace Axrone.Memory.Lifetime;
 
 public static class SingletonAuto<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T> where T : class, new()
 {

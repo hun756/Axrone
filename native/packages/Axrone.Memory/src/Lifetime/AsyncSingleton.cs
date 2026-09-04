@@ -1,4 +1,4 @@
-namespace Enterprise.Patterns.Singleton;
+namespace Axrone.Memory.Lifetime;
 
 public sealed class AsyncSingleton<T> : IAsyncSingleton<T>, IDisposable, IAsyncDisposable where T : class
 {

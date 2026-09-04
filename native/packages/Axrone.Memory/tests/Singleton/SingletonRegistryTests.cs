@@ -1,4 +1,4 @@
-using Enterprise.Patterns.Singleton;
+using Axrone.Memory.Lifetime;
 
 namespace Axrone.Memory.Tests;
 
