@@ -1,6 +1,6 @@
 import { clamp } from '@axrone/numeric';
 import type { UIRuntime } from '../runtime';
-import type { ColorInput, TextBlockInput, WidgetId } from '../types';
+import type { ColorInput, TextBlockInput, UIImageSource, WidgetId } from '../types';
 import type { UIControlTheme, UIHandle, UIParentTarget, UISlotHandle } from './types';
 
 export const DEFAULT_SELECTION_COLOR = '#2563eb55';
@@ -31,6 +31,63 @@ export const asRecord = (value: unknown): Record<string, unknown> =>
     value && typeof value === 'object' && !Array.isArray(value)
         ? (value as Record<string, unknown>)
         : {};
+
+// ─── Image-source helpers ────────────────────────────────────────────────────
+// Shared helpers for controllers that swap image sources (button, checkbox).
+
+/**
+ * Inline image-source descriptor for per-state sprite swapping.
+ * Mirrors `UIImageSource` without requiring an import-time dependency on the
+ * full widget type — keeps the props contract self-contained in JSON.
+ */
+export interface ImageSourceInput {
+    readonly kind: 'texture' | 'material';
+    readonly resourceId?: string;
+    readonly materialId?: string;
+    readonly textureBinding?: string;
+    readonly width: number;
+    readonly height: number;
+}
+
+/** Type guard: checks if unknown value is a valid UIImageSource. */
+export const isValidImageSource = (source: unknown): source is UIImageSource => {
+    if (!source || typeof source !== 'object') return false;
+    const src = source as Record<string, unknown>;
+    if (src.kind === 'texture') return typeof src.resourceId === 'string' && !!src.resourceId;
+    if (src.kind === 'material') return typeof src.materialId === 'string' && !!src.materialId;
+    return false;
+};
+
+/** Converts an ImageSourceInput to a UIImageSource, or null if invalid. */
+export const toImageSource = (input: ImageSourceInput): UIImageSource | null => {
+    if (input.kind === 'texture' && input.resourceId) {
+        return { kind: 'texture', resourceId: input.resourceId, width: input.width, height: input.height };
+    }
+    if (input.kind === 'material' && input.materialId) {
+        return {
+            kind: 'material',
+            materialId: input.materialId,
+            textureBinding: input.textureBinding,
+            width: input.width,
+            height: input.height,
+        };
+    }
+    return null;
+};
+
+/** Extracts an ImageSourceInput from a raw record (e.g. from JSON props). */
+export const extractSourceInput = (record: Record<string, unknown>): ImageSourceInput | null => {
+    const kind = record.kind;
+    if (kind !== 'texture' && kind !== 'material') return null;
+    const width = Number(record.width);
+    const height = Number(record.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+    const result: Record<string, unknown> = { kind, width, height };
+    if (typeof record.resourceId === 'string') result.resourceId = record.resourceId;
+    if (typeof record.materialId === 'string') result.materialId = record.materialId;
+    if (typeof record.textureBinding === 'string') result.textureBinding = record.textureBinding;
+    return result as unknown as ImageSourceInput;
+};
 
 export const resolveParentWidget = <TRuntime>(runtime: UIRuntime<TRuntime>, parent: UIParentTarget): WidgetId => {
     if (parent === null || parent === undefined) {

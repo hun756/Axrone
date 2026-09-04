@@ -2,7 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { ColorHexString, UIInputEvent, UIImageSource, WidgetId, WidgetImageInput, WidgetStrokeData } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { animateWidgetColor, Easing, type UIAnimationHandle } from './animation';
-import { asString, asNumber, asBoolean, asRecord } from './internals';
+import { asString, asNumber, asBoolean, asRecord, isValidImageSource, toImageSource, extractSourceInput, type ImageSourceInput } from './internals';
 
 /**
  * Declarative checkbox controller for `.ui.json` authored checkboxes.
@@ -49,15 +49,9 @@ export type CheckboxTransitionMode = 'color' | 'tint' | 'sprite';
  * Inline image-source descriptor for per-state sprite swapping on checkbox
  * children. Mirrors `UIImageSource` without requiring consumers to import
  * the full widget type.
+ * @deprecated Use ImageSourceInput from internals instead.
  */
-export interface CheckboxImageSourceInput {
-	readonly kind: 'texture' | 'material';
-	readonly resourceId?: string;
-	readonly materialId?: string;
-	readonly textureBinding?: string;
-	readonly width: number;
-	readonly height: number;
-}
+export type CheckboxImageSourceInput = ImageSourceInput;
 
 export interface CheckboxControllerProps {
     readonly isOn?: boolean;
@@ -132,43 +126,6 @@ const resolveTransitionMode = (value: unknown): CheckboxTransitionMode => {
     return (TRANSITION_MODES as readonly string[]).includes(mode)
         ? (mode as CheckboxTransitionMode)
         : 'color';
-};
-
-const isValidImageSource = (source: unknown): source is UIImageSource => {
-    if (!source || typeof source !== 'object') return false;
-    const src = source as Record<string, unknown>;
-    if (src.kind === 'texture') return typeof src.resourceId === 'string' && !!src.resourceId;
-    if (src.kind === 'material') return typeof src.materialId === 'string' && !!src.materialId;
-    return false;
-};
-
-const toImageSource = (input: CheckboxImageSourceInput): UIImageSource | null => {
-    if (input.kind === 'texture' && input.resourceId) {
-        return { kind: 'texture', resourceId: input.resourceId, width: input.width, height: input.height };
-    }
-    if (input.kind === 'material' && input.materialId) {
-        return {
-            kind: 'material',
-            materialId: input.materialId,
-            textureBinding: input.textureBinding,
-            width: input.width,
-            height: input.height,
-        };
-    }
-    return null;
-};
-
-const extractSourceInput = (record: Record<string, unknown>): CheckboxImageSourceInput | null => {
-    const kind = record.kind;
-    if (kind !== 'texture' && kind !== 'material') return null;
-    const width = Number(record.width);
-    const height = Number(record.height);
-    if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
-    const result: Record<string, unknown> = { kind, width, height };
-    if (typeof record.resourceId === 'string') result.resourceId = record.resourceId;
-    if (typeof record.materialId === 'string') result.materialId = record.materialId;
-    if (typeof record.textureBinding === 'string') result.textureBinding = record.textureBinding;
-    return result as unknown as CheckboxImageSourceInput;
 };
 
 const captureOriginalSource = (runtime: UIRuntime, key: string): UIImageSource | null => {
