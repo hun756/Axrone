@@ -2098,24 +2098,29 @@ describe('normalizeShaderSource version directive', () => {
     });
 });
 
-describe('normalizeStrokeColor scratch buffer', () => {
-    it('returns a Float32Array with correct RGBA values from a hex string', async () => {
-        const { normalizeStrokeColor } = await import('../webgl-utils');
-        const result = normalizeStrokeColor('#ff8040');
-        expect(result).toBeInstanceOf(Float32Array);
-        expect(result[0]).toBeCloseTo(1, 1);
-        expect(result[1]).toBeCloseTo(0.502, 1);
-        expect(result[2]).toBeCloseTo(0.251, 1);
-        expect(result[3]).toBeCloseTo(1, 1);
+describe('writeStrokeColor out-parameter API', () => {
+    it('writes correct RGBA values into caller buffer from a hex string', async () => {
+        const { writeStrokeColor } = await import('../webgl-utils');
+        const out = new Float32Array(4);
+        writeStrokeColor('#ff8040', out);
+        expect(out[0]).toBeCloseTo(1, 1);
+        expect(out[1]).toBeCloseTo(0.502, 1);
+        expect(out[2]).toBeCloseTo(0.251, 1);
+        expect(out[3]).toBeCloseTo(1, 1);
     });
 
-    it('reuses the same scratch buffer across calls', async () => {
-        const { normalizeStrokeColor } = await import('../webgl-utils');
-        const first = normalizeStrokeColor('#ff0000');
-        const second = normalizeStrokeColor('#00ff00');
-        expect(first).toBe(second);
-        expect(second[0]).toBeCloseTo(0, 1);
-        expect(second[1]).toBeCloseTo(1, 1);
-        expect(second[2]).toBeCloseTo(0, 1);
+    it('writes into caller buffer at specified offset without aliasing', async () => {
+        const { writeStrokeColor } = await import('../webgl-utils');
+        const out = new Float32Array(8);
+        writeStrokeColor('#ff0000', out, 0);
+        writeStrokeColor('#00ff00', out, 4);
+        // First color preserved (no scratch aliasing)
+        expect(out[0]).toBeCloseTo(1, 1);
+        expect(out[1]).toBeCloseTo(0, 1);
+        expect(out[2]).toBeCloseTo(0, 1);
+        // Second color written correctly
+        expect(out[4]).toBeCloseTo(0, 1);
+        expect(out[5]).toBeCloseTo(1, 1);
+        expect(out[6]).toBeCloseTo(0, 1);
     });
 });

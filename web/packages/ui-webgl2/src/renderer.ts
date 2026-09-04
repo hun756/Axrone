@@ -25,7 +25,7 @@ import type {
 } from './types';
 import { createProgram } from './shader-source';
 import { QUAD_VERTEX_SOURCE, QUAD_FRAGMENT_SOURCE, TEXT_VERTEX_SOURCE, TEXT_FRAGMENT_SOURCE, IMAGE_VERTEX_SOURCE, IMAGE_FRAGMENT_SOURCE } from './shaders';
-import { UNIT_QUAD, writeBlendedColor, normalizeStrokeColor } from './webgl-utils';
+import { UNIT_QUAD, writeBlendedColor, writeStrokeColor } from './webgl-utils';
 import { resolveSliceSpans, sliceImageCommand, createSliceSpanTriple, ZERO_RADII } from './nine-slice';
 import {
     GL_STATE_FRAMEBUFFER,
@@ -570,8 +570,9 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         const widgetW = command.width;
         const widgetH = command.height;
         const camera = command.transform ?? IDENTITY_TRANSFORM;
+        const strokeColorScratch = new Float32Array(4);
         for (const stroke of command.strokes) {
-            const color = normalizeStrokeColor(stroke.color);
+            writeStrokeColor(stroke.color, strokeColorScratch);
             const weight = Math.max(0.5, stroke.weight);
             const halfWeight = weight * 0.5;
             const points = stroke.points;
@@ -621,10 +622,10 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 this.quadBatch[base + 1] = 0;
                 this.quadBatch[base + 2] = extent;
                 this.quadBatch[base + 3] = weight;
-                this.quadBatch[base + 4] = color[0];
-                this.quadBatch[base + 5] = color[1];
-                this.quadBatch[base + 6] = color[2];
-                this.quadBatch[base + 7] = color[3] * command.opacity;
+                this.quadBatch[base + 4] = strokeColorScratch[0];
+                this.quadBatch[base + 5] = strokeColorScratch[1];
+                this.quadBatch[base + 6] = strokeColorScratch[2];
+                this.quadBatch[base + 7] = strokeColorScratch[3] * command.opacity;
                 // No border, no radius, no border width.
                 this.quadBatch[base + 8] = 0;
                 this.quadBatch[base + 9] = 0;

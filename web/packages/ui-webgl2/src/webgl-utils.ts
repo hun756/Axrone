@@ -21,7 +21,7 @@ export const multiplyAlpha = (alpha: number, opacity: number): number => alpha *
 /**
  * Writes a premultiplied-alpha color into a Float32Array batch at the given
  * offset. Handles both resolved color objects (r/g/b/a) and raw inputs
- * (hex string, packed number, tuple) via {@link normalizeStrokeColor}.
+ * (hex string, packed number, tuple) via {@link writeStrokeColor}.
  */
 export const writeBlendedColor = (
     batch: Float32Array,
@@ -32,11 +32,8 @@ export const writeBlendedColor = (
     // Runtime-authored commands always carry resolved color objects; the
     // scalar/array branch only serves hand-built commands.
     if (typeof color === 'string' || typeof color === 'number' || Array.isArray(color)) {
-        const resolved = normalizeStrokeColor(color);
-        batch[offset] = resolved[0];
-        batch[offset + 1] = resolved[1];
-        batch[offset + 2] = resolved[2];
-        batch[offset + 3] = multiplyAlpha(resolved[3], opacity);
+        writeStrokeColor(color, batch, offset);
+        batch[offset + 3] = multiplyAlpha(batch[offset + 3], opacity);
         return;
     }
     batch[offset] = color.r;
@@ -45,26 +42,23 @@ export const writeBlendedColor = (
     batch[offset + 3] = multiplyAlpha(color.a ?? 1, opacity);
 };
 
-/** Module-scoped scratch buffer reused synchronously by normalizeStrokeColor. */
-const strokeColorScratch = new Float32Array(4);
-
 /**
- * Converts a ColorInput (hex string, number, array, or ColorLike) to a
- * normalized [r, g, b, a] tuple for stroke rendering.
- *
- * Writes into a module-scoped scratch Float32Array to avoid per-call
- * allocation. The scratch is consumed synchronously by the caller, so
- * no aliasing hazard exists across calls that retain results.
+ * Writes a normalized [r, g, b, a] color directly into a caller-owned
+ * Float32Array at the given offset, avoiding any module-scoped scratch
+ * retention hazard.
  *
  * Delegates to the canonical {@link normalizeColor} from `@axrone/ui/types`
  * to ensure a single normalization path across the UI and WebGL packages.
  */
-export const normalizeStrokeColor = (color: StrokeRenderCommand['strokes'][number]['color']): Float32Array => {
+export const writeStrokeColor = (
+    color: StrokeRenderCommand['strokes'][number]['color'],
+    out: Float32Array,
+    offset = 0
+): void => {
     const WHITE: ReadonlyColor = { r: 1, g: 1, b: 1, a: 1 };
     const resolved = normalizeColor(color, WHITE);
-    strokeColorScratch[0] = resolved.r;
-    strokeColorScratch[1] = resolved.g;
-    strokeColorScratch[2] = resolved.b;
-    strokeColorScratch[3] = resolved.a;
-    return strokeColorScratch;
+    out[offset] = resolved.r;
+    out[offset + 1] = resolved.g;
+    out[offset + 2] = resolved.b;
+    out[offset + 3] = resolved.a;
 };
