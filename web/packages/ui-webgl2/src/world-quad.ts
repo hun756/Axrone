@@ -6,6 +6,7 @@
  * its own minimal program and fully captures/restores the GL state it touches so
  * it can be injected into an existing scene render loop without disturbing it.
  */
+import { LazyGLStateGuard, GL_STATE_PROGRAM, GL_STATE_VERTEX_ARRAY, GL_STATE_ARRAY_BUFFER, GL_STATE_ACTIVE_TEXTURE, GL_STATE_UNIT0_TEXTURE, GL_STATE_BLEND, GL_STATE_BLEND_FUNC, GL_STATE_DEPTH_TEST, GL_STATE_DEPTH_WRITEMASK, GL_STATE_CULL_FACE } from './gl-state';
 export interface UIWorldQuadDrawOptions {
     /** Entity world matrix, 4x4 column-major. */
     readonly modelMatrix: Float32Array;
@@ -179,17 +180,18 @@ export function createUIWorldQuadRenderer(gl: WebGL2RenderingContext): UIWorldQu
         opacity: gl.getUniformLocation(program, 'u_Opacity'),
     };
 
-    const previousBuffer = gl.getParameter(gl.ARRAY_BUFFER_BINDING) as WebGLBuffer | null;
-    const previousVao = gl.getParameter(gl.VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject | null;
+    const setupGuard = new LazyGLStateGuard();
+    setupGuard.capture(gl, GL_STATE_ARRAY_BUFFER | GL_STATE_VERTEX_ARRAY);
     gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, UNIT_QUAD, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    gl.bindVertexArray(previousVao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, previousBuffer);
+    setupGuard.restore(gl);
 
     let disposed = false;
+    const drawGuard = new LazyGLStateGuard();
+    const DRAW_GROUPS = GL_STATE_PROGRAM | GL_STATE_VERTEX_ARRAY | GL_STATE_ACTIVE_TEXTURE | GL_STATE_UNIT0_TEXTURE | GL_STATE_BLEND | GL_STATE_BLEND_FUNC | GL_STATE_DEPTH_TEST | GL_STATE_DEPTH_WRITEMASK | GL_STATE_CULL_FACE;
 
     return {
         draw(texture: WebGLTexture, options: UIWorldQuadDrawOptions): void {
@@ -197,20 +199,9 @@ export function createUIWorldQuadRenderer(gl: WebGL2RenderingContext): UIWorldQu
                 return;
             }
 
-            // ── capture the state this pass mutates ─────────────────────────────
-            const restore = {
-                program: gl.getParameter(gl.CURRENT_PROGRAM) as WebGLProgram | null,
-                vao: gl.getParameter(gl.VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject | null,
-                activeTexture: gl.getParameter(gl.ACTIVE_TEXTURE) as number,
-                blend: gl.getParameter(gl.BLEND) as boolean,
-                blendSrcRgb: gl.getParameter(gl.BLEND_SRC_RGB) as number,
-                blendDstRgb: gl.getParameter(gl.BLEND_DST_RGB) as number,
-                blendSrcAlpha: gl.getParameter(gl.BLEND_SRC_ALPHA) as number,
-                blendDstAlpha: gl.getParameter(gl.BLEND_DST_ALPHA) as number,
-                depthTest: gl.getParameter(gl.DEPTH_TEST) as boolean,
-                depthMask: gl.getParameter(gl.DEPTH_WRITEMASK) as boolean,
-                cullFace: gl.getParameter(gl.CULL_FACE) as boolean,
-            };
+            // ── capture the state this pass mutates (lazy — zero getParameter at steady state) ──
+            drawGuard.capture(gl, DRAW_GROUPS);
+
             gl.activeTexture(gl.TEXTURE0);
             const restoreTexture = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
 
@@ -244,31 +235,7 @@ export function createUIWorldQuadRenderer(gl: WebGL2RenderingContext): UIWorldQu
 
             // ── restore ────────────────────────────────────────────────────────
             gl.bindTexture(gl.TEXTURE_2D, restoreTexture);
-            gl.activeTexture(restore.activeTexture);
-            gl.bindVertexArray(restore.vao);
-            gl.useProgram(restore.program);
-            gl.depthMask(restore.depthMask);
-            if (restore.depthTest) {
-                gl.enable(gl.DEPTH_TEST);
-            } else {
-                gl.disable(gl.DEPTH_TEST);
-            }
-            if (restore.cullFace) {
-                gl.enable(gl.CULL_FACE);
-            } else {
-                gl.disable(gl.CULL_FACE);
-            }
-            if (restore.blend) {
-                gl.enable(gl.BLEND);
-            } else {
-                gl.disable(gl.BLEND);
-            }
-            gl.blendFuncSeparate(
-                restore.blendSrcRgb,
-                restore.blendDstRgb,
-                restore.blendSrcAlpha,
-                restore.blendDstAlpha
-            );
+            drawGuard.restore(gl);
         },
         dispose(): void {
             if (disposed) {

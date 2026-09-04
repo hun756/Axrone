@@ -6,6 +6,7 @@
  * surface separate from the renderer lets a single renderer instance serve both
  * the screen overlay and any number of world-space hosts.
  */
+import { LazyGLStateGuard, GL_STATE_UNIT0_TEXTURE, GL_STATE_FRAMEBUFFER } from './gl-state';
 export interface UIWorldSurface extends Disposable {
     readonly texture: WebGLTexture;
     readonly framebuffer: WebGLFramebuffer;
@@ -41,10 +42,8 @@ export function createUIWorldSurface(
     let currentHeight = 0;
     let disposed = false;
 
-    const previousTexture = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
-    const previousFramebuffer = gl.getParameter(
-        gl.FRAMEBUFFER_BINDING
-    ) as WebGLFramebuffer | null;
+    const guard = new LazyGLStateGuard();
+    guard.capture(gl, GL_STATE_UNIT0_TEXTURE | GL_STATE_FRAMEBUFFER);
 
     const allocate = (nextWidth: number, nextHeight: number): void => {
         const clampedWidth = clampSurfaceSize(nextWidth);
@@ -83,8 +82,7 @@ export function createUIWorldSurface(
     allocate(width, height);
 
     // Leave the context exactly as it was found.
-    gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer);
-    gl.bindTexture(gl.TEXTURE_2D, previousTexture);
+    guard.restore(gl);
 
     const surface: UIWorldSurface = {
         texture,
@@ -99,13 +97,10 @@ export function createUIWorldSurface(
             if (disposed) {
                 return;
             }
-            const restoreTexture = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
-            const restoreFramebuffer = gl.getParameter(
-                gl.FRAMEBUFFER_BINDING
-            ) as WebGLFramebuffer | null;
+            const resizeGuard = new LazyGLStateGuard();
+            resizeGuard.capture(gl, GL_STATE_UNIT0_TEXTURE | GL_STATE_FRAMEBUFFER);
             allocate(nextWidth, nextHeight);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, restoreFramebuffer);
-            gl.bindTexture(gl.TEXTURE_2D, restoreTexture);
+            resizeGuard.restore(gl);
         },
         dispose(): void {
             if (disposed) {

@@ -24,6 +24,28 @@ import type {
     WebGL2UIRendererStatistics,
     WebGL2UIRenderOptions,
 } from './types';
+import {
+    GL_STATE_FRAMEBUFFER,
+    GL_STATE_VIEWPORT,
+    GL_STATE_SCISSOR_BOX,
+    GL_STATE_SCISSOR_TEST,
+    GL_STATE_PROGRAM,
+    GL_STATE_VERTEX_ARRAY,
+    GL_STATE_ARRAY_BUFFER,
+    GL_STATE_UNPACK_ALIGNMENT,
+    GL_STATE_CULL_FACE,
+    GL_STATE_DEPTH_TEST,
+    GL_STATE_BLEND,
+    GL_STATE_BLEND_FUNC,
+    GL_STATE_ACTIVE_TEXTURE,
+    GL_STATE_UNIT0_TEXTURE,
+    GL_STATE_UNIT0_SAMPLER,
+    type GLStateShadow,
+    createGLStateShadow,
+    readGLParameter,
+    readGLEnabled,
+    restoreGLEnableState,
+} from './gl-state';
 
 const QUAD_FLOATS_PER_INSTANCE = 23;
 const IMAGE_FLOATS_PER_INSTANCE = 22;
@@ -396,76 +418,11 @@ interface TexturePage {
  * two active-texture round trips, and several tuple allocations per frame)
  * with a zero-allocation fast path that reads at most 15 state values and
  * skips groups the frame never touched entirely.
+ *
+ * State group constants, the GLStateShadow interface, and the helper functions
+ * are imported from ./gl-state so that world-quad and world-surface share the
+ * same definitions.
  */
-const GL_STATE_FRAMEBUFFER = 1 << 0;
-const GL_STATE_VIEWPORT = 1 << 1;
-const GL_STATE_SCISSOR_BOX = 1 << 2;
-const GL_STATE_SCISSOR_TEST = 1 << 3;
-const GL_STATE_PROGRAM = 1 << 4;
-const GL_STATE_VERTEX_ARRAY = 1 << 5;
-const GL_STATE_ARRAY_BUFFER = 1 << 6;
-const GL_STATE_UNPACK_ALIGNMENT = 1 << 7;
-const GL_STATE_CULL_FACE = 1 << 8;
-const GL_STATE_DEPTH_TEST = 1 << 9;
-const GL_STATE_BLEND = 1 << 10;
-const GL_STATE_BLEND_FUNC = 1 << 11;
-const GL_STATE_ACTIVE_TEXTURE = 1 << 12;
-const GL_STATE_UNIT0_TEXTURE = 1 << 13;
-const GL_STATE_UNIT0_SAMPLER = 1 << 14;
-
-interface GLStateShadow {
-    framebuffer: WebGLFramebuffer | null;
-    program: WebGLProgram | null;
-    vertexArray: WebGLVertexArrayObject | null;
-    arrayBuffer: WebGLBuffer | null;
-    viewportX: number | undefined;
-    viewportY: number | undefined;
-    viewportWidth: number | undefined;
-    viewportHeight: number | undefined;
-    scissorX: number | undefined;
-    scissorY: number | undefined;
-    scissorWidth: number | undefined;
-    scissorHeight: number | undefined;
-    scissorTest: boolean | undefined;
-    cullFace: boolean | undefined;
-    depthTest: boolean | undefined;
-    blend: boolean | undefined;
-    blendSrcRgb: number | undefined;
-    blendDstRgb: number | undefined;
-    blendSrcAlpha: number | undefined;
-    blendDstAlpha: number | undefined;
-    unpackAlignment: number | undefined;
-    activeTexture: number;
-    unit0Texture: WebGLTexture | null;
-    unit0Sampler: WebGLSampler | null;
-}
-
-const createGLStateShadow = (): GLStateShadow => ({
-    framebuffer: null,
-    program: null,
-    vertexArray: null,
-    arrayBuffer: null,
-    viewportX: undefined,
-    viewportY: undefined,
-    viewportWidth: undefined,
-    viewportHeight: undefined,
-    scissorX: undefined,
-    scissorY: undefined,
-    scissorWidth: undefined,
-    scissorHeight: undefined,
-    scissorTest: undefined,
-    cullFace: undefined,
-    depthTest: undefined,
-    blend: undefined,
-    blendSrcRgb: undefined,
-    blendDstRgb: undefined,
-    blendSrcAlpha: undefined,
-    blendDstAlpha: undefined,
-    unpackAlignment: undefined,
-    activeTexture: 0,
-    unit0Texture: null,
-    unit0Sampler: null,
-});
 
 const UNIT_QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
@@ -551,69 +508,6 @@ const normalizeStrokeColor = (color: StrokeRenderCommand['strokes'][number]['col
 
 const IDENTITY_TRANSFORM = [1, 0, 0, 1, 0, 0] as const;
 
-
-
-function readGLParameter<TValue>(
-    gl: WebGL2RenderingContext,
-    parameter: number,
-    fallback: undefined
-): TValue | undefined;
-function readGLParameter<TValue>(
-    gl: WebGL2RenderingContext,
-    parameter: number,
-    fallback: null
-): TValue | null;
-function readGLParameter<TValue>(
-    gl: WebGL2RenderingContext,
-    parameter: number,
-    fallback: TValue
-): TValue;
-function readGLParameter<TValue>(
-    gl: WebGL2RenderingContext,
-    parameter: number,
-    fallback: TValue | null | undefined
-): TValue | null | undefined {
-    if (typeof gl.getParameter !== 'function') {
-        return fallback;
-    }
-
-    try {
-        return (gl.getParameter(parameter) as TValue | null | undefined) ?? fallback;
-    } catch {
-        return fallback;
-    }
-}
-
-const readGLEnabled = (
-    gl: WebGL2RenderingContext,
-    capability: number,
-    fallback: boolean | undefined = undefined
-): boolean | undefined => {
-    if (typeof gl.isEnabled !== 'function') {
-        return fallback;
-    }
-
-    try {
-        return gl.isEnabled(capability);
-    } catch {
-        return fallback;
-    }
-};
-
-const restoreGLEnableState = (
-    gl: WebGL2RenderingContext,
-    capability: number,
-    enabled: boolean | undefined
-): void => {
-    if (enabled === undefined) {
-        return;
-    }
-    if (enabled) {
-        gl.enable(capability);
-        return;
-    }
-    gl.disable(capability);
-};
 
 
 /**
