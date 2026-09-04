@@ -1,84 +1,114 @@
-using Axrone.Memory.Lifetime.Internal;
+namespace Enterprise.Patterns.Singleton;
 
-namespace Axrone.Memory.Lifetime;
-
-/// <summary>
-/// Static facade for the singleton subsystem. Primary entry point for singleton access,
-/// registration, diagnostics, and orderly shutdown.
-/// </summary>
-/// <remarks>
-/// <para>Thread-safe, lock-free on the fast path (single volatile read).</para>
-/// <para>Native AOT safe — uses <c>new()</c> constraint, no reflection on hot paths.</para>
-/// </remarks>
-/// <example>
-/// <code>
-/// // Parameterless — requires new() constraint
-/// var audio = Singleton.GetInstance&lt;AudioSystem&gt;();
-///
-/// // Factory — for types without parameterless constructors
-/// var config = Singleton.GetInstance(() =&gt; new GameConfig(settings));
-///
-/// // Pre-register an instance
-/// Singleton.Register&lt;ILogger&gt;(new FileLogger("app.log"));
-///
-/// // Orderly shutdown at application exit
-/// await Singleton.ShutdownAsync();
-/// </code>
-/// </example>
-[SkipLocalsInit]
-public static class Singleton
+public static class Singleton<T> where T : class
 {
-    /// <summary>Get or create the singleton instance of <typeparamref name="T"/>.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static T GetInstance<T>() where T : class, new() =>
-        SingletonProvider<T>.Instance;
+    private static Lazy<T>? s_lazy;
+    private static readonly object s_gate = new();
+    private static volatile int s_state = (int)SingletonLifecycleState.Uninitialized;
 
-    /// <summary>Get or create a singleton using a custom factory.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static T GetInstance<T>(Func<T> factory) where T : class =>
-        FactoryProvider<T>.GetOrCreateInstance(factory);
+    public static bool IsInitialized => Volatile.Read(ref s_state) == (int)SingletonLifecycleState.Initialized;
 
-    /// <summary>Check if a singleton type has been initialized.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static bool IsInitialized<T>() where T : class =>
-        SingletonRegistryInternal.TryGet(out T? _);
-
-    /// <summary>
-    /// Try to get an already-created instance without triggering creation.
-    /// Returns <see langword="false"/> if the singleton has not been accessed yet.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static bool TryGet<T>([NotNullWhen(true)] out T? instance) where T : class =>
-        SingletonRegistryInternal.TryGet(out instance);
-
-    /// <summary>
-    /// Register a pre-created instance for type <typeparamref name="T"/>.
-    /// Subsequent calls to <see cref="GetInstance{T}()"/> will return this instance
-    /// only if the provider has not already created one.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void Register<T>(T instance) where T : class
+    public static T Instance
     {
-        ArgumentNullException.ThrowIfNull(instance);
-        SingletonRegistryInternal.Register(instance);
-        SingletonShutdownRegistry.Register(instance);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get
+        {
+            var lazy = Volatile.Read(ref s_lazy);
+            if (lazy is null)
+            {
+                throw new SingletonInitializationException(
+                    $"Singleton of type '{typeof(T).FullName}' has not been configured. Call SetFactory or SetInstance prior to access.");
+            }
+
+            try
+            {
+                return lazy.Value;
+            }
+            catch (Exception ex) when (ex is not SingletonException)
+            {
+                throw new SingletonInitializationException(typeof(T).FullName ?? nameof(T), ex);
+            }
+        }
     }
 
-    /// <summary>Force eager initialization. Safe to call multiple times.</summary>
-    /// <remarks>Call from <c>[ModuleInitializer]</c> for startup-time initialization.</remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void WarmUp<T>() where T : class, new() =>
-        SingletonProvider<T>.WarmUp();
+    public static void SetFactory(Func<T> factory, LazyThreadSafetyMode mode = LazyThreadSafetyMode.ExecutionAndPublication)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
 
-    /// <summary>Get diagnostics metrics for a monitored singleton type.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static SingletonMetrics GetMetrics<T>() where T : class =>
-        SingletonDiagnostics.GetMetrics<T>();
+        lock (s_gate)
+        {
+            if (s_lazy is not null && s_lazy.IsValueCreated)
+            {
+                throw new SingletonAlreadyInitializedException(typeof(T).FullName ?? nameof(T));
+            }
 
-    /// <summary>
-    /// Dispose all tracked singleton instances in reverse creation order.
-    /// Call at application exit for deterministic teardown. Safe to call multiple times.
-    /// </summary>
-    public static ValueTask ShutdownAsync() =>
-        SingletonShutdownRegistry.ShutdownAsync();
+            s_lazy = new Lazy<T>(() =>
+            {
+                Volatile.Write(ref s_state, (int)SingletonLifecycleState.Initializing);
+                try
+                {
+                    var instance = factory();
+                    if (instance is null)
+                    {
+                        throw new SingletonInitializationException(typeof(T).FullName ?? nameof(T));
+                    }
+
+                    Volatile.Write(ref s_state, (int)SingletonLifecycleState.Initialized);
+                    return instance;
+                }
+                catch
+                {
+                    Volatile.Write(ref s_state, (int)SingletonLifecycleState.Faulted);
+                    throw;
+                }
+            }, mode);
+
+            Volatile.Write(ref s_state, (int)SingletonLifecycleState.Uninitialized);
+        }
+    }
+
+    public static void SetInstance(T instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        lock (s_gate)
+        {
+            if (s_lazy is not null && s_lazy.IsValueCreated)
+            {
+                throw new SingletonAlreadyInitializedException(typeof(T).FullName ?? nameof(T));
+            }
+
+            s_lazy = new Lazy<T>(() => instance, LazyThreadSafetyMode.PublicationOnly);
+            _ = s_lazy.Value;
+            Volatile.Write(ref s_state, (int)SingletonLifecycleState.Initialized);
+        }
+    }
+
+    public static void Reset()
+    {
+        lock (s_gate)
+        {
+            if (s_lazy is not null && s_lazy.IsValueCreated)
+            {
+                try
+                {
+                    var instance = s_lazy.Value;
+                    if (instance is IDisposable disposable)
+                    {
+                        disposable.Dispose();
+                    }
+                    else if (instance is IAsyncDisposable asyncDisposable)
+                    {
+                        asyncDisposable.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            s_lazy = null;
+            Volatile.Write(ref s_state, (int)SingletonLifecycleState.Uninitialized);
+        }
+    }
 }
