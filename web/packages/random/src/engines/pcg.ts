@@ -45,27 +45,9 @@ export class PCGEngine implements IRandomEngine {
         // LCG step: state = state * MULT + inc
         this.stepLCG();
 
-        // XSH-RR output from old state
-        const xorshifted = (((old_hi >>> 18) | (old_lo << 14)) ^ old_hi) >>> 27;
-        // Wait, that's not right. Let me redo:
-        // oldState >> 18n: shift right 18 bits of 64-bit value
-        // For 64-bit: (old_hi >>> 18) in hi, ((old_lo >>> 18) | (old_hi << 14)) in lo
-        // Then XOR with oldState
-        // Then >> 27n: shift right 27 more bits
-        // Total shift: 18 + 27 = 45 bits from top
-
-        // Actually, let me compute it properly:
-        // xorshifted = ((oldState >> 18) ^ oldState) >> 27
-        // This gives us a 64-45 = 19 bit value? No, >> 27 of a 64-bit gives 37 bits.
-        // But we only need 32 bits for the rotation output.
-
-        // Let me re-derive:
-        // oldState >> 18: top 46 bits become bits 0-45
-        // XOR with oldState: 64-bit result
-        // >> 27: top 37 bits become bits 0-36
-        // We need bits 0-31 (32 bits) for xorshifted
-        // rot = oldState >> 59: top 5 bits
-
+        // XSH-RR output from old state:
+        //   xorshifted = ((oldState >> 18) ^ oldState) >> 27  (low 32 bits kept)
+        //   rot = oldState >> 59                              (top 5 bits)
         // 64-bit shift right by 18:
         const s18_lo = ((old_lo >>> 18) | (old_hi << 14)) | 0;
         const s18_hi = (old_hi >>> 18) | 0;
@@ -74,9 +56,8 @@ export class PCGEngine implements IRandomEngine {
         const xor_lo = (s18_lo ^ old_lo) | 0;
         const xor_hi = (s18_hi ^ old_hi) | 0;
 
-        // Shift right by 27 more (total 45):
+        // Shift right by 27 more (total 45), keep low 32 bits:
         const xorshifted_full_lo = ((xor_lo >>> 27) | (xor_hi << 5)) | 0;
-        // We only need low 32 bits
         const xorshifted = xorshifted_full_lo >>> 0;
 
         // rot = oldState >> 59: top 5 bits of 64-bit = old_hi >>> 27
