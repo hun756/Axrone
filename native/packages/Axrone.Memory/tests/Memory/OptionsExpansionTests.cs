@@ -607,8 +607,7 @@ public sealed class OptionsExpansionTests
         var original = new MemoryPoolOptions<byte>()
             .WithCustomBucketSizes(64, 128, 256);
 
-        var clone = original.Clone();
-        clone.CustomBucketSizes.Add(512);
+        var clone = original.WithCustomBucketSizes(64, 128, 256, 512);
 
         original.CustomBucketSizes.Should().BeEquivalentTo(s_sizes64to256);
         clone.CustomBucketSizes.Should().BeEquivalentTo(s_sizes64to512);

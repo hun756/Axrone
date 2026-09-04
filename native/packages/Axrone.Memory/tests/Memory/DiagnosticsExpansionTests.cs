@@ -412,10 +412,10 @@ public sealed class DiagnosticsExpansionTests
     public void BucketDiagnostics_IsRecordStruct()
     {
         // Arrange & Act
-        var bd = new BucketDiagnostics(64, 1, 64L);
+        var bd = new BucketDiagnostics(64, 1, 1, 64L, 0L, 64L, 0.0, 0.0);
 
         // Assert — value-type semantics: equality by value
-        var bd2 = new BucketDiagnostics(64, 1, 64L);
+        var bd2 = new BucketDiagnostics(64, 1, 1, 64L, 0L, 64L, 0.0, 0.0);
         bd.Should().Be(bd2);
     }
 
@@ -423,7 +423,7 @@ public sealed class DiagnosticsExpansionTests
     public void BucketDiagnostics_Properties_AreAccessible()
     {
         // Arrange & Act
-        var bd = new BucketDiagnostics(256, 3, 768L);
+        var bd = new BucketDiagnostics(256, 3, 3, 768L, 0L, 768L, 0.0, 0.0);
 
         // Assert
         bd.BufferSize.Should().Be(256);

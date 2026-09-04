@@ -4,7 +4,7 @@ public static class Singleton<T> where T : class
 {
     private static Lazy<T>? s_lazy;
     private static readonly object s_gate = new();
-    private static volatile int s_state = (int)SingletonLifecycleState.Uninitialized;
+    private static int s_state = (int)SingletonLifecycleState.Uninitialized;
 
     public static bool IsInitialized => Volatile.Read(ref s_state) == (int)SingletonLifecycleState.Initialized;
 

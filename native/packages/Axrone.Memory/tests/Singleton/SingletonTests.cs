@@ -2,9 +2,13 @@ using Enterprise.Patterns.Singleton;
 
 namespace Axrone.Memory.Tests;
 
-public class SingletonTests : IDisposable
+public sealed class SingletonTests : IDisposable
 {
-    public void Dispose() => Singleton<SimpleService>.Reset();
+    public void Dispose()
+    {
+        Singleton<SimpleService>.Reset();
+        GC.SuppressFinalize(this);
+    }
 
     [Fact]
     public void SetFactory_ThenAccess_ReturnsSameInstance()

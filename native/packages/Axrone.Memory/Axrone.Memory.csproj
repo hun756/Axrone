@@ -43,6 +43,14 @@
     <NoWarn>$(NoWarn);CA1720</NoWarn>
     <!-- CA1028: Enum storage type — byte/uint chosen for memory layout compatibility -->
     <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1716: Get method name — intentional API design for registry pattern -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
+    <!-- CA1065: Property throws — intentional for singleton access before configuration -->
+    <NoWarn>$(NoWarn);CA1065</NoWarn>
+    <!-- CA1849: .Result usage — intentional for sync-over-async in disposal paths -->
+    <NoWarn>$(NoWarn);CA1849</NoWarn>
+    <!-- IL2091: AOT trim annotations — Lazy&lt;T&gt; generic constraints are satisfied at runtime -->
+    <NoWarn>$(NoWarn);IL2091</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

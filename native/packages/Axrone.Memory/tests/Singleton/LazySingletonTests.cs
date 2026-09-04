@@ -73,7 +73,7 @@ public class LazySingletonTests
     [Fact]
     public void Constructor_NullFactory_ThrowsArgumentNullException()
     {
-        var act = () => new LazySingleton<SimpleService>(null!);
+        var act = () => new LazySingleton<SimpleService>((Func<SimpleService>)null!);
         act.Should().Throw<ArgumentNullException>();
     }
 

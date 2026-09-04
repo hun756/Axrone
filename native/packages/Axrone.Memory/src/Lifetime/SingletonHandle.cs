@@ -23,6 +23,9 @@ public readonly struct SingletonHandle<T> : IEquatable<SingletonHandle<T>> where
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator T(SingletonHandle<T> handle) => handle.Value;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public T ToT() => Value;
+
     public bool Equals(SingletonHandle<T> other) => ReferenceEquals(_singleton, other._singleton);
 
     public override bool Equals(object? obj) => obj is SingletonHandle<T> other && Equals(other);
