@@ -97,10 +97,9 @@ export function createUIWorldSurface(
             if (disposed) {
                 return;
             }
-            const resizeGuard = new LazyGLStateGuard();
-            resizeGuard.capture(gl, GL_STATE_UNIT0_TEXTURE | GL_STATE_FRAMEBUFFER);
+            guard.capture(gl, GL_STATE_UNIT0_TEXTURE | GL_STATE_FRAMEBUFFER);
             allocate(nextWidth, nextHeight);
-            resizeGuard.restore(gl);
+            guard.restore(gl);
         },
         dispose(): void {
             if (disposed) {
