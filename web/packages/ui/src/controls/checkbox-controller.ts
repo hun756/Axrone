@@ -1,5 +1,5 @@
 import type { UIRuntime } from '../runtime';
-import type { UIInputEvent, UIImageSource, WidgetId, WidgetImageInput, WidgetStrokeData } from '../types';
+import type { ColorHexString, UIInputEvent, UIImageSource, WidgetId, WidgetImageInput, WidgetStrokeData } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { animateWidgetColor, Easing, type UIAnimationHandle } from './animation';
 
@@ -267,7 +267,7 @@ const DASH_STROKE_POINTS: readonly (readonly [number, number])[] = Object.freeze
  */
 const resolveMarkStrokes = (
     markStyle: CheckboxMarkStyle,
-    markColor: string,
+    markColor: ColorHexString,
     markWeight: number,
 ): readonly WidgetStrokeData[] | null => {
     switch (markStyle) {

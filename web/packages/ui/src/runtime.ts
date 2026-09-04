@@ -56,7 +56,7 @@ import {
     mergeTextInput,
 } from './runtime/internals';
 import { TextLayoutEngine } from './text';
-import { WidgetRegistry } from './widget';
+import { WidgetRegistry, type WidgetController } from './widget';
 import type {
     ColorInput,
     CustomRenderCommand,
@@ -644,12 +644,14 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         // carried by `transform` and applied once by the renderer. Pre-scaling the
         // geometry here as well would double-apply the scale. Clip rects are the
         // exception: they feed the scissor test, which operates in viewport space.
+        // RenderCommand declares clip/transform readonly, but the frame and its
+        // commands are owned by this call — mutate in place to avoid rebuilding
+        // every command array on each commitToViewport().
         for (const command of frame.commands) {
+            const mutable = command as { clip: RectLike | null; transform?: unknown };
+            mutable.clip = command.clip ? scaleClipRect(command.clip, scaleResult) : null;
             if (command.kind === 'quad' || command.kind === 'text' || command.kind === 'image' || command.kind === 'stroke') {
-                command.clip = command.clip ? scaleClipRect(command.clip, scaleResult) : null;
-                (command as any).transform = transform;
-            } else if (command.kind === 'custom') {
-                command.clip = command.clip ? scaleClipRect(command.clip, scaleResult) : null;
+                mutable.transform = transform;
             }
         }
         return {

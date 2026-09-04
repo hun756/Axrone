@@ -225,6 +225,8 @@ export const compileWidgetImage = (input: WidgetImageInput | null): ResolvedWidg
     };
 };
 
+const DEFAULT_FOCUS_RING_COLOR = normalizeColor('#60a5faff', WHITE);
+
 export const compileWidgetFocus = (
     input: WidgetFocusPolicyInput,
     interactive: boolean
@@ -234,7 +236,7 @@ export const compileWidgetFocus = (
     scope: input.scope ?? false,
     cycle: input.cycle ?? false,
     order: input.order ?? 0,
-    ringColor: normalizeColor(input.ringColor, '#60a5faff'),
+    ringColor: normalizeColor(input.ringColor, DEFAULT_FOCUS_RING_COLOR),
     ringWidth: input.ringWidth ?? 2,
     ringOffset: input.ringOffset ?? 2,
 });
