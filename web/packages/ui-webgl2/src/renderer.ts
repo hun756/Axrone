@@ -24,6 +24,7 @@ import type {
     WebGL2UIRendererStatistics,
     WebGL2UIRenderOptions,
 } from './types';
+import { createProgram } from './shader-source';
 import {
     GL_STATE_FRAMEBUFFER,
     GL_STATE_VIEWPORT,
@@ -508,104 +509,6 @@ const normalizeStrokeColor = (color: StrokeRenderCommand['strokes'][number]['col
 
 const IDENTITY_TRANSFORM = [1, 0, 0, 1, 0, 0] as const;
 
-
-
-/**
- * Restores newline separators in shader source that has been flattened
- * by build-time minification (esbuild template literal transformation).
- *
- * When newlines are stripped, GLSL tokens merge across former line boundaries:
- *   #version 300 esprecision mediump float;   (es + precision)
- *   float;layout(location = 0) in vec2 ...    (float; + layout)
- *
- * This function detects and repairs such corruption by re-inserting
- * newlines at statement boundaries. Uses split/join instead of regex
- * to avoid esbuild transformation issues with replacement strings.
- */
-const normalizeShaderSource = (source: string): string => {
-    // Fast path: if the first line is a valid #version directive, source is intact.
-    // Uses a strict regex to reject corrupted lines like '#version 300 esprecision ...'
-    // where esbuild merged tokens across a stripped newline boundary.
-    const firstNewline = source.indexOf('\n');
-    if (firstNewline > 0 && /^#version\s+\d+\s+\w+$/.test(source.slice(0, firstNewline).trim())) {
-        return source;
-    }
-
-    // Corruption detected — rebuild newlines at GLSL statement boundaries.
-    // Uses split/join instead of regex to avoid esbuild transformation issues.
-    const parts: string[] = [];
-    for (const segment of source.split(/([;{}])/)) {
-        if (segment === ';') {
-            parts.push(';\n');
-        } else if (segment === '{') {
-            parts.push('{\n');
-        } else if (segment === '}') {
-            parts.push('\n}\n');
-        } else {
-            parts.push(segment);
-        }
-    }
-    let restored = parts.join('');
-
-    // Fix #version directive: ensure newline after 'es' before next token.
-    const versionEnd = restored.indexOf('es') + 2;
-    if (versionEnd > 2 && versionEnd < restored.length) {
-        const after = restored[versionEnd];
-        if (after !== '\n' && after !== ' ' && after !== '\t' && after !== '\r') {
-            restored = restored.slice(0, versionEnd) + '\n' + restored.slice(versionEnd);
-        }
-    }
-
-    return restored;
-};
-
-const createShader = (gl: WebGL2RenderingContext, type: number, source: string): WebGLShader => {
-    const shader = gl.createShader(type);
-    if (!shader) {
-        throw new Error('Failed to create UI shader.');
-    }
-    const resolvedSource = normalizeShaderSource(source);
-    if (resolvedSource !== source) {
-        // eslint-disable-next-line no-console
-        console.warn('[WebGL2UIRenderer] Shader source was corrupted — newlines were restored. This indicates esbuild minification stripped newlines from the shader template literal.');
-    }
-    gl.shaderSource(shader, resolvedSource);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        const message = gl.getShaderInfoLog(shader) ?? 'Unknown shader compile failure.';
-        gl.deleteShader(shader);
-        const stageLabel = type === gl.VERTEX_SHADER ? 'vertex' : 'fragment';
-        throw new Error(
-            `UI ${stageLabel} shader compilation failed: ${message}\nSource (first 200 chars): ${resolvedSource.slice(0, 200)}`
-        );
-    }
-    return shader;
-};
-
-const createProgram = (
-    gl: WebGL2RenderingContext,
-    vertexSource: string,
-    fragmentSource: string
-): WebGLProgram => {
-    const program = gl.createProgram();
-    if (!program) {
-        throw new Error('Failed to create UI program.');
-    }
-    const vertex = createShader(gl, gl.VERTEX_SHADER, vertexSource);
-    const fragment = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-    gl.attachShader(program, vertex);
-    gl.attachShader(program, fragment);
-    gl.linkProgram(program);
-    gl.deleteShader(vertex);
-    gl.deleteShader(fragment);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        const message = gl.getProgramInfoLog(program) ?? 'Unknown program link failure.';
-        gl.deleteProgram(program);
-        throw new Error(message);
-    }
-    return program;
-};
-
 export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayload> {
     private readonly gl: WebGL2RenderingContext;
     // GPU-dependent handles are mutable: they are re-created wholesale after a
@@ -681,9 +584,9 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
      */
     private createGpuResources(): void {
         const gl = this.gl;
-        this.quadProgram = createProgram(gl, QUAD_VERTEX_SOURCE, QUAD_FRAGMENT_SOURCE);
-        this.imageProgram = createProgram(gl, IMAGE_VERTEX_SOURCE, IMAGE_FRAGMENT_SOURCE);
-        this.textProgram = createProgram(gl, TEXT_VERTEX_SOURCE, TEXT_FRAGMENT_SOURCE);
+        this.quadProgram = createProgram(gl, QUAD_VERTEX_SOURCE, QUAD_FRAGMENT_SOURCE, 'quad');
+        this.imageProgram = createProgram(gl, IMAGE_VERTEX_SOURCE, IMAGE_FRAGMENT_SOURCE, 'image');
+        this.textProgram = createProgram(gl, TEXT_VERTEX_SOURCE, TEXT_FRAGMENT_SOURCE, 'text');
         this.quadViewportUniform = gl.getUniformLocation(this.quadProgram, 'u_Viewport');
         this.imageViewportUniform = gl.getUniformLocation(this.imageProgram, 'u_Viewport');
         this.imageTextureUniform = gl.getUniformLocation(this.imageProgram, 'u_Image');

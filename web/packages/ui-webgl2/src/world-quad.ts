@@ -7,6 +7,7 @@
  * it can be injected into an existing scene render loop without disturbing it.
  */
 import { LazyGLStateGuard, GL_STATE_PROGRAM, GL_STATE_VERTEX_ARRAY, GL_STATE_ARRAY_BUFFER, GL_STATE_ACTIVE_TEXTURE, GL_STATE_UNIT0_TEXTURE, GL_STATE_BLEND, GL_STATE_BLEND_FUNC, GL_STATE_DEPTH_TEST, GL_STATE_DEPTH_WRITEMASK, GL_STATE_CULL_FACE } from './gl-state';
+import { compileShader } from './shader-source';
 export interface UIWorldQuadDrawOptions {
     /** Entity world matrix, 4x4 column-major. */
     readonly modelMatrix: Float32Array;
@@ -89,68 +90,6 @@ export function orientQuadTowardCamera(
     return result;
 }
 
-/**
- * Restores newline separators in shader source that has been flattened
- * by build-time minification (esbuild template literal transformation).
- * See the identical function in renderer.ts for full rationale.
- */
-const normalizeShaderSource = (source: string): string => {
-    // Fast path: if the first line is a valid #version directive, source is intact.
-    // Uses a strict regex to reject corrupted lines like '#version 300 esprecision ...'
-    // where esbuild merged tokens across a stripped newline boundary.
-    const firstNewline = source.indexOf('\n');
-    if (firstNewline > 0 && /^#version\s+\d+\s+\w+$/.test(source.slice(0, firstNewline).trim())) {
-        return source;
-    }
-
-    // Corruption detected — rebuild newlines at GLSL statement boundaries.
-    // Uses split/join instead of regex to avoid esbuild transformation issues.
-    const parts: string[] = [];
-    for (const segment of source.split(/([;{}])/)) {
-        if (segment === ';') {
-            parts.push(';\n');
-        } else if (segment === '{') {
-            parts.push('{\n');
-        } else if (segment === '}') {
-            parts.push('\n}\n');
-        } else {
-            parts.push(segment);
-        }
-    }
-    let restored = parts.join('');
-
-    // Fix #version directive: ensure newline after 'es' before next token.
-    const versionEnd = restored.indexOf('es') + 2;
-    if (versionEnd > 2 && versionEnd < restored.length) {
-        const after = restored[versionEnd];
-        if (after !== '\n' && after !== ' ' && after !== '\t' && after !== '\r') {
-            restored = restored.slice(0, versionEnd) + '\n' + restored.slice(versionEnd);
-        }
-    }
-
-    return restored;
-};
-
-const compileShader = (
-    gl: WebGL2RenderingContext,
-    type: number,
-    source: string
-): WebGLShader => {
-    const shader = gl.createShader(type);
-    if (!shader) {
-        throw new Error('Failed to create the world-space UI quad shader.');
-    }
-    const resolvedSource = normalizeShaderSource(source);
-    gl.shaderSource(shader, resolvedSource);
-    gl.compileShader(shader);
-    if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === false) {
-        const log = gl.getShaderInfoLog(shader);
-        gl.deleteShader(shader);
-        throw new Error(`World-space UI quad shader failed to compile: ${log ?? 'unknown error'}`);
-    }
-    return shader;
-};
-
 export function createUIWorldQuadRenderer(gl: WebGL2RenderingContext): UIWorldQuadRenderer {
     const program = gl.createProgram();
     const buffer = gl.createBuffer();
@@ -159,8 +98,8 @@ export function createUIWorldQuadRenderer(gl: WebGL2RenderingContext): UIWorldQu
         throw new Error('Failed to allocate the world-space UI quad renderer.');
     }
 
-    const vertexShader = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SOURCE);
-    const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SOURCE);
+    const vertexShader = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SOURCE, 'world-quad vertex');
+    const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SOURCE, 'world-quad fragment');
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
