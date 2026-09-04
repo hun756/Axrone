@@ -230,8 +230,8 @@ const installUIWidgetRefResolver = (): void => {
 };
 
 const resolveFramebufferSize = (scene: SceneUIOverlayTarget): { width: number; height: number } => ({
-    width: scene.canvas.width || scene.gl.drawingBufferWidth,
-    height: scene.canvas.height || scene.gl.drawingBufferHeight,
+    width: Math.max(1, scene.canvas.width || scene.gl.drawingBufferWidth || 1),
+    height: Math.max(1, scene.canvas.height || scene.gl.drawingBufferHeight || 1),
 });
 
 const connectUIHostInput = <TPayload>(
