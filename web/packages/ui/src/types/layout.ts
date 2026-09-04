@@ -38,6 +38,15 @@ export interface Anchor {
     readonly stretch: boolean;
 }
 
+/**
+ * Fully resolved, normalized color with all channels present.
+ *
+ * **Contract:** Produced by normalization functions (e.g. `normalizeColor`).
+ * All channels (r, g, b, a) are guaranteed to be present and in [0, 1].
+ * Use this type for internal/resolved state and rendering pipelines.
+ *
+ * @see ColorLike — user input where alpha is optional (defaults to 1).
+ */
 export interface ReadonlyColor {
     readonly r: number;
     readonly g: number;
@@ -45,6 +54,15 @@ export interface ReadonlyColor {
     readonly a: number;
 }
 
+/**
+ * User-supplied color input where alpha is optional.
+ *
+ * **Contract:** Accepted as input from widget style patches, theme tokens,
+ * and API callers. The `a` channel defaults to 1 when omitted during
+ * normalization to {@link ReadonlyColor}.
+ *
+ * @see ReadonlyColor — resolved output with guaranteed alpha.
+ */
 export interface ColorLike {
     readonly r: number;
     readonly g: number;
