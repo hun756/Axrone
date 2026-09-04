@@ -1,7 +1,8 @@
 import type { UIRuntime } from '../runtime';
 import type { UICheckboxHandle, UICheckboxOptions } from './types';
-import { attachToParent, createTextBlock, disposeWidget, isPointInside } from './internals';
+import { attachToParent, createTextBlock, isPointInside } from './internals';
 import { resolveTheme, resolveVariantPalette } from './theme';
+import { createStatefulControl } from './stateful-control';
 
 export const createUICheckbox = <TRuntime>(
     runtime: UIRuntime<TRuntime>,
@@ -25,29 +26,22 @@ export const createUICheckbox = <TRuntime>(
     const markSize = Math.max(12, Math.round(boxSize * 0.65));
 
     let handle: UICheckboxHandle;
+    let applyRef: () => void = () => {};
+    const apply = () => applyRef();
 
-    const root = runtime.createWidget({
-        role: 'custom:checkbox',
-        key: options.key,
-        enabled: !state.disabled,
-        interactive: !state.disabled,
-        focus: {
-            focusable: !state.disabled,
-            ...(options.focus ?? {}),
-        },
-        layout: {
-            display: 'stack',
-            direction: 'row',
-            alignItems: 'center',
-            gap: Math.max(8, Math.round(theme.controlHeight * 0.24)),
-            width: 'content',
-            height: 'content',
-            ...(options.layout ?? {}),
-        },
-        style: {
-            background: options.style?.background ?? '#00000000',
-            ...(options.style ?? {}),
-        },
+    const toggleChecked = (): void => {
+        if (state.indeterminate) {
+            state.indeterminate = false;
+            state.checked = true;
+        } else {
+            state.checked = !state.checked;
+        }
+        state.onChange?.(state.checked, handle);
+    };
+
+    const sc = createStatefulControl<typeof state>(runtime, {
+        state,
+        apply,
         handlers: {
             pointerEnter: () => {
                 if (state.disabled) return false;
@@ -73,13 +67,7 @@ export const createUICheckbox = <TRuntime>(
                 const shouldToggle = state.pressed && isPointInside(runtime, root, event.x, event.y);
                 state.pressed = false;
                 if (shouldToggle) {
-                    if (state.indeterminate) {
-                        state.indeterminate = false;
-                        state.checked = true;
-                    } else {
-                        state.checked = !state.checked;
-                    }
-                    state.onChange?.(state.checked, handle);
+                    toggleChecked();
                 }
                 apply();
                 return true;
@@ -87,28 +75,38 @@ export const createUICheckbox = <TRuntime>(
             keyDown: (event) => {
                 if (state.disabled) return false;
                 if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) {
-                    if (state.indeterminate) {
-                        state.indeterminate = false;
-                        state.checked = true;
-                    } else {
-                        state.checked = !state.checked;
-                    }
-                    state.onChange?.(state.checked, handle);
+                    toggleChecked();
                     apply();
                     return true;
                 }
                 return false;
             },
-            focus: () => {
-                state.focused = true;
-                apply();
-            },
-            blur: () => {
-                state.focused = false;
-                state.pressed = false;
-                apply();
-            },
         },
+    });
+
+    const root = runtime.createWidget({
+        role: 'custom:checkbox',
+        key: options.key,
+        enabled: !state.disabled,
+        interactive: !state.disabled,
+        focus: {
+            focusable: !state.disabled,
+            ...(options.focus ?? {}),
+        },
+        layout: {
+            display: 'stack',
+            direction: 'row',
+            alignItems: 'center',
+            gap: Math.max(8, Math.round(theme.controlHeight * 0.24)),
+            width: 'content',
+            height: 'content',
+            ...(options.layout ?? {}),
+        },
+        style: {
+            background: options.style?.background ?? '#00000000',
+            ...(options.style ?? {}),
+        },
+        handlers: sc.handlers,
     });
 
     const box = runtime.createWidget({
@@ -148,7 +146,7 @@ export const createUICheckbox = <TRuntime>(
         runtime.appendChild(root, label);
     }
 
-    const apply = (): void => {
+    applyRef = (): void => {
         const palette = resolveVariantPalette(theme, state.variant);
         const activeColor = state.checked || state.indeterminate ? palette.idle : theme.surfaceColor;
         const hoverColor = state.checked ? palette.hover : theme.surfaceHoverColor;
@@ -158,14 +156,7 @@ export const createUICheckbox = <TRuntime>(
               ? hoverColor
               : activeColor;
 
-        runtime.updateWidget(root, {
-            enabled: !state.disabled,
-            interactive: !state.disabled,
-            focus: {
-                focusable: !state.disabled,
-                ...(options.focus ?? {}),
-            },
-        });
+        sc.syncDisabled(root, options.focus ?? {});
 
         runtime.updateWidget(box, {
             style: {
@@ -219,24 +210,15 @@ export const createUICheckbox = <TRuntime>(
         },
         toggle() {
             if (!state.disabled) {
-                if (state.indeterminate) {
-                    state.indeterminate = false;
-                    state.checked = true;
-                } else {
-                    state.checked = !state.checked;
-                }
-                state.onChange?.(state.checked, handle);
+                toggleChecked();
                 apply();
             }
         },
         setDisabled(disabled) {
-            state.disabled = disabled;
-            state.pressed = false;
-            state.hovered = false;
-            apply();
+            sc.setDisabled(disabled, root, options.focus ?? {});
         },
         dispose() {
-            disposeWidget(runtime, root);
+            sc.dispose(root);
         },
     };
 
