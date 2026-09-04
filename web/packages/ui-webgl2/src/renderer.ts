@@ -3,6 +3,7 @@ import type {
     EdgeInsets,
     FontGlyphBitmapFormat,
     GlyphAtlasEntry,
+    GlyphAtlasPageSnapshot,
     ImageRenderCommand,
     CornerRadii,
     QuadRenderCommand,
@@ -858,6 +859,33 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             uploadedGlyphCount: this.statisticsState.uploadedGlyphCount,
             atlasPageCount: this.pages.size,
         };
+    }
+
+    /**
+     * Handle an atlas page eviction from the CPU-side glyph atlas.
+     * Deletes the corresponding GPU texture and removes the renderer's
+     * TexturePage bookkeeping entry.
+     */
+    handleAtlasPageEviction(snapshot: GlyphAtlasPageSnapshot): void {
+        if (this.contextLost) {
+            return;
+        }
+        const evictedEntry = snapshot.entries[0];
+        if (!evictedEntry) {
+            return;
+        }
+        const pageKey = ((evictedEntry.faceId as number) << 16) | (snapshot.id as number);
+        const page = this.pages.get(pageKey);
+        if (page) {
+            this.gl.deleteTexture(page.texture);
+            this.pages.delete(pageKey);
+        }
+        // If the evicted page was the active text page, reset the batch so
+        // subsequent glyphs do not try to flush into a stale page key.
+        if (this.activeTextPageKey === pageKey) {
+            this.textCount = 0;
+            this.activeTextPageKey = null;
+        }
     }
 
     render(frame: Readonly<UIFrame<TPayload>>, options?: WebGL2UIRenderOptions): void {

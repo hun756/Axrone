@@ -88,6 +88,7 @@ export class FontRegistry implements Disposable {
     private nextFaceId = 1;
     private disposed = false;
     private defaultFamily: string | null;
+    private atlasPageEvictCallback: ((page: GlyphAtlasPageSnapshot) => void) | null = null;
 
     constructor(options: FontRegistryOptions = {}) {
         this.options = {
@@ -154,7 +155,14 @@ export class FontRegistry implements Disposable {
             info.id,
             infoSource.atlas?.width ?? this.options.atlasWidth,
             infoSource.atlas?.height ?? this.options.atlasHeight,
-            infoSource.atlas?.padding ?? this.options.atlasPadding
+            infoSource.atlas?.padding ?? this.options.atlasPadding,
+            {
+                onEvictPage: (page) => {
+                    if (this.atlasPageEvictCallback) {
+                        this.atlasPageEvictCallback(page);
+                    }
+                },
+            },
         );
         const face: InternalFontFace = {
             id: info.id,
@@ -290,6 +298,18 @@ export class FontRegistry implements Disposable {
 
     getDefaultFamily(): string | null {
         return this.defaultFamily;
+    }
+
+    /** Register a callback invoked when any atlas page is evicted by LRU policy. */
+    setAtlasPageEvictCallback(callback: ((page: GlyphAtlasPageSnapshot) => void) | null): void {
+        this.atlasPageEvictCallback = callback;
+    }
+
+    /** Advance the LRU frame counter on all registered atlases. */
+    tickAtlases(): void {
+        for (const face of this.facesById.values()) {
+            face.atlas.tick();
+        }
     }
 
     snapshot(): FontRegistrySnapshot {

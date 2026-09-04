@@ -515,6 +515,7 @@ export function bindUIHostToWorld<TPayload = unknown>(
     const surface = createUIWorldSurface(scene.gl, initialSize.width, initialSize.height);
     const quadRenderer = createUIWorldQuadRenderer(scene.gl);
     const uiRenderer = new WebGL2UIRenderer<TPayload>({ gl: scene.gl });
+    runtime.fonts.setAtlasPageEvictCallback((page) => uiRenderer.handleAtlasPageEviction(page));
 
     const drawWorldFrame = (): void => {
         const size = resolveWorldSurfaceSize(host);
