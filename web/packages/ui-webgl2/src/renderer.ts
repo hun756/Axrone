@@ -131,7 +131,7 @@ const sameClipRect = (stored: RectLike | null, incoming: RectLike | null): boole
 };
 
 const createGlyphPageKey = (entry: GlyphAtlasEntry): number =>
-    ((entry.faceId as number) << 16) | (entry.page as number);
+    (entry.faceId as number) * 65536 + (entry.page as number);
 
 const IDENTITY_TRANSFORM = [1, 0, 0, 1, 0, 0] as const;
 
@@ -297,7 +297,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         if (!evictedEntry) {
             return;
         }
-        const pageKey = ((evictedEntry.faceId as number) << 16) | (snapshot.id as number);
+        const pageKey = (evictedEntry.faceId as number) * 65536 + (snapshot.id as number);
         const page = this.pages.get(pageKey);
         if (page) {
             this.gl.deleteTexture(page.texture);

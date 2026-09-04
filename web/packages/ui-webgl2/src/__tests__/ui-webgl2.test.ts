@@ -1017,6 +1017,44 @@ describe('@axrone/ui-webgl2', () => {
         expect(gl.texSubImage2D).toHaveBeenCalledTimes(2);
         expect(renderer.getStats().uploadedGlyphCount).toBe(2);
     });
+
+    it('creates distinct glyph pages for faceId >= 65536 without overflow', () => {
+        const gl = createMockWebGL2Context();
+        const renderer = new WebGL2UIRenderer({ gl });
+        const baseEntry = createGlyphEntry();
+        const smallFaceEntry: GlyphAtlasEntry = { ...baseEntry, faceId: 1 as GlyphAtlasEntry['faceId'], page: 0 as GlyphAtlasEntry['page'] };
+        const largeFaceEntry: GlyphAtlasEntry = { ...baseEntry, faceId: 70000 as GlyphAtlasEntry['faceId'], page: 0 as GlyphAtlasEntry['page'] };
+        const frame: UIFrame<never> = {
+            viewportWidth: 160,
+            viewportHeight: 96,
+            metrics: { ...createMetrics(), renderCount: 1, textCommandCount: 2, glyphCount: 2, customCommandCount: 0 },
+            commands: [
+                {
+                    kind: 'text',
+                    widget: 1 as WidgetId,
+                    x: 0, y: 0, zIndex: 0,
+                    color: { r: 1, g: 1, b: 1, a: 1 },
+                    outlineColor: { r: 0, g: 0, b: 0, a: 0 },
+                    outlineWidth: 0, edgeSoftness: 0, opacity: 1, clip: null,
+                    layout: { ...createTextLayout(smallFaceEntry), glyphs: [{ ...createTextLayout(smallFaceEntry).glyphs[0], atlasEntry: smallFaceEntry }] },
+                },
+                {
+                    kind: 'text',
+                    widget: 2 as WidgetId,
+                    x: 0, y: 20, zIndex: 1,
+                    color: { r: 1, g: 1, b: 1, a: 1 },
+                    outlineColor: { r: 0, g: 0, b: 0, a: 0 },
+                    outlineWidth: 0, edgeSoftness: 0, opacity: 1, clip: null,
+                    layout: { ...createTextLayout(largeFaceEntry), glyphs: [{ ...createTextLayout(largeFaceEntry).glyphs[0], atlasEntry: largeFaceEntry }] },
+                },
+            ],
+        };
+        renderer.render(frame);
+        // Both glyphs uploaded separately means distinct page keys.
+        expect(renderer.getStats().uploadedGlyphCount).toBe(2);
+        expect(renderer.getStats().atlasPageCount).toBe(2);
+        renderer.dispose();
+    });
 });
 
 describe('scene-host UIHost binding', () => {
