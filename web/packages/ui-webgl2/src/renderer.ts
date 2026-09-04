@@ -585,6 +585,8 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.statisticsState.quadCount += 1;
     }
 
+    private readonly strokeColorScratch = new Float32Array(4);
+
     /**
      * Converts each stroke segment into an oriented strip rendered through the
      * existing quad pipeline. Normalized 0–1 points are mapped into the widget
@@ -599,9 +601,8 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         const widgetW = command.width;
         const widgetH = command.height;
         const camera = command.transform ?? IDENTITY_TRANSFORM;
-        const strokeColorScratch = new Float32Array(4);
         for (const stroke of command.strokes) {
-            writeStrokeColor(stroke.color, strokeColorScratch);
+            writeStrokeColor(stroke.color, this.strokeColorScratch);
             const weight = Math.max(0.5, stroke.weight);
             const halfWeight = weight * 0.5;
             const points = stroke.points;
@@ -651,10 +652,10 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 this.quadBatch[base + 1] = 0;
                 this.quadBatch[base + 2] = extent;
                 this.quadBatch[base + 3] = weight;
-                this.quadBatch[base + 4] = strokeColorScratch[0];
-                this.quadBatch[base + 5] = strokeColorScratch[1];
-                this.quadBatch[base + 6] = strokeColorScratch[2];
-                this.quadBatch[base + 7] = strokeColorScratch[3] * command.opacity;
+                this.quadBatch[base + 4] = this.strokeColorScratch[0];
+                this.quadBatch[base + 5] = this.strokeColorScratch[1];
+                this.quadBatch[base + 6] = this.strokeColorScratch[2];
+                this.quadBatch[base + 7] = this.strokeColorScratch[3] * command.opacity;
                 // No border, no radius, no border width.
                 this.quadBatch[base + 8] = 0;
                 this.quadBatch[base + 9] = 0;
