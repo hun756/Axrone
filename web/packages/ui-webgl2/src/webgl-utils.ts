@@ -45,15 +45,26 @@ export const writeBlendedColor = (
     batch[offset + 3] = multiplyAlpha(color.a ?? 1, opacity);
 };
 
+/** Module-scoped scratch buffer reused synchronously by normalizeStrokeColor. */
+const strokeColorScratch = new Float32Array(4);
+
 /**
  * Converts a ColorInput (hex string, number, array, or ColorLike) to a
  * normalized [r, g, b, a] tuple for stroke rendering.
  *
+ * Writes into a module-scoped scratch Float32Array to avoid per-call
+ * allocation. The scratch is consumed synchronously by the caller, so
+ * no aliasing hazard exists across calls that retain results.
+ *
  * Delegates to the canonical {@link normalizeColor} from `@axrone/ui/types`
  * to ensure a single normalization path across the UI and WebGL packages.
  */
-export const normalizeStrokeColor = (color: StrokeRenderCommand['strokes'][number]['color']): readonly [number, number, number, number] => {
+export const normalizeStrokeColor = (color: StrokeRenderCommand['strokes'][number]['color']): Float32Array => {
     const WHITE: ReadonlyColor = { r: 1, g: 1, b: 1, a: 1 };
     const resolved = normalizeColor(color, WHITE);
-    return [resolved.r, resolved.g, resolved.b, resolved.a] as const;
+    strokeColorScratch[0] = resolved.r;
+    strokeColorScratch[1] = resolved.g;
+    strokeColorScratch[2] = resolved.b;
+    strokeColorScratch[3] = resolved.a;
+    return strokeColorScratch;
 };
