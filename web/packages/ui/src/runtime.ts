@@ -809,12 +809,20 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         return this;
     }
 
+    /**
+     * Disposes the runtime, releasing all resources.
+     *
+     * NOTE: Controller re-registration after dispose is unsupported. The
+     * controller resolve cache is cleared here; any controllers registered
+     * before dispose become unreachable.
+     */
     dispose(): void {
         if (!this.disposed) {
             this.clear();
             this.fonts.dispose();
             this.textEngine.dispose();
             this.registry.clear();
+            this.controllerResolveCache.clear();
             this.disposed = true;
         }
     }

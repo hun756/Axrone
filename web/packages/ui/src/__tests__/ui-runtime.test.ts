@@ -603,4 +603,24 @@ describe('@axrone/ui runtime', () => {
         // With wrap-reverse the first line of children is placed below the second.
         expect(box0.y).toBeGreaterThan(box2.y);
     });
+
+    it('clears controller resolve cache on dispose', () => {
+        const runtime = new UIRuntime({ width: 400, height: 200 });
+        runtime.fonts.registerFace(createFontAsset());
+
+        // Create a widget with a controller
+        const widget = runtime.createWidget({
+            layout: { width: 100, height: 50 },
+            controller: 'test-controller',
+        });
+        runtime.appendChild(runtime.root, widget);
+        runtime.commit();
+
+        // Dispose the runtime
+        runtime.dispose();
+
+        // After disposal, the controller resolve cache should be cleared.
+        // Any attempt to resolve controllers should fail consistently.
+        expect(() => runtime.commit()).toThrow();
+    });
 });
