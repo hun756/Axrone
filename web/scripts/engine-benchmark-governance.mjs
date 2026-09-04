@@ -92,6 +92,9 @@ const fail = (message) => {
 const scenarioKey = ({ workload, comparisonMode, objectCount }) =>
     [workload, comparisonMode, objectCount > 0 ? objectCount : ''].filter(Boolean).join('|');
 
+const legacyScenarioKey = ({ workload, comparisonMode, objectCount }) =>
+    `${workload}|${comparisonMode}|${objectCount > 0 ? objectCount : ''}`;
+
 const scenarioLabel = ({ workload, comparisonMode, objectCount }) =>
     [workload, comparisonMode, objectCount > 0 ? objectCount.toLocaleString('en-US') : ''].filter(Boolean).join('/');
 
@@ -195,7 +198,14 @@ const stabilityWarnings = [];
 
 for (const budget of activeBudgets) {
     const label = scenarioLabel(budget);
-    const scenarioReport = scenarioReports.get(scenarioKey(budget));
+    let scenarioReport = scenarioReports.get(scenarioKey(budget));
+
+    // Fall back to the legacy pre-M14 key format (${workload}|${comparisonMode}|${count})
+    // so stale .tmp reports from older runner versions do not produce false
+    // 'missing from report' failures.
+    if (!scenarioReport) {
+        scenarioReport = scenarioReports.get(legacyScenarioKey(budget));
+    }
 
     if (!scenarioReport) {
         failures.push(
