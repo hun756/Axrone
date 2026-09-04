@@ -21,7 +21,7 @@ const defaultRunnerOptions = {
     durationSec: '5',
     objectCounts: '19600',
     comparisonModes: 'no-culling',
-    workloads: 'draw-call,triangle,mixed',
+    workloads: 'draw-call,triangle,mixed,ui-widgets',
 };
 
 const scenarioBudgets = [
@@ -72,6 +72,16 @@ const scenarioBudgets = [
         maxSceneSetupMedianMs: 14,
         requireFpsLeader: true,
         requireFirstRenderLeader: true,
+    },
+    {
+        workload: 'ui-widgets',
+        comparisonMode: '',
+        objectCount: 0,
+        minRunCount: 1,
+        maxFrameTimeMedianMs: 25,
+        maxFrameTimeP99Ms: 120,
+        maxDrawCallsPerFrame: 5,
+        maxGetParameterPerFrameMedian: 20,
     },
 ];
 
@@ -156,6 +166,14 @@ const { values: cli } = parseArgs({
 
 const reportPath = path.resolve(workspaceDir, cli.report ?? defaultReportPath);
 
+// When --workloads is given without --refresh, filter which budgets are evaluated.
+const evaluateWorkloads = cli.workloads
+    ? cli.workloads.split(',').map((s) => s.trim()).filter(Boolean)
+    : null;
+const activeBudgets = evaluateWorkloads
+    ? scenarioBudgets.filter((b) => evaluateWorkloads.includes(b.workload))
+    : scenarioBudgets;
+
 if (cli.refresh) {
     runBenchmarkRefresh(reportPath, cli);
 }
@@ -175,7 +193,7 @@ const reportRows = [];
 const failures = [];
 const stabilityWarnings = [];
 
-for (const budget of scenarioBudgets) {
+for (const budget of activeBudgets) {
     const label = scenarioLabel(budget);
     const scenarioReport = scenarioReports.get(scenarioKey(budget));
 
@@ -190,6 +208,34 @@ for (const budget of scenarioBudgets) {
         failures.push(
             `${label} only has ${scenarioReport.summary?.runCount ?? 0} measured run(s); expected at least ${budget.minRunCount}.`,
         );
+    }
+
+    // ── ui-widgets workload has its own metric layout ─────────────────
+    if (budget.workload === 'ui-widgets') {
+        const frameTime = scenarioReport.summary?.frameTimeMs;
+        const drawCalls = scenarioReport.summary?.drawCallsPerFrame;
+        const getParams = scenarioReport.summary?.getParameterPerFrame;
+
+        if (!frameTime || !drawCalls || !getParams) {
+            failures.push(`${label} is missing ui-widgets summary data.`);
+            continue;
+        }
+
+        reportRows.push({
+            label,
+            buildMedianMs: frameTime.median,
+            firstRenderMedianMs: frameTime.p99,
+            setupMedianMs: 0,
+            componentInstantiateMedianMs: 0,
+            sceneSetupMedianMs: 0,
+            warningCount: 0,
+        });
+
+        pushMedianBudgetFailure(failures, label, 'frameTimeMs', frameTime, budget.maxFrameTimeMedianMs);
+        pushMedianBudgetFailure(failures, label, 'frameTimeP99Ms', { median: frameTime.p99 }, budget.maxFrameTimeP99Ms);
+        pushMedianBudgetFailure(failures, label, 'drawCallsPerFrame', { median: drawCalls.median }, budget.maxDrawCallsPerFrame);
+        pushMedianBudgetFailure(failures, label, 'getParameterPerFrame', { median: getParams.median }, budget.maxGetParameterPerFrameMedian);
+        continue;
     }
 
     const axrone = scenarioReport.summary?.engines?.axrone;

@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
-const VALID_WORKLOADS = ['draw-call', 'triangle', 'mixed'];
+const VALID_WORKLOADS = ['draw-call', 'triangle', 'mixed', 'ui-widgets'];
 const VALID_COMPARISON_MODES = ['no-culling', 'three-culling'];
 const DEFAULT_OBJECT_COUNTS = [2600, 19600];
 const DEFAULT_VIEWPORT = { width: 1600, height: 900 };
@@ -200,18 +200,22 @@ if (options.objectCounts.length === 0) {
     fail('At least one object count is required.');
 }
 
-const scenarios = options.workloads.flatMap((workload) =>
-    options.comparisonModes.flatMap((comparisonMode) =>
-        options.objectCounts.map((objectCount) => ({
-            workload,
-            comparisonMode,
-            objectCount,
-            durationSeconds: options.durationSec,
-        }))
-    )
-);
+const engineScenarios = options.workloads
+    .filter((w) => w !== 'ui-widgets')
+    .flatMap((workload) =>
+        options.comparisonModes.flatMap((comparisonMode) =>
+            options.objectCounts.map((objectCount) => ({
+                workload,
+                comparisonMode,
+                objectCount,
+                durationSeconds: options.durationSec,
+            }))
+        )
+    );
+const hasUIWidgets = options.workloads.includes('ui-widgets');
 
 const benchmarkPageUrl = (baseUrl) => `${baseUrl.replace(/\/$/, '')}/legacy/engine-benchmark.html`;
+const uiPerfPageUrl = (baseUrl) => `${baseUrl.replace(/\/$/, '')}/ui-perf-benchmark.html`;
 
 const startExamplesServer = async () => {
     if (!fs.existsSync(viteBinPath)) {
@@ -598,7 +602,7 @@ try {
 
     const scenarioReports = [];
 
-    for (const scenario of scenarios) {
+    for (const scenario of engineScenarios) {
         await runWithBrowser(async (probeBrowser) => {
             if (browserVersion && userAgent) {
                 return;
@@ -650,6 +654,75 @@ try {
                 await scenarioBrowser.close();
             }
         }
+    }
+
+    // ── ui-widgets workload ──────────────────────────────────────────────
+    if (hasUIWidgets) {
+        const uiWidgetsScenario = { workload: 'ui-widgets', comparisonMode: '', objectCount: 0 };
+        console.log(`Running ui-widgets (${options.iterations} measured run(s))`);
+
+        const uiRawRuns = [];
+        for (let i = 0; i < options.iterations; i++) {
+            await runWithBrowser(async (probeBrowser) => {
+                const ctx = await probeBrowser.newContext({
+                    viewport: { width: 960, height: 540 },
+                    deviceScaleFactor: 1,
+                    serviceWorkers: 'block',
+                });
+                const pg = await ctx.newPage();
+                try {
+                    pg.on('console', (msg) => {
+                        if (msg.type() === 'error') console.error('  [page]', msg.text());
+                    });
+                    await pg.goto(uiPerfPageUrl(baseUrl), {
+                        waitUntil: 'domcontentloaded',
+                        timeout: DEFAULT_TIMEOUT_MS,
+                    });
+                    await pg.waitForFunction(() => document.title === 'UIPERF_DONE', undefined, {
+                        timeout: DEFAULT_TIMEOUT_MS,
+                    });
+                    const result = await pg.evaluate(() => globalThis.__UI_PERF_RESULT__);
+                    uiRawRuns.push(result);
+                } finally {
+                    await ctx.close();
+                }
+            });
+        }
+
+        const frameTimes = uiRawRuns.flatMap((r) =>
+            Array.from({ length: r.frames?.measured ?? 0 }, () => r.frameTimeMs?.median ?? 0)
+        );
+        const drawCalls = uiRawRuns.map((r) => r.drawCallsPerFrame?.median ?? 0);
+        const getParams = uiRawRuns.map((r) => r.getParameterPerFrame?.median ?? 0);
+
+        const summarizeValues = (values) => {
+            const sorted = [...values].sort((a, b) => a - b);
+            const pct = (p) => {
+                if (sorted.length === 0) return 0;
+                const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * p) - 1));
+                return sorted[idx];
+            };
+            return { median: pct(0.5), p95: pct(0.95), p99: pct(0.99), max: sorted[sorted.length - 1] ?? 0 };
+        };
+
+        const uiWidgetsReport = {
+            scenario: uiWidgetsScenario,
+            summary: {
+                runCount: uiRawRuns.length,
+                frameTimeMs: summarizeValues(frameTimes.length > 0 ? frameTimes : uiRawRuns.map((r) => r.frameTimeMs?.median ?? 0)),
+                drawCallsPerFrame: summarizeValues(drawCalls),
+                getParameterPerFrame: summarizeValues(getParams),
+            },
+            rawRuns: uiRawRuns,
+        };
+
+        scenarioReports.push(uiWidgetsReport);
+        console.log(
+            `  frameTime median=${uiWidgetsReport.summary.frameTimeMs.median.toFixed(2)} ms  p99=${uiWidgetsReport.summary.frameTimeMs.p99.toFixed(2)} ms`
+        );
+        console.log(
+            `  drawCalls median=${uiWidgetsReport.summary.drawCallsPerFrame.median}  getParameter median=${uiWidgetsReport.summary.getParameterPerFrame.median}`
+        );
     }
 
     const report = {
