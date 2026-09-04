@@ -1,4 +1,4 @@
-import type { UIAsset, WidgetId } from '@axrone/ui/types';
+import type { UIAsset, WidgetId, WidgetPatch } from '@axrone/ui/types';
 import { UIRuntime, deserializeUIAsset } from '@axrone/ui/runtime';
 import { resolveCanvasScale, mapViewportPointToCanvas } from '@axrone/ui/layout';
 import { buttonFeedbackController, checkboxToggleController, sliderController, dropdownController, tooltipHostController, toggleSwitchController, radioGroupController, segmentedController, dragController, tabViewController, editBoxController } from '@axrone/ui/controls';
@@ -21,7 +21,7 @@ let nextWorldHostSystemId = 1;
  * to input in builds. The Editor preview calls its own equivalent; this covers
  * the runtime/build path.
  */
-const registerBuiltinWidgetControllers = (runtime: UIRuntime<any>): void => {
+const registerBuiltinWidgetControllers = (runtime: UIRuntime<unknown>): void => {
     type RegistryEntry = Parameters<typeof runtime.registry.register>[0];
     runtime.registry.register(buttonFeedbackController as RegistryEntry);
     runtime.registry.register(checkboxToggleController as RegistryEntry);
@@ -200,7 +200,7 @@ export class UIWidgetRef {
         if (!runtime || widgetId === null) {
             return false;
         }
-        runtime.updateWidget(widgetId, patch as never);
+        runtime.updateWidget(widgetId, patch as WidgetPatch);
         return true;
     }
 }
