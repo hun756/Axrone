@@ -162,6 +162,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     private lastViewport: { readonly width: number; readonly height: number } | null = null;
     private readonly bindingTable = new Map<string, WidgetId>();
     private readonly controllerListeners = new Map<number, Map<string, Set<(data: unknown) => void>>>();
+    private readonly controllerResolveCache = new Map<string, WidgetController<any, any, any> | null>();
     private readonly autoSizeCache = new Map<string, TextLayoutResult>();
     private readonly autoSizeCacheMaxSize = 64;
 
@@ -1119,6 +1120,19 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         };
     }
 
+    private resolveControllerCached(controllerName: string | null): WidgetController<any, any, any> | null {
+        if (!controllerName) {
+            return null;
+        }
+        const cached = this.controllerResolveCache.get(controllerName);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const resolved = this.registry.resolve(controllerName);
+        this.controllerResolveCache.set(controllerName, resolved);
+        return resolved;
+    }
+
     private renderFrame(): UIFrame<TPayload> {
         const commands: RenderCommand<TPayload>[] = [];
         let visibleWidgetCount = 0;
@@ -1235,9 +1249,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
                     commands.push(caretCommand);
                 }
             }
-            const controller = this.records[index]!.controller
-                ? this.registry.resolve(this.records[index]!.controller)
-                : null;
+            const controller = this.resolveControllerCached(this.records[index]!.controller);
             controller?.render?.({
                 runtime: this,
                 widget: index as WidgetId,
