@@ -12,6 +12,10 @@ const SCROLLBAR_THUMB_DEFAULT = 40;
 const SCROLLBAR_RADIUS = 4;
 const SCROLLBAR_THUMB_COLOR = '#475569aa';
 
+// ─── Scroll content constants ────────────────────────────────────────────────
+const DEFAULT_CONTENT_GAP = 10;
+const SCROLL_PAGE_STEP = 64;
+
 // ─── Scrollbar factory ───────────────────────────────────────────────────────
 type ScrollbarAxis = 'vertical' | 'horizontal';
 
@@ -258,11 +262,11 @@ export const createUIScrollView = <TRuntime>(
                 }
                 switch (event.key) {
                     case 'PageDown':
-                        state.scrollY = Math.max(0, state.scrollY + 64);
+                        state.scrollY = Math.max(0, state.scrollY + SCROLL_PAGE_STEP);
                         applyOffsets();
                         return true;
                     case 'PageUp':
-                        state.scrollY = Math.max(0, state.scrollY - 64);
+                        state.scrollY = Math.max(0, state.scrollY - SCROLL_PAGE_STEP);
                         applyOffsets();
                         return true;
                     case 'Home':
@@ -289,7 +293,7 @@ export const createUIScrollView = <TRuntime>(
             height: 'content',
             display: 'stack',
             direction: 'column',
-            gap: 10,
+            gap: DEFAULT_CONTENT_GAP,
             ...(options.contentLayout ?? {}),
             contentOffsetX: state.scrollX,
             contentOffsetY: state.scrollY,

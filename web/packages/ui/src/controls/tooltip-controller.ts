@@ -27,6 +27,11 @@ import { asString, asNumber } from './internals';
  */
 export const TOOLTIP_HOST_CONTROLLER_TYPE = 'tooltip-host';
 
+// ─── Tooltip constants ───────────────────────────────────────────────────────
+const FRAME_INTERVAL_MS = 1000 / 60;
+const TOOLTIP_DEFAULT_OFFSET = 8;
+const TOOLTIP_FPS = 60;
+
 export type TooltipPosition = 'top' | 'bottom' | 'left' | 'right';
 
 export interface TooltipControllerProps {
@@ -96,7 +101,7 @@ const resolveTextWidget = (context: TooltipContext): WidgetId | null => {
 const applyTooltipPosition = (context: TooltipContext, tooltipWidget: WidgetId): void => {
     const props = context.props as TooltipControllerProps;
     const position: TooltipPosition = (props.position as TooltipPosition) ?? 'top';
-    const offset = asNumber(props.offset, 8);
+    const offset = asNumber(props.offset, TOOLTIP_DEFAULT_OFFSET);
 
     switch (position) {
         case 'top':
@@ -221,7 +226,7 @@ export const tooltipHostController: WidgetController<
         // so the event-driven delay check can compare elapsed time against it.
         const props = typed.props as TooltipControllerProps;
         const delaySeconds = asNumber(props.delay, 0);
-        typed.state.delayFrames = Math.round(delaySeconds * 60);
+        typed.state.delayFrames = Math.round(delaySeconds * TOOLTIP_FPS);
 
         // Start with the tooltip hidden.
         const tooltipWidget = typed.state.cachedTooltip;
@@ -248,7 +253,7 @@ export const tooltipHostController: WidgetController<
         // Convert seconds to frames at ~60fps.
         if (props.delay !== previous.delay) {
             const delaySeconds = asNumber(props.delay, 0);
-            typed.state.delayFrames = Math.round(delaySeconds * 60);
+            typed.state.delayFrames = Math.round(delaySeconds * TOOLTIP_FPS);
         }
 
         // If the tooltip is currently visible and relevant props changed,
@@ -306,7 +311,7 @@ export const tooltipHostController: WidgetController<
                     // input events, so the delay is evaluated lazily here.
                     if (state.pendingShow && state.delayFrames > 0) {
                         const elapsed = performance.now() - state.entryTime;
-                        const delayMs = state.delayFrames * (1000 / 60);
+                        const delayMs = state.delayFrames * FRAME_INTERVAL_MS;
                         if (elapsed >= delayMs) {
                             showTooltip(typed);
                         }

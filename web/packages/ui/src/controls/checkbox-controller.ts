@@ -41,6 +41,10 @@ import { asString, asNumber, asBoolean, asRecord, isValidImageSource, toImageSou
  */
 export const CHECKBOX_TOGGLE_CONTROLLER_TYPE = 'checkbox-toggle';
 
+// ─── Checkbox constants ──────────────────────────────────────────────────────
+const CHECKBOX_DOT_RADIUS = 7;
+const DEFAULT_MARK_WEIGHT = 2;
+
 export type CheckboxVisualState = 'normal' | 'hover' | 'checked' | 'disabled';
 export type CheckboxMarkStyle = 'check' | 'cross' | 'dot' | 'dash';
 export type CheckboxTransitionMode = 'color' | 'tint' | 'sprite';
@@ -329,7 +333,7 @@ const applyVisuals = (context: CheckboxContext): boolean => {
             const markVisible = state.checked || state.indeterminate;
             const markStyle = (asString(props.markStyle) || 'check') as CheckboxMarkStyle;
             const markColor = (asString(props.markColor) || '#ffffffff') as `#${string}`;
-            const markWeight = asNumber(props.markWeight, 2);
+            const markWeight = asNumber(props.markWeight, DEFAULT_MARK_WEIGHT);
             const markSize = asNumber(props.markSize, NaN);
 
             if (transition === 'tint') {
@@ -361,7 +365,7 @@ const applyVisuals = (context: CheckboxContext): boolean => {
                     runtime.updateWidget(mark, {
                         style: {
                             background: proceduralMark ? markColor : '#00000000',
-                            radius: Number.isFinite(markSize) ? markSize * 0.5 : 7,
+                            radius: Number.isFinite(markSize) ? markSize * 0.5 : CHECKBOX_DOT_RADIUS,
                             strokes: [],
                         },
                         enabled: markVisible,
