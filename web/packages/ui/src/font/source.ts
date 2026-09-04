@@ -6,6 +6,7 @@ import type {
     FontGlyphMetric,
     FontStyle,
     FontWeight,
+    GlyphAtlasEntry,
     KerningPairKey,
     RetryPolicy,
     StaticFontFaceAsset,
@@ -16,12 +17,19 @@ export { normalizeWeight };
 
 export const normalizeStyle = (style: FontStyle | undefined): FontStyle => style ?? 'normal';
 
-export const toByteArray = (value: ArrayBuffer | ArrayBufferView): Uint8Array => {
+/**
+ * Converts an ArrayBuffer or ArrayBufferView to a Uint8Array.
+ * Canonical implementation shared with the WebGL renderer.
+ */
+export const toUint8Array = (value: ArrayBuffer | ArrayBufferView): Uint8Array => {
     if (value instanceof ArrayBuffer) {
         return new Uint8Array(value);
     }
     return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 };
+
+/** @deprecated Use {@link toUint8Array} instead. */
+export const toByteArray = toUint8Array;
 
 export const toOwnedArrayBuffer = (value: ArrayBuffer | ArrayBufferView): ArrayBuffer => {
     const bytes = toByteArray(value);
@@ -50,6 +58,13 @@ export const applyRetryDelay = (policy: RetryPolicy | undefined, attempt: number
 export const isDynamicFontFaceAsset = (asset: FontFaceAsset): asset is DynamicFontFaceAsset => asset.kind === 'dynamic';
 
 export const createAtlasEntryKey = (codePoint: number, rasterSize?: number): string => `${codePoint}:${rasterSize ?? 0}`;
+
+/**
+ * Creates a numeric key for an uploaded glyph atlas entry.
+ * Packs codePoint into upper 16 bits and rasterSize into lower 16 bits.
+ */
+export const createUploadedGlyphKey = (entry: GlyphAtlasEntry): number =>
+    (entry.codePoint << 16) | (entry.rasterSize ?? 0);
 
 export const detectBinaryFormatFromContentType = (contentType: string | undefined): FontBinaryFormat | null => {
     if (!contentType) {

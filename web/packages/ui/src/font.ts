@@ -6,11 +6,15 @@ import { BinaryFontLoader, DescriptorFontLoader, JsonFontLoader } from './font/l
 import {
     applyRetryDelay,
     buildSourceKey,
+    createAtlasEntryKey,
+    createUploadedGlyphKey,
     isDynamicFontFaceAsset,
     normalizeGlyphMap,
     normalizeKerningMap,
     normalizeStyle,
     normalizeWeight,
+    toByteArray,
+    toUint8Array,
     wait,
 } from './font/source';
 import type {
@@ -586,3 +590,4 @@ export type {
 };
 
 export { createBrowserDynamicFontRuntimeFactory, createBrowserSystemFontFaceRuntime };
+export { toUint8Array, toByteArray, createAtlasEntryKey, createUploadedGlyphKey };

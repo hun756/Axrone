@@ -14,6 +14,7 @@ import type {
 } from '@axrone/ui/types';
 import type { UIFrameSink } from '@axrone/ui/render';
 import { DisposedUIError } from '@axrone/ui/errors';
+import { toUint8Array, createUploadedGlyphKey } from '@axrone/ui/font';
 import type {
     WebGL2UICustomCommandContext,
     WebGL2UIMaterialImageContext,
@@ -128,16 +129,6 @@ const sameClipRect = (stored: RectLike | null, incoming: RectLike | null): boole
         stored.height === incoming.height
     );
 };
-
-const toUint8Array = (value: ArrayBuffer | ArrayBufferView): Uint8Array => {
-    if (value instanceof ArrayBuffer) {
-        return new Uint8Array(value);
-    }
-    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-};
-
-const createUploadedGlyphKey = (entry: GlyphAtlasEntry): number =>
-    (entry.codePoint << 16) | (entry.rasterSize ?? 0);
 
 const createGlyphPageKey = (entry: GlyphAtlasEntry): number =>
     ((entry.faceId as number) << 16) | (entry.page as number);
