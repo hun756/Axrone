@@ -8,6 +8,7 @@ export * from './mat4';
 export * from './quat';
 export * from './color';
 export * from './clamp';
+export * from './rect';
 export * from './box-muller';
 
 // Extended functionality

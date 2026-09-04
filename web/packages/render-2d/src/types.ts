@@ -1,4 +1,4 @@
-import type { IColorLike } from '@axrone/numeric';
+import type { IColorLike, IRectLike } from '@axrone/numeric';
 
 declare const __render2DColorBrand: unique symbol;
 declare const __render2DTextureReferenceBrand: unique symbol;
@@ -22,7 +22,11 @@ export interface Render2DSizeLike {
     readonly height: number;
 }
 
-export interface Render2DRectLike extends Render2DVec2Like, Render2DSizeLike {}
+/**
+ * Canonical rectangle type re-exported from `@axrone/numeric` (`IRectLike`).
+ * Shared with `@axrone/ui` (as `RectLike`) for a single source of truth.
+ */
+export type Render2DRectLike = IRectLike;
 
 export interface Render2DBorderLike {
     readonly left: number;
