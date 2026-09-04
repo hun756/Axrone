@@ -160,47 +160,4 @@ export class FocusController {
         }
         return host.rootId;
     }
-
-    /**
-     * Computes the focus-ring clip by walking up the ancestor chain.
-     * The focus ring should be clipped by ancestor clip rects, not the widget's own.
-     */
-    computeFocusRingClip(
-        focusIndex: number,
-        host: FocusControllerHost,
-        isVisible: (index: number) => boolean,
-        getStyle: (index: number) => { clip: boolean } | null
-    ): LayoutBox | null {
-        let parentClip: LayoutBox | null = null;
-        for (let ancestor = host.parent[focusIndex]; ancestor !== 0; ancestor = host.parent[ancestor]) {
-            if (!isVisible(ancestor)) {
-                continue;
-            }
-            const ancestorStyle = getStyle(ancestor);
-            if (ancestorStyle && ancestorStyle.clip) {
-                const ancestorBox = host.readBox(ancestor);
-                // Intersect with parentClip - import intersectRect from internals
-                parentClip = parentClip === null ? ancestorBox : intersectRectSimple(parentClip, ancestorBox);
-                if (parentClip === null) {
-                    break;
-                }
-            }
-        }
-        return parentClip;
-    }
-}
-
-/**
- * Simple rect intersection for focus-ring clip computation.
- */
-function intersectRectSimple(a: LayoutBox | null, b: LayoutBox): LayoutBox | null {
-    if (a === null) return b;
-    const x = Math.max(a.x, b.x);
-    const y = Math.max(a.y, b.y);
-    const right = Math.min(a.x + a.width, b.x + b.width);
-    const bottom = Math.min(a.y + a.height, b.y + b.height);
-    if (right <= x || bottom <= y) {
-        return null;
-    }
-    return { x, y, width: right - x, height: bottom - y, contentX: 0, contentY: 0, contentWidth: 0, contentHeight: 0 };
 }

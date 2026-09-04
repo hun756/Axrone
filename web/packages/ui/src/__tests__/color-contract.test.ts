@@ -1,6 +1,6 @@
 import { describe, it, expect, expectTypeOf } from 'vitest';
 import type { ColorLike, ReadonlyColor } from '../types';
-import { normalizeColor, TRANSPARENT_COLOR } from '../types/color';
+import { normalizeColor } from '../types/color';
 
 describe('ColorLike vs ReadonlyColor contract', () => {
 	it('ReadonlyColor requires all four channels', () => {
