@@ -137,11 +137,11 @@ export function createUIWorldQuadRenderer(gl: WebGL2RenderingContext): UIWorldQu
                 return;
             }
 
+            // ── activate texture unit zero before capturing so the shadow reads the correct binding ──
+            gl.activeTexture(gl.TEXTURE0);
+
             // ── capture the state this pass mutates (lazy — zero getParameter at steady state) ──
             drawGuard.capture(gl, DRAW_GROUPS);
-
-            gl.activeTexture(gl.TEXTURE0);
-            const restoreTexture = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
 
             gl.useProgram(program);
             gl.bindVertexArray(vao);
@@ -172,7 +172,6 @@ export function createUIWorldQuadRenderer(gl: WebGL2RenderingContext): UIWorldQu
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
             // ── restore ────────────────────────────────────────────────────────
-            gl.bindTexture(gl.TEXTURE_2D, restoreTexture);
             drawGuard.restore(gl);
         },
         dispose(): void {
