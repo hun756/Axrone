@@ -77,7 +77,7 @@ const scenarioBudgets = [
         workload: 'ui-widgets',
         comparisonMode: '',
         objectCount: 0,
-        minRunCount: 1,
+        minRunCount: 3,
         maxFrameTimeMedianMs: 25,
         maxFrameTimeP99Ms: 120,
         maxDrawCallsPerFrame: 5,
