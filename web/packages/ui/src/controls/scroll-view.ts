@@ -4,6 +4,135 @@ import { clamp } from '@axrone/numeric';
 import { attachToParent, disposeWidget } from './internals';
 import { resolveTheme } from './theme';
 
+// ─── Scrollbar constants ─────────────────────────────────────────────────────
+const SCROLLBAR_TRACK_SIZE = 8;
+const SCROLLBAR_THUMB_MIN = 20;
+const SCROLLBAR_TRACK_INSET = 4;
+const SCROLLBAR_THUMB_DEFAULT = 40;
+const SCROLLBAR_RADIUS = 4;
+const SCROLLBAR_THUMB_COLOR = '#475569aa';
+
+// ─── Scrollbar factory ───────────────────────────────────────────────────────
+type ScrollbarAxis = 'vertical' | 'horizontal';
+
+interface ScrollbarResult {
+    readonly track: number;
+    readonly thumb: number;
+    readonly setDragging: (dragging: boolean) => void;
+    readonly isDragging: () => boolean;
+    readonly startDrag: (pointerCoord: number, scrollCoord: number) => void;
+    readonly updateDrag: (pointerCoord: number, getTrackSize: () => number, getMaxScroll: () => number, getScroll: () => number, setScroll: (v: number) => void) => void;
+}
+
+const createScrollbar = <TRuntime>(
+    runtime: UIRuntime<TRuntime>,
+    axis: ScrollbarAxis,
+    state: { scrollX: number; scrollY: number; disabled: boolean },
+    cancelMomentum: () => void,
+    applyOffsets: () => void,
+): ScrollbarResult => {
+    const isVertical = axis === 'vertical';
+    let dragging = false;
+    let dragStartCoord = 0;
+    let dragStartScroll = 0;
+
+    const track = runtime.createWidget({
+        role: isVertical ? 'custom:scrollbar-track-v' : 'custom:scrollbar-track-h',
+        layout: isVertical
+            ? {
+                position: 'absolute',
+                anchor: { x: 1, y: 0, maxX: 1, maxY: 1 },
+                inset: { top: SCROLLBAR_TRACK_INSET, right: 2 },
+                width: SCROLLBAR_TRACK_SIZE,
+            }
+            : {
+                position: 'absolute',
+                anchor: { x: 0, y: 1, maxX: 1, maxY: 1 },
+                inset: { left: SCROLLBAR_TRACK_INSET, bottom: 2 },
+                height: SCROLLBAR_TRACK_SIZE,
+            },
+        style: {
+            background: '#00000000',
+            radius: SCROLLBAR_RADIUS,
+        },
+        interactive: true,
+        handlers: {
+            pointerDown: (event) => {
+                if (state.disabled) return false;
+                cancelMomentum();
+                dragging = true;
+                dragStartCoord = isVertical ? event.y : event.x;
+                dragStartScroll = isVertical ? state.scrollY : state.scrollX;
+                return true;
+            },
+            pointerMove: (event) => {
+                if (!dragging) return false;
+                const trackBox = runtime.getLayoutBox(track);
+                const contentBoxLocal = runtime.getLayoutBox(content);
+                const viewportBox = runtime.getLayoutBox(root);
+                const maxScroll = isVertical
+                    ? Math.max(0, contentBoxLocal.height - viewportBox.contentHeight)
+                    : Math.max(0, contentBoxLocal.width - viewportBox.contentWidth);
+                const trackSize = (isVertical ? trackBox.height : trackBox.width) - SCROLLBAR_TRACK_SIZE;
+                const delta = (isVertical ? event.y : event.x) - dragStartCoord;
+                const scrollDelta = (delta / Math.max(1, trackSize)) * maxScroll;
+                const newScroll = clamp(dragStartScroll + scrollDelta, 0, maxScroll);
+                if (isVertical) {
+                    state.scrollY = newScroll;
+                } else {
+                    state.scrollX = newScroll;
+                }
+                applyOffsets();
+                return true;
+            },
+            pointerUp: () => {
+                dragging = false;
+                return true;
+            },
+        },
+    });
+
+    const thumb = runtime.createWidget({
+        role: isVertical ? 'custom:scrollbar-thumb-v' : 'custom:scrollbar-thumb-h',
+        layout: isVertical
+            ? {
+                position: 'absolute',
+                width: '100%',
+                height: SCROLLBAR_THUMB_DEFAULT,
+            }
+            : {
+                position: 'absolute',
+                height: '100%',
+                width: SCROLLBAR_THUMB_DEFAULT,
+            },
+        style: {
+            background: SCROLLBAR_THUMB_COLOR,
+            radius: SCROLLBAR_RADIUS,
+        },
+    });
+
+    runtime.appendChild(track, thumb);
+
+    return {
+        track,
+        thumb,
+        setDragging: (v: boolean) => { dragging = v; },
+        isDragging: () => dragging,
+        startDrag: (pointerCoord: number, scrollCoord: number) => {
+            dragStartCoord = pointerCoord;
+            dragStartScroll = scrollCoord;
+        },
+        updateDrag: (pointerCoord, getTrackSize, getMaxScroll, getScroll, setScroll) => {
+            if (!dragging) return;
+            const trackSize = getTrackSize() - SCROLLBAR_TRACK_SIZE;
+            const maxScroll = getMaxScroll();
+            const delta = pointerCoord - dragStartCoord;
+            const scrollDelta = (delta / Math.max(1, trackSize)) * maxScroll;
+            setScroll(clamp(dragStartScroll + scrollDelta, 0, maxScroll));
+        },
+    };
+};
+
 export const createUIScrollView = <TRuntime>(
     runtime: UIRuntime<TRuntime>,
     options: UIScrollViewOptions = {}
@@ -15,13 +144,7 @@ export const createUIScrollView = <TRuntime>(
         disabled: options.disabled ?? false,
     };
 
-    // Drag state for scrollbar interaction (internal, not part of public state)
-    let draggingV = false;
-    let draggingH = false;
-    let dragStartY = 0;
-    let dragStartScrollY = 0;
-    let dragStartX = 0;
-    let dragStartScrollX = 0;
+    // Drag state for scrollbar interaction is now managed by createScrollbar factory
 
     // Momentum scrolling state
     let velocityX = 0;
@@ -177,128 +300,8 @@ export const createUIScrollView = <TRuntime>(
         },
     });
 
-    // Vertical scrollbar track
-    const scrollbarTrackV = runtime.createWidget({
-        role: 'custom:scrollbar-track-v',
-        layout: {
-            position: 'absolute',
-            anchor: { x: 1, y: 0, maxX: 1, maxY: 1 },
-            inset: { top: 4, right: 2 },
-            width: 8,
-        },
-        style: {
-            background: '#00000000',
-            radius: 4,
-        },
-        interactive: true,
-        handlers: {
-            pointerDown: (event) => {
-                if (state.disabled) return false;
-                cancelMomentum();
-                draggingV = true;
-                dragStartY = event.y;
-                dragStartScrollY = state.scrollY;
-                return true;
-            },
-            pointerMove: (event) => {
-                if (!draggingV) return false;
-                const trackBox = runtime.getLayoutBox(scrollbarTrackV);
-                const contentBoxLocal = runtime.getLayoutBox(content);
-                const viewportBox = runtime.getLayoutBox(root);
-                const maxScroll = Math.max(0, contentBoxLocal.height - viewportBox.contentHeight);
-                const trackHeight = trackBox.height - 8;
-                const deltaY = event.y - dragStartY;
-                const scrollDelta = (deltaY / Math.max(1, trackHeight)) * maxScroll;
-                state.scrollY = clamp(dragStartScrollY + scrollDelta, 0, maxScroll);
-                applyOffsets();
-                return true;
-            },
-            pointerUp: () => {
-                draggingV = false;
-                return true;
-            },
-        },
-    });
-
-    // Vertical scrollbar thumb
-    const scrollbarThumbV = runtime.createWidget({
-        role: 'custom:scrollbar-thumb-v',
-        layout: {
-            position: 'absolute',
-            width: '100%',
-            height: 40,
-        },
-        style: {
-            background: '#475569aa',
-            radius: 4,
-        },
-    });
-
-    runtime.appendChild(scrollbarTrackV, scrollbarThumbV);
-
-    // Horizontal scrollbar track
-    const scrollbarTrackH = runtime.createWidget({
-        role: 'custom:scrollbar-track-h',
-        layout: {
-            position: 'absolute',
-            anchor: { x: 0, y: 1, maxX: 1, maxY: 1 },
-            inset: { left: 4, bottom: 2 },
-            height: 8,
-        },
-        style: {
-            background: '#00000000',
-            radius: 4,
-        },
-        interactive: true,
-        handlers: {
-            pointerDown: (event) => {
-                if (state.disabled) return false;
-                cancelMomentum();
-                draggingH = true;
-                dragStartX = event.x;
-                dragStartScrollX = state.scrollX;
-                return true;
-            },
-            pointerMove: (event) => {
-                if (!draggingH) return false;
-                const trackBox = runtime.getLayoutBox(scrollbarTrackH);
-                const contentBoxLocal = runtime.getLayoutBox(content);
-                const viewportBox = runtime.getLayoutBox(root);
-                const maxScroll = Math.max(0, contentBoxLocal.width - viewportBox.contentWidth);
-                const trackWidth = trackBox.width - 8;
-                const deltaX = event.x - dragStartX;
-                const scrollDelta = (deltaX / Math.max(1, trackWidth)) * maxScroll;
-                state.scrollX = clamp(dragStartScrollX + scrollDelta, 0, maxScroll);
-                applyOffsets();
-                return true;
-            },
-            pointerUp: () => {
-                draggingH = false;
-                return true;
-            },
-        },
-    });
-
-    // Horizontal scrollbar thumb
-    const scrollbarThumbH = runtime.createWidget({
-        role: 'custom:scrollbar-thumb-h',
-        layout: {
-            position: 'absolute',
-            height: '100%',
-            width: 40,
-        },
-        style: {
-            background: '#475569aa',
-            radius: 4,
-        },
-    });
-
-    runtime.appendChild(scrollbarTrackH, scrollbarThumbH);
-
     attachToParent(runtime, options.parent, root);
     runtime.appendChild(root, content);
-    runtime.appendChild(root, scrollbarTrackV);
-    runtime.appendChild(root, scrollbarTrackH);
 
     // Per-frame scroll bookkeeping: remember which structural values were last
     // pushed so scroll ticks only translate boxes instead of re-laying out the
@@ -310,6 +313,12 @@ export const createUIScrollView = <TRuntime>(
     let lastThumbWidthH = NaN;
     let lastThumbLeftH = NaN;
     let lastShowH: boolean | null = null;
+
+    // Scrollbar track/thumb widgets (assigned after factory creation)
+    let scrollbarTrackV: number;
+    let scrollbarThumbV: number;
+    let scrollbarTrackH: number;
+    let scrollbarThumbH: number;
 
     const applyOffsets = (): void => {
         if (state.disabled !== lastDisabled) {
@@ -402,6 +411,16 @@ export const createUIScrollView = <TRuntime>(
         state.scrollX = clamp(state.scrollX, 0, Math.max(0, contentBox.width - viewport.contentWidth));
         state.scrollY = clamp(state.scrollY, 0, Math.max(0, contentBox.height - viewport.contentHeight));
     };
+
+    // Create scrollbars using the factory (after applyOffsets is defined)
+    const verticalScrollbar = createScrollbar(runtime, 'vertical', state, cancelMomentum, applyOffsets);
+    const horizontalScrollbar = createScrollbar(runtime, 'horizontal', state, cancelMomentum, applyOffsets);
+    scrollbarTrackV = verticalScrollbar.track;
+    scrollbarThumbV = verticalScrollbar.thumb;
+    scrollbarTrackH = horizontalScrollbar.track;
+    scrollbarThumbH = horizontalScrollbar.thumb;
+    runtime.appendChild(root, scrollbarTrackV);
+    runtime.appendChild(root, scrollbarTrackH);
 
     applyOffsets();
 
