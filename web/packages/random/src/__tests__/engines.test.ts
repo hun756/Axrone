@@ -291,9 +291,12 @@ describe('CryptoEngine', () => {
     it('jumpAhead(0n) is a no-op', () => {
         const engine = new CryptoEngine();
         engine.nextUint32();
-        const before = engine.getState().counter;
+        // NOTE: getState() deliberately throws for CryptoEngine (see the
+        // 'getState throws' test above), so assert via the internal counter
+        // like the 'jumpAhead advances counter' test does.
+        const before: bigint = engine['counter'];
         engine.jumpAhead(0n);
-        expect(engine.getState().counter).toBe(before);
+        expect(engine['counter']).toBe(before);
     });
 });
 
