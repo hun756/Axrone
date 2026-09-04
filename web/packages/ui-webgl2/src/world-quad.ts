@@ -89,53 +89,90 @@ export function orientQuadTowardCamera(
     return result;
 }
 
+interface QuadGLResources {
+    program: WebGLProgram;
+    buffer: WebGLBuffer;
+    vao: WebGLVertexArrayObject;
+    uniforms: {
+        viewProjection: WebGLUniformLocation | null;
+        model: WebGLUniformLocation | null;
+        size: WebGLUniformLocation | null;
+        texture: WebGLUniformLocation | null;
+        opacity: WebGLUniformLocation | null;
+    };
+}
+
 export function createUIWorldQuadRenderer(gl: WebGL2RenderingContext): UIWorldQuadRenderer {
-    const program = gl.createProgram();
-    const buffer = gl.createBuffer();
-    const vao = gl.createVertexArray();
-    if (!program || !buffer || !vao) {
-        throw new Error('Failed to allocate the world-space UI quad renderer.');
-    }
-
-    const vertexShader = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SOURCE, 'world-quad vertex');
-    const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SOURCE, 'world-quad fragment');
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
-    if (gl.getProgramParameter(program, gl.LINK_STATUS) === false) {
-        const log = gl.getProgramInfoLog(program);
-        gl.deleteProgram(program);
-        throw new Error(`World-space UI quad program failed to link: ${log ?? 'unknown error'}`);
-    }
-
-    const uniforms = {
-        viewProjection: gl.getUniformLocation(program, 'u_ViewProjection'),
-        model: gl.getUniformLocation(program, 'u_Model'),
-        size: gl.getUniformLocation(program, 'u_Size'),
-        texture: gl.getUniformLocation(program, 'u_Texture'),
-        opacity: gl.getUniformLocation(program, 'u_Opacity'),
+    const createResources = (): QuadGLResources => {
+        const program = gl.createProgram();
+        const buffer = gl.createBuffer();
+        const vao = gl.createVertexArray();
+        if (!program || !buffer || !vao) {
+            throw new Error('Failed to allocate the world-space UI quad renderer.');
+        }
+        const vertexShader = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SOURCE, 'world-quad vertex');
+        const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SOURCE, 'world-quad fragment');
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        gl.deleteShader(vertexShader);
+        gl.deleteShader(fragmentShader);
+        if (gl.getProgramParameter(program, gl.LINK_STATUS) === false) {
+            const log = gl.getProgramInfoLog(program);
+            gl.deleteProgram(program);
+            throw new Error(`World-space UI quad program failed to link: ${log ?? 'unknown error'}`);
+        }
+        const uniforms = {
+            viewProjection: gl.getUniformLocation(program, 'u_ViewProjection'),
+            model: gl.getUniformLocation(program, 'u_Model'),
+            size: gl.getUniformLocation(program, 'u_Size'),
+            texture: gl.getUniformLocation(program, 'u_Texture'),
+            opacity: gl.getUniformLocation(program, 'u_Opacity'),
+        };
+        const setupGuard = new LazyGLStateGuard();
+        setupGuard.capture(gl, GL_STATE_ARRAY_BUFFER | GL_STATE_VERTEX_ARRAY);
+        gl.bindVertexArray(vao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        gl.bufferData(gl.ARRAY_BUFFER, UNIT_QUAD, gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        setupGuard.restore(gl);
+        return { program, buffer, vao, uniforms };
     };
 
-    const setupGuard = new LazyGLStateGuard();
-    setupGuard.capture(gl, GL_STATE_ARRAY_BUFFER | GL_STATE_VERTEX_ARRAY);
-    gl.bindVertexArray(vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, UNIT_QUAD, gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    setupGuard.restore(gl);
-
+    let resources = createResources();
     let disposed = false;
+    let contextLost = false;
     const drawGuard = new LazyGLStateGuard();
     const DRAW_GROUPS = GL_STATE_PROGRAM | GL_STATE_VERTEX_ARRAY | GL_STATE_ACTIVE_TEXTURE | GL_STATE_UNIT0_TEXTURE | GL_STATE_BLEND | GL_STATE_BLEND_FUNC | GL_STATE_DEPTH_TEST | GL_STATE_DEPTH_WRITEMASK | GL_STATE_CULL_FACE;
 
+    const handleContextLost = (event: Event): void => {
+        event.preventDefault();
+        contextLost = true;
+        drawGuard.invalidate();
+    };
+
+    const handleContextRestored = (): void => {
+        try {
+            resources = createResources();
+            contextLost = false;
+        } catch {
+            contextLost = true;
+        }
+    };
+
+    const canvas = gl.canvas as HTMLCanvasElement | undefined;
+    if (canvas && typeof canvas.addEventListener === 'function') {
+        canvas.addEventListener('webglcontextlost', handleContextLost);
+        canvas.addEventListener('webglcontextrestored', handleContextRestored);
+    }
+
     return {
         draw(texture: WebGLTexture, options: UIWorldQuadDrawOptions): void {
-            if (disposed) {
+            if (disposed || contextLost) {
                 return;
             }
+            const { program, vao, uniforms } = resources;
 
             // ── capture the caller's active texture unit FIRST so the shadow records it ──
             drawGuard.capture(gl, GL_STATE_ACTIVE_TEXTURE);
@@ -156,25 +193,17 @@ export function createUIWorldQuadRenderer(gl: WebGL2RenderingContext): UIWorldQu
             gl.uniform1f(uniforms.opacity, options.opacity ?? 1);
 
             gl.enable(gl.BLEND);
-            // The UI frame is rendered with straight alpha, so blend accordingly.
-            gl.blendFuncSeparate(
-                gl.SRC_ALPHA,
-                gl.ONE_MINUS_SRC_ALPHA,
-                gl.ONE,
-                gl.ONE_MINUS_SRC_ALPHA
-            );
+            gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
             if (options.depthTest ?? true) {
                 gl.enable(gl.DEPTH_TEST);
             } else {
                 gl.disable(gl.DEPTH_TEST);
             }
             gl.depthMask(options.depthWrite ?? false);
-            // UI must stay visible from both sides of the quad.
             gl.disable(gl.CULL_FACE);
 
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-            // ── restore ────────────────────────────────────────────────────────
             drawGuard.restore(gl);
         },
         dispose(): void {
@@ -182,9 +211,13 @@ export function createUIWorldQuadRenderer(gl: WebGL2RenderingContext): UIWorldQu
                 return;
             }
             disposed = true;
-            gl.deleteVertexArray(vao);
-            gl.deleteBuffer(buffer);
-            gl.deleteProgram(program);
+            if (canvas && typeof canvas.removeEventListener === 'function') {
+                canvas.removeEventListener('webglcontextlost', handleContextLost);
+                canvas.removeEventListener('webglcontextrestored', handleContextRestored);
+            }
+            gl.deleteVertexArray(resources.vao);
+            gl.deleteBuffer(resources.buffer);
+            gl.deleteProgram(resources.program);
         },
         [Symbol.dispose]() {
             this.dispose();

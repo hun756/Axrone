@@ -32,8 +32,8 @@ export function createUIWorldSurface(
     width: number,
     height: number
 ): UIWorldSurface {
-    const texture = gl.createTexture();
-    const framebuffer = gl.createFramebuffer();
+    let texture = gl.createTexture();
+    let framebuffer = gl.createFramebuffer();
     if (!texture || !framebuffer) {
         throw new Error('Failed to allocate the world-space UI surface.');
     }
@@ -41,6 +41,7 @@ export function createUIWorldSurface(
     let currentWidth = 0;
     let currentHeight = 0;
     let disposed = false;
+    let contextLost = false;
 
     const guard = new LazyGLStateGuard();
     guard.capture(gl, GL_STATE_UNIT0_TEXTURE | GL_STATE_FRAMEBUFFER);
@@ -84,9 +85,42 @@ export function createUIWorldSurface(
     // Leave the context exactly as it was found.
     guard.restore(gl);
 
+    const handleContextLost = (event: Event): void => {
+        event.preventDefault();
+        contextLost = true;
+        guard.invalidate();
+    };
+
+    const handleContextRestored = (): void => {
+        try {
+            texture = gl.createTexture();
+            framebuffer = gl.createFramebuffer();
+            if (!texture || !framebuffer) {
+                contextLost = true;
+                return;
+            }
+            currentWidth = 0;
+            currentHeight = 0;
+            allocate(currentWidth || width, currentHeight || height);
+            contextLost = false;
+        } catch {
+            contextLost = true;
+        }
+    };
+
+    const canvas = gl.canvas as HTMLCanvasElement | undefined;
+    if (canvas && typeof canvas.addEventListener === 'function') {
+        canvas.addEventListener('webglcontextlost', handleContextLost);
+        canvas.addEventListener('webglcontextrestored', handleContextRestored);
+    }
+
     const surface: UIWorldSurface = {
-        texture,
-        framebuffer,
+        get texture() {
+            return texture!;
+        },
+        get framebuffer() {
+            return framebuffer!;
+        },
         get width() {
             return currentWidth;
         },
@@ -94,7 +128,7 @@ export function createUIWorldSurface(
             return currentHeight;
         },
         resize(nextWidth: number, nextHeight: number): void {
-            if (disposed) {
+            if (disposed || contextLost) {
                 return;
             }
             // Invalidate so capture re-reads current GL bindings instead of
@@ -109,6 +143,10 @@ export function createUIWorldSurface(
                 return;
             }
             disposed = true;
+            if (canvas && typeof canvas.removeEventListener === 'function') {
+                canvas.removeEventListener('webglcontextlost', handleContextLost);
+                canvas.removeEventListener('webglcontextrestored', handleContextRestored);
+            }
             gl.deleteFramebuffer(framebuffer);
             gl.deleteTexture(texture);
         },

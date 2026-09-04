@@ -1970,3 +1970,79 @@ describe('world-surface resize guard invalidation', () => {
         surface.dispose();
     });
 });
+
+describe('context loss handling', () => {
+    const createMockCanvas = () => {
+        const listeners = new Map<string, Set<(event: Event) => void>>();
+        return {
+            width: 320,
+            height: 180,
+            addEventListener: vi.fn((type: string, listener: (event: Event) => void) => {
+                if (!listeners.has(type)) listeners.set(type, new Set());
+                listeners.get(type)!.add(listener);
+            }),
+            removeEventListener: vi.fn((type: string, listener: (event: Event) => void) => {
+                listeners.get(type)?.delete(listener);
+            }),
+            dispatchEvent(event: Event) {
+                for (const listener of listeners.get(event.type) ?? []) {
+                    listener(event);
+                }
+                return true;
+            },
+        };
+    };
+
+    const createGLWithCanvas = () => {
+        const gl = createMockWebGL2Context();
+        const canvas = createMockCanvas();
+        (gl as unknown as { canvas: object }).canvas = canvas;
+        return { gl, canvas };
+    };
+
+    it('skips world-quad draw while context is lost and recreates resources on restore', () => {
+        const { gl, canvas } = createGLWithCanvas();
+        const quadRenderer = createUIWorldQuadRenderer(gl);
+        const vp = columnMajorIdentity();
+        const texture = gl.createTexture()!;
+
+        // Dispatch context lost.
+        canvas.dispatchEvent(new Event('webglcontextlost'));
+
+        // Draw should be skipped.
+        const drawCallsBefore = (gl.drawArrays as ReturnType<typeof vi.fn>).mock.calls.length;
+        quadRenderer.draw(texture, { modelMatrix: vp, viewProjection: vp, width: 32, height: 32 });
+        expect((gl.drawArrays as ReturnType<typeof vi.fn>).mock.calls.length).toBe(drawCallsBefore);
+
+        // Dispatch context restored.
+        canvas.dispatchEvent(new Event('webglcontextrestored'));
+
+        // Draw should work again.
+        quadRenderer.draw(texture, { modelMatrix: vp, viewProjection: vp, width: 32, height: 32 });
+        expect((gl.drawArrays as ReturnType<typeof vi.fn>).mock.calls.length).toBe(drawCallsBefore + 1);
+
+        quadRenderer.dispose();
+        // Listeners removed.
+        expect(canvas.removeEventListener).toHaveBeenCalledWith('webglcontextlost', expect.any(Function));
+        expect(canvas.removeEventListener).toHaveBeenCalledWith('webglcontextrestored', expect.any(Function));
+    });
+
+    it('skips world-surface resize while context is lost and recreates on restore', () => {
+        const { gl, canvas } = createGLWithCanvas();
+        const surface = createUIWorldSurface(gl, 64, 64);
+
+        canvas.dispatchEvent(new Event('webglcontextlost'));
+
+        const texImageCallsBefore = (gl.texImage2D as ReturnType<typeof vi.fn>).mock.calls.length;
+        surface.resize(128, 128);
+        // No new texImage2D calls because resize is skipped.
+        expect((gl.texImage2D as ReturnType<typeof vi.fn>).mock.calls.length).toBe(texImageCallsBefore);
+
+        canvas.dispatchEvent(new Event('webglcontextrestored'));
+        // After restore, resources are recreated (new texture allocated).
+        expect((gl.texImage2D as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(texImageCallsBefore);
+
+        surface.dispose();
+        expect(canvas.removeEventListener).toHaveBeenCalledWith('webglcontextlost', expect.any(Function));
+    });
+});
