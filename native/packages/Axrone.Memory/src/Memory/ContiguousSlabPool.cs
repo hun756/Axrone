@@ -153,7 +153,7 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
         if (Interlocked.Exchange(ref _isDisposed, 1) == 0)
         {
             for (int i = 0; i < _slotArray.Length; i++) _slotArray[i].FinalizeEviction();
-            _rootManager.Dispose();
+            ((IDisposable)_rootManager).Dispose();
             NativeMemory.AlignedFree(_backingPointer);
         }
     }

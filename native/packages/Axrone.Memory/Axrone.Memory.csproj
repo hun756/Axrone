@@ -51,6 +51,10 @@
     <NoWarn>$(NoWarn);CA1849</NoWarn>
     <!-- IL2091: AOT trim annotations — Lazy&lt;T&gt; generic constraints are satisfied at runtime -->
     <NoWarn>$(NoWarn);IL2091</NoWarn>
+    <!-- CA1512: Use ThrowIfNegativeOrZero — explicit throw is intentional for custom messages -->
+    <NoWarn>$(NoWarn);CA1512</NoWarn>
+    <!-- CA2208: paramName casing — options property names are intentional for record init -->
+    <NoWarn>$(NoWarn);CA2208</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

@@ -8,5 +8,5 @@ public sealed record BufferPoolOptions
     public MemoryClearMode ClearMode { get; init; } = MemoryClearMode.Never;
     public MemoryBackingStrategy BackingStrategy { get; init; } = MemoryBackingStrategy.Managed;
     public TimeSpan TrimInterval { get; init; } = TimeSpan.Zero;
-    public int AutoTrimPercentage { get; init; } = 0;
+    public int AutoTrimPercentage { get; init; }
 }
