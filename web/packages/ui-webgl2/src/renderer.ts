@@ -352,8 +352,19 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             }
             this.prepareFrame(frame.viewportWidth, frame.viewportHeight);
 
+            let hasPendingImages = false;
+            let hasPendingText = false;
+
             for (const command of frame.commands) {
                 if (command.kind === 'quad') {
+                    if (hasPendingImages) {
+                        this.flushImageBatch(frame.viewportHeight);
+                        hasPendingImages = false;
+                    }
+                    if (hasPendingText) {
+                        this.flushTextBatch(frame.viewportHeight);
+                        hasPendingText = false;
+                    }
                     if (!sameClipRect(this.activeQuadClip, command.clip)) {
                         this.flushQuadBatch(frame.viewportHeight);
                         this.activeQuadClip = command.clip ?? null;
@@ -362,14 +373,32 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                     continue;
                 }
                 if (command.kind === 'image') {
+                    if (hasPendingText) {
+                        this.flushTextBatch(frame.viewportHeight);
+                        hasPendingText = false;
+                    }
+                    hasPendingImages = true;
                     this.pushImageCommand(command, frame);
                     continue;
                 }
                 if (command.kind === 'text') {
+                    if (hasPendingImages) {
+                        this.flushImageBatch(frame.viewportHeight);
+                        hasPendingImages = false;
+                    }
+                    hasPendingText = true;
                     this.pushTextCommand(command, frame.viewportHeight);
                     continue;
                 }
                 if (command.kind === 'stroke') {
+                    if (hasPendingImages) {
+                        this.flushImageBatch(frame.viewportHeight);
+                        hasPendingImages = false;
+                    }
+                    if (hasPendingText) {
+                        this.flushTextBatch(frame.viewportHeight);
+                        hasPendingText = false;
+                    }
                     if (!this.activeQuadClip || !sameClipRect(this.activeQuadClip, command.clip)) {
                         this.flushQuadBatch(frame.viewportHeight);
                         this.activeQuadClip = command.clip ?? null;
