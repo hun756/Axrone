@@ -71,10 +71,10 @@ export class UILayoutEngine<TNode> {
     private layoutPasses = 0;
     private viewportWidth = 0;
     private viewportHeight = 0;
-    private readonly measureCache = new Map<string, SizeLike>();
+    private readonly measureCache = new Map<TNode, Map<string, SizeLike>>();
 
-    private static measureCacheKey(node: unknown, availableWidth: number, availableHeight: number): string {
-        return `${String(node)}|${availableWidth}|${availableHeight}`;
+    private static constraintKey(availableWidth: number, availableHeight: number): string {
+        return `${availableWidth}|${availableHeight}`;
     }
 
     compute(adapter: LayoutTreeAdapter<TNode>, viewport: Readonly<SizeLike>): void {
@@ -119,10 +119,13 @@ export class UILayoutEngine<TNode> {
         availableWidth: number,
         availableHeight: number
     ): SizeLike {
-        const cacheKey = UILayoutEngine.measureCacheKey(node, availableWidth, availableHeight);
-        const cached = this.measureCache.get(cacheKey);
-        if (cached) {
-            return cached;
+        const constraintKey = UILayoutEngine.constraintKey(availableWidth, availableHeight);
+        let nodeCache = this.measureCache.get(node);
+        if (nodeCache) {
+            const cached = nodeCache.get(constraintKey);
+            if (cached) {
+                return cached;
+            }
         }
         this.layoutPasses += 1;
         if (!adapter.isVisible(node)) {
@@ -170,7 +173,11 @@ export class UILayoutEngine<TNode> {
             width: clamp(width, layout.minWidth, layout.maxWidth),
             height: clamp(height, layout.minHeight, layout.maxHeight),
         };
-        this.measureCache.set(cacheKey, result);
+        if (!nodeCache) {
+            nodeCache = new Map();
+            this.measureCache.set(node, nodeCache);
+        }
+        nodeCache.set(constraintKey, result);
         return result;
     }
 

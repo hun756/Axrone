@@ -208,4 +208,133 @@ describe('@axrone/ui UILayoutEngine measure cache', () => {
         // (cache is cleared between compute() calls, so this tests consistency)
         expect(firstPasses).toBe(secondPasses);
     });
+
+    it('never shares cache entries between distinct numeric-node adapters', () => {
+        // Numeric nodes (indices) use number identity — the old String(node)
+        // approach collided for object nodes in test adapters. This test
+        // verifies the nested identity map keeps distinct numeric nodes apart.
+        //
+        // Build a tree: root (overlay, 200×200) → [nodeA (150px), nodeB (80px)]
+        // Both children are leaf content nodes with auto sizing.
+        const nodeA = 1;
+        const nodeB = 2;
+        const rootId = 0;
+
+        const layouts = new Map<number, ResolvedLayout>();
+        layouts.set(rootId, createDefaultLayout({
+            display: 'overlay',
+            width: { kind: 'px' as const, value: 200 },
+            height: { kind: 'px' as const, value: 200 },
+        }));
+        layouts.set(nodeA, createDefaultLayout({
+            width: { kind: 'px' as const, value: 150 },
+            height: { kind: 'px' as const, value: 100 },
+        }));
+        layouts.set(nodeB, createDefaultLayout({
+            width: { kind: 'px' as const, value: 80 },
+            height: { kind: 'px' as const, value: 100 },
+        }));
+
+        const children = new Map<number, number[]>();
+        children.set(rootId, [nodeA, nodeB]);
+        children.set(nodeA, []);
+        children.set(nodeB, []);
+
+        const measureCounts = new Map<number, number>();
+        measureCounts.set(nodeA, 0);
+        measureCounts.set(nodeB, 0);
+
+        const adapter: LayoutTreeAdapter<number> = {
+            root: rootId,
+            getLayout: (node) => layouts.get(node)!,
+            getFirstChild: (node) => {
+                const kids = children.get(node);
+                return kids && kids.length > 0 ? kids[0] : null;
+            },
+            getNextSibling: (node) => {
+                const kids = children.get(rootId);
+                if (!kids) return null;
+                const idx = kids.indexOf(node);
+                return idx >= 0 && idx + 1 < kids.length ? kids[idx + 1] : null;
+            },
+            measureContent: (node, constraints) => {
+                measureCounts.set(node, (measureCounts.get(node) ?? 0) + 1);
+                const width = constraints.width === Number.POSITIVE_INFINITY ? 200 : Math.min(constraints.width, 200);
+                const height = constraints.height === Number.POSITIVE_INFINITY ? 100 : Math.min(constraints.height, 100);
+                return { width, height };
+            },
+            setBox: () => {},
+            isVisible: () => true,
+        };
+
+        const engine = new UILayoutEngine<number>();
+        engine.compute(adapter, { width: 200, height: 200 });
+
+        // Both distinct numeric nodes must have been measured independently
+        expect(measureCounts.get(nodeA)).toBeGreaterThanOrEqual(1);
+        expect(measureCounts.get(nodeB)).toBeGreaterThanOrEqual(1);
+    });
+
+    it('never shares cache entries between distinct object-node adapters', () => {
+        // Object nodes: the old String(node) produced '[object Object]' for all
+        // objects, causing cache collisions. The nested identity map keys by
+        // reference so distinct objects never collide.
+        const childA: TestNode = {
+            id: 'childA',
+            layout: createDefaultLayout({
+                width: { kind: 'auto' as const },
+                height: { kind: 'auto' as const },
+            }),
+            children: [],
+            visible: true,
+        };
+        const childB: TestNode = {
+            id: 'childB',
+            layout: createDefaultLayout({
+                width: { kind: 'auto' as const },
+                height: { kind: 'auto' as const },
+            }),
+            children: [],
+            visible: true,
+        };
+        const root: TestNode = {
+            id: 'root',
+            layout: createDefaultLayout({
+                display: 'overlay',
+                width: { kind: 'px' as const, value: 200 },
+                height: { kind: 'px' as const, value: 200 },
+            }),
+            children: [childA, childB],
+            visible: true,
+        };
+
+        const measureCounts = new Map<TestNode, number>();
+        measureCounts.set(childA, 0);
+        measureCounts.set(childB, 0);
+
+        const adapter: LayoutTreeAdapter<TestNode> = {
+            root,
+            getLayout: (node) => node.layout,
+            getFirstChild: (node) => node.children[0] ?? null,
+            getNextSibling: (node) => {
+                const idx = root.children.indexOf(node);
+                return idx >= 0 && idx + 1 < root.children.length ? root.children[idx + 1] : null;
+            },
+            measureContent: (node, constraints) => {
+                measureCounts.set(node, (measureCounts.get(node) ?? 0) + 1);
+                const width = constraints.width === Number.POSITIVE_INFINITY ? 200 : Math.min(constraints.width, 200);
+                const height = constraints.height === Number.POSITIVE_INFINITY ? 100 : Math.min(constraints.height, 100);
+                return { width, height };
+            },
+            setBox: (node, box) => { node.box = box; },
+            isVisible: (node) => node.visible,
+        };
+
+        const engine = new UILayoutEngine<TestNode>();
+        engine.compute(adapter, { width: 200, height: 200 });
+
+        // Both distinct object nodes must have been measured independently
+        expect(measureCounts.get(childA)).toBeGreaterThanOrEqual(1);
+        expect(measureCounts.get(childB)).toBeGreaterThanOrEqual(1);
+    });
 });
