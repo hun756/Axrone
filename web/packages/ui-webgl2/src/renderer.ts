@@ -887,7 +887,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                         this.flushQuadBatch(frame.viewportHeight);
                         this.activeQuadClip = toClipState(command.clip);
                     }
-                    this.pushQuad(command);
+                    this.pushQuad(command, frame.viewportHeight);
                     continue;
                 }
                 if (command.kind === 'image') {
@@ -909,7 +909,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                         this.flushQuadBatch(frame.viewportHeight);
                         this.activeQuadClip = toClipState(command.clip);
                     }
-                    this.pushStrokeCommand(command);
+                    this.pushStrokeCommand(command, frame.viewportHeight);
                     continue;
                 }
                 this.flushQuadBatch(frame.viewportHeight);
@@ -1066,10 +1066,11 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
     }
 
-    private pushQuad(command: QuadRenderCommand): void {
-        const base = this.quadCount * QUAD_FLOATS_PER_INSTANCE;
+    private pushQuad(command: QuadRenderCommand, viewportHeight: number): void {
+        let base = this.quadCount * QUAD_FLOATS_PER_INSTANCE;
         if (base + QUAD_FLOATS_PER_INSTANCE > this.quadBatch.length) {
-            throw new Error('Quad batch capacity exceeded.');
+            this.flushQuadBatch(viewportHeight);
+            base = 0;
         }
         const fill = blendColor(command.color, command.opacity);
         const border = blendColor(command.borderColor, command.opacity);
@@ -1103,7 +1104,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
      * transform is composed on top of the segment transform so position and
      * thickness scale together with the camera.
      */
-    private pushStrokeCommand(command: StrokeRenderCommand): void {
+    private pushStrokeCommand(command: StrokeRenderCommand, viewportHeight: number): void {
         const widgetX = command.x;
         const widgetY = command.y;
         const widgetW = command.width;
@@ -1152,7 +1153,8 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 const r5 = camera[2] * s4 + camera[3] * s5 + camera[5];
                 const base = this.quadCount * QUAD_FLOATS_PER_INSTANCE;
                 if (base + QUAD_FLOATS_PER_INSTANCE > this.quadBatch.length) {
-                    throw new Error('Quad batch capacity exceeded (stroke).');
+                    this.flushQuadBatch(viewportHeight);
+                    continue;
                 }
                 // Local rect carries the strip's pixel size; the transform places it.
                 this.quadBatch[base] = 0;
