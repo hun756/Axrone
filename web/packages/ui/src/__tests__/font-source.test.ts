@@ -11,6 +11,7 @@ import {
 	detectBinaryFormatFromUrl,
 	detectBinaryFormatFromBuffer,
 	createAtlasEntryKey,
+	createUploadedGlyphKey,
 } from '../font/source';
 
 describe('@axrone/ui font source utilities', () => {
@@ -53,6 +54,29 @@ describe('@axrone/ui font source utilities', () => {
 
 		it('defaults rasterSize to 0', () => {
 			expect(createAtlasEntryKey(65)).toBe('65:0');
+		});
+	});
+
+	describe('createUploadedGlyphKey', () => {
+		const makeEntry = (codePoint: number, rasterSize?: number) =>
+			({ codePoint, rasterSize } as import('../types').GlyphAtlasEntry);
+
+		it('produces distinct keys for emoji (U+1F600) vs null (U+0000) at same rasterSize', () => {
+			const emojiKey = createUploadedGlyphKey(makeEntry(0x1f600, 16));
+			const nullKey = createUploadedGlyphKey(makeEntry(0x0000, 16));
+			expect(emojiKey).not.toBe(nullKey);
+		});
+
+		it('produces distinct keys for different raster sizes of the same code point', () => {
+			const key16 = createUploadedGlyphKey(makeEntry(65, 16));
+			const key32 = createUploadedGlyphKey(makeEntry(65, 32));
+			expect(key16).not.toBe(key32);
+		});
+
+		it('handles supplementary plane code points without overflow', () => {
+			const key = createUploadedGlyphKey(makeEntry(0x20000, 24));
+			expect(key).toBe(0x20000 * 65536 + 24);
+			expect(Number.isSafeInteger(key)).toBe(true);
 		});
 	});
 

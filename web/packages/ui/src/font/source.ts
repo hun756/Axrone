@@ -61,10 +61,11 @@ export const createAtlasEntryKey = (codePoint: number, rasterSize?: number): str
 
 /**
  * Creates a numeric key for an uploaded glyph atlas entry.
- * Packs codePoint into upper 16 bits and rasterSize into lower 16 bits.
+ * Uses arithmetic instead of bitwise ops to avoid 32-bit overflow
+ * for codePoint > 0xFFFF (emoji, CJK Extension B, etc.).
  */
 export const createUploadedGlyphKey = (entry: GlyphAtlasEntry): number =>
-    (entry.codePoint << 16) | (entry.rasterSize ?? 0);
+    entry.codePoint * 65536 + (entry.rasterSize ?? 0);
 
 export const detectBinaryFormatFromContentType = (contentType: string | undefined): FontBinaryFormat | null => {
     if (!contentType) {
