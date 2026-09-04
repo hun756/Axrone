@@ -17,6 +17,129 @@ const jscpdIgnoreGlobs = [
     '**/*.spec.ts',
     '**/vitest.config.ts',
 ];
+
+// ── GLSL-in-string extraction ────────────────────────────────────────────────
+// Extracts template-literal / string contents that look like GLSL from .ts
+// sources, writes them to a temp dir as pseudo-.glsl files, and runs a
+// dedicated jscpd pass over them.
+const glslMarkerPattern = /(?:#version\s|precision\s+(?:low|med|high)p|\bvec[234]\b|\bfloat\s+\w+\s*\()/;
+const templateLiteralPattern = /`([^`]*?)`/gs;
+const glslScanPackages = ['packages/ui', 'packages/ui-webgl2'];
+const glslTempDir = path.resolve(workspaceDir, '.tmp', 'duplicate-governance', 'glsl-extracts');
+
+const extractGlslStrings = () => {
+    fs.rmSync(glslTempDir, { recursive: true, force: true });
+    fs.mkdirSync(glslTempDir, { recursive: true });
+
+    let extractedCount = 0;
+    const walk = (dir) => {
+        if (!fs.existsSync(dir)) return;
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const fullPath = path.resolve(dir, entry.name);
+            if (entry.isDirectory()) {
+                walk(fullPath);
+                continue;
+            }
+            if (!entry.isFile() || !entry.name.endsWith('.ts') || entry.name.endsWith('.d.ts')) continue;
+            if (entry.name.includes('.test.') || entry.name.includes('.spec.')) continue;
+            if (fullPath.includes('__tests__')) continue;
+
+            const content = fs.readFileSync(fullPath, 'utf8');
+            let match;
+            templateLiteralPattern.lastIndex = 0;
+            while ((match = templateLiteralPattern.exec(content)) !== null) {
+                const body = match[1];
+                if (glslMarkerPattern.test(body)) {
+                    const safeName = `${path.relative(workspaceDir, fullPath).replace(/[\/\\.]/g, '_')}_${extractedCount}.glsl`;
+                    fs.writeFileSync(path.resolve(glslTempDir, safeName), body);
+                    extractedCount++;
+                }
+            }
+        }
+    };
+
+    for (const pkg of glslScanPackages) {
+        walk(path.resolve(workspaceDir, pkg, 'src'));
+    }
+
+    return extractedCount;
+};
+
+const runJscpdOnGlsl = () => {
+    const glslFiles = fs.existsSync(glslTempDir) ? fs.readdirSync(glslTempDir).filter((f) => f.endsWith('.glsl')) : [];
+    if (glslFiles.length === 0) {
+        console.log('\nGLSL duplicate scan: no GLSL strings extracted, skipping.');
+        return { duplicates: [], statistics: { formats: { glsl: { total: { sources: 0, clones: 0, duplicatedLines: 0, percentage: '0.00%' } } } } };
+    }
+
+    const glslReportDir = path.resolve(workspaceDir, '.tmp', 'duplicate-governance', 'glsl-report');
+    const glslReportFile = path.resolve(glslReportDir, 'jscpd-report.json');
+    fs.rmSync(glslReportDir, { recursive: true, force: true });
+    fs.mkdirSync(glslReportDir, { recursive: true });
+
+    const result = spawnSync(
+        process.execPath,
+        [
+            jscpdEntryPath,
+            '--silent',
+            '--min-lines', '10',
+            '--min-tokens', '60',
+            '--format', 'typescript',
+            '--reporters', 'json',
+            '--output', glslReportDir,
+            glslTempDir,
+        ],
+        { cwd: workspaceDir, encoding: 'utf8' }
+    );
+
+    if (result.error || result.status !== 0) {
+        const errorOutput = result.error?.message || result.stderr?.trim() || result.stdout?.trim() || 'Unknown jscpd failure';
+        throw new Error(`GLSL jscpd scan failed: ${errorOutput}`);
+    }
+
+    if (!fs.existsSync(glslReportFile)) {
+        return { duplicates: [], statistics: { formats: { glsl: { total: { sources: glslFiles.length, clones: 0, duplicatedLines: 0, percentage: '0.00%' } } } } };
+    }
+
+    return JSON.parse(fs.readFileSync(glslReportFile, 'utf8'));
+};
+
+// ── Lowered-threshold jscpd pass for ui packages ─────────────────────────────
+const runJscpdUiLowered = () => {
+    const uiReportDir = path.resolve(workspaceDir, '.tmp', 'duplicate-governance', 'ui-lowered-report');
+    const uiReportFile = path.resolve(uiReportDir, 'jscpd-report.json');
+    fs.rmSync(uiReportDir, { recursive: true, force: true });
+    fs.mkdirSync(uiReportDir, { recursive: true });
+
+    const result = spawnSync(
+        process.execPath,
+        [
+            jscpdEntryPath,
+            '--silent',
+            '--min-lines', '10',
+            '--min-tokens', '60',
+            '--format', 'typescript',
+            '--ignore', jscpdIgnoreGlobs.join(','),
+            '--reporters', 'json',
+            '--output', uiReportDir,
+            'packages/ui/src',
+            'packages/ui-webgl2/src',
+        ],
+        { cwd: workspaceDir, encoding: 'utf8' }
+    );
+
+    if (result.error || result.status !== 0) {
+        const errorOutput = result.error?.message || result.stderr?.trim() || result.stdout?.trim() || 'Unknown jscpd failure';
+        throw new Error(`UI lowered-threshold jscpd scan failed: ${errorOutput}`);
+    }
+
+    if (!fs.existsSync(uiReportFile)) {
+        return { duplicates: [], statistics: { formats: { typescript: { total: { sources: 0, clones: 0, duplicatedLines: 0, percentage: '0.00%' } } } } };
+    }
+
+    return JSON.parse(fs.readFileSync(uiReportFile, 'utf8'));
+};
+
 const approvedCrossPackageDebt = [
     {
         files: [
@@ -43,6 +166,49 @@ const createFilePairKey = (firstFile, secondFile) =>
 
 const approvedCrossPackageDebtByPair = new Map(
     approvedCrossPackageDebt.map((entry) => [createFilePairKey(entry.files[0], entry.files[1]), entry])
+);
+
+// Approved same-package duplicate debt for the lowered-threshold ui pass.
+const approvedUiLoweredDebt = [
+    {
+        files: ['packages/ui/src/controls/checkbox.ts', 'packages/ui/src/controls/toggle.ts'],
+        maxLines: 75,
+        reason: 'Checkbox/toggle share track/thumb layout scaffolding; intentionally divergent control semantics.',
+    },
+    {
+        files: ['packages/ui/src/controls/segmented-controller.ts', 'packages/ui/src/controls/tab-controller.ts'],
+        maxLines: 35,
+        reason: 'Segmented/tab controllers share selection-indicator wiring; different container semantics.',
+    },
+    {
+        files: ['packages/ui/src/controls/button.ts', 'packages/ui/src/controls/toggle.ts'],
+        maxLines: 35,
+        reason: 'Button/toggle share press-state visual scaffolding; divergent toggle-vs-momentary semantics.',
+    },
+    {
+        files: ['packages/ui/src/controls/page-view.ts', 'packages/ui/src/controls/scroll-view.ts'],
+        maxLines: 30,
+        reason: 'Page-view/scroll-view share viewport clamping logic; different paging semantics.',
+    },
+    {
+        files: ['packages/ui/src/controls/checkbox-controller.ts', 'packages/ui/src/controls/toggle-controller.ts'],
+        maxLines: 25,
+        reason: 'Checkbox/toggle controller share boolean-binding glue; divergent event wiring.',
+    },
+    {
+        files: ['packages/ui/src/controls/radio-group-controller.ts', 'packages/ui/src/controls/segmented-controller.ts'],
+        maxLines: 20,
+        reason: 'Radio/segmented controller share single-selection dispatch; different visual contracts.',
+    },
+    {
+        files: ['packages/ui/src/controls/progress-bar.ts', 'packages/ui/src/controls/slider.ts'],
+        maxLines: 20,
+        reason: 'Progress-bar/slider share range-clamping helpers; divergent interaction models.',
+    },
+];
+
+const approvedUiLoweredDebtByPair = new Map(
+    approvedUiLoweredDebt.map((entry) => [createFilePairKey(entry.files[0], entry.files[1]), entry])
 );
 
 const getPackageName = (filePath) => normalizePath(filePath).split('/')[1] ?? 'unknown';
@@ -243,6 +409,65 @@ if (unexpectedCrossPackageGroups.length > 0) {
         'Unexpected cross-package duplicate violations',
         unexpectedCrossPackageGroups,
         (group) => `${group.firstPackage} <-> ${group.secondPackage} | ${group.lines} duplicated lines across ${group.count} clone blocks`
+    );
+    process.exit(1);
+}
+
+// ── GLSL duplicate scan ──────────────────────────────────────────────────────
+const glslExtracted = extractGlslStrings();
+const glslReport = runJscpdOnGlsl();
+const glslSummary = glslReport.statistics.formats?.glsl?.total ?? { sources: 0, clones: 0, duplicatedLines: 0, percentage: '0.00%' };
+const glslDuplicates = (glslReport.duplicates ?? []).map(toDuplicateRecord).sort((left, right) => right.lines - left.lines);
+
+const safePercent = (value) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? `${num.toFixed(2)}%` : '0.00%';
+};
+
+console.log(`\nGLSL string duplicate scan: ${glslExtracted} strings extracted, ${glslSummary.clones} clones, ${glslSummary.duplicatedLines} duplicated lines (${safePercent(glslSummary.percentage)})`);
+
+if (glslDuplicates.length > 0) {
+    console.log('GLSL duplicate clusters:');
+    for (const dup of glslDuplicates) {
+        console.log(`  ${dup.lines} lines | ${dup.firstFile}:${dup.firstStartLine}-${dup.firstEndLine} <-> ${dup.secondFile}:${dup.secondStartLine}-${dup.secondEndLine}`);
+    }
+}
+
+// ── Lowered-threshold ui pass ────────────────────────────────────────────────
+const uiLowerReport = runJscpdUiLowered();
+const uiLowerSummary = uiLowerReport.statistics.formats?.typescript?.total ?? { sources: 0, clones: 0, duplicatedLines: 0, percentage: '0.00%' };
+const uiLowerDuplicates = (uiLowerReport.duplicates ?? []).map(toDuplicateRecord).sort((left, right) => right.lines - left.lines);
+
+const uiLowerGroups = [...groupBy(
+        uiLowerDuplicates.filter((dup) => dup.firstFile !== dup.secondFile),
+        (dup) => dup.filePairKey
+    ).values()]
+    .map(summarizeDuplicatePair)
+    .map((group) => {
+        const allowance = approvedUiLoweredDebtByPair.get(group.filePairKey);
+        return {
+            ...group,
+            allowance,
+            isApproved: Boolean(allowance) && group.lines <= allowance.maxLines,
+        };
+    })
+    .sort((left, right) => right.lines - left.lines);
+
+const unexpectedUiGroups = uiLowerGroups.filter((group) => !group.allowance || group.lines > group.allowance.maxLines);
+
+console.log(`\nUI lowered-threshold scan (min-lines 10, min-tokens 60): ${uiLowerSummary.clones} clones, ${uiLowerSummary.duplicatedLines} duplicated lines (${formatPercent(uiLowerSummary.percentage)})`);
+
+printDuplicateGroup(
+    'Approved UI lowered-threshold debt',
+    uiLowerGroups.filter((group) => group.isApproved),
+    (group) => `${group.firstFile} <-> ${group.secondFile} | ${group.lines} lines | ${group.allowance.reason}`
+);
+
+if (unexpectedUiGroups.length > 0) {
+    printDuplicateGroup(
+        'Unexpected UI duplicate violations (lowered thresholds)',
+        unexpectedUiGroups,
+        (group) => `${group.firstFile} <-> ${group.secondFile} | ${group.lines} duplicated lines across ${group.count} clone blocks`
     );
     process.exit(1);
 }
