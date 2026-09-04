@@ -5,32 +5,12 @@
  * renderer.ts so they can be maintained in one place. The two fragment
  * shaders that need rounded-rect SDF evaluation (quad and image) share a
  * single `ROUNDED_RECT_SDF_GLSL` block instead of each carrying a copy.
- */
-
-/**
- * Shared GLSL fragment code: `selectRadius` + `roundedRectSdf`.
  *
- * Computes the outside-signed-distance of a rounded rectangle whose per-corner
- * radii are selected based on the fragment's quadrant. Both the quad (fill +
- * border) and image (textured + radius mask) fragment shaders embed this block
- * verbatim.
+ * The shared ROUNDED_RECT_SDF_GLSL constant is hosted in @axrone/render-core
+ * so render-2d can reuse it for mask evaluation.
  */
-export const ROUNDED_RECT_SDF_GLSL = `
-float selectRadius(vec2 local, vec2 size, vec4 radii) {
-    bool left = local.x <= size.x * 0.5;
-    bool top = local.y <= size.y * 0.5;
-    if (left && top) return radii.x;
-    if (!left && top) return radii.y;
-    if (!left && !top) return radii.z;
-    return radii.w;
-}
-float roundedRectSdf(vec2 local, vec2 size, vec4 radii) {
-    float radius = selectRadius(local, size, radii);
-    vec2 center = size * 0.5;
-    vec2 halfSize = max(center - vec2(radius), vec2(0.0));
-    vec2 delta = abs(local - center) - halfSize;
-    return length(max(delta, 0.0)) + min(max(delta.x, delta.y), 0.0) - radius;
-}`;
+export { ROUNDED_RECT_SDF_GLSL } from '@axrone/render-core/nine-slice';
+import { ROUNDED_RECT_SDF_GLSL } from '@axrone/render-core/nine-slice';
 
 export const QUAD_VERTEX_SOURCE = `#version 300 es
 precision mediump float;

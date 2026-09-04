@@ -1,15 +1,20 @@
 /**
  * Nine-slice span math for the UI renderer.
  *
- * Extracted from renderer.ts as pure functions so they can be tested in
- * isolation and later hosted in @axrone/render-core for sharing with
- * render-2d.
+ * The pure axis math (border scaling, UV fractions) is hosted in
+ * @axrone/render-core so render-2d can share it. This module adds the
+ * SliceSpan abstraction and the sliceImageCommand expansion that depend on
+ * @axrone/ui types.
  */
 import type {
     CornerRadii,
     EdgeInsets,
     ImageRenderCommand,
 } from '@axrone/ui/types';
+import {
+    computeAxisBorderSizes,
+    computeAxisUvFractions,
+} from '@axrone/render-core/nine-slice';
 
 /** A single axis span produced by the nine-slice resolver. */
 export type SliceSpan = {
@@ -52,12 +57,10 @@ export const resolveSliceSpans = (
     uvExtent: number,
     out: readonly [SliceSpan, SliceSpan, SliceSpan]
 ): void => {
-    const totalBorder = startBorder + endBorder;
-    const scale = totalBorder > extent && totalBorder > 0 ? extent / totalBorder : 1;
-    const start = startBorder * scale;
-    const end = endBorder * scale;
-    const startUv = sourceExtent > 0 ? startBorder / sourceExtent : 0;
-    const endUv = sourceExtent > 0 ? endBorder / sourceExtent : 0;
+    const { startSize: start, endSize: end } = computeAxisBorderSizes(
+        extent, startBorder, endBorder, sourceExtent
+    );
+    const { startUv, endUv } = computeAxisUvFractions(startBorder, endBorder, sourceExtent);
     const first = out[0];
     const middle = out[1];
     const last = out[2];

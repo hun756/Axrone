@@ -2,6 +2,7 @@ import {
     compileRenderShaderEffect,
     type RenderShaderEffectDefinition,
 } from '@axrone/render-core/shader-effect';
+import { ROUNDED_RECT_SDF_GLSL } from '@axrone/render-core/nine-slice';
 
 export const RENDER_2D_DEFAULT_SPRITE_SHADER_ID = 'Render2D/Sprite';
 
@@ -95,6 +96,8 @@ export const RENDER_2D_SPRITE_EFFECT = {
         {
             id: 'sprite.mask',
             code: [
+                ...ROUNDED_RECT_SDF_GLSL.split('\n'),
+                '',
                 'float evaluateMaskCircle(vec2 localPosition, vec2 maskSize, vec2 maskAnchor) {',
                 '    vec2 maskMin = -maskAnchor * maskSize;',
                 '    vec2 maskCenter = maskMin + maskSize * 0.5;',
@@ -108,12 +111,8 @@ export const RENDER_2D_SPRITE_EFFECT = {
                 '    vec2 maskCenter = maskMin + maskSize * 0.5;',
                 '    vec2 halfSize = maskSize * 0.5;',
                 '    float radius = clamp(cornerRadius, 0.0, min(halfSize.x, halfSize.y));',
-                '    vec2 local = abs(localPosition - maskCenter);',
-                '    vec2 inner = max(halfSize - vec2(radius), vec2(0.0));',
-                '    vec2 delta = local - inner;',
-                '    vec2 maxDelta = max(delta, vec2(0.0));',
-                '    float outsideDistance = length(maxDelta) + min(max(delta.x, delta.y), 0.0) - radius;',
-                '    return step(outsideDistance, 0.0);',
+                '    float sdf = roundedRectSdf(localPosition - maskMin, maskSize, vec4(radius));',
+                '    return step(sdf, 0.0);',
                 '}',
                 '',
                 'float evaluateMask(vec3 worldPosition) {',
