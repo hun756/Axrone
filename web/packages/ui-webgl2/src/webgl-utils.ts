@@ -10,7 +10,7 @@ import type {
     StrokeRenderCommand,
     TextRenderCommand,
 } from '@axrone/ui/types';
-import { Color } from '@axrone/numeric';
+import { normalizeColor, type ReadonlyColor } from '@axrone/ui/types';
 
 /** Unit quad vertex positions for TRIANGLE_STRIP rendering (0,0 → 1,1). */
 export const UNIT_QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
@@ -48,30 +48,12 @@ export const writeBlendedColor = (
 /**
  * Converts a ColorInput (hex string, number, array, or ColorLike) to a
  * normalized [r, g, b, a] tuple for stroke rendering.
+ *
+ * Delegates to the canonical {@link normalizeColor} from `@axrone/ui/types`
+ * to ensure a single normalization path across the UI and WebGL packages.
  */
 export const normalizeStrokeColor = (color: StrokeRenderCommand['strokes'][number]['color']): readonly [number, number, number, number] => {
-    if (typeof color === 'string') {
-        try {
-            const c = Color.fromHex(color);
-            return [c.r, c.g, c.b, c.a] as const;
-        } catch {
-            return [1, 1, 1, 1] as const;
-        }
-    }
-    if (typeof color === 'number') {
-        return [
-            ((color >>> 24) & 0xff) / 255,
-            ((color >>> 16) & 0xff) / 255,
-            ((color >>> 8) & 0xff) / 255,
-            (color & 0xff) / 255,
-        ];
-    }
-    // Object branch first: Array.isArray cannot narrow readonly tuple members
-    // out of the union, but the `in` check cleanly separates object from tuple.
-    if ('r' in color) {
-        return [color.r, color.g, color.b, color.a ?? 1];
-    }
-    return color.length === 3
-        ? [color[0], color[1], color[2], 1]
-        : [color[0], color[1], color[2], color[3]];
+    const WHITE: ReadonlyColor = { r: 1, g: 1, b: 1, a: 1 };
+    const resolved = normalizeColor(color, WHITE);
+    return [resolved.r, resolved.g, resolved.b, resolved.a] as const;
 };
