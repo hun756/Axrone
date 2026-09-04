@@ -97,6 +97,9 @@ export function createUIWorldSurface(
             if (disposed) {
                 return;
             }
+            // Invalidate so capture re-reads current GL bindings instead of
+            // reusing stale construction-time values.
+            guard.invalidate();
             guard.capture(gl, GL_STATE_UNIT0_TEXTURE | GL_STATE_FRAMEBUFFER);
             allocate(nextWidth, nextHeight);
             guard.restore(gl);
