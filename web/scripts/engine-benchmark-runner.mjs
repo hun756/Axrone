@@ -659,7 +659,30 @@ try {
     // ── ui-widgets workload ──────────────────────────────────────────────
     if (hasUIWidgets) {
         const uiWidgetsScenario = { workload: 'ui-widgets', comparisonMode: '', objectCount: 0 };
-        console.log(`Running ui-widgets (${options.iterations} measured run(s))`);
+        const uiWarmupCount = options.warmup ?? 1;
+        console.log(`Running ui-widgets (${uiWarmupCount} warmup + ${options.iterations} measured run(s))`);
+
+        for (let w = 0; w < uiWarmupCount; w++) {
+            await runWithBrowser(async (probeBrowser) => {
+                const ctx = await probeBrowser.newContext({
+                    viewport: { width: 960, height: 540 },
+                    deviceScaleFactor: 1,
+                    serviceWorkers: 'block',
+                });
+                const pg = await ctx.newPage();
+                try {
+                    await pg.goto(uiPerfPageUrl(baseUrl), {
+                        waitUntil: 'domcontentloaded',
+                        timeout: DEFAULT_TIMEOUT_MS,
+                    });
+                    await pg.waitForFunction(() => document.title === 'UIPERF_DONE', undefined, {
+                        timeout: DEFAULT_TIMEOUT_MS,
+                    });
+                } finally {
+                    await ctx.close();
+                }
+            });
+        }
 
         const uiRawRuns = [];
         for (let i = 0; i < options.iterations; i++) {
