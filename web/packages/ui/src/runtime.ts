@@ -641,30 +641,18 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         // carried by `transform` and applied once by the renderer. Pre-scaling the
         // geometry here as well would double-apply the scale. Clip rects are the
         // exception: they feed the scissor test, which operates in viewport space.
-        const scaledCommands = frame.commands.map((command) => {
-            switch (command.kind) {
-                case 'quad':
-                case 'text':
-                case 'image':
-                case 'stroke':
-                    return {
-                        ...command,
-                        clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
-                        transform,
-                    };
-                case 'custom':
-                    return {
-                        ...command,
-                        clip: command.clip ? scaleClipRect(command.clip, scaleResult) : null,
-                    };
-                default:
-                    return command;
+        for (const command of frame.commands) {
+            if (command.kind === 'quad' || command.kind === 'text' || command.kind === 'image' || command.kind === 'stroke') {
+                command.clip = command.clip ? scaleClipRect(command.clip, scaleResult) : null;
+                (command as any).transform = transform;
+            } else if (command.kind === 'custom') {
+                command.clip = command.clip ? scaleClipRect(command.clip, scaleResult) : null;
             }
-        });
+        }
         return {
             viewportWidth: actualWidth,
             viewportHeight: actualHeight,
-            commands: scaledCommands,
+            commands: frame.commands,
             metrics: frame.metrics,
         };
     }
