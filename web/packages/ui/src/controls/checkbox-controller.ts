@@ -238,10 +238,10 @@ const resolveMarkStrokes = (
 };
 
 /**
- * Pushes the visual state onto the box, mark, and label child widgets.
- * Returns true once at least the box widget was reached.
+ * Pushes the box visual state: transition mode (color/tint/sprite) and boxSize.
+ * Returns true when the box widget was reached.
  */
-const applyVisuals = (context: CheckboxContext): boolean => {
+const applyBoxVisuals = (context: CheckboxContext): boolean => {
     const props = context.props as CheckboxControllerProps;
     const runtime = context.runtime;
     const state = context.state;
@@ -249,163 +249,188 @@ const applyVisuals = (context: CheckboxContext): boolean => {
     const visualState = resolveVisualState(state);
     const transition = resolveTransitionMode(props.transition);
 
+    const boxKey = asString(props.boxKey);
+    if (!boxKey) {
+        return false;
+    }
+    const box = runtime.getBoundWidget(boxKey);
+    if (box === null) {
+        return false;
+    }
+
+    if (transition === 'tint') {
+        const boxTints = asRecord(props.boxTints);
+        applyTintToChild(runtime, box, visualState, boxTints);
+    } else if (transition === 'sprite') {
+        const boxSprites = asRecord(props.boxSprites);
+        applySpriteToChild(runtime, box, visualState, boxSprites, state.originalBoxSource);
+    } else {
+        const states = asRecord(props.states);
+        const isActive = state.checked || state.indeterminate;
+        const bg = isActive
+            ? (asString(states.checked) || DEFAULT_STATES.checked)
+            : (visualState === 'hover'
+                ? (asString(states.hover) || DEFAULT_STATES.hover)
+                : (asString(states.normal) || DEFAULT_STATES.normal));
+
+        const duration = asNumber(props.transitionDuration, 0);
+        if (state.previousBoxColor === '') {
+            // First run: sentinel — apply directly without animation
+            // and record the initial color to avoid a mount flash.
+            if (state.boxAnimation) {
+                state.boxAnimation.cancel();
+                state.boxAnimation = null;
+            }
+            runtime.updateWidget(box, {
+                style: { background: bg as `#${string}` },
+            });
+            state.previousBoxColor = bg;
+        } else if (duration > 0 && state.previousBoxColor !== bg) {
+            if (state.boxAnimation) {
+                state.boxAnimation.cancel();
+            }
+            // Read the widget's actual current color so that a
+            // cancelled mid-flight animation starts from where the
+            // widget truly is, not from a stale target.
+            const currentStyle = runtime.getWidgetStyleInput(box);
+            const fromColor = (asString(currentStyle?.background) || state.previousBoxColor) as `#${string}`;
+            state.boxAnimation = animateWidgetColor(
+                runtime,
+                box,
+                'style.background',
+                fromColor,
+                bg as `#${string}`,
+                duration,
+                Easing.easeOutQuad
+            );
+            state.previousBoxColor = bg;
+        } else {
+            if (state.boxAnimation) {
+                state.boxAnimation.cancel();
+                state.boxAnimation = null;
+            }
+            runtime.updateWidget(box, {
+                style: { background: bg as `#${string}` },
+            });
+            state.previousBoxColor = bg;
+        }
+    }
+
+    // Apply boxSize to box child layout dimensions.
+    const boxSize = asNumber(props.boxSize, NaN);
+    if (Number.isFinite(boxSize)) {
+        runtime.updateWidget(box, {
+            layout: { width: boxSize, height: boxSize },
+        });
+    }
+
+    return true;
+};
+
+/**
+ * Pushes the mark visual state: transition mode (color/tint/sprite), mark style,
+ * mark size, and mark layout. Returns true when the mark widget was reached.
+ */
+const applyMarkVisuals = (context: CheckboxContext): boolean => {
+    const props = context.props as CheckboxControllerProps;
+    const runtime = context.runtime;
+    const state = context.state;
+
+    const visualState = resolveVisualState(state);
+    const transition = resolveTransitionMode(props.transition);
+
+    const markKey = asString(props.markKey);
+    if (!markKey) {
+        return false;
+    }
+    const mark = runtime.getBoundWidget(markKey);
+    if (mark === null) {
+        return false;
+    }
+
+    const markVisible = state.checked || state.indeterminate;
+    const markStyle = (asString(props.markStyle) || 'check') as CheckboxMarkStyle;
+    const markColor = (asString(props.markColor) || '#ffffffff') as `#${string}`;
+    const markWeight = asNumber(props.markWeight, DEFAULT_MARK_WEIGHT);
+    const markSize = asNumber(props.markSize, NaN);
+
+    if (transition === 'tint') {
+        const markTints = asRecord(props.markTints);
+        if (markVisible) {
+            applyTintToChild(runtime, mark, visualState, markTints);
+            runtime.updateWidget(mark, { enabled: true });
+        } else {
+            runtime.updateWidget(mark, { enabled: false });
+        }
+    } else if (transition === 'sprite') {
+        const markSprites = asRecord(props.markSprites);
+        if (markVisible) {
+            applySpriteToChild(runtime, mark, visualState, markSprites, state.originalMarkSource);
+            runtime.updateWidget(mark, { enabled: true });
+        } else {
+            runtime.updateWidget(mark, { enabled: false });
+        }
+    } else {
+        // Color transition mode: use strokes for mark styles (check/cross/dash)
+        // or background fill for dot style. A base image authored on the mark
+        // child replaces the default tick outright, so the procedural mark is
+        // suppressed instead of painted on top of the user's artwork.
+        const hasMarkImage = isValidImageSource(runtime.getWidgetImageInput(mark)?.source);
+        const proceduralMark = markVisible && !hasMarkImage;
+        const strokes = proceduralMark ? resolveMarkStrokes(markStyle, markColor, markWeight) : null;
+        if (markStyle === 'dot') {
+            // Dot uses background fill with radius for circular shape.
+            runtime.updateWidget(mark, {
+                style: {
+                    background: proceduralMark ? markColor : '#00000000',
+                    radius: Number.isFinite(markSize) ? markSize * 0.5 : CHECKBOX_DOT_RADIUS,
+                    strokes: [],
+                },
+                enabled: markVisible,
+            });
+        } else {
+            // Stroke-based marks: transparent background, strokes render the shape.
+            runtime.updateWidget(mark, {
+                style: {
+                    background: '#00000000',
+                    strokes: strokes ?? [],
+                },
+                enabled: markVisible,
+            });
+        }
+    }
+
+    // Apply markSize to mark child layout dimensions. The mark is centered
+    // inside the box by contract: boxSize/markSize are authoritative, so the
+    // insets are dropped rather than zeroed — a zero inset still counts as
+    // "present" and would make layoutAbsoluteChild resolve from the inset and
+    // skip the anchor branch, pinning the mark to the box's top-left corner.
+    // Older assets carry stale baked pixel insets and sometimes no anchor.
+    if (Number.isFinite(markSize)) {
+        runtime.updateWidget(mark, {
+            layout: {
+                width: markSize,
+                height: markSize,
+                position: 'absolute',
+                anchor: { x: 0.5, y: 0.5, maxX: 0.5, maxY: 0.5, pivotX: 0.5, pivotY: 0.5 },
+                inset: { left: undefined, top: undefined, right: undefined, bottom: undefined },
+            },
+        });
+    }
+
+    return true;
+};
+
+/**
+ * Pushes the label visual state: visibility, color override, and root gap.
+ * Returns true when the label widget was reached (or no label configured).
+ */
+const applyLabelVisuals = (context: CheckboxContext): boolean => {
+    const props = context.props as CheckboxControllerProps;
+    const runtime = context.runtime;
+
     let applied = false;
 
-    // ─── box ──────────────────────────────────────────────────────────────
-    const boxKey = asString(props.boxKey);
-    if (boxKey) {
-        const box = runtime.getBoundWidget(boxKey);
-        if (box !== null) {
-            if (transition === 'tint') {
-                const boxTints = asRecord(props.boxTints);
-                applyTintToChild(runtime, box, visualState, boxTints);
-            } else if (transition === 'sprite') {
-                const boxSprites = asRecord(props.boxSprites);
-                applySpriteToChild(runtime, box, visualState, boxSprites, state.originalBoxSource);
-            } else {
-                const states = asRecord(props.states);
-                const isActive = state.checked || state.indeterminate;
-                const bg = isActive
-                    ? (asString(states.checked) || DEFAULT_STATES.checked)
-                    : (visualState === 'hover'
-                        ? (asString(states.hover) || DEFAULT_STATES.hover)
-                        : (asString(states.normal) || DEFAULT_STATES.normal));
-
-                const duration = asNumber(props.transitionDuration, 0);
-                if (state.previousBoxColor === '') {
-                    // First run: sentinel — apply directly without animation
-                    // and record the initial color to avoid a mount flash.
-                    if (state.boxAnimation) {
-                        state.boxAnimation.cancel();
-                        state.boxAnimation = null;
-                    }
-                    runtime.updateWidget(box, {
-                        style: { background: bg as `#${string}` },
-                    });
-                    state.previousBoxColor = bg;
-                } else if (duration > 0 && state.previousBoxColor !== bg) {
-                    if (state.boxAnimation) {
-                        state.boxAnimation.cancel();
-                    }
-                    // Read the widget's actual current color so that a
-                    // cancelled mid-flight animation starts from where the
-                    // widget truly is, not from a stale target.
-                    const currentStyle = runtime.getWidgetStyleInput(box);
-                    const fromColor = (asString(currentStyle?.background) || state.previousBoxColor) as `#${string}`;
-                    state.boxAnimation = animateWidgetColor(
-                        runtime,
-                        box,
-                        'style.background',
-                        fromColor,
-                        bg as `#${string}`,
-                        duration,
-                        Easing.easeOutQuad
-                    );
-                    state.previousBoxColor = bg;
-                } else {
-                    if (state.boxAnimation) {
-                        state.boxAnimation.cancel();
-                        state.boxAnimation = null;
-                    }
-                    runtime.updateWidget(box, {
-                        style: { background: bg as `#${string}` },
-                    });
-                    state.previousBoxColor = bg;
-                }
-            }
-
-            // Apply boxSize to box child layout dimensions.
-            const boxSize = asNumber(props.boxSize, NaN);
-            if (Number.isFinite(boxSize)) {
-                runtime.updateWidget(box, {
-                    layout: { width: boxSize, height: boxSize },
-                });
-            }
-
-            applied = true;
-        }
-    }
-
-    // ─── mark ─────────────────────────────────────────────────────────────
-    const markKey = asString(props.markKey);
-    if (markKey) {
-        const mark = runtime.getBoundWidget(markKey);
-        if (mark !== null) {
-            const markVisible = state.checked || state.indeterminate;
-            const markStyle = (asString(props.markStyle) || 'check') as CheckboxMarkStyle;
-            const markColor = (asString(props.markColor) || '#ffffffff') as `#${string}`;
-            const markWeight = asNumber(props.markWeight, DEFAULT_MARK_WEIGHT);
-            const markSize = asNumber(props.markSize, NaN);
-
-            if (transition === 'tint') {
-                const markTints = asRecord(props.markTints);
-                if (markVisible) {
-                    applyTintToChild(runtime, mark, visualState, markTints);
-                    runtime.updateWidget(mark, { enabled: true });
-                } else {
-                    runtime.updateWidget(mark, { enabled: false });
-                }
-            } else if (transition === 'sprite') {
-                const markSprites = asRecord(props.markSprites);
-                if (markVisible) {
-                    applySpriteToChild(runtime, mark, visualState, markSprites, state.originalMarkSource);
-                    runtime.updateWidget(mark, { enabled: true });
-                } else {
-                    runtime.updateWidget(mark, { enabled: false });
-                }
-            } else {
-                // Color transition mode: use strokes for mark styles (check/cross/dash)
-                // or background fill for dot style. A base image authored on the mark
-                // child replaces the default tick outright, so the procedural mark is
-                // suppressed instead of painted on top of the user's artwork.
-                const hasMarkImage = isValidImageSource(runtime.getWidgetImageInput(mark)?.source);
-                const proceduralMark = markVisible && !hasMarkImage;
-                const strokes = proceduralMark ? resolveMarkStrokes(markStyle, markColor, markWeight) : null;
-                if (markStyle === 'dot') {
-                    // Dot uses background fill with radius for circular shape.
-                    runtime.updateWidget(mark, {
-                        style: {
-                            background: proceduralMark ? markColor : '#00000000',
-                            radius: Number.isFinite(markSize) ? markSize * 0.5 : CHECKBOX_DOT_RADIUS,
-                            strokes: [],
-                        },
-                        enabled: markVisible,
-                    });
-                } else {
-                    // Stroke-based marks: transparent background, strokes render the shape.
-                    runtime.updateWidget(mark, {
-                        style: {
-                            background: '#00000000',
-                            strokes: strokes ?? [],
-                        },
-                        enabled: markVisible,
-                    });
-                }
-            }
-
-            // Apply markSize to mark child layout dimensions. The mark is centered
-            // inside the box by contract: boxSize/markSize are authoritative, so the
-            // insets are dropped rather than zeroed — a zero inset still counts as
-            // "present" and would make layoutAbsoluteChild resolve from the inset and
-            // skip the anchor branch, pinning the mark to the box's top-left corner.
-            // Older assets carry stale baked pixel insets and sometimes no anchor.
-            if (Number.isFinite(markSize)) {
-                runtime.updateWidget(mark, {
-                    layout: {
-                        width: markSize,
-                        height: markSize,
-                        position: 'absolute',
-                        anchor: { x: 0.5, y: 0.5, maxX: 0.5, maxY: 0.5, pivotX: 0.5, pivotY: 0.5 },
-                        inset: { left: undefined, top: undefined, right: undefined, bottom: undefined },
-                    },
-                });
-            }
-
-            applied = true;
-        }
-    }
-
-    // ─── label ────────────────────────────────────────────────────────────
     const labelKey = asString(props.labelKey);
     if (labelKey) {
         const label = runtime.getBoundWidget(labelKey);
@@ -435,7 +460,28 @@ const applyVisuals = (context: CheckboxContext): boolean => {
         runtime.updateWidget(context.widget, rootUpdate);
     }
 
-    return applied || (!boxKey && !markKey && !labelKey);
+    return applied || !labelKey;
+};
+
+/**
+ * Pushes the visual state onto the box, mark, and label child widgets.
+ * Returns true once at least the box widget was reached.
+ *
+ * Decomposed into three stage functions (applyBoxVisuals, applyMarkVisuals,
+ * applyLabelVisuals) for clarity and potential per-stage diff optimization.
+ * The update handler retains the original 21-property diff to ensure
+ * behavioral equivalence — per-stage diff scoping deferred to avoid
+ * cross-stage dependency issues (see code review Q-3).
+ */
+const applyVisuals = (context: CheckboxContext): boolean => {
+    const boxReached = applyBoxVisuals(context);
+    const markReached = applyMarkVisuals(context);
+    const labelReached = applyLabelVisuals(context);
+    const props = context.props as CheckboxControllerProps;
+    const boxKey = asString(props.boxKey);
+    const markKey = asString(props.markKey);
+    const labelKey = asString(props.labelKey);
+    return boxReached || markReached || labelReached || (!boxKey && !markKey && !labelKey);
 };
 
 /**
@@ -498,6 +544,9 @@ export const checkboxToggleController: WidgetController<
         const props = typed.props as CheckboxControllerProps;
         const previous = previousProps as CheckboxControllerProps;
 
+        // Original 21-property diff retained for behavioral equivalence.
+        // Per-stage diff scoping was attempted but caused test failures due to
+        // cross-stage dependencies (corrupted-insets repair path). Deferred.
         if (
             props.isOn !== previous.isOn ||
             props.indeterminate !== previous.indeterminate ||
