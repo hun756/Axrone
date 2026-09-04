@@ -974,6 +974,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.gl.enableVertexAttribArray(0);
         this.gl.vertexAttribPointer(0, 2, this.gl.FLOAT, false, 8, 0);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.quadInstanceBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, this.quadBatch.byteLength, this.gl.DYNAMIC_DRAW);
         this.gl.enableVertexAttribArray(1);
         this.gl.vertexAttribPointer(1, 4, this.gl.FLOAT, false, stride, 0);
         this.gl.vertexAttribDivisor(1, 1);
@@ -1006,6 +1007,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.gl.enableVertexAttribArray(0);
         this.gl.vertexAttribPointer(0, 2, this.gl.FLOAT, false, 8, 0);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.imageInstanceBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, this.imageBatch.byteLength, this.gl.DYNAMIC_DRAW);
         this.gl.enableVertexAttribArray(1);
         this.gl.vertexAttribPointer(1, 4, this.gl.FLOAT, false, stride, 0);
         this.gl.vertexAttribDivisor(1, 1);
@@ -1035,6 +1037,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.gl.enableVertexAttribArray(0);
         this.gl.vertexAttribPointer(0, 2, this.gl.FLOAT, false, 8, 0);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.textInstanceBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, this.textBatch.byteLength, this.gl.DYNAMIC_DRAW);
         this.gl.enableVertexAttribArray(1);
         this.gl.vertexAttribPointer(1, 4, this.gl.FLOAT, false, stride, 0);
         this.gl.vertexAttribDivisor(1, 1);
@@ -1347,10 +1350,10 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.gl.uniform2f(this.quadViewportUniform, this.currentFrame.viewportWidth, this.currentFrame.viewportHeight);
         this.gl.bindVertexArray(this.quadVao);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.quadInstanceBuffer);
-        this.gl.bufferData(
+        this.gl.bufferSubData(
             this.gl.ARRAY_BUFFER,
-            this.quadBatch.subarray(0, this.quadCount * QUAD_FLOATS_PER_INSTANCE),
-            this.gl.DYNAMIC_DRAW
+            0,
+            this.quadBatch.subarray(0, this.quadCount * QUAD_FLOATS_PER_INSTANCE)
         );
         this.gl.drawArraysInstanced(this.gl.TRIANGLE_STRIP, 0, 4, this.quadCount);
         this.gl.bindVertexArray(null);
@@ -1373,10 +1376,10 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.gl.uniform1i(this.imageTextureUniform, 0);
         this.gl.bindVertexArray(this.imageVao);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.imageInstanceBuffer);
-        this.gl.bufferData(
+        this.gl.bufferSubData(
             this.gl.ARRAY_BUFFER,
-            this.imageBatch.subarray(0, this.imageCount * IMAGE_FLOATS_PER_INSTANCE),
-            this.gl.DYNAMIC_DRAW
+            0,
+            this.imageBatch.subarray(0, this.imageCount * IMAGE_FLOATS_PER_INSTANCE)
         );
         this.gl.drawArraysInstanced(this.gl.TRIANGLE_STRIP, 0, 4, this.imageCount);
         this.gl.bindVertexArray(null);
@@ -1404,10 +1407,10 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.gl.uniform1i(this.textAtlasUniform, 0);
         this.gl.bindVertexArray(this.textVao);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.textInstanceBuffer);
-        this.gl.bufferData(
+        this.gl.bufferSubData(
             this.gl.ARRAY_BUFFER,
-            this.textBatch.subarray(0, this.textCount * TEXT_FLOATS_PER_INSTANCE),
-            this.gl.DYNAMIC_DRAW
+            0,
+            this.textBatch.subarray(0, this.textCount * TEXT_FLOATS_PER_INSTANCE)
         );
         this.gl.drawArraysInstanced(this.gl.TRIANGLE_STRIP, 0, 4, this.textCount);
         this.gl.bindVertexArray(null);
