@@ -60,7 +60,11 @@ const getOrCreateSegmenter = (locale: string): Intl.Segmenter => {
 export const createGraphemeSegments = (value: string, locale: string): string[] => {
     if (typeof Intl !== 'undefined' && typeof Intl.Segmenter !== 'undefined') {
         const segmenter = getOrCreateSegmenter(locale);
-        return [...segmenter.segment(value)].map((segment) => segment.segment);
+        const result: string[] = [];
+        for (const segment of segmenter.segment(value)) {
+            result.push(segment.segment);
+        }
+        return result;
     }
     return Array.from(value);
 };
