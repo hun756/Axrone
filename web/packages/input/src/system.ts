@@ -199,6 +199,7 @@ export class InputSystem<TSchema extends InputActionSchema = InputActionSchema> 
     private _disposed = false;
     private _rebindToken = 0;
     private _activeRebinding?: ActiveRebinding<TSchema>;
+    private _hasGamepadBindings = false;
 
     constructor(options: InputSystemOptions<TSchema>) {
         if (!isRecord(options) || !isRecord(options.schema)) {
@@ -327,7 +328,9 @@ export class InputSystem<TSchema extends InputActionSchema = InputActionSchema> 
         }
         this._timestamp = Number.isFinite(now) ? now : this._now();
         this._expireRebindingIfNeeded(this._timestamp);
-        pollGamepads(this as unknown as InputSourceRuntime<TSchema>);
+        if (this._hasGamepadBindings) {
+            pollGamepads(this as unknown as InputSourceRuntime<TSchema>);
+        }
         this._frame += 1;
         try {
             this._evaluate();
@@ -853,6 +856,7 @@ export class InputSystem<TSchema extends InputActionSchema = InputActionSchema> 
 
         this._contexts.set(id, context);
         this._contextOrderDirty = true;
+        this._hasGamepadBindings = true; // Conservative: assume gamepad bindings may exist
         return this._snapshotContextState(context);
     }
 
