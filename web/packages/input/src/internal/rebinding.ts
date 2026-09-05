@@ -300,13 +300,8 @@ export const restoreInputSnapshot = <TSchema extends InputActionSchema>(
         );
     }
 
-    if (!options.merge) {
-        runtime._users.clear();
-        runtime._gamepadOwners.clear();
-        runtime._contexts.clear();
-        runtime._contextOrderDirty = true;
-    }
-
+    // Validate all entries first (atomic: either all valid or none committed)
+    const validatedUsers: Array<{ id: string; enabled?: boolean; devices?: readonly any[] }> = [];
     for (const userSnapshot of snapshot.users ?? []) {
         if (!isRecord(userSnapshot) || typeof userSnapshot.id !== 'string') {
             throw new InputSnapshotError(
@@ -316,17 +311,14 @@ export const restoreInputSnapshot = <TSchema extends InputActionSchema>(
                 })
             );
         }
-
-        runtime._upsertUser(
-            {
-                id: userSnapshot.id,
-                enabled: userSnapshot.enabled,
-                devices: userSnapshot.devices,
-            },
-            true
-        );
+        validatedUsers.push({
+            id: userSnapshot.id,
+            enabled: userSnapshot.enabled,
+            devices: userSnapshot.devices,
+        });
     }
 
+    const validatedContexts: Array<{ id: string; priority: number; enabled: boolean; capture: any; user?: string; bindings: any }> = [];
     for (const contextSnapshot of snapshot.contexts) {
         if (!isRecord(contextSnapshot) || typeof contextSnapshot.id !== 'string') {
             throw new InputSnapshotError(
@@ -336,18 +328,30 @@ export const restoreInputSnapshot = <TSchema extends InputActionSchema>(
                 })
             );
         }
+        validatedContexts.push({
+            id: contextSnapshot.id,
+            priority: contextSnapshot.priority,
+            enabled: contextSnapshot.enabled,
+            capture: contextSnapshot.capture,
+            user: contextSnapshot.user,
+            bindings: contextSnapshot.bindings,
+        });
+    }
 
-        runtime._upsertContext(
-            {
-                id: contextSnapshot.id,
-                priority: contextSnapshot.priority,
-                enabled: contextSnapshot.enabled,
-                capture: contextSnapshot.capture,
-                user: contextSnapshot.user,
-                bindings: contextSnapshot.bindings,
-            },
-            true
-        );
+    // All validated — now commit
+    if (!options.merge) {
+        runtime._users.clear();
+        runtime._gamepadOwners.clear();
+        runtime._contexts.clear();
+        runtime._contextOrderDirty = true;
+    }
+
+    for (const user of validatedUsers) {
+        runtime._upsertUser(user, true);
+    }
+
+    for (const context of validatedContexts) {
+        runtime._upsertContext(context, true);
     }
 };
 
