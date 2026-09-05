@@ -57,7 +57,8 @@ export const applyRetryDelay = (policy: RetryPolicy | undefined, attempt: number
 
 export const isDynamicFontFaceAsset = (asset: FontFaceAsset): asset is DynamicFontFaceAsset => asset.kind === 'dynamic';
 
-export const createAtlasEntryKey = (codePoint: number, rasterSize?: number): string => `${codePoint}:${rasterSize ?? 0}`;
+export const createAtlasEntryKey = (codePoint: number, rasterSize?: number): number =>
+    codePoint * 256 + (rasterSize ?? 0);
 
 /**
  * Creates a numeric key for an uploaded glyph atlas entry.

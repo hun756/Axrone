@@ -611,9 +611,11 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
                 this.scopedRelayout(adapter, viewportSize);
             } else {
                 this.layoutEngine.compute(adapter, viewportSize);
-                // Clear translation offsets after full layout (they're baked into the new boxes)
-                this.clearTranslationOffsets();
             }
+            // Clear translation offsets after any layout pass — they're baked
+            // into the new boxes by writeBox() and must not leak into the next
+            // frame's readBox() calls.
+            this.clearTranslationOffsets();
             this.layoutDirty = false;
             this.dirtyNodes.clear();
             this.structuralDirty = false;
@@ -645,6 +647,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             } else {
                 this.layoutEngine.compute(adapter, viewportSize);
             }
+            this.clearTranslationOffsets();
             this.layoutDirty = false;
             this.dirtyNodes.clear();
             this.structuralDirty = false;

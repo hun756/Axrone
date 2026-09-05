@@ -6,7 +6,7 @@
  * surface separate from the renderer lets a single renderer instance serve both
  * the screen overlay and any number of world-space hosts.
  */
-import { LazyGLStateGuard, GL_STATE_UNIT0_TEXTURE, GL_STATE_FRAMEBUFFER } from './gl-state';
+import { LazyGLStateGuard, GL_STATE_ACTIVE_TEXTURE, GL_STATE_UNIT0_TEXTURE, GL_STATE_FRAMEBUFFER } from './gl-state';
 export interface UIWorldSurface extends Disposable {
     readonly texture: WebGLTexture;
     readonly framebuffer: WebGLFramebuffer;
@@ -44,7 +44,7 @@ export function createUIWorldSurface(
     let contextLost = false;
 
     const guard = new LazyGLStateGuard();
-    guard.capture(gl, GL_STATE_UNIT0_TEXTURE | GL_STATE_FRAMEBUFFER);
+    guard.capture(gl, GL_STATE_ACTIVE_TEXTURE | GL_STATE_UNIT0_TEXTURE | GL_STATE_FRAMEBUFFER);
 
     const allocate = (nextWidth: number, nextHeight: number): void => {
         const clampedWidth = clampSurfaceSize(nextWidth);
@@ -52,6 +52,7 @@ export function createUIWorldSurface(
         if (clampedWidth === currentWidth && clampedHeight === currentHeight) {
             return;
         }
+        gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texImage2D(
             gl.TEXTURE_2D,
@@ -138,7 +139,7 @@ export function createUIWorldSurface(
             // Invalidate so capture re-reads current GL bindings instead of
             // reusing stale construction-time values.
             guard.invalidate();
-            guard.capture(gl, GL_STATE_UNIT0_TEXTURE | GL_STATE_FRAMEBUFFER);
+            guard.capture(gl, GL_STATE_ACTIVE_TEXTURE | GL_STATE_UNIT0_TEXTURE | GL_STATE_FRAMEBUFFER);
             allocate(nextWidth, nextHeight);
             guard.restore(gl);
         },

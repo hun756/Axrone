@@ -32,7 +32,7 @@ interface AtlasPage {
     cursorX: number;
     cursorY: number;
     rowHeight: number;
-    readonly entries: Map<string, GlyphAtlasEntry>;
+    readonly entries: Map<number, GlyphAtlasEntry>;
     lastAccess: number;
 }
 
@@ -44,7 +44,7 @@ export class GlyphAtlas {
     private readonly maxPages: number;
     private readonly onEvictPage: GlyphAtlasOptions['onEvictPage'];
     private readonly pages: AtlasPage[] = [];
-    private readonly entries = new Map<string, GlyphAtlasEntry>();
+    private readonly entries = new Map<number, GlyphAtlasEntry>();
     private nextPageId = 1;
     private frameCounter = 0;
 

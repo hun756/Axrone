@@ -518,6 +518,7 @@ export function bindUIHostToWorld<TPayload = unknown>(
     runtime.fonts.setAtlasPageEvictCallback((page) => uiRenderer.handleAtlasPageEviction(page));
 
     const drawWorldFrame = (): void => {
+        if (scene.gl.isContextLost()) return;
         const size = resolveWorldSurfaceSize(host);
         surface.resize(size.width, size.height);
         // 1) UI into the offscreen texture at the surface resolution.
