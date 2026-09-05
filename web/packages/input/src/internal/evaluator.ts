@@ -265,6 +265,10 @@ const evaluateDirectionalBinding = <TSchema extends InputActionSchema>(
         }
     }
 
+    if (binding.processors.length === 0) {
+        return { x, y };
+    }
+
     return applyVectorProcessors(
         {
             x,
@@ -289,6 +293,10 @@ const evaluateDualAxisBinding = <TSchema extends InputActionSchema>(
     } else if (binding.normalize && length > 1) {
         x /= length;
         y /= length;
+    }
+
+    if (binding.processors.length === 0) {
+        return { x, y };
     }
 
     return applyVectorProcessors(
