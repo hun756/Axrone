@@ -9,7 +9,7 @@ export function hashCombine(a: HashValue, b: HashValue): Hash32 {
     let h: number;
     if (typeof a === 'number') h = a as unknown as number;
     else h = Number((a as bigint & 0xffffffffn) ^ ((a as bigint >> 32n) & 0xffffffffn));
-    h = (h ^ (b as unknown as number & 0xff)) >>> 0;
+    h = (h ^ (b as unknown as number)) >>> 0;
     h = Math.imul(h, FNV_PRIME_32) >>> 0;
     return fmix32(h) as unknown as Hash32;
 }
