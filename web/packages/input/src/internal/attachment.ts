@@ -293,6 +293,14 @@ export const attachInputBrowserTarget = (
                 requestPointerLock();
             }
 
+            if (typeof (event.target as Element)?.setPointerCapture === 'function' && event.pointerId !== undefined) {
+                try {
+                    (event.target as Element).setPointerCapture(event.pointerId);
+                } catch {
+                    // Pointer capture may fail if already captured or invalid pointer
+                }
+            }
+
             host.dispatch({
                 type: 'mouse-button',
                 button: event.button,
