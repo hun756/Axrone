@@ -517,9 +517,15 @@ const canAccessControl = <TSchema extends InputActionSchema>(
     }
 
     if (control.device === 'gamepad') {
-        return control.selector === GAMEPAD_ANY
-            ? [...owner.devices.values()].some((device) => device.device === 'gamepad')
-            : canAccessGamepadIndex(runtime, control.selector, user);
+        if (control.selector === GAMEPAD_ANY) {
+            for (const device of owner.devices.values()) {
+                if (device.device === 'gamepad') {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return canAccessGamepadIndex(runtime, control.selector, user);
     }
 
     return owner.devices.has(control.device);
