@@ -293,8 +293,8 @@ export class Fnv1a64 implements IHasher<Hash64> {
 
     updateBoolean(value: boolean): this {
         this._checkFinalized();
-        this._h = (this._h * 0x100000001b3n) & 0xffffffffffffffffn;
         this._h = (this._h ^ BigInt(value ? 1 : 0)) & 0xffffffffffffffffn;
+        this._h = (this._h * 0x100000001b3n) & 0xffffffffffffffffn;
         this._byteLength += 1;
         return this;
     }
