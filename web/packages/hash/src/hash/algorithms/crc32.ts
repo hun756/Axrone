@@ -29,6 +29,8 @@ const CRC32_TABLE: Uint32Array = (() => {
 })();
 
 export class Crc32 extends Fnv1a32 {
+    private _finalDigest: Hash32 | undefined;
+    
     constructor(seed: Seed32 = asSeed32(0)) {
         super(seed);
         (this as any).algorithm = CRC32_METADATA.name;
@@ -47,15 +49,17 @@ export class Crc32 extends Fnv1a32 {
     }
 
     override digest(): Hash32 {
+        if (this._finalDigest !== undefined) return this._finalDigest;
         (this as any)._finalized = true;
-        (this as any)._h = ((this as any)._h as number) ^ 0xffffffff;
-        return asHash32((this as any)._h as number);
+        this._finalDigest = asHash32(((this as any)._h as number) ^ 0xffffffff);
+        return this._finalDigest;
     }
 
     override reset(seed: Seed32 = asSeed32(0)): this {
         (this as any)._h = ((seed as number) >>> 0) ^ 0xffffffff;
         (this as any)._byteLength = 0;
         (this as any)._finalized = false;
+        this._finalDigest = undefined;
         return this;
     }
 }
@@ -79,6 +83,8 @@ const CRC32C_TABLE: Uint32Array = (() => {
 })();
 
 export class Crc32c extends Fnv1a32 {
+    private _finalDigest: Hash32 | undefined;
+    
     constructor(seed: Seed32 = asSeed32(0)) {
         super(seed);
         (this as any).algorithm = CRC32C_METADATA.name;
@@ -97,15 +103,17 @@ export class Crc32c extends Fnv1a32 {
     }
 
     override digest(): Hash32 {
+        if (this._finalDigest !== undefined) return this._finalDigest;
         (this as any)._finalized = true;
-        (this as any)._h = ((this as any)._h as number) ^ 0xffffffff;
-        return asHash32((this as any)._h as number);
+        this._finalDigest = asHash32(((this as any)._h as number) ^ 0xffffffff);
+        return this._finalDigest;
     }
 
     override reset(seed: Seed32 = asSeed32(0)): this {
         (this as any)._h = ((seed as number) >>> 0) ^ 0xffffffff;
         (this as any)._byteLength = 0;
         (this as any)._finalized = false;
+        this._finalDigest = undefined;
         return this;
     }
 }
