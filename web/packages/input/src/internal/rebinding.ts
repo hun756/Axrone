@@ -97,7 +97,7 @@ export const applyBindingMutation = <TSchema extends InputActionSchema, TAction 
             }) as InputControlBinding
         );
     } else {
-        nextBindings[index] = patchBindingControl(nextBindings[index]!, slot, control);
+        nextBindings[index] = patchBindingControl(runtime, nextBindings[index]!, slot, control);
     }
 
     const normalized = runtime._compiler.normalizeBindingList(patchRequest.action, nextBindings);
@@ -471,7 +471,8 @@ const resolveBindingSlot = <TSchema extends InputActionSchema>(
     );
 };
 
-const patchBindingControl = (
+const patchBindingControl = <TSchema extends InputActionSchema>(
+    runtime: InputRebindingRuntime<TSchema>,
     binding: InputBinding,
     slot: InputBindingSlot,
     control: InputControlPath
@@ -510,6 +511,9 @@ const patchBindingControl = (
 
     throw new InputRebindingError(
         'input.invalid-slot',
-        String(slot)
+        runtime._resolveMessage({
+            code: 'input.invalid-slot',
+            value: slot ?? binding.type,
+        })
     );
 };
