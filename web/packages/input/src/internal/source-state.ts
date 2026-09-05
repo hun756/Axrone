@@ -169,13 +169,6 @@ export const handleTouchEvent = <TSchema extends InputActionSchema>(
         const existing = runtime._touches.get(point.id);
 
         if (event.phase === 'end' || event.phase === 'cancel') {
-            if (existing) {
-                existing.deltaX += point.x - existing.x;
-                existing.deltaY += point.y - existing.y;
-                existing.x = point.x;
-                existing.y = point.y;
-            }
-
             runtime._touches.delete(point.id);
             continue;
         }
