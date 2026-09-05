@@ -375,7 +375,16 @@ export class Murmur2_64 implements IHasher<import('../types').Hash64> {
 
     digest(): import('../types').Hash64 {
         this._finalized = true;
-        let h = this._h ^ BigInt(this._totalLen);
+        let h = this._h;
+        
+        // Mix tail bytes (_tail has byte0 at bits 0-7, byte1 at 8-15, etc.)
+        if (this._tailLen > 0) {
+            h ^= this._tail;
+            h = (h * 0xc6a4a7935bd1e995n) & 0xffffffffffffffffn;
+        }
+        
+        // Finalize
+        h ^= BigInt(this._totalLen);
         h ^= h >> 47n;
         h = (h * 0xc6a4a7935bd1e995n) & 0xffffffffffffffffn;
         h ^= h >> 47n;
