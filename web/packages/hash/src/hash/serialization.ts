@@ -157,12 +157,18 @@ export function hashToBytes(value: HashValue): Uint8Array {
         new DataView(out.buffer).setUint32(0, value >>> 0, true);
         return out;
     }
-    let n = value as unknown as bigint;
-    const size = Math.ceil(Math.max(0, Number(n.toString(2).length)) / 8);
-    const out = new Uint8Array(8);
-    for (let i = 0; i < 8; i++) {
-        out[i] = Number(n & 0xffn);
-        n >>= 8n;
+    const n = value as unknown as bigint;
+    // Determine size: 8, 16, 32, or 64 bytes based on value range
+    let size = 8;
+    if (n > 0xffffffffffffffffn) size = 16;
+    if (n > 0xffffffffffffffffffffffffffffffffn) size = 32;
+    if (n > 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffn) size = 64;
+    
+    const out = new Uint8Array(size);
+    let v = n;
+    for (let i = 0; i < size; i++) {
+        out[i] = Number(v & 0xffn);
+        v >>= 8n;
     }
     return out;
 }
