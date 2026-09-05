@@ -35,6 +35,7 @@ export class Djb2 extends Fnv1a32 {
     }
 
     override reset(seed: Seed32 = asSeed32(0)): this {
+        (this as any)._initialSeed = (seed as number) >>> 0;
         (this as any)._h = 5381;
         (this as any)._byteLength = 0;
         (this as any)._finalized = false;
@@ -67,6 +68,7 @@ export class Djb2a extends Fnv1a32 {
     }
 
     override reset(seed: Seed32 = asSeed32(0)): this {
+        (this as any)._initialSeed = (seed as number) >>> 0;
         (this as any)._h = 5381;
         (this as any)._byteLength = 0;
         (this as any)._finalized = false;
@@ -106,6 +108,7 @@ export class Sdbm extends Fnv1a32 {
     }
 
     override reset(seed: Seed32 = asSeed32(0)): this {
+        (this as any)._initialSeed = (seed as number) >>> 0;
         (this as any)._h = 0;
         (this as any)._byteLength = 0;
         (this as any)._finalized = false;

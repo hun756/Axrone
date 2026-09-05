@@ -56,6 +56,7 @@ export class Crc32 extends Fnv1a32 {
     }
 
     override reset(seed: Seed32 = asSeed32(0)): this {
+        (this as any)._initialSeed = (seed as number) >>> 0;
         (this as any)._h = ((seed as number) >>> 0) ^ 0xffffffff;
         (this as any)._byteLength = 0;
         (this as any)._finalized = false;
@@ -110,6 +111,7 @@ export class Crc32c extends Fnv1a32 {
     }
 
     override reset(seed: Seed32 = asSeed32(0)): this {
+        (this as any)._initialSeed = (seed as number) >>> 0;
         (this as any)._h = ((seed as number) >>> 0) ^ 0xffffffff;
         (this as any)._byteLength = 0;
         (this as any)._finalized = false;
