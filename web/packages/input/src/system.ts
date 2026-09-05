@@ -329,8 +329,11 @@ export class InputSystem<TSchema extends InputActionSchema = InputActionSchema> 
         this._expireRebindingIfNeeded(this._timestamp);
         pollGamepads(this as unknown as InputSourceRuntime<TSchema>);
         this._frame += 1;
-        this._evaluate();
-        clearTransients(this as unknown as InputSourceRuntime<TSchema>);
+        try {
+            this._evaluate();
+        } finally {
+            clearTransients(this as unknown as InputSourceRuntime<TSchema>);
+        }
         return this._frame;
     }
 
