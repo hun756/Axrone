@@ -95,7 +95,7 @@ export class StructState {
             hashable.hashInto(h);
             return this.mixHash(h.digest());
         }
-        return this;
+        throw new Error(`structHash: cannot hash plain object of type ${typeof value}. Implement IHashable interface or use mixIn/mixString/mixNumber.`);
     }
 
     digest(): number {
