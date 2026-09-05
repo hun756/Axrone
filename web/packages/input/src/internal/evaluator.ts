@@ -26,6 +26,8 @@ import type {
 } from './shared';
 import type { InputActionSchema, InputContextId, InputControlPath, InputUserId } from '../types';
 
+let cachedModifierMask = -1;
+
 export interface InputEvaluationRuntime<TSchema extends InputActionSchema = InputActionSchema> {
     _actionDefinitions: readonly InternalActionDefinition[];
     _contexts: Map<string, InternalContext<TSchema>>;
@@ -55,6 +57,7 @@ export interface InputEvaluationRuntime<TSchema extends InputActionSchema = Inpu
 export const collectActionInputs = <TSchema extends InputActionSchema>(
     runtime: InputEvaluationRuntime<TSchema>
 ): void => {
+    cachedModifierMask = -1;
     runtime._accumulatorX.fill(0);
     runtime._accumulatorY.fill(0);
     runtime._assigned.fill(0);
@@ -562,6 +565,10 @@ const matchesModifiers = <TSchema extends InputActionSchema>(
 const currentModifierMask = <TSchema extends InputActionSchema>(
     runtime: InputEvaluationRuntime<TSchema>
 ): number => {
+    if (cachedModifierMask >= 0) {
+        return cachedModifierMask;
+    }
+
     let mask = 0;
 
     if (runtime._keysDown.has('ShiftLeft') || runtime._keysDown.has('ShiftRight')) {
@@ -580,6 +587,7 @@ const currentModifierMask = <TSchema extends InputActionSchema>(
         mask |= MODIFIER_MASKS.meta;
     }
 
+    cachedModifierMask = mask;
     return mask;
 };
 
