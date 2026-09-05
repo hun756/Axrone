@@ -176,13 +176,14 @@ export class Murmur3_32 implements IHasher<Hash32> {
 
     digest(): Hash32 {
         this._finalized = true;
-        let k1 = this._tail;
+        let k1 = 0;
         switch (this._tailLen) {
             case 3:
                 k1 ^= (this._tail & 0xff0000) >>> 0;
             case 2:
                 k1 ^= (this._tail & 0xff00) >>> 0;
             case 1:
+                k1 ^= (this._tail & 0xff) >>> 0;
                 k1 = murmur3Scramble(k1);
                 this._h1 = (this._h1 ^ k1) >>> 0;
         }
