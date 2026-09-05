@@ -282,6 +282,52 @@ export const ingestGamepadSnapshots = <TSchema extends InputActionSchema>(
     }
 };
 
+export const ingestRawGamepads = <TSchema extends InputActionSchema>(
+    runtime: InputSourceRuntime<TSchema>,
+    rawGamepads: readonly (Gamepad | null)[] | null
+): void => {
+    runtime._gamepadSeen.clear();
+
+    if (!rawGamepads) {
+        return;
+    }
+
+    for (const rawGamepad of rawGamepads) {
+        if (!rawGamepad) {
+            continue;
+        }
+
+        if (!Number.isInteger(rawGamepad.index) || rawGamepad.index < 0) {
+            continue;
+        }
+
+        runtime._gamepadSeen.add(rawGamepad.index);
+        const state = ensureGamepadState(
+            runtime,
+            rawGamepad.index,
+            rawGamepad.buttons.length,
+            rawGamepad.axes.length
+        );
+        state.connected = rawGamepad.connected;
+
+        for (let index = 0; index < state.buttons.length; index += 1) {
+            state.buttons[index] = rawGamepad.buttons[index]?.value ?? 0;
+        }
+
+        for (let index = 0; index < state.axes.length; index += 1) {
+            state.axes[index] = rawGamepad.axes[index] ?? 0;
+        }
+    }
+
+    for (const [index, state] of runtime._gamepads) {
+        if (!runtime._gamepadSeen.has(index)) {
+            state.connected = false;
+            state.buttons.fill(0);
+            state.axes.fill(0);
+        }
+    }
+};
+
 export const pollGamepads = <TSchema extends InputActionSchema>(
     runtime: InputSourceRuntime<TSchema>
 ): void => {
@@ -304,22 +350,7 @@ export const pollGamepads = <TSchema extends InputActionSchema>(
         return;
     }
 
-    const snapshots: InputGamepadSnapshot[] = [];
-
-    for (const rawGamepad of rawGamepads) {
-        if (!rawGamepad) {
-            continue;
-        }
-
-        snapshots.push({
-            index: rawGamepad.index,
-            connected: rawGamepad.connected,
-            buttons: rawGamepad.buttons.map((button) => button.value),
-            axes: [...rawGamepad.axes],
-        });
-    }
-
-    ingestGamepadSnapshots(runtime, snapshots);
+    ingestRawGamepads(runtime, rawGamepads);
     captureGamepadCandidate(runtime, runtime._timestamp);
 };
 
