@@ -237,11 +237,6 @@ export const expireRebindingSessionIfNeeded = <TSchema extends InputActionSchema
         return;
     }
 
-    runtime._resolveMessage({
-        code: 'input.rebind.timeout',
-        action: String(active.request.action),
-        context: String(active.request.context),
-    });
     const handlers = active.handlers;
     runtime._activeRebinding = undefined;
     handlers?.cancel?.('timeout');
