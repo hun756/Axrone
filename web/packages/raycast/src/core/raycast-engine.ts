@@ -258,7 +258,7 @@ export class Raycaster2D {
     private readonly _tempHit: RaycastHit2D = new RaycastHit2D();
     private readonly _invDirection: Vec2 = Vec2.ZERO.clone();
 
-    private _shapes: ShapeData2D[] = [];
+    private _shapes: Map<ShapeId, ShapeData2D> = new Map();
     private _broadphase: IRaycastBroadphaseSource2D | null = null;
 
     constructor() {
@@ -280,14 +280,11 @@ export class Raycaster2D {
         type: ShapeType,
         data: unknown
     ): void {
-        this._shapes.push({ bodyId, shapeId, layer, type, data });
+        this._shapes.set(shapeId, { bodyId, shapeId, layer, type, data });
     }
 
     public unregisterShape(shapeId: ShapeId): void {
-        const index = this._shapes.findIndex((s) => s.shapeId === shapeId);
-        if (index !== -1) {
-            this._shapes.splice(index, 1);
-        }
+        this._shapes.delete(shapeId);
     }
 
     public raycast(query: IRaycastQuery2D, predicate?: RaycastPredicate2D): RaycastResult2D {
@@ -370,7 +367,7 @@ export class Raycaster2D {
             this._broadphase.query(
                 (proxyId) => {
                     const userData = this._broadphase!.getUserData(proxyId) as ShapeId;
-                    const shape = this._shapes.find((s) => s.shapeId === userData);
+                    const shape = this._shapes.get(userData);
                     if (shape && (shape.layer & layerMask) !== 0) {
                         const aabb = this._broadphase!.getAABB(proxyId);
                         if (
@@ -399,7 +396,13 @@ export class Raycaster2D {
             );
             return candidates;
         }
-        return this._shapes.filter((s) => (s.layer & layerMask) !== 0);
+        const result: ShapeData2D[] = [];
+        for (const shape of this._shapes.values()) {
+            if ((shape.layer & layerMask) !== 0) {
+                result.push(shape);
+            }
+        }
+        return result;
     }
 
     private _intersectShape2D(
@@ -520,7 +523,7 @@ export class Raycaster3D {
     private readonly _tempHit: RaycastHit3D = new RaycastHit3D();
     private readonly _invDirection: Vec3 = Vec3.ZERO.clone();
 
-    private _shapes: ShapeData3D[] = [];
+    private _shapes: Map<ShapeId, ShapeData3D> = new Map();
 
     constructor() {
         this._hitPool = new ObjectPool(
@@ -537,14 +540,11 @@ export class Raycaster3D {
         type: ShapeType,
         data: unknown
     ): void {
-        this._shapes.push({ bodyId, shapeId, layer, type, data });
+        this._shapes.set(shapeId, { bodyId, shapeId, layer, type, data });
     }
 
     public unregisterShape(shapeId: ShapeId): void {
-        const index = this._shapes.findIndex((s) => s.shapeId === shapeId);
-        if (index !== -1) {
-            this._shapes.splice(index, 1);
-        }
+        this._shapes.delete(shapeId);
     }
 
     public raycast(query: IRaycastQuery3D, predicate?: RaycastPredicate3D): RaycastResult3D {
@@ -621,7 +621,13 @@ export class Raycaster3D {
     }
 
     private _broadphaseQuery(ray: IRay3D, layerMask: LayerMask): ShapeData3D[] {
-        return this._shapes.filter((s) => (s.layer & layerMask) !== 0);
+        const result: ShapeData3D[] = [];
+        for (const shape of this._shapes.values()) {
+            if ((shape.layer & layerMask) !== 0) {
+                result.push(shape);
+            }
+        }
+        return result;
     }
 
     private _intersectShape3D(
