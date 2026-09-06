@@ -23,7 +23,7 @@ public readonly struct Digest32 : IHashDigest<Digest32>
     public static Digest32 FromSpan(ReadOnlySpan<byte> span)
     {
         if (span.Length < ByteCount) throw new ArgumentOutOfRangeException(nameof(span), span.Length, "Span too short for Digest32.");
-        return new Digest32(BinaryPrimitives.ReadUInt32BigEndian(span));
+        return new Digest32(MemoryMarshal.Read<uint>(span));
     }
 
     public bool Equals(Digest32 other) => CryptographicOperations.FixedTimeEquals(AsSpan(), other.AsSpan());
@@ -78,7 +78,7 @@ public readonly struct Digest64 : IHashDigest<Digest64>
     public static Digest64 FromSpan(ReadOnlySpan<byte> span)
     {
         if (span.Length < ByteCount) throw new ArgumentOutOfRangeException(nameof(span), span.Length, "Span too short for Digest64.");
-        return new Digest64(BinaryPrimitives.ReadUInt64BigEndian(span));
+        return new Digest64(MemoryMarshal.Read<ulong>(span));
     }
 
     public bool Equals(Digest64 other) => CryptographicOperations.FixedTimeEquals(AsSpan(), other.AsSpan());
@@ -138,7 +138,7 @@ public readonly struct Digest128 : IHashDigest<Digest128>
     public static Digest128 FromSpan(ReadOnlySpan<byte> span)
     {
         if (span.Length < ByteCount) throw new ArgumentOutOfRangeException(nameof(span), span.Length, "Span too short for Digest128.");
-        return new Digest128(BinaryPrimitives.ReadUInt64BigEndian(span), BinaryPrimitives.ReadUInt64BigEndian(span[8..]));
+        return new Digest128(MemoryMarshal.Read<ulong>(span), MemoryMarshal.Read<ulong>(span[8..]));
     }
 
     public bool Equals(Digest128 other) => CryptographicOperations.FixedTimeEquals(AsSpan(), other.AsSpan());
