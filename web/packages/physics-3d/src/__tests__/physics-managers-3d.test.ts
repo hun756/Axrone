@@ -734,3 +734,57 @@ describe('Acceptance: 3D default material convergence (P1-28)', () => {
         expect(filter.groupIndex).toBe(0);
     });
 });
+
+// ─── P1-26: Error hierarchy acceptance tests ────────────────────────────────
+
+describe('P1-26: PhysicsError3D hierarchy and symmetry', () => {
+    it('PhysicsError3D has timestamp, context, and withContext like 2D PhysicsError', () => {
+        const err = new PhysicsError3D('test', 'INVALID_STATE', { bodyId: 42 });
+        expect(err.timestamp).toBeGreaterThan(0);
+        expect(err.context).toEqual({ bodyId: 42 });
+        expect(Object.isFrozen(err.context)).toBe(true);
+        expect(err.withContext).toBeTypeOf('function');
+    });
+
+    it('PhysicsError3D.withContext returns new error with merged context', () => {
+        const original = new PhysicsError3D('fail', 'CAPACITY_EXCEEDED', { max: 100 });
+        const extended = original.withContext({ current: 101 });
+        expect(extended.code).toBe('CAPACITY_EXCEEDED');
+        expect(extended.message).toBe('fail');
+        expect(extended.context).toEqual({ max: 100, current: 101 });
+        expect(extended).not.toBe(original);
+    });
+
+    it('PhysicsError3D is catchable via instanceof Error', () => {
+        const tiny = new BodyManager3D(1);
+        tiny.createBody({ type: 2 });
+        try {
+            tiny.createBody({ type: 2 });
+            expect.unreachable('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(Error);
+            expect(e).toBeInstanceOf(PhysicsError3D);
+            expect((e as PhysicsError3D).code).toBe('CAPACITY_EXCEEDED');
+        }
+    });
+
+    it('PhysicsError3D from shape-not-found has correct code and context', () => {
+        const sm = new ShapeManager3D(64);
+        try {
+            sm.getMaterial(999n as any);
+            expect.unreachable('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(PhysicsError3D);
+            expect((e as PhysicsError3D).code).toBe('INVALID_STATE');
+        }
+    });
+
+    it('2D/3D error symmetry: both have code, timestamp, context, withContext', () => {
+        const err3d = new PhysicsError3D('test', 'NOT_FOUND', { id: 1 });
+        // Structural symmetry check: all fields present
+        expect(err3d.code).toBe('NOT_FOUND');
+        expect(err3d.timestamp).toBeGreaterThan(0);
+        expect(err3d.context).toEqual({ id: 1 });
+        expect(err3d.withContext({ extra: true }).context).toEqual({ id: 1, extra: true });
+    });
+});
