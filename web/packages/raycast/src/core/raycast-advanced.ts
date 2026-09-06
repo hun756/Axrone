@@ -169,10 +169,6 @@ export class ShapeCaster3D {
 
         return closestHit;
     }
-
-    private _computeSphereSamples(_radius: number): number {
-        return 8; // kept for potential subclass override
-    }
 }
 
 export class MultiRaycaster3D {

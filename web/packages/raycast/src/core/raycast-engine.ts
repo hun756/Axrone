@@ -140,12 +140,6 @@ class ObjectPool<T> {
         this._pool.push(item);
     }
 
-    public releaseAll(items: T[]): void {
-        for (const item of items) {
-            this.release(item);
-        }
-    }
-
     public get size(): number {
         return this._pool.length;
     }
@@ -263,7 +257,6 @@ export class Raycaster2D {
     private readonly _hitPool: ObjectPool<RaycastHit2D>;
     private readonly _tempHit: RaycastHit2D = new RaycastHit2D();
     private readonly _invDirection: Vec2 = Vec2.ZERO.clone();
-    private readonly _aabbTestResult = { tMin: 0, tMax: 0 };
 
     private _shapes: ShapeData2D[] = [];
     private _broadphase: IRaycastBroadphaseSource2D | null = null;
@@ -524,7 +517,6 @@ export class Raycaster3D {
     private readonly _hitPool: ObjectPool<RaycastHit3D>;
     private readonly _tempHit: RaycastHit3D = new RaycastHit3D();
     private readonly _invDirection: Vec3 = Vec3.ZERO.clone();
-    private readonly _aabbTestResult = { tMin: 0, tMax: 0 };
 
     private _shapes: ShapeData3D[] = [];
 

@@ -21,7 +21,7 @@ import {
     RaycastStatistics,
 } from './raycast-optimization';
 import { SpatialHashGrid3D, SpatialOctree } from './raycast-spatial';
-import { InvalidRayError, RaycastQueryError } from './raycast-errors';
+import { InvalidRayError } from './raycast-errors';
 import type { BodyId, ShapeId } from '../types/primitives';
 
 const DEFAULT_MAX_DISTANCE = 1000;

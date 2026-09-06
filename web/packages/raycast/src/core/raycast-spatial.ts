@@ -201,7 +201,6 @@ export class SpatialHashGrid3D<T> {
 
 export class SpatialOctree<T> {
     private readonly _octree: Octree<T>;
-    private readonly _itemBounds = new Map<T, readonly [IVec3Like, IVec3Like]>();
 
     constructor(
         center: Readonly<IVec3Like>,
@@ -230,14 +229,11 @@ export class SpatialOctree<T> {
     }
 
     public insert(item: T, min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): void {
-        this._itemBounds.set(item, [min, max]);
         this._octree.insert([min, max], item);
     }
 
     public remove(item: T): boolean {
-        const removed = this._octree.remove(item);
-        this._itemBounds.delete(item);
-        return removed;
+        return this._octree.remove(item);
     }
 
     public query(min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): T[] {
@@ -256,7 +252,6 @@ export class SpatialOctree<T> {
 
     public clear(): void {
         this._octree.clear();
-        this._itemBounds.clear();
     }
 
     public get itemCount(): number {
