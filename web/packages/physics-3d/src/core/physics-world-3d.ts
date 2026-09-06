@@ -123,6 +123,9 @@ export class PhysicsWorld3D implements Disposable {
     private _autoClearForces = true;
     private _disposed = false;
     private readonly _sleepTimes = new Map<BodyId3D, number>();
+    /** Previous transform for kinematic bodies — detects actual movement. (P1-4) */
+    private readonly _kinematicPrevPos = new Map<BodyId3D, { x: number; y: number; z: number }>();
+    private readonly _kinematicPrevRot = new Map<BodyId3D, { x: number; y: number; z: number; w: number }>();
 
     constructor(config: IPhysicsWorld3DConfig = {}) {
         this.config = config;
@@ -162,6 +165,12 @@ export class PhysicsWorld3D implements Disposable {
             getShapeWorldCenter: (descriptor) => this._getShapeWorldCenter(descriptor),
             getConstraintAnchor: (def, firstBody) => this._getConstraintAnchor(def, firstBody),
         });
+
+        // P1-4: Kinematic transform tracking — wake sleeping contact neighbors
+        // when a kinematic body actually moves.
+        this._bodyManager.onKinematicTransformChange((bodyId) => {
+            this._wakeKinematicContacts(bodyId);
+        });
     }
 
     get gravity(): Readonly<IVec3Like> {
@@ -184,6 +193,8 @@ export class PhysicsWorld3D implements Disposable {
         }
 
         this._bodyViews.delete(bodyId);
+        this._kinematicPrevPos.delete(bodyId);
+        this._kinematicPrevRot.delete(bodyId);
         this._bodyManager.destroyBody(bodyId);
     }
 
@@ -650,6 +661,40 @@ export class PhysicsWorld3D implements Disposable {
 
     private _integratePositions(dt: number): void {
         integratePositionsImpl(this._bodyManager, dt, this._autoClearForces);
+    }
+
+    /**
+     * P1-4: When a kinematic body moves, wake sleeping dynamic bodies
+     * that are in contact with it. Uses contact index for precise targeting.
+     */
+    private _wakeKinematicContacts(bodyId: BodyId3D): void {
+        const pos = this._bodyManager.getPosition(bodyId);
+        const rot = this._bodyManager.getRotation(bodyId);
+        const prevPos = this._kinematicPrevPos.get(bodyId);
+        const prevRot = this._kinematicPrevRot.get(bodyId);
+        this._kinematicPrevPos.set(bodyId, { x: pos.x, y: pos.y, z: pos.z });
+        this._kinematicPrevRot.set(bodyId, { x: rot.x, y: rot.y, z: rot.z, w: rot.w });
+
+        // Early exit: no actual movement
+        if (prevPos && prevPos.x === pos.x && prevPos.y === pos.y && prevPos.z === pos.z &&
+            prevRot && prevRot.x === rot.x && prevRot.y === rot.y && prevRot.z === rot.z && prevRot.w === rot.w) {
+            return;
+        }
+
+        // Rebuild body contact index from current manifolds
+        this._contactRuntime.rebuildBodyContactIndex();
+
+        // Wake sleeping dynamic neighbors via contact graph
+        const pairKeys = this._contactRuntime.getContactPairKeysForBody(bodyId);
+        if (!pairKeys) return;
+        for (const pairKey of pairKeys) {
+            const bodies = this._contactRuntime.getManifoldBodyIds(pairKey);
+            if (!bodies) continue;
+            const otherId = bodies.bodyIdA === bodyId ? bodies.bodyIdB : bodies.bodyIdA;
+            if (this._bodyManager.getBodyType(otherId) === BODY_TYPE_DYNAMIC && !this._bodyManager.isAwake(otherId)) {
+                this._bodyManager.setAwake(otherId, true);
+            }
+        }
     }
 
     private _registerConstraint(

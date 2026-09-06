@@ -91,6 +91,9 @@ export class PhysicsWorld3DContactRuntime {
     private readonly _warmImpulses = new Map<number, { normal: number; tangent: number }>();
     private _lastIslandCount = 0;
 
+    /** Body→contact pairKey index for kinematic wake queries. (P1-4) */
+    private readonly _bodyContactIndex = new Map<number, number[]>();
+
     // Persistent buffers to eliminate per-step allocations
     private readonly _candidatePairs: IShapePairCandidate3D[] = [];
     private readonly _scratchAabb = { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
@@ -125,6 +128,33 @@ export class PhysicsWorld3DContactRuntime {
             this._shapeProxyMap.delete(shapeId);
         }
         this._shapePreviousCenter.delete(shapeId);
+    }
+
+    /**
+     * Rebuild body→contact pairKey index from current manifolds. (P1-4)
+     * O(C) where C = contact count. Called lazily when kinematic bodies move.
+     */
+    rebuildBodyContactIndex(): void {
+        this._bodyContactIndex.clear();
+        for (const [pairKey, m] of this._contactManifolds) {
+            let arr = this._bodyContactIndex.get(Number(m.bodyIdA));
+            if (!arr) { arr = []; this._bodyContactIndex.set(Number(m.bodyIdA), arr); }
+            arr.push(pairKey);
+            arr = this._bodyContactIndex.get(Number(m.bodyIdB));
+            if (!arr) { arr = []; this._bodyContactIndex.set(Number(m.bodyIdB), arr); }
+            arr.push(pairKey);
+        }
+    }
+
+    /** Get contact pairKeys for a body from the pre-built index. (P1-4) */
+    getContactPairKeysForBody(bodyId: BodyId3D): number[] | undefined {
+        return this._bodyContactIndex.get(Number(bodyId));
+    }
+
+    /** Look up manifold bodyIds by pairKey. (P1-4) */
+    getManifoldBodyIds(pairKey: number): { bodyIdA: BodyId3D; bodyIdB: BodyId3D } | null {
+        const m = this._contactManifolds.get(pairKey);
+        return m ? { bodyIdA: m.bodyIdA, bodyIdB: m.bodyIdB } : null;
     }
 
     /**

@@ -86,6 +86,8 @@ export class BodyManager3D implements Disposable {
     private readonly _dampings: Float32Array;
     private readonly _forces: Float64Array;
     private readonly _torques: Float64Array;
+    /** Called when a KINEMATIC body's position or rotation changes. (P1-4) */
+    private _onKinematicTransformChange: ((bodyId: BodyId3D) => void) | null = null;
 
     constructor(maxBodies: number = 4096) {
         this._maxBodies = maxBodies;
@@ -214,6 +216,9 @@ export class BodyManager3D implements Disposable {
         this._positions[offset] = position.x;
         this._positions[offset + 1] = position.y;
         this._positions[offset + 2] = position.z;
+        if (this._onKinematicTransformChange && this._bodyTypes[index] === 1) {
+            this._onKinematicTransformChange(bodyId);
+        }
     }
 
     getRotation(bodyId: BodyId3D, out?: IQuatLike): IQuatLike {
@@ -226,6 +231,9 @@ export class BodyManager3D implements Disposable {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return;
         this._writeQuat(index * POSITION_STRIDE + ROTATION_OFFSET, rotation);
+        if (this._onKinematicTransformChange && this._bodyTypes[index] === 1) {
+            this._onKinematicTransformChange(bodyId);
+        }
     }
 
     getLinearVelocity(bodyId: BodyId3D, out?: IVec3Like): IVec3Like {
@@ -508,6 +516,14 @@ export class BodyManager3D implements Disposable {
     clearForceAccumulators(): void {
         this._forces.fill(0);
         this._torques.fill(0);
+    }
+
+    /**
+     * Register a callback invoked whenever a KINEMATIC body's position or rotation
+     * is written. Used by PhysicsWorld3D to wake sleeping contact neighbors. (P1-4)
+     */
+    onKinematicTransformChange(callback: (bodyId: BodyId3D) => void): void {
+        this._onKinematicTransformChange = callback;
     }
 
     getBodyIds(): BodyId3D[] { return Array.from(this._bodyIdToIndex.keys()); }
