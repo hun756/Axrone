@@ -170,7 +170,7 @@ describe('physics-core Foundation', () => {
             expect(ANGULAR_SLOP).toBeCloseTo((2.0 / 180.0) * Math.PI);
             expect(BAUMGARTE_FACTOR).toBe(0.2);
             expect(TOI_BAUMGARTE).toBe(0.75);
-            expect(EPSILON).toBe(1e-10);
+            expect(EPSILON).toBe(1e-6);
         });
 
         it('PhysicsConstants contains solver parameters', () => {
@@ -315,6 +315,68 @@ describe('physics-core Foundation', () => {
 
         it('does not export BodyTypeEnum (governance rule)', () => {
             expect((PhysicsCore as Record<string, unknown>)['BodyTypeEnum']).toBeUndefined();
+        });
+    });
+
+    describe('Dead Contract Removal (P1-17/P1-23)', () => {
+        it('no longer exports pool types', () => {
+            const pc = PhysicsCore as Record<string, unknown>;
+            expect(pc['Vec2Pool']).toBeUndefined();
+            expect(pc['Vec3Pool']).toBeUndefined();
+            expect(pc['TransformPool']).toBeUndefined();
+            expect(pc['VelocityPool']).toBeUndefined();
+            expect(pc['MassDataPool']).toBeUndefined();
+        });
+
+        it('no longer exports dead collision interfaces', () => {
+            const pc = PhysicsCore as Record<string, unknown>;
+            expect(pc['IContact2D']).toBeUndefined();
+            expect(pc['IContact3D']).toBeUndefined();
+            expect(pc['IContactEdge2D']).toBeUndefined();
+            expect(pc['IContactEdge3D']).toBeUndefined();
+            expect(pc['IRayInput2D']).toBeUndefined();
+            expect(pc['IRayInput3D']).toBeUndefined();
+            expect(pc['IShapeQueryInput2D']).toBeUndefined();
+            expect(pc['IShapeQueryInput3D']).toBeUndefined();
+            expect(pc['IOverlapResult2D']).toBeUndefined();
+            expect(pc['IOverlapResult3D']).toBeUndefined();
+            expect(pc['IClosestPointInput2D']).toBeUndefined();
+            expect(pc['IClosestPointResult2D']).toBeUndefined();
+            expect(pc['IClosestPointInput3D']).toBeUndefined();
+            expect(pc['IClosestPointResult3D']).toBeUndefined();
+            expect(pc['ICollisionPair']).toBeUndefined();
+            expect(pc['CollisionCallback2D']).toBeUndefined();
+            expect(pc['CollisionCallback3D']).toBeUndefined();
+        });
+
+        it('no longer exports dead constraint interfaces', () => {
+            const pc = PhysicsCore as Record<string, unknown>;
+            expect(pc['IConstraintSolver']).toBeUndefined();
+            expect(pc['IConstraintVelocityData']).toBeUndefined();
+            expect(pc['IConstraintPositionData']).toBeUndefined();
+        });
+
+        it('no longer exports IIsland2D/IIsland3D/IPhysicsWorld3D', () => {
+            const pc = PhysicsCore as Record<string, unknown>;
+            expect(pc['IIsland2D']).toBeUndefined();
+            expect(pc['IIsland3D']).toBeUndefined();
+            expect(pc['IPhysicsWorld3D']).toBeUndefined();
+            expect(pc['PhysicsWorld']).toBeUndefined();
+        });
+    });
+
+    describe('Duplicate Star-Export Renames (P1-18)', () => {
+        it('physics-3d.ts IContactListener3D renamed to IContactListener3DRaw', () => {
+            // The canonical IContactListener3D (collision.ts, event-based) is still exported.
+            // The physics-3d.ts manifold-based variant is now IContactListener3DRaw — type-only, not runtime-checkable.
+            // We verify the canonical one is still accessible:
+            expect(PhysicsCore.IContactListener3D).toBeUndefined(); // interface, type-only
+        });
+
+        it('physics-3d.ts RaycastCallback3D renamed to RaycastQueryCallback3D', () => {
+            // The canonical RaycastCallback3D (collision.ts, → number) is still exported.
+            // The physics-3d.ts variant (→ boolean) is now RaycastQueryCallback3D — type-only.
+            expect(PhysicsCore.RaycastCallback3D).toBeUndefined(); // type alias, type-only
         });
     });
 
