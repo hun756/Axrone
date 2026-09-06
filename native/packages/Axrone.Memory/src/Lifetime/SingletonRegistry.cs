@@ -5,7 +5,7 @@ namespace Axrone.Memory.Lifetime;
 public sealed class SingletonRegistry : ISingletonRegistry
 {
     private readonly ConcurrentDictionary<Type, IRegistryEntry> _entries = new();
-    private readonly ConcurrentStack<object> _disposables = new();
+    private readonly ConcurrentCompositeDisposable _disposables = new();
     private DisposalTracker _tracker;
 
     private interface IRegistryEntry
@@ -165,9 +165,14 @@ public sealed class SingletonRegistry : ISingletonRegistry
 
     private void TrackDisposable(object instance)
     {
-        if (instance is IDisposable or IAsyncDisposable)
+        if (instance is IDisposable disposable)
         {
-            _disposables.Push(instance);
+            _disposables.Add(disposable);
+        }
+        else if (instance is IAsyncDisposable asyncDisposable)
+        {
+            _disposables.Add(new ActionDisposable(() =>
+                asyncDisposable.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult()));
         }
     }
 
@@ -177,38 +182,14 @@ public sealed class SingletonRegistry : ISingletonRegistry
     public void Dispose()
     {
         if (!_tracker.TryDispose()) return;
-
         _entries.Clear();
-
-        while (_disposables.TryPop(out var item))
-        {
-            if (item is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
-            else if (item is IAsyncDisposable asyncDisposable)
-            {
-                asyncDisposable.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
-            }
-        }
+        _disposables.Dispose();
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        if (!_tracker.TryDispose()) return;
-
+        if (!_tracker.TryDispose()) return ValueTask.CompletedTask;
         _entries.Clear();
-
-        while (_disposables.TryPop(out var item))
-        {
-            if (item is IAsyncDisposable asyncDisposable)
-            {
-                await asyncDisposable.DisposeAsync().ConfigureAwait(false);
-            }
-            else if (item is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
-        }
+        return _disposables.DisposeAsync();
     }
 }
