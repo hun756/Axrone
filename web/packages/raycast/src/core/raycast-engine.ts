@@ -206,16 +206,7 @@ export class RaycastResult3D implements IRaycastResult3D {
     }
 }
 
-interface ShapeData2D {
-    bodyId: BodyId;
-    shapeId: ShapeId;
-    layer: LayerMask;
-    type: ShapeType;
-    data: unknown;
-    active: boolean;
-}
-
-interface ShapeData3D {
+interface ShapeData {
     bodyId: BodyId;
     shapeId: ShapeId;
     layer: LayerMask;
@@ -228,7 +219,7 @@ export class Raycaster2D {
     private readonly _tempHit: RaycastHit2D = new RaycastHit2D();
     private readonly _invDirection: Vec2 = Vec2.ZERO.clone();
 
-    private _shapes: Map<ShapeId, ShapeData2D> = new Map();
+    private _shapes: Map<ShapeId, ShapeData> = new Map();
     private _broadphase: IRaycastBroadphaseSource2D | null = null;
 
     public setBroadphase(broadphase: IRaycastBroadphaseSource2D): void {
@@ -334,9 +325,9 @@ export class Raycaster2D {
         out.y = Math.abs(direction.y) > EPSILON ? 1.0 / direction.y : Number.MAX_VALUE;
     }
 
-    private _broadphaseQuery(ray: IRay2D, layerMask: LayerMask): ShapeData2D[] {
+    private _broadphaseQuery(ray: IRay2D, layerMask: LayerMask): ShapeData[] {
         if (this._broadphase) {
-            const candidates: ShapeData2D[] = [];
+            const candidates: ShapeData[] = [];
             const invDir = this._invDirection;
             const aabbResult = { tMin: 0, tMax: 0 };
             this._broadphase.query(
@@ -371,7 +362,7 @@ export class Raycaster2D {
             );
             return candidates;
         }
-        const result: ShapeData2D[] = [];
+        const result: ShapeData[] = [];
         for (const shape of this._shapes.values()) {
             if ((shape.layer & layerMask) !== 0) {
                 result.push(shape);
@@ -382,7 +373,7 @@ export class Raycaster2D {
 
     private _intersectShape2D(
         ray: IRay2D,
-        shape: ShapeData2D,
+        shape: ShapeData,
         flags: RaycastFlags,
         out: RaycastHit2D
     ): boolean {
@@ -497,7 +488,7 @@ export class Raycaster3D {
     private readonly _tempHit: RaycastHit3D = new RaycastHit3D();
     private readonly _invDirection: Vec3 = Vec3.ZERO.clone();
 
-    private _shapes: Map<ShapeId, ShapeData3D> = new Map();
+    private _shapes: Map<ShapeId, ShapeData> = new Map();
 
     public registerShape(
         bodyId: BodyId,
@@ -600,8 +591,8 @@ export class Raycaster3D {
         out.z = Math.abs(direction.z) > EPSILON ? 1.0 / direction.z : Number.MAX_VALUE;
     }
 
-    private _broadphaseQuery(ray: IRay3D, layerMask: LayerMask): ShapeData3D[] {
-        const result: ShapeData3D[] = [];
+    private _broadphaseQuery(ray: IRay3D, layerMask: LayerMask): ShapeData[] {
+        const result: ShapeData[] = [];
         for (const shape of this._shapes.values()) {
             if ((shape.layer & layerMask) !== 0) {
                 result.push(shape);
@@ -612,7 +603,7 @@ export class Raycaster3D {
 
     private _intersectShape3D(
         ray: IRay3D,
-        shape: ShapeData3D,
+        shape: ShapeData,
         flags: RaycastFlags,
         out: RaycastHit3D
     ): boolean {
