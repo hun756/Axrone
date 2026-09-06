@@ -148,6 +148,34 @@ describe('IslandSolver2D', () => {
             }
             expect(wasSleeping).toBe(true);
         });
+
+        it('sleeping still works after wake-enabled velocity setters (regression)', () => {
+            // Regression test: body commit uses setLinearVelocity(wake=false)
+            // so the sleep system must still be able to put bodies to sleep.
+            const body = bodyManager.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+                rotation: 0,
+                allowSleep: true,
+                linearDamping: 5, // high damping so body slows down in zero gravity
+            });
+            bodyManager.setMassData(body, 1, 0.1, { x: 0, y: 0 });
+
+            // Give body some initial velocity — it will move then settle
+            bodyManager.setLinearVelocity(body, { x: 5, y: 0 });
+            expect(bodyManager.isAwake(body)).toBe(true);
+
+            // Run steps with zero gravity and damping — body should slow and sleep
+            let fellAsleep = false;
+            for (let i = 0; i < 300; i++) {
+                islandSolver.solveIslands(1 / 60, 8, 3, true, SolverFlags.None, { x: 0, y: 0 });
+                if (!bodyManager.isAwake(body)) {
+                    fellAsleep = true;
+                    break;
+                }
+            }
+            expect(fellAsleep).toBe(true);
+        });
     });
 
     describe('P1-1 allocation-free hot path', () => {
