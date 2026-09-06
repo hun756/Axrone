@@ -483,10 +483,16 @@ export interface UIHostWorldBindingOptions<TPayload = unknown>
 }
 
 const MAX_WORLD_TEXTURE_SIZE = 2048;
+const SURFACE_SIZE_STEP = 64;
+
+const quantizeSurfaceSize = (value: number): number => {
+    const clamped = Math.max(1, Math.min(MAX_WORLD_TEXTURE_SIZE, value));
+    return Math.ceil(clamped / SURFACE_SIZE_STEP) * SURFACE_SIZE_STEP;
+};
 
 const resolveWorldSurfaceSize = (host: UIHost): { width: number; height: number } => ({
-    width: Math.min(MAX_WORLD_TEXTURE_SIZE, Math.max(1, Math.round(host.worldWidth * host.textureScale))),
-    height: Math.min(MAX_WORLD_TEXTURE_SIZE, Math.max(1, Math.round(host.worldHeight * host.textureScale))),
+    width: quantizeSurfaceSize(host.worldWidth * host.textureScale),
+    height: quantizeSurfaceSize(host.worldHeight * host.textureScale),
 });
 
 /**
