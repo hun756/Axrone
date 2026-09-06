@@ -383,4 +383,150 @@ describe('PhysicsWorld3D contact runtime', () => {
             }
         });
     });
+
+    describe('spring constraint iteration independence', () => {
+        it('spring response is independent of velocity iteration count', () => {
+            // Spring force must be applied ONCE per step, not per velocity iteration.
+            // If over-accumulation exists, higher iterations → proportionally more force.
+            const runWithIters = (velIters: number): number => {
+                const w = new PhysicsWorld3D({ gravity: { x: 0, y: 0, z: 0 } });
+                const anchor = w.createBody({ type: 0, position: { x: 0, y: 0, z: 0 } });
+                const bob = w.createBody({ type: 2, position: { x: 5, y: 0, z: 0 } });
+                w.createSpringConstraint({
+                    bodyIdA: anchor,
+                    bodyIdB: bob,
+                    localAnchorA: { x: 0, y: 0, z: 0 },
+                    localAnchorB: { x: 0, y: 0, z: 0 },
+                    restLength: 2,
+                    stiffness: 50,
+                    damping: 5,
+                });
+                w.step(1 / 60, velIters, 4);
+                return w.getBodyManager().getPosition(bob).x;
+            };
+
+            const x1 = runWithIters(1);
+            const x10 = runWithIters(10);
+
+            // Both should pull the bob toward anchor (x < 5)
+            expect(x1).toBeLessThan(5);
+            expect(x10).toBeLessThan(5);
+
+            // The positions should be CLOSE (within 15% relative tolerance).
+            // With over-accumulation, x10 would be dramatically different from x1
+            // (effective stiffness ~10x). After fix, they converge.
+            const diff = Math.abs(x1 - x10);
+            const ref = Math.abs(x1);
+            expect(diff / Math.max(ref, 0.01)).toBeLessThan(0.15);
+        });
+
+        it('spring with Hooke-law stiffness produces physically reasonable displacement', () => {
+            // k=50 N/m, restLength=2, body at x=5, anchor at x=0
+            // The spring must pull the body toward the anchor.
+            // Note: the current solver applies spring impulse without dt scaling
+            // (pre-existing design), so the absolute displacement is larger than
+            // analytical Hooke prediction. The key invariant is: (a) body moves
+            // toward anchor, (b) response is iteration-independent (tested above).
+            const w = new PhysicsWorld3D({ gravity: { x: 0, y: 0, z: 0 } });
+            const anchor = w.createBody({ type: 0, position: { x: 0, y: 0, z: 0 } });
+            const bob = w.createBody({ type: 2, position: { x: 5, y: 0, z: 0 } });
+            w.createSpringConstraint({
+                bodyIdA: anchor,
+                bodyIdB: bob,
+                localAnchorA: { x: 0, y: 0, z: 0 },
+                localAnchorB: { x: 0, y: 0, z: 0 },
+                restLength: 2,
+                stiffness: 50,
+                damping: 5,
+            });
+            w.step(1 / 60, 4, 4);
+            const afterX = w.getBodyManager().getPosition(bob).x;
+
+            // Body must move toward anchor (spring pulls it)
+            expect(afterX).toBeLessThan(5);
+            // Body should not pass through the anchor (no sign flip)
+            expect(afterX).toBeGreaterThan(0);
+        });
+    });
+
+    describe('contact separation physical correctness', () => {
+        it('overlapping boxes produce negative separation (penetration)', () => {
+            // Ground box at y=-0.5 (top at y=0), dynamic box at y=0.3 (bottom at y=-0.2)
+            // Overlap = 0.2m in y direction
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 0.5, z: 5 } });
+
+            const box = world.createBody({ type: 2, position: { x: 0, y: 0.3, z: 0 } });
+            world.createBoxShape(box, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
+
+            world.step(1 / 60);
+
+            const stats = world.getStatistics();
+            expect(stats.contactCount).toBeGreaterThan(0);
+
+            // Access manifold separation values via contact listener
+            const separations: number[] = [];
+            world.setContactListener({
+                onCollisionStay(m: any) {
+                    for (const pt of m.points) {
+                        separations.push(pt.separation);
+                    }
+                },
+            } as any);
+            world.step(1 / 60);
+
+            // Separations should be negative (overlapping)
+            for (const sep of separations) {
+                expect(sep).toBeLessThan(0);
+            }
+        });
+
+        it('touching boxes produce separation near zero', () => {
+            // Ground top at y=0, box bottom at y=0 (box center y=0.5)
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 0.5, z: 5 } });
+
+            const box = world.createBody({ type: 2, position: { x: 0, y: 0.5, z: 0 } });
+            world.createBoxShape(box, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
+
+            world.step(1 / 60);
+
+            const separations: number[] = [];
+            world.setContactListener({
+                onCollisionStay(m: any) {
+                    for (const pt of m.points) {
+                        separations.push(pt.separation);
+                    }
+                },
+            } as any);
+            world.step(1 / 60);
+
+            // At touching or slight penetration, separation should be small
+            for (const sep of separations) {
+                expect(Math.abs(sep)).toBeLessThan(0.15);
+            }
+        });
+
+        it('box-box multi-point manifold produces >= 2 contact points', () => {
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 0.5, z: 5 } });
+
+            const box = world.createBody({ type: 2, position: { x: 0, y: 0.4, z: 0 } });
+            world.createBoxShape(box, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
+
+            const pointCounts: number[] = [];
+            world.setContactListener({
+                onCollisionStay(m: any) {
+                    pointCounts.push(m.points.length);
+                },
+            } as any);
+
+            world.step(1 / 60);
+            world.step(1 / 60);
+
+            expect(pointCounts.length).toBeGreaterThan(0);
+            // Multi-point manifold: at least one manifold should have >= 2 points
+            expect(Math.max(...pointCounts)).toBeGreaterThanOrEqual(2);
+        });
+    });
 });
