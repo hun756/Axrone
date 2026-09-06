@@ -235,3 +235,26 @@ describe('RaycastSystem3D — unregisterShape', () => {
         expect(sys.raycast(v3(-5, 0, 0), v3(1, 0, 0), 100, ALL)).toBeNull();
     });
 });
+
+describe('RaycastSystem3D — TriangleMesh', () => {
+    it('hits a triangle mesh and populates triangleIndex and barycentric', () => {
+        const sys = createRaycastSystem3D();
+        sys.registerShape(bid(1), sid(30), ALL, ShapeType.TriangleMesh, {
+            vertices: [
+                { x: 0, y: 0, z: 0 },
+                { x: 2, y: 0, z: 0 },
+                { x: 0, y: 2, z: 0 },
+            ],
+            indices: [0, 1, 2],
+        });
+
+        const hit = sys.raycast(v3(0.5, 0.5, -5), v3(0, 0, 1), 100, ALL);
+        expect(hit).not.toBeNull();
+        expect(hit!.distance).toBeCloseTo(5, 3);
+        expect(hit!.triangleIndex).toBe(0);
+        expect(hit!.barycentric).not.toBeNull();
+        expect(hit!.barycentric!.u).toBeGreaterThanOrEqual(0);
+        expect(hit!.barycentric!.v).toBeGreaterThanOrEqual(0);
+        expect(hit!.barycentric!.u + hit!.barycentric!.v).toBeLessThanOrEqual(1);
+    });
+});

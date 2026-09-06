@@ -684,6 +684,67 @@ export class Raycaster3D {
                 out.normal.z = nLen > EPSILON ? nz / nLen : 0;
                 break;
             }
+            case ShapeType.TriangleMesh: {
+                const d = shape.data as { vertices: { x: number; y: number; z: number }[]; indices: number[] };
+                const cullBackface = (flags & RaycastFlags.IgnoreBackfaces) !== 0;
+                let closestT = Number.MAX_VALUE;
+                let closestTriIndex = -1;
+                let closestU = 0;
+                let closestV = 0;
+
+                for (let i = 0; i < d.indices.length; i += 3) {
+                    const i0 = d.indices[i];
+                    const i1 = d.indices[i + 1];
+                    const i2 = d.indices[i + 2];
+                    const v0 = d.vertices[i0];
+                    const v1 = d.vertices[i1];
+                    const v2 = d.vertices[i2];
+
+                    const bary = { u: 0, v: 0 };
+                    const triResult = RayPrimitiveIntersector3D.intersectTriangle(
+                        ray.origin, ray.direction, v0, v1, v2, ray.length, cullBackface, bary
+                    );
+
+                    if (triResult.hit && triResult.distance < closestT) {
+                        closestT = triResult.distance;
+                        closestTriIndex = i / 3;
+                        closestU = bary.u;
+                        closestV = bary.v;
+                    }
+                }
+
+                if (closestTriIndex < 0) return false;
+
+                out.point.x = ray.origin.x + ray.direction.x * closestT;
+                out.point.y = ray.origin.y + ray.direction.y * closestT;
+                out.point.z = ray.origin.z + ray.direction.z * closestT;
+
+                const i0 = d.indices[closestTriIndex * 3];
+                const i1 = d.indices[closestTriIndex * 3 + 1];
+                const i2 = d.indices[closestTriIndex * 3 + 2];
+                const v0 = d.vertices[i0];
+                const v1 = d.vertices[i1];
+                const v2 = d.vertices[i2];
+
+                const e1x = v1.x - v0.x, e1y = v1.y - v0.y, e1z = v1.z - v0.z;
+                const e2x = v2.x - v0.x, e2y = v2.y - v0.y, e2z = v2.z - v0.z;
+                const nx = e1y * e2z - e1z * e2y;
+                const ny = e1z * e2x - e1x * e2z;
+                const nz = e1x * e2y - e1y * e2x;
+                const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                out.normal.x = nLen > EPSILON ? nx / nLen : 0;
+                out.normal.y = nLen > EPSILON ? ny / nLen : 0;
+                out.normal.z = nLen > EPSILON ? nz / nLen : 1;
+
+                out.distance = closestT;
+                out.fraction = closestT / ray.length;
+                out.triangleIndex = closestTriIndex;
+                out.barycentric = { u: closestU, v: closestV };
+                out.bodyId = shape.bodyId;
+                out.shapeId = shape.shapeId;
+                out.layer = shape.layer;
+                return true;
+            }
             default:
                 return false;
         }
