@@ -242,6 +242,20 @@ const connectUIHostInput = <TPayload>(
 ): (() => void) => {
     const target = input.target;
 
+    // Cache the bounding rect to avoid per-pointermove layout reads.
+    // Invalidate on resize so the cache stays fresh.
+    let cachedRect: { left: number; top: number; width: number; height: number } | null = null;
+    const getRect = (): { left: number; top: number; width: number; height: number } => {
+        if (!cachedRect) {
+            cachedRect = target.getBoundingClientRect();
+        }
+        return cachedRect;
+    };
+    const onResize = (): void => {
+        cachedRect = null;
+    };
+    window.addEventListener('resize', onResize);
+
     // Convert client (CSS) coordinates to reference-space coordinates for the
     // UI runtime's hit-test. When a canvas config is loaded (match-width-or-height
     // etc.), we must undo the same scale+offset transform the renderer applies so
@@ -259,7 +273,7 @@ const connectUIHostInput = <TPayload>(
     // because they render via commitToViewport(surface.width, surface.height)
     // rather than the main canvas framebuffer.
     const toReferencePoint = (event: UIHostPointerEventLike): { x: number; y: number } => {
-        const rect = target.getBoundingClientRect();
+        const rect = getRect();
         const viewport = getViewportSize
             ? getViewportSize()
             : resolveFramebufferSize(scene);
@@ -337,6 +351,7 @@ const connectUIHostInput = <TPayload>(
     }
 
     return () => {
+        window.removeEventListener('resize', onResize);
         target.removeEventListener('pointerdown', onPointerDown);
         target.removeEventListener('pointermove', onPointerMove);
         target.removeEventListener('pointerup', onPointerUp);
