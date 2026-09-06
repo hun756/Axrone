@@ -12,12 +12,6 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     private readonly int _globalQueueCapacity;
     private readonly Timer? _trimTimer;
     private readonly int _autoTrimPercentage;
-    private long _totalAllocatedBytes;
-    private long _totalRentedBytes;
-    private long _activeAllocations;
-    private long _tier1Hits;
-    private long _tier2Hits;
-    private long _allocatorMisses;
     private int _isPoolDisposed;
 
     public TieredMemoryPool(BufferPoolOptions? options = null, IBlockAllocator<T>? customAllocator = null)
@@ -209,28 +203,31 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
 
         if (threadCache.TryRetrieve(bucketIndex, out PooledBufferSlot<T>? cachedSlot))
         {
-            Interlocked.Increment(ref _tier1Hits);
-            Interlocked.Increment(ref _activeAllocations);
-            Interlocked.Add(ref _totalRentedBytes, _allocator.ComputeByteSize(cachedSlot.Capacity));
+            ref var cell = ref PoolCounterStore.Current.Cell;
+            cell.Tier1Hits++;
+            cell.ActiveAllocations++;
+            cell.TotalRentedBytes += _allocator.ComputeByteSize(cachedSlot.Capacity);
             return cachedSlot;
         }
 
         if (_tier2GlobalQueues[bucketIndex].TryDequeue(out PooledBufferSlot<T>? globalSlot))
         {
-            Interlocked.Increment(ref _tier2Hits);
-            Interlocked.Increment(ref _activeAllocations);
-            Interlocked.Add(ref _totalRentedBytes, _allocator.ComputeByteSize(globalSlot.Capacity));
+            ref var cell = ref PoolCounterStore.Current.Cell;
+            cell.Tier2Hits++;
+            cell.ActiveAllocations++;
+            cell.TotalRentedBytes += _allocator.ComputeByteSize(globalSlot.Capacity);
             return globalSlot;
         }
 
-        Interlocked.Increment(ref _allocatorMisses);
+        ref var missCell = ref PoolCounterStore.Current.Cell;
+        missCell.AllocatorMisses++;
         int slotSize = _bucketCapacities[bucketIndex];
         Memory<T> allocatedMemory = _allocator.Allocate(slotSize, out object? token);
         long byteCount = _allocator.ComputeByteSize(slotSize);
 
-        Interlocked.Add(ref _totalAllocatedBytes, byteCount);
-        Interlocked.Add(ref _totalRentedBytes, byteCount);
-        Interlocked.Increment(ref _activeAllocations);
+        missCell.TotalAllocatedBytes += byteCount;
+        missCell.TotalRentedBytes += byteCount;
+        missCell.ActiveAllocations++;
 
         return new PooledBufferSlot<T>(
             allocatedMemory,
@@ -244,13 +241,14 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
 
     private DynamicSingleBufferOwner<T> RentOversizedOwner(int minimumLength)
     {
-        Interlocked.Increment(ref _allocatorMisses);
+        ref var cell = ref PoolCounterStore.Current.Cell;
+        cell.AllocatorMisses++;
         Memory<T> raw = _allocator.Allocate(minimumLength, out object? token);
         long byteSize = _allocator.ComputeByteSize(minimumLength);
 
-        Interlocked.Add(ref _totalAllocatedBytes, byteSize);
-        Interlocked.Add(ref _totalRentedBytes, byteSize);
-        Interlocked.Increment(ref _activeAllocations);
+        cell.TotalAllocatedBytes += byteSize;
+        cell.TotalRentedBytes += byteSize;
+        cell.ActiveAllocations++;
 
         return new DynamicSingleBufferOwner<T>(
             raw,
@@ -258,9 +256,10 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
             _allocator,
             bytes =>
             {
-                Interlocked.Add(ref _totalAllocatedBytes, -bytes);
-                Interlocked.Add(ref _totalRentedBytes, -bytes);
-                Interlocked.Decrement(ref _activeAllocations);
+                ref var rc = ref PoolCounterStore.Current.Cell;
+                rc.TotalAllocatedBytes -= bytes;
+                rc.TotalRentedBytes -= bytes;
+                rc.ActiveAllocations--;
             },
             byteSize);
     }
@@ -274,12 +273,13 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     void IPoolBucketRegistry<T>.Recycle(int bucketIndex, PooledBufferSlot<T> slot)
     {
-        Interlocked.Decrement(ref _activeAllocations);
-        Interlocked.Add(ref _totalRentedBytes, -_allocator.ComputeByteSize(slot.Capacity));
+        ref var cell = ref PoolCounterStore.Current.Cell;
+        cell.ActiveAllocations--;
+        cell.TotalRentedBytes -= _allocator.ComputeByteSize(slot.Capacity);
 
         if (Volatile.Read(ref _isPoolDisposed) != 0)
         {
-            Interlocked.Add(ref _totalAllocatedBytes, -_allocator.ComputeByteSize(slot.Capacity));
+            cell.TotalAllocatedBytes -= _allocator.ComputeByteSize(slot.Capacity);
             slot.FinalizeEviction();
             return;
         }
@@ -296,18 +296,11 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
             return;
         }
 
-        Interlocked.Add(ref _totalAllocatedBytes, -_allocator.ComputeByteSize(slot.Capacity));
+        cell.TotalAllocatedBytes -= _allocator.ComputeByteSize(slot.Capacity);
         slot.FinalizeEviction();
     }
 
-    public PoolDiagnosticsSnapshot CreateDiagnosticsSnapshot() =>
-        new(
-            Volatile.Read(ref _totalAllocatedBytes),
-            Volatile.Read(ref _totalRentedBytes),
-            Volatile.Read(ref _activeAllocations),
-            Volatile.Read(ref _tier1Hits),
-            Volatile.Read(ref _tier2Hits),
-            Volatile.Read(ref _allocatorMisses));
+    public PoolDiagnosticsSnapshot CreateDiagnosticsSnapshot() => PoolCounterStore.Aggregate();
 
     public void Trim(float percentage = 0.5f)
     {
@@ -322,7 +315,8 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
             int evicted = 0;
             while (evicted < targetPerQueue && queue.TryDequeue(out PooledBufferSlot<T>? slot))
             {
-                Interlocked.Add(ref _totalAllocatedBytes, -_allocator.ComputeByteSize(slot.Capacity));
+                ref var cell = ref PoolCounterStore.Current.Cell;
+                cell.TotalAllocatedBytes -= _allocator.ComputeByteSize(slot.Capacity);
                 slot.FinalizeEviction();
                 evicted++;
             }
@@ -348,7 +342,8 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
                 MpmcRingBuffer<PooledBufferSlot<T>> queue = _tier2GlobalQueues[i];
                 while (queue.TryDequeue(out PooledBufferSlot<T>? slot))
                 {
-                    Interlocked.Add(ref _totalAllocatedBytes, -_allocator.ComputeByteSize(slot.Capacity));
+                    ref var cell = ref PoolCounterStore.Current.Cell;
+                    cell.TotalAllocatedBytes -= _allocator.ComputeByteSize(slot.Capacity);
                     slot.FinalizeEviction();
                 }
             }
