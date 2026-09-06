@@ -13,7 +13,7 @@ export { ROUNDED_RECT_SDF_GLSL } from '@axrone/render-core/nine-slice';
 import { ROUNDED_RECT_SDF_GLSL } from '@axrone/render-core/nine-slice';
 
 export const QUAD_VERTEX_SOURCE = `#version 300 es
-precision mediump float;
+precision highp float;
 layout(location = 0) in vec2 a_Unit;
 layout(location = 1) in vec4 a_Rect;
 layout(location = 2) in vec4 a_FillColor;
@@ -79,7 +79,7 @@ void main() {
 }`;
 
 export const TEXT_VERTEX_SOURCE = `#version 300 es
-precision mediump float;
+precision highp float;
 layout(location = 0) in vec2 a_Unit;
 layout(location = 1) in vec4 a_Rect;
 layout(location = 2) in vec4 a_UvRect;
@@ -137,7 +137,7 @@ void main() {
 }`;
 
 export const IMAGE_VERTEX_SOURCE = `#version 300 es
-precision mediump float;
+precision highp float;
 layout(location = 0) in vec2 a_Unit;
 layout(location = 1) in vec4 a_Rect;
 layout(location = 2) in vec4 a_UvRect;
