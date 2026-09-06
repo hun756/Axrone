@@ -422,6 +422,8 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 if (visitedPairs.has(pairKey)) return true;
                 visitedPairs.add(pairKey);
 
+                const lo = shapeIdA < shapeIdB ? shapeIdA : shapeIdB;
+                const hi = shapeIdA < shapeIdB ? shapeIdB : shapeIdA;
                 candidatePairs.push({ shapeIdA: lo, shapeIdB: hi });
                 return true;
             }, aabbA);
