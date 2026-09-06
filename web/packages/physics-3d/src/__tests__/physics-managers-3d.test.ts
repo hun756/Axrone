@@ -350,7 +350,9 @@ describe('ShapeManager3D', () => {
         it('uses defaults when no material provided', () => {
             const sid = sm.createSphere(bodyId, { center: { x: 0, y: 0, z: 0 }, radius: 1 });
             const mat = sm.getMaterial(sid);
-            expect(mat.friction).toBeCloseTo(0.5, 5);
+            // Canonical default friction=0.4 (P1-28): matches DEFAULT_MATERIAL in shared.ts
+            // and Collider3D component path. Previously 0.5 — changed for 3D-wide convergence.
+            expect(mat.friction).toBeCloseTo(0.4, 5);
             expect(mat.density).toBeCloseTo(1, 5);
         });
 
@@ -622,5 +624,99 @@ describe('Acceptance: shape queries after create/destroy (P1-15)', () => {
         expect(sm.getBodyForShape(sid2)).toBe(bodyId);
         // sid1 should throw
         expect(() => sm.getMaterial(sid1)).toThrow();
+    });
+});
+
+// ─── Acceptance tests (Wave 3a: raw API wake semantics) ─────────────────────
+
+describe('Acceptance: raw velocity setters wake sleeping bodies (P1-28 / Wave 3a)', () => {
+    let bm: BodyManager3D;
+
+    beforeEach(() => {
+        bm = new BodyManager3D(64);
+    });
+
+    it('setLinearVelocity wakes a sleeping body', () => {
+        const id = bm.createBody({ type: 2 });
+        // 1. Put body to sleep
+        bm.setAwake(id, false);
+        expect(bm.isAwake(id)).toBe(false);
+
+        // 2. Apply linear velocity via raw API
+        bm.setLinearVelocity(id, { x: 5, y: 0, z: 0 });
+
+        // 3. Body must be awake after velocity set
+        expect(bm.isAwake(id)).toBe(true);
+        // 4. Velocity must be stored correctly
+        const vel = bm.getLinearVelocity(id);
+        expect(vel.x).toBeCloseTo(5, 5);
+    });
+
+    it('setAngularVelocity wakes a sleeping body', () => {
+        const id = bm.createBody({ type: 2 });
+        // 1. Put body to sleep
+        bm.setAwake(id, false);
+        expect(bm.isAwake(id)).toBe(false);
+
+        // 2. Apply angular velocity via raw API
+        bm.setAngularVelocity(id, { x: 0, y: 3, z: 0 });
+
+        // 3. Body must be awake after velocity set
+        expect(bm.isAwake(id)).toBe(true);
+        // 4. Angular velocity must be stored correctly
+        const vel = bm.getAngularVelocity(id);
+        expect(vel.y).toBeCloseTo(3, 5);
+    });
+
+    it('setLinearVelocity is idempotent for already-awake body', () => {
+        const id = bm.createBody({ type: 2 });
+        // Body starts awake by default
+        expect(bm.isAwake(id)).toBe(true);
+
+        // Setting velocity on an awake body should not toggle awake off
+        bm.setLinearVelocity(id, { x: 1, y: 0, z: 0 });
+        expect(bm.isAwake(id)).toBe(true);
+    });
+
+    it('setAngularVelocity is idempotent for already-awake body', () => {
+        const id = bm.createBody({ type: 2 });
+        expect(bm.isAwake(id)).toBe(true);
+
+        bm.setAngularVelocity(id, { x: 0, y: 0, z: 1 });
+        expect(bm.isAwake(id)).toBe(true);
+    });
+
+    it('setLinearVelocity on non-existent body does not throw', () => {
+        expect(() => bm.setLinearVelocity(999n as any, { x: 1, y: 0, z: 0 })).not.toThrow();
+    });
+
+    it('setAngularVelocity on non-existent body does not throw', () => {
+        expect(() => bm.setAngularVelocity(999n as any, { x: 0, y: 1, z: 0 })).not.toThrow();
+    });
+});
+
+// ─── Acceptance tests (Wave 3a: default value convergence) ──────────────────
+
+describe('Acceptance: 3D default material convergence (P1-28)', () => {
+    it('ShapeManager3D raw path produces same friction as DEFAULT_MATERIAL (0.4)', () => {
+        const sm = new ShapeManager3D(64);
+        const bodyId = 1n as any;
+        const sid = sm.createSphere(bodyId, { center: { x: 0, y: 0, z: 0 }, radius: 1 });
+        const mat = sm.getMaterial(sid);
+        // Canonical friction=0.4 matches DEFAULT_MATERIAL in physics-world-3d-shared.ts
+        expect(mat.friction).toBeCloseTo(0.4, 5);
+        expect(mat.restitution).toBe(0);
+        expect(mat.density).toBe(1);
+    });
+
+    it('ShapeManager3D raw path produces same maskBits as DEFAULT_FILTER (0xffff)', () => {
+        const sm = new ShapeManager3D(64);
+        const bodyId = 1n as any;
+        const sid = sm.createSphere(bodyId, { center: { x: 0, y: 0, z: 0 }, radius: 1 });
+        const filter = sm.getFilter(sid);
+        // Canonical maskBits=0xffff matches DEFAULT_FILTER in physics-world-3d-shared.ts
+        expect(filter.categoryBits).toBe(1);
+        expect(filter.maskBits).toBe(0xffff);
+        expect(filter.groupIndex).toBe(0);
     });
 });
