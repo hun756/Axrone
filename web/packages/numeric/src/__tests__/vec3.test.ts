@@ -243,6 +243,62 @@ describe('Vec3 Test Suite', () => {
                 const result = Vec3.fromArray(arr);
                 expect(result).toEqual(new Vec3(1.5, 2.5, 3.5));
             });
+
+            test('writes into out parameter and returns same reference', () => {
+                const arr = [3.5, 7.25, 11.0];
+                const out = new Vec3();
+                const result = Vec3.fromArray(arr, 0, out);
+
+                expect(result).toBe(out);
+                expect(out.x).toBe(3.5);
+                expect(out.y).toBe(7.25);
+                expect(out.z).toBe(11.0);
+            });
+
+            test('returns new Vec3 when out is not provided', () => {
+                const arr = [1, 2, 3];
+                const result = Vec3.fromArray(arr);
+
+                expect(result).toBeInstanceOf(Vec3);
+                expect(result.x).toBe(1);
+                expect(result.y).toBe(2);
+                expect(result.z).toBe(3);
+            });
+
+            test('works with offset and out parameter together', () => {
+                const arr = [10, 20, 30, 40, 50, 60];
+                const out = new Vec3();
+                const result = Vec3.fromArray(arr, 2, out);
+
+                expect(result).toBe(out);
+                expect(out.x).toBe(30);
+                expect(out.y).toBe(40);
+                expect(out.z).toBe(50);
+            });
+
+            test('sequential calls with same out overwrite correctly', () => {
+                const arr = [1, 2, 3, 4, 5, 6];
+                const out = new Vec3();
+
+                Vec3.fromArray(arr, 0, out);
+                expect(out.x).toBe(1);
+                expect(out.y).toBe(2);
+                expect(out.z).toBe(3);
+
+                Vec3.fromArray(arr, 3, out);
+                expect(out.x).toBe(4);
+                expect(out.y).toBe(5);
+                expect(out.z).toBe(6);
+            });
+
+            test('out parameter avoids new allocation', () => {
+                const arr = [5, 10, 15];
+                const out = new Vec3();
+                const result = Vec3.fromArray(arr, 0, out);
+
+                // Same reference proves no allocation occurred
+                expect(result === out).toBe(true);
+            });
         });
 
         describe('create', () => {

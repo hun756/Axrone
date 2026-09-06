@@ -284,6 +284,57 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
                     expect(fromArray).toBeVectorCloseTo(constructed);
                 }
             });
+
+            test('writes into out parameter and returns same reference', () => {
+                const arr = [3.5, 7.25];
+                const out = new Vec2();
+                const result = Vec2.fromArray(arr, 0, out);
+
+                expect(result).toBe(out);
+                expect(out.x).toBe(3.5);
+                expect(out.y).toBe(7.25);
+            });
+
+            test('returns new Vec2 when out is not provided', () => {
+                const arr = [1, 2];
+                const result = Vec2.fromArray(arr);
+
+                expect(result).toBeInstanceOf(Vec2);
+                expect(result.x).toBe(1);
+                expect(result.y).toBe(2);
+            });
+
+            test('works with offset and out parameter together', () => {
+                const arr = [10, 20, 30, 40, 50];
+                const out = new Vec2();
+                const result = Vec2.fromArray(arr, 2, out);
+
+                expect(result).toBe(out);
+                expect(out.x).toBe(30);
+                expect(out.y).toBe(40);
+            });
+
+            test('sequential calls with same out overwrite correctly', () => {
+                const arr = [1, 2, 3, 4];
+                const out = new Vec2();
+
+                Vec2.fromArray(arr, 0, out);
+                expect(out.x).toBe(1);
+                expect(out.y).toBe(2);
+
+                Vec2.fromArray(arr, 2, out);
+                expect(out.x).toBe(3);
+                expect(out.y).toBe(4);
+            });
+
+            test('out parameter avoids new allocation', () => {
+                const arr = [5, 10];
+                const out = new Vec2();
+                const result = Vec2.fromArray(arr, 0, out);
+
+                // Same reference proves no allocation occurred
+                expect(result === out).toBe(true);
+            });
         });
 
         describe('create()', () => {
