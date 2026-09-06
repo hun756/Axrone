@@ -24,17 +24,17 @@ let nextWorldHostSystemId = 1;
 const registerBuiltinWidgetControllers = (runtime: UIRuntime<unknown>): void => {
     type RegistryEntry = Parameters<typeof runtime.registry.register>[0];
     const controllers: readonly RegistryEntry[] = [
-        buttonFeedbackController,
-        checkboxToggleController,
-        sliderController,
-        dropdownController,
-        tooltipHostController,
-        toggleSwitchController,
-        radioGroupController,
-        segmentedController,
-        dragController,
-        tabViewController,
-        editBoxController,
+        buttonFeedbackController as RegistryEntry,
+        checkboxToggleController as RegistryEntry,
+        sliderController as RegistryEntry,
+        dropdownController as RegistryEntry,
+        tooltipHostController as RegistryEntry,
+        toggleSwitchController as RegistryEntry,
+        radioGroupController as RegistryEntry,
+        segmentedController as RegistryEntry,
+        dragController as RegistryEntry,
+        tabViewController as RegistryEntry,
+        editBoxController as RegistryEntry,
     ];
     for (const controller of controllers) {
         runtime.registry.register(controller);
