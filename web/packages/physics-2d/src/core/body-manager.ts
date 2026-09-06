@@ -65,6 +65,8 @@ export class BodyManager2D extends SoAManager<BodySchema> {
     private readonly _userData: Map<BodyId, unknown>;
     /** Called when a STATIC body's position or rotation changes. (RB-1 fix) */
     private _onStaticTransformChange: ((bodyId: BodyId) => void) | null = null;
+    /** Called when a KINEMATIC body's position or rotation changes. (P1-4) */
+    private _onKinematicTransformChange: ((bodyId: BodyId) => void) | null = null;
 
     constructor(maxBodies: number = 1024) {
         super(maxBodies, BODY_SCHEMA);
@@ -167,8 +169,12 @@ export class BodyManager2D extends SoAManager<BodySchema> {
 
     setPosition(bodyId: BodyId, position: ReadonlyVec2): void {
         this._writeVec2(this._resolveIndex(bodyId), 'posX', position);
-        if (this._onStaticTransformChange && this.getBodyType(bodyId) === 0) {
+        const bodyType = this.getBodyType(bodyId);
+        if (this._onStaticTransformChange && bodyType === 0) {
             this._onStaticTransformChange(bodyId);
+        }
+        if (this._onKinematicTransformChange && bodyType === 1) {
+            this._onKinematicTransformChange(bodyId);
         }
     }
 
@@ -178,8 +184,12 @@ export class BodyManager2D extends SoAManager<BodySchema> {
 
     setRotation(bodyId: BodyId, rotation: number): void {
         this._writeScalar(this._resolveIndex(bodyId), 'rotation', rotation);
-        if (this._onStaticTransformChange && this.getBodyType(bodyId) === 0) {
+        const bodyType = this.getBodyType(bodyId);
+        if (this._onStaticTransformChange && bodyType === 0) {
             this._onStaticTransformChange(bodyId);
+        }
+        if (this._onKinematicTransformChange && bodyType === 1) {
+            this._onKinematicTransformChange(bodyId);
         }
     }
 
@@ -430,6 +440,14 @@ export class BodyManager2D extends SoAManager<BodySchema> {
      */
     onStaticTransformChange(callback: (bodyId: BodyId) => void): void {
         this._onStaticTransformChange = callback;
+    }
+
+    /**
+     * Register a callback invoked whenever a KINEMATIC body's position or rotation
+     * is written. Used by PhysicsWorld2D to wake sleeping contact neighbors. (P1-4)
+     */
+    onKinematicTransformChange(callback: (bodyId: BodyId) => void): void {
+        this._onKinematicTransformChange = callback;
     }
 
     hasBody(bodyId: BodyId): boolean {

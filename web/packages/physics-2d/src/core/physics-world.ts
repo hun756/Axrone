@@ -118,6 +118,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     private readonly _staticAabbCache = new Map<ShapeId, AABB2D>();
     /** Static shapes whose AABB needs recomputation. */
     private readonly _staticAabbDirty = new Set<ShapeId>();
+    /** Previous transform for kinematic bodies — detects actual movement. (P1-4) */
+    private readonly _kinematicPrevPos = new Map<BodyId, { x: number; y: number }>();
+    private readonly _kinematicPrevRot = new Map<BodyId, number>();
 
     private _autoClearForces = true;
     private _profiler: IPhysicsProfiler | null = null;
@@ -167,6 +170,12 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         // setRotation), mark its shapes dirty so the next _updateBroadphase recomputes.
         this._bodyManager.onStaticTransformChange((bodyId) => {
             this._markStaticDirty(bodyId);
+        });
+
+        // P1-4: Kinematic transform tracking — wake sleeping contact neighbors
+        // when a kinematic body actually moves.
+        this._bodyManager.onKinematicTransformChange((bodyId) => {
+            this._wakeKinematicContacts(bodyId);
         });
 
         if (config.enableProfiler) {
@@ -581,6 +590,8 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         }
 
         this._bodyViews.delete(bodyId);
+        this._kinematicPrevPos.delete(bodyId);
+        this._kinematicPrevRot.delete(bodyId);
         this._bodyManager.destroyBody(bodyId);
     }
 
@@ -656,6 +667,34 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const shapes = this._shapeManager.getShapesForBody(bodyId);
         for (const shapeId of shapes) {
             this._staticAabbDirty.add(shapeId);
+        }
+    }
+
+    /**
+     * P1-4: When a kinematic body moves, wake sleeping dynamic bodies
+     * that are in contact with it. Uses contact graph for precise targeting.
+     */
+    private _wakeKinematicContacts(bodyId: BodyId): void {
+        const pos = this._bodyManager.getPosition(bodyId);
+        const rot = this._bodyManager.getRotation(bodyId);
+        const prevPos = this._kinematicPrevPos.get(bodyId);
+        const prevRot = this._kinematicPrevRot.get(bodyId);
+        this._kinematicPrevPos.set(bodyId, { x: pos.x, y: pos.y });
+        this._kinematicPrevRot.set(bodyId, rot);
+
+        // Early exit: no actual movement
+        if (prevPos && prevPos.x === pos.x && prevPos.y === pos.y && prevRot === rot) {
+            return;
+        }
+
+        // Wake sleeping dynamic neighbors via contact graph
+        for (const contactId of this._contactManager.getContactsForBody(bodyId)) {
+            const contactBodies = this._contactManager.getContactBodies(contactId);
+            if (!contactBodies) continue;
+            const otherId = contactBodies.bodyIdA === bodyId ? contactBodies.bodyIdB : contactBodies.bodyIdA;
+            if (this._bodyManager.getBodyType(otherId) === 2 && !this._bodyManager.isAwake(otherId)) {
+                this._bodyManager.setAwake(otherId, true);
+            }
         }
     }
 
