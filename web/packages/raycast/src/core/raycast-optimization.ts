@@ -130,6 +130,12 @@ export class RaycastCache2D {
 
         if (oldestHash !== -1) {
             this._cache.delete(oldestHash);
+        } else {
+            // All entries are from current frame — evict the first one to make room
+            const firstKey = this._cache.keys().next().value;
+            if (firstKey !== undefined) {
+                this._cache.delete(firstKey);
+            }
         }
     }
 
@@ -257,6 +263,12 @@ export class RaycastCache3D {
 
         if (oldestHash !== -1) {
             this._cache.delete(oldestHash);
+        } else {
+            // All entries are from current frame — evict the first one to make room
+            const firstKey = this._cache.keys().next().value;
+            if (firstKey !== undefined) {
+                this._cache.delete(firstKey);
+            }
         }
     }
 
