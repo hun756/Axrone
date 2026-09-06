@@ -341,7 +341,7 @@ export class PhysicsWorld3D implements Disposable {
             bodyId,
             type: SHAPE_TYPE_TRIANGLE_MESH,
             def: {
-                vertices: def.vertices.map(Vec3.copy),
+                vertices: def.vertices.map((v) => Vec3.copy(v)),
                 indices: [...def.indices],
                 kind: SHAPE_TYPE_TRIANGLE_MESH,
             },
