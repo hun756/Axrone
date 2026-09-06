@@ -226,7 +226,7 @@ export interface IPhysicsProfiler3D {
     ccdTime: number;
 }
 
-export interface IContactListener3D {
+export interface IContactListener3DRaw {
     onCollisionBegin?(manifold: IContactManifold3D): void;
     onCollisionStay?(manifold: IContactManifold3D): void;
     onCollisionEnd?(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void;
@@ -234,7 +234,7 @@ export interface IContactListener3D {
     onTriggerExit?(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void;
 }
 
-export type RaycastCallback3D = (result: IRaycastResult3D) => boolean;
+export type RaycastQueryCallback3D = (result: IRaycastResult3D) => boolean;
 
 export interface IQueryFilter3D {
     readonly categoryBits?: number;
