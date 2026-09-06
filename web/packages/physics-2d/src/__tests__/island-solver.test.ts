@@ -20,6 +20,41 @@ describe('IslandSolver2D', () => {
         islandSolver = new IslandSolver2D(bodyManager, contactManager, constraintManager, 128);
     });
 
+    describe('P1-3 solver ordering', () => {
+        it('solves joint constraints after position commit without crashing', () => {
+            // Static anchor at origin
+            const anchor = bodyManager.createBody({
+                type: BodyType.Static,
+                position: { x: 0, y: 0 },
+                rotation: 0,
+            });
+
+            // Dynamic body connected by distance constraint
+            const dyn = bodyManager.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 5, y: 0 },
+                rotation: 0,
+            });
+            bodyManager.setMassData(dyn, 1, 0.1, { x: 0, y: 0 });
+
+            constraintManager.createDistanceConstraint({
+                bodyIdA: anchor,
+                bodyIdB: dyn,
+                localAnchorA: { x: 0, y: 0 },
+                localAnchorB: { x: 0, y: 0 },
+                length: 2,
+            });
+
+            const zeroGrav = { x: 0, y: 0 };
+            // Constraint solver runs after position commit (P1-3 deferred:
+            // proper ordering requires splitting ConstraintSolver2D).
+            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, false, SolverFlags.None, zeroGrav)).not.toThrow();
+
+            // The constraint should have been discovered and prepared
+            expect(islandSolver.getLastSolvedConstraintCount()).toBeGreaterThan(0);
+        });
+    });
+
     describe('Island Solver Basics', () => {
         it('creates solver', () => {
             expect(islandSolver).toBeDefined();

@@ -360,6 +360,10 @@ export class IslandSolver2D {
             }
         }
 
+        // P1-3: Joint constraints are solved AFTER position commit because the
+        // monolithic ConstraintSolver2D reads/writes body manager state directly.
+        // Proper ordering (joints before position integration) requires splitting
+        // ConstraintSolver2D into velocity-only and position-only phases.
         this._constraintSolver.solveConstraints(
             this._constraintStack,
             dt,
