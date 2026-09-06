@@ -164,10 +164,11 @@ describe('PhysicsWorld3D Integration', () => {
             noGravityWorld.step(1 / 60);
             const afterX = noGravityWorld.getBodyManager().getPosition(bob).x;
 
-            // The spring should cause the body to move (either toward anchor or oscillate)
-            // Just verify the simulation ran without error
+            // Initial position must be as set
             expect(initialX).toBe(5);
-            expect(afterX).toBeTypeOf('number');
+            // Spring (restLength=2, stiffness=50) must pull body toward anchor
+            // Body at x=5, anchor at x=0, restLength=2 → spring pulls body toward x=2
+            expect(afterX).toBeLessThan(5);
         });
     });
 

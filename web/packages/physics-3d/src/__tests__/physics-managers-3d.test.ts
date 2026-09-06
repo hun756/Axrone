@@ -686,12 +686,26 @@ describe('Acceptance: raw velocity setters wake sleeping bodies (P1-28 / Wave 3a
         expect(bm.isAwake(id)).toBe(true);
     });
 
-    it('setLinearVelocity on non-existent body does not throw', () => {
-        expect(() => bm.setLinearVelocity(999n as any, { x: 1, y: 0, z: 0 })).not.toThrow();
+    it('setLinearVelocity on non-existent body does not throw and does not affect existing bodies', () => {
+        const id = bm.createBody({ type: 2 });
+        bm.setLinearVelocity(id, { x: 1, y: 2, z: 3 });
+        expect(() => bm.setLinearVelocity(999n as any, { x: 99, y: 99, z: 99 })).not.toThrow();
+        // Existing body velocity must remain unchanged (no silent write to wrong body)
+        const vel = bm.getLinearVelocity(id);
+        expect(vel.x).toBeCloseTo(1, 5);
+        expect(vel.y).toBeCloseTo(2, 5);
+        expect(vel.z).toBeCloseTo(3, 5);
     });
 
-    it('setAngularVelocity on non-existent body does not throw', () => {
-        expect(() => bm.setAngularVelocity(999n as any, { x: 0, y: 1, z: 0 })).not.toThrow();
+    it('setAngularVelocity on non-existent body does not throw and does not affect existing bodies', () => {
+        const id = bm.createBody({ type: 2 });
+        bm.setAngularVelocity(id, { x: 0.1, y: 0.2, z: 0.3 });
+        expect(() => bm.setAngularVelocity(999n as any, { x: 99, y: 99, z: 99 })).not.toThrow();
+        // Existing body angular velocity must remain unchanged
+        const vel = bm.getAngularVelocity(id);
+        expect(vel.x).toBeCloseTo(0.1, 5);
+        expect(vel.y).toBeCloseTo(0.2, 5);
+        expect(vel.z).toBeCloseTo(0.3, 5);
     });
 });
 
