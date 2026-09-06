@@ -23,6 +23,7 @@ abstract class Fnv1a32Base implements IHasher<Hash32> {
     protected _byteLength: number = 0;
     protected _finalized: boolean = false;
     protected _initialSeed: number = 0;
+    protected _f64Tuple: [number, number] = [0, 0];
     protected _checkFinalized(): void {}
 
     get seed(): Seed32 { return asSeed32(this._initialSeed); }
@@ -81,8 +82,8 @@ abstract class Fnv1a32Base implements IHasher<Hash32> {
     updateF32(value: number): this { return this.updateU32(float32ToBits(value)); }
 
     updateF64(value: number): this {
-        const [lo, hi] = float64ToBitsPair(value);
-        return this.updateU32(lo).updateU32(hi);
+        float64ToBitsPair(value, this._f64Tuple);
+        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
     }
 
     updateHash(value: Hash32 | Hash64 | bigint): this {
@@ -256,6 +257,7 @@ export class Fnv1a64 implements IHasher<Hash64> {
     private _byteLength: number = 0;
     private _finalized: boolean = false;
     private _initialSeed: bigint = 0n;
+    private _f64Tuple: [number, number] = [0, 0];
 
     constructor(seed: Seed32 = asSeed32(0)) {
         this._initialSeed = BigInt((seed as number) >>> 0);
@@ -331,8 +333,8 @@ export class Fnv1a64 implements IHasher<Hash64> {
     updateF32(value: number): this { return this.updateU32(float32ToBits(value)); }
 
     updateF64(value: number): this {
-        const [lo, hi] = float64ToBitsPair(value);
-        return this.updateU32(lo).updateU32(hi);
+        float64ToBitsPair(value, this._f64Tuple);
+        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
     }
 
     updateHash(value: Hash32 | Hash64 | bigint): this {

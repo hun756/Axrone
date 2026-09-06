@@ -16,9 +16,10 @@ export function bitsToFloat32(v: number): number {
     return F32_BUF[0]!;
 }
 
-export function float64ToBitsPair(v: number): [number, number] {
+export function float64ToBitsPair(v: number, out: [number, number]): void {
     F64_BUF[0] = v;
-    return [I64_BUF[0]!, I64_BUF[1]!];
+    out[0] = I64_BUF[0]!;
+    out[1] = I64_BUF[1]!;
 }
 
 export function bitsPairToFloat64(lo: number, hi: number): number {

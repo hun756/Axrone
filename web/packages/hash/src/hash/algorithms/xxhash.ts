@@ -34,6 +34,7 @@ export class XxHash32 implements IHasher<Hash32> {
     private _memSize: number = 0;
     private _seed: number;
     private _finalized: boolean = false;
+    private _f64Tuple: [number, number] = [0, 0];
 
     constructor(seed: Seed32 = asSeed32(0)) {
         this._seed = (seed as number) >>> 0;
@@ -173,8 +174,8 @@ export class XxHash32 implements IHasher<Hash32> {
     updateU64(value: bigint): this { return this.updateI64(value); }
     updateF32(value: number): this { return this.updateU32(float32ToBits(value)); }
     updateF64(value: number): this {
-        const [lo, hi] = float64ToBitsPair(value);
-        return this.updateU32(lo).updateU32(hi);
+        float64ToBitsPair(value, this._f64Tuple);
+        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
     }
     updateHash(value: Hash32 | bigint): this {
         this._checkFinalized();
@@ -323,6 +324,7 @@ export class XxHash64 implements IHasher<Hash64> {
     private _memSize: number = 0;
     private _seed: bigint;
     private _finalized: boolean = false;
+    private _f64Tuple: [number, number] = [0, 0];
 
     constructor(seed: Seed32 = asSeed32(0)) {
         this._seed = BigInt((seed as number) >>> 0);
@@ -469,8 +471,8 @@ export class XxHash64 implements IHasher<Hash64> {
     updateU64(value: bigint): this { return this.updateI64(value); }
     updateF32(value: number): this { return this.updateU32(float32ToBits(value)); }
     updateF64(value: number): this {
-        const [lo, hi] = float64ToBitsPair(value);
-        return this.updateU32(lo).updateU32(hi);
+        float64ToBitsPair(value, this._f64Tuple);
+        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
     }
     updateHash(value: Hash32 | bigint): this {
         this._checkFinalized();
