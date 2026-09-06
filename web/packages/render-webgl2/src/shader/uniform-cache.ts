@@ -1,3 +1,4 @@
+import { hashString } from '@axrone/utility';
 import type { ShaderUniformValue, ShaderDataType } from './interfaces';
 
 export interface UniformDescriptorLite {
@@ -33,48 +34,39 @@ interface BucketEntry {
     lastValue: UniformScalarValue;
 }
 
-const fnv1a = (input: string): number => {
-    let hash = 0x811c9dc5;
-    for (let i = 0; i < input.length; i++) {
-        hash ^= input.charCodeAt(i);
-        hash = Math.imul(hash, 0x01000193) >>> 0;
-    }
-    return hash >>> 0;
-};
-
 const hashValue = (value: UniformScalarValue): number => {
     if (value === null) return 0;
     if (typeof value === 'number') {
         const bits = Math.fround(value);
-        return fnv1a(`n:${bits}`);
+        return hashString(`n:${bits}`);
     }
-    if (typeof value === 'boolean') return fnv1a(`b:${value ? 1 : 0}`);
+    if (typeof value === 'boolean') return hashString(`b:${value ? 1 : 0}`);
     if (value instanceof Float32Array) {
-        let h = fnv1a('f32:');
+        let h = hashString('f32:');
         for (let i = 0; i < value.length; i++) {
-            h = Math.imul(h ^ fnv1a(`n:${Math.fround(value[i] as number)}`), 0x01000193) >>> 0;
+            h = Math.imul(h ^ hashString(`n:${Math.fround(value[i] as number)}`), 0x01000193) >>> 0;
         }
         return h;
     }
     if (value instanceof Int32Array) {
-        let h = fnv1a('i32:');
+        let h = hashString('i32:');
         for (let i = 0; i < value.length; i++) {
-            h = Math.imul(h ^ fnv1a(`n:${value[i] as number}`), 0x01000193) >>> 0;
+            h = Math.imul(h ^ hashString(`n:${value[i] as number}`), 0x01000193) >>> 0;
         }
         return h;
     }
     if (value instanceof Uint32Array) {
-        let h = fnv1a('u32:');
+        let h = hashString('u32:');
         for (let i = 0; i < value.length; i++) {
-            h = Math.imul(h ^ fnv1a(`n:${value[i] as number}`), 0x01000193) >>> 0;
+            h = Math.imul(h ^ hashString(`n:${value[i] as number}`), 0x01000193) >>> 0;
         }
         return h;
     }
     if (Array.isArray(value)) {
-        let h = fnv1a('a:');
+        let h = hashString('a:');
         for (let i = 0; i < value.length; i++) {
             const v = value[i];
-            h = Math.imul(h ^ fnv1a(`n:${Math.fround(v as number)}`), 0x01000193) >>> 0;
+            h = Math.imul(h ^ hashString(`n:${Math.fround(v as number)}`), 0x01000193) >>> 0;
         }
         return h;
     }
