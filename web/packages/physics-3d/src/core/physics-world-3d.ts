@@ -95,6 +95,11 @@ import {
     transformPoint3D,
 } from './physics-world-3d-shared';
 import { PhysicsConstants } from '../types';
+import {
+    computeLocalConvexBounds,
+    computeLocalHeightFieldBounds,
+    computeShapeMassData,
+} from './physics-world-3d-shape-mass-properties';
 
 export { BodyManager3D, ShapeManager3D, ConstraintManager3D } from './physics-managers-3d';
 
@@ -1216,7 +1221,7 @@ export class PhysicsWorld3D implements Disposable {
                 return descriptor.userData;
             },
             computeAABB: () => this._computeShapeAabb(descriptor),
-            computeMassData: (density) => this._computeShapeMassData(descriptor, density),
+            computeMassData: (density) => computeShapeMassData(descriptor, density),
             testPoint: (point) => this._testPointShape(descriptor, point),
             rayCast: (origin, direction, maxFraction) => {
                 const hit = this._rayCastShape(descriptor, origin, direction, maxFraction);
@@ -1284,7 +1289,7 @@ export class PhysicsWorld3D implements Disposable {
             if (!descriptor) {
                 continue;
             }
-            const massData = this._computeShapeMassData(descriptor, descriptor.material.density);
+            const massData = computeShapeMassData(descriptor, descriptor.material.density);
             shapeMassData.push(massData);
             totalMass += massData.mass;
             center = Vec3.add(center, Vec3.multiplyScalar(massData.center, massData.mass));
@@ -1330,157 +1335,7 @@ export class PhysicsWorld3D implements Disposable {
         };
     }
 
-    private _computeShapeMassData(descriptor: IShapeDescriptor3D, density: number): IMassData3D {
-        const safeDensity = Math.max(0, density);
-        switch (descriptor.def.kind) {
-            case SHAPE_TYPE_SPHERE: {
-                const radius = descriptor.def.radius;
-                const mass = ((4 / 3) * Math.PI * radius * radius * radius) * safeDensity;
-                const inertia = (2 / 5) * mass * radius * radius;
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor: { x: inertia, y: inertia, z: inertia },
-                    inverseInertiaTensor: inverseVec3({ x: inertia, y: inertia, z: inertia }),
-                    center: Vec3.copy(descriptor.def.center),
-                };
-            }
-            case SHAPE_TYPE_BOX: {
-                const halfExtents = descriptor.def.halfExtents;
-                const fullExtents = Vec3.multiplyScalar(halfExtents, 2);
-                const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
-                const inertiaTensor = {
-                    x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
-                    y: (mass * (fullExtents.x * fullExtents.x + fullExtents.z * fullExtents.z)) / 12,
-                    z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
-                };
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor,
-                    inverseInertiaTensor: inverseVec3(inertiaTensor),
-                    center: Vec3.copy(descriptor.def.center),
-                };
-            }
-            case SHAPE_TYPE_CAPSULE: {
-                const segment = Vec3.subtract(descriptor.def.p2, descriptor.def.p1);
-                const segmentLength = Vec3.len(segment);
-                const radius = descriptor.def.radius;
-                const cylinderMass = Math.PI * radius * radius * segmentLength * safeDensity;
-                const sphereMass = ((4 / 3) * Math.PI * radius * radius * radius) * safeDensity;
-                const mass = cylinderMass + sphereMass;
-                const inertia = radius * radius * mass;
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor: { x: inertia, y: inertia, z: inertia },
-                    inverseInertiaTensor: inverseVec3({ x: inertia, y: inertia, z: inertia }),
-                    center: midpointVec3(descriptor.def.p1, descriptor.def.p2),
-                };
-            }
-            case SHAPE_TYPE_CYLINDER: {
-                const radius = descriptor.def.radius;
-                const height = descriptor.def.height;
-                const mass = Math.PI * radius * radius * height * safeDensity;
-                const radial = (mass * (3 * radius * radius + height * height)) / 12;
-                const axial = 0.5 * mass * radius * radius;
-                const axis = descriptor.def.axis ?? 1;
-                const inertiaTensor =
-                    axis === 0
-                        ? { x: axial, y: radial, z: radial }
-                        : axis === 2
-                          ? { x: radial, y: radial, z: axial }
-                          : { x: radial, y: axial, z: radial };
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor,
-                    inverseInertiaTensor: inverseVec3(inertiaTensor),
-                    center: Vec3.copy(descriptor.def.center),
-                };
-            }
-            case SHAPE_TYPE_CONE: {
-                const radius = descriptor.def.radius;
-                const height = descriptor.def.height;
-                const mass = ((Math.PI * radius * radius * height) / 3) * safeDensity;
-                const axis = descriptor.def.axis ?? 1;
-                const transverse = ((3 / 20) * mass * radius * radius) + ((3 / 5) * mass * height * height);
-                const axial = (3 / 10) * mass * radius * radius;
-                const inertiaTensor =
-                    axis === 0
-                        ? { x: axial, y: transverse, z: transverse }
-                        : axis === 2
-                          ? { x: transverse, y: transverse, z: axial }
-                          : { x: transverse, y: axial, z: transverse };
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor,
-                    inverseInertiaTensor: inverseVec3(inertiaTensor),
-                    center: Vec3.copy(descriptor.def.center),
-                };
-            }
-            case SHAPE_TYPE_CONVEX_HULL: {
-                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
-                const fullExtents = Vec3.subtract(bounds.max, bounds.min);
-                const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
-                const inertiaTensor = {
-                    x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
-                    y: (mass * (fullExtents.x * fullExtents.x + fullExtents.z * fullExtents.z)) / 12,
-                    z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
-                };
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor,
-                    inverseInertiaTensor: inverseVec3(inertiaTensor),
-                    center: midpointVec3(bounds.min, bounds.max),
-                };
-            }
-            case SHAPE_TYPE_TRIANGLE_MESH: {
-                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
-                const fullExtents = Vec3.subtract(bounds.max, bounds.min);
-                const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
-                const inertiaTensor = {
-                    x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
-                    y: (mass * (fullExtents.x * fullExtents.x + fullExtents.z * fullExtents.z)) / 12,
-                    z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
-                };
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor,
-                    inverseInertiaTensor: inverseVec3(inertiaTensor),
-                    center: midpointVec3(bounds.min, bounds.max),
-                };
-            }
-            case SHAPE_TYPE_HEIGHTFIELD: {
-                const bounds = this._computeLocalHeightFieldBounds(descriptor.def);
-                const fullExtents = Vec3.subtract(bounds.max, bounds.min);
-                const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
-                const inertiaTensor = {
-                    x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
-                    y: (mass * (fullExtents.x * fullExtents.x + fullExtents.z * fullExtents.z)) / 12,
-                    z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
-                };
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor,
-                    inverseInertiaTensor: inverseVec3(inertiaTensor),
-                    center: midpointVec3(bounds.min, bounds.max),
-                };
-            }
-            default:
-                return {
-                    mass: 0 as Mass,
-                    inverseMass: 0,
-                    inertiaTensor: { x: 0, y: 0, z: 0 },
-                    inverseInertiaTensor: { x: 0, y: 0, z: 0 },
-                    center: { x: 0, y: 0, z: 0 },
-                };
-        }
-    }
+
 
     private _computeShapeAabb(descriptor: IShapeDescriptor3D): IAabb3D {
         const position = this._bodyManager.getPosition(descriptor.bodyId);
@@ -1552,7 +1407,7 @@ export class PhysicsWorld3D implements Disposable {
                 return bounds ?? { min: Vec3.copy(position), max: Vec3.copy(position) };
             }
             case SHAPE_TYPE_HEIGHTFIELD: {
-                const localBounds = this._computeLocalHeightFieldBounds(descriptor.def);
+                const localBounds = computeLocalHeightFieldBounds(descriptor.def);
                 const corners: readonly IVec3Like[] = [
                     { x: localBounds.min.x, y: localBounds.min.y, z: localBounds.min.z },
                     { x: localBounds.min.x, y: localBounds.min.y, z: localBounds.max.z },
@@ -1647,7 +1502,7 @@ export class PhysicsWorld3D implements Disposable {
             }
             case SHAPE_TYPE_CONVEX_HULL: {
                 const localPoint = inverseTransformPoint3D(point, position, rotation);
-                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
+                const bounds = computeLocalConvexBounds(descriptor.def.vertices);
                 return (
                     localPoint.x >= bounds.min.x &&
                     localPoint.x <= bounds.max.x &&
@@ -1659,7 +1514,7 @@ export class PhysicsWorld3D implements Disposable {
             }
             case SHAPE_TYPE_TRIANGLE_MESH: {
                 const localPoint = inverseTransformPoint3D(point, position, rotation);
-                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
+                const bounds = computeLocalConvexBounds(descriptor.def.vertices);
                 if (
                     localPoint.x < bounds.min.x ||
                     localPoint.x > bounds.max.x ||
@@ -1834,15 +1689,15 @@ export class PhysicsWorld3D implements Disposable {
             case SHAPE_TYPE_CAPSULE:
                 return transformPoint3D(midpointVec3(descriptor.def.p1, descriptor.def.p2), position, rotation);
             case SHAPE_TYPE_CONVEX_HULL: {
-                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
+                const bounds = computeLocalConvexBounds(descriptor.def.vertices);
                 return transformPoint3D(midpointVec3(bounds.min, bounds.max), position, rotation);
             }
             case SHAPE_TYPE_TRIANGLE_MESH: {
-                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
+                const bounds = computeLocalConvexBounds(descriptor.def.vertices);
                 return transformPoint3D(midpointVec3(bounds.min, bounds.max), position, rotation);
             }
             case SHAPE_TYPE_HEIGHTFIELD: {
-                const bounds = this._computeLocalHeightFieldBounds(descriptor.def);
+                const bounds = computeLocalHeightFieldBounds(descriptor.def);
                 return transformPoint3D(midpointVec3(bounds.min, bounds.max), position, rotation);
             }
             default:
@@ -1868,30 +1723,6 @@ export class PhysicsWorld3D implements Disposable {
             this._bodyManager.getPosition(bodyId),
             this._bodyManager.getRotation(bodyId)
         );
-    }
-
-    private _computeLocalConvexBounds(vertices: readonly IVec3Like[]): IAabb3D {
-        let bounds: IAabb3D | null = null;
-        for (const vertex of vertices) {
-            bounds = bounds
-                ? expandAabb(bounds, vertex)
-                : { min: Vec3.copy(vertex), max: Vec3.copy(vertex) };
-        }
-        return bounds ?? { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
-    }
-
-    private _computeLocalHeightFieldBounds(def: Readonly<IHeightFieldShapeDef3D>): IAabb3D {
-        let bounds: IAabb3D | null = null;
-        for (let zIndex = 0; zIndex < def.depth; zIndex += 1) {
-            for (let xIndex = 0; xIndex < def.width; xIndex += 1) {
-                const vertex = getHeightFieldLocalVertex(def, xIndex, zIndex);
-                bounds = bounds
-                    ? expandAabb(bounds, vertex)
-                    : { min: Vec3.copy(vertex), max: Vec3.copy(vertex) };
-            }
-        }
-
-        return bounds ?? { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
     }
 
     private _sampleHeightFieldHeight(
