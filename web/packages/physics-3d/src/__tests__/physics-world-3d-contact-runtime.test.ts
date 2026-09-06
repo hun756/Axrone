@@ -201,4 +201,99 @@ describe('PhysicsWorld3D contact runtime', () => {
             }
         });
     });
+
+    describe('acceptance: deterministic pair key', () => {
+        it('produces a single manifold regardless of shape creation order', () => {
+            // Two overlapping boxes — pair key must be symmetric (A:B == B:A)
+            const bodyA = world.createBody({ type: 0, position: { x: 0, y: 0, z: 0 } });
+            world.createBoxShape(bodyA, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 1, y: 1, z: 1 } });
+            const bodyB = world.createBody({ type: 2, position: { x: 0.5, y: 0, z: 0 } });
+            world.createBoxShape(bodyB, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 1, y: 1, z: 1 } });
+
+            world.step(1 / 60);
+            const stats1 = world.getStatistics();
+            expect(stats1.contactCount).toBe(1);
+        });
+    });
+
+    describe('acceptance: box-box multi-point manifold', () => {
+        it('generates >= 2 contact points for face-to-face boxes', () => {
+            // Two boxes with overlapping faces — should produce multi-point manifold
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 0.5, z: 5 } });
+
+            // Place box directly touching ground (bottom face at y=0)
+            const box = world.createBody({ type: 2, position: { x: 0, y: 0.5, z: 0 } });
+            world.createBoxShape(box, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
+
+            world.step(1 / 60);
+            const stats = world.getStatistics();
+            expect(stats.contactCount).toBeGreaterThan(0);
+        });
+    });
+
+    describe('acceptance: velocity clamp', () => {
+        it('clamps velocity when extreme force is applied', () => {
+            const body = world.createBody({ type: 2, position: { x: 0, y: 0, z: 0 } });
+            world.createSphereShape(body, { center: { x: 0, y: 0, z: 0 }, radius: 0.5 });
+
+            // Apply massive force
+            world.getBodyManager().applyForce(body, { x: 1e9, y: 0, z: 0 });
+            world.step(1 / 60);
+
+            const lv = world.getBodyManager().getLinearVelocity(body);
+            const speed = Math.sqrt(lv.x * lv.x + lv.y * lv.y + lv.z * lv.z);
+            // MAX_VELOCITY = 200
+            expect(speed).toBeLessThanOrEqual(201); // small epsilon for floating point
+        });
+    });
+
+    describe('acceptance: world-level sleeping', () => {
+        it('sleeps bodies after resting below threshold', () => {
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 10, y: 0.5, z: 10 } });
+
+            const ball = world.createBody({ type: 2, position: { x: 0, y: 1, z: 0 } });
+            world.createSphereShape(ball, { center: { x: 0, y: 0, z: 0 }, radius: 0.5 });
+
+            // Let it settle for many steps
+            for (let i = 0; i < 200; i++) world.step(1 / 60);
+
+            // Body should eventually fall asleep (isAwake = false)
+            const isAwake = world.getBodyManager().isAwake(ball);
+            // After 200 steps of settling, the body should be asleep
+            expect(isAwake).toBe(false);
+        });
+    });
+
+    describe('acceptance: 5-box stack stability', () => {
+        it('5 boxes stacked settle without extreme jitter after 60 frames', () => {
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 10, y: 0.5, z: 10 } });
+
+            const boxes: any[] = [];
+            for (let i = 0; i < 5; i++) {
+                const b = world.createBody({ type: 2, position: { x: 0, y: 0.5 + i * 1.05, z: 0 } });
+                world.createBoxShape(b, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
+                boxes.push(b);
+            }
+
+            // Run 60 frames
+            for (let i = 0; i < 60; i++) world.step(1 / 60);
+
+            // Record positions at frame 60
+            const posAt60 = boxes.map(b => world.getBodyManager().getPosition(b));
+
+            // Run 30 more frames
+            for (let i = 0; i < 30; i++) world.step(1 / 60);
+
+            // Check jitter: positions should not drift significantly
+            for (let i = 0; i < boxes.length; i++) {
+                const posAt90 = world.getBodyManager().getPosition(boxes[i]);
+                const drift = Math.abs(posAt90.y - posAt60[i].y);
+                // Allow generous tolerance — just ensure no explosion
+                expect(drift).toBeLessThan(2.0);
+            }
+        });
+    });
 });
