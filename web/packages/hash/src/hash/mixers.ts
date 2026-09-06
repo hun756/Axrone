@@ -9,21 +9,11 @@ export function fmix32(h: number): number {
     return h >>> 0;
 }
 
-export function fmix32Alt(h: number): number {
-    h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
-    h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
-    h = (h ^ (h >>> 16)) >>> 0;
-    return h >>> 0;
-}
+/** @deprecated Alias for {@link fmix32} — kept for backward compatibility. */
+export const fmix32Alt = fmix32;
 
-export function avalanche32(h: number): number {
-    h = (h ^ (h >>> 16)) >>> 0;
-    h = Math.imul(h, 0x85ebca6b) >>> 0;
-    h = (h ^ (h >>> 13)) >>> 0;
-    h = Math.imul(h, 0xc2b2ae35) >>> 0;
-    h = (h ^ (h >>> 16)) >>> 0;
-    return h >>> 0;
-}
+/** @deprecated Alias for {@link fmix32} — kept for backward compatibility. */
+export const avalanche32 = fmix32;
 
 export function splitmix32(state: number): number {
     state = (state + 0x9e3779b9) >>> 0;

@@ -1,3 +1,4 @@
+export { HasherBase } from '../base';
 export { Fnv1a32, Fnv1_32, Fnv1a64 } from './fnv';
 export { Djb2, Djb2a, Sdbm } from './djb2';
 export { Crc32, Crc32c } from './crc32';

@@ -121,3 +121,58 @@ export function writeU16BE(value: number, out: Uint8Array, offset: number): void
     out[offset] = (value >>> 8) & 0xff;
     out[offset + 1] = value & 0xff;
 }
+
+const _B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/**
+ * Encode bytes as base64 string.
+ * Local implementation to avoid circular dependency with @axrone/utility.
+ */
+export function encodeBase64(bytes: Uint8Array): string {
+    let s = '';
+    const len = bytes.length;
+    const remainder = len % 3;
+    const main = len - remainder;
+    for (let i = 0; i < main; i += 3) {
+        const a = bytes[i]!;
+        const b = bytes[i + 1]!;
+        const c = bytes[i + 2]!;
+        s += _B64[(a >>> 2)] + _B64[((a & 3) << 4) | (b >>> 4)] + _B64[((b & 0xf) << 2) | (c >>> 6)] + _B64[c & 0x3f];
+    }
+    if (remainder === 1) {
+        const a = bytes[main]!;
+        s += _B64[(a >>> 2)] + _B64[((a & 3) << 4)] + '==';
+    } else if (remainder === 2) {
+        const a = bytes[main]!;
+        const b = bytes[main + 1]!;
+        s += _B64[(a >>> 2)] + _B64[((a & 3) << 4) | (b >>> 4)] + _B64[((b & 0xf) << 2)] + '=';
+    }
+    return s;
+}
+
+const _B64_LOOKUP: Record<string, number> = {};
+for (let i = 0; i < _B64.length; i++) _B64_LOOKUP[_B64[i]!] = i;
+
+/**
+ * Decode base64 string to Uint8Array.
+ * Local implementation to avoid circular dependency with @axrone/utility.
+ */
+export function decodeBase64(input: string): Uint8Array {
+    let len = input.length;
+    if (len === 0) return new Uint8Array(0);
+    if (input[len - 1] === '=') len--;
+    if (len > 0 && input[len - 1] === '=') len--;
+    const byteLen = (len * 3) >>> 2;
+    const out = new Uint8Array(byteLen);
+    let j = 0;
+    for (let i = 0; i < len; i += 4) {
+        const a = _B64_LOOKUP[input[i]!] ?? 0;
+        const b = _B64_LOOKUP[input[i + 1]!] ?? 0;
+        const c = _B64_LOOKUP[input[i + 2]!] ?? 0;
+        const d = _B64_LOOKUP[input[i + 3]!] ?? 0;
+        out[j++] = (a << 2) | (b >>> 4);
+        if (j < byteLen) out[j++] = ((b & 0xf) << 4) | (c >>> 2);
+        if (j < byteLen) out[j++] = ((c & 3) << 6) | d;
+    }
+    return out;
+}

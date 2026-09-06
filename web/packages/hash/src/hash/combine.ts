@@ -1,9 +1,7 @@
 import type { Hash32, Hash64, HashValue } from './types';
 import { asHash32 } from './types';
 import { fmix32 } from './mixers';
-
-const FNV_PRIME_32 = 0x01000193;
-const FNV_OFFSET_32 = 0x811c9dc5;
+import { fnv1aMix32, fnv1aMixU32, FNV_PRIME_32, FNV_OFFSET_32 } from './mixing';
 
 export function hashCombine(a: HashValue, b: HashValue): Hash32 {
     let h: number;
@@ -18,15 +16,11 @@ export function hashCombineOrdered(values: readonly HashValue[]): Hash32 {
     let h = FNV_OFFSET_32;
     for (const v of values) {
         if (typeof v === 'number') {
-            const num = v as unknown as number;
-            h = Math.imul(h ^ (num & 0xff), FNV_PRIME_32) >>> 0;
-            h = Math.imul(h ^ ((num >>> 8) & 0xff), FNV_PRIME_32) >>> 0;
-            h = Math.imul(h ^ ((num >>> 16) & 0xff), FNV_PRIME_32) >>> 0;
-            h = Math.imul(h ^ ((num >>> 24) & 0xff), FNV_PRIME_32) >>> 0;
+            h = fnv1aMixU32(h, v as unknown as number);
         } else {
             let big = v as bigint;
             for (let i = 0; i < 8; i++) {
-                h = Math.imul(h ^ Number(big & 0xffn), FNV_PRIME_32) >>> 0;
+                h = fnv1aMix32(h, Number(big & 0xffn));
                 big >>= 8n;
             }
         }
@@ -39,8 +33,8 @@ export function hashCombineStrings(seed: number, ...strings: readonly string[]):
     for (const s of strings) {
         for (let i = 0; i < s.length; i++) {
             const c = s.charCodeAt(i);
-            h = Math.imul(h ^ (c & 0xff), FNV_PRIME_32) >>> 0;
-            h = Math.imul(h ^ ((c >>> 8) & 0xff), FNV_PRIME_32) >>> 0;
+            h = fnv1aMix32(h, c & 0xff);
+            h = fnv1aMix32(h, (c >>> 8) & 0xff);
         }
         h = Math.imul(h, FNV_PRIME_32) >>> 0;
     }
@@ -50,7 +44,7 @@ export function hashCombineStrings(seed: number, ...strings: readonly string[]):
 export function hashCombineBooleans(seed: number, ...values: readonly boolean[]): Hash32 {
     let h = seed ^ FNV_OFFSET_32;
     for (const v of values) {
-        h = Math.imul(h ^ (v ? 1 : 0), FNV_PRIME_32) >>> 0;
+        h = fnv1aMix32(h, v ? 1 : 0);
     }
     return fmix32(h) as unknown as Hash32;
 }
@@ -62,14 +56,14 @@ export function hashCombineNumbers(seed: number, ...values: readonly number[]): 
     let h = seed ^ FNV_OFFSET_32;
     for (const v of values) {
         COMBINE_F64_BUF[0] = v;
-        h = Math.imul(h ^ (COMBINE_I32_BUF[0]! & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ ((COMBINE_I32_BUF[0]! >>> 8) & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ ((COMBINE_I32_BUF[0]! >>> 16) & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ ((COMBINE_I32_BUF[0]! >>> 24) & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ (COMBINE_I32_BUF[1]! & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ ((COMBINE_I32_BUF[1]! >>> 8) & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ ((COMBINE_I32_BUF[1]! >>> 16) & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ ((COMBINE_I32_BUF[1]! >>> 24) & 0xff), FNV_PRIME_32) >>> 0;
+        h = fnv1aMix32(h, COMBINE_I32_BUF[0]! & 0xff);
+        h = fnv1aMix32(h, (COMBINE_I32_BUF[0]! >>> 8) & 0xff);
+        h = fnv1aMix32(h, (COMBINE_I32_BUF[0]! >>> 16) & 0xff);
+        h = fnv1aMix32(h, (COMBINE_I32_BUF[0]! >>> 24) & 0xff);
+        h = fnv1aMix32(h, COMBINE_I32_BUF[1]! & 0xff);
+        h = fnv1aMix32(h, (COMBINE_I32_BUF[1]! >>> 8) & 0xff);
+        h = fnv1aMix32(h, (COMBINE_I32_BUF[1]! >>> 16) & 0xff);
+        h = fnv1aMix32(h, (COMBINE_I32_BUF[1]! >>> 24) & 0xff);
     }
     return fmix32(h) as unknown as Hash32;
 }

@@ -1,9 +1,9 @@
 import type { Hash32, Hash64, Hash128, Hash256, Hash512, HashValue } from './types';
 import { asHash32, asHash64, asHash128 } from './types';
 import { HashSerializationError, HashDeserializationError } from './errors';
-import { encode, decode } from '@axrone/utility';
+import { encodeBase64, decodeBase64 } from './bits';
+import { u32ToHex, bigIntToHex } from './hex';
 
-const HEX_CHARS = '0123456789abcdef';
 const HEX_REV: number[] = new Array(256).fill(-1);
 for (let i = 0; i < 10; i++) HEX_REV[0x30 + i] = i;
 for (let i = 0; i < 6; i++) {
@@ -12,53 +12,23 @@ for (let i = 0; i < 6; i++) {
 }
 
 export function hash32ToHex(value: Hash32, uppercase: boolean = false): string {
-    let n = (value as number) >>> 0;
-    let out = '';
-    for (let i = 0; i < 8; i++) {
-        out = HEX_CHARS[n & 0xf] + out;
-        n >>>= 4;
-    }
-    return uppercase ? out.toUpperCase() : out;
+    return u32ToHex(value as number, uppercase);
 }
 
 export function hash64ToHex(value: Hash64, uppercase: boolean = false): string {
-    let n = value as unknown as bigint;
-    let out = '';
-    for (let i = 0; i < 16; i++) {
-        out = HEX_CHARS[Number(n & 0xfn)] + out;
-        n >>= 4n;
-    }
-    return uppercase ? out.toUpperCase() : out;
+    return bigIntToHex(value as unknown as bigint, 16, uppercase);
 }
 
 export function hash128ToHex(value: Hash128, uppercase: boolean = false): string {
-    let n = value as unknown as bigint;
-    let out = '';
-    for (let i = 0; i < 32; i++) {
-        out = HEX_CHARS[Number(n & 0xfn)] + out;
-        n >>= 4n;
-    }
-    return uppercase ? out.toUpperCase() : out;
+    return bigIntToHex(value as unknown as bigint, 32, uppercase);
 }
 
 export function hash256ToHex(value: Hash256, uppercase: boolean = false): string {
-    let n = value as unknown as bigint;
-    let out = '';
-    for (let i = 0; i < 64; i++) {
-        out = HEX_CHARS[Number(n & 0xfn)] + out;
-        n >>= 4n;
-    }
-    return uppercase ? out.toUpperCase() : out;
+    return bigIntToHex(value as unknown as bigint, 64, uppercase);
 }
 
 export function hash512ToHex(value: Hash512, uppercase: boolean = false): string {
-    let n = value as unknown as bigint;
-    let out = '';
-    for (let i = 0; i < 128; i++) {
-        out = HEX_CHARS[Number(n & 0xfn)] + out;
-        n >>= 4n;
-    }
-    return uppercase ? out.toUpperCase() : out;
+    return bigIntToHex(value as unknown as bigint, 128, uppercase);
 }
 
 export function hexToHash32(input: string): Hash32 {
@@ -110,11 +80,11 @@ export function hexToHash128(input: string): Hash128 {
 }
 
 export function bytesToBase64(bytes: Uint8Array): string {
-    return encode(bytes);
+    return encodeBase64(bytes);
 }
 
 export function base64ToBytes(input: string): Uint8Array {
-    return decode(input);
+    return decodeBase64(input);
 }
 
 export function hash32ToBase64(value: Hash32): string {

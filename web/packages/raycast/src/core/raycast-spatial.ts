@@ -1,5 +1,6 @@
 import { Vec3, IVec3Like, EPSILON } from '@axrone/numeric';
 import { Octree } from '@axrone/geometry';
+import { Fnv1a32 } from '@axrone/hash';
 
 const GRID_INITIAL_CAPACITY = 256;
 // Spatial coordinate packing: 21 bits per axis (covers ±1M units at 1.0 cell size)
@@ -8,17 +9,19 @@ const COORD_BITS = 21;
 const COORD_MASK = (1 << COORD_BITS) - 1;
 const COORD_OFFSET = 1 << (COORD_BITS - 1); // bias to handle negatives
 
+const _spatialHasher = new Fnv1a32();
+
 function packCellKey(x: number, y: number, z: number): number {
     // Bias coordinates to non-negative range
     const bx = (x + COORD_OFFSET) & COORD_MASK;
     const by = (y + COORD_OFFSET) & COORD_MASK;
     const bz = (z + COORD_OFFSET) & COORD_MASK;
-    // FNV-1a style mix into a 32-bit integer
-    let h = 0x811c9dc5;
-    h = Math.imul(h ^ bx, 0x01000193);
-    h = Math.imul(h ^ by, 0x01000193);
-    h = Math.imul(h ^ bz, 0x01000193);
-    return h >>> 0;
+    // FNV-1a hash of packed coordinate integers via @axrone/hash
+    _spatialHasher.reset();
+    _spatialHasher.updateU32(bx);
+    _spatialHasher.updateU32(by);
+    _spatialHasher.updateU32(bz);
+    return _spatialHasher.digest() as number;
 }
 
 interface GridCell<T> {

@@ -1,19 +1,10 @@
 import type { BytesLike } from '../../../../types';
 import { asHash256, asSeed32, type Hash256, type Hash512, type Hash128, type Seed32, type HashAlgorithmMetadata } from '../../types';
-import type { IHasher } from '../../interfaces';
-import { HashCryptoUnavailableError, HashCryptoOperationError } from '../../errors';
-import { encode } from '@axrone/utility';
-
-const _HEX = '0123456789abcdef';
-
-function toHex(bytes: Uint8Array, uppercase: boolean = false): string {
-    let s = '';
-    for (let i = 0; i < bytes.length; i++) {
-        const b = bytes[i]!;
-        s += _HEX[(b >>> 4) & 0xf] + _HEX[b & 0xf];
-    }
-    return uppercase ? s.toUpperCase() : s;
-}
+import type { IHasher, IDigestAsync } from '../../interfaces';
+import { HasherBase } from '../../base';
+import { HashAlreadyFinalizedError, HashCryptoUnavailableError, HashCryptoOperationError } from '../../errors';
+import { encodeBase64 } from '../../bits';
+import { bytesToHex } from '../../hex';
 
 function bytesToBigInt(bytes: Uint8Array): bigint {
     let v = 0n;
@@ -49,6 +40,7 @@ const SHA1_METADATA: HashAlgorithmMetadata = {
     seedable: false,
     keyed: false,
     cryptographicallySecure: false,
+    async: true,
     description: 'SHA-1 (deprecated, collision attacks known; use for compatibility only)',
 };
 
@@ -61,6 +53,7 @@ const SHA256_METADATA: HashAlgorithmMetadata = {
     seedable: false,
     keyed: false,
     cryptographicallySecure: true,
+    async: true,
     description: 'SHA-256 (FIPS 180-4)',
 };
 
@@ -73,6 +66,7 @@ const SHA384_METADATA: HashAlgorithmMetadata = {
     seedable: false,
     keyed: false,
     cryptographicallySecure: true,
+    async: true,
     description: 'SHA-384 (FIPS 180-4)',
 };
 
@@ -85,27 +79,17 @@ const SHA512_METADATA: HashAlgorithmMetadata = {
     seedable: false,
     keyed: false,
     cryptographicallySecure: true,
+    async: true,
     description: 'SHA-512 (FIPS 180-4)',
 };
 
-abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> implements IHasher<H> {
-    abstract readonly algorithm: string;
-    abstract readonly metadata: Readonly<HashAlgorithmMetadata>;
+abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> extends HasherBase<H> implements IDigestAsync<H> {
     protected _chunks: Uint8Array[] = [];
     protected _totalLen: number = 0;
-    protected _finalized: boolean = false;
     protected _cachedResult: Uint8Array | undefined;
-
-    get seed(): Seed32 | undefined {
-        return undefined;
-    }
 
     get byteLength(): number {
         return this._totalLen;
-    }
-
-    get finalized(): boolean {
-        return this._finalized;
     }
 
     protected abstract getSubtleName(): string;
@@ -113,7 +97,7 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> implements
     protected abstract convertResult(bytes: Uint8Array): H;
 
     private _checkFinalized(): void {
-        if (this._finalized) throw new Error(`${this.algorithm}: cannot update after digest() (algorithm=${this.algorithm})`);
+        if (this._finalized) throw new HashAlreadyFinalizedError(`${this.algorithm}: cannot update after digest() (algorithm=${this.algorithm})`);
     }
 
     updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {
@@ -133,8 +117,9 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> implements
     updateString(input: string): this {
         this._checkFinalized();
         const enc = new TextEncoder();
-        this._chunks.push(enc.encode(input));
-        this._totalLen += input.length * 2;
+        const bytes = enc.encode(input);
+        this._chunks.push(bytes);
+        this._totalLen += bytes.byteLength;
         return this;
     }
 
@@ -145,9 +130,6 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> implements
         return this;
     }
 
-    updateI8(v: number): this { return this.updateI32(v | 0); }
-    updateI16(v: number): this { return this.updateI32(v | 0); }
-    updateI32(value: number): this { return this.updateU32(value | 0); }
     updateI64(value: bigint): this {
         this._checkFinalized();
         const arr = new Uint8Array(8);
@@ -157,8 +139,7 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> implements
         this._totalLen += 8;
         return this;
     }
-    updateU8(v: number): this { return this.updateU32(v & 0xff); }
-    updateU16(v: number): this { return this.updateU32(v & 0xffff); }
+
     updateU32(value: number): this {
         this._checkFinalized();
         const arr = new Uint8Array(4);
@@ -168,31 +149,7 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> implements
         this._totalLen += 4;
         return this;
     }
-    updateU64(value: bigint): this {
-        this._checkFinalized();
-        const arr = new Uint8Array(8);
-        const view = new DataView(arr.buffer);
-        view.setBigUint64(0, value, true);
-        this._chunks.push(arr);
-        this._totalLen += 8;
-        return this;
-    }
-    updateF32(value: number): this {
-        this._checkFinalized();
-        const arr = new Uint8Array(4);
-        new DataView(arr.buffer).setFloat32(0, value, true);
-        this._chunks.push(arr);
-        this._totalLen += 4;
-        return this;
-    }
-    updateF64(value: number): this {
-        this._checkFinalized();
-        const arr = new Uint8Array(8);
-        new DataView(arr.buffer).setFloat64(0, value, true);
-        this._chunks.push(arr);
-        this._totalLen += 8;
-        return this;
-    }
+
     updateHash(value: import('../../types').Hash32 | bigint): this {
         this._checkFinalized();
         if (typeof value === 'number') return this.updateU32(value);
@@ -204,10 +161,12 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> implements
         this._totalLen += 8;
         return this;
     }
+
     updateHashable<H2 extends import('../../types').HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
         value.hashInto(this as unknown as IHasher<H2>);
         return this;
     }
+
     updateAny(value: unknown): this {
         if (value === null || value === undefined) { this._chunks.push(new Uint8Array([0])); this._totalLen++; return this; }
         if (typeof value === 'number') {
@@ -236,7 +195,7 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> implements
     }
 
     digest(): H {
-        throw new Error(`${this.algorithm}: WebCrypto digests are asynchronous. Use digestAsync() instead.`);
+        throw new Error(`${this.algorithm}: WebCrypto digests are asynchronous. Use digestAsync() or hashAsync() instead.`);
     }
 
     digestBytes(): Uint8Array {
@@ -247,11 +206,11 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> implements
     }
 
     digestHex(uppercase: boolean = false): string {
-        return toHex(this.digestBytes(), uppercase);
+        return bytesToHex(this.digestBytes(), uppercase);
     }
 
     digestBase64(): string {
-        return encode(this.digestBytes());
+        return encodeBase64(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
@@ -275,8 +234,6 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> implements
         if (this._cachedResult) c._cachedResult = new Uint8Array(this._cachedResult);
         return c;
     }
-
-
 }
 
 export class Sha1 extends WebCryptoHasher<Hash256> {
