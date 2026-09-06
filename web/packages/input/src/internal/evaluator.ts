@@ -403,9 +403,17 @@ const resolveTouch = <TSchema extends InputActionSchema>(
     target: number
 ): MutableTouchPoint | undefined => {
     if (target === TOUCH_ANY) {
-        return runtime._primaryTouchId !== undefined
-            ? runtime._touches.get(runtime._primaryTouchId)
-            : runtime._touches.values().next().value;
+        if (runtime._primaryTouchId !== undefined) {
+            return runtime._touches.get(runtime._primaryTouchId);
+        }
+        // Find touch with lowest order (oldest active touch)
+        let oldest: MutableTouchPoint | undefined;
+        for (const touch of runtime._touches.values()) {
+            if (!oldest || touch.order < oldest.order) {
+                oldest = touch;
+            }
+        }
+        return oldest;
     }
 
     if (target === TOUCH_PRIMARY) {

@@ -991,7 +991,7 @@ export class InputSystem<TSchema extends InputActionSchema = InputActionSchema>
     }
 
     /** @internal */ public _requireActionIndex(action: string): number {
-        const index = this._actionIndices.get(action);
+        const index = this._actionIndices.get(action.trim());
         if (typeof index === 'number') {
             return index;
         }
