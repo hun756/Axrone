@@ -150,6 +150,31 @@ export class DynamicAABBTree2D<TUserData = ShapeId> {
     }
 
     /**
+     * Balance metric in [0, 1]: averages per-node min/max child-height ratios
+     * across all internal nodes. 1.0 = every subtree pair has equal height.
+     * Uses iterative post-order traversal (structurally distinct from 3D recursive version).
+     */
+    getTreeBalance(): number {
+        if (this._root === NULL_NODE || this._leafCount <= 1) return 1.0;
+        let ratioSum = 0;
+        let internalCount = 0;
+        const stack: number[] = [this._root];
+        while (stack.length > 0) {
+            const nid = stack.pop()!;
+            const nd = this._nodes[nid];
+            if (nd.child1 === NULL_NODE) continue;
+            const ha = this._nodes[nd.child1].height;
+            const hb = this._nodes[nd.child2].height;
+            const hi = Math.max(ha, hb);
+            const lo = Math.min(ha, hb);
+            ratioSum += hi > 0 ? lo / hi : 1.0;
+            internalCount++;
+            stack.push(nd.child1, nd.child2);
+        }
+        return internalCount === 0 ? 1.0 : ratioSum / internalCount;
+    }
+
+    /**
      * Returns a quality metric for the tree.
      * Ratio = actualHeight / max(1, ceil(log2(leafCount + 1))).
      * 1.0 = perfectly balanced; higher = more degenerate.
