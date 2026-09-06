@@ -487,20 +487,7 @@ export class InputSystem<TSchema extends InputActionSchema = InputActionSchema> 
         }
 
         const storedUser = this._requireUser(user);
-        const previousOwner = this._gamepadOwners.get(index);
-        if (previousOwner && previousOwner !== storedUser.id) {
-            const owner = this._users.get(previousOwner);
-            owner?.devices.delete(this._deviceOwnershipKey({ device: 'gamepad', index }));
-        }
-
-        storedUser.devices.set(
-            this._deviceOwnershipKey({ device: 'gamepad', index }),
-            Object.freeze({
-                device: 'gamepad',
-                index,
-            })
-        );
-        this._gamepadOwners.set(index, storedUser.id);
+        this._claimGamepadOwnership(storedUser, index);
         storedUser.sequence = ++this._sequence;
         return this._snapshotUserState(storedUser);
     }
@@ -967,11 +954,7 @@ export class InputSystem<TSchema extends InputActionSchema = InputActionSchema> 
             for (const device of normalizedDevices) {
                 existing.devices.set(this._deviceOwnershipKey(device), device);
                 if (device.device === 'gamepad') {
-                    const previousOwner = this._gamepadOwners.get(device.index);
-                    if (previousOwner && previousOwner !== existing.id) {
-                        this._users.get(previousOwner)?.devices.delete(this._deviceOwnershipKey(device));
-                    }
-                    this._gamepadOwners.set(device.index, existing.id);
+                    this._claimGamepadOwnership(existing, device.index);
                 }
             }
 
@@ -988,11 +971,7 @@ export class InputSystem<TSchema extends InputActionSchema = InputActionSchema> 
         for (const device of normalizedDevices) {
             user.devices.set(this._deviceOwnershipKey(device), device);
             if (device.device === 'gamepad') {
-                const previousOwner = this._gamepadOwners.get(device.index);
-                if (previousOwner && previousOwner !== user.id) {
-                    this._users.get(previousOwner)?.devices.delete(this._deviceOwnershipKey(device));
-                }
-                this._gamepadOwners.set(device.index, user.id);
+                this._claimGamepadOwnership(user, device.index);
             }
         }
 
@@ -1191,6 +1170,23 @@ export class InputSystem<TSchema extends InputActionSchema = InputActionSchema> 
 
     private _deviceOwnershipKey(device: InputOwnedDeviceDefinition): string {
         return device.device === 'gamepad' ? `gamepad:${device.index}` : device.device;
+    }
+
+    private _claimGamepadOwnership(user: InternalInputUser, index: number): void {
+        const previousOwner = this._gamepadOwners.get(index);
+        if (previousOwner && previousOwner !== user.id) {
+            const owner = this._users.get(previousOwner);
+            owner?.devices.delete(this._deviceOwnershipKey({ device: 'gamepad', index }));
+        }
+
+        user.devices.set(
+            this._deviceOwnershipKey({ device: 'gamepad', index }),
+            Object.freeze({
+                device: 'gamepad',
+                index,
+            })
+        );
+        this._gamepadOwners.set(index, user.id);
     }
 
     private _requireControlPath(value: string): InputControlPath {
