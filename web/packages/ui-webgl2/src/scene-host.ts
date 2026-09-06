@@ -6,7 +6,7 @@ import { UIHost, setSceneUIWidgetRefResolver } from '@axrone/scene-runtime/scene
 // Re-export UIHost so the module namespace (imported via __AXRONE_RUNTIME__.modules)
 // exposes the class for the boot-factory fallback discovery path.
 export { UIHost };
-import { attachUIOverlayToScene } from './scene';
+import { attachUIOverlayToScene, resolveFramebufferSize } from './scene';
 import { WebGL2UIRenderer } from './renderer';
 import { createUIWorldSurface } from './world-surface';
 import { createUIWorldQuadRenderer, orientQuadTowardCamera } from './world-quad';
@@ -233,11 +233,6 @@ const uiWidgetRefResolver = (host: unknown, widgetKey: string): UIWidgetRef | nu
 const installUIWidgetRefResolver = (): void => {
     setSceneUIWidgetRefResolver(uiWidgetRefResolver);
 };
-
-const resolveFramebufferSize = (scene: SceneUIOverlayTarget): { width: number; height: number } => ({
-    width: Math.max(1, scene.canvas.width || scene.gl.drawingBufferWidth || 1),
-    height: Math.max(1, scene.canvas.height || scene.gl.drawingBufferHeight || 1),
-});
 
 const connectUIHostInput = <TPayload>(
     runtime: UIRuntime<TPayload>,
