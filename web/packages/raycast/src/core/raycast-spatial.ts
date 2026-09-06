@@ -1,32 +1,19 @@
 import { Vec3, IVec3Like, EPSILON } from '@axrone/numeric';
 import { Octree } from '@axrone/geometry';
-import { Fnv1a32 } from '@axrone/hash';
 
-const GRID_INITIAL_CAPACITY = 256;
-// Spatial coordinate packing: 21 bits per axis (covers ±1M units at 1.0 cell size)
-// Uses BigInt-free approach: pack into two 32-bit numbers to avoid float issues
 const COORD_BITS = 21;
 const COORD_MASK = (1 << COORD_BITS) - 1;
-const COORD_OFFSET = 1 << (COORD_BITS - 1); // bias to handle negatives
-
-const _spatialHasher = new Fnv1a32();
+const COORD_OFFSET = 1 << (COORD_BITS - 1);
 
 function packCellKey(x: number, y: number, z: number): number {
-    // Bias coordinates to non-negative range
     const bx = (x + COORD_OFFSET) & COORD_MASK;
     const by = (y + COORD_OFFSET) & COORD_MASK;
     const bz = (z + COORD_OFFSET) & COORD_MASK;
-    // FNV-1a hash of packed coordinate integers via @axrone/hash
-    _spatialHasher.reset();
-    _spatialHasher.updateU32(bx);
-    _spatialHasher.updateU32(by);
-    _spatialHasher.updateU32(bz);
-    return _spatialHasher.digest() as number;
+    return (bx << 42) | (by << 21) | bz;
 }
 
 interface GridCell<T> {
     readonly items: Set<T>;
-    // Store canonical coords for collision resolution
     readonly x: number;
     readonly y: number;
     readonly z: number;
@@ -49,19 +36,18 @@ export class SpatialHashGrid3D<T> {
     }
 
     public insert(item: T, min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): void {
-        const cellKeys = this._getCellKeys(min, max);
         if (!this._itemCells.has(item)) {
             this._itemCells.set(item, new Set());
         }
         const itemCells = this._itemCells.get(item)!;
 
-        for (const { key, x, y, z } of cellKeys) {
+        this._forEachCellKey(min, max, (key, x, y, z) => {
             if (!this._grid.has(key)) {
                 this._grid.set(key, { items: new Set<T>(), x, y, z });
             }
             this._grid.get(key)!.items.add(item);
             itemCells.add(key);
-        }
+        });
     }
 
     public remove(item: T): void {
@@ -86,14 +72,13 @@ export class SpatialHashGrid3D<T> {
     }
 
     public query(min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): T[] {
-        const cellKeys = this._getCellKeys(min, max);
         const results = new Set<T>();
-        for (const { key } of cellKeys) {
+        this._forEachCellKey(min, max, (key) => {
             const cell = this._grid.get(key);
             if (cell) {
                 for (const item of cell.items) results.add(item);
             }
-        }
+        });
         return Array.from(results);
     }
 
@@ -180,18 +165,20 @@ export class SpatialHashGrid3D<T> {
         };
     }
 
-    private _getCellKeys(min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): { key: number; x: number; y: number; z: number }[] {
+    private _forEachCellKey(
+        min: Readonly<IVec3Like>,
+        max: Readonly<IVec3Like>,
+        callback: (key: number, x: number, y: number, z: number) => void
+    ): void {
         const minCell = this._getCellCoords(min);
         const maxCell = this._getCellCoords(max);
-        const keys: { key: number; x: number; y: number; z: number }[] = [];
         for (let cx = minCell.x; cx <= maxCell.x; cx++) {
             for (let cy = minCell.y; cy <= maxCell.y; cy++) {
                 for (let cz = minCell.z; cz <= maxCell.z; cz++) {
-                    keys.push({ key: packCellKey(cx, cy, cz), x: cx, y: cy, z: cz });
+                    callback(packCellKey(cx, cy, cz), cx, cy, cz);
                 }
             }
         }
-        return keys;
     }
 
     private _cellBoundary(cell: number, direction: number): number {
