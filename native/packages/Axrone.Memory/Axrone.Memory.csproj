@@ -62,6 +62,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../Axrone.Collections/Axrone.Collections.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="tests/**" />
   </ItemGroup>
 

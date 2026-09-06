@@ -32,7 +32,7 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
 
         _rootManager = new NativeBlockMemoryManager<T>((T*)_backingPointer, blockSize * blockCount, 64);
         _slotArray = new PooledBufferSlot<T>[blockCount];
-        _freeSlotQueue = new MpmcRingBuffer<PooledBufferSlot<T>>(blockCount);
+        _freeSlotQueue = new MpmcRingBuffer<PooledBufferSlot<T>>(Math.Max(2, blockCount));
 
         for (int i = 0; i < blockCount; i++)
         {
@@ -153,6 +153,7 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
         if (Interlocked.Exchange(ref _isDisposed, 1) == 0)
         {
             for (int i = 0; i < _slotArray.Length; i++) _slotArray[i].FinalizeEviction();
+            _freeSlotQueue.Dispose();
             ((IDisposable)_rootManager).Dispose();
             NativeMemory.AlignedFree(_backingPointer);
         }
