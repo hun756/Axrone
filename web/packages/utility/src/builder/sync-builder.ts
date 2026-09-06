@@ -42,9 +42,9 @@ export class Builder<TTarget extends object, in out TSupplied extends keyof TTar
         const instance = Object.create(Object.getPrototypeOf(this)) as this;
         (instance as any)[$state] = this[$state];
         (instance as any)[$node] = node;
-        (instance as any).validators = this.validators;
-        (instance as any).beforeHooks = this.beforeHooks;
-        (instance as any).afterHooks = this.afterHooks;
+        (instance as any).validators = this.validators.slice();
+        (instance as any).beforeHooks = this.beforeHooks.slice();
+        (instance as any).afterHooks = this.afterHooks.slice();
         (instance as any).shouldFreeze = this.shouldFreeze;
         return instance;
     }
