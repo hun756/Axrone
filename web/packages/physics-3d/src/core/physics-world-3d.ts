@@ -1,5 +1,4 @@
-import { Vec3, Quat, clamp, type IVec3Like } from '@axrone/numeric';
-import { AABB3D } from '@axrone/geometry';
+import { Vec3, Quat, type IVec3Like } from '@axrone/numeric';
 import type {
     IAABBQueryCallback,
     ICollisionFilter,
@@ -51,60 +50,30 @@ import {
 import { PhysicsWorld3DContactRuntime } from './physics-world-3d-contact-runtime';
 import {
     BODY_TYPE_DYNAMIC,
-    BODY_TYPE_STATIC,
     CONSTRAINT_TYPE_CONE_TWIST,
     CONSTRAINT_TYPE_FIXED,
     CONSTRAINT_TYPE_GENERIC,
     CONSTRAINT_TYPE_HINGE,
     CONSTRAINT_TYPE_SLIDER,
     CONSTRAINT_TYPE_SPRING,
-    IDENTITY_ROTATION,
-    SHAPE_TYPE_BOX,
-    SHAPE_TYPE_CAPSULE,
-    SHAPE_TYPE_CONE,
-    SHAPE_TYPE_CONVEX_HULL,
-    SHAPE_TYPE_CYLINDER,
-    SHAPE_TYPE_HEIGHTFIELD,
-    SHAPE_TYPE_SPHERE,
-    SHAPE_TYPE_TRIANGLE_MESH,
     type IAabb3D,
     type IConstraintDescriptor3D,
     type IShapeDescriptor3D,
     type IShapeOptions3D,
     type IShapeRayHit3D,
     type SupportedConstraintDef3D,
-    type SupportedShapeDef3D,
-    componentMax,
-    componentMin,
-    cylinderConeLocalHalfExtents,
-    expandAabb,
-    getAxisVector,
-    getBoxWorldExtents,
-    getHeightFieldLocalVertex,
     inverseTransformPoint3D,
     inverseVec3,
-    intersectsAabb,
-    linePointDistanceSquared,
-    makeFilter,
-    makeMaterial,
-    midpointVec3,
-    rayAabbHit,
-    raySphereHit,
-    rayTriangleHit,
-    supportsQueryFilter,
     transformPoint3D,
 } from './physics-world-3d-shared';
 import { PhysicsConstants } from '../types';
 import {
-    computeLocalConvexBounds,
-    computeLocalHeightFieldBounds,
     computeShapeMassData,
 } from './physics-world-3d-shape-mass-properties';
 import {
     computeShapeAabb as computeShapeAabbImpl,
     getShapeWorldCenter as getShapeWorldCenterImpl,
     rayCastShape as rayCastShapeImpl,
-    sampleHeightFieldHeight as sampleHeightFieldHeightImpl,
     testPointShape as testPointShapeImpl,
 } from './physics-world-3d-shape-geometry';
 import {
@@ -637,14 +606,6 @@ export class PhysicsWorld3D implements Disposable {
         integrateVelocitiesImpl(this._bodyManager, this._gravity, dt);
     }
 
-    private _solveConstraints(
-        deltaTime: number,
-        velocityIterations: number,
-        positionIterations: number
-    ): void {
-        // Legacy combined solve — delegates to the split pipeline.
-        this._contactRuntime.solve(deltaTime, velocityIterations, positionIterations);
-    }
 
     /**
      * World-level sleeping: bodies with low kinetic energy for SLEEP_TIME
@@ -1092,13 +1053,6 @@ export class PhysicsWorld3D implements Disposable {
         );
     }
 
-    private _sampleHeightFieldHeight(
-        def: Readonly<IHeightFieldShapeDef3D>,
-        x: number,
-        z: number
-    ): number | null {
-        return sampleHeightFieldHeightImpl(def, x, z);
-    }
 
     [Symbol.dispose](): void {
         if (this._disposed) return;
