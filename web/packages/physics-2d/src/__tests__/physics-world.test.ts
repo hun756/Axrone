@@ -911,5 +911,144 @@ describe('PhysicsWorld2D Integration', () => {
             w[Symbol.dispose]();
         });
     });
+
+    describe('RB-1: Static AABB cache invalidation', () => {
+        it('detects collision after static body moved via bodyManager.setPosition', () => {
+            // Static body A starts at origin, dynamic body B at (50,0) — far apart.
+            const staticBody = world.createBody({
+                type: BodyType.Static,
+                position: { x: 0, y: 0 },
+            });
+            world.createCircleShape(staticBody, { radius: 1 });
+
+            const dynamicBody = world.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 50, y: 0 },
+            });
+            world.createCircleShape(dynamicBody, { radius: 1 });
+
+            // Step 1: broadphase cache populated with A's AABB at (0,0).
+            world.step(1 / 60);
+
+            // No contact — bodies far apart.
+            expect(world.getContactManager().contactCount).toBe(0);
+
+            // Move static body A to overlap with B.
+            const bm = world.getBodyManager();
+            bm.setPosition(staticBody, { x: 50, y: 0 });
+
+            // Step 2: if cache invalidated, broadphase AABB updated → collision found.
+            world.step(1 / 60);
+
+            // Assertion A: collision detected at NEW position.
+            expect(world.getContactManager().contactCount).toBeGreaterThan(0);
+        });
+
+        it('detects collision after static body moved via body view.setTransform', () => {
+            const staticBody = world.createBody({
+                type: BodyType.Static,
+                position: { x: 0, y: 0 },
+            });
+            world.createCircleShape(staticBody, { radius: 1 });
+
+            const dynamicBody = world.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 50, y: 0 },
+            });
+            world.createCircleShape(dynamicBody, { radius: 1 });
+
+            world.step(1 / 60);
+            expect(world.getContactManager().contactCount).toBe(0);
+
+            // Move via body view (exercises setTransform → bodyManager.setPosition).
+            const view = world.getBody(staticBody);
+            expect(view).not.toBeNull();
+            view!.setTransform({ x: 50, y: 0 }, 0);
+
+            world.step(1 / 60);
+
+            // Assertion A: collision detected via body-view path.
+            expect(world.getContactManager().contactCount).toBeGreaterThan(0);
+        });
+
+        it('does NOT find stale collision at OLD position after static body moved', () => {
+            // Static body A at (0,0), dynamic body B at (0.5, 0) — overlapping.
+            const staticBody = world.createBody({
+                type: BodyType.Static,
+                position: { x: 0, y: 0 },
+            });
+            const staticShape = world.createCircleShape(staticBody, { radius: 1 });
+
+            const dynamicBody = world.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0.5, y: 0 },
+            });
+            world.createCircleShape(dynamicBody, { radius: 1 });
+
+            // Step to populate broadphase.
+            world.step(1 / 60);
+            // They overlap — contact exists.
+            expect(world.getContactManager().contactCount).toBeGreaterThan(0);
+
+            // Move static body FAR away.
+            world.getBodyManager().setPosition(staticBody, { x: 1000, y: 1000 });
+
+            world.step(1 / 60);
+
+            // Assertion B: no stale collision at old position.
+            // Without invalidation, broadphase still has A's AABB at (0,0) which
+            // overlaps B at (0.5,0), so narrowphase would still be invoked.
+            // With invalidation, broadphase AABB is at (1000,1000) — no overlap.
+            expect(world.getContactManager().contactCount).toBe(0);
+        });
+
+        it('does not invalidate static cache when dynamic body moves', () => {
+            const dynamicBody = world.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+            });
+            world.createCircleShape(dynamicBody, { radius: 1 });
+
+            world.step(1 / 60);
+
+            // Access internal _staticAabbDirty for performance guard.
+            const dirtySet = (world as any)._staticAabbDirty as Set<number>;
+            const dirtyBefore = dirtySet.size;
+
+            // Move dynamic body — should NOT add to static dirty set.
+            world.getBodyManager().setPosition(dynamicBody, { x: 100, y: 100 });
+
+            expect(dirtySet.size).toBe(dirtyBefore);
+        });
+
+        it('static AABB cache is not recomputed when body does not move', () => {
+            const staticBody = world.createBody({
+                type: BodyType.Static,
+                position: { x: 0, y: 0 },
+            });
+            world.createCircleShape(staticBody, { radius: 1 });
+
+            // Step once to populate cache.
+            world.step(1 / 60);
+
+            const dirtySet = (world as any)._staticAabbDirty as Set<number>;
+            const cacheMap = (world as any)._staticAabbCache as Map<number, unknown>;
+
+            // After step, dirty set should be empty (all entries consumed).
+            expect(dirtySet.size).toBe(0);
+            // Cache should have an entry for the shape.
+            expect(cacheMap.size).toBeGreaterThan(0);
+
+            // Step 10 more times without moving the static body.
+            for (let i = 0; i < 10; i++) {
+                world.step(1 / 60);
+            }
+
+            // Dirty set should still be empty — no spurious invalidation.
+            expect(dirtySet.size).toBe(0);
+            // Cache entry should still be the same object (not recomputed).
+            expect(cacheMap.size).toBeGreaterThan(0);
+        });
+    });
 });
 

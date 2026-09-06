@@ -61,6 +61,8 @@ export class BodyManager2D extends SoAManager<BodySchema> {
     private readonly _gravityScales: Float32Array;
     private readonly _dampingData: Float32Array;
     private readonly _userData: Map<BodyId, unknown>;
+    /** Called when a STATIC body's position or rotation changes. (RB-1 fix) */
+    private _onStaticTransformChange: ((bodyId: BodyId) => void) | null = null;
 
     constructor(maxBodies: number = 1024) {
         super(maxBodies, BODY_SCHEMA);
@@ -163,6 +165,9 @@ export class BodyManager2D extends SoAManager<BodySchema> {
 
     setPosition(bodyId: BodyId, position: ReadonlyVec2): void {
         this._writeVec2(this._resolveIndex(bodyId), 'posX', position);
+        if (this._onStaticTransformChange && this.getBodyType(bodyId) === 0) {
+            this._onStaticTransformChange(bodyId);
+        }
     }
 
     getRotation(bodyId: BodyId): number {
@@ -171,6 +176,9 @@ export class BodyManager2D extends SoAManager<BodySchema> {
 
     setRotation(bodyId: BodyId, rotation: number): void {
         this._writeScalar(this._resolveIndex(bodyId), 'rotation', rotation);
+        if (this._onStaticTransformChange && this.getBodyType(bodyId) === 0) {
+            this._onStaticTransformChange(bodyId);
+        }
     }
 
     getLinearVelocity(bodyId: BodyId, out?: IVec2Output): IVec2Output {
@@ -394,6 +402,14 @@ export class BodyManager2D extends SoAManager<BodySchema> {
 
     getBodyIds(): IterableIterator<BodyId> {
         return this._bodyIdToIndex.keys();
+    }
+
+    /**
+     * Register a callback invoked whenever a STATIC body's position or rotation
+     * is written. Used by PhysicsWorld2D to invalidate the static AABB cache. (RB-1)
+     */
+    onStaticTransformChange(callback: (bodyId: BodyId) => void): void {
+        this._onStaticTransformChange = callback;
     }
 
     hasBody(bodyId: BodyId): boolean {

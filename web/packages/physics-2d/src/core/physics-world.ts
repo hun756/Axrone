@@ -160,6 +160,13 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._narrowphase = new Narrowphase2D();
         this._broadphase = new DynamicAABBTree2D(1024);
 
+        // RB-1: Centralized static AABB cache invalidation.
+        // Whenever a STATIC body's transform is written (via bodyManager.setPosition /
+        // setRotation), mark its shapes dirty so the next _updateBroadphase recomputes.
+        this._bodyManager.onStaticTransformChange((bodyId) => {
+            this._markStaticDirty(bodyId);
+        });
+
         if (config.enableProfiler) {
             this._profiler = {
                 stepTime: 0,
