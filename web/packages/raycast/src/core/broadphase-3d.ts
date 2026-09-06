@@ -26,8 +26,33 @@ export interface IBroadphase3D<T> {
     readonly itemCount: number;
 }
 
-function pairKey(a: number, b: number): string {
-    return a < b ? `${a}:${b}` : `${b}:${a}`;
+function pairKey(a: number, b: number): number {
+    const min = a < b ? a : b;
+    const max = a < b ? b : a;
+    return min * 100000 + max;
+}
+
+function dedupedPairs<T>(
+    bounds: Map<T, [Readonly<IVec3Like>, Readonly<IVec3Like>]>,
+    queryFn: (min: Readonly<IVec3Like>, max: Readonly<IVec3Like>) => T[],
+    getIdFn: (item: T) => number
+): IBroadphaseResult3D<T>[] {
+    const results: IBroadphaseResult3D<T>[] = [];
+    const seen = new Set<number>();
+
+    for (const [item, [min, max]] of bounds) {
+        const candidates = queryFn(min, max);
+        const idA = getIdFn(item);
+        for (const other of candidates) {
+            if (other === item) continue;
+            const idB = getIdFn(other);
+            const key = pairKey(idA, idB);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            results.push({ itemA: item, itemB: other });
+        }
+    }
+    return results;
 }
 
 export class SpatialHashBroadphase3D<T extends IBroadphaseItem3D> implements IBroadphase3D<T> {
@@ -69,22 +94,7 @@ export class SpatialHashBroadphase3D<T extends IBroadphaseItem3D> implements IBr
     }
 
     queryPairs(): IBroadphaseResult3D<T>[] {
-        const results: IBroadphaseResult3D<T>[] = [];
-        const seen = new Set<string>();
-
-        for (const [item, [min, max]] of this._bounds) {
-            const candidates = this._grid.query(min, max);
-            const idA = this._getId(item);
-            for (const other of candidates) {
-                if (other === item) continue;
-                const idB = this._getId(other);
-                const key = pairKey(idA, idB);
-                if (seen.has(key)) continue;
-                seen.add(key);
-                results.push({ itemA: item, itemB: other });
-            }
-        }
-        return results;
+        return dedupedPairs(this._bounds, (min, max) => this._grid.query(min, max), (item) => this._getId(item));
     }
 
     queryAABB(min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): T[] {
@@ -150,22 +160,7 @@ export class OctreeBroadphase3D<T extends IBroadphaseItem3D> implements IBroadph
     }
 
     queryPairs(): IBroadphaseResult3D<T>[] {
-        const results: IBroadphaseResult3D<T>[] = [];
-        const seen = new Set<string>();
-
-        for (const [item, [min, max]] of this._bounds) {
-            const candidates = this._octree.query(min, max);
-            const idA = this._getId(item);
-            for (const other of candidates) {
-                if (other === item) continue;
-                const idB = this._getId(other);
-                const key = pairKey(idA, idB);
-                if (seen.has(key)) continue;
-                seen.add(key);
-                results.push({ itemA: item, itemB: other });
-            }
-        }
-        return results;
+        return dedupedPairs(this._bounds, (min, max) => this._octree.query(min, max), (item) => this._getId(item));
     }
 
     queryAABB(min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): T[] {
