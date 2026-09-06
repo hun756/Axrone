@@ -39,8 +39,13 @@ export class Djb2 extends HasherBase<Hash32> {
 
     updateString(input: string): this {
         this._checkFinalized();
-        const bytes = new TextEncoder().encode(input);
-        return this.updateBytes(bytes);
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            this._h = (this._h * 33 + (c & 0xff)) >>> 0;
+            this._h = (this._h * 33 + ((c >>> 8) & 0xff)) >>> 0;
+        }
+        this._byteLength += input.length * 2;
+        return this;
     }
 
     updateBoolean(value: boolean): this {
@@ -170,8 +175,13 @@ export class Djb2a extends HasherBase<Hash32> {
 
     updateString(input: string): this {
         this._checkFinalized();
-        const bytes = new TextEncoder().encode(input);
-        return this.updateBytes(bytes);
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            this._h = ((this._h ^ (c & 0xff)) * 33) >>> 0;
+            this._h = ((this._h ^ ((c >>> 8) & 0xff)) * 33) >>> 0;
+        }
+        this._byteLength += input.length * 2;
+        return this;
     }
 
     updateBoolean(value: boolean): this {
@@ -309,8 +319,13 @@ export class Sdbm extends HasherBase<Hash32> {
 
     updateString(input: string): this {
         this._checkFinalized();
-        const bytes = new TextEncoder().encode(input);
-        return this.updateBytes(bytes);
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            this._h = ((c & 0xff) + (this._h << 6) + (this._h << 16) - this._h) >>> 0;
+            this._h = (((c >>> 8) & 0xff) + (this._h << 6) + (this._h << 16) - this._h) >>> 0;
+        }
+        this._byteLength += input.length * 2;
+        return this;
     }
 
     updateBoolean(value: boolean): this {

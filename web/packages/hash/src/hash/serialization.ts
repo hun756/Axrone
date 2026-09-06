@@ -1,7 +1,7 @@
 import type { Hash32, Hash64, Hash128, Hash256, Hash512, HashValue } from './types';
 import { asHash32, asHash64, asHash128 } from './types';
 import { HashSerializationError, HashDeserializationError } from './errors';
-import { encode, decode } from '@axrone/utility';
+import { encodeBase64, decodeBase64 } from './bits';
 
 const HEX_CHARS = '0123456789abcdef';
 const HEX_REV: number[] = new Array(256).fill(-1);
@@ -110,11 +110,11 @@ export function hexToHash128(input: string): Hash128 {
 }
 
 export function bytesToBase64(bytes: Uint8Array): string {
-    return encode(bytes);
+    return encodeBase64(bytes);
 }
 
 export function base64ToBytes(input: string): Uint8Array {
-    return decode(input);
+    return decodeBase64(input);
 }
 
 export function hash32ToBase64(value: Hash32): string {

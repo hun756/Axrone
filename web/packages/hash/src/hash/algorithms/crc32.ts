@@ -56,8 +56,13 @@ export class Crc32 extends HasherBase<Hash32> {
 
     updateString(input: string): this {
         this._checkFinalized();
-        const bytes = new TextEncoder().encode(input);
-        return this.updateBytes(bytes);
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            this._h = ((this._h >>> 8) ^ CRC32_TABLE[(this._h ^ (c & 0xff)) & 0xff]!) >>> 0;
+            this._h = ((this._h >>> 8) ^ CRC32_TABLE[(this._h ^ ((c >>> 8) & 0xff)) & 0xff]!) >>> 0;
+        }
+        this._byteLength += input.length * 2;
+        return this;
     }
 
     updateBoolean(value: boolean): this {
@@ -209,8 +214,13 @@ export class Crc32c extends HasherBase<Hash32> {
 
     updateString(input: string): this {
         this._checkFinalized();
-        const bytes = new TextEncoder().encode(input);
-        return this.updateBytes(bytes);
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            this._h = ((this._h >>> 8) ^ CRC32C_TABLE[(this._h ^ (c & 0xff)) & 0xff]!) >>> 0;
+            this._h = ((this._h >>> 8) ^ CRC32C_TABLE[(this._h ^ ((c >>> 8) & 0xff)) & 0xff]!) >>> 0;
+        }
+        this._byteLength += input.length * 2;
+        return this;
     }
 
     updateBoolean(value: boolean): this {

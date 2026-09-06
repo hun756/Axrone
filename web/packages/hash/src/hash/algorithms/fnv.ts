@@ -13,7 +13,6 @@ const FNV_METADATA: HashAlgorithmMetadata = {
     seedable: true,
     keyed: false,
     cryptographicallySecure: false,
-    async: false,
     description: 'FNV-1a 32-bit non-cryptographic hash (Fowler-Noll-Voy)',
 };
 
@@ -25,8 +24,13 @@ abstract class Fnv1a32Base extends HasherBase<Hash32> {
 
     updateString(input: string): this {
         this._checkFinalized();
-        const bytes = new TextEncoder().encode(input);
-        return this.updateBytes(bytes);
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            this._h = Math.imul(this._h ^ (c & 0xff), 0x01000193) >>> 0;
+            this._h = Math.imul(this._h ^ ((c >>> 8) & 0xff), 0x01000193) >>> 0;
+        }
+        this._byteLength += input.length * 2;
+        return this;
     }
 
     updateBoolean(value: boolean): this {
@@ -185,10 +189,15 @@ export class Fnv1_32 extends Fnv1a32Base {
         return this;
     }
 
-    updateString(input: string): this {
+    override updateString(input: string): this {
         this._checkFinalized();
-        const bytes = new TextEncoder().encode(input);
-        return this.updateBytes(bytes);
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            this._h = (Math.imul(this._h, 0x01000193) ^ (c & 0xff)) >>> 0;
+            this._h = (Math.imul(this._h, 0x01000193) ^ ((c >>> 8) & 0xff)) >>> 0;
+        }
+        this._byteLength += input.length * 2;
+        return this;
     }
 
     reset(seed: Seed32 = asSeed32(0)): this {
@@ -217,7 +226,6 @@ const FNV64_METADATA: HashAlgorithmMetadata = {
     seedable: true,
     keyed: false,
     cryptographicallySecure: false,
-    async: false,
     description: 'FNV-1a 64-bit non-cryptographic hash (bigint)',
 };
 
@@ -251,8 +259,13 @@ export class Fnv1a64 extends HasherBase<Hash64> {
 
     updateString(input: string): this {
         this._checkFinalized();
-        const bytes = new TextEncoder().encode(input);
-        return this.updateBytes(bytes);
+        for (let i = 0; i < input.length; i++) {
+            const c = BigInt(input.charCodeAt(i));
+            this._h = ((this._h ^ (c & 0xffn)) * 0x100000001b3n) & 0xffffffffffffffffn;
+            this._h = ((this._h ^ ((c >> 8n) & 0xffn)) * 0x100000001b3n) & 0xffffffffffffffffn;
+        }
+        this._byteLength += input.length * 2;
+        return this;
     }
 
     updateBoolean(value: boolean): this {
