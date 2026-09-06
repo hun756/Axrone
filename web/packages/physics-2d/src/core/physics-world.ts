@@ -45,6 +45,7 @@ import { ContactManager2D } from './contact-manager';
 import { IslandSolver2D } from './island-solver';
 import { Narrowphase2D } from './narrowphase';
 import { DynamicAABBTree2D } from './broadphase';
+import { ContinuousCollisionDetection } from './continuous-collision';
 import { createPhysicsBody2DView } from './physics-world-2d-body-view';
 import { PhysicsWorld2DConstraintStore } from './physics-world-2d-constraint-store';
 import { PhysicsWorld2DShapeStore } from './physics-world-2d-shape-store';
@@ -196,6 +197,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const allowSleep = this.config.allowSleep ?? true;
 
         this._updateBroadphase();
+        this._performCCD(deltaTime);
         this._detectCollisions();
 
         this._solver.solveIslands(
@@ -215,6 +217,85 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._stepTime = performance.now() - t0;
         if (this._profiler) {
             this._profiler.stepTime = this._stepTime;
+        }
+    }
+
+    /**
+     * Continuous Collision Detection pass for bullet-flagged bodies.
+     * Prevents tunneling by computing time-of-impact and clamping movement.
+     */
+    private _performCCD(deltaTime: number): void {
+        const BodyFlagsBullet = 1 << 2; // BodyFlags.Bullet
+        for (const bodyId of this._bodyManager.getBodyIds()) {
+            const flags = this._bodyManager.getFlags(bodyId);
+            if ((flags & BodyFlagsBullet) === 0) continue;
+
+            const velocity = this._bodyManager.getLinearVelocity(bodyId);
+            const speedSq = velocity.x * velocity.x + velocity.y * velocity.y;
+            if (speedSq < 1e-8) continue;
+
+            // Get all shapes for this bullet body
+            const bodyShapes = this._shapeManager.getShapesForBody(bodyId);
+            for (const shapeId of bodyShapes) {
+                const currentAabb = this._computeShapeAabb(shapeId);
+                if (!currentAabb) continue;
+
+                // Compute swept AABB (expand by velocity * dt)
+                const sweptMin = {
+                    x: Math.min(currentAabb.min.x, currentAabb.min.x + velocity.x * deltaTime),
+                    y: Math.min(currentAabb.min.y, currentAabb.min.y + velocity.y * deltaTime),
+                };
+                const sweptMax = {
+                    x: Math.max(currentAabb.max.x, currentAabb.max.x + velocity.x * deltaTime),
+                    y: Math.max(currentAabb.max.y, currentAabb.max.y + velocity.y * deltaTime),
+                };
+                const sweptAabb = new AABB2D(sweptMin, sweptMax);
+
+                // Query broadphase for potential colliders in swept volume
+                const candidates: number[] = [];
+                this._broadphase.query((proxyId) => {
+                    const otherShapeId = this._broadphase.getUserData(proxyId);
+                    if (otherShapeId && otherShapeId !== shapeId) {
+                        const otherDesc = this._shapeStore.getDescriptor(otherShapeId);
+                        if (otherDesc && otherDesc.bodyId !== bodyId) {
+                            candidates.push(proxyId);
+                        }
+                    }
+                    return true;
+                }, sweptAabb);
+
+                // Check TOI for each candidate
+                for (const proxyId of candidates) {
+                    const otherShapeId = this._broadphase.getUserData(proxyId);
+                    if (!otherShapeId) continue;
+                    const otherAabb = this._computeShapeAabb(otherShapeId);
+                    if (!otherAabb) continue;
+
+                    const otherBodyId = this._shapeStore.getDescriptor(otherShapeId)?.bodyId;
+                    if (!otherBodyId) continue;
+                    const otherVel = this._bodyManager.getLinearVelocity(otherBodyId);
+
+                    const ccdResult = ContinuousCollisionDetection.computeTimeOfImpact(
+                        currentAabb,
+                        velocity,
+                        otherAabb,
+                        otherVel,
+                        deltaTime
+                    );
+
+                    if (ccdResult.hit && ccdResult.toi < deltaTime) {
+                        // Clamp body position to TOI
+                        const position = this._bodyManager.getPosition(bodyId);
+                        const clampedPos = {
+                            x: position.x + velocity.x * ccdResult.toi,
+                            y: position.y + velocity.y * ccdResult.toi,
+                        };
+                        this._bodyManager.setPosition(bodyId, clampedPos);
+                        // Break after first TOI found for this shape
+                        break;
+                    }
+                }
+            }
         }
     }
 
