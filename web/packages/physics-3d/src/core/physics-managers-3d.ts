@@ -219,13 +219,19 @@ export class BodyManager3D implements Disposable {
         return this._readVec(this._velocities, index * VELOCITY_STRIDE + LINEAR_VEL_OFFSET, out);
     }
 
-    setLinearVelocity(bodyId: BodyId3D, velocity: IVec3Like): void {
+    setLinearVelocity(bodyId: BodyId3D, velocity: IVec3Like, wake = true): void {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return;
         const offset = index * VELOCITY_STRIDE + LINEAR_VEL_OFFSET;
         this._velocities[offset] = velocity.x;
         this._velocities[offset + 1] = velocity.y;
         this._velocities[offset + 2] = velocity.z;
+        // Wake the body so the new velocity takes effect immediately.
+        // Component API (Rigidbody3D.velocity) already calls wakeUp() separately;
+        // this ensures the raw API path is correct too.
+        // Internal callers (e.g. _updateSleeping) pass wake=false to avoid
+        // conflicting with the sleep system.
+        if (wake) this.setAwake(bodyId, true);
     }
 
     getAngularVelocity(bodyId: BodyId3D, out?: IVec3Like): IVec3Like {
@@ -234,13 +240,19 @@ export class BodyManager3D implements Disposable {
         return this._readVec(this._velocities, index * VELOCITY_STRIDE + ANGULAR_VEL_OFFSET, out);
     }
 
-    setAngularVelocity(bodyId: BodyId3D, velocity: IVec3Like): void {
+    setAngularVelocity(bodyId: BodyId3D, velocity: IVec3Like, wake = true): void {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return;
         const offset = index * VELOCITY_STRIDE + ANGULAR_VEL_OFFSET;
         this._velocities[offset] = velocity.x;
         this._velocities[offset + 1] = velocity.y;
         this._velocities[offset + 2] = velocity.z;
+        // Wake the body so the new angular velocity takes effect immediately.
+        // Component API (Rigidbody3D.angularVelocity) already calls wakeUp() separately;
+        // this ensures the raw API path is correct too.
+        // Internal callers (e.g. _updateSleeping) pass wake=false to avoid
+        // conflicting with the sleep system.
+        if (wake) this.setAwake(bodyId, true);
     }
 
     getBodyType(bodyId: BodyId3D): number { return Number(this._bodyTypes[this._getBodyIndex(bodyId)]); }
@@ -743,14 +755,16 @@ export class ShapeManager3D implements Disposable {
         this._shapeTypes[index] = type;
 
         const materialOffset = index * 4;
-        this._materials[materialOffset] = material?.friction ?? 0.5;
+        // Canonical default: friction=0.4, maskBits=0xffff — matches DEFAULT_MATERIAL
+        // and DEFAULT_FILTER in physics-world-3d-shared.ts (P1-28 convergence).
+        this._materials[materialOffset] = material?.friction ?? 0.4;
         this._materials[materialOffset + 1] = material?.restitution ?? 0;
         this._materials[materialOffset + 2] = material?.density ?? 1;
         this._materials[materialOffset + 3] = options?.isSensor ? 1 : 0;
 
         const filterOffset = index * 3;
         this._filters[filterOffset] = filter?.categoryBits ?? 1;
-        this._filters[filterOffset + 1] = filter?.maskBits ?? -1;
+        this._filters[filterOffset + 1] = filter?.maskBits ?? 0xffff;
         this._filters[filterOffset + 2] = filter?.groupIndex ?? 0;
 
         this._shapeDefs.set(shapeId, { kind: type, def });

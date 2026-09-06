@@ -147,11 +147,15 @@ export interface IShapePairCandidate3D {
 }
 
 export const IDENTITY_ROTATION: IQuatLike = { x: 0, y: 0, z: 0, w: 1 };
+// Canonical 3D material defaults (P1-28): friction=0.4, restitution=0, density=1.
+// ShapeManager3D._createShape uses these same defaults — both paths (component
+// via Collider3D and raw via BodyManager3D/ShapeManager3D) produce identical results.
 export const DEFAULT_MATERIAL: IMaterial = {
     friction: 0.4 as unknown as Friction,
     restitution: 0 as unknown as Restitution,
     density: 1 as unknown as Density,
 };
+// Canonical 3D filter defaults (P1-28): maskBits=0xffff (all layers).
 export const DEFAULT_FILTER: ICollisionFilter3D = { categoryBits: 1, maskBits: 0xffff, groupIndex: 0 };
 
 export function componentMin(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
