@@ -2,9 +2,9 @@ import { Vec3, IVec2Like, IVec3Like, EPSILON } from '@axrone/numeric';
 import type { IAABB } from '@axrone/geometry';
 
 export interface IRayIntersection {
-    readonly hit: boolean;
-    readonly distance: number;
-    readonly fraction: number;
+    hit: boolean;
+    distance: number;
+    fraction: number;
 }
 
 export class RayPrimitiveIntersector2D {
@@ -369,34 +369,34 @@ export class RayPrimitiveIntersector3D {
         extents: Readonly<IVec3Like>,
         maxDistance: number
     ): IRayIntersection {
-        const localOrigin = Vec3.subtract(origin, center);
+        const lox = origin.x - center.x;
+        const loy = origin.y - center.y;
+        const loz = origin.z - center.z;
 
-        const invDir = Vec3.create(
-            Math.abs(direction.x) > EPSILON ? 1.0 / direction.x : Number.MAX_VALUE,
-            Math.abs(direction.y) > EPSILON ? 1.0 / direction.y : Number.MAX_VALUE,
-            Math.abs(direction.z) > EPSILON ? 1.0 / direction.z : Number.MAX_VALUE
-        );
+        const invDirX = Math.abs(direction.x) > EPSILON ? 1.0 / direction.x : Number.MAX_VALUE;
+        const invDirY = Math.abs(direction.y) > EPSILON ? 1.0 / direction.y : Number.MAX_VALUE;
+        const invDirZ = Math.abs(direction.z) > EPSILON ? 1.0 / direction.z : Number.MAX_VALUE;
 
         let tMin = 0;
         let tMax = maxDistance;
 
         {
-            const t1 = (-extents.x - localOrigin.x) * invDir.x;
-            const t2 = (extents.x - localOrigin.x) * invDir.x;
+            const t1 = (-extents.x - lox) * invDirX;
+            const t2 = (extents.x - lox) * invDirX;
             tMin = Math.max(tMin, Math.min(t1, t2));
             tMax = Math.min(tMax, Math.max(t1, t2));
         }
 
         {
-            const t1 = (-extents.y - localOrigin.y) * invDir.y;
-            const t2 = (extents.y - localOrigin.y) * invDir.y;
+            const t1 = (-extents.y - loy) * invDirY;
+            const t2 = (extents.y - loy) * invDirY;
             tMin = Math.max(tMin, Math.min(t1, t2));
             tMax = Math.min(tMax, Math.max(t1, t2));
         }
 
         {
-            const t1 = (-extents.z - localOrigin.z) * invDir.z;
-            const t2 = (extents.z - localOrigin.z) * invDir.z;
+            const t1 = (-extents.z - loz) * invDirZ;
+            const t2 = (extents.z - loz) * invDirZ;
             tMin = Math.max(tMin, Math.min(t1, t2));
             tMax = Math.min(tMax, Math.max(t1, t2));
         }
@@ -420,13 +420,18 @@ export class RayPrimitiveIntersector3D {
         height: number,
         maxDistance: number
     ): IRayIntersection {
-        const oc = Vec3.subtract(origin, baseCenter);
-        const dirDotAxis = Vec3.dot(direction, axis);
-        const ocDotAxis = Vec3.dot(oc, axis);
+        const ocx = origin.x - baseCenter.x;
+        const ocy = origin.y - baseCenter.y;
+        const ocz = origin.z - baseCenter.z;
+        const dirDotAxis = direction.x * axis.x + direction.y * axis.y + direction.z * axis.z;
+        const ocDotAxis = ocx * axis.x + ocy * axis.y + ocz * axis.z;
 
-        const a = Vec3.dot(direction, direction) - dirDotAxis * dirDotAxis;
-        const b = 2.0 * (Vec3.dot(oc, direction) - ocDotAxis * dirDotAxis);
-        const c = Vec3.dot(oc, oc) - ocDotAxis * ocDotAxis - radius * radius;
+        const dirDotDir = direction.x * direction.x + direction.y * direction.y + direction.z * direction.z;
+        const ocDotOc = ocx * ocx + ocy * ocy + ocz * ocz;
+
+        const a = dirDotDir - dirDotAxis * dirDotAxis;
+        const b = 2.0 * (ocx * direction.x + ocy * direction.y + ocz * direction.z - ocDotAxis * dirDotAxis);
+        const c = ocDotOc - ocDotAxis * ocDotAxis - radius * radius;
 
         const discriminant = b * b - 4 * a * c;
         if (discriminant < 0) {
@@ -439,9 +444,13 @@ export class RayPrimitiveIntersector3D {
 
         for (const t of [t1, t2]) {
             if (t >= 0 && t <= maxDistance) {
-                const hitPoint = Vec3.add(origin, Vec3.multiplyScalar(direction, t));
-                const hitVec = Vec3.subtract(hitPoint, baseCenter);
-                const projection = Vec3.dot(hitVec, axis);
+                const hitX = origin.x + direction.x * t;
+                const hitY = origin.y + direction.y * t;
+                const hitZ = origin.z + direction.z * t;
+                const hitVecX = hitX - baseCenter.x;
+                const hitVecY = hitY - baseCenter.y;
+                const hitVecZ = hitZ - baseCenter.z;
+                const projection = hitVecX * axis.x + hitVecY * axis.y + hitVecZ * axis.z;
 
                 if (projection >= 0 && projection <= height) {
                     return { hit: true, distance: t, fraction: t / maxDistance };
@@ -460,17 +469,29 @@ export class RayPrimitiveIntersector3D {
         radius: number,
         maxDistance: number
     ): IRayIntersection {
-        const segment = Vec3.subtract(p1, p0);
-        const segmentLength = Vec3.len(segment);
-        const segmentDir = Vec3.multiplyScalar(segment, 1 / segmentLength);
+        const segX = p1.x - p0.x;
+        const segY = p1.y - p0.y;
+        const segZ = p1.z - p0.z;
+        const segmentLength = Math.sqrt(segX * segX + segY * segY + segZ * segZ);
+        if (segmentLength < EPSILON) {
+            return this.intersectSphere(origin, direction, p0, radius, maxDistance);
+        }
+        const segDirX = segX / segmentLength;
+        const segDirY = segY / segmentLength;
+        const segDirZ = segZ / segmentLength;
 
-        const oc = Vec3.subtract(origin, p0);
-        const dirDotSeg = Vec3.dot(direction, segmentDir);
-        const ocDotSeg = Vec3.dot(oc, segmentDir);
+        const ocX = origin.x - p0.x;
+        const ocY = origin.y - p0.y;
+        const ocZ = origin.z - p0.z;
+        const dirDotSeg = direction.x * segDirX + direction.y * segDirY + direction.z * segDirZ;
+        const ocDotSeg = ocX * segDirX + ocY * segDirY + ocZ * segDirZ;
 
-        const a = Vec3.dot(direction, direction) - dirDotSeg * dirDotSeg;
-        const b = 2.0 * (Vec3.dot(oc, direction) - ocDotSeg * dirDotSeg);
-        const c = Vec3.dot(oc, oc) - ocDotSeg * ocDotSeg - radius * radius;
+        const dirDotDir = direction.x * direction.x + direction.y * direction.y + direction.z * direction.z;
+        const ocDotOc = ocX * ocX + ocY * ocY + ocZ * ocZ;
+
+        const a = dirDotDir - dirDotSeg * dirDotSeg;
+        const b = 2.0 * (ocX * direction.x + ocY * direction.y + ocZ * direction.z - ocDotSeg * dirDotSeg);
+        const c = ocDotOc - ocDotSeg * ocDotSeg - radius * radius;
 
         const discriminant = b * b - 4 * a * c;
         if (discriminant < 0) {
@@ -491,25 +512,28 @@ export class RayPrimitiveIntersector3D {
         const t1 = (-b - sqrtDisc) / (2.0 * a);
         const t2 = (-b + sqrtDisc) / (2.0 * a);
 
-        let closestHit: IRayIntersection | null = null;
+        let closestT = -1;
 
         for (const t of [t1, t2]) {
             if (t >= 0 && t <= maxDistance) {
-                const hitPoint = Vec3.add(origin, Vec3.multiplyScalar(direction, t));
-                const hitVec = Vec3.subtract(hitPoint, p0);
-                const projection = Vec3.dot(hitVec, segmentDir);
+                const hitX = origin.x + direction.x * t;
+                const hitY = origin.y + direction.y * t;
+                const hitZ = origin.z + direction.z * t;
+                const hitVecX = hitX - p0.x;
+                const hitVecY = hitY - p0.y;
+                const hitVecZ = hitZ - p0.z;
+                const projection = hitVecX * segDirX + hitVecY * segDirY + hitVecZ * segDirZ;
 
                 if (projection >= 0 && projection <= segmentLength) {
-                    const hit = { hit: true, distance: t, fraction: t / maxDistance };
-                    if (!closestHit || t < closestHit.distance) {
-                        closestHit = hit;
+                    if (closestT < 0 || t < closestT) {
+                        closestT = t;
                     }
                 }
             }
         }
 
-        if (closestHit) {
-            return closestHit;
+        if (closestT >= 0) {
+            return { hit: true, distance: closestT, fraction: closestT / maxDistance };
         }
 
         const sphere0 = this.intersectSphere(origin, direction, p0, radius, maxDistance);
