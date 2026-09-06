@@ -553,10 +553,12 @@ export class Rigidbody3D extends Component {
 
     sleep(): void {
         if (!this._bodyManager || this._bodyId === -1) return;
-        this._isSleeping = true;
-        this._bodyManager.setAwake(this._bodyId, false);
+        // Zero velocities BEFORE sleeping — setLinearVelocity/setAngularVelocity
+        // wake the body (Wave 3a), so they must run before setAwake(false).
         this._bodyManager.setLinearVelocity(this._bodyId, Vec3.ZERO);
         this._bodyManager.setAngularVelocity(this._bodyId, Vec3.ZERO);
+        this._isSleeping = true;
+        this._bodyManager.setAwake(this._bodyId, false);
     }
 
     wakeUp(): void {
