@@ -28,7 +28,6 @@ const BODY_TYPE_DYNAMIC = BodyTypeEnum.Dynamic;
 const POSITION_STRIDE = 8;
 const VELOCITY_STRIDE = 8;
 const MASS_STRIDE = 16;
-const SHAPE_STRIDE = 24;
 const CONSTRAINT_STRIDE = 32;
 
 const POSITION_OFFSET = 0;
@@ -187,10 +186,10 @@ export class BodyManager3D implements Disposable {
 
     hasBody(bodyId: BodyId3D): boolean { return this._bodyIdToIndex.has(bodyId); }
 
-    getPosition(bodyId: BodyId3D): IVec3Like {
+    getPosition(bodyId: BodyId3D, out?: IVec3Like): IVec3Like {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return { x: 0, y: 0, z: 0 };
-        return this._readVec(this._positions, index * POSITION_STRIDE + POSITION_OFFSET);
+        return this._readVec(this._positions, index * POSITION_STRIDE + POSITION_OFFSET, out);
     }
 
     setPosition(bodyId: BodyId3D, position: IVec3Like): void {
@@ -202,10 +201,10 @@ export class BodyManager3D implements Disposable {
         this._positions[offset + 2] = position.z;
     }
 
-    getRotation(bodyId: BodyId3D): IQuatLike {
+    getRotation(bodyId: BodyId3D, out?: IQuatLike): IQuatLike {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return { x: 0, y: 0, z: 0, w: 1 };
-        return this._readQuat(this._positions, index * POSITION_STRIDE + ROTATION_OFFSET);
+        return this._readQuat(this._positions, index * POSITION_STRIDE + ROTATION_OFFSET, out);
     }
 
     setRotation(bodyId: BodyId3D, rotation: IQuatLike): void {
@@ -214,10 +213,10 @@ export class BodyManager3D implements Disposable {
         this._writeQuat(index * POSITION_STRIDE + ROTATION_OFFSET, rotation);
     }
 
-    getLinearVelocity(bodyId: BodyId3D): IVec3Like {
+    getLinearVelocity(bodyId: BodyId3D, out?: IVec3Like): IVec3Like {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return { x: 0, y: 0, z: 0 };
-        return this._readVec(this._velocities, index * VELOCITY_STRIDE + LINEAR_VEL_OFFSET);
+        return this._readVec(this._velocities, index * VELOCITY_STRIDE + LINEAR_VEL_OFFSET, out);
     }
 
     setLinearVelocity(bodyId: BodyId3D, velocity: IVec3Like): void {
@@ -229,10 +228,10 @@ export class BodyManager3D implements Disposable {
         this._velocities[offset + 2] = velocity.z;
     }
 
-    getAngularVelocity(bodyId: BodyId3D): IVec3Like {
+    getAngularVelocity(bodyId: BodyId3D, out?: IVec3Like): IVec3Like {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return { x: 0, y: 0, z: 0 };
-        return this._readVec(this._velocities, index * VELOCITY_STRIDE + ANGULAR_VEL_OFFSET);
+        return this._readVec(this._velocities, index * VELOCITY_STRIDE + ANGULAR_VEL_OFFSET, out);
     }
 
     setAngularVelocity(bodyId: BodyId3D, velocity: IVec3Like): void {
@@ -294,18 +293,18 @@ export class BodyManager3D implements Disposable {
     }
 
     getInverseMass(bodyId: BodyId3D): number { return Number(this._massData[this._getBodyIndex(bodyId) * MASS_STRIDE + 1]); }
-    getInertiaTensor(bodyId: BodyId3D): IVec3Like {
+    getInertiaTensor(bodyId: BodyId3D, out?: IVec3Like): IVec3Like {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return { x: 0, y: 0, z: 0 };
         const offset = index * MASS_STRIDE + 2;
-        return this._readVec(this._massData, offset);
+        return this._readVec(this._massData, offset, out);
     }
 
-    getInverseInertia(bodyId: BodyId3D): IVec3Like {
+    getInverseInertia(bodyId: BodyId3D, out?: IVec3Like): IVec3Like {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined) return { x: 0, y: 0, z: 0 };
         const offset = index * MASS_STRIDE + 5;
-        return this._readVec(this._massData, offset);
+        return this._readVec(this._massData, offset, out);
     }
 
     setInertiaTensor(bodyId: BodyId3D, inertia: IVec3Like): void {
@@ -489,6 +488,30 @@ export class BodyManager3D implements Disposable {
     getGravityScale(bodyId: BodyId3D): number { return Number(this._gravityScales[this._getBodyIndex(bodyId)]); }
     setGravityScale(bodyId: BodyId3D, scale: number): void { this._gravityScales[this._getBodyIndex(bodyId)] = scale; }
 
+    /**
+     * Compute composite inertia tensor for a body from its attached shape geometries.
+     * Uses parallel-axis theorem to offset each shape's contribution by its center offset.
+     */
+    computeInertiaForBody(bodyId: BodyId3D, shapeManager: ShapeManager3D): IVec3Like {
+        const mass = this.getMass(bodyId);
+        if (mass <= 0) return { x: 0, y: 0, z: 0 };
+
+        const shapes = shapeManager.getShapesForBodyWithDefs(bodyId);
+        if (shapes.length === 0) return { x: 1, y: 1, z: 1 };
+
+        const perShapeMass = mass / shapes.length;
+        let ix = 0, iy = 0, iz = 0;
+
+        for (const { kind, def } of shapes) {
+            const inertia = _computeShapeInertia(kind, def as Record<string, unknown>, perShapeMass);
+            ix += inertia.x;
+            iy += inertia.y;
+            iz += inertia.z;
+        }
+
+        return { x: ix, y: iy, z: iz };
+    }
+
     private _allocateIndex(): number {
         if (this._freeList.length > 0) return this._freeList.pop()!;
         return Number(this._bodyCount);
@@ -500,11 +523,24 @@ export class BodyManager3D implements Disposable {
         return index;
     }
 
-    private _readVec(arr: Float64Array, offset: number): IVec3Like {
+    private _readVec(arr: Float64Array, offset: number, out?: IVec3Like): IVec3Like {
+        if (out) {
+            out.x = arr[offset];
+            out.y = arr[offset + 1];
+            out.z = arr[offset + 2];
+            return out;
+        }
         return { x: arr[offset], y: arr[offset + 1], z: arr[offset + 2] };
     }
 
-    private _readQuat(arr: Float64Array, offset: number): IQuatLike {
+    private _readQuat(arr: Float64Array, offset: number, out?: IQuatLike): IQuatLike {
+        if (out) {
+            out.x = arr[offset];
+            out.y = arr[offset + 1];
+            out.z = arr[offset + 2];
+            out.w = arr[offset + 3];
+            return out;
+        }
         return { x: arr[offset], y: arr[offset + 1], z: arr[offset + 2], w: arr[offset + 3] };
     }
 
@@ -532,14 +568,13 @@ export class ShapeManager3D implements Disposable {
     private readonly _freeList: number[] = [];
 
     private readonly _shapeTypes: Uint8Array;
-    private readonly _shapeData: Float64Array;
     private readonly _materials: Float32Array;
     private readonly _filters: Int32Array;
+    private readonly _shapeDefs = new Map<ShapeId3D, { kind: number; def: unknown }>();
 
     constructor(maxShapes: number = 8192) {
         this._maxShapes = maxShapes;
         this._shapeTypes = new Uint8Array(maxShapes);
-        this._shapeData = new Float64Array(maxShapes * SHAPE_STRIDE);
         this._materials = new Float32Array(maxShapes * 4);
         this._filters = new Int32Array(maxShapes * 3);
     }
@@ -553,12 +588,7 @@ export class ShapeManager3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeCreateOptions3D
     ): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.Sphere, material, filter, options, (offset) => {
-            this._shapeData[offset] = def.center.x;
-            this._shapeData[offset + 1] = def.center.y;
-            this._shapeData[offset + 2] = def.center.z;
-            this._shapeData[offset + 3] = def.radius;
-        });
+        return this._createShape(bodyId, ShapeType.Sphere, def, material, filter, options);
     }
 
     createBox(
@@ -568,14 +598,7 @@ export class ShapeManager3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeCreateOptions3D
     ): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.Box, material, filter, options, (offset) => {
-            this._shapeData[offset] = def.center.x;
-            this._shapeData[offset + 1] = def.center.y;
-            this._shapeData[offset + 2] = def.center.z;
-            this._shapeData[offset + 3] = def.halfExtents.x;
-            this._shapeData[offset + 4] = def.halfExtents.y;
-            this._shapeData[offset + 5] = def.halfExtents.z;
-        });
+        return this._createShape(bodyId, ShapeType.Box, def, material, filter, options);
     }
 
     createCapsule(
@@ -585,15 +608,7 @@ export class ShapeManager3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeCreateOptions3D
     ): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.Capsule, material, filter, options, (offset) => {
-            this._shapeData[offset] = def.p1.x;
-            this._shapeData[offset + 1] = def.p1.y;
-            this._shapeData[offset + 2] = def.p1.z;
-            this._shapeData[offset + 3] = def.p2.x;
-            this._shapeData[offset + 4] = def.p2.y;
-            this._shapeData[offset + 5] = def.p2.z;
-            this._shapeData[offset + 6] = def.radius;
-        });
+        return this._createShape(bodyId, ShapeType.Capsule, def, material, filter, options);
     }
 
     createCylinder(
@@ -603,14 +618,7 @@ export class ShapeManager3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeCreateOptions3D
     ): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.Cylinder, material, filter, options, (offset) => {
-            this._shapeData[offset] = def.center.x;
-            this._shapeData[offset + 1] = def.center.y;
-            this._shapeData[offset + 2] = def.center.z;
-            this._shapeData[offset + 3] = def.radius;
-            this._shapeData[offset + 4] = def.height;
-            this._shapeData[offset + 5] = def.axis ?? 1;
-        });
+        return this._createShape(bodyId, ShapeType.Cylinder, def, material, filter, options);
     }
 
     createCone(
@@ -620,14 +628,7 @@ export class ShapeManager3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeCreateOptions3D
     ): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.Cone, material, filter, options, (offset) => {
-            this._shapeData[offset] = def.center.x;
-            this._shapeData[offset + 1] = def.center.y;
-            this._shapeData[offset + 2] = def.center.z;
-            this._shapeData[offset + 3] = def.radius;
-            this._shapeData[offset + 4] = def.height;
-            this._shapeData[offset + 5] = def.axis ?? 1;
-        });
+        return this._createShape(bodyId, ShapeType.Cone, def, material, filter, options);
     }
 
     createConvexHull(
@@ -637,9 +638,7 @@ export class ShapeManager3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeCreateOptions3D
     ): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.ConvexHull, material, filter, options, (offset) => {
-            this._shapeData[offset] = def.vertices.length;
-        });
+        return this._createShape(bodyId, ShapeType.ConvexHull, def, material, filter, options);
     }
 
     createTriangleMesh(
@@ -649,10 +648,7 @@ export class ShapeManager3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeCreateOptions3D
     ): ShapeId3D {
-        return this._createShape(bodyId, ShapeType.TriangleMesh, material, filter, options, (offset) => {
-            this._shapeData[offset] = def.vertices.length;
-            this._shapeData[offset + 1] = def.indices.length;
-        });
+        return this._createShape(bodyId, ShapeType.TriangleMesh, def, material, filter, options);
     }
 
     createHeightField(
@@ -662,23 +658,7 @@ export class ShapeManager3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeCreateOptions3D
     ): ShapeId3D {
-        let minHeight = Infinity;
-        let maxHeight = -Infinity;
-        for (let index = 0; index < def.heights.length; index += 1) {
-            const height = def.heights[index];
-            if (height < minHeight) minHeight = height;
-            if (height > maxHeight) maxHeight = height;
-        }
-
-        return this._createShape(bodyId, ShapeType.HeightField, material, filter, options, (offset) => {
-            this._shapeData[offset] = def.width;
-            this._shapeData[offset + 1] = def.depth;
-            this._shapeData[offset + 2] = def.scaleX;
-            this._shapeData[offset + 3] = def.scaleY;
-            this._shapeData[offset + 4] = def.scaleZ;
-            this._shapeData[offset + 5] = Number.isFinite(minHeight) ? minHeight : 0;
-            this._shapeData[offset + 6] = Number.isFinite(maxHeight) ? maxHeight : 0;
-        });
+        return this._createShape(bodyId, ShapeType.HeightField, def, material, filter, options);
     }
 
     destroyShape(shapeId: ShapeId3D): void {
@@ -698,12 +678,10 @@ export class ShapeManager3D implements Disposable {
         this._shapeToBody.delete(shapeId);
         this._freeList.push(index);
 
-        for (let i = 0; i < SHAPE_STRIDE; i++) {
-            this._shapeData[index * SHAPE_STRIDE + i] = 0;
-        }
         this._materials.fill(0, index * 4, index * 4 + 4);
         this._filters.fill(0, index * 3, index * 3 + 3);
         this._shapeTypes[index] = 0;
+        this._shapeDefs.delete(shapeId);
         this._shapeCount -= 1n;
     }
 
@@ -739,10 +717,10 @@ export class ShapeManager3D implements Disposable {
     private _createShape(
         bodyId: BodyId3D,
         type: ShapeType,
+        def: unknown,
         material: Partial<IMaterial> | undefined,
         filter: ICollisionFilter3D | undefined,
-        options: IShapeCreateOptions3D | undefined,
-        initData: (offset: number) => void
+        options: IShapeCreateOptions3D | undefined
     ): ShapeId3D {
         if (Number(this._shapeCount) >= this._maxShapes && this._freeList.length === 0) {
             throw new PhysicsError3D('Shape capacity exceeded', BodyManagerError.CAPACITY_EXCEEDED);
@@ -763,8 +741,6 @@ export class ShapeManager3D implements Disposable {
         shapes.add(shapeId);
 
         this._shapeTypes[index] = type;
-        const dataOffset = index * SHAPE_STRIDE;
-        initData(dataOffset);
 
         const materialOffset = index * 4;
         this._materials[materialOffset] = material?.friction ?? 0.5;
@@ -777,8 +753,20 @@ export class ShapeManager3D implements Disposable {
         this._filters[filterOffset + 1] = filter?.maskBits ?? -1;
         this._filters[filterOffset + 2] = filter?.groupIndex ?? 0;
 
+        this._shapeDefs.set(shapeId, { kind: type, def });
         this._shapeCount += 1n;
         return shapeId;
+    }
+
+    getShapesForBodyWithDefs(bodyId: BodyId3D): Array<{ kind: number; def: unknown }> {
+        const shapes = this._bodyToShapes.get(bodyId);
+        if (!shapes) return [];
+        const result: Array<{ kind: number; def: unknown }> = [];
+        for (const sid of shapes) {
+            const entry = this._shapeDefs.get(sid);
+            if (entry) result.push(entry);
+        }
+        return result;
     }
 
     private _getShapeIndex(shapeId: ShapeId3D): number {
@@ -791,6 +779,7 @@ export class ShapeManager3D implements Disposable {
         this._shapeIdToIndex.clear();
         this._shapeToBody.clear();
         this._bodyToShapes.clear();
+        this._shapeDefs.clear();
         this._freeList.length = 0;
     }
 }
@@ -989,5 +978,110 @@ export class ConstraintManager3D implements Disposable {
         this._constraintIdToIndex.clear();
         this._bodyToConstraints.clear();
         this._freeList.length = 0;
+    }
+}
+
+/**
+ * Compute inertia tensor diagonal for a single shape about the body origin.
+ * Uses parallel-axis theorem to offset by shape center position.
+ */
+function _computeShapeInertia(
+    kind: number,
+    def: Record<string, unknown>,
+    mass: number
+): IVec3Like {
+    if (mass <= 0) return { x: 0, y: 0, z: 0 };
+
+    switch (kind) {
+        case ShapeType.Sphere: {
+            const r = (def.radius as number) || 0;
+            const i = 0.4 * mass * r * r; // (2/5)*m*r²
+            return { x: i, y: i, z: i };
+        }
+
+        case ShapeType.Box: {
+            const he = def.halfExtents as IVec3Like;
+            if (!he) return { x: 0, y: 0, z: 0 };
+            const hx2 = he.x * 2, hy2 = he.y * 2, hz2 = he.z * 2;
+            const f = mass / 12;
+            const c = (def.center as IVec3Like) || { x: 0, y: 0, z: 0 };
+            // Inertia about own center + parallel-axis offset
+            return {
+                x: f * (hy2 * hy2 + hz2 * hz2) + mass * (c.y * c.y + c.z * c.z),
+                y: f * (hx2 * hx2 + hz2 * hz2) + mass * (c.x * c.x + c.z * c.z),
+                z: f * (hx2 * hx2 + hy2 * hy2) + mass * (c.x * c.x + c.y * c.y),
+            };
+        }
+
+        case ShapeType.Capsule: {
+            const p1 = def.p1 as IVec3Like;
+            const p2 = def.p2 as IVec3Like;
+            const r = (def.radius as number) || 0;
+            if (!p1 || !p2) return { x: 0, y: 0, z: 0 };
+
+            // Capsule axis direction
+            const dx = p2.x - p1.x, dy = p2.y - p1.y, dz = p2.z - p1.z;
+            const segLen = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            // Hemisphere mass and cylinder mass (equal volumes for uniform density)
+            const hemiMass = mass / 3;
+            const cylMass = mass - 2 * hemiMass;
+
+            // Center of capsule segment
+            const cx = (p1.x + p2.x) * 0.5;
+            const cy = (p1.y + p2.y) * 0.5;
+            const cz = (p1.z + p2.z) * 0.5;
+
+            // Unit axis direction
+            const invSeg = segLen > 1e-10 ? 1 / segLen : 0;
+            const nx = dx * invSeg, ny = dy * invSeg, nz = dz * invSeg;
+
+            // Cylinder inertia about its own center (aligned with axis)
+            const iCylAxial = 0.5 * cylMass * r * r;
+            const iCylPerp = cylMass * (3 * r * r + segLen * segLen) / 12;
+
+            // Hemisphere inertia about its own centroid (2/5*m*r²)
+            const iHemi = 0.4 * hemiMass * r * r;
+            // Distance from hemisphere centroid to capsule center
+            const d = segLen * 0.5 + 0.375 * r; // centroid at 3r/8 from flat face
+            const d2 = d * d;
+
+            // Perpendicular-axis component for each hemisphere (parallel-axis theorem)
+            const iHemiPerp = iHemi + hemiMass * d2;
+
+            // Total inertia along axis and perpendicular
+            const iAxial = iCylAxial + 2 * iHemi;
+            const iPerp = iCylPerp + 2 * iHemiPerp;
+
+            // Distribute to x,y,z using direction cosines + parallel-axis for center offset
+            return {
+                x: iPerp * (1 - nx * nx) + iAxial * nx * nx + mass * (cy * cy + cz * cz),
+                y: iPerp * (1 - ny * ny) + iAxial * ny * ny + mass * (cx * cx + cz * cz),
+                z: iPerp * (1 - nz * nz) + iAxial * nz * nz + mass * (cx * cx + cy * cy),
+            };
+        }
+
+        case ShapeType.Cylinder: {
+            const r = (def.radius as number) || 0;
+            const h = (def.height as number) || 0;
+            const axis = ((def.axis as number) ?? 1) as 0 | 1 | 2;
+            const c = (def.center as IVec3Like) || { x: 0, y: 0, z: 0 };
+
+            const iAxial = 0.5 * mass * r * r;
+            const iPerp = mass * (3 * r * r + h * h) / 12;
+
+            // Map axis to x,y,z
+            const dir = [0, 0, 0];
+            dir[axis] = 1;
+
+            return {
+                x: iPerp * (1 - dir[0] * dir[0]) + iAxial * dir[0] * dir[0] + mass * (c.y * c.y + c.z * c.z),
+                y: iPerp * (1 - dir[1] * dir[1]) + iAxial * dir[1] * dir[1] + mass * (c.x * c.x + c.z * c.z),
+                z: iPerp * (1 - dir[2] * dir[2]) + iAxial * dir[2] * dir[2] + mass * (c.x * c.x + c.y * c.y),
+            };
+        }
+
+        default:
+            return { x: 0, y: 0, z: 0 };
     }
 }
