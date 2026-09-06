@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../Axrone.ObjectPool.csproj" />
+    <ProjectReference Include="../../Axrone.Utility/Axrone.Utility.csproj" />
   </ItemGroup>
 
   <ItemGroup>

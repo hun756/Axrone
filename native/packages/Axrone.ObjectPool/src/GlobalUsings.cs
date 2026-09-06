@@ -10,3 +10,5 @@ global using System.Runtime.InteropServices;
 global using System.Threading;
 global using System.Threading.Channels;
 global using System.Threading.Tasks;
+global using Axrone.Utility.Concurrency;
+global using Axrone.Utility.Internal;

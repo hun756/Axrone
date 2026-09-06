@@ -1,6 +1,6 @@
-namespace Axrone.ObjectPool;
+namespace Axrone.Utility.Internal;
 
-internal static class ThrowHelper
+public static class ThrowHelper
 {
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]

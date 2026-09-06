@@ -1,4 +1,4 @@
-namespace Axrone.ObjectPool;
+namespace Axrone.Utility.Concurrency;
 
 /// <summary>
 /// An asynchronous reader-writer lock that supports multiple concurrent readers, a single exclusive writer,

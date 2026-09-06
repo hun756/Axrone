@@ -1,4 +1,5 @@
 using Axrone.ObjectPool;
+using Axrone.Utility.Internal;
 
 namespace Axrone.ObjectPool.Tests;
 

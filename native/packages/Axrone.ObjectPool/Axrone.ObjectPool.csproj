@@ -23,6 +23,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
+    <ProjectReference Include="../Axrone.Collections/Axrone.Collections.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="tests/**" />
     <Compile Remove="benchmarks/**" />
   </ItemGroup>
