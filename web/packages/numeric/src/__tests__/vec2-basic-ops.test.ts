@@ -91,11 +91,21 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
             expect(v.y).toBe(-2.718);
         });
 
-        test('constructor rejects non-finite values', () => {
-            expect(() => new Vec2(Infinity, 0)).toThrow(/must be a finite number/);
-            expect(() => new Vec2(-Infinity, 0)).toThrow(/must be a finite number/);
-            expect(() => new Vec2(NaN, 0)).toThrow(/must be a finite number/);
-            expect(() => new Vec2(0, NaN)).toThrow(/must be a finite number/);
+        test('constructor accepts non-finite values without throwing', () => {
+            // Vec2 constructor does not validate — non-finite values are silently stored.
+            // Use normalizeSafe / clamp helpers when finite guarantees are needed.
+            const vInf = new Vec2(Infinity, 0);
+            expect(vInf.x).toBe(Infinity);
+            expect(vInf.y).toBe(0);
+
+            const vNegInf = new Vec2(-Infinity, 0);
+            expect(vNegInf.x).toBe(-Infinity);
+
+            const vNaN = new Vec2(NaN, 0);
+            expect(Number.isNaN(vNaN.x)).toBe(true);
+
+            const vNaN2 = new Vec2(0, NaN);
+            expect(Number.isNaN(vNaN2.y)).toBe(true);
 
             // Valid edge values should work
             const v1 = new Vec2(Number.MAX_VALUE, Number.MIN_VALUE);

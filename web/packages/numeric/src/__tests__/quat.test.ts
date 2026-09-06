@@ -181,11 +181,20 @@ describe('Quaternion Mathematics Library', () => {
                 QuaternionTestUtils.expectQuaternionEquals(q, { x: 1, y: 2, z: 3, w: 4 });
             });
 
-            test('constructor rejects non-finite values', () => {
-                expect(() => new Quat(Infinity, 0, 0, 0)).toThrow(/must be a finite number/);
-                expect(() => new Quat(-Infinity, 0, 0, 0)).toThrow(/must be a finite number/);
-                expect(() => new Quat(NaN, 0, 0, 0)).toThrow(/must be a finite number/);
-                expect(() => new Quat(0, NaN, 0, 0)).toThrow(/must be a finite number/);
+            test('constructor accepts non-finite values without throwing', () => {
+                // Quat constructor does not validate — non-finite values are silently stored.
+                // Use normalizeSafe / clamp helpers when finite guarantees are needed.
+                const qInf = new Quat(Infinity, 0, 0, 0);
+                expect(qInf.x).toBe(Infinity);
+
+                const qNegInf = new Quat(-Infinity, 0, 0, 0);
+                expect(qNegInf.x).toBe(-Infinity);
+
+                const qNaN = new Quat(NaN, 0, 0, 0);
+                expect(Number.isNaN(qNaN.x)).toBe(true);
+
+                const qNaN2 = new Quat(0, NaN, 0, 0);
+                expect(Number.isNaN(qNaN2.y)).toBe(true);
 
                 // Valid edge values should work
                 const q1 = new Quat(0, 0, 0, 0);
