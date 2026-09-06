@@ -1,4 +1,5 @@
 import type { IVec3Like } from '@axrone/numeric';
+import { makeCollisionPairKey } from '@axrone/physics-core';
 import { SpatialHashGrid3D, SpatialOctree } from './raycast-spatial';
 
 export interface IBroadphaseItem3D {
@@ -26,8 +27,8 @@ export interface IBroadphase3D<T> {
     readonly itemCount: number;
 }
 
-function pairKey(a: number, b: number): string {
-    return a < b ? `${a}:${b}` : `${b}:${a}`;
+function pairKey(a: number, b: number): number {
+    return makeCollisionPairKey(a, b);
 }
 
 export class SpatialHashBroadphase3D<T extends IBroadphaseItem3D> implements IBroadphase3D<T> {
@@ -70,7 +71,7 @@ export class SpatialHashBroadphase3D<T extends IBroadphaseItem3D> implements IBr
 
     queryPairs(): IBroadphaseResult3D<T>[] {
         const results: IBroadphaseResult3D<T>[] = [];
-        const seen = new Set<string>();
+        const seen = new Set<number>();
 
         for (const [item, [min, max]] of this._bounds) {
             const candidates = this._grid.query(min, max);
@@ -151,7 +152,7 @@ export class OctreeBroadphase3D<T extends IBroadphaseItem3D> implements IBroadph
 
     queryPairs(): IBroadphaseResult3D<T>[] {
         const results: IBroadphaseResult3D<T>[] = [];
-        const seen = new Set<string>();
+        const seen = new Set<number>();
 
         for (const [item, [min, max]] of this._bounds) {
             const candidates = this._octree.query(min, max);
