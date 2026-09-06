@@ -29,6 +29,16 @@
     <NoWarn>$(NoWarn);CA1068</NoWarn>
     <!-- CA1711: Type name ends in 'Algorithm' — intentional naming -->
     <NoWarn>$(NoWarn);CA1711</NoWarn>
+    <!-- CA1036: Comparison operators — digest structs use SequenceCompareTo, operators not needed -->
+    <NoWarn>$(NoWarn);CA1036</NoWarn>
+    <!-- CA2225: Implicit operator alternatives — HashDigest.AsSpan() serves as named alternative -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1707: Underscores in enum names — Murmur3_128, Sha3_256 etc. follow algorithm naming conventions -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <!-- CA1008: Enum needs None=0 — HashAlgorithmId starts at 1, no default value needed -->
+    <NoWarn>$(NoWarn);CA1008</NoWarn>
+    <!-- CA1067: Must override Equals — digest structs use FixedTimeEquals via IEquatable, object.Equals not overridden by design -->
+    <NoWarn>$(NoWarn);CA1067</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
