@@ -73,6 +73,8 @@ export class DynamicAABBTree3D<TUserData = unknown> {
     private _nodeCount: number = 0;
     private _nodeCapacity: number;
     private readonly _fatAabbMargin: number = 0.1;
+    /** Number of active leaf (proxy) nodes. */
+    private _leafCount: number = 0;
 
     constructor(initialCapacity: number = 1024) {
         this._nodeCapacity = initialCapacity;
@@ -108,12 +110,14 @@ export class DynamicAABBTree3D<TUserData = unknown> {
         this._nodes[proxyId].userData = userData;
         this._nodes[proxyId].height = 0;
         this._insertLeaf(proxyId);
+        this._leafCount++;
         return proxyId;
     }
 
     destroyProxy(proxyId: number): void {
         this._removeLeaf(proxyId);
         this._freeNode(proxyId);
+        this._leafCount--;
     }
 
     moveProxy(proxyId: number, aabb: AABB3D, displacement: IVec3Like): boolean {
@@ -221,6 +225,42 @@ export class DynamicAABBTree3D<TUserData = unknown> {
     getHeight(): number {
         if (this._root === NULL_NODE) return 0;
         return this._nodes[this._root].height;
+    }
+
+    get leafCount(): number {
+        return this._leafCount;
+    }
+
+    /**
+     * Quality ratio: actualHeight / max(1, ceil(log2(leafCount+1))).
+     * 1.0 = perfectly balanced; higher = more degenerate.
+     */
+    getTreeQuality(): number {
+        if (this._root === NULL_NODE || this._leafCount <= 1) return 1.0;
+        const optimal = Math.ceil(Math.log2(this._leafCount + 1));
+        return this._nodes[this._root].height / Math.max(1, optimal);
+    }
+
+    /**
+     * Balance metric in [0, 1]: averages per-node min/max child-height ratios
+     * across all internal nodes. 1.0 = every subtree pair has equal height.
+     */
+    getTreeBalance(): number {
+        if (this._root === NULL_NODE || this._leafCount <= 1) return 1.0;
+        const acc = this._sumBalanceRatios(this._root);
+        return acc.n === 0 ? 1.0 : acc.sum / acc.n;
+    }
+
+    private _sumBalanceRatios(nid: number): { sum: number; n: number } {
+        const nd = this._nodes[nid];
+        if (nd.child1 === NULL_NODE) return { sum: 0, n: 0 };
+        const a = this._nodes[nd.child1].height;
+        const b = this._nodes[nd.child2].height;
+        const hi = Math.max(a, b);
+        const lo = Math.min(a, b);
+        const l = this._sumBalanceRatios(nd.child1);
+        const r = this._sumBalanceRatios(nd.child2);
+        return { sum: (hi > 0 ? lo / hi : 1.0) + l.sum + r.sum, n: 1 + l.n + r.n };
     }
 
     get nodeCount(): number {
