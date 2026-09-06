@@ -133,8 +133,8 @@ export class BodyManager3D implements Disposable {
         this._dampings[index * 2 + 1] = def.angularDamping ?? 0;
 
         let flags = 0;
-        if (def.fixedRotation !== false) flags |= BodyFlags.FixedRotation;
-        if (def.bullet !== false) flags |= BodyFlags.Bullet;
+        if (def.fixedRotation === true) flags |= BodyFlags.FixedRotation;
+        if (def.bullet === true) flags |= BodyFlags.Bullet;
         if (def.allowSleep !== false) flags |= BodyFlags.AutoSleep;
         if (def.awake !== false) flags |= BodyFlags.Awake;
         if (def.enabled !== false) flags |= BodyFlags.Active;
