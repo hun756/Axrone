@@ -591,7 +591,6 @@ export class InputSystem<TSchema extends InputActionSchema = InputActionSchema>
         context: string | InputContextId,
         action: TAction
     ): readonly InputBindingForAction<TSchema[TAction]>[] {
-        this._assertNotDisposed();
         const entry = this._requireContextAction(context, action);
         return entry.current as readonly InputBindingForAction<TSchema[TAction]>[];
     }
