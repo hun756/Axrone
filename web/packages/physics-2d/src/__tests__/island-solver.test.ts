@@ -206,7 +206,10 @@ describe('IslandSolver2D', () => {
         });
 
         it('solves empty islands', () => {
+            // No bodies — solver should be a no-op, no state corruption
             expect(() => islandSolver.solveIslands(1 / 60, 8, 3, true, SolverFlags.None, GRAVITY)).not.toThrow();
+            // Verify solver counters are zero for empty solve
+            expect(islandSolver.getLastSolvedConstraintCount()).toBe(0);
         });
 
         it('solves islands with dynamic bodies', () => {
@@ -218,7 +221,14 @@ describe('IslandSolver2D', () => {
 
             bodyManager.setMassData(bodyA, 1, 0.1, { x: 0, y: 0 });
 
-            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, true, SolverFlags.None, GRAVITY)).not.toThrow();
+            const posBefore = bodyManager.getPosition(bodyA);
+            islandSolver.solveIslands(1 / 60, 8, 3, true, SolverFlags.None, GRAVITY);
+            const posAfter = bodyManager.getPosition(bodyA);
+            const velAfter = bodyManager.getLinearVelocity(bodyA);
+
+            // Gravity should have pulled the body downward
+            expect(posAfter.y).toBeLessThan(posBefore.y);
+            expect(velAfter.y).toBeLessThan(0);
         });
 
         it('solves islands with multiple bodies', () => {
@@ -237,7 +247,13 @@ describe('IslandSolver2D', () => {
             bodyManager.setMassData(bodyA, 1, 0.1, { x: 0, y: 0 });
             bodyManager.setMassData(bodyB, 1, 0.1, { x: 0, y: 0 });
 
-            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, true, SolverFlags.None, GRAVITY)).not.toThrow();
+            islandSolver.solveIslands(1 / 60, 8, 3, true, SolverFlags.None, GRAVITY);
+
+            // Both bodies should have fallen under gravity
+            const velA = bodyManager.getLinearVelocity(bodyA);
+            const velB = bodyManager.getLinearVelocity(bodyB);
+            expect(velA.y).toBeLessThan(0);
+            expect(velB.y).toBeLessThan(0);
         });
 
         it('handles sleep flag', () => {
@@ -249,7 +265,12 @@ describe('IslandSolver2D', () => {
 
             bodyManager.setMassData(bodyA, 1, 0.1, { x: 0, y: 0 });
 
-            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, false, SolverFlags.None, GRAVITY)).not.toThrow();
+            // allowSleep=false at world level — body should still be processed
+            islandSolver.solveIslands(1 / 60, 8, 3, false, SolverFlags.None, GRAVITY);
+
+            const velAfter = bodyManager.getLinearVelocity(bodyA);
+            // Body moved under gravity (sleep disabled at world level, so always awake)
+            expect(velAfter.y).toBeLessThan(0);
         });
 
         it('handles different iteration counts', () => {
@@ -261,9 +282,19 @@ describe('IslandSolver2D', () => {
 
             bodyManager.setMassData(bodyA, 1, 0.1, { x: 0, y: 0 });
 
-            expect(() => islandSolver.solveIslands(1 / 60, 4, 2, true, SolverFlags.None, GRAVITY)).not.toThrow();
+            // Low iterations
+            islandSolver.solveIslands(1 / 60, 4, 2, true, SolverFlags.None, GRAVITY);
+            const velLow = bodyManager.getLinearVelocity(bodyA);
 
-            expect(() => islandSolver.solveIslands(1 / 60, 16, 6, true, SolverFlags.None, GRAVITY)).not.toThrow();
+            // High iterations — should produce same gravity result (no constraints to benefit)
+            islandSolver.solveIslands(1 / 60, 16, 6, true, SolverFlags.None, GRAVITY);
+            const velHigh = bodyManager.getLinearVelocity(bodyA);
+
+            // Both should have gravity applied (velocity negative)
+            expect(velLow.y).toBeLessThan(0);
+            expect(velHigh.y).toBeLessThan(0);
+            // Without constraints, iteration count shouldn't change gravity result significantly
+            expect(Math.abs(velHigh.y - velLow.y)).toBeLessThan(0.5);
         });
     });
 });
