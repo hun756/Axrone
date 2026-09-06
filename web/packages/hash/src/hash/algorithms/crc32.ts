@@ -1,5 +1,6 @@
 import type { BytesLike } from '../../../types';
 import { writeU32LE, encodeBase64 } from '../bits';
+import { u32ToHex } from '../hex';
 import { asHash32, asSeed32, type Hash32, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
 import { HasherBase } from '../base';
@@ -137,9 +138,7 @@ export class Crc32 extends HasherBase<Hash32> {
     }
 
     digestHex(uppercase: boolean = false): string {
-        const h = this.digest() as number;
-        const s = h.toString(16).padStart(8, '0');
-        return uppercase ? s.toUpperCase() : s;
+        return u32ToHex(this.digest() as number, uppercase);
     }
 
     digestBase64(): string {
@@ -295,9 +294,7 @@ export class Crc32c extends HasherBase<Hash32> {
     }
 
     digestHex(uppercase: boolean = false): string {
-        const h = this.digest() as number;
-        const s = h.toString(16).padStart(8, '0');
-        return uppercase ? s.toUpperCase() : s;
+        return u32ToHex(this.digest() as number, uppercase);
     }
 
     digestBase64(): string {

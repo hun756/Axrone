@@ -4,17 +4,7 @@ import type { IHasher, IDigestAsync } from '../../interfaces';
 import { HasherBase } from '../../base';
 import { HashAlreadyFinalizedError, HashCryptoUnavailableError, HashCryptoOperationError } from '../../errors';
 import { encodeBase64 } from '../../bits';
-
-const _HEX = '0123456789abcdef';
-
-function toHex(bytes: Uint8Array, uppercase: boolean = false): string {
-    let s = '';
-    for (let i = 0; i < bytes.length; i++) {
-        const b = bytes[i]!;
-        s += _HEX[(b >>> 4) & 0xf] + _HEX[b & 0xf];
-    }
-    return uppercase ? s.toUpperCase() : s;
-}
+import { bytesToHex } from '../../hex';
 
 function bytesToBigInt(bytes: Uint8Array): bigint {
     let v = 0n;
@@ -216,7 +206,7 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> extends Ha
     }
 
     digestHex(uppercase: boolean = false): string {
-        return toHex(this.digestBytes(), uppercase);
+        return bytesToHex(this.digestBytes(), uppercase);
     }
 
     digestBase64(): string {

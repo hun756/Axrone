@@ -29,8 +29,8 @@ abstract class Fnv1a32Base extends HasherBase<Hash32> {
         this._checkFinalized();
         for (let i = 0; i < input.length; i++) {
             const c = input.charCodeAt(i);
-            this._h = Math.imul(this._h ^ (c & 0xff), 0x01000193) >>> 0;
-            this._h = Math.imul(this._h ^ ((c >>> 8) & 0xff), 0x01000193) >>> 0;
+            this._h = fnv1aMix32(this._h, c & 0xff);
+            this._h = fnv1aMix32(this._h, (c >>> 8) & 0xff);
         }
         this._byteLength += input.length * 2;
         return this;
@@ -38,7 +38,7 @@ abstract class Fnv1a32Base extends HasherBase<Hash32> {
 
     updateBoolean(value: boolean): this {
         this._checkFinalized();
-        this._h = Math.imul(this._h ^ (value ? 1 : 0), 0x01000193) >>> 0;
+        this._h = fnv1aMix32(this._h, value ? 1 : 0);
         this._byteLength += 1;
         return this;
     }
@@ -47,7 +47,7 @@ abstract class Fnv1a32Base extends HasherBase<Hash32> {
         this._checkFinalized();
         let v = value;
         for (let i = 0; i < 8; i++) {
-            this._h = Math.imul(this._h ^ Number(v & 0xffn), 0x01000193) >>> 0;
+            this._h = fnv1aMix32(this._h, Number(v & 0xffn));
             v >>= 8n;
         }
         this._byteLength += 8;
@@ -56,10 +56,10 @@ abstract class Fnv1a32Base extends HasherBase<Hash32> {
 
     updateU32(value: number): this {
         this._checkFinalized();
-        this._h = Math.imul(this._h ^ (value & 0xff), 0x01000193) >>> 0;
-        this._h = Math.imul(this._h ^ ((value >>> 8) & 0xff), 0x01000193) >>> 0;
-        this._h = Math.imul(this._h ^ ((value >>> 16) & 0xff), 0x01000193) >>> 0;
-        this._h = Math.imul(this._h ^ ((value >>> 24) & 0xff), 0x01000193) >>> 0;
+        this._h = fnv1aMix32(this._h, value & 0xff);
+        this._h = fnv1aMix32(this._h, (value >>> 8) & 0xff);
+        this._h = fnv1aMix32(this._h, (value >>> 16) & 0xff);
+        this._h = fnv1aMix32(this._h, (value >>> 24) & 0xff);
         this._byteLength += 4;
         return this;
     }
@@ -69,7 +69,7 @@ abstract class Fnv1a32Base extends HasherBase<Hash32> {
         if (typeof value === 'number') return this.updateU32(value);
         let v = value as bigint;
         for (let i = 0; i < 8; i++) {
-            this._h = Math.imul(this._h ^ Number(v & 0xffn), 0x01000193) >>> 0;
+            this._h = fnv1aMix32(this._h, Number(v & 0xffn));
             v >>= 8n;
         }
         this._byteLength += 8;
@@ -82,7 +82,7 @@ abstract class Fnv1a32Base extends HasherBase<Hash32> {
     }
 
     updateAny(value: unknown): this {
-        if (value === null || value === undefined) { this._h = Math.imul(this._h, 0x01000193) >>> 0; return this; }
+        if (value === null || value === undefined) { this._h = fnv1aMix32(this._h, 0); return this; }
         if (typeof value === 'number') {
             if (Number.isInteger(value)) return this.updateI32(value);
             return this.updateF64(value);
@@ -107,9 +107,7 @@ abstract class Fnv1a32Base extends HasherBase<Hash32> {
     }
 
     digestHex(uppercase: boolean = false): string {
-        const h = this.digest() as number;
-        const s = h.toString(16).padStart(8, '0');
-        return uppercase ? s.toUpperCase() : s;
+        return u32ToHex(this.digest() as number, uppercase);
     }
 
     digestBase64(): string {
@@ -137,11 +135,9 @@ export class Fnv1a32 extends Fnv1a32Base {
 
     updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {
         this._checkFinalized();
-        const end = length === undefined ? bytes.length : offset + length;
-        for (let i = offset; i < end; i++) {
-            this._h = Math.imul(this._h ^ (bytes[i]! & 0xff), 0x01000193) >>> 0;
-        }
-        this._byteLength += end - offset;
+        const len = length === undefined ? bytes.length - offset : length;
+        this._h = fnv1aMixBytes32(this._h, bytes, offset, len);
+        this._byteLength += len;
         return this;
     }
 
@@ -186,7 +182,7 @@ export class Fnv1_32 extends Fnv1a32Base {
         this._checkFinalized();
         const end = length === undefined ? bytes.length : offset + length;
         for (let i = offset; i < end; i++) {
-            this._h = (Math.imul(this._h, 0x01000193) ^ (bytes[i]! & 0xff)) >>> 0;
+            this._h = (Math.imul(this._h, FNV_PRIME_32) ^ (bytes[i]! & 0xff)) >>> 0;
         }
         this._byteLength += end - offset;
         return this;
@@ -196,8 +192,8 @@ export class Fnv1_32 extends Fnv1a32Base {
         this._checkFinalized();
         for (let i = 0; i < input.length; i++) {
             const c = input.charCodeAt(i);
-            this._h = (Math.imul(this._h, 0x01000193) ^ (c & 0xff)) >>> 0;
-            this._h = (Math.imul(this._h, 0x01000193) ^ ((c >>> 8) & 0xff)) >>> 0;
+            this._h = (Math.imul(this._h, FNV_PRIME_32) ^ (c & 0xff)) >>> 0;
+            this._h = (Math.imul(this._h, FNV_PRIME_32) ^ ((c >>> 8) & 0xff)) >>> 0;
         }
         this._byteLength += input.length * 2;
         return this;
@@ -345,13 +341,7 @@ export class Fnv1a64 extends HasherBase<Hash64> {
     }
 
     digestHex(uppercase: boolean = false): string {
-        let h = this.digest() as bigint;
-        let s = '';
-        for (let i = 0; i < 16; i++) {
-            s = (h & 0xfn).toString(16) + s;
-            h >>= 4n;
-        }
-        return uppercase ? s.toUpperCase() : s;
+        return bigIntToHex(this.digest() as bigint, 16, uppercase);
     }
 
     digestBase64(): string {

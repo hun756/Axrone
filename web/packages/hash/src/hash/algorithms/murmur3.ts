@@ -1,6 +1,7 @@
 import type { BytesLike } from '../../../types';
 import { rotl32, writeU32LE, encodeBase64 } from '../bits';
 import { fmix32, murmur3Scramble } from '../mixers';
+import { u32ToHex, bigIntToHex } from '../hex';
 import { asHash32, asHash64, asSeed32, type Hash32, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
 import { HasherBase } from '../base';
@@ -161,9 +162,7 @@ export class Murmur3_32 extends HasherBase<Hash32> {
     }
 
     digestHex(uppercase: boolean = false): string {
-        const h = this.digest() as number;
-        const s = h.toString(16).padStart(8, '0');
-        return uppercase ? s.toUpperCase() : s;
+        return u32ToHex(this.digest() as number, uppercase);
     }
 
     digestBase64(): string {
@@ -342,13 +341,7 @@ export class Murmur2_64 extends HasherBase<import('../types').Hash64> {
     }
 
     digestHex(uppercase: boolean = false): string {
-        let h = this.digest() as bigint;
-        let s = '';
-        for (let i = 0; i < 16; i++) {
-            s = (h & 0xfn).toString(16) + s;
-            h >>= 4n;
-        }
-        return uppercase ? s.toUpperCase() : s;
+        return bigIntToHex(this.digest() as bigint, 16, uppercase);
     }
 
     digestBase64(): string {
