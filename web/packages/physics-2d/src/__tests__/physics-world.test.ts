@@ -1212,5 +1212,169 @@ describe('PhysicsWorld2D Integration', () => {
             expect(cacheMap.size).toBeGreaterThan(0);
         });
     });
+
+    describe('Statistics Truthfulness (audit fix)', () => {
+        it('empty world: treeQuality is 1.0, treeHeight is 0, islandCount is 0', () => {
+            const stats = world.getStatistics();
+            expect(stats.treeQuality).toBe(1.0);
+            expect(stats.treeHeight).toBe(0);
+            expect(stats.treeBalance).toBe(1.0);
+            expect(stats.islandCount).toBe(0);
+        });
+
+        it('single shape: treeHeight is 0 (single leaf), treeQuality is 1.0', () => {
+            const body = world.createBody({ type: BodyType.Dynamic, position: { x: 0, y: 0 } });
+            world.createCircleShape(body, { radius: 1 });
+            world.step(1 / 60);
+
+            const stats = world.getStatistics();
+            expect(stats.treeHeight).toBe(0); // single leaf = height 0
+            expect(stats.treeQuality).toBe(1.0);
+            expect(stats.treeBalance).toBe(1.0);
+        });
+
+        it('treeHeight matches broadphase.getHeight() after adding shapes', () => {
+            for (let i = 0; i < 8; i++) {
+                const body = world.createBody({ type: BodyType.Dynamic, position: { x: i * 3, y: 0 } });
+                world.createBoxShape(body, { width: 1, height: 1 });
+            }
+            world.step(1 / 60);
+
+            const stats = world.getStatistics();
+            const broadphase = (world as any)._broadphase;
+            expect(stats.treeHeight).toBe(broadphase.getHeight());
+            expect(stats.treeHeight).toBeGreaterThan(0); // multiple leaves → height > 0
+        });
+
+        it('treeQuality matches broadphase.getTreeQuality()', () => {
+            for (let i = 0; i < 16; i++) {
+                const body = world.createBody({ type: BodyType.Dynamic, position: { x: i * 2, y: i * 2 } });
+                world.createCircleShape(body, { radius: 0.5 });
+            }
+            world.step(1 / 60);
+
+            const stats = world.getStatistics();
+            const broadphase = (world as any)._broadphase;
+            expect(stats.treeQuality).toBe(broadphase.getTreeQuality());
+            expect(stats.treeQuality).toBeGreaterThanOrEqual(1.0);
+            // Before auto-rebalance, quality can be > 1 (degenerate insert pattern)
+            expect(stats.treeQuality).toBeGreaterThan(0);
+        });
+
+        it('treeBalance matches broadphase.getTreeBalance() and is in [0, 1]', () => {
+            for (let i = 0; i < 12; i++) {
+                const body = world.createBody({ type: BodyType.Dynamic, position: { x: i * 2, y: 0 } });
+                world.createBoxShape(body, { width: 1, height: 1 });
+            }
+            world.step(1 / 60);
+
+            const stats = world.getStatistics();
+            const broadphase = (world as any)._broadphase;
+            expect(stats.treeBalance).toBe(broadphase.getTreeBalance());
+            expect(stats.treeBalance).toBeGreaterThan(0);
+            expect(stats.treeBalance).toBeLessThanOrEqual(1.0);
+        });
+
+        it('islandCount: N isolated dynamic bodies → N islands after step', () => {
+            const N = 5;
+            for (let i = 0; i < N; i++) {
+                const body = world.createBody({
+                    type: BodyType.Dynamic,
+                    position: { x: i * 100, y: 0 },
+                });
+                world.createCircleShape(body, { radius: 1 });
+            }
+            world.step(1 / 60);
+
+            const stats = world.getStatistics();
+            expect(stats.islandCount).toBe(N);
+            expect(stats.islandCount).toBeGreaterThan(0);
+        });
+
+        it('islandCount: touching bodies merge into fewer islands', () => {
+            const bodyA = world.createBody({ type: BodyType.Dynamic, position: { x: 0, y: 0 } });
+            world.createCircleShape(bodyA, { radius: 1 });
+            const bodyB = world.createBody({ type: BodyType.Dynamic, position: { x: 1.5, y: 0 } });
+            world.createCircleShape(bodyB, { radius: 1 });
+            const bodyC = world.createBody({ type: BodyType.Dynamic, position: { x: 100, y: 0 } });
+            world.createCircleShape(bodyC, { radius: 1 });
+
+            world.step(1 / 60);
+
+            const stats = world.getStatistics();
+            expect(stats.islandCount).toBeGreaterThanOrEqual(1);
+            expect(stats.islandCount).toBeLessThan(3);
+        });
+
+        it('profiler attached: timing fields are measured (>= 0)', () => {
+            const profWorld = new PhysicsWorld2D({
+                gravity: { x: 0, y: -10 },
+                enableProfiler: true,
+                bodyCapacity: 64,
+                shapeCapacity: 64,
+            });
+            const body = profWorld.createBody({ type: BodyType.Dynamic, position: { x: 0, y: 0 } });
+            profWorld.createCircleShape(body, { radius: 1 });
+            profWorld.step(1 / 60);
+
+            const stats = profWorld.getStatistics();
+            expect(stats.stepTime).toBeGreaterThanOrEqual(0);
+            expect(stats.broadphaseTime).toBeGreaterThanOrEqual(0);
+            expect(stats.narrowphaseTime).toBeGreaterThanOrEqual(0);
+            expect(stats.solveTime).toBeGreaterThanOrEqual(0);
+
+            const profiler = profWorld.getProfiler();
+            expect(profiler).not.toBeNull();
+            expect(profiler!.broadphaseTime).toBeGreaterThanOrEqual(0);
+            expect(profiler!.narrowphaseTime).toBeGreaterThanOrEqual(0);
+        });
+
+        it('profiler NOT attached: timing fields are 0 (no measurement overhead)', () => {
+            const noProfWorld = new PhysicsWorld2D({
+                gravity: { x: 0, y: -10 },
+                enableProfiler: false,
+                bodyCapacity: 64,
+                shapeCapacity: 64,
+            });
+            const body = noProfWorld.createBody({ type: BodyType.Dynamic, position: { x: 0, y: 0 } });
+            noProfWorld.createCircleShape(body, { radius: 1 });
+            noProfWorld.step(1 / 60);
+
+            const stats = noProfWorld.getStatistics();
+            expect(stats.broadphaseTime).toBe(0);
+            expect(stats.narrowphaseTime).toBe(0);
+            expect(stats.solveTime).toBe(0);
+            expect(noProfWorld.getProfiler()).toBeNull();
+        });
+
+        it('NEGATIVE: empty vs populated world have different statistics', () => {
+            const emptyStats = world.getStatistics();
+
+            for (let i = 0; i < 8; i++) {
+                const body = world.createBody({ type: BodyType.Dynamic, position: { x: i * 5, y: 0 } });
+                world.createBoxShape(body, { width: 1, height: 1 });
+            }
+            world.step(1 / 60);
+
+            const populatedStats = world.getStatistics();
+            expect(populatedStats.treeHeight).toBeGreaterThan(emptyStats.treeHeight);
+            expect(populatedStats.islandCount).toBeGreaterThan(emptyStats.islandCount);
+            expect(populatedStats.shapeCount).toBeGreaterThan(emptyStats.shapeCount);
+            expect(populatedStats.bodyCount).toBeGreaterThan(emptyStats.bodyCount);
+        });
+
+        it('getTreeHeight/getTreeBalance/getTreeQuality delegate to broadphase', () => {
+            for (let i = 0; i < 6; i++) {
+                const body = world.createBody({ type: BodyType.Dynamic, position: { x: i * 3, y: 0 } });
+                world.createCircleShape(body, { radius: 1 });
+            }
+            world.step(1 / 60);
+
+            expect(world.getTreeHeight()).toBeGreaterThan(0);
+            expect(world.getTreeBalance()).toBeGreaterThan(0);
+            expect(world.getTreeBalance()).toBeLessThanOrEqual(1.0);
+            expect(world.getTreeQuality()).toBeGreaterThanOrEqual(1.0);
+        });
+    });
 });
 

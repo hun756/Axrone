@@ -540,6 +540,53 @@ describe('DynamicAABBTree2D', () => {
                 expect(reachable.has(id)).toBe(true);
             }
         });
+
+        it('getTreeBalance returns 1.0 for empty or single-leaf tree', () => {
+            expect(tree.getTreeBalance()).toBe(1.0);
+            const aabb = new AABB2D({ x: 0, y: 0 }, { x: 1, y: 1 });
+            tree.createProxy(aabb, {});
+            expect(tree.getTreeBalance()).toBe(1.0);
+        });
+
+        it('getTreeBalance: balanced tree has higher ratio than degenerate', () => {
+            const balancedTree = new DynamicAABBTree2D(64);
+            const degenerateTree = new DynamicAABBTree2D(64);
+
+            // Balanced: insert in checkerboard pattern
+            for (let i = 0; i < 32; i++) {
+                const x = (i % 8) * 10;
+                const y = Math.floor(i / 8) * 10;
+                const aabb = new AABB2D({ x, y }, { x: x + 1, y: y + 1 });
+                balancedTree.createProxy(aabb, { id: i });
+            }
+
+            // Degenerate: insert in sorted order (creates long chain)
+            for (let i = 0; i < 32; i++) {
+                const aabb = new AABB2D({ x: i * 10, y: 0 }, { x: i * 10 + 1, y: 1 });
+                degenerateTree.createProxy(aabb, { id: i });
+            }
+
+            const balancedRatio = balancedTree.getTreeBalance();
+            const degenerateRatio = degenerateTree.getTreeBalance();
+
+            expect(balancedRatio).toBeGreaterThan(0);
+            expect(degenerateRatio).toBeGreaterThan(0);
+            expect(balancedRatio).toBeGreaterThanOrEqual(degenerateRatio);
+        });
+
+        it('getTreeBalance improves or stays same after rebalance', () => {
+            for (let i = 0; i < 64; i++) {
+                const aabb = new AABB2D({ x: i * 10, y: 0 }, { x: i * 10 + 1, y: 1 });
+                tree.createProxy(aabb, { id: i });
+            }
+
+            const balanceBefore = tree.getTreeBalance();
+            tree.rebalance();
+            const balanceAfter = tree.getTreeBalance();
+
+            expect(balanceAfter).toBeGreaterThanOrEqual(balanceBefore);
+            expect(balanceAfter).toBeLessThanOrEqual(1.0);
+        });
     });
 });
 
