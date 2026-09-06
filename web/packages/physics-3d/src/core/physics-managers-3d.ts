@@ -70,6 +70,8 @@ export class BodyManager3D implements Disposable {
     private readonly _bodyFlags: Uint32Array;
     private readonly _gravityScales: Float32Array;
     private readonly _dampings: Float32Array;
+    private readonly _forces: Float64Array;
+    private readonly _torques: Float64Array;
 
     constructor(maxBodies: number = 4096) {
         this._maxBodies = maxBodies;
@@ -80,6 +82,8 @@ export class BodyManager3D implements Disposable {
         this._bodyFlags = new Uint32Array(maxBodies);
         this._gravityScales = new Float32Array(maxBodies);
         this._dampings = new Float32Array(maxBodies * 2);
+        this._forces = new Float64Array(maxBodies * 3);
+        this._torques = new Float64Array(maxBodies * 3);
 
         for (let i = 0; i < maxBodies; i++) {
             // Identity quaternion (w = 1) and neutral gravity scale defaults.
@@ -346,29 +350,23 @@ export class BodyManager3D implements Disposable {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined || Number(this._bodyTypes[index]) !== BODY_TYPE_DYNAMIC) return;
 
-        const invMass = this._massData[index * MASS_STRIDE + 1];
-        if (invMass === 0) return;
+        // Accumulate linear force
+        const fOffset = index * 3;
+        this._forces[fOffset] += force.x;
+        this._forces[fOffset + 1] += force.y;
+        this._forces[fOffset + 2] += force.z;
 
-        const velOffset = index * VELOCITY_STRIDE + LINEAR_VEL_OFFSET;
-        this._velocities[velOffset] += force.x * invMass;
-        this._velocities[velOffset + 1] += force.y * invMass;
-        this._velocities[velOffset + 2] += force.z * invMass;
-
+        // Accumulate torque from off-center force application (τ = r × F)
         if (point) {
             const posOffset = index * POSITION_STRIDE + POSITION_OFFSET;
             const rx = point.x - this._positions[posOffset];
             const ry = point.y - this._positions[posOffset + 1];
             const rz = point.z - this._positions[posOffset + 2];
 
-            const massOffset = index * MASS_STRIDE + 5;
-            const invIx = this._massData[massOffset];
-            const invIy = this._massData[massOffset + 1];
-            const invIz = this._massData[massOffset + 2];
-
-            const angOffset = index * VELOCITY_STRIDE + ANGULAR_VEL_OFFSET;
-            this._velocities[angOffset] += (ry * force.z - rz * force.y) * invIx;
-            this._velocities[angOffset + 1] += (rz * force.x - rx * force.z) * invIy;
-            this._velocities[angOffset + 2] += (rx * force.y - ry * force.x) * invIz;
+            const tOffset = index * 3;
+            this._torques[tOffset] += ry * force.z - rz * force.y;
+            this._torques[tOffset + 1] += rz * force.x - rx * force.z;
+            this._torques[tOffset + 2] += rx * force.y - ry * force.x;
         }
 
         this.setAwake(bodyId, true);
@@ -393,15 +391,10 @@ export class BodyManager3D implements Disposable {
         const index = this._bodyIdToIndex.get(bodyId);
         if (index === undefined || Number(this._bodyTypes[index]) !== BODY_TYPE_DYNAMIC) return;
 
-        const massOffset = index * MASS_STRIDE + 5;
-        const invIx = this._massData[massOffset];
-        const invIy = this._massData[massOffset + 1];
-        const invIz = this._massData[massOffset + 2];
-
-        const angOffset = index * VELOCITY_STRIDE + ANGULAR_VEL_OFFSET;
-        this._velocities[angOffset] += torque.x * invIx;
-        this._velocities[angOffset + 1] += torque.y * invIy;
-        this._velocities[angOffset + 2] += torque.z * invIz;
+        const tOffset = index * 3;
+        this._torques[tOffset] += torque.x;
+        this._torques[tOffset + 1] += torque.y;
+        this._torques[tOffset + 2] += torque.z;
 
         this.setAwake(bodyId, true);
     }
@@ -455,6 +448,40 @@ export class BodyManager3D implements Disposable {
         this._velocities[angOffset + 2] += impulse.z * invIz;
 
         this.setAwake(bodyId, true);
+    }
+
+    /**
+     * Integrate accumulated forces and torques into velocities.
+     * Called once per step before damping. Converts force → velocity via F*dt*invMass.
+     */
+    integrateForces(dt: number): void {
+        for (const [bodyId, index] of this._bodyIdToIndex) {
+            if (Number(this._bodyTypes[index]) !== BODY_TYPE_DYNAMIC) continue;
+
+            const invMass = this._massData[index * MASS_STRIDE + 1];
+            if (invMass === 0) continue;
+
+            const fOffset = index * 3;
+            const velOffset = index * VELOCITY_STRIDE + LINEAR_VEL_OFFSET;
+            this._velocities[velOffset] += this._forces[fOffset] * dt * invMass;
+            this._velocities[velOffset + 1] += this._forces[fOffset + 1] * dt * invMass;
+            this._velocities[velOffset + 2] += this._forces[fOffset + 2] * dt * invMass;
+
+            const massOffset = index * MASS_STRIDE + 5;
+            const invIx = this._massData[massOffset];
+            const invIy = this._massData[massOffset + 1];
+            const invIz = this._massData[massOffset + 2];
+
+            const angOffset = index * VELOCITY_STRIDE + ANGULAR_VEL_OFFSET;
+            this._velocities[angOffset] += this._torques[fOffset] * dt * invIx;
+            this._velocities[angOffset + 1] += this._torques[fOffset + 1] * dt * invIy;
+            this._velocities[angOffset + 2] += this._torques[fOffset + 2] * dt * invIz;
+        }
+    }
+
+    clearForceAccumulators(): void {
+        this._forces.fill(0);
+        this._torques.fill(0);
     }
 
     getBodyIds(): BodyId3D[] { return Array.from(this._bodyIdToIndex.keys()); }

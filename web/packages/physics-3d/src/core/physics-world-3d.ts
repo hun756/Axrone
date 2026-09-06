@@ -679,8 +679,7 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     clearForces(): void {
-        // The current 3D runtime applies forces directly into velocity state,
-        // so there is no accumulated force buffer to clear yet.
+        this._bodyManager.clearForceAccumulators();
     }
 
     wakeAllBodies(): void {
@@ -741,6 +740,9 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     private _integrateVelocities(dt: number): void {
+        // Integrate accumulated forces (F*dt*invMass → velocity)
+        this._bodyManager.integrateForces(dt);
+
         const bodyIds = this._bodyManager.getBodyIds();
         const gravityX = this._gravity.x * dt;
         const gravityY = this._gravity.y * dt;
