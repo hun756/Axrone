@@ -185,16 +185,24 @@ export class BodyManager2D extends SoAManager<BodySchema> {
         return this._readVec2(this._resolveIndex(bodyId), 'velX', out);
     }
 
-    setLinearVelocity(bodyId: BodyId, velocity: ReadonlyVec2): void {
+    setLinearVelocity(bodyId: BodyId, velocity: ReadonlyVec2, wake = true): void {
         this._writeVec2(this._resolveIndex(bodyId), 'velX', velocity);
+        // Wake the body so the new velocity takes effect immediately.
+        // Internal callers (e.g. island-solver body commit, sleep path) pass
+        // wake=false to avoid conflicting with the sleep system.
+        if (wake) this.setAwake(bodyId, true);
     }
 
     getAngularVelocity(bodyId: BodyId): number {
         return this._readScalar(this._resolveIndex(bodyId), 'angVel');
     }
 
-    setAngularVelocity(bodyId: BodyId, velocity: number): void {
+    setAngularVelocity(bodyId: BodyId, velocity: number, wake = true): void {
         this._writeScalar(this._resolveIndex(bodyId), 'angVel', velocity);
+        // Wake the body so the new angular velocity takes effect immediately.
+        // Internal callers (e.g. island-solver body commit, sleep path) pass
+        // wake=false to avoid conflicting with the sleep system.
+        if (wake) this.setAwake(bodyId, true);
     }
 
     applyForce(bodyId: BodyId, force: ReadonlyVec2, point?: ReadonlyVec2): void {

@@ -385,8 +385,8 @@ export class IslandSolver2D {
                 this._bodyManager.setRotation(bodyId, this._positions[offset + 2]);
                 this._tmpLinearVel.x = this._velocities[offset];
                 this._tmpLinearVel.y = this._velocities[offset + 1];
-                this._bodyManager.setLinearVelocity(bodyId, this._tmpLinearVel);
-                this._bodyManager.setAngularVelocity(bodyId, this._velocities[offset + 2]);
+                this._bodyManager.setLinearVelocity(bodyId, this._tmpLinearVel, false);
+                this._bodyManager.setAngularVelocity(bodyId, this._velocities[offset + 2], false);
             }
         }
 
