@@ -55,20 +55,21 @@ export function hashCombineBooleans(seed: number, ...values: readonly boolean[])
     return fmix32(h) as unknown as Hash32;
 }
 
+const COMBINE_F64_BUF = new Float64Array(1);
+const COMBINE_I32_BUF = new Int32Array(COMBINE_F64_BUF.buffer);
+
 export function hashCombineNumbers(seed: number, ...values: readonly number[]): Hash32 {
     let h = seed ^ FNV_OFFSET_32;
     for (const v of values) {
-        const buf = new Float64Array(1);
-        const ibuf = new Int32Array(buf.buffer);
-        buf[0] = v;
-        h = Math.imul(h ^ (ibuf[0]! & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ ((ibuf[0]! >>> 8) & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ ((ibuf[0]! >>> 16) & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ ((ibuf[0]! >>> 24) & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ (ibuf[1]! & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ ((ibuf[1]! >>> 8) & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ ((ibuf[1]! >>> 16) & 0xff), FNV_PRIME_32) >>> 0;
-        h = Math.imul(h ^ ((ibuf[1]! >>> 24) & 0xff), FNV_PRIME_32) >>> 0;
+        COMBINE_F64_BUF[0] = v;
+        h = Math.imul(h ^ (COMBINE_I32_BUF[0]! & 0xff), FNV_PRIME_32) >>> 0;
+        h = Math.imul(h ^ ((COMBINE_I32_BUF[0]! >>> 8) & 0xff), FNV_PRIME_32) >>> 0;
+        h = Math.imul(h ^ ((COMBINE_I32_BUF[0]! >>> 16) & 0xff), FNV_PRIME_32) >>> 0;
+        h = Math.imul(h ^ ((COMBINE_I32_BUF[0]! >>> 24) & 0xff), FNV_PRIME_32) >>> 0;
+        h = Math.imul(h ^ (COMBINE_I32_BUF[1]! & 0xff), FNV_PRIME_32) >>> 0;
+        h = Math.imul(h ^ ((COMBINE_I32_BUF[1]! >>> 8) & 0xff), FNV_PRIME_32) >>> 0;
+        h = Math.imul(h ^ ((COMBINE_I32_BUF[1]! >>> 16) & 0xff), FNV_PRIME_32) >>> 0;
+        h = Math.imul(h ^ ((COMBINE_I32_BUF[1]! >>> 24) & 0xff), FNV_PRIME_32) >>> 0;
     }
     return fmix32(h) as unknown as Hash32;
 }

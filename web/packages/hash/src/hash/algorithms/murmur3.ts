@@ -26,6 +26,7 @@ export class Murmur3_32 implements IHasher<Hash32> {
     private _tailLen: number = 0;
     private _finalized: boolean = false;
     private _initialSeed: number;
+    private _f64Tuple: [number, number] = [0, 0];
 
     constructor(seed: Seed32 = asSeed32(0)) {
         this._initialSeed = (seed as number) >>> 0;
@@ -136,8 +137,8 @@ export class Murmur3_32 implements IHasher<Hash32> {
     }
 
     updateF64(value: number): this {
-        const [lo, hi] = float64ToBitsPair(value);
-        return this.updateU32(lo).updateU32(hi);
+        float64ToBitsPair(value, this._f64Tuple);
+        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
     }
 
     updateHash(value: Hash32 | bigint): this {
@@ -257,6 +258,7 @@ export class Murmur2_64 implements IHasher<import('../types').Hash64> {
     private _tailLen: number = 0;
     private _finalized: boolean = false;
     private _initialSeed: bigint;
+    private _f64Tuple: [number, number] = [0, 0];
 
     constructor(seed: import('../types').Seed32 = asSeed32(0)) {
         this._initialSeed = BigInt((seed as number) >>> 0);
@@ -343,8 +345,8 @@ export class Murmur2_64 implements IHasher<import('../types').Hash64> {
     updateU64(value: bigint): this { return this.updateI64(value); }
     updateF32(value: number): this { return this.updateU32(float32ToBits(value)); }
     updateF64(value: number): this {
-        const [lo, hi] = float64ToBitsPair(value);
-        return this.updateU32(lo).updateU32(hi);
+        float64ToBitsPair(value, this._f64Tuple);
+        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
     }
     updateHash(value: import('../types').Hash32 | bigint): this {
         this._checkFinalized();

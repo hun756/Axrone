@@ -3,6 +3,11 @@ import { createHasher } from './factory';
 import type { HashValue, HashAlgorithmName } from './types';
 import { fmix32 } from './mixers';
 
+const STRUCT_F64_BUF = new Float64Array(1);
+const STRUCT_I32_BUF = new Int32Array(STRUCT_F64_BUF.buffer);
+const STRUCT_F32_BUF = new Float32Array(1);
+const STRUCT_F32_I32_BUF = new Int32Array(STRUCT_F32_BUF.buffer);
+
 export class StructState {
     private _h: number;
     private _byteLength: number = 0;
@@ -45,10 +50,8 @@ export class StructState {
     }
 
     mixNumber(value: number): this {
-        const buf = new Float64Array(1);
-        const ibuf = new Int32Array(buf.buffer);
-        buf[0] = value;
-        this.mixIn(ibuf[0]!).mixIn(ibuf[1]!);
+        STRUCT_F64_BUF[0] = value;
+        this.mixIn(STRUCT_I32_BUF[0]!).mixIn(STRUCT_I32_BUF[1]!);
         return this;
     }
 
@@ -61,10 +64,8 @@ export class StructState {
     }
 
     mixF32(value: number): this {
-        const buf = new Float32Array(1);
-        const ibuf = new Int32Array(buf.buffer);
-        buf[0] = value;
-        return this.mixIn(ibuf[0]!);
+        STRUCT_F32_BUF[0] = value;
+        return this.mixIn(STRUCT_F32_I32_BUF[0]!);
     }
 
     mixF64(value: number): this {

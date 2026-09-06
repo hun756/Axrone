@@ -78,26 +78,29 @@ describe('hash/bits — bit/byte operations', () => {
 
     describe('float64ToBitsPair / bitsPairToFloat64', () => {
         it('round-trips finite numbers', () => {
+            const out: [number, number] = [0, 0];
             for (const v of [0, 1, -1, 0.5, -0.5, Math.PI, -Math.PI, Number.MAX_SAFE_INTEGER, 1e-300, 1e300]) {
-                const [lo, hi] = float64ToBitsPair(v);
-                const back = bitsPairToFloat64(lo, hi);
+                float64ToBitsPair(v, out);
+                const back = bitsPairToFloat64(out[0], out[1]);
                 expect(back).toBe(v);
             }
         });
 
         it('handles special values', () => {
-            const [infLo, infHi] = float64ToBitsPair(Infinity);
-            expect(infLo).toBe(0);
-            expect(infHi).toBe(0x7ff00000);
-            const [ninfLo, ninfHi] = float64ToBitsPair(-Infinity);
-            expect(ninfLo).toBe(0);
-            expect(U32(ninfHi)).toBe(0xfff00000);
+            const out: [number, number] = [0, 0];
+            float64ToBitsPair(Infinity, out);
+            expect(out[0]).toBe(0);
+            expect(out[1]).toBe(0x7ff00000);
+            float64ToBitsPair(-Infinity, out);
+            expect(out[0]).toBe(0);
+            expect(U32(out[1])).toBe(0xfff00000);
         });
 
         it('produces known IEEE 754 representations', () => {
-            const [lo, hi] = float64ToBitsPair(1.0);
-            expect(lo).toBe(0);
-            expect(hi).toBe(0x3ff00000);
+            const out: [number, number] = [0, 0];
+            float64ToBitsPair(1.0, out);
+            expect(out[0]).toBe(0);
+            expect(out[1]).toBe(0x3ff00000);
         });
     });
 

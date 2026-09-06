@@ -48,6 +48,12 @@ export class Crc32 extends Fnv1a32 {
         return this;
     }
 
+    override updateString(input: string): this {
+        this._checkFinalized();
+        const bytes = new TextEncoder().encode(input);
+        return this.updateBytes(bytes);
+    }
+
     override digest(): Hash32 {
         if (this._finalDigest !== undefined) return this._finalDigest;
         (this as any)._finalized = true;
@@ -101,6 +107,12 @@ export class Crc32c extends Fnv1a32 {
         }
         (this as any)._byteLength += end - offset;
         return this;
+    }
+
+    override updateString(input: string): this {
+        this._checkFinalized();
+        const bytes = new TextEncoder().encode(input);
+        return this.updateBytes(bytes);
     }
 
     override digest(): Hash32 {
