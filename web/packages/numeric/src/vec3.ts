@@ -41,7 +41,9 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
         return new Vec3(v.x, v.y, v.z);
     }
 
-    static fromArray(arr: ArrayLike<number>, offset: number = 0): Vec3 {
+    static fromArray(arr: ArrayLike<number>, offset?: number): Vec3;
+    static fromArray<V extends IVec3Like>(arr: ArrayLike<number>, offset: number, out: V): V;
+    static fromArray<V extends IVec3Like>(arr: ArrayLike<number>, offset: number = 0, out?: V): Vec3 | V {
         if (offset < 0) {
             throw new RangeError('Offset cannot be negative');
         }
@@ -52,7 +54,18 @@ export class Vec3 implements IVec3Like, ICloneable<Vec3>, Equatable {
             );
         }
 
-        return new Vec3(Number(arr[offset]), Number(arr[offset + 1]), Number(arr[offset + 2]));
+        const x = Number(arr[offset]);
+        const y = Number(arr[offset + 1]);
+        const z = Number(arr[offset + 2]);
+
+        if (out) {
+            out.x = x;
+            out.y = y;
+            out.z = z;
+            return out;
+        }
+
+        return new Vec3(x, y, z);
     }
 
     static create(x: number = 0, y: number = 0, z: number = 0): Vec3 {
