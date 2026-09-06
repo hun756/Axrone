@@ -1,14 +1,12 @@
-declare const __brand: unique symbol;
+import type { Brand } from '@axrone/utility';
 
-type Branded<T, TBrand extends string> = T & { readonly [K in TBrand]: typeof __brand };
-
-export type NodeId = Branded<string, 'NodeId'>;
-export type MeshKey = Branded<string, 'MeshKey'>;
-export type MaterialKey = Branded<string, 'MaterialKey'>;
-export type TextureKey = Branded<string, 'TextureKey'>;
-export type SkinKey = Branded<string, 'SkinKey'>;
-export type AnimationKey = Branded<string, 'AnimationKey'>;
-export type PrefabKey = Branded<string, 'PrefabKey'>;
+export type NodeId = Brand<string, 'NodeId'>;
+export type MeshKey = Brand<string, 'MeshKey'>;
+export type MaterialKey = Brand<string, 'MaterialKey'>;
+export type TextureKey = Brand<string, 'TextureKey'>;
+export type SkinKey = Brand<string, 'SkinKey'>;
+export type AnimationKey = Brand<string, 'AnimationKey'>;
+export type PrefabKey = Brand<string, 'PrefabKey'>;
 
 export const nodeId = (index: number): NodeId => `node/${index}` as NodeId;
 export const meshKey = (meshIndex: number, primitiveIndex: number): MeshKey =>
