@@ -219,3 +219,31 @@ export const PhysicsConstants = Object.freeze({
     EPSILON: 1e-6,
 });
 
+// ---------------------------------------------------------------------------
+// Collision pair key
+// ---------------------------------------------------------------------------
+
+/**
+ * Branded numeric pair key for deterministic contact/collision pair lookup.
+ *
+ * Formula: `lo * 0x100000 + hi` where `lo = min(a,b)` and `hi = max(a,b)`.
+ *
+ * **Overflow limit:** `0x100000 = 1 048 576`.  Safe for engines with
+ * `maxBodies ≤ 1024` because `1024 × 1024 = 1 048 576`.  If the engine
+ * configuration exceeds this bound the key space may collide.
+ */
+export type CollisionPairKey = number & { readonly __collisionPairKeyBrand: unique symbol };
+
+/**
+ * Compute a deterministic collision pair key from two shape/body IDs.
+ *
+ * The result is order-independent: `makeCollisionPairKey(a, b) === makeCollisionPairKey(b, a)`.
+ *
+ * **Overflow:** safe for IDs in `[0, 0x100000)` (≈ 1 M).  See {@link CollisionPairKey}.
+ */
+export function makeCollisionPairKey(a: number, b: number): CollisionPairKey {
+    const lo = a < b ? a : b;
+    const hi = a < b ? b : a;
+    return (lo * 0x100000 + hi) as CollisionPairKey;
+}
+
