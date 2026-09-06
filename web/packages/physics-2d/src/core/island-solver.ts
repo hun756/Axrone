@@ -311,12 +311,27 @@ export class IslandSolver2D {
             this._warmStart();
         }
 
+        // ── Step 4: Contact velocity solve (island contacts) ──────────────
         const t0 = performance.now();
         for (let i = 0; i < velIters; i++) {
             this._solveVelocityConstraints();
         }
         if (profiler) profiler.solveVelocityTime += performance.now() - t0;
 
+        // ── Step 5: Constraint velocity solve (joints) ────────────────────
+        // P1-3: Joint velocity corrections are applied BEFORE position integration
+        // so that position integration uses the corrected velocities. This matches
+        // the 3D step ordering (physics-world-3d.ts).
+        if (this._constraintStack.length > 0) {
+            this._constraintSolver.prepareConstraints(this._constraintStack, dt);
+            this._constraintSolver.solveVelocityConstraints(velIters);
+            // Sync joint velocity corrections back into island working arrays
+            this._constraintSolver.writeBackVelocities(
+                this._velocities, this._bodyStack, this._bodyIndex
+            );
+        }
+
+        // ── Step 6: Position integrate (positions += velocities * dt) ──────
         for (let i = 0; i < bodyCount; i++) {
             const bodyId = this._bodyStack[i];
             const type = this._bodyManager.getBodyType(bodyId);
@@ -333,6 +348,7 @@ export class IslandSolver2D {
             }
         }
 
+        // ── Step 7: Contact position solve (island contacts) ──────────────
         this._initializePositionConstraints();
 
         const t1 = performance.now();
@@ -344,6 +360,18 @@ export class IslandSolver2D {
         }
         if (profiler) profiler.solvePositionTime += performance.now() - t1;
 
+        // ── Step 8: Constraint position solve (joints) ────────────────────
+        // P1-3: Joint position corrections are applied BEFORE body commit so that
+        // the committed positions include joint constraint corrections.
+        if (this._constraintStack.length > 0) {
+            this._constraintSolver.solvePositionConstraints(posIters);
+            // Sync joint position corrections back into island working arrays
+            this._constraintSolver.writeBackPositions(
+                this._positions, this._bodyStack, this._bodyIndex
+            );
+        }
+
+        // ── Step 9: Body commit (single pass, all bodies) ─────────────────
         for (let i = 0; i < bodyCount; i++) {
             const bodyId = this._bodyStack[i];
             const type = this._bodyManager.getBodyType(bodyId);
@@ -362,16 +390,7 @@ export class IslandSolver2D {
             }
         }
 
-        // P1-3: Joint constraints are solved AFTER position commit because the
-        // monolithic ConstraintSolver2D reads/writes body manager state directly.
-        // Proper ordering (joints before position integration) requires splitting
-        // ConstraintSolver2D into velocity-only and position-only phases.
-        this._constraintSolver.solveConstraints(
-            this._constraintStack,
-            dt,
-            velIters,
-            posIters
-        );
+        // ── Step 10: Sleep + warm start storage ───────────────────────────
 
         // Sleep system: update sleep timers and put resting bodies to sleep
         if (allowSleep) {
