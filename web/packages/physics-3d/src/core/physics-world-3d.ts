@@ -552,6 +552,7 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     getStatistics(): IPhysicsWorldStatistics {
+        const tree = this._contactRuntime.broadphase;
         return {
             bodyCount: this._bodyManager.bodyCount,
             shapeCount: this._shapeManager.shapeCount,
@@ -559,9 +560,9 @@ export class PhysicsWorld3D implements Disposable {
             contactCount: this._contactRuntime.contactCount,
             proxyCount: this._shapeManager.shapeCount,
             islandCount: this._contactRuntime.islandCount,
-            treeHeight: 0,
-            treeBalance: 0,
-            treeQuality: 0,
+            treeHeight: tree.getHeight(),
+            treeBalance: tree.getTreeBalance(),
+            treeQuality: tree.getTreeQuality(),
             stepTime: this._profiler?.stepTime ?? 0,
             collisionTime: this._profiler?.collisionTime ?? 0,
             solveTime: this._profiler?.solveTime ?? 0,
@@ -587,15 +588,15 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     getTreeHeight(): number {
-        return 0;
+        return this._contactRuntime.broadphase.getHeight();
     }
 
     getTreeBalance(): number {
-        return 0;
+        return this._contactRuntime.broadphase.getTreeBalance();
     }
 
     getTreeQuality(): number {
-        return 0;
+        return this._contactRuntime.broadphase.getTreeQuality();
     }
 
     validate(): boolean {
