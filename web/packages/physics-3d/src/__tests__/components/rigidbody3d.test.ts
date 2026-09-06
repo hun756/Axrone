@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Rigidbody3D } from '../../components/rigidbody3d';
+import { PhysicsWorld3D } from '@axrone/physics-3d';
 
 describe('Rigidbody3D', () => {
     function create() { return new Rigidbody3D(); }
@@ -101,27 +102,107 @@ describe('Rigidbody3D', () => {
         });
     });
 
-    describe('force/impulse methods without physics world', () => {
-        it('addForce does not throw', () => {
-            expect(() => create().addForce({ x: 1, y: 0, z: 0 })).not.toThrow();
+    describe('force/impulse methods with physics world', () => {
+        function createConnectedRigidbody() {
+            const world = new PhysicsWorld3D({ gravity: { x: 0, y: 0, z: 0 } });
+            const rb = new Rigidbody3D();
+            rb.initialize(world, { mass: 1 });
+            return { world, rb };
+        }
+
+        it('addForce increases linear velocity (C14 fix proof)', () => {
+            const { rb } = createConnectedRigidbody();
+            rb.addForce({ x: 60, y: 0, z: 0 });
+            // Apply accumulated forces (simulates fixedUpdate)
+            (rb as any)._applyAccumulatedForces(1 / 60);
+            const vel = rb.velocity;
+            // force=60, dt=1/60, mass=1 → Δvel = 60*(1/60)/1 = 1
+            expect(vel.x).toBeCloseTo(1, 3);
         });
-        it('addTorque does not throw', () => {
-            expect(() => create().addTorque({ x: 0, y: 1, z: 0 })).not.toThrow();
+
+        it('addTorque changes angular velocity via world integration', () => {
+            const { world, rb } = createConnectedRigidbody();
+            rb.addTorque({ x: 0, y: 60, z: 0 });
+            // Apply accumulated torques (simulates fixedUpdate)
+            (rb as any)._applyAccumulatedForces(1 / 60);
+            // Integrate forces via world step (torques → angular velocity)
+            world.step(1 / 60);
+            const angVel = rb.angularVelocity;
+            expect(Math.abs(angVel.y)).toBeGreaterThan(0);
         });
-        it('addRelativeForce does not throw', () => {
-            expect(() => create().addRelativeForce({ x: 0, y: 0, z: 1 })).not.toThrow();
+
+        it('addRelativeForce transforms direction by rotation', () => {
+            const { rb } = createConnectedRigidbody();
+            // With identity rotation, relative forward (0,0,1) = world forward (0,0,1)
+            rb.addRelativeForce({ x: 0, y: 0, z: 60 });
+            (rb as any)._applyAccumulatedForces(1 / 60);
+            const vel = rb.velocity;
+            // Should be in world Z direction
+            expect(vel.z).toBeCloseTo(1, 3);
+            expect(Math.abs(vel.x)).toBeLessThan(0.001);
         });
-        it('addExplosionForce does not throw', () => {
-            expect(() => create().addExplosionForce(10, { x: 0, y: 5, z: 0 }, 5)).not.toThrow();
+
+        it('addExplosionForce applies distance-attenuated force', () => {
+            const world = new PhysicsWorld3D({ gravity: { x: 0, y: 0, z: 0 } });
+            // Near body
+            const rbNear = new Rigidbody3D();
+            rbNear.initialize(world, { mass: 1 });
+            // Far body
+            const rbFar = new Rigidbody3D();
+            rbFar.initialize(world, { mass: 1 });
+            // Position them at different distances from explosion
+            world.getBodyManager().setPosition(rbNear.bodyId, { x: 1, y: 0, z: 0 });
+            world.getBodyManager().setPosition(rbFar.bodyId, { x: 8, y: 0, z: 0 });
+
+            // Explosion at origin, radius 10
+            rbNear.addExplosionForce(100, { x: 0, y: 0, z: 0 }, 10);
+            rbFar.addExplosionForce(100, { x: 0, y: 0, z: 0 }, 10);
+            (rbNear as any)._applyAccumulatedForces(1 / 60);
+            (rbFar as any)._applyAccumulatedForces(1 / 60);
+
+            const velNear = rbNear.velocity;
+            const velFar = rbFar.velocity;
+            const speedNear = Math.sqrt(velNear.x ** 2 + velNear.y ** 2 + velNear.z ** 2);
+            const speedFar = Math.sqrt(velFar.x ** 2 + velFar.y ** 2 + velFar.z ** 2);
+            // Near body must be affected more than far body
+            expect(speedNear).toBeGreaterThan(speedFar);
         });
     });
 
-    describe('sleep management', () => {
-        it('wakeUp does not throw', () => {
-            expect(() => create().wakeUp()).not.toThrow();
+    describe('sleep management with physics world', () => {
+        it('wakeUp sets body awake and clears sleeping state', () => {
+            const world = new PhysicsWorld3D({ gravity: { x: 0, y: -10, z: 0 } });
+            const rb = new Rigidbody3D();
+            rb.initialize(world, { mass: 1 });
+
+            // Put to sleep first
+            rb.sleep();
+            expect(rb.isSleeping).toBe(true);
+            expect(world.getBodyManager().isAwake(rb.bodyId)).toBe(false);
+
+            // Wake up
+            rb.wakeUp();
+            expect(rb.isSleeping).toBe(false);
+            expect(world.getBodyManager().isAwake(rb.bodyId)).toBe(true);
         });
-        it('sleep does not throw', () => {
-            expect(() => create().sleep()).not.toThrow();
+
+        it('sleep sets body asleep and zeros velocity', () => {
+            const world = new PhysicsWorld3D({ gravity: { x: 0, y: -10, z: 0 } });
+            const rb = new Rigidbody3D();
+            rb.initialize(world, { mass: 1 });
+
+            // Give it some velocity
+            world.getBodyManager().setLinearVelocity(rb.bodyId, { x: 5, y: 5, z: 5 });
+
+            rb.sleep();
+            expect(rb.isSleeping).toBe(true);
+            expect(world.getBodyManager().isAwake(rb.bodyId)).toBe(false);
+
+            // Velocity should be zeroed
+            const vel = world.getBodyManager().getLinearVelocity(rb.bodyId);
+            expect(vel.x).toBe(0);
+            expect(vel.y).toBe(0);
+            expect(vel.z).toBe(0);
         });
     });
 });
