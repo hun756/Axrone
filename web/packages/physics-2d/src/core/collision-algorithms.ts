@@ -1,4 +1,5 @@
 import type { IVec2Like } from '@axrone/numeric';
+import { PhysicsConstants } from '../types';
 
 interface Simplex {
     readonly points: IVec2Like[];
@@ -480,7 +481,23 @@ export class EPA2D {
                 };
             }
 
-            polytope.splice(minIndex + 1, 0, { x: _supportPointB.point.x, y: _supportPointB.point.y });
+            // ENGINEERING_FIXES #6: Duplicate point guard — prevent degenerate polytope
+            // that would cause infinite loops or NaN from near-identical support points.
+            const newPx = _supportPointB.point.x;
+            const newPy = _supportPointB.point.y;
+            const dupEpsilon = PhysicsConstants.EPSILON;
+            for (let k = 0; k < polytope.length; k++) {
+                const ddx = newPx - polytope[k].x;
+                const ddy = newPy - polytope[k].y;
+                if (ddx * ddx + ddy * ddy < dupEpsilon) {
+                    return {
+                        depth: minDistance,
+                        normal: { x: minNormalX, y: minNormalY },
+                    };
+                }
+            }
+
+            polytope.splice(minIndex + 1, 0, { x: newPx, y: newPy });
         }
 
         return { depth: 0, normal: { x: 0, y: 0 } };
