@@ -91,8 +91,16 @@ public struct WyHash64Accumulator : IHashAccumulator<WyHash64Accumulator, Digest
         _length += source.Length;
     }
 
+    // Note: WyHash64 requires all data upfront (no incremental state), so this
+    // accumulator buffers all appended data and computes the hash in GetDigest().
+    // This differs from true streaming accumulators (e.g., XxHash64, SHA-256)
+    // that maintain running state. The IIncrementalHashAlgorithm interface is
+    // implemented for API uniformity, but consumers should be aware that memory
+    // usage grows linearly with total appended data until GetDigest/Dispose.
     private void EnsureCapacity(int required)
     {
+        // First call: allocate buffer. _length is 0, so Append's CopyTo writes
+        // to _buffer.AsSpan(0, 0) which is a no-op — this is correct.
         if (_buffer == null) { _buffer = ArrayPool<byte>.Shared.Rent(Math.Max(required, 256)); return; }
         if (_buffer.Length < required)
         {

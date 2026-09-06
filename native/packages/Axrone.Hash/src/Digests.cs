@@ -270,9 +270,8 @@ public readonly struct Digest384 : IHashDigest<Digest384>
             BinaryPrimitives.ReadUInt64LittleEndian(span[8..]),
             BinaryPrimitives.ReadUInt64LittleEndian(span[16..]),
             BinaryPrimitives.ReadUInt64LittleEndian(span[24..]),
-            HashCode.Combine(
-                BinaryPrimitives.ReadUInt64LittleEndian(span[32..]),
-                BinaryPrimitives.ReadUInt64LittleEndian(span[40..])));
+            BinaryPrimitives.ReadUInt64LittleEndian(span[32..]),
+            BinaryPrimitives.ReadUInt64LittleEndian(span[40..]));
     }
 
     public override string ToString() => ToString(null, null);
