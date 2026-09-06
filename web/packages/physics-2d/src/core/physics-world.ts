@@ -36,7 +36,7 @@ import type {
     IShape2D,
     IConstraint2D,
 } from '../types';
-import { ConstraintType, SolverFlags } from '../types';
+import { ConstraintType, SolverFlags, PhysicsConstants } from '../types';
 
 import { BodyManager2D } from './body-manager';
 import { ShapeManager2D } from './shape-manager';
@@ -113,11 +113,21 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     private readonly _shapeProxyMap = new Map<ShapeId, number>();
     private readonly _shapePreviousCenter = new Map<ShapeId, { x: number; y: number }>();
     private readonly _contactPairCache = new Map<number, ContactId>();
+    /** Cached AABB for static-body shapes; only recomputed when dirty. (P1-2) */
+    private readonly _staticAabbCache = new Map<ShapeId, AABB2D>();
+    /** Static shapes whose AABB needs recomputation. */
+    private readonly _staticAabbDirty = new Set<ShapeId>();
 
     private _autoClearForces = true;
     private _profiler: IPhysicsProfiler | null = null;
     private _disposed = false;
     private _stepTime = 0;
+    // P1-6: Cache config-driven flags
+    private readonly _warmStarting: boolean;
+    private readonly _continuousPhysics: boolean;
+    private readonly _subStepping: boolean;
+    private readonly _defaultVelIters: number;
+    private readonly _defaultPosIters: number;
 
     constructor(config: IPhysicsWorldConfig = {}) {
         this.config = config;
@@ -163,6 +173,13 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 sleepTime: 0,
             };
         }
+
+        // P1-6: Wire up previously decorative config fields
+        this._warmStarting = config.warmStarting ?? true;
+        this._continuousPhysics = config.continuousPhysics ?? true;
+        this._subStepping = config.subStepping ?? false;
+        this._defaultVelIters = config.solverIterations ?? 8;
+        this._defaultPosIters = config.positionIterations ?? 3;
     }
 
     get gravity(): Readonly<IVec2Like> {
@@ -189,26 +206,50 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         return this._solver;
     }
 
-    step(deltaTime: number, velocityIterations: number = 8, positionIterations: number = 3): void {
+    step(deltaTime: number, velocityIterations?: number, positionIterations?: number): void {
         if (this._disposed) return;
 
         const t0 = performance.now();
-        const solverFlags = this.config.solverFlags ?? SolverFlags.Default;
         const allowSleep = this.config.allowSleep ?? true;
 
-        this._updateBroadphase();
-        this._performCCD(deltaTime);
-        this._detectCollisions();
+        // P1-6: Resolve iteration defaults from config
+        const velIters = velocityIterations ?? this._defaultVelIters;
+        const posIters = positionIterations ?? this._defaultPosIters;
 
-        this._solver.solveIslands(
-            deltaTime,
-            velocityIterations,
-            positionIterations,
-            allowSleep,
-            solverFlags,
-            { x: this._gravity.x, y: this._gravity.y },
-            this._profiler ?? undefined
-        );
+        // P1-6: Build solver flags — warmStarting from config
+        let solverFlags = this.config.solverFlags ?? SolverFlags.Default;
+        if (this._warmStarting) {
+            solverFlags |= SolverFlags.WarmStarting;
+        } else {
+            solverFlags &= ~SolverFlags.WarmStarting;
+        }
+
+        // P1-6: Sub-stepping — split large dt into smaller fixed steps
+        const subSteps = this._subStepping
+            ? Math.min(Math.ceil(deltaTime / (1.0 / 60.0)), PhysicsConstants.MAX_SUB_STEPS)
+            : 1;
+        const subDt = deltaTime / subSteps;
+
+        for (let sub = 0; sub < subSteps; sub++) {
+            this._updateBroadphase();
+
+            // P1-6: continuousPhysics gates the CCD pass
+            if (this._continuousPhysics) {
+                this._performCCD(subDt);
+            }
+
+            this._detectCollisions();
+
+            this._solver.solveIslands(
+                subDt,
+                velIters,
+                posIters,
+                allowSleep,
+                solverFlags,
+                { x: this._gravity.x, y: this._gravity.y },
+                this._profiler ?? undefined
+            );
+        }
 
         if (this._autoClearForces) {
             this.clearForces();
@@ -301,7 +342,20 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
 
     private _updateBroadphase(): void {
         for (const [shapeId] of this._shapeStore.entries()) {
-            const shapeAabb = this._computeShapeAabb(shapeId);
+            const descriptor = this._shapeStore.getDescriptor(shapeId);
+            const bodyType = descriptor ? this._bodyManager.getBodyType(descriptor.bodyId) : 2;
+            const isStatic = bodyType === 0;
+
+            let shapeAabb: AABB2D | null;
+            if (isStatic && !this._staticAabbDirty.has(shapeId) && this._staticAabbCache.has(shapeId)) {
+                shapeAabb = this._staticAabbCache.get(shapeId)!;
+            } else {
+                shapeAabb = this._computeShapeAabb(shapeId);
+                if (isStatic && shapeAabb) {
+                    this._staticAabbCache.set(shapeId, shapeAabb);
+                    this._staticAabbDirty.delete(shapeId);
+                }
+            }
             if (!shapeAabb) continue;
 
             const currentCenterX = (shapeAabb.min.x + shapeAabb.max.x) * 0.5;
@@ -528,6 +582,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const shapeId = this._shapeManager.createCircle(bodyId, def);
         this._shapeStore.registerCircle(shapeId, bodyId, def);
         this._shapeStore.resetBodyMassData(bodyId);
+        this._markStaticDirty(bodyId);
         return shapeId;
     }
 
@@ -535,6 +590,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const shapeId = this._shapeManager.createBox(bodyId, def);
         this._shapeStore.registerBox(shapeId, bodyId, def);
         this._shapeStore.resetBodyMassData(bodyId);
+        this._markStaticDirty(bodyId);
         return shapeId;
     }
 
@@ -542,6 +598,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const shapeId = this._shapeManager.createPolygon(bodyId, def);
         this._shapeStore.registerPolygon(shapeId, bodyId, def);
         this._shapeStore.resetBodyMassData(bodyId);
+        this._markStaticDirty(bodyId);
         return shapeId;
     }
 
@@ -549,6 +606,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const shapeId = this._shapeManager.createCapsule(bodyId, def);
         this._shapeStore.registerCapsule(shapeId, bodyId, def);
         this._shapeStore.resetBodyMassData(bodyId);
+        this._markStaticDirty(bodyId);
         return shapeId;
     }
 
@@ -556,7 +614,15 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const shapeId = this._shapeManager.createSegment(bodyId, def);
         this._shapeStore.registerSegment(shapeId, bodyId, def);
         this._shapeStore.resetBodyMassData(bodyId);
+        this._markStaticDirty(bodyId);
         return shapeId;
+    }
+
+    private _markStaticDirty(bodyId: BodyId): void {
+        const shapes = this._shapeManager.getShapesForBody(bodyId);
+        for (const shapeId of shapes) {
+            this._staticAabbDirty.add(shapeId);
+        }
     }
 
     destroyShape(shapeId: ShapeId): void {
@@ -570,6 +636,8 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             this._shapeProxyMap.delete(shapeId);
         }
         this._shapePreviousCenter.delete(shapeId);
+        this._staticAabbCache.delete(shapeId);
+        this._staticAabbDirty.delete(shapeId);
 
         if (descriptor && this._bodyManager.hasBody(descriptor.bodyId)) {
             this._shapeStore.resetBodyMassData(descriptor.bodyId);
@@ -821,6 +889,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 x: position.x - newOrigin.x,
                 y: position.y - newOrigin.y,
             });
+            this._markStaticDirty(bodyId);
         }
     }
 
@@ -894,6 +963,8 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._bodyViews.clear();
         this._shapeStore.clear();
         this._constraintStore.clear();
+        this._staticAabbCache.clear();
+        this._staticAabbDirty.clear();
 
         this._bodyManager[Symbol.dispose]();
         this._shapeManager[Symbol.dispose]();

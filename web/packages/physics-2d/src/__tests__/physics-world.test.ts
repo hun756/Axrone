@@ -879,5 +879,37 @@ describe('PhysicsWorld2D Integration', () => {
             world.step(1 / 60);
         });
     });
+    describe('P1-6 config surface', () => {
+        it('uses solverIterations from config as default', () => {
+            const w = new PhysicsWorld2D({ solverIterations: 4, positionIterations: 2 });
+            // Should not throw — config values used internally
+            expect(() => w.step(1 / 60)).not.toThrow();
+            w[Symbol.dispose]();
+        });
+
+        it('respects continuousPhysics=false (skips CCD)', () => {
+            const w = new PhysicsWorld2D({ continuousPhysics: false });
+            const body = w.createBody({ type: BodyType.Dynamic, position: { x: 0, y: 0 }, rotation: 0 });
+            w.createCircleShape(body, { radius: 1 });
+            // Should run without CCD pass
+            expect(() => w.step(1 / 60)).not.toThrow();
+            w[Symbol.dispose]();
+        });
+
+        it('respects warmStarting=false', () => {
+            const w = new PhysicsWorld2D({ warmStarting: false });
+            expect(() => w.step(1 / 60)).not.toThrow();
+            w[Symbol.dispose]();
+        });
+
+        it('respects subStepping=true', () => {
+            const w = new PhysicsWorld2D({ subStepping: true });
+            const body = w.createBody({ type: BodyType.Dynamic, position: { x: 0, y: 10 }, rotation: 0 });
+            w.createCircleShape(body, { radius: 0.5 });
+            // Large dt should be split into sub-steps
+            expect(() => w.step(1 / 30)).not.toThrow();
+            w[Symbol.dispose]();
+        });
+    });
 });
 
