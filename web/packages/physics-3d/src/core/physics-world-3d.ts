@@ -1,4 +1,5 @@
 import { Vec3, Quat, clamp, type IVec3Like } from '@axrone/numeric';
+import { AABB3D } from '@axrone/geometry';
 import type {
     IAABBQueryCallback,
     ICollisionFilter,
@@ -93,6 +94,7 @@ import {
     supportsQueryFilter,
     transformPoint3D,
 } from './physics-world-3d-shared';
+import { PhysicsConstants } from '../types';
 
 export { BodyManager3D, ShapeManager3D, ConstraintManager3D } from './physics-managers-3d';
 
@@ -115,6 +117,7 @@ export class PhysicsWorld3D implements Disposable {
     private _collisionFilter: ICollisionFilter | null = null;
     private _autoClearForces = true;
     private _disposed = false;
+    private readonly _sleepTimes = new Map<BodyId3D, number>();
 
     constructor(config: IPhysicsWorld3DConfig = {}) {
         this.config = config;
@@ -532,9 +535,31 @@ export class PhysicsWorld3D implements Disposable {
 
         const t0 = performance.now();
 
+        // 1. Integrate forces → velocities (gravity, damping, force accumulators)
         this._integrateVelocities(deltaTime);
+
+        // 2. Broadphase + narrowphase → collect contact manifolds
+        this._contactRuntime.collectManifolds();
+
+        // 3. Warm start: apply cached impulses from previous frame
+        this._contactRuntime.warmStart();
+
+        // 4. Velocity solve: sequential impulse iterations
+        this._contactRuntime.solveVelocity(velocityIterations);
+
+        // 5. Integrate positions: position += velocity * dt
         this._integratePositions(deltaTime);
-        this._solveConstraints(deltaTime, velocityIterations, positionIterations);
+
+        // 6. Position solve: Baumgarte correction
+        this._contactRuntime.solvePosition(positionIterations);
+
+        // 7. Persist warm impulses and fire contact events
+        this._contactRuntime.dispatchEvents();
+
+        // 8. World-level sleeping check
+        if (this.config.allowSleep !== false) {
+            this._updateSleeping(deltaTime);
+        }
 
         if (this._profiler) {
             this._profiler.stepTime = performance.now() - t0;
@@ -596,17 +621,15 @@ export class PhysicsWorld3D implements Disposable {
         filter?: IQueryFilter3D
     ): readonly IRaycastResult3D[] {
         const results: IRaycastResult3D[] = [];
+        const bvh = this._contactRuntime.broadphase;
 
-        for (const descriptor of this._shapeDescriptors.values()) {
-            if (!supportsQueryFilter(descriptor.filter, filter)) {
-                continue;
-            }
-
+        // BVH-backed ray cast: traverse tree for O(log N) candidate selection
+        bvh.rayCast(origin, direction, maxFraction, (shapeId, _frac) => {
+            const descriptor = this._shapeDescriptors.get(shapeId);
+            if (!descriptor) return maxFraction;
+            if (!supportsQueryFilter(descriptor.filter, filter)) return maxFraction;
             const hit = this._rayCastShape(descriptor, origin, direction, maxFraction);
-            if (!hit) {
-                continue;
-            }
-
+            if (!hit) return maxFraction;
             results.push({
                 hit: true,
                 bodyId: descriptor.bodyId,
@@ -615,6 +638,21 @@ export class PhysicsWorld3D implements Disposable {
                 normal: hit.normal,
                 fraction: hit.fraction,
             });
+            return hit.fraction; // clip to tighten pruning
+        });
+
+        // Fallback: shapes not yet in BVH (before first step)
+        if (bvh.nodeCount === 0) {
+            for (const descriptor of this._shapeDescriptors.values()) {
+                if (!supportsQueryFilter(descriptor.filter, filter)) continue;
+                const hit = this._rayCastShape(descriptor, origin, direction, maxFraction);
+                if (!hit) continue;
+                results.push({
+                    hit: true, bodyId: descriptor.bodyId, shapeId: descriptor.id,
+                    point: Vec3.add(origin, Vec3.multiplyScalar(direction, hit.fraction)),
+                    normal: hit.normal, fraction: hit.fraction,
+                });
+            }
         }
 
         results.sort((left, right) => left.fraction - right.fraction);
@@ -636,13 +674,30 @@ export class PhysicsWorld3D implements Disposable {
     ): readonly ShapeId3D[] {
         const queryBounds = { min: Vec3.copy(min), max: Vec3.copy(max) };
         const shapeIds: ShapeId3D[] = [];
+        const bvh = this._contactRuntime.broadphase;
 
-        for (const descriptor of this._shapeDescriptors.values()) {
-            if (!supportsQueryFilter(descriptor.filter, filter)) {
-                continue;
-            }
-            if (intersectsAabb(this._computeShapeAabb(descriptor), queryBounds)) {
-                shapeIds.push(descriptor.id);
+        if (bvh.nodeCount > 0) {
+            // BVH-backed: broadphase candidate generation
+            const bvhQuery = new AABB3D(min, max);
+            const seen = new Set<ShapeId3D>();
+            bvh.queryAABBAll(bvhQuery, (shapeId: ShapeId3D) => {
+                if (seen.has(shapeId)) return true;
+                seen.add(shapeId);
+                const descriptor = this._shapeDescriptors.get(shapeId);
+                if (!descriptor) return true;
+                if (!supportsQueryFilter(descriptor.filter, filter)) return true;
+                if (intersectsAabb(this._computeShapeAabb(descriptor), queryBounds)) {
+                    shapeIds.push(descriptor.id);
+                }
+                return true;
+            });
+        } else {
+            // Fallback: linear scan before first step
+            for (const descriptor of this._shapeDescriptors.values()) {
+                if (!supportsQueryFilter(descriptor.filter, filter)) continue;
+                if (intersectsAabb(this._computeShapeAabb(descriptor), queryBounds)) {
+                    shapeIds.push(descriptor.id);
+                }
             }
         }
 
@@ -659,13 +714,29 @@ export class PhysicsWorld3D implements Disposable {
 
     queryPointAll(point: Readonly<IVec3Like>, filter?: IQueryFilter3D): readonly ShapeId3D[] {
         const shapeIds: ShapeId3D[] = [];
+        const bvh = this._contactRuntime.broadphase;
 
-        for (const descriptor of this._shapeDescriptors.values()) {
-            if (!supportsQueryFilter(descriptor.filter, filter)) {
-                continue;
-            }
-            if (this._testPointShape(descriptor, point)) {
-                shapeIds.push(descriptor.id);
+        if (bvh.nodeCount > 0) {
+            // BVH-backed: broadphase candidate generation
+            const seen = new Set<ShapeId3D>();
+            bvh.queryPointAll(point, (shapeId: ShapeId3D) => {
+                if (seen.has(shapeId)) return true;
+                seen.add(shapeId);
+                const descriptor = this._shapeDescriptors.get(shapeId);
+                if (!descriptor) return true;
+                if (!supportsQueryFilter(descriptor.filter, filter)) return true;
+                if (this._testPointShape(descriptor, point)) {
+                    shapeIds.push(descriptor.id);
+                }
+                return true;
+            });
+        } else {
+            // Fallback: linear scan before first step
+            for (const descriptor of this._shapeDescriptors.values()) {
+                if (!supportsQueryFilter(descriptor.filter, filter)) continue;
+                if (this._testPointShape(descriptor, point)) {
+                    shapeIds.push(descriptor.id);
+                }
             }
         }
 
@@ -771,6 +842,28 @@ export class PhysicsWorld3D implements Disposable {
                 y: this._bodyManager.isFixedRotation(bodyId) ? 0 : angularVelocity.y * angularDamping,
                 z: this._bodyManager.isFixedRotation(bodyId) ? 0 : angularVelocity.z * angularDamping,
             });
+
+            // Velocity clamp: prevent numerical explosion
+            const lv = this._bodyManager.getLinearVelocity(bodyId);
+            const lvSq = lv.x * lv.x + lv.y * lv.y + lv.z * lv.z;
+            const maxV = PhysicsConstants.MAX_VELOCITY;
+            if (lvSq > maxV * maxV) {
+                const scale = maxV / Math.sqrt(lvSq);
+                this._bodyManager.setLinearVelocity(bodyId, {
+                    x: lv.x * scale, y: lv.y * scale, z: lv.z * scale,
+                });
+            }
+            if (!this._bodyManager.isFixedRotation(bodyId)) {
+                const av = this._bodyManager.getAngularVelocity(bodyId);
+                const avSq = av.x * av.x + av.y * av.y + av.z * av.z;
+                const maxAV = PhysicsConstants.MAX_ANGULAR_VELOCITY;
+                if (avSq > maxAV * maxAV) {
+                    const scale = maxAV / Math.sqrt(avSq);
+                    this._bodyManager.setAngularVelocity(bodyId, {
+                        x: av.x * scale, y: av.y * scale, z: av.z * scale,
+                    });
+                }
+            }
         }
     }
 
@@ -779,7 +872,46 @@ export class PhysicsWorld3D implements Disposable {
         velocityIterations: number,
         positionIterations: number
     ): void {
+        // Legacy combined solve — delegates to the split pipeline.
         this._contactRuntime.solve(deltaTime, velocityIterations, positionIterations);
+    }
+
+    /**
+     * World-level sleeping: bodies with low kinetic energy for SLEEP_TIME
+     * are put to sleep to skip integration/solving.
+     */
+    private _updateSleeping(dt: number): void {
+        const linTolSq = PhysicsConstants.LINEAR_SLEEP_TOLERANCE * PhysicsConstants.LINEAR_SLEEP_TOLERANCE;
+        const angTolSq = PhysicsConstants.ANGULAR_SLEEP_TOLERANCE * PhysicsConstants.ANGULAR_SLEEP_TOLERANCE;
+        const sleepTime = PhysicsConstants.SLEEP_TIME;
+
+        for (const bodyId of this._bodyManager.getBodyIds()) {
+            if (this._bodyManager.getBodyType(bodyId) !== BODY_TYPE_DYNAMIC) continue;
+            if (!this._bodyManager.isEnabled(bodyId)) continue;
+            if (!this._bodyManager.isAwake(bodyId)) continue;
+            if (!(this._bodyManager.getBodyFlags(bodyId) & BodyFlags.AutoSleep)) {
+                this._sleepTimes.delete(bodyId);
+                continue;
+            }
+
+            const lv = this._bodyManager.getLinearVelocity(bodyId);
+            const av = this._bodyManager.getAngularVelocity(bodyId);
+            const lvSq = lv.x * lv.x + lv.y * lv.y + lv.z * lv.z;
+            const avSq = av.x * av.x + av.y * av.y + av.z * av.z;
+
+            if (lvSq > linTolSq || avSq > angTolSq) {
+                this._sleepTimes.set(bodyId, 0);
+            } else {
+                const t = (this._sleepTimes.get(bodyId) ?? 0) + dt;
+                this._sleepTimes.set(bodyId, t);
+                if (t >= sleepTime) {
+                    this._bodyManager.setAwake(bodyId, false);
+                    this._bodyManager.setLinearVelocity(bodyId, { x: 0, y: 0, z: 0 });
+                    this._bodyManager.setAngularVelocity(bodyId, { x: 0, y: 0, z: 0 });
+                    this._sleepTimes.delete(bodyId);
+                }
+            }
+        }
     }
 
     private _integratePositions(dt: number): void {
