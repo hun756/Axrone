@@ -23,6 +23,12 @@ abstract class Fnv1a32Base extends HasherBase<Hash32> {
 
     get seed(): Seed32 { return asSeed32(this._initialSeed); }
 
+    updateString(input: string): this {
+        this._checkFinalized();
+        const bytes = new TextEncoder().encode(input);
+        return this.updateBytes(bytes);
+    }
+
     updateBoolean(value: boolean): this {
         this._checkFinalized();
         this._h = Math.imul(this._h ^ (value ? 1 : 0), 0x01000193) >>> 0;
@@ -130,12 +136,6 @@ export class Fnv1a32 extends Fnv1a32Base {
         }
         this._byteLength += end - offset;
         return this;
-    }
-
-    updateString(input: string): this {
-        this._checkFinalized();
-        const bytes = new TextEncoder().encode(input);
-        return this.updateBytes(bytes);
     }
 
     reset(seed: Seed32 = asSeed32(0)): this {

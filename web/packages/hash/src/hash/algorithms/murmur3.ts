@@ -1,7 +1,7 @@
 import type { BytesLike } from '../../../types';
 import { rotl32, writeU32LE, encodeBase64 } from '../bits';
 import { fmix32, murmur3Scramble } from '../mixers';
-import { asHash32, asSeed32, type Hash32, type Seed32, type HashAlgorithmMetadata } from '../types';
+import { asHash32, asHash64, asSeed32, type Hash32, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
 import { HasherBase } from '../base';
 

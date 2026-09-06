@@ -127,8 +127,9 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> extends Ha
     updateString(input: string): this {
         this._checkFinalized();
         const enc = new TextEncoder();
-        this._chunks.push(enc.encode(input));
-        this._totalLen += input.length * 2;
+        const bytes = enc.encode(input);
+        this._chunks.push(bytes);
+        this._totalLen += bytes.byteLength;
         return this;
     }
 
