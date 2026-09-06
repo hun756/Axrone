@@ -17,6 +17,58 @@ import type {
 import type { InputActionSchema, InputContextId } from '../types';
 import type { InputEvaluationRuntime } from './evaluator';
 
+const emitActivationEvents = <TSchema extends InputActionSchema>(
+    runtime: InputCommitRuntime<TSchema>,
+    index: number,
+    definition: Extract<InternalActionDefinition, { kind: 'axis' | 'vector2' }>,
+    previousActive: boolean,
+    active: boolean,
+    changed: boolean,
+    context: InputContextId | undefined,
+    previousContext: InputContextId | undefined
+): void => {
+    if (!runtime._hasActionEventListeners() || !changed) {
+        return;
+    }
+
+    const terminalContext = context ?? previousContext;
+    const descriptors: InternalActionEventDescriptor[] = [];
+
+    if (!previousActive && active) {
+        descriptors.push({
+            phase: 'started',
+            trigger: 'activate',
+            context,
+        });
+    }
+
+    if (active && changed) {
+        descriptors.push({
+            phase: 'performed',
+            trigger: 'change',
+            context,
+        });
+    }
+
+    if (changed) {
+        descriptors.push({
+            phase: 'changed',
+            trigger: 'change',
+            context: active ? context : terminalContext,
+        });
+    }
+
+    if (previousActive && !active) {
+        descriptors.push({
+            phase: 'canceled',
+            trigger: 'deactivate',
+            context: terminalContext,
+        });
+    }
+
+    runtime._emitActionEvents(index, definition, descriptors);
+};
+
 export interface InputCommitRuntime<TSchema extends InputActionSchema = InputActionSchema>
     extends InputEvaluationRuntime<TSchema> {
     _buttonStateStores: Array<ButtonStateStore | undefined>;
@@ -284,45 +336,16 @@ export const commitAxisState = <TSchema extends InputActionSchema>(
     state.timestamp = runtime._timestamp;
     state.context = runtime._sourceContexts[index];
 
-    if (runtime._hasActionEventListeners() && state.changed) {
-        const context = state.context;
-        const terminalContext = context ?? previousContext;
-        const descriptors: InternalActionEventDescriptor[] = [];
-
-        if (!previousActive && state.active) {
-            descriptors.push({
-                phase: 'started',
-                trigger: 'activate',
-                context,
-            });
-        }
-
-        if (state.active && state.changed) {
-            descriptors.push({
-                phase: 'performed',
-                trigger: 'change',
-                context,
-            });
-        }
-
-        if (state.changed) {
-            descriptors.push({
-                phase: 'changed',
-                trigger: 'change',
-                context: state.active ? context : terminalContext,
-            });
-        }
-
-        if (previousActive && !state.active) {
-            descriptors.push({
-                phase: 'canceled',
-                trigger: 'deactivate',
-                context: terminalContext,
-            });
-        }
-
-        runtime._emitActionEvents(index, definition, descriptors);
-    }
+    emitActivationEvents(
+        runtime,
+        index,
+        definition,
+        previousActive,
+        state.active,
+        state.changed,
+        state.context,
+        previousContext
+    );
 };
 
 export const commitVectorState = <TSchema extends InputActionSchema>(
@@ -372,43 +395,14 @@ export const commitVectorState = <TSchema extends InputActionSchema>(
     state.timestamp = runtime._timestamp;
     state.context = runtime._sourceContexts[index];
 
-    if (runtime._hasActionEventListeners() && state.changed) {
-        const context = state.context;
-        const terminalContext = context ?? previousContext;
-        const descriptors: InternalActionEventDescriptor[] = [];
-
-        if (!previousActive && state.active) {
-            descriptors.push({
-                phase: 'started',
-                trigger: 'activate',
-                context,
-            });
-        }
-
-        if (state.active && state.changed) {
-            descriptors.push({
-                phase: 'performed',
-                trigger: 'change',
-                context,
-            });
-        }
-
-        if (state.changed) {
-            descriptors.push({
-                phase: 'changed',
-                trigger: 'change',
-                context: state.active ? context : terminalContext,
-            });
-        }
-
-        if (previousActive && !state.active) {
-            descriptors.push({
-                phase: 'canceled',
-                trigger: 'deactivate',
-                context: terminalContext,
-            });
-        }
-
-        runtime._emitActionEvents(index, definition, descriptors);
-    }
+    emitActivationEvents(
+        runtime,
+        index,
+        definition,
+        previousActive,
+        state.active,
+        state.changed,
+        state.context,
+        previousContext
+    );
 };
