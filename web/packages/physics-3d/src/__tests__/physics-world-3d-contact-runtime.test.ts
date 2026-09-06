@@ -43,6 +43,34 @@ describe('PhysicsWorld3D contact runtime', () => {
         });
     });
 
+    describe('falling body establishes contact', () => {
+        it('box falling from gap establishes contact and rests on ground', () => {
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 0.5, z: 5 } });
+
+            // Box with a gap above ground (bottom at y=0.5, ground top at y=0)
+            const box = world.createBody({ type: 2, position: { x: 0, y: 1.5, z: 0 } });
+            world.createBoxShape(box, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
+
+            const initialY = world.getBodyManager().getPosition(box).y;
+
+            // Step enough for the box to fall and establish contact
+            for (let i = 0; i < 60; i++) world.step(1 / 60);
+
+            // (a) Box actually fell
+            const pos = world.getBodyManager().getPosition(box);
+            expect(pos.y).toBeLessThan(initialY);
+
+            // (b) Contact was established
+            const stats = world.getStatistics();
+            expect(stats.contactCount).toBeGreaterThan(0);
+
+            // (c) Box did not sink through ground (resting reasonably)
+            expect(pos.y).toBeGreaterThanOrEqual(0);
+            expect(pos.y).toBeLessThan(1.5);
+        });
+    });
+
     describe('sphere-box contact', () => {
         it('generates contact between sphere and box', () => {
             const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
