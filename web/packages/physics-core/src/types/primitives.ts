@@ -216,11 +216,6 @@ export const PhysicsConstants = Object.freeze({
     ANGULAR_SLEEP_TOLERANCE: (2.0 / 180.0) * Math.PI,
     ALLOWED_PENETRATION: 0.01,
     CONTACT_PERSISTENT_THRESHOLD_SQ: 0.01,
-    EPSILON: 1e-10,
+    EPSILON: 1e-6,
 });
 
-export type Vec2Pool = Float64Array;
-export type Vec3Pool = Float64Array;
-export type TransformPool = Float64Array;
-export type VelocityPool = Float64Array;
-export type MassDataPool = Float64Array;
