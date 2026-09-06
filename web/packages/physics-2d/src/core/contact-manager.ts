@@ -40,6 +40,8 @@ const enum ContactDataOffset {
 
 export class ContactManager2D implements Disposable {
     private _nextContactId: number = 1;
+    // EF#2: Separate manifold counter — eliminates unsafe ContactId→ManifoldId cast
+    private _nextManifoldId: number = 1;
     private _contactCount: number = 0;
     private readonly _maxContacts: number;
 
@@ -116,7 +118,7 @@ export class ContactManager2D implements Disposable {
             bodyIdB,
             shapeIdA,
             shapeIdB,
-            manifoldId: contactId as unknown as ManifoldId,
+            manifoldId: this._nextManifoldId++ as ManifoldId,
         });
 
         // Combine materials: sqrt for friction, max for restitution
@@ -271,7 +273,7 @@ export class ContactManager2D implements Disposable {
         const pointCount = this._contactData[offset + ContactDataOffset.POINT_COUNT];
 
         return {
-            id: contactId as unknown as ManifoldId,
+            id: metadata?.manifoldId ?? (this._nextManifoldId++ as ManifoldId),
             bodyIdA: metadata?.bodyIdA ?? (0 as BodyId),
             bodyIdB: metadata?.bodyIdB ?? (0 as BodyId),
             shapeIdA: metadata?.shapeIdA ?? (0 as ShapeId),

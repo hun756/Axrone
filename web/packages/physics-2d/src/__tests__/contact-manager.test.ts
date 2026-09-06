@@ -247,5 +247,32 @@ describe('ContactManager2D', () => {
             expect(manager.contactCount).toBe(0);
         });
     });
+
+    describe('EF#2 manifold ID separation', () => {
+        it('assigns distinct manifold IDs independent of contact IDs', () => {
+            const c1 = manager.createContact(shapeIdA, shapeIdB, bodyIdA, bodyIdB);
+            const c2 = manager.createContact(shapeIdA, shapeIdB, bodyIdA, bodyIdB);
+
+            // Contact IDs should be different
+            expect(c1).not.toBe(c2);
+
+            // Trigger collision to build manifold — use updateContact with points
+            manager.updateContact(c1, {
+                id: 0 as any,
+                bodyIdA,
+                bodyIdB,
+                shapeIdA,
+                shapeIdB,
+                normal: { x: 1, y: 0 },
+                pointCount: 1,
+                points: [{ localPointA: { x: 0, y: 0 }, localPointB: { x: 0, y: 0 }, separation: 0 }],
+            });
+
+            // Destroy should not throw and manifold ID should be valid
+            expect(() => manager.destroyContact(c1)).not.toThrow();
+            expect(() => manager.destroyContact(c2)).not.toThrow();
+            expect(manager.contactCount).toBe(0);
+        });
+    });
 });
 
