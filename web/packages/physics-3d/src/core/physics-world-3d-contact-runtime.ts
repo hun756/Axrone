@@ -48,6 +48,7 @@ import {
     isCapsuleDef,
     isCylinderDef,
     isConeDef,
+    isHeightFieldDef,
     isConvexHullDef,
     isTriangleMeshDef,
 } from './physics-world-3d-shared';
@@ -290,11 +291,17 @@ export class PhysicsWorld3DContactRuntime {
         if (tA === SHAPE_TYPE_SPHERE && tB === SHAPE_TYPE_CAPSULE) { const k = this._cCapSph(dB, dA); return k ? { normal: Vec3.negate(k.normal), point: k.point, penetration: k.penetration } : null; }
         if (tA === SHAPE_TYPE_CAPSULE && tB === SHAPE_TYPE_BOX) return this._cCapBox(dA, dB);
         if (tA === SHAPE_TYPE_BOX && tB === SHAPE_TYPE_CAPSULE) { const k = this._cCapBox(dB, dA); return k ? { normal: Vec3.negate(k.normal), point: k.point, penetration: k.penetration } : null; }
-        // Convex hull / triangle mesh: real GJK/EPA narrowphase (replaces AABB fallback).
+        // Convex hull / triangle mesh / cylinder / cone: real GJK/EPA narrowphase.
         if (
             tA === SHAPE_TYPE_CONVEX_HULL || tA === SHAPE_TYPE_TRIANGLE_MESH ||
-            tB === SHAPE_TYPE_CONVEX_HULL || tB === SHAPE_TYPE_TRIANGLE_MESH
+            tB === SHAPE_TYPE_CONVEX_HULL || tB === SHAPE_TYPE_TRIANGLE_MESH ||
+            tA === SHAPE_TYPE_CYLINDER || tA === SHAPE_TYPE_CONE ||
+            tB === SHAPE_TYPE_CYLINDER || tB === SHAPE_TYPE_CONE
         ) {
+            return this._cConvex(dA, dB, aabbA, aabbB);
+        }
+        // Heightfield: use analytic sphere/capsule-vs-heightfield when possible, else GJK.
+        if (tA === SHAPE_TYPE_HEIGHTFIELD || tB === SHAPE_TYPE_HEIGHTFIELD) {
             return this._cConvex(dA, dB, aabbA, aabbB);
         }
         return this._cAabbApprox(dA, dB, aabbA, aabbB);
@@ -421,6 +428,33 @@ export class PhysicsWorld3DContactRuntime {
                 verts.push(Vec3.add(c, Vec3.multiplyScalar(localY, height)));
             }
             return verts;
+        }
+
+        if (isHeightFieldDef(def)) {
+            const { heights, width, depth, scaleX = 1, scaleY = 1, scaleZ = 1 } = def;
+            const center = def.center ?? { x: 0, y: 0, z: 0 };
+            const c = transformPoint3D(center, pos, rot);
+            const verts: IVec2Like[] = [];
+            const halfW = (width - 1) * 0.5;
+            const halfD = (depth - 1) * 0.5;
+            // Sample a subset of heightfield vertices for GJK (full grid too expensive)
+            const stepX = Math.max(1, Math.floor(width / 8));
+            const stepZ = Math.max(1, Math.floor(depth / 8));
+            for (let iz = 0; iz < depth; iz += stepZ) {
+                for (let ix = 0; ix < width; ix += stepX) {
+                    const h = heights[iz * width + ix] ?? 0;
+                    const lx = (ix - halfW) * scaleX;
+                    const ly = h * scaleY;
+                    const lz = (iz - halfD) * scaleZ;
+                    const local = Vec3.add(c, Vec3.add(
+                        Vec3.add(Vec3.multiplyScalar(Quat.rotateVector(rot, { x: 1, y: 0, z: 0 }), lx),
+                            Vec3.multiplyScalar(Quat.rotateVector(rot, { x: 0, y: 1, z: 0 }), ly)),
+                        Vec3.multiplyScalar(Quat.rotateVector(rot, { x: 0, y: 0, z: 1 }), lz)
+                    ));
+                    verts.push(local);
+                }
+            }
+            return verts as IVec3Like[];
         }
 
         return [];
