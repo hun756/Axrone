@@ -279,6 +279,13 @@ export class Raycaster2D {
                     const dot = ray.direction.x * this._tempHit.normal.x + ray.direction.y * this._tempHit.normal.y;
                     if (dot > 0) continue;
                 }
+                if ((query.flags & RaycastFlags.PreciseHitNormal) !== 0) {
+                    const nLen = Math.sqrt(this._tempHit.normal.x * this._tempHit.normal.x + this._tempHit.normal.y * this._tempHit.normal.y);
+                    if (nLen > EPSILON) {
+                        this._tempHit.normal.x /= nLen;
+                        this._tempHit.normal.y /= nLen;
+                    }
+                }
                 if (closestOnly) {
                     if (this._tempHit.distance < bestDistance) {
                         bestDistance = this._tempHit.distance;
@@ -535,6 +542,14 @@ export class Raycaster3D {
                 if ((query.flags & RaycastFlags.IgnoreBackfaces) !== 0) {
                     const dot = ray.direction.x * this._tempHit.normal.x + ray.direction.y * this._tempHit.normal.y + ray.direction.z * this._tempHit.normal.z;
                     if (dot > 0) continue;
+                }
+                if ((query.flags & RaycastFlags.PreciseHitNormal) !== 0) {
+                    const nLen = Math.sqrt(this._tempHit.normal.x * this._tempHit.normal.x + this._tempHit.normal.y * this._tempHit.normal.y + this._tempHit.normal.z * this._tempHit.normal.z);
+                    if (nLen > EPSILON) {
+                        this._tempHit.normal.x /= nLen;
+                        this._tempHit.normal.y /= nLen;
+                        this._tempHit.normal.z /= nLen;
+                    }
                 }
                 if (closestOnly) {
                     if (this._tempHit.distance < bestDistance) {
