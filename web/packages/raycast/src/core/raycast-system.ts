@@ -20,7 +20,6 @@ import {
     RaycastBatcher3D,
     RaycastStatistics,
 } from './raycast-optimization';
-import { SpatialHashGrid3D, SpatialOctree } from './raycast-spatial';
 import { InvalidRayError } from './raycast-errors';
 import type { BodyId, ShapeId } from '../types/primitives';
 
@@ -215,11 +214,8 @@ export class RaycastSystem3D {
     private readonly _cache: RaycastCache3D;
     private readonly _batcher: RaycastBatcher3D;
     private readonly _statistics: RaycastStatistics;
-    private readonly _spatialGrid: SpatialHashGrid3D<ShapeId> | null = null;
-    private readonly _octree: SpatialOctree<ShapeId> | null = null;
     private _enableCache: boolean = true;
     private _enableBatching: boolean = false;
-    private _spatialAcceleration: 'none' | 'grid' | 'octree' | 'bvh' = 'none';
 
     constructor() {
         this._raycaster = new Raycaster3D();
@@ -351,14 +347,6 @@ export class RaycastSystem3D {
 
     public get enableBatching(): boolean {
         return this._enableBatching;
-    }
-
-    public set spatialAcceleration(value: 'none' | 'grid' | 'octree' | 'bvh') {
-        this._spatialAcceleration = value;
-    }
-
-    public get spatialAcceleration(): 'none' | 'grid' | 'octree' | 'bvh' {
-        return this._spatialAcceleration;
     }
 
     public get statistics(): RaycastStatistics {
