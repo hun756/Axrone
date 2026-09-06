@@ -78,6 +78,14 @@ interface IRigidbody3DConfig {
     sleepThreshold?: number;
 }
 
+/**
+ * 3D physics body component.
+ *
+ * IMPORTANT: Setting `mass` to 0 does NOT make a body static. The body type
+ * is controlled by the `bodyType` property (or `type` in the config). A body
+ * with `mass: 0` is clamped to 0.0001 and remains dynamic. To create a static
+ * body, set `bodyType` to `Static` (0) or pass `type: 0` in the config.
+ */
 @script({ scriptName: 'Rigidbody3D', description: '3D physics body component' })
 export class Rigidbody3D extends Component {
     private _bodyId: BodyId3D = -1 as BodyId3D;
@@ -126,6 +134,13 @@ export class Rigidbody3D extends Component {
         this._syncBodyType();
     }
 
+    /**
+     * Mass of the body (always > 0, minimum 0.0001).
+     *
+     * IMPORTANT: Setting mass to 0 does NOT change the body type to static.
+     * The value is clamped to 0.0001 and the body remains dynamic. To create
+     * a static body, set `bodyType` to Static (0) instead.
+     */
     get mass(): number {
         return this._mass;
     }

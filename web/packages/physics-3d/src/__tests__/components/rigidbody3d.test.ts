@@ -31,6 +31,20 @@ describe('Rigidbody3D', () => {
             expect(rb.mass).toBeCloseTo(0.0001, 4);
         });
 
+        it('mass: 0 does not change body type — body remains dynamic', () => {
+            const world = new PhysicsWorld3D({ gravity: { x: 0, y: -10, z: 0 } });
+            const rb = new Rigidbody3D();
+            rb.initialize(world, { mass: 0 });
+            // Body type should still be dynamic (2), NOT static (0)
+            expect(rb.bodyType).toBe(2);
+            // Mass should be clamped to 0.0001, not 0
+            expect(rb.mass).toBeCloseTo(0.0001, 4);
+            // invMass should be finite (no NaN/Infinity)
+            const invMass = world.getBodyManager().getInverseMass(rb.bodyId);
+            expect(Number.isFinite(invMass)).toBe(true);
+            expect(invMass).toBeGreaterThan(0);
+        });
+
         it('clamps negative linearDamping to 0', () => {
             const rb = create();
             rb.linearDamping = -1;
