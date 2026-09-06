@@ -64,9 +64,9 @@ interface PositionConstraint {
     points: [PositionConstraintPoint, PositionConstraintPoint];
 }
 
-const RESTITUTION_THRESHOLD = 1.0;
-const POSITION_SLOP = 0.005;
-const MAX_LINEAR_CORRECTION = 0.2;
+const RESTITUTION_THRESHOLD = PhysicsConstants.VELOCITY_THRESHOLD;
+const POSITION_SLOP = PhysicsConstants.LINEAR_SLOP;
+const MAX_LINEAR_CORRECTION = PhysicsConstants.MAX_LINEAR_CORRECTION;
 
 export class IslandSolver2D {
     private readonly _bodyStack: BodyId[] = [];
