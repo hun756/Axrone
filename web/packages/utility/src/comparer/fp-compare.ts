@@ -167,6 +167,8 @@ const internalCreateComparer = <T extends Numeric = number>(
     };
 
     const compareAbsolute = (a: number, b: number): ComparisonResult => {
+        if (a === b) return 0;
+
         const diff = Math.abs(a - b);
         const maxMagnitude = Math.max(Math.abs(a), Math.abs(b));
 
