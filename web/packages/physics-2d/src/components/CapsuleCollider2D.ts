@@ -66,21 +66,23 @@ export class CapsuleCollider2D extends Collider2D {
                 ? { x: this._offset.x, y: this._offset.y + halfLength }
                 : { x: this._offset.x + halfLength, y: this._offset.y };
 
-        this._shapeId = (this._physicsWorld as any).getShapeManager().createCapsule(
-            this._rigidbody.bodyId,
-            { p1, p2, radius: this._radius },
-            {
-                friction: this._material.friction as any,
-                restitution: this._material.restitution as any,
+        this._shapeId = this._physicsWorld.createCapsuleShape(this._rigidbody.bodyId, {
+            p1,
+            p2,
+            radius: this._radius,
+            material: {
+                friction: this._material.friction,
+                restitution: this._material.restitution,
                 density: this._material.density,
             },
-            this._collisionFilter
-        );
+            isSensor: this._isTrigger,
+            filter: this._collisionFilter,
+        });
     }
 
     protected destroyPhysicsShape(): void {
         if (!this._shapeId || !this._physicsWorld) return;
-        (this._physicsWorld as any).getShapeManager().destroyShape(this._shapeId);
+        this._physicsWorld.destroyShape(this._shapeId);
         this._shapeId = null;
     }
 
