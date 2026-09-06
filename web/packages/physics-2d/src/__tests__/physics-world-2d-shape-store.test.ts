@@ -72,7 +72,7 @@ describe('PhysicsWorld2DShapeStore', () => {
         it('uses default material when none provided', () => {
             store.registerCircle(1 as ShapeId, 10 as BodyId, { radius: 1 } as any);
             const desc = store.getDescriptor(1 as ShapeId);
-            expect(desc?.material.friction).toBe(0.2);
+            expect(desc?.material.friction).toBe(0.4);
             expect(desc?.material.density).toBe(1);
         });
 

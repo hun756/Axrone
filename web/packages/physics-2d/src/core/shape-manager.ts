@@ -436,7 +436,7 @@ export class ShapeManager2D implements Disposable {
         }
     ): void {
         const material: IMaterial = def.material ?? {
-            friction: (def.friction ?? 0.2) as Friction,
+            friction: (def.friction ?? 0.4) as Friction,
             restitution: (def.restitution ?? 0) as Restitution,
             density: (def.density ?? 1) as Density,
         };
