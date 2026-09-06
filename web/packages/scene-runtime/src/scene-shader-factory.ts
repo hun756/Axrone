@@ -1,4 +1,5 @@
 import { compileRenderShaderEffect } from '@axrone/render-core/shader-effect';
+import { Djb2 } from '@axrone/hash';
 import type { SceneMeshSemantic, SceneShaderDefinition } from './types';
 import { SceneShaderError } from './errors';
 import type { SceneShaderResource } from './shader-registry';
@@ -119,12 +120,12 @@ const extractUniformTypeHints = (
     return types;
 };
 
+const _djb2Hasher = new Djb2();
+
 const hashString = (input: string): string => {
-    let hash = 5381;
-    for (let i = 0; i < input.length; i += 1) {
-        hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0;
-    }
-    return (hash >>> 0).toString(36);
+    _djb2Hasher.reset();
+    _djb2Hasher.updateString(input);
+    return (_djb2Hasher.digest() as number).toString(36);
 };
 
 const resolveDepthTest = (definition: SceneShaderDefinition): boolean =>

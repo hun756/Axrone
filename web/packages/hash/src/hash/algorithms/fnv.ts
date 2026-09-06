@@ -1,8 +1,11 @@
 import type { BytesLike } from '../../../types';
-import { float32ToBits, float64ToBitsPair, writeU32LE } from '../bits';
-import { asHash32, asHash64, asSeed32, type Hash32, type Hash64, type HashValue, type Seed32, type HashAlgorithmMetadata } from '../types';
+import { writeU32LE, encodeBase64 } from '../bits';
+import { fnv1aMix32, fnv1aMixBytes32, FNV_PRIME_32 } from '../mixing';
+import { u32ToHex, bigIntToHex } from '../hex';
+import { asHash32, asHash64, asSeed32, type Hash32, type Hash64, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
-import { encode } from '@axrone/utility';
+import { HasherBase } from '../base';
+import { HashAlreadyFinalizedError } from '../errors';
 
 const FNV_METADATA: HashAlgorithmMetadata = {
     name: 'fnv1a-32',
@@ -16,28 +19,18 @@ const FNV_METADATA: HashAlgorithmMetadata = {
     description: 'FNV-1a 32-bit non-cryptographic hash (Fowler-Noll-Voy)',
 };
 
-abstract class Fnv1a32Base implements IHasher<Hash32> {
-    abstract readonly algorithm: string;
-    abstract readonly metadata: Readonly<HashAlgorithmMetadata>;
+abstract class Fnv1a32Base extends HasherBase<Hash32> {
     protected _h: number = 0;
-    protected _byteLength: number = 0;
-    protected _finalized: boolean = false;
     protected _initialSeed: number = 0;
-    protected _f64Tuple: [number, number] = [0, 0];
-    protected _checkFinalized(): void {}
 
     get seed(): Seed32 { return asSeed32(this._initialSeed); }
-    get byteLength(): number { return this._byteLength; }
-    get finalized(): boolean { return this._finalized; }
-
-    abstract updateBytes(bytes: BytesLike, offset?: number, length?: number): this;
 
     updateString(input: string): this {
         this._checkFinalized();
         for (let i = 0; i < input.length; i++) {
             const c = input.charCodeAt(i);
-            this._h = Math.imul(this._h ^ (c & 0xff), 0x01000193) >>> 0;
-            this._h = Math.imul(this._h ^ ((c >>> 8) & 0xff), 0x01000193) >>> 0;
+            this._h = fnv1aMix32(this._h, c & 0xff);
+            this._h = fnv1aMix32(this._h, (c >>> 8) & 0xff);
         }
         this._byteLength += input.length * 2;
         return this;
@@ -45,45 +38,30 @@ abstract class Fnv1a32Base implements IHasher<Hash32> {
 
     updateBoolean(value: boolean): this {
         this._checkFinalized();
-        this._h = Math.imul(this._h ^ (value ? 1 : 0), 0x01000193) >>> 0;
+        this._h = fnv1aMix32(this._h, value ? 1 : 0);
         this._byteLength += 1;
         return this;
     }
-
-    updateI8(v: number): this { return this.updateI32(v | 0); }
-    updateI16(v: number): this { return this.updateI32(v | 0); }
-    updateI32(value: number): this { return this.updateU32(value | 0); }
 
     updateI64(value: bigint): this {
         this._checkFinalized();
         let v = value;
         for (let i = 0; i < 8; i++) {
-            this._h = Math.imul(this._h ^ Number(v & 0xffn), 0x01000193) >>> 0;
+            this._h = fnv1aMix32(this._h, Number(v & 0xffn));
             v >>= 8n;
         }
         this._byteLength += 8;
         return this;
     }
 
-    updateU8(v: number): this { return this.updateU32(v & 0xff); }
-    updateU16(v: number): this { return this.updateU32(v & 0xffff); }
-
     updateU32(value: number): this {
         this._checkFinalized();
-        this._h = Math.imul(this._h ^ (value & 0xff), 0x01000193) >>> 0;
-        this._h = Math.imul(this._h ^ ((value >>> 8) & 0xff), 0x01000193) >>> 0;
-        this._h = Math.imul(this._h ^ ((value >>> 16) & 0xff), 0x01000193) >>> 0;
-        this._h = Math.imul(this._h ^ ((value >>> 24) & 0xff), 0x01000193) >>> 0;
+        this._h = fnv1aMix32(this._h, value & 0xff);
+        this._h = fnv1aMix32(this._h, (value >>> 8) & 0xff);
+        this._h = fnv1aMix32(this._h, (value >>> 16) & 0xff);
+        this._h = fnv1aMix32(this._h, (value >>> 24) & 0xff);
         this._byteLength += 4;
         return this;
-    }
-
-    updateU64(value: bigint): this { return this.updateI64(value); }
-    updateF32(value: number): this { return this.updateU32(float32ToBits(value)); }
-
-    updateF64(value: number): this {
-        float64ToBitsPair(value, this._f64Tuple);
-        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
     }
 
     updateHash(value: Hash32 | Hash64 | bigint): this {
@@ -91,20 +69,20 @@ abstract class Fnv1a32Base implements IHasher<Hash32> {
         if (typeof value === 'number') return this.updateU32(value);
         let v = value as bigint;
         for (let i = 0; i < 8; i++) {
-            this._h = Math.imul(this._h ^ Number(v & 0xffn), 0x01000193) >>> 0;
+            this._h = fnv1aMix32(this._h, Number(v & 0xffn));
             v >>= 8n;
         }
         this._byteLength += 8;
         return this;
     }
 
-    updateHashable<H2 extends HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
+    updateHashable<H2 extends import('../types').HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
         value.hashInto(this as unknown as IHasher<H2>);
         return this;
     }
 
     updateAny(value: unknown): this {
-        if (value === null || value === undefined) { this._h = Math.imul(this._h, 0x01000193) >>> 0; return this; }
+        if (value === null || value === undefined) { this._h = fnv1aMix32(this._h, 0); return this; }
         if (typeof value === 'number') {
             if (Number.isInteger(value)) return this.updateI32(value);
             return this.updateF64(value);
@@ -129,21 +107,16 @@ abstract class Fnv1a32Base implements IHasher<Hash32> {
     }
 
     digestHex(uppercase: boolean = false): string {
-        const h = this.digest() as number;
-        const s = h.toString(16).padStart(8, '0');
-        return uppercase ? s.toUpperCase() : s;
+        return u32ToHex(this.digest() as number, uppercase);
     }
 
     digestBase64(): string {
-        return encode(this.digestBytes());
+        return encodeBase64(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
         return BigInt(this.digest() as number) as H2;
     }
-
-    abstract reset(seed?: Seed32): this;
-    abstract clone(): IHasher<Hash32>;
 }
 
 export class Fnv1a32 extends Fnv1a32Base {
@@ -157,16 +130,14 @@ export class Fnv1a32 extends Fnv1a32Base {
     }
 
     protected override _checkFinalized(): void {
-        if (this._finalized) throw new Error(`Fnv1a32: cannot update after digest()`);
+        if (this._finalized) throw new HashAlreadyFinalizedError(`Fnv1a32: cannot update after digest()`);
     }
 
     updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {
         this._checkFinalized();
-        const end = length === undefined ? bytes.length : offset + length;
-        for (let i = offset; i < end; i++) {
-            this._h = Math.imul(this._h ^ (bytes[i]! & 0xff), 0x01000193) >>> 0;
-        }
-        this._byteLength += end - offset;
+        const len = length === undefined ? bytes.length - offset : length;
+        this._h = fnv1aMixBytes32(this._h, bytes, offset, len);
+        this._byteLength += len;
         return this;
     }
 
@@ -185,8 +156,6 @@ export class Fnv1a32 extends Fnv1a32Base {
         c._finalized = this._finalized;
         return c;
     }
-
-
 }
 
 const FNV1_METADATA: HashAlgorithmMetadata = {
@@ -206,16 +175,27 @@ export class Fnv1_32 extends Fnv1a32Base {
     }
 
     protected override _checkFinalized(): void {
-        if (this._finalized) throw new Error(`Fnv1_32: cannot update after digest()`);
+        if (this._finalized) throw new HashAlreadyFinalizedError(`Fnv1_32: cannot update after digest()`);
     }
 
     updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {
         this._checkFinalized();
         const end = length === undefined ? bytes.length : offset + length;
         for (let i = offset; i < end; i++) {
-            this._h = (Math.imul(this._h, 0x01000193) ^ (bytes[i]! & 0xff)) >>> 0;
+            this._h = (Math.imul(this._h, FNV_PRIME_32) ^ (bytes[i]! & 0xff)) >>> 0;
         }
         this._byteLength += end - offset;
+        return this;
+    }
+
+    override updateString(input: string): this {
+        this._checkFinalized();
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            this._h = (Math.imul(this._h, FNV_PRIME_32) ^ (c & 0xff)) >>> 0;
+            this._h = (Math.imul(this._h, FNV_PRIME_32) ^ ((c >>> 8) & 0xff)) >>> 0;
+        }
+        this._byteLength += input.length * 2;
         return this;
     }
 
@@ -234,8 +214,6 @@ export class Fnv1_32 extends Fnv1a32Base {
         c._finalized = this._finalized;
         return c;
     }
-
-
 }
 
 const FNV64_METADATA: HashAlgorithmMetadata = {
@@ -247,115 +225,180 @@ const FNV64_METADATA: HashAlgorithmMetadata = {
     seedable: true,
     keyed: false,
     cryptographicallySecure: false,
-    description: 'FNV-1a 64-bit non-cryptographic hash (bigint)',
+    description: 'FNV-1a 64-bit non-cryptographic hash (u32-lane)',
 };
 
-export class Fnv1a64 implements IHasher<Hash64> {
+// FNV-1a 64-bit offset basis: 0xcbf29ce484222325
+const FNV64_BASIS_HI = 0xcbf29ce4;
+const FNV64_BASIS_LO = 0x84222325;
+
+export class Fnv1a64 extends HasherBase<Hash64> {
     readonly algorithm: string = FNV64_METADATA.name;
     readonly metadata: Readonly<HashAlgorithmMetadata> = FNV64_METADATA;
-    private _h: bigint = 0n;
-    private _byteLength: number = 0;
-    private _finalized: boolean = false;
-    private _initialSeed: bigint = 0n;
-    private _f64Tuple: [number, number] = [0, 0];
+    private _hHi: number = 0;
+    private _hLo: number = 0;
+    private _initialSeed: number = 0;
 
     constructor(seed: Seed32 = asSeed32(0)) {
-        this._initialSeed = BigInt((seed as number) >>> 0);
-        this._h = (this._initialSeed ^ 0xcbf29ce484222325n) & 0xffffffffffffffffn;
+        super();
+        this._initialSeed = (seed as number) >>> 0;
+        this._hHi = FNV64_BASIS_HI;
+        this._hLo = (this._initialSeed ^ FNV64_BASIS_LO) >>> 0;
     }
 
-    get seed(): Seed32 { return asSeed32(Number(this._initialSeed)); }
-    get byteLength(): number { return this._byteLength; }
-    get finalized(): boolean { return this._finalized; }
+    get seed(): Seed32 { return asSeed32(this._initialSeed); }
 
-    private _checkFinalized(): void {
-        if (this._finalized) throw new Error(`Fnv1a64: cannot update after digest()`);
+    protected override _checkFinalized(): void {
+        if (this._finalized) throw new HashAlreadyFinalizedError(`Fnv1a64: cannot update after digest()`);
     }
 
     updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {
         this._checkFinalized();
         const end = length === undefined ? bytes.length : offset + length;
+        let hHi = this._hHi;
+        let hLo = this._hLo;
         for (let i = offset; i < end; i++) {
-            this._h = ((this._h ^ BigInt(bytes[i]! & 0xff)) * 0x100000001b3n) & 0xffffffffffffffffn;
+            hLo ^= (bytes[i]! & 0xff);
+            // Multiply (hHi, hLo) by FNV prime (0x100, 0x1b3) — u32-lane schoolbook
+            const a0 = hLo & 0xffff;
+            const a1 = hLo >>> 16;
+            const p0 = a0 * 0x1b3;
+            const p1 = a1 * 0x1b3;
+            const mid = (p0 >>> 16) + (p1 & 0xffff);
+            const newLo = (((mid & 0xffff) << 16) | (p0 & 0xffff)) >>> 0;
+            hHi = (Math.imul(hHi, 0x1b3) + ((hLo << 8) >>> 0) + (p1 >>> 16) + (mid >>> 16)) >>> 0;
+            hLo = newLo;
         }
+        this._hHi = hHi;
+        this._hLo = hLo;
         this._byteLength += end - offset;
         return this;
     }
 
     updateString(input: string): this {
         this._checkFinalized();
+        let hHi = this._hHi;
+        let hLo = this._hLo;
         for (let i = 0; i < input.length; i++) {
-            const c = BigInt(input.charCodeAt(i));
-            this._h = ((this._h ^ (c & 0xffn)) * 0x100000001b3n) & 0xffffffffffffffffn;
-            this._h = ((this._h ^ ((c >> 8n) & 0xffn)) * 0x100000001b3n) & 0xffffffffffffffffn;
+            const c = input.charCodeAt(i);
+            // Low byte
+            hLo ^= (c & 0xff);
+            {
+                const a0 = hLo & 0xffff; const a1 = hLo >>> 16;
+                const p0 = a0 * 0x1b3; const p1 = a1 * 0x1b3;
+                const mid = (p0 >>> 16) + (p1 & 0xffff);
+                const newLo = (((mid & 0xffff) << 16) | (p0 & 0xffff)) >>> 0;
+                hHi = (Math.imul(hHi, 0x1b3) + ((hLo << 8) >>> 0) + (p1 >>> 16) + (mid >>> 16)) >>> 0;
+                hLo = newLo;
+            }
+            // High byte
+            hLo ^= ((c >>> 8) & 0xff);
+            {
+                const a0 = hLo & 0xffff; const a1 = hLo >>> 16;
+                const p0 = a0 * 0x1b3; const p1 = a1 * 0x1b3;
+                const mid = (p0 >>> 16) + (p1 & 0xffff);
+                const newLo = (((mid & 0xffff) << 16) | (p0 & 0xffff)) >>> 0;
+                hHi = (Math.imul(hHi, 0x1b3) + ((hLo << 8) >>> 0) + (p1 >>> 16) + (mid >>> 16)) >>> 0;
+                hLo = newLo;
+            }
         }
+        this._hHi = hHi;
+        this._hLo = hLo;
         this._byteLength += input.length * 2;
         return this;
     }
 
     updateBoolean(value: boolean): this {
         this._checkFinalized();
-        this._h = (this._h ^ BigInt(value ? 1 : 0)) & 0xffffffffffffffffn;
-        this._h = (this._h * 0x100000001b3n) & 0xffffffffffffffffn;
+        let hLo = this._hLo ^ (value ? 1 : 0);
+        const hHi = this._hHi;
+        const a0 = hLo & 0xffff; const a1 = hLo >>> 16;
+        const p0 = a0 * 0x1b3; const p1 = a1 * 0x1b3;
+        const mid = (p0 >>> 16) + (p1 & 0xffff);
+        this._hLo = (((mid & 0xffff) << 16) | (p0 & 0xffff)) >>> 0;
+        this._hHi = (Math.imul(hHi, 0x1b3) + ((hLo << 8) >>> 0) + (p1 >>> 16) + (mid >>> 16)) >>> 0;
         this._byteLength += 1;
         return this;
     }
 
-    updateI8(v: number): this { return this.updateI32(v | 0); }
-    updateI16(v: number): this { return this.updateI32(v | 0); }
-    updateI32(value: number): this { return this.updateU32(value | 0); }
-
     updateI64(value: bigint): this {
         this._checkFinalized();
+        let hHi = this._hHi;
+        let hLo = this._hLo;
         let v = value & 0xffffffffffffffffn;
         for (let i = 0; i < 8; i++) {
-            this._h = ((this._h ^ (v & 0xffn)) * 0x100000001b3n) & 0xffffffffffffffffn;
+            hLo ^= Number(v & 0xffn);
+            const a0 = hLo & 0xffff; const a1 = hLo >>> 16;
+            const p0 = a0 * 0x1b3; const p1 = a1 * 0x1b3;
+            const mid = (p0 >>> 16) + (p1 & 0xffff);
+            const newLo = (((mid & 0xffff) << 16) | (p0 & 0xffff)) >>> 0;
+            hHi = (Math.imul(hHi, 0x1b3) + ((hLo << 8) >>> 0) + (p1 >>> 16) + (mid >>> 16)) >>> 0;
+            hLo = newLo;
             v >>= 8n;
         }
+        this._hHi = hHi;
+        this._hLo = hLo;
         this._byteLength += 8;
         return this;
     }
 
-    updateU8(v: number): this { return this.updateU32(v & 0xff); }
-    updateU16(v: number): this { return this.updateU32(v & 0xffff); }
-
     updateU32(value: number): this {
         this._checkFinalized();
-        const v = BigInt(value >>> 0);
+        let hHi = this._hHi;
+        let hLo = this._hLo;
+        const v = value >>> 0;
         for (let i = 0; i < 4; i++) {
-            this._h = ((this._h ^ ((v >> BigInt(i * 8)) & 0xffn)) * 0x100000001b3n) & 0xffffffffffffffffn;
+            hLo ^= ((v >>> (i * 8)) & 0xff);
+            const a0 = hLo & 0xffff; const a1 = hLo >>> 16;
+            const p0 = a0 * 0x1b3; const p1 = a1 * 0x1b3;
+            const mid = (p0 >>> 16) + (p1 & 0xffff);
+            const newLo = (((mid & 0xffff) << 16) | (p0 & 0xffff)) >>> 0;
+            hHi = (Math.imul(hHi, 0x1b3) + ((hLo << 8) >>> 0) + (p1 >>> 16) + (mid >>> 16)) >>> 0;
+            hLo = newLo;
         }
+        this._hHi = hHi;
+        this._hLo = hLo;
         this._byteLength += 4;
         return this;
-    }
-
-    updateU64(value: bigint): this { return this.updateI64(value); }
-    updateF32(value: number): this { return this.updateU32(float32ToBits(value)); }
-
-    updateF64(value: number): this {
-        float64ToBitsPair(value, this._f64Tuple);
-        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
     }
 
     updateHash(value: Hash32 | Hash64 | bigint): this {
         this._checkFinalized();
         if (typeof value === 'number') return this.updateU32(value);
+        let hHi = this._hHi;
+        let hLo = this._hLo;
         let v = value as bigint;
         for (let i = 0; i < 8; i++) {
-            this._h = ((this._h ^ (v & 0xffn)) * 0x100000001b3n) & 0xffffffffffffffffn;
+            hLo ^= Number(v & 0xffn);
+            const a0 = hLo & 0xffff; const a1 = hLo >>> 16;
+            const p0 = a0 * 0x1b3; const p1 = a1 * 0x1b3;
+            const mid = (p0 >>> 16) + (p1 & 0xffff);
+            const newLo = (((mid & 0xffff) << 16) | (p0 & 0xffff)) >>> 0;
+            hHi = (Math.imul(hHi, 0x1b3) + ((hLo << 8) >>> 0) + (p1 >>> 16) + (mid >>> 16)) >>> 0;
+            hLo = newLo;
             v >>= 8n;
         }
+        this._hHi = hHi;
+        this._hLo = hLo;
         this._byteLength += 8;
         return this;
     }
 
-    updateHashable<H2 extends HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
+    updateHashable<H2 extends import('../types').HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
         value.hashInto(this as unknown as IHasher<H2>);
         return this;
     }
 
     updateAny(value: unknown): this {
-        if (value === null || value === undefined) { this._h = (this._h * 0x100000001b3n) & 0xffffffffffffffffn; return this; }
+        if (value === null || value === undefined) {
+            const hLo = this._hLo; const hHi = this._hHi;
+            const a0 = hLo & 0xffff; const a1 = hLo >>> 16;
+            const p0 = a0 * 0x1b3; const p1 = a1 * 0x1b3;
+            const mid = (p0 >>> 16) + (p1 & 0xffff);
+            this._hLo = (((mid & 0xffff) << 16) | (p0 & 0xffff)) >>> 0;
+            this._hHi = (Math.imul(hHi, 0x1b3) + ((hLo << 8) >>> 0) + (p1 >>> 16) + (mid >>> 16)) >>> 0;
+            return this;
+        }
         if (typeof value === 'number') {
             if (Number.isInteger(value)) return this.updateI32(value);
             return this.updateF64(value);
@@ -369,39 +412,42 @@ export class Fnv1a64 implements IHasher<Hash64> {
 
     digest(): Hash64 {
         this._finalized = true;
-        return asHash64(this._h);
+        return asHash64((BigInt(this._hHi >>> 0) << 32n) | BigInt(this._hLo >>> 0));
     }
 
     digestBytes(): Uint8Array {
-        const h = this.digest() as bigint;
+        this._finalized = true;
         const out = new Uint8Array(8);
-        for (let i = 0; i < 8; i++) {
-            out[i] = Number((h >> BigInt(i * 8)) & 0xffn);
-        }
+        out[0] = this._hLo & 0xff;
+        out[1] = (this._hLo >>> 8) & 0xff;
+        out[2] = (this._hLo >>> 16) & 0xff;
+        out[3] = (this._hLo >>> 24) & 0xff;
+        out[4] = this._hHi & 0xff;
+        out[5] = (this._hHi >>> 8) & 0xff;
+        out[6] = (this._hHi >>> 16) & 0xff;
+        out[7] = (this._hHi >>> 24) & 0xff;
         return out;
     }
 
     digestHex(uppercase: boolean = false): string {
-        let h = this.digest() as bigint;
-        let s = '';
-        for (let i = 0; i < 16; i++) {
-            s = (h & 0xfn).toString(16) + s;
-            h >>= 4n;
-        }
+        this._finalized = true;
+        const s = this._hHi.toString(16).padStart(8, '0') + this._hLo.toString(16).padStart(8, '0');
         return uppercase ? s.toUpperCase() : s;
     }
 
     digestBase64(): string {
-        return encode(this.digestBytes());
+        return encodeBase64(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
-        return this.digest() as unknown as H2;
+        this._finalized = true;
+        return ((BigInt(this._hHi >>> 0) << 32n) | BigInt(this._hLo >>> 0)) as H2;
     }
 
     reset(seed: Seed32 = asSeed32(0)): this {
-        this._initialSeed = BigInt((seed as number) >>> 0);
-        this._h = (this._initialSeed ^ 0xcbf29ce484222325n) & 0xffffffffffffffffn;
+        this._initialSeed = (seed as number) >>> 0;
+        this._hHi = FNV64_BASIS_HI;
+        this._hLo = (this._initialSeed ^ FNV64_BASIS_LO) >>> 0;
         this._byteLength = 0;
         this._finalized = false;
         return this;
@@ -409,11 +455,10 @@ export class Fnv1a64 implements IHasher<Hash64> {
 
     clone(): IHasher<Hash64> {
         const c = new Fnv1a64(this.seed);
-        c._h = this._h;
+        (c as any)._hHi = this._hHi;
+        (c as any)._hLo = this._hLo;
         c._byteLength = this._byteLength;
         c._finalized = this._finalized;
         return c;
     }
-
-
 }

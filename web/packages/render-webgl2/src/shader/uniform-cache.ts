@@ -1,5 +1,5 @@
-import { hashString } from '@axrone/utility';
 import type { ShaderUniformValue, ShaderDataType } from './interfaces';
+import { Fnv1a32 } from '@axrone/hash';
 
 export interface UniformDescriptorLite {
     readonly name: string;
@@ -34,41 +34,52 @@ interface BucketEntry {
     lastValue: UniformScalarValue;
 }
 
+const _uniformHasher = new Fnv1a32();
+
+const fnv1a = (input: string): number => {
+    _uniformHasher.reset();
+    _uniformHasher.updateString(input);
+    return _uniformHasher.digest() as number;
+};
+
 const hashValue = (value: UniformScalarValue): number => {
     if (value === null) return 0;
     if (typeof value === 'number') {
         const bits = Math.fround(value);
-        return hashString(`n:${bits}`);
+        return fnv1a(`n:${bits}`);
     }
-    if (typeof value === 'boolean') return hashString(`b:${value ? 1 : 0}`);
+    if (typeof value === 'boolean') return fnv1a(`b:${value ? 1 : 0}`);
     if (value instanceof Float32Array) {
-        let h = hashString('f32:');
+        _uniformHasher.reset();
+        _uniformHasher.updateString('f32:');
         for (let i = 0; i < value.length; i++) {
-            h = Math.imul(h ^ hashString(`n:${Math.fround(value[i] as number)}`), 0x01000193) >>> 0;
+            _uniformHasher.updateF32(value[i] as number);
         }
-        return h;
+        return _uniformHasher.digest() as number;
     }
     if (value instanceof Int32Array) {
-        let h = hashString('i32:');
+        _uniformHasher.reset();
+        _uniformHasher.updateString('i32:');
         for (let i = 0; i < value.length; i++) {
-            h = Math.imul(h ^ hashString(`n:${value[i] as number}`), 0x01000193) >>> 0;
+            _uniformHasher.updateI32(value[i] as number);
         }
-        return h;
+        return _uniformHasher.digest() as number;
     }
     if (value instanceof Uint32Array) {
-        let h = hashString('u32:');
+        _uniformHasher.reset();
+        _uniformHasher.updateString('u32:');
         for (let i = 0; i < value.length; i++) {
-            h = Math.imul(h ^ hashString(`n:${value[i] as number}`), 0x01000193) >>> 0;
+            _uniformHasher.updateU32(value[i] as number);
         }
-        return h;
+        return _uniformHasher.digest() as number;
     }
     if (Array.isArray(value)) {
-        let h = hashString('a:');
+        _uniformHasher.reset();
+        _uniformHasher.updateString('a:');
         for (let i = 0; i < value.length; i++) {
-            const v = value[i];
-            h = Math.imul(h ^ hashString(`n:${Math.fround(v as number)}`), 0x01000193) >>> 0;
+            _uniformHasher.updateF32(Math.fround(value[i] as number));
         }
-        return h;
+        return _uniformHasher.digest() as number;
     }
     return 0;
 };
