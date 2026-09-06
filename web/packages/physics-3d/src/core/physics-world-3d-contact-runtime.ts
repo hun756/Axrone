@@ -71,16 +71,25 @@ export interface IPhysicsWorld3DContactRuntimeHost {
     ) => IVec3Like;
 }
 
+/** Deterministic numeric pair key: lo * 0x100000 + hi (avoids string alloc). */
+function _makePairKey(idA: ShapeId3D, idB: ShapeId3D): number {
+    const a = Number(idA);
+    const b = Number(idB);
+    const lo = a < b ? a : b;
+    const hi = a < b ? b : a;
+    return lo * 0x100000 + hi;
+}
+
 export class PhysicsWorld3DContactRuntime {
     private _nextContactId = 1 as ContactId;
     private _nextManifoldId = 1;
-    private _contactManifolds = new Map<string, IResolvedContactManifold3D>();
+    private _contactManifolds = new Map<number, IResolvedContactManifold3D>();
     private readonly _broadphase = new DynamicAABBTree3D<ShapeId3D>(1024);
     private readonly _shapeProxyMap = new Map<ShapeId3D, number>();
     private readonly _shapePreviousCenter = new Map<ShapeId3D, IVec3Like>();
 
-    /** Warm-start impulse cache keyed by pairKey (shapeIdA:shapeIdB). */
-    private readonly _warmImpulses = new Map<string, { normal: number; tangent: number }>();
+    /** Warm-start impulse cache keyed by pairKey * 4 + pointIndex. */
+    private readonly _warmImpulses = new Map<number, { normal: number; tangent: number }>();
     private _lastIslandCount = 0;
 
     // Persistent buffers to eliminate per-step allocations
@@ -88,6 +97,9 @@ export class PhysicsWorld3DContactRuntime {
     private readonly _scratchAabb = { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
     private readonly _scratchCenter: IVec3Like = { x: 0, y: 0, z: 0 };
     private readonly _scratchDisp: IVec3Like = { x: 0, y: 0, z: 0 };
+
+    // Pre-allocated contact point pool (max 4 points per manifold)
+    private static readonly MAX_CONTACT_POINTS = 4;
 
     constructor(private readonly _host: IPhysicsWorld3DContactRuntimeHost) {}
 
@@ -97,6 +109,11 @@ export class PhysicsWorld3DContactRuntime {
 
     get islandCount(): number {
         return this._lastIslandCount;
+    }
+
+    /** Expose the broadphase tree for world-level queries (P1-13). */
+    get broadphase(): DynamicAABBTree3D<ShapeId3D> {
+        return this._broadphase;
     }
 
     pruneShape(shapeId: ShapeId3D): void {
@@ -111,23 +128,40 @@ export class PhysicsWorld3DContactRuntime {
         this._shapePreviousCenter.delete(shapeId);
     }
 
+    /**
+     * Legacy combined solve — kept for backward compat.
+     * Internally delegates to the split pipeline.
+     */
     solve(deltaTime: number, velIters: number, posIters: number): void {
+        this.collectManifolds();
+        this.warmStart();
+        this.solveVelocity(velIters);
+        this.solvePosition(posIters);
+        this._persistWarmImpulses();
+        this.dispatchEvents();
+    }
+
+    /** Phase 1: broadphase + narrowphase → build manifolds. */
+    collectManifolds(): void {
         const bStart = performance.now();
         const pairs = this._collectPotentialCollisionPairs();
         const bTime = performance.now() - bStart;
         const nStart = performance.now();
 
-        // Reuse manifold map — clear instead of reallocating
         const next = this._contactManifolds;
         next.clear();
 
         for (const pair of pairs) {
             const m = this._buildContactManifold(pair);
             if (!m) continue;
-            const warm = this._warmImpulses.get(pair.pairKey);
-            if (warm) {
-                m.points[0].normalImpulse = warm.normal as Impulse;
-                m.points[0].tangentImpulse1 = warm.tangent as Impulse;
+            // Apply warm impulses from previous frame
+            for (let pi = 0; pi < m.pointCount; pi++) {
+                const warmKey = pair.pairKey * 4 + pi;
+                const warm = this._warmImpulses.get(warmKey);
+                if (warm) {
+                    m.points[pi].normalImpulse = warm.normal as Impulse;
+                    m.points[pi].tangentImpulse1 = warm.tangent as Impulse;
+                }
             }
             next.set(pair.pairKey, m);
         }
@@ -139,70 +173,92 @@ export class PhysicsWorld3DContactRuntime {
             profiler.collisionTime = bTime + nTime;
         }
 
-        // Build islands (connected components of bodies via contacts) and report the count.
         this._lastIslandCount = this._buildIslandCount(next);
+    }
 
-        // Warm start: apply cached accumulated impulses to velocities before iterating.
-        for (const m of next.values()) this._warmStartContact(m);
+    /** Phase 2: apply cached impulses to velocities. */
+    warmStart(): void {
+        for (const m of this._contactManifolds.values()) this._warmStartContact(m);
+    }
 
+    /** Phase 3: sequential impulse velocity solve. */
+    solveVelocity(velIters: number): void {
         const vStart = performance.now();
+        const manifolds = this._contactManifolds;
         for (let i = 0; i < velIters; i++) {
-            for (const m of next.values()) this._solveContactVelocity(m);
+            for (const m of manifolds.values()) this._solveContactVelocity(m);
             this._solveConstraints(velIters);
         }
+        const profiler = this._host.getProfiler();
         if (profiler) profiler.solveVelocityTime = performance.now() - vStart;
+    }
 
+    /** Phase 4: Baumgarte positional correction. */
+    solvePosition(posIters: number): void {
         const pStart = performance.now();
+        const manifolds = this._contactManifolds;
         for (let i = 0; i < posIters; i++) {
-            for (const m of next.values()) this._correctContactPositions(m, 0.2);
+            for (const m of manifolds.values()) this._correctContactPositions(m, 0.2);
         }
-        for (const m of next.values()) this._correctContactPositions(m, 1.0);
+        for (const m of manifolds.values()) this._correctContactPositions(m, 1.0);
+        const profiler = this._host.getProfiler();
         if (profiler) profiler.solvePositionTime = performance.now() - pStart;
+    }
 
-        // Persist accumulated impulses for next-frame warm starting.
+    /** Persist accumulated impulses for next-frame warm starting. */
+    private _persistWarmImpulses(): void {
         this._warmImpulses.clear();
-        for (const m of next.values()) {
-            const p = m.points[0];
-            this._warmImpulses.set(m.pairKey, {
-                normal: p.normalImpulse as number,
-                tangent: p.tangentImpulse1 as number,
-            });
-        }
-
-        // Fire contact events by comparing previous vs current manifolds.
-        const listener = this._host.getContactListener();
-        if (listener) {
-            const prev = this._contactManifolds;
-            // Begin events: new contacts
-            for (const [key, m] of next.entries()) {
-                if (!prev.has(key)) {
-                    if (m.sensor) {
-                        listener.onTriggerEnter?.(m.bodyIdA, m.bodyIdB);
-                    } else {
-                        listener.onCollisionBegin?.(this._toContactManifold(m));
-                    }
-                }
-            }
-            // Stay events: continuing contacts
-            for (const [key, m] of next.entries()) {
-                if (prev.has(key)) {
-                    if (!m.sensor) {
-                        listener.onCollisionStay?.(this._toContactManifold(m));
-                    }
-                }
-            }
-            // End events: removed contacts
-            for (const [key, m] of prev.entries()) {
-                if (!next.has(key)) {
-                    if (m.sensor) {
-                        listener.onTriggerExit?.(m.bodyIdA, m.bodyIdB);
-                    } else {
-                        listener.onCollisionEnd?.(m.bodyIdA, m.bodyIdB);
-                    }
-                }
+        for (const m of this._contactManifolds.values()) {
+            for (let pi = 0; pi < m.pointCount; pi++) {
+                const p = m.points[pi];
+                this._warmImpulses.set(m.pairKey * 4 + pi, {
+                    normal: p.normalImpulse as number,
+                    tangent: p.tangentImpulse1 as number,
+                });
             }
         }
     }
+
+    /** Fire contact events by comparing previous vs current manifolds. */
+    dispatchEvents(): void {
+        const listener = this._host.getContactListener();
+        if (!listener) return;
+        const next = this._contactManifolds;
+        const prev = this._previousManifolds;
+        // Begin events: new contacts
+        for (const [key, m] of next.entries()) {
+            if (!prev.has(key)) {
+                if (m.sensor) {
+                    listener.onTriggerEnter?.(m.bodyIdA, m.bodyIdB);
+                } else {
+                    listener.onCollisionBegin?.(this._toContactManifold(m));
+                }
+            }
+        }
+        // Stay events: continuing contacts
+        for (const [key, m] of next.entries()) {
+            if (prev.has(key)) {
+                if (!m.sensor) {
+                    listener.onCollisionStay?.(this._toContactManifold(m));
+                }
+            }
+        }
+        // End events: removed contacts
+        for (const [key, m] of prev.entries()) {
+            if (!next.has(key)) {
+                if (m.sensor) {
+                    listener.onTriggerExit?.(m.bodyIdA, m.bodyIdB);
+                } else {
+                    listener.onCollisionEnd?.(m.bodyIdA, m.bodyIdB);
+                }
+            }
+        }
+        // Snapshot current manifolds for next frame's event diff
+        this._previousManifolds = new Map(next);
+    }
+
+    /** Previous-frame manifold snapshot for event dispatch diff. */
+    private _previousManifolds = new Map<number, IResolvedContactManifold3D>();
 
     private _collectPotentialCollisionPairs(): IShapePairCandidate3D[] {
         // Reuse persistent array — clear but don't reallocate
@@ -272,7 +328,7 @@ export class PhysicsWorld3DContactRuntime {
                 descriptorB: dB,
                 aabbA: this._broadphase.getAABB(pA),
                 aabbB: this._broadphase.getAABB(pB),
-                pairKey: dA.id + ':' + dB.id,
+                pairKey: _makePairKey(dA.id, dB.id),
             });
             return true;
         });
@@ -281,20 +337,55 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     private _buildContactManifold(pair: IShapePairCandidate3D): IResolvedContactManifold3D | null {
-        const c = this._detectCollision(pair.descriptorA, pair.descriptorB, pair.aabbA, pair.aabbB);
+        const dA = pair.descriptorA, dB = pair.descriptorB;
+        const c = this._detectCollision(dA, dB, pair.aabbA, pair.aabbB);
         if (!c) return null;
         const { tangent1, tangent2 } = buildOrthonormalBasis(c.normal);
-        const wA = this._getContactPointOnShape(pair.descriptorA, c, true);
-        const wB = this._getContactPointOnShape(pair.descriptorB, c, false);
-        const lA = inverseTransformPoint3D(wA, this._host.bodyManager.getPosition(pair.descriptorA.bodyId), this._host.bodyManager.getRotation(pair.descriptorA.bodyId));
-        const lB = inverseTransformPoint3D(wB, this._host.bodyManager.getPosition(pair.descriptorB.bodyId), this._host.bodyManager.getRotation(pair.descriptorB.bodyId));
-        const friction = Math.sqrt(pair.descriptorA.material.friction * pair.descriptorB.material.friction);
-        const restitution = Math.max(pair.descriptorA.material.restitution, pair.descriptorB.material.restitution);
+        const friction = Math.sqrt(dA.material.friction * dB.material.friction);
+        const restitution = Math.max(dA.material.restitution, dB.material.restitution);
+
+        // Box-box: try clip-based multi-point manifold
+        if (isBoxDef(dA.def) && isBoxDef(dB.def)) {
+            const clipPoints = this._buildBoxBoxManifold(dA, dB, c.normal, c.penetration);
+            if (clipPoints.length >= 2) {
+                const points: IMutableContactPoint3D[] = [];
+                const bm = this._host.bodyManager;
+                const posA = bm.getPosition(dA.bodyId);
+                const rotA = bm.getRotation(dA.bodyId);
+                const posB = bm.getPosition(dB.bodyId);
+                const rotB = bm.getRotation(dB.bodyId);
+                for (const cp of clipPoints) {
+                    const lA = inverseTransformPoint3D(cp.worldPoint, posA, rotA);
+                    const lB = inverseTransformPoint3D(cp.worldPoint, posB, rotB);
+                    points.push({
+                        id: (this._nextContactId++ as unknown) as ContactId,
+                        localPointA: lA, localPointB: lB,
+                        normalImpulse: 0 as Impulse, tangentImpulse1: 0 as Impulse, tangentImpulse2: 0 as Impulse,
+                        separation: cp.separation,
+                    });
+                }
+                return {
+                    id: (this._nextManifoldId++ as ManifoldId),
+                    pairKey: pair.pairKey, descriptorA: dA, descriptorB: dB,
+                    bodyIdA: dA.bodyId, bodyIdB: dB.bodyId,
+                    shapeIdA: dA.id, shapeIdB: dB.id,
+                    normal: c.normal, tangent1, tangent2, pointCount: points.length,
+                    points, sensor: dA.isSensor || dB.isSensor,
+                    friction, restitution,
+                };
+            }
+        }
+
+        // Fallback: single-point manifold (sphere-sphere, capsule, etc.)
+        const wA = this._getContactPointOnShape(dA, c, true);
+        const wB = this._getContactPointOnShape(dB, c, false);
+        const lA = inverseTransformPoint3D(wA, this._host.bodyManager.getPosition(dA.bodyId), this._host.bodyManager.getRotation(dA.bodyId));
+        const lB = inverseTransformPoint3D(wB, this._host.bodyManager.getPosition(dB.bodyId), this._host.bodyManager.getRotation(dB.bodyId));
         return {
             id: (this._nextManifoldId++ as ManifoldId),
-            pairKey: pair.pairKey, descriptorA: pair.descriptorA, descriptorB: pair.descriptorB,
-            bodyIdA: pair.descriptorA.bodyId, bodyIdB: pair.descriptorB.bodyId,
-            shapeIdA: pair.descriptorA.id, shapeIdB: pair.descriptorB.id,
+            pairKey: pair.pairKey, descriptorA: dA, descriptorB: dB,
+            bodyIdA: dA.bodyId, bodyIdB: dB.bodyId,
+            shapeIdA: dA.id, shapeIdB: dB.id,
             normal: c.normal, tangent1, tangent2, pointCount: 1,
             points: [{
                 id: (this._nextContactId++ as unknown) as ContactId,
@@ -302,7 +393,7 @@ export class PhysicsWorld3DContactRuntime {
                 normalImpulse: 0 as Impulse, tangentImpulse1: 0 as Impulse, tangentImpulse2: 0 as Impulse,
                 separation: Vec3.dot(Vec3.subtract(wB, wA), c.normal),
             }],
-            sensor: pair.descriptorA.isSensor || pair.descriptorB.isSensor,
+            sensor: dA.isSensor || dB.isSensor,
             friction, restitution,
         };
     }
@@ -548,6 +639,166 @@ export class PhysicsWorld3DContactRuntime {
         return { normal: bestN, point: midpointVec3(cA, cB), penetration: minP };
     }
 
+    /**
+     * Clip-based box-box manifold: generates up to 4 contact points.
+     * Uses the incident/reference face approach from Box2D.
+     */
+    private _buildBoxBoxManifold(
+        dA: IShapeDescriptor3D, dB: IShapeDescriptor3D,
+        normal: IVec3Like, totalPen: number
+    ): { worldPoint: IVec3Like; separation: number }[] {
+        const bm = this._host.bodyManager;
+        const bDA = dA.def as { center: IVec3Like; halfExtents: IVec3Like; rotation?: IVec3Like };
+        const bDB = dB.def as { center: IVec3Like; halfExtents: IVec3Like; rotation?: IVec3Like };
+
+        // World-space transforms for both boxes
+        const posA = bm.getPosition(dA.bodyId), rotA = bm.getRotation(dA.bodyId);
+        const posB = bm.getPosition(dB.bodyId), rotB = bm.getRotation(dB.bodyId);
+        const cA = transformPoint3D(bDA.center, posA, rotA);
+        const cB = transformPoint3D(bDB.center, posB, rotB);
+        const rA = Quat.multiply(rotA, bDA.rotation ?? IDENTITY_ROTATION);
+        const rB = Quat.multiply(rotB, bDB.rotation ?? IDENTITY_ROTATION);
+
+        // Local axes
+        const axesA = [
+            Quat.rotateVector(rA, { x: 1, y: 0, z: 0 }),
+            Quat.rotateVector(rA, { x: 0, y: 1, z: 0 }),
+            Quat.rotateVector(rA, { x: 0, y: 0, z: 1 }),
+        ];
+        const axesB = [
+            Quat.rotateVector(rB, { x: 1, y: 0, z: 0 }),
+            Quat.rotateVector(rB, { x: 0, y: 1, z: 0 }),
+            Quat.rotateVector(rB, { x: 0, y: 0, z: 1 }),
+        ];
+
+        // Determine incident/reference face based on normal alignment
+        const negNormal = Vec3.negate(normal);
+        let bestDotA = -Infinity, bestA = 0;
+        let bestDotB = -Infinity, bestB = 0;
+        for (let i = 0; i < 3; i++) {
+            const dA2 = Math.abs(Vec3.dot(axesA[i], normal));
+            if (dA2 > bestDotA) { bestDotA = dA2; bestA = i; }
+            const dB2 = Math.abs(Vec3.dot(axesB[i], negNormal));
+            if (dB2 > bestDotB) { bestDotB = dB2; bestB = i; }
+        }
+
+        // Choose reference (most aligned with normal) and incident face
+        let refCenter: IVec3Like, refAxes: IVec3Like[], refHalf: number[], refSign: number;
+        let incCenter: IVec3Like, incAxes: IVec3Like[], incHalf: number[], incSign: number;
+        let isARef: boolean;
+
+        if (bestDotA >= bestDotB) {
+            // Box A's face is the reference
+            isARef = true;
+            refCenter = cA; refAxes = axesA; refHalf = [bDA.halfExtents.x, bDA.halfExtents.y, bDA.halfExtents.z];
+            refSign = Vec3.dot(normal, axesA[bestA]) > 0 ? -1 : 1;
+            incCenter = cB; incAxes = axesB; incHalf = [bDB.halfExtents.x, bDB.halfExtents.y, bDB.halfExtents.z];
+            incSign = Vec3.dot(negNormal, axesB[bestB]) > 0 ? -1 : 1;
+        } else {
+            // Box B's face is the reference
+            isARef = false;
+            refCenter = cB; refAxes = axesB; refHalf = [bDB.halfExtents.x, bDB.halfExtents.y, bDB.halfExtents.z];
+            refSign = Vec3.dot(negNormal, axesB[bestB]) > 0 ? -1 : 1;
+            incCenter = cA; incAxes = axesA; incHalf = [bDA.halfExtents.x, bDA.halfExtents.y, bDA.halfExtents.z];
+            incSign = Vec3.dot(normal, axesA[bestA]) > 0 ? -1 : 1;
+        }
+
+        // Get incident face vertices (4 corners of the incident face)
+        const incNormal = incAxes[bestB === bestDotB ? bestB : bestB]; // incident face axis
+        const incTangent1 = incAxes[(bestB + 1) % 3];
+        const incTangent2 = incAxes[(bestB + 2) % 3];
+        const incFaceOffset = incSign * incHalf[bestB];
+        const hT1 = incHalf[(bestB + 1) % 3];
+        const hT2 = incHalf[(bestB + 2) % 3];
+
+        const incVerts: IVec3Like[] = [
+            Vec3.add(incCenter, Vec3.add(
+                Vec3.multiplyScalar(incNormal, incFaceOffset),
+                Vec3.add(Vec3.multiplyScalar(incTangent1, -hT1), Vec3.multiplyScalar(incTangent2, -hT2))
+            )),
+            Vec3.add(incCenter, Vec3.add(
+                Vec3.multiplyScalar(incNormal, incFaceOffset),
+                Vec3.add(Vec3.multiplyScalar(incTangent1, hT1), Vec3.multiplyScalar(incTangent2, -hT2))
+            )),
+            Vec3.add(incCenter, Vec3.add(
+                Vec3.multiplyScalar(incNormal, incFaceOffset),
+                Vec3.add(Vec3.multiplyScalar(incTangent1, hT1), Vec3.multiplyScalar(incTangent2, hT2))
+            )),
+            Vec3.add(incCenter, Vec3.add(
+                Vec3.multiplyScalar(incNormal, incFaceOffset),
+                Vec3.add(Vec3.multiplyScalar(incTangent1, -hT1), Vec3.multiplyScalar(incTangent2, hT2))
+            )),
+        ];
+
+        // Reference face normal (pointing from ref toward incident)
+        const refNormal = refAxes[bestDotA >= bestDotB ? bestA : bestB];
+        const refFaceDist = refSign * refHalf[bestDotA >= bestDotB ? bestA : bestB];
+        const refNormalActual = isARef
+            ? (Vec3.dot(normal, refAxes[bestA]) > 0 ? Vec3.negate(refAxes[bestA]) : refAxes[bestA])
+            : (Vec3.dot(negNormal, refAxes[bestB]) > 0 ? Vec3.negate(refAxes[bestB]) : refAxes[bestB]);
+
+        // Reference face tangent axes and half-extents
+        const refFaceIdx = bestDotA >= bestDotB ? bestA : bestB;
+        const refT1Idx = (refFaceIdx + 1) % 3;
+        const refT2Idx = (refFaceIdx + 2) % 3;
+        const refT1 = refAxes[refT1Idx];
+        const refT2 = refAxes[refT2Idx];
+        const refH1 = refHalf[refT1Idx];
+        const refH2 = refHalf[refT2Idx];
+
+        // Clip incident vertices against reference face side planes (Sutherland-Hodgman)
+        let clipped = incVerts;
+        clipped = this._clipSegmentToLine(clipped, refT1, refCenter, refH1);
+        if (clipped.length < 2) return [];
+        clipped = this._clipSegmentToLine(clipped, Vec3.negate(refT1), refCenter, refH1);
+        if (clipped.length < 2) return [];
+        clipped = this._clipSegmentToLine(clipped, refT2, refCenter, refH2);
+        if (clipped.length < 2) return [];
+        clipped = this._clipSegmentToLine(clipped, Vec3.negate(refT2), refCenter, refH2);
+        if (clipped.length < 2) return [];
+
+        // Keep only points behind the reference face, up to 4
+        const result: { worldPoint: IVec3Like; separation: number }[] = [];
+        const refFaceCenter = Vec3.add(refCenter, Vec3.multiplyScalar(refNormalActual, refFaceDist));
+        for (const pt of clipped) {
+            if (result.length >= 4) break;
+            const sep = Vec3.dot(Vec3.subtract(pt, refFaceCenter), refNormalActual);
+            if (sep <= totalPen * 0.1 + PhysicsConstants.ALLOWED_PENETRATION) {
+                result.push({ worldPoint: pt, separation: sep - totalPen });
+            }
+        }
+        return result;
+    }
+
+    /** Sutherland-Hodgman clip: keep vertices on the negative side of the plane. */
+    private _clipSegmentToLine(
+        verts: IVec3Like[], planeNormal: IVec3Like, planePoint: IVec3Like, planeOffset: number
+    ): IVec3Like[] {
+        const out: IVec3Like[] = [];
+        const d0 = Vec3.dot(verts[0], planeNormal) - Vec3.dot(planePoint, planeNormal) - planeOffset;
+        const d1 = Vec3.dot(verts[1], planeNormal) - Vec3.dot(planePoint, planeNormal) - planeOffset;
+        const d2 = Vec3.dot(verts[2], planeNormal) - Vec3.dot(planePoint, planeNormal) - planeOffset;
+        const d3 = Vec3.dot(verts[3], planeNormal) - Vec3.dot(planePoint, planeNormal) - planeOffset;
+        const ds = [d0, d1, d2, d3];
+
+        for (let i = 0; i < 4; i++) {
+            const curr = verts[i];
+            const next = verts[(i + 1) % 4];
+            const dc = ds[i];
+            const dn = ds[(i + 1) % 4];
+            if (dc <= 0) out.push(curr);
+            if (dc * dn < 0) {
+                const t = dc / (dc - dn);
+                out.push({
+                    x: curr.x + t * (next.x - curr.x),
+                    y: curr.y + t * (next.y - curr.y),
+                    z: curr.z + t * (next.z - curr.z),
+                });
+            }
+        }
+        return out;
+    }
+
     private _cCapCap(dA: IShapeDescriptor3D, dB: IShapeDescriptor3D): { normal: IVec3Like; point: IVec3Like; penetration: number } | null {
         if (!isCapsuleDef(dA.def) || !isCapsuleDef(dB.def)) return null;
         const p1A = transformPoint3D(dA.def.p1, this._host.bodyManager.getPosition(dA.bodyId), this._host.bodyManager.getRotation(dA.bodyId));
@@ -688,20 +939,20 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     private _warmStartContact(manifold: IResolvedContactManifold3D): void {
-        const normal = (manifold.points[0].normalImpulse as number) ?? 0;
-        if (normal === 0) return;
+        for (let i = 0; i < manifold.pointCount; i++) {
+            const point = manifold.points[i];
+            const normal = (point.normalImpulse as number) ?? 0;
+            if (normal === 0) continue;
 
-        const wp = midpointVec3(
-            this._lp2w(manifold.bodyIdA, manifold.points[0].localPointA),
-            this._lp2w(manifold.bodyIdB, manifold.points[0].localPointB)
-        );
+            const wp = midpointVec3(
+                this._lp2w(manifold.bodyIdA, point.localPointA),
+                this._lp2w(manifold.bodyIdB, point.localPointB)
+            );
 
-        const normalImpulse = Vec3.multiplyScalar(manifold.normal, normal);
-        this._applyImp(manifold.bodyIdA, Vec3.negate(normalImpulse), wp);
-        this._applyImp(manifold.bodyIdB, normalImpulse, wp);
-
-        manifold.points[0].tangentImpulse1 = 0 as Impulse;
-        manifold.points[0].tangentImpulse2 = 0 as Impulse;
+            const normalImpulse = Vec3.multiplyScalar(manifold.normal, normal);
+            this._applyImp(manifold.bodyIdA, Vec3.negate(normalImpulse), wp);
+            this._applyImp(manifold.bodyIdB, normalImpulse, wp);
+        }
     }
 
     private _correctContactPositions(manifold: IResolvedContactManifold3D, beta: number): void {
@@ -874,7 +1125,7 @@ export class PhysicsWorld3DContactRuntime {
      * contact manifolds. Enables island-level reporting and (combined with warm
      * starting) stable, ordered sequential-impulse solving.
      */
-    private _buildIslandCount(manifolds: ReadonlyMap<string, IResolvedContactManifold3D>): number {
+    private _buildIslandCount(manifolds: ReadonlyMap<number, IResolvedContactManifold3D>): number {
         const parent = new Map<number, number>();
         const find = (x: number): number => {
             let root = x;
