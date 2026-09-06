@@ -130,10 +130,12 @@ export class RaycastSystem2D {
         data: unknown
     ): void {
         this._raycaster.registerShape(bodyId, shapeId, layer, type, data);
+        this._cache.invalidate();
     }
 
     public unregisterShape(shapeId: ShapeId): void {
         this._raycaster.unregisterShape(shapeId);
+        this._cache.invalidate();
     }
 
     public flushBatch(): void {
@@ -314,10 +316,12 @@ export class RaycastSystem3D {
         data: unknown
     ): void {
         this._raycaster.registerShape(bodyId, shapeId, layer, type, data);
+        this._cache.invalidate();
     }
 
     public unregisterShape(shapeId: ShapeId): void {
         this._raycaster.unregisterShape(shapeId);
+        this._cache.invalidate();
     }
 
     public flushBatch(): void {

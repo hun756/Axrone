@@ -10,12 +10,20 @@ interface CachedRaycastHit2D {
     hit: IRaycastHit2D;
     frameId: number;
     hash: number;
+    origin: Readonly<IVec2Like>;
+    direction: Readonly<IVec2Like>;
+    maxDistance: number;
+    layerMask: LayerMask;
 }
 
 interface CachedRaycastHit3D {
     hit: IRaycastHit3D;
     frameId: number;
     hash: number;
+    origin: Readonly<IVec3Like>;
+    direction: Readonly<IVec3Like>;
+    maxDistance: number;
+    layerMask: LayerMask;
 }
 
 export class RaycastCache2D {
@@ -37,7 +45,17 @@ export class RaycastCache2D {
         const cached = this._cache.get(hash);
 
         if (cached && cached.frameId === this._currentFrame) {
-            return cached.hit;
+            // Verify key equality to prevent hash collision bugs
+            if (
+                cached.origin.x === origin.x &&
+                cached.origin.y === origin.y &&
+                cached.direction.x === direction.x &&
+                cached.direction.y === direction.y &&
+                cached.maxDistance === maxDistance &&
+                cached.layerMask === layerMask
+            ) {
+                return cached.hit;
+            }
         }
 
         return null;
@@ -60,7 +78,15 @@ export class RaycastCache2D {
             hit,
             frameId: this._currentFrame,
             hash,
+            origin,
+            direction,
+            maxDistance,
+            layerMask,
         });
+    }
+
+    public invalidate(): void {
+        this._cache.clear();
     }
 
     public advanceFrame(): void {
@@ -142,7 +168,19 @@ export class RaycastCache3D {
         const cached = this._cache.get(hash);
 
         if (cached && cached.frameId === this._currentFrame) {
-            return cached.hit;
+            // Verify key equality to prevent hash collision bugs
+            if (
+                cached.origin.x === origin.x &&
+                cached.origin.y === origin.y &&
+                cached.origin.z === origin.z &&
+                cached.direction.x === direction.x &&
+                cached.direction.y === direction.y &&
+                cached.direction.z === direction.z &&
+                cached.maxDistance === maxDistance &&
+                cached.layerMask === layerMask
+            ) {
+                return cached.hit;
+            }
         }
 
         return null;
@@ -165,7 +203,15 @@ export class RaycastCache3D {
             hit,
             frameId: this._currentFrame,
             hash,
+            origin,
+            direction,
+            maxDistance,
+            layerMask,
         });
+    }
+
+    public invalidate(): void {
+        this._cache.clear();
     }
 
     public advanceFrame(): void {
