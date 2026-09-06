@@ -34,6 +34,17 @@ export class Djb2 extends Fnv1a32 {
         return this;
     }
 
+    override updateString(input: string): this {
+        this._checkFinalized();
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            (this as any)._h = (((this as any)._h as number) * 33 + (c & 0xff)) >>> 0;
+            (this as any)._h = (((this as any)._h as number) * 33 + ((c >>> 8) & 0xff)) >>> 0;
+        }
+        (this as any)._byteLength += input.length * 2;
+        return this;
+    }
+
     override reset(seed: Seed32 = asSeed32(0)): this {
         (this as any)._initialSeed = (seed as number) >>> 0;
         (this as any)._h = 5381;
@@ -64,6 +75,17 @@ export class Djb2a extends Fnv1a32 {
             (this as any)._h = ((((this as any)._h as number) ^ (bytes[i]! & 0xff)) * 33) >>> 0;
         }
         (this as any)._byteLength += end - offset;
+        return this;
+    }
+
+    override updateString(input: string): this {
+        this._checkFinalized();
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            (this as any)._h = ((((this as any)._h as number) ^ (c & 0xff)) * 33) >>> 0;
+            (this as any)._h = ((((this as any)._h as number) ^ ((c >>> 8) & 0xff)) * 33) >>> 0;
+        }
+        (this as any)._byteLength += input.length * 2;
         return this;
     }
 
@@ -104,6 +126,19 @@ export class Sdbm extends Fnv1a32 {
             (this as any)._h = ((b) + (((this as any)._h as number) << 6) + (((this as any)._h as number) << 16) - (this as any)._h) >>> 0;
         }
         (this as any)._byteLength += end - offset;
+        return this;
+    }
+
+    override updateString(input: string): this {
+        this._checkFinalized();
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            const b1 = c & 0xff;
+            (this as any)._h = ((b1) + (((this as any)._h as number) << 6) + (((this as any)._h as number) << 16) - (this as any)._h) >>> 0;
+            const b2 = (c >>> 8) & 0xff;
+            (this as any)._h = ((b2) + (((this as any)._h as number) << 6) + (((this as any)._h as number) << 16) - (this as any)._h) >>> 0;
+        }
+        (this as any)._byteLength += input.length * 2;
         return this;
     }
 
