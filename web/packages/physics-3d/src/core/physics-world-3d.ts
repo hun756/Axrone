@@ -144,6 +144,7 @@ export class PhysicsWorld3D implements Disposable {
 
         this._contactRuntime = new PhysicsWorld3DContactRuntime({
             bodyManager: this._bodyManager,
+            constraintManager: this._constraintManager,
             shapeDescriptors: this._shapeDescriptors,
             constraintDescriptors: this._constraintDescriptors,
             getProfiler: () => this._profiler,

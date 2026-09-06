@@ -15,7 +15,7 @@ import type {
     IPhysicsProfiler3D,
     ShapeId3D,
 } from '../types/physics-3d';
-import { BodyManager3D } from './physics-managers-3d';
+import { BodyManager3D, ConstraintManager3D } from './physics-managers-3d';
 import { DynamicAABBTree3D } from './broadphase-3d';
 import { AABB3D } from '@axrone/geometry';
 import {
@@ -57,6 +57,7 @@ import { GJK3D, supportFromVertices, type Support3D } from './gjk3d';
 
 export interface IPhysicsWorld3DContactRuntimeHost {
     readonly bodyManager: BodyManager3D;
+    readonly constraintManager: ConstraintManager3D;
     readonly shapeDescriptors: ReadonlyMap<ShapeId3D, IShapeDescriptor3D>;
     readonly constraintDescriptors: ReadonlyMap<ConstraintId3D, IConstraintDescriptor3D>;
     readonly getProfiler: () => IPhysicsProfiler3D | null;
@@ -137,6 +138,7 @@ export class PhysicsWorld3DContactRuntime {
         const vStart = performance.now();
         for (let i = 0; i < velIters; i++) {
             for (const m of next.values()) this._solveContactVelocity(m);
+            this._solveConstraints(velIters);
         }
         if (profiler) profiler.solveVelocityTime = performance.now() - vStart;
 
@@ -719,6 +721,102 @@ export class PhysicsWorld3DContactRuntime {
             return { x: 0, y: 0, z: 0 };
         }
         return bm.getInverseInertia(bodyId);
+    }
+
+    /**
+     * Solve joint constraints using sequential impulses (position-based).
+     * Handles distance (fixed) and spring constraints. Other joint types
+     * require specialized solvers (hinge axis, slider rail, cone-twist limits).
+     */
+    private _solveConstraints(iterations: number): void {
+        const cm = this._host.constraintManager;
+        const bm = this._host.bodyManager;
+        const constraintIds = cm.getAllConstraintIds();
+        if (constraintIds.length === 0) return;
+
+        const BIAS = 0.2; // Baumgarte stabilization factor
+
+        for (let iter = 0; iter < Math.min(iterations, 4); iter++) {
+            for (const cid of constraintIds) {
+                const type = cm.getConstraintType(cid);
+                const { bodyIdA, bodyIdB } = cm.getConstraintBodyIds(cid);
+
+                // Skip if either body is static/kinematic
+                const typeA = bm.getBodyType(bodyIdA);
+                const typeB = bm.getBodyType(bodyIdB);
+                if (typeA !== 2 && typeB !== 2) continue; // 2 = Dynamic
+
+                const posA = bm.getPosition(bodyIdA);
+                const posB = bm.getPosition(bodyIdB);
+                const rotA = bm.getRotation(bodyIdA);
+                const rotB = bm.getRotation(bodyIdB);
+
+                const localAnchorA = cm.getConstraintLocalAnchorA(cid);
+                const localAnchorB = cm.getConstraintLocalAnchorB(cid);
+
+                // Transform local anchors to world space
+                const worldAnchorA = transformPoint3D(localAnchorA, posA, rotA);
+                const worldAnchorB = transformPoint3D(localAnchorB, posB, rotB);
+
+                // Compute error vector
+                const delta = Vec3.subtract(worldAnchorB, worldAnchorA);
+                const currentDist = Vec3.len(delta);
+
+                // Determine target distance
+                let targetDist = 0;
+                if (type === 6) {
+                    // Spring constraint: use rest length from params
+                    targetDist = cm.getConstraintParam(cid, 0); // restLength at offset 0
+                }
+                // Fixed/distance (type 0, 2): target is the initial distance (0 for fixed)
+
+                const error = currentDist - targetDist;
+                if (Math.abs(error) < PhysicsConstants.EPSILON) continue;
+
+                // Compute correction direction
+                const dir = currentDist > PhysicsConstants.EPSILON
+                    ? Vec3.normalize(delta)
+                    : { x: 0, y: 1, z: 0 };
+
+                // Compute effective mass
+                const invMassA = typeA === 2 ? bm.getInverseMass(bodyIdA) : 0;
+                const invMassB = typeB === 2 ? bm.getInverseMass(bodyIdB) : 0;
+                const invMassSum = invMassA + invMassB;
+                if (invMassSum <= PhysicsConstants.EPSILON) continue;
+
+                // Apply positional correction (Baumgarte stabilization)
+                const correction = Vec3.multiplyScalar(dir, error * BIAS / invMassSum);
+
+                if (typeA === 2) {
+                    const newPosA = Vec3.add(posA, Vec3.multiplyScalar(correction, invMassA));
+                    bm.setPosition(bodyIdA, newPosA);
+                }
+                if (typeB === 2) {
+                    const newPosB = Vec3.subtract(posB, Vec3.multiplyScalar(correction, invMassB));
+                    bm.setPosition(bodyIdB, newPosB);
+                }
+
+                // Spring: apply spring force (F = -k*x - c*v)
+                if (type === 6) {
+                    const stiffness = cm.getConstraintParam(cid, 1);
+                    const damping = cm.getConstraintParam(cid, 2);
+                    const relVel = Vec3.subtract(
+                        bm.getLinearVelocity(bodyIdB),
+                        bm.getLinearVelocity(bodyIdA)
+                    );
+                    const velAlongDir = Vec3.dot(relVel, dir);
+                    const springForce = -stiffness * error - damping * velAlongDir;
+                    const impulse = Vec3.multiplyScalar(dir, springForce);
+
+                    if (typeA === 2) {
+                        bm.applyImpulse(bodyIdA, Vec3.negate(impulse));
+                    }
+                    if (typeB === 2) {
+                        bm.applyImpulse(bodyIdB, impulse);
+                    }
+                }
+            }
+        }
     }
 
     private _toContactManifold(m: IResolvedContactManifold3D): IContactManifold3D {

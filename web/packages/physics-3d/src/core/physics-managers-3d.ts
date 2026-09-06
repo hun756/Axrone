@@ -900,6 +900,39 @@ export class ConstraintManager3D implements Disposable {
         return constraints ? Array.from(constraints) : [];
     }
 
+    getAllConstraintIds(): ConstraintId3D[] {
+        return Array.from(this._constraintIdToIndex.keys());
+    }
+
+    getConstraintBodyIds(constraintId: ConstraintId3D): { bodyIdA: BodyId3D; bodyIdB: BodyId3D } {
+        const index = this._getConstraintIndex(constraintId);
+        // Body IDs are stored in the _bodyToConstraints map; find them by scanning
+        let bodyIdA: BodyId3D | null = null;
+        let bodyIdB: BodyId3D | null = null;
+        for (const [bodyId, constraints] of this._bodyToConstraints.entries()) {
+            if (constraints.has(constraintId)) {
+                if (bodyIdA === null) bodyIdA = bodyId;
+                else { bodyIdB = bodyId; break; }
+            }
+        }
+        return { bodyIdA: bodyIdA!, bodyIdB: bodyIdB! };
+    }
+
+    getConstraintLocalAnchorA(constraintId: ConstraintId3D): IVec3Like {
+        const offset = this._getConstraintIndex(constraintId) * CONSTRAINT_STRIDE;
+        return { x: this._constraintData[offset], y: this._constraintData[offset + 1], z: this._constraintData[offset + 2] };
+    }
+
+    getConstraintLocalAnchorB(constraintId: ConstraintId3D): IVec3Like {
+        const offset = this._getConstraintIndex(constraintId) * CONSTRAINT_STRIDE;
+        return { x: this._constraintData[offset + 3], y: this._constraintData[offset + 4], z: this._constraintData[offset + 5] };
+    }
+
+    getConstraintParam(constraintId: ConstraintId3D, paramOffset: number): number {
+        const offset = this._getConstraintIndex(constraintId) * CONSTRAINT_STRIDE + 6 + paramOffset;
+        return this._constraintData[offset];
+    }
+
     private _createConstraint(
         type: number,
         bodyIdA: BodyId3D,
