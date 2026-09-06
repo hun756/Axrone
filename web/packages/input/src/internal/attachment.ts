@@ -215,7 +215,7 @@ export const attachInputBrowserTarget = (
             pressed: true,
             repeat: event.repeat,
         });
-    });
+    }, listenerOptions);
 
     add<KeyboardEvent>(keyboardTarget, 'keyup', (event) => {
         preventIfNeeded(event);
@@ -225,7 +225,7 @@ export const attachInputBrowserTarget = (
             pressed: false,
             repeat: event.repeat,
         });
-    });
+    }, listenerOptions);
 
     add<InputEvent>(
         keyboardTarget,
