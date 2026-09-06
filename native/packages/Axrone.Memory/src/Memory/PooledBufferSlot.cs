@@ -11,6 +11,13 @@ public sealed class PooledBufferSlot<T> : IMemoryOwner<T>, IPooledBufferToken<T>
     private Memory<T> _allocatedMemory;
     private uint _leaseGeneration;
     private int _state;
+#pragma warning disable CA2213 // Leak tracker is disposed in FinalizeEviction, not Dispose — by design
+#if DEBUG
+    private readonly LeakTracker? _leakTracker;
+#else
+    private readonly object? _leakTracker;
+#endif
+#pragma warning restore CA2213
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public PooledBufferSlot(
@@ -31,6 +38,7 @@ public sealed class PooledBufferSlot<T> : IMemoryOwner<T>, IPooledBufferToken<T>
         _allocator = allocator;
         _leaseGeneration = 1;
         _state = 0;
+        _leakTracker = LeakDiagnostics.CreateTracker<T>();
     }
 
     public int Capacity
@@ -117,6 +125,7 @@ public sealed class PooledBufferSlot<T> : IMemoryOwner<T>, IPooledBufferToken<T>
     {
         if (Interlocked.Exchange(ref _state, 2) != 2)
         {
+            LeakDiagnostics.DisposeTracker(_leakTracker);
             _allocator.Free(_allocatedMemory, _lifetimeToken);
             _allocatedMemory = Memory<T>.Empty;
         }
