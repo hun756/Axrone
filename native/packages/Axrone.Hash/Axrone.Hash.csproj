@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Hash</RootNamespace>
+    <AssemblyName>Axrone.Hash</AssemblyName>
+    <Description>High-performance hashing library with non-crypto and cryptographic algorithms for the Axrone engine.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1724: Type name conflicts with namespace — intentional -->
+    <NoWarn>$(NoWarn);CA1724</NoWarn>
+    <!-- CA1000: Static members on generic types — intentional for hash algorithm API -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1028: Enum storage type — byte chosen for minimal memory footprint -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Struct Equals/GetHashCode — digest structs use custom equality -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA2231: Struct should override Equals — digest structs implement IEquatable -->
+    <NoWarn>$(NoWarn);CA2231</NoWarn>
+    <!-- CA1068: CancellationToken must be last parameter — intentional API design -->
+    <NoWarn>$(NoWarn);CA1068</NoWarn>
+    <!-- CA1711: Type name ends in 'Algorithm' — intentional naming -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Hash.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+
+</Project>
