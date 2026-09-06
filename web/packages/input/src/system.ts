@@ -686,20 +686,25 @@ export class InputSystem<TSchema extends InputActionSchema = InputActionSchema> 
         }
     }
 
-    read<TAction extends InputActionName<TSchema>>(action: TAction): TSchema[TAction] extends InputButtonActionDefinition
-        ? boolean
-        : TSchema[TAction] extends InputAxisActionDefinition
-          ? number
-          : InputVector2 {
+    read<TAction extends InputActionName<TSchema>>(
+        action: TSchema[TAction] extends InputButtonActionDefinition ? TAction : never
+    ): boolean;
+    read<TAction extends InputActionName<TSchema>>(
+        action: TSchema[TAction] extends InputAxisActionDefinition ? TAction : never
+    ): number;
+    read<TAction extends InputActionName<TSchema>>(
+        action: TSchema[TAction] extends InputVector2ActionDefinition ? TAction : never
+    ): InputVector2;
+    read<TAction extends InputActionName<TSchema>>(action: TAction): boolean | number | InputVector2 {
         const state = this.state(action) as InputActionState;
 
         switch (state.kind) {
             case 'button':
-                return state.value as never;
+                return state.value;
             case 'axis':
-                return state.value as never;
+                return state.value;
             case 'vector2':
-                return state.value as never;
+                return state.value;
         }
     }
 
