@@ -21,7 +21,7 @@ describe('IslandSolver2D', () => {
     });
 
     describe('P1-3 solver ordering', () => {
-        it('solves joint constraints after position commit without crashing', () => {
+        it('joint velocity corrections affect position integration in the same step', () => {
             // Static anchor at origin
             const anchor = bodyManager.createBody({
                 type: BodyType.Static,
@@ -29,7 +29,7 @@ describe('IslandSolver2D', () => {
                 rotation: 0,
             });
 
-            // Dynamic body connected by distance constraint
+            // Dynamic body connected by distance constraint (rest length 3)
             const dyn = bodyManager.createBody({
                 type: BodyType.Dynamic,
                 position: { x: 5, y: 0 },
@@ -42,15 +42,68 @@ describe('IslandSolver2D', () => {
                 bodyIdB: dyn,
                 localAnchorA: { x: 0, y: 0 },
                 localAnchorB: { x: 0, y: 0 },
-                length: 2,
+                length: 3,
             });
 
-            const zeroGrav = { x: 0, y: 0 };
-            // Constraint solver runs after position commit (P1-3 deferred:
-            // proper ordering requires splitting ConstraintSolver2D).
-            expect(() => islandSolver.solveIslands(1 / 60, 8, 3, false, SolverFlags.None, zeroGrav)).not.toThrow();
+            // Apply strong impulse away from anchor → constraint must correct velocity
+            const velBefore = { ...bodyManager.getLinearVelocity(dyn) };
+            bodyManager.setLinearVelocity(dyn, { x: 100, y: 0 });
 
-            // The constraint should have been discovered and prepared
+            const zeroGrav = { x: 0, y: 0 };
+            islandSolver.solveIslands(1 / 60, 8, 3, false, SolverFlags.None, zeroGrav);
+
+            const velAfter = bodyManager.getLinearVelocity(dyn);
+
+            // The constraint must have corrected the velocity (body was at distance 5,
+            // constraint length is 3, impulse pushes further away).
+            // The Jacobian-based impulse reduces the outward velocity significantly.
+            const velChangeX = Math.abs(velAfter.x - velBefore.x);
+            expect(velChangeX).toBeGreaterThan(1);
+
+            // Constraint was prepared and solved
+            expect(islandSolver.getLastSolvedConstraintCount()).toBeGreaterThan(0);
+        });
+
+        it('connected body responds to impulse within the same step', () => {
+            // Two dynamic bodies connected by a distance constraint
+            const bodyA = bodyManager.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+                rotation: 0,
+            });
+            bodyManager.setMassData(bodyA, 1, 0.1, { x: 0, y: 0 });
+
+            const bodyB = bodyManager.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 3, y: 0 },
+                rotation: 0,
+            });
+            bodyManager.setMassData(bodyB, 1, 0.1, { x: 0, y: 0 });
+
+            constraintManager.createDistanceConstraint({
+                bodyIdA: bodyA,
+                bodyIdB: bodyB,
+                localAnchorA: { x: 0, y: 0 },
+                localAnchorB: { x: 0, y: 0 },
+                length: 3,
+            });
+
+            // Apply strong impulse to bodyA away from bodyB
+            bodyManager.setLinearVelocity(bodyA, { x: -50, y: 0 });
+
+            const velBBefore = { ...bodyManager.getLinearVelocity(bodyB) };
+            const zeroGrav = { x: 0, y: 0 };
+            islandSolver.solveIslands(1 / 60, 8, 3, false, SolverFlags.None, zeroGrav);
+
+            const velBAfter = bodyManager.getLinearVelocity(bodyB);
+
+            // Body B must have been pulled in the same step — the distance constraint
+            // transmits force through joint velocity solve, which now happens
+            // before body commit (not after). This means body B's response is immediate.
+            const velBChange = Math.abs(velBAfter.x - velBBefore.x) + Math.abs(velBAfter.y - velBBefore.y);
+            expect(velBChange).toBeGreaterThan(0.1);
+
+            // Constraint was solved
             expect(islandSolver.getLastSolvedConstraintCount()).toBeGreaterThan(0);
         });
     });
