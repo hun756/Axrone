@@ -12,6 +12,7 @@ import { BodyFlags } from '../types';
 import {
     SoAManager,
     PhysicsError,
+    type ErrorCode,
     assertFound,
     assertCapacity,
     type ManagerState,
@@ -44,9 +45,10 @@ type BodyField = keyof BodySchema;
 type BodyManagerState = ManagerState;
 
 class BodyPhysicsError extends PhysicsError {
-    constructor(message: string, code: Parameters<typeof PhysicsError.prototype.withContext>[0] extends never ? never : never) {
-        super(message, code as any);
+    constructor(message: string, code: ErrorCode = 'INVALID_STATE', context: Record<string, unknown> = {}) {
+        super(message, code, context);
         this.name = 'BodyPhysicsError';
+        Object.setPrototypeOf(this, BodyPhysicsError.prototype);
     }
 }
 

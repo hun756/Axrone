@@ -19,21 +19,12 @@ import type {
     ICapsuleShapeDef2D,
     ISegmentShapeDef,
 } from '../types';
-import { IndexPool } from './foundation';
+import { IndexPool, PhysicsError, type ErrorCode } from './foundation';
 
-const enum ShapeManagerError {
-    INVALID_STATE = 'INVALID_STATE',
-    SHAPE_NOT_FOUND = 'SHAPE_NOT_FOUND',
-    CAPACITY_EXCEEDED = 'CAPACITY_EXCEEDED',
-    INVALID_SHAPE = 'INVALID_SHAPE',
-}
-
-class ShapeError extends Error {
-    readonly code: ShapeManagerError;
-    constructor(message: string, code: ShapeManagerError) {
-        super(message);
+class ShapeError extends PhysicsError<ErrorCode> {
+    constructor(message: string, code: ErrorCode, context: Record<string, unknown> = {}) {
+        super(message, code, context);
         this.name = 'ShapeError';
-        this.code = code;
         Object.setPrototypeOf(this, ShapeError.prototype);
     }
 }
@@ -147,7 +138,7 @@ export class ShapeManager2D implements Disposable {
         if (halfWidth === undefined || halfHeight === undefined) {
             throw new ShapeError(
                 'Box must have halfWidth/halfHeight or width/height',
-                ShapeManagerError.INVALID_SHAPE
+                'INVALID_SHAPE'
             );
         }
         this._boxData[offset] = center.x;
@@ -169,7 +160,7 @@ export class ShapeManager2D implements Disposable {
         if (vertices.length < 3 || vertices.length > POLYGON_MAX_VERTICES) {
             throw new ShapeError(
                 `Polygon must have 3-${POLYGON_MAX_VERTICES} vertices`,
-                ShapeManagerError.INVALID_SHAPE
+                'INVALID_SHAPE'
             );
         }
 
@@ -230,7 +221,7 @@ export class ShapeManager2D implements Disposable {
 
         const metadata = this._shapeMetadata.get(shapeId);
         if (!metadata) {
-            throw new ShapeError(`Shape ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
 
         const bodyShapes = this._bodyToShapes.get(metadata.bodyId);
@@ -282,7 +273,7 @@ export class ShapeManager2D implements Disposable {
     getShapeType(shapeId: ShapeId): ShapeType {
         const metadata = this._shapeMetadata.get(shapeId);
         if (!metadata) {
-            throw new ShapeError(`Shape ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         return metadata.type;
     }
@@ -290,7 +281,7 @@ export class ShapeManager2D implements Disposable {
     getBodyId(shapeId: ShapeId): BodyId {
         const metadata = this._shapeMetadata.get(shapeId);
         if (!metadata) {
-            throw new ShapeError(`Shape ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         return metadata.bodyId;
     }
@@ -298,7 +289,7 @@ export class ShapeManager2D implements Disposable {
     getShapeMaterial(shapeId: ShapeId): IMaterial {
         const metadata = this._shapeMetadata.get(shapeId);
         if (!metadata) {
-            throw new ShapeError(`Shape ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         return metadata.material;
     }
@@ -306,7 +297,7 @@ export class ShapeManager2D implements Disposable {
     getShapeFilter(shapeId: ShapeId): ICollisionFilter {
         const metadata = this._shapeMetadata.get(shapeId);
         if (!metadata) {
-            throw new ShapeError(`Shape ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         return metadata.filter;
     }
@@ -314,7 +305,7 @@ export class ShapeManager2D implements Disposable {
     isShapeSensor(shapeId: ShapeId): boolean {
         const metadata = this._shapeMetadata.get(shapeId);
         if (!metadata) {
-            throw new ShapeError(`Shape ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         return metadata.isSensor;
     }
@@ -322,7 +313,7 @@ export class ShapeManager2D implements Disposable {
     getCircleData(shapeId: ShapeId): { center: IVec2Like; radius: number } {
         const index = this._shapeToCircleIndex.get(shapeId);
         if (index === undefined) {
-            throw new ShapeError(`Circle ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Circle ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         const offset = index * CIRCLE_SHAPE_SIZE;
         return {
@@ -339,7 +330,7 @@ export class ShapeManager2D implements Disposable {
     } {
         const index = this._shapeToBoxIndex.get(shapeId);
         if (index === undefined) {
-            throw new ShapeError(`Box ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Box ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         const offset = index * BOX_SHAPE_SIZE;
         return {
@@ -353,7 +344,7 @@ export class ShapeManager2D implements Disposable {
     getPolygonData(shapeId: ShapeId): { vertices: IVec2Like[] } {
         const index = this._shapeToPolygonIndex.get(shapeId);
         if (index === undefined) {
-            throw new ShapeError(`Polygon ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Polygon ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         const vertexCount = this._polygonVertexCounts[index];
         const offset = index * POLYGON_MAX_VERTICES * 2;
@@ -370,7 +361,7 @@ export class ShapeManager2D implements Disposable {
     getCapsuleData(shapeId: ShapeId): { p1: IVec2Like; p2: IVec2Like; radius: number } {
         const index = this._shapeToCapsuleIndex.get(shapeId);
         if (index === undefined) {
-            throw new ShapeError(`Capsule ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Capsule ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         const offset = index * 4;
         const centerX = this._capsuleData[offset];
@@ -475,13 +466,13 @@ export class ShapeManager2D implements Disposable {
 
     private _assertNotDisposed(): void {
         if (this._disposed) {
-            throw new ShapeError('Manager is disposed', ShapeManagerError.INVALID_STATE);
+            throw new ShapeError('Manager is disposed', 'INVALID_STATE');
         }
     }
 
     private _assertCapacity(): void {
         if (this._shapeCount >= this._maxShapes) {
-            throw new ShapeError('Shape capacity exceeded', ShapeManagerError.CAPACITY_EXCEEDED);
+            throw new ShapeError('Shape capacity exceeded', 'CAPACITY_EXCEEDED');
         }
     }
 

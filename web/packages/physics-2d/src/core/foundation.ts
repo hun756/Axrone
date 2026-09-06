@@ -28,7 +28,9 @@ export type ErrorCode =
     | 'CAPACITY_EXCEEDED'
     | 'INVALID_ARGUMENT'
     | 'DUPLICATE'
-    | 'PERMISSION_DENIED';
+    | 'PERMISSION_DENIED'
+    | 'SHAPE_NOT_FOUND'
+    | 'INVALID_SHAPE';
 
 export class PhysicsError<TCode extends ErrorCode = ErrorCode> extends Error {
     readonly code: TCode;
