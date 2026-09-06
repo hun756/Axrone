@@ -1,8 +1,8 @@
 import type { BytesLike } from '../../../types';
-import { float32ToBits, float64ToBitsPair, writeU32LE } from '../bits';
-import { asHash32, asHash64, asSeed32, type Hash32, type Hash64, type HashValue, type Seed32, type HashAlgorithmMetadata } from '../types';
+import { writeU32LE, encodeBase64 } from '../bits';
+import { asHash32, asHash64, asSeed32, type Hash32, type Hash64, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
-import { encode } from '@axrone/utility';
+import { HasherBase } from '../base';
 
 const FNV_METADATA: HashAlgorithmMetadata = {
     name: 'fnv1a-32',
@@ -13,35 +13,15 @@ const FNV_METADATA: HashAlgorithmMetadata = {
     seedable: true,
     keyed: false,
     cryptographicallySecure: false,
+    async: false,
     description: 'FNV-1a 32-bit non-cryptographic hash (Fowler-Noll-Voy)',
 };
 
-abstract class Fnv1a32Base implements IHasher<Hash32> {
-    abstract readonly algorithm: string;
-    abstract readonly metadata: Readonly<HashAlgorithmMetadata>;
+abstract class Fnv1a32Base extends HasherBase<Hash32> {
     protected _h: number = 0;
-    protected _byteLength: number = 0;
-    protected _finalized: boolean = false;
     protected _initialSeed: number = 0;
-    protected _f64Tuple: [number, number] = [0, 0];
-    protected _checkFinalized(): void {}
 
     get seed(): Seed32 { return asSeed32(this._initialSeed); }
-    get byteLength(): number { return this._byteLength; }
-    get finalized(): boolean { return this._finalized; }
-
-    abstract updateBytes(bytes: BytesLike, offset?: number, length?: number): this;
-
-    updateString(input: string): this {
-        this._checkFinalized();
-        for (let i = 0; i < input.length; i++) {
-            const c = input.charCodeAt(i);
-            this._h = Math.imul(this._h ^ (c & 0xff), 0x01000193) >>> 0;
-            this._h = Math.imul(this._h ^ ((c >>> 8) & 0xff), 0x01000193) >>> 0;
-        }
-        this._byteLength += input.length * 2;
-        return this;
-    }
 
     updateBoolean(value: boolean): this {
         this._checkFinalized();
@@ -49,10 +29,6 @@ abstract class Fnv1a32Base implements IHasher<Hash32> {
         this._byteLength += 1;
         return this;
     }
-
-    updateI8(v: number): this { return this.updateI32(v | 0); }
-    updateI16(v: number): this { return this.updateI32(v | 0); }
-    updateI32(value: number): this { return this.updateU32(value | 0); }
 
     updateI64(value: bigint): this {
         this._checkFinalized();
@@ -65,9 +41,6 @@ abstract class Fnv1a32Base implements IHasher<Hash32> {
         return this;
     }
 
-    updateU8(v: number): this { return this.updateU32(v & 0xff); }
-    updateU16(v: number): this { return this.updateU32(v & 0xffff); }
-
     updateU32(value: number): this {
         this._checkFinalized();
         this._h = Math.imul(this._h ^ (value & 0xff), 0x01000193) >>> 0;
@@ -76,14 +49,6 @@ abstract class Fnv1a32Base implements IHasher<Hash32> {
         this._h = Math.imul(this._h ^ ((value >>> 24) & 0xff), 0x01000193) >>> 0;
         this._byteLength += 4;
         return this;
-    }
-
-    updateU64(value: bigint): this { return this.updateI64(value); }
-    updateF32(value: number): this { return this.updateU32(float32ToBits(value)); }
-
-    updateF64(value: number): this {
-        float64ToBitsPair(value, this._f64Tuple);
-        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
     }
 
     updateHash(value: Hash32 | Hash64 | bigint): this {
@@ -98,7 +63,7 @@ abstract class Fnv1a32Base implements IHasher<Hash32> {
         return this;
     }
 
-    updateHashable<H2 extends HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
+    updateHashable<H2 extends import('../types').HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
         value.hashInto(this as unknown as IHasher<H2>);
         return this;
     }
@@ -135,15 +100,12 @@ abstract class Fnv1a32Base implements IHasher<Hash32> {
     }
 
     digestBase64(): string {
-        return encode(this.digestBytes());
+        return encodeBase64(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
         return BigInt(this.digest() as number) as H2;
     }
-
-    abstract reset(seed?: Seed32): this;
-    abstract clone(): IHasher<Hash32>;
 }
 
 export class Fnv1a32 extends Fnv1a32Base {
@@ -170,6 +132,12 @@ export class Fnv1a32 extends Fnv1a32Base {
         return this;
     }
 
+    updateString(input: string): this {
+        this._checkFinalized();
+        const bytes = new TextEncoder().encode(input);
+        return this.updateBytes(bytes);
+    }
+
     reset(seed: Seed32 = asSeed32(0)): this {
         this._initialSeed = (seed as number) >>> 0;
         this._h = (this._initialSeed ^ 0x811c9dc5) >>> 0;
@@ -185,8 +153,6 @@ export class Fnv1a32 extends Fnv1a32Base {
         c._finalized = this._finalized;
         return c;
     }
-
-
 }
 
 const FNV1_METADATA: HashAlgorithmMetadata = {
@@ -219,6 +185,12 @@ export class Fnv1_32 extends Fnv1a32Base {
         return this;
     }
 
+    updateString(input: string): this {
+        this._checkFinalized();
+        const bytes = new TextEncoder().encode(input);
+        return this.updateBytes(bytes);
+    }
+
     reset(seed: Seed32 = asSeed32(0)): this {
         this._initialSeed = (seed as number) >>> 0;
         this._h = (this._initialSeed ^ 0x811c9dc5) >>> 0;
@@ -234,8 +206,6 @@ export class Fnv1_32 extends Fnv1a32Base {
         c._finalized = this._finalized;
         return c;
     }
-
-
 }
 
 const FNV64_METADATA: HashAlgorithmMetadata = {
@@ -247,28 +217,25 @@ const FNV64_METADATA: HashAlgorithmMetadata = {
     seedable: true,
     keyed: false,
     cryptographicallySecure: false,
+    async: false,
     description: 'FNV-1a 64-bit non-cryptographic hash (bigint)',
 };
 
-export class Fnv1a64 implements IHasher<Hash64> {
+export class Fnv1a64 extends HasherBase<Hash64> {
     readonly algorithm: string = FNV64_METADATA.name;
     readonly metadata: Readonly<HashAlgorithmMetadata> = FNV64_METADATA;
     private _h: bigint = 0n;
-    private _byteLength: number = 0;
-    private _finalized: boolean = false;
     private _initialSeed: bigint = 0n;
-    private _f64Tuple: [number, number] = [0, 0];
 
     constructor(seed: Seed32 = asSeed32(0)) {
+        super();
         this._initialSeed = BigInt((seed as number) >>> 0);
         this._h = (this._initialSeed ^ 0xcbf29ce484222325n) & 0xffffffffffffffffn;
     }
 
     get seed(): Seed32 { return asSeed32(Number(this._initialSeed)); }
-    get byteLength(): number { return this._byteLength; }
-    get finalized(): boolean { return this._finalized; }
 
-    private _checkFinalized(): void {
+    protected override _checkFinalized(): void {
         if (this._finalized) throw new Error(`Fnv1a64: cannot update after digest()`);
     }
 
@@ -284,13 +251,8 @@ export class Fnv1a64 implements IHasher<Hash64> {
 
     updateString(input: string): this {
         this._checkFinalized();
-        for (let i = 0; i < input.length; i++) {
-            const c = BigInt(input.charCodeAt(i));
-            this._h = ((this._h ^ (c & 0xffn)) * 0x100000001b3n) & 0xffffffffffffffffn;
-            this._h = ((this._h ^ ((c >> 8n) & 0xffn)) * 0x100000001b3n) & 0xffffffffffffffffn;
-        }
-        this._byteLength += input.length * 2;
-        return this;
+        const bytes = new TextEncoder().encode(input);
+        return this.updateBytes(bytes);
     }
 
     updateBoolean(value: boolean): this {
@@ -300,10 +262,6 @@ export class Fnv1a64 implements IHasher<Hash64> {
         this._byteLength += 1;
         return this;
     }
-
-    updateI8(v: number): this { return this.updateI32(v | 0); }
-    updateI16(v: number): this { return this.updateI32(v | 0); }
-    updateI32(value: number): this { return this.updateU32(value | 0); }
 
     updateI64(value: bigint): this {
         this._checkFinalized();
@@ -316,9 +274,6 @@ export class Fnv1a64 implements IHasher<Hash64> {
         return this;
     }
 
-    updateU8(v: number): this { return this.updateU32(v & 0xff); }
-    updateU16(v: number): this { return this.updateU32(v & 0xffff); }
-
     updateU32(value: number): this {
         this._checkFinalized();
         const v = BigInt(value >>> 0);
@@ -327,14 +282,6 @@ export class Fnv1a64 implements IHasher<Hash64> {
         }
         this._byteLength += 4;
         return this;
-    }
-
-    updateU64(value: bigint): this { return this.updateI64(value); }
-    updateF32(value: number): this { return this.updateU32(float32ToBits(value)); }
-
-    updateF64(value: number): this {
-        float64ToBitsPair(value, this._f64Tuple);
-        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
     }
 
     updateHash(value: Hash32 | Hash64 | bigint): this {
@@ -349,7 +296,7 @@ export class Fnv1a64 implements IHasher<Hash64> {
         return this;
     }
 
-    updateHashable<H2 extends HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
+    updateHashable<H2 extends import('../types').HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
         value.hashInto(this as unknown as IHasher<H2>);
         return this;
     }
@@ -392,7 +339,7 @@ export class Fnv1a64 implements IHasher<Hash64> {
     }
 
     digestBase64(): string {
-        return encode(this.digestBytes());
+        return encodeBase64(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
@@ -409,11 +356,10 @@ export class Fnv1a64 implements IHasher<Hash64> {
 
     clone(): IHasher<Hash64> {
         const c = new Fnv1a64(this.seed);
-        c._h = this._h;
+        (c as any)._h = this._h;
+        (c as any)._initialSeed = this._initialSeed;
         c._byteLength = this._byteLength;
         c._finalized = this._finalized;
         return c;
     }
-
-
 }

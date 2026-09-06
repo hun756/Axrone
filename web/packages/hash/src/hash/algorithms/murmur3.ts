@@ -1,9 +1,9 @@
 import type { BytesLike } from '../../../types';
-import { float32ToBits, float64ToBitsPair, readU32LE, rotl32, writeU32LE } from '../bits';
+import { rotl32, writeU32LE, encodeBase64 } from '../bits';
 import { fmix32, murmur3Scramble } from '../mixers';
-import { asHash32, asHash64, asSeed32, type Hash32, type Hash64, type HashValue, type Seed32, type HashAlgorithmMetadata } from '../types';
+import { asHash32, asSeed32, type Hash32, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
-import { encode } from '@axrone/utility';
+import { HasherBase } from '../base';
 
 const MURMUR3_METADATA: HashAlgorithmMetadata = {
     name: 'murmur3-32',
@@ -14,21 +14,21 @@ const MURMUR3_METADATA: HashAlgorithmMetadata = {
     seedable: true,
     keyed: false,
     cryptographicallySecure: false,
+    async: false,
     description: 'MurmurHash3 32-bit (Austin Appleby)',
 };
 
-export class Murmur3_32 implements IHasher<Hash32> {
+export class Murmur3_32 extends HasherBase<Hash32> {
     readonly algorithm: string = MURMUR3_METADATA.name;
     readonly metadata: Readonly<HashAlgorithmMetadata> = MURMUR3_METADATA;
     private _h1: number;
     private _totalLen: number = 0;
     private _tail: number = 0;
     private _tailLen: number = 0;
-    private _finalized: boolean = false;
     private _initialSeed: number;
-    private _f64Tuple: [number, number] = [0, 0];
 
     constructor(seed: Seed32 = asSeed32(0)) {
+        super();
         this._initialSeed = (seed as number) >>> 0;
         this._h1 = this._initialSeed;
     }
@@ -39,10 +39,6 @@ export class Murmur3_32 implements IHasher<Hash32> {
 
     get byteLength(): number {
         return this._totalLen;
-    }
-
-    get finalized(): boolean {
-        return this._finalized;
     }
 
     private _checkFinalized(): void {
@@ -74,30 +70,14 @@ export class Murmur3_32 implements IHasher<Hash32> {
 
     updateString(input: string): this {
         this._checkFinalized();
-        for (let i = 0; i < input.length; i++) {
-            const c = input.charCodeAt(i);
-            this._accumulate(c & 0xff);
-            this._accumulate((c >>> 8) & 0xff);
-        }
-        return this;
+        const bytes = new TextEncoder().encode(input);
+        return this.updateBytes(bytes);
     }
 
     updateBoolean(value: boolean): this {
         this._checkFinalized();
         this._accumulate(value ? 1 : 0);
         return this;
-    }
-
-    updateI8(value: number): this {
-        return this.updateI32(value | 0);
-    }
-
-    updateI16(value: number): this {
-        return this.updateI32(value | 0);
-    }
-
-    updateI32(value: number): this {
-        return this.updateU32(value | 0);
     }
 
     updateI64(value: bigint): this {
@@ -110,14 +90,6 @@ export class Murmur3_32 implements IHasher<Hash32> {
         return this;
     }
 
-    updateU8(value: number): this {
-        return this.updateU32(value & 0xff);
-    }
-
-    updateU16(value: number): this {
-        return this.updateU32(value & 0xffff);
-    }
-
     updateU32(value: number): this {
         this._checkFinalized();
         const v = value >>> 0;
@@ -126,19 +98,6 @@ export class Murmur3_32 implements IHasher<Hash32> {
         this._accumulate((v >>> 16) & 0xff);
         this._accumulate((v >>> 24) & 0xff);
         return this;
-    }
-
-    updateU64(value: bigint): this {
-        return this.updateI64(value);
-    }
-
-    updateF32(value: number): this {
-        return this.updateU32(float32ToBits(value));
-    }
-
-    updateF64(value: number): this {
-        float64ToBitsPair(value, this._f64Tuple);
-        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
     }
 
     updateHash(value: Hash32 | bigint): this {
@@ -152,7 +111,7 @@ export class Murmur3_32 implements IHasher<Hash32> {
         return this;
     }
 
-    updateHashable<H2 extends HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
+    updateHashable<H2 extends import('../types').HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
         value.hashInto(this as unknown as IHasher<H2>);
         return this;
     }
@@ -207,7 +166,7 @@ export class Murmur3_32 implements IHasher<Hash32> {
     }
 
     digestBase64(): string {
-        return encode(this.digestBytes());
+        return encodeBase64(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
@@ -233,8 +192,6 @@ export class Murmur3_32 implements IHasher<Hash32> {
         c._finalized = this._finalized;
         return c;
     }
-
-
 }
 
 const MURMUR2_METADATA: HashAlgorithmMetadata = {
@@ -246,21 +203,21 @@ const MURMUR2_METADATA: HashAlgorithmMetadata = {
     seedable: true,
     keyed: false,
     cryptographicallySecure: false,
+    async: false,
     description: 'MurmurHash2 64-bit',
 };
 
-export class Murmur2_64 implements IHasher<import('../types').Hash64> {
+export class Murmur2_64 extends HasherBase<import('../types').Hash64> {
     readonly algorithm: string = MURMUR2_METADATA.name;
     readonly metadata: Readonly<HashAlgorithmMetadata> = MURMUR2_METADATA;
     private _h: bigint;
     private _totalLen: number = 0;
     private _tail: bigint = 0n;
     private _tailLen: number = 0;
-    private _finalized: boolean = false;
     private _initialSeed: bigint;
-    private _f64Tuple: [number, number] = [0, 0];
 
     constructor(seed: import('../types').Seed32 = asSeed32(0)) {
+        super();
         this._initialSeed = BigInt((seed as number) >>> 0);
         this._h = this._initialSeed & 0xffffffffffffffffn;
     }
@@ -271,10 +228,6 @@ export class Murmur2_64 implements IHasher<import('../types').Hash64> {
 
     get byteLength(): number {
         return this._totalLen;
-    }
-
-    get finalized(): boolean {
-        return this._finalized;
     }
 
     private _checkFinalized(): void {
@@ -308,12 +261,8 @@ export class Murmur2_64 implements IHasher<import('../types').Hash64> {
 
     updateString(input: string): this {
         this._checkFinalized();
-        for (let i = 0; i < input.length; i++) {
-            const c = input.charCodeAt(i);
-            this._accumulate(c & 0xff);
-            this._accumulate((c >>> 8) & 0xff);
-        }
-        return this;
+        const bytes = new TextEncoder().encode(input);
+        return this.updateBytes(bytes);
     }
 
     updateBoolean(value: boolean): this {
@@ -322,9 +271,6 @@ export class Murmur2_64 implements IHasher<import('../types').Hash64> {
         return this;
     }
 
-    updateI8(v: number): this { return this.updateI32(v | 0); }
-    updateI16(v: number): this { return this.updateI32(v | 0); }
-    updateI32(value: number): this { return this.updateU32(value | 0); }
     updateI64(value: bigint): this {
         this._checkFinalized();
         let v = value;
@@ -334,20 +280,14 @@ export class Murmur2_64 implements IHasher<import('../types').Hash64> {
         }
         return this;
     }
-    updateU8(v: number): this { return this.updateU32(v & 0xff); }
-    updateU16(v: number): this { return this.updateU32(v & 0xffff); }
+
     updateU32(value: number): this {
         this._checkFinalized();
         const v = value >>> 0;
         for (let i = 0; i < 4; i++) this._accumulate((v >>> (i * 8)) & 0xff);
         return this;
     }
-    updateU64(value: bigint): this { return this.updateI64(value); }
-    updateF32(value: number): this { return this.updateU32(float32ToBits(value)); }
-    updateF64(value: number): this {
-        float64ToBitsPair(value, this._f64Tuple);
-        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
-    }
+
     updateHash(value: import('../types').Hash32 | bigint): this {
         this._checkFinalized();
         if (typeof value === 'number') return this.updateU32(value);
@@ -358,10 +298,12 @@ export class Murmur2_64 implements IHasher<import('../types').Hash64> {
         }
         return this;
     }
-    updateHashable<H2 extends HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
+
+    updateHashable<H2 extends import('../types').HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
         value.hashInto(this as unknown as IHasher<H2>);
         return this;
     }
+
     updateAny(value: unknown): this {
         if (value === null || value === undefined) { this._accumulate(0); return this; }
         if (typeof value === 'number') {
@@ -378,14 +320,12 @@ export class Murmur2_64 implements IHasher<import('../types').Hash64> {
     digest(): import('../types').Hash64 {
         this._finalized = true;
         let h = this._h;
-        
-        // Mix tail bytes (_tail has byte0 at bits 0-7, byte1 at 8-15, etc.)
+
         if (this._tailLen > 0) {
             h ^= this._tail;
             h = (h * 0xc6a4a7935bd1e995n) & 0xffffffffffffffffn;
         }
-        
-        // Finalize
+
         h ^= BigInt(this._totalLen);
         h ^= h >> 47n;
         h = (h * 0xc6a4a7935bd1e995n) & 0xffffffffffffffffn;
@@ -411,7 +351,7 @@ export class Murmur2_64 implements IHasher<import('../types').Hash64> {
     }
 
     digestBase64(): string {
-        return encode(this.digestBytes());
+        return encodeBase64(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
@@ -437,6 +377,4 @@ export class Murmur2_64 implements IHasher<import('../types').Hash64> {
         c._finalized = this._finalized;
         return c;
     }
-
-
 }

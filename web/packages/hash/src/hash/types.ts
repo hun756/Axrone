@@ -63,6 +63,7 @@ export interface HashAlgorithmMetadata {
     readonly seedable: boolean;
     readonly keyed: boolean;
     readonly cryptographicallySecure: boolean;
+    readonly async: boolean;
     readonly description: string;
 }
 

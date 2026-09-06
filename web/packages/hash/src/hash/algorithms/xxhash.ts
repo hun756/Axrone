@@ -1,8 +1,8 @@
 import type { BytesLike } from '../../../types';
-import { float32ToBits, float64ToBitsPair, readU32LE, readU64LE, rotl32, writeU32LE } from '../bits';
-import { asHash32, asSeed32, asHash64, type Hash32, type Hash64, type Seed32, type HashAlgorithmMetadata, type HashValue } from '../types';
+import { readU32LE, readU64LE, rotl32, writeU32LE, encodeBase64 } from '../bits';
+import { asHash32, asSeed32, asHash64, type Hash32, type Hash64, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
-import { encode } from '@axrone/utility';
+import { HasherBase } from '../base';
 
 const XXH32_METADATA: HashAlgorithmMetadata = {
     name: 'xxhash32',
@@ -13,6 +13,7 @@ const XXH32_METADATA: HashAlgorithmMetadata = {
     seedable: true,
     keyed: false,
     cryptographicallySecure: false,
+    async: false,
     description: 'xxHash32 - extremely fast non-cryptographic hash (Yann Collet)',
 };
 
@@ -22,7 +23,7 @@ const XXH_P3 = 0xc2b2ae3d;
 const XXH_P4 = 0x27d4eb2f;
 const XXH_P5 = 0x165667b1;
 
-export class XxHash32 implements IHasher<Hash32> {
+export class XxHash32 extends HasherBase<Hash32> {
     readonly algorithm: string = XXH32_METADATA.name;
     readonly metadata: Readonly<HashAlgorithmMetadata> = XXH32_METADATA;
     private _v1: number;
@@ -33,10 +34,9 @@ export class XxHash32 implements IHasher<Hash32> {
     private _mem: Uint8Array;
     private _memSize: number = 0;
     private _seed: number;
-    private _finalized: boolean = false;
-    private _f64Tuple: [number, number] = [0, 0];
 
     constructor(seed: Seed32 = asSeed32(0)) {
+        super();
         this._seed = (seed as number) >>> 0;
         this._v1 = (this._seed + XXH_P1 + XXH_P2) >>> 0;
         this._v2 = (this._seed + XXH_P2) >>> 0;
@@ -51,10 +51,6 @@ export class XxHash32 implements IHasher<Hash32> {
 
     get byteLength(): number {
         return this._totalLen;
-    }
-
-    get finalized(): boolean {
-        return this._finalized;
     }
 
     private _checkFinalized(): void {
@@ -74,7 +70,6 @@ export class XxHash32 implements IHasher<Hash32> {
         const inputLen = end - offset;
         this._totalLen += inputLen;
 
-        // If we have buffered bytes, fill the buffer first
         if (this._memSize > 0) {
             const remaining = 16 - this._memSize;
             const toCopy = Math.min(inputLen, remaining);
@@ -85,7 +80,6 @@ export class XxHash32 implements IHasher<Hash32> {
             offset += toCopy;
 
             if (this._memSize === 16) {
-                // Process the full 16-byte block from buffer
                 const v1 = this._round(this._v1, readU32LE(this._mem, 0));
                 const v2 = this._round(this._v2, readU32LE(this._mem, 4));
                 const v3 = this._round(this._v3, readU32LE(this._mem, 8));
@@ -98,7 +92,6 @@ export class XxHash32 implements IHasher<Hash32> {
             }
         }
 
-        // Process full 16-byte blocks directly from input
         const limit = end - offset;
         if (limit >= 16) {
             let v1 = this._v1;
@@ -121,7 +114,6 @@ export class XxHash32 implements IHasher<Hash32> {
             offset = pos;
         }
 
-        // Buffer remaining bytes
         const leftover = end - offset;
         if (leftover > 0) {
             for (let i = 0; i < leftover; i++) {
@@ -135,11 +127,7 @@ export class XxHash32 implements IHasher<Hash32> {
 
     updateString(input: string): this {
         this._checkFinalized();
-        // Encode string as UTF-8 bytes
-        const bytes = new Uint8Array(input.length);
-        for (let i = 0; i < input.length; i++) {
-            bytes[i] = input.charCodeAt(i) & 0xff;
-        }
+        const bytes = new TextEncoder().encode(input);
         return this.updateBytes(bytes);
     }
 
@@ -150,9 +138,6 @@ export class XxHash32 implements IHasher<Hash32> {
         return this.updateBytes(b);
     }
 
-    updateI8(v: number): this { return this.updateI32(v | 0); }
-    updateI16(v: number): this { return this.updateI32(v | 0); }
-    updateI32(value: number): this { return this.updateU32(value | 0); }
     updateI64(value: bigint): this {
         this._checkFinalized();
         const buf = new Uint8Array(8);
@@ -163,29 +148,25 @@ export class XxHash32 implements IHasher<Hash32> {
         }
         return this.updateBytes(buf);
     }
-    updateU8(v: number): this { return this.updateU32(v & 0xff); }
-    updateU16(v: number): this { return this.updateU32(v & 0xffff); }
+
     updateU32(value: number): this {
         this._checkFinalized();
         const buf = new Uint8Array(4);
         writeU32LE(value >>> 0, buf, 0);
         return this.updateBytes(buf);
     }
-    updateU64(value: bigint): this { return this.updateI64(value); }
-    updateF32(value: number): this { return this.updateU32(float32ToBits(value)); }
-    updateF64(value: number): this {
-        float64ToBitsPair(value, this._f64Tuple);
-        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
-    }
+
     updateHash(value: Hash32 | bigint): this {
         this._checkFinalized();
         if (typeof value === 'number') return this.updateU32(value);
         return this.updateI64(value);
     }
-    updateHashable<H2 extends HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
+
+    updateHashable<H2 extends import('../types').HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
         value.hashInto(this as unknown as IHasher<H2>);
         return this;
     }
+
     updateAny(value: unknown): this {
         if (value === null || value === undefined) {
             const b = new Uint8Array(1);
@@ -221,7 +202,6 @@ export class XxHash32 implements IHasher<Hash32> {
         }
         h32 = (h32 + this._totalLen) >>> 0;
 
-        // Process remaining 4-byte lanes from buffer
         let pos = 0;
         while (pos + 4 <= this._memSize) {
             const lane = readU32LE(this._mem, pos);
@@ -230,7 +210,6 @@ export class XxHash32 implements IHasher<Hash32> {
             pos += 4;
         }
 
-        // Process remaining 1-3 bytes
         while (pos < this._memSize) {
             h32 = (h32 + Math.imul(this._mem[pos]! & 0xff, XXH_P5)) >>> 0;
             h32 = Math.imul(rotl32(h32, 11), XXH_P1) >>> 0;
@@ -259,7 +238,7 @@ export class XxHash32 implements IHasher<Hash32> {
     }
 
     digestBase64(): string {
-        return encode(this.digestBytes());
+        return encodeBase64(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
@@ -302,6 +281,7 @@ const XXH64_METADATA: HashAlgorithmMetadata = {
     seedable: true,
     keyed: false,
     cryptographicallySecure: false,
+    async: false,
     description: 'xxHash64 - 64-bit extremely fast non-cryptographic hash',
 };
 
@@ -312,7 +292,7 @@ const XXH64_P3 = 0x165667b19e3779f9n;
 const XXH64_P4 = 0x85ebca6c2b72e835n;
 const XXH64_P5 = 0x27d4eb2f165667c5n;
 
-export class XxHash64 implements IHasher<Hash64> {
+export class XxHash64 extends HasherBase<Hash64> {
     readonly algorithm: string = XXH64_METADATA.name;
     readonly metadata: Readonly<HashAlgorithmMetadata> = XXH64_METADATA;
     private _v1: bigint;
@@ -323,10 +303,9 @@ export class XxHash64 implements IHasher<Hash64> {
     private _mem: Uint8Array;
     private _memSize: number = 0;
     private _seed: bigint;
-    private _finalized: boolean = false;
-    private _f64Tuple: [number, number] = [0, 0];
 
     constructor(seed: Seed32 = asSeed32(0)) {
+        super();
         this._seed = BigInt((seed as number) >>> 0);
         this._v1 = (this._seed + XXH64_P1 + XXH64_P2) & MASK64;
         this._v2 = (this._seed + XXH64_P2) & MASK64;
@@ -341,10 +320,6 @@ export class XxHash64 implements IHasher<Hash64> {
 
     get byteLength(): number {
         return this._totalLen;
-    }
-
-    get finalized(): boolean {
-        return this._finalized;
     }
 
     private _checkFinalized(): void {
@@ -371,7 +346,6 @@ export class XxHash64 implements IHasher<Hash64> {
         const inputLen = end - offset;
         this._totalLen += inputLen;
 
-        // If we have buffered bytes, fill the buffer first
         if (this._memSize > 0) {
             const remaining = 32 - this._memSize;
             const toCopy = Math.min(inputLen, remaining);
@@ -382,7 +356,6 @@ export class XxHash64 implements IHasher<Hash64> {
             offset += toCopy;
 
             if (this._memSize === 32) {
-                // Process the full 32-byte block from buffer
                 const v1 = this._round(this._v1, readU64LE(this._mem, 0));
                 const v2 = this._round(this._v2, readU64LE(this._mem, 8));
                 const v3 = this._round(this._v3, readU64LE(this._mem, 16));
@@ -395,7 +368,6 @@ export class XxHash64 implements IHasher<Hash64> {
             }
         }
 
-        // Process full 32-byte blocks directly from input
         const limit = end - offset;
         if (limit >= 32) {
             let v1 = this._v1;
@@ -418,7 +390,6 @@ export class XxHash64 implements IHasher<Hash64> {
             offset = pos;
         }
 
-        // Buffer remaining bytes
         const leftover = end - offset;
         if (leftover > 0) {
             for (let i = 0; i < leftover; i++) {
@@ -432,11 +403,7 @@ export class XxHash64 implements IHasher<Hash64> {
 
     updateString(input: string): this {
         this._checkFinalized();
-        // Encode string as bytes (low byte of each char code)
-        const bytes = new Uint8Array(input.length);
-        for (let i = 0; i < input.length; i++) {
-            bytes[i] = input.charCodeAt(i) & 0xff;
-        }
+        const bytes = new TextEncoder().encode(input);
         return this.updateBytes(bytes);
     }
 
@@ -447,9 +414,6 @@ export class XxHash64 implements IHasher<Hash64> {
         return this.updateBytes(b);
     }
 
-    updateI8(v: number): this { return this.updateI32(v | 0); }
-    updateI16(v: number): this { return this.updateI32(v | 0); }
-    updateI32(value: number): this { return this.updateU32(value | 0); }
     updateI64(value: bigint): this {
         this._checkFinalized();
         const buf = new Uint8Array(8);
@@ -460,29 +424,25 @@ export class XxHash64 implements IHasher<Hash64> {
         }
         return this.updateBytes(buf);
     }
-    updateU8(v: number): this { return this.updateU32(v & 0xff); }
-    updateU16(v: number): this { return this.updateU32(v & 0xffff); }
+
     updateU32(value: number): this {
         this._checkFinalized();
         const buf = new Uint8Array(4);
         writeU32LE(value >>> 0, buf, 0);
         return this.updateBytes(buf);
     }
-    updateU64(value: bigint): this { return this.updateI64(value); }
-    updateF32(value: number): this { return this.updateU32(float32ToBits(value)); }
-    updateF64(value: number): this {
-        float64ToBitsPair(value, this._f64Tuple);
-        return this.updateU32(this._f64Tuple[0]).updateU32(this._f64Tuple[1]);
-    }
+
     updateHash(value: Hash32 | bigint): this {
         this._checkFinalized();
         if (typeof value === 'number') return this.updateU32(value);
         return this.updateI64(value);
     }
-    updateHashable<H2 extends HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
+
+    updateHashable<H2 extends import('../types').HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
         value.hashInto(this as unknown as IHasher<H2>);
         return this;
     }
+
     updateAny(value: unknown): this {
         if (value === null || value === undefined) {
             const b = new Uint8Array(1);
@@ -527,7 +487,6 @@ export class XxHash64 implements IHasher<Hash64> {
         }
         h64 = (h64 + BigInt(this._totalLen)) & MASK64;
 
-        // Process remaining 8-byte lanes from buffer
         let pos = 0;
         while (pos + 8 <= this._memSize) {
             const lane = readU64LE(this._mem, pos);
@@ -536,7 +495,6 @@ export class XxHash64 implements IHasher<Hash64> {
             pos += 8;
         }
 
-        // Process remaining 1-7 bytes
         while (pos < this._memSize) {
             h64 = (h64 ^ (BigInt(this._mem[pos]! & 0xff) * XXH64_P5)) & MASK64;
             h64 = ((((h64 << 11n) | (h64 >> 53n)) & MASK64) * XXH64_P1) & MASK64;
@@ -569,7 +527,7 @@ export class XxHash64 implements IHasher<Hash64> {
     }
 
     digestBase64(): string {
-        return encode(this.digestBytes());
+        return encodeBase64(this.digestBytes());
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
