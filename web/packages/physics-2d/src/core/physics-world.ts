@@ -142,7 +142,8 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._solver = new IslandSolver2D(
             this._bodyManager,
             this._contactManager,
-            this._constraintManager
+            this._constraintManager,
+            maxBodies
         );
 
         this._narrowphase = new Narrowphase2D();
