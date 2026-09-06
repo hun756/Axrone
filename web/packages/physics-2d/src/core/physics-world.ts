@@ -50,6 +50,7 @@ import { createPhysicsBody2DView } from './physics-world-2d-body-view';
 import { PhysicsWorld2DConstraintStore } from './physics-world-2d-constraint-store';
 import { PhysicsWorld2DShapeStore } from './physics-world-2d-shape-store';
 import type { IConstraintDescriptor2D } from './physics-world-2d-helpers';
+import { makeCollisionPairKey } from './foundation';
 
 const NULL_VEC: IVec2Like = { x: 0, y: 0 };
 
@@ -416,9 +417,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                     return true;
                 }
 
-                const lo = shapeIdA < shapeIdB ? shapeIdA : shapeIdB;
-                const hi = shapeIdA < shapeIdB ? shapeIdB : shapeIdA;
-                const pairKey = (lo as number) * 0x100000 + (hi as number);
+                const pairKey = makeCollisionPairKey(shapeIdA as number, shapeIdB as number);
 
                 if (visitedPairs.has(pairKey)) return true;
                 visitedPairs.add(pairKey);
@@ -441,7 +440,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             const descriptorB = this._shapeStore.getDescriptor(pair.shapeIdB);
             if (!descriptorA || !descriptorB) continue;
 
-            const pairKey = (pair.shapeIdA as number) * 0x100000 + (pair.shapeIdB as number);
+            const pairKey = makeCollisionPairKey(pair.shapeIdA as number, pair.shapeIdB as number);
             const existingContactId = this._contactPairCache.get(pairKey);
 
             const posA = this._bodyManager.getPosition(descriptorA.bodyId);

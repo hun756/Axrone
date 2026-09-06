@@ -1,5 +1,8 @@
 import type { IVec2Like } from '@axrone/numeric';
 import type { Brand } from '@axrone/utility';
+import { makeCollisionPairKey, type CollisionPairKey } from '@axrone/physics-core';
+
+export { makeCollisionPairKey, type CollisionPairKey };
 
 export type { Brand };
 
@@ -77,14 +80,6 @@ export function assertCapacity(current: number, max: number, name: string): void
 
 export type ReadonlyVec2 = Readonly<IVec2Like>;
 export type IVec2Output = IVec2Like;
-
-export type CollisionPairKey = Brand<number, 'CollisionPairKey'>;
-
-export function makeCollisionPairKey(a: number, b: number): CollisionPairKey {
-    const lo = a < b ? a : b;
-    const hi = a < b ? b : a;
-    return (lo * 0x100000 + hi) as CollisionPairKey;
-}
 
 export interface ISoAFieldDescriptor {
     readonly offset: number;
