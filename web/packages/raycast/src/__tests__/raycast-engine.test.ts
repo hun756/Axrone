@@ -157,6 +157,22 @@ describe('RaycastSystem2D — predicate filtering', () => {
     });
 });
 
+describe('RaycastSystem2D — closest-hit semantics', () => {
+    it('returns the closest hit even when far shape is registered first', () => {
+        const sys = createRaycastSystem2D();
+        // Register far shape first
+        sys.registerShape(bid(1), sid(11), ALL, ShapeType.Circle, { center: { x: 20, y: 0 }, radius: 1 });
+        // Register near shape second
+        sys.registerShape(bid(2), sid(10), ALL, ShapeType.Circle, { center: { x: 5, y: 0 }, radius: 1 });
+        sys.clearCache();
+
+        const hit = sys.raycast(v2(-5, 0), v2(1, 0), 100, ALL);
+        expect(hit).not.toBeNull();
+        expect(hit!.shapeId).toBe(sid(10)); // near shape, not far
+        expect(hit!.distance).toBeCloseTo(9, 5);
+    });
+});
+
 describe('RaycastSystem2D — raycastSingle', () => {
     it('returns the closest hit via raycastSingle', () => {
         const sys = createRaycastSystem2D();
@@ -189,6 +205,22 @@ describe('RaycastSystem3D — predicate filtering', () => {
         const hit = sys.raycast(v3(-5, 0, 0), v3(1, 0, 0), 100, ALL, RaycastFlags.ClosestOnly, (_b, s) => s !== sid(10));
         expect(hit).not.toBeNull();
         expect(hit!.shapeId).toBe(sid(11));
+    });
+});
+
+describe('RaycastSystem3D — closest-hit semantics', () => {
+    it('returns the closest hit even when far shape is registered first', () => {
+        const sys = createRaycastSystem3D();
+        // Register far shape first
+        sys.registerShape(bid(1), sid(11), ALL, ShapeType.Sphere, { center: { x: 20, y: 0, z: 0 }, radius: 1 });
+        // Register near shape second
+        sys.registerShape(bid(2), sid(10), ALL, ShapeType.Sphere, { center: { x: 5, y: 0, z: 0 }, radius: 1 });
+        sys.clearCache();
+
+        const hit = sys.raycast(v3(-5, 0, 0), v3(1, 0, 0), 100, ALL);
+        expect(hit).not.toBeNull();
+        expect(hit!.shapeId).toBe(sid(10)); // near shape, not far
+        expect(hit!.distance).toBeCloseTo(9, 5);
     });
 });
 

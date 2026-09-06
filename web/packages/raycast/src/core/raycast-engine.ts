@@ -301,6 +301,7 @@ export class Raycaster2D {
         this._computeInvDirection(ray.direction, this._invDirection);
 
         const candidates = this._broadphaseQuery(ray, query.layerMask);
+        let bestDistance = Number.MAX_VALUE;
 
         for (const shape of candidates) {
             if ((shape.layer & query.layerMask) === 0) continue;
@@ -309,25 +310,26 @@ export class Raycaster2D {
             const hit = this._hitPool.acquire();
             const intersected = this._intersectShape2D(ray, shape, query.flags, hit);
             if (intersected) {
-                result.addHit(hit);
+                if (closestOnly) {
+                    // Track only the closest hit
+                    if (hit.distance < bestDistance) {
+                        bestDistance = hit.distance;
+                        result.clear();
+                        result.addHit(hit);
+                    }
+                } else {
+                    result.addHit(hit);
+                    if (stopAtFirst) break;
+                    if (result.hitCount >= maxHits) break;
+                }
                 this._hitPool.release(hit);
-
-                if (stopAtFirst) break;
-                if (result.hitCount >= maxHits) break;
             } else {
                 this._hitPool.release(hit);
             }
         }
 
-        if ((query.flags & RaycastFlags.SortByDistance) !== 0) {
+        if (!closestOnly && (query.flags & RaycastFlags.SortByDistance) !== 0) {
             result.sort();
-        }
-
-        if (closestOnly && result.hitCount > 1) {
-            const closestHit = result.hits[0];
-            result.clear();
-            this._tempHit.copyFrom(closestHit as RaycastHit2D);
-            result.addHit(this._tempHit);
         }
 
         return result;
@@ -556,6 +558,7 @@ export class Raycaster3D {
         this._computeInvDirection(ray.direction, this._invDirection);
 
         const candidates = this._broadphaseQuery(ray, query.layerMask);
+        let bestDistance = Number.MAX_VALUE;
 
         for (const shape of candidates) {
             if ((shape.layer & query.layerMask) === 0) continue;
@@ -564,25 +567,26 @@ export class Raycaster3D {
             const hit = this._hitPool.acquire();
             const intersected = this._intersectShape3D(ray, shape, query.flags, hit);
             if (intersected) {
-                result.addHit(hit);
+                if (closestOnly) {
+                    // Track only the closest hit
+                    if (hit.distance < bestDistance) {
+                        bestDistance = hit.distance;
+                        result.clear();
+                        result.addHit(hit);
+                    }
+                } else {
+                    result.addHit(hit);
+                    if (stopAtFirst) break;
+                    if (result.hitCount >= maxHits) break;
+                }
                 this._hitPool.release(hit);
-
-                if (stopAtFirst) break;
-                if (result.hitCount >= maxHits) break;
             } else {
                 this._hitPool.release(hit);
             }
         }
 
-        if ((query.flags & RaycastFlags.SortByDistance) !== 0) {
+        if (!closestOnly && (query.flags & RaycastFlags.SortByDistance) !== 0) {
             result.sort();
-        }
-
-        if (closestOnly && result.hitCount > 1) {
-            const closestHit = result.hits[0];
-            result.clear();
-            this._tempHit.copyFrom(closestHit as RaycastHit3D);
-            result.addHit(this._tempHit);
         }
 
         return result;
