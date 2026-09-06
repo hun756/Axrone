@@ -186,8 +186,12 @@ export class PhysicsWorld3DContactRuntime {
         const manifolds = this._contactManifolds;
         for (let i = 0; i < velIters; i++) {
             for (const m of manifolds.values()) this._solveContactVelocity(m);
-            this._solveConstraints(velIters);
+            this._solveDistanceConstraints(velIters);
         }
+        // Spring forces are applied ONCE per step (not per velocity iteration)
+        // to prevent over-accumulation. Box2D convention: soft constraint bias
+        // is computed in prepare phase; only the pre-biased impulse is iterated.
+        this._solveSpringForces();
         const profiler = this._host.getProfiler();
         if (profiler) profiler.solveVelocityTime = performance.now() - vStart;
     }
@@ -729,12 +733,12 @@ export class PhysicsWorld3DContactRuntime {
             )),
         ];
 
-        // Reference face normal (pointing from ref toward incident)
+        // Reference face normal (pointing OUTWARD from reference body, away from interior)
         const refNormal = refAxes[bestDotA >= bestDotB ? bestA : bestB];
         const refFaceDist = refSign * refHalf[bestDotA >= bestDotB ? bestA : bestB];
         const refNormalActual = isARef
-            ? (Vec3.dot(normal, refAxes[bestA]) > 0 ? Vec3.negate(refAxes[bestA]) : refAxes[bestA])
-            : (Vec3.dot(negNormal, refAxes[bestB]) > 0 ? Vec3.negate(refAxes[bestB]) : refAxes[bestB]);
+            ? (Vec3.dot(normal, refAxes[bestA]) > 0 ? refAxes[bestA] : Vec3.negate(refAxes[bestA]))
+            : (Vec3.dot(negNormal, refAxes[bestB]) > 0 ? refAxes[bestB] : Vec3.negate(refAxes[bestB]));
 
         // Reference face tangent axes and half-extents
         const refFaceIdx = bestDotA >= bestDotB ? bestA : bestB;
@@ -757,12 +761,15 @@ export class PhysicsWorld3DContactRuntime {
         if (clipped.length < 2) return [];
 
         // Keep only points behind the reference face, up to 4
+        // After fix: refNormalActual points OUTWARD, so sep = dot(pt-center, outwardNormal)
+        // is positive when pt is in front of the face, negative when behind.
         const result: { worldPoint: IVec3Like; separation: number }[] = [];
         const refFaceCenter = Vec3.add(refCenter, Vec3.multiplyScalar(refNormalActual, refFaceDist));
         for (const pt of clipped) {
             if (result.length >= 4) break;
             const sep = Vec3.dot(Vec3.subtract(pt, refFaceCenter), refNormalActual);
-            if (sep <= totalPen * 0.1 + PhysicsConstants.ALLOWED_PENETRATION) {
+            // Keep points that are behind or near the reference face
+            if (sep >= -(totalPen * 0.1 + PhysicsConstants.ALLOWED_PENETRATION)) {
                 result.push({ worldPoint: pt, separation: sep - totalPen });
             }
         }
@@ -1006,11 +1013,12 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     /**
-     * Solve joint constraints using sequential impulses (position-based).
-     * Handles distance (fixed) and spring constraints. Other joint types
-     * require specialized solvers (hinge axis, slider rail, cone-twist limits).
+     * Solve distance/fixed (rigid) joint constraints using sequential impulses.
+     * Baumgarte positional correction is iterated within the velocity solve loop.
+     * Spring forces are handled separately in _solveSpringForces() to avoid
+     * per-iteration over-accumulation.
      */
-    private _solveConstraints(iterations: number): void {
+    private _solveDistanceConstraints(iterations: number): void {
         const cm = this._host.constraintManager;
         const bm = this._host.bodyManager;
         const constraintIds = cm.getAllConstraintIds();
@@ -1021,6 +1029,9 @@ export class PhysicsWorld3DContactRuntime {
         for (let iter = 0; iter < Math.min(iterations, 4); iter++) {
             for (const cid of constraintIds) {
                 const type = cm.getConstraintType(cid);
+                // Only handle rigid constraints here (distance=0, fixed=2)
+                if (type !== 0 && type !== 2) continue;
+
                 const { bodyIdA, bodyIdB } = cm.getConstraintBodyIds(cid);
 
                 // Skip if either body is static/kinematic
@@ -1044,15 +1055,7 @@ export class PhysicsWorld3DContactRuntime {
                 const delta = Vec3.subtract(worldAnchorB, worldAnchorA);
                 const currentDist = Vec3.len(delta);
 
-                // Determine target distance
-                let targetDist = 0;
-                if (type === 6) {
-                    // Spring constraint: use rest length from params
-                    targetDist = cm.getConstraintParam(cid, 0); // restLength at offset 0
-                }
-                // Fixed/distance (type 0, 2): target is the initial distance (0 for fixed)
-
-                const error = currentDist - targetDist;
+                const error = currentDist; // target is 0 for fixed/distance
                 if (Math.abs(error) < PhysicsConstants.EPSILON) continue;
 
                 // Compute correction direction
@@ -1077,26 +1080,83 @@ export class PhysicsWorld3DContactRuntime {
                     const newPosB = Vec3.subtract(posB, Vec3.multiplyScalar(correction, invMassB));
                     bm.setPosition(bodyIdB, newPosB);
                 }
+            }
+        }
+    }
 
-                // Spring: apply spring force (F = -k*x - c*v)
-                if (type === 6) {
-                    const stiffness = cm.getConstraintParam(cid, 1);
-                    const damping = cm.getConstraintParam(cid, 2);
-                    const relVel = Vec3.subtract(
-                        bm.getLinearVelocity(bodyIdB),
-                        bm.getLinearVelocity(bodyIdA)
-                    );
-                    const velAlongDir = Vec3.dot(relVel, dir);
-                    const springForce = -stiffness * error - damping * velAlongDir;
-                    const impulse = Vec3.multiplyScalar(dir, springForce);
+    /**
+     * Apply spring constraint forces ONCE per step (not per velocity iteration).
+     * F = -k*x - c*v, applied as impulse along the constraint axis.
+     */
+    private _solveSpringForces(): void {
+        const cm = this._host.constraintManager;
+        const bm = this._host.bodyManager;
+        const constraintIds = cm.getAllConstraintIds();
+        if (constraintIds.length === 0) return;
 
-                    if (typeA === 2) {
-                        bm.applyImpulse(bodyIdA, Vec3.negate(impulse));
-                    }
-                    if (typeB === 2) {
-                        bm.applyImpulse(bodyIdB, impulse);
-                    }
+        const BIAS = 0.2;
+
+        for (const cid of constraintIds) {
+            const type = cm.getConstraintType(cid);
+            if (type !== 6) continue; // 6 = SPRING
+
+            const { bodyIdA, bodyIdB } = cm.getConstraintBodyIds(cid);
+            const typeA = bm.getBodyType(bodyIdA);
+            const typeB = bm.getBodyType(bodyIdB);
+            if (typeA !== 2 && typeB !== 2) continue;
+
+            const posA = bm.getPosition(bodyIdA);
+            const posB = bm.getPosition(bodyIdB);
+            const rotA = bm.getRotation(bodyIdA);
+            const rotB = bm.getRotation(bodyIdB);
+
+            const localAnchorA = cm.getConstraintLocalAnchorA(cid);
+            const localAnchorB = cm.getConstraintLocalAnchorB(cid);
+
+            const worldAnchorA = transformPoint3D(localAnchorA, posA, rotA);
+            const worldAnchorB = transformPoint3D(localAnchorB, posB, rotB);
+
+            const delta = Vec3.subtract(worldAnchorB, worldAnchorA);
+            const currentDist = Vec3.len(delta);
+
+            const targetDist = cm.getConstraintParam(cid, 0); // restLength
+            const error = currentDist - targetDist;
+            if (Math.abs(error) < PhysicsConstants.EPSILON) continue;
+
+            const dir = currentDist > PhysicsConstants.EPSILON
+                ? Vec3.normalize(delta)
+                : { x: 0, y: 1, z: 0 };
+
+            // Baumgarte positional correction (applied once)
+            const invMassA = typeA === 2 ? bm.getInverseMass(bodyIdA) : 0;
+            const invMassB = typeB === 2 ? bm.getInverseMass(bodyIdB) : 0;
+            const invMassSum = invMassA + invMassB;
+            if (invMassSum > PhysicsConstants.EPSILON) {
+                const correction = Vec3.multiplyScalar(dir, error * BIAS / invMassSum);
+                if (typeA === 2) {
+                    bm.setPosition(bodyIdA, Vec3.add(posA, Vec3.multiplyScalar(correction, invMassA)));
                 }
+                if (typeB === 2) {
+                    bm.setPosition(bodyIdB, Vec3.subtract(posB, Vec3.multiplyScalar(correction, invMassB)));
+                }
+            }
+
+            // Spring force: F = -k*x - c*v, applied as impulse
+            const stiffness = cm.getConstraintParam(cid, 1);
+            const damping = cm.getConstraintParam(cid, 2);
+            const relVel = Vec3.subtract(
+                bm.getLinearVelocity(bodyIdB),
+                bm.getLinearVelocity(bodyIdA)
+            );
+            const velAlongDir = Vec3.dot(relVel, dir);
+            const springForce = -stiffness * error - damping * velAlongDir;
+            const impulse = Vec3.multiplyScalar(dir, springForce);
+
+            if (typeA === 2) {
+                bm.applyImpulse(bodyIdA, Vec3.negate(impulse));
+            }
+            if (typeB === 2) {
+                bm.applyImpulse(bodyIdB, impulse);
             }
         }
     }
