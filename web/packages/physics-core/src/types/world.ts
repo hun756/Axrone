@@ -3,57 +3,35 @@ import type {
     BodyId,
     ShapeId,
     ConstraintId,
-    IslandId,
     SolverFlags,
     IRaycastResult2D,
-    IRaycastResult3D,
-    IContactManifold2D,
-    IContactManifold3D,
 } from './primitives';
 import type {
     IPhysicsBody2D,
-    IPhysicsBody3D,
     IPhysicsBodyDef2D,
-    IPhysicsBodyDef3D,
     IShape2D,
-    IShape3D,
     ICircleShapeDef,
-    ISphereShapeDef,
     IBoxShapeDef2D,
-    IBoxShapeDef3D,
     IPolygonShapeDef,
-    IConvexHullShapeDef,
     ICapsuleShapeDef2D,
-    ICapsuleShapeDef3D,
     ISegmentShapeDef,
-    ICylinderShapeDef,
-    IConeShapeDef,
 } from './physics-body';
 import type {
     IConstraint2D,
-    IConstraint3D,
     IDistanceConstraintDef2D,
-    IDistanceConstraintDef3D,
     IRevoluteConstraintDef2D,
-    IRevoluteConstraintDef3D,
     IPrismaticConstraintDef2D,
-    IPrismaticConstraintDef3D,
     IWeldConstraintDef2D,
-    IWeldConstraintDef3D,
     IWheelConstraintDef2D,
     IMotorConstraintDef2D,
-    IMotorConstraintDef3D,
     IMouseConstraintDef2D,
     IGearConstraintDef,
     IRopeConstraintDef2D,
-    IRopeConstraintDef3D,
 } from './constraints';
 import type {
     IContactListener2D,
-    IContactListener3D,
     ICollisionFilter,
     RaycastCallback2D,
-    RaycastCallback3D,
 } from './collision';
 
 export interface IPhysicsWorldConfig {
@@ -117,22 +95,6 @@ export interface IPhysicsProfiler {
     solveVelocityTime: number;
     solvePositionTime: number;
     sleepTime: number;
-}
-
-export interface IIsland2D {
-    readonly id: IslandId;
-    readonly bodies: readonly BodyId[];
-    readonly contacts: readonly IContactManifold2D[];
-    readonly constraints: readonly ConstraintId[];
-    readonly isSleeping: boolean;
-}
-
-export interface IIsland3D {
-    readonly id: IslandId;
-    readonly bodies: readonly BodyId[];
-    readonly contacts: readonly IContactManifold3D[];
-    readonly constraints: readonly ConstraintId[];
-    readonly isSleeping: boolean;
 }
 
 export interface IQueryFilter {
@@ -234,91 +196,3 @@ export interface IPhysicsWorld2D extends Disposable {
     dump(): void;
 }
 
-export interface IPhysicsWorld3D extends Disposable {
-    readonly config: Readonly<IPhysicsWorldConfig>;
-    readonly gravity: Readonly<IVec3Like>;
-
-    step(deltaTime: number, velocityIterations?: number, positionIterations?: number): void;
-
-    createBody(def: IPhysicsBodyDef3D): BodyId;
-    destroyBody(bodyId: BodyId): void;
-    getBody(bodyId: BodyId): IPhysicsBody3D | null;
-    getBodies(): ReadonlyMap<BodyId, IPhysicsBody3D>;
-
-    createSphereShape(bodyId: BodyId, def: ISphereShapeDef): ShapeId;
-    createBoxShape(bodyId: BodyId, def: IBoxShapeDef3D): ShapeId;
-    createCapsuleShape(bodyId: BodyId, def: ICapsuleShapeDef3D): ShapeId;
-    createCylinderShape(bodyId: BodyId, def: ICylinderShapeDef): ShapeId;
-    createConeShape(bodyId: BodyId, def: IConeShapeDef): ShapeId;
-    createConvexHullShape(bodyId: BodyId, def: IConvexHullShapeDef): ShapeId;
-    destroyShape(shapeId: ShapeId): void;
-    getShape(shapeId: ShapeId): IShape3D | null;
-
-    createDistanceConstraint(def: IDistanceConstraintDef3D): ConstraintId;
-    createRevoluteConstraint(def: IRevoluteConstraintDef3D): ConstraintId;
-    createPrismaticConstraint(def: IPrismaticConstraintDef3D): ConstraintId;
-    createWeldConstraint(def: IWeldConstraintDef3D): ConstraintId;
-    createMotorConstraint(def: IMotorConstraintDef3D): ConstraintId;
-    createRopeConstraint(def: IRopeConstraintDef3D): ConstraintId;
-    destroyConstraint(constraintId: ConstraintId): void;
-    getConstraint(constraintId: ConstraintId): IConstraint3D | null;
-
-    setGravity(gravity: Readonly<IVec3Like>): void;
-    getGravity(): Readonly<IVec3Like>;
-
-    setContactListener(listener: IContactListener3D | null): void;
-    setCollisionFilter(filter: ICollisionFilter | null): void;
-
-    rayCast(
-        origin: Readonly<IVec3Like>,
-        direction: Readonly<IVec3Like>,
-        maxFraction: number,
-        callback: RaycastCallback3D
-    ): void;
-    rayCastClosest(
-        origin: Readonly<IVec3Like>,
-        direction: Readonly<IVec3Like>,
-        maxFraction: number,
-        filter?: IQueryFilter
-    ): IRaycastResult3D | null;
-    rayCastAll(
-        origin: Readonly<IVec3Like>,
-        direction: Readonly<IVec3Like>,
-        maxFraction: number,
-        filter?: IQueryFilter
-    ): readonly IRaycastResult3D[];
-
-    queryAABB(
-        min: Readonly<IVec3Like>,
-        max: Readonly<IVec3Like>,
-        callback: IAABBQueryCallback
-    ): void;
-    queryAABBAll(
-        min: Readonly<IVec3Like>,
-        max: Readonly<IVec3Like>,
-        filter?: IQueryFilter
-    ): readonly ShapeId[];
-
-    queryPoint(point: Readonly<IVec3Like>, callback: IAABBQueryCallback): void;
-    queryPointAll(point: Readonly<IVec3Like>, filter?: IQueryFilter): readonly ShapeId[];
-
-    shiftOrigin(newOrigin: Readonly<IVec3Like>): void;
-    clearForces(): void;
-    wakeAllBodies(): void;
-
-    getStatistics(): IPhysicsWorldStatistics;
-    getProfiler(): IPhysicsProfiler | null;
-
-    setAutoClearForces(flag: boolean): void;
-    getAutoClearForces(): boolean;
-
-    getProxyCount(): number;
-    getTreeHeight(): number;
-    getTreeBalance(): number;
-    getTreeQuality(): number;
-
-    validate(): boolean;
-    dump(): void;
-}
-
-export type PhysicsWorld = IPhysicsWorld2D | IPhysicsWorld3D;

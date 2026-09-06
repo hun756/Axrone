@@ -310,23 +310,3 @@ export interface IRopeConstraint2D extends IConstraint2D {
     getLimitState(): JointLimitState;
 }
 
-export interface IConstraintSolver {
-    warmStart(): void;
-    solveVelocityConstraints(): void;
-    solvePositionConstraints(): boolean;
-}
-
-export interface IConstraintVelocityData {
-    readonly jacobian: Float64Array;
-    readonly effectiveMass: Float64Array;
-    readonly bias: number;
-    readonly impulse: number;
-    readonly lowerImpulse: number;
-    readonly upperImpulse: number;
-}
-
-export interface IConstraintPositionData {
-    readonly c: number;
-    readonly k: number;
-    readonly positionError: number;
-}
