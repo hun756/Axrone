@@ -320,11 +320,15 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             if (manifold.pointCount > 0) {
                 let contactId = existingContactId;
                 if (!contactId || !this._contactManager.getContactData(contactId)) {
+                    const materialA = this._shapeManager.getShapeMaterial(pair.shapeIdA);
+                    const materialB = this._shapeManager.getShapeMaterial(pair.shapeIdB);
                     contactId = this._contactManager.createContact(
                         pair.shapeIdA,
                         pair.shapeIdB,
                         descriptorA.bodyId,
-                        descriptorB.bodyId
+                        descriptorB.bodyId,
+                        materialA,
+                        materialB
                     );
                     this._contactPairCache.set(pairKey, contactId);
                 }

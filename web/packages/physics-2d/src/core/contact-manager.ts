@@ -7,6 +7,7 @@ import type {
     IContactManifold2D,
     IContactListener2D,
     ICollisionFilter,
+    IMaterial,
 } from '../types';
 import { CollisionEventType } from '../types';
 import { PhysicsError, assertCapacity, assertFound } from './foundation';
@@ -88,7 +89,9 @@ export class ContactManager2D implements Disposable {
         shapeIdA: ShapeId,
         shapeIdB: ShapeId,
         bodyIdA: BodyId,
-        bodyIdB: BodyId
+        bodyIdB: BodyId,
+        materialA?: IMaterial,
+        materialB?: IMaterial
     ): ContactId {
         this._assertNotDisposed();
 
@@ -116,9 +119,17 @@ export class ContactManager2D implements Disposable {
             manifoldId: contactId as unknown as ManifoldId,
         });
 
+        // Combine materials: sqrt for friction, max for restitution
+        const friction = materialA && materialB
+            ? Math.sqrt(materialA.friction * materialB.friction)
+            : 0.2;
+        const restitution = materialA && materialB
+            ? Math.max(materialA.restitution, materialB.restitution)
+            : 0.0;
+
         const dataOffset = index * CONTACT_DATA_STRIDE;
-        this._contactData[dataOffset + ContactDataOffset.FRICTION] = 0.2;
-        this._contactData[dataOffset + ContactDataOffset.RESTITUTION] = 0.0;
+        this._contactData[dataOffset + ContactDataOffset.FRICTION] = friction;
+        this._contactData[dataOffset + ContactDataOffset.RESTITUTION] = restitution;
         this._contactData[dataOffset + ContactDataOffset.TANGENT_SPEED] = 0.0;
         this._contactData[dataOffset + ContactDataOffset.NORMAL_X] = 0;
         this._contactData[dataOffset + ContactDataOffset.NORMAL_Y] = 0;

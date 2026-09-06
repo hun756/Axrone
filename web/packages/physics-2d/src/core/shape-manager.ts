@@ -254,6 +254,14 @@ export class ShapeManager2D implements Disposable {
         return metadata.bodyId;
     }
 
+    getShapeMaterial(shapeId: ShapeId): IMaterial {
+        const metadata = this._shapeMetadata.get(shapeId);
+        if (!metadata) {
+            throw new ShapeError(`Shape ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+        }
+        return metadata.material;
+    }
+
     getCircleData(shapeId: ShapeId): { center: IVec2Like; radius: number } {
         const index = this._shapeToCircleIndex.get(shapeId);
         if (index === undefined) {
