@@ -3,6 +3,7 @@ import { readU32LE, readU64LE, rotl32, writeU32LE, encodeBase64 } from '../bits'
 import { asHash32, asSeed32, asHash64, type Hash32, type Hash64, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
 import { HasherBase } from '../base';
+import { HashAlreadyFinalizedError } from '../errors';
 
 const XXH32_METADATA: HashAlgorithmMetadata = {
     name: 'xxhash32',
@@ -54,7 +55,7 @@ export class XxHash32 extends HasherBase<Hash32> {
     }
 
     private _checkFinalized(): void {
-        if (this._finalized) throw new Error(`XxHash32: cannot update after digest() (algorithm=${this.algorithm})`);
+        if (this._finalized) throw new HashAlreadyFinalizedError(`XxHash32: cannot update after digest() (algorithm=${this.algorithm})`);
     }
 
     private _round(acc: number, input: number): number {
@@ -323,7 +324,7 @@ export class XxHash64 extends HasherBase<Hash64> {
     }
 
     private _checkFinalized(): void {
-        if (this._finalized) throw new Error(`XxHash64: cannot update after digest() (algorithm=${this.algorithm})`);
+        if (this._finalized) throw new HashAlreadyFinalizedError(`XxHash64: cannot update after digest() (algorithm=${this.algorithm})`);
     }
 
     private _round(acc: bigint, input: bigint): bigint {

@@ -4,6 +4,7 @@ import { fmix32, murmur3Scramble } from '../mixers';
 import { asHash32, asHash64, asSeed32, type Hash32, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
 import { HasherBase } from '../base';
+import { HashAlreadyFinalizedError } from '../errors';
 
 const MURMUR3_METADATA: HashAlgorithmMetadata = {
     name: 'murmur3-32',
@@ -42,7 +43,7 @@ export class Murmur3_32 extends HasherBase<Hash32> {
     }
 
     private _checkFinalized(): void {
-        if (this._finalized) throw new Error(`Murmur3_32: cannot update after digest() (algorithm=${this.algorithm})`);
+        if (this._finalized) throw new HashAlreadyFinalizedError(`Murmur3_32: cannot update after digest() (algorithm=${this.algorithm})`);
     }
 
     private _accumulate(byte: number): void {
@@ -231,7 +232,7 @@ export class Murmur2_64 extends HasherBase<import('../types').Hash64> {
     }
 
     private _checkFinalized(): void {
-        if (this._finalized) throw new Error(`Murmur2_64: cannot update after digest() (algorithm=${this.algorithm})`);
+        if (this._finalized) throw new HashAlreadyFinalizedError(`Murmur2_64: cannot update after digest() (algorithm=${this.algorithm})`);
     }
 
     private _accumulate(byte: number): void {

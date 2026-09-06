@@ -1,8 +1,11 @@
 import type { BytesLike } from '../../../types';
 import { writeU32LE, encodeBase64 } from '../bits';
+import { fnv1aMix32, fnv1aMixBytes32, FNV_PRIME_32 } from '../mixing';
+import { u32ToHex, bigIntToHex } from '../hex';
 import { asHash32, asHash64, asSeed32, type Hash32, type Hash64, type Seed32, type HashAlgorithmMetadata } from '../types';
 import type { IHasher } from '../interfaces';
 import { HasherBase } from '../base';
+import { HashAlreadyFinalizedError } from '../errors';
 
 const FNV_METADATA: HashAlgorithmMetadata = {
     name: 'fnv1a-32',
@@ -129,7 +132,7 @@ export class Fnv1a32 extends Fnv1a32Base {
     }
 
     protected override _checkFinalized(): void {
-        if (this._finalized) throw new Error(`Fnv1a32: cannot update after digest()`);
+        if (this._finalized) throw new HashAlreadyFinalizedError(`Fnv1a32: cannot update after digest()`);
     }
 
     updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {
@@ -176,7 +179,7 @@ export class Fnv1_32 extends Fnv1a32Base {
     }
 
     protected override _checkFinalized(): void {
-        if (this._finalized) throw new Error(`Fnv1_32: cannot update after digest()`);
+        if (this._finalized) throw new HashAlreadyFinalizedError(`Fnv1_32: cannot update after digest()`);
     }
 
     updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {
@@ -244,7 +247,7 @@ export class Fnv1a64 extends HasherBase<Hash64> {
     get seed(): Seed32 { return asSeed32(Number(this._initialSeed)); }
 
     protected override _checkFinalized(): void {
-        if (this._finalized) throw new Error(`Fnv1a64: cannot update after digest()`);
+        if (this._finalized) throw new HashAlreadyFinalizedError(`Fnv1a64: cannot update after digest()`);
     }
 
     updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {

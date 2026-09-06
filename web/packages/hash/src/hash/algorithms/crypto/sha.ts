@@ -2,7 +2,7 @@ import type { BytesLike } from '../../../../types';
 import { asHash256, asSeed32, type Hash256, type Hash512, type Hash128, type Seed32, type HashAlgorithmMetadata } from '../../types';
 import type { IHasher, IDigestAsync } from '../../interfaces';
 import { HasherBase } from '../../base';
-import { HashCryptoUnavailableError, HashCryptoOperationError } from '../../errors';
+import { HashAlreadyFinalizedError, HashCryptoUnavailableError, HashCryptoOperationError } from '../../errors';
 import { encodeBase64 } from '../../bits';
 
 const _HEX = '0123456789abcdef';
@@ -107,7 +107,7 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> extends Ha
     protected abstract convertResult(bytes: Uint8Array): H;
 
     private _checkFinalized(): void {
-        if (this._finalized) throw new Error(`${this.algorithm}: cannot update after digest() (algorithm=${this.algorithm})`);
+        if (this._finalized) throw new HashAlreadyFinalizedError(`${this.algorithm}: cannot update after digest() (algorithm=${this.algorithm})`);
     }
 
     updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {

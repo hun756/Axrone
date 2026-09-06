@@ -3,6 +3,7 @@ import {
     type Hash32, type Hash64, type Hash256, type Hash512,
     type HashValue, type Seed32, type HashAlgorithmName, type HashAlgorithmMetadata
 } from './types';
+import { HashAlgorithmNotFoundError } from './errors';
 import { Fnv1a32, Fnv1_32, Fnv1a64, Djb2, Djb2a, Sdbm, Crc32, Crc32c, Murmur3_32, Murmur2_64, XxHash32, XxHash64, Sha1, Sha256, Sha384, Sha512 } from './algorithms';
 
 type AnyCtor<H extends HashValue> = new (seed?: Seed32, ...rest: any[]) => IHasher<H>;
@@ -104,9 +105,7 @@ export const FACTORIES: ReadonlyMap<HashAlgorithmName, IHashFactory<any>> = (() 
 export function getFactory<H extends HashValue>(name: HashAlgorithmName): IHashFactory<H> {
     const f = FACTORIES.get(name);
     if (!f) {
-        const err = new Error(`Hash algorithm '${name}' not found in registry`) as Error & { code?: string };
-        err.code = 'HASH_ALGORITHM_NOT_FOUND';
-        throw err;
+        throw new HashAlgorithmNotFoundError(`Hash algorithm '${name}' not found in registry`);
     }
     return f as IHashFactory<H>;
 }

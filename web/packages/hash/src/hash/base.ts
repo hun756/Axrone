@@ -2,6 +2,7 @@ import type { BytesLike } from '../../types';
 import { float32ToBits, float64ToBitsPair } from './bits';
 import type { IHasher } from './interfaces';
 import type { HashValue, Seed32, Seed64, HashAlgorithmMetadata } from './types';
+import { HashAlreadyFinalizedError } from './errors';
 
 /**
  * Abstract base class for all hash algorithm implementations.
@@ -26,7 +27,7 @@ export abstract class HasherBase<H extends HashValue> implements IHasher<H> {
     get seed(): Seed32 | Seed64 | undefined { return undefined; }
 
     protected _checkFinalized(): void {
-        if (this._finalized) throw new Error(`${this.algorithm}: cannot update after digest()`);
+        if (this._finalized) throw new HashAlreadyFinalizedError(`${this.algorithm}: cannot update after digest()`);
     }
 
     // ── Core abstract methods each algorithm must implement ──────────────
