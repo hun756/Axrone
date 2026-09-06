@@ -24,7 +24,7 @@ export const syncTransformWorldPosition = (
     const parent = transform.parent;
     if (!parent) {
         Vec3.copy(value, positionScratch);
-        transform.position = positionScratch;
+        transform.position = { x: positionScratch.x, y: positionScratch.y, z: positionScratch.z };
         return;
     }
 
@@ -46,7 +46,7 @@ export const syncTransformWorldPosition = (
             ? positionScratch.z / parentScale.z
             : 0;
 
-    transform.position = positionScratch;
+    transform.position = { x: positionScratch.x, y: positionScratch.y, z: positionScratch.z };
 };
 
 export const syncTransformWorldRotation = (
@@ -60,12 +60,12 @@ export const syncTransformWorldRotation = (
     const parent = transform.parent;
     if (!parent) {
         Quat.copy(value, rotationScratch);
-        transform.rotation = rotationScratch;
+        transform.rotation = { x: rotationScratch.x, y: rotationScratch.y, z: rotationScratch.z, w: rotationScratch.w };
         return;
     }
 
     Quat.multiply(copyInverseParentRotation(parent.worldRotation), value, rotationScratch);
-    transform.rotation = rotationScratch;
+    transform.rotation = { x: rotationScratch.x, y: rotationScratch.y, z: rotationScratch.z, w: rotationScratch.w };
 };
 
 export const syncTransformWorldPose = (
@@ -81,8 +81,8 @@ export const syncTransformWorldPose = (
     if (!parent) {
         Vec3.copy(position, positionScratch);
         Quat.copy(rotation, rotationScratch);
-        transform.position = positionScratch;
-        transform.rotation = rotationScratch;
+        transform.position = { x: positionScratch.x, y: positionScratch.y, z: positionScratch.z };
+        transform.rotation = { x: rotationScratch.x, y: rotationScratch.y, z: rotationScratch.z, w: rotationScratch.w };
         return;
     }
 
@@ -106,6 +106,6 @@ export const syncTransformWorldPose = (
 
     Quat.multiply(inverseParentRotation, rotation, rotationScratch);
 
-    transform.position = positionScratch;
-    transform.rotation = rotationScratch;
+    transform.position = { x: positionScratch.x, y: positionScratch.y, z: positionScratch.z };
+    transform.rotation = { x: rotationScratch.x, y: rotationScratch.y, z: rotationScratch.z, w: rotationScratch.w };
 };
