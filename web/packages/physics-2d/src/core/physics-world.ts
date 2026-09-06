@@ -239,15 +239,36 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             : 1;
         const subDt = deltaTime / subSteps;
 
+        // Phase timing — only measured when profiler is attached (zero overhead otherwise)
+        const prof = this._profiler;
+        let broadphaseAccum = 0;
+        let narrowphaseAccum = 0;
+        if (prof) {
+            prof.solveVelocityTime = 0;
+            prof.solvePositionTime = 0;
+        }
+
         for (let sub = 0; sub < subSteps; sub++) {
-            this._updateBroadphase();
+            if (prof) {
+                const tb = performance.now();
+                this._updateBroadphase();
+                broadphaseAccum += performance.now() - tb;
+            } else {
+                this._updateBroadphase();
+            }
 
             // P1-6: continuousPhysics gates the CCD pass
             if (this._continuousPhysics) {
                 this._performCCD(subDt);
             }
 
-            this._detectCollisions();
+            if (prof) {
+                const tn = performance.now();
+                this._detectCollisions();
+                narrowphaseAccum += performance.now() - tn;
+            } else {
+                this._detectCollisions();
+            }
 
             this._solver.solveIslands(
                 subDt,
@@ -256,7 +277,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 allowSleep,
                 solverFlags,
                 { x: this._gravity.x, y: this._gravity.y },
-                this._profiler ?? undefined
+                prof ?? undefined
             );
         }
 
@@ -265,8 +286,12 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         }
 
         this._stepTime = performance.now() - t0;
-        if (this._profiler) {
-            this._profiler.stepTime = this._stepTime;
+        if (prof) {
+            prof.stepTime = this._stepTime;
+            prof.broadphaseTime = broadphaseAccum;
+            prof.narrowphaseTime = narrowphaseAccum;
+            prof.collisionTime = narrowphaseAccum;
+            prof.solveTime = (prof.solveVelocityTime ?? 0) + (prof.solvePositionTime ?? 0);
         }
     }
 
@@ -919,15 +944,15 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             constraintCount: this._constraintStore.size,
             contactCount: this._contactManager.contactCount,
             proxyCount: this.getProxyCount(),
-            islandCount: 0,
-            treeHeight: 0,
-            treeBalance: 0,
-            treeQuality: 0,
+            islandCount: this._solver.lastIslandCount,
+            treeHeight: this._broadphase.getHeight(),
+            treeBalance: this._broadphase.getTreeBalance(),
+            treeQuality: this._broadphase.getTreeQuality(),
             stepTime: this._stepTime,
-            collisionTime: 0,
-            solveTime: 0,
-            broadphaseTime: 0,
-            narrowphaseTime: 0,
+            collisionTime: this._profiler?.collisionTime ?? 0,
+            solveTime: this._profiler?.solveTime ?? 0,
+            broadphaseTime: this._profiler?.broadphaseTime ?? 0,
+            narrowphaseTime: this._profiler?.narrowphaseTime ?? 0,
         };
     }
 
@@ -948,15 +973,15 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     }
 
     getTreeHeight(): number {
-        return 0;
+        return this._broadphase.getHeight();
     }
 
     getTreeBalance(): number {
-        return 0;
+        return this._broadphase.getTreeBalance();
     }
 
     getTreeQuality(): number {
-        return 0;
+        return this._broadphase.getTreeQuality();
     }
 
     validate(): boolean {

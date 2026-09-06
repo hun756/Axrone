@@ -99,6 +99,9 @@ export class IslandSolver2D {
     private readonly _tmpPosition = new Vec2();
     private readonly _tmpLinearVel = new Vec2();
 
+    /** Number of islands solved in the last solveIslands() call. */
+    private _lastIslandCount = 0;
+
     constructor(
         bodyManager: BodyManager2D,
         contactManager: ContactManager2D,
@@ -127,6 +130,11 @@ export class IslandSolver2D {
         return this._constraintSolver.getLastSolvedConstraintCount();
     }
 
+    /** Number of islands solved in the most recent solveIslands() call. */
+    get lastIslandCount(): number {
+        return this._lastIslandCount;
+    }
+
     solveIslands(
         deltaTime: number,
         velocityIterations: number,
@@ -136,6 +144,7 @@ export class IslandSolver2D {
         gravity: { x: number; y: number },
         profiler?: ProfilerData
     ): void {
+        this._lastIslandCount = 0;
         const bodies = this._bodyManager.getBodyIds();
         const visitedBodies = new Set<BodyId>();
 
@@ -162,6 +171,7 @@ export class IslandSolver2D {
                     allowSleep,
                     profiler
                 );
+                this._lastIslandCount++;
                 this._bodyStack.length = 0;
                 this._contactStack.length = 0;
                 this._constraintStack.length = 0;
