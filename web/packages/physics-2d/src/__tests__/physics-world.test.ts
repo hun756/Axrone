@@ -977,7 +977,7 @@ describe('PhysicsWorld2D Integration', () => {
                 type: BodyType.Static,
                 position: { x: 0, y: 0 },
             });
-            const staticShape = world.createCircleShape(staticBody, { radius: 1 });
+            world.createCircleShape(staticBody, { radius: 1 });
 
             const dynamicBody = world.createBody({
                 type: BodyType.Dynamic,
