@@ -9,6 +9,7 @@ import type {
     IMassData2D,
     Mass,
     Inertia,
+    ICollisionFilter,
 } from '../types';
 import { ShapeType, CollisionFilter } from '../types';
 import type {
@@ -260,6 +261,14 @@ export class ShapeManager2D implements Disposable {
             throw new ShapeError(`Shape ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
         }
         return metadata.material;
+    }
+
+    getShapeFilter(shapeId: ShapeId): ICollisionFilter {
+        const metadata = this._shapeMetadata.get(shapeId);
+        if (!metadata) {
+            throw new ShapeError(`Shape ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+        }
+        return metadata.filter;
     }
 
     getCircleData(shapeId: ShapeId): { center: IVec2Like; radius: number } {

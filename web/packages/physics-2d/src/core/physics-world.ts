@@ -264,6 +264,16 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 const typeB = this._bodyManager.getBodyType(descriptorB.bodyId);
                 if (typeA === 0 && typeB === 0) return true;
 
+                // Apply collision filter bits
+                const filterA = this._shapeManager.getShapeFilter(shapeIdA);
+                const filterB = this._shapeManager.getShapeFilter(shapeIdB);
+                if (
+                    (filterA.categoryBits & filterB.maskBits) === 0 ||
+                    (filterB.categoryBits & filterA.maskBits) === 0
+                ) {
+                    return true;
+                }
+
                 const lo = shapeIdA < shapeIdB ? shapeIdA : shapeIdB;
                 const hi = shapeIdA < shapeIdB ? shapeIdB : shapeIdA;
                 const pairKey = (lo as number) * 0x100000 + (hi as number);
