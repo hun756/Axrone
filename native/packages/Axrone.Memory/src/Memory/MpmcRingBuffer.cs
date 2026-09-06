@@ -1,5 +1,12 @@
 namespace Axrone.Memory;
 
+[StructLayout(LayoutKind.Explicit, Size = 256)]
+internal struct MpmcPaddedCounters
+{
+    [FieldOffset(0)] public nint ProducerIndex;
+    [FieldOffset(128)] public nint ConsumerIndex;
+}
+
 internal sealed class MpmcRingBuffer<TItem>
 {
     [StructLayout(LayoutKind.Sequential)]
@@ -11,8 +18,7 @@ internal sealed class MpmcRingBuffer<TItem>
 
     private readonly Cell[] _storage;
     private readonly int _mask;
-    private nint _producerIndex;
-    private nint _consumerIndex;
+    private MpmcPaddedCounters _counters;
 
     public MpmcRingBuffer(int bufferCapacity)
     {
@@ -38,14 +44,14 @@ internal sealed class MpmcRingBuffer<TItem>
 
         while (true)
         {
-            nint current = Volatile.Read(ref _producerIndex);
+            nint current = Volatile.Read(ref _counters.ProducerIndex);
             ref Cell cell = ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(storage), (int)(current & mask));
             nint sequence = Volatile.Read(ref cell.Sequence);
             nint difference = sequence - current;
 
             if (difference == 0)
             {
-                if (Interlocked.CompareExchange(ref _producerIndex, current + 1, current) == current)
+                if (Interlocked.CompareExchange(ref _counters.ProducerIndex, current + 1, current) == current)
                 {
                     cell.Element = item;
                     Volatile.Write(ref cell.Sequence, current + 1);
@@ -67,14 +73,14 @@ internal sealed class MpmcRingBuffer<TItem>
 
         while (true)
         {
-            nint current = Volatile.Read(ref _consumerIndex);
+            nint current = Volatile.Read(ref _counters.ConsumerIndex);
             ref Cell cell = ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(storage), (int)(current & mask));
             nint sequence = Volatile.Read(ref cell.Sequence);
             nint difference = sequence - (current + 1);
 
             if (difference == 0)
             {
-                if (Interlocked.CompareExchange(ref _consumerIndex, current + 1, current) == current)
+                if (Interlocked.CompareExchange(ref _counters.ConsumerIndex, current + 1, current) == current)
                 {
                     item = cell.Element!;
                     cell.Element = default;
