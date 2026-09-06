@@ -1,17 +1,17 @@
 namespace Axrone.Collections;
 
+[StructLayout(LayoutKind.Explicit, Size = 256)]
+internal struct PaddedRingPosition
+{
+    [FieldOffset(0)]
+    public long EnqueuePosition;
+
+    [FieldOffset(128)]
+    public long DequeuePosition;
+}
+
 public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 {
-    [StructLayout(LayoutKind.Explicit, Size = 256)]
-    private struct PaddedPosition
-    {
-        [FieldOffset(128)]
-        public long Value;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public PaddedPosition(long value) => Value = value;
-    }
-
     [StructLayout(LayoutKind.Sequential, Pack = 8)]
     private struct Slot
     {
@@ -86,8 +86,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
     private readonly ProducerEndpoint _producerEndpoint;
     private readonly ConsumerEndpoint _consumerEndpoint;
 
-    private PaddedPosition _enqueuePos;
-    private PaddedPosition _dequeuePos;
+    private PaddedRingPosition _positions;
     private int _state;
 
     public MpmcRingBuffer(int capacity)
@@ -121,8 +120,8 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
             _slots[i].Sequence = i;
         }
 
-        _enqueuePos = new PaddedPosition(0);
-        _dequeuePos = new PaddedPosition(0);
+        _positions.EnqueuePosition = 0;
+        _positions.DequeuePosition = 0;
         _state = StateActive;
 
         _producerEndpoint = new ProducerEndpoint(this);
@@ -138,9 +137,9 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
             SpinWait spinner = new();
             while (true)
             {
-                long headBefore = Volatile.Read(ref _dequeuePos.Value);
-                long tail = Volatile.Read(ref _enqueuePos.Value);
-                long headAfter = Volatile.Read(ref _dequeuePos.Value);
+                long headBefore = Volatile.Read(ref _positions.DequeuePosition);
+                long tail = Volatile.Read(ref _positions.EnqueuePosition);
+                long headAfter = Volatile.Read(ref _positions.DequeuePosition);
 
                 if (headBefore == headAfter)
                 {
@@ -168,7 +167,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 
         Slot[] slots = _slots;
         long mask = _mask;
-        long pos = Volatile.Read(ref _enqueuePos.Value);
+        long pos = Volatile.Read(ref _positions.EnqueuePosition);
 
         while (true)
         {
@@ -178,7 +177,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 
             if (diff == 0)
             {
-                long actualPos = Interlocked.CompareExchange(ref _enqueuePos.Value, pos + 1, pos);
+                long actualPos = Interlocked.CompareExchange(ref _positions.EnqueuePosition, pos + 1, pos);
                 if (actualPos == pos)
                 {
                     slot.Value = item;
@@ -193,7 +192,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
             }
             else
             {
-                pos = Volatile.Read(ref _enqueuePos.Value);
+                pos = Volatile.Read(ref _positions.EnqueuePosition);
             }
         }
     }
@@ -351,7 +350,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
     {
         Slot[] slots = _slots;
         long mask = _mask;
-        long pos = Volatile.Read(ref _dequeuePos.Value);
+        long pos = Volatile.Read(ref _positions.DequeuePosition);
 
         while (true)
         {
@@ -361,7 +360,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 
             if (diff == 0)
             {
-                long actualPos = Interlocked.CompareExchange(ref _dequeuePos.Value, pos + 1, pos);
+                long actualPos = Interlocked.CompareExchange(ref _positions.DequeuePosition, pos + 1, pos);
                 if (actualPos == pos)
                 {
                     item = slot.Value;
@@ -379,7 +378,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
             }
             else
             {
-                pos = Volatile.Read(ref _dequeuePos.Value);
+                pos = Volatile.Read(ref _positions.DequeuePosition);
             }
         }
     }
