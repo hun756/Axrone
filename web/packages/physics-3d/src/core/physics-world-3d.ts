@@ -111,6 +111,16 @@ import {
     integratePositions as integratePositionsImpl,
     integrateVelocities as integrateVelocitiesImpl,
 } from './physics-world-3d-integration';
+import {
+    queryAABB as queryAABBImpl,
+    queryAABBAll as queryAABBAllImpl,
+    queryPoint as queryPointImpl,
+    queryPointAll as queryPointAllImpl,
+    raycast as raycastImpl,
+    rayCastAll as rayCastAllImpl,
+    rayCastClosest as rayCastClosestImpl,
+    shiftOrigin as shiftOriginImpl,
+} from './physics-world-3d-queries';
 
 export { BodyManager3D, ShapeManager3D, ConstraintManager3D } from './physics-managers-3d';
 
@@ -607,18 +617,7 @@ export class PhysicsWorld3D implements Disposable {
         callback: RaycastCallback3D,
         filter?: IQueryFilter3D
     ): void {
-        for (const result of this.rayCastAll(origin, direction, maxDistance, filter)) {
-            // Box2D-style continuation contract: returning 0 terminates the query.
-            const continuation = callback(
-                result.shapeId,
-                result.point,
-                result.normal,
-                result.fraction
-            );
-            if (continuation === 0) {
-                break;
-            }
-        }
+        raycastImpl(origin, direction, maxDistance, callback, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager, filter);
     }
 
     rayCastClosest(
@@ -627,7 +626,7 @@ export class PhysicsWorld3D implements Disposable {
         maxFraction: number,
         filter?: IQueryFilter3D
     ): ISingleRaycastResult3D | null {
-        return this.rayCastAll(origin, direction, maxFraction, filter)[0] ?? null;
+        return rayCastClosestImpl(origin, direction, maxFraction, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager, filter);
     }
 
     rayCastAll(
@@ -636,51 +635,11 @@ export class PhysicsWorld3D implements Disposable {
         maxFraction: number,
         filter?: IQueryFilter3D
     ): readonly ISingleRaycastResult3D[] {
-        const results: ISingleRaycastResult3D[] = [];
-        const bvh = this._contactRuntime.broadphase;
-
-        // BVH-backed ray cast: traverse tree for O(log N) candidate selection
-        bvh.rayCast(origin, direction, maxFraction, (shapeId, _frac) => {
-            const descriptor = this._shapeDescriptors.get(shapeId);
-            if (!descriptor) return maxFraction;
-            if (!supportsQueryFilter(descriptor.filter, filter)) return maxFraction;
-            const hit = this._rayCastShape(descriptor, origin, direction, maxFraction);
-            if (!hit) return maxFraction;
-            results.push({
-                hit: true,
-                bodyId: descriptor.bodyId,
-                shapeId: descriptor.id,
-                point: Vec3.add(origin, Vec3.multiplyScalar(direction, hit.fraction)),
-                normal: hit.normal,
-                fraction: hit.fraction,
-            });
-            return hit.fraction; // clip to tighten pruning
-        });
-
-        // Fallback: shapes not yet in BVH (before first step)
-        if (bvh.nodeCount === 0) {
-            for (const descriptor of this._shapeDescriptors.values()) {
-                if (!supportsQueryFilter(descriptor.filter, filter)) continue;
-                const hit = this._rayCastShape(descriptor, origin, direction, maxFraction);
-                if (!hit) continue;
-                results.push({
-                    hit: true, bodyId: descriptor.bodyId, shapeId: descriptor.id,
-                    point: Vec3.add(origin, Vec3.multiplyScalar(direction, hit.fraction)),
-                    normal: hit.normal, fraction: hit.fraction,
-                });
-            }
-        }
-
-        results.sort((left, right) => left.fraction - right.fraction);
-        return results;
+        return rayCastAllImpl(origin, direction, maxFraction, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager, filter);
     }
 
     queryAABB(min: Readonly<IVec3Like>, max: Readonly<IVec3Like>, callback: IAABBQueryCallback): void {
-        for (const shapeId of this.queryAABBAll(min, max)) {
-            if (!callback(shapeId)) {
-                break;
-            }
-        }
+        queryAABBImpl(min, max, callback, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager);
     }
 
     queryAABBAll(
@@ -688,82 +647,19 @@ export class PhysicsWorld3D implements Disposable {
         max: Readonly<IVec3Like>,
         filter?: IQueryFilter3D
     ): readonly ShapeId3D[] {
-        const queryBounds = { min: Vec3.copy(min), max: Vec3.copy(max) };
-        const shapeIds: ShapeId3D[] = [];
-        const bvh = this._contactRuntime.broadphase;
-
-        if (bvh.nodeCount > 0) {
-            // BVH-backed: broadphase candidate generation
-            const bvhQuery = new AABB3D(min, max);
-            const seen = new Set<ShapeId3D>();
-            bvh.queryAABBAll(bvhQuery, (shapeId: ShapeId3D) => {
-                if (seen.has(shapeId)) return true;
-                seen.add(shapeId);
-                const descriptor = this._shapeDescriptors.get(shapeId);
-                if (!descriptor) return true;
-                if (!supportsQueryFilter(descriptor.filter, filter)) return true;
-                if (intersectsAabb(this._computeShapeAabb(descriptor), queryBounds)) {
-                    shapeIds.push(descriptor.id);
-                }
-                return true;
-            });
-        } else {
-            // Fallback: linear scan before first step
-            for (const descriptor of this._shapeDescriptors.values()) {
-                if (!supportsQueryFilter(descriptor.filter, filter)) continue;
-                if (intersectsAabb(this._computeShapeAabb(descriptor), queryBounds)) {
-                    shapeIds.push(descriptor.id);
-                }
-            }
-        }
-
-        return shapeIds;
+        return queryAABBAllImpl(min, max, filter, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager);
     }
 
     queryPoint(point: Readonly<IVec3Like>, callback: IAABBQueryCallback): void {
-        for (const shapeId of this.queryPointAll(point)) {
-            if (!callback(shapeId)) {
-                break;
-            }
-        }
+        queryPointImpl(point, callback, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager);
     }
 
     queryPointAll(point: Readonly<IVec3Like>, filter?: IQueryFilter3D): readonly ShapeId3D[] {
-        const shapeIds: ShapeId3D[] = [];
-        const bvh = this._contactRuntime.broadphase;
-
-        if (bvh.nodeCount > 0) {
-            // BVH-backed: broadphase candidate generation
-            const seen = new Set<ShapeId3D>();
-            bvh.queryPointAll(point, (shapeId: ShapeId3D) => {
-                if (seen.has(shapeId)) return true;
-                seen.add(shapeId);
-                const descriptor = this._shapeDescriptors.get(shapeId);
-                if (!descriptor) return true;
-                if (!supportsQueryFilter(descriptor.filter, filter)) return true;
-                if (this._testPointShape(descriptor, point)) {
-                    shapeIds.push(descriptor.id);
-                }
-                return true;
-            });
-        } else {
-            // Fallback: linear scan before first step
-            for (const descriptor of this._shapeDescriptors.values()) {
-                if (!supportsQueryFilter(descriptor.filter, filter)) continue;
-                if (this._testPointShape(descriptor, point)) {
-                    shapeIds.push(descriptor.id);
-                }
-            }
-        }
-
-        return shapeIds;
+        return queryPointAllImpl(point, filter, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager);
     }
 
     shiftOrigin(newOrigin: Readonly<IVec3Like>): void {
-        for (const bodyId of this._bodyManager.getBodyIds()) {
-            const position = this._bodyManager.getPosition(bodyId);
-            this._bodyManager.setPosition(bodyId, Vec3.subtract(position, newOrigin));
-        }
+        shiftOriginImpl(newOrigin, this._bodyManager);
     }
 
     clearForces(): void {
