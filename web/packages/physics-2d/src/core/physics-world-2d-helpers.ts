@@ -1,5 +1,6 @@
 import { clamp } from '@axrone/numeric';
 import type { IVec2Like } from '@axrone/numeric';
+export { clamp };
 
 import type {
     BodyId,
