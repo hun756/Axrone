@@ -199,11 +199,11 @@ export class MultiRaycaster3D {
             return hits;
         }
 
-        const up = Vec3.create(0, 1, 0);
-        const right = Vec3.cross(centerDirection, up);
-        Vec3.normalize(right, right);
-        const actualUp = Vec3.cross(right, centerDirection);
-        Vec3.normalize(actualUp, actualUp);
+        const up = Math.abs(centerDirection.y) < 0.9
+            ? Vec3.create(0, 1, 0)
+            : Vec3.create(1, 0, 0);
+        const right = Vec3.normalize(Vec3.cross(centerDirection, up));
+        const actualUp = Vec3.normalize(Vec3.cross(right, centerDirection));
 
         for (let i = 0; i < rayCount; i++) {
             const angle = (i / (rayCount - 1) - 0.5) * spreadAngle;
@@ -237,11 +237,11 @@ export class MultiRaycaster3D {
         const centerHit = this._raycastSystem.raycast(origin, direction, maxDistance, layerMask);
         if (centerHit) hits.push(centerHit);
 
-        const up = Vec3.create(0, 1, 0);
-        const right = Vec3.cross(direction, up);
-        Vec3.normalize(right, right);
-        const actualUp = Vec3.cross(right, direction);
-        Vec3.normalize(actualUp, actualUp);
+        const up = Math.abs(direction.y) < 0.9
+            ? Vec3.create(0, 1, 0)
+            : Vec3.create(1, 0, 0);
+        const right = Vec3.normalize(Vec3.cross(direction, up));
+        const actualUp = Vec3.normalize(Vec3.cross(right, direction));
 
         const ringCount = Math.ceil(Math.sqrt(samples));
         const raysPerRing = Math.ceil(samples / ringCount);
@@ -315,11 +315,11 @@ export class MultiRaycaster3D {
     ): IRaycastHit3D[][] {
         const grid: IRaycastHit3D[][] = Array.from({ length: rows }, () => []);
 
-        const up = Vec3.create(0, 1, 0);
-        const right = Vec3.cross(direction, up);
-        Vec3.normalize(right, right);
-        const actualUp = Vec3.cross(right, direction);
-        Vec3.normalize(actualUp, actualUp);
+        const up = Math.abs(direction.y) < 0.9
+            ? Vec3.create(0, 1, 0)
+            : Vec3.create(1, 0, 0);
+        const right = Vec3.normalize(Vec3.cross(direction, up));
+        const actualUp = Vec3.normalize(Vec3.cross(right, direction));
 
         const stepX = width / (columns - 1);
         const stepY = height / (rows - 1);
