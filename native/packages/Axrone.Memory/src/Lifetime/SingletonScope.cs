@@ -6,7 +6,7 @@ public sealed class SingletonScope : ISingletonScope
 {
     private readonly ISingletonRegistry _parent;
     private readonly SingletonRegistry _local = new();
-    private int _isDisposed;
+    private DisposalTracker _tracker;
 
     public SingletonScope(ISingletonRegistry parent)
     {
@@ -72,31 +72,17 @@ public sealed class SingletonScope : ISingletonScope
         return new SingletonScope(this);
     }
 
-    private void ThrowIfDisposed()
-    {
-        if (Volatile.Read(ref _isDisposed) != 0)
-        {
-            throw new SingletonDisposedException(nameof(SingletonScope));
-        }
-    }
+    private void ThrowIfDisposed() => _tracker.ThrowIfDisposed(nameof(SingletonScope));
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
-        {
-            return;
-        }
-
+        if (!_tracker.TryDispose()) return;
         _local.Dispose();
     }
 
     public ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
-        {
-            return ValueTask.CompletedTask;
-        }
-
+        if (!_tracker.TryDispose()) return ValueTask.CompletedTask;
         return _local.DisposeAsync();
     }
 }

@@ -92,14 +92,14 @@ public class SingletonScopeTests
     }
 
     [Fact]
-    public void Get_AfterDispose_ThrowsSingletonDisposedException()
+    public void Get_AfterDispose_ThrowsObjectDisposedException()
     {
         var parent = new SingletonRegistry();
         var child = new SingletonScope(parent);
         child.Register<SimpleService>(() => new SimpleService());
         child.Dispose();
         var act = () => child.Get<SimpleService>();
-        act.Should().Throw<SingletonDisposedException>();
+        act.Should().Throw<ObjectDisposedException>();
     }
 
     [Fact]

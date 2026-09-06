@@ -6,7 +6,7 @@ public sealed class SingletonRegistry : ISingletonRegistry
 {
     private readonly ConcurrentDictionary<Type, IRegistryEntry> _entries = new();
     private readonly ConcurrentStack<object> _disposables = new();
-    private int _isDisposed;
+    private DisposalTracker _tracker;
 
     private interface IRegistryEntry
     {
@@ -147,7 +147,7 @@ public sealed class SingletonRegistry : ISingletonRegistry
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGet<T>([NotNullWhen(true)] out T? instance) where T : class
     {
-        if (Volatile.Read(ref _isDisposed) == 0 && _entries.TryGetValue(typeof(T), out var entry))
+        if (!_tracker.IsDisposed && _entries.TryGetValue(typeof(T), out var entry))
         {
             instance = (T)entry.Resolve();
             return true;
@@ -172,20 +172,11 @@ public sealed class SingletonRegistry : ISingletonRegistry
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ThrowIfDisposed()
-    {
-        if (Volatile.Read(ref _isDisposed) != 0)
-        {
-            throw new SingletonDisposedException(nameof(SingletonRegistry));
-        }
-    }
+    private void ThrowIfDisposed() => _tracker.ThrowIfDisposed(nameof(SingletonRegistry));
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
-        {
-            return;
-        }
+        if (!_tracker.TryDispose()) return;
 
         _entries.Clear();
 
@@ -204,10 +195,7 @@ public sealed class SingletonRegistry : ISingletonRegistry
 
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
-        {
-            return;
-        }
+        if (!_tracker.TryDispose()) return;
 
         _entries.Clear();
 

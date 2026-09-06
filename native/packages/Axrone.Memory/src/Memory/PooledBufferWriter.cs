@@ -5,14 +5,13 @@ public sealed class PooledBufferWriter<T> : IBufferWriter<T>, IDisposable
     private readonly TieredMemoryPool<T> _pool;
     private ValueMemoryLease<T> _currentLease;
     private int _elementsWritten;
-    private int _isDisposed;
+    private DisposalTracker _tracker;
 
     public PooledBufferWriter(TieredMemoryPool<T> pool, int initialCapacity = 256)
     {
         _pool = pool;
         _currentLease = _pool.RentLease(initialCapacity);
         _elementsWritten = 0;
-        _isDisposed = 0;
     }
 
     public int WrittenCount => _elementsWritten;
@@ -24,7 +23,7 @@ public sealed class PooledBufferWriter<T> : IBufferWriter<T>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Advance(int count)
     {
-        ThrowIfDisposed();
+        _tracker.ThrowIfDisposed(nameof(PooledBufferWriter<T>));
         if (count < 0 || _elementsWritten + count > _currentLease.Length) throw new ArgumentOutOfRangeException(nameof(count));
         _elementsWritten += count;
     }
@@ -32,7 +31,7 @@ public sealed class PooledBufferWriter<T> : IBufferWriter<T>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Memory<T> GetMemory(int sizeHint = 0)
     {
-        ThrowIfDisposed();
+        _tracker.ThrowIfDisposed(nameof(PooledBufferWriter<T>));
         EnsureCapacity(sizeHint);
         return _currentLease.Memory.Slice(_elementsWritten);
     }
@@ -40,7 +39,7 @@ public sealed class PooledBufferWriter<T> : IBufferWriter<T>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Span<T> GetSpan(int sizeHint = 0)
     {
-        ThrowIfDisposed();
+        _tracker.ThrowIfDisposed(nameof(PooledBufferWriter<T>));
         EnsureCapacity(sizeHint);
         return _currentLease.Span.Slice(_elementsWritten);
     }
@@ -62,33 +61,24 @@ public sealed class PooledBufferWriter<T> : IBufferWriter<T>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Reset()
     {
-        ThrowIfDisposed();
+        _tracker.ThrowIfDisposed(nameof(PooledBufferWriter<T>));
         _elementsWritten = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Clear()
     {
-        ThrowIfDisposed();
+        _tracker.ThrowIfDisposed(nameof(PooledBufferWriter<T>));
         _currentLease.Span.Slice(0, _elementsWritten).Clear();
         _elementsWritten = 0;
     }
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _isDisposed, 1) == 0)
+        if (_tracker.TryDispose())
         {
             _currentLease.Dispose();
             _elementsWritten = 0;
         }
     }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ThrowIfDisposed()
-    {
-        if (Volatile.Read(ref _isDisposed) != 0) ThrowDisposed();
-    }
-
-    [DoesNotReturn]
-    private static void ThrowDisposed() => throw new ObjectDisposedException(nameof(PooledBufferWriter<T>));
 }

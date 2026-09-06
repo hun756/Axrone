@@ -12,7 +12,7 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
     private long _activeRentals;
     private long _hits;
     private long _misses;
-    private int _isDisposed;
+    private DisposalTracker _tracker;
 
     public ContiguousSlabPool(int blockSize, int blockCount, MemoryClearMode clearMode = MemoryClearMode.Never)
     {
@@ -85,7 +85,7 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public bool TryRentLease(int length, out ValueMemoryLease<T> lease)
     {
-        if (Volatile.Read(ref _isDisposed) != 0 || (uint)length > (uint)_blockSize || length <= 0)
+        if (_tracker.IsDisposed || (uint)length > (uint)_blockSize || length <= 0)
         {
             lease = default;
             return false;
@@ -134,7 +134,7 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
     void IPoolBucketRegistry<T>.Recycle(int bucketIndex, PooledBufferSlot<T> slot)
     {
         Interlocked.Decrement(ref _activeRentals);
-        if (Volatile.Read(ref _isDisposed) == 0)
+        if (!_tracker.IsDisposed)
         {
             _freeSlotQueue.TryEnqueue(slot);
         }
@@ -150,7 +150,7 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
 
     protected override void Dispose(bool disposing)
     {
-        if (Interlocked.Exchange(ref _isDisposed, 1) == 0)
+        if (_tracker.TryDispose())
         {
             for (int i = 0; i < _slotArray.Length; i++) _slotArray[i].FinalizeEviction();
             _freeSlotQueue.Dispose();
@@ -160,11 +160,5 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ThrowIfDisposed()
-    {
-        if (Volatile.Read(ref _isDisposed) != 0) ThrowDisposed();
-    }
-
-    [DoesNotReturn]
-    private static void ThrowDisposed() => throw new ObjectDisposedException(nameof(ContiguousSlabPool<T>));
+    private void ThrowIfDisposed() => _tracker.ThrowIfDisposed(nameof(ContiguousSlabPool<T>));
 }

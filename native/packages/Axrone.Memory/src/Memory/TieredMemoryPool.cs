@@ -12,7 +12,7 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     private readonly int _globalQueueCapacity;
     private readonly Timer? _trimTimer;
     private readonly int _autoTrimPercentage;
-    private int _isPoolDisposed;
+    private DisposalTracker _tracker;
 
     public TieredMemoryPool(BufferPoolOptions? options = null, IBlockAllocator<T>? customAllocator = null)
     {
@@ -146,7 +146,7 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public bool TryRentLease(int requestedLength, out ValueMemoryLease<T> lease)
     {
-        if (Volatile.Read(ref _isPoolDisposed) != 0 || requestedLength <= 0)
+        if (_tracker.IsDisposed || requestedLength <= 0)
         {
             lease = default;
             return false;
@@ -277,7 +277,7 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
         cell.ActiveAllocations--;
         cell.TotalRentedBytes -= _allocator.ComputeByteSize(slot.Capacity);
 
-        if (Volatile.Read(ref _isPoolDisposed) != 0)
+        if (_tracker.IsDisposed)
         {
             cell.TotalAllocatedBytes -= _allocator.ComputeByteSize(slot.Capacity);
             slot.FinalizeEviction();
@@ -325,7 +325,7 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
 
     private void PerformPeriodicTrim()
     {
-        if (Volatile.Read(ref _isPoolDisposed) == 0)
+        if (!_tracker.IsDisposed)
         {
             Trim((float)_autoTrimPercentage / 100.0f);
         }
@@ -333,7 +333,7 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
 
     protected override void Dispose(bool disposing)
     {
-        if (Interlocked.Exchange(ref _isPoolDisposed, 1) == 0)
+        if (_tracker.TryDispose())
         {
             _trimTimer?.Dispose();
 
@@ -351,13 +351,7 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ThrowIfDisposed()
-    {
-        if (Volatile.Read(ref _isPoolDisposed) != 0)
-        {
-            ThrowPoolDisposed();
-        }
-    }
+    private void ThrowIfDisposed() => _tracker.ThrowIfDisposed(nameof(TieredMemoryPool<T>));
 
     [DoesNotReturn]
     private static void ThrowPoolDisposed() =>

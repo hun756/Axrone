@@ -111,13 +111,13 @@ public class SingletonRegistryTests
     }
 
     [Fact]
-    public void Get_AfterDispose_ThrowsSingletonDisposedException()
+    public void Get_AfterDispose_ThrowsObjectDisposedException()
     {
         var registry = new SingletonRegistry();
         registry.Register<SimpleService>(() => new SimpleService());
         registry.Dispose();
         var act = () => registry.Get<SimpleService>();
-        act.Should().Throw<SingletonDisposedException>();
+        act.Should().Throw<ObjectDisposedException>();
     }
 
     [Fact]

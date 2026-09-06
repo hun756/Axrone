@@ -15,7 +15,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     private byte* _currentSegmentBase;
     private nint _currentSegmentCapacity;
     private long _currentOffset;
-    private int _isDisposed;
+    private DisposalTracker _tracker;
 
     public MonotonicArenaBuffer(nint segmentCapacity = 1048576)
     {
@@ -121,7 +121,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _isDisposed, 1) == 0)
+        if (_tracker.TryDispose())
         {
             lock (_expansionLock)
             {
@@ -145,11 +145,5 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     private static nint AlignTo64(nint size) => (size + 63) & ~63;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ThrowIfDisposed()
-    {
-        if (Volatile.Read(ref _isDisposed) != 0) ThrowDisposed();
-    }
-
-    [DoesNotReturn]
-    private static void ThrowDisposed() => throw new ObjectDisposedException(nameof(MonotonicArenaBuffer));
+    private void ThrowIfDisposed() => _tracker.ThrowIfDisposed(nameof(MonotonicArenaBuffer));
 }

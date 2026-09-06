@@ -27,13 +27,6 @@ public class ExceptionTests
     }
 
     [Fact]
-    public void SingletonDisposedException_IsSingletonException()
-    {
-        var ex = new SingletonDisposedException("disposed");
-        ex.Should().BeAssignableTo<SingletonException>();
-    }
-
-    [Fact]
     public void SingletonAlreadyInitializedException_IsSingletonException()
     {
         var ex = new SingletonAlreadyInitializedException("already init");
@@ -49,10 +42,10 @@ public class ExceptionTests
     }
 
     [Fact]
-    public void SingletonDisposedException_WithInner_HasCorrectInner()
+    public void ObjectDisposedException_WithInner_HasCorrectInner()
     {
         var inner = new InvalidOperationException("inner");
-        var ex = new SingletonDisposedException("disposed", inner);
+        var ex = new ObjectDisposedException("disposed", inner);
         ex.InnerException.Should().BeSameAs(inner);
     }
 

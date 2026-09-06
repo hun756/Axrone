@@ -59,14 +59,14 @@ public class EdgeCaseTests
     }
 
     [Fact]
-    public void Registry_Get_AfterDispose_ThrowsSingletonDisposedException()
+    public void Registry_Get_AfterDispose_ThrowsObjectDisposedException()
     {
         var registry = new SingletonRegistry();
         registry.Register<SimpleService>(() => new SimpleService());
         registry.Dispose();
 
         var act = () => registry.Get<SimpleService>();
-        act.Should().Throw<SingletonDisposedException>();
+        act.Should().Throw<ObjectDisposedException>();
     }
 
     [Fact]
@@ -80,14 +80,14 @@ public class EdgeCaseTests
     }
 
     [Fact]
-    public void Registry_Contains_AfterDispose_ThrowsSingletonDisposedException()
+    public void Registry_Contains_AfterDispose_ThrowsObjectDisposedException()
     {
         var registry = new SingletonRegistry();
         registry.Register<SimpleService>(() => new SimpleService());
         registry.Dispose();
 
         var act = () => registry.Contains<SimpleService>();
-        act.Should().Throw<SingletonDisposedException>();
+        act.Should().Throw<ObjectDisposedException>();
     }
 
     [Fact]
@@ -104,25 +104,25 @@ public class EdgeCaseTests
     // ── Scope edge cases ─────────────────────────────────────────────
 
     [Fact]
-    public void Scope_RegisterAfterDispose_ThrowsSingletonDisposedException()
+    public void Scope_RegisterAfterDispose_ThrowsObjectDisposedException()
     {
         var parent = new SingletonRegistry();
         var scope = new SingletonScope(parent);
         scope.Dispose();
 
         var act = () => scope.Register<SimpleService>(() => new SimpleService());
-        act.Should().Throw<SingletonDisposedException>();
+        act.Should().Throw<ObjectDisposedException>();
     }
 
     [Fact]
-    public void Scope_CreateChildScope_AfterDispose_ThrowsSingletonDisposedException()
+    public void Scope_CreateChildScope_AfterDispose_ThrowsObjectDisposedException()
     {
         var parent = new SingletonRegistry();
         var scope = new SingletonScope(parent);
         scope.Dispose();
 
         var act = () => scope.CreateChildScope();
-        act.Should().Throw<SingletonDisposedException>();
+        act.Should().Throw<ObjectDisposedException>();
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public class EdgeCaseTests
         // All exceptions should be constructible with message + inner
         var ex1 = new SingletonException("msg", new InvalidOperationException());
         var ex2 = new SingletonInitializationException("msg", new InvalidOperationException());
-        var ex3 = new SingletonDisposedException("msg", new InvalidOperationException());
+        var ex3 = new ObjectDisposedException("msg", new InvalidOperationException());
         var ex4 = new SingletonAlreadyInitializedException("msg", new InvalidOperationException());
 
         ex1.InnerException.Should().BeOfType<InvalidOperationException>();
