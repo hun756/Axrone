@@ -831,6 +831,41 @@ describe('T-10 Extended > Action Events', () => {
         subscription.dispose();
         input.dispose();
     });
+
+    it('update() clears transients even when listener throws', () => {
+        const input = createInputSystem({
+            schema: {
+                fire: { kind: 'button' },
+            },
+            contexts: [
+                {
+                    id: 'gameplay',
+                    bindings: {
+                        fire: [{ type: 'control', control: 'keyboard/KeyF' }],
+                    },
+                },
+            ],
+        });
+
+        input.subscribeAction('fire', () => {
+            throw new Error('listener error');
+        });
+
+        dispatchKey(input, 'KeyF', true);
+
+        // First update: listener throws, but transients should still clear
+        expect(() => input.update(1)).toThrow('listener error');
+
+        // Second update: mouse delta should be zero (transients cleared)
+        input.dispatch({ type: 'mouse-move', x: 0, y: 0, deltaX: 10, deltaY: 5 });
+        input.update(2);
+
+        // If transients weren't cleared, the delta would persist
+        const moveState = input.state('fire' as any);
+        expect(moveState.frame).toBe(2);
+
+        input.dispose();
+    });
 });
 
 // ===========================================================================
