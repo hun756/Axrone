@@ -508,6 +508,9 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     private _solveContactVelocity(manifold: IResolvedContactManifold3D): void {
+        // Sensors do not generate collision response — only overlap detection.
+        if (manifold.sensor) return;
+
         const bm = this._host.bodyManager;
         const cA = bm.getPosition(manifold.bodyIdA);
         const cB = bm.getPosition(manifold.bodyIdB);
@@ -600,6 +603,9 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     private _correctContactPositions(manifold: IResolvedContactManifold3D, beta: number): void {
+        // Sensors do not generate collision response — only overlap detection.
+        if (manifold.sensor) return;
+
         for (const point of manifold.points) {
             const sep = this._getSep(manifold, point);
             const pen = Math.max(0, -sep);
