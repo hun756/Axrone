@@ -335,7 +335,6 @@ export class RaycastBatcher2D {
 
     public flush(): void {
         if (this._pending.length === 0) return;
-        this._sortByDirection();
         for (const item of this._pending) {
             const hit = this._raycaster
                 ? this._raycaster(item.origin, item.direction, item.maxDistance, item.layerMask, item.flags)
@@ -347,14 +346,6 @@ export class RaycastBatcher2D {
 
     public get pendingCount(): number {
         return this._pending.length;
-    }
-
-    private _sortByDirection(): void {
-        this._pending.sort((a, b) => {
-            const angleA = Math.atan2(a.direction.y, a.direction.x);
-            const angleB = Math.atan2(b.direction.y, b.direction.x);
-            return angleA - angleB;
-        });
     }
 }
 
@@ -387,7 +378,6 @@ export class RaycastBatcher3D {
 
     public flush(): void {
         if (this._pending.length === 0) return;
-        this._sortByDirection();
         for (const item of this._pending) {
             const hit = this._raycaster
                 ? this._raycaster(item.origin, item.direction, item.maxDistance, item.layerMask, item.flags)
@@ -400,23 +390,6 @@ export class RaycastBatcher3D {
     public get pendingCount(): number {
         return this._pending.length;
     }
-
-    private _sortByDirection(): void {
-        this._pending.sort((a, b) => {
-            const theta1 = Math.atan2(
-                Math.sqrt(a.direction.x * a.direction.x + a.direction.y * a.direction.y),
-                a.direction.z
-            );
-            const phi1 = Math.atan2(a.direction.y, a.direction.x);
-            const theta2 = Math.atan2(
-                Math.sqrt(b.direction.x * b.direction.x + b.direction.y * b.direction.y),
-                b.direction.z
-            );
-            const phi2 = Math.atan2(b.direction.y, b.direction.x);
-            const diff = theta1 - theta2;
-            return Math.abs(diff) > EPSILON ? diff : phi1 - phi2;
-        });
-    }
 }
 
 export class RaycastStatistics {
@@ -424,30 +397,19 @@ export class RaycastStatistics {
     private _hitCount: number = 0;
     private _missCount: number = 0;
     private _cacheHits: number = 0;
-    private _averageTestsPerRay: number = 0;
-    private _totalTests: number = 0;
-    private _frameRaycasts: number = 0;
 
-    public recordRaycast(hit: boolean, testsPerformed: number): void {
+    public recordRaycast(hit: boolean): void {
         this._totalRaycasts++;
-        this._frameRaycasts++;
-        this._totalTests += testsPerformed;
 
         if (hit) {
             this._hitCount++;
         } else {
             this._missCount++;
         }
-
-        this._averageTestsPerRay = this._totalTests / this._totalRaycasts;
     }
 
     public recordCacheHit(): void {
         this._cacheHits++;
-    }
-
-    public endFrame(): void {
-        this._frameRaycasts = 0;
     }
 
     public reset(): void {
@@ -455,9 +417,6 @@ export class RaycastStatistics {
         this._hitCount = 0;
         this._missCount = 0;
         this._cacheHits = 0;
-        this._averageTestsPerRay = 0;
-        this._totalTests = 0;
-        this._frameRaycasts = 0;
     }
 
     public get totalRaycasts(): number {
@@ -482,13 +441,5 @@ export class RaycastStatistics {
 
     public get cacheHitRate(): number {
         return this._totalRaycasts > 0 ? this._cacheHits / this._totalRaycasts : 0;
-    }
-
-    public get averageTestsPerRay(): number {
-        return this._averageTestsPerRay;
-    }
-
-    public get frameRaycasts(): number {
-        return this._frameRaycasts;
     }
 }

@@ -76,7 +76,7 @@ export class RaycastSystem2D {
             this._cache.set(origin, direction, maxDistance, layerMask, hit);
         }
 
-        this._statistics.recordRaycast(hit !== null, 1);
+        this._statistics.recordRaycast(hit !== null);
 
         return hit;
     }
@@ -143,7 +143,6 @@ export class RaycastSystem2D {
 
     public advanceFrame(): void {
         this._cache.advanceFrame();
-        this._statistics.endFrame();
     }
 
     public clearCache(): void {
@@ -259,7 +258,7 @@ export class RaycastSystem3D {
             this._cache.set(origin, direction, maxDistance, layerMask, hit);
         }
 
-        this._statistics.recordRaycast(hit !== null, 1);
+        this._statistics.recordRaycast(hit !== null);
 
         return hit;
     }
@@ -326,7 +325,6 @@ export class RaycastSystem3D {
 
     public advanceFrame(): void {
         this._cache.advanceFrame();
-        this._statistics.endFrame();
     }
 
     public clearCache(): void {
