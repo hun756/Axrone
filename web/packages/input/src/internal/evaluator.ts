@@ -26,6 +26,8 @@ import type {
 } from './shared';
 import type { InputActionSchema, InputContextId, InputControlPath, InputUserId } from '../types';
 
+let cachedModifierMask = -1;
+
 export interface InputEvaluationRuntime<TSchema extends InputActionSchema = InputActionSchema> {
     _actionDefinitions: readonly InternalActionDefinition[];
     _contexts: Map<string, InternalContext<TSchema>>;
@@ -55,6 +57,7 @@ export interface InputEvaluationRuntime<TSchema extends InputActionSchema = Inpu
 export const collectActionInputs = <TSchema extends InputActionSchema>(
     runtime: InputEvaluationRuntime<TSchema>
 ): void => {
+    cachedModifierMask = -1;
     runtime._accumulatorX.fill(0);
     runtime._accumulatorY.fill(0);
     runtime._assigned.fill(0);
@@ -265,6 +268,10 @@ const evaluateDirectionalBinding = <TSchema extends InputActionSchema>(
         }
     }
 
+    if (binding.processors.length === 0) {
+        return { x, y };
+    }
+
     return applyVectorProcessors(
         {
             x,
@@ -289,6 +296,10 @@ const evaluateDualAxisBinding = <TSchema extends InputActionSchema>(
     } else if (binding.normalize && length > 1) {
         x /= length;
         y /= length;
+    }
+
+    if (binding.processors.length === 0) {
+        return { x, y };
     }
 
     return applyVectorProcessors(
@@ -392,9 +403,17 @@ const resolveTouch = <TSchema extends InputActionSchema>(
     target: number
 ): MutableTouchPoint | undefined => {
     if (target === TOUCH_ANY) {
-        return runtime._primaryTouchId !== undefined
-            ? runtime._touches.get(runtime._primaryTouchId)
-            : runtime._touches.values().next().value;
+        if (runtime._primaryTouchId !== undefined) {
+            return runtime._touches.get(runtime._primaryTouchId);
+        }
+        // Find touch with lowest order (oldest active touch)
+        let oldest: MutableTouchPoint | undefined;
+        for (const touch of runtime._touches.values()) {
+            if (!oldest || touch.order < oldest.order) {
+                oldest = touch;
+            }
+        }
+        return oldest;
     }
 
     if (target === TOUCH_PRIMARY) {
@@ -509,9 +528,15 @@ const canAccessControl = <TSchema extends InputActionSchema>(
     }
 
     if (control.device === 'gamepad') {
-        return control.selector === GAMEPAD_ANY
-            ? [...owner.devices.values()].some((device) => device.device === 'gamepad')
-            : canAccessGamepadIndex(runtime, control.selector, user);
+        if (control.selector === GAMEPAD_ANY) {
+            for (const device of owner.devices.values()) {
+                if (device.device === 'gamepad') {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return canAccessGamepadIndex(runtime, control.selector, user);
     }
 
     return owner.devices.has(control.device);
@@ -548,6 +573,10 @@ const matchesModifiers = <TSchema extends InputActionSchema>(
 const currentModifierMask = <TSchema extends InputActionSchema>(
     runtime: InputEvaluationRuntime<TSchema>
 ): number => {
+    if (cachedModifierMask >= 0) {
+        return cachedModifierMask;
+    }
+
     let mask = 0;
 
     if (runtime._keysDown.has('ShiftLeft') || runtime._keysDown.has('ShiftRight')) {
@@ -566,6 +595,7 @@ const currentModifierMask = <TSchema extends InputActionSchema>(
         mask |= MODIFIER_MASKS.meta;
     }
 
+    cachedModifierMask = mask;
     return mask;
 };
 

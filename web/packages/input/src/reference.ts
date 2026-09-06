@@ -137,7 +137,7 @@ export const parseInputControlPath = (value: string): ParsedInputControlPath | u
 
     if (device === 'keyboard') {
         const code = parts.slice(1).join('/').trim();
-        if (!code || code.includes('/') || !INPUT_PATH_SEGMENT_PATTERN.test(code)) {
+        if (!code || !INPUT_PATH_SEGMENT_PATTERN.test(code)) {
             return undefined;
         }
 
