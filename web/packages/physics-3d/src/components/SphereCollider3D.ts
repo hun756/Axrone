@@ -16,7 +16,11 @@ export class SphereCollider3D extends Collider3D {
 
     protected override _createShape(): void {
         if (!this._rigidbody) return;
-        const def: ISphereShapeDef3D = { center: this._center, radius: this._radius };
+        const s = this._getWorldScale();
+        const def: ISphereShapeDef3D = {
+            center: { x: this._center.x * s.x, y: this._center.y * s.y, z: this._center.z * s.z },
+            radius: this._radius * Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.z)),
+        };
         if (this._world) {
             this._shapeId = this._world.createSphereShape(
                 this._rigidbody.bodyId,
@@ -25,11 +29,13 @@ export class SphereCollider3D extends Collider3D {
                 this._getFilter(),
                 { isSensor: this.isTrigger }
             );
+            this._notifyShapeChanged();
             return;
         }
 
         if (!this._shapeManager) return;
         this._shapeId = this._shapeManager.createSphere(this._rigidbody.bodyId, def, this._getMaterial(), this._getFilter());
+        this._notifyShapeChanged();
     }
 
     protected override _updateShape(): void {
