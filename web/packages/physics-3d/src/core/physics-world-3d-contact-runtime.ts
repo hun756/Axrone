@@ -53,6 +53,7 @@ import {
     isTriangleMeshDef,
 } from './physics-world-3d-shared';
 
+import { makeCollisionPairKey } from '@axrone/physics-core';
 import { GJK3D, supportFromVertices, type Support3D } from './gjk3d';
 
 export interface IPhysicsWorld3DContactRuntimeHost {
@@ -71,13 +72,11 @@ export interface IPhysicsWorld3DContactRuntimeHost {
     ) => IVec3Like;
 }
 
-/** Deterministic numeric pair key: lo * 0x100000 + hi (avoids string alloc). */
+/** Deterministic numeric pair key — delegates to canonical helper.
+ *  `Number()` conversion is required because `ShapeId3D` values are BigInt
+ *  at runtime (branded `number` type, but `_nextBodyId = 1n`). */
 function _makePairKey(idA: ShapeId3D, idB: ShapeId3D): number {
-    const a = Number(idA);
-    const b = Number(idB);
-    const lo = a < b ? a : b;
-    const hi = a < b ? b : a;
-    return lo * 0x100000 + hi;
+    return makeCollisionPairKey(Number(idA), Number(idB));
 }
 
 export class PhysicsWorld3DContactRuntime {
