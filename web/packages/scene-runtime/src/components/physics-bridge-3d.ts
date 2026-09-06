@@ -15,6 +15,7 @@ import type {
     BodyId3D,
     IPhysicsWorld3DConfig,
 } from '@axrone/physics-core';
+import { makeCollisionPairKey } from '@axrone/physics-core';
 
 type AnyWorld = World<any>;
 type AnyActor = Actor<AnyWorld>;
@@ -36,8 +37,8 @@ interface ContactPair {
     readonly bodyIdB: BodyId3D;
 }
 
-function makePairKey(a: BodyId3D, b: BodyId3D): string {
-    return a < b ? `${a}:${b}` : `${b}:${a}`;
+function makePairKey(a: BodyId3D, b: BodyId3D): number {
+    return makeCollisionPairKey(Number(a), Number(b));
 }
 
 export interface PhysicsBridge3DOptions {
@@ -60,8 +61,8 @@ export class PhysicsBridge3D implements GameLoopSystem<SceneLoopState>, IContact
     private readonly _initializedCharacterControllers = new WeakSet<CharacterController>();
     private readonly _bodyIdToComponent = new Map<BodyId3D, Rigidbody3D>();
     private readonly _componentToActor = new Map<Rigidbody3D, AnyActor>();
-    private readonly _activeContactPairs = new Set<string>();
-    private readonly _activeTriggerPairs = new Set<string>();
+    private readonly _activeContactPairs = new Set<number>();
+    private readonly _activeTriggerPairs = new Set<number>();
 
     private _disposed = false;
 
