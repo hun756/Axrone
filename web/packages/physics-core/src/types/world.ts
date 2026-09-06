@@ -55,17 +55,7 @@ export interface IPhysicsWorldConfig {
     readonly contactCapacity?: number;
     /** Legacy alias for `maxConstraints` used in tests */
     readonly constraintCapacity?: number;
-    readonly broadphaseType?: BroadphaseType;
     readonly enableProfiler?: boolean;
-}
-
-export const enum BroadphaseType {
-    BruteForce = 0,
-    SweepAndPrune = 1,
-    DynamicAABBTree = 2,
-    SpatialHash = 3,
-    Quadtree = 4,
-    Octree = 5,
 }
 
 export interface IPhysicsWorldStatistics {

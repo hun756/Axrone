@@ -263,18 +263,6 @@ describe('physics-core Foundation', () => {
         });
     });
 
-    describe('BroadphaseType Enum', () => {
-        it('exports BroadphaseType enum', () => {
-            expect(PhysicsCore.BroadphaseType).toBeDefined();
-            expect(PhysicsCore.BroadphaseType.BruteForce).toBe(0);
-            expect(PhysicsCore.BroadphaseType.SweepAndPrune).toBe(1);
-            expect(PhysicsCore.BroadphaseType.DynamicAABBTree).toBe(2);
-            expect(PhysicsCore.BroadphaseType.SpatialHash).toBe(3);
-            expect(PhysicsCore.BroadphaseType.Quadtree).toBe(4);
-            expect(PhysicsCore.BroadphaseType.Octree).toBe(5);
-        });
-    });
-
     describe('Export Completeness', () => {
         it('exports all required enums', () => {
             const requiredEnums = [
@@ -290,7 +278,6 @@ describe('physics-core Foundation', () => {
                 'SensorEventType',
                 'TOIState',
                 'JointLimitState',
-                'BroadphaseType',
             ];
             requiredEnums.forEach((enumName) => {
                 expect(PhysicsCore[enumName]).toBeDefined();
