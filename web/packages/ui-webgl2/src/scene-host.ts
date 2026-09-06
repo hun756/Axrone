@@ -525,8 +525,7 @@ export function bindUIHostToWorld<TPayload = unknown>(
         const frame = runtime.commitToViewport(surface.width, surface.height);
         scene.gl.bindFramebuffer(scene.gl.FRAMEBUFFER, surface.framebuffer);
         scene.gl.viewport(0, 0, surface.width, surface.height);
-        scene.gl.clearColor(0, 0, 0, 0);
-        scene.gl.clear(scene.gl.COLOR_BUFFER_BIT);
+        scene.gl.clearBufferfv(scene.gl.COLOR, 0, [0, 0, 0, 0]);
         scene.gl.bindFramebuffer(scene.gl.FRAMEBUFFER, null);
         uiRenderer.render(frame, { framebuffer: surface.framebuffer });
 
