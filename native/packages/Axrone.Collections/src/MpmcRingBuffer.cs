@@ -1,3 +1,5 @@
+using Enterprise.Patterns.Result;
+
 namespace Axrone.Collections;
 
 [StructLayout(LayoutKind.Explicit, Size = 256)]
@@ -34,7 +36,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
         public bool TryEnqueue(in T item) => _buffer.TryEnqueue(item);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RingBufferOperationStatus Enqueue(in T item, TimeSpan timeout, CancellationToken cancellationToken = default)
+        public Result Enqueue(in T item, TimeSpan timeout, CancellationToken cancellationToken = default)
             => _buffer.Enqueue(item, timeout, cancellationToken);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -60,7 +62,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
         public bool TryDequeue([MaybeNullWhen(false)] out T item) => _buffer.TryDequeue(out item);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RingBufferResult<T> Dequeue(TimeSpan timeout, CancellationToken cancellationToken = default)
+        public Result<T> Dequeue(TimeSpan timeout, CancellationToken cancellationToken = default)
             => _buffer.Dequeue(timeout, cancellationToken);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -76,6 +78,10 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 
     private const int StateActive = 0;
     private const int StateDisposed = 1;
+
+    private static readonly Error s_bufferFull = Error.Failure("RING_BUFFER_FULL", "The ring buffer is full.");
+    private static readonly Error s_bufferEmpty = Error.Failure("RING_BUFFER_EMPTY", "The ring buffer is empty.");
+    private static readonly Error s_bufferTimeout = Error.Timeout("RING_BUFFER_TIMEOUT", "The ring buffer operation timed out.");
 
     private readonly Slot[] _slots;
     private readonly int _capacity;
@@ -197,13 +203,13 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
         }
     }
 
-    public RingBufferOperationStatus Enqueue(in T item, TimeSpan timeout, CancellationToken cancellationToken = default)
+    public Result Enqueue(in T item, TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (TryEnqueue(item)) return RingBufferOperationStatus.Success;
-        if (timeout == TimeSpan.Zero) return RingBufferOperationStatus.Full;
+        if (TryEnqueue(item)) return Result.Success();
+        if (timeout == TimeSpan.Zero) return Result.Failure(s_bufferFull);
 
         long startTimestamp = Stopwatch.GetTimestamp();
         IWaitStrategy waitStrategy = _waitStrategy;
@@ -215,10 +221,10 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
             ThrowIfDisposed();
 
             if (timeout != Timeout.InfiniteTimeSpan && Stopwatch.GetElapsedTime(startTimestamp) >= timeout)
-                return RingBufferOperationStatus.Timeout;
+                return Result.Failure(s_bufferTimeout);
 
             waitStrategy.Wait();
-            if (TryEnqueue(item)) return RingBufferOperationStatus.Success;
+            if (TryEnqueue(item)) return Result.Success();
         }
     }
 
@@ -260,16 +266,16 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
         return TryDequeueInternal(out item);
     }
 
-    public RingBufferResult<T> Dequeue(TimeSpan timeout, CancellationToken cancellationToken = default)
+    public Result<T> Dequeue(TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
 
         if (TryDequeue(out T? immediateItem))
-            return RingBufferResult<T>.Success(immediateItem);
+            return Result<T>.Success(immediateItem);
 
         if (timeout == TimeSpan.Zero)
-            return RingBufferResult<T>.Failure(RingBufferOperationStatus.Empty);
+            return Result<T>.Failure(s_bufferEmpty);
 
         long startTimestamp = Stopwatch.GetTimestamp();
         IWaitStrategy waitStrategy = _waitStrategy;
@@ -281,11 +287,11 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
             ThrowIfDisposed();
 
             if (timeout != Timeout.InfiniteTimeSpan && Stopwatch.GetElapsedTime(startTimestamp) >= timeout)
-                return RingBufferResult<T>.Failure(RingBufferOperationStatus.Timeout);
+                return Result<T>.Failure(s_bufferTimeout);
 
             waitStrategy.Wait();
             if (TryDequeue(out T? item))
-                return RingBufferResult<T>.Success(item);
+                return Result<T>.Success(item);
         }
     }
 

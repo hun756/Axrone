@@ -163,27 +163,26 @@ public class MpmcRingBufferTests
     public void Enqueue_WithTimeout_SucceedsImmediately()
     {
         var buffer = new MpmcRingBuffer<int>(16);
-        var status = buffer.Enqueue(42, TimeSpan.FromSeconds(1));
-        status.Should().Be(RingBufferOperationStatus.Success);
+        var result = buffer.Enqueue(42, TimeSpan.FromSeconds(1));
+        result.IsSuccess.Should().BeTrue();
     }
 
     [Fact]
-    public void Enqueue_WithTimeout_ReturnsFullOnTimeout()
+    public void Enqueue_WithTimeout_ReturnsFailureOnTimeout()
     {
         var buffer = new MpmcRingBuffer<int>(new RingBufferOptions { Capacity = 2, WaitStrategy = new BusySpinWaitStrategy() });
         buffer.TryEnqueue(1);
         buffer.TryEnqueue(2);
-        var status = buffer.Enqueue(3, TimeSpan.FromMilliseconds(10));
-        status.Should().Be(RingBufferOperationStatus.Timeout);
+        var result = buffer.Enqueue(3, TimeSpan.FromMilliseconds(10));
+        result.IsFailure.Should().BeTrue();
     }
 
     [Fact]
-    public void Dequeue_WithTimeout_ReturnsEmptyOnTimeout()
+    public void Dequeue_WithTimeout_ReturnsFailureOnTimeout()
     {
         var buffer = new MpmcRingBuffer<int>(new RingBufferOptions { Capacity = 16, WaitStrategy = new BusySpinWaitStrategy() });
         var result = buffer.Dequeue(TimeSpan.FromMilliseconds(10));
-        result.IsSuccess.Should().BeFalse();
-        result.Status.Should().Be(RingBufferOperationStatus.Timeout);
+        result.IsFailure.Should().BeTrue();
     }
 
     [Fact]
@@ -339,22 +338,31 @@ public class WaitStrategyTests
     }
 }
 
-public class RingBufferResultTests
+public class ResultIntegrationTests
 {
     [Fact]
-    public void Success_HasCorrectStatus()
+    public void Enqueue_ReturnsResultSuccess()
     {
-        var result = RingBufferResult<int>.Success(42);
+        var buffer = new MpmcRingBuffer<int>(16);
+        var result = buffer.Enqueue(42, TimeSpan.FromSeconds(1));
         result.IsSuccess.Should().BeTrue();
-        result.Status.Should().Be(RingBufferOperationStatus.Success);
+    }
+
+    [Fact]
+    public void Dequeue_ReturnsResultWithSuccess()
+    {
+        var buffer = new MpmcRingBuffer<int>(16);
+        buffer.TryEnqueue(42);
+        var result = buffer.Dequeue(TimeSpan.FromSeconds(1));
+        result.IsSuccess.Should().BeTrue();
         result.Value.Should().Be(42);
     }
 
     [Fact]
-    public void Failure_HasCorrectStatus()
+    public void Dequeue_Empty_ReturnsResultFailure()
     {
-        var result = RingBufferResult<int>.Failure(RingBufferOperationStatus.Full);
-        result.IsSuccess.Should().BeFalse();
-        result.Status.Should().Be(RingBufferOperationStatus.Full);
+        var buffer = new MpmcRingBuffer<int>(16);
+        var result = buffer.Dequeue(TimeSpan.Zero);
+        result.IsFailure.Should().BeTrue();
     }
 }
