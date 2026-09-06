@@ -517,7 +517,8 @@ describe('Collision Algorithms', () => {
             ];
 
             const result = GJK2D.testIntersection(shape, square, transformA, transformB);
-            expect(typeof result).toBe('boolean');
+            // Collinear shape and square overlap at the same transform
+            expect(result).toBe(true);
         });
 
         it('handles near-miss collision', () => {
