@@ -156,6 +156,40 @@ export class PhysicsWorld3DContactRuntime {
             });
         }
 
+        // Fire contact events by comparing previous vs current manifolds.
+        const listener = this._host.getContactListener();
+        if (listener) {
+            const prev = this._contactManifolds;
+            // Begin events: new contacts
+            for (const [key, m] of next.entries()) {
+                if (!prev.has(key)) {
+                    if (m.sensor) {
+                        listener.onTriggerEnter?.(m.bodyIdA, m.bodyIdB);
+                    } else {
+                        listener.onCollisionBegin?.(this._toContactManifold(m));
+                    }
+                }
+            }
+            // Stay events: continuing contacts
+            for (const [key, m] of next.entries()) {
+                if (prev.has(key)) {
+                    if (!m.sensor) {
+                        listener.onCollisionStay?.(this._toContactManifold(m));
+                    }
+                }
+            }
+            // End events: removed contacts
+            for (const [key, m] of prev.entries()) {
+                if (!next.has(key)) {
+                    if (m.sensor) {
+                        listener.onTriggerExit?.(m.bodyIdA, m.bodyIdB);
+                    } else {
+                        listener.onCollisionEnd?.(m.bodyIdA, m.bodyIdB);
+                    }
+                }
+            }
+        }
+
         this._contactManifolds = next;
     }
 
@@ -651,6 +685,24 @@ export class PhysicsWorld3DContactRuntime {
             return { x: 0, y: 0, z: 0 };
         }
         return bm.getInverseInertia(bodyId);
+    }
+
+    private _toContactManifold(m: IResolvedContactManifold3D): IContactManifold3D {
+        return {
+            bodyIdA: m.bodyIdA,
+            bodyIdB: m.bodyIdB,
+            shapeIdA: m.shapeIdA,
+            shapeIdB: m.shapeIdB,
+            normal: m.normal,
+            points: m.points.map((p) => ({
+                localPointA: p.localPointA,
+                localPointB: p.localPointB,
+                separation: p.separation,
+                normalImpulse: p.normalImpulse,
+                tangentImpulse1: p.tangentImpulse1,
+                tangentImpulse2: p.tangentImpulse2,
+            })),
+        };
     }
 
     /**
