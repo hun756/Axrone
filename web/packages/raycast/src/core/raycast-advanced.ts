@@ -312,8 +312,10 @@ export class MultiRaycaster3D {
         height: number,
         columns: number,
         rows: number
-    ): IRaycastHit3D[][] {
-        const grid: IRaycastHit3D[][] = Array.from({ length: rows }, () => []);
+    ): (IRaycastHit3D | null)[][] {
+        const grid: (IRaycastHit3D | null)[][] = Array.from({ length: rows }, () =>
+            new Array<IRaycastHit3D | null>(columns).fill(null)
+        );
 
         const up = Math.abs(direction.y) < 0.9
             ? Vec3.create(0, 1, 0)
@@ -321,8 +323,8 @@ export class MultiRaycaster3D {
         const right = Vec3.normalize(Vec3.cross(direction, up));
         const actualUp = Vec3.normalize(Vec3.cross(right, direction));
 
-        const stepX = width / (columns - 1);
-        const stepY = height / (rows - 1);
+        const stepX = columns > 1 ? width / (columns - 1) : 0;
+        const stepY = rows > 1 ? height / (rows - 1) : 0;
         const startX = -width * 0.5;
         const startY = -height * 0.5;
 
@@ -343,7 +345,7 @@ export class MultiRaycaster3D {
                     maxDistance,
                     layerMask
                 );
-                if (hit) grid[row].push(hit);
+                grid[row][col] = hit;
             }
         }
 

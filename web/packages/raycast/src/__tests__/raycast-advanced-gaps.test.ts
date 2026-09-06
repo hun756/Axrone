@@ -163,7 +163,7 @@ describe('MultiRaycaster3D', () => {
             const sys = makeSystemWithSphere();
             const multi = createMultiRaycaster3D(sys);
             const grid = multi.gridCast(v3(-5, 100, 0), v3(1, 0, 0), 100, ALL, 4, 4, 3, 3);
-            const totalHits = grid.reduce((sum, row) => sum + row.length, 0);
+            const totalHits = grid.reduce((sum, row) => sum + row.filter((h) => h !== null).length, 0);
             expect(totalHits).toBe(0);
         });
     });
