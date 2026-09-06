@@ -382,10 +382,10 @@ describe('PhysicsWorld2D Integration', () => {
             // Position: body fell down
             expect(finalPos.y).toBeLessThan(initialPos.y);
 
-            // Velocity: clamped by PhysicsConstants.MAX_TRANSLATION=2.0
-            // Terminal velocity is -2.0, reached after ~12 steps
-            expect(finalVel.y).toBeLessThan(-1.5);
-            expect(finalVel.y).toBeGreaterThan(-2.1);
+            // Velocity: gravity=-10, after 60 steps (1s), v≈-10 (no clamp on velocity;
+            // MAX_TRANSLATION is now a position-delta limit, not velocity clamp)
+            expect(finalVel.y).toBeLessThan(-9);
+            expect(finalVel.y).toBeGreaterThan(-11);
 
             // Horizontal should not drift
             expect(Math.abs(finalVel.x)).toBeLessThan(0.01);
@@ -406,9 +406,9 @@ describe('PhysicsWorld2D Integration', () => {
                 offset: { x: 0, y: 0 },
             });
 
-            // Default gravity {x:0, y:-10}. MAX_TRANSLATION=2.0 clamps velocity.
-            // Terminal velocity = -2.0, reached after ~12 steps.
-            // After 100 steps: position ≈ 0 + (-2.0 * 88/60) ≈ -2.93
+            // Default gravity {x:0, y:-10}. After 100 steps (t=100/60≈1.667s),
+            // velocity = -10 * 100/60 ≈ -16.67 (MAX_VELOCITY=200, not clamped)
+            // MAX_TRANSLATION=2.0 is now position-delta per step, not velocity clamp.
             for (let i = 0; i < 100; i++) {
                 world.step(1 / 60);
             }
@@ -416,11 +416,11 @@ describe('PhysicsWorld2D Integration', () => {
             const finalPos = world.getBodyManager().getPosition(bodyId);
             const finalVel = world.getBodyManager().getLinearVelocity(bodyId);
 
-            // Velocity clamped to MAX_TRANSLATION=2.0
-            expect(finalVel.y).toBeLessThan(-1.5);
-            expect(finalVel.y).toBeGreaterThan(-2.1);
-            // Body fell significantly
-            expect(finalPos.y).toBeLessThan(-2);
+            // Velocity = gravity * time = -10 * 100/60 ≈ -16.67
+            expect(finalVel.y).toBeLessThan(-15);
+            expect(finalVel.y).toBeGreaterThan(-18);
+            // Body fell significantly (≈ -0.5 * 10 * (100/60)² ≈ -13.9)
+            expect(finalPos.y).toBeLessThan(-10);
             expect(Math.abs(finalVel.x)).toBeLessThan(0.01);
         });
 

@@ -369,6 +369,12 @@ export class ContactManager2D implements Disposable {
         return { bodyIdA: data.bodyIdA, bodyIdB: data.bodyIdB };
     }
 
+    getContactShapes(contactId: ContactId): { shapeIdA: ShapeId; shapeIdB: ShapeId } | null {
+        const data = this._contactMetadata.get(contactId);
+        if (!data) return null;
+        return { shapeIdA: data.shapeIdA, shapeIdB: data.shapeIdB };
+    }
+
     getContactsForBody(bodyId: BodyId): IterableIterator<ContactId> {
         const contacts = this._bodyToContacts.get(bodyId);
         if (!contacts) {

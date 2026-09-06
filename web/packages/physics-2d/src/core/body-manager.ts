@@ -408,6 +408,16 @@ export class BodyManager2D extends SoAManager<BodySchema> {
         }
     }
 
+    /** Read accumulated force for a body. */
+    getForce(bodyId: BodyId, out?: IVec2Output): IVec2Output {
+        return this._readVec2(this._resolveIndex(bodyId), 'forceX', out);
+    }
+
+    /** Read accumulated torque for a body. */
+    getTorque(bodyId: BodyId): number {
+        return this._readScalar(this._resolveIndex(bodyId), 'torque');
+    }
+
     getBodyIds(): IterableIterator<BodyId> {
         return this._bodyIdToIndex.keys();
     }

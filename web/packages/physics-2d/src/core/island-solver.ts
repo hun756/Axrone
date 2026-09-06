@@ -3,6 +3,7 @@ import type { BodyId, ContactId, ConstraintId, SolverFlags } from '../types';
 import type { BodyManager2D } from './body-manager';
 import type { ContactManager2D } from './contact-manager';
 import type { ConstraintManager2D } from './constraint-manager';
+import type { ShapeManager2D } from './shape-manager';
 import { ConstraintSolver2D } from './constraint-solver';
 import { PhysicsConstants, BodyFlags } from '../types';
 
@@ -15,6 +16,8 @@ const LINEAR_SLEEP_TOLERANCE_SQ = PhysicsConstants.LINEAR_SLEEP_TOLERANCE * Phys
 const ANGULAR_SLEEP_TOLERANCE_SQ = PhysicsConstants.ANGULAR_SLEEP_TOLERANCE * PhysicsConstants.ANGULAR_SLEEP_TOLERANCE;
 const MAX_TRANSLATION_SQ = PhysicsConstants.MAX_TRANSLATION * PhysicsConstants.MAX_TRANSLATION;
 const MAX_ROTATION_SQ = PhysicsConstants.MAX_ROTATION * PhysicsConstants.MAX_ROTATION;
+const MAX_VELOCITY_SQ = PhysicsConstants.MAX_VELOCITY * PhysicsConstants.MAX_VELOCITY;
+const MAX_ANGULAR_VELOCITY_SQ = PhysicsConstants.MAX_ANGULAR_VELOCITY * PhysicsConstants.MAX_ANGULAR_VELOCITY;
 
 interface VelocityConstraintPoint {
     rA: IVec2Like;
@@ -78,6 +81,7 @@ export class IslandSolver2D {
     private readonly _bodyManager: BodyManager2D;
     private readonly _contactManager: ContactManager2D;
     private readonly _constraintManager: ConstraintManager2D;
+    private readonly _shapeManager: ShapeManager2D;
     private readonly _constraintSolver: ConstraintSolver2D;
 
     private readonly _velocities: Float64Array;
@@ -99,11 +103,13 @@ export class IslandSolver2D {
         bodyManager: BodyManager2D,
         contactManager: ContactManager2D,
         constraintManager: ConstraintManager2D,
+        shapeManager: ShapeManager2D,
         maxBodiesPerIsland: number = 1024
     ) {
         this._bodyManager = bodyManager;
         this._contactManager = contactManager;
         this._constraintManager = constraintManager;
+        this._shapeManager = shapeManager;
         this._constraintSolver = new ConstraintSolver2D(constraintManager, bodyManager);
 
         this._velocities = new Float64Array(maxBodiesPerIsland * 3);
@@ -266,7 +272,7 @@ export class IslandSolver2D {
             }
         }
 
-        // Gravity integration: apply gravity force to dynamic bodies
+        // ── Step 1: Force integration + gravity + damping ───────────────
         for (let i = 0; i < bodyCount; i++) {
             const bodyId = this._bodyStack[i];
             const type = this._bodyManager.getBodyType(bodyId);
@@ -279,6 +285,22 @@ export class IslandSolver2D {
                 this._velocities[offset] += gravity.x * gravityScale * h;
                 this._velocities[offset + 1] += gravity.y * gravityScale * h;
 
+                // Integrate accumulated forces for dynamic bodies: v += F * dt * invMass
+                if (type === 2) {
+                    const invMass = this._invMass[i];
+                    if (invMass > 0) {
+                        const force = this._bodyManager.getForce(bodyId);
+                        this._velocities[offset] += force.x * h * invMass;
+                        this._velocities[offset + 1] += force.y * h * invMass;
+
+                        const invI = this._invI[i];
+                        if (invI > 0) {
+                            const torque = this._bodyManager.getTorque(bodyId);
+                            this._velocities[offset + 2] += torque * h * invI;
+                        }
+                    }
+                }
+
                 // Apply damping
                 const linearDamping = this._bodyManager.getLinearDamping(bodyId);
                 const angularDamping = this._bodyManager.getAngularDamping(bodyId);
@@ -289,18 +311,18 @@ export class IslandSolver2D {
                 this._velocities[offset + 1] *= linearDampingFactor;
                 this._velocities[offset + 2] *= angularDampingFactor;
 
-                // Clamp velocities to prevent instability
+                // Clamp velocity to MAX_VELOCITY (separate from position-delta limit)
                 const vx = this._velocities[offset];
                 const vy = this._velocities[offset + 1];
                 const w = this._velocities[offset + 2];
                 const speedSq = vx * vx + vy * vy;
-                if (speedSq > MAX_TRANSLATION_SQ) {
-                    const scale = PhysicsConstants.MAX_TRANSLATION / Math.sqrt(speedSq);
+                if (speedSq > MAX_VELOCITY_SQ) {
+                    const scale = PhysicsConstants.MAX_VELOCITY / Math.sqrt(speedSq);
                     this._velocities[offset] = vx * scale;
                     this._velocities[offset + 1] = vy * scale;
                 }
-                if (w * w > MAX_ROTATION_SQ) {
-                    this._velocities[offset + 2] = w > 0 ? PhysicsConstants.MAX_ROTATION : -PhysicsConstants.MAX_ROTATION;
+                if (w * w > MAX_ANGULAR_VELOCITY_SQ) {
+                    this._velocities[offset + 2] = w > 0 ? PhysicsConstants.MAX_ANGULAR_VELOCITY : -PhysicsConstants.MAX_ANGULAR_VELOCITY;
                 }
             }
         }
@@ -338,13 +360,22 @@ export class IslandSolver2D {
 
             if (type !== 0) {
                 const offset = i * 3;
-                const vx = this._velocities[offset];
-                const vy = this._velocities[offset + 1];
-                const w = this._velocities[offset + 2];
+                let dx = this._velocities[offset] * h;
+                let dy = this._velocities[offset + 1] * h;
+                const dw = this._velocities[offset + 2] * h;
 
-                this._positions[offset] += vx * h;
-                this._positions[offset + 1] += vy * h;
-                this._positions[offset + 2] += w * h;
+                // Clamp position delta to MAX_TRANSLATION per step (Box2D anti-tunneling)
+                const transSq = dx * dx + dy * dy;
+                if (transSq > MAX_TRANSLATION_SQ) {
+                    const scale = PhysicsConstants.MAX_TRANSLATION / Math.sqrt(transSq);
+                    dx *= scale;
+                    dy *= scale;
+                }
+                const clampedDw = Math.max(-PhysicsConstants.MAX_ROTATION, Math.min(PhysicsConstants.MAX_ROTATION, dw));
+
+                this._positions[offset] += dx;
+                this._positions[offset + 1] += dy;
+                this._positions[offset + 2] += clampedDw;
             }
         }
 
@@ -467,6 +498,14 @@ export class IslandSolver2D {
 
             const bodies = this._contactManager.getContactBodies(contactId);
             if (!bodies) continue;
+
+            // Sensor contacts generate events but no collision response
+            const contactShapes = this._contactManager.getContactShapes(contactId);
+            if (contactShapes &&
+                (this._shapeManager.isShapeSensor(contactShapes.shapeIdA) ||
+                 this._shapeManager.isShapeSensor(contactShapes.shapeIdB))) {
+                continue;
+            }
 
             const indexA = this._bodyIndex.get(bodies.bodyIdA);
             const indexB = this._bodyIndex.get(bodies.bodyIdB);
@@ -664,6 +703,14 @@ export class IslandSolver2D {
 
             const bodies = this._contactManager.getContactBodies(contactId);
             if (!bodies) continue;
+
+            // Sensor contacts generate events but no collision response
+            const contactShapes = this._contactManager.getContactShapes(contactId);
+            if (contactShapes &&
+                (this._shapeManager.isShapeSensor(contactShapes.shapeIdA) ||
+                 this._shapeManager.isShapeSensor(contactShapes.shapeIdB))) {
+                continue;
+            }
 
             const indexA = this._bodyIndex.get(bodies.bodyIdA);
             const indexB = this._bodyIndex.get(bodies.bodyIdB);

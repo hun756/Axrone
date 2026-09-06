@@ -155,6 +155,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             this._bodyManager,
             this._contactManager,
             this._constraintManager,
+            this._shapeManager,
             maxBodies
         );
 
