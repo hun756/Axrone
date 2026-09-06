@@ -1,4 +1,5 @@
 import { Vec3, Quat, clamp } from '@axrone/numeric';
+export { clamp } from '@axrone/numeric';
 import type { IQuatLike, IVec3Like } from '@axrone/numeric';
 import type {
     ContactId,
@@ -129,7 +130,7 @@ export interface IMutableContactManifold3D extends IContactManifold3D {
 }
 
 export interface IResolvedContactManifold3D extends IMutableContactManifold3D {
-    readonly pairKey: string;
+    readonly pairKey: number;
     readonly descriptorA: IShapeDescriptor3D;
     readonly descriptorB: IShapeDescriptor3D;
     readonly sensor: boolean;
@@ -142,7 +143,7 @@ export interface IShapePairCandidate3D {
     readonly descriptorB: IShapeDescriptor3D;
     readonly aabbA: IAabb3D;
     readonly aabbB: IAabb3D;
-    readonly pairKey: string;
+    readonly pairKey: number;
 }
 
 export const IDENTITY_ROTATION: IQuatLike = { x: 0, y: 0, z: 0, w: 1 };
@@ -198,6 +199,13 @@ export function transformPoint3D(
     rotation: Readonly<IQuatLike>
 ): IVec3Like {
     return Vec3.add(Quat.rotateVector(rotation, point), position);
+}
+
+export function transformDirection3D(
+    direction: Readonly<IVec3Like>,
+    rotation: Readonly<IQuatLike>
+): IVec3Like {
+    return Quat.rotateVector(rotation, direction);
 }
 
 export function inverseTransformPoint3D(
