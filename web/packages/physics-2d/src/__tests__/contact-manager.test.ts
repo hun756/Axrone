@@ -153,13 +153,28 @@ describe('ContactManager2D', () => {
     });
 
     describe('Contact Data Access', () => {
-        it('gets contact data', () => {
+        it('gets contact data with default material values', () => {
             const contactId = manager.createContact(shapeIdA, shapeIdB, bodyIdA, bodyIdB);
             const data = manager.getContactData(contactId);
             expect(data).not.toBeNull();
             if (data) {
-                expect(data.friction).toBeDefined();
-                expect(data.restitution).toBeDefined();
+                // No materials → defaults: friction=0.2, restitution=0.0
+                expect(data.friction).toBeCloseTo(0.2, 5);
+                expect(data.restitution).toBeCloseTo(0.0, 5);
+            }
+        });
+
+        it('computes geometric mean friction from materials (C2 fix)', () => {
+            const matA = { friction: 0.4, restitution: 0.3, density: 1 };
+            const matB = { friction: 0.9, restitution: 0.7, density: 1 };
+            const contactId = manager.createContact(shapeIdA, shapeIdB, bodyIdA, bodyIdB, matA as any, matB as any);
+            const data = manager.getContactData(contactId);
+            expect(data).not.toBeNull();
+            if (data) {
+                // sqrt(0.4 * 0.9) = sqrt(0.36) = 0.6
+                expect(data.friction).toBeCloseTo(0.6, 5);
+                // max(0.3, 0.7) = 0.7
+                expect(data.restitution).toBeCloseTo(0.7, 5);
             }
         });
 
@@ -170,29 +185,64 @@ describe('ContactManager2D', () => {
     });
 
     describe('Contact Listener', () => {
-        it('sets contact listener', () => {
+        it('sets contact listener and fires on collision events', () => {
             const listener = {
                 onCollisionBegin: vi.fn(),
                 onCollisionEnd: vi.fn(),
             };
             manager.setContactListener(listener);
+
+            // Create a contact and update it with a manifold to trigger collision begin
+            const contactId = manager.createContact(shapeIdA, shapeIdB, bodyIdA, bodyIdB);
+            manager.updateContact(contactId, {
+                normal: { x: 1, y: 0 },
+                pointCount: 1,
+                points: [{
+                    localPointA: { x: 0, y: 0 },
+                    localPointB: { x: 0, y: 0 },
+                    separation: -0.1,
+                    id: 0 as any,
+                    normalImpulse: 0,
+                    tangentImpulse: 0,
+                }],
+            } as any);
+
+            // updateContact fires onCollisionBegin directly (not-touching → touching)
+            expect(listener.onCollisionBegin).toHaveBeenCalledTimes(1);
         });
 
         it('clears contact listener', () => {
             manager.setContactListener(null);
+            // After clearing, updates should not throw
+            const contactId = manager.createContact(shapeIdA, shapeIdB, bodyIdA, bodyIdB);
+            expect(() => manager.updateContact(contactId, {
+                normal: { x: 1, y: 0 },
+                pointCount: 0,
+                points: [],
+            } as any)).not.toThrow();
         });
     });
 
     describe('Collision Filter', () => {
-        it('sets collision filter', () => {
+        it('sets collision filter and blocks contacts', () => {
             const filter = {
-                shouldCollide: vi.fn(() => true),
+                shouldCollide: vi.fn(() => false),
             };
             manager.setCollisionFilter(filter);
+
+            // Create contact — filter should block it
+            const contactId = manager.createContact(shapeIdA, shapeIdB, bodyIdA, bodyIdB);
+            expect(filter.shouldCollide).toHaveBeenCalledWith(shapeIdA, shapeIdB);
+            // Contact was blocked (returns 0)
+            expect(contactId).toBe(0);
+            expect(manager.contactCount).toBe(0);
         });
 
         it('clears collision filter', () => {
             manager.setCollisionFilter(null);
+            // After clearing, contacts should be created normally
+            const contactId = manager.createContact(shapeIdA, shapeIdB, bodyIdA, bodyIdB);
+            expect(contactId).toBeGreaterThan(0);
         });
     });
 
