@@ -204,26 +204,67 @@ const MURMUR2_METADATA: HashAlgorithmMetadata = {
     keyed: false,
     cryptographicallySecure: false,
     async: false,
-    description: 'MurmurHash2 64-bit',
+    description: 'MurmurHash2 64-bit (u32-lane)',
 };
+
+// MurmurHash2 64-bit constant: M = 0xc6a4a7935bd1e995
+const M2_M_HI = 0xc6a4a793;
+const M2_M_LO = 0x5bd1e995;
+
+// --- u64 arithmetic helpers for Murmur2_64 ---
+// Module-level result variables to avoid per-call allocations
+let _m2rHi = 0, _m2rLo = 0;
+
+/** General 64-bit multiply: (aHi,aLo) * (bHi,bLo), result in (_m2rHi,_m2rLo) */
+function m2Mul64(aHi: number, aLo: number, bHi: number, bLo: number): void {
+    const a0 = aLo & 0xffff, a1 = aLo >>> 16;
+    const b0 = bLo & 0xffff, b1 = bLo >>> 16;
+    const ll = a0 * b0;
+    const mid = (ll >>> 16) + (a1 * b0 & 0xffff) + (a0 * b1 & 0xffff);
+    _m2rLo = (((mid & 0xffff) << 16) | (ll & 0xffff)) >>> 0;
+    _m2rHi = (Math.imul(aHi, bLo) + Math.imul(aLo, bHi) + (a1 * b1) + (a1 * b0 >>> 16) + (a0 * b1 >>> 16) + (mid >>> 16)) >>> 0;
+}
+
+/** 64-bit XOR: (aHi,aLo) ^ (bHi,bLo), result in (_m2rHi,_m2rLo) */
+function m2Xor64(aHi: number, aLo: number, bHi: number, bLo: number): void {
+    _m2rHi = (aHi ^ bHi) >>> 0;
+    _m2rLo = (aLo ^ bLo) >>> 0;
+}
+
+/** 64-bit right shift by n (n < 64), result in (_m2rHi,_m2rLo) */
+function m2Shr64(hi: number, lo: number, n: number): void {
+    if (n >= 32) {
+        _m2rHi = 0;
+        _m2rLo = hi >>> (n - 32);
+    } else if (n === 0) {
+        _m2rHi = hi;
+        _m2rLo = lo;
+    } else {
+        _m2rHi = hi >>> n;
+        _m2rLo = ((lo >>> n) | (hi << (32 - n))) >>> 0;
+    }
+}
 
 export class Murmur2_64 extends HasherBase<import('../types').Hash64> {
     readonly algorithm: string = MURMUR2_METADATA.name;
     readonly metadata: Readonly<HashAlgorithmMetadata> = MURMUR2_METADATA;
-    private _h: bigint;
+    private _hHi: number = 0;
+    private _hLo: number = 0;
     private _totalLen: number = 0;
-    private _tail: bigint = 0n;
+    private _tailHi: number = 0;
+    private _tailLo: number = 0;
     private _tailLen: number = 0;
-    private _initialSeed: bigint;
+    private _initialSeed: number = 0;
 
     constructor(seed: import('../types').Seed32 = asSeed32(0)) {
         super();
-        this._initialSeed = BigInt((seed as number) >>> 0);
-        this._h = this._initialSeed & 0xffffffffffffffffn;
+        this._initialSeed = (seed as number) >>> 0;
+        this._hHi = 0;
+        this._hLo = this._initialSeed;
     }
 
     get seed(): import('../types').Seed32 {
-        return asSeed32(Number(this._initialSeed));
+        return asSeed32(this._initialSeed);
     }
 
     get byteLength(): number {
@@ -235,17 +276,33 @@ export class Murmur2_64 extends HasherBase<import('../types').Hash64> {
     }
 
     private _accumulate(byte: number): void {
-        this._tail = (this._tail | (BigInt(byte & 0xff) << BigInt(this._tailLen * 8))) & 0xffffffffffffffffn;
+        const shift = this._tailLen * 8;
+        if (shift < 32) {
+            this._tailLo = (this._tailLo | ((byte & 0xff) << shift)) >>> 0;
+        } else {
+            this._tailHi = (this._tailHi | ((byte & 0xff) << (shift - 32))) >>> 0;
+        }
         this._tailLen++;
         this._totalLen++;
         if (this._tailLen === 8) {
-            let k = this._tail;
-            k = (k * 0xc6a4a7935bd1e995n) & 0xffffffffffffffffn;
-            k ^= k >> 47n;
-            k = (k * 0xc6a4a7935bd1e995n) & 0xffffffffffffffffn;
-            this._h ^= k;
-            this._h = (this._h * 0xc6a4a7935bd1e995n) & 0xffffffffffffffffn;
-            this._tail = 0n;
+            // k = tail * M
+            m2Mul64(this._tailHi, this._tailLo, M2_M_HI, M2_M_LO);
+            let kHi = _m2rHi, kLo = _m2rLo;
+            // k ^= k >> 47
+            m2Shr64(kHi, kLo, 47);
+            kHi ^= _m2rHi; kLo = (kLo ^ _m2rLo) >>> 0;
+            // k = k * M
+            m2Mul64(kHi, kLo, M2_M_HI, M2_M_LO);
+            kHi = _m2rHi; kLo = _m2rLo;
+            // h ^= k
+            this._hHi = (this._hHi ^ kHi) >>> 0;
+            this._hLo = (this._hLo ^ kLo) >>> 0;
+            // h = h * M
+            m2Mul64(this._hHi, this._hLo, M2_M_HI, M2_M_LO);
+            this._hHi = _m2rHi;
+            this._hLo = _m2rLo;
+            this._tailHi = 0;
+            this._tailLo = 0;
             this._tailLen = 0;
         }
     }
@@ -319,29 +376,79 @@ export class Murmur2_64 extends HasherBase<import('../types').Hash64> {
 
     digest(): import('../types').Hash64 {
         this._finalized = true;
-        let h = this._h;
+        let hHi = this._hHi;
+        let hLo = this._hLo;
 
         if (this._tailLen > 0) {
-            h ^= this._tail;
-            h = (h * 0xc6a4a7935bd1e995n) & 0xffffffffffffffffn;
+            // h ^= tail
+            hHi = (hHi ^ this._tailHi) >>> 0;
+            hLo = (hLo ^ this._tailLo) >>> 0;
+            // h = h * M
+            m2Mul64(hHi, hLo, M2_M_HI, M2_M_LO);
+            hHi = _m2rHi; hLo = _m2rLo;
         }
 
-        h ^= BigInt(this._totalLen);
-        h ^= h >> 47n;
-        h = (h * 0xc6a4a7935bd1e995n) & 0xffffffffffffffffn;
-        h ^= h >> 47n;
-        return asHash64(h);
+        // h ^= totalLen
+        hLo = (hLo ^ this._totalLen) >>> 0;
+        // h ^= h >> 47
+        m2Shr64(hHi, hLo, 47);
+        hHi ^= _m2rHi; hLo = (hLo ^ _m2rLo) >>> 0;
+        // h = h * M
+        m2Mul64(hHi, hLo, M2_M_HI, M2_M_LO);
+        hHi = _m2rHi; hLo = _m2rLo;
+        // h ^= h >> 47
+        m2Shr64(hHi, hLo, 47);
+        hHi ^= _m2rHi; hLo = (hLo ^ _m2rLo) >>> 0;
+
+        return asHash64((BigInt(hHi >>> 0) << 32n) | BigInt(hLo >>> 0));
     }
 
     digestBytes(): Uint8Array {
-        const h = this.digest() as bigint;
+        this._finalized = true;
+        // Compute hash without full digest() to get (hHi, hLo)
+        let hHi = this._hHi;
+        let hLo = this._hLo;
+        if (this._tailLen > 0) {
+            hHi = (hHi ^ this._tailHi) >>> 0;
+            hLo = (hLo ^ this._tailLo) >>> 0;
+            m2Mul64(hHi, hLo, M2_M_HI, M2_M_LO);
+            hHi = _m2rHi; hLo = _m2rLo;
+        }
+        hLo = (hLo ^ this._totalLen) >>> 0;
+        m2Shr64(hHi, hLo, 47);
+        hHi ^= _m2rHi; hLo = (hLo ^ _m2rLo) >>> 0;
+        m2Mul64(hHi, hLo, M2_M_HI, M2_M_LO);
+        hHi = _m2rHi; hLo = _m2rLo;
+        m2Shr64(hHi, hLo, 47);
+        hHi ^= _m2rHi; hLo = (hLo ^ _m2rLo) >>> 0;
+
         const out = new Uint8Array(8);
-        for (let i = 0; i < 8; i++) out[i] = Number((h >> BigInt(i * 8)) & 0xffn);
+        out[0] = hLo & 0xff; out[1] = (hLo >>> 8) & 0xff;
+        out[2] = (hLo >>> 16) & 0xff; out[3] = (hLo >>> 24) & 0xff;
+        out[4] = hHi & 0xff; out[5] = (hHi >>> 8) & 0xff;
+        out[6] = (hHi >>> 16) & 0xff; out[7] = (hHi >>> 24) & 0xff;
         return out;
     }
 
     digestHex(uppercase: boolean = false): string {
-        return bigIntToHex(this.digest() as bigint, 16, uppercase);
+        this._finalized = true;
+        let hHi = this._hHi;
+        let hLo = this._hLo;
+        if (this._tailLen > 0) {
+            hHi = (hHi ^ this._tailHi) >>> 0;
+            hLo = (hLo ^ this._tailLo) >>> 0;
+            m2Mul64(hHi, hLo, M2_M_HI, M2_M_LO);
+            hHi = _m2rHi; hLo = _m2rLo;
+        }
+        hLo = (hLo ^ this._totalLen) >>> 0;
+        m2Shr64(hHi, hLo, 47);
+        hHi ^= _m2rHi; hLo = (hLo ^ _m2rLo) >>> 0;
+        m2Mul64(hHi, hLo, M2_M_HI, M2_M_LO);
+        hHi = _m2rHi; hLo = _m2rLo;
+        m2Shr64(hHi, hLo, 47);
+        hHi ^= _m2rHi; hLo = (hLo ^ _m2rLo) >>> 0;
+        const s = (hHi >>> 0).toString(16).padStart(8, '0') + (hLo >>> 0).toString(16).padStart(8, '0');
+        return uppercase ? s.toUpperCase() : s;
     }
 
     digestBase64(): string {
@@ -349,14 +456,32 @@ export class Murmur2_64 extends HasherBase<import('../types').Hash64> {
     }
 
     digestBigInt<H2 extends bigint = bigint>(): H2 {
-        return this.digest() as unknown as H2;
+        this._finalized = true;
+        let hHi = this._hHi;
+        let hLo = this._hLo;
+        if (this._tailLen > 0) {
+            hHi = (hHi ^ this._tailHi) >>> 0;
+            hLo = (hLo ^ this._tailLo) >>> 0;
+            m2Mul64(hHi, hLo, M2_M_HI, M2_M_LO);
+            hHi = _m2rHi; hLo = _m2rLo;
+        }
+        hLo = (hLo ^ this._totalLen) >>> 0;
+        m2Shr64(hHi, hLo, 47);
+        hHi ^= _m2rHi; hLo = (hLo ^ _m2rLo) >>> 0;
+        m2Mul64(hHi, hLo, M2_M_HI, M2_M_LO);
+        hHi = _m2rHi; hLo = _m2rLo;
+        m2Shr64(hHi, hLo, 47);
+        hHi ^= _m2rHi; hLo = (hLo ^ _m2rLo) >>> 0;
+        return ((BigInt(hHi >>> 0) << 32n) | BigInt(hLo >>> 0)) as H2;
     }
 
     reset(seed: import('../types').Seed32 = asSeed32(0)): this {
-        this._initialSeed = BigInt((seed as number) >>> 0);
-        this._h = this._initialSeed & 0xffffffffffffffffn;
+        this._initialSeed = (seed as number) >>> 0;
+        this._hHi = 0;
+        this._hLo = this._initialSeed;
         this._totalLen = 0;
-        this._tail = 0n;
+        this._tailHi = 0;
+        this._tailLo = 0;
         this._tailLen = 0;
         this._finalized = false;
         return this;
@@ -364,9 +489,11 @@ export class Murmur2_64 extends HasherBase<import('../types').Hash64> {
 
     clone(): IHasher<import('../types').Hash64> {
         const c = new Murmur2_64(this.seed);
-        c._h = this._h;
+        (c as any)._hHi = this._hHi;
+        (c as any)._hLo = this._hLo;
+        (c as any)._tailHi = this._tailHi;
+        (c as any)._tailLo = this._tailLo;
         c._totalLen = this._totalLen;
-        c._tail = this._tail;
         c._tailLen = this._tailLen;
         c._finalized = this._finalized;
         return c;
