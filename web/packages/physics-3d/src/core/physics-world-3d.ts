@@ -107,6 +107,10 @@ import {
     sampleHeightFieldHeight as sampleHeightFieldHeightImpl,
     testPointShape as testPointShapeImpl,
 } from './physics-world-3d-shape-geometry';
+import {
+    integratePositions as integratePositionsImpl,
+    integrateVelocities as integrateVelocitiesImpl,
+} from './physics-world-3d-integration';
 
 export { BodyManager3D, ShapeManager3D, ConstraintManager3D } from './physics-managers-3d';
 
@@ -824,59 +828,7 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     private _integrateVelocities(dt: number): void {
-        // Integrate accumulated forces (F*dt*invMass → velocity)
-        this._bodyManager.integrateForces(dt);
-
-        const bodyIds = this._bodyManager.getBodyIds();
-        const gravityX = this._gravity.x * dt;
-        const gravityY = this._gravity.y * dt;
-        const gravityZ = this._gravity.z * dt;
-
-        for (const bodyId of bodyIds) {
-            if (this._bodyManager.getBodyType(bodyId) !== BODY_TYPE_DYNAMIC) continue;
-            if (!this._bodyManager.isEnabled(bodyId)) continue;
-            if (!this._bodyManager.isAwake(bodyId)) continue;
-
-            const gravityScale = this._bodyManager.getGravityScale(bodyId);
-            const velocity = this._bodyManager.getLinearVelocity(bodyId);
-            const angularVelocity = this._bodyManager.getAngularVelocity(bodyId);
-            const linearDamping = Math.max(0, 1 - this._bodyManager.getLinearDamping(bodyId) * dt);
-            const angularDamping = Math.max(0, 1 - this._bodyManager.getAngularDamping(bodyId) * dt);
-
-            this._bodyManager.setLinearVelocity(bodyId, {
-                x: (velocity.x + gravityX * gravityScale) * linearDamping,
-                y: (velocity.y + gravityY * gravityScale) * linearDamping,
-                z: (velocity.z + gravityZ * gravityScale) * linearDamping,
-            });
-
-            this._bodyManager.setAngularVelocity(bodyId, {
-                x: this._bodyManager.isFixedRotation(bodyId) ? 0 : angularVelocity.x * angularDamping,
-                y: this._bodyManager.isFixedRotation(bodyId) ? 0 : angularVelocity.y * angularDamping,
-                z: this._bodyManager.isFixedRotation(bodyId) ? 0 : angularVelocity.z * angularDamping,
-            });
-
-            // Velocity clamp: prevent numerical explosion
-            const lv = this._bodyManager.getLinearVelocity(bodyId);
-            const lvSq = lv.x * lv.x + lv.y * lv.y + lv.z * lv.z;
-            const maxV = PhysicsConstants.MAX_VELOCITY;
-            if (lvSq > maxV * maxV) {
-                const scale = maxV / Math.sqrt(lvSq);
-                this._bodyManager.setLinearVelocity(bodyId, {
-                    x: lv.x * scale, y: lv.y * scale, z: lv.z * scale,
-                });
-            }
-            if (!this._bodyManager.isFixedRotation(bodyId)) {
-                const av = this._bodyManager.getAngularVelocity(bodyId);
-                const avSq = av.x * av.x + av.y * av.y + av.z * av.z;
-                const maxAV = PhysicsConstants.MAX_ANGULAR_VELOCITY;
-                if (avSq > maxAV * maxAV) {
-                    const scale = maxAV / Math.sqrt(avSq);
-                    this._bodyManager.setAngularVelocity(bodyId, {
-                        x: av.x * scale, y: av.y * scale, z: av.z * scale,
-                    });
-                }
-            }
-        }
+        integrateVelocitiesImpl(this._bodyManager, this._gravity, dt);
     }
 
     private _solveConstraints(
@@ -929,78 +881,7 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     private _integratePositions(dt: number): void {
-        const bodyIds = this._bodyManager.getBodyIds();
-
-        for (const bodyId of bodyIds) {
-            if (this._bodyManager.getBodyType(bodyId) === BODY_TYPE_STATIC) continue;
-            if (!this._bodyManager.isEnabled(bodyId)) continue;
-            if (!this._bodyManager.isAwake(bodyId)) continue;
-
-            const position = this._bodyManager.getPosition(bodyId);
-            const velocity = this._bodyManager.getLinearVelocity(bodyId);
-            const rotation = this._bodyManager.getRotation(bodyId);
-            const angularVelocity = this._bodyManager.getAngularVelocity(bodyId);
-
-            this._bodyManager.setPosition(bodyId, {
-                x: position.x + velocity.x * dt,
-                y: position.y + velocity.y * dt,
-                z: position.z + velocity.z * dt,
-            });
-
-            const angularSpeed = Math.sqrt(
-                angularVelocity.x * angularVelocity.x +
-                    angularVelocity.y * angularVelocity.y +
-                    angularVelocity.z * angularVelocity.z
-            );
-
-            if (angularSpeed > 1e-10 && !this._bodyManager.isFixedRotation(bodyId)) {
-                const halfAngle = angularSpeed * dt * 0.5;
-                const s = Math.sin(halfAngle) / angularSpeed;
-                const c = Math.cos(halfAngle);
-
-                const dqx = angularVelocity.x * s;
-                const dqy = angularVelocity.y * s;
-                const dqz = angularVelocity.z * s;
-                const dqw = c;
-
-                const newW =
-                    dqw * rotation.w -
-                    dqx * rotation.x -
-                    dqy * rotation.y -
-                    dqz * rotation.z;
-                const newX =
-                    dqw * rotation.x +
-                    dqx * rotation.w +
-                    dqy * rotation.z -
-                    dqz * rotation.y;
-                const newY =
-                    dqw * rotation.y -
-                    dqx * rotation.z +
-                    dqy * rotation.w +
-                    dqz * rotation.x;
-                const newZ =
-                    dqw * rotation.z +
-                    dqx * rotation.y -
-                    dqy * rotation.x +
-                    dqz * rotation.w;
-
-                const length = Math.sqrt(
-                    newX * newX + newY * newY + newZ * newZ + newW * newW
-                );
-                const inverseLength = length > 1e-10 ? 1 / length : 0;
-
-                this._bodyManager.setRotation(bodyId, {
-                    x: newX * inverseLength,
-                    y: newY * inverseLength,
-                    z: newZ * inverseLength,
-                    w: newW * inverseLength,
-                });
-            }
-        }
-
-        if (this._autoClearForces) {
-            this.clearForces();
-        }
+        integratePositionsImpl(this._bodyManager, dt, this._autoClearForces);
     }
 
     private _registerConstraint(
