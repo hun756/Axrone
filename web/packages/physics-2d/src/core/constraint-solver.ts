@@ -52,6 +52,11 @@ export class ConstraintSolver2D {
         this._bodyManager = bodyManager;
     }
 
+    /**
+     * @deprecated Use phased API instead: prepareConstraints() → solveVelocityConstraints()
+     * → solvePositionConstraints() → commitBodies(). This monolithic method exists only
+     * for backward compatibility and will be removed in a future version.
+     */
     solveConstraints(
         constraints: readonly ConstraintId[],
         deltaTime: number,
@@ -123,6 +128,7 @@ export class ConstraintSolver2D {
                 }
             }
         }
+        this._lastSolvedConstraintCount = this._jacobianCache.size;
     }
 
     solvePositionConstraints(iterations: number): boolean {
@@ -203,6 +209,46 @@ export class ConstraintSolver2D {
 
     getSolverBody(bodyId: BodyId): SolverBody | undefined {
         return this._bodyMap.get(bodyId);
+    }
+
+    /**
+     * Write back velocity corrections from the constraint solver's internal body map
+     * to an external velocity array. Used by IslandSolver2D to sync joint-correction
+     * impulses before position integration.
+     */
+    writeBackVelocities(
+        velocities: Float64Array,
+        bodyStack: readonly BodyId[],
+        bodyIndex: Map<BodyId, number>
+    ): void {
+        for (const [bodyId, solverBody] of this._bodyMap) {
+            const idx = bodyIndex.get(bodyId);
+            if (idx === undefined) continue;
+            const offset = idx * 3;
+            velocities[offset] = solverBody.linearVelocity.x;
+            velocities[offset + 1] = solverBody.linearVelocity.y;
+            velocities[offset + 2] = solverBody.angularVelocity;
+        }
+    }
+
+    /**
+     * Write back position corrections from the constraint solver's internal body map
+     * to an external position array. Used by IslandSolver2D to sync joint position
+     * corrections before the final body commit.
+     */
+    writeBackPositions(
+        positions: Float64Array,
+        bodyStack: readonly BodyId[],
+        bodyIndex: Map<BodyId, number>
+    ): void {
+        for (const [bodyId, solverBody] of this._bodyMap) {
+            const idx = bodyIndex.get(bodyId);
+            if (idx === undefined) continue;
+            const offset = idx * 3;
+            positions[offset] = solverBody.position.x;
+            positions[offset + 1] = solverBody.position.y;
+            positions[offset + 2] = solverBody.rotation;
+        }
     }
 
     clearCache(): void {
