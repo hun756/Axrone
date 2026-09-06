@@ -1,7 +1,8 @@
-import { Vec3, Quat, type IVec3Like, type IQuatLike } from '@axrone/numeric';
+import { Vec3, type IVec3Like, type IQuatLike } from '@axrone/numeric';
 import { Component } from '@axrone/ecs-runtime';
 import type { ConstraintId3D } from '../types';
 import type { ConstraintManager3D, PhysicsWorld3D } from '../core/physics-world-3d';
+import { transformPoint3D } from '../core/physics-world-3d-shared';
 import type { Rigidbody3D } from './rigidbody3d';
 
 export const INVALID_CONSTRAINT_ID = -1 as ConstraintId3D;
@@ -242,35 +243,7 @@ export abstract class Joint3D extends Component {
     }
 
     protected _transformPoint(pos: IVec3Like, rot: IQuatLike, localPoint: IVec3Like): IVec3Like {
-        const rx = rot.x * 2;
-        const ry = rot.y * 2;
-        const rz = rot.z * 2;
-        const wx = rot.w * rx;
-        const wy = rot.w * ry;
-        const wz = rot.w * rz;
-        const xx = rot.x * rx;
-        const xy = rot.x * ry;
-        const xz = rot.x * rz;
-        const yy = rot.y * ry;
-        const yz = rot.y * rz;
-        const zz = rot.z * rz;
-        return {
-            x:
-                pos.x +
-                (1 - (yy + zz)) * localPoint.x +
-                (xy - wz) * localPoint.y +
-                (xz + wy) * localPoint.z,
-            y:
-                pos.y +
-                (xy + wz) * localPoint.x +
-                (1 - (xx + zz)) * localPoint.y +
-                (yz - wx) * localPoint.z,
-            z:
-                pos.z +
-                (xz - wy) * localPoint.x +
-                (yz + wx) * localPoint.y +
-                (1 - (xx + yy)) * localPoint.z,
-        };
+        return transformPoint3D(localPoint, pos, rot);
     }
 
     protected _calculatePerpendicularAxis(): IVec3Like {
