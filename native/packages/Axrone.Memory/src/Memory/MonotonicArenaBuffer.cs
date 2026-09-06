@@ -12,9 +12,9 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     private readonly object _expansionLock = new();
     private ArenaSegment[] _segments;
     private int _activeSegmentCount;
-    private int _currentSegmentIndex;
-    private byte* _currentPointer;
-    private nint _currentRemainingBytes;
+    private byte* _currentSegmentBase;
+    private nint _currentSegmentCapacity;
+    private long _currentOffset;
     private int _isDisposed;
 
     public MonotonicArenaBuffer(nint segmentCapacity = 1048576)
@@ -28,9 +28,9 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
 
         _segments[0] = new ArenaSegment { MemoryBlock = initialAlloc, ByteCapacity = _segmentCapacity };
         _activeSegmentCount = 1;
-        _currentSegmentIndex = 0;
-        _currentPointer = (byte*)initialAlloc;
-        _currentRemainingBytes = _segmentCapacity;
+        _currentSegmentBase = (byte*)initialAlloc;
+        _currentSegmentCapacity = _segmentCapacity;
+        _currentOffset = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -58,49 +58,50 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
 
         nint alignedAllocationSize = AlignTo64(byteCount);
 
+        // Lock-free fast path: atomic bump pointer
+        nint offset = (nint)Interlocked.Add(ref _currentOffset, (long)alignedAllocationSize);
+        if (offset <= Volatile.Read(ref _currentSegmentCapacity))
+        {
+            return _currentSegmentBase + (offset - alignedAllocationSize);
+        }
+
+        // Slow path: segment overflow, expansion lock required
+        return AllocateOverflowSlow(alignedAllocationSize);
+    }
+
+    private void* AllocateOverflowSlow(nint alignedSize)
+    {
         lock (_expansionLock)
         {
-            if (_currentRemainingBytes >= alignedAllocationSize)
+            nint newCapacity = Math.Max(_segmentCapacity, alignedSize);
+            int nextIndex = _currentSegmentIndex + 1;
+
+            if (nextIndex < _activeSegmentCount && _segments[nextIndex].ByteCapacity >= newCapacity)
             {
-                byte* result = _currentPointer;
-                _currentPointer += alignedAllocationSize;
-                _currentRemainingBytes -= alignedAllocationSize;
-                return result;
+                _currentSegmentIndex = nextIndex;
+                _currentSegmentBase = (byte*)_segments[nextIndex].MemoryBlock;
+                _currentSegmentCapacity = _segments[nextIndex].ByteCapacity;
             }
-            return AllocateOverflowSegment(alignedAllocationSize);
+            else
+            {
+                void* newBlock = NativeMemory.AlignedAlloc((nuint)newCapacity, 64);
+                if (newBlock == null) throw new InsufficientMemoryException($"Failed to allocate arena chunk of {newCapacity} bytes.");
+
+                if (_activeSegmentCount == _segments.Length) Array.Resize(ref _segments, _segments.Length * 2);
+
+                _segments[_activeSegmentCount] = new ArenaSegment { MemoryBlock = newBlock, ByteCapacity = newCapacity };
+                _currentSegmentIndex = _activeSegmentCount;
+                _activeSegmentCount++;
+                _currentSegmentBase = (byte*)newBlock;
+                _currentSegmentCapacity = newCapacity;
+            }
+
+            _currentOffset = (long)alignedSize;
+            return _currentSegmentBase;
         }
     }
 
-    private void* AllocateOverflowSegment(nint alignedSize)
-    {
-        nint newCapacity = Math.Max(_segmentCapacity, alignedSize);
-        int nextIndex = _currentSegmentIndex + 1;
-
-        if (nextIndex < _activeSegmentCount && _segments[nextIndex].ByteCapacity >= newCapacity)
-        {
-            _currentSegmentIndex = nextIndex;
-            _currentPointer = (byte*)_segments[nextIndex].MemoryBlock;
-            _currentRemainingBytes = _segments[nextIndex].ByteCapacity;
-        }
-        else
-        {
-            void* newBlock = NativeMemory.AlignedAlloc((nuint)newCapacity, 64);
-            if (newBlock == null) throw new InsufficientMemoryException($"Failed to allocate arena chunk of {newCapacity} bytes.");
-
-            if (_activeSegmentCount == _segments.Length) Array.Resize(ref _segments, _segments.Length * 2);
-
-            _segments[_activeSegmentCount] = new ArenaSegment { MemoryBlock = newBlock, ByteCapacity = newCapacity };
-            _currentSegmentIndex = _activeSegmentCount;
-            _activeSegmentCount++;
-            _currentPointer = (byte*)newBlock;
-            _currentRemainingBytes = newCapacity;
-        }
-
-        byte* allocatedAddress = _currentPointer;
-        _currentPointer += alignedSize;
-        _currentRemainingBytes -= alignedSize;
-        return allocatedAddress;
-    }
+    private int _currentSegmentIndex;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Reset()
@@ -111,8 +112,9 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
             _currentSegmentIndex = 0;
             if (_activeSegmentCount > 0)
             {
-                _currentPointer = (byte*)_segments[0].MemoryBlock;
-                _currentRemainingBytes = _segments[0].ByteCapacity;
+                _currentSegmentBase = (byte*)_segments[0].MemoryBlock;
+                _currentSegmentCapacity = _segments[0].ByteCapacity;
+                _currentOffset = 0;
             }
         }
     }
@@ -132,8 +134,9 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
                     }
                 }
                 _activeSegmentCount = 0;
-                _currentPointer = null;
-                _currentRemainingBytes = 0;
+                _currentSegmentBase = null;
+                _currentSegmentCapacity = 0;
+                _currentOffset = 0;
             }
         }
     }
