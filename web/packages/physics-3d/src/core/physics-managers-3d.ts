@@ -35,18 +35,33 @@ const ROTATION_OFFSET = 3;
 const LINEAR_VEL_OFFSET = 0;
 const ANGULAR_VEL_OFFSET = 3;
 
-enum BodyManagerError {
-    INVALID_STATE = 'INVALID_STATE',
-    CAPACITY_EXCEEDED = 'CAPACITY_EXCEEDED',
-}
+type ErrorCode3D =
+    | 'INVALID_STATE'
+    | 'NOT_FOUND'
+    | 'CAPACITY_EXCEEDED'
+    | 'INVALID_ARGUMENT'
+    | 'DUPLICATE'
+    | 'PERMISSION_DENIED';
 
-export class PhysicsError3D extends Error {
-    readonly code: string;
+export class PhysicsError3D<TCode extends ErrorCode3D = ErrorCode3D> extends Error {
+    readonly code: TCode;
+    readonly timestamp: number;
+    readonly context: Readonly<Record<string, unknown>>;
 
-    constructor(message: string, code: string) {
+    constructor(message: string, code: TCode, context: Record<string, unknown> = {}) {
         super(message);
         this.name = 'PhysicsError3D';
         this.code = code;
+        this.timestamp = performance.now();
+        this.context = Object.freeze({ ...context });
+        Object.setPrototypeOf(this, PhysicsError3D.prototype);
+    }
+
+    withContext(additional: Record<string, unknown>): PhysicsError3D<TCode> {
+        return new PhysicsError3D<TCode>(this.message, this.code, {
+            ...this.context,
+            ...additional,
+        });
     }
 }
 
@@ -95,7 +110,7 @@ export class BodyManager3D implements Disposable {
 
     createBody(def: IPhysicsBodyDef3D): BodyId3D {
         if (Number(this._bodyCount) >= this._maxBodies && this._freeList.length === 0) {
-            throw new PhysicsError3D('Body capacity exceeded', BodyManagerError.CAPACITY_EXCEEDED);
+            throw new PhysicsError3D('Body capacity exceeded', 'CAPACITY_EXCEEDED');
         }
 
         const bodyId = this._nextBodyId as unknown as BodyId3D;
@@ -531,7 +546,7 @@ export class BodyManager3D implements Disposable {
 
     private _getBodyIndex(bodyId: BodyId3D): number {
         const index = this._bodyIdToIndex.get(bodyId);
-        if (index === undefined) throw new PhysicsError3D('Body not found', BodyManagerError.INVALID_STATE);
+        if (index === undefined) throw new PhysicsError3D('Body not found', 'INVALID_STATE');
         return index;
     }
 
@@ -735,7 +750,7 @@ export class ShapeManager3D implements Disposable {
         options: IShapeCreateOptions3D | undefined
     ): ShapeId3D {
         if (Number(this._shapeCount) >= this._maxShapes && this._freeList.length === 0) {
-            throw new PhysicsError3D('Shape capacity exceeded', BodyManagerError.CAPACITY_EXCEEDED);
+            throw new PhysicsError3D('Shape capacity exceeded', 'CAPACITY_EXCEEDED');
         }
 
         const shapeId = this._nextShapeId as unknown as ShapeId3D;
@@ -785,7 +800,7 @@ export class ShapeManager3D implements Disposable {
 
     private _getShapeIndex(shapeId: ShapeId3D): number {
         const index = this._shapeIdToIndex.get(shapeId);
-        if (index === undefined) throw new PhysicsError3D('Shape not found', BodyManagerError.INVALID_STATE);
+        if (index === undefined) throw new PhysicsError3D('Shape not found', 'INVALID_STATE');
         return index;
     }
 
@@ -943,7 +958,7 @@ export class ConstraintManager3D implements Disposable {
         initData: (offset: number) => void
     ): ConstraintId3D {
         if (Number(this._constraintCount) >= this._maxConstraints && this._freeList.length === 0) {
-            throw new PhysicsError3D('Constraint capacity exceeded', BodyManagerError.CAPACITY_EXCEEDED);
+            throw new PhysicsError3D('Constraint capacity exceeded', 'CAPACITY_EXCEEDED');
         }
 
         const constraintId = this._nextConstraintId as unknown as ConstraintId3D;
@@ -971,7 +986,7 @@ export class ConstraintManager3D implements Disposable {
 
     private _getConstraintIndex(constraintId: ConstraintId3D): number {
         const index = this._constraintIdToIndex.get(constraintId);
-        if (index === undefined) throw new PhysicsError3D('Constraint not found', BodyManagerError.INVALID_STATE);
+        if (index === undefined) throw new PhysicsError3D('Constraint not found', 'INVALID_STATE');
         return index;
     }
 
