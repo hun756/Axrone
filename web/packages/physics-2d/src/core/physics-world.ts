@@ -29,7 +29,7 @@ import type {
     IContactManifold2D,
     ICollisionFilter,
     RaycastCallback2D,
-    IRaycastResult2D,
+    ISingleRaycastResult2D,
     IQueryFilter,
     IAABBQueryCallback,
     IPhysicsBody2D,
@@ -847,7 +847,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         direction: Readonly<IVec2Like>,
         maxFraction: number,
         filter?: IQueryFilter
-    ): IRaycastResult2D | null {
+    ): ISingleRaycastResult2D | null {
         const hits = this._shapeStore.rayCastAll(origin, direction, maxFraction, filter);
         return hits.length > 0 ? hits[0] : null;
     }
@@ -857,7 +857,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         direction: Readonly<IVec2Like>,
         maxFraction: number,
         filter?: IQueryFilter
-    ): readonly IRaycastResult2D[] {
+    ): readonly ISingleRaycastResult2D[] {
         return this._shapeStore.rayCastAll(origin, direction, maxFraction, filter);
     }
 

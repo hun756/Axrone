@@ -133,7 +133,7 @@ export interface IMaterial {
     readonly spinningFriction?: Friction;
 }
 
-export interface IRaycastResult2D {
+export interface ISingleRaycastResult2D {
     readonly hit: boolean;
     readonly bodyId: BodyId;
     readonly shapeId: ShapeId;
@@ -142,7 +142,7 @@ export interface IRaycastResult2D {
     readonly fraction: number;
 }
 
-export interface IRaycastResult3D {
+export interface ISingleRaycastResult3D {
     readonly hit: boolean;
     readonly bodyId: BodyId;
     readonly shapeId: ShapeId;

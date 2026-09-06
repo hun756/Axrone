@@ -4,7 +4,7 @@ import type {
     ShapeId,
     ConstraintId,
     SolverFlags,
-    IRaycastResult2D,
+    ISingleRaycastResult2D,
 } from './primitives';
 import type {
     IPhysicsBody2D,
@@ -155,13 +155,13 @@ export interface IPhysicsWorld2D extends Disposable {
         direction: Readonly<IVec2Like>,
         maxFraction: number,
         filter?: IQueryFilter
-    ): IRaycastResult2D | null;
+    ): ISingleRaycastResult2D | null;
     rayCastAll(
         origin: Readonly<IVec2Like>,
         direction: Readonly<IVec2Like>,
         maxFraction: number,
         filter?: IQueryFilter
-    ): readonly IRaycastResult2D[];
+    ): readonly ISingleRaycastResult2D[];
 
     queryAABB(
         min: Readonly<IVec2Like>,

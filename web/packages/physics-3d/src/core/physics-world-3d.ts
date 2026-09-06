@@ -8,7 +8,7 @@ import type {
     IMaterial,
     IPhysicsBody3D,
     IPhysicsWorldStatistics,
-    IRaycastResult3D,
+    ISingleRaycastResult3D,
     IShape3D,
     Mass,
 } from '../types';
@@ -610,7 +610,7 @@ export class PhysicsWorld3D implements Disposable {
         direction: Readonly<IVec3Like>,
         maxFraction: number,
         filter?: IQueryFilter3D
-    ): IRaycastResult3D | null {
+    ): ISingleRaycastResult3D | null {
         return this.rayCastAll(origin, direction, maxFraction, filter)[0] ?? null;
     }
 
@@ -619,8 +619,8 @@ export class PhysicsWorld3D implements Disposable {
         direction: Readonly<IVec3Like>,
         maxFraction: number,
         filter?: IQueryFilter3D
-    ): readonly IRaycastResult3D[] {
-        const results: IRaycastResult3D[] = [];
+    ): readonly ISingleRaycastResult3D[] {
+        const results: ISingleRaycastResult3D[] = [];
         const bvh = this._contactRuntime.broadphase;
 
         // BVH-backed ray cast: traverse tree for O(log N) candidate selection

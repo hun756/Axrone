@@ -16,7 +16,7 @@ import type {
     ITransform3D,
     IVelocity3D,
     IContactManifold3D,
-    IRaycastResult3D,
+    ISingleRaycastResult3D,
     SolverFlags,
     BodyFlags,
 } from '../types';
@@ -234,8 +234,11 @@ export interface IContactListener3DRaw {
     onTriggerExit?(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void;
 }
 
-export type RaycastQueryCallback3D = (result: IRaycastResult3D) => boolean;
+export type RaycastQueryCallback3D = (result: ISingleRaycastResult3D) => boolean;
 
+// IQueryFilter3D — defined here (physics-3d type section) because it is only
+// consumed by the physics-3d package.  Kept in physics-core solely so that the
+// physics-3d barrel (`export * from '@axrone/physics-core'`) re-exports it.
 export interface IQueryFilter3D {
     readonly categoryBits?: number;
     readonly maskBits?: number;
