@@ -62,7 +62,7 @@ void main() {
     vec4 color = v_FillColor;
     if (v_BorderWidth > 0.0 && v_BorderColor.a > 0.0) {
         vec2 innerSize = max(v_Size - vec2(v_BorderWidth * 2.0), vec2(0.0));
-        vec2 innerLocal = clamp(v_Local - vec2(v_BorderWidth), vec2(0.0), innerSize);
+        vec2 innerLocal = v_Local - vec2(v_BorderWidth);
         vec4 innerRadii = max(v_Radius - vec4(v_BorderWidth), vec4(0.0));
         float inner = roundedRectSdf(innerLocal, innerSize, innerRadii);
         float innerAlpha = innerSize.x <= 0.0 || innerSize.y <= 0.0 ? 0.0 : 1.0 - smoothstep(-aa, aa, inner);
