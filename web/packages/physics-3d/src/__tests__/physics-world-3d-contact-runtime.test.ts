@@ -33,7 +33,7 @@ describe('PhysicsWorld3D contact runtime', () => {
             const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
             world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 0.5, z: 5 } });
 
-            const box = world.createBody({ type: 2, position: { x: 0, y: 0.8, z: 0 } });
+            const box = world.createBody({ type: 2, position: { x: 0, y: 0.2, z: 0 } });
             world.createBoxShape(box, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
 
             world.step(0.3);
