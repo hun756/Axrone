@@ -115,7 +115,16 @@ export const attachInputBrowserTarget = (
             return false;
         }
 
-        pointerLockElement.requestPointerLock();
+        try {
+            const result = pointerLockElement.requestPointerLock();
+            if (result && typeof (result as Promise<void>).catch === 'function') {
+                (result as Promise<void>).catch(() => {
+                    // Pointer lock request failed (e.g., user gesture required, already locked)
+                });
+            }
+        } catch {
+            // Synchronous failure (e.g., not supported)
+        }
         return true;
     };
 
