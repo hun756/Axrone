@@ -121,6 +121,16 @@ import {
     rayCastClosest as rayCastClosestImpl,
     shiftOrigin as shiftOriginImpl,
 } from './physics-world-3d-queries';
+import {
+    createBoxShape as createBoxShapeImpl,
+    createCapsuleShape as createCapsuleShapeImpl,
+    createConeShape as createConeShapeImpl,
+    createConvexHullShape as createConvexHullShapeImpl,
+    createCylinderShape as createCylinderShapeImpl,
+    createHeightFieldShape as createHeightFieldShapeImpl,
+    createSphereShape as createSphereShapeImpl,
+    createTriangleMeshShape as createTriangleMeshShapeImpl,
+} from './physics-world-3d-shape-factory';
 
 export { BodyManager3D, ShapeManager3D, ConstraintManager3D } from './physics-managers-3d';
 
@@ -239,18 +249,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createSphere(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_SPHERE,
-            def: { ...def, kind: SHAPE_TYPE_SPHERE },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createSphereShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createBoxShape(
@@ -260,18 +259,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createBox(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_BOX,
-            def: { ...def, kind: SHAPE_TYPE_BOX },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createBoxShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createCapsuleShape(
@@ -281,18 +269,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createCapsule(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_CAPSULE,
-            def: { ...def, kind: SHAPE_TYPE_CAPSULE },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createCapsuleShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createCylinderShape(
@@ -302,18 +279,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createCylinder(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_CYLINDER,
-            def: { ...def, kind: SHAPE_TYPE_CYLINDER },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createCylinderShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createConeShape(
@@ -323,18 +289,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createCone(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_CONE,
-            def: { ...def, kind: SHAPE_TYPE_CONE },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createConeShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createConvexHullShape(
@@ -344,18 +299,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createConvexHull(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_CONVEX_HULL,
-            def: { ...def, vertices: def.vertices.map(Vec3.copy), kind: SHAPE_TYPE_CONVEX_HULL },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createConvexHullShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createTriangleMeshShape(
@@ -365,22 +309,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createTriangleMesh(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_TRIANGLE_MESH,
-            def: {
-                vertices: def.vertices.map((v) => Vec3.copy(v)),
-                indices: [...def.indices],
-                kind: SHAPE_TYPE_TRIANGLE_MESH,
-            },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createTriangleMeshShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createHeightFieldShape(
@@ -390,26 +319,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createHeightField(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_HEIGHTFIELD,
-            def: {
-                heights: new Float32Array(def.heights),
-                width: def.width,
-                depth: def.depth,
-                scaleX: def.scaleX,
-                scaleY: def.scaleY,
-                scaleZ: def.scaleZ,
-                kind: SHAPE_TYPE_HEIGHTFIELD,
-            },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createHeightFieldShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     destroyShape(shapeId: ShapeId3D): void {
