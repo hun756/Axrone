@@ -189,3 +189,44 @@ export function buildCollisionMatrix<
     }
     return matrix as CollisionMatrix<TShapeKind, TFn>;
 }
+
+/**
+ * Lightweight free-list for recycling integer indices into parallel typed arrays.
+ * Eliminates silent corruption from monotonic slot consumption under spawn/destroy churn.
+ */
+export class IndexPool {
+    private readonly _free: number[] = [];
+    private _next: number = 0;
+    private readonly _capacity: number;
+
+    constructor(capacity: number) {
+        this._capacity = capacity;
+    }
+
+    acquire(): number {
+        if (this._free.length > 0) {
+            return this._free.pop()!;
+        }
+        if (this._next >= this._capacity) {
+            throw new PhysicsError('IndexPool capacity exceeded', 'CAPACITY_EXCEEDED');
+        }
+        return this._next++;
+    }
+
+    release(index: number): void {
+        this._free.push(index);
+    }
+
+    get available(): number {
+        return this._free.length + (this._capacity - this._next);
+    }
+
+    get inUse(): number {
+        return this._next - this._free.length;
+    }
+
+    reset(): void {
+        this._free.length = 0;
+        this._next = 0;
+    }
+}

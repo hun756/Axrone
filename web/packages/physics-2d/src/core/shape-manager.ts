@@ -19,6 +19,7 @@ import type {
     ICapsuleShapeDef2D,
     ISegmentShapeDef,
 } from '../types';
+import { IndexPool } from './foundation';
 
 const enum ShapeManagerError {
     INVALID_STATE = 'INVALID_STATE',
@@ -77,19 +78,23 @@ export class ShapeManager2D implements Disposable {
     private _polygonCount: number = 0;
     private _segmentCount: number = 0;
     private _capsuleCount: number = 0;
+    private readonly _circlePool: IndexPool;
+    private readonly _boxPool: IndexPool;
+    private readonly _polygonPool: IndexPool;
+    private readonly _segmentPool: IndexPool;
+    private readonly _capsulePool: IndexPool;
     private _disposed: boolean = false;
 
     constructor(maxShapes: number = 2048) {
         this._maxShapes = maxShapes;
-        const quarterMax = Math.ceil(maxShapes / 4);
 
         this._shapeMetadata = new Map();
-        this._circleData = new Float64Array(quarterMax * CIRCLE_SHAPE_SIZE);
-        this._boxData = new Float64Array(quarterMax * BOX_SHAPE_SIZE);
-        this._polygonData = new Float64Array(quarterMax * POLYGON_MAX_VERTICES * 2);
-        this._polygonVertexCounts = new Uint8Array(quarterMax);
-        this._segmentData = new Float64Array(quarterMax * 4);
-        this._capsuleData = new Float64Array(quarterMax * 4);
+        this._circleData = new Float64Array(maxShapes * CIRCLE_SHAPE_SIZE);
+        this._boxData = new Float64Array(maxShapes * BOX_SHAPE_SIZE);
+        this._polygonData = new Float64Array(maxShapes * POLYGON_MAX_VERTICES * 2);
+        this._polygonVertexCounts = new Uint8Array(maxShapes);
+        this._segmentData = new Float64Array(maxShapes * 4);
+        this._capsuleData = new Float64Array(maxShapes * 4);
 
         this._shapeToCircleIndex = new Map();
         this._shapeToBoxIndex = new Map();
@@ -97,6 +102,12 @@ export class ShapeManager2D implements Disposable {
         this._shapeToSegmentIndex = new Map();
         this._shapeToCapsuleIndex = new Map();
         this._bodyToShapes = new Map();
+
+        this._circlePool = new IndexPool(maxShapes);
+        this._boxPool = new IndexPool(maxShapes);
+        this._polygonPool = new IndexPool(maxShapes);
+        this._segmentPool = new IndexPool(maxShapes);
+        this._capsulePool = new IndexPool(maxShapes);
     }
 
     get shapeCount(): number {
@@ -108,7 +119,7 @@ export class ShapeManager2D implements Disposable {
         this._assertCapacity();
 
         const shapeId = this._nextShapeId++ as ShapeId;
-        const index = this._circleCount++;
+        const index = this._circlePool.acquire();
         const offset = index * CIRCLE_SHAPE_SIZE;
 
         const center = def.center ?? def.offset ?? { x: 0, y: 0 };
@@ -126,7 +137,7 @@ export class ShapeManager2D implements Disposable {
         this._assertCapacity();
 
         const shapeId = this._nextShapeId++ as ShapeId;
-        const index = this._boxCount++;
+        const index = this._boxPool.acquire();
         const offset = index * BOX_SHAPE_SIZE;
 
         const center = def.center ?? def.offset ?? { x: 0, y: 0 };
@@ -163,7 +174,7 @@ export class ShapeManager2D implements Disposable {
         }
 
         const shapeId = this._nextShapeId++ as ShapeId;
-        const index = this._polygonCount++;
+        const index = this._polygonPool.acquire();
         const offset = index * POLYGON_MAX_VERTICES * 2;
 
         for (let i = 0; i < vertices.length; i++) {
@@ -182,7 +193,7 @@ export class ShapeManager2D implements Disposable {
         this._assertCapacity();
 
         const shapeId = this._nextShapeId++ as ShapeId;
-        const index = this._segmentCount++;
+        const index = this._segmentPool.acquire();
         const offset = index * 4;
 
         this._segmentData[offset] = def.start.x;
@@ -200,7 +211,7 @@ export class ShapeManager2D implements Disposable {
         this._assertCapacity();
 
         const shapeId = this._nextShapeId++ as ShapeId;
-        const index = this._capsuleCount++;
+        const index = this._capsulePool.acquire();
         const offset = index * 4;
 
         const center = def.center ?? def.offset ?? { x: 0, y: 0 };
@@ -227,6 +238,35 @@ export class ShapeManager2D implements Disposable {
             bodyShapes.delete(shapeId);
             if (bodyShapes.size === 0) {
                 this._bodyToShapes.delete(metadata.bodyId);
+            }
+        }
+
+        // Release per-type index back to the pool
+        switch (metadata.type) {
+            case ShapeType.Circle: {
+                const idx = this._shapeToCircleIndex.get(shapeId);
+                if (idx !== undefined) this._circlePool.release(idx);
+                break;
+            }
+            case ShapeType.Box: {
+                const idx = this._shapeToBoxIndex.get(shapeId);
+                if (idx !== undefined) this._boxPool.release(idx);
+                break;
+            }
+            case ShapeType.Polygon: {
+                const idx = this._shapeToPolygonIndex.get(shapeId);
+                if (idx !== undefined) this._polygonPool.release(idx);
+                break;
+            }
+            case ShapeType.Segment: {
+                const idx = this._shapeToSegmentIndex.get(shapeId);
+                if (idx !== undefined) this._segmentPool.release(idx);
+                break;
+            }
+            case ShapeType.Capsule: {
+                const idx = this._shapeToCapsuleIndex.get(shapeId);
+                if (idx !== undefined) this._capsulePool.release(idx);
+                break;
             }
         }
 
