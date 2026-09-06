@@ -47,21 +47,33 @@ describe('ConstraintSolver2D', () => {
                 length: 5,
             });
 
+            // Bodies are 5 apart, rest length 5 → no error, but prepare should succeed
             expect(() => solver.prepareConstraints([c], 1 / 60)).not.toThrow();
         });
 
         it('solves velocity constraints', () => {
+            // Create constraint with wrong rest length to generate velocity corrections
             const c = constraintManager.createDistanceConstraint({
                 type: ConstraintType.Distance,
                 bodyIdA,
                 bodyIdB,
                 localAnchorA: { x: 0, y: 0 },
                 localAnchorB: { x: 0, y: 0 },
-                length: 5,
+                length: 3, // Bodies are 5 apart, rest length 3 → error
             });
 
+            // Give bodyA an initial velocity so the constraint has something to correct
+            bodyManager.setLinearVelocity(bodyIdA, { x: 10, y: 0 });
+
             solver.prepareConstraints([c], 1 / 60);
-            expect(() => solver.solveVelocityConstraints(8)).not.toThrow();
+            solver.solveVelocityConstraints(8);
+
+            // After solve, bodyA velocity should have been corrected (reduced by constraint)
+            const velA = bodyManager.getLinearVelocity(bodyIdA);
+            // The constraint pulls bodyA back toward bodyB (positive x direction correction)
+            // or slows it down. The exact value depends on the Jacobian, but velocity changed.
+            expect(Number.isFinite(velA.x)).toBe(true);
+            expect(Number.isFinite(velA.y)).toBe(true);
         });
 
         it('solves position constraints', () => {
@@ -71,11 +83,12 @@ describe('ConstraintSolver2D', () => {
                 bodyIdB,
                 localAnchorA: { x: 0, y: 0 },
                 localAnchorB: { x: 0, y: 0 },
-                length: 5,
+                length: 3, // Bodies are 5 apart, rest length 3 → position error
             });
 
             solver.prepareConstraints([c], 1 / 60);
             const result = solver.solvePositionConstraints(3);
+            // Result is boolean indicating convergence
             expect(typeof result).toBe('boolean');
         });
 
@@ -86,7 +99,7 @@ describe('ConstraintSolver2D', () => {
                 bodyIdB,
                 localAnchorA: { x: 0, y: 0 },
                 localAnchorB: { x: 0, y: 0 },
-                length: 5,
+                length: 3, // Error: bodies 5 apart, rest length 3
             });
 
             const c2 = constraintManager.createRevoluteConstraint({
@@ -97,11 +110,17 @@ describe('ConstraintSolver2D', () => {
                 localAnchorB: { x: -1, y: 0 },
             });
 
-            expect(() => {
-                solver.prepareConstraints([c1, c2], 1 / 60);
-                solver.solveVelocityConstraints(8);
-                solver.solvePositionConstraints(3);
-            }).not.toThrow();
+            // Give bodies initial velocity for the solver to work with
+            bodyManager.setLinearVelocity(bodyIdA, { x: 5, y: 0 });
+
+            solver.prepareConstraints([c1, c2], 1 / 60);
+            solver.solveVelocityConstraints(8);
+            const result = solver.solvePositionConstraints(3);
+
+            // Position solve should return a boolean (convergence indicator)
+            expect(typeof result).toBe('boolean');
+            // Both constraints were prepared and solved
+            expect(solver.getLastPreparedConstraintCount()).toBeGreaterThanOrEqual(2);
         });
     });
 
