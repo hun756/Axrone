@@ -10,6 +10,17 @@ import {
     type ISoftJointLimitSpring3D,
 } from './joint3d';
 
+/**
+ * Hinge joint — registers a HINGE constraint (type 2).
+ *
+ * **Solver status: PARTIAL.** The anchor distance between connected bodies is
+ * maintained via the fixed-anchor solver path. However, **hinge axis rotation
+ * is NOT simulated** — the connected body will not rotate freely about the
+ * hinge axis. Motor, limit, and spring properties are stored but have no effect.
+ *
+ * @see JOINT_CAPABILITY_3D
+ * @remarks TODO(P2-joint-solvers): implement proper hinge-axis rotational solver.
+ */
 @script({ scriptName: 'HingeJoint3D' })
 export class HingeJoint3D extends Joint3D {
     private _useLimits: boolean = false;

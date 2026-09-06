@@ -13,6 +13,18 @@ import {
     type ISoftJointLimitSpring3D,
 } from './joint3d';
 
+/**
+ * Configurable joint — registers a GENERIC constraint (type 5).
+ *
+ * **Solver status: UNSUPPORTED.** The constraint is registered with the
+ * constraint manager but the solver produces **no correction** for generic
+ * constraints. Adding this joint to a scene has **no physical effect** —
+ * connected bodies are free to move independently. All per-axis motion,
+ * limit, drive, and target properties are stored but have no effect.
+ *
+ * @see JOINT_CAPABILITY_3D
+ * @remarks TODO(P2-joint-solvers): implement proper generic/6-DOF constraint solver.
+ */
 @script({ scriptName: 'ConfigurableJoint3D' })
 export class ConfigurableJoint3D extends Joint3D {
     private _xMotion: number = 0;

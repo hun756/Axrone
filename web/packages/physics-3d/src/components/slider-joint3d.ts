@@ -10,6 +10,17 @@ import {
     type ISoftJointLimitSpring3D,
 } from './joint3d';
 
+/**
+ * Slider joint — registers a SLIDER constraint (type 3).
+ *
+ * **Solver status: UNSUPPORTED.** The constraint is registered with the
+ * constraint manager but the solver produces **no correction** for slider
+ * constraints. Adding this joint to a scene has **no physical effect** —
+ * connected bodies are free to move independently.
+ *
+ * @see JOINT_CAPABILITY_3D
+ * @remarks TODO(P2-joint-solvers): implement proper slider constraint Jacobian.
+ */
 @script({ scriptName: 'SliderJoint3D' })
 export class SliderJoint3D extends Joint3D {
     private _useLimits: boolean = false;

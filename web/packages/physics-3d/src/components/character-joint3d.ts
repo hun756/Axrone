@@ -10,6 +10,17 @@ import {
     type ISoftJointLimitSpring3D,
 } from './joint3d';
 
+/**
+ * Character joint — registers a CONE_TWIST constraint (type 4).
+ *
+ * **Solver status: UNSUPPORTED.** The constraint is registered with the
+ * constraint manager but the solver produces **no correction** for cone-twist
+ * constraints. Adding this joint to a scene has **no physical effect** —
+ * connected bodies are free to move independently.
+ *
+ * @see JOINT_CAPABILITY_3D
+ * @remarks TODO(P2-joint-solvers): implement proper cone-twist constraint solver.
+ */
 @script({ scriptName: 'CharacterJoint3D' })
 export class CharacterJoint3D extends Joint3D {
     private _swingAxis: Vec3 = new Vec3(1, 0, 0);

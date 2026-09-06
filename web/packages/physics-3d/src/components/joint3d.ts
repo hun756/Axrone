@@ -7,6 +7,33 @@ import type { Rigidbody3D } from './rigidbody3d';
 
 export const INVALID_CONSTRAINT_ID = -1 as ConstraintId3D;
 
+/**
+ * 3D joint solver capability matrix.
+ *
+ * | Joint type      | Constraint type | Solver status |
+ * |-----------------|-----------------|---------------|
+ * | FixedJoint3D    | FIXED (0)       | **FULL** — Baumgarte + sequential impulse, distance preserved |
+ * | DistanceJoint3D | FIXED (0)       | **FULL** — same solver path as Fixed |
+ * | SpringJoint3D   | SPRING (6)      | **FULL** — spring force + Baumgarte |
+ * | HingeJoint3D    | HINGE (2)       | **PARTIAL** — anchor distance maintained; **axis rotation NOT simulated** |
+ * | SliderJoint3D   | SLIDER (3)      | **UNSUPPORTED** — constraint registered but no solver correction |
+ * | CharacterJoint3D| CONE_TWIST (4)  | **UNSUPPORTED** — constraint registered but no solver correction |
+ * | ConfigurableJoint3D | GENERIC (5) | **UNSUPPORTED** — constraint registered but no solver correction |
+ *
+ * TODO(P2-joint-solvers): implement proper slider, cone-twist, configurable, and hinge-axis solvers.
+ */
+export const JOINT_CAPABILITY_3D = {
+    FIXED: 'full',
+    DISTANCE: 'full',
+    SPRING: 'full',
+    HINGE: 'partial',
+    SLIDER: 'unsupported',
+    CONE_TWIST: 'unsupported',
+    GENERIC: 'unsupported',
+} as const;
+
+export type JointCapability3D = typeof JOINT_CAPABILITY_3D[keyof typeof JOINT_CAPABILITY_3D];
+
 export const enum JointDriveMode3D {
     None = 0,
     Position = 1,
@@ -62,6 +89,16 @@ export const DEFAULT_SOFT_JOINT_LIMIT_SPRING: Readonly<ISoftJointLimitSpring3D> 
     damper: 0,
 };
 
+/**
+ * Base class for all 3D joint components.
+ *
+ * IMPORTANT: Not all joint types are fully simulated. See {@link JOINT_CAPABILITY_3D}
+ * for the current solver capability matrix. Joints marked as "unsupported" register
+ * their constraint with the solver but receive no correction — they are effectively
+ * decorative until proper solver implementations are added.
+ *
+ * @see JOINT_CAPABILITY_3D
+ */
 export abstract class Joint3D extends Component {
     protected _constraintId: ConstraintId3D = INVALID_CONSTRAINT_ID;
     protected _constraintManager: ConstraintManager3D | null = null;
