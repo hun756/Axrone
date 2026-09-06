@@ -1,4 +1,5 @@
 import { Vec3, Quat, type IVec3Like, type IQuatLike } from '@axrone/numeric';
+import { transformPoint3D, transformDirection3D } from '../core/physics-world-3d-shared';
 import { script } from '@axrone/ecs-runtime/decorators';
 import { Component } from '@axrone/ecs-runtime';
 import type {
@@ -377,6 +378,8 @@ export class Rigidbody3D extends Component {
         this._bodyManager = world.getBodyManager();
         this._applyConfig(config);
         this._createBody();
+        // Compute initial inertia from any colliders already attached
+        this._updateInertiaFromColliders();
     }
 
     addForce(force: IVec3Like, mode: ForceMode3D = ForceMode3D.Force): void {
@@ -614,6 +617,21 @@ export class Rigidbody3D extends Component {
         this._world = null;
     }
 
+    /**
+     * Recompute inertia tensor from attached collider geometries.
+     * Call this after colliders are added or removed from this body.
+     */
+    _updateInertiaFromColliders(): void {
+        if (!this._bodyManager || !this._world || this._bodyId === -1) return;
+        if (this._type !== Rigidbody3DType.Dynamic) return;
+        const shapeManager = this._world.getShapeManager();
+        const inertia = this._bodyManager.computeInertiaForBody(this._bodyId, shapeManager);
+        this._inertiaTensor.x = inertia.x;
+        this._inertiaTensor.y = inertia.y;
+        this._inertiaTensor.z = inertia.z;
+        this._bodyManager.setInertiaTensor(this._bodyId, inertia);
+    }
+
     private _applyConfig(config: IRigidbody3DConfig): void {
         if (config.type !== undefined) this._type = config.type;
         if (config.mass !== undefined) this._mass = Math.max(0.0001, config.mass);
@@ -785,30 +803,11 @@ export class Rigidbody3D extends Component {
     }
 
     private _transformDirection(localDir: IVec3Like): IVec3Like {
-        const rot = this.rotation;
-        const rx = rot.x * 2;
-        const ry = rot.y * 2;
-        const rz = rot.z * 2;
-        const wx = rot.w * rx;
-        const wy = rot.w * ry;
-        const wz = rot.w * rz;
-        const xx = rot.x * rx;
-        const xy = rot.x * ry;
-        const xz = rot.x * rz;
-        const yy = rot.y * ry;
-        const yz = rot.y * rz;
-        const zz = rot.z * rz;
-        return {
-            x: (1 - (yy + zz)) * localDir.x + (xy - wz) * localDir.y + (xz + wy) * localDir.z,
-            y: (xy + wz) * localDir.x + (1 - (xx + zz)) * localDir.y + (yz - wx) * localDir.z,
-            z: (xz - wy) * localDir.x + (yz + wx) * localDir.y + (1 - (xx + yy)) * localDir.z,
-        };
+        return transformDirection3D(localDir, this.rotation);
     }
 
     private _transformPoint(localPoint: IVec3Like): IVec3Like {
-        const worldDir = this._transformDirection(localPoint);
-        const pos = this.position;
-        return { x: pos.x + worldDir.x, y: pos.y + worldDir.y, z: pos.z + worldDir.z };
+        return transformPoint3D(localPoint, this.position, this.rotation);
     }
 
     private _addTorqueFromForceAtPosition(force: IVec3Like, position: IVec3Like): void {
