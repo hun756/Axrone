@@ -10,6 +10,7 @@ import {
     IRaycastResult2D,
     IRaycastResult3D,
     RaycastFlags,
+    RaycastLayer,
     LayerMask,
     RaycastPredicate2D,
     RaycastPredicate3D,
@@ -261,6 +262,7 @@ export class Raycaster2D {
 
         for (const shape of candidates) {
             if ((shape.layer & query.layerMask) === 0) continue;
+            if ((query.flags & RaycastFlags.IgnoreTriggers) !== 0 && (shape.layer & RaycastLayer.Trigger) !== 0) continue;
             if (predicate && !predicate(shape.bodyId, shape.shapeId)) continue;
 
             const intersected = this._intersectShape2D(ray, shape, query.flags, this._tempHit);
@@ -507,6 +509,7 @@ export class Raycaster3D {
 
         for (const shape of candidates) {
             if ((shape.layer & query.layerMask) === 0) continue;
+            if ((query.flags & RaycastFlags.IgnoreTriggers) !== 0 && (shape.layer & RaycastLayer.Trigger) !== 0) continue;
             if (predicate && !predicate(shape.bodyId, shape.shapeId)) continue;
 
             const intersected = this._intersectShape3D(ray, shape, query.flags, this._tempHit);
