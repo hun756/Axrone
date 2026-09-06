@@ -438,6 +438,10 @@ export function bindUIHostToScene<TPayload = unknown>(
         [Symbol.dispose]: disposeBinding,
     };
 
+    const existing = uiHostHandles.get(host);
+    if (existing) {
+        existing.dispose();
+    }
     uiHostHandles.set(host, handle as UIHostBindingHandle<unknown>);
     return handle;
 }
@@ -591,6 +595,10 @@ export function bindUIHostToWorld<TPayload = unknown>(
         [Symbol.dispose]: disposeBinding,
     };
 
+    const existing = uiHostHandles.get(host);
+    if (existing) {
+        existing.dispose();
+    }
     uiHostHandles.set(host, handle as UIHostBindingHandle<unknown>);
     return handle;
 }
