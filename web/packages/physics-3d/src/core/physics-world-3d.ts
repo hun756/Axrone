@@ -906,8 +906,10 @@ export class PhysicsWorld3D implements Disposable {
                 this._sleepTimes.set(bodyId, t);
                 if (t >= sleepTime) {
                     this._bodyManager.setAwake(bodyId, false);
-                    this._bodyManager.setLinearVelocity(bodyId, { x: 0, y: 0, z: 0 });
-                    this._bodyManager.setAngularVelocity(bodyId, { x: 0, y: 0, z: 0 });
+                    // Zero velocities without re-waking (wake=false bypasses the
+                    // raw-API wake added in Wave 3a). Sleep takes priority.
+                    this._bodyManager.setLinearVelocity(bodyId, { x: 0, y: 0, z: 0 }, false);
+                    this._bodyManager.setAngularVelocity(bodyId, { x: 0, y: 0, z: 0 }, false);
                     this._sleepTimes.delete(bodyId);
                 }
             }
