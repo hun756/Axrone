@@ -97,6 +97,28 @@ describe('IslandSolver2D', () => {
         });
     });
 
+    describe('P1-1 allocation-free hot path', () => {
+        it('commits body state correctly using scratch vectors', () => {
+            const body = bodyManager.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+                rotation: 0,
+            });
+            bodyManager.setMassData(body, 1, 0.1, { x: 0, y: 0 });
+            bodyManager.setLinearVelocity(body, { x: 60, y: 0 });
+
+            // One step — body should move in +x direction
+            islandSolver.solveIslands(1 / 60, 8, 3, false, SolverFlags.None, { x: 0, y: 0 });
+
+            const pos = bodyManager.getPosition(body);
+            // Position should have moved in +x (exact value depends on damping/gravity)
+            expect(pos.x).toBeGreaterThan(0);
+            // Verify scratch vec reuse doesn't corrupt position
+            expect(Number.isFinite(pos.x)).toBe(true);
+            expect(Number.isFinite(pos.y)).toBe(true);
+        });
+    });
+
     describe('Island Solver Basics', () => {
         it('creates solver', () => {
             expect(islandSolver).toBeDefined();

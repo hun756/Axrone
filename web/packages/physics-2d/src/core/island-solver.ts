@@ -91,6 +91,9 @@ export class IslandSolver2D {
     private readonly _tmpVelocityA = new Vec2();
     private readonly _tmpVelocityB = new Vec2();
     private readonly _tmpDelta = new Vec2();
+    // P1-1: Scratch vectors for body commit to avoid per-body {x,y} allocation
+    private readonly _tmpPosition = new Vec2();
+    private readonly _tmpLinearVel = new Vec2();
 
     constructor(
         bodyManager: BodyManager2D,
@@ -347,15 +350,14 @@ export class IslandSolver2D {
 
             if (type !== 0) {
                 const offset = i * 3;
-                this._bodyManager.setPosition(bodyId, {
-                    x: this._positions[offset],
-                    y: this._positions[offset + 1],
-                });
+                // P1-1: Use scratch Vec2 to avoid per-body {x,y} allocation
+                this._tmpPosition.x = this._positions[offset];
+                this._tmpPosition.y = this._positions[offset + 1];
+                this._bodyManager.setPosition(bodyId, this._tmpPosition);
                 this._bodyManager.setRotation(bodyId, this._positions[offset + 2]);
-                this._bodyManager.setLinearVelocity(bodyId, {
-                    x: this._velocities[offset],
-                    y: this._velocities[offset + 1],
-                });
+                this._tmpLinearVel.x = this._velocities[offset];
+                this._tmpLinearVel.y = this._velocities[offset + 1];
+                this._bodyManager.setLinearVelocity(bodyId, this._tmpLinearVel);
                 this._bodyManager.setAngularVelocity(bodyId, this._velocities[offset + 2]);
             }
         }
@@ -626,12 +628,14 @@ export class IslandSolver2D {
         const offsetA = indexA * 3;
         this._velocities[offsetA] -= invMassA * px;
         this._velocities[offsetA + 1] -= invMassA * py;
-        this._velocities[offsetA + 2] -= invIA * Vec2.cross(rA, { x: px, y: py });
+        // P1-1: Inline cross product to avoid {x,y} allocation
+        this._velocities[offsetA + 2] -= invIA * (rA.x * py - rA.y * px);
 
         const offsetB = indexB * 3;
         this._velocities[offsetB] += invMassB * px;
         this._velocities[offsetB + 1] += invMassB * py;
-        this._velocities[offsetB + 2] += invIB * Vec2.cross(rB, { x: px, y: py });
+        // P1-1: Inline cross product to avoid {x,y} allocation
+        this._velocities[offsetB + 2] += invIB * (rB.x * py - rB.y * px);
     }
 
     private _initializePositionConstraints(): void {
