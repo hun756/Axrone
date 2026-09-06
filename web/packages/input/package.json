@@ -18,7 +18,7 @@
     "scripts": {
         "build": "rollup -c rollup.config.mjs",
         "clean": "rimraf dist",
-        "test": "vitest run"
+        "test": "vitest run src/__tests__"
     },
     "dependencies": {
         "@axrone/event": "^2.0.0",
