@@ -1,6 +1,55 @@
 import { AABB3D } from '@axrone/geometry';
 import type { IVec3Like } from '@axrone/numeric';
 
+/** Ray-AABB slab intersection. Returns fraction or -1 if miss. */
+function _rayAabbSlab(
+    ox: number, oy: number, oz: number,
+    dx: number, dy: number, dz: number,
+    minX: number, minY: number, minZ: number,
+    maxX: number, maxY: number, maxZ: number,
+    maxFrac: number
+): number {
+    let tmin = 0;
+    let tmax = maxFrac;
+    // X slab
+    if (Math.abs(dx) < 1e-12) {
+        if (ox < minX || ox > maxX) return -1;
+    } else {
+        const invD = 1.0 / dx;
+        let t1 = (minX - ox) * invD;
+        let t2 = (maxX - ox) * invD;
+        if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+        if (t1 > tmin) tmin = t1;
+        if (t2 < tmax) tmax = t2;
+        if (tmin > tmax) return -1;
+    }
+    // Y slab
+    if (Math.abs(dy) < 1e-12) {
+        if (oy < minY || oy > maxY) return -1;
+    } else {
+        const invD = 1.0 / dy;
+        let t1 = (minY - oy) * invD;
+        let t2 = (maxY - oy) * invD;
+        if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+        if (t1 > tmin) tmin = t1;
+        if (t2 < tmax) tmax = t2;
+        if (tmin > tmax) return -1;
+    }
+    // Z slab
+    if (Math.abs(dz) < 1e-12) {
+        if (oz < minZ || oz > maxZ) return -1;
+    } else {
+        const invD = 1.0 / dz;
+        let t1 = (minZ - oz) * invD;
+        let t2 = (maxZ - oz) * invD;
+        if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+        if (t1 > tmin) tmin = t1;
+        if (t2 < tmax) tmax = t2;
+        if (tmin > tmax) return -1;
+    }
+    return tmin;
+}
+
 interface TreeNode3D<TUserData> {
     id: number;
     aabb: AABB3D;
@@ -176,6 +225,64 @@ export class DynamicAABBTree3D<TUserData = unknown> {
 
     get nodeCount(): number {
         return this._nodeCount;
+    }
+
+    /**
+     * BVH-backed ray cast. Traverses the tree testing ray against node AABBs.
+     * Callback receives leaf userData and the hit fraction; return new max fraction
+     * to clip further tests, or -1 to abort.
+     */
+    rayCast(
+        origin: Readonly<IVec3Like>, direction: Readonly<IVec3Like>, maxDistance: number,
+        callback: (userData: TUserData, fraction: number) => number
+    ): void {
+        if (this._root === NULL_NODE) return;
+        const stack: number[] = [this._root];
+        let currentMax = maxDistance;
+        while (stack.length > 0) {
+            const nodeId = stack.pop()!;
+            if (nodeId === NULL_NODE) continue;
+            const node = this._nodes[nodeId];
+            const frac = _rayAabbSlab(
+                origin.x, origin.y, origin.z,
+                direction.x, direction.y, direction.z,
+                node.aabb.min.x, node.aabb.min.y, node.aabb.min.z,
+                node.aabb.max.x, node.aabb.max.y, node.aabb.max.z,
+                currentMax
+            );
+            if (frac < 0) continue;
+            if (node.child1 === NULL_NODE) {
+                // Leaf
+                if (node.userData !== null) {
+                    const newMax = callback(node.userData, frac);
+                    if (newMax < 0) return;
+                    currentMax = newMax;
+                }
+            } else {
+                stack.push(node.child1);
+                stack.push(node.child2);
+            }
+        }
+    }
+
+    /**
+     * BVH-backed AABB query. Returns all leaves whose fat AABB overlaps the query AABB.
+     */
+    queryAABBAll(aabb: AABB3D, callback: (userData: TUserData) => boolean): void {
+        this.query((proxyId) => {
+            const ud = this._nodes[proxyId].userData;
+            if (ud !== null) return callback(ud);
+            return true;
+        }, aabb);
+    }
+
+    /**
+     * BVH-backed point query. Tests if a point lies within any leaf's fat AABB.
+     */
+    queryPointAll(point: Readonly<IVec3Like>, callback: (userData: TUserData) => boolean): void {
+        // Create a degenerate AABB at the point
+        const ptAabb = new AABB3D(point, point);
+        this.queryAABBAll(ptAabb, callback);
     }
 
     private _allocateNode(): number {
