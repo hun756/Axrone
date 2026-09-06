@@ -83,6 +83,12 @@ export class PhysicsWorld3DContactRuntime {
     private readonly _warmImpulses = new Map<string, { normal: number; tangent: number }>();
     private _lastIslandCount = 0;
 
+    // Persistent buffers to eliminate per-step allocations
+    private readonly _candidatePairs: IShapePairCandidate3D[] = [];
+    private readonly _scratchAabb = { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
+    private readonly _scratchCenter: IVec3Like = { x: 0, y: 0, z: 0 };
+    private readonly _scratchDisp: IVec3Like = { x: 0, y: 0, z: 0 };
+
     constructor(private readonly _host: IPhysicsWorld3DContactRuntimeHost) {}
 
     get contactCount(): number {
@@ -110,7 +116,11 @@ export class PhysicsWorld3DContactRuntime {
         const pairs = this._collectPotentialCollisionPairs();
         const bTime = performance.now() - bStart;
         const nStart = performance.now();
-        const next = new Map<string, IResolvedContactManifold3D>();
+
+        // Reuse manifold map — clear instead of reallocating
+        const next = this._contactManifolds;
+        next.clear();
+
         for (const pair of pairs) {
             const m = this._buildContactManifold(pair);
             if (!m) continue;
@@ -192,37 +202,54 @@ export class PhysicsWorld3DContactRuntime {
                 }
             }
         }
-
-        this._contactManifolds = next;
     }
 
     private _collectPotentialCollisionPairs(): IShapePairCandidate3D[] {
-        const candidates: IShapePairCandidate3D[] = [];
+        // Reuse persistent array — clear but don't reallocate
+        this._candidatePairs.length = 0;
+
         const filter = this._host.getCollisionFilter();
         for (const d of this._host.shapeDescriptors.values()) {
             if (!this._host.bodyManager.isEnabled(d.bodyId)) continue;
+
             const rawAabb = this._host.computeShapeAabb(d);
-            const aabb = new AABB3D(rawAabb.min, rawAabb.max);
-            const currentCenter = {
-                x: (aabb.min.x + aabb.max.x) * 0.5,
-                y: (aabb.min.y + aabb.max.y) * 0.5,
-                z: (aabb.min.z + aabb.max.z) * 0.5,
-            };
+            // Use scratch AABB instead of new AABB3D
+            this._scratchAabb.min.x = rawAabb.min.x;
+            this._scratchAabb.min.y = rawAabb.min.y;
+            this._scratchAabb.min.z = rawAabb.min.z;
+            this._scratchAabb.max.x = rawAabb.max.x;
+            this._scratchAabb.max.y = rawAabb.max.y;
+            this._scratchAabb.max.z = rawAabb.max.z;
+
+            // Use scratch center instead of new object
+            this._scratchCenter.x = (rawAabb.min.x + rawAabb.max.x) * 0.5;
+            this._scratchCenter.y = (rawAabb.min.y + rawAabb.max.y) * 0.5;
+            this._scratchCenter.z = (rawAabb.min.z + rawAabb.max.z) * 0.5;
+
             const existing = this._shapeProxyMap.get(d.id);
             if (existing !== undefined) {
-                const prev = this._shapePreviousCenter.get(d.id) ?? currentCenter;
-                const disp = {
-                    x: currentCenter.x - prev.x,
-                    y: currentCenter.y - prev.y,
-                    z: currentCenter.z - prev.z,
-                };
-                this._broadphase.moveProxy(existing, aabb, disp);
+                const prev = this._shapePreviousCenter.get(d.id);
+                if (prev) {
+                    this._scratchDisp.x = this._scratchCenter.x - prev.x;
+                    this._scratchDisp.y = this._scratchCenter.y - prev.y;
+                    this._scratchDisp.z = this._scratchCenter.z - prev.z;
+                } else {
+                    this._scratchDisp.x = 0;
+                    this._scratchDisp.y = 0;
+                    this._scratchDisp.z = 0;
+                }
+                this._broadphase.moveProxy(existing, this._scratchAabb, this._scratchDisp);
             } else {
-                const pid = this._broadphase.createProxy(aabb, d.id);
+                const pid = this._broadphase.createProxy(this._scratchAabb, d.id);
                 this._shapeProxyMap.set(d.id, pid);
             }
-            this._shapePreviousCenter.set(d.id, currentCenter);
+            this._shapePreviousCenter.set(d.id, {
+                x: this._scratchCenter.x,
+                y: this._scratchCenter.y,
+                z: this._scratchCenter.z,
+            });
         }
+
         this._broadphase.queryPairs((pA, pB) => {
             const sA = this._broadphase.getUserData(pA);
             const sB = this._broadphase.getUserData(pB);
@@ -238,14 +265,19 @@ export class PhysicsWorld3DContactRuntime {
             const tA = this._host.bodyManager.getBodyType(dA.bodyId);
             const tB = this._host.bodyManager.getBodyType(dB.bodyId);
             if (tA === BODY_TYPE_STATIC && tB === BODY_TYPE_STATIC) return true;
-            candidates.push({
-                descriptorA: dA, descriptorB: dB,
-                aabbA: this._broadphase.getAABB(pA), aabbB: this._broadphase.getAABB(pB),
+
+            // Reuse persistent array — push object literal (unavoidable but pooled via array reuse)
+            this._candidatePairs.push({
+                descriptorA: dA,
+                descriptorB: dB,
+                aabbA: this._broadphase.getAABB(pA),
+                aabbB: this._broadphase.getAABB(pB),
                 pairKey: dA.id + ':' + dB.id,
             });
             return true;
         });
-        return candidates;
+
+        return this._candidatePairs;
     }
 
     private _buildContactManifold(pair: IShapePairCandidate3D): IResolvedContactManifold3D | null {
