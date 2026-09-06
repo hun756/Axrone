@@ -17,7 +17,7 @@ describe('PhysicsWorld3D Integration', () => {
                 halfExtents: { x: 10, y: 0.5, z: 10 },
             });
 
-            // Stack 3 spheres
+            // Stack 3 spheres (radius=0.5 each)
             const spheres: number[] = [];
             for (let i = 0; i < 3; i++) {
                 const body = world.createBody({
@@ -36,15 +36,28 @@ describe('PhysicsWorld3D Integration', () => {
                 world.step(1 / 60);
             }
 
-            // Bottom sphere should be resting near ground
+            // Bottom sphere: ground top at y=0, sphere radius=0.5 → expected settle y≈0.5
+            // Tolerance ±0.1 accounts for solver settling dynamics
             const bottomPos = world.getBodyManager().getPosition(spheres[0]);
-            expect(bottomPos.y).toBeGreaterThanOrEqual(0.4);
-            expect(bottomPos.y).toBeLessThan(1.5);
+            expect(bottomPos.y).toBeGreaterThanOrEqual(0.35);
+            expect(bottomPos.y).toBeLessThan(0.65);
+
+            // Bottom sphere velocity should be ~0 (settled, not frozen)
+            const bottomVel = world.getBodyManager().getLinearVelocity(spheres[0]);
+            expect(Math.abs(bottomVel.y)).toBeLessThan(0.5);
 
             // All spheres should have moved from their initial positions (gravity applied)
             for (const bodyId of spheres) {
                 const pos = world.getBodyManager().getPosition(bodyId);
                 expect(pos.y).toBeLessThan(10); // Should have fallen from initial height
+            }
+
+            // Spheres should remain stacked vertically (no horizontal jitter)
+            // Multi-point manifold quality proof: x positions should stay near 0
+            for (const bodyId of spheres) {
+                const pos = world.getBodyManager().getPosition(bodyId);
+                expect(Math.abs(pos.x)).toBeLessThan(0.3);
+                expect(Math.abs(pos.z)).toBeLessThan(0.3);
             }
         });
 
@@ -56,7 +69,8 @@ describe('PhysicsWorld3D Integration', () => {
                 halfExtents: { x: 20, y: 0.5, z: 20 },
             });
 
-            // Row of boxes
+            // Row of boxes (half-extents 0.5 → full size 1×1×1)
+            // Ground top at y=0, box half-extent y=0.5 → expected settle y≈0.5
             const boxes: number[] = [];
             for (let i = 0; i < 5; i++) {
                 const body = world.createBody({
@@ -74,11 +88,25 @@ describe('PhysicsWorld3D Integration', () => {
                 world.step(1 / 60);
             }
 
-            // All boxes should be near ground level
+            // All boxes should be near ground level: expected y≈0.5, tolerance ±0.15
             for (const bodyId of boxes) {
                 const pos = world.getBodyManager().getPosition(bodyId);
-                expect(pos.y).toBeGreaterThanOrEqual(0.4);
-                expect(pos.y).toBeLessThan(2);
+                expect(pos.y).toBeGreaterThanOrEqual(0.35);
+                expect(pos.y).toBeLessThan(0.65);
+
+                // Velocity should be ~0 (settled)
+                const vel = world.getBodyManager().getLinearVelocity(bodyId);
+                expect(Math.abs(vel.y)).toBeLessThan(0.5);
+            }
+
+            // Boxes should maintain horizontal row layout (no clustering)
+            // Each box started at x = i*2.5 - 5, spaced 2.5 apart
+            // They should NOT have drifted together (multi-point manifold quality)
+            const xPositions = boxes.map(id => world.getBodyManager().getPosition(id).x);
+            for (let i = 0; i < xPositions.length; i++) {
+                // Each box should stay within ±0.5 of its original x position
+                const expectedX = i * 2.5 - 5;
+                expect(Math.abs(xPositions[i] - expectedX)).toBeLessThan(0.5);
             }
         });
     });
@@ -267,10 +295,17 @@ describe('PhysicsWorld3D Integration', () => {
                 world.step(1 / 60);
             }
 
-            // The 3D contact runtime may or may not fire listener events depending on implementation.
-            // We just verify the simulation ran and the sphere fell.
+            // Sphere must have fallen
             const pos = world.getBodyManager().getPosition(sphere);
-            expect(pos.y).toBeLessThan(3); // Sphere should have fallen
+            expect(pos.y).toBeLessThan(3);
+
+            // C7 fix proof: begin events must fire
+            const beginEvents = events.filter(e => e.startsWith('begin:'));
+            expect(beginEvents.length).toBeGreaterThanOrEqual(1);
+
+            // C7 fix proof: stay events must fire while in contact
+            const stayEvents = events.filter(e => e.startsWith('stay:'));
+            expect(stayEvents.length).toBeGreaterThanOrEqual(1);
         });
 
         it('supports null listener (disables events)', () => {

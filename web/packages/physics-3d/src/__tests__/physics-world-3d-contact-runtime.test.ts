@@ -92,8 +92,8 @@ describe('PhysicsWorld3D contact runtime', () => {
             const events: string[] = [];
             world.setContactListener({
                 onCollisionBegin(p: any) { events.push(`begin:${p.bodyIdA}:${p.bodyIdB}`); },
-                onCollisionStay() {},
-                onCollisionEnd() {},
+                onCollisionStay(p: any) { events.push(`stay:${p.bodyIdA}:${p.bodyIdB}`); },
+                onCollisionEnd(a: number, b: number) { events.push(`end:${a}:${b}`); },
             } as any);
 
             const ground = world.createBody({ type: 0, position: { x: 0, y: 0, z: 0 } });
@@ -102,17 +102,31 @@ describe('PhysicsWorld3D contact runtime', () => {
             const ball = world.createBody({ type: 2, position: { x: 0, y: 2, z: 0 } });
             world.createSphereShape(ball, { center: { x: 0, y: 0, z: 0 }, radius: 0.5 });
 
-            world.step(0.5);
-            // The 3D contact runtime may or may not fire listener events.
-            // We just verify the simulation ran and the ball fell.
+            // Step until contact should be established
+            for (let i = 0; i < 60; i++) world.step(1 / 60);
+
+            // Ball must have fallen
             const pos = world.getBodyManager().getPosition(ball);
             expect(pos.y).toBeLessThan(2);
+
+            // C7 fix proof: onCollisionBegin MUST fire when two bodies first touch
+            const beginEvents = events.filter(e => e.startsWith('begin:'));
+            expect(beginEvents.length).toBeGreaterThanOrEqual(1);
+
+            // C7 fix proof: onCollisionStay MUST fire on subsequent steps while in contact
+            const stayEvents = events.filter(e => e.startsWith('stay:'));
+            expect(stayEvents.length).toBeGreaterThanOrEqual(1);
+
+            // Begin must come before Stay
+            const firstBeginIdx = events.indexOf(beginEvents[0]);
+            const firstStayIdx = events.indexOf(stayEvents[0]);
+            expect(firstBeginIdx).toBeLessThan(firstStayIdx);
         });
 
         it('fires onCollisionEnd when bodies separate', () => {
             const events: string[] = [];
             world.setContactListener({
-                onCollisionBegin() {},
+                onCollisionBegin(p: any) { events.push(`begin:${p.bodyIdA}:${p.bodyIdB}`); },
                 onCollisionStay() {},
                 onCollisionEnd(a: number, b: number) { events.push(`end:${a}:${b}`); },
             } as any);
@@ -123,15 +137,52 @@ describe('PhysicsWorld3D contact runtime', () => {
             const ball = world.createBody({ type: 2, position: { x: 0, y: 1.5, z: 0 } });
             world.createSphereShape(ball, { center: { x: 0, y: 0, z: 0 }, radius: 0.5 });
 
-            world.step(0.3);
-            // Launch the ball upward to break contact.
-            world.getBodyManager().setLinearVelocity(ball, { x: 0, y: 20, z: 0 });
-            world.step(0.5);
+            // Let contact establish
+            for (let i = 0; i < 30; i++) world.step(1 / 60);
 
-            // The 3D contact runtime may or may not fire listener events.
-            // We just verify the ball moved upward.
+            // Verify begin fired
+            const beginBefore = events.filter(e => e.startsWith('begin:'));
+            expect(beginBefore.length).toBeGreaterThanOrEqual(1);
+
+            // Launch the ball upward to break contact
+            world.getBodyManager().setLinearVelocity(ball, { x: 0, y: 20, z: 0 });
+            for (let i = 0; i < 30; i++) world.step(1 / 60);
+
+            // Ball must have moved upward
             const pos = world.getBodyManager().getPosition(ball);
             expect(pos.y).toBeGreaterThan(1.5);
+
+            // C7 fix proof: onCollisionEnd MUST fire when contact breaks
+            const endEvents = events.filter(e => e.startsWith('end:'));
+            expect(endEvents.length).toBeGreaterThanOrEqual(1);
+        });
+
+        it('fires onCollisionStay on every step while bodies remain in contact', () => {
+            const events: string[] = [];
+            world.setContactListener({
+                onCollisionBegin() {},
+                onCollisionStay(p: any) { events.push(`stay:${p.bodyIdA}:${p.bodyIdB}`); },
+                onCollisionEnd() {},
+            } as any);
+
+            const ground = world.createBody({ type: 0, position: { x: 0, y: 0, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 0.5, z: 5 } });
+
+            const ball = world.createBody({ type: 2, position: { x: 0, y: 1, z: 0 } });
+            world.createSphereShape(ball, { center: { x: 0, y: 0, z: 0 }, radius: 0.5 });
+
+            // Settle the ball onto the ground
+            for (let i = 0; i < 60; i++) world.step(1 / 60);
+
+            // Clear events, then run 10 more steps while in contact
+            events.length = 0;
+            for (let i = 0; i < 10; i++) world.step(1 / 60);
+
+            // Stay must fire on every step while contact persists
+            expect(events.length).toBe(10);
+            for (const e of events) {
+                expect(e).toMatch(/^stay:/);
+            }
         });
     });
 
@@ -162,12 +213,11 @@ describe('PhysicsWorld3D contact runtime', () => {
     });
 
     describe('sensor shapes', () => {
-        it('sensor shapes can be created and simulated', () => {
-            const events: string[] = [];
+        it('sensor shapes fire trigger enter/exit events without physical response', () => {
+            const triggerEvents: string[] = [];
             world.setContactListener({
-                onCollisionBegin(p: any) { events.push('begin'); },
-                onCollisionStay() {},
-                onCollisionEnd() {},
+                onTriggerEnter(a: number, b: number) { triggerEvents.push(`enter:${a}:${b}`); },
+                onTriggerExit(a: number, b: number) { triggerEvents.push(`exit:${a}:${b}`); },
             } as any);
 
             const sensorBody = world.createBody({ type: 0, position: { x: 0, y: 0, z: 0 } });
@@ -182,11 +232,20 @@ describe('PhysicsWorld3D contact runtime', () => {
             const ball = world.createBody({ type: 2, position: { x: 0, y: 1, z: 0 } });
             world.createSphereShape(ball, { center: { x: 0, y: 0, z: 0 }, radius: 0.5 });
 
-            world.step(0.3);
+            // Step to let ball enter sensor
+            for (let i = 0; i < 30; i++) world.step(1 / 60);
 
-            // Sensor shapes are created successfully; simulation ran without error.
-            // The 3D contact runtime may or may not fire events for sensors.
-            expect(world.getStatistics().shapeCount).toBe(2);
+            // C9 fix proof: sensor trigger events MUST fire
+            const enterEvents = triggerEvents.filter(e => e.startsWith('enter:'));
+            expect(enterEvents.length).toBeGreaterThanOrEqual(1);
+
+            // Now launch ball away to exit sensor
+            world.getBodyManager().setLinearVelocity(ball, { x: 0, y: 30, z: 0 });
+            for (let i = 0; i < 30; i++) world.step(1 / 60);
+
+            // C9 fix proof: sensor trigger exit MUST fire when ball leaves sensor
+            const exitEvents = triggerEvents.filter(e => e.startsWith('exit:'));
+            expect(exitEvents.length).toBeGreaterThanOrEqual(1);
         });
     });
 
