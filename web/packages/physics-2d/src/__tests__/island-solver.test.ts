@@ -55,6 +55,48 @@ describe('IslandSolver2D', () => {
         });
     });
 
+    describe('P1-4 per-body allowSleep', () => {
+        it('respects per-body allowSleep=false flag', () => {
+            // Create body with allowSleep=false
+            const body = bodyManager.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+                rotation: 0,
+                allowSleep: false,
+            });
+            bodyManager.setMassData(body, 1, 0.1, { x: 0, y: 0 });
+
+            // Run many steps with allowSleep enabled at world level
+            for (let i = 0; i < 100; i++) {
+                islandSolver.solveIslands(1 / 60, 8, 3, true, SolverFlags.None, GRAVITY);
+            }
+
+            // Body should still be awake because allowSleep=false
+            expect(bodyManager.isAwake(body)).toBe(true);
+        });
+
+        it('allows sleep for bodies with allowSleep=true', () => {
+            const body = bodyManager.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+                rotation: 0,
+                allowSleep: true,
+            });
+            bodyManager.setMassData(body, 1, 0.1, { x: 0, y: 0 });
+
+            // Run many steps — body should eventually sleep (zero velocity, no forces)
+            let wasSleeping = false;
+            for (let i = 0; i < 200; i++) {
+                islandSolver.solveIslands(1 / 60, 8, 3, true, SolverFlags.None, { x: 0, y: 0 });
+                if (!bodyManager.isAwake(body)) {
+                    wasSleeping = true;
+                    break;
+                }
+            }
+            expect(wasSleeping).toBe(true);
+        });
+    });
+
     describe('Island Solver Basics', () => {
         it('creates solver', () => {
             expect(islandSolver).toBeDefined();

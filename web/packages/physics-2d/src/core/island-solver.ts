@@ -4,7 +4,7 @@ import type { BodyManager2D } from './body-manager';
 import type { ContactManager2D } from './contact-manager';
 import type { ConstraintManager2D } from './constraint-manager';
 import { ConstraintSolver2D } from './constraint-solver';
-import { PhysicsConstants } from '../types';
+import { PhysicsConstants, BodyFlags } from '../types';
 
 interface ProfilerData {
     solveVelocityTime: number;
@@ -393,6 +393,14 @@ export class IslandSolver2D {
 
             if (type !== 2) continue; // Only dynamic bodies sleep
 
+            // P1-4: Check per-body allowSleep flag
+            const flags = this._bodyManager.getFlags(bodyId);
+            if ((flags & BodyFlags.AutoSleep) === 0) {
+                this._bodyManager.setSleepTime(bodyId, 0);
+                minSleepTime = 0;
+                continue;
+            }
+
             const offset = i * 3;
             const vx = this._velocities[offset];
             const vy = this._velocities[offset + 1];
@@ -422,7 +430,11 @@ export class IslandSolver2D {
             const type = this._bodyManager.getBodyType(bodyId);
 
             if (type === 2) {
-                this._bodyManager.setAwake(bodyId, false);
+                // P1-4: Only put bodies to sleep if they allow it
+                const flags = this._bodyManager.getFlags(bodyId);
+                if ((flags & BodyFlags.AutoSleep) !== 0) {
+                    this._bodyManager.setAwake(bodyId, false);
+                }
             }
         }
     }
