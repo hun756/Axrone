@@ -212,6 +212,7 @@ interface ShapeData2D {
     layer: LayerMask;
     type: ShapeType;
     data: unknown;
+    active: boolean;
 }
 
 interface ShapeData3D {
@@ -220,6 +221,7 @@ interface ShapeData3D {
     layer: LayerMask;
     type: ShapeType;
     data: unknown;
+    active: boolean;
 }
 
 export class Raycaster2D {
@@ -240,7 +242,12 @@ export class Raycaster2D {
         type: ShapeType,
         data: unknown
     ): void {
-        this._shapes.set(shapeId, { bodyId, shapeId, layer, type, data });
+        this._shapes.set(shapeId, { bodyId, shapeId, layer, type, data, active: true });
+    }
+
+    public setShapeActive(shapeId: ShapeId, active: boolean): void {
+        const shape = this._shapes.get(shapeId);
+        if (shape) shape.active = active;
     }
 
     public unregisterShape(shapeId: ShapeId): void {
@@ -263,10 +270,15 @@ export class Raycaster2D {
         for (const shape of candidates) {
             if ((shape.layer & query.layerMask) === 0) continue;
             if ((query.flags & RaycastFlags.IgnoreTriggers) !== 0 && (shape.layer & RaycastLayer.Trigger) !== 0) continue;
+            if ((query.flags & RaycastFlags.IncludeInactive) === 0 && !shape.active) continue;
             if (predicate && !predicate(shape.bodyId, shape.shapeId)) continue;
 
             const intersected = this._intersectShape2D(ray, shape, query.flags, this._tempHit);
             if (intersected) {
+                if ((query.flags & RaycastFlags.IgnoreBackfaces) !== 0) {
+                    const dot = ray.direction.x * this._tempHit.normal.x + ray.direction.y * this._tempHit.normal.y;
+                    if (dot > 0) continue;
+                }
                 if (closestOnly) {
                     if (this._tempHit.distance < bestDistance) {
                         bestDistance = this._tempHit.distance;
@@ -487,7 +499,12 @@ export class Raycaster3D {
         type: ShapeType,
         data: unknown
     ): void {
-        this._shapes.set(shapeId, { bodyId, shapeId, layer, type, data });
+        this._shapes.set(shapeId, { bodyId, shapeId, layer, type, data, active: true });
+    }
+
+    public setShapeActive(shapeId: ShapeId, active: boolean): void {
+        const shape = this._shapes.get(shapeId);
+        if (shape) shape.active = active;
     }
 
     public unregisterShape(shapeId: ShapeId): void {
@@ -510,10 +527,15 @@ export class Raycaster3D {
         for (const shape of candidates) {
             if ((shape.layer & query.layerMask) === 0) continue;
             if ((query.flags & RaycastFlags.IgnoreTriggers) !== 0 && (shape.layer & RaycastLayer.Trigger) !== 0) continue;
+            if ((query.flags & RaycastFlags.IncludeInactive) === 0 && !shape.active) continue;
             if (predicate && !predicate(shape.bodyId, shape.shapeId)) continue;
 
             const intersected = this._intersectShape3D(ray, shape, query.flags, this._tempHit);
             if (intersected) {
+                if ((query.flags & RaycastFlags.IgnoreBackfaces) !== 0) {
+                    const dot = ray.direction.x * this._tempHit.normal.x + ray.direction.y * this._tempHit.normal.y + ray.direction.z * this._tempHit.normal.z;
+                    if (dot > 0) continue;
+                }
                 if (closestOnly) {
                     if (this._tempHit.distance < bestDistance) {
                         bestDistance = this._tempHit.distance;

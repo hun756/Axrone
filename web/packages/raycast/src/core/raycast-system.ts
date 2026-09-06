@@ -137,6 +137,11 @@ export class RaycastSystem2D {
         this._cache.invalidate();
     }
 
+    public setShapeActive(shapeId: ShapeId, active: boolean): void {
+        this._raycaster.setShapeActive(shapeId, active);
+        this._cache.invalidate();
+    }
+
     public flushBatch(): void {
         this._batcher.flush();
     }
@@ -316,6 +321,11 @@ export class RaycastSystem3D {
 
     public unregisterShape(shapeId: ShapeId): void {
         this._raycaster.unregisterShape(shapeId);
+        this._cache.invalidate();
+    }
+
+    public setShapeActive(shapeId: ShapeId, active: boolean): void {
+        this._raycaster.setShapeActive(shapeId, active);
         this._cache.invalidate();
     }
 
