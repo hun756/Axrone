@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/packages/">
+    <Project Path="packages/Axrone.Collections/Axrone.Collections.csproj" />
+    <Project Path="packages/Axrone.Collections/tests/Axrone.Collections.Tests.csproj" />
     <Project Path="packages/Axrone.Memory/Axrone.Memory.csproj" />
     <Project Path="packages/Axrone.Memory/tests/Axrone.Memory.Tests.csproj" />
     <Project Path="packages/Axrone.Utility/Axrone.Utility.csproj" />
