@@ -9,6 +9,7 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     private readonly IBlockAllocator<T> _allocator;
     private readonly MpmcRingBuffer<PooledBufferSlot<T>>[] _tier2GlobalQueues;
     private readonly int[] _bucketCapacities;
+    private readonly int _globalQueueCapacity;
     private readonly Timer? _trimTimer;
     private readonly int _autoTrimPercentage;
     private long _totalAllocatedBytes;
@@ -58,6 +59,7 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
 
         _tier2GlobalQueues = new MpmcRingBuffer<PooledBufferSlot<T>>[bucketCount];
         _bucketCapacities = new int[bucketCount];
+        _globalQueueCapacity = options.GlobalQueueCapacity;
 
         for (int i = 0; i < bucketCount; i++)
         {
@@ -312,13 +314,17 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
         ThrowIfDisposed();
         percentage = Math.Clamp(percentage, 0.0f, 1.0f);
 
+        int targetPerQueue = Math.Max(1, (int)(_globalQueueCapacity * percentage));
+
         for (int i = 0; i < _tier2GlobalQueues.Length; i++)
         {
             MpmcRingBuffer<PooledBufferSlot<T>> queue = _tier2GlobalQueues[i];
-            while (queue.TryDequeue(out PooledBufferSlot<T>? slot))
+            int evicted = 0;
+            while (evicted < targetPerQueue && queue.TryDequeue(out PooledBufferSlot<T>? slot))
             {
                 Interlocked.Add(ref _totalAllocatedBytes, -_allocator.ComputeByteSize(slot.Capacity));
                 slot.FinalizeEviction();
+                evicted++;
             }
         }
     }
