@@ -51,15 +51,15 @@ describe('RaycastEngine2D — dispatch correctness (regression for broken hit pi
     it('returns a hit for a Capsule', () => {
         const sys = createRaycastSystem2D();
         sys.registerShape(bid(1), sid(12), ALL, ShapeType.Capsule, {
-            p1: { x: 4, y: -1 },
-            p2: { x: 4, y: 1 },
+            p0: { x: 4, y: -1 },
+            p1: { x: 4, y: 1 },
             radius: 1,
         });
 
         const hit = sys.raycast(v2(-5, 0), v2(1, 0), 100, ALL);
 
         expect(hit).not.toBeNull();
-        expect(hit!.distance).toBeCloseTo(9, 3);
+        expect(hit!.distance).toBeCloseTo(8, 3);
     });
 
     it('returns a hit for a Polygon', () => {

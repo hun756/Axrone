@@ -151,24 +151,67 @@ export class RayPrimitiveIntersector2D {
         radius: number,
         maxDistance: number
     ): IRayIntersection {
-        const segmentHit = this.intersectSegment(origin, direction, p0, p1, maxDistance);
-
-        const p0Hit = this.intersectCircle(origin, direction, p0, radius, maxDistance);
-        const p1Hit = this.intersectCircle(origin, direction, p1, radius, maxDistance);
-
-        let closestHit: IRayIntersection = { hit: false, distance: Number.MAX_VALUE, fraction: 0 };
-
-        if (segmentHit.hit && segmentHit.distance < closestHit.distance) {
-            closestHit = segmentHit;
+        // Segment direction (normalized)
+        const segX = p1.x - p0.x;
+        const segY = p1.y - p0.y;
+        const segLen = Math.sqrt(segX * segX + segY * segY);
+        if (segLen < EPSILON) {
+            // Degenerate capsule = circle
+            return this.intersectCircle(origin, direction, p0, radius, maxDistance);
         }
-        if (p0Hit.hit && p0Hit.distance < closestHit.distance) {
-            closestHit = p0Hit;
-        }
-        if (p1Hit.hit && p1Hit.distance < closestHit.distance) {
-            closestHit = p1Hit;
+        const segDirX = segX / segLen;
+        const segDirY = segY / segLen;
+
+        // Origin relative to p0
+        const ocX = origin.x - p0.x;
+        const ocY = origin.y - p0.y;
+
+        // Infinite cylinder quadratic (ray vs offset curve around segment)
+        const dirDotSeg = direction.x * segDirX + direction.y * segDirY;
+        const ocDotSeg = ocX * segDirX + ocY * segDirY;
+        const dirDotDir = direction.x * direction.x + direction.y * direction.y;
+        const ocDotOc = ocX * ocX + ocY * ocY;
+
+        const a = dirDotDir - dirDotSeg * dirDotSeg;
+        const b = 2.0 * (ocX * direction.x + ocY * direction.y - ocDotSeg * dirDotSeg);
+        const c = ocDotOc - ocDotSeg * ocDotSeg - radius * radius;
+
+        const discriminant = b * b - 4 * a * c;
+        if (discriminant < 0 || a < EPSILON) {
+            // No cylinder hit or degenerate — fall back to cap circles
+            const c0 = this.intersectCircle(origin, direction, p0, radius, maxDistance);
+            const c1 = this.intersectCircle(origin, direction, p1, radius, maxDistance);
+            if (c0.hit && (!c1.hit || c0.distance < c1.distance)) return c0;
+            if (c1.hit) return c1;
+            return { hit: false, distance: 0, fraction: 0 };
         }
 
-        return closestHit.hit ? closestHit : { hit: false, distance: 0, fraction: 0 };
+        const sqrtDisc = Math.sqrt(discriminant);
+        const t1 = (-b - sqrtDisc) / (2.0 * a);
+        const t2 = (-b + sqrtDisc) / (2.0 * a);
+
+        let closestT = -1;
+        for (const t of [t1, t2]) {
+            if (t >= 0 && t <= maxDistance) {
+                const hitX = origin.x + direction.x * t;
+                const hitY = origin.y + direction.y * t;
+                const proj = (hitX - p0.x) * segDirX + (hitY - p0.y) * segDirY;
+                if (proj >= 0 && proj <= segLen) {
+                    if (closestT < 0 || t < closestT) closestT = t;
+                }
+            }
+        }
+
+        if (closestT >= 0) {
+            return { hit: true, distance: closestT, fraction: closestT / maxDistance };
+        }
+
+        // Cylinder roots outside segment range — try cap circles
+        const c0 = this.intersectCircle(origin, direction, p0, radius, maxDistance);
+        const c1 = this.intersectCircle(origin, direction, p1, radius, maxDistance);
+        if (c0.hit && (!c1.hit || c0.distance < c1.distance)) return c0;
+        if (c1.hit) return c1;
+        return { hit: false, distance: 0, fraction: 0 };
     }
 
     public static intersectPolygon(

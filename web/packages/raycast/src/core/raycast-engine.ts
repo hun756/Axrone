@@ -450,20 +450,20 @@ export class Raycaster2D {
                 break;
             }
             case ShapeType.Capsule: {
-                const d = shape.data as { p1: { x: number; y: number }; p2: { x: number; y: number }; radius: number };
+                const d = shape.data as { p0: { x: number; y: number }; p1: { x: number; y: number }; radius: number };
                 result = RayPrimitiveIntersector2D.intersectCapsule(
-                    ray.origin, ray.direction, d.p1, d.p2, d.radius, ray.length
+                    ray.origin, ray.direction, d.p0, d.p1, d.radius, ray.length
                 );
                 if (!result.hit) return false;
                 out.point.x = ray.origin.x + ray.direction.x * result.distance;
                 out.point.y = ray.origin.y + ray.direction.y * result.distance;
                 // Normal: closest point on segment axis to hit point
-                const abx = d.p2.x - d.p1.x;
-                const aby = d.p2.y - d.p1.y;
+                const abx = d.p1.x - d.p0.x;
+                const aby = d.p1.y - d.p0.y;
                 const ab2 = abx * abx + aby * aby;
-                const t = ab2 > EPSILON ? Math.max(0, Math.min(1, ((out.point.x - d.p1.x) * abx + (out.point.y - d.p1.y) * aby) / ab2)) : 0;
-                const closestX = d.p1.x + abx * t;
-                const closestY = d.p1.y + aby * t;
+                const t = ab2 > EPSILON ? Math.max(0, Math.min(1, ((out.point.x - d.p0.x) * abx + (out.point.y - d.p0.y) * aby) / ab2)) : 0;
+                const closestX = d.p0.x + abx * t;
+                const closestY = d.p0.y + aby * t;
                 const nx = out.point.x - closestX;
                 const ny = out.point.y - closestY;
                 const nLen = Math.sqrt(nx * nx + ny * ny);
