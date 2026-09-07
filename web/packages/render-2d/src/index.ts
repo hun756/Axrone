@@ -60,24 +60,3 @@ export {
     Render2DValidationError,
 } from './errors';
 export { Render2DSpriteBatchBuilder } from './sprite-batch-builder';
-
-export type {
-    ReadonlyRenderResourceRegistry,
-    RenderClearState,
-    RenderPassName,
-    RenderPassSummary,
-    RenderResourceLifetime,
-    RenderResourceName,
-    RenderResourceUsage,
-    RenderTextureDescriptor,
-    RenderTextureFormat,
-    RenderViewport,
-} from '@axrone/render-core/types';
-export {
-    RenderExecutionError,
-    RenderPipelineError,
-    RenderValidationError,
-} from '@axrone/render-core/errors';
-export {
-    createRenderPassGraph,
-} from '@axrone/render-core/graph';
