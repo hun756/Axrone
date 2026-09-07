@@ -14,4 +14,5 @@ export * from './wheel-joint2d';
 export * from './motor-joint2d';
 export * from './mouse-joint2d';
 export * from './gear-joint2d';
+export * from './rope-joint2d';
 export * from './physics-world-2d-component';
