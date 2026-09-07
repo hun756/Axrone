@@ -129,6 +129,7 @@ export interface Render2DSpriteBatchBuildResult {
 
 export interface Render2DSpriteBatchBuilderOptions {
     readonly maxBatchQuads?: number;
+    readonly validateInputs?: boolean;
 }
 
 export const asRender2DTextureReference = (

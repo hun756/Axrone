@@ -322,6 +322,7 @@ const transformPoint = (
 
 export class Render2DSpriteBatchBuilder {
     private readonly _maxBatchQuads: number;
+    private readonly _validateInputs: boolean;
     private readonly _batches: MutableRender2DSpriteBatchRange[] = [];
     private readonly _renderableSubmissions: Render2DSpriteSubmission[] = [];
     private readonly _submissionQuadCounts: number[] = [];
@@ -350,6 +351,7 @@ export class Render2DSpriteBatchBuilder {
 
     constructor(options: Render2DSpriteBatchBuilderOptions = {}) {
         this._maxBatchQuads = options.maxBatchQuads ?? DEFAULT_MAX_BATCH_QUADS;
+        this._validateInputs = options.validateInputs ?? true;
 
         if (!Number.isInteger(this._maxBatchQuads) || this._maxBatchQuads <= 0) {
             throw new Render2DValidationError('maxBatchQuads must be a positive integer');
@@ -366,7 +368,9 @@ export class Render2DSpriteBatchBuilder {
         let quadCount = 0;
 
         for (const submission of submissions) {
-            validateSubmission(submission);
+            if (this._validateInputs) {
+                validateSubmission(submission);
+            }
             if (!isRenderableSubmission(submission)) {
                 continue;
             }
