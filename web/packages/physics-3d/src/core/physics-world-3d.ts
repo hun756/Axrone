@@ -417,6 +417,13 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     destroyConstraint(constraintId: ConstraintId3D): void {
+        const descriptor = this._constraintDescriptors.get(constraintId);
+        if (descriptor && !descriptor.collideConnected) {
+            this._contactRuntime.unregisterJointCollisionPair(
+                descriptor.def.bodyIdA,
+                descriptor.def.bodyIdB
+            );
+        }
         this._constraintViews.delete(constraintId);
         this._constraintDescriptors.delete(constraintId);
         this._constraintManager.destroyConstraint(constraintId);
@@ -715,6 +722,9 @@ export class PhysicsWorld3D implements Disposable {
             collideConnected: def.collideConnected ?? false,
             ...(def.userData !== undefined ? { userData: def.userData } : {}),
         });
+        if (!def.collideConnected) {
+            this._contactRuntime.registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 

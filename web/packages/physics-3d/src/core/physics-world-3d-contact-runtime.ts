@@ -94,6 +94,13 @@ export class PhysicsWorld3DContactRuntime {
     private readonly _warmImpulses = new Map<number, { normal: number; tangent: number }>();
     private _lastIslandCount = 0;
 
+    /**
+     * Counter-based index: tracks how many constraints with `collideConnected=false`
+     * connect each body pair. When count > 0, the pair is suppressed from contact generation.
+     * Uses canonical `makeCollisionPairKey` with body IDs (converted to number from BigInt).
+     */
+    private readonly _jointCollisionCounts = new Map<number, number>();
+
     /** Body→contact pairKey index for kinematic wake queries. (P1-4) */
     private readonly _bodyContactIndex = new Map<number, number[]>();
 
@@ -167,6 +174,13 @@ export class PhysicsWorld3DContactRuntime {
         }
         // Remove body contact index entries
         this._bodyContactIndex.delete(bid);
+        // Remove joint-collision entries whose pair involves this body
+        for (const [key, m] of this._contactManifolds) {
+            if (Number(m.bodyIdA) === bid || Number(m.bodyIdB) === bid) {
+                const pairBodyKey = makeCollisionPairKey(Number(m.bodyIdA), Number(m.bodyIdB));
+                this._jointCollisionCounts.delete(pairBodyKey);
+            }
+        }
     }
 
     /**
@@ -194,6 +208,30 @@ export class PhysicsWorld3DContactRuntime {
     getManifoldBodyIds(pairKey: number): { bodyIdA: BodyId3D; bodyIdB: BodyId3D } | null {
         const m = this._contactManifolds.get(pairKey);
         return m ? { bodyIdA: m.bodyIdA, bodyIdB: m.bodyIdB } : null;
+    }
+
+    /**
+     * Register a joint collision pair — increments the counter for the body pair.
+     * Called when a constraint with `collideConnected=false` is created.
+     */
+    registerJointCollisionPair(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void {
+        const key = makeCollisionPairKey(Number(bodyIdA), Number(bodyIdB));
+        this._jointCollisionCounts.set(key, (this._jointCollisionCounts.get(key) ?? 0) + 1);
+    }
+
+    /**
+     * Unregister a joint collision pair — decrements the counter, removes entry at zero.
+     * Called when a constraint with `collideConnected=false` is destroyed.
+     */
+    unregisterJointCollisionPair(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void {
+        const key = makeCollisionPairKey(Number(bodyIdA), Number(bodyIdB));
+        const count = this._jointCollisionCounts.get(key);
+        if (count === undefined) return;
+        if (count <= 1) {
+            this._jointCollisionCounts.delete(key);
+        } else {
+            this._jointCollisionCounts.set(key, count - 1);
+        }
     }
 
     /**
@@ -482,6 +520,10 @@ export class PhysicsWorld3DContactRuntime {
             const tA = this._host.bodyManager.getBodyType(dA.bodyId);
             const tB = this._host.bodyManager.getBodyType(dB.bodyId);
             if (tA === BODY_TYPE_STATIC && tB === BODY_TYPE_STATIC) return true;
+
+            // collideConnected filter: skip pairs joined by a non-colliding constraint
+            const bodyPairKey = makeCollisionPairKey(Number(dA.bodyId), Number(dB.bodyId));
+            if (this._jointCollisionCounts.has(bodyPairKey)) return true;
 
             // Reuse persistent array — push object literal (unavoidable but pooled via array reuse)
             this._candidatePairs.push({
