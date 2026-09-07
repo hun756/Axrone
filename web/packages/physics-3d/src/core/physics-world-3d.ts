@@ -195,6 +195,8 @@ export class PhysicsWorld3D implements Disposable {
         this._bodyViews.delete(bodyId);
         this._kinematicPrevPos.delete(bodyId);
         this._kinematicPrevRot.delete(bodyId);
+        this._sleepTimes.delete(bodyId);
+        this._contactRuntime.removeBodyState(bodyId);
         this._bodyManager.destroyBody(bodyId);
     }
 
@@ -461,7 +463,7 @@ export class PhysicsWorld3D implements Disposable {
         this._contactRuntime.warmStart();
 
         // 4. Velocity solve: sequential impulse iterations
-        this._contactRuntime.solveVelocity(velocityIterations);
+        this._contactRuntime.solveVelocity(velocityIterations, deltaTime);
 
         // 5. Integrate positions: position += velocity * dt
         this._integratePositions(deltaTime);
@@ -469,10 +471,13 @@ export class PhysicsWorld3D implements Disposable {
         // 6. Position solve: Baumgarte correction
         this._contactRuntime.solvePosition(positionIterations);
 
-        // 7. Persist warm impulses and fire contact events
+        // 7. Persist warm impulses for next frame (after full solve, before events)
+        this._contactRuntime.persistWarmImpulses();
+
+        // 8. Fire contact events
         this._contactRuntime.dispatchEvents();
 
-        // 8. World-level sleeping check
+        // 9. World-level sleeping check
         if (this.config.allowSleep !== false) {
             this._updateSleeping(deltaTime);
         }

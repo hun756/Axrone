@@ -143,6 +143,33 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     /**
+     * Remove all solver state associated with a body. Called on destroy to prevent
+     * stale warm impulses, manifold history, and contact index entries from leaking.
+     */
+    removeBodyState(bodyId: BodyId3D): void {
+        const bid = Number(bodyId);
+        // Remove warm impulse entries whose pair involves this body
+        for (const [key, m] of this._contactManifolds) {
+            if (Number(m.bodyIdA) === bid || Number(m.bodyIdB) === bid) {
+                // Remove warm impulses for this manifold's pairKey
+                for (let pi = 0; pi < m.pointCount; pi++) {
+                    this._warmImpulses.delete(m.pairKey * 4 + pi);
+                }
+            }
+        }
+        // Also scan remaining warm impulse keys — pairKey encodes two shape IDs,
+        // but we can't easily reverse that. Instead, clear entries for manifolds
+        // that reference this body in _previousManifolds.
+        for (const [key, m] of this._previousManifolds) {
+            if (Number(m.bodyIdA) === bid || Number(m.bodyIdB) === bid) {
+                this._previousManifolds.delete(key);
+            }
+        }
+        // Remove body contact index entries
+        this._bodyContactIndex.delete(bid);
+    }
+
+    /**
      * Rebuild body→contact pairKey index from current manifolds. (P1-4)
      * O(C) where C = contact count. Called lazily when kinematic bodies move.
      */
@@ -195,13 +222,17 @@ export class PhysicsWorld3DContactRuntime {
         for (const pair of pairs) {
             const m = this._buildContactManifold(pair);
             if (!m) continue;
-            // Apply warm impulses from previous frame
+            // Apply warm impulses from previous frame, scaled for stability.
+            // Full warm starting can overshoot when the solver's accumulated impulse
+            // was from an impact frame (large) and the current frame is resting.
+            // A factor of 0.5 provides convergence benefit without instability.
+            const WARM_SCALE = 0.5;
             for (let pi = 0; pi < m.pointCount; pi++) {
                 const warmKey = pair.pairKey * 4 + pi;
                 const warm = this._warmImpulses.get(warmKey);
                 if (warm) {
-                    m.points[pi].normalImpulse = warm.normal as Impulse;
-                    m.points[pi].tangentImpulse1 = warm.tangent as Impulse;
+                    m.points[pi].normalImpulse = (warm.normal * WARM_SCALE) as Impulse;
+                    m.points[pi].tangentImpulse1 = (warm.tangent * WARM_SCALE) as Impulse;
                 }
             }
             next.set(pair.pairKey, m);
@@ -223,7 +254,7 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     /** Phase 3: sequential impulse velocity solve. */
-    solveVelocity(velIters: number): void {
+    solveVelocity(velIters: number, dt?: number): void {
         const vStart = performance.now();
         const manifolds = this._contactManifolds;
         for (let i = 0; i < velIters; i++) {
@@ -233,7 +264,7 @@ export class PhysicsWorld3DContactRuntime {
         // Spring forces are applied ONCE per step (not per velocity iteration)
         // to prevent over-accumulation. Box2D convention: soft constraint bias
         // is computed in prepare phase; only the pre-biased impulse is iterated.
-        this._solveSpringForces();
+        this._solveSpringForces(dt);
         const profiler = this._host.getProfiler();
         if (profiler) profiler.solveVelocityTime = performance.now() - vStart;
     }
@@ -262,6 +293,19 @@ export class PhysicsWorld3DContactRuntime {
                 });
             }
         }
+    }
+
+    /**
+     * Public accessor for warm-impulse persistence — called by the step() pipeline
+     * after solvePosition(). Delegates to the private _persistWarmImpulses().
+     */
+    persistWarmImpulses(): void {
+        this._persistWarmImpulses();
+    }
+
+    /** Expose warm impulse cache size for testing. */
+    get warmImpulseCacheSize(): number {
+        return this._warmImpulses.size;
     }
 
     /** Fire contact events by comparing previous vs current manifolds. */
@@ -895,17 +939,20 @@ export class PhysicsWorld3DContactRuntime {
         verts: IVec3Like[], planeNormal: IVec3Like, planePoint: IVec3Like, planeOffset: number
     ): IVec3Like[] {
         const out: IVec3Like[] = [];
-        const d0 = Vec3.dot(verts[0], planeNormal) - Vec3.dot(planePoint, planeNormal) - planeOffset;
-        const d1 = Vec3.dot(verts[1], planeNormal) - Vec3.dot(planePoint, planeNormal) - planeOffset;
-        const d2 = Vec3.dot(verts[2], planeNormal) - Vec3.dot(planePoint, planeNormal) - planeOffset;
-        const d3 = Vec3.dot(verts[3], planeNormal) - Vec3.dot(planePoint, planeNormal) - planeOffset;
-        const ds = [d0, d1, d2, d3];
+        const n = verts.length;
+        if (n < 2) return out;
 
-        for (let i = 0; i < 4; i++) {
+        const planeDot = Vec3.dot(planePoint, planeNormal) + planeOffset;
+        const ds: number[] = new Array(n);
+        for (let i = 0; i < n; i++) {
+            ds[i] = Vec3.dot(verts[i], planeNormal) - planeDot;
+        }
+
+        for (let i = 0; i < n; i++) {
             const curr = verts[i];
-            const next = verts[(i + 1) % 4];
+            const next = verts[(i + 1) % n];
             const dc = ds[i];
-            const dn = ds[(i + 1) % 4];
+            const dn = ds[(i + 1) % n];
             if (dc <= 0) out.push(curr);
             if (dc * dn < 0) {
                 const t = dc / (dc - dn);
@@ -1026,6 +1073,11 @@ export class PhysicsWorld3DContactRuntime {
                 point.normalImpulse = newPn as unknown as Impulse;
                 this._applyImp(manifold.bodyIdA, Vec3.negate(Vec3.multiplyScalar(manifold.normal, dPn)), wp);
                 this._applyImp(manifold.bodyIdB, Vec3.multiplyScalar(manifold.normal, dPn), wp);
+            } else {
+                // Bodies separating — reset accumulated normal impulse to prevent
+                // stale warm-start impulses from pushing bodies together.
+                point.normalImpulse = 0 as unknown as Impulse;
+                point.tangentImpulse1 = 0 as unknown as Impulse;
             }
 
             // Friction along the tangent defined by the current relative velocity.
@@ -1200,15 +1252,17 @@ export class PhysicsWorld3DContactRuntime {
 
     /**
      * Apply spring constraint forces ONCE per step (not per velocity iteration).
-     * F = -k*x - c*v, applied as impulse along the constraint axis.
+     * F = -k*x - c*v, converted to impulse via * dt.
      */
-    private _solveSpringForces(): void {
+    private _solveSpringForces(dt?: number): void {
         const cm = this._host.constraintManager;
         const bm = this._host.bodyManager;
         const constraintIds = cm.getAllConstraintIds();
         if (constraintIds.length === 0) return;
 
         const BIAS = 0.2;
+        // When dt is not provided (legacy solve() path), default to 1/60 for backward compat.
+        const stepDt = dt ?? (1 / 60);
 
         for (const cid of constraintIds) {
             const type = cm.getConstraintType(cid);
@@ -1255,7 +1309,8 @@ export class PhysicsWorld3DContactRuntime {
                 }
             }
 
-            // Spring force: F = -k*x - c*v, applied as impulse
+            // Spring force: F = -k*x - c*v (both terms are forces in Newtons).
+            // Convert to impulse by multiplying by dt: impulse = F * dt.
             const stiffness = cm.getConstraintParam(cid, 1);
             const damping = cm.getConstraintParam(cid, 2);
             const relVel = Vec3.subtract(
@@ -1264,7 +1319,7 @@ export class PhysicsWorld3DContactRuntime {
             );
             const velAlongDir = Vec3.dot(relVel, dir);
             const springForce = -stiffness * error - damping * velAlongDir;
-            const impulse = Vec3.multiplyScalar(dir, springForce);
+            const impulse = Vec3.multiplyScalar(dir, springForce * stepDt);
 
             if (typeA === 2) {
                 bm.applyImpulse(bodyIdA, Vec3.negate(impulse));
