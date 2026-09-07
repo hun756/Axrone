@@ -162,7 +162,7 @@ function prepareHinge(
         -angError2,
     ));
 
-    // ─── 1 Axial Row (limit + motor about hinge axis) ─────────────────
+    // ─── 1 Axial Row (limit) + 1 Motor Row (optional) about hinge axis ───
     // Extract the angle about the hinge axis
     const hingeAngle = extractAxisAngle(qRel, hingeAxis);
 
@@ -174,13 +174,10 @@ function prepareHinge(
     const motorSpeed = hingeDef.motorSpeed ?? 0;
     const maxMotorTorque = hingeDef.maxMotorTorque ?? 0;
 
-    let axialBias = 0;
-    let axialPosError = 0;
-    let axialLower = -Infinity;
-    let axialUpper = Infinity;
+    // ── Limit row (bilateral when violated, drift-prevention when within limits) ──
+    // Jacobian: j1Ang = -hingeAxis, j2Ang = +hingeAxis
+    // bias = -BAUMGARTE * limitError / h (standard convergent convention)
     let hasLimit = false;
-    let hasMotor = false;
-
     if (enableLimit) {
         hasLimit = true;
         let limitError = 0;
@@ -192,47 +189,50 @@ function prepareHinge(
         }
 
         if (Math.abs(limitError) > ANGULAR_SLOP) {
-            // Same sign convention as linear rows: negative bias for positive error → lambda > 0
-            axialBias = -BAUMGARTE * limitError / h;
-            axialPosError = -limitError;
-            axialLower = -Infinity;
-            axialUpper = Infinity;
+            // Violated: Baumgarte correction with bilateral clamp
+            const limitRow = createRow(
+                bodyIdA, bodyIdB,
+                zeroVec3(), { x: -hingeAxis.x, y: -hingeAxis.y, z: -hingeAxis.z },
+                zeroVec3(), { x: hingeAxis.x, y: hingeAxis.y, z: hingeAxis.z },
+                -BAUMGARTE * limitError / h,
+                -limitError,
+                -Infinity, Infinity,
+            );
+            limitRow.hasLimit = true;
+            out.push(limitRow);
         } else {
-            // Within limits — no correction needed, but still add the row
-            // to prevent drift (bilateral constraint on the axis).
-            axialBias = 0;
-            axialPosError = 0;
-            axialLower = -Infinity;
-            axialUpper = Infinity;
+            // Within limits: bilateral row with zero bias to prevent drift
+            const limitRow = createRow(
+                bodyIdA, bodyIdB,
+                zeroVec3(), { x: -hingeAxis.x, y: -hingeAxis.y, z: -hingeAxis.z },
+                zeroVec3(), { x: hingeAxis.x, y: hingeAxis.y, z: hingeAxis.z },
+                0, 0,
+                -Infinity, Infinity,
+            );
+            limitRow.hasLimit = true;
+            out.push(limitRow);
         }
     }
 
+    // ── Motor row (separate from limit — Box2D motor-stall semantics) ──
+    // The motor row is pushed AFTER the limit row so that within each
+    // sequential-impulse iteration the limit sees the post-motor velocities
+    // and strips any motor impulse that would push past the rim.
+    // Jacobian: same as limit row.
+    // Motor bias = -motorSpeed (with this Jacobian: positive motorSpeed →
+    // negative impulse → negative angular acceleration on B → correct direction).
     if (enableMotor && Math.abs(maxMotorTorque as number) > EPSILON) {
-        hasMotor = true;
-        // Motor: bias drives relative angular velocity toward motorSpeed.
-        // With j1=-axis, j2=+axis: J*v = ωB_axis - ωA_axis
-        // To increase J*v toward motorSpeed: bias = -motorSpeed (negative for positive target)
-        axialBias = -(motorSpeed as number);
-        axialPosError = 0;
         const maxImpulse = (maxMotorTorque as number) * h;
-        axialLower = -maxImpulse;
-        axialUpper = maxImpulse;
-    }
-
-    // Only add the axial row if there's a limit or motor active
-    if (hasLimit || hasMotor) {
-        const axialRow = createRow(
+        const motorRow = createRow(
             bodyIdA, bodyIdB,
             zeroVec3(), { x: -hingeAxis.x, y: -hingeAxis.y, z: -hingeAxis.z },
             zeroVec3(), { x: hingeAxis.x, y: hingeAxis.y, z: hingeAxis.z },
-            axialBias,
-            axialPosError,
-            axialLower,
-            axialUpper,
+            -(motorSpeed as number),
+            0,
+            -maxImpulse, maxImpulse,
         );
-        axialRow.hasLimit = hasLimit;
-        axialRow.hasMotor = hasMotor;
-        out.push(axialRow);
+        motorRow.hasMotor = true;
+        out.push(motorRow);
     }
 
     // ─── Compute effective masses ─────────────────────────────────────
