@@ -13,13 +13,19 @@ import {
 /**
  * Character joint — registers a CONE_TWIST constraint (type 4).
  *
- * **Solver status: UNSUPPORTED.** The constraint is registered with the
- * constraint manager but the solver produces **no correction** for cone-twist
- * constraints. Adding this joint to a scene has **no physical effect** —
- * connected bodies are free to move independently.
+ * **Solver status: SOLVER IMPLEMENTED, RUNTIME WIRING PENDING.** The
+ * cone-twist solver module (physics-world-3d-constraints-cone-twist.ts)
+ * implements the full 6-row scheme — 3 anchor rows, the cone swing limit
+ * driven by quaternion swing-twist decomposition, and the independent twist
+ * limit/motor rows — and self-registers under CONSTRAINT_TYPE_CONE_TWIST.
+ * The runtime side-effect import that activates the module in the live
+ * world is added by the constraint-integration task; once merged, this joint
+ * becomes fully simulated.
  *
  * @see JOINT_CAPABILITY_3D
- * @remarks TODO(P2-joint-solvers): implement proper cone-twist constraint solver.
+ * @remarks Solver: physics-world-3d-constraints-cone-twist.ts (unit-tested
+ * against 26 direct-prepare scenarios including cone apex singularity and
+ * twist motor stall).
  */
 @script({ scriptName: 'CharacterJoint3D' })
 export class CharacterJoint3D extends Joint3D {
