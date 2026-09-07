@@ -266,4 +266,95 @@ export class ConfigurableJoint3D extends Joint3D {
     protected override _updateConstraint(): void {
         this._recreateConstraint();
     }
+
+    /**
+     * Serialize configurable-joint-specific properties.
+     *
+     * Editor key mapping (components.rs `configurable_joint_3d_properties`):
+     * - `xMotion`, `yMotion`, `zMotion`, `angularXMotion`, `angularYMotion`, `angularZMotion` (number)
+     * - `linearLimit: { limit, bounciness, contactDistance }`
+     * - `targetPosition` (Vec3), `targetVelocity` (Vec3, m/s per axis)
+     * - `targetRotation` (Quat), `targetAngularVelocity` (Vec3, rad/s per axis)
+     * - `rotationDriveMode` (number), `configuredInWorldSpace`, `swapBodies`
+     *
+     * Engine-only drive structs (not in Editor default JSON but wired to solver):
+     * - `xDrive`, `yDrive`, `zDrive` (linear per-axis drive: positionSpring, positionDamper, maximumForce, useAcceleration)
+     * - `angularXDrive`, `angularYZDrive` (angular per-axis drive)
+     */
+    override serialize(): Record<string, any> {
+        return {
+            ...super.serialize(),
+            xMotion: this._xMotion,
+            yMotion: this._yMotion,
+            zMotion: this._zMotion,
+            angularXMotion: this._angularXMotion,
+            angularYMotion: this._angularYMotion,
+            angularZMotion: this._angularZMotion,
+            linearLimit: { limit: this._linearLimit.limit, bounciness: this._linearLimit.bounciness, contactDistance: this._linearLimit.contactDistance },
+            targetPosition: { x: this._targetPosition.x, y: this._targetPosition.y, z: this._targetPosition.z },
+            targetVelocity: { x: this._targetVelocity.x, y: this._targetVelocity.y, z: this._targetVelocity.z },
+            targetRotation: { x: this._targetRotation.x, y: this._targetRotation.y, z: this._targetRotation.z, w: this._targetRotation.w },
+            targetAngularVelocity: { x: this._targetAngularVelocity.x, y: this._targetAngularVelocity.y, z: this._targetAngularVelocity.z },
+            rotationDriveMode: this._rotationDriveMode,
+            configuredInWorldSpace: this._configuredInWorldSpace,
+            swapBodies: this._swapBodies,
+            xDrive: { ...this._xDrive },
+            yDrive: { ...this._yDrive },
+            zDrive: { ...this._zDrive },
+            angularXDrive: { ...this._angularXDrive },
+            angularYZDrive: { ...this._angularYZDrive },
+        };
+    }
+
+    override deserialize(data: Record<string, any>): void {
+        super.deserialize(data);
+        if (data.xMotion !== undefined) this._xMotion = data.xMotion;
+        if (data.yMotion !== undefined) this._yMotion = data.yMotion;
+        if (data.zMotion !== undefined) this._zMotion = data.zMotion;
+        if (data.angularXMotion !== undefined) this._angularXMotion = data.angularXMotion;
+        if (data.angularYMotion !== undefined) this._angularYMotion = data.angularYMotion;
+        if (data.angularZMotion !== undefined) this._angularZMotion = data.angularZMotion;
+        const ll = data.linearLimit;
+        if (ll && typeof ll === 'object') {
+            if (ll.limit !== undefined) this._linearLimit.limit = ll.limit;
+            if (ll.bounciness !== undefined) this._linearLimit.bounciness = ll.bounciness;
+            if (ll.contactDistance !== undefined) this._linearLimit.contactDistance = ll.contactDistance;
+        }
+        if (data.targetPosition) {
+            this._targetPosition.x = data.targetPosition.x ?? 0;
+            this._targetPosition.y = data.targetPosition.y ?? 0;
+            this._targetPosition.z = data.targetPosition.z ?? 0;
+        }
+        if (data.targetVelocity) {
+            this._targetVelocity.x = data.targetVelocity.x ?? 0;
+            this._targetVelocity.y = data.targetVelocity.y ?? 0;
+            this._targetVelocity.z = data.targetVelocity.z ?? 0;
+        }
+        if (data.targetRotation) {
+            this._targetRotation.x = data.targetRotation.x ?? 0;
+            this._targetRotation.y = data.targetRotation.y ?? 0;
+            this._targetRotation.z = data.targetRotation.z ?? 0;
+            this._targetRotation.w = data.targetRotation.w ?? 1;
+        }
+        if (data.targetAngularVelocity) {
+            this._targetAngularVelocity.x = data.targetAngularVelocity.x ?? 0;
+            this._targetAngularVelocity.y = data.targetAngularVelocity.y ?? 0;
+            this._targetAngularVelocity.z = data.targetAngularVelocity.z ?? 0;
+        }
+        if (data.rotationDriveMode !== undefined) this._rotationDriveMode = data.rotationDriveMode;
+        if (data.configuredInWorldSpace !== undefined) this._configuredInWorldSpace = !!data.configuredInWorldSpace;
+        if (data.swapBodies !== undefined) this._swapBodies = !!data.swapBodies;
+        // Drive structs — engine-only, safe defaults when absent
+        const driveKeys = ['xDrive', 'yDrive', 'zDrive', 'angularXDrive', 'angularYZDrive'] as const;
+        const driveTargets = [this._xDrive, this._yDrive, this._zDrive, this._angularXDrive, this._angularYZDrive] as const;
+        for (let i = 0; i < driveKeys.length; i++) {
+            const src = data[driveKeys[i]];
+            if (src && typeof src === 'object') {
+                if (src.positionSpring !== undefined) driveTargets[i].positionSpring = src.positionSpring;
+                if (src.positionDamper !== undefined) driveTargets[i].positionDamper = src.positionDamper;
+                if (src.maximumForce !== undefined) driveTargets[i].maximumForce = src.maximumForce;
+                if (src.useAcceleration !== undefined) driveTargets[i].useAcceleration = !!src.useAcceleration;
+            }
+        }
+    }
 }

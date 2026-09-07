@@ -116,4 +116,67 @@ export class HingeJoint3D extends Joint3D {
     protected override _updateConstraint(): void {
         this._recreateConstraint();
     }
+
+    /**
+     * Serialize hinge-specific properties.
+     *
+     * Editor key mapping (components.rs `hinge_joint_3d_properties`):
+     * - `limits: { enabled, min, max, bounciness, bounceThresholdVelocity, contactDistance }`
+     * - `motor: { enabled, targetVelocity, force, freeSpin }`
+     * - `spring: { enabled, spring, damper, targetPosition }`
+     *
+     * Engine uses flat `_useLimits`/`_useMotor`/`_useSpring` booleans; the
+     * Editor nests them as `enabled` inside the corresponding sub-object.
+     */
+    override serialize(): Record<string, any> {
+        return {
+            ...super.serialize(),
+            limits: {
+                enabled: this._useLimits,
+                min: this._limits.min,
+                max: this._limits.max,
+                bounciness: this._limits.bounciness,
+                bounceThresholdVelocity: 0,
+                contactDistance: this._limits.contactDistance,
+            },
+            motor: {
+                enabled: this._useMotor,
+                targetVelocity: this._motor.targetVelocity,
+                force: this._motor.force,
+                freeSpin: this._motor.freeSpin,
+            },
+            spring: {
+                enabled: this._useSpring,
+                spring: this._spring.spring,
+                damper: this._spring.damper,
+                targetPosition: 0,
+            },
+        };
+    }
+
+    override deserialize(data: Record<string, any>): void {
+        super.deserialize(data);
+        const limits = data.limits;
+        if (limits && typeof limits === 'object') {
+            if (limits.enabled !== undefined) this._useLimits = !!limits.enabled;
+            if (limits.min !== undefined) this._limits.min = limits.min;
+            if (limits.max !== undefined) this._limits.max = limits.max;
+            if (limits.bounciness !== undefined) this._limits.bounciness = Math.max(0, Math.min(1, limits.bounciness));
+            if (limits.contactDistance !== undefined) this._limits.contactDistance = Math.max(0, limits.contactDistance);
+        }
+        const motor = data.motor;
+        if (motor && typeof motor === 'object') {
+            if (motor.enabled !== undefined) this._useMotor = !!motor.enabled;
+            if (motor.targetVelocity !== undefined) this._motor.targetVelocity = motor.targetVelocity;
+            if (motor.force !== undefined) this._motor.force = Math.max(0, motor.force);
+            if (motor.freeSpin !== undefined) this._motor.freeSpin = !!motor.freeSpin;
+        }
+        const spring = data.spring;
+        if (spring && typeof spring === 'object') {
+            if (spring.enabled !== undefined) this._useSpring = !!spring.enabled;
+            if (spring.spring !== undefined) this._spring.spring = Math.max(0, spring.spring);
+            if (spring.damper !== undefined) this._spring.damper = Math.max(0, spring.damper);
+            // targetPosition is Editor-only (hinge spring target), not consumed by solver
+        }
+    }
 }

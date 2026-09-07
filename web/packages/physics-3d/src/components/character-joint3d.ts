@@ -169,4 +169,68 @@ export class CharacterJoint3D extends Joint3D {
     protected override _updateConstraint(): void {
         this._recreateConstraint();
     }
+
+    /**
+     * Serialize character-joint-specific properties.
+     *
+     * Editor key mapping (components.rs `character_joint_3d_properties`):
+     * - `swingAxis: [x,y,z]`
+     * - `lowTwistLimit`, `highTwistLimit`, `swing1Limit`, `swing2Limit`:
+     *   `{ limit, bounciness, contactDistance }`
+     * - `twistLimitSpring`, `swingLimitSpring`: `{ spring, damper }`
+     * - `enableProjection`, `projectionDistance` (metres), `projectionAngle`
+     *
+     * Engine-only (not in Editor default JSON but wired to solver):
+     * - `motorSpeed` (rad/s), `maxMotorTorque` (N·m)
+     */
+    override serialize(): Record<string, any> {
+        return {
+            ...super.serialize(),
+            swingAxis: { x: this._swingAxis.x, y: this._swingAxis.y, z: this._swingAxis.z },
+            lowTwistLimit: { limit: this._lowTwistLimit.limit, bounciness: this._lowTwistLimit.bounciness, contactDistance: this._lowTwistLimit.contactDistance },
+            highTwistLimit: { limit: this._highTwistLimit.limit, bounciness: this._highTwistLimit.bounciness, contactDistance: this._highTwistLimit.contactDistance },
+            swing1Limit: { limit: this._swing1Limit.limit, bounciness: this._swing1Limit.bounciness, contactDistance: this._swing1Limit.contactDistance },
+            swing2Limit: { limit: this._swing2Limit.limit, bounciness: this._swing2Limit.bounciness, contactDistance: this._swing2Limit.contactDistance },
+            twistLimitSpring: { spring: this._twistLimitSpring.spring, damper: this._twistLimitSpring.damper },
+            swingLimitSpring: { spring: this._swingLimitSpring.spring, damper: this._swingLimitSpring.damper },
+            enableProjection: this._enableProjection,
+            projectionDistance: this._projectionDistance,
+            projectionAngle: this._projectionAngle,
+            motorSpeed: this._motorSpeed,
+            maxMotorTorque: this._maxMotorTorque,
+        };
+    }
+
+    override deserialize(data: Record<string, any>): void {
+        super.deserialize(data);
+        if (data.swingAxis) {
+            this._swingAxis.x = data.swingAxis.x ?? 1;
+            this._swingAxis.y = data.swingAxis.y ?? 0;
+            this._swingAxis.z = data.swingAxis.z ?? 0;
+        }
+        const softLimitKeys = ['lowTwistLimit', 'highTwistLimit', 'swing1Limit', 'swing2Limit'] as const;
+        const softLimitTargets = [this._lowTwistLimit, this._highTwistLimit, this._swing1Limit, this._swing2Limit] as const;
+        for (let i = 0; i < softLimitKeys.length; i++) {
+            const src = data[softLimitKeys[i]];
+            if (src && typeof src === 'object') {
+                if (src.limit !== undefined) softLimitTargets[i].limit = src.limit;
+                if (src.bounciness !== undefined) softLimitTargets[i].bounciness = src.bounciness;
+                if (src.contactDistance !== undefined) softLimitTargets[i].contactDistance = src.contactDistance;
+            }
+        }
+        const springKeys = ['twistLimitSpring', 'swingLimitSpring'] as const;
+        const springTargets = [this._twistLimitSpring, this._swingLimitSpring] as const;
+        for (let i = 0; i < springKeys.length; i++) {
+            const src = data[springKeys[i]];
+            if (src && typeof src === 'object') {
+                if (src.spring !== undefined) springTargets[i].spring = src.spring;
+                if (src.damper !== undefined) springTargets[i].damper = src.damper;
+            }
+        }
+        if (data.enableProjection !== undefined) this._enableProjection = !!data.enableProjection;
+        if (data.projectionDistance !== undefined) this._projectionDistance = Math.max(0, data.projectionDistance);
+        if (data.projectionAngle !== undefined) this._projectionAngle = Math.max(0, data.projectionAngle);
+        if (data.motorSpeed !== undefined) this._motorSpeed = data.motorSpeed;
+        if (data.maxMotorTorque !== undefined) this._maxMotorTorque = Math.max(0, data.maxMotorTorque);
+    }
 }
