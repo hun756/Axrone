@@ -629,7 +629,11 @@ export class ShaderInstance implements IShaderInstance {
         // targets the wrong program ("location is not from the associated
         // program"). Track the context-level current program instead.
         if (ShaderInstance.contextCurrentProgram !== program) {
-            this._ctx?.state.useProgram(program) ?? gl.useProgram(program);
+            if (this._ctx) {
+                this._ctx.state.useProgram(program);
+            } else {
+                gl.useProgram(program);
+            }
             ShaderInstance.contextCurrentProgram = program;
             this.programBindCount++;
         }
@@ -842,7 +846,11 @@ export class ShaderInstance implements IShaderInstance {
             const source = buffer as unknown as { buffer?: ArrayBuffer; byteOffset?: number };
             const data = source.buffer ?? (buffer as unknown as ArrayBuffer);
             const size = data.byteLength;
-            this._ctx?.state.bindBuffer(gl.UNIFORM_BUFFER, glBuffer) ?? gl.bindBuffer(gl.UNIFORM_BUFFER, glBuffer);
+            if (this._ctx) {
+                this._ctx.state.bindBuffer(gl.UNIFORM_BUFFER, glBuffer);
+            } else {
+                gl.bindBuffer(gl.UNIFORM_BUFFER, glBuffer);
+            }
             const capacity = this.uniformBufferCapacities.get(bufferName) ?? 0;
             if (capacity >= size && capacity > 0) {
                 gl.bufferSubData(gl.UNIFORM_BUFFER, 0, new Uint8Array(data, 0, size));
@@ -853,7 +861,11 @@ export class ShaderInstance implements IShaderInstance {
                 gl.bufferData(gl.UNIFORM_BUFFER, 0, gl.DYNAMIC_DRAW);
                 this.uniformBufferCapacities.set(bufferName, 0);
             }
-            this._ctx?.state.bindBufferBase(gl.UNIFORM_BUFFER, binding, glBuffer) ?? gl.bindBufferBase(gl.UNIFORM_BUFFER, binding, glBuffer);
+            if (this._ctx) {
+                this._ctx.state.bindBufferBase(gl.UNIFORM_BUFFER, binding, glBuffer);
+            } else {
+                gl.bindBufferBase(gl.UNIFORM_BUFFER, binding, glBuffer);
+            }
         }
         this.dirtyBuffers.clear();
     }
