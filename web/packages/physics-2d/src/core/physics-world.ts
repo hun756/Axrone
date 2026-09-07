@@ -459,11 +459,14 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 }
 
                 // collideConnected filter: skip pairs joined by a non-colliding constraint
-                const bodyPairKey = makeCollisionPairKey(
-                    descriptorA.bodyId as number,
-                    descriptorB.bodyId as number
-                );
-                if (this._jointCollisionCounts.has(bodyPairKey)) return true;
+                // Early exit: when no joints exist, the index is empty — skip entirely.
+                if (this._jointCollisionCounts.size > 0) {
+                    const bodyPairKey = makeCollisionPairKey(
+                        descriptorA.bodyId as number,
+                        descriptorB.bodyId as number
+                    );
+                    if (this._jointCollisionCounts.has(bodyPairKey)) return true;
+                }
 
                 const pairKey = makeCollisionPairKey(shapeIdA as number, shapeIdB as number);
 
