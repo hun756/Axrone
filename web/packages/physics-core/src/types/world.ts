@@ -56,6 +56,28 @@ export interface IPhysicsWorldConfig {
     /** Legacy alias for `maxConstraints` used in tests */
     readonly constraintCapacity?: number;
     readonly enableProfiler?: boolean;
+    /**
+     * Maximum linear velocity in metres per second (m/s).
+     * Bodies exceeding this speed are scaled down to this magnitude.
+     * Default: `PhysicsConstants.MAX_VELOCITY` (200 m/s ≈ 720 km/h).
+     * @see ADR 0004 — Physics World Unit Convention
+     */
+    readonly maxVelocity?: number;
+    /**
+     * Maximum angular velocity in radians per second (rad/s).
+     * Bodies exceeding this angular speed are clamped to this magnitude.
+     * Default: `PhysicsConstants.MAX_ANGULAR_VELOCITY` (250 rad/s).
+     * @see ADR 0004 — Physics World Unit Convention
+     */
+    readonly maxAngularVelocity?: number;
+    /**
+     * Maximum position translation per solver step in metres per step (m/step).
+     * Anti-tunneling clamp: limits how far a body can move in a single step.
+     * This is NOT a velocity limit — it operates on position delta (velocity × dt).
+     * Default: `PhysicsConstants.MAX_TRANSLATION` (2.0 m/step).
+     * @see ADR 0004 — Physics World Unit Convention
+     */
+    readonly maxTranslation?: number;
 }
 
 export interface IPhysicsWorldStatistics {
