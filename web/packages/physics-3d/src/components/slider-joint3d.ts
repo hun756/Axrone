@@ -13,7 +13,7 @@ import {
 /**
  * Slider (Prismatic) joint — registers a SLIDER constraint (type 3).
  *
- * **Solver status: FULL.** The Jacobian constraint solver enforces all 5 DOF:
+ * **Solver status: PARTIAL.** The Jacobian constraint solver enforces all 5 DOF:
  * - 2 lateral linear rows: lock translation perpendicular to the slide axis
  * - 3 angular lock rows: lock all rotation (slider must not rotate)
  * - 1 axial limit/motor row: translation along slide axis with optional
@@ -27,6 +27,11 @@ import {
  * **Motor + limit interaction:** When the motor is active and the slider
  * reaches a limit boundary, the motor cannot push past the limit (Box2D
  * behavior). The motor can still pull away from the limit.
+ *
+ * **CAVEAT — `useSpring`/`spring` NOT wired:** The component exposes
+ * `useSpring` and `spring` (spring/damper) properties, but these are
+ * NOT passed to the constraint definition. Setting them has NO EFFECT.
+ * This is a known gap — the solver does not yet implement slider spring.
  *
  * @see JOINT_CAPABILITY_3D
  */

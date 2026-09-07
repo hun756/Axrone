@@ -13,14 +13,16 @@ import {
 /**
  * Character joint — registers a CONE_TWIST constraint (type 4).
  *
- * **Solver status: SOLVER IMPLEMENTED, RUNTIME WIRING PENDING.** The
- * cone-twist solver module (physics-world-3d-constraints-cone-twist.ts)
- * implements the full 6-row scheme — 3 anchor rows, the cone swing limit
- * driven by quaternion swing-twist decomposition, and the independent twist
- * limit/motor rows — and self-registers under CONSTRAINT_TYPE_CONE_TWIST.
- * The runtime side-effect import that activates the module in the live
- * world is added by the constraint-integration task; once merged, this joint
- * becomes fully simulated.
+ * **Solver status: PARTIAL.** The cone-twist solver module implements
+ * the full 6-row scheme — 3 anchor rows, cone swing limits via quaternion
+ * swing-twist decomposition, and independent twist limit/motor rows.
+ * Swing and twist limits are fully functional.
+ *
+ * **CAVEAT — motor NOT exposed:** The solver supports a twist motor
+ * (`motorSpeed`/`maxMotorTorque`), but the component does not expose
+ * these properties. Motor control is not available through this component.
+ *
+ * All distance units are METRES (ADR 0004). Angles are in radians.
  *
  * @see JOINT_CAPABILITY_3D
  * @remarks Solver: physics-world-3d-constraints-cone-twist.ts (unit-tested

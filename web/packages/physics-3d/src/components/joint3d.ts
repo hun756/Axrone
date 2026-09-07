@@ -10,26 +10,28 @@ export const INVALID_CONSTRAINT_ID = -1 as ConstraintId3D;
 /**
  * 3D joint solver capability matrix.
  *
- * | Joint type      | Constraint type | Solver status |
- * |-----------------|-----------------|---------------|
- * | FixedJoint3D    | FIXED (0)       | **FULL** — Baumgarte + sequential impulse, distance preserved |
- * | DistanceJoint3D | FIXED (0)       | **FULL** — same solver path as Fixed |
- * | SpringJoint3D   | SPRING (6)      | **FULL** — spring force + Baumgarte |
- * | HingeJoint3D    | HINGE (2)       | **FULL** — 3 linear + 2 angular lock + 1 axial (limit/motor) |
- * | SliderJoint3D   | SLIDER (3)      | **UNSUPPORTED** — constraint registered but no solver correction |
- * | CharacterJoint3D| CONE_TWIST (4)  | **UNSUPPORTED** — constraint registered but no solver correction |
- * | ConfigurableJoint3D | GENERIC (5) | **UNSUPPORTED** — constraint registered but no solver correction |
+ * | Joint type      | Constraint type | Solver status | Notes |
+ * |-----------------|-----------------|---------------|-------|
+ * | FixedJoint3D    | FIXED (0)       | **FULL** — Baumgarte + sequential impulse, distance preserved | |
+ * | DistanceJoint3D | FIXED (0)       | **FULL** — same solver path as Fixed | |
+ * | SpringJoint3D   | SPRING (6)      | **FULL** — spring force + Baumgarte | |
+ * | HingeJoint3D    | HINGE (2)       | **FULL** — 3 linear + 2 angular lock + 1 axial (limit/motor), Box2D stall semantics | |
+ * | SliderJoint3D   | SLIDER (3)      | **PARTIAL** — limit+motor work; `useSpring`/`spring` properties exposed but NOT wired to solver (silent no-op) | |
+ * | CharacterJoint3D| CONE_TWIST (4)  | **PARTIAL** — swing/twist limits work; motor solver exists but `motorSpeed`/`maxMotorTorque` not exposed in component | |
+ * | ConfigurableJoint3D | GENERIC (5) | **PARTIAL** — limit+lock work; drive properties (`xDrive`, `targetPosition`, etc.) exposed but NOT wired to solver | |
  *
- * TODO(P2-joint-solvers): implement proper slider, cone-twist, and configurable solvers.
+ * Units: All distances in METRES (ADR 0004), angles in radians.
+ *
+ * @see Joint3D
  */
 export const JOINT_CAPABILITY_3D = {
     FIXED: 'full',
     DISTANCE: 'full',
     SPRING: 'full',
     HINGE: 'full',
-    SLIDER: 'unsupported',
-    CONE_TWIST: 'unsupported',
-    GENERIC: 'unsupported',
+    SLIDER: 'partial',
+    CONE_TWIST: 'partial',
+    GENERIC: 'partial',
 } as const;
 
 export type JointCapability3D = typeof JOINT_CAPABILITY_3D[keyof typeof JOINT_CAPABILITY_3D];
@@ -92,10 +94,12 @@ export const DEFAULT_SOFT_JOINT_LIMIT_SPRING: Readonly<ISoftJointLimitSpring3D> 
 /**
  * Base class for all 3D joint components.
  *
- * IMPORTANT: Not all joint types are fully simulated. See {@link JOINT_CAPABILITY_3D}
- * for the current solver capability matrix. Joints marked as "unsupported" register
- * their constraint with the solver but receive no correction — they are effectively
- * decorative until proper solver implementations are added.
+ * IMPORTANT: Not all joint capabilities are fully wired. See {@link JOINT_CAPABILITY_3D}
+ * for the current solver capability matrix. Joints marked as "partial" have some
+ * features implemented in the solver but not exposed through the component API,
+ * or expose properties that are not yet wired to the solver (silent no-ops).
+ *
+ * All distance units are METRES (ADR 0004). Angles are in radians.
  *
  * @see JOINT_CAPABILITY_3D
  */

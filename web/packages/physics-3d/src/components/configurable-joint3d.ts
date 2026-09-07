@@ -16,7 +16,7 @@ import {
 /**
  * Configurable joint — registers a GENERIC constraint (type 5).
  *
- * **Solver status: FULL.** The 6-DOF configurable joint solver is implemented
+ * **Solver status: PARTIAL.** The 6-DOF configurable joint solver is implemented
  * in `physics-world-3d-constraints-configurable.ts`. Each of the 6 DOFs
  * (3 linear + 3 angular) can independently be:
  *
@@ -32,6 +32,14 @@ import {
  * with Fixed joint) and extractAxisAngle in the relative local frame for
  * angular DOFs. When localFrame rotations are identity, the behavior is
  * identical to the Fixed joint for all-locked configuration.
+ *
+ * **CAVEAT — drive/motor NOT wired:** The component exposes drive properties
+ * (`xDrive`, `yDrive`, `zDrive`, `angularXDrive`, `angularYZDrive`, `slerpDrive`)
+ * and target values (`targetPosition`, `targetVelocity`, `targetRotation`,
+ * `targetAngularVelocity`), but these are NOT passed to the constraint definition.
+ * Only limit/lock functionality is active. Drive/motor control is not available.
+ *
+ * All distance units are METRES (ADR 0004). Angles are in radians.
  *
  * @see JOINT_CAPABILITY_3D
  */
