@@ -16,14 +16,24 @@ import {
 /**
  * Configurable joint — registers a GENERIC constraint (type 5).
  *
- * **Solver status: UNSUPPORTED.** The constraint is registered with the
- * constraint manager but the solver produces **no correction** for generic
- * constraints. Adding this joint to a scene has **no physical effect** —
- * connected bodies are free to move independently. All per-axis motion,
- * limit, drive, and target properties are stored but have no effect.
+ * **Solver status: FULL.** The 6-DOF configurable joint solver is implemented
+ * in `physics-world-3d-constraints-configurable.ts`. Each of the 6 DOFs
+ * (3 linear + 3 angular) can independently be:
+ *
+ *   - **LOCKED** (motion=0): rigid constraint, bilateral row produced
+ *   - **FREE** (motion=1): no constraint, no row produced
+ *   - **LIMITED** (motion=2): per-axis limit range enforced, unilateral row
+ *     produced only when the limit is violated
+ *
+ * Motion mode is inferred from the descriptor's per-axis limit pairs:
+ * lower==upper → LOCKED, both infinite → FREE, otherwise → LIMITED.
+ *
+ * Measurement uses world-space axis projection for linear DOFs (consistent
+ * with Fixed joint) and extractAxisAngle in the relative local frame for
+ * angular DOFs. When localFrame rotations are identity, the behavior is
+ * identical to the Fixed joint for all-locked configuration.
  *
  * @see JOINT_CAPABILITY_3D
- * @remarks TODO(P2-joint-solvers): implement proper generic/6-DOF constraint solver.
  */
 @script({ scriptName: 'ConfigurableJoint3D' })
 export class ConfigurableJoint3D extends Joint3D {
