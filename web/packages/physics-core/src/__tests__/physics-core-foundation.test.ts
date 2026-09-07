@@ -353,16 +353,17 @@ describe('physics-core Foundation', () => {
     });
 
     describe('Duplicate Star-Export Renames (P1-18)', () => {
-        it('physics-3d.ts IContactListener3D renamed to IContactListener3DRaw', () => {
+        it('physics-3d.ts IContactListener3DRaw removed — canonical IContactListener3D is the only contact listener', () => {
+            // The dead IContactListener3DRaw interface was removed (no consumers).
             // The canonical IContactListener3D (collision.ts, event-based) is still exported.
-            // The physics-3d.ts manifold-based variant is now IContactListener3DRaw — type-only, not runtime-checkable.
-            // We verify the canonical one is still accessible:
+            expect(PhysicsCore.IContactListener3DRaw).toBeUndefined();
             expect(PhysicsCore.IContactListener3D).toBeUndefined(); // interface, type-only
         });
 
-        it('physics-3d.ts RaycastCallback3D renamed to RaycastQueryCallback3D', () => {
+        it('physics-3d.ts RaycastQueryCallback3D removed — canonical RaycastCallback3D is the only raycast callback', () => {
+            // The dead RaycastQueryCallback3D type alias was removed (no consumers).
             // The canonical RaycastCallback3D (collision.ts, → number) is still exported.
-            // The physics-3d.ts variant (→ boolean) is now RaycastQueryCallback3D — type-only.
+            expect(PhysicsCore.RaycastQueryCallback3D).toBeUndefined();
             expect(PhysicsCore.RaycastCallback3D).toBeUndefined(); // type alias, type-only
         });
     });

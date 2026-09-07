@@ -226,16 +226,6 @@ export interface IPhysicsProfiler3D {
     ccdTime: number;
 }
 
-export interface IContactListener3DRaw {
-    onCollisionBegin?(manifold: IContactManifold3D): void;
-    onCollisionStay?(manifold: IContactManifold3D): void;
-    onCollisionEnd?(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void;
-    onTriggerEnter?(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void;
-    onTriggerExit?(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void;
-}
-
-export type RaycastQueryCallback3D = (result: ISingleRaycastResult3D) => boolean;
-
 // IQueryFilter3D — defined here (physics-3d type section) because it is only
 // consumed by the physics-3d package.  Kept in physics-core solely so that the
 // physics-3d barrel (`export * from '@axrone/physics-core'`) re-exports it.
