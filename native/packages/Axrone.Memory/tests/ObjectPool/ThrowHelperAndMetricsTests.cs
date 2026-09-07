@@ -1,7 +1,7 @@
-using Axrone.ObjectPool;
+using Axrone.Memory.ObjectPool;
 using Axrone.Utility.Internal;
 
-namespace Axrone.ObjectPool.Tests;
+namespace Axrone.Memory.Tests.ObjectPool;
 
 public class ThrowHelperTests
 {

@@ -1,7 +1,7 @@
 using Text = System.Text;
 using IO = System.IO;
 
-namespace Axrone.ObjectPool;
+namespace Axrone.Memory.ObjectPool;
 
 /// <summary>
 /// Provides factory methods for creating <see cref="IObjectPool{T}"/> instances with

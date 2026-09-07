@@ -6,7 +6,7 @@ using Axrone.Utility.Concurrency;
 using FluentAssertions;
 using Xunit;
 
-namespace Axrone.ObjectPool.Tests;
+namespace Axrone.Memory.Tests.ObjectPool;
 
 public class AsyncReaderWriterLockTests
 {

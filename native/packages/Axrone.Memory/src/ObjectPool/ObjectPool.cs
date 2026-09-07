@@ -1,4 +1,4 @@
-namespace Axrone.ObjectPool;
+namespace Axrone.Memory.ObjectPool;
 
 /// <summary>
 /// A high-performance, thread-safe generic object pool that supports multiple pooling strategies,

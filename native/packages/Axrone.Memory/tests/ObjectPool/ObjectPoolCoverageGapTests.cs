@@ -1,4 +1,4 @@
-namespace Axrone.ObjectPool.Tests;
+namespace Axrone.Memory.Tests.ObjectPool;
 
 /// <summary>
 /// Tests for scavenge behavior, reset-exception handling, cancellation token propagation,

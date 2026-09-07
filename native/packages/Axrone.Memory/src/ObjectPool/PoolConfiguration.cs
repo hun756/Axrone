@@ -1,4 +1,4 @@
-namespace Axrone.ObjectPool;
+namespace Axrone.Memory.ObjectPool;
 
 /// <summary>
 /// Immutable configuration for an object pool, covering capacity, strategy, diagnostics, and memory behavior.

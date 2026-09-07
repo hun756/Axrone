@@ -1,4 +1,4 @@
-namespace Axrone.ObjectPool;
+namespace Axrone.Memory.ObjectPool;
 
 /// <summary>
 /// Contains metadata and tracking information for a single object managed by the pool.

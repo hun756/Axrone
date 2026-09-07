@@ -1,4 +1,4 @@
-namespace Axrone.ObjectPool;
+namespace Axrone.Memory.ObjectPool;
 
 /// <summary>
 /// Represents a single pooled item with its associated metadata.

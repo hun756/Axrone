@@ -1,6 +1,6 @@
-using Axrone.ObjectPool;
+using Axrone.Memory.ObjectPool;
 
-namespace Axrone.ObjectPool.Tests;
+namespace Axrone.Memory.Tests.ObjectPool;
 
 public class InterfaceTests
 {

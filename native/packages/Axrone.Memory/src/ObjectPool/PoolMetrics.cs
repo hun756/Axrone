@@ -1,4 +1,4 @@
-namespace Axrone.ObjectPool;
+namespace Axrone.Memory.ObjectPool;
 
 public readonly struct PoolMetrics
 {

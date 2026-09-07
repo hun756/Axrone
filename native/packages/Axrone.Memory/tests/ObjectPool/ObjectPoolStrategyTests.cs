@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Linq;
 
-namespace Axrone.ObjectPool.Tests;
+namespace Axrone.Memory.Tests.ObjectPool;
 
 public class ObjectPoolStrategyTests
 {

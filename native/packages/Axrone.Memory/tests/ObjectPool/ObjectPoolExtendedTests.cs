@@ -1,4 +1,4 @@
-namespace Axrone.ObjectPool.Tests;
+namespace Axrone.Memory.Tests.ObjectPool;
 
 using FluentAssertions;
 

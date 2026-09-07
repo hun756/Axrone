@@ -1,4 +1,4 @@
-namespace Axrone.ObjectPool;
+namespace Axrone.Memory.ObjectPool;
 
 /// <summary>
 /// Abstracts the item-storage mechanism used by <see cref="ObjectPool{T}"/>.
