@@ -93,7 +93,7 @@ describe('PhysicsWorld3D contact runtime', () => {
             world.setContactListener({
                 onCollisionBegin(p: any) { events.push(`begin:${p.bodyIdA}:${p.bodyIdB}`); },
                 onCollisionStay(p: any) { events.push(`stay:${p.bodyIdA}:${p.bodyIdB}`); },
-                onCollisionEnd(a: number, b: number) { events.push(`end:${a}:${b}`); },
+                onCollisionEnd(event: any) { events.push(`end:${event.bodyIdA}:${event.bodyIdB}`); },
             } as any);
 
             const ground = world.createBody({ type: 0, position: { x: 0, y: 0, z: 0 } });
@@ -128,7 +128,7 @@ describe('PhysicsWorld3D contact runtime', () => {
             world.setContactListener({
                 onCollisionBegin(p: any) { events.push(`begin:${p.bodyIdA}:${p.bodyIdB}`); },
                 onCollisionStay() {},
-                onCollisionEnd(a: number, b: number) { events.push(`end:${a}:${b}`); },
+                onCollisionEnd(event: any) { events.push(`end:${event.bodyIdA}:${event.bodyIdB}`); },
             } as any);
 
             const ground = world.createBody({ type: 0, position: { x: 0, y: 0, z: 0 } });
@@ -216,8 +216,8 @@ describe('PhysicsWorld3D contact runtime', () => {
         it('sensor shapes fire trigger enter/exit events without physical response', () => {
             const triggerEvents: string[] = [];
             world.setContactListener({
-                onTriggerEnter(a: number, b: number) { triggerEvents.push(`enter:${a}:${b}`); },
-                onTriggerExit(a: number, b: number) { triggerEvents.push(`exit:${a}:${b}`); },
+                onSensorEnter(event: any) { triggerEvents.push(`enter:${event.sensorBodyId}:${event.visitorBodyId}`); },
+                onSensorExit(event: any) { triggerEvents.push(`exit:${event.sensorBodyId}:${event.visitorBodyId}`); },
             } as any);
 
             const sensorBody = world.createBody({ type: 0, position: { x: 0, y: 0, z: 0 } });
@@ -467,8 +467,8 @@ describe('PhysicsWorld3D contact runtime', () => {
             // Access manifold separation values via contact listener
             const separations: number[] = [];
             world.setContactListener({
-                onCollisionStay(m: any) {
-                    for (const pt of m.points) {
+                onCollisionStay(event: any) {
+                    for (const pt of event.manifold.points) {
                         separations.push(pt.separation);
                     }
                 },
@@ -493,8 +493,8 @@ describe('PhysicsWorld3D contact runtime', () => {
 
             const separations: number[] = [];
             world.setContactListener({
-                onCollisionStay(m: any) {
-                    for (const pt of m.points) {
+                onCollisionStay(event: any) {
+                    for (const pt of event.manifold.points) {
                         separations.push(pt.separation);
                     }
                 },
@@ -516,8 +516,8 @@ describe('PhysicsWorld3D contact runtime', () => {
 
             const pointCounts: number[] = [];
             world.setContactListener({
-                onCollisionStay(m: any) {
-                    pointCounts.push(m.points.length);
+                onCollisionStay(event: any) {
+                    pointCounts.push(event.manifold.points.length);
                 },
             } as any);
 

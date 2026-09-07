@@ -97,14 +97,14 @@ describe('Physics3D E2E component harness', () => {
             triggerCol.isTrigger = true;
             triggerCol.initialize(world, triggerRb);
 
-            // Set up contact listener — runtime uses IContactListener3DRaw interface
+            // Set up contact listener — canonical IContactListener3D event-based interface
             const events: string[] = [];
             world.setContactListener({
                 onCollisionBegin() {},
                 onCollisionStay() {},
                 onCollisionEnd() {},
-                onTriggerEnter(a: number, b: number) { events.push(`triggerEnter:${a}:${b}`); },
-                onTriggerExit(a: number, b: number) { events.push(`triggerExit:${a}:${b}`); },
+                onSensorEnter(event: any) { events.push(`triggerEnter:${event.sensorBodyId}:${event.visitorBodyId}`); },
+                onSensorExit(event: any) { events.push(`triggerExit:${event.sensorBodyId}:${event.visitorBodyId}`); },
             } as any);
 
             // Step until ball passes through trigger zone

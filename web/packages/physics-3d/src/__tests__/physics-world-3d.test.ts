@@ -219,8 +219,8 @@ describe('PhysicsWorld3D modular structure', () => {
             onCollisionStay(payload: any) {
                 events.push(`stay:${payload.bodyIdA}:${payload.bodyIdB}`);
             },
-            onCollisionEnd(bodyIdA: number, bodyIdB: number) {
-                events.push(`end:${bodyIdA}:${bodyIdB}`);
+            onCollisionEnd(event: any) {
+                events.push(`end:${event.bodyIdA}:${event.bodyIdB}`);
             },
         } as any);
 

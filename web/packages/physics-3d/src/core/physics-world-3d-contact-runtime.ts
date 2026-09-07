@@ -2,11 +2,14 @@
 import { Vec3, Quat, clamp, type IVec3Like } from '@axrone/numeric';
 import type {
     ContactId,
+    ICollisionEvent3D,
     ICollisionFilter,
     IContactManifold3D,
     Impulse,
+    ISensorEvent3D,
     ManifoldId,
 } from '../types';
+import { CollisionEventType, SensorEventType } from '../types';
 import { PhysicsConstants } from '../types';
 import type {
     BodyId3D,
@@ -99,6 +102,15 @@ export class PhysicsWorld3DContactRuntime {
     private readonly _scratchAabb = { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
     private readonly _scratchCenter: IVec3Like = { x: 0, y: 0, z: 0 };
     private readonly _scratchDisp: IVec3Like = { x: 0, y: 0, z: 0 };
+
+    /**
+     * Reusable transient event objects for Stay events (fired every step per contact).
+     * WARNING: These are MUTATED each step. Listeners MUST NOT retain references
+     * beyond the callback — copy any data needed. This avoids O(contacts) allocations
+     * per step, preserving the zero-allocation discipline from Phase 1.
+     */
+    private _stayCollisionEvent: ICollisionEvent3D | null = null;
+    private _staySensorEvent: ISensorEvent3D | null = null;
 
     // Pre-allocated contact point pool (max 4 points per manifold)
     private static readonly MAX_CONTACT_POINTS = 4;
@@ -258,21 +270,76 @@ export class PhysicsWorld3DContactRuntime {
         if (!listener) return;
         const next = this._contactManifolds;
         const prev = this._previousManifolds;
+        const now = performance.now();
         // Begin events: new contacts
         for (const [key, m] of next.entries()) {
             if (!prev.has(key)) {
                 if (m.sensor) {
-                    listener.onTriggerEnter?.(m.bodyIdA, m.bodyIdB);
+                    const event: ISensorEvent3D = {
+                        type: SensorEventType.Enter,
+                        sensorBodyId: m.bodyIdA,
+                        sensorShapeId: m.shapeIdA,
+                        visitorBodyId: m.bodyIdB,
+                        visitorShapeId: m.shapeIdB,
+                        timestamp: now,
+                    };
+                    listener.onSensorEnter?.(event);
                 } else {
-                    listener.onCollisionBegin?.(this._toContactManifold(m));
+                    const event: ICollisionEvent3D = {
+                        type: CollisionEventType.Begin,
+                        bodyIdA: m.bodyIdA,
+                        bodyIdB: m.bodyIdB,
+                        shapeIdA: m.shapeIdA,
+                        shapeIdB: m.shapeIdB,
+                        manifold: this._toContactManifold(m),
+                        timestamp: now,
+                    };
+                    listener.onCollisionBegin?.(event);
                 }
             }
         }
         // Stay events: continuing contacts
         for (const [key, m] of next.entries()) {
             if (prev.has(key)) {
-                if (!m.sensor) {
-                    listener.onCollisionStay?.(this._toContactManifold(m));
+                if (m.sensor) {
+                    if (!this._staySensorEvent) {
+                        this._staySensorEvent = {
+                            type: SensorEventType.Stay,
+                            sensorBodyId: m.bodyIdA,
+                            sensorShapeId: m.shapeIdA,
+                            visitorBodyId: m.bodyIdB,
+                            visitorShapeId: m.shapeIdB,
+                            timestamp: now,
+                        };
+                    } else {
+                        this._staySensorEvent.sensorBodyId = m.bodyIdA;
+                        this._staySensorEvent.sensorShapeId = m.shapeIdA;
+                        this._staySensorEvent.visitorBodyId = m.bodyIdB;
+                        this._staySensorEvent.visitorShapeId = m.shapeIdB;
+                        this._staySensorEvent.timestamp = now;
+                    }
+                    listener.onSensorStay?.(this._staySensorEvent);
+                } else {
+                    const manifold = this._toContactManifold(m);
+                    if (!this._stayCollisionEvent) {
+                        this._stayCollisionEvent = {
+                            type: CollisionEventType.Stay,
+                            bodyIdA: m.bodyIdA,
+                            bodyIdB: m.bodyIdB,
+                            shapeIdA: m.shapeIdA,
+                            shapeIdB: m.shapeIdB,
+                            manifold,
+                            timestamp: now,
+                        };
+                    } else {
+                        this._stayCollisionEvent.bodyIdA = m.bodyIdA;
+                        this._stayCollisionEvent.bodyIdB = m.bodyIdB;
+                        this._stayCollisionEvent.shapeIdA = m.shapeIdA;
+                        this._stayCollisionEvent.shapeIdB = m.shapeIdB;
+                        (this._stayCollisionEvent as { manifold: IContactManifold3D }).manifold = manifold;
+                        this._stayCollisionEvent.timestamp = now;
+                    }
+                    listener.onCollisionStay?.(this._stayCollisionEvent);
                 }
             }
         }
@@ -280,9 +347,26 @@ export class PhysicsWorld3DContactRuntime {
         for (const [key, m] of prev.entries()) {
             if (!next.has(key)) {
                 if (m.sensor) {
-                    listener.onTriggerExit?.(m.bodyIdA, m.bodyIdB);
+                    const event: ISensorEvent3D = {
+                        type: SensorEventType.Exit,
+                        sensorBodyId: m.bodyIdA,
+                        sensorShapeId: m.shapeIdA,
+                        visitorBodyId: m.bodyIdB,
+                        visitorShapeId: m.shapeIdB,
+                        timestamp: now,
+                    };
+                    listener.onSensorExit?.(event);
                 } else {
-                    listener.onCollisionEnd?.(m.bodyIdA, m.bodyIdB);
+                    const event: ICollisionEvent3D = {
+                        type: CollisionEventType.End,
+                        bodyIdA: m.bodyIdA,
+                        bodyIdB: m.bodyIdB,
+                        shapeIdA: m.shapeIdA,
+                        shapeIdB: m.shapeIdB,
+                        manifold: this._toContactManifold(m),
+                        timestamp: now,
+                    };
+                    listener.onCollisionEnd?.(event);
                 }
             }
         }
