@@ -14,20 +14,24 @@ import { PhysicsWorld2DComponent } from './physics-world-2d-component';
  * | HingeJoint2D      | Revolute        | Revolute     | **FULL** — anchor + limit + motor |
  * | SliderJoint2D     | Prismatic       | Prismatic    | **FULL** — lateral lock + rotation lock + limit + motor |
  * | FixedJoint2D      | Weld            | Weld         | **FULL** — 3-row Jacobian (x, y, angle) + soft |
- * | (solver-only)     | Wheel           | Wheel        | **FULL** — lateral + suspension + limit + motor |
- * | (solver-only)     | Motor           | Motor        | **FULL** — linear offset + angular offset |
- * | (solver-only)     | Mouse           | Mouse        | **FULL** — soft target seek + force clamp |
- * | (solver-only)     | Gear            | Gear         | **FULL** — rotation ratio enforcement |
- * | (solver-only)     | Rope            | Rope         | **FULL** — unilateral max-length guard |
+ * | WheelJoint2D      | Wheel           | Wheel        | **FULL** — lateral + suspension + limit + motor |
+ * | MotorJoint2D      | Motor           | Motor        | **FULL** — linear offset + angular offset |
+ * | MouseJoint2D      | Mouse           | Mouse        | **FULL** — soft target seek + force clamp |
+ * | GearJoint2D       | Gear            | Gear         | **FULL** — rotation ratio enforcement |
+ * | RopeJoint2D       | Rope            | Rope         | **FULL** — unilateral max-length guard |
  *
- * All 9 constraint types have real solver implementations with Jacobians,
+ * All 10 constraint types have real solver implementations with Jacobians,
  * bias computation, and impulse solving. No decorative joints.
+ * All 10 also have `@script` component wrappers — users never need to
+ * call the constraint manager directly.
  *
- * Symmetry note: 3D has 3 UNSUPPORTED joint types (Slider, ConeTwist,
- * Configurable). 2D has 0 UNSUPPORTED — all types are fully solved.
+ * ## 2D / 3D asymmetry
  *
- * TODO(P2-2d-joint-solvers): add component wrappers for Wheel, Motor,
- * Mouse, Gear, Rope (solver support exists, no @script component yet).
+ * 2D has **10 joint types, all FULL** — zero unsupported types.
+ * 3D has 10 joint types but only **3 FULL** (Distance, Revolute, Weld);
+ * 4 are UNSUPPORTED (Slider, Prismatic solver exists but no component;
+ * ConeTwist, Configurable have no solver); 3 are PARTIAL.
+ * See `JOINT_CAPABILITY_3D` in `physics-3d` for the 3D matrix.
  */
 export const JOINT_CAPABILITY_2D = {
     DISTANCE: 'full',
@@ -47,9 +51,13 @@ export type JointCapability2D = typeof JOINT_CAPABILITY_2D[keyof typeof JOINT_CA
 /**
  * Base class for all 2D joint components.
  *
- * All 2D joint types have fully functional solvers — velocity correction,
- * position correction, and limit/motor support where applicable.
- * See {@link JOINT_CAPABILITY_2D} for the complete capability matrix.
+ * All 10 joint types (Distance, Spring, Hinge, Slider, Fixed, Wheel, Motor,
+ * Mouse, Gear, Rope) have fully functional solvers AND `@script` component
+ * wrappers. See {@link JOINT_CAPABILITY_2D} for the complete capability matrix.
+ *
+ * Lifecycle: `awake()` resolves the local Rigidbody2D → `start()` calls
+ * `createConstraint()` → `onDestroy()` calls `destroyConstraint()`.
+ * Property setters call `recreateConstraint()` which destroys and re-creates.
  *
  * @see JOINT_CAPABILITY_2D
  */
