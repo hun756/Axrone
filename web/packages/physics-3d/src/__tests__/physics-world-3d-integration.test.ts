@@ -821,4 +821,241 @@ describe('PhysicsWorld3D Integration', () => {
             expect(spuriousEvents.length).toBeLessThanOrEqual(1);
         });
     });
+
+    describe('Configurable velocity limits (ADR 0004)', () => {
+        it('clamps linear velocity to config maxVelocity', () => {
+            const limitedWorld = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxVelocity: 5,
+            } as any);
+
+            const body = limitedWorld.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+            });
+            limitedWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            // Apply extreme force to trigger clamp
+            limitedWorld.getBodyManager().applyForce(body, { x: 1e9, y: 0, z: 0 });
+            limitedWorld.step(1 / 60);
+
+            const lv = limitedWorld.getBodyManager().getLinearVelocity(body);
+            const speed = Math.sqrt(lv.x * lv.x + lv.y * lv.y + lv.z * lv.z);
+            expect(speed).toBeLessThanOrEqual(5.01);
+            expect(speed).toBeGreaterThan(4.9); // should be near the limit, not zero
+        });
+
+        it('uses default MAX_VELOCITY (200) when no config provided', () => {
+            const defaultWorld = new PhysicsWorld3D({ gravity: { x: 0, y: 0, z: 0 } });
+
+            const body = defaultWorld.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+            });
+            defaultWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            defaultWorld.getBodyManager().applyForce(body, { x: 1e9, y: 0, z: 0 });
+            defaultWorld.step(1 / 60);
+
+            const lv = defaultWorld.getBodyManager().getLinearVelocity(body);
+            const speed = Math.sqrt(lv.x * lv.x + lv.y * lv.y + lv.z * lv.z);
+            // Default MAX_VELOCITY = 200
+            expect(speed).toBeLessThanOrEqual(201);
+            expect(speed).toBeGreaterThan(199);
+        });
+
+        it('clamps angular velocity to config maxAngularVelocity', () => {
+            const limitedWorld = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxAngularVelocity: 2,
+            } as any);
+
+            const body = limitedWorld.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+            });
+            limitedWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            // Set angular velocity directly well above the limit
+            limitedWorld.getBodyManager().setAngularVelocity(body, { x: 0, y: 100, z: 0 });
+            limitedWorld.step(1 / 60);
+
+            const av = limitedWorld.getBodyManager().getAngularVelocity(body);
+            const angularSpeed = Math.sqrt(av.x * av.x + av.y * av.y + av.z * av.z);
+            expect(angularSpeed).toBeLessThanOrEqual(2.01);
+            expect(angularSpeed).toBeGreaterThan(1.9);
+        });
+
+        it('preserves velocity direction during linear clamp', () => {
+            const limitedWorld = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxVelocity: 5,
+            } as any);
+
+            const body = limitedWorld.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                // Set initial velocity well above the limit in (3,4,0) direction
+                linearVelocity: { x: 30, y: 40, z: 0 },
+            });
+            limitedWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            limitedWorld.step(1 / 60);
+
+            const lv = limitedWorld.getBodyManager().getLinearVelocity(body);
+            const speed = Math.sqrt(lv.x * lv.x + lv.y * lv.y + lv.z * lv.z);
+
+            // Speed should be clamped to ~5
+            expect(speed).toBeLessThanOrEqual(5.01);
+            expect(speed).toBeGreaterThan(4.9);
+
+            // Direction must be preserved: ratio x/y should remain 3/4 = 0.75
+            // z should remain 0
+            expect(lv.z).toBeCloseTo(0, 10);
+            const ratio = lv.x / lv.y;
+            expect(ratio).toBeCloseTo(3 / 4, 5);
+
+            // Both components should be positive (same quadrant)
+            expect(lv.x).toBeGreaterThan(0);
+            expect(lv.y).toBeGreaterThan(0);
+        });
+
+        it('does NOT clamp velocity when below limit (negative control)', () => {
+            const limitedWorld = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxVelocity: 200,
+            } as any);
+
+            const body = limitedWorld.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                linearVelocity: { x: 3, y: 4, z: 0 },
+            });
+            limitedWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            // No forces applied — velocity should remain unchanged
+            limitedWorld.step(1 / 60);
+
+            const lv = limitedWorld.getBodyManager().getLinearVelocity(body);
+            const speed = Math.sqrt(lv.x * lv.x + lv.y * lv.y + lv.z * lv.z);
+
+            // Speed is 5 m/s, well below 200 m/s limit — should be unchanged
+            expect(speed).toBeCloseTo(5, 1);
+            expect(lv.x).toBeCloseTo(3, 1);
+            expect(lv.y).toBeCloseTo(4, 1);
+            expect(lv.z).toBeCloseTo(0, 5);
+        });
+
+        it('handles degenerate config: maxVelocity 0 clamps all linear velocity', () => {
+            const zeroWorld = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxVelocity: 0,
+            } as any);
+
+            const body = zeroWorld.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                linearVelocity: { x: 10, y: 0, z: 0 },
+            });
+            zeroWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            zeroWorld.step(1 / 60);
+
+            const lv = zeroWorld.getBodyManager().getLinearVelocity(body);
+            const speed = Math.sqrt(lv.x * lv.x + lv.y * lv.y + lv.z * lv.z);
+            // maxVelocity=0 → any velocity exceeds 0 → scale = 0/sqrt(lvSq) = 0 → velocity zeroed
+            expect(speed).toBeCloseTo(0, 5);
+        });
+
+        it('handles degenerate config: negative maxVelocity does not clamp (consistent with 2D)', () => {
+            const negWorld = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxVelocity: -10,
+            } as any);
+
+            const body = negWorld.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                linearVelocity: { x: 10, y: 0, z: 0 },
+            });
+            negWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            negWorld.step(1 / 60);
+
+            const lv = negWorld.getBodyManager().getLinearVelocity(body);
+            const speed = Math.sqrt(lv.x * lv.x + lv.y * lv.y + lv.z * lv.z);
+            // Negative maxVelocity: lvSq > maxV*maxV (100 > 100) is false → no clamp.
+            // Consistent with 2D which has the same behavior.
+            expect(speed).toBeCloseTo(10, 1);
+        });
+
+        it('handles degenerate config: Infinity does not clamp', () => {
+            const infWorld = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxVelocity: Infinity,
+            } as any);
+
+            const body = infWorld.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                linearVelocity: { x: 1000, y: 0, z: 0 },
+            });
+            infWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            infWorld.step(1 / 60);
+
+            const lv = infWorld.getBodyManager().getLinearVelocity(body);
+            const speed = Math.sqrt(lv.x * lv.x + lv.y * lv.y + lv.z * lv.z);
+            // Infinity * Infinity = Infinity, lvSq > Infinity is false → no clamp
+            expect(speed).toBeCloseTo(1000, 0);
+        });
+
+        it('handles degenerate config: NaN does not clamp (consistent with 2D)', () => {
+            const nanWorld = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxVelocity: NaN,
+            } as any);
+
+            const body = nanWorld.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                linearVelocity: { x: 10, y: 0, z: 0 },
+            });
+            nanWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            nanWorld.step(1 / 60);
+
+            const lv = nanWorld.getBodyManager().getLinearVelocity(body);
+            // NaN * NaN = NaN, lvSq > NaN is false → no clamp triggered.
+            // Consistent with 2D behavior (no validation in either path).
+            expect(lv.x).toBeCloseTo(10, 1);
+        });
+    });
 });
