@@ -416,11 +416,18 @@ describe('PhysicsBridge3D integration', () => {
             const vel = visitorRb.velocity;
             expect(Math.abs(vel.x - 10)).toBeLessThan(2);
 
-            // NOTE: Due to interface mismatch between contact runtime (raw: onTriggerEnter(bodyIdA, bodyIdB))
-            // and bridge (event-based: onSensorEnter(event: ISensorEvent3D)), sensor events
-            // are NOT dispatched to user handlers. This is a known bug — reported separately.
-            // The physics-level trigger detection works (proven in physics-3d tests),
-            // but the bridge fails to translate raw events to the handler interface.
+            // Sensor events MUST reach user handlers (canonical IContactListener3D contract)
+            expect(handlerSensor.sensorEnters.length).toBeGreaterThanOrEqual(1);
+            expect(handlerVisitor.sensorEnters.length).toBeGreaterThanOrEqual(1);
+
+            // The 'other' rigidbody should be the opposite body
+            expect(handlerSensor.sensorEnters[0].other).toBe(visitorRb);
+            expect(handlerVisitor.sensorEnters[0].other).toBe(sensorRb);
+
+            // Event must carry canonical ISensorEvent3D fields
+            const sensorEvent = handlerSensor.sensorEnters[0].event as ISensorEvent3D;
+            expect(sensorEvent.sensorBodyId).toBeDefined();
+            expect(sensorEvent.visitorBodyId).toBeDefined();
 
             bridge.dispose();
         });
@@ -458,6 +465,138 @@ describe('PhysicsBridge3D integration', () => {
             const vel = visitorRb.velocity;
             // Either bounced back or slowed significantly
             expect(vel.x).toBeLessThan(8);
+
+            bridge.dispose();
+        });
+
+        it('fires onSensorExit when visitor leaves sensor zone', () => {
+            const { bridge, addEntity, step } = createHarness({ gravity: { x: 0, y: 0, z: 0 } });
+
+            const handlerVisitor = new CollisionHandler();
+            const handlerSensor = new CollisionHandler();
+
+            // Visitor: dynamic sphere moving in +x direction
+            const tVisitor = createMockTransform({ x: -5, y: 0, z: 0 });
+            const { rb: visitorRb } = addEntity(tVisitor, {
+                mass: 1,
+                collider: 'sphere',
+                sphereRadius: 0.5,
+                handler: handlerVisitor,
+            });
+
+            // Sensor: static trigger sphere at origin
+            const tSensor = createMockTransform({ x: 0, y: 0, z: 0 });
+            const { rb: sensorRb } = addEntity(tSensor, {
+                isStatic: true,
+                collider: 'sphere',
+                sphereRadius: 2,
+                isTrigger: true,
+                handler: handlerSensor,
+            });
+
+            step(1);
+            sensorRb.bodyType = 0 as any;
+
+            // Move visitor through sensor quickly
+            bridge.physicsWorld
+                .getBodyManager()
+                .setLinearVelocity(visitorRb.bodyId, { x: 50, y: 0, z: 0 });
+
+            // Step until visitor exits sensor zone
+            step(60);
+
+            // Sensor exit events MUST reach user handlers
+            expect(handlerSensor.sensorExits.length).toBeGreaterThanOrEqual(1);
+            expect(handlerVisitor.sensorExits.length).toBeGreaterThanOrEqual(1);
+
+            // Trigger pairs set must be cleaned up (no memory leak)
+            const triggerPairs = (bridge as any)._activeTriggerPairs as Set<number>;
+            expect(triggerPairs.size).toBe(0);
+
+            bridge.dispose();
+        });
+    });
+
+    // ── 4b. Collision exit and memory leak ──────────────────────────────────
+    describe('4b. collision exit events and memory leak prevention', () => {
+        it('fires onCollisionExit when bodies separate', () => {
+            const { bridge, addEntity, step } = createHarness();
+
+            const handlerA = new CollisionHandler();
+            const handlerB = new CollisionHandler();
+
+            // Ground: static box
+            const tGround = createMockTransform({ x: 0, y: 0, z: 0 });
+            const { rb: groundRb } = addEntity(tGround, {
+                isStatic: true,
+                collider: 'box',
+                boxSize: { x: 50, y: 1, z: 50 },
+                handler: handlerB,
+            });
+
+            // Ball: dynamic sphere
+            const tBall = createMockTransform({ x: 0, y: 3, z: 0 });
+            addEntity(tBall, {
+                mass: 1,
+                collider: 'sphere',
+                sphereRadius: 0.5,
+                handler: handlerA,
+            });
+
+            step(1);
+            groundRb.bodyType = 0 as any;
+
+            // Let ball fall and establish contact
+            step(120);
+
+            // Collision enter should have fired
+            expect(handlerA.collisionEnters.length).toBeGreaterThanOrEqual(1);
+
+            // Launch ball upward to break contact
+            bridge.physicsWorld
+                .getBodyManager()
+                .setLinearVelocity(handlerA.collisionEnters[0].other.bodyId, { x: 0, y: 20, z: 0 });
+
+            step(60);
+
+            // Collision exit MUST fire when contact breaks
+            expect(handlerA.collisionExits.length).toBeGreaterThanOrEqual(1);
+            expect(handlerB.collisionExits.length).toBeGreaterThanOrEqual(1);
+
+            // Active contact pairs must be cleaned up (no memory leak)
+            const activePairs = (bridge as any)._activeContactPairs as Set<number>;
+            expect(activePairs.size).toBe(0);
+
+            bridge.dispose();
+        });
+
+        it('activeContactPairs and activeTriggerPairs are empty after all contacts end', () => {
+            const { bridge, addEntity, step } = createHarness({ gravity: { x: 0, y: 0, z: 0 } });
+
+            const handler = new CollisionHandler();
+
+            // Two overlapping spheres
+            const tA = createMockTransform({ x: 0, y: 0, z: 0 });
+            addEntity(tA, { mass: 1, collider: 'sphere', sphereRadius: 1, handler });
+
+            const tB = createMockTransform({ x: 1, y: 0, z: 0 });
+            const { rb: rbB } = addEntity(tB, { mass: 1, collider: 'sphere', sphereRadius: 1 });
+
+            step(1);
+
+            // Contact pairs should be populated
+            const activePairs = (bridge as any)._activeContactPairs as Set<number>;
+            expect(activePairs.size).toBeGreaterThanOrEqual(1);
+
+            // Separate bodies by moving one far away
+            bridge.physicsWorld
+                .getBodyManager()
+                .setPosition(rbB.bodyId, { x: 100, y: 0, z: 0 });
+
+            step(5);
+
+            // After separation, active contact pairs must be cleared
+            expect(activePairs.size).toBe(0);
 
             bridge.dispose();
         });
