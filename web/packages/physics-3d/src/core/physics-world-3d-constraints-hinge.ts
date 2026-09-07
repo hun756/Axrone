@@ -96,7 +96,7 @@ function prepareHinge(
         { x: 0, y: rA.z, z: -rA.y },
         { x: 1, y: 0, z: 0 },
         { x: 0, y: -rB.z, z: rB.y },
-        BAUMGARTE * errorX / h,
+        -BAUMGARTE * errorX / h,
         -errorX,
     ));
 
@@ -107,7 +107,7 @@ function prepareHinge(
         { x: -rA.z, y: 0, z: rA.x },
         { x: 0, y: 1, z: 0 },
         { x: rB.z, y: 0, z: -rB.x },
-        BAUMGARTE * errorY / h,
+        -BAUMGARTE * errorY / h,
         -errorY,
     ));
 
@@ -118,7 +118,7 @@ function prepareHinge(
         { x: rA.y, y: -rA.x, z: 0 },
         { x: 0, y: 0, z: 1 },
         { x: -rB.y, y: rB.x, z: 0 },
-        BAUMGARTE * errorZ / h,
+        -BAUMGARTE * errorZ / h,
         -errorZ,
     ));
 
@@ -149,7 +149,7 @@ function prepareHinge(
         bodyIdA, bodyIdB,
         zeroVec3(), { x: -perp1.x, y: -perp1.y, z: -perp1.z },
         zeroVec3(), { x: perp1.x, y: perp1.y, z: perp1.z },
-        BAUMGARTE * angError1 / h,
+        -BAUMGARTE * angError1 / h,
         -angError1,
     ));
 
@@ -158,7 +158,7 @@ function prepareHinge(
         bodyIdA, bodyIdB,
         zeroVec3(), { x: -perp2.x, y: -perp2.y, z: -perp2.z },
         zeroVec3(), { x: perp2.x, y: perp2.y, z: perp2.z },
-        BAUMGARTE * angError2 / h,
+        -BAUMGARTE * angError2 / h,
         -angError2,
     ));
 
@@ -192,9 +192,8 @@ function prepareHinge(
         }
 
         if (Math.abs(limitError) > ANGULAR_SLOP) {
-            // Same sign convention as linear rows: positive error → positive bias
-            // so that lambda < 0, driving correction in the right direction.
-            axialBias = BAUMGARTE * limitError / h;
+            // Same sign convention as linear rows: negative bias for positive error → lambda > 0
+            axialBias = -BAUMGARTE * limitError / h;
             axialPosError = -limitError;
             axialLower = -Infinity;
             axialUpper = Infinity;
@@ -212,8 +211,8 @@ function prepareHinge(
         hasMotor = true;
         // Motor: bias drives relative angular velocity toward motorSpeed.
         // With j1=-axis, j2=+axis: J*v = ωB_axis - ωA_axis
-        // To increase J*v toward motorSpeed: bias = +motorSpeed
-        axialBias = motorSpeed as number;
+        // To increase J*v toward motorSpeed: bias = -motorSpeed (negative for positive target)
+        axialBias = -(motorSpeed as number);
         axialPosError = 0;
         const maxImpulse = (maxMotorTorque as number) * h;
         axialLower = -maxImpulse;
