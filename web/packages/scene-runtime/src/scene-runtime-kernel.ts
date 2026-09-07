@@ -29,6 +29,8 @@ import {
 } from './scene-runtime-defaults';
 import { SceneSnapshotRuntime } from './scene-snapshot-runtime';
 import { PhysicsBridge3D, type PhysicsBridge3DOptions } from './components/physics-bridge-3d';
+import { PhysicsBridge2D, type PhysicsBridge2DOptions } from './components/physics-bridge-2d';
+import { SCENE_2D_RUNTIME_PROFILE_ID } from './scene-2d-profile';
 
 type RuntimeRegistry<R extends ComponentRegistry> = SceneRegistry<R>;
 
@@ -55,6 +57,7 @@ export interface SceneRuntimeKernelOptions<
     readonly sceneId: string;
     readonly options?: SceneOptions<R>;
     readonly physicsBridge?: PhysicsBridge3DOptions;
+    readonly physicsBridge2D?: PhysicsBridge2DOptions;
 }
 
 export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, never>> {
@@ -69,7 +72,8 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
     readonly renderRuntime: SceneRenderRuntime;
     readonly snapshots: SceneSnapshotRuntime;
     readonly lifecycle: SceneLifecycleRuntime;
-    readonly physicsBridge: PhysicsBridge3D;
+    readonly physicsBridge3D: PhysicsBridge3D | null;
+    readonly physicsBridge2D: PhysicsBridge2D | null;
     readonly profiler: SceneRuntimeProfiler;
 
     constructor(options: SceneRuntimeKernelOptions<R>) {
@@ -141,18 +145,41 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
         const profilerRequested =
             sceneOptions.profiler === true ||
             (typeof sceneOptions.profiler === 'object' && sceneOptions.profiler !== null);
-        this.physicsBridge = new PhysicsBridge3D(
-            this.world,
-            profilerRequested
-                ? {
-                      ...options.physicsBridge,
-                      worldConfig: {
-                          ...options.physicsBridge?.worldConfig,
-                          enableProfiler: true,
-                      },
-                  }
-                : options.physicsBridge
-        );
+
+        // Determine which physics bridge(s) to create based on the scene profile.
+        // 2D profile → 2D bridge only, 3D profile → 3D bridge only, full/default → 3D bridge.
+        const profileId = sceneOptions.profile?.id;
+        const is2DProfile = profileId === SCENE_2D_RUNTIME_PROFILE_ID;
+
+        this.physicsBridge3D = !is2DProfile
+            ? new PhysicsBridge3D(
+                  this.world,
+                  profilerRequested
+                      ? {
+                            ...options.physicsBridge,
+                            worldConfig: {
+                                ...options.physicsBridge?.worldConfig,
+                                enableProfiler: true,
+                            },
+                        }
+                      : options.physicsBridge
+              )
+            : null;
+
+        this.physicsBridge2D = is2DProfile
+            ? new PhysicsBridge2D(
+                  this.world,
+                  profilerRequested
+                      ? {
+                            ...options.physicsBridge2D,
+                            worldConfig: {
+                                ...options.physicsBridge2D?.worldConfig,
+                                enableProfiler: true,
+                            },
+                        }
+                      : options.physicsBridge2D
+              )
+            : null;
 
         const profilerOptions: SceneRuntimeProfilerOptions =
             typeof sceneOptions.profiler === 'object' && sceneOptions.profiler !== null
@@ -213,24 +240,55 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
                     this.profiler.beginFrame(ctx.frame, ctx.now, ctx.delta);
                 },
                 afterFrame: (ctx) => {
-                    const physicsProfiler = this.physicsBridge.physicsWorld.getProfiler();
-                    if (physicsProfiler) {
-                        this.profiler.attachPhysicsStats({
-                            stepMs: physicsProfiler.stepTime,
-                            collisionMs: physicsProfiler.collisionTime,
-                            solveMs: physicsProfiler.solveTime,
-                        });
+                    // Attach physics profiler stats from whichever bridge is active
+                    const activeBridge3D = this.physicsBridge3D;
+                    if (activeBridge3D) {
+                        const physicsProfiler = activeBridge3D.physicsWorld.getProfiler();
+                        if (physicsProfiler) {
+                            this.profiler.attachPhysicsStats({
+                                stepMs: physicsProfiler.stepTime,
+                                collisionMs: physicsProfiler.collisionTime,
+                                solveMs: physicsProfiler.solveTime,
+                            });
+                        }
+                    }
+                    const activeBridge2D = this.physicsBridge2D;
+                    if (activeBridge2D) {
+                        const physicsProfiler = activeBridge2D.physicsWorld.getProfiler();
+                        if (physicsProfiler) {
+                            this.profiler.attachPhysicsStats({
+                                stepMs: physicsProfiler.stepTime,
+                                collisionMs: physicsProfiler.collisionTime,
+                                solveMs: physicsProfiler.solveTime,
+                            });
+                        }
                     }
                     this.profiler.endFrame(ctx.now, ctx.fixedSteps);
                 },
             },
             ...baseLoopSystems,
-            {
-                id: this.physicsBridge.id,
-                beforeUpdate: (ctx) => this.physicsBridge.beforeUpdate(ctx),
-                fixedUpdate: (ctx) => this.physicsBridge.fixedUpdate(ctx),
-                dispose: () => this.physicsBridge.dispose(),
-            },
+            // 3D physics bridge (active for 3D and full profiles)
+            ...(this.physicsBridge3D
+                ? [
+                      {
+                          id: this.physicsBridge3D.id,
+                          beforeUpdate: (ctx: any) => this.physicsBridge3D!.beforeUpdate(ctx),
+                          fixedUpdate: (ctx: any) => this.physicsBridge3D!.fixedUpdate(ctx),
+                          dispose: () => this.physicsBridge3D!.dispose(),
+                      },
+                  ]
+                : []),
+            // 2D physics bridge (active for 2D profile)
+            ...(this.physicsBridge2D
+                ? [
+                      {
+                          id: this.physicsBridge2D.id,
+                          beforeUpdate: (ctx: any) => this.physicsBridge2D!.beforeUpdate(ctx),
+                          fixedUpdate: (ctx: any) => this.physicsBridge2D!.fixedUpdate(ctx),
+                          dispose: () => this.physicsBridge2D!.dispose(),
+                      },
+                  ]
+                : []),
         ];
 
         this.loop = createGameLoop({
