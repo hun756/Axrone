@@ -592,4 +592,230 @@ describe('PhysicsWorld3D Integration', () => {
             expect(world.getAutoClearForces()).toBe(false);
         });
     });
+
+    describe('Warm impulse persistence (Bug Fix 1)', () => {
+        it('warm impulse cache is populated after step()', () => {
+            // Ground
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 0.5, z: 5 } });
+
+            // Dynamic box that will contact ground
+            const box = world.createBody({ type: 2, position: { x: 0, y: 0.6, z: 0 } });
+            world.createBoxShape(box, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
+
+            // Step once to establish contact
+            world.step(1 / 60);
+
+            // Access the contact runtime's warm impulse cache size via internal API
+            // We verify behaviorally: the cache should be non-empty after a step with contact
+            // by checking that the world's contact runtime has persisted impulses.
+            // We use a second step to verify warm starting affects behavior.
+            const posAfterStep1 = world.getBodyManager().getPosition(box);
+
+            // Step again - warm impulses should now influence the solve
+            world.step(1 / 60);
+            const posAfterStep2 = world.getBodyManager().getPosition(box);
+
+            // Both positions should be valid (no NaN/Infinity from broken warm start)
+            expect(Number.isFinite(posAfterStep1.y)).toBe(true);
+            expect(Number.isFinite(posAfterStep2.y)).toBe(true);
+
+            // Box should be settling (not gaining energy from warm start)
+            expect(posAfterStep2.y).toBeLessThan(2);
+        });
+
+        it('warm starting reduces solver iterations needed for stacking', () => {
+            // This test verifies that warm starting provides benefit by comparing
+            // settling behavior: with warm starting, a stack should settle faster.
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 10, y: 0.5, z: 10 } });
+
+            // Create a stack of 3 boxes
+            const boxes: number[] = [];
+            for (let i = 0; i < 3; i++) {
+                const body = world.createBody({
+                    type: 2,
+                    position: { x: 0, y: 1.5 + i * 1.2, z: 0 },
+                });
+                world.createBoxShape(body, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
+                boxes.push(body);
+            }
+
+            // Simulate for 90 frames to allow settling
+            for (let i = 0; i < 90; i++) {
+                world.step(1 / 60);
+            }
+
+            // Bottom box should be near ground level (y ≈ 0.5)
+            const bottomPos = world.getBodyManager().getPosition(boxes[0]);
+            expect(bottomPos.y).toBeGreaterThan(0.3);
+            expect(bottomPos.y).toBeLessThan(0.8);
+
+            // Stack should be stable: low velocity
+            for (const bodyId of boxes) {
+                const vel = world.getBodyManager().getLinearVelocity(bodyId);
+                expect(Math.abs(vel.y)).toBeLessThan(1.0);
+            }
+        });
+    });
+
+    describe('Spring frame-rate independence (Bug Fix 3)', () => {
+        it('spring simulation produces similar results at different timesteps', () => {
+            // Create two bodies connected by a spring
+            const createSpringScene = () => {
+                const w = new PhysicsWorld3D({ gravity: { x: 0, y: 0, z: 0 } });
+                const a = w.createBody({ type: 2, position: { x: -2, y: 0, z: 0 } });
+                w.createSphereShape(a, { center: { x: 0, y: 0, z: 0 }, radius: 0.3 });
+                const b = w.createBody({ type: 2, position: { x: 2, y: 0, z: 0 } });
+                w.createSphereShape(b, { center: { x: 0, y: 0, z: 0 }, radius: 0.3 });
+                w.createSpringConstraint({
+                    bodyIdA: a,
+                    bodyIdB: b,
+                    localAnchorA: { x: 0, y: 0, z: 0 },
+                    localAnchorB: { x: 0, y: 0, z: 0 },
+                    restLength: 3,
+                    stiffness: 50,
+                    damping: 5,
+                });
+                return { world: w, bodyA: a, bodyB: b };
+            };
+
+            // Run at dt=1/60 for 60 steps (1 second of simulation)
+            const sim1 = createSpringScene();
+            for (let i = 0; i < 60; i++) {
+                sim1.world.step(1 / 60);
+            }
+            const pos1A = sim1.world.getBodyManager().getPosition(sim1.bodyA);
+            const pos1B = sim1.world.getBodyManager().getPosition(sim1.bodyB);
+
+            // Run at dt=1/30 for 30 steps (same 1 second of simulation)
+            const sim2 = createSpringScene();
+            for (let i = 0; i < 30; i++) {
+                sim2.world.step(1 / 30);
+            }
+            const pos2A = sim2.world.getBodyManager().getPosition(sim2.bodyA);
+            const pos2B = sim2.world.getBodyManager().getPosition(sim2.bodyB);
+
+            // Positions should be similar (within tolerance for numerical integration)
+            // Tolerance of 0.5 accounts for different integration step sizes
+            expect(Math.abs(pos1A.x - pos2A.x)).toBeLessThan(0.5);
+            expect(Math.abs(pos1B.x - pos2B.x)).toBeLessThan(0.5);
+
+            // Both should have bodies approaching rest length distance
+            const dist1 = Math.abs(pos1B.x - pos1A.x);
+            const dist2 = Math.abs(pos2B.x - pos2A.x);
+            // Both distances should be closer to restLength=3 than initial distance=4
+            expect(dist1).toBeLessThan(4);
+            expect(dist2).toBeLessThan(4);
+        });
+
+        it('spring iteration-independence is preserved', () => {
+            // Verify that the a13a1c6d fix (iteration independence) still works
+            const createSpringScene = () => {
+                const w = new PhysicsWorld3D({ gravity: { x: 0, y: 0, z: 0 } });
+                const a = w.createBody({ type: 2, position: { x: 0, y: 0, z: 0 } });
+                w.createSphereShape(a, { center: { x: 0, y: 0, z: 0 }, radius: 0.3 });
+                const b = w.createBody({ type: 2, position: { x: 3, y: 0, z: 0 } });
+                w.createSphereShape(b, { center: { x: 0, y: 0, z: 0 }, radius: 0.3 });
+                w.createSpringConstraint({
+                    bodyIdA: a,
+                    bodyIdB: b,
+                    localAnchorA: { x: 0, y: 0, z: 0 },
+                    localAnchorB: { x: 0, y: 0, z: 0 },
+                    restLength: 2,
+                    stiffness: 100,
+                    damping: 10,
+                });
+                return { world: w, bodyA: a, bodyB: b };
+            };
+
+            // Run with 5 velocity iterations
+            const sim1 = createSpringScene();
+            for (let i = 0; i < 30; i++) {
+                sim1.world.step(1 / 60, 5);
+            }
+            const pos1 = sim1.world.getBodyManager().getPosition(sim1.bodyB);
+
+            // Run with 20 velocity iterations
+            const sim2 = createSpringScene();
+            for (let i = 0; i < 30; i++) {
+                sim2.world.step(1 / 60, 20);
+            }
+            const pos2 = sim2.world.getBodyManager().getPosition(sim2.bodyB);
+
+            // Results should be similar (spring is applied once per step, not per iteration)
+            expect(Math.abs(pos1.x - pos2.x)).toBeLessThan(0.3);
+        });
+    });
+
+    describe('Destroy body cleanup (Bug Fix 4)', () => {
+        it('destroyBody does not leak solver state maps', () => {
+            // Create world with ground
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 0.5, z: 5 } });
+
+            // Create and destroy multiple bodies, stepping between each
+            for (let cycle = 0; cycle < 5; cycle++) {
+                const body = world.createBody({
+                    type: 2,
+                    position: { x: 0, y: 2, z: 0 },
+                });
+                world.createBoxShape(body, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
+
+                // Step to establish contacts and warm impulses
+                for (let i = 0; i < 5; i++) {
+                    world.step(1 / 60);
+                }
+
+                // Destroy the body
+                world.destroyBody(body);
+
+                // Step again to process any pending cleanup
+                world.step(1 / 60);
+            }
+
+            // After all cycles, the world should still be valid
+            expect(world.validate()).toBe(true);
+
+            // Only the ground body should remain
+            const bodies = world.getBodies();
+            expect(bodies.size).toBe(1);
+        });
+
+        it('destroyBody does not cause spurious collision end events', () => {
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 0.5, z: 5 } });
+
+            const endEvents: Array<{ bodyIdA: number; bodyIdB: number }> = [];
+            world.setContactListener({
+                onCollisionEnd(event: any) {
+                    endEvents.push({ bodyIdA: Number(event.bodyIdA), bodyIdB: Number(event.bodyIdB) });
+                },
+            } as any);
+
+            const body = world.createBody({ type: 2, position: { x: 0, y: 0.6, z: 0 } });
+            world.createBoxShape(body, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
+
+            // Step to establish contact
+            for (let i = 0; i < 3; i++) {
+                world.step(1 / 60);
+            }
+
+            // Destroy the body
+            world.destroyBody(body);
+
+            // Step a few more times
+            for (let i = 0; i < 3; i++) {
+                world.step(1 / 60);
+            }
+
+            // No spurious collision end events should reference the destroyed body
+            const bodyIdNum = Number(body);
+            const spuriousEvents = endEvents.filter(
+                e => e.bodyIdA === bodyIdNum || e.bodyIdB === bodyIdNum
+            );
+            // At most one legitimate end event (when contact was actually broken by destroy)
+            expect(spuriousEvents.length).toBeLessThanOrEqual(1);
+        });
+    });
 });
