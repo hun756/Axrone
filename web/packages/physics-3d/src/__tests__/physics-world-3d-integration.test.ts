@@ -134,12 +134,11 @@ describe('PhysicsWorld3D Integration', () => {
             noGravityWorld.step(0.5, 10, 10);
 
             const posB = noGravityWorld.getBodyManager().getPosition(bodyB);
-            // Body B should not have traveled full distance; constraint should have some effect.
-            // Unconstrained: 3 + (-5 * 0.5) = 0.5. The sequential impulse solver with
-            // Baumgarte stabilization is softer than legacy direct position correction,
-            // so body B overshoots slightly (measured: 0.72). Threshold 0.75 is the
-            // tightest that passes while still verifying the constraint is active.
-            expect(posB.x).toBeLessThanOrEqual(0.75);
+            // Body B should not have traveled full distance; constraint should have effect.
+            // Unconstrained: 3 + (-5 * 0.5) = 0.5. With convergent velocity solve,
+            // the constraint properly pulls B back toward A (measured: 0.48).
+            // Threshold 0.5 verifies the constraint is active and convergent.
+            expect(posB.x).toBeLessThanOrEqual(0.5);
         });
 
         it('spring constraint affects body position', () => {
