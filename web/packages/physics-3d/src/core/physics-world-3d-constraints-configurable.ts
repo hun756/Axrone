@@ -52,6 +52,7 @@ import {
     zeroVec3,
     registerConstraintModule,
     extractAxisAngle,
+    detectMotionMode,
 } from './physics-world-3d-constraints-framework';
 import type { BodyManager3D } from './physics-managers-3d';
 
@@ -59,21 +60,6 @@ const BAUMGARTE = PhysicsConstants.BAUMGARTE_FACTOR;
 const EPSILON = PhysicsConstants.EPSILON;
 const LINEAR_SLOP = PhysicsConstants.LINEAR_SLOP;
 const ANGULAR_SLOP = PhysicsConstants.ANGULAR_SLOP;
-
-// ─── Motion Mode Detection ────────────────────────────────────────────────────
-
-/**
- * Determine the motion mode for a single DOF from its limit pair.
- *
- *   - lower == upper → 'locked'
- *   - both infinite  → 'free'
- *   - otherwise      → 'limited'
- */
-function detectMotionMode(lower: number, upper: number): 'locked' | 'free' | 'limited' {
-    if (Math.abs(lower - upper) <= EPSILON) return 'locked';
-    if (!isFinite(lower) && !isFinite(upper)) return 'free';
-    return 'limited';
-}
 
 // ─── Local Helpers ────────────────────────────────────────────────────────────
 

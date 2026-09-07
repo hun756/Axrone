@@ -779,3 +779,89 @@ export function createRow(
         effectiveMass: 0,
     };
 }
+
+// ─── Swing-Twist Decomposition ────────────────────────────────────────────────
+
+/** Result of the swing-twist decomposition of a relative rotation. */
+export interface ISwingTwistSplit {
+    /** Total swing deviation from the twist axis, in [0, π] (axis-independent). */
+    swingAngle: number;
+    /** Signed twist angle about the twist axis, in [-π, π]. */
+    twistAngle: number;
+    /** Unit swing direction in frame-A space (zero vector at the apex). */
+    swingDirFrame: IVec3Like;
+    /** True when the swing direction is usable (swingAngle > EPSILON). */
+    hasSwingDirection: boolean;
+}
+
+/**
+ * Decompose a relative rotation into swing and twist components about the
+ * frame X axis. Pure function writing into `out` (no allocation).
+ *
+ * Handles the degenerate 180°-swing case (qRel.w ≈ 0 and qRel.x ≈ 0) by
+ * treating the twist as identity — the decomposition stays finite.
+ */
+export function decomposeSwingTwist(
+    qRelIn: IQuatLike,
+    out: ISwingTwistSplit,
+): ISwingTwistSplit {
+    const s = qRelIn.w < 0 ? -1 : 1;
+    const qx = qRelIn.x * s;
+    const qy = qRelIn.y * s;
+    const qz = qRelIn.z * s;
+    const qw = qRelIn.w * s;
+
+    const p = qx;
+    const norm2 = p * p + qw * qw;
+
+    let swingX = qx;
+    let swingY = qy;
+    let swingZ = qz;
+    let swingW = qw;
+
+    if (norm2 > EPSILON * EPSILON) {
+        const invN = 1.0 / Math.sqrt(norm2);
+        const twX = p * invN;
+        const twW = qw * invN;
+
+        swingW = qw * twW - (qx * -twX);
+        swingX = qw * -twX + twW * qx;
+        swingY = twW * qy + (qz * -twX - qx * 0);
+        swingZ = twW * qz + (qx * 0 - qy * -twX);
+
+        out.twistAngle = 2.0 * Math.atan2(twX, twW);
+    } else {
+        out.twistAngle = 0;
+    }
+
+    const swingLen = Math.sqrt(swingX * swingX + swingY * swingY + swingZ * swingZ);
+    out.swingAngle = 2.0 * Math.atan2(swingLen, swingW);
+
+    if (swingLen > EPSILON) {
+        out.swingDirFrame.x = swingX / swingLen;
+        out.swingDirFrame.y = swingY / swingLen;
+        out.swingDirFrame.z = swingZ / swingLen;
+        out.hasSwingDirection = true;
+    } else {
+        out.swingDirFrame.x = 0;
+        out.swingDirFrame.y = 0;
+        out.swingDirFrame.z = 0;
+        out.hasSwingDirection = false;
+    }
+    return out;
+}
+
+// ─── Motion Mode Detection ────────────────────────────────────────────────────
+
+/**
+ * Determine the motion mode for a single DOF from its limit pair.
+ *
+ *   - lower == upper → 'locked'
+ *   - both infinite  → 'free'
+ *   - otherwise      → 'limited'
+ */
+export function detectMotionMode(lower: number, upper: number): 'locked' | 'free' | 'limited' {
+    if (Math.abs(lower - upper) <= EPSILON) return 'locked';
+    if (!isFinite(lower) && !isFinite(upper)) return 'free';
+    return 'limited';
+}

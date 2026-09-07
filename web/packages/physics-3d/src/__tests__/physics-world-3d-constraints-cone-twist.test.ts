@@ -38,12 +38,12 @@ import {
     type ConstraintData3D,
     solveVelocityRow,
     getPrepareFunction,
+    decomposeSwingTwist,
 } from '../core/physics-world-3d-constraints-framework';
 import { CONSTRAINT_TYPE_CONE_TWIST, transformPoint3D } from '../core/physics-world-3d-shared';
 import type { BodyManager3D } from '../core/physics-managers-3d';
 import {
     prepareConeTwist,
-    decomposeSwingTwist,
 } from '../core/physics-world-3d-constraints-cone-twist';
 
 // ─── Constants ────────────────────────────────────────────────────────────────

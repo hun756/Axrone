@@ -195,10 +195,10 @@ function prepareSlider(
     const atUpperLimit = enableLimit && translation >= upperLimit - LINEAR_SLOP;
 
     // ── Limit component ──
-    // The axial Jacobian uses j1Lin=+axis, j2Lin=-axis (matching the fixed joint
-    // convention: j1Lin=-dir, j2Lin=+dir where dir=-axis). This gives
-    // J*v = axis·vA - axis·vB = -(vB_axis - vA_axis).
-    // Standard bias convention: bias = -BAUMGARTE * error / h.
+    // The axial Jacobian uses j1Lin=+axis, j2Lin=-axis (opposite of the lateral rows).
+    // This gives J*v = axis·vA - axis·vB = -(vB_axis - vA_axis) = -gap_rate.
+    // For the LIMIT: bias = -BAUMGARTE * error / h (standard convergent formula).
+    // Positive limit error (above upper) → positive bias → negative impulse → deceleration ✓
     let limitActive = false;
     if (enableLimit) {
         hasLimit = true;
@@ -220,35 +220,18 @@ function prepareSlider(
     }
 
     // ── Motor component + Box2D limit interaction ──
-    // Motor bias = -motorSpeed. With J*v = -(vB_axis - vA_axis):
-    //   lambda = -effMass*(jv + bias) = -effMass*(0 + (-motorSpeed)) = effMass*motorSpeed
-    //   If motorSpeed > 0: lambda > 0 → deltaVelB_x = -lambda*invMassB*axis.x < 0... 
-    //   Wait — we need the motor to INCREASE vB_axis. With the flipped Jacobian,
-    //   lambda > 0 pushes body A along +axis and body B along -axis.
-    //   So for positive motorSpeed: we need lambda < 0 → bias = +motorSpeed? No.
-    //   Actually: deltaVelB_axis = -lambda*invMassB. For lambda > 0: deltaVelB_axis < 0.
-    //   But we want deltaVelB_axis > 0 (positive motor). So lambda must be < 0.
-    //   lambda = -effMass*(jv + bias). For lambda < 0: jv + bias > 0. With jv=0: bias > 0.
-    //   So bias = +motorSpeed for the flipped Jacobian.
-    //
-    // BUT the limit bias uses the standard convention (bias = -BAUMGARTE*error/h).
-    // The motor and limit have DIFFERENT sign conventions with this Jacobian!
-    //
-    // Resolution: use bias = -motorSpeed and flip the motor impulse clamp.
-    // Actually, simplest: motor bias = -motorSpeed, which gives lambda = effMass*motorSpeed > 0.
-    // deltaVelB_axis = -lambda*invMassB < 0. This DECREASES vB_axis.
-    // For positive motorSpeed, this is WRONG.
-    //
-    // CORRECT: motor bias = +motorSpeed for the flipped Jacobian.
-    // lambda = -effMass*(0 + motorSpeed) = -effMass*motorSpeed < 0.
-    // deltaVelB_axis = -(-effMass*motorSpeed)*invMassB = effMass*motorSpeed*invMassB > 0. ✓
+    // With j1Lin=+axis, j2Lin=-axis: J*v = -(vB_axis - vA_axis).
+    // Motor target: drive vB_axis toward +motorSpeed.
+    // Need: positive motorSpeed → negative impulse (pushes B along +axis).
+    // lambda = -effMass*(jv + bias). For lambda < 0: need bias > 0.
+    // So motor bias = +motorSpeed (opposite sign of linear rows — correct for this Jacobian).
     if (enableMotor && Math.abs(maxMotorForce as number) > EPSILON) {
         hasMotor = true;
 
         if (atLowerLimit) {
             // At lower limit: motor cannot push further into the limit.
-            // With flipped Jacobian: lambda < 0 pushes body B in +axis direction (away from lower).
-            // Motor at lower limit: only allow lambda ≤ 0 (push away from lower limit).
+            // lambda > 0 pushes B along -axis (into lower limit) → blocked.
+            // lambda < 0 pushes B along +axis (away from lower limit) → allowed.
             axBias = motorSpeed as number;
             axPosError = 0;
             axLower = -maxImpulse;
@@ -256,7 +239,7 @@ function prepareSlider(
             limitActive = true;
         } else if (atUpperLimit) {
             // At upper limit: motor cannot push further into the limit.
-            // Motor at upper limit: only allow lambda ≥ 0 (push away from upper limit).
+            // lambda < 0 pushes B along -axis (away from upper limit) → allowed.
             axBias = motorSpeed as number;
             axPosError = 0;
             axLower = 0;
@@ -277,8 +260,7 @@ function prepareSlider(
     if (limitActive || hasMotor) {
         const axialRow = createRow(
             bodyIdA, bodyIdB,
-            // Flipped Jacobian: j1Lin=+axis, j2Lin=-axis
-            // This matches the fixed joint convention for consistent bias signs.
+            // Axial Jacobian: j1Lin=+axis, j2Lin=-axis
             { x: worldAxis.x, y: worldAxis.y, z: worldAxis.z },
             { x: rAxAxis.x, y: rAxAxis.y, z: rAxAxis.z },
             { x: -worldAxis.x, y: -worldAxis.y, z: -worldAxis.z },
