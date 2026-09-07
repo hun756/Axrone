@@ -499,13 +499,13 @@ describe('GearJoint2D', () => {
         expect(j.ratio).toBe(2.5);
     });
 
-    it('enters pending state when joint references are null', () => {
+    it('does NOT enter pending state when both joint references are null (no reference ≠ pending)', () => {
         const cm = mockConstraintManager();
         const j = create();
         setupJoint(j, cm);
-        // No jointA/jointB set
+        // No jointA/jointB set — both null means "no gear coupling", not "waiting".
         j.start();
-        expect(j.isPending).toBe(true);
+        expect(j.isPending).toBe(false);
         expect(cm.createGearConstraint).not.toHaveBeenCalled();
         expect(j.constraintId).toBeNull();
     });
@@ -620,13 +620,14 @@ describe('GearJoint2D', () => {
         expect(j.constraintId).toBeNull();
     });
 
-    it('serializes ratio but not joint references', () => {
+    it('serializes ratio and emits "" for joint references (Editor contract)', () => {
         const j = create();
         j.ratio = 5;
         const data = j.serialize();
         expect(data.ratio).toBe(5);
-        expect(data.jointA).toBeUndefined();
-        expect(data.jointB).toBeUndefined();
+        // Editor convention: "" = "no reference" (string type, not undefined).
+        expect(data.jointA).toBe('');
+        expect(data.jointB).toBe('');
     });
 
     it('deserializes ratio', () => {
