@@ -2,6 +2,16 @@ import { script } from '@axrone/ecs-runtime/decorators';
 import { Vec2 } from '@axrone/numeric';
 import { Joint2D } from './joint2d';
 
+/**
+ * Spring joint: soft distance constraint with Hooke's law restoring force
+ * and damping. Uses the same solver path as DistanceJoint2D but with
+ * non-zero stiffness/damping, producing soft constraint behavior.
+ *
+ * Maps to solver `Distance` case (soft formulation).
+ * **Solver**: FULL — soft sequential impulse with spring/damping.
+ *
+ * @see JOINT_CAPABILITY_2D
+ */
 @script({
     scriptName: 'SpringJoint2D',
     priority: 80,

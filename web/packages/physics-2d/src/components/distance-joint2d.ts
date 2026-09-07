@@ -2,6 +2,14 @@ import { script } from '@axrone/ecs-runtime/decorators';
 import { Vec2 } from '@axrone/numeric';
 import { Joint2D } from './joint2d';
 
+/**
+ * Distance joint: maintains a fixed distance between two anchor points.
+ *
+ * **Solver**: FULL — Baumgarte-stabilized sequential impulse with optional
+ * soft constraint (stiffness/damping). Velocity + position correction active.
+ *
+ * @see JOINT_CAPABILITY_2D
+ */
 @script({
     scriptName: 'DistanceJoint2D',
     priority: 80,

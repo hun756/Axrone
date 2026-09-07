@@ -2,6 +2,16 @@ import { script } from '@axrone/ecs-runtime/decorators';
 import { Vec2 } from '@axrone/numeric';
 import { Joint2D } from './joint2d';
 
+/**
+ * Hinge/revolute joint: constrains two bodies to share an anchor point
+ * while allowing relative rotation.
+ *
+ * Maps to solver `Revolute` case.
+ * **Solver**: FULL — 2-row anchor constraint + optional angle limit + optional motor.
+ * Velocity + position correction active.
+ *
+ * @see JOINT_CAPABILITY_2D
+ */
 @script({
     scriptName: 'HingeJoint2D',
     priority: 80,

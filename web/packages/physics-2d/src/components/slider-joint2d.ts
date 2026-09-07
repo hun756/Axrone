@@ -2,6 +2,16 @@ import { script } from '@axrone/ecs-runtime/decorators';
 import { Vec2 } from '@axrone/numeric';
 import { Joint2D } from './joint2d';
 
+/**
+ * Slider/prismatic joint: constrains body B to slide along a local axis
+ * of body A. Locks rotation and lateral movement.
+ *
+ * Maps to solver `Prismatic` case.
+ * **Solver**: FULL — lateral lock + rotation lock + optional translation limit
+ * + optional motor. Velocity + position correction active.
+ *
+ * @see JOINT_CAPABILITY_2D
+ */
 @script({
     scriptName: 'SliderJoint2D',
     priority: 80,

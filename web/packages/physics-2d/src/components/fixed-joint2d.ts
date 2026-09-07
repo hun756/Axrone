@@ -2,6 +2,16 @@ import { script } from '@axrone/ecs-runtime/decorators';
 import { Vec2 } from '@axrone/numeric';
 import { Joint2D } from './joint2d';
 
+/**
+ * Fixed/weld joint: rigidly attaches two bodies so their relative transform
+ * is preserved.
+ *
+ * Maps to solver `Weld` case.
+ * **Solver**: FULL — 3-row Jacobian (x, y, angle) with optional soft constraint
+ * (stiffness/damping via frequency/dampingRatio). Velocity + position correction active.
+ *
+ * @see JOINT_CAPABILITY_2D
+ */
 @script({
     scriptName: 'FixedJoint2D',
     priority: 80,

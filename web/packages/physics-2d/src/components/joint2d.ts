@@ -4,6 +4,55 @@ import type { PhysicsWorld2D } from '../core/physics-world';
 import { Rigidbody2D } from './rigidbody2d';
 import { PhysicsWorld2DComponent } from './physics-world-2d-component';
 
+/**
+ * 2D joint solver capability matrix.
+ *
+ * | Component         | Constraint type | Solver case  | Solver status |
+ * |-------------------|-----------------|--------------|---------------|
+ * | DistanceJoint2D   | Distance        | Distance     | **FULL** — Jacobian + Baumgarte + soft spring |
+ * | SpringJoint2D     | Distance (soft) | Distance     | **FULL** — same path, stiffness/damping active |
+ * | HingeJoint2D      | Revolute        | Revolute     | **FULL** — anchor + limit + motor |
+ * | SliderJoint2D     | Prismatic       | Prismatic    | **FULL** — lateral lock + rotation lock + limit + motor |
+ * | FixedJoint2D      | Weld            | Weld         | **FULL** — 3-row Jacobian (x, y, angle) + soft |
+ * | (solver-only)     | Wheel           | Wheel        | **FULL** — lateral + suspension + limit + motor |
+ * | (solver-only)     | Motor           | Motor        | **FULL** — linear offset + angular offset |
+ * | (solver-only)     | Mouse           | Mouse        | **FULL** — soft target seek + force clamp |
+ * | (solver-only)     | Gear            | Gear         | **FULL** — rotation ratio enforcement |
+ * | (solver-only)     | Rope            | Rope         | **FULL** — unilateral max-length guard |
+ *
+ * All 9 constraint types have real solver implementations with Jacobians,
+ * bias computation, and impulse solving. No decorative joints.
+ *
+ * Symmetry note: 3D has 3 UNSUPPORTED joint types (Slider, ConeTwist,
+ * Configurable). 2D has 0 UNSUPPORTED — all types are fully solved.
+ *
+ * TODO(P2-2d-joint-solvers): add component wrappers for Wheel, Motor,
+ * Mouse, Gear, Rope (solver support exists, no @script component yet).
+ */
+export const JOINT_CAPABILITY_2D = {
+    DISTANCE: 'full',
+    SPRING: 'full',
+    REVOLUTE: 'full',
+    PRISMATIC: 'full',
+    WELD: 'full',
+    WHEEL: 'full',
+    MOTOR: 'full',
+    MOUSE: 'full',
+    GEAR: 'full',
+    ROPE: 'full',
+} as const;
+
+export type JointCapability2D = typeof JOINT_CAPABILITY_2D[keyof typeof JOINT_CAPABILITY_2D];
+
+/**
+ * Base class for all 2D joint components.
+ *
+ * All 2D joint types have fully functional solvers — velocity correction,
+ * position correction, and limit/motor support where applicable.
+ * See {@link JOINT_CAPABILITY_2D} for the complete capability matrix.
+ *
+ * @see JOINT_CAPABILITY_2D
+ */
 export abstract class Joint2D extends Component {
     protected _constraintId: ConstraintId | null = null;
     protected _physicsWorld: PhysicsWorld2D | null = null;
