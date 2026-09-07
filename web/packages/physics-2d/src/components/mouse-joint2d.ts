@@ -119,7 +119,13 @@ export class MouseJoint2D extends Joint2D {
 
     deserialize(data: Record<string, any>): void {
         super.deserialize(data);
-        this._target = new Vec2(data.target?.x ?? 0, data.target?.y ?? 0);
+        // Vec2 fields: Editor writes ARRAY [x,y], engine uses OBJECT {x,y}.
+        // normalizeVec2Value accepts both formats for backward compatibility.
+        if (data.target !== undefined) {
+            const v = this.normalizeVec2Value(data.target);
+            this._target.x = v.x;
+            this._target.y = v.y;
+        }
         this._maxForce = data.maxForce ?? 1000;
         this._stiffness = data.stiffness ?? 5;
         this._damping = data.damping ?? 0.7;

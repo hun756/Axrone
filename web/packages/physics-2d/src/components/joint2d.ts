@@ -1,4 +1,5 @@
 import { Component } from '@axrone/ecs-runtime';
+import type { IVec2Like } from '@axrone/numeric';
 import type { ConstraintId } from '../types';
 import type { PhysicsWorld2D } from '../core/physics-world';
 import { Rigidbody2D } from './rigidbody2d';
@@ -161,6 +162,40 @@ export abstract class Joint2D extends Component {
             return this._physicsWorld;
         }
         return null;
+    }
+
+    /**
+     * Normalise a serialised Vec2 value to {x, y} object format.
+     *
+     * The Editor stores Vec2 values as **arrays** `[x, y]` in scene JSON
+     * (source: `Editor/src-tauri/src/scene/components.rs` `*_properties()`).
+     * The engine's internal representation uses `{x, y}` objects (IVec2Like).
+     *
+     * This helper accepts BOTH formats for backward compatibility:
+     * - Array: `[x, y]` → `{x, y}` (Editor contract)
+     * - Object: `{x, y}` → pass-through (engine round-trip)
+     *
+     * @see normalizeVec3Value in `physics-3d/src/components/joint3d.ts` —
+     *   3D counterpart. Both MUST change together if the format contract evolves.
+     * @see normalizeReferenceValue for the reference normalisation pattern.
+     * @see JOINT_CAPABILITY_2D for the joint capability matrix.
+     */
+    protected normalizeVec2Value(
+        value: unknown,
+        fallbackX: number = 0,
+        fallbackY: number = 0
+    ): IVec2Like {
+        if (Array.isArray(value) && value.length >= 2) {
+            return { x: value[0], y: value[1] };
+        }
+        if (value && typeof value === 'object') {
+            const v = value as Record<string, unknown>;
+            return {
+                x: typeof v.x === 'number' ? v.x : fallbackX,
+                y: typeof v.y === 'number' ? v.y : fallbackY,
+            };
+        }
+        return { x: fallbackX, y: fallbackY };
     }
 
     /**

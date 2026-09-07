@@ -103,8 +103,18 @@ export class RopeJoint2D extends Joint2D {
 
     deserialize(data: Record<string, any>): void {
         super.deserialize(data);
-        this._anchorA = new Vec2(data.anchorA?.x ?? 0, data.anchorA?.y ?? 0);
-        this._anchorB = new Vec2(data.anchorB?.x ?? 0, data.anchorB?.y ?? 0);
+        // Vec2 fields: Editor writes ARRAY [x,y], engine uses OBJECT {x,y}.
+        // normalizeVec2Value accepts both formats for backward compatibility.
+        if (data.anchorA !== undefined) {
+            const v = this.normalizeVec2Value(data.anchorA);
+            this._anchorA.x = v.x;
+            this._anchorA.y = v.y;
+        }
+        if (data.anchorB !== undefined) {
+            const v = this.normalizeVec2Value(data.anchorB);
+            this._anchorB.x = v.x;
+            this._anchorB.y = v.y;
+        }
         this._maxLength = data.maxLength ?? 1;
     }
 }

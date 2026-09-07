@@ -101,7 +101,13 @@ export class FixedJoint2D extends Joint2D {
 
     deserialize(data: Record<string, any>): void {
         super.deserialize(data);
-        this._anchor = new Vec2(data.anchor?.x ?? 0, data.anchor?.y ?? 0);
+        // Vec2 fields: Editor writes ARRAY [x,y], engine uses OBJECT {x,y}.
+        // normalizeVec2Value accepts both formats for backward compatibility.
+        if (data.anchor !== undefined) {
+            const v = this.normalizeVec2Value(data.anchor);
+            this._anchor.x = v.x;
+            this._anchor.y = v.y;
+        }
         this._dampingRatio = data.dampingRatio ?? 0.7;
         this._frequency = data.frequency ?? 0;
     }

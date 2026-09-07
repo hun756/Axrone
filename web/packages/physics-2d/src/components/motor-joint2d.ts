@@ -133,7 +133,13 @@ export class MotorJoint2D extends Joint2D {
 
     deserialize(data: Record<string, any>): void {
         super.deserialize(data);
-        this._linearOffset = new Vec2(data.linearOffset?.x ?? 0, data.linearOffset?.y ?? 0);
+        // Vec2 fields: Editor writes ARRAY [x,y], engine uses OBJECT {x,y}.
+        // normalizeVec2Value accepts both formats for backward compatibility.
+        if (data.linearOffset !== undefined) {
+            const v = this.normalizeVec2Value(data.linearOffset);
+            this._linearOffset.x = v.x;
+            this._linearOffset.y = v.y;
+        }
         this._angularOffset = data.angularOffset ?? 0;
         this._maxForce = data.maxForce ?? 1;
         this._maxTorque = data.maxTorque ?? 1;
