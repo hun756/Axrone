@@ -109,6 +109,21 @@ const cloneMask = (
           })
         : null;
 
+const createBatchKeyCacheKey = (
+    sourceKey: string,
+    clipRect: Render2DRectLike | null,
+    mask: Render2DSpriteMask | null
+): string => {
+    let key = sourceKey;
+    if (clipRect) {
+        key += `|c:${clipRect.x},${clipRect.y},${clipRect.width},${clipRect.height}`;
+    }
+    if (mask) {
+        key += `|m:${mask.shape},${mask.size.width},${mask.size.height}`;
+    }
+    return key;
+};
+
 const areSourcesEqual = (
     left: Render2DSpriteSource,
     right: Render2DSpriteSource
@@ -315,6 +330,7 @@ export class Render2DSpriteBatchBuilder {
     private readonly _batches: MutableRender2DSpriteBatchRange[] = [];
     private readonly _renderableSubmissions: Render2DSpriteSubmission[] = [];
     private readonly _submissionQuadCounts: number[] = [];
+    private readonly _keyCache = new Map<string, Render2DSpriteBatchKey>();
     private _vertexBuffer = new ArrayBuffer(0);
     private _vertexBytes = new Uint8Array(0);
     private _vertexFloatView = new Float32Array(0);
@@ -352,6 +368,7 @@ export class Render2DSpriteBatchBuilder {
     ): Render2DSpriteBatchBuildResult {
         this._renderableSubmissions.length = 0;
         this._submissionQuadCounts.length = 0;
+        this._keyCache.clear();
 
         let spriteCount = 0;
         let quadCount = 0;
@@ -414,12 +431,20 @@ export class Render2DSpriteBatchBuilder {
                 this._batches[batchIndex]!.quadCount + submissionQuadCount > this._maxBatchQuads
             ) {
                 batchIndex += 1;
-                const key = {
-                    source: cloneSource(submission.source),
-                    sourceKey: getRender2DSpriteSourceKey(submission.source),
-                    clipRect: cloneRect(submissionClipRect),
-                    mask: cloneMask(submission.mask),
-                } satisfies Render2DSpriteBatchKey;
+                const sourceKey = getRender2DSpriteSourceKey(submission.source);
+                const cacheKey = createBatchKeyCacheKey(sourceKey, submissionClipRect, submission.mask ?? null);
+
+                let key = this._keyCache.get(cacheKey);
+                if (!key) {
+                    key = {
+                        source: cloneSource(submission.source),
+                        sourceKey,
+                        clipRect: cloneRect(submissionClipRect),
+                        mask: cloneMask(submission.mask),
+                    } satisfies Render2DSpriteBatchKey;
+                    this._keyCache.set(cacheKey, key);
+                }
+
                 this._batches[batchIndex] = {
                     key,
                     spriteOffset,
