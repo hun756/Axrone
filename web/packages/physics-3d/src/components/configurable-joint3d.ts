@@ -16,7 +16,7 @@ import {
 /**
  * Configurable joint — registers a GENERIC constraint (type 5).
  *
- * **Solver status: PARTIAL.** The 6-DOF configurable joint solver is implemented
+ * **Solver status: FULL.** The 6-DOF configurable joint solver is implemented
  * in `physics-world-3d-constraints-configurable.ts`. Each of the 6 DOFs
  * (3 linear + 3 angular) can independently be:
  *
@@ -33,11 +33,12 @@ import {
  * angular DOFs. When localFrame rotations are identity, the behavior is
  * identical to the Fixed joint for all-locked configuration.
  *
- * **CAVEAT — drive/motor NOT wired:** The component exposes drive properties
- * (`xDrive`, `yDrive`, `zDrive`, `angularXDrive`, `angularYZDrive`, `slerpDrive`)
- * and target values (`targetPosition`, `targetVelocity`, `targetRotation`,
- * `targetAngularVelocity`), but these are NOT passed to the constraint definition.
- * Only limit/lock functionality is active. Drive/motor control is not available.
+ * **Motor/drive:** Per-axis linear and angular motors are wired to the solver.
+ * `targetVelocity` → `motorSpeed` (m/s per axis), `targetAngularVelocity` →
+ * `angularMotorSpeed` (rad/s per axis). Per-axis `maximumForce` from the
+ * drive structs caps the motor impulse (N for linear, N·m for angular).
+ * Motor is active only when both target velocity and maximum force are
+ * non-zero on a given axis.
  *
  * All distance units are METRES (ADR 0004). Angles are in radians.
  *
@@ -254,6 +255,10 @@ export class ConfigurableJoint3D extends Joint3D {
             linearUpperLimit: linUp,
             angularLowerLimit: angLow,
             angularUpperLimit: angUp,
+            motorSpeed: { x: this._targetVelocity.x, y: this._targetVelocity.y, z: this._targetVelocity.z },
+            maxMotorForce: { x: this._xDrive.maximumForce, y: this._yDrive.maximumForce, z: this._zDrive.maximumForce },
+            angularMotorSpeed: { x: this._targetAngularVelocity.x, y: this._targetAngularVelocity.y, z: this._targetAngularVelocity.z },
+            angularMaxMotorTorque: { x: this._angularXDrive.maximumForce, y: this._angularYZDrive.maximumForce, z: this._angularYZDrive.maximumForce },
             collideConnected: this._enableCollision,
         };
         this._constraintId = this._constraintManager.createGeneric(def);

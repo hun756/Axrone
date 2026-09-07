@@ -19,10 +19,13 @@
  *   - Angular: extractAxisAngle in relative local frame. When localFrame
  *     rotations are identity, reduces to conj(qA)*qB — same as Fixed.
  *
- * Motor-limit interaction (Box2D behavior):
- *   When a limit is violated AND the motor would push further into the limit,
- *   the motor is disabled for that axis/step. This prevents the motor from
- *   trying to exceed the limit.
+ * Motor-limit interaction (Box2D stall semantics):
+ *   Motor rows are pushed BEFORE limit rows. Each sequential-impulse iteration
+ *   processes the motor row first, then the limit row strips any impulse that
+ *   would push past the rim. At a limit boundary the motor clamp becomes
+ *   asymmetric (Rhys pattern): at the lower limit, impulse ∈ [0, +maxImpulse]
+ *   (motor can only push away from lower limit); at the upper limit,
+ *   impulse ∈ [-maxImpulse, 0]. Between limits the clamp is symmetric.
  *
  * Diagonal approximation caveat:
  *   Each row uses scalar effective mass (diagonal approximation). When multiple
@@ -139,6 +142,14 @@ export function prepareConfigurable(
     const linLower = [genDef.linearLowerLimit.x, genDef.linearLowerLimit.y, genDef.linearLowerLimit.z];
     const linUpper = [genDef.linearUpperLimit.x, genDef.linearUpperLimit.y, genDef.linearUpperLimit.z];
 
+    // Per-axis linear motor fields (optional)
+    const linMotorSpeed = genDef.motorSpeed
+        ? [genDef.motorSpeed.x, genDef.motorSpeed.y, genDef.motorSpeed.z]
+        : null;
+    const linMaxMotorForce = genDef.maxMotorForce
+        ? [genDef.maxMotorForce.x, genDef.maxMotorForce.y, genDef.maxMotorForce.z]
+        : null;
+
     for (let i = 0; i < 3; i++) {
         const mode = detectMotionMode(linLower[i], linUpper[i]);
         if (mode === 'free') continue;
@@ -171,7 +182,38 @@ export function prepareConfigurable(
                 limitError = error - linUpper[i];
             }
 
-            if (Math.abs(limitError) > LINEAR_SLOP) {
+            const atLower = error <= linLower[i] + LINEAR_SLOP;
+            const atUpper = error >= linUpper[i] - LINEAR_SLOP;
+            const limitViolated = Math.abs(limitError) > LINEAR_SLOP;
+
+            // ── Linear motor row (before limit → Box2D stall) ──
+            // Standard convention: j1Lin=-dA, j2Lin=+dB → J*v = vB·d - vA·d
+            // Motor bias = -motorSpeed (equilibrium drives J*v → motorSpeed).
+            const linMotorSpd = linMotorSpeed ? linMotorSpeed[i] : undefined;
+            const linMaxForce = linMaxMotorForce ? linMaxMotorForce[i] : undefined;
+            const hasLinMotor = linMotorSpd !== undefined
+                && linMaxForce !== undefined
+                && Math.abs(linMaxForce) > EPSILON;
+
+            if (hasLinMotor) {
+                const maxImp = Math.abs(linMaxForce as number) * h;
+                let impLo = -maxImp;
+                let impHi = maxImp;
+                if (atLower) { impLo = 0; }       // motor can only push away from lower
+                else if (atUpper) { impHi = 0; }   // motor can only push away from upper
+                const motorRow = createRow(
+                    bodyIdA, bodyIdB,
+                    { x: -dA.x, y: -dA.y, z: -dA.z }, j1Ang,
+                    { x: dB.x, y: dB.y, z: dB.z }, j2Ang,
+                    -(linMotorSpd as number),
+                    0,
+                    impLo, impHi,
+                );
+                motorRow.hasMotor = true;
+                out.push(motorRow);
+            }
+
+            if (limitViolated) {
                 out.push(createRow(
                     bodyIdA, bodyIdB,
                     { x: -dA.x, y: -dA.y, z: -dA.z }, j1Ang,
@@ -182,7 +224,7 @@ export function prepareConfigurable(
                 ));
                 out[out.length - 1].hasLimit = true;
             }
-            // Within limits: no linear row (free within bounds)
+            // Within limits and no motor: no row (free within bounds)
         }
     }
 
@@ -212,6 +254,14 @@ export function prepareConfigurable(
 
     const angLower = [genDef.angularLowerLimit.x, genDef.angularLowerLimit.y, genDef.angularLowerLimit.z];
     const angUpper = [genDef.angularUpperLimit.x, genDef.angularUpperLimit.y, genDef.angularUpperLimit.z];
+
+    // Per-axis angular motor fields (optional)
+    const angMotorSpeed = genDef.angularMotorSpeed
+        ? [genDef.angularMotorSpeed.x, genDef.angularMotorSpeed.y, genDef.angularMotorSpeed.z]
+        : null;
+    const angMaxMotorTorque = genDef.angularMaxMotorTorque
+        ? [genDef.angularMaxMotorTorque.x, genDef.angularMaxMotorTorque.y, genDef.angularMaxMotorTorque.z]
+        : null;
 
     // Angular measurement axes in world space (for Jacobian)
     // Use body A's frame axes (same convention as Fixed when frames are identity)
@@ -252,10 +302,32 @@ export function prepareConfigurable(
             const atUpper = angle >= angUpper[i] - ANGULAR_SLOP;
             const limitViolated = Math.abs(limitError) > ANGULAR_SLOP;
 
-            // Motor is not in the descriptor — no motor for generic constraints
-            // in the current descriptor schema. Motor support would require
-            // additional descriptor fields (per-axis motorSpeed, maxForce).
-            // Report: descriptor lacks per-axis motor fields.
+            // ── Angular motor row (before limit → Box2D stall) ──
+            // Standard convention: j1Ang=-axis, j2Ang=+axis → J*ω = ωB·ax - ωA·ax
+            // Motor bias = -motorSpeed (equilibrium drives J*ω → motorSpeed).
+            const angMotorSpd = angMotorSpeed ? angMotorSpeed[i] : undefined;
+            const angMaxTorque = angMaxMotorTorque ? angMaxMotorTorque[i] : undefined;
+            const hasAngMotor = angMotorSpd !== undefined
+                && angMaxTorque !== undefined
+                && Math.abs(angMaxTorque) > EPSILON;
+
+            if (hasAngMotor) {
+                const maxImp = Math.abs(angMaxTorque as number) * h;
+                let impLo = -maxImp;
+                let impHi = maxImp;
+                if (atLower) { impLo = 0; }
+                else if (atUpper) { impHi = 0; }
+                const motorRow = createRow(
+                    bodyIdA, bodyIdB,
+                    zeroVec3(), { x: -axis.x, y: -axis.y, z: -axis.z },
+                    zeroVec3(), { x: axis.x, y: axis.y, z: axis.z },
+                    -(angMotorSpd as number),
+                    0,
+                    impLo, impHi,
+                );
+                motorRow.hasMotor = true;
+                out.push(motorRow);
+            }
 
             if (limitViolated) {
                 const row = createRow(
@@ -269,7 +341,7 @@ export function prepareConfigurable(
                 row.hasLimit = true;
                 out.push(row);
             }
-            // Within angular limits: no row (free within bounds)
+            // Within angular limits and no motor: no row (free within bounds)
         }
     }
 
