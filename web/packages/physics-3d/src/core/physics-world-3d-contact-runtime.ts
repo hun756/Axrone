@@ -58,6 +58,23 @@ import {
 import { makeCollisionPairKey } from '@axrone/physics-core';
 import { GJK3D, supportFromVertices, type Support3D } from './gjk3d';
 
+// ─── Constraint Framework Imports ─────────────────────────────────────────────
+// Side-effect imports: each module calls registerConstraintModule() at load time.
+import './physics-world-3d-constraints-fixed';
+import './physics-world-3d-constraints-hinge';
+import {
+    type JacobianRow3D,
+    type SolverBody3D,
+    prepareAllConstraints,
+    solveAllVelocityConstraints,
+    solveAllPositionConstraints,
+    resetImpulses,
+    commitSolverVelocities3D,
+    commitSolverBodies3D,
+    syncSolverBodiesFromManager,
+    applyConstraintPositionCorrection,
+} from './physics-world-3d-constraints-framework';
+
 export interface IPhysicsWorld3DContactRuntimeHost {
     readonly bodyManager: BodyManager3D;
     readonly constraintManager: ConstraintManager3D;
@@ -88,6 +105,10 @@ export class PhysicsWorld3DContactRuntime {
     private readonly _broadphase = new DynamicAABBTree3D<ShapeId3D>(1024);
     private readonly _shapeProxyMap = new Map<ShapeId3D, number>();
     private readonly _shapePreviousCenter = new Map<ShapeId3D, IVec3Like>();
+
+    // ─── Constraint solver state (reused per step, allocated once) ───
+    private _jacobianCache = new Map<ConstraintId3D, JacobianRow3D[]>();
+    private _solverBodies = new Map<BodyId3D, SolverBody3D>();
 
     /**
      * Joint collision pair index for collideConnected filtering.
@@ -296,10 +317,30 @@ export class PhysicsWorld3DContactRuntime {
     solveVelocity(velIters: number, dt?: number): void {
         const vStart = performance.now();
         const manifolds = this._contactManifolds;
+
+        // ─── Prepare Jacobian constraints (once per step, outside iteration loop) ───
+        const stepDt = dt ?? (1 / 60);
+        this._solverBodies.clear();
+        this._jacobianCache = prepareAllConstraints(
+            this._host.constraintManager.getAllConstraintIds(),
+            this._host.constraintManager,
+            this._host.constraintDescriptors,
+            this._host.bodyManager,
+            this._solverBodies,
+            stepDt,
+        );
+
         for (let i = 0; i < velIters; i++) {
             for (const m of manifolds.values()) this._solveContactVelocity(m);
             this._solveDistanceConstraints(velIters);
+            // Sync solver body velocities from body manager (contact solve modifies it directly)
+            syncSolverBodiesFromManager(this._solverBodies, this._host.bodyManager);
+            // Jacobian-based constraint velocity solve (Fixed, Hinge, etc.)
+            solveAllVelocityConstraints(this._jacobianCache, this._solverBodies);
+            // Commit constraint corrections back to body manager
+            commitSolverVelocities3D(this._solverBodies, this._host.bodyManager);
         }
+
         // Spring forces are applied ONCE per step (not per velocity iteration)
         // to prevent over-accumulation. Box2D convention: soft constraint bias
         // is computed in prepare phase; only the pre-biased impulse is iterated.
@@ -316,6 +357,19 @@ export class PhysicsWorld3DContactRuntime {
             for (const m of manifolds.values()) this._correctContactPositions(m, 0.2);
         }
         for (const m of manifolds.values()) this._correctContactPositions(m, 1.0);
+
+        // ─── Jacobian constraint position correction ───
+        // Apply anchor-alignment position corrections for constraints (Fixed, Hinge, etc.)
+        // This runs AFTER contact position corrections and AFTER position integration.
+        if (this._jacobianCache.size > 0) {
+            applyConstraintPositionCorrection(
+                this._jacobianCache,
+                this._host.bodyManager,
+                this._host.constraintManager,
+                1 / 60, // dt for bias computation
+            );
+        }
+
         const profiler = this._host.getProfiler();
         if (profiler) profiler.solvePositionTime = performance.now() - pStart;
     }
@@ -1234,75 +1288,18 @@ export class PhysicsWorld3DContactRuntime {
     }
 
     /**
-     * Solve distance/fixed (rigid) joint constraints using sequential impulses.
-     * Baumgarte positional correction is iterated within the velocity solve loop.
-     * Spring forces are handled separately in _solveSpringForces() to avoid
-     * per-iteration over-accumulation.
+     * @deprecated Legacy anchor position correction. Now handled by the Jacobian
+     * constraint framework (physics-world-3d-constraints-framework.ts).
+     * Types 0 (Fixed) and 2 (Hinge) are solved by the new framework.
+     * Kept as a no-op for backward compatibility; will be removed when all
+     * constraint types migrate to the Jacobian framework.
      */
-    private _solveDistanceConstraints(iterations: number): void {
-        const cm = this._host.constraintManager;
-        const bm = this._host.bodyManager;
-        const constraintIds = cm.getAllConstraintIds();
-        if (constraintIds.length === 0) return;
-
-        const BIAS = 0.2; // Baumgarte stabilization factor
-
-        for (let iter = 0; iter < Math.min(iterations, 4); iter++) {
-            for (const cid of constraintIds) {
-                const type = cm.getConstraintType(cid);
-                // Only handle rigid constraints here (distance=0, fixed=2)
-                if (type !== 0 && type !== 2) continue;
-
-                const { bodyIdA, bodyIdB } = cm.getConstraintBodyIds(cid);
-
-                // Skip if either body is static/kinematic
-                const typeA = bm.getBodyType(bodyIdA);
-                const typeB = bm.getBodyType(bodyIdB);
-                if (typeA !== 2 && typeB !== 2) continue; // 2 = Dynamic
-
-                const posA = bm.getPosition(bodyIdA);
-                const posB = bm.getPosition(bodyIdB);
-                const rotA = bm.getRotation(bodyIdA);
-                const rotB = bm.getRotation(bodyIdB);
-
-                const localAnchorA = cm.getConstraintLocalAnchorA(cid);
-                const localAnchorB = cm.getConstraintLocalAnchorB(cid);
-
-                // Transform local anchors to world space
-                const worldAnchorA = transformPoint3D(localAnchorA, posA, rotA);
-                const worldAnchorB = transformPoint3D(localAnchorB, posB, rotB);
-
-                // Compute error vector
-                const delta = Vec3.subtract(worldAnchorB, worldAnchorA);
-                const currentDist = Vec3.len(delta);
-
-                const error = currentDist; // target is 0 for fixed/distance
-                if (Math.abs(error) < PhysicsConstants.EPSILON) continue;
-
-                // Compute correction direction
-                const dir = currentDist > PhysicsConstants.EPSILON
-                    ? Vec3.normalize(delta)
-                    : { x: 0, y: 1, z: 0 };
-
-                // Compute effective mass
-                const invMassA = typeA === 2 ? bm.getInverseMass(bodyIdA) : 0;
-                const invMassB = typeB === 2 ? bm.getInverseMass(bodyIdB) : 0;
-                const invMassSum = invMassA + invMassB;
-                if (invMassSum <= PhysicsConstants.EPSILON) continue;
-
-                // Apply positional correction (Baumgarte stabilization)
-                const correction = Vec3.multiplyScalar(dir, error * BIAS / invMassSum);
-
-                if (typeA === 2) {
-                    const newPosA = Vec3.add(posA, Vec3.multiplyScalar(correction, invMassA));
-                    bm.setPosition(bodyIdA, newPosA);
-                }
-                if (typeB === 2) {
-                    const newPosB = Vec3.subtract(posB, Vec3.multiplyScalar(correction, invMassB));
-                    bm.setPosition(bodyIdB, newPosB);
-                }
-            }
-        }
+    private _solveDistanceConstraints(_iterations: number): void {
+        // All rigid constraint types (0=Fixed, 2=Hinge) are now handled by the
+        // Jacobian constraint framework in solveVelocity()/solvePosition().
+        // Spring (6) has its own _solveSpringForces() path.
+        // Other types (3=Slider, 4=ConeTwist, 5=Generic) are unsupported.
+        return;
     }
 
     /**

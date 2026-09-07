@@ -95,7 +95,7 @@ export class HingeJoint3D extends Joint3D {
     }
 
     protected override _createConstraint(ownerBody: Rigidbody3D): void {
-        if (!this._constraintManager || !this._connectedBody) return;
+        if (!this._constraintManager || !this._connectedBody || !this._world) return;
         const def: IHingeConstraintDef3D = {
             bodyIdA: ownerBody.bodyId,
             bodyIdB: this._connectedBody.bodyId,
@@ -111,7 +111,8 @@ export class HingeJoint3D extends Joint3D {
             maxMotorTorque: this._motor.force as unknown as Torque,
             collideConnected: this._enableCollision,
         };
-        this._constraintId = this._constraintManager.createHinge(def);
+        // Use world API to ensure constraint descriptor is registered for the solver framework
+        this._constraintId = this._world.createHingeConstraint(def);
     }
     protected override _updateConstraint(): void {
         this._recreateConstraint();

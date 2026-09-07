@@ -250,8 +250,13 @@ export abstract class Joint3D extends Component {
     protected abstract _updateConstraint(): void;
 
     protected _recreateConstraint(): void {
-        if (this._constraintId !== INVALID_CONSTRAINT_ID && this._constraintManager) {
-            this._constraintManager.destroyConstraint(this._constraintId);
+        if (this._constraintId !== INVALID_CONSTRAINT_ID) {
+            // Use world's destroyConstraint to also clean up the constraint descriptor
+            if (this._world) {
+                this._world.destroyConstraint(this._constraintId);
+            } else if (this._constraintManager) {
+                this._constraintManager.destroyConstraint(this._constraintId);
+            }
         }
 
         this._constraintId = INVALID_CONSTRAINT_ID;
