@@ -9,11 +9,8 @@ export const RUNTIME_PROFILE_2D_CAPABILITY_PACKAGES = Object.freeze([
     ASSET_2D_CAPABILITY_PACKAGE,
     RENDER_2D_CAPABILITY_PACKAGE,
     '@axrone/physics-core',
-    // TODO(physics-2d-bridge): @axrone/physics-2d is declared as a capability but
-    // not wired to scene-runtime — no PhysicsBridge2D exists (contrast with
-    // physics-bridge-3d in scene-runtime). Consequence: 2D collision/sensor events
-    // do not reach user @script components, and the physics-2d bundle is included
-    // in playable-2d without being instantiated at runtime.
+    // @axrone/physics-2d is wired through PhysicsBridge2D in @axrone/scene-runtime.
+    // 2D collision/sensor events are routed to user @script components via the bridge.
     '@axrone/physics-2d',
     '@axrone/ui',
 ]) as readonly string[];
