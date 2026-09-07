@@ -352,6 +352,11 @@ export abstract class Joint3D extends Component {
      * strings to `null`. Any other value (entity ID string, or already-resolved
      * component reference) is returned as-is for the scene loader to resolve.
      *
+     * NOTE: This is a local duplicate of the identical helper in
+     * `physics-2d/src/components/joint2d.ts` (Joint2D.normalizeReferenceValue).
+     * Both MUST change together. Not moved to physics-core to avoid cross-package
+     * dependency churn for a 7-line pure function.
+     *
      * @param value - Raw value from serialised data (Editor contract: `string`).
      * @returns `null` when the reference is empty/missing, otherwise the
      *   original value for downstream resolution.
