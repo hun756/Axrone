@@ -114,6 +114,12 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     private readonly _shapeProxyMap = new Map<ShapeId, number>();
     private readonly _shapePreviousCenter = new Map<ShapeId, { x: number; y: number }>();
     private readonly _contactPairCache = new Map<number, ContactId>();
+    /**
+     * Counter-based index: tracks how many constraints with `collideConnected=false`
+     * connect each body pair. When count > 0, the pair is suppressed from contact generation.
+     * Uses canonical `makeCollisionPairKey` with body IDs.
+     */
+    private readonly _jointCollisionCounts = new Map<number, number>();
     /** Cached AABB for static-body shapes; only recomputed when dirty. (P1-2) */
     private readonly _staticAabbCache = new Map<ShapeId, AABB2D>();
     /** Static shapes whose AABB needs recomputation. */
@@ -452,6 +458,13 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                     return true;
                 }
 
+                // collideConnected filter: skip pairs joined by a non-colliding constraint
+                const bodyPairKey = makeCollisionPairKey(
+                    descriptorA.bodyId as number,
+                    descriptorB.bodyId as number
+                );
+                if (this._jointCollisionCounts.has(bodyPairKey)) return true;
+
                 const pairKey = makeCollisionPairKey(shapeIdA as number, shapeIdB as number);
 
                 if (visitedPairs.has(pairKey)) return true;
@@ -663,6 +676,22 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         return shapeId;
     }
 
+    private _registerJointCollisionPair(bodyIdA: BodyId, bodyIdB: BodyId): void {
+        const key = makeCollisionPairKey(bodyIdA as number, bodyIdB as number);
+        this._jointCollisionCounts.set(key, (this._jointCollisionCounts.get(key) ?? 0) + 1);
+    }
+
+    private _unregisterJointCollisionPair(bodyIdA: BodyId, bodyIdB: BodyId): void {
+        const key = makeCollisionPairKey(bodyIdA as number, bodyIdB as number);
+        const count = this._jointCollisionCounts.get(key);
+        if (count === undefined) return;
+        if (count <= 1) {
+            this._jointCollisionCounts.delete(key);
+        } else {
+            this._jointCollisionCounts.set(key, count - 1);
+        }
+    }
+
     private _markStaticDirty(bodyId: BodyId): void {
         const shapes = this._shapeManager.getShapesForBody(bodyId);
         for (const shapeId of shapes) {
@@ -742,6 +771,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             stiffness: def.stiffness ?? null,
             damping: def.damping ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -755,6 +787,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             motorSpeed: def.motorSpeed ?? null,
             maxMotorTorque: def.maxMotorTorque ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -771,6 +806,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             motorSpeed: def.motorSpeed ?? null,
             maxMotorForce: def.maxMotorForce ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -784,6 +822,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             stiffness: def.stiffness ?? null,
             damping: def.damping ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -801,6 +842,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             motorSpeed: def.motorSpeed ?? null,
             maxMotorTorque: def.maxMotorTorque ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -814,6 +858,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             maxTorque: def.maxTorque ?? null,
             correctionFactor: def.correctionFactor ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -826,6 +873,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             damping: def.damping ?? null,
             maxForce: def.maxForce ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -837,6 +887,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             constraintIdB: def.constraintIdB,
             ratio: def.ratio ?? 1,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -848,6 +901,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             localAnchorB: cloneVec(def.localAnchorB),
             maxLength: def.maxLength,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -858,6 +914,11 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 this._constraintManager.destroyConstraint(constraintId);
             }
             return;
+        }
+
+        // Unregister collideConnected suppression before destroying
+        if (!descriptor.collideConnected) {
+            this._unregisterJointCollisionPair(descriptor.bodyIdA, descriptor.bodyIdB);
         }
 
         if (descriptor.storage === 'manager' && this._constraintManager.hasConstraint(constraintId)) {
@@ -1038,6 +1099,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._constraintStore.clear();
         this._staticAabbCache.clear();
         this._staticAabbDirty.clear();
+        this._jointCollisionCounts.clear();
 
         this._bodyManager[Symbol.dispose]();
         this._shapeManager[Symbol.dispose]();
