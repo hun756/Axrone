@@ -138,6 +138,10 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     private readonly _subStepping: boolean;
     private readonly _defaultVelIters: number;
     private readonly _defaultPosIters: number;
+    // ADR 0004: Config-driven physics limits (metre-based)
+    private readonly _maxVelocity: number;
+    private readonly _maxAngularVelocity: number;
+    private readonly _maxTranslation: number;
 
     constructor(config: IPhysicsWorldConfig = {}) {
         this.config = config;
@@ -204,6 +208,11 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._subStepping = config.subStepping ?? false;
         this._defaultVelIters = config.solverIterations ?? 8;
         this._defaultPosIters = config.positionIterations ?? 3;
+
+        // ADR 0004: Config-driven physics limits (metre-based)
+        this._maxVelocity = config.maxVelocity ?? PhysicsConstants.MAX_VELOCITY;
+        this._maxAngularVelocity = config.maxAngularVelocity ?? PhysicsConstants.MAX_ANGULAR_VELOCITY;
+        this._maxTranslation = config.maxTranslation ?? PhysicsConstants.MAX_TRANSLATION;
     }
 
     get gravity(): Readonly<IVec2Like> {
@@ -292,7 +301,12 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 allowSleep,
                 solverFlags,
                 { x: this._gravity.x, y: this._gravity.y },
-                prof ?? undefined
+                prof ?? undefined,
+                {
+                    maxVelocity: this._maxVelocity,
+                    maxAngularVelocity: this._maxAngularVelocity,
+                    maxTranslation: this._maxTranslation,
+                }
             );
         }
 

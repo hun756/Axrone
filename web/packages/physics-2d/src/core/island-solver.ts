@@ -12,12 +12,21 @@ interface ProfilerData {
     solvePositionTime: number;
 }
 
+/**
+ * Configurable solver limits (ADR 0004 — metre-based).
+ * When omitted, falls back to `PhysicsConstants` defaults.
+ */
+interface SolverLimits {
+    /** Maximum linear velocity in metres per second (m/s). */
+    maxVelocity: number;
+    /** Maximum angular velocity in radians per second (rad/s). */
+    maxAngularVelocity: number;
+    /** Maximum position translation per step in metres per step (m/step). */
+    maxTranslation: number;
+}
+
 const LINEAR_SLEEP_TOLERANCE_SQ = PhysicsConstants.LINEAR_SLEEP_TOLERANCE * PhysicsConstants.LINEAR_SLEEP_TOLERANCE;
 const ANGULAR_SLEEP_TOLERANCE_SQ = PhysicsConstants.ANGULAR_SLEEP_TOLERANCE * PhysicsConstants.ANGULAR_SLEEP_TOLERANCE;
-const MAX_TRANSLATION_SQ = PhysicsConstants.MAX_TRANSLATION * PhysicsConstants.MAX_TRANSLATION;
-const MAX_ROTATION_SQ = PhysicsConstants.MAX_ROTATION * PhysicsConstants.MAX_ROTATION;
-const MAX_VELOCITY_SQ = PhysicsConstants.MAX_VELOCITY * PhysicsConstants.MAX_VELOCITY;
-const MAX_ANGULAR_VELOCITY_SQ = PhysicsConstants.MAX_ANGULAR_VELOCITY * PhysicsConstants.MAX_ANGULAR_VELOCITY;
 
 interface VelocityConstraintPoint {
     rA: IVec2Like;
@@ -142,7 +151,8 @@ export class IslandSolver2D {
         allowSleep: boolean,
         flags: SolverFlags,
         gravity: { x: number; y: number },
-        profiler?: ProfilerData
+        profiler?: ProfilerData,
+        limits?: SolverLimits
     ): void {
         this._lastIslandCount = 0;
         const bodies = this._bodyManager.getBodyIds();
@@ -169,7 +179,8 @@ export class IslandSolver2D {
                     flags,
                     gravity,
                     allowSleep,
-                    profiler
+                    profiler,
+                    limits
                 );
                 this._lastIslandCount++;
                 this._bodyStack.length = 0;
@@ -239,8 +250,16 @@ export class IslandSolver2D {
         flags: SolverFlags,
         gravity: { x: number; y: number },
         allowSleep: boolean,
-        profiler?: ProfilerData
+        profiler?: ProfilerData,
+        limits?: SolverLimits
     ): void {
+        // ADR 0004: Use configurable limits or fall back to PhysicsConstants defaults
+        const maxVel = limits?.maxVelocity ?? PhysicsConstants.MAX_VELOCITY;
+        const maxAngVel = limits?.maxAngularVelocity ?? PhysicsConstants.MAX_ANGULAR_VELOCITY;
+        const maxTrans = limits?.maxTranslation ?? PhysicsConstants.MAX_TRANSLATION;
+        const maxVelSq = maxVel * maxVel;
+        const maxAngVelSq = maxAngVel * maxAngVel;
+        const maxTransSq = maxTrans * maxTrans;
         const h = dt;
         const bodyCount = this._bodyStack.length;
 
@@ -321,18 +340,18 @@ export class IslandSolver2D {
                 this._velocities[offset + 1] *= linearDampingFactor;
                 this._velocities[offset + 2] *= angularDampingFactor;
 
-                // Clamp velocity to MAX_VELOCITY (separate from position-delta limit)
+                // Clamp velocity to maxVelocity (separate from position-delta limit)
                 const vx = this._velocities[offset];
                 const vy = this._velocities[offset + 1];
                 const w = this._velocities[offset + 2];
                 const speedSq = vx * vx + vy * vy;
-                if (speedSq > MAX_VELOCITY_SQ) {
-                    const scale = PhysicsConstants.MAX_VELOCITY / Math.sqrt(speedSq);
+                if (speedSq > maxVelSq) {
+                    const scale = maxVel / Math.sqrt(speedSq);
                     this._velocities[offset] = vx * scale;
                     this._velocities[offset + 1] = vy * scale;
                 }
-                if (w * w > MAX_ANGULAR_VELOCITY_SQ) {
-                    this._velocities[offset + 2] = w > 0 ? PhysicsConstants.MAX_ANGULAR_VELOCITY : -PhysicsConstants.MAX_ANGULAR_VELOCITY;
+                if (w * w > maxAngVelSq) {
+                    this._velocities[offset + 2] = w > 0 ? maxAngVel : -maxAngVel;
                 }
             }
         }
@@ -374,10 +393,10 @@ export class IslandSolver2D {
                 let dy = this._velocities[offset + 1] * h;
                 const dw = this._velocities[offset + 2] * h;
 
-                // Clamp position delta to MAX_TRANSLATION per step (Box2D anti-tunneling)
+                // Clamp position delta to maxTranslation per step (Box2D anti-tunneling)
                 const transSq = dx * dx + dy * dy;
-                if (transSq > MAX_TRANSLATION_SQ) {
-                    const scale = PhysicsConstants.MAX_TRANSLATION / Math.sqrt(transSq);
+                if (transSq > maxTransSq) {
+                    const scale = maxTrans / Math.sqrt(transSq);
                     dx *= scale;
                     dy *= scale;
                 }
