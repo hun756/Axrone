@@ -12,16 +12,15 @@ import { PhysicsWorld3D } from '@axrone/physics-3d';
  * | Fixed          | 0 (FIXED)       | YES                | Maintains distance=0  |
  * | Distance       | 0 (FIXED)       | YES (same as Fixed)| Maintains distance    |
  * | Spring         | 6 (SPRING)      | YES                | Spring force + rest   |
- * | Hinge          | 2 (HINGE)       | PARTIAL            | Solved as fixed (no axis rotation) |
+ * | Hinge          | 2 (HINGE)       | FULL               | 3 linear + 2 angular lock + 1 axial (limit/motor) |
  * | Slider         | 3 (SLIDER)      | NO                 | Decorative            |
  * | Cone-twist     | 4 (CONE_TWIST)  | NO                 | Decorative            |
  * | Character      | 4 (CONE_TWIST)  | NO                 | Decorative            |
  * | Configurable   | 5 (GENERIC)     | NO                 | Decorative            |
  *
- * The _solveConstraints method only handles type 0 (fixed/distance) and type 6
- * (spring). Hinge (type 2) falls through the same code path as fixed, which
- * accidentally maintains anchor distance but does NOT implement hinge axis
- * rotation. Slider, cone-twist, and generic constraints are registered but
+ * The Jacobian constraint framework handles Fixed (type 0), Hinge (type 2),
+ * and Spring (type 6). Hinge implements full axis rotation with limits and motor.
+ * Slider, cone-twist, and generic constraints are registered but
  * produce no solver correction.
  */
 describe('PhysicsWorld3D joint solver behaviour', () => {
