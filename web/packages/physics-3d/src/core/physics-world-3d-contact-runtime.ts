@@ -62,6 +62,9 @@ import { GJK3D, supportFromVertices, type Support3D } from './gjk3d';
 // Side-effect imports: each module calls registerConstraintModule() at load time.
 import './physics-world-3d-constraints-fixed';
 import './physics-world-3d-constraints-hinge';
+import './physics-world-3d-constraints-slider';
+import './physics-world-3d-constraints-cone-twist';
+import './physics-world-3d-constraints-configurable';
 import {
     type JacobianRow3D,
     type SolverBody3D,
@@ -1295,10 +1298,11 @@ export class PhysicsWorld3DContactRuntime {
      * constraint types migrate to the Jacobian framework.
      */
     private _solveDistanceConstraints(_iterations: number): void {
-        // All rigid constraint types (0=Fixed, 2=Hinge) are now handled by the
-        // Jacobian constraint framework in solveVelocity()/solvePosition().
-        // Spring (6) has its own _solveSpringForces() path.
-        // Other types (3=Slider, 4=ConeTwist, 5=Generic) are unsupported.
+        // All rigid constraint types (Fixed, Hinge, Slider, ConeTwist, Generic)
+        // are now handled by the Jacobian constraint framework in
+        // solveVelocity()/solvePosition(). Spring (6) has its own
+        // _solveSpringForces() path. This method is kept as a no-op for
+        // backward compatibility with the velocity solve loop.
         return;
     }
 
