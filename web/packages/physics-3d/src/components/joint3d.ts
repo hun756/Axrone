@@ -15,18 +15,18 @@ export const INVALID_CONSTRAINT_ID = -1 as ConstraintId3D;
  * | FixedJoint3D    | FIXED (0)       | **FULL** — Baumgarte + sequential impulse, distance preserved |
  * | DistanceJoint3D | FIXED (0)       | **FULL** — same solver path as Fixed |
  * | SpringJoint3D   | SPRING (6)      | **FULL** — spring force + Baumgarte |
- * | HingeJoint3D    | HINGE (2)       | **PARTIAL** — anchor distance maintained; **axis rotation NOT simulated** |
+ * | HingeJoint3D    | HINGE (2)       | **FULL** — 3 linear + 2 angular lock + 1 axial (limit/motor) |
  * | SliderJoint3D   | SLIDER (3)      | **UNSUPPORTED** — constraint registered but no solver correction |
  * | CharacterJoint3D| CONE_TWIST (4)  | **UNSUPPORTED** — constraint registered but no solver correction |
  * | ConfigurableJoint3D | GENERIC (5) | **UNSUPPORTED** — constraint registered but no solver correction |
  *
- * TODO(P2-joint-solvers): implement proper slider, cone-twist, configurable, and hinge-axis solvers.
+ * TODO(P2-joint-solvers): implement proper slider, cone-twist, and configurable solvers.
  */
 export const JOINT_CAPABILITY_3D = {
     FIXED: 'full',
     DISTANCE: 'full',
     SPRING: 'full',
-    HINGE: 'partial',
+    HINGE: 'full',
     SLIDER: 'unsupported',
     CONE_TWIST: 'unsupported',
     GENERIC: 'unsupported',
