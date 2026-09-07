@@ -11,15 +11,24 @@ import {
 } from './joint3d';
 
 /**
- * Slider joint — registers a SLIDER constraint (type 3).
+ * Slider (Prismatic) joint — registers a SLIDER constraint (type 3).
  *
- * **Solver status: UNSUPPORTED.** The constraint is registered with the
- * constraint manager but the solver produces **no correction** for slider
- * constraints. Adding this joint to a scene has **no physical effect** —
- * connected bodies are free to move independently.
+ * **Solver status: FULL.** The Jacobian constraint solver enforces all 5 DOF:
+ * - 2 lateral linear rows: lock translation perpendicular to the slide axis
+ * - 3 angular lock rows: lock all rotation (slider must not rotate)
+ * - 1 axial limit/motor row: translation along slide axis with optional
+ *   distance limits (`lowerLimit`/`upperLimit`) and a linear motor
+ *   (`motorSpeed`/`maxMotorForce`).
+ *
+ * The slide axis is defined by `localAxisA` in body A's local frame.
+ * Body B slides along this axis relative to body A. Lateral motion and
+ * all rotation are constrained.
+ *
+ * **Motor + limit interaction:** When the motor is active and the slider
+ * reaches a limit boundary, the motor cannot push past the limit (Box2D
+ * behavior). The motor can still pull away from the limit.
  *
  * @see JOINT_CAPABILITY_3D
- * @remarks TODO(P2-joint-solvers): implement proper slider constraint Jacobian.
  */
 @script({ scriptName: 'SliderJoint3D' })
 export class SliderJoint3D extends Joint3D {
