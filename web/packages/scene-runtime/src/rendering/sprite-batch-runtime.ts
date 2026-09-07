@@ -173,7 +173,9 @@ export class SceneSpriteBatchRuntime {
     private _defaultShader: SceneShaderResource | null = null;
     private _vertexArray: WebGLVertexArrayObject | null = null;
     private _vertexBuffer: WebGLBuffer | null = null;
+    private _vertexBufferSize = 0;
     private _indexBuffer: WebGLBuffer | null = null;
+    private _indexBufferSize = 0;
     private _scissorEnabled = false;
     private _activeClipRect: Render2DRectLike | null = null;
     private _activeMask: Render2DSpriteMask | null = null;
@@ -442,20 +444,35 @@ export class SceneSpriteBatchRuntime {
     private _upload(buildResult: Render2DSpriteBatchBuildResult): void {
         this._options.gl.bindVertexArray(this._vertexArray);
         this._options.gl.bindBuffer(this._options.gl.ARRAY_BUFFER, this._vertexBuffer);
-        this._options.gl.bufferData(
-            this._options.gl.ARRAY_BUFFER,
-            buildResult.vertexData,
-            this._options.gl.DYNAMIC_DRAW
-        );
+
+        const vertexByteLength = buildResult.vertexByteLength;
+        if (this._vertexBufferSize === vertexByteLength) {
+            this._options.gl.bufferSubData(this._options.gl.ARRAY_BUFFER, 0, buildResult.vertexData);
+        } else {
+            this._options.gl.bufferData(
+                this._options.gl.ARRAY_BUFFER,
+                buildResult.vertexData,
+                this._options.gl.DYNAMIC_DRAW
+            );
+            this._vertexBufferSize = vertexByteLength;
+        }
+
         this._options.gl.bindBuffer(
             this._options.gl.ELEMENT_ARRAY_BUFFER,
             this._indexBuffer
         );
-        this._options.gl.bufferData(
-            this._options.gl.ELEMENT_ARRAY_BUFFER,
-            buildResult.indexData,
-            this._options.gl.DYNAMIC_DRAW
-        );
+
+        const indexByteLength = buildResult.indexData.byteLength;
+        if (this._indexBufferSize === indexByteLength) {
+            this._options.gl.bufferSubData(this._options.gl.ELEMENT_ARRAY_BUFFER, 0, buildResult.indexData);
+        } else {
+            this._options.gl.bufferData(
+                this._options.gl.ELEMENT_ARRAY_BUFFER,
+                buildResult.indexData,
+                this._options.gl.DYNAMIC_DRAW
+            );
+            this._indexBufferSize = indexByteLength;
+        }
     }
 
     private _drawBatch(
