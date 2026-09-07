@@ -80,8 +80,6 @@ export class BatchGroup implements IBatchGroup {
             initialData: new Float32Array(maxInstances * 4),
             usage: isDynamic ? this.gl.DYNAMIC_DRAW : this.gl.STATIC_DRAW,
         });
-
-        bufferFactory.dispose();
     }
 
     public get context(): IGLContext {
