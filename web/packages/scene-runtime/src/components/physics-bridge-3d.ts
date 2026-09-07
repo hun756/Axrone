@@ -23,13 +23,19 @@ type AnyActor = Actor<AnyWorld>;
 /**
  * Interface for user script components that want to receive physics collision events.
  * Implement these methods on any Component subclass to receive callbacks.
+ * Generic over rigidbody/event types so both 2D and 3D bridges can use the same contract.
+ * Defaults preserve the original 3D signature for backward compatibility.
  */
-export interface IPhysicsCollisionHandler {
-    onCollisionEnter?(other: Rigidbody3D, event: ICollisionEvent3D): void;
-    onCollisionStay?(other: Rigidbody3D, event: ICollisionEvent3D): void;
-    onCollisionExit?(other: Rigidbody3D, event: ICollisionEvent3D): void;
-    onSensorEnter?(other: Rigidbody3D, event: ISensorEvent3D): void;
-    onSensorExit?(other: Rigidbody3D, event: ISensorEvent3D): void;
+export interface IPhysicsCollisionHandler<
+    TRigidbody = Rigidbody3D,
+    TCollisionEvent = ICollisionEvent3D,
+    TSensorEvent = ISensorEvent3D,
+> {
+    onCollisionEnter?(other: TRigidbody, event: TCollisionEvent): void;
+    onCollisionStay?(other: TRigidbody, event: TCollisionEvent): void;
+    onCollisionExit?(other: TRigidbody, event: TCollisionEvent): void;
+    onSensorEnter?(other: TRigidbody, event: TSensorEvent): void;
+    onSensorExit?(other: TRigidbody, event: TSensorEvent): void;
 }
 
 interface ContactPair {
