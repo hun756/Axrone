@@ -395,8 +395,10 @@ describe('Configurable joint — per-axis LIMITED', () => {
         const rows = runPrepare(def, bodyA, bodyB);
         expect(rows.length).toBe(1);
         expect(rows[0].hasLimit).toBe(true);
-        // Bias should be negative (positive error → negative bias → lambda > 0)
-        expect(rows[0].bias).toBeLessThan(0);
+        // Bias should be POSITIVE (positive error → positive bias → convergent velocity solve)
+        // Convention: j1Lin=-n, j2Lin=+n → J*v = vB·n - vA·n. For positive error,
+        // bias = +BAUMGARTE * error / h drives J*v toward -bias (negative), closing the gap.
+        expect(rows[0].bias).toBeGreaterThan(0);
     });
 
     it('linear X limited: beyond lower limit → 1 row with limit correction', () => {
@@ -413,8 +415,10 @@ describe('Configurable joint — per-axis LIMITED', () => {
         const rows = runPrepare(def, bodyA, bodyB);
         expect(rows.length).toBe(1);
         expect(rows[0].hasLimit).toBe(true);
-        // Bias should be positive (negative error → positive bias → lambda < 0)
-        expect(rows[0].bias).toBeGreaterThan(0);
+        // Bias should be NEGATIVE (negative error → negative bias → convergent velocity solve)
+        // Convention: j1Lin=-n, j2Lin=+n → J*v = vB·n - vA·n. For negative error,
+        // bias = +BAUMGARTE * error / h < 0 drives J*v toward -bias (positive), closing the gap.
+        expect(rows[0].bias).toBeLessThan(0);
     });
 
     it('angular Y limited: within limits → no row', () => {

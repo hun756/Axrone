@@ -80,20 +80,20 @@ function prepareFixedOrDistance(
     const errorZ = worldAnchorB.z - worldAnchorA.z;
 
     // ─── 3 Linear Rows (one per axis) ─────────────────────────────────
+    // Convention: j1Lin = -n, j2Lin = +n → J*v = vB·n - vA·n
+    // For positive error (B ahead of A), bias must be POSITIVE so that
+    // the kernel drives J*v toward -bias (negative), closing the gap.
+    // Sequential impulse: deltaImpulse = -effMass * bias → negative impulse
+    // → pushes A along +n (toward B) and B along -n (toward A).
 
     // Row 1: X-axis alignment
-    // Convention: j1Lin = -xHat, j2Lin = +xHat → J*v = vB_x - vA_x
-    // For positive error (B ahead of A), bias must be NEGATIVE so that
-    // lambda > 0, which pushes A in -x (toward B) and B in +x (toward A).
-    // Sequential impulse: lambda = prev - effMass * (jv + bias)
-    // With negative bias: lambda = -effMass * (0 + neg) = positive → correct direction.
     const row1 = createRow(
         bodyIdA, bodyIdB,
         { x: -1, y: 0, z: 0 }, // j1Linear
         { x: 0, y: rA.z, z: -rA.y }, // j1Angular = -(rA × xHat)
         { x: 1, y: 0, z: 0 }, // j2Linear
         { x: 0, y: -rB.z, z: rB.y }, // j2Angular = rB × xHat
-        -BAUMGARTE * errorX / h, // Baumgarte bias (negative for positive error → lambda > 0 → convergence)
+        BAUMGARTE * errorX / h, // Baumgarte bias (positive for positive error → convergence)
         -errorX, // positionError (negated for position solver convention)
     );
 
@@ -104,7 +104,7 @@ function prepareFixedOrDistance(
         { x: -rA.z, y: 0, z: rA.x }, // j1Angular for Y: -(rA × yHat)
         { x: 0, y: 1, z: 0 },
         { x: rB.z, y: 0, z: -rB.x }, // j2Angular for Y
-        -BAUMGARTE * errorY / h,
+        BAUMGARTE * errorY / h,
         -errorY,
     );
 
@@ -115,7 +115,7 @@ function prepareFixedOrDistance(
         { x: rA.y, y: -rA.x, z: 0 }, // j1Angular for Z: -(rA × zHat)
         { x: 0, y: 0, z: 1 },
         { x: -rB.y, y: rB.x, z: 0 }, // j2Angular for Z
-        -BAUMGARTE * errorZ / h,
+        BAUMGARTE * errorZ / h,
         -errorZ,
     );
 
@@ -138,11 +138,13 @@ function prepareFixedOrDistance(
     const angErrorZ = 2.0 * qRel.z;
 
     // Angular row 1: lock rotation about X
+    // Angular Jacobian: j1Ang = -xHat, j2Ang = +xHat → J*ω = ωB_x - ωA_x
+    // For positive angular error: bias = +BAUMGARTE * error / h (convergent)
     const angRow1 = createRow(
         bodyIdA, bodyIdB,
         zeroVec3(), { x: -1, y: 0, z: 0 }, // j1Linear=0, j1Angular=-xHat
         zeroVec3(), { x: 1, y: 0, z: 0 },  // j2Linear=0, j2Angular=xHat
-        -BAUMGARTE * angErrorX / h,
+        BAUMGARTE * angErrorX / h,
         -angErrorX,
     );
 
@@ -151,7 +153,7 @@ function prepareFixedOrDistance(
         bodyIdA, bodyIdB,
         zeroVec3(), { x: 0, y: -1, z: 0 },
         zeroVec3(), { x: 0, y: 1, z: 0 },
-        -BAUMGARTE * angErrorY / h,
+        BAUMGARTE * angErrorY / h,
         -angErrorY,
     );
 
@@ -160,7 +162,7 @@ function prepareFixedOrDistance(
         bodyIdA, bodyIdB,
         zeroVec3(), { x: 0, y: 0, z: -1 },
         zeroVec3(), { x: 0, y: 0, z: 1 },
-        -BAUMGARTE * angErrorZ / h,
+        BAUMGARTE * angErrorZ / h,
         -angErrorZ,
     );
 

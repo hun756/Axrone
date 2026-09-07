@@ -85,6 +85,8 @@ function prepareHinge(
     const rB = Vec3.subtract(worldAnchorB, bodyB.position);
 
     // ─── 3 Linear Rows (anchor alignment) ─────────────────────────────
+    // Convention: j1Lin = -n, j2Lin = +n → J*v = vB·n - vA·n
+    // For positive error: bias = +BAUMGARTE * error / h (convergent)
     const errorX = worldAnchorB.x - worldAnchorA.x;
     const errorY = worldAnchorB.y - worldAnchorA.y;
     const errorZ = worldAnchorB.z - worldAnchorA.z;
@@ -96,7 +98,7 @@ function prepareHinge(
         { x: 0, y: rA.z, z: -rA.y },
         { x: 1, y: 0, z: 0 },
         { x: 0, y: -rB.z, z: rB.y },
-        -BAUMGARTE * errorX / h,
+        BAUMGARTE * errorX / h,
         -errorX,
     ));
 
@@ -107,7 +109,7 @@ function prepareHinge(
         { x: -rA.z, y: 0, z: rA.x },
         { x: 0, y: 1, z: 0 },
         { x: rB.z, y: 0, z: -rB.x },
-        -BAUMGARTE * errorY / h,
+        BAUMGARTE * errorY / h,
         -errorY,
     ));
 
@@ -118,7 +120,7 @@ function prepareHinge(
         { x: rA.y, y: -rA.x, z: 0 },
         { x: 0, y: 0, z: 1 },
         { x: -rB.y, y: rB.x, z: 0 },
-        -BAUMGARTE * errorZ / h,
+        BAUMGARTE * errorZ / h,
         -errorZ,
     ));
 
@@ -145,11 +147,13 @@ function prepareHinge(
     const angError2 = 2.0 * (qRel.x * perp2.x + qRel.y * perp2.y + qRel.z * perp2.z);
 
     // Lock row 1: prevent rotation about perp1
+    // Angular Jacobian: j1Ang = -perp, j2Ang = +perp → J*ω = ωB·perp - ωA·perp
+    // For positive angular error: bias = +BAUMGARTE * error / h (convergent)
     out.push(createRow(
         bodyIdA, bodyIdB,
         zeroVec3(), { x: -perp1.x, y: -perp1.y, z: -perp1.z },
         zeroVec3(), { x: perp1.x, y: perp1.y, z: perp1.z },
-        -BAUMGARTE * angError1 / h,
+        BAUMGARTE * angError1 / h,
         -angError1,
     ));
 
@@ -158,7 +162,7 @@ function prepareHinge(
         bodyIdA, bodyIdB,
         zeroVec3(), { x: -perp2.x, y: -perp2.y, z: -perp2.z },
         zeroVec3(), { x: perp2.x, y: perp2.y, z: perp2.z },
-        -BAUMGARTE * angError2 / h,
+        BAUMGARTE * angError2 / h,
         -angError2,
     ));
 

@@ -95,9 +95,8 @@ function prepareSlider(
     // ─── 2 Lateral Linear Rows (lock translation perpendicular to axis) ──
     // For each perpendicular direction p:
     //   error = dot(worldDelta, p) — lateral offset
-    //   J*v = dot(p, velB + ωB×rB) - dot(p, velA + ωA×rA)
-    //   j1Linear = -p, j1Angular = -(rA × p)
-    //   j2Linear = +p, j2Angular = +(rB × p)
+    //   Convention: j1Lin = -p, j2Lin = +p → J*v = vB·p - vA·p
+    //   For positive error: bias = +BAUMGARTE * error / h (convergent)
     const lateralError1 = Vec3.dot(worldDelta, _perp1);
     const lateralError2 = Vec3.dot(worldDelta, _perp2);
 
@@ -114,7 +113,7 @@ function prepareSlider(
         { x: -rAxP1.x, y: -rAxP1.y, z: -rAxP1.z },
         { x: _perp1.x, y: _perp1.y, z: _perp1.z },
         { x: rBxP1.x, y: rBxP1.y, z: rBxP1.z },
-        -BAUMGARTE * lateralError1 / h,
+        BAUMGARTE * lateralError1 / h,
         -lateralError1,
     ));
 
@@ -125,13 +124,14 @@ function prepareSlider(
         { x: -rAxP2.x, y: -rAxP2.y, z: -rAxP2.z },
         { x: _perp2.x, y: _perp2.y, z: _perp2.z },
         { x: rBxP2.x, y: rBxP2.y, z: rBxP2.z },
-        -BAUMGARTE * lateralError2 / h,
+        BAUMGARTE * lateralError2 / h,
         -lateralError2,
     ));
 
     // ─── 3 Angular Lock Rows (prevent all rotation) ───────────────────
     // Same approach as Fixed joint: qRel = conj(qA) * qB, error ≈ 2*qRel.xyz
-    // Using perp1, perp2, and worldAxis as three orthogonal rotation axes.
+    // Angular Jacobian: j1Ang = -axis, j2Ang = +axis → J*ω = ωB·axis - ωA·axis
+    // For positive angular error: bias = +BAUMGARTE * error / h (convergent)
     const qRel: IQuatLike = Quat.multiply(
         { x: -bodyA.rotation.x, y: -bodyA.rotation.y, z: -bodyA.rotation.z, w: bodyA.rotation.w },
         bodyB.rotation,
@@ -146,7 +146,7 @@ function prepareSlider(
         bodyIdA, bodyIdB,
         zeroVec3(), { x: -_perp1.x, y: -_perp1.y, z: -_perp1.z },
         zeroVec3(), { x: _perp1.x, y: _perp1.y, z: _perp1.z },
-        -BAUMGARTE * angError1 / h,
+        BAUMGARTE * angError1 / h,
         -angError1,
     ));
 
@@ -155,7 +155,7 @@ function prepareSlider(
         bodyIdA, bodyIdB,
         zeroVec3(), { x: -_perp2.x, y: -_perp2.y, z: -_perp2.z },
         zeroVec3(), { x: _perp2.x, y: _perp2.y, z: _perp2.z },
-        -BAUMGARTE * angError2 / h,
+        BAUMGARTE * angError2 / h,
         -angError2,
     ));
 
@@ -164,11 +164,22 @@ function prepareSlider(
         bodyIdA, bodyIdB,
         zeroVec3(), { x: -worldAxis.x, y: -worldAxis.y, z: -worldAxis.z },
         zeroVec3(), { x: worldAxis.x, y: worldAxis.y, z: worldAxis.z },
-        -BAUMGARTE * angErrorAxis / h,
+        BAUMGARTE * angErrorAxis / h,
         -angErrorAxis,
     ));
 
     // ─── 1 Axial Row (limit + motor along slide axis) ─────────────────
+    // SLIDER AXIAL JACOBIAN CONVENTION:
+    // The axial row uses j1Lin=+axis, j2Lin=-axis (OPPOSITE of the lateral rows).
+    // This gives J*v = axis·vA - axis·vB = -(vB_axis - vA_axis) = -gap_rate.
+    //
+    // Because the Jacobian sign is flipped, the bias sign must also be flipped
+    // relative to the standard convention:
+    //   - Standard rows (j1=-n, j2=+n): bias = +BAUMGARTE * error / h
+    //   - Axial row (j1=+axis, j2=-axis): bias = -BAUMGARTE * error / h
+    //
+    // This is NOT a sign error — it is the mathematically correct convention for
+    // this Jacobian. See the full sign chain analysis in the module documentation.
     const enableLimit = sliderDef.enableLimit ?? false;
     const enableMotor = sliderDef.enableMotor ?? false;
     const lowerLimit = sliderDef.lowerLimit ?? 0;
@@ -195,10 +206,9 @@ function prepareSlider(
     const atUpperLimit = enableLimit && translation >= upperLimit - LINEAR_SLOP;
 
     // ── Limit component ──
-    // The axial Jacobian uses j1Lin=+axis, j2Lin=-axis (opposite of the lateral rows).
-    // This gives J*v = axis·vA - axis·vB = -(vB_axis - vA_axis) = -gap_rate.
-    // For the LIMIT: bias = -BAUMGARTE * error / h (standard convergent formula).
-    // Positive limit error (above upper) → positive bias → negative impulse → deceleration ✓
+    // With j1Lin=+axis, j2Lin=-axis: J*v = -(vB_axis - vA_axis).
+    // For positive limit error (above upper): bias = -BAUMGARTE * error / h < 0.
+    // At equilibrium: J*v = -bias > 0, meaning vB_axis decreases → convergence ✓
     let limitActive = false;
     if (enableLimit) {
         hasLimit = true;
@@ -222,9 +232,8 @@ function prepareSlider(
     // ── Motor component + Box2D limit interaction ──
     // With j1Lin=+axis, j2Lin=-axis: J*v = -(vB_axis - vA_axis).
     // Motor target: drive vB_axis toward +motorSpeed.
-    // Need: positive motorSpeed → negative impulse (pushes B along +axis).
-    // lambda = -effMass*(jv + bias). For lambda < 0: need bias > 0.
-    // So motor bias = +motorSpeed (opposite sign of linear rows — correct for this Jacobian).
+    // At equilibrium: J*v = -bias. For vB_axis = motorSpeed: J*v = -motorSpeed.
+    // So bias = +motorSpeed (opposite sign of limit bias — correct for this Jacobian).
     if (enableMotor && Math.abs(maxMotorForce as number) > EPSILON) {
         hasMotor = true;
 

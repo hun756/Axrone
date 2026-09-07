@@ -132,7 +132,7 @@ export function prepareConfigurable(
     // Convention (same as Fixed):
     //   j1Linear = -dirA, j2Linear = +dirB
     //   J*v = vB·dirB - vA·dirA (+ angular coupling via r×dir)
-    //   For positive error: bias < 0 → lambda > 0 → convergence
+    //   For positive error: bias = +BAUMGARTE * error / h → convergence
 
     const dirsA = [dirA0, dirA1, dirA2];
     const dirsB = [dirB0, dirB1, dirB2];
@@ -159,7 +159,7 @@ export function prepareConfigurable(
                 bodyIdA, bodyIdB,
                 { x: -dA.x, y: -dA.y, z: -dA.z }, j1Ang,
                 { x: dB.x, y: dB.y, z: dB.z }, j2Ang,
-                -BAUMGARTE * error / h,
+                BAUMGARTE * error / h,
                 -error,
             ));
         } else {
@@ -176,7 +176,7 @@ export function prepareConfigurable(
                     bodyIdA, bodyIdB,
                     { x: -dA.x, y: -dA.y, z: -dA.z }, j1Ang,
                     { x: dB.x, y: dB.y, z: dB.z }, j2Ang,
-                    -BAUMGARTE * limitError / h,
+                    BAUMGARTE * limitError / h,
                     -limitError,
                     -Infinity, Infinity,
                 ));
@@ -230,11 +230,13 @@ export function prepareConfigurable(
 
         if (mode === 'locked') {
             // Bilateral angular lock
+            // Angular Jacobian: j1Ang = -axis, j2Ang = +axis → J*ω = ωB·axis - ωA·axis
+            // For positive angular error: bias = +BAUMGARTE * error / h (convergent)
             out.push(createRow(
                 bodyIdA, bodyIdB,
                 zeroVec3(), { x: -axis.x, y: -axis.y, z: -axis.z },
                 zeroVec3(), { x: axis.x, y: axis.y, z: axis.z },
-                -BAUMGARTE * angle / h,
+                BAUMGARTE * angle / h,
                 -angle,
             ));
         } else {
@@ -260,7 +262,7 @@ export function prepareConfigurable(
                     bodyIdA, bodyIdB,
                     zeroVec3(), { x: -axis.x, y: -axis.y, z: -axis.z },
                     zeroVec3(), { x: axis.x, y: axis.y, z: axis.z },
-                    -BAUMGARTE * limitError / h,
+                    BAUMGARTE * limitError / h,
                     -limitError,
                     -Infinity, Infinity,
                 );
