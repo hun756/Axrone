@@ -13,13 +13,12 @@ import {
 /**
  * Hinge joint — registers a HINGE constraint (type 2).
  *
- * **Solver status: PARTIAL.** The anchor distance between connected bodies is
- * maintained via the fixed-anchor solver path. However, **hinge axis rotation
- * is NOT simulated** — the connected body will not rotate freely about the
- * hinge axis. Motor, limit, and spring properties are stored but have no effect.
+ * **Solver status: FULL.** The Jacobian constraint solver maintains anchor
+ * alignment (3 linear rows), locks rotation about the two axes perpendicular
+ * to the hinge axis (2 angular lock rows), and supports angle limits and
+ * motor about the hinge axis (1 axial row).
  *
  * @see JOINT_CAPABILITY_3D
- * @remarks TODO(P2-joint-solvers): implement proper hinge-axis rotational solver.
  */
 @script({ scriptName: 'HingeJoint3D' })
 export class HingeJoint3D extends Joint3D {
