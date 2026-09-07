@@ -12,7 +12,7 @@ void main() {
 `;
 
 export const TONEMAP_FRAGMENT_SHADER_SOURCE = `#version 300 es
-precision highp float;
+precision mediump float;
 
 uniform sampler2D uSource;
 uniform sampler2D uExposureHistory;
@@ -172,7 +172,7 @@ void main() {
 `;
 
 export const EXPOSURE_HISTORY_FRAGMENT_SHADER_SOURCE = `#version 300 es
-precision highp float;
+precision mediump float;
 
 uniform sampler2D uSource;
 uniform sampler2D uPreviousExposure;
@@ -236,7 +236,7 @@ void main() {
 `;
 
 export const POST_PROCESS_FRAGMENT_SHADER_SOURCE = `#version 300 es
-precision highp float;
+precision mediump float;
 
 uniform sampler2D uSource;
 uniform sampler2D uAuxSource;
