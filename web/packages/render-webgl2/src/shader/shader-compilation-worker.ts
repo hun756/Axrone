@@ -2,7 +2,7 @@ import { ShaderInstanceBackendError } from './errors';
 
 export class ShaderCompilationWorker {
     private readonly worker: Worker;
-    private readonly pendingCompilations = new Map<string, (shader: string) => void>();
+    private readonly pendingCompilations = new Map<string, { resolve: (shader: string) => void; reject: (error: Error) => void }>();
 
     constructor() {
         const workerCode = `
@@ -74,7 +74,7 @@ export class ShaderCompilationWorker {
         return new Promise((resolve, reject) => {
             const id = `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
-            this.pendingCompilations.set(id, resolve);
+            this.pendingCompilations.set(id, { resolve, reject });
 
             this.worker.postMessage({
                 id,
@@ -94,9 +94,9 @@ export class ShaderCompilationWorker {
         this.pendingCompilations.delete(id);
 
         if (success) {
-            callback(shader);
+            callback.resolve(shader);
         } else {
-            throw new ShaderInstanceBackendError('SHADER_COMPILE_FAILED', 'en', { detail: error });
+            callback.reject(new ShaderInstanceBackendError('SHADER_COMPILE_FAILED', 'en', { detail: error }));
         }
     }
 
