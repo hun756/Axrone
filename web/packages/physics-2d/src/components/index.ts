@@ -11,4 +11,5 @@ export * from './slider-joint2d';
 export * from './spring-joint2d';
 export * from './fixed-joint2d';
 export * from './wheel-joint2d';
+export * from './motor-joint2d';
 export * from './physics-world-2d-component';
