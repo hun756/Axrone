@@ -1074,6 +1074,153 @@ describe('PhysicsWorld2D Integration', () => {
         });
     });
 
+    describe('ADR 0004: Configurable velocity and translation limits', () => {
+        it('maxVelocity: clamps linear velocity when configured', () => {
+            // With maxVelocity=5, a body under large force should be clamped at 5 m/s
+            const w = new PhysicsWorld2D({
+                gravity: { x: 0, y: 0 },
+                maxVelocity: 5,
+            });
+            const bodyId = w.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+            });
+            w.createCircleShape(bodyId, { radius: 1 });
+
+            // Apply a huge force that would produce velocity >> 5 m/s
+            // F*dt*invMass = 10000 * (1/60) * 1 = 166.67 m/s without clamp
+            w.getBodyManager().applyForce(bodyId, { x: 10000, y: 0 });
+            w.step(1 / 60);
+
+            const vel = w.getBodyManager().getLinearVelocity(bodyId);
+            const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+            // Velocity must be clamped at 5 m/s (with small floating-point tolerance)
+            expect(speed).toBeLessThanOrEqual(5.01);
+            // But it should be close to 5 (force was huge)
+            expect(speed).toBeGreaterThan(4.9);
+            w[Symbol.dispose]();
+        });
+
+        it('maxVelocity: default 200 is used when not configured', () => {
+            // Without maxVelocity config, default is 200 m/s
+            const w = new PhysicsWorld2D({ gravity: { x: 0, y: 0 } });
+            const bodyId = w.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+            });
+            w.createCircleShape(bodyId, { radius: 1 });
+
+            // Apply force to reach ~100 m/s (below default 200 clamp)
+            w.getBodyManager().setLinearVelocity(bodyId, { x: 100, y: 0 });
+            w.step(1 / 60);
+
+            const vel = w.getBodyManager().getLinearVelocity(bodyId);
+            // Should NOT be clamped — 100 < 200 default
+            expect(vel.x).toBeGreaterThan(99);
+            expect(vel.x).toBeLessThan(101);
+            w[Symbol.dispose]();
+        });
+
+        it('maxTranslation: clamps position delta per step preserving direction', () => {
+            // With maxTranslation=0.5, position delta per step must not exceed 0.5 m
+            const w = new PhysicsWorld2D({
+                gravity: { x: 0, y: 0 },
+                maxTranslation: 0.5,
+            });
+            const bodyId = w.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+            });
+            w.createCircleShape(bodyId, { radius: 1 });
+
+            // Set velocity high enough that displacement = vel * dt >> 0.5
+            // vel = 600 m/s, dt = 1/60 → displacement = 10 m without clamp
+            w.getBodyManager().setLinearVelocity(bodyId, { x: 360, y: 480 });
+            // speed = 600 m/s, direction = (0.6, 0.8)
+            w.step(1 / 60);
+
+            const pos = w.getBodyManager().getPosition(bodyId);
+            // Position delta should be clamped to 0.5 m in the direction of velocity
+            const dist = Math.sqrt(pos.x * pos.x + pos.y * pos.y);
+            expect(dist).toBeLessThanOrEqual(0.51);
+            expect(dist).toBeGreaterThan(0.49);
+            // Direction must be preserved: ratio x/y ≈ 360/480 = 0.75
+            if (Math.abs(pos.y) > 1e-6) {
+                expect(pos.x / pos.y).toBeCloseTo(360 / 480, 1);
+            }
+            w[Symbol.dispose]();
+        });
+
+        it('maxTranslation: default 2.0 is used when not configured', () => {
+            // Without maxTranslation config, default is 2.0 m/step
+            const w = new PhysicsWorld2D({ gravity: { x: 0, y: 0 } });
+            const bodyId = w.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+            });
+            w.createCircleShape(bodyId, { radius: 1 });
+
+            // Set velocity so displacement = 1.0 m/step (below default 2.0 clamp)
+            w.getBodyManager().setLinearVelocity(bodyId, { x: 60, y: 0 });
+            w.step(1 / 60);
+
+            const pos = w.getBodyManager().getPosition(bodyId);
+            // Should NOT be clamped — 1.0 < 2.0 default
+            expect(pos.x).toBeCloseTo(1.0, 1);
+            w[Symbol.dispose]();
+        });
+
+        it('maxAngularVelocity: clamps angular velocity when configured', () => {
+            const w = new PhysicsWorld2D({
+                gravity: { x: 0, y: 0 },
+                maxAngularVelocity: 3,
+            });
+            const bodyId = w.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 0 },
+            });
+            w.createCircleShape(bodyId, { radius: 1 });
+
+            // Set angular velocity way above 3 rad/s
+            w.getBodyManager().setAngularVelocity(bodyId, 100);
+            w.step(1 / 60);
+
+            const angVel = w.getBodyManager().getAngularVelocity(bodyId);
+            // Should be clamped at 3 rad/s
+            expect(Math.abs(angVel)).toBeLessThanOrEqual(3.01);
+            expect(Math.abs(angVel)).toBeGreaterThan(2.9);
+            w[Symbol.dispose]();
+        });
+
+        it('all limits: custom values work together without breaking simulation', () => {
+            const w = new PhysicsWorld2D({
+                gravity: { x: 0, y: -10 },
+                maxVelocity: 50,
+                maxAngularVelocity: 10,
+                maxTranslation: 1.0,
+            });
+            const bodyId = w.createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 100 },
+            });
+            w.createCircleShape(bodyId, { radius: 1 });
+
+            // Run simulation — should not throw
+            for (let i = 0; i < 60; i++) {
+                w.step(1 / 60);
+            }
+
+            const vel = w.getBodyManager().getLinearVelocity(bodyId);
+            const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+            // Speed should be clamped at 50 m/s
+            expect(speed).toBeLessThanOrEqual(50.01);
+            // Body should have fallen (gravity is -10)
+            const pos = w.getBodyManager().getPosition(bodyId);
+            expect(pos.y).toBeLessThan(100);
+            w[Symbol.dispose]();
+        });
+    });
+
     describe('RB-1: Static AABB cache invalidation', () => {
         it('detects collision after static body moved via bodyManager.setPosition', () => {
             // Static body A starts at origin, dynamic body B at (50,0) — far apart.
