@@ -158,6 +158,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._shapeManager = new ShapeManager2D(maxShapes);
         this._constraintManager = new ConstraintManager2D(maxConstraints);
         this._contactManager = new ContactManager2D(maxContacts);
+        this._contactManager.setSensorChecker((shapeId) => this._shapeManager.isShapeSensor(shapeId));
         this._shapeStore = new PhysicsWorld2DShapeStore(this._bodyManager, this._shapeManager);
         this._constraintStore = new PhysicsWorld2DConstraintStore(
             this._bodyManager,

@@ -8,8 +8,10 @@ import type {
     IContactListener2D,
     ICollisionFilter,
     IMaterial,
+    ISensorEvent2D,
+    ICollisionEvent2D,
 } from '../types';
-import { CollisionEventType } from '../types';
+import { CollisionEventType, SensorEventType } from '../types';
 import { PhysicsError, assertCapacity, assertFound } from './foundation';
 
 const CONTACT_DATA_STRIDE = 16;
@@ -66,8 +68,21 @@ export class ContactManager2D implements Disposable {
 
     private _contactListener: IContactListener2D | null = null;
     private _collisionFilter: ICollisionFilter | null = null;
+    private _sensorChecker: ((shapeId: ShapeId) => boolean) | null = null;
     private _disposed: boolean = false;
     private readonly _freeIndices: number[] = [];
+
+    /**
+     * Reusable mutable sensor Stay event — 0 allocation per step.
+     * Listeners MUST NOT retain references beyond the callback invocation.
+     */
+    private _staySensorEvent: ISensorEvent2D | null = null;
+
+    /**
+     * Reusable mutable collision Stay event — 0 allocation per step.
+     * Listeners MUST NOT retain references beyond the callback invocation.
+     */
+    private _stayCollisionEvent: ICollisionEvent2D | null = null;
 
     constructor(maxContacts: number = 4096) {
         this._maxContacts = maxContacts;
@@ -171,10 +186,26 @@ export class ContactManager2D implements Disposable {
         }
 
         const metadata = this._contactMetadata.get(contactId)!;
+        const wasTouching = (this._contactFlags[index] & CONTACT_FLAG_TOUCHING) !== 0;
 
-        if (this._contactListener?.onCollisionEnd) {
-            const wasTouching = (this._contactFlags[index] & CONTACT_FLAG_TOUCHING) !== 0;
-            if (wasTouching) {
+        if (wasTouching && this._contactListener) {
+            const isSensor = this._isSensorContact(metadata.shapeIdA, metadata.shapeIdB);
+            const timestamp = performance.now();
+
+            if (isSensor) {
+                const { sensorBodyId, sensorShapeId, visitorBodyId, visitorShapeId } =
+                    this._resolveSensorVisitor(metadata.bodyIdA, metadata.bodyIdB, metadata.shapeIdA, metadata.shapeIdB);
+                if (this._contactListener.onSensorExit) {
+                    this._contactListener.onSensorExit({
+                        type: SensorEventType.Exit,
+                        sensorBodyId,
+                        sensorShapeId,
+                        visitorBodyId,
+                        visitorShapeId,
+                        timestamp,
+                    });
+                }
+            } else if (this._contactListener.onCollisionEnd) {
                 this._contactListener.onCollisionEnd({
                     type: CollisionEventType.End,
                     bodyIdA: metadata.bodyIdA,
@@ -182,7 +213,7 @@ export class ContactManager2D implements Disposable {
                     shapeIdA: metadata.shapeIdA,
                     shapeIdB: metadata.shapeIdB,
                     manifold: this._buildManifoldFromContact(contactId, index),
-                    timestamp: performance.now(),
+                    timestamp,
                 });
             }
         }
@@ -232,29 +263,98 @@ export class ContactManager2D implements Disposable {
         const metadata = this._contactMetadata.get(contactId);
         if (metadata) {
             const timestamp = performance.now();
+            const isSensor = this._isSensorContact(metadata.shapeIdA, metadata.shapeIdB);
 
-            if (isTouching && !wasTouching) {
-                this._contactListener?.onCollisionBegin?.({
-                    type: CollisionEventType.Begin,
-                    bodyIdA: metadata.bodyIdA,
-                    bodyIdB: metadata.bodyIdB,
-                    shapeIdA: metadata.shapeIdA,
-                    shapeIdB: metadata.shapeIdB,
-                    manifold,
+            if (isSensor) {
+                this._dispatchSensorUpdate(metadata, isTouching, wasTouching, timestamp);
+            } else {
+                this._dispatchCollisionUpdate(metadata, manifold, isTouching, wasTouching, timestamp);
+            }
+        }
+    }
+
+    private _dispatchSensorUpdate(
+        metadata: { bodyIdA: BodyId; bodyIdB: BodyId; shapeIdA: ShapeId; shapeIdB: ShapeId },
+        isTouching: boolean,
+        wasTouching: boolean,
+        timestamp: number
+    ): void {
+        if (!this._contactListener) return;
+
+        const { sensorBodyId, sensorShapeId, visitorBodyId, visitorShapeId } =
+            this._resolveSensorVisitor(metadata.bodyIdA, metadata.bodyIdB, metadata.shapeIdA, metadata.shapeIdB);
+
+        if (isTouching && !wasTouching) {
+            this._contactListener.onSensorEnter?.({
+                type: SensorEventType.Enter,
+                sensorBodyId,
+                sensorShapeId,
+                visitorBodyId,
+                visitorShapeId,
+                timestamp,
+            });
+        } else if (!isTouching && wasTouching) {
+            this._contactListener.onSensorExit?.({
+                type: SensorEventType.Exit,
+                sensorBodyId,
+                sensorShapeId,
+                visitorBodyId,
+                visitorShapeId,
+                timestamp,
+            });
+        } else if (isTouching && wasTouching) {
+            if (!this._staySensorEvent) {
+                this._staySensorEvent = {
+                    type: SensorEventType.Stay,
+                    sensorBodyId,
+                    sensorShapeId,
+                    visitorBodyId,
+                    visitorShapeId,
                     timestamp,
-                });
-            } else if (!isTouching && wasTouching) {
-                this._contactListener?.onCollisionEnd?.({
-                    type: CollisionEventType.End,
-                    bodyIdA: metadata.bodyIdA,
-                    bodyIdB: metadata.bodyIdB,
-                    shapeIdA: metadata.shapeIdA,
-                    shapeIdB: metadata.shapeIdB,
-                    manifold,
-                    timestamp,
-                });
-            } else if (isTouching && wasTouching) {
-                this._contactListener?.onCollisionStay?.({
+                };
+            } else {
+                this._staySensorEvent.sensorBodyId = sensorBodyId;
+                this._staySensorEvent.sensorShapeId = sensorShapeId;
+                this._staySensorEvent.visitorBodyId = visitorBodyId;
+                this._staySensorEvent.visitorShapeId = visitorShapeId;
+                this._staySensorEvent.timestamp = timestamp;
+            }
+            this._contactListener.onSensorStay?.(this._staySensorEvent);
+        }
+    }
+
+    private _dispatchCollisionUpdate(
+        metadata: { bodyIdA: BodyId; bodyIdB: BodyId; shapeIdA: ShapeId; shapeIdB: ShapeId },
+        manifold: IContactManifold2D,
+        isTouching: boolean,
+        wasTouching: boolean,
+        timestamp: number
+    ): void {
+        if (!this._contactListener) return;
+
+        if (isTouching && !wasTouching) {
+            this._contactListener.onCollisionBegin?.({
+                type: CollisionEventType.Begin,
+                bodyIdA: metadata.bodyIdA,
+                bodyIdB: metadata.bodyIdB,
+                shapeIdA: metadata.shapeIdA,
+                shapeIdB: metadata.shapeIdB,
+                manifold,
+                timestamp,
+            });
+        } else if (!isTouching && wasTouching) {
+            this._contactListener.onCollisionEnd?.({
+                type: CollisionEventType.End,
+                bodyIdA: metadata.bodyIdA,
+                bodyIdB: metadata.bodyIdB,
+                shapeIdA: metadata.shapeIdA,
+                shapeIdB: metadata.shapeIdB,
+                manifold,
+                timestamp,
+            });
+        } else if (isTouching && wasTouching) {
+            if (!this._stayCollisionEvent) {
+                this._stayCollisionEvent = {
                     type: CollisionEventType.Stay,
                     bodyIdA: metadata.bodyIdA,
                     bodyIdB: metadata.bodyIdB,
@@ -262,8 +362,16 @@ export class ContactManager2D implements Disposable {
                     shapeIdB: metadata.shapeIdB,
                     manifold,
                     timestamp,
-                });
+                };
+            } else {
+                this._stayCollisionEvent.bodyIdA = metadata.bodyIdA;
+                this._stayCollisionEvent.bodyIdB = metadata.bodyIdB;
+                this._stayCollisionEvent.shapeIdA = metadata.shapeIdA;
+                this._stayCollisionEvent.shapeIdB = metadata.shapeIdB;
+                (this._stayCollisionEvent as { manifold: IContactManifold2D }).manifold = manifold;
+                this._stayCollisionEvent.timestamp = timestamp;
             }
+            this._contactListener.onCollisionStay?.(this._stayCollisionEvent);
         }
     }
 
@@ -357,6 +465,31 @@ export class ContactManager2D implements Disposable {
 
     setContactListener(listener: IContactListener2D | null): void {
         this._contactListener = listener;
+    }
+
+    /**
+     * Set a callback that determines whether a shape is a sensor.
+     * Used by the contact manager to route events to sensor vs collision listeners.
+     */
+    setSensorChecker(checker: ((shapeId: ShapeId) => boolean) | null): void {
+        this._sensorChecker = checker;
+    }
+
+    private _isSensorContact(shapeIdA: ShapeId, shapeIdB: ShapeId): boolean {
+        if (!this._sensorChecker) return false;
+        return this._sensorChecker(shapeIdA) || this._sensorChecker(shapeIdB);
+    }
+
+    private _resolveSensorVisitor(
+        bodyIdA: BodyId,
+        bodyIdB: BodyId,
+        shapeIdA: ShapeId,
+        shapeIdB: ShapeId
+    ): { sensorBodyId: BodyId; sensorShapeId: ShapeId; visitorBodyId: BodyId; visitorShapeId: ShapeId } {
+        const aIsSensor = this._sensorChecker ? this._sensorChecker(shapeIdA) : false;
+        return aIsSensor
+            ? { sensorBodyId: bodyIdA, sensorShapeId: shapeIdA, visitorBodyId: bodyIdB, visitorShapeId: shapeIdB }
+            : { sensorBodyId: bodyIdB, sensorShapeId: shapeIdB, visitorBodyId: bodyIdA, visitorShapeId: shapeIdA };
     }
 
     setCollisionFilter(filter: ICollisionFilter | null): void {

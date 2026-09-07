@@ -195,16 +195,16 @@ describe('Audit Claim 3: Sensor flag honored in collision response', () => {
         });
         world.createCircleShape(sensorBodyId, { radius: 1, density: 1, isSensor: true });
 
-        // Track contact events
-        let contactBegan = false;
+        // Track sensor events (sensor contacts now fire onSensorEnter, not onCollisionBegin)
+        let sensorEntered = false;
         world.setContactListener({
-            onCollisionBegin: (event) => {
-                if (event.bodyIdA === dynId || event.bodyIdB === dynId) {
-                    contactBegan = true;
+            onSensorEnter: (event) => {
+                if (event.visitorBodyId === dynId || event.sensorBodyId === dynId) {
+                    sensorEntered = true;
                 }
             },
-            onCollisionEnd: () => {},
-            onCollisionStay: () => {},
+            onSensorExit: () => {},
+            onSensorStay: () => {},
         });
 
         // Record initial velocity (only gravity)
@@ -216,8 +216,8 @@ describe('Audit Claim 3: Sensor flag honored in collision response', () => {
             world.step(1 / 60);
         }
 
-        // Contact should have been detected
-        expect(contactBegan).toBe(true);
+        // Sensor contact should have been detected
+        expect(sensorEntered).toBe(true);
 
         // But the sensor should NOT provide physical support
         // Dynamic body should have fallen THROUGH (or at least not been stopped by sensor)

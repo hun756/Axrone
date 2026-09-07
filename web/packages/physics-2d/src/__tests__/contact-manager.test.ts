@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ContactManager2D } from '@axrone/physics-2d';
+import { SensorEventType, CollisionEventType } from '@axrone/physics-core';
 
 describe('ContactManager2D', () => {
     let manager: ContactManager2D;
@@ -322,6 +323,163 @@ describe('ContactManager2D', () => {
             expect(() => manager.destroyContact(c1)).not.toThrow();
             expect(() => manager.destroyContact(c2)).not.toThrow();
             expect(manager.contactCount).toBe(0);
+        });
+    });
+
+    describe('Sensor Event Dispatch', () => {
+        const sensorShapeId = 100 as any;
+        const visitorShapeId = 200 as any;
+        const sensorBodyId = 1 as any;
+        const visitorBodyId = 2 as any;
+
+        const TOUCHING_MANIFOLD = {
+            normal: { x: 1, y: 0 },
+            pointCount: 1,
+            points: [{
+                localPointA: { x: 0, y: 0 },
+                localPointB: { x: 0, y: 0 },
+                separation: -0.1,
+                id: 0 as any,
+                normalImpulse: 0,
+                tangentImpulse: 0,
+            }],
+        };
+
+        const SEPARATED_MANIFOLD = {
+            normal: { x: 1, y: 0 },
+            pointCount: 0,
+            points: [],
+        };
+
+        it('fires onSensorEnter (not onCollisionBegin) for sensor contacts', () => {
+            manager.setSensorChecker((id) => id === sensorShapeId);
+            const listener = {
+                onCollisionBegin: vi.fn(),
+                onSensorEnter: vi.fn(),
+            };
+            manager.setContactListener(listener);
+
+            const contactId = manager.createContact(sensorShapeId, visitorShapeId, sensorBodyId, visitorBodyId);
+            manager.updateContact(contactId, TOUCHING_MANIFOLD as any);
+
+            expect(listener.onSensorEnter).toHaveBeenCalledTimes(1);
+            expect(listener.onCollisionBegin).not.toHaveBeenCalled();
+
+            const event = listener.onSensorEnter.mock.calls[0][0];
+            expect(event.type).toBe(SensorEventType.Enter);
+            expect(event.sensorBodyId).toBe(sensorBodyId);
+            expect(event.sensorShapeId).toBe(sensorShapeId);
+            expect(event.visitorBodyId).toBe(visitorBodyId);
+            expect(event.visitorShapeId).toBe(visitorShapeId);
+            expect(typeof event.timestamp).toBe('number');
+        });
+
+        it('fires onSensorStay with reusable mutable object on continuing contact', () => {
+            manager.setSensorChecker((id) => id === sensorShapeId);
+            const listener = { onSensorStay: vi.fn() };
+            manager.setContactListener(listener);
+
+            const contactId = manager.createContact(sensorShapeId, visitorShapeId, sensorBodyId, visitorBodyId);
+            manager.updateContact(contactId, TOUCHING_MANIFOLD as any); // Begin
+            manager.updateContact(contactId, TOUCHING_MANIFOLD as any); // Stay
+
+            expect(listener.onSensorStay).toHaveBeenCalledTimes(1);
+            const event = listener.onSensorStay.mock.calls[0][0];
+            expect(event.type).toBe(SensorEventType.Stay);
+            expect(event.sensorBodyId).toBe(sensorBodyId);
+        });
+
+        it('fires onSensorExit when sensor contact separates', () => {
+            manager.setSensorChecker((id) => id === sensorShapeId);
+            const listener = {
+                onSensorEnter: vi.fn(),
+                onSensorExit: vi.fn(),
+            };
+            manager.setContactListener(listener);
+
+            const contactId = manager.createContact(sensorShapeId, visitorShapeId, sensorBodyId, visitorBodyId);
+            manager.updateContact(contactId, TOUCHING_MANIFOLD as any); // Enter
+            manager.updateContact(contactId, SEPARATED_MANIFOLD as any); // Exit
+
+            expect(listener.onSensorEnter).toHaveBeenCalledTimes(1);
+            expect(listener.onSensorExit).toHaveBeenCalledTimes(1);
+            const exitEvent = listener.onSensorExit.mock.calls[0][0];
+            expect(exitEvent.type).toBe(SensorEventType.Exit);
+            expect(exitEvent.sensorBodyId).toBe(sensorBodyId);
+        });
+
+        it('fires onSensorExit when sensor contact is destroyed while touching', () => {
+            manager.setSensorChecker((id) => id === sensorShapeId);
+            const listener = { onSensorExit: vi.fn() };
+            manager.setContactListener(listener);
+
+            const contactId = manager.createContact(sensorShapeId, visitorShapeId, sensorBodyId, visitorBodyId);
+            manager.updateContact(contactId, TOUCHING_MANIFOLD as any); // Enter
+            manager.destroyContact(contactId); // Exit via destroy
+
+            expect(listener.onSensorExit).toHaveBeenCalledTimes(1);
+        });
+
+        it('negative: normal contact does NOT fire onSensorEnter', () => {
+            manager.setSensorChecker(() => false); // No shapes are sensors
+            const listener = {
+                onCollisionBegin: vi.fn(),
+                onSensorEnter: vi.fn(),
+            };
+            manager.setContactListener(listener);
+
+            const contactId = manager.createContact(shapeIdA, shapeIdB, bodyIdA, bodyIdB);
+            manager.updateContact(contactId, TOUCHING_MANIFOLD as any);
+
+            expect(listener.onCollisionBegin).toHaveBeenCalledTimes(1);
+            expect(listener.onSensorEnter).not.toHaveBeenCalled();
+        });
+
+        it('negative: sensor contact does NOT fire onCollisionBegin', () => {
+            manager.setSensorChecker((id) => id === sensorShapeId);
+            const listener = {
+                onCollisionBegin: vi.fn(),
+                onCollisionEnd: vi.fn(),
+            };
+            manager.setContactListener(listener);
+
+            const contactId = manager.createContact(sensorShapeId, visitorShapeId, sensorBodyId, visitorBodyId);
+            manager.updateContact(contactId, TOUCHING_MANIFOLD as any);
+            manager.updateContact(contactId, SEPARATED_MANIFOLD as any);
+
+            expect(listener.onCollisionBegin).not.toHaveBeenCalled();
+            expect(listener.onCollisionEnd).not.toHaveBeenCalled();
+        });
+
+        it('resolves sensor/visitor correctly when shapeIdB is the sensor', () => {
+            // shapeIdB is sensor, shapeIdA is visitor
+            manager.setSensorChecker((id) => id === shapeIdB);
+            const listener = { onSensorEnter: vi.fn() };
+            manager.setContactListener(listener);
+
+            const contactId = manager.createContact(shapeIdA, shapeIdB, bodyIdA, bodyIdB);
+            manager.updateContact(contactId, TOUCHING_MANIFOLD as any);
+
+            const event = listener.onSensorEnter.mock.calls[0][0];
+            expect(event.sensorBodyId).toBe(bodyIdB);
+            expect(event.sensorShapeId).toBe(shapeIdB);
+            expect(event.visitorBodyId).toBe(bodyIdA);
+            expect(event.visitorShapeId).toBe(shapeIdA);
+        });
+
+        it('does not fire sensor events when no sensor checker is set', () => {
+            // No sensor checker → all contacts treated as normal
+            const listener = {
+                onCollisionBegin: vi.fn(),
+                onSensorEnter: vi.fn(),
+            };
+            manager.setContactListener(listener);
+
+            const contactId = manager.createContact(sensorShapeId, visitorShapeId, sensorBodyId, visitorBodyId);
+            manager.updateContact(contactId, TOUCHING_MANIFOLD as any);
+
+            expect(listener.onCollisionBegin).toHaveBeenCalledTimes(1);
+            expect(listener.onSensorEnter).not.toHaveBeenCalled();
         });
     });
 });
