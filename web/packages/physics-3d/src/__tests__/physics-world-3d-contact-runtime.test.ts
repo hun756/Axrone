@@ -528,5 +528,69 @@ describe('PhysicsWorld3D contact runtime', () => {
             // Multi-point manifold: at least one manifold should have >= 2 points
             expect(Math.max(...pointCounts)).toBeGreaterThanOrEqual(2);
         });
+
+        it('angled box-box clipping does not crash (N-vertex polygon clip)', () => {
+            // This test exercises the _clipSegmentToLine generalization.
+            // When boxes are at angles, the Sutherland-Hodgman clip can produce
+            // 2-3 vertex polygons. Before the fix, the hard-coded 4-vertex access
+            // would crash with TypeError on undefined vertex access.
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 0.5, z: 5 } });
+
+            // Rotated box at 30 degrees — creates diagonal clip scenarios
+            const angle = Math.PI / 6; // 30 degrees
+            const rotatedBox = world.createBody({
+                type: 2,
+                position: { x: 0, y: 0.4, z: 0 },
+                rotation: { x: 0, y: Math.sin(angle / 2), z: 0, w: Math.cos(angle / 2) },
+            });
+            world.createBoxShape(rotatedBox, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
+
+            // Should not crash — before the fix, this would throw TypeError
+            expect(() => {
+                for (let i = 0; i < 5; i++) {
+                    world.step(1 / 60);
+                }
+            }).not.toThrow();
+
+            // The rotated box should have a valid position (not NaN)
+            const pos = world.getBodyManager().getPosition(rotatedBox);
+            expect(Number.isFinite(pos.x)).toBe(true);
+            expect(Number.isFinite(pos.y)).toBe(true);
+            expect(Number.isFinite(pos.z)).toBe(true);
+        });
+
+        it('angled box-box at 45 degrees produces valid manifold contacts', () => {
+            // 45-degree angle — maximally diagonal clip
+            const ground = world.createBody({ type: 0, position: { x: 0, y: -0.5, z: 0 } });
+            world.createBoxShape(ground, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 0.5, z: 5 } });
+
+            const angle = Math.PI / 4; // 45 degrees
+            const box = world.createBody({
+                type: 2,
+                position: { x: 0.3, y: 0.3, z: 0 },
+                rotation: { x: 0, y: Math.sin(angle / 2), z: 0, w: Math.cos(angle / 2) },
+            });
+            world.createBoxShape(box, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } });
+
+            let manifoldPointCount = 0;
+            world.setContactListener({
+                onCollisionBegin(event: any) {
+                    manifoldPointCount = event.manifold.points.length;
+                },
+                onCollisionStay(event: any) {
+                    manifoldPointCount = Math.max(manifoldPointCount, event.manifold.points.length);
+                },
+            } as any);
+
+            for (let i = 0; i < 10; i++) {
+                world.step(1 / 60);
+            }
+
+            // Should have produced at least 1 contact point
+            expect(manifoldPointCount).toBeGreaterThanOrEqual(1);
+            // Point count should be physically reasonable (1-4)
+            expect(manifoldPointCount).toBeLessThanOrEqual(4);
+        });
     });
 });
