@@ -203,10 +203,12 @@ export class CharacterJoint3D extends Joint3D {
 
     override deserialize(data: Record<string, any>): void {
         super.deserialize(data);
-        if (data.swingAxis) {
-            this._swingAxis.x = data.swingAxis.x ?? 1;
-            this._swingAxis.y = data.swingAxis.y ?? 0;
-            this._swingAxis.z = data.swingAxis.z ?? 0;
+        // swingAxis: Vec3 — Editor writes ARRAY [x,y,z], accept both formats.
+        if (data.swingAxis !== undefined) {
+            const v = this.normalizeVec3Value(data.swingAxis, 1, 0, 0);
+            this._swingAxis.x = v.x;
+            this._swingAxis.y = v.y;
+            this._swingAxis.z = v.z;
         }
         const softLimitKeys = ['lowTwistLimit', 'highTwistLimit', 'swing1Limit', 'swing2Limit'] as const;
         const softLimitTargets = [this._lowTwistLimit, this._highTwistLimit, this._swing1Limit, this._swing2Limit] as const;

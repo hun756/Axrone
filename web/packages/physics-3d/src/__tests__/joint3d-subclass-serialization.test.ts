@@ -23,11 +23,13 @@ import { FixedJoint3D } from '../components/fixed-joint3d';
  */
 
 // ─── Editor fixture data (from components.rs) ──────────────────────────────
+// IMPORTANT: Editor writes Vec3 as ARRAY [x,y,z], not object {x,y,z}.
+// Source: Editor/src-tauri/src/scene/components.rs *_properties() functions.
 
 const HINGE_EDITOR_DEFAULT = {
-    anchor: { x: 0.0, y: 0.5, z: 0.0 },
-    axis: { x: 0.0, y: 1.0, z: 0.0 },
-    connectedAnchor: { x: 0.0, y: -1.2, z: 0.0 },
+    anchor: [0.0, 0.5, 0.0],
+    axis: [0.0, 1.0, 0.0],
+    connectedAnchor: [0.0, -1.2, 0.0],
     autoConfigureConnectedAnchor: true,
     connectedBody: '',
     massScale: 1.0,
@@ -38,16 +40,16 @@ const HINGE_EDITOR_DEFAULT = {
     breakForce: 2500.0,
     breakTorque: 2500.0,
     enableCollision: false,
-    enablePreprocessing: true,
+    preprocessing: true, // Hinge uses legacy "preprocessing" key in Editor
 };
 
 const SLIDER_EDITOR_DEFAULT = {
-    anchor: { x: 0.0, y: 0.0, z: 0.0 },
-    connectedAnchor: { x: 0.0, y: 0.0, z: 0.0 },
+    anchor: [0.0, 0.0, 0.0],
+    connectedAnchor: [0.0, 0.0, 0.0],
     autoConfigureConnectedAnchor: true,
     connectedBody: '',
-    axis: { x: 1.0, y: 0.0, z: 0.0 },
-    secondaryAxis: { x: 0.0, y: 1.0, z: 0.0 },
+    axis: [1.0, 0.0, 0.0],
+    secondaryAxis: [0.0, 1.0, 0.0],
     breakForce: 1e18,
     breakTorque: 1e18,
     enableCollision: false,
@@ -63,12 +65,12 @@ const SLIDER_EDITOR_DEFAULT = {
 };
 
 const SPRING_EDITOR_DEFAULT = {
-    anchor: { x: 0.0, y: 0.0, z: 0.0 },
-    connectedAnchor: { x: 0.0, y: 0.0, z: 0.0 },
+    anchor: [0.0, 0.0, 0.0],
+    connectedAnchor: [0.0, 0.0, 0.0],
     autoConfigureConnectedAnchor: true,
     connectedBody: '',
-    axis: { x: 1.0, y: 0.0, z: 0.0 },
-    secondaryAxis: { x: 0.0, y: 1.0, z: 0.0 },
+    axis: [1.0, 0.0, 0.0],
+    secondaryAxis: [0.0, 1.0, 0.0],
     breakForce: 1e18,
     breakTorque: 1e18,
     enableCollision: false,
@@ -84,19 +86,19 @@ const SPRING_EDITOR_DEFAULT = {
 };
 
 const CHARACTER_EDITOR_DEFAULT = {
-    anchor: { x: 0.0, y: 0.0, z: 0.0 },
-    connectedAnchor: { x: 0.0, y: 0.0, z: 0.0 },
+    anchor: [0.0, 0.0, 0.0],
+    connectedAnchor: [0.0, 0.0, 0.0],
     autoConfigureConnectedAnchor: true,
     connectedBody: '',
-    axis: { x: 1.0, y: 0.0, z: 0.0 },
-    secondaryAxis: { x: 0.0, y: 1.0, z: 0.0 },
+    axis: [1.0, 0.0, 0.0],
+    secondaryAxis: [0.0, 1.0, 0.0],
     breakForce: 1e18,
     breakTorque: 1e18,
     enableCollision: false,
     enablePreprocessing: true,
     massScale: 1.0,
     connectedMassScale: 1.0,
-    swingAxis: { x: 1.0, y: 0.0, z: 0.0 },
+    swingAxis: [1.0, 0.0, 0.0],
     lowTwistLimit: { limit: 0.0, bounciness: 0.0, contactDistance: 0.0 },
     highTwistLimit: { limit: 0.0, bounciness: 0.0, contactDistance: 0.0 },
     swing1Limit: { limit: 0.0, bounciness: 0.0, contactDistance: 0.0 },
@@ -109,12 +111,12 @@ const CHARACTER_EDITOR_DEFAULT = {
 };
 
 const CONFIGURABLE_EDITOR_DEFAULT = {
-    anchor: { x: 0.0, y: 0.0, z: 0.0 },
-    connectedAnchor: { x: 0.0, y: 0.0, z: 0.0 },
+    anchor: [0.0, 0.0, 0.0],
+    connectedAnchor: [0.0, 0.0, 0.0],
     autoConfigureConnectedAnchor: true,
     connectedBody: '',
-    axis: { x: 1.0, y: 0.0, z: 0.0 },
-    secondaryAxis: { x: 0.0, y: 1.0, z: 0.0 },
+    axis: [1.0, 0.0, 0.0],
+    secondaryAxis: [0.0, 1.0, 0.0],
     breakForce: 1e18,
     breakTorque: 1e18,
     enableCollision: false,
@@ -128,10 +130,10 @@ const CONFIGURABLE_EDITOR_DEFAULT = {
     angularYMotion: 0,
     angularZMotion: 0,
     linearLimit: { limit: 0.0, bounciness: 0.0, contactDistance: 0.0 },
-    targetPosition: { x: 0.0, y: 0.0, z: 0.0 },
-    targetVelocity: { x: 0.0, y: 0.0, z: 0.0 },
-    targetRotation: { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
-    targetAngularVelocity: { x: 0.0, y: 0.0, z: 0.0 },
+    targetPosition: [0.0, 0.0, 0.0],
+    targetVelocity: [0.0, 0.0, 0.0],
+    targetRotation: [0.0, 0.0, 0.0, 1.0],
+    targetAngularVelocity: [0.0, 0.0, 0.0],
     rotationDriveMode: 0,
     configuredInWorldSpace: false,
     swapBodies: false,
@@ -587,16 +589,94 @@ describe('FixedJoint3D: no subclass properties', () => {
     });
 });
 
-// ─── 7. Editor key name mismatch: preprocessing ────────────────────────────
+// ─── 7. Editor contract: Vec3 array format ─────────────────────────────────
+// CRITICAL: Editor writes Vec3 as ARRAY [x,y,z], not object {x,y,z}.
+// These tests verify the motor correctly reads the Editor's actual format.
+// If these tests fail when the normalizeVec3Value fix is reverted, the fix works.
 
-describe('Editor key name: preprocessing vs enablePreprocessing', () => {
-    it('documents that Editor hinge "preprocessing" key is not read by base deserialize', () => {
+describe('Editor Vec3 array format contract (P0 regression protection)', () => {
+    it('reads anchor.y correctly from array format (not defaulting to 0)', () => {
         const joint = new HingeJoint3D();
-        // The Editor's hinge JSON uses "preprocessing" key (not "enablePreprocessing").
-        // Base class deserialize reads "enablePreprocessing". This is a naming mismatch.
-        // The scene loader likely maps "preprocessing" → "enablePreprocessing" before
-        // component deserialize, or this is a latent bug for the Editor integration team.
-        joint.deserialize({ ...HINGE_EDITOR_DEFAULT, enablePreprocessing: false });
+        // Editor writes: "anchor": [0.0, 0.5, 0.0]
+        joint.deserialize({ anchor: [0.0, 0.5, 0.0] });
+        // CRITICAL: anchor.y must be 0.5, NOT 0 (which would happen if array format was not handled)
+        expect(joint.anchor.y).toBe(0.5);
+        expect(joint.anchor.x).toBe(0.0);
+        expect(joint.anchor.z).toBe(0.0);
+    });
+
+    it('reads axis correctly from array format', () => {
+        const joint = new HingeJoint3D();
+        joint.deserialize({ axis: [0.0, 1.0, 0.0] });
+        expect(joint.axis.y).toBe(1.0);
+        expect(joint.axis.x).toBe(0.0);
+    });
+
+    it('reads connectedAnchor with negative values from array format', () => {
+        const joint = new HingeJoint3D();
+        joint.deserialize({ connectedAnchor: [0.0, -1.2, 0.0] });
+        expect(joint.connectedAnchor.y).toBe(-1.2);
+    });
+
+    it('reads CharacterJoint swingAxis from array format', () => {
+        const joint = new CharacterJoint3D();
+        joint.deserialize({ swingAxis: [1.0, 0.0, 0.0] });
+        // Access internal swingAxis via serialize round-trip
+        const serialized = joint.serialize();
+        expect(serialized.swingAxis).toEqual({ x: 1.0, y: 0.0, z: 0.0 });
+    });
+
+    it('reads ConfigurableJoint targetPosition from array format', () => {
+        const joint = new ConfigurableJoint3D();
+        joint.deserialize({ targetPosition: [1.5, 2.5, 3.5] });
+        const serialized = joint.serialize();
+        expect(serialized.targetPosition).toEqual({ x: 1.5, y: 2.5, z: 3.5 });
+    });
+
+    it('reads ConfigurableJoint targetRotation (Quat) from array format', () => {
+        const joint = new ConfigurableJoint3D();
+        joint.deserialize({ targetRotation: [0.0, 0.707, 0.0, 0.707] });
+        const serialized = joint.serialize();
+        expect(serialized.targetRotation.w).toBeCloseTo(0.707);
+        expect(serialized.targetRotation.y).toBeCloseTo(0.707);
+    });
+
+    it('accepts object format for backward compatibility (engine round-trip)', () => {
+        const joint = new HingeJoint3D();
+        // Engine serialize() produces object format — must still work
+        joint.deserialize({ anchor: { x: 0.0, y: 0.5, z: 0.0 } });
+        expect(joint.anchor.y).toBe(0.5);
+    });
+});
+
+// ─── 8. preprocessing key alias ─────────────────────────────────────────────
+// Editor's Hinge joint writes "preprocessing" (legacy key).
+// Other joints write "enablePreprocessing" (canonical).
+// Motor accepts both; if both present, canonical wins.
+
+describe('preprocessing key alias (Editor Hinge uses legacy key)', () => {
+    it('reads "preprocessing" key (Editor Hinge format)', () => {
+        const joint = new HingeJoint3D();
+        joint.deserialize({ preprocessing: false });
         expect(joint.enablePreprocessing).toBe(false);
+    });
+
+    it('reads "enablePreprocessing" key (canonical format)', () => {
+        const joint = new HingeJoint3D();
+        joint.deserialize({ enablePreprocessing: false });
+        expect(joint.enablePreprocessing).toBe(false);
+    });
+
+    it('canonical "enablePreprocessing" wins when both keys present', () => {
+        const joint = new HingeJoint3D();
+        // Both keys present — canonical should win
+        joint.deserialize({ preprocessing: true, enablePreprocessing: false });
+        expect(joint.enablePreprocessing).toBe(false);
+    });
+
+    it('defaults to true when neither key present', () => {
+        const joint = new HingeJoint3D();
+        joint.deserialize({});
+        expect(joint.enablePreprocessing).toBe(true);
     });
 });

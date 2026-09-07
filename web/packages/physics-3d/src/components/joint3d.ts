@@ -344,6 +344,67 @@ export abstract class Joint3D extends Component {
     }
 
     /**
+     * Normalise a serialised Vec3 value to {x, y, z} object format.
+     *
+     * The Editor stores Vec3 values as **arrays** `[x, y, z]` in scene JSON
+     * (source: `Editor/src-tauri/src/scene/components.rs` `*_properties()`).
+     * The engine's internal representation uses `{x, y, z}` objects (IVec3Like).
+     *
+     * This helper accepts BOTH formats for backward compatibility:
+     * - Array: `[x, y, z]` → `{x, y, z}` (Editor contract)
+     * - Object: `{x, y, z}` → pass-through (engine round-trip)
+     *
+     * @see normalizeReferenceValue for the reference normalisation pattern.
+     * @see JOINT_CAPABILITY_3D for the joint capability matrix.
+     */
+    protected normalizeVec3Value(
+        value: unknown,
+        fallbackX: number = 0,
+        fallbackY: number = 0,
+        fallbackZ: number = 0
+    ): IVec3Like {
+        if (Array.isArray(value) && value.length >= 3) {
+            return { x: value[0], y: value[1], z: value[2] };
+        }
+        if (value && typeof value === 'object') {
+            const v = value as Record<string, unknown>;
+            return {
+                x: typeof v.x === 'number' ? v.x : fallbackX,
+                y: typeof v.y === 'number' ? v.y : fallbackY,
+                z: typeof v.z === 'number' ? v.z : fallbackZ,
+            };
+        }
+        return { x: fallbackX, y: fallbackY, z: fallbackZ };
+    }
+
+    /**
+     * Normalise a serialised Quat value to {x, y, z, w} object format.
+     *
+     * Same dual-format support as {@link normalizeVec3Value}.
+     */
+    protected normalizeQuatValue(
+        value: unknown,
+        fallbackX: number = 0,
+        fallbackY: number = 0,
+        fallbackZ: number = 0,
+        fallbackW: number = 1
+    ): { x: number; y: number; z: number; w: number } {
+        if (Array.isArray(value) && value.length >= 4) {
+            return { x: value[0], y: value[1], z: value[2], w: value[3] };
+        }
+        if (value && typeof value === 'object') {
+            const v = value as Record<string, unknown>;
+            return {
+                x: typeof v.x === 'number' ? v.x : fallbackX,
+                y: typeof v.y === 'number' ? v.y : fallbackY,
+                z: typeof v.z === 'number' ? v.z : fallbackZ,
+                w: typeof v.w === 'number' ? v.w : fallbackW,
+            };
+        }
+        return { x: fallbackX, y: fallbackY, z: fallbackZ, w: fallbackW };
+    }
+
+    /**
      * Normalise a serialised reference value to the engine's internal
      * representation.
      *
@@ -400,33 +461,46 @@ export abstract class Joint3D extends Component {
             const normalised = this.normalizeReferenceValue(rawCB);
             this._connectedBody = (normalised as Rigidbody3D) ?? null;
         }
-        if (data.anchor) {
-            this._anchor.x = data.anchor.x ?? 0;
-            this._anchor.y = data.anchor.y ?? 0;
-            this._anchor.z = data.anchor.z ?? 0;
+        // Vec3 fields: Editor writes ARRAY [x,y,z], engine uses OBJECT {x,y,z}.
+        // normalizeVec3Value accepts both formats for backward compatibility.
+        if (data.anchor !== undefined) {
+            const v = this.normalizeVec3Value(data.anchor);
+            this._anchor.x = v.x;
+            this._anchor.y = v.y;
+            this._anchor.z = v.z;
         }
-        if (data.connectedAnchor) {
-            this._connectedAnchor.x = data.connectedAnchor.x ?? 0;
-            this._connectedAnchor.y = data.connectedAnchor.y ?? 0;
-            this._connectedAnchor.z = data.connectedAnchor.z ?? 0;
+        if (data.connectedAnchor !== undefined) {
+            const v = this.normalizeVec3Value(data.connectedAnchor);
+            this._connectedAnchor.x = v.x;
+            this._connectedAnchor.y = v.y;
+            this._connectedAnchor.z = v.z;
         }
         if (data.autoConfigureConnectedAnchor !== undefined) {
             this._autoConfigureConnectedAnchor = data.autoConfigureConnectedAnchor;
         }
-        if (data.axis) {
-            this._axis.x = data.axis.x ?? 1;
-            this._axis.y = data.axis.y ?? 0;
-            this._axis.z = data.axis.z ?? 0;
+        if (data.axis !== undefined) {
+            const v = this.normalizeVec3Value(data.axis, 1, 0, 0);
+            this._axis.x = v.x;
+            this._axis.y = v.y;
+            this._axis.z = v.z;
         }
-        if (data.secondaryAxis) {
-            this._secondaryAxis.x = data.secondaryAxis.x ?? 0;
-            this._secondaryAxis.y = data.secondaryAxis.y ?? 1;
-            this._secondaryAxis.z = data.secondaryAxis.z ?? 0;
+        if (data.secondaryAxis !== undefined) {
+            const v = this.normalizeVec3Value(data.secondaryAxis, 0, 1, 0);
+            this._secondaryAxis.x = v.x;
+            this._secondaryAxis.y = v.y;
+            this._secondaryAxis.z = v.z;
         }
         if (data.breakForce !== undefined) this._breakForce = data.breakForce;
         if (data.breakTorque !== undefined) this._breakTorque = data.breakTorque;
         if (data.enableCollision !== undefined) this._enableCollision = data.enableCollision;
-        if (data.enablePreprocessing !== undefined) this._enablePreprocessing = data.enablePreprocessing;
+        // Preprocessing: Editor's Hinge joint writes "preprocessing" (legacy key),
+        // other joints write "enablePreprocessing" (canonical). Accept both.
+        // If both are present, "enablePreprocessing" wins (canonical takes precedence).
+        if (data.enablePreprocessing !== undefined) {
+            this._enablePreprocessing = data.enablePreprocessing;
+        } else if (data.preprocessing !== undefined) {
+            this._enablePreprocessing = data.preprocessing;
+        }
         if (data.massScale !== undefined) this._massScale = data.massScale;
         if (data.connectedMassScale !== undefined) this._connectedMassScale = data.connectedMassScale;
         if (data.enabled !== undefined) this._joint3dEnabled = data.enabled;

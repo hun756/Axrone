@@ -320,26 +320,31 @@ export class ConfigurableJoint3D extends Joint3D {
             if (ll.bounciness !== undefined) this._linearLimit.bounciness = ll.bounciness;
             if (ll.contactDistance !== undefined) this._linearLimit.contactDistance = ll.contactDistance;
         }
-        if (data.targetPosition) {
-            this._targetPosition.x = data.targetPosition.x ?? 0;
-            this._targetPosition.y = data.targetPosition.y ?? 0;
-            this._targetPosition.z = data.targetPosition.z ?? 0;
+        // Vec3/Quat fields: Editor writes ARRAY [x,y,z] or [x,y,z,w], accept both formats.
+        if (data.targetPosition !== undefined) {
+            const v = this.normalizeVec3Value(data.targetPosition);
+            this._targetPosition.x = v.x;
+            this._targetPosition.y = v.y;
+            this._targetPosition.z = v.z;
         }
-        if (data.targetVelocity) {
-            this._targetVelocity.x = data.targetVelocity.x ?? 0;
-            this._targetVelocity.y = data.targetVelocity.y ?? 0;
-            this._targetVelocity.z = data.targetVelocity.z ?? 0;
+        if (data.targetVelocity !== undefined) {
+            const v = this.normalizeVec3Value(data.targetVelocity);
+            this._targetVelocity.x = v.x;
+            this._targetVelocity.y = v.y;
+            this._targetVelocity.z = v.z;
         }
-        if (data.targetRotation) {
-            this._targetRotation.x = data.targetRotation.x ?? 0;
-            this._targetRotation.y = data.targetRotation.y ?? 0;
-            this._targetRotation.z = data.targetRotation.z ?? 0;
-            this._targetRotation.w = data.targetRotation.w ?? 1;
+        if (data.targetRotation !== undefined) {
+            const v = this.normalizeQuatValue(data.targetRotation);
+            this._targetRotation.x = v.x;
+            this._targetRotation.y = v.y;
+            this._targetRotation.z = v.z;
+            this._targetRotation.w = v.w;
         }
-        if (data.targetAngularVelocity) {
-            this._targetAngularVelocity.x = data.targetAngularVelocity.x ?? 0;
-            this._targetAngularVelocity.y = data.targetAngularVelocity.y ?? 0;
-            this._targetAngularVelocity.z = data.targetAngularVelocity.z ?? 0;
+        if (data.targetAngularVelocity !== undefined) {
+            const v = this.normalizeVec3Value(data.targetAngularVelocity);
+            this._targetAngularVelocity.x = v.x;
+            this._targetAngularVelocity.y = v.y;
+            this._targetAngularVelocity.z = v.z;
         }
         if (data.rotationDriveMode !== undefined) this._rotationDriveMode = data.rotationDriveMode;
         if (data.configuredInWorldSpace !== undefined) this._configuredInWorldSpace = !!data.configuredInWorldSpace;
