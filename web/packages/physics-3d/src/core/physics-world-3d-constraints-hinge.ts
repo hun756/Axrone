@@ -189,19 +189,23 @@ function prepareHinge(
         }
 
         if (Math.abs(limitError) > ANGULAR_SLOP) {
-            // Violated: Baumgarte correction with bilateral clamp
+            // Violated: Baumgarte correction with bilateral clamp.
+            // Angular rows use POSITIVE bias (same as ConeTwist) because there's
+            // no position correction for angular constraints — velocity solve must converge.
             const limitRow = createRow(
                 bodyIdA, bodyIdB,
                 zeroVec3(), { x: -hingeAxis.x, y: -hingeAxis.y, z: -hingeAxis.z },
                 zeroVec3(), { x: hingeAxis.x, y: hingeAxis.y, z: hingeAxis.z },
-                -BAUMGARTE * limitError / h,
+                BAUMGARTE * limitError / h,
                 -limitError,
                 -Infinity, Infinity,
             );
             limitRow.hasLimit = true;
             out.push(limitRow);
-        } else {
-            // Within limits: bilateral row with zero bias to prevent drift
+        } else if (!enableMotor) {
+            // Within limits and no motor: bilateral row with zero bias to prevent drift.
+            // When motor is active, we skip this row to allow free rotation within limits.
+            // The limit row will only activate when the limit is violated.
             const limitRow = createRow(
                 bodyIdA, bodyIdB,
                 zeroVec3(), { x: -hingeAxis.x, y: -hingeAxis.y, z: -hingeAxis.z },

@@ -271,6 +271,41 @@ describe('Hinge joint motor', () => {
         // Body B should have angular velocity about Y (hinge axis)
         expect(angVelB.y).toBeGreaterThan(0.1);
     });
+
+    it('motor cannot push past the angle limit (Box2D stall)', () => {
+        const world = new PhysicsWorld3D({ gravity: { x: 0, y: 0, z: 0 } });
+        const bodyA = createStaticBody(world, { x: 0, y: 0, z: 0 });
+        const bodyB = createDynamicBody(world, { x: 2, y: 0, z: 0 });
+
+        const limitAngle = Math.PI / 4; // 45 degrees
+
+        world.createHingeConstraint({
+            bodyIdA: bodyA, bodyIdB: bodyB,
+            localAnchorA: { x: 0, y: 0, z: 0 }, localAnchorB: { x: 0, y: 0, z: 0 },
+            localAxisA: { x: 0, y: 1, z: 0 }, localAxisB: { x: 0, y: 1, z: 0 },
+            enableLimit: true,
+            lowerLimit: -limitAngle,
+            upperLimit: limitAngle,
+            enableMotor: true,
+            motorSpeed: 10.0, // High motor speed
+            maxMotorTorque: 100,
+        });
+
+        // Run enough steps for the motor to drive the hinge to the limit
+        for (let i = 0; i < 120; i++) world.step(1 / 60, 10, 10);
+
+        const rotB = world.getBodyManager().getRotation(bodyB);
+        const angle = angleAboutAxis(rotB, { x: 0, y: 1, z: 0 });
+        const angVelB = world.getBodyManager().getAngularVelocity(bodyB);
+
+        // Motor drove the hinge toward the upper limit — angle should be near it
+        expect(Math.abs(angle)).toBeGreaterThan(limitAngle * 0.5);
+        // But NEVER past the limit + small tolerance (blow-through prevention)
+        expect(Math.abs(angle)).toBeLessThanOrEqual(limitAngle + 0.1);
+        // Angular velocity should be stalled well below the 10 rad/s motor target
+        // because the limit row strips motor impulse that would push past the rim
+        expect(Math.abs(angVelB.y)).toBeLessThan(5.0);
+    });
 });
 
 // ─── Singularity Robustness ──────────────────────────────────────────────────
