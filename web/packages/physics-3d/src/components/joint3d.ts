@@ -17,10 +17,13 @@ export const INVALID_CONSTRAINT_ID = -1 as ConstraintId3D;
  * | SpringJoint3D   | SPRING (6)      | **FULL** — spring force + Baumgarte | |
  * | HingeJoint3D    | HINGE (2)       | **FULL** — 3 linear + 2 angular lock + 1 axial (limit/motor), Box2D stall semantics | |
  * | SliderJoint3D   | SLIDER (3)      | **PARTIAL** — limit+motor work; `useSpring`/`spring` properties exposed but NOT wired to solver (silent no-op) | |
- * | CharacterJoint3D| CONE_TWIST (4)  | **PARTIAL** — swing/twist limits work; motor solver exists but `motorSpeed`/`maxMotorTorque` not exposed in component | |
- * | ConfigurableJoint3D | GENERIC (5) | **PARTIAL** — limit+lock work; drive properties (`xDrive`, `targetPosition`, etc.) exposed but NOT wired to solver | |
+ * | CharacterJoint3D| CONE_TWIST (4)  | **FULL** — swing/twist limits + twist motor (motorSpeed/maxMotorTorque wired) | |
+ * | ConfigurableJoint3D | GENERIC (5) | **FULL** — 6-DOF limit/lock + per-axis linear/angular motors wired | |
  *
  * Units: All distances in METRES (ADR 0004), angles in radians.
+ *
+ * 2D/3D asymmetry: 2D has 10 joint types all at FULL. 3D has 7 types,
+ * Slider PARTIAL due to unwired spring properties (separate scope).
  *
  * @see Joint3D
  */
@@ -30,8 +33,8 @@ export const JOINT_CAPABILITY_3D = {
     SPRING: 'full',
     HINGE: 'full',
     SLIDER: 'partial',
-    CONE_TWIST: 'partial',
-    GENERIC: 'partial',
+    CONE_TWIST: 'full',
+    GENERIC: 'full',
 } as const;
 
 export type JointCapability3D = typeof JOINT_CAPABILITY_3D[keyof typeof JOINT_CAPABILITY_3D];
