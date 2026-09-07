@@ -303,6 +303,14 @@ export class Buffer implements IBuffer {
         this.bind();
         this.#gl.bufferSubData(this.#target, offset, data);
 
+        // Snapshot data for context restore
+        if (offset === 0 && dataSize === this.#byteLength) {
+            // Full buffer replacement — snapshot the entire data
+            const copy = new ArrayBuffer(dataSize);
+            new Uint8Array(copy).set(new Uint8Array(isBufferData(data) ? data.buffer ?? data : data));
+            this.#lastData = copy;
+        }
+
         return this;
     };
 
