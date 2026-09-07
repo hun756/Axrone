@@ -59,6 +59,21 @@ export type JointCapability2D = typeof JOINT_CAPABILITY_2D[keyof typeof JOINT_CA
  * `createConstraint()` → `onDestroy()` calls `destroyConstraint()`.
  * Property setters call `recreateConstraint()` which destroys and re-creates.
  *
+ * ## Reference serialisation contract (Editor ↔ Engine)
+ *
+ * Component references (`connectedBody`, `jointA`, `jointB`) are stored as
+ * **strings** in the Editor (entity/component IDs), with `""` meaning "no
+ * reference". The engine stores them as typed object references (`Rigidbody2D
+ * | null`, `Joint2D | null`).
+ *
+ * - `serialize()` emits `""` when the reference is `null`, matching the
+ *   Editor's expected default.
+ * - `deserialize()` normalises `""`, `undefined`, `null`, and whitespace-only
+ *   strings to `null`. Non-empty string values are stored as-is (the scene
+ *   loader resolves them to component references via entity relationships
+ *   after `deserialize()` completes).
+ * - Use {@link normalizeReferenceValue} to apply this rule in subclasses.
+ *
  * @see JOINT_CAPABILITY_2D
  */
 export abstract class Joint2D extends Component {
@@ -148,8 +163,34 @@ export abstract class Joint2D extends Component {
         return null;
     }
 
+    /**
+     * Normalise a serialised reference value to the engine's internal
+     * representation.
+     *
+     * The Editor stores component references as strings (`""` = no reference).
+     * This method converts `""`, `null`, `undefined`, and whitespace-only
+     * strings to `null`. Any other value (entity ID string, or already-resolved
+     * component reference) is returned as-is for the scene loader to resolve.
+     *
+     * @param value - Raw value from serialised data (Editor contract: `string`).
+     * @returns `null` when the reference is empty/missing, otherwise the
+     *   original value for downstream resolution.
+     */
+    protected normalizeReferenceValue(value: unknown): unknown {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'string') {
+            return value.trim() === '' ? null : value;
+        }
+        // Already a resolved component reference — pass through.
+        return value;
+    }
+
     serialize(): Record<string, any> {
         return {
+            // Reference serialisation contract: emit "" for null references
+            // (Editor convention). Non-null references are resolved by the
+            // scene loader — the serialised placeholder keeps the key present.
+            connectedBody: '',
             enableCollision: this._enableCollision,
             breakForce: this._breakForce,
             breakTorque: this._breakTorque,
@@ -158,6 +199,14 @@ export abstract class Joint2D extends Component {
     }
 
     deserialize(data: Record<string, any>): void {
+        // connectedBody: Editor sends "" for no reference, or an entity ID
+        // string. Normalise empties to null; non-empty values are resolved
+        // by the scene loader after this call.
+        const rawCB = data.connectedBody;
+        if (rawCB !== undefined) {
+            const normalised = this.normalizeReferenceValue(rawCB);
+            this._connectedBody = (normalised as Rigidbody2D) ?? null;
+        }
         this._enableCollision = data.enableCollision ?? false;
         this._breakForce = data.breakForce ?? Infinity;
         this._breakTorque = data.breakTorque ?? Infinity;

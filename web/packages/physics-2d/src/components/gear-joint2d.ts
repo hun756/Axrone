@@ -34,6 +34,20 @@ import type { ConstraintId } from '../types';
  * the referenced joint may be disabled or misconfigured, and a hard error
  * would prevent the rest of the scene from loading.
  *
+ * ### Reference serialisation contract (Editor ↔ Engine)
+ *
+ * `jointA` and `jointB` are stored as **strings** in the Editor (entity/component
+ * IDs), with `""` meaning "no reference". The engine stores them as `Joint2D | null`.
+ *
+ * - `serialize()` emits `""` for both fields (references are managed by the
+ *   scene loader, not by the component's own serialiser).
+ * - `deserialize()` normalises `""`, `null`, `undefined`, and whitespace-only
+ *   strings to `null`. A `null` reference means "no joint coupled" — the gear
+ *   constraint is NOT created and `isPending` stays `false`. This is distinct
+ *   from the pending state, which only activates when non-null references are
+ *   provided but their constraints haven't been created yet.
+ * - Use the inherited `normalizeReferenceValue()` helper for this rule.
+ *
  * **Units** (METRE campaign):
  * - `ratio` — dimensionless (radians per radian, or metres per radian)
  *
@@ -145,6 +159,12 @@ export class GearJoint2D extends Joint2D {
         this._physicsWorld = this.getPhysicsWorld();
         if (!this._physicsWorld) return;
 
+        // If both references are null (e.g. deserialised from ""), no gear
+        // coupling is configured — this is NOT a pending state, just "no
+        // constraint". Pending only activates when at least one reference
+        // exists but its constraint ID isn't ready yet.
+        if (!this._jointA && !this._jointB) return;
+
         if (!this._jointA || !this._jointB) {
             this._pendingCreation = true;
             return;
@@ -187,16 +207,30 @@ export class GearJoint2D extends Joint2D {
     serialize(): Record<string, any> {
         return {
             ...super.serialize(),
+            // jointA/jointB: serialise as "" (Editor convention for "no reference").
+            // Component references are resolved by the scene loader, not persisted
+            // as raw constraintIds — IDs regenerate on prefab/scene reload.
+            jointA: '',
+            jointB: '',
             ratio: this._ratio,
-            // jointA/jointB are component references — resolved at runtime,
-            // not serialised as raw constraintIds. The editor serialiser
-            // should persist entity/component references via its own mechanism.
         };
     }
 
     deserialize(data: Record<string, any>): void {
         super.deserialize(data);
         this._ratio = data.ratio ?? 1;
+        // jointA/jointB: normalise empty/whitespace strings to null.
+        // "" = "no reference" (Editor convention) — gear constraint is not
+        // created and isPending stays false. Non-empty strings are stored
+        // as-is for the scene loader to resolve to Joint2D references.
+        const rawA = data.jointA;
+        const rawB = data.jointB;
+        if (rawA !== undefined) {
+            this._jointA = (this.normalizeReferenceValue(rawA) as Joint2D) ?? null;
+        }
+        if (rawB !== undefined) {
+            this._jointB = (this.normalizeReferenceValue(rawB) as Joint2D) ?? null;
+        }
         // jointA/jointB must be re-linked by the scene loader via entity references.
     }
 }
