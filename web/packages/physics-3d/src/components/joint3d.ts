@@ -101,6 +101,24 @@ export const DEFAULT_SOFT_JOINT_LIMIT_SPRING: Readonly<ISoftJointLimitSpring3D> 
  *
  * All distance units are METRES (ADR 0004). Angles are in radians.
  *
+ * ## Reference serialisation contract (Editor ↔ Engine)
+ *
+ * Component references (`connectedBody`) are stored as **strings** in the
+ * Editor (entity/component IDs), with `""` meaning "no reference". The engine
+ * stores them as typed object references (`Rigidbody3D | null`).
+ *
+ * - `serialize()` emits `""` when the reference is `null`, matching the
+ *   Editor's expected default.
+ * - `deserialize()` normalises `""`, `undefined`, `null`, and whitespace-only
+ *   strings to `null`. Non-empty string values are stored as-is (the scene
+ *   loader resolves them to component references via entity relationships
+ *   after `deserialize()` completes).
+ * - Use {@link normalizeReferenceValue} to apply this rule in subclasses.
+ *
+ * This contract is **identical** to the 2D `Joint2D` base class contract.
+ * The helper is duplicated locally (not in `physics-core`) — see 2D/3D
+ * asymmetry note in `joint2d.ts`.
+ *
  * @see JOINT_CAPABILITY_3D
  */
 export abstract class Joint3D extends Component {
@@ -320,5 +338,89 @@ export abstract class Joint3D extends Component {
             this._constraintManager.destroyConstraint(this._constraintId);
             this._constraintId = INVALID_CONSTRAINT_ID;
         }
+    }
+
+    /**
+     * Normalise a serialised reference value to the engine's internal
+     * representation.
+     *
+     * The Editor stores component references as strings (`""` = no reference).
+     * This method converts `""`, `null`, `undefined`, and whitespace-only
+     * strings to `null`. Any other value (entity ID string, or already-resolved
+     * component reference) is returned as-is for the scene loader to resolve.
+     *
+     * @param value - Raw value from serialised data (Editor contract: `string`).
+     * @returns `null` when the reference is empty/missing, otherwise the
+     *   original value for downstream resolution.
+     */
+    protected normalizeReferenceValue(value: unknown): unknown {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'string') {
+            return value.trim() === '' ? null : value;
+        }
+        // Already a resolved component reference — pass through.
+        return value;
+    }
+
+    serialize(): Record<string, any> {
+        return {
+            // Reference serialisation contract: emit "" for null references
+            // (Editor convention). Non-null references are resolved by the
+            // scene loader — the serialised placeholder keeps the key present.
+            connectedBody: '',
+            anchor: { x: this._anchor.x, y: this._anchor.y, z: this._anchor.z },
+            connectedAnchor: { x: this._connectedAnchor.x, y: this._connectedAnchor.y, z: this._connectedAnchor.z },
+            autoConfigureConnectedAnchor: this._autoConfigureConnectedAnchor,
+            axis: { x: this._axis.x, y: this._axis.y, z: this._axis.z },
+            secondaryAxis: { x: this._secondaryAxis.x, y: this._secondaryAxis.y, z: this._secondaryAxis.z },
+            breakForce: this._breakForce,
+            breakTorque: this._breakTorque,
+            enableCollision: this._enableCollision,
+            enablePreprocessing: this._enablePreprocessing,
+            massScale: this._massScale,
+            connectedMassScale: this._connectedMassScale,
+            enabled: this._joint3dEnabled,
+        };
+    }
+
+    deserialize(data: Record<string, any>): void {
+        // connectedBody: Editor sends "" for no reference, or an entity ID
+        // string. Normalise empties to null; non-empty values are resolved
+        // by the scene loader after this call.
+        const rawCB = data.connectedBody;
+        if (rawCB !== undefined) {
+            const normalised = this.normalizeReferenceValue(rawCB);
+            this._connectedBody = (normalised as Rigidbody3D) ?? null;
+        }
+        if (data.anchor) {
+            this._anchor.x = data.anchor.x ?? 0;
+            this._anchor.y = data.anchor.y ?? 0;
+            this._anchor.z = data.anchor.z ?? 0;
+        }
+        if (data.connectedAnchor) {
+            this._connectedAnchor.x = data.connectedAnchor.x ?? 0;
+            this._connectedAnchor.y = data.connectedAnchor.y ?? 0;
+            this._connectedAnchor.z = data.connectedAnchor.z ?? 0;
+        }
+        if (data.autoConfigureConnectedAnchor !== undefined) {
+            this._autoConfigureConnectedAnchor = data.autoConfigureConnectedAnchor;
+        }
+        if (data.axis) {
+            this._axis.x = data.axis.x ?? 1;
+            this._axis.y = data.axis.y ?? 0;
+            this._axis.z = data.axis.z ?? 0;
+        }
+        if (data.secondaryAxis) {
+            this._secondaryAxis.x = data.secondaryAxis.x ?? 0;
+            this._secondaryAxis.y = data.secondaryAxis.y ?? 1;
+            this._secondaryAxis.z = data.secondaryAxis.z ?? 0;
+        }
+        if (data.breakForce !== undefined) this._breakForce = data.breakForce;
+        if (data.breakTorque !== undefined) this._breakTorque = data.breakTorque;
+        if (data.enableCollision !== undefined) this._enableCollision = data.enableCollision;
+        if (data.enablePreprocessing !== undefined) this._enablePreprocessing = data.enablePreprocessing;
+        if (data.massScale !== undefined) this._massScale = data.massScale;
+        if (data.connectedMassScale !== undefined) this._connectedMassScale = data.connectedMassScale;
+        if (data.enabled !== undefined) this._joint3dEnabled = data.enabled;
     }
 }
