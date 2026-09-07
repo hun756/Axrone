@@ -127,6 +127,14 @@ export class PhysicsWorld3D implements Disposable {
     private readonly _kinematicPrevPos = new Map<BodyId3D, { x: number; y: number; z: number }>();
     private readonly _kinematicPrevRot = new Map<BodyId3D, { x: number; y: number; z: number; w: number }>();
 
+    // ADR 0004: Config-driven physics limits (metre-based)
+    /** Maximum linear velocity in metres per second (m/s). @see ADR 0004 */
+    private readonly _maxVelocity: number;
+    /** Maximum angular velocity in radians per second (rad/s). @see ADR 0004 */
+    private readonly _maxAngularVelocity: number;
+    /** Maximum position translation per step in metres per step (m/step). @see ADR 0004 */
+    private readonly _maxTranslation: number;
+
     constructor(config: IPhysicsWorld3DConfig = {}) {
         this.config = config;
         this._gravity = config.gravity ? Vec3.from(config.gravity) : new Vec3(0, -9.81, 0);
@@ -171,6 +179,16 @@ export class PhysicsWorld3D implements Disposable {
         this._bodyManager.onKinematicTransformChange((bodyId) => {
             this._wakeKinematicContacts(bodyId);
         });
+
+        // ADR 0004: Config-driven physics limits (metre-based)
+        const cfg = config as IPhysicsWorld3DConfig & {
+            maxVelocity?: number;
+            maxAngularVelocity?: number;
+            maxTranslation?: number;
+        };
+        this._maxVelocity = cfg.maxVelocity ?? PhysicsConstants.MAX_VELOCITY;
+        this._maxAngularVelocity = cfg.maxAngularVelocity ?? PhysicsConstants.MAX_ANGULAR_VELOCITY;
+        this._maxTranslation = cfg.maxTranslation ?? PhysicsConstants.MAX_TRANSLATION;
     }
 
     get gravity(): Readonly<IVec3Like> {
@@ -627,7 +645,7 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     private _integrateVelocities(dt: number): void {
-        integrateVelocitiesImpl(this._bodyManager, this._gravity, dt);
+        integrateVelocitiesImpl(this._bodyManager, this._gravity, dt, this._maxVelocity, this._maxAngularVelocity);
     }
 
 

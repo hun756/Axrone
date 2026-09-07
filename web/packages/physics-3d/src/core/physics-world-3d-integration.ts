@@ -6,11 +6,19 @@ import type { BodyManager3D } from './physics-managers-3d';
 /**
  * Integrates accumulated forces into velocities (gravity, damping, velocity clamp).
  * Extracted from PhysicsWorld3D — operates on BodyManager3D via explicit parameters.
+ *
+ * @param maxVelocity - Maximum linear velocity in metres per second (m/s).
+ *   Bodies exceeding this speed are scaled down preserving direction.
+ *   Default: `PhysicsConstants.MAX_VELOCITY` (200 m/s). @see ADR 0004
+ * @param maxAngularVelocity - Maximum angular velocity in radians per second (rad/s).
+ *   Default: `PhysicsConstants.MAX_ANGULAR_VELOCITY` (250 rad/s). @see ADR 0004
  */
 export function integrateVelocities(
     bodyManager: BodyManager3D,
     gravity: Readonly<IVec3Like>,
-    dt: number
+    dt: number,
+    maxVelocity: number = PhysicsConstants.MAX_VELOCITY,
+    maxAngularVelocity: number = PhysicsConstants.MAX_ANGULAR_VELOCITY
 ): void {
     // Integrate accumulated forces (F*dt*invMass → velocity)
     bodyManager.integrateForces(dt);
@@ -43,10 +51,10 @@ export function integrateVelocities(
             z: bodyManager.isFixedRotation(bodyId) ? 0 : angularVelocity.z * angularDamping,
         });
 
-        // Velocity clamp: prevent numerical explosion
+        // Velocity clamp: prevent numerical explosion (ADR 0004 — metre-based)
         const lv = bodyManager.getLinearVelocity(bodyId);
         const lvSq = lv.x * lv.x + lv.y * lv.y + lv.z * lv.z;
-        const maxV = PhysicsConstants.MAX_VELOCITY;
+        const maxV = maxVelocity;
         if (lvSq > maxV * maxV) {
             const scale = maxV / Math.sqrt(lvSq);
             bodyManager.setLinearVelocity(bodyId, {
@@ -56,7 +64,7 @@ export function integrateVelocities(
         if (!bodyManager.isFixedRotation(bodyId)) {
             const av = bodyManager.getAngularVelocity(bodyId);
             const avSq = av.x * av.x + av.y * av.y + av.z * av.z;
-            const maxAV = PhysicsConstants.MAX_ANGULAR_VELOCITY;
+            const maxAV = maxAngularVelocity;
             if (avSq > maxAV * maxAV) {
                 const scale = maxAV / Math.sqrt(avSq);
                 bodyManager.setAngularVelocity(bodyId, {
