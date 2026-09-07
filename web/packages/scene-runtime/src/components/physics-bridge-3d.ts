@@ -35,6 +35,7 @@ export interface IPhysicsCollisionHandler<
     onCollisionStay?(other: TRigidbody, event: TCollisionEvent): void;
     onCollisionExit?(other: TRigidbody, event: TCollisionEvent): void;
     onSensorEnter?(other: TRigidbody, event: TSensorEvent): void;
+    onSensorStay?(other: TRigidbody, event: TSensorEvent): void;
     onSensorExit?(other: TRigidbody, event: TSensorEvent): void;
 }
 

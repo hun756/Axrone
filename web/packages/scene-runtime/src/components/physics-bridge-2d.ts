@@ -126,9 +126,9 @@ export class PhysicsBridge2D implements GameLoopSystem<SceneLoopState>, IContact
     }
 
     // ── IContactListener2D ────────────────────────────────────────────────
-    // NOTE: In the 2D physics engine, sensor contacts are dispatched through
-    // onCollisionBegin/Stay/End (same as regular contacts). The bridge must
-    // check whether a shape is a sensor and route events accordingly.
+    // The 2D contact manager now dispatches sensor events natively
+    // (onSensorEnter/Stay/Exit) — same as the 3D engine. The bridge
+    // simply routes them to user @script handlers.
 
     onCollisionBegin(event: ICollisionEvent2D): void {
         const bodyIdA = event.bodyIdA;
@@ -139,14 +139,8 @@ export class PhysicsBridge2D implements GameLoopSystem<SceneLoopState>, IContact
         const componentB = this._bodyIdToComponent.get(bodyIdB);
         if (!componentA || !componentB) return;
 
-        if (this._isSensorContact(event)) {
-            this._activeTriggerPairs.add(key);
-            const sensorEvent = this._adaptToSensorEvent(event);
-            this._dispatchSensorEvent(componentA, componentB, sensorEvent, 'onSensorEnter');
-        } else {
-            this._activeContactPairs.add(key);
-            this._dispatchCollisionEvent(componentA, componentB, event, 'onCollisionBegin');
-        }
+        this._activeContactPairs.add(key);
+        this._dispatchCollisionEvent(componentA, componentB, event, 'onCollisionBegin');
     }
 
     onCollisionStay(event: ICollisionEvent2D): void {
@@ -157,11 +151,7 @@ export class PhysicsBridge2D implements GameLoopSystem<SceneLoopState>, IContact
         const componentB = this._bodyIdToComponent.get(bodyIdB);
         if (!componentA || !componentB) return;
 
-        if (this._isSensorContact(event)) {
-            // Sensor stay — no explicit handler method, but could be added
-        } else {
-            this._dispatchCollisionEvent(componentA, componentB, event, 'onCollisionStay');
-        }
+        this._dispatchCollisionEvent(componentA, componentB, event, 'onCollisionStay');
     }
 
     onCollisionEnd(event: ICollisionEvent2D): void {
@@ -173,14 +163,8 @@ export class PhysicsBridge2D implements GameLoopSystem<SceneLoopState>, IContact
         const componentB = this._bodyIdToComponent.get(bodyIdB);
         if (!componentA || !componentB) return;
 
-        if (this._activeTriggerPairs.has(key)) {
-            this._activeTriggerPairs.delete(key);
-            const sensorEvent = this._adaptToSensorEvent(event);
-            this._dispatchSensorEvent(componentA, componentB, sensorEvent, 'onSensorExit');
-        } else {
-            this._activeContactPairs.delete(key);
-            this._dispatchCollisionEndEvent(componentA, componentB, event);
-        }
+        this._activeContactPairs.delete(key);
+        this._dispatchCollisionEndEvent(componentA, componentB, event);
     }
 
     onSensorEnter(event: ISensorEvent2D): void {
@@ -193,6 +177,17 @@ export class PhysicsBridge2D implements GameLoopSystem<SceneLoopState>, IContact
         const componentB = this._bodyIdToComponent.get(bodyIdB);
         if (componentA && componentB) {
             this._dispatchSensorEvent(componentA, componentB, event, 'onSensorEnter');
+        }
+    }
+
+    onSensorStay(event: ISensorEvent2D): void {
+        const bodyIdA = event.sensorBodyId;
+        const bodyIdB = event.visitorBodyId;
+
+        const componentA = this._bodyIdToComponent.get(bodyIdA);
+        const componentB = this._bodyIdToComponent.get(bodyIdB);
+        if (componentA && componentB) {
+            this._dispatchSensorStayEvent(componentA, componentB, event);
         }
     }
 
@@ -224,33 +219,6 @@ export class PhysicsBridge2D implements GameLoopSystem<SceneLoopState>, IContact
     }
 
     // ── Internal ──────────────────────────────────────────────────────────
-
-    /**
-     * Check whether a collision event involves a sensor shape.
-     * In the 2D engine, sensor contacts flow through onCollisionBegin/End
-     * (not onSensorEnter/Exit), so the bridge must distinguish them here.
-     */
-    private _isSensorContact(event: ICollisionEvent2D): boolean {
-        const shapeManager = this._physicsWorld.getShapeManager();
-        return shapeManager.isShapeSensor(event.shapeIdA) || shapeManager.isShapeSensor(event.shapeIdB);
-    }
-
-    /**
-     * Adapt an ICollisionEvent2D into an ISensorEvent2D shape.
-     * Determines which body is the sensor and which is the visitor by checking shapes.
-     */
-    private _adaptToSensorEvent(event: ICollisionEvent2D): ISensorEvent2D {
-        const shapeManager = this._physicsWorld.getShapeManager();
-        const aIsSensor = shapeManager.isShapeSensor(event.shapeIdA);
-        return {
-            type: event.type,
-            sensorBodyId: aIsSensor ? event.bodyIdA : event.bodyIdB,
-            sensorShapeId: aIsSensor ? event.shapeIdA : event.shapeIdB,
-            visitorBodyId: aIsSensor ? event.bodyIdB : event.bodyIdA,
-            visitorShapeId: aIsSensor ? event.shapeIdB : event.shapeIdA,
-            timestamp: event.timestamp,
-        };
-    }
 
     private _registerNewComponents(): void {
         const actors = this._ecsWorld.getAllActors();
@@ -305,6 +273,15 @@ export class PhysicsBridge2D implements GameLoopSystem<SceneLoopState>, IContact
         this._notifySensorActor(other, handler, self, event);
     }
 
+    private _dispatchSensorStayEvent(
+        self: Rigidbody2D,
+        other: Rigidbody2D,
+        event: ISensorEvent2D
+    ): void {
+        this._notifySensorActor(self, 'onSensorStay', other, event);
+        this._notifySensorActor(other, 'onSensorStay', self, event);
+    }
+
     private _notifyActor(
         rigidbody: Rigidbody2D,
         method: 'onCollisionEnter' | 'onCollisionStay' | 'onCollisionExit',
@@ -325,7 +302,7 @@ export class PhysicsBridge2D implements GameLoopSystem<SceneLoopState>, IContact
 
     private _notifySensorActor(
         rigidbody: Rigidbody2D,
-        method: 'onSensorEnter' | 'onSensorExit',
+        method: 'onSensorEnter' | 'onSensorStay' | 'onSensorExit',
         other: Rigidbody2D,
         event: ISensorEvent2D
     ): void {
