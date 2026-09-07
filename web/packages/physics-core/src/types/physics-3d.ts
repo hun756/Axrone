@@ -170,6 +170,10 @@ export interface IConeTwistConstraintDef3D {
     readonly softness?: number;
     readonly biasFactor?: number;
     readonly relaxationFactor?: number;
+    /** Twist motor target velocity (rad/s). Undefined = motor disabled. */
+    readonly motorSpeed?: number;
+    /** Maximum twist motor torque (N·m). Undefined or zero = motor disabled. */
+    readonly maxMotorTorque?: number;
     readonly collideConnected?: boolean;
     readonly userData?: unknown;
 }
@@ -187,6 +191,14 @@ export interface IGenericConstraintDef3D {
     readonly angularStiffness?: IVec3Like;
     readonly linearDamping?: IVec3Like;
     readonly angularDamping?: IVec3Like;
+    /** Per-axis linear motor target speed (m/s). Undefined = no linear motor. */
+    readonly motorSpeed?: IVec3Like;
+    /** Per-axis linear motor max force (N). Undefined or zero component = no motor on that axis. */
+    readonly maxMotorForce?: IVec3Like;
+    /** Per-axis angular motor target speed (rad/s). Undefined = no angular motor. */
+    readonly angularMotorSpeed?: IVec3Like;
+    /** Per-axis angular motor max torque (N·m). Undefined or zero component = no motor on that axis. */
+    readonly angularMaxMotorTorque?: IVec3Like;
     readonly collideConnected?: boolean;
     readonly userData?: unknown;
 }
