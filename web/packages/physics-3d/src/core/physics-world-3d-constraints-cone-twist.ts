@@ -253,24 +253,24 @@ export function prepareConeTwist(
     const twistUpper = hasTwistLimit ? +twistSpan / 2 : 0;
 
     // Motor: drives the twist rate toward motorSpeed (equilibrium J*v = -bias).
-    // Optional motor fields are read through a narrow structural assertion:
-    // IConeTwistConstraintDef3D carries no motor members (framework gap), but
-    // users may pass them via userData-style extensions. No `as any` needed.
-    const motorSpeed = (coneDef as { motorSpeed?: number }).motorSpeed;
-    const maxMotorTorque = (coneDef as { maxMotorTorque?: number }).maxMotorTorque;
+    // Motor fields are defined in IConeTwistConstraintDef3D (motorSpeed,
+    // maxMotorTorque). When both are provided and maxMotorTorque > 0, the
+    // motor row is produced.
+    const motorSpeed = coneDef.motorSpeed;
+    const maxMotorTorque = coneDef.maxMotorTorque;
     const enableTwistMotor = motorSpeed !== undefined
         && maxMotorTorque !== undefined
         && Math.abs(maxMotorTorque) > EPSILON;
 
     if (enableTwistMotor) {
-        const maxImpulse = Math.abs(maxMotorTorque as number) * h;
+        const maxImpulse = Math.abs(maxMotorTorque!) * h;
         const row = createRow(
             bodyIdA, bodyIdB,
             zeroVec3(),
             { x: -_twistAxisW.x, y: -_twistAxisW.y, z: -_twistAxisW.z },
             zeroVec3(),
             { x: _twistAxisW.x, y: _twistAxisW.y, z: _twistAxisW.z },
-            -(motorSpeed as number),
+            -(motorSpeed!),
             0,
             -maxImpulse, maxImpulse,
         );

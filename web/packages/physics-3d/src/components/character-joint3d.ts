@@ -13,14 +13,14 @@ import {
 /**
  * Character joint — registers a CONE_TWIST constraint (type 4).
  *
- * **Solver status: PARTIAL.** The cone-twist solver module implements
+ * **Solver status: FULL.** The cone-twist solver module implements
  * the full 6-row scheme — 3 anchor rows, cone swing limits via quaternion
  * swing-twist decomposition, and independent twist limit/motor rows.
- * Swing and twist limits are fully functional.
+ * Swing, twist limits, and twist motor are fully functional.
  *
- * **CAVEAT — motor NOT exposed:** The solver supports a twist motor
- * (`motorSpeed`/`maxMotorTorque`), but the component does not expose
- * these properties. Motor control is not available through this component.
+ * Motor: The twist motor (`motorSpeed`/`maxMotorTorque`) drives the twist
+ * rate toward the target velocity, with impulse capped by maxMotorTorque.
+ * The motor row is solved BEFORE the twist limit row (Box2D stall semantics).
  *
  * All distance units are METRES (ADR 0004). Angles are in radians.
  *
@@ -45,6 +45,8 @@ export class CharacterJoint3D extends Joint3D {
     private _enableProjection: boolean = false;
     private _projectionDistance: number = 0.1;
     private _projectionAngle: number = 180;
+    private _motorSpeed: number = 0;
+    private _maxMotorTorque: number = 0;
 
     get swingAxis(): Readonly<Vec3> {
         return this._swingAxis;
@@ -128,6 +130,22 @@ export class CharacterJoint3D extends Joint3D {
     set projectionAngle(value: number) {
         this._projectionAngle = Math.max(0, value);
     }
+    /** Twist motor target velocity (rad/s). */
+    get motorSpeed(): number {
+        return this._motorSpeed;
+    }
+    set motorSpeed(value: number) {
+        this._motorSpeed = value;
+        this._updateConstraint();
+    }
+    /** Maximum twist motor torque (N·m). Zero disables the motor. */
+    get maxMotorTorque(): number {
+        return this._maxMotorTorque;
+    }
+    set maxMotorTorque(value: number) {
+        this._maxMotorTorque = Math.max(0, value);
+        this._updateConstraint();
+    }
 
     protected override _createConstraint(ownerBody: Rigidbody3D): void {
         if (!this._constraintManager || !this._connectedBody) return;
@@ -142,6 +160,8 @@ export class CharacterJoint3D extends Joint3D {
             softness: 1,
             biasFactor: 0.3,
             relaxationFactor: 1,
+            motorSpeed: this._motorSpeed,
+            maxMotorTorque: this._maxMotorTorque,
             collideConnected: this._enableCollision,
         };
         this._constraintId = this._constraintManager.createConeTwist(def);
