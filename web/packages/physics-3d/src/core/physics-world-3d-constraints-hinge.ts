@@ -179,8 +179,8 @@ function prepareHinge(
     const maxMotorTorque = hingeDef.maxMotorTorque ?? 0;
 
     // ── Limit row (bilateral when violated, drift-prevention when within limits) ──
-    // Jacobian: j1Ang = -hingeAxis, j2Ang = +hingeAxis
-    // bias = -BAUMGARTE * limitError / h (standard convergent convention)
+    // Jacobian: j1Ang = -hingeAxis, j2Ang = +hingeAxis → J*ω = ωB·axis - ωA·axis
+    // For positive limit error: bias = +BAUMGARTE * limitError / h (convergent)
     let hasLimit = false;
     if (enableLimit) {
         hasLimit = true;
