@@ -132,6 +132,12 @@ export class GearJoint2D extends Joint2D {
         return true;
     }
 
+    protected recreateConstraint(): void {
+        this.destroyConstraint();
+        this._pendingCreation = false;
+        this.createConstraint();
+    }
+
     protected createConstraint(): void {
         if (this._constraintId || !this._rigidbodyA || !this._rigidbodyA.bodyId) return;
         if (!this._connectedBody || !this._connectedBody.bodyId) return;
@@ -166,10 +172,10 @@ export class GearJoint2D extends Joint2D {
     }
 
     protected destroyConstraint(): void {
+        this._pendingCreation = false;
         if (!this._constraintId || !this._physicsWorld) return;
         (this._physicsWorld as any).getConstraintManager().destroyConstraint(this._constraintId);
         this._constraintId = null;
-        this._pendingCreation = false;
     }
 
     private _resolveConstraintId(joint: Joint2D | null): ConstraintId | null {
