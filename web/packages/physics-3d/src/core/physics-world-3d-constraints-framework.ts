@@ -9,7 +9,7 @@
  * Architecture:
  * - prepareXxx() builds JacobianRow3D entries per constraint (once per step)
  * - solveVelocityRow() applies sequential impulse corrections to velocities
- * - solvePositionRow() applies Baumgarte position corrections
+ * - applyConstraintPositionCorrection() applies direct position corrections (legacy path)
  *
  * Wave 3b decomposition: pure functions, state passed as parameters,
  * no `this` binding, no `as any`, no circular imports.
@@ -385,97 +385,7 @@ export function solveVelocityRow(
     return deltaImpulse;
 }
 
-/**
- * Position-level correction using the same Jacobian rows.
- *
- * Uses the stored positionError (computed during prepare) and applies
- * Baumgarte-style position correction with effective mass.
- *
- * @returns true if correction was applied (error above tolerance).
- */
-export function solvePositionRow(
-    row: JacobianRow3D,
-    bodyA: SolverBody3D,
-    bodyB: SolverBody3D,
-): boolean {
-    const error = row.positionError;
-    if (Math.abs(error) <= POSITION_SOLVER_TOLERANCE) return false;
 
-    // Recompute effective mass for position solve (same formula)
-    const sumJInvJ = computeEffectiveMass(row, bodyA, bodyB);
-    if (sumJInvJ <= EPSILON) return false;
-
-    const totalInvMass = sumJInvJ + row.softness;
-    const effMass = totalInvMass > EPSILON ? 1.0 / totalInvMass : 0;
-
-    // Position impulse with correct sign convention for constraints.
-    // impulse > 0 when error > 0. Application: body A along +j1, body B along -j2.
-    let impulse = effMass * error;
-
-    // Unilateral constraint guard
-    if (!isFinite(row.lowerLimit) || impulse >= row.lowerLimit) {
-        if (isFinite(row.upperLimit)) {
-            impulse = Math.min(impulse, row.upperLimit);
-        }
-    } else {
-        return false;
-    }
-
-    // Apply position correction to body A (along +j1 direction → toward body B)
-    if (bodyA.invMass > 0) {
-        bodyA.position.x += bodyA.invMass * impulse * row.j1Linear.x;
-        bodyA.position.y += bodyA.invMass * impulse * row.j1Linear.y;
-        bodyA.position.z += bodyA.invMass * impulse * row.j1Linear.z;
-    }
-    if (bodyA.invInertia.x > 0 || bodyA.invInertia.y > 0 || bodyA.invInertia.z > 0) {
-        bodyA.rotation = _applyAngularPositionCorrection(
-            bodyA.rotation, bodyA.invInertia, row.j1Angular, impulse,
-        );
-    }
-
-    // Apply position correction to body B (along -j2 direction → toward body A)
-    if (bodyB.invMass > 0) {
-        bodyB.position.x -= bodyB.invMass * impulse * row.j2Linear.x;
-        bodyB.position.y -= bodyB.invMass * impulse * row.j2Linear.y;
-        bodyB.position.z -= bodyB.invMass * impulse * row.j2Linear.z;
-    }
-    if (bodyB.invInertia.x > 0 || bodyB.invInertia.y > 0 || bodyB.invInertia.z > 0) {
-        bodyB.rotation = _applyAngularPositionCorrection(
-            bodyB.rotation, bodyB.invInertia, row.j2Angular, -impulse,
-        );
-    }
-
-    return true;
-}
-
-/**
- * Apply a small angular position correction via quaternion integration.
- * Δq = 0.5 * (axis * impulse * invI) * q, then normalize.
- */
-function _applyAngularPositionCorrection(
-    q: IQuatLike,
-    invI: IVec3Like,
-    jAngular: IVec3Like,
-    impulse: number,
-): IQuatLike {
-    const dqx = invI.x * jAngular.x * impulse * 0.5;
-    const dqy = invI.y * jAngular.y * impulse * 0.5;
-    const dqz = invI.z * jAngular.z * impulse * 0.5;
-
-    // δq = (dqx, dqy, dqz, 0) * q (quaternion multiply, scalar part of δq is 0)
-    const result = Quat.multiply(
-        { x: dqx, y: dqy, z: dqz, w: 0 },
-        q,
-    );
-    // Add to original quaternion
-    const newQ: IQuatLike = {
-        x: q.x + result.x,
-        y: q.y + result.y,
-        z: q.z + result.z,
-        w: q.w + result.w,
-    };
-    return Quat.normalize(newQ);
-}
 
 /**
  * Apply direct position corrections to body manager AFTER position integration.
@@ -694,30 +604,6 @@ export function solveAllVelocityConstraints(
     }
 }
 
-/**
- * Solve all position constraints for one iteration.
- */
-export function solveAllPositionConstraints(
-    jacobianCache: Map<ConstraintId3D, JacobianRow3D[]>,
-    solverBodies: Map<BodyId3D, SolverBody3D>,
-): boolean {
-    let minError = Infinity;
-
-    for (const rows of jacobianCache.values()) {
-        for (const row of rows) {
-            const bodyA = solverBodies.get(row.bodyIdA);
-            const bodyB = solverBodies.get(row.bodyIdB);
-            if (!bodyA || !bodyB) continue;
-
-            const error = Math.abs(row.positionError);
-            minError = Math.min(minError, error);
-
-            solvePositionRow(row, bodyA, bodyB);
-        }
-    }
-
-    return minError <= POSITION_SOLVER_TOLERANCE;
-}
 
 /**
  * Reset accumulated impulses (called at prepare time, not per iteration).

@@ -70,7 +70,6 @@ import {
     type SolverBody3D,
     prepareAllConstraints,
     solveAllVelocityConstraints,
-    solveAllPositionConstraints,
     resetImpulses,
     commitSolverVelocities3D,
     commitSolverBodies3D,

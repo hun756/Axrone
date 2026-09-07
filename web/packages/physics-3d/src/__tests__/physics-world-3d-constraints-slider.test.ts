@@ -8,7 +8,6 @@ import {
     type SolverBody3D,
     type ConstraintData3D,
     solveVelocityRow,
-    solvePositionRow,
     getPrepareFunction,
     zeroVec3,
 } from '../core/physics-world-3d-constraints-framework';
@@ -116,11 +115,6 @@ function solveRows(
     for (let i = 0; i < iterations; i++) {
         for (const row of rows) {
             solveVelocityRow(row, bodyA, bodyB);
-        }
-    }
-    for (let i = 0; i < iterations; i++) {
-        for (const row of rows) {
-            solvePositionRow(row, bodyA, bodyB);
         }
     }
 }
@@ -566,11 +560,6 @@ describe('Slider joint — iteration convergence', () => {
             for (let i = 0; i < iters; i++) {
                 for (const row of rows) {
                     solveVelocityRow(row, bodyA, bodyB);
-                }
-            }
-            for (let i = 0; i < iters; i++) {
-                for (const row of rows) {
-                    solvePositionRow(row, bodyA, bodyB);
                 }
             }
 
