@@ -1,4 +1,5 @@
 import { Transform, type Actor } from '@axrone/ecs-runtime';
+import { transformPoint2D } from '@axrone/render-core';
 import {
     RENDER_2D_SPRITE_VERTEX_STRIDE,
     Render2DSpriteBatchBuilder,
@@ -59,18 +60,6 @@ const intersectClipRects = (
     }
 
     return { x, y, width, height };
-};
-
-const transformWorldPoint = (
-    matrix: ArrayLike<number>,
-    localX: number,
-    localY: number,
-    out: Float32Array
-): Float32Array => {
-    out[0] = (matrix[0] ?? 0) * localX + (matrix[1] ?? 0) * localY + (matrix[3] ?? 0);
-    out[1] = (matrix[4] ?? 0) * localX + (matrix[5] ?? 0) * localY + (matrix[7] ?? 0);
-    out[2] = (matrix[8] ?? 0) * localX + (matrix[9] ?? 0) * localY + (matrix[11] ?? 0);
-    return out;
 };
 
 const projectWorldPoint = (
@@ -713,7 +702,7 @@ export class SceneSpriteBatchRuntime {
 
         for (let index = 0; index < corners.length; index += 1) {
             const corner = corners[index]!;
-            const worldPoint = transformWorldPoint(
+            const worldPoint = transformPoint2D(
                 worldMatrix,
                 corner[0],
                 corner[1],

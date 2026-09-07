@@ -1,4 +1,5 @@
 import { clamp01 } from '@axrone/numeric';
+import { transformPoint2D } from '@axrone/render-core';
 import {
     RENDER_2D_SPRITE_INDICES_PER_QUAD,
     RENDER_2D_SPRITE_VERTEX_STRIDE,
@@ -306,18 +307,6 @@ const writeVertex = (
     floatView[offset + 3] = u;
     floatView[offset + 4] = v;
     uintView[offset + 5] = color;
-};
-
-const transformPoint = (
-    matrix: ArrayLike<number>,
-    localX: number,
-    localY: number,
-    out: Float32Array
-): Float32Array => {
-    out[0] = (matrix[0] ?? 0) * localX + (matrix[1] ?? 0) * localY + (matrix[3] ?? 0);
-    out[1] = (matrix[4] ?? 0) * localX + (matrix[5] ?? 0) * localY + (matrix[7] ?? 0);
-    out[2] = (matrix[8] ?? 0) * localX + (matrix[9] ?? 0) * localY + (matrix[11] ?? 0);
-    return out;
 };
 
 export class Render2DSpriteBatchBuilder {
@@ -726,7 +715,7 @@ export class Render2DSpriteBatchBuilder {
         const vertexBase = quadIndex * RENDER_2D_SPRITE_VERTICES_PER_QUAD;
         const indexBase = quadIndex * RENDER_2D_SPRITE_INDICES_PER_QUAD;
 
-        const point = transformPoint(submission.worldMatrix, minX, minY, this._pointScratch);
+        const point = transformPoint2D(submission.worldMatrix, minX, minY, this._pointScratch);
         writeVertex(
             this._vertexFloatView,
             this._vertexUintView,
@@ -739,7 +728,7 @@ export class Render2DSpriteBatchBuilder {
             color
         );
 
-        transformPoint(submission.worldMatrix, maxX, minY, this._pointScratch);
+        transformPoint2D(submission.worldMatrix, maxX, minY, this._pointScratch);
         writeVertex(
             this._vertexFloatView,
             this._vertexUintView,
@@ -752,7 +741,7 @@ export class Render2DSpriteBatchBuilder {
             color
         );
 
-        transformPoint(submission.worldMatrix, maxX, maxY, this._pointScratch);
+        transformPoint2D(submission.worldMatrix, maxX, maxY, this._pointScratch);
         writeVertex(
             this._vertexFloatView,
             this._vertexUintView,
@@ -765,7 +754,7 @@ export class Render2DSpriteBatchBuilder {
             color
         );
 
-        transformPoint(submission.worldMatrix, minX, maxY, this._pointScratch);
+        transformPoint2D(submission.worldMatrix, minX, maxY, this._pointScratch);
         writeVertex(
             this._vertexFloatView,
             this._vertexUintView,
