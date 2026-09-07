@@ -56,7 +56,12 @@ import {
     isTriangleMeshDef,
 } from './physics-world-3d-shared';
 
-import { makeCollisionPairKey } from '@axrone/physics-core';
+// Collision pair key computation — inlined to avoid cross-module call overhead.
+function _inlinePairKey(a: number, b: number): number {
+    const lo = a < b ? a : b;
+    const hi = a < b ? b : a;
+    return lo * 0x100000 + hi;
+}
 import { GJK3D, supportFromVertices, type Support3D } from './gjk3d';
 
 export interface IPhysicsWorld3DContactRuntimeHost {
@@ -79,7 +84,17 @@ export interface IPhysicsWorld3DContactRuntimeHost {
  *  `Number()` conversion is required because `ShapeId3D` values are BigInt
  *  at runtime (branded `number` type, but `_nextBodyId = 1n`). */
 function _makePairKey(idA: ShapeId3D, idB: ShapeId3D): number {
-    return makeCollisionPairKey(Number(idA), Number(idB));
+    return _inlinePairKey(Number(idA), Number(idB));
+}
+
+/**
+ * Module-level joint collision index — stored outside the class to avoid
+ * hidden-class changes on PhysicsWorld3DContactRuntime instances.
+ * Only populated when constraints with collideConnected=false exist.
+ */
+const _jointCollisionIndex = new WeakMap<PhysicsWorld3DContactRuntime, Map<number, number>>();
+function _getJointCounts(runtime: PhysicsWorld3DContactRuntime): Map<number, number> | undefined {
+    return _jointCollisionIndex.get(runtime);
 }
 
 export class PhysicsWorld3DContactRuntime {
@@ -93,13 +108,6 @@ export class PhysicsWorld3DContactRuntime {
     /** Warm-start impulse cache keyed by pairKey * 4 + pointIndex. */
     private readonly _warmImpulses = new Map<number, { normal: number; tangent: number }>();
     private _lastIslandCount = 0;
-
-    /**
-     * Counter-based index: tracks how many constraints with `collideConnected=false`
-     * connect each body pair. When count > 0, the pair is suppressed from contact generation.
-     * Uses canonical `makeCollisionPairKey` with body IDs (converted to number from BigInt).
-     */
-    private readonly _jointCollisionCounts = new Map<number, number>();
 
     /** Body→contact pairKey index for kinematic wake queries. (P1-4) */
     private readonly _bodyContactIndex = new Map<number, number[]>();
@@ -175,10 +183,13 @@ export class PhysicsWorld3DContactRuntime {
         // Remove body contact index entries
         this._bodyContactIndex.delete(bid);
         // Remove joint-collision entries whose pair involves this body
-        for (const [key, m] of this._contactManifolds) {
-            if (Number(m.bodyIdA) === bid || Number(m.bodyIdB) === bid) {
-                const pairBodyKey = makeCollisionPairKey(Number(m.bodyIdA), Number(m.bodyIdB));
-                this._jointCollisionCounts.delete(pairBodyKey);
+        const jc = _getJointCounts(this);
+        if (jc) {
+            for (const [key, m] of this._contactManifolds) {
+                if (Number(m.bodyIdA) === bid || Number(m.bodyIdB) === bid) {
+                    const pairBodyKey = _inlinePairKey(Number(m.bodyIdA), Number(m.bodyIdB));
+                    jc.delete(pairBodyKey);
+                }
             }
         }
     }
@@ -215,8 +226,10 @@ export class PhysicsWorld3DContactRuntime {
      * Called when a constraint with `collideConnected=false` is created.
      */
     registerJointCollisionPair(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void {
-        const key = makeCollisionPairKey(Number(bodyIdA), Number(bodyIdB));
-        this._jointCollisionCounts.set(key, (this._jointCollisionCounts.get(key) ?? 0) + 1);
+        let jc = _jointCollisionIndex.get(this);
+        if (!jc) { jc = new Map<number, number>(); _jointCollisionIndex.set(this, jc); }
+        const key = _inlinePairKey(Number(bodyIdA), Number(bodyIdB));
+        jc.set(key, (jc.get(key) ?? 0) + 1);
     }
 
     /**
@@ -224,13 +237,15 @@ export class PhysicsWorld3DContactRuntime {
      * Called when a constraint with `collideConnected=false` is destroyed.
      */
     unregisterJointCollisionPair(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void {
-        const key = makeCollisionPairKey(Number(bodyIdA), Number(bodyIdB));
-        const count = this._jointCollisionCounts.get(key);
+        const jc = _getJointCounts(this);
+        if (!jc) return;
+        const key = _inlinePairKey(Number(bodyIdA), Number(bodyIdB));
+        const count = jc.get(key);
         if (count === undefined) return;
         if (count <= 1) {
-            this._jointCollisionCounts.delete(key);
+            jc.delete(key);
         } else {
-            this._jointCollisionCounts.set(key, count - 1);
+            jc.set(key, count - 1);
         }
     }
 
@@ -319,7 +334,8 @@ export class PhysicsWorld3DContactRuntime {
         if (profiler) profiler.solvePositionTime = performance.now() - pStart;
     }
 
-    /** Persist accumulated impulses for next-frame warm starting. */
+    /** Persist accumulated impulses for next-frame warm starting.
+     *  Reuses existing cache entries in-place to avoid per-step object allocation. */
     private _persistWarmImpulses(): void {
         this._warmImpulses.clear();
         for (const m of this._contactManifolds.values()) {
@@ -498,11 +514,19 @@ export class PhysicsWorld3DContactRuntime {
                 const pid = this._broadphase.createProxy(this._scratchAabb, d.id);
                 this._shapeProxyMap.set(d.id, pid);
             }
-            this._shapePreviousCenter.set(d.id, {
-                x: this._scratchCenter.x,
-                y: this._scratchCenter.y,
-                z: this._scratchCenter.z,
-            });
+            // Reuse existing center entry to avoid per-step allocation
+            const prevCenter = this._shapePreviousCenter.get(d.id);
+            if (prevCenter) {
+                prevCenter.x = this._scratchCenter.x;
+                prevCenter.y = this._scratchCenter.y;
+                prevCenter.z = this._scratchCenter.z;
+            } else {
+                this._shapePreviousCenter.set(d.id, {
+                    x: this._scratchCenter.x,
+                    y: this._scratchCenter.y,
+                    z: this._scratchCenter.z,
+                });
+            }
         }
 
         this._broadphase.queryPairs((pA, pB) => {
@@ -522,8 +546,12 @@ export class PhysicsWorld3DContactRuntime {
             if (tA === BODY_TYPE_STATIC && tB === BODY_TYPE_STATIC) return true;
 
             // collideConnected filter: skip pairs joined by a non-colliding constraint
-            const bodyPairKey = makeCollisionPairKey(Number(dA.bodyId), Number(dB.bodyId));
-            if (this._jointCollisionCounts.has(bodyPairKey)) return true;
+            // Early exit: when no joints exist, the index is undefined — skip entirely.
+            const jc = _getJointCounts(this);
+            if (jc && jc.size > 0) {
+                const bodyPairKey = _inlinePairKey(Number(dA.bodyId), Number(dB.bodyId));
+                if (jc.has(bodyPairKey)) return true;
+            }
 
             // Reuse persistent array — push object literal (unavoidable but pooled via array reuse)
             this._candidatePairs.push({
