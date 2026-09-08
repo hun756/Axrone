@@ -14,3 +14,6 @@ export * from './box-muller';
 // Extended functionality
 export * from './ext/perlin-noise';
 export * from './ext/serialized-value';
+
+// SOA typed-array math
+export * from './soa';
