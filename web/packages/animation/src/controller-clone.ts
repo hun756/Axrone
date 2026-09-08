@@ -1,5 +1,6 @@
 import { assertNever } from './errors';
-import { freezeTuple3, freezeTuple4, spreadIfFinite, spreadIfNonEmptyString } from './internal';
+import { spreadIfFinite, spreadIfNonEmptyString } from './internal';
+import { tuple3, tuple4 } from '@axrone/utility';
 import type {
     AnimationConditionDefinition,
     AnimationControllerDefinition,
@@ -43,11 +44,11 @@ export const cloneRigDefinition = (rig: AnimationRigDefinition): AnimationRigDef
                     name: bone.name,
                     ...(bone.parent !== undefined ? { parent: bone.parent } : {}),
                     ...(bone.translation
-                        ? { translation: freezeTuple3(bone.translation[0], bone.translation[1], bone.translation[2]) }
+                        ? { translation: tuple3(bone.translation[0], bone.translation[1], bone.translation[2]) }
                         : {}),
                     ...(bone.rotation
                         ? {
-                              rotation: freezeTuple4(
+                              rotation: tuple4(
                                   bone.rotation[0],
                                   bone.rotation[1],
                                   bone.rotation[2],
@@ -55,7 +56,7 @@ export const cloneRigDefinition = (rig: AnimationRigDefinition): AnimationRigDef
                               ),
                           }
                         : {}),
-                    ...(bone.scale ? { scale: freezeTuple3(bone.scale[0], bone.scale[1], bone.scale[2]) } : {}),
+                    ...(bone.scale ? { scale: tuple3(bone.scale[0], bone.scale[1], bone.scale[2]) } : {}),
                     ...(bone.inverseBindMatrix
                         ? {
                               inverseBindMatrix:
@@ -86,7 +87,7 @@ export const cloneRootMotionDefinition = (
         ...(typeof rootMotion.consume === 'boolean' ? { consume: rootMotion.consume } : {}),
         ...(rootMotion.projectTranslationAxes
             ? {
-                  projectTranslationAxes: freezeTuple3(
+                  projectTranslationAxes: tuple3(
                       rootMotion.projectTranslationAxes[0],
                       rootMotion.projectTranslationAxes[1],
                       rootMotion.projectTranslationAxes[2]
@@ -146,7 +147,7 @@ export const cloneClipDefinition = (
                               endTime: contact.endTime,
                               ...(contact.lockTranslationAxes
                                   ? {
-                                        lockTranslationAxes: freezeTuple3(
+                                        lockTranslationAxes: tuple3(
                                             contact.lockTranslationAxes[0],
                                             contact.lockTranslationAxes[1],
                                             contact.lockTranslationAxes[2]
@@ -170,7 +171,7 @@ export const cloneClipDefinition = (
                               time: feature.time,
                               ...(feature.trajectoryPosition
                                   ? {
-                                        trajectoryPosition: freezeTuple3(
+                                        trajectoryPosition: tuple3(
                                             feature.trajectoryPosition[0],
                                             feature.trajectoryPosition[1],
                                             feature.trajectoryPosition[2]
@@ -179,7 +180,7 @@ export const cloneClipDefinition = (
                                   : {}),
                               ...(feature.facingDirection
                                   ? {
-                                        facingDirection: freezeTuple3(
+                                        facingDirection: tuple3(
                                             feature.facingDirection[0],
                                             feature.facingDirection[1],
                                             feature.facingDirection[2]

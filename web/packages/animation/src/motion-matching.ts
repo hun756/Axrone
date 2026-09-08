@@ -1,5 +1,5 @@
 import { AnimationClip } from './clip';
-import { freezeTuple3 } from './internal';
+import { tuple3 } from '@axrone/utility';
 import { SOA_EPSILON } from '@axrone/numeric';
 import type {
     AnimationClipDefinition,
@@ -96,7 +96,7 @@ export class AnimationMotionMatchDatabase {
                         tags: normalizeTags([...(metadata.tags ?? EMPTY_TAGS), ...(feature.tags ?? EMPTY_TAGS)]),
                         ...(feature.trajectoryPosition
                             ? {
-                                  trajectoryPosition: freezeTuple3(
+                                  trajectoryPosition: tuple3(
                                       feature.trajectoryPosition[0],
                                       feature.trajectoryPosition[1],
                                       feature.trajectoryPosition[2]
@@ -105,7 +105,7 @@ export class AnimationMotionMatchDatabase {
                             : {}),
                         ...(feature.facingDirection
                             ? {
-                                  facingDirection: freezeTuple3(
+                                  facingDirection: tuple3(
                                       feature.facingDirection[0],
                                       feature.facingDirection[1],
                                       feature.facingDirection[2]

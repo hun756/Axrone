@@ -1,5 +1,5 @@
 import { AnimationSamplingError, AnimationValidationError } from './errors';
-import { freezeTuple3 } from './internal';
+import { tuple3 } from '@axrone/utility';
 import { clamp, SoaVec3Buffer, SoaQuatBuffer } from '@axrone/numeric';
 import type { AnimationCurveLayout, AnimationFrame } from './pose';
 import type { AnimationRig } from './rig';
@@ -295,7 +295,7 @@ const sanitizeFootContacts = (
                     endTime,
                     ...(contact.lockTranslationAxes
                         ? {
-                              lockTranslationAxes: freezeTuple3(
+                              lockTranslationAxes: tuple3(
                                   contact.lockTranslationAxes[0],
                                   contact.lockTranslationAxes[1],
                                   contact.lockTranslationAxes[2]
@@ -322,7 +322,7 @@ const sanitizeMotionFeatures = (
                     time: clamp(feature.time, 0, duration),
                     ...(feature.trajectoryPosition
                         ? {
-                              trajectoryPosition: freezeTuple3(
+                              trajectoryPosition: tuple3(
                                   feature.trajectoryPosition[0],
                                   feature.trajectoryPosition[1],
                                   feature.trajectoryPosition[2]
@@ -331,7 +331,7 @@ const sanitizeMotionFeatures = (
                         : {}),
                     ...(feature.facingDirection
                         ? {
-                              facingDirection: freezeTuple3(
+                              facingDirection: tuple3(
                                   feature.facingDirection[0],
                                   feature.facingDirection[1],
                                   feature.facingDirection[2]

@@ -1,5 +1,6 @@
 import { assertNever } from './errors';
-import { freezeTuple2, isFiniteNumber, spreadIfFinite } from './internal';
+import { isFiniteNumber, spreadIfFinite } from './internal';
+import { tuple2 } from '@axrone/utility';
 import type { AnimationBlendTreeDefinition, AnimationMotionDefinition } from './types';
 
 export interface AnimationBlendGraphDiagnostic {
@@ -54,7 +55,7 @@ const freezeMotionDefinition = (motion: AnimationMotionDefinition): AnimationMot
                 children: Object.freeze(
                     motion.children.map((child) =>
                         Object.freeze({
-                            position: freezeTuple2(child.position[0], child.position[1]),
+                            position: tuple2(child.position[0], child.position[1]),
                             motion: freezeMotionDefinition(child.motion),
                         })
                     )
@@ -168,7 +169,7 @@ export class AnimationBlend2DGraphBuilder implements AnimationMotionBuilder {
             parameterX: this._parameterX,
             parameterY: this._parameterY,
             children: this._children.map((child) => ({
-                position: freezeTuple2(child.x, child.y),
+                position: tuple2(child.x, child.y),
                 motion: toMotionDefinition(child.motion),
             })),
         };

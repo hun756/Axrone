@@ -1,12 +1,4 @@
-import { tuple2, tuple3, tuple4 } from '@axrone/utility';
 import type { AnimationTrackDefinition } from './types';
-
-// Re-export zero-cost tuple utilities for backward compatibility within this package.
-// These replace the previous Object.freeze-based implementations with compile-time-only
-// readonly guarantees, eliminating runtime freeze overhead.
-export const freezeTuple2 = tuple2;
-export const freezeTuple3 = tuple3;
-export const freezeTuple4 = tuple4;
 
 export const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);
