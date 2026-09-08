@@ -1,6 +1,6 @@
 import { AnimationValidationError } from './errors';
 import { getTrackComponentCount } from './internal';
-import { ANIMATION_EPSILON } from './math';
+import { SOA_EPSILON } from '@axrone/numeric';
 import type {
     AnimationClipCompressionDefinition,
     AnimationClipDefinition,
@@ -46,7 +46,7 @@ const canRemoveLinearKeyframe = (
     const span = nextTime - prevTime;
     // Number.EPSILON (~2.2e-16) is far below meaningful animation time deltas;
     // use the animation-scale epsilon so degenerate spans are actually caught.
-    if (span <= ANIMATION_EPSILON) {
+    if (span <= SOA_EPSILON) {
         return false;
     }
 

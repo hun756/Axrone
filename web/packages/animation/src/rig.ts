@@ -1,6 +1,6 @@
 import { brandString, type AnimationRigId } from './brands';
 import { AnimationValidationError } from './errors';
-import { composeMatrix, quatApplyToVec3, quatMultiply, quatNormalize, vec3Add, vec3Multiply } from './math';
+import { SoaVec3Buffer, SoaQuatBuffer, composeMatrix } from '@axrone/numeric';
 import type { AnimationRigDefinition } from './types';
 
 const IDENTITY_TRANSLATION = Object.freeze([0, 0, 0] as const);
@@ -220,7 +220,7 @@ export class AnimationRig {
             } else {
                 const parentTranslationOffset = parentIndex * 3;
                 const parentRotationOffset = parentIndex * 4;
-                vec3Multiply(
+                SoaVec3Buffer.vec3Multiply(
                     scratchVector,
                     0,
                     this.restTranslations,
@@ -228,7 +228,7 @@ export class AnimationRig {
                     worldScales,
                     parentTranslationOffset
                 );
-                quatApplyToVec3(
+                SoaQuatBuffer.quatApplyToVec3(
                     scratchVector,
                     0,
                     worldRotations,
@@ -236,7 +236,7 @@ export class AnimationRig {
                     scratchVector,
                     0
                 );
-                vec3Add(
+                SoaVec3Buffer.vec3Add(
                     worldTranslations,
                     localTranslationOffset,
                     worldTranslations,
@@ -244,7 +244,7 @@ export class AnimationRig {
                     scratchVector,
                     0
                 );
-                quatMultiply(
+                SoaQuatBuffer.quatMultiply(
                     worldRotations,
                     localRotationOffset,
                     worldRotations,
@@ -252,8 +252,8 @@ export class AnimationRig {
                     this.restRotations,
                     localRotationOffset
                 );
-                quatNormalize(worldRotations, localRotationOffset, worldRotations, localRotationOffset);
-                vec3Multiply(
+                SoaQuatBuffer.quatNormalize(worldRotations, localRotationOffset, worldRotations, localRotationOffset);
+                SoaVec3Buffer.vec3Multiply(
                     worldScales,
                     localTranslationOffset,
                     worldScales,

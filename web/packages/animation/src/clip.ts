@@ -1,7 +1,6 @@
 import { AnimationSamplingError, AnimationValidationError } from './errors';
 import { freezeTuple3 } from './internal';
-import { clamp } from '@axrone/numeric';
-import { quatCopy, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Copy, vec3Lerp } from './math';
+import { clamp, SoaVec3Buffer, SoaQuatBuffer } from '@axrone/numeric';
 import type { AnimationCurveLayout, AnimationFrame } from './pose';
 import type { AnimationRig } from './rig';
 import {
@@ -201,7 +200,7 @@ const sampleTrack = (
     const leftOffset = frameIndex * track.sampleStride;
     const rightOffset = nextIndex * track.sampleStride;
     if (track.path === 'rotation' && componentCount === 4) {
-        quatSlerp(out, outOffset, track.values, leftOffset, track.values, rightOffset, alpha);
+        SoaQuatBuffer.quatSlerp(out, outOffset, track.values, leftOffset, track.values, rightOffset, alpha);
         return;
     }
 
@@ -657,7 +656,7 @@ export class AnimationClip {
         for (let trackIndex = 0; trackIndex < this.rotationTracks.length; trackIndex += 1) {
             const track = this.rotationTracks[trackIndex]!;
             sampleTrack(track, sampleTimeValue, 4, frame.pose.rotations, track.targetIndex * 4);
-            quatNormalize(frame.pose.rotations, track.targetIndex * 4, frame.pose.rotations, track.targetIndex * 4);
+            SoaQuatBuffer.quatNormalize(frame.pose.rotations, track.targetIndex * 4, frame.pose.rotations, track.targetIndex * 4);
         }
         for (let trackIndex = 0; trackIndex < this.scaleTracks.length; trackIndex += 1) {
             const track = this.scaleTracks[trackIndex]!;
@@ -760,10 +759,10 @@ export class AnimationClip {
     ): void {
         const translationOffset = boneIndex * 3;
         const rotationOffset = boneIndex * 4;
-        vec3Copy(outTranslation, 0, rig.restTranslations, translationOffset);
-        quatCopy(outRotation, 0, rig.restRotations, rotationOffset);
+        SoaVec3Buffer.vec3Copy(outTranslation, 0, rig.restTranslations, translationOffset);
+        SoaQuatBuffer.quatCopy(outRotation, 0, rig.restRotations, rotationOffset);
         if (outScale) {
-            vec3Copy(outScale, 0, rig.restScales, translationOffset);
+            SoaVec3Buffer.vec3Copy(outScale, 0, rig.restScales, translationOffset);
         }
 
         const sampleTimeValue = clamp(timeSeconds, 0, this.duration);
@@ -774,7 +773,7 @@ export class AnimationClip {
         const rotationTrack = this._rotationTrackByTarget.get(boneIndex);
         if (rotationTrack) {
             sampleTrack(rotationTrack, sampleTimeValue, 4, outRotation, 0);
-            quatNormalize(outRotation, 0, outRotation, 0);
+            SoaQuatBuffer.quatNormalize(outRotation, 0, outRotation, 0);
         }
         if (outScale) {
             const scaleTrack = this._scaleTrackByTarget.get(boneIndex);
@@ -795,7 +794,7 @@ export class AnimationClip {
     ): void {
         if (this.duration <= 0) {
             outTranslation.fill(0);
-            quatIdentity(outRotation, 0);
+            SoaQuatBuffer.quatIdentity(outRotation, 0);
             return;
         }
 
@@ -833,12 +832,12 @@ export class AnimationClip {
                 (this._sampleMidTranslation[2]! - this._sampleStartTranslation[2]!) +
                 (outTranslation[2]! - this._sampleEndTranslation[2]!);
 
-            quatInvert(this._inverseQuaternion, 0, this._sampleStartRotation, 0);
-            quatMultiply(this._sampleMidRotation, 0, this._inverseQuaternion, 0, this._sampleMidRotation, 0);
-            quatInvert(this._inverseQuaternion, 0, this._sampleZeroRotation, 0);
-            quatMultiply(outRotation, 0, this._inverseQuaternion, 0, outRotation, 0);
-            quatMultiply(outRotation, 0, this._sampleMidRotation, 0, outRotation, 0);
-            quatNormalize(outRotation, 0, outRotation, 0);
+            SoaQuatBuffer.quatInvert(this._inverseQuaternion, 0, this._sampleStartRotation, 0);
+            SoaQuatBuffer.quatMultiply(this._sampleMidRotation, 0, this._inverseQuaternion, 0, this._sampleMidRotation, 0);
+            SoaQuatBuffer.quatInvert(this._inverseQuaternion, 0, this._sampleZeroRotation, 0);
+            SoaQuatBuffer.quatMultiply(outRotation, 0, this._inverseQuaternion, 0, outRotation, 0);
+            SoaQuatBuffer.quatMultiply(outRotation, 0, this._sampleMidRotation, 0, outRotation, 0);
+            SoaQuatBuffer.quatNormalize(outRotation, 0, outRotation, 0);
             return;
         }
 
@@ -860,9 +859,9 @@ export class AnimationClip {
         outTranslation[0] = this._sampleEndTranslation[0]! - this._sampleStartTranslation[0]!;
         outTranslation[1] = this._sampleEndTranslation[1]! - this._sampleStartTranslation[1]!;
         outTranslation[2] = this._sampleEndTranslation[2]! - this._sampleStartTranslation[2]!;
-        quatInvert(this._inverseQuaternion, 0, this._sampleStartRotation, 0);
-        quatMultiply(outRotation, 0, this._inverseQuaternion, 0, this._sampleEndRotation, 0);
-        quatNormalize(outRotation, 0, outRotation, 0);
+        SoaQuatBuffer.quatInvert(this._inverseQuaternion, 0, this._sampleStartRotation, 0);
+        SoaQuatBuffer.quatMultiply(outRotation, 0, this._inverseQuaternion, 0, this._sampleEndRotation, 0);
+        SoaQuatBuffer.quatNormalize(outRotation, 0, outRotation, 0);
     }
 }
 
