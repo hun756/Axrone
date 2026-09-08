@@ -178,6 +178,28 @@ function prepareHinge(
     const motorSpeed = hingeDef.motorSpeed ?? 0;
     const maxMotorTorque = hingeDef.maxMotorTorque ?? 0;
 
+    // ── Motor row (separate from limit — Box2D motor-stall semantics) ──
+    // The motor row is pushed BEFORE the limit row (matching ConeTwist and
+    // Configurable) so that within each sequential-impulse iteration the limit
+    // sees the post-motor velocities and strips any motor impulse that would
+    // push past the rim.
+    // Jacobian: same as limit row.
+    // Motor bias = -motorSpeed (with this Jacobian: positive motorSpeed →
+    // negative impulse → negative angular acceleration on B → correct direction).
+    if (enableMotor && Math.abs(maxMotorTorque as number) > EPSILON) {
+        const maxImpulse = (maxMotorTorque as number) * h;
+        const motorRow = createRow(
+            bodyIdA, bodyIdB,
+            zeroVec3(), { x: -hingeAxis.x, y: -hingeAxis.y, z: -hingeAxis.z },
+            zeroVec3(), { x: hingeAxis.x, y: hingeAxis.y, z: hingeAxis.z },
+            -(motorSpeed as number),
+            0,
+            -maxImpulse, maxImpulse,
+        );
+        motorRow.hasMotor = true;
+        out.push(motorRow);
+    }
+
     // ── Limit row (bilateral when violated, drift-prevention when within limits) ──
     // Jacobian: j1Ang = -hingeAxis, j2Ang = +hingeAxis → J*ω = ωB·axis - ωA·axis
     // For positive limit error: bias = +BAUMGARTE * limitError / h (convergent)
@@ -220,27 +242,6 @@ function prepareHinge(
             limitRow.hasLimit = true;
             out.push(limitRow);
         }
-    }
-
-    // ── Motor row (separate from limit — Box2D motor-stall semantics) ──
-    // The motor row is pushed AFTER the limit row so that within each
-    // sequential-impulse iteration the limit sees the post-motor velocities
-    // and strips any motor impulse that would push past the rim.
-    // Jacobian: same as limit row.
-    // Motor bias = -motorSpeed (with this Jacobian: positive motorSpeed →
-    // negative impulse → negative angular acceleration on B → correct direction).
-    if (enableMotor && Math.abs(maxMotorTorque as number) > EPSILON) {
-        const maxImpulse = (maxMotorTorque as number) * h;
-        const motorRow = createRow(
-            bodyIdA, bodyIdB,
-            zeroVec3(), { x: -hingeAxis.x, y: -hingeAxis.y, z: -hingeAxis.z },
-            zeroVec3(), { x: hingeAxis.x, y: hingeAxis.y, z: hingeAxis.z },
-            -(motorSpeed as number),
-            0,
-            -maxImpulse, maxImpulse,
-        );
-        motorRow.hasMotor = true;
-        out.push(motorRow);
     }
 
     // ─── Compute effective masses ─────────────────────────────────────
