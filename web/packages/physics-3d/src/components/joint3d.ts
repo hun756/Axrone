@@ -335,9 +335,21 @@ export abstract class Joint3D extends Component {
 
     protected _checkBreakForce(): void {
         if (!this._constraintManager || this._constraintId === INVALID_CONSTRAINT_ID) return;
+        // Non-finite break thresholds mean "unbreakable" — skip the check.
+        // Editor serialises Infinity as 1e18 (JSON cannot represent Infinity);
+        // 1e18 N is physically unreachable, so the comparison below naturally
+        // never triggers for it either. Both conventions produce identical
+        // behaviour: the joint is never broken.
         const forceLen = Vec3.len(this._currentForce);
         const torqueLen = Vec3.len(this._currentTorque);
-        if (forceLen > this._breakForce || torqueLen > this._breakTorque) {
+        const breakForceFinite = Number.isFinite(this._breakForce);
+        const breakTorqueFinite = Number.isFinite(this._breakTorque);
+        if (breakForceFinite && forceLen > this._breakForce) {
+            this._constraintManager.destroyConstraint(this._constraintId);
+            this._constraintId = INVALID_CONSTRAINT_ID;
+            return;
+        }
+        if (breakTorqueFinite && torqueLen > this._breakTorque) {
             this._constraintManager.destroyConstraint(this._constraintId);
             this._constraintId = INVALID_CONSTRAINT_ID;
         }

@@ -262,3 +262,37 @@ describe('Joint3D discriminative: valid connectedBody creates constraint', () =>
         expect(joint.constraintId).toBe(-1);
     });
 });
+
+// ─── breakForce / breakTorque Infinity ↔ 1e18 contract ──────────────────────
+
+describe('Joint3D breakForce/breakTorque Infinity contract', () => {
+    it('default breakForce is Infinity (unbreakable)', () => {
+        const joint = new FixedJoint3D();
+        expect(joint.breakForce).toBe(Infinity);
+        expect(joint.breakTorque).toBe(Infinity);
+    });
+
+    it('serialize emits Infinity (JSON.stringify will produce null)', () => {
+        const joint = new FixedJoint3D();
+        const data = joint.serialize();
+        expect(data.breakForce).toBe(Infinity);
+        expect(data.breakTorque).toBe(Infinity);
+        // JSON.stringify(Infinity) → null — this is why Editor uses 1e18
+        expect(JSON.stringify(data.breakForce)).toBe('null');
+    });
+
+    it('deserialize 1e18 (Editor convention) → finite but practically unbreakable', () => {
+        const joint = new FixedJoint3D();
+        joint.deserialize({ breakForce: 1e18, breakTorque: 1e18 });
+        expect(joint.breakForce).toBe(1e18);
+        expect(joint.breakTorque).toBe(1e18);
+        expect(Number.isFinite(joint.breakForce)).toBe(true);
+    });
+
+    it('deserialize Infinity → stays Infinity', () => {
+        const joint = new FixedJoint3D();
+        joint.deserialize({ breakForce: Infinity, breakTorque: Infinity });
+        expect(joint.breakForce).toBe(Infinity);
+        expect(joint.breakTorque).toBe(Infinity);
+    });
+});
