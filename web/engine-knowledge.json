@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-04T12:26:12.792Z",
+  "generatedAt": "2026-09-08T07:48:34.594Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -2948,6 +2948,7 @@
         "SOLVER_EPSILON",
         "SQRT2",
         "SerializedValue",
+        "SoaVec3Buffer",
         "Vec2",
         "Vec2Comparer",
         "Vec2ComparisonMode",
@@ -2994,6 +2995,7 @@
         "IMat3Like",
         "IMat4Like",
         "IQuatLike",
+        "IRectLike",
         "IVec2Like",
         "IVec3Like",
         "IVec4Like",
@@ -8801,7 +8803,7 @@
     },
     {
       "name": "@axrone/ui",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "description": "",
       "exports": [
         "AXRONE_DEFAULT_UI_FONT_CSS_FAMILY",
@@ -9571,7 +9573,7 @@
     },
     {
       "name": "@axrone/ui-webgl2",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "description": "",
       "exports": [
         "UIWidgetRef",
@@ -24419,6 +24421,11 @@
       "kind": "interface"
     },
     {
+      "name": "IRectLike",
+      "package": "@axrone/numeric",
+      "kind": "interface"
+    },
+    {
       "name": "IRenderbuffer",
       "package": "@axrone/render-webgl2",
       "kind": "unknown"
@@ -35581,6 +35588,11 @@
     {
       "name": "SOAParticleBuffer",
       "package": "@axrone/particle-system",
+      "kind": "class"
+    },
+    {
+      "name": "SoaVec3Buffer",
+      "package": "@axrone/numeric",
       "kind": "class"
     },
     {
@@ -48894,6 +48906,12 @@
       "kind": "class",
       "code": "declare class SOAParticleBuffer implements IParticleBuffer { get allocated(): boolean; get capacity(): number; get count(): number; get alive(): ReadonlyUint32Array; get positions(): ReadonlyFloat32Array; get velocities(): ReadonlyFloat32Array; get accelerations(): ReadonlyFloat32Array; get lifetim…",
       "package": "@axrone/particle-system"
+    },
+    {
+      "name": "SoaVec3Buffer",
+      "kind": "class",
+      "code": "declare class SoaVec3Buffer {",
+      "package": "@axrone/numeric"
     },
     {
       "name": "solvePlanarGrounding",
