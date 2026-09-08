@@ -241,7 +241,10 @@ export function prepareConeTwist(
             -Infinity, violated ? Infinity : 0,
         );
         row.hasLimit = true;
-        row.softness = softness;
+        // Angular limit row: softness NOT applied. With character-joint
+        // softness=1 the limit becomes too compliant to resist the motor,
+        // causing blow-through past the twist/swing limit. Matches hinge
+        // pattern (no softness on limit rows).
         out.push(row);
     }
 
@@ -275,7 +278,12 @@ export function prepareConeTwist(
             -maxImpulse, maxImpulse,
         );
         row.hasMotor = true;
-        row.softness = softness;
+        // Motor row: softness intentionally NOT applied. The framework kernel
+        // adds `softness * prevImpulse` to the residual, which dampens impulse
+        // accumulation. With character-joint softness=1 this reduces the motor
+        // impulse to ~5% of its intended value, making the motor unable to
+        // reach the twist limit in world simulation. Hinge and Configurable
+        // motor rows follow the same pattern (softness=0 on motor rows).
         out.push(row);
     }
 
@@ -297,7 +305,7 @@ export function prepareConeTwist(
                 -clampedError,
             );
             row.hasLimit = true;
-            row.softness = softness;
+            // Angular limit: softness NOT applied (see swing limit note).
             out.push(row);
         } else if (_split.twistAngle > twistUpper - ANGULAR_SLOP) {
             // At/beyond the upper rim. Bilateral while violated (restoration
@@ -316,7 +324,7 @@ export function prepareConeTwist(
                 -Infinity, violated ? Infinity : 0,
             );
             row.hasLimit = true;
-            row.softness = softness;
+            // Angular limit: softness NOT applied (see swing limit note).
             out.push(row);
         } else if (_split.twistAngle < twistLower + ANGULAR_SLOP) {
             // At/beyond the lower rim. Bilateral while violated, one-sided
@@ -335,7 +343,7 @@ export function prepareConeTwist(
                 violated ? -Infinity : 0, Infinity,
             );
             row.hasLimit = true;
-            row.softness = softness;
+            // Angular limit: softness NOT applied (see swing limit note).
             out.push(row);
         }
     }
