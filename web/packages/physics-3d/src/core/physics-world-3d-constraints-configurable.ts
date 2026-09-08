@@ -199,6 +199,12 @@ export function prepareConfigurable(
                 const maxImp = Math.abs(linMaxForce as number) * h;
                 let impLo = -maxImp;
                 let impHi = maxImp;
+                // Asymmetric clamp at limits (Rhys/Box2D pattern): at the lower
+                // limit, motor can only push away (impulse ∈ [0, +maxImp]); at the
+                // upper limit, only pull away (impulse ∈ [-maxImp, 0]). The limit
+                // row strips opposing impulse anyway, so this is an optimization
+                // that prevents unnecessary motor work per iteration and maintains
+                // convention consistency with the hinge/slider solvers.
                 if (atLower) { impLo = 0; }       // motor can only push away from lower
                 else if (atUpper) { impHi = 0; }   // motor can only push away from upper
                 const motorRow = createRow(
@@ -315,6 +321,9 @@ export function prepareConfigurable(
                 const maxImp = Math.abs(angMaxTorque as number) * h;
                 let impLo = -maxImp;
                 let impHi = maxImp;
+                // Asymmetric clamp at limits (Rhys/Box2D pattern): same rationale
+                // as linear motor — limit row strips opposing impulse, but the
+                // asymmetric bounds prevent unnecessary motor work per iteration.
                 if (atLower) { impLo = 0; }
                 else if (atUpper) { impHi = 0; }
                 const motorRow = createRow(
