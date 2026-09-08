@@ -126,4 +126,33 @@ describe('transform-sync', () => {
             expect(t.position.x).toBeCloseTo(5, 3);
         });
     });
+
+    // (d) Acceptance: two sequential syncs don't corrupt the first
+    describe('sequential sync isolation (P1-16)', () => {
+        it('two sequential position syncs do not corrupt the first transform', () => {
+            const t1 = makeTransform();
+            const t2 = makeTransform();
+            syncTransformWorldPosition(t1 as any, { x: 10, y: 20, z: 30 });
+            // Snapshot t1 values after first sync
+            const t1Pos = { x: t1.position.x, y: t1.position.y, z: t1.position.z };
+            // Second sync to a different transform
+            syncTransformWorldPosition(t2 as any, { x: 99, y: 88, z: 77 });
+            // t1 must remain unchanged
+            expect(t1.position.x).toBeCloseTo(t1Pos.x, 5);
+            expect(t1.position.y).toBeCloseTo(t1Pos.y, 5);
+            expect(t1.position.z).toBeCloseTo(t1Pos.z, 5);
+        });
+
+        it('two sequential rotation syncs do not corrupt the first transform', () => {
+            const t1 = makeTransform();
+            const t2 = makeTransform();
+            syncTransformWorldRotation(t1 as any, { x: 0, y: 0.5, z: 0, w: 0.866 });
+            const t1Rot = { x: t1.rotation.x, y: t1.rotation.y, z: t1.rotation.z, w: t1.rotation.w };
+            syncTransformWorldRotation(t2 as any, { x: 0.7, y: 0, z: 0, w: 0.7 });
+            expect(t1.rotation.x).toBeCloseTo(t1Rot.x, 5);
+            expect(t1.rotation.y).toBeCloseTo(t1Rot.y, 5);
+            expect(t1.rotation.z).toBeCloseTo(t1Rot.z, 5);
+            expect(t1.rotation.w).toBeCloseTo(t1Rot.w, 5);
+        });
+    });
 });

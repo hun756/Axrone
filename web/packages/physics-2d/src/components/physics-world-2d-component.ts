@@ -4,6 +4,18 @@ import { Vec2 } from '@axrone/numeric';
 import { PhysicsWorld2D } from '../core/physics-world';
 import type { IPhysicsWorldConfig } from '../types';
 
+// Forward reference to avoid circular import — PhysicsBridge2D lives in
+// @axrone/scene-runtime which depends on @axrone/physics-2d. We resolve it
+// lazily through a registration callback set by the bridge at construction.
+let _bridgeWorldProvider: (() => PhysicsWorld2D | null) | null = null;
+
+/** @internal Called by PhysicsBridge2D to provide its world to this component. */
+export function _setPhysicsWorld2DBridgeProvider(
+    provider: (() => PhysicsWorld2D | null) | null
+): void {
+    _bridgeWorldProvider = provider;
+}
+
 @script({
     scriptName: 'PhysicsWorld2D',
     priority: 50,
@@ -47,6 +59,15 @@ export class PhysicsWorld2DComponent extends Component {
 
     awake(): void {
         PhysicsWorld2DComponent._instance = this;
+        // If a PhysicsBridge2D is active, reuse its world so that rigidbodies
+        // and the bridge share the same PhysicsWorld2D instance.
+        if (_bridgeWorldProvider) {
+            const bridgeWorld = _bridgeWorldProvider();
+            if (bridgeWorld) {
+                this._physicsWorld = bridgeWorld;
+                return;
+            }
+        }
         const config: IPhysicsWorldConfig = {
             gravity: { x: this._gravity.x, y: this._gravity.y },
         };

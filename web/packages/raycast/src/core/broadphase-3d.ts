@@ -1,4 +1,5 @@
 import type { IVec3Like } from '@axrone/numeric';
+import { makeCollisionPairKey } from '@axrone/physics-core';
 import { SpatialHashGrid3D, SpatialOctree } from './raycast-spatial';
 
 export interface IBroadphaseItem3D {
@@ -27,9 +28,7 @@ export interface IBroadphase3D<T> {
 }
 
 function pairKey(a: number, b: number): number {
-    const min = a < b ? a : b;
-    const max = a < b ? b : a;
-    return min * 100000 + max;
+    return makeCollisionPairKey(a, b);
 }
 
 function dedupedPairs<T>(

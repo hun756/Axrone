@@ -16,7 +16,7 @@ describe('PhysicsWorld3D modular structure', () => {
     });
 
     it('steps dynamic bodies through the extracted manager boundary', () => {
-        const world = new PhysicsWorld3D({ gravity: { x: 0, y: -10, z: 0 } });
+        const world = new PhysicsWorld3D({ gravity: { x: 0, y: -10, z: 0 }, maxTranslation: 10 } as any);
         const bodyId = world.getBodyManager().createBody({
             type: 2,
             position: { x: 0, y: 10, z: 0 },
@@ -219,8 +219,8 @@ describe('PhysicsWorld3D modular structure', () => {
             onCollisionStay(payload: any) {
                 events.push(`stay:${payload.bodyIdA}:${payload.bodyIdB}`);
             },
-            onCollisionEnd(bodyIdA: number, bodyIdB: number) {
-                events.push(`end:${bodyIdA}:${bodyIdB}`);
+            onCollisionEnd(event: any) {
+                events.push(`end:${event.bodyIdA}:${event.bodyIdB}`);
             },
         } as any);
 
@@ -275,5 +275,38 @@ describe('PhysicsWorld3D modular structure', () => {
 
         const position = world.getBodyManager().getPosition(dynamicBody);
         expect(position.x).toBeLessThanOrEqual(4);
+    });
+
+    it('reports real broadphase tree metrics in statistics (not hardcoded zero)', () => {
+        const world = new PhysicsWorld3D({ gravity: { x: 0, y: 0, z: 0 } });
+
+        // Empty world — tree metrics should reflect empty state
+        let stats = world.getStatistics();
+        expect(stats.treeHeight).toBe(0);
+        expect(stats.treeQuality).toBe(1.0);
+        expect(stats.treeBalance).toBe(1.0);
+
+        // Add shapes to populate the broadphase tree
+        const bodyA = world.createBody({ type: 2, position: { x: 0, y: 0, z: 0 } });
+        const bodyB = world.createBody({ type: 2, position: { x: 10, y: 0, z: 0 } });
+        const bodyC = world.createBody({ type: 2, position: { x: 20, y: 0, z: 0 } });
+        world.createSphereShape(bodyA, { center: { x: 0, y: 0, z: 0 }, radius: 0.5 });
+        world.createSphereShape(bodyB, { center: { x: 0, y: 0, z: 0 }, radius: 0.5 });
+        world.createSphereShape(bodyC, { center: { x: 0, y: 0, z: 0 }, radius: 0.5 });
+
+        // Step to populate the broadphase tree (proxies are created during collectManifolds)
+        world.step(0.016);
+
+        stats = world.getStatistics();
+        // treeHeight must be > 0 with 3 leaves (proves wiring, not hardcoded 0)
+        expect(stats.treeHeight).toBeGreaterThan(0);
+        // Facade methods must agree with statistics
+        expect(world.getTreeHeight()).toBe(stats.treeHeight);
+        expect(world.getTreeQuality()).toBe(stats.treeQuality);
+        expect(world.getTreeBalance()).toBe(stats.treeBalance);
+        // Quality and balance should be in valid ranges
+        expect(stats.treeQuality).toBeGreaterThanOrEqual(1.0);
+        expect(stats.treeBalance).toBeGreaterThan(0);
+        expect(stats.treeBalance).toBeLessThanOrEqual(1.0);
     });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BodyManager3D, ShapeManager3D, ConstraintManager3D, PhysicsError3D } from '../core/physics-managers-3d';
+import { ShapeType } from '../types';
 
 describe('BodyManager3D', () => {
     let bm: BodyManager3D;
@@ -349,7 +350,9 @@ describe('ShapeManager3D', () => {
         it('uses defaults when no material provided', () => {
             const sid = sm.createSphere(bodyId, { center: { x: 0, y: 0, z: 0 }, radius: 1 });
             const mat = sm.getMaterial(sid);
-            expect(mat.friction).toBeCloseTo(0.5, 5);
+            // Canonical default friction=0.4 (P1-28): matches DEFAULT_MATERIAL in shared.ts
+            // and Collider3D component path. Previously 0.5 — changed for 3D-wide convergence.
+            expect(mat.friction).toBeCloseTo(0.4, 5);
             expect(mat.density).toBeCloseTo(1, 5);
         });
 
@@ -503,5 +506,285 @@ describe('ConstraintManager3D', () => {
             cm[Symbol.dispose]();
             expect(cm.getConstraintsForBody(bodyA)).toHaveLength(0);
         });
+    });
+});
+
+// ─── Acceptance tests (Cluster D) ────────────────────────────────────────────
+
+describe('Acceptance: getPosition with out param (P1-12)', () => {
+    it('fills scratch object and returns same reference', () => {
+        const bm = new BodyManager3D(64);
+        const id = bm.createBody({ type: 2, position: { x: 7, y: 8, z: 9 } });
+        const scratch = { x: 0, y: 0, z: 0 };
+        const result = bm.getPosition(id, scratch);
+        expect(result).toBe(scratch);
+        expect(scratch.x).toBeCloseTo(7, 5);
+        expect(scratch.y).toBeCloseTo(8, 5);
+        expect(scratch.z).toBeCloseTo(9, 5);
+    });
+});
+
+describe('Acceptance: sphere inertia from geometry (P1-11)', () => {
+    it('computeInertiaForBody: sphere inertia = (2/5)*m*r²', () => {
+        const bm = new BodyManager3D(64);
+        const sm = new ShapeManager3D(64);
+        const bodyId = bm.createBody({ type: 2 });
+        bm.setMass(bodyId, 10);
+        const r = 2;
+        sm.createSphere(bodyId, { center: { x: 0, y: 0, z: 0 }, radius: r });
+        const inertia = bm.computeInertiaForBody(bodyId, sm);
+        const expected = 0.4 * 10 * r * r; // (2/5)*m*r² = 16
+        expect(inertia.x).toBeCloseTo(expected, 5);
+        expect(inertia.y).toBeCloseTo(expected, 5);
+        expect(inertia.z).toBeCloseTo(expected, 5);
+    });
+
+    it('computeInertiaForBody: box inertia = (1/12)*m*(h²+w², h²+d², w²+d²)', () => {
+        const bm = new BodyManager3D(64);
+        const sm = new ShapeManager3D(64);
+        const bodyId = bm.createBody({ type: 2 });
+        bm.setMass(bodyId, 12);
+        // halfExtents (1,2,3) → full dims w=2, h=4, d=6
+        sm.createBox(bodyId, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 1, y: 2, z: 3 } });
+        const inertia = bm.computeInertiaForBody(bodyId, sm);
+        const w = 2, h = 4, d = 6;
+        const f = 12 / 12; // m/12
+        expect(inertia.x).toBeCloseTo(f * (h * h + d * d), 5);
+        expect(inertia.y).toBeCloseTo(f * (w * w + d * d), 5);
+        expect(inertia.z).toBeCloseTo(f * (w * w + h * h), 5);
+    });
+});
+
+describe('Acceptance: scale 2x → shape def 2x (P1-14)', () => {
+    it('sphere shape def stores scaled radius', () => {
+        const sm = new ShapeManager3D(64);
+        const bodyId = 1n as any;
+        // Simulate what SphereCollider3D._createShape does with scale 2x
+        const scale = 2;
+        const baseRadius = 0.5;
+        sm.createSphere(bodyId, {
+            center: { x: 0, y: 0, z: 0 },
+            radius: baseRadius * scale,
+        });
+        const shapes = sm.getShapesForBodyWithDefs(bodyId);
+        expect(shapes).toHaveLength(1);
+        expect(shapes[0].kind).toBe(ShapeType.Sphere);
+        expect((shapes[0].def as any).radius).toBe(baseRadius * scale);
+    });
+
+    it('box shape def stores scaled halfExtents', () => {
+        const sm = new ShapeManager3D(64);
+        const bodyId = 1n as any;
+        const scale = 2;
+        const size = { x: 4, y: 6, z: 8 };
+        sm.createBox(bodyId, {
+            center: { x: 0, y: 0, z: 0 },
+            halfExtents: { x: size.x * 0.5 * scale, y: size.y * 0.5 * scale, z: size.z * 0.5 * scale },
+        });
+        const shapes = sm.getShapesForBodyWithDefs(bodyId);
+        expect(shapes).toHaveLength(1);
+        const he = (shapes[0].def as any).halfExtents;
+        expect(he.x).toBe(size.x * 0.5 * scale);
+        expect(he.y).toBe(size.y * 0.5 * scale);
+        expect(he.z).toBe(size.z * 0.5 * scale);
+    });
+});
+
+describe('Acceptance: shape queries after create/destroy (P1-15)', () => {
+    it('getMaterial/getFilter/getShapeType/isSensor return correct values after create', () => {
+        const sm = new ShapeManager3D(64);
+        const bodyId = 1n as any;
+        const sid = sm.createSphere(
+            bodyId,
+            { center: { x: 0, y: 0, z: 0 }, radius: 1 },
+            { friction: 0.7, restitution: 0.3, density: 2.5 },
+            { categoryBits: 0x02, maskBits: 0x04, groupIndex: -1 },
+            { isSensor: true }
+        );
+        const mat = sm.getMaterial(sid);
+        expect(mat.friction).toBeCloseTo(0.7, 5);
+        expect(mat.restitution).toBeCloseTo(0.3, 5);
+        expect(mat.density).toBeCloseTo(2.5, 5);
+        const filter = sm.getFilter(sid);
+        expect(filter.categoryBits).toBe(0x02);
+        expect(filter.maskBits).toBe(0x04);
+        expect(filter.groupIndex).toBe(-1);
+        expect(sm.getShapeType(sid)).toBe(ShapeType.Sphere);
+        expect(sm.isSensor(sid)).toBe(true);
+    });
+
+    it('shape queries are consistent after destroy', () => {
+        const sm = new ShapeManager3D(64);
+        const bodyId = 1n as any;
+        const sid1 = sm.createSphere(bodyId, { center: { x: 0, y: 0, z: 0 }, radius: 1 });
+        const sid2 = sm.createBox(bodyId, { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 1, y: 1, z: 1 } });
+        sm.destroyShape(sid1);
+        // sid2 should still be queryable
+        expect(sm.getShapeType(sid2)).toBe(ShapeType.Box);
+        expect(sm.getBodyForShape(sid2)).toBe(bodyId);
+        // sid1 should throw
+        expect(() => sm.getMaterial(sid1)).toThrow();
+    });
+});
+
+// ─── Acceptance tests (Wave 3a: raw API wake semantics) ─────────────────────
+
+describe('Acceptance: raw velocity setters wake sleeping bodies (P1-28 / Wave 3a)', () => {
+    let bm: BodyManager3D;
+
+    beforeEach(() => {
+        bm = new BodyManager3D(64);
+    });
+
+    it('setLinearVelocity wakes a sleeping body', () => {
+        const id = bm.createBody({ type: 2 });
+        // 1. Put body to sleep
+        bm.setAwake(id, false);
+        expect(bm.isAwake(id)).toBe(false);
+
+        // 2. Apply linear velocity via raw API
+        bm.setLinearVelocity(id, { x: 5, y: 0, z: 0 });
+
+        // 3. Body must be awake after velocity set
+        expect(bm.isAwake(id)).toBe(true);
+        // 4. Velocity must be stored correctly
+        const vel = bm.getLinearVelocity(id);
+        expect(vel.x).toBeCloseTo(5, 5);
+    });
+
+    it('setAngularVelocity wakes a sleeping body', () => {
+        const id = bm.createBody({ type: 2 });
+        // 1. Put body to sleep
+        bm.setAwake(id, false);
+        expect(bm.isAwake(id)).toBe(false);
+
+        // 2. Apply angular velocity via raw API
+        bm.setAngularVelocity(id, { x: 0, y: 3, z: 0 });
+
+        // 3. Body must be awake after velocity set
+        expect(bm.isAwake(id)).toBe(true);
+        // 4. Angular velocity must be stored correctly
+        const vel = bm.getAngularVelocity(id);
+        expect(vel.y).toBeCloseTo(3, 5);
+    });
+
+    it('setLinearVelocity is idempotent for already-awake body', () => {
+        const id = bm.createBody({ type: 2 });
+        // Body starts awake by default
+        expect(bm.isAwake(id)).toBe(true);
+
+        // Setting velocity on an awake body should not toggle awake off
+        bm.setLinearVelocity(id, { x: 1, y: 0, z: 0 });
+        expect(bm.isAwake(id)).toBe(true);
+    });
+
+    it('setAngularVelocity is idempotent for already-awake body', () => {
+        const id = bm.createBody({ type: 2 });
+        expect(bm.isAwake(id)).toBe(true);
+
+        bm.setAngularVelocity(id, { x: 0, y: 0, z: 1 });
+        expect(bm.isAwake(id)).toBe(true);
+    });
+
+    it('setLinearVelocity on non-existent body does not throw and does not affect existing bodies', () => {
+        const id = bm.createBody({ type: 2 });
+        bm.setLinearVelocity(id, { x: 1, y: 2, z: 3 });
+        expect(() => bm.setLinearVelocity(999n as any, { x: 99, y: 99, z: 99 })).not.toThrow();
+        // Existing body velocity must remain unchanged (no silent write to wrong body)
+        const vel = bm.getLinearVelocity(id);
+        expect(vel.x).toBeCloseTo(1, 5);
+        expect(vel.y).toBeCloseTo(2, 5);
+        expect(vel.z).toBeCloseTo(3, 5);
+    });
+
+    it('setAngularVelocity on non-existent body does not throw and does not affect existing bodies', () => {
+        const id = bm.createBody({ type: 2 });
+        bm.setAngularVelocity(id, { x: 0.1, y: 0.2, z: 0.3 });
+        expect(() => bm.setAngularVelocity(999n as any, { x: 99, y: 99, z: 99 })).not.toThrow();
+        // Existing body angular velocity must remain unchanged
+        const vel = bm.getAngularVelocity(id);
+        expect(vel.x).toBeCloseTo(0.1, 5);
+        expect(vel.y).toBeCloseTo(0.2, 5);
+        expect(vel.z).toBeCloseTo(0.3, 5);
+    });
+});
+
+// ─── Acceptance tests (Wave 3a: default value convergence) ──────────────────
+
+describe('Acceptance: 3D default material convergence (P1-28)', () => {
+    it('ShapeManager3D raw path produces same friction as DEFAULT_MATERIAL (0.4)', () => {
+        const sm = new ShapeManager3D(64);
+        const bodyId = 1n as any;
+        const sid = sm.createSphere(bodyId, { center: { x: 0, y: 0, z: 0 }, radius: 1 });
+        const mat = sm.getMaterial(sid);
+        // Canonical friction=0.4 matches DEFAULT_MATERIAL in physics-world-3d-shared.ts
+        expect(mat.friction).toBeCloseTo(0.4, 5);
+        expect(mat.restitution).toBe(0);
+        expect(mat.density).toBe(1);
+    });
+
+    it('ShapeManager3D raw path produces same maskBits as DEFAULT_FILTER (0xffff)', () => {
+        const sm = new ShapeManager3D(64);
+        const bodyId = 1n as any;
+        const sid = sm.createSphere(bodyId, { center: { x: 0, y: 0, z: 0 }, radius: 1 });
+        const filter = sm.getFilter(sid);
+        // Canonical maskBits=0xffff matches DEFAULT_FILTER in physics-world-3d-shared.ts
+        expect(filter.categoryBits).toBe(1);
+        expect(filter.maskBits).toBe(0xffff);
+        expect(filter.groupIndex).toBe(0);
+    });
+});
+
+// ─── P1-26: Error hierarchy acceptance tests ────────────────────────────────
+
+describe('P1-26: PhysicsError3D hierarchy and symmetry', () => {
+    it('PhysicsError3D has timestamp, context, and withContext like 2D PhysicsError', () => {
+        const err = new PhysicsError3D('test', 'INVALID_STATE', { bodyId: 42 });
+        expect(err.timestamp).toBeGreaterThan(0);
+        expect(err.context).toEqual({ bodyId: 42 });
+        expect(Object.isFrozen(err.context)).toBe(true);
+        expect(err.withContext).toBeTypeOf('function');
+    });
+
+    it('PhysicsError3D.withContext returns new error with merged context', () => {
+        const original = new PhysicsError3D('fail', 'CAPACITY_EXCEEDED', { max: 100 });
+        const extended = original.withContext({ current: 101 });
+        expect(extended.code).toBe('CAPACITY_EXCEEDED');
+        expect(extended.message).toBe('fail');
+        expect(extended.context).toEqual({ max: 100, current: 101 });
+        expect(extended).not.toBe(original);
+    });
+
+    it('PhysicsError3D is catchable via instanceof Error', () => {
+        const tiny = new BodyManager3D(1);
+        tiny.createBody({ type: 2 });
+        try {
+            tiny.createBody({ type: 2 });
+            expect.unreachable('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(Error);
+            expect(e).toBeInstanceOf(PhysicsError3D);
+            expect((e as PhysicsError3D).code).toBe('CAPACITY_EXCEEDED');
+        }
+    });
+
+    it('PhysicsError3D from shape-not-found has correct code and context', () => {
+        const sm = new ShapeManager3D(64);
+        try {
+            sm.getMaterial(999n as any);
+            expect.unreachable('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(PhysicsError3D);
+            expect((e as PhysicsError3D).code).toBe('INVALID_STATE');
+        }
+    });
+
+    it('2D/3D error symmetry: both have code, timestamp, context, withContext', () => {
+        const err3d = new PhysicsError3D('test', 'NOT_FOUND', { id: 1 });
+        // Structural symmetry check: all fields present
+        expect(err3d.code).toBe('NOT_FOUND');
+        expect(err3d.timestamp).toBeGreaterThan(0);
+        expect(err3d.context).toEqual({ id: 1 });
+        expect(err3d.withContext({ extra: true }).context).toEqual({ id: 1, extra: true });
     });
 });

@@ -46,6 +46,7 @@
         "test:coverage": "vitest --coverage",
         "test:all": "yarn test && yarn test:architecture && yarn test:browser && yarn test:webgl",
         "ci:engine-hardening": "yarn test:architecture && yarn verify:engine-hardening",
+        "ci:physics-allocation": "node --expose-gc ./scripts/physics-allocation-governance.mjs",
         "verify:engine-hardening": "yarn test:hardening && yarn build && yarn test:runtime-profile-governance && yarn test:capability-descriptor-governance && yarn test:playable-2d-bundle-governance && yarn test:playable-2d-size-governance && yarn test:playable-2d-smoke && yarn test:engine-benchmark-governance -- --refresh --headless --strictStability && yarn examples:build",
         "docs": "typedoc",
         "prepare": "husky"

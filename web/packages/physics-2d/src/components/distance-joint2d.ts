@@ -2,6 +2,14 @@ import { script } from '@axrone/ecs-runtime/decorators';
 import { Vec2 } from '@axrone/numeric';
 import { Joint2D } from './joint2d';
 
+/**
+ * Distance joint: maintains a fixed distance between two anchor points.
+ *
+ * **Solver**: FULL — Baumgarte-stabilized sequential impulse with optional
+ * soft constraint (stiffness/damping). Velocity + position correction active.
+ *
+ * @see JOINT_CAPABILITY_2D
+ */
 @script({
     scriptName: 'DistanceJoint2D',
     priority: 80,
@@ -154,8 +162,18 @@ export class DistanceJoint2D extends Joint2D {
         this._maxDistance = data.maxDistance ?? Infinity;
         this._stiffness = data.stiffness ?? 0;
         this._damping = data.damping ?? 0;
-        this._anchorA = new Vec2(data.anchorA?.x ?? 0, data.anchorA?.y ?? 0);
-        this._anchorB = new Vec2(data.anchorB?.x ?? 0, data.anchorB?.y ?? 0);
+        // Vec2 fields: Editor writes ARRAY [x,y], engine uses OBJECT {x,y}.
+        // normalizeVec2Value accepts both formats for backward compatibility.
+        if (data.anchorA !== undefined) {
+            const v = this.normalizeVec2Value(data.anchorA);
+            this._anchorA.x = v.x;
+            this._anchorA.y = v.y;
+        }
+        if (data.anchorB !== undefined) {
+            const v = this.normalizeVec2Value(data.anchorB);
+            this._anchorB.x = v.x;
+            this._anchorB.y = v.y;
+        }
         this._autoConfigureDistance = data.autoConfigureDistance ?? true;
     }
 }

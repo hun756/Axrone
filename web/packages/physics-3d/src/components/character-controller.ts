@@ -5,7 +5,7 @@ import type {
     BodyId3D,
     Density,
     Friction,
-    IRaycastResult3D,
+    ISingleRaycastResult3D,
     Restitution,
     ShapeId3D,
 } from '../types';
@@ -411,7 +411,7 @@ export class CharacterController extends Component {
         };
     }
 
-    private _getGroundHit(position: IVec3Like): IRaycastResult3D | null {
+    private _getGroundHit(position: IVec3Like): ISingleRaycastResult3D | null {
         if (!this._world) return null;
 
         const halfBodyHeight = this._radius + (this._height - this._radius * 2) * 0.5;

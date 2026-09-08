@@ -3,18 +3,30 @@ import type { BodyId, ContactId, ConstraintId, SolverFlags } from '../types';
 import type { BodyManager2D } from './body-manager';
 import type { ContactManager2D } from './contact-manager';
 import type { ConstraintManager2D } from './constraint-manager';
+import type { ShapeManager2D } from './shape-manager';
 import { ConstraintSolver2D } from './constraint-solver';
-import { PhysicsConstants } from '../types';
+import { PhysicsConstants, BodyFlags } from '../types';
 
 interface ProfilerData {
     solveVelocityTime: number;
     solvePositionTime: number;
 }
 
+/**
+ * Configurable solver limits (ADR 0004 — metre-based).
+ * When omitted, falls back to `PhysicsConstants` defaults.
+ */
+interface SolverLimits {
+    /** Maximum linear velocity in metres per second (m/s). */
+    maxVelocity: number;
+    /** Maximum angular velocity in radians per second (rad/s). */
+    maxAngularVelocity: number;
+    /** Maximum position translation per step in metres per step (m/step). */
+    maxTranslation: number;
+}
+
 const LINEAR_SLEEP_TOLERANCE_SQ = PhysicsConstants.LINEAR_SLEEP_TOLERANCE * PhysicsConstants.LINEAR_SLEEP_TOLERANCE;
 const ANGULAR_SLEEP_TOLERANCE_SQ = PhysicsConstants.ANGULAR_SLEEP_TOLERANCE * PhysicsConstants.ANGULAR_SLEEP_TOLERANCE;
-const MAX_TRANSLATION_SQ = PhysicsConstants.MAX_TRANSLATION * PhysicsConstants.MAX_TRANSLATION;
-const MAX_ROTATION_SQ = PhysicsConstants.MAX_ROTATION * PhysicsConstants.MAX_ROTATION;
 
 interface VelocityConstraintPoint {
     rA: IVec2Like;
@@ -64,9 +76,9 @@ interface PositionConstraint {
     points: [PositionConstraintPoint, PositionConstraintPoint];
 }
 
-const RESTITUTION_THRESHOLD = 1.0;
-const POSITION_SLOP = 0.005;
-const MAX_LINEAR_CORRECTION = 0.2;
+const RESTITUTION_THRESHOLD = PhysicsConstants.VELOCITY_THRESHOLD;
+const POSITION_SLOP = PhysicsConstants.LINEAR_SLOP;
+const MAX_LINEAR_CORRECTION = PhysicsConstants.MAX_LINEAR_CORRECTION;
 
 export class IslandSolver2D {
     private readonly _bodyStack: BodyId[] = [];
@@ -78,6 +90,7 @@ export class IslandSolver2D {
     private readonly _bodyManager: BodyManager2D;
     private readonly _contactManager: ContactManager2D;
     private readonly _constraintManager: ConstraintManager2D;
+    private readonly _shapeManager: ShapeManager2D;
     private readonly _constraintSolver: ConstraintSolver2D;
 
     private readonly _velocities: Float64Array;
@@ -91,16 +104,24 @@ export class IslandSolver2D {
     private readonly _tmpVelocityA = new Vec2();
     private readonly _tmpVelocityB = new Vec2();
     private readonly _tmpDelta = new Vec2();
+    // P1-1: Scratch vectors for body commit to avoid per-body {x,y} allocation
+    private readonly _tmpPosition = new Vec2();
+    private readonly _tmpLinearVel = new Vec2();
+
+    /** Number of islands solved in the last solveIslands() call. */
+    private _lastIslandCount = 0;
 
     constructor(
         bodyManager: BodyManager2D,
         contactManager: ContactManager2D,
         constraintManager: ConstraintManager2D,
+        shapeManager: ShapeManager2D,
         maxBodiesPerIsland: number = 1024
     ) {
         this._bodyManager = bodyManager;
         this._contactManager = contactManager;
         this._constraintManager = constraintManager;
+        this._shapeManager = shapeManager;
         this._constraintSolver = new ConstraintSolver2D(constraintManager, bodyManager);
 
         this._velocities = new Float64Array(maxBodiesPerIsland * 3);
@@ -118,6 +139,11 @@ export class IslandSolver2D {
         return this._constraintSolver.getLastSolvedConstraintCount();
     }
 
+    /** Number of islands solved in the most recent solveIslands() call. */
+    get lastIslandCount(): number {
+        return this._lastIslandCount;
+    }
+
     solveIslands(
         deltaTime: number,
         velocityIterations: number,
@@ -125,8 +151,10 @@ export class IslandSolver2D {
         allowSleep: boolean,
         flags: SolverFlags,
         gravity: { x: number; y: number },
-        profiler?: ProfilerData
+        profiler?: ProfilerData,
+        limits?: SolverLimits
     ): void {
+        this._lastIslandCount = 0;
         const bodies = this._bodyManager.getBodyIds();
         const visitedBodies = new Set<BodyId>();
 
@@ -151,8 +179,10 @@ export class IslandSolver2D {
                     flags,
                     gravity,
                     allowSleep,
-                    profiler
+                    profiler,
+                    limits
                 );
+                this._lastIslandCount++;
                 this._bodyStack.length = 0;
                 this._contactStack.length = 0;
                 this._constraintStack.length = 0;
@@ -220,8 +250,16 @@ export class IslandSolver2D {
         flags: SolverFlags,
         gravity: { x: number; y: number },
         allowSleep: boolean,
-        profiler?: ProfilerData
+        profiler?: ProfilerData,
+        limits?: SolverLimits
     ): void {
+        // ADR 0004: Use configurable limits or fall back to PhysicsConstants defaults
+        const maxVel = limits?.maxVelocity ?? PhysicsConstants.MAX_VELOCITY;
+        const maxAngVel = limits?.maxAngularVelocity ?? PhysicsConstants.MAX_ANGULAR_VELOCITY;
+        const maxTrans = limits?.maxTranslation ?? PhysicsConstants.MAX_TRANSLATION;
+        const maxVelSq = maxVel * maxVel;
+        const maxAngVelSq = maxAngVel * maxAngVel;
+        const maxTransSq = maxTrans * maxTrans;
         const h = dt;
         const bodyCount = this._bodyStack.length;
 
@@ -263,7 +301,7 @@ export class IslandSolver2D {
             }
         }
 
-        // Gravity integration: apply gravity force to dynamic bodies
+        // ── Step 1: Force integration + gravity + damping ───────────────
         for (let i = 0; i < bodyCount; i++) {
             const bodyId = this._bodyStack[i];
             const type = this._bodyManager.getBodyType(bodyId);
@@ -276,6 +314,22 @@ export class IslandSolver2D {
                 this._velocities[offset] += gravity.x * gravityScale * h;
                 this._velocities[offset + 1] += gravity.y * gravityScale * h;
 
+                // Integrate accumulated forces for dynamic bodies: v += F * dt * invMass
+                if (type === 2) {
+                    const invMass = this._invMass[i];
+                    if (invMass > 0) {
+                        const force = this._bodyManager.getForce(bodyId);
+                        this._velocities[offset] += force.x * h * invMass;
+                        this._velocities[offset + 1] += force.y * h * invMass;
+
+                        const invI = this._invI[i];
+                        if (invI > 0) {
+                            const torque = this._bodyManager.getTorque(bodyId);
+                            this._velocities[offset + 2] += torque * h * invI;
+                        }
+                    }
+                }
+
                 // Apply damping
                 const linearDamping = this._bodyManager.getLinearDamping(bodyId);
                 const angularDamping = this._bodyManager.getAngularDamping(bodyId);
@@ -286,18 +340,18 @@ export class IslandSolver2D {
                 this._velocities[offset + 1] *= linearDampingFactor;
                 this._velocities[offset + 2] *= angularDampingFactor;
 
-                // Clamp velocities to prevent instability
+                // Clamp velocity to maxVelocity (separate from position-delta limit)
                 const vx = this._velocities[offset];
                 const vy = this._velocities[offset + 1];
                 const w = this._velocities[offset + 2];
                 const speedSq = vx * vx + vy * vy;
-                if (speedSq > MAX_TRANSLATION_SQ) {
-                    const scale = PhysicsConstants.MAX_TRANSLATION / Math.sqrt(speedSq);
+                if (speedSq > maxVelSq) {
+                    const scale = maxVel / Math.sqrt(speedSq);
                     this._velocities[offset] = vx * scale;
                     this._velocities[offset + 1] = vy * scale;
                 }
-                if (w * w > MAX_ROTATION_SQ) {
-                    this._velocities[offset + 2] = w > 0 ? PhysicsConstants.MAX_ROTATION : -PhysicsConstants.MAX_ROTATION;
+                if (w * w > maxAngVelSq) {
+                    this._velocities[offset + 2] = w > 0 ? maxAngVel : -maxAngVel;
                 }
             }
         }
@@ -308,28 +362,53 @@ export class IslandSolver2D {
             this._warmStart();
         }
 
+        // ── Step 4: Contact velocity solve (island contacts) ──────────────
         const t0 = performance.now();
         for (let i = 0; i < velIters; i++) {
             this._solveVelocityConstraints();
         }
         if (profiler) profiler.solveVelocityTime += performance.now() - t0;
 
+        // ── Step 5: Constraint velocity solve (joints) ────────────────────
+        // P1-3: Joint velocity corrections are applied BEFORE position integration
+        // so that position integration uses the corrected velocities. This matches
+        // the 3D step ordering (physics-world-3d.ts).
+        if (this._constraintStack.length > 0) {
+            this._constraintSolver.prepareConstraints(this._constraintStack, dt);
+            this._constraintSolver.solveVelocityConstraints(velIters);
+            // Sync joint velocity corrections back into island working arrays
+            this._constraintSolver.writeBackVelocities(
+                this._velocities, this._bodyStack, this._bodyIndex
+            );
+        }
+
+        // ── Step 6: Position integrate (positions += velocities * dt) ──────
         for (let i = 0; i < bodyCount; i++) {
             const bodyId = this._bodyStack[i];
             const type = this._bodyManager.getBodyType(bodyId);
 
             if (type !== 0) {
                 const offset = i * 3;
-                const vx = this._velocities[offset];
-                const vy = this._velocities[offset + 1];
-                const w = this._velocities[offset + 2];
+                let dx = this._velocities[offset] * h;
+                let dy = this._velocities[offset + 1] * h;
+                const dw = this._velocities[offset + 2] * h;
 
-                this._positions[offset] += vx * h;
-                this._positions[offset + 1] += vy * h;
-                this._positions[offset + 2] += w * h;
+                // Clamp position delta to maxTranslation per step (Box2D anti-tunneling)
+                const transSq = dx * dx + dy * dy;
+                if (transSq > maxTransSq) {
+                    const scale = maxTrans / Math.sqrt(transSq);
+                    dx *= scale;
+                    dy *= scale;
+                }
+                const clampedDw = Math.max(-PhysicsConstants.MAX_ROTATION, Math.min(PhysicsConstants.MAX_ROTATION, dw));
+
+                this._positions[offset] += dx;
+                this._positions[offset + 1] += dy;
+                this._positions[offset + 2] += clampedDw;
             }
         }
 
+        // ── Step 7: Contact position solve (island contacts) ──────────────
         this._initializePositionConstraints();
 
         const t1 = performance.now();
@@ -341,31 +420,37 @@ export class IslandSolver2D {
         }
         if (profiler) profiler.solvePositionTime += performance.now() - t1;
 
+        // ── Step 8: Constraint position solve (joints) ────────────────────
+        // P1-3: Joint position corrections are applied BEFORE body commit so that
+        // the committed positions include joint constraint corrections.
+        if (this._constraintStack.length > 0) {
+            this._constraintSolver.solvePositionConstraints(posIters);
+            // Sync joint position corrections back into island working arrays
+            this._constraintSolver.writeBackPositions(
+                this._positions, this._bodyStack, this._bodyIndex
+            );
+        }
+
+        // ── Step 9: Body commit (single pass, all bodies) ─────────────────
         for (let i = 0; i < bodyCount; i++) {
             const bodyId = this._bodyStack[i];
             const type = this._bodyManager.getBodyType(bodyId);
 
             if (type !== 0) {
                 const offset = i * 3;
-                this._bodyManager.setPosition(bodyId, {
-                    x: this._positions[offset],
-                    y: this._positions[offset + 1],
-                });
+                // P1-1: Use scratch Vec2 to avoid per-body {x,y} allocation
+                this._tmpPosition.x = this._positions[offset];
+                this._tmpPosition.y = this._positions[offset + 1];
+                this._bodyManager.setPosition(bodyId, this._tmpPosition);
                 this._bodyManager.setRotation(bodyId, this._positions[offset + 2]);
-                this._bodyManager.setLinearVelocity(bodyId, {
-                    x: this._velocities[offset],
-                    y: this._velocities[offset + 1],
-                });
-                this._bodyManager.setAngularVelocity(bodyId, this._velocities[offset + 2]);
+                this._tmpLinearVel.x = this._velocities[offset];
+                this._tmpLinearVel.y = this._velocities[offset + 1];
+                this._bodyManager.setLinearVelocity(bodyId, this._tmpLinearVel, false);
+                this._bodyManager.setAngularVelocity(bodyId, this._velocities[offset + 2], false);
             }
         }
 
-        this._constraintSolver.solveConstraints(
-            this._constraintStack,
-            dt,
-            velIters,
-            posIters
-        );
+        // ── Step 10: Sleep + warm start storage ───────────────────────────
 
         // Sleep system: update sleep timers and put resting bodies to sleep
         if (allowSleep) {
@@ -388,6 +473,14 @@ export class IslandSolver2D {
             const type = this._bodyManager.getBodyType(bodyId);
 
             if (type !== 2) continue; // Only dynamic bodies sleep
+
+            // P1-4: Check per-body allowSleep flag
+            const flags = this._bodyManager.getFlags(bodyId);
+            if ((flags & BodyFlags.AutoSleep) === 0) {
+                this._bodyManager.setSleepTime(bodyId, 0);
+                minSleepTime = 0;
+                continue;
+            }
 
             const offset = i * 3;
             const vx = this._velocities[offset];
@@ -418,7 +511,11 @@ export class IslandSolver2D {
             const type = this._bodyManager.getBodyType(bodyId);
 
             if (type === 2) {
-                this._bodyManager.setAwake(bodyId, false);
+                // P1-4: Only put bodies to sleep if they allow it
+                const flags = this._bodyManager.getFlags(bodyId);
+                if ((flags & BodyFlags.AutoSleep) !== 0) {
+                    this._bodyManager.setAwake(bodyId, false);
+                }
             }
         }
     }
@@ -430,6 +527,14 @@ export class IslandSolver2D {
 
             const bodies = this._contactManager.getContactBodies(contactId);
             if (!bodies) continue;
+
+            // Sensor contacts generate events but no collision response
+            const contactShapes = this._contactManager.getContactShapes(contactId);
+            if (contactShapes &&
+                (this._shapeManager.isShapeSensor(contactShapes.shapeIdA) ||
+                 this._shapeManager.isShapeSensor(contactShapes.shapeIdB))) {
+                continue;
+            }
 
             const indexA = this._bodyIndex.get(bodies.bodyIdA);
             const indexB = this._bodyIndex.get(bodies.bodyIdB);
@@ -610,12 +715,14 @@ export class IslandSolver2D {
         const offsetA = indexA * 3;
         this._velocities[offsetA] -= invMassA * px;
         this._velocities[offsetA + 1] -= invMassA * py;
-        this._velocities[offsetA + 2] -= invIA * Vec2.cross(rA, { x: px, y: py });
+        // P1-1: Inline cross product to avoid {x,y} allocation
+        this._velocities[offsetA + 2] -= invIA * (rA.x * py - rA.y * px);
 
         const offsetB = indexB * 3;
         this._velocities[offsetB] += invMassB * px;
         this._velocities[offsetB + 1] += invMassB * py;
-        this._velocities[offsetB + 2] += invIB * Vec2.cross(rB, { x: px, y: py });
+        // P1-1: Inline cross product to avoid {x,y} allocation
+        this._velocities[offsetB + 2] += invIB * (rB.x * py - rB.y * px);
     }
 
     private _initializePositionConstraints(): void {
@@ -625,6 +732,14 @@ export class IslandSolver2D {
 
             const bodies = this._contactManager.getContactBodies(contactId);
             if (!bodies) continue;
+
+            // Sensor contacts generate events but no collision response
+            const contactShapes = this._contactManager.getContactShapes(contactId);
+            if (contactShapes &&
+                (this._shapeManager.isShapeSensor(contactShapes.shapeIdA) ||
+                 this._shapeManager.isShapeSensor(contactShapes.shapeIdB))) {
+                continue;
+            }
 
             const indexA = this._bodyIndex.get(bodies.bodyIdA);
             const indexB = this._bodyIndex.get(bodies.bodyIdB);

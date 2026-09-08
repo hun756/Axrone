@@ -1,4 +1,4 @@
-import { Vec3, Quat, type IVec3Like, type IQuatLike } from '@axrone/numeric';
+import { Vec3, type IVec3Like, type IQuatLike } from '@axrone/numeric';
 import { Component } from '@axrone/ecs-runtime';
 import type {
     Density,
@@ -8,6 +8,7 @@ import type {
     ShapeId3D,
 } from '../types';
 import type { PhysicsWorld3D, ShapeManager3D } from '../core/physics-world-3d';
+import { transformPoint3D } from '../core/physics-world-3d-shared';
 import type { Rigidbody3D } from './rigidbody3d';
 
 const enum PhysicMaterialCombine {
@@ -21,6 +22,7 @@ interface IPhysicMaterial3D {
     staticFriction: number;
     dynamicFriction: number;
     bounciness: number;
+    density: number;
     frictionCombine: PhysicMaterialCombine;
     bounceCombine: PhysicMaterialCombine;
 }
@@ -35,6 +37,7 @@ const DEFAULT_PHYSIC_MATERIAL: Readonly<IPhysicMaterial3D> = {
     staticFriction: 0.6,
     dynamicFriction: 0.6,
     bounciness: 0,
+    density: 1,
     frictionCombine: PhysicMaterialCombine.Average,
     bounceCombine: PhysicMaterialCombine.Average,
 };
@@ -121,6 +124,8 @@ export abstract class Collider3D extends Component {
             this._material.dynamicFriction = Math.max(0, value.dynamicFriction);
         if (value.bounciness !== undefined)
             this._material.bounciness = Math.max(0, Math.min(1, value.bounciness));
+        if (value.density !== undefined)
+            this._material.density = Math.max(0, value.density);
         if (value.frictionCombine !== undefined)
             this._material.frictionCombine = value.frictionCombine;
         if (value.bounceCombine !== undefined) this._material.bounceCombine = value.bounceCombine;
@@ -188,9 +193,9 @@ export abstract class Collider3D extends Component {
 
     protected _getMaterial(): IMaterial {
         return {
-            friction: this._material.dynamicFriction as unknown as Friction,
+            friction: (Math.sqrt(this._material.staticFriction * this._material.dynamicFriction)) as unknown as Friction,
             restitution: this._material.bounciness as unknown as Restitution,
-            density: 1 as unknown as Density,
+            density: this._material.density as unknown as Density,
         };
     }
 
@@ -206,35 +211,11 @@ export abstract class Collider3D extends Component {
     }
 
     protected _transformPoint(pos: IVec3Like, rot: IQuatLike, localPoint: IVec3Like): IVec3Like {
-        const rx = rot.x * 2;
-        const ry = rot.y * 2;
-        const rz = rot.z * 2;
-        const wx = rot.w * rx;
-        const wy = rot.w * ry;
-        const wz = rot.w * rz;
-        const xx = rot.x * rx;
-        const xy = rot.x * ry;
-        const xz = rot.x * rz;
-        const yy = rot.y * ry;
-        const yz = rot.y * rz;
-        const zz = rot.z * rz;
-        return {
-            x:
-                pos.x +
-                (1 - (yy + zz)) * localPoint.x +
-                (xy - wz) * localPoint.y +
-                (xz + wy) * localPoint.z,
-            y:
-                pos.y +
-                (xy + wz) * localPoint.x +
-                (1 - (xx + zz)) * localPoint.y +
-                (yz - wx) * localPoint.z,
-            z:
-                pos.z +
-                (xz - wy) * localPoint.x +
-                (yz + wx) * localPoint.y +
-                (1 - (xx + yy)) * localPoint.z,
-        };
+        return transformPoint3D(localPoint, pos, rot);
+    }
+
+    protected _getWorldScale(): Readonly<IVec3Like> {
+        return this.transform?.worldScale ?? { x: 1, y: 1, z: 1 };
     }
 
     protected _setBounds(
@@ -263,6 +244,12 @@ export abstract class Collider3D extends Component {
         }
 
         this._shapeId = INVALID_SHAPE_ID;
+        this._notifyShapeChanged();
+    }
+
+    /** Notify attached rigidbody that shape topology changed (inertia recomputation needed). */
+    protected _notifyShapeChanged(): void {
+        this._rigidbody?._updateInertiaFromColliders();
     }
 }
 

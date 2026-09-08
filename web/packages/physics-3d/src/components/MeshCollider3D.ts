@@ -29,13 +29,14 @@ export class MeshCollider3D extends Collider3D {
 
     protected override _createShape(): void {
         if (!this._rigidbody || this._vertices.length === 0) return;
+        const s = this._getWorldScale();
         if (this._convex) {
             const vArr: IVec3Like[] = [];
             for (let i = 0; i < this._vertices.length; i += 3)
                 vArr.push({
-                    x: this._vertices[i],
-                    y: this._vertices[i + 1],
-                    z: this._vertices[i + 2],
+                    x: this._vertices[i] * s.x,
+                    y: this._vertices[i + 1] * s.y,
+                    z: this._vertices[i + 2] * s.z,
                 });
             const def: IConvexHullShapeDef3D = { vertices: vArr };
             if (this._world) {
@@ -46,20 +47,22 @@ export class MeshCollider3D extends Collider3D {
                     this._getFilter(),
                     { isSensor: this.isTrigger }
                 );
+                this._notifyShapeChanged();
                 return;
             }
 
             if (!this._shapeManager) return;
             this._shapeId = this._shapeManager.createConvexHull(this._rigidbody.bodyId, def, this._getMaterial(), this._getFilter());
+            this._notifyShapeChanged();
             return;
         }
 
         const vertices: IVec3Like[] = [];
         for (let i = 0; i < this._vertices.length; i += 3) {
             vertices.push({
-                x: this._vertices[i],
-                y: this._vertices[i + 1],
-                z: this._vertices[i + 2],
+                x: this._vertices[i] * s.x,
+                y: this._vertices[i + 1] * s.y,
+                z: this._vertices[i + 2] * s.z,
             });
         }
 
@@ -74,11 +77,13 @@ export class MeshCollider3D extends Collider3D {
                 this._getFilter(),
                 { isSensor: this.isTrigger }
             );
+            this._notifyShapeChanged();
             return;
         }
 
         if (!this._shapeManager) return;
         this._shapeId = this._shapeManager.createTriangleMesh(this._rigidbody.bodyId, def, this._getMaterial(), this._getFilter());
+        this._notifyShapeChanged();
     }
 
     protected override _updateShape(): void {

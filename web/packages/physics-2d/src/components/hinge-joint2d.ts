@@ -2,6 +2,16 @@ import { script } from '@axrone/ecs-runtime/decorators';
 import { Vec2 } from '@axrone/numeric';
 import { Joint2D } from './joint2d';
 
+/**
+ * Hinge/revolute joint: constrains two bodies to share an anchor point
+ * while allowing relative rotation.
+ *
+ * Maps to solver `Revolute` case.
+ * **Solver**: FULL — 2-row anchor constraint + optional angle limit + optional motor.
+ * Velocity + position correction active.
+ *
+ * @see JOINT_CAPABILITY_2D
+ */
 @script({
     scriptName: 'HingeJoint2D',
     priority: 80,
@@ -134,13 +144,28 @@ export class HingeJoint2D extends Joint2D {
 
     deserialize(data: Record<string, any>): void {
         super.deserialize(data);
-        this._anchor = new Vec2(data.anchor?.x ?? 0, data.anchor?.y ?? 0);
+        // Vec2 fields: Editor writes ARRAY [x,y], engine uses OBJECT {x,y}.
+        // normalizeVec2Value accepts both formats for backward compatibility.
+        if (data.anchor !== undefined) {
+            const v = this.normalizeVec2Value(data.anchor);
+            this._anchor.x = v.x;
+            this._anchor.y = v.y;
+        }
         this._useMotor = data.useMotor ?? false;
         this._motor = {
             speed: data.motorSpeed ?? 0,
             maxTorque: data.maxMotorTorque ?? 10000,
         };
         this._useLimits = data.useLimits ?? false;
-        this._limits = data.limits ?? { min: 0, max: 360 };
+        // Accept both flat keys (limitsMin/limitsMax from Editor) and nested
+        // object (limits: { min, max } from legacy scenes). Flat keys win.
+        if (data.limitsMin !== undefined || data.limitsMax !== undefined) {
+            this._limits = {
+                min: data.limitsMin ?? this._limits.min,
+                max: data.limitsMax ?? this._limits.max,
+            };
+        } else {
+            this._limits = data.limits ?? { min: 0, max: 360 };
+        }
     }
 }
