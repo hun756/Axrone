@@ -222,7 +222,6 @@ export interface IPhysicsWorld3DConfig {
     readonly maxConstraints?: number;
     readonly maxContacts?: number;
     readonly solverIterations?: number;
-    readonly enableCCD?: boolean;
     readonly enableProfiler?: boolean;
 }
 

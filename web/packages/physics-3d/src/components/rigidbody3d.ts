@@ -60,8 +60,9 @@ const enum RigidbodyConstraints3D {
  * `IPhysicsWorldConfig.continuousPhysics`, sub-stepping via `MAX_SUB_STEPS`).
  * This asymmetry is intentional — the 2D solver mirrors Box2D's CCD pipeline.
  *
- * `IPhysicsWorld3DConfig.enableCCD` is declared in the config interface
- * but **not read** by the 3D world constructor — a second silent no-op.
+ * `IPhysicsWorld3DConfig.enableCCD` was removed from the config interface —
+ * it was declared but never read, a silent no-op that misled users.
+ * CCD implementation for 3D remains unimplemented (see caveat above).
  */
 const enum CollisionDetectionMode3D {
     Discrete = 0,
