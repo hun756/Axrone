@@ -18,6 +18,14 @@ import {
  * to the hinge axis (2 angular lock rows), and supports angle limits and
  * motor about the hinge axis (1 axial row).
  *
+ * **Motor overshoot caveat:** When the motor drives toward a limit, the
+ * sequential impulse solver stalls the motor at the limit row (Box2D
+ * semantics), but a small overshoot (~0.05–0.1 rad) is expected. This is
+ * inherent to the iterative solver — the motor impulse applied before the
+ * limit row is resolved causes brief exceedance. For tighter precision,
+ * increase `velocityIterations` (reduces overshoot) or use a penalty-based
+ * controller externally.
+ *
  * @see JOINT_CAPABILITY_3D
  */
 @script({ scriptName: 'HingeJoint3D' })

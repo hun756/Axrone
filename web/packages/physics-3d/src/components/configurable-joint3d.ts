@@ -40,6 +40,13 @@ import {
  * Motor is active only when both target velocity and maximum force are
  * non-zero on a given axis.
  *
+ * **Motor overshoot caveat:** When a per-axis motor drives toward its angular
+ * or linear limit, the sequential impulse solver stalls the motor at the
+ * limit row, but a small overshoot (~0.05–0.1 rad for angular, proportional
+ * for linear) is expected. This is inherent to the iterative solver — the
+ * motor impulse applied before the limit row is resolved causes brief
+ * exceedance. For tighter precision, increase `velocityIterations`.
+ *
  * All distance units are METRES (ADR 0004). Angles are in radians.
  *
  * @see JOINT_CAPABILITY_3D

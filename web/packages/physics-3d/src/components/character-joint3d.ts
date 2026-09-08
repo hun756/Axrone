@@ -22,6 +22,13 @@ import {
  * rate toward the target velocity, with impulse capped by maxMotorTorque.
  * The motor row is solved BEFORE the twist limit row (Box2D stall semantics).
  *
+ * **Motor overshoot caveat:** When the twist motor drives toward the twist
+ * limit, the sequential impulse solver stalls the motor at the limit row,
+ * but a small overshoot (~0.03–0.05 rad) is expected. This is inherent to
+ * the iterative solver — the motor impulse applied before the limit row is
+ * resolved causes brief exceedance. For tighter precision, increase
+ * `velocityIterations`.
+ *
  * All distance units are METRES (ADR 0004). Angles are in radians.
  *
  * @see JOINT_CAPABILITY_3D
