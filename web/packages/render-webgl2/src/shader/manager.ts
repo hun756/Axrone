@@ -268,6 +268,10 @@ export class ShaderManager implements IShaderManager {
 
         // Remove old shaders
         for (const name of shadersToEvict) {
+            const entry = this.shaderCache.get(name);
+            if (entry) {
+                this.disposeShaderEntry(entry);
+            }
             this.shaderCache.delete(name);
         }
 

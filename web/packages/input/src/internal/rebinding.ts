@@ -97,7 +97,7 @@ export const applyBindingMutation = <TSchema extends InputActionSchema, TAction 
             }) as InputControlBinding
         );
     } else {
-        nextBindings[index] = patchBindingControl(nextBindings[index]!, slot, control);
+        nextBindings[index] = patchBindingControl(runtime, nextBindings[index]!, slot, control);
     }
 
     const normalized = runtime._compiler.normalizeBindingList(patchRequest.action, nextBindings);
@@ -237,11 +237,6 @@ export const expireRebindingSessionIfNeeded = <TSchema extends InputActionSchema
         return;
     }
 
-    runtime._resolveMessage({
-        code: 'input.rebind.timeout',
-        action: String(active.request.action),
-        context: String(active.request.context),
-    });
     const handlers = active.handlers;
     runtime._activeRebinding = undefined;
     handlers?.cancel?.('timeout');
@@ -305,13 +300,8 @@ export const restoreInputSnapshot = <TSchema extends InputActionSchema>(
         );
     }
 
-    if (!options.merge) {
-        runtime._users.clear();
-        runtime._gamepadOwners.clear();
-        runtime._contexts.clear();
-        runtime._contextOrderDirty = true;
-    }
-
+    // Validate all entries first (atomic: either all valid or none committed)
+    const validatedUsers: Array<{ id: string; enabled?: boolean; devices?: readonly any[] }> = [];
     for (const userSnapshot of snapshot.users ?? []) {
         if (!isRecord(userSnapshot) || typeof userSnapshot.id !== 'string') {
             throw new InputSnapshotError(
@@ -321,17 +311,14 @@ export const restoreInputSnapshot = <TSchema extends InputActionSchema>(
                 })
             );
         }
-
-        runtime._upsertUser(
-            {
-                id: userSnapshot.id,
-                enabled: userSnapshot.enabled,
-                devices: userSnapshot.devices,
-            },
-            true
-        );
+        validatedUsers.push({
+            id: userSnapshot.id,
+            enabled: userSnapshot.enabled,
+            devices: userSnapshot.devices,
+        });
     }
 
+    const validatedContexts: Array<{ id: string; priority: number; enabled: boolean; capture: any; user?: string; bindings: any }> = [];
     for (const contextSnapshot of snapshot.contexts) {
         if (!isRecord(contextSnapshot) || typeof contextSnapshot.id !== 'string') {
             throw new InputSnapshotError(
@@ -341,18 +328,30 @@ export const restoreInputSnapshot = <TSchema extends InputActionSchema>(
                 })
             );
         }
+        validatedContexts.push({
+            id: contextSnapshot.id,
+            priority: contextSnapshot.priority,
+            enabled: contextSnapshot.enabled,
+            capture: contextSnapshot.capture,
+            user: contextSnapshot.user,
+            bindings: contextSnapshot.bindings,
+        });
+    }
 
-        runtime._upsertContext(
-            {
-                id: contextSnapshot.id,
-                priority: contextSnapshot.priority,
-                enabled: contextSnapshot.enabled,
-                capture: contextSnapshot.capture,
-                user: contextSnapshot.user,
-                bindings: contextSnapshot.bindings,
-            },
-            true
-        );
+    // All validated — now commit
+    if (!options.merge) {
+        runtime._users.clear();
+        runtime._gamepadOwners.clear();
+        runtime._contexts.clear();
+        runtime._contextOrderDirty = true;
+    }
+
+    for (const user of validatedUsers) {
+        runtime._upsertUser(user, true);
+    }
+
+    for (const context of validatedContexts) {
+        runtime._upsertContext(context, true);
     }
 };
 
@@ -476,7 +475,8 @@ const resolveBindingSlot = <TSchema extends InputActionSchema>(
     );
 };
 
-const patchBindingControl = (
+const patchBindingControl = <TSchema extends InputActionSchema>(
+    runtime: InputRebindingRuntime<TSchema>,
     binding: InputBinding,
     slot: InputBindingSlot,
     control: InputControlPath
@@ -515,6 +515,9 @@ const patchBindingControl = (
 
     throw new InputRebindingError(
         'input.invalid-slot',
-        String(slot)
+        runtime._resolveMessage({
+            code: 'input.invalid-slot',
+            value: slot ?? binding.type,
+        })
     );
 };

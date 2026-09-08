@@ -69,7 +69,7 @@ describe('RayPrimitiveIntersector2D', () => {
         it('hits a capsule (swept segment + radius)', () => {
             const r = RayPrimitiveIntersector2D.intersectCapsule(v2(-5, 0), v2(1, 0), v2(4, -1), v2(4, 1), 1, 100);
             expect(r.hit).toBe(true);
-            expect(r.distance).toBeCloseTo(9, 3);
+            expect(r.distance).toBeCloseTo(8, 3);
         });
 
         it('misses a capsule that is off the ray line', () => {

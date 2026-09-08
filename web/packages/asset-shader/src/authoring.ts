@@ -2,7 +2,7 @@ import {
     type AssetCustomSource,
     type AssetImporter,
 } from '@axrone/asset-core';
-import { isPlainObject } from '@axrone/utility';
+import { isPlainObject, deepClone } from '@axrone/utility';
 import {
     type RenderShaderAttributeDefinition,
     type RenderShaderEffectDefinition,
@@ -220,7 +220,7 @@ export const defineShaderEffect = (
  */
 export const serializeShaderEffectToJson = (
     effect: RenderShaderEffectDefinition
-): Record<string, unknown> => JSON.parse(JSON.stringify(effect)) as Record<string, unknown>;
+): Record<string, unknown> => deepClone(effect) as Record<string, unknown>;
 
 /** Declare a shader keyword (variant switch). */
 export const keyword = (

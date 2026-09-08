@@ -16,7 +16,7 @@ let nextSceneOverlayId = 1;
 
 const createOverlaySystemId = (): string => `axrone.ui.overlay:${nextSceneOverlayId++}`;
 
-const resolveViewport = (scene: SceneUIOverlayTarget) => ({
+export const resolveFramebufferSize = (scene: SceneUIOverlayTarget): { width: number; height: number } => ({
     width: Math.max(1, scene.canvas.width || scene.gl.drawingBufferWidth || 1),
     height: Math.max(1, scene.canvas.height || scene.gl.drawingBufferHeight || 1),
 });
@@ -87,7 +87,7 @@ export const attachUIOverlayToScene = <TPayload = unknown>(
         if (disposed) {
             return null;
         }
-        return renderUIFrame(renderer, options.ui, resolveViewport(scene));
+        return renderUIFrame(renderer, options.ui, resolveFramebufferSize(scene));
     };
 
     const system: GameLoopSystem<{ readonly sceneId: string }> = {

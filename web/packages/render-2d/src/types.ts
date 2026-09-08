@@ -115,6 +115,15 @@ export interface Render2DSpriteBatchRange<
     readonly indexCount: number;
 }
 
+/**
+ * Result of building a sprite batch.
+ *
+ * IMPORTANT: The returned object is reused across build() calls. The vertexData
+ * and indexData are views into internal buffers that are overwritten on the next
+ * build(). The batches array is also reused and cleared. Consumers must process
+ * the result before calling build() again, or copy the data if they need to
+ * retain it across frames.
+ */
 export interface Render2DSpriteBatchBuildResult {
     readonly vertexStride: number;
     readonly vertexByteLength: number;
@@ -129,6 +138,7 @@ export interface Render2DSpriteBatchBuildResult {
 
 export interface Render2DSpriteBatchBuilderOptions {
     readonly maxBatchQuads?: number;
+    readonly validateInputs?: boolean;
 }
 
 export const asRender2DTextureReference = (

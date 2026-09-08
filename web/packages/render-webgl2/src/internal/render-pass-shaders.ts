@@ -12,7 +12,7 @@ void main() {
 `;
 
 export const TONEMAP_FRAGMENT_SHADER_SOURCE = `#version 300 es
-precision highp float;
+precision mediump float;
 
 uniform sampler2D uSource;
 uniform sampler2D uExposureHistory;
@@ -172,7 +172,7 @@ void main() {
 `;
 
 export const EXPOSURE_HISTORY_FRAGMENT_SHADER_SOURCE = `#version 300 es
-precision highp float;
+precision mediump float;
 
 uniform sampler2D uSource;
 uniform sampler2D uPreviousExposure;
@@ -235,8 +235,22 @@ void main() {
 }
 `;
 
+/**
+ * Post-process fragment shader.
+ *
+ * TODO(perf): Mobile optimization - implement quality-based texture sampling.
+ * Current implementation uses fixed sample counts that exceed mobile budget (≤4):
+ * - FXAA: 9 samples
+ * - Bloom: 8 samples
+ * - Sharpen: 5 samples
+ * - SSAO: 8+ samples
+ *
+ * Solution: Add uQuality uniform (0=low, 1=medium, 2=high, 3=ultra) and use
+ * conditional compilation or branching to reduce samples on low/medium quality.
+ * Example: FXAA low quality = 5 samples, medium = 7, high/ultra = 9.
+ */
 export const POST_PROCESS_FRAGMENT_SHADER_SOURCE = `#version 300 es
-precision highp float;
+precision mediump float;
 
 uniform sampler2D uSource;
 uniform sampler2D uAuxSource;

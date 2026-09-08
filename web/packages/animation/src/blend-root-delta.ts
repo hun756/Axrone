@@ -8,7 +8,7 @@ import type {
     AnimationCompiledDirectMotion,
     AnimationCompiledAdditiveMotion,
 } from './blend-types';
-import { quatAccumulateWeighted, quatFinalizeWeighted, quatIdentity, quatMultiply, quatNormalize, quatSlerp } from './math';
+import { SoaQuatBuffer } from '@axrone/numeric';
 import { dispatchMotion } from './blend-visitor';
 import type { BlendMotionVisitor } from './blend-types';
 import type { AnimationMotionEvaluationContext } from './blend-scratch';
@@ -67,7 +67,7 @@ function extractBlend1DRootDelta(
     outTranslation[0] = leftScratch.translation[0]! + (rightScratch.translation[0]! - leftScratch.translation[0]!) * alpha;
     outTranslation[1] = leftScratch.translation[1]! + (rightScratch.translation[1]! - leftScratch.translation[1]!) * alpha;
     outTranslation[2] = leftScratch.translation[2]! + (rightScratch.translation[2]! - leftScratch.translation[2]!) * alpha;
-    quatSlerp(outRotation, 0, leftScratch.rotation, 0, rightScratch.rotation, 0, alpha);
+    SoaQuatBuffer.quatSlerp(outRotation, 0, leftScratch.rotation, 0, rightScratch.rotation, 0, alpha);
 }
 
 function extractBlend2DRootDelta(
@@ -101,11 +101,11 @@ function extractBlend2DRootDelta(
         outTranslation[1] += childScratch.translation[1]! * weights[index]!;
         outTranslation[2] += childScratch.translation[2]! * weights[index]!;
         if (weight > 0) {
-            quatAccumulateWeighted(outRotation, 0, referenceScratch.rotation, 0, childScratch.rotation, 0, weight, totalRotationWeight <= 0);
+            SoaQuatBuffer.quatAccumulateWeighted(outRotation, 0, referenceScratch.rotation, 0, childScratch.rotation, 0, weight, totalRotationWeight <= 0);
             totalRotationWeight += weight;
         }
     }
-    quatFinalizeWeighted(outRotation, 0, outRotation, 0, totalRotationWeight);
+    SoaQuatBuffer.quatFinalizeWeighted(outRotation, 0, outRotation, 0, totalRotationWeight);
 }
 
 function extractDirectRootDelta(
@@ -133,7 +133,7 @@ function extractDirectRootDelta(
         outTranslation[0] += childScratch.translation[0]! * weight;
         outTranslation[1] += childScratch.translation[1]! * weight;
         outTranslation[2] += childScratch.translation[2]! * weight;
-        quatAccumulateWeighted(outRotation, 0, referenceScratch.rotation, 0, childScratch.rotation, 0, weight, totalWeight <= 0);
+        SoaQuatBuffer.quatAccumulateWeighted(outRotation, 0, referenceScratch.rotation, 0, childScratch.rotation, 0, weight, totalWeight <= 0);
         totalWeight += weight;
     }
     if (totalWeight > 0) {
@@ -141,7 +141,7 @@ function extractDirectRootDelta(
         outTranslation[1] /= totalWeight;
         outTranslation[2] /= totalWeight;
     }
-    quatFinalizeWeighted(outRotation, 0, outRotation, 0, totalWeight);
+    SoaQuatBuffer.quatFinalizeWeighted(outRotation, 0, outRotation, 0, totalWeight);
 }
 
 function extractAdditiveRootDelta(
@@ -165,10 +165,10 @@ function extractAdditiveRootDelta(
     outTranslation[0] = baseScratch.translation[0]! + additiveScratch.translation[0]! * resolvedWeight;
     outTranslation[1] = baseScratch.translation[1]! + additiveScratch.translation[1]! * resolvedWeight;
     outTranslation[2] = baseScratch.translation[2]! + additiveScratch.translation[2]! * resolvedWeight;
-    quatIdentity(outRotation, 0);
-    quatSlerp(outRotation, 0, outRotation, 0, additiveScratch.rotation, 0, resolvedWeight);
-    quatMultiply(outRotation, 0, baseScratch.rotation, 0, outRotation, 0);
-    quatNormalize(outRotation, 0, outRotation, 0);
+    SoaQuatBuffer.quatIdentity(outRotation, 0);
+    SoaQuatBuffer.quatSlerp(outRotation, 0, outRotation, 0, additiveScratch.rotation, 0, resolvedWeight);
+    SoaQuatBuffer.quatMultiply(outRotation, 0, baseScratch.rotation, 0, outRotation, 0);
+    SoaQuatBuffer.quatNormalize(outRotation, 0, outRotation, 0);
 }
 
 interface RootDeltaContext {

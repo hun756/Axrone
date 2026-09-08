@@ -1,6 +1,6 @@
 import { AnimationClip } from './clip';
 import { freezeTuple3 } from './internal';
-import { ANIMATION_EPSILON } from './math';
+import { SOA_EPSILON } from '@axrone/numeric';
 import type {
     AnimationClipDefinition,
     AnimationMotionFeatureDefinition,
@@ -62,7 +62,7 @@ const normalizedDot3 = (
 ): number => {
     const leftLength = Math.hypot(left[0], left[1], left[2]);
     const rightLength = Math.hypot(right[0], right[1], right[2]);
-    if (leftLength <= ANIMATION_EPSILON || rightLength <= ANIMATION_EPSILON) {
+    if (leftLength <= SOA_EPSILON || rightLength <= SOA_EPSILON) {
         return 1;
     }
     return (

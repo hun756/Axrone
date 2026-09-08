@@ -3,7 +3,7 @@ import type { IParticleBuffer } from '../core/interfaces';
 import type { ICurve } from '../interfaces';
 import { BaseModule } from './base-module';
 import { CurveEvaluator } from '../curve-evaluator';
-import { Vec3 } from '@axrone/numeric';
+import { Vec3, SoaVec3Buffer } from '@axrone/numeric';
 
 export interface SizeStats {
     minSize: number;
@@ -201,11 +201,7 @@ export class SizeModule extends BaseModule<'size'> {
 
             if (config.speedInfluence && config.speedInfluence !== 0) {
                 const vi3 = particleIndex * 3;
-                const speed = Math.sqrt(
-                    velocities[vi3] * velocities[vi3] +
-                        velocities[vi3 + 1] * velocities[vi3 + 1] +
-                        velocities[vi3 + 2] * velocities[vi3 + 2]
-                );
+                const speed = SoaVec3Buffer.vec3Length(velocities, vi3);
                 finalSize *= 1 + speed * config.speedInfluence * 0.1;
             }
 

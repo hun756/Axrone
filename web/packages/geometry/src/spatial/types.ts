@@ -1,6 +1,7 @@
+import type { Brand } from '@axrone/utility';
 import { IVec2Like, IVec3Like } from '@axrone/numeric';
 
-export type SpatialItemId = string & { readonly __brand: unique symbol };
+export type SpatialItemId = Brand<string, 'SpatialItemId'>;
 
 export interface IBounds2D {
     readonly min: IVec2Like;

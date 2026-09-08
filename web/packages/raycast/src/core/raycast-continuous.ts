@@ -338,7 +338,7 @@ export class AdaptiveRaycaster3D {
 
 export class PriorityRaycaster3D {
     private readonly _raycastSystem: RaycastSystem3D;
-    // Min-heap: O(log N) enqueue vs O(N log N) full sort
+    // Max-heap: O(log N) enqueue vs O(N log N) full sort
     private readonly _heap: Array<{
         priority: number;
         origin: IVec3Like;

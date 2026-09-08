@@ -6,7 +6,7 @@ import { UIHost, setSceneUIWidgetRefResolver } from '@axrone/scene-runtime/scene
 // Re-export UIHost so the module namespace (imported via __AXRONE_RUNTIME__.modules)
 // exposes the class for the boot-factory fallback discovery path.
 export { UIHost };
-import { attachUIOverlayToScene } from './scene';
+import { attachUIOverlayToScene, resolveFramebufferSize } from './scene';
 import { WebGL2UIRenderer } from './renderer';
 import { createUIWorldSurface } from './world-surface';
 import { createUIWorldQuadRenderer, orientQuadTowardCamera } from './world-quad';
@@ -23,17 +23,22 @@ let nextWorldHostSystemId = 1;
  */
 const registerBuiltinWidgetControllers = (runtime: UIRuntime<unknown>): void => {
     type RegistryEntry = Parameters<typeof runtime.registry.register>[0];
-    runtime.registry.register(buttonFeedbackController as RegistryEntry);
-    runtime.registry.register(checkboxToggleController as RegistryEntry);
-    runtime.registry.register(sliderController as RegistryEntry);
-    runtime.registry.register(dropdownController as RegistryEntry);
-    runtime.registry.register(tooltipHostController as RegistryEntry);
-    runtime.registry.register(toggleSwitchController as RegistryEntry);
-    runtime.registry.register(radioGroupController as RegistryEntry);
-    runtime.registry.register(segmentedController as RegistryEntry);
-    runtime.registry.register(dragController as RegistryEntry);
-    runtime.registry.register(tabViewController as RegistryEntry);
-    runtime.registry.register(editBoxController as RegistryEntry);
+    const controllers: readonly RegistryEntry[] = [
+        buttonFeedbackController as RegistryEntry,
+        checkboxToggleController as RegistryEntry,
+        sliderController as RegistryEntry,
+        dropdownController as RegistryEntry,
+        tooltipHostController as RegistryEntry,
+        toggleSwitchController as RegistryEntry,
+        radioGroupController as RegistryEntry,
+        segmentedController as RegistryEntry,
+        dragController as RegistryEntry,
+        tabViewController as RegistryEntry,
+        editBoxController as RegistryEntry,
+    ];
+    for (const controller of controllers) {
+        runtime.registry.register(controller);
+    }
 };
 
 /**
@@ -229,11 +234,6 @@ const installUIWidgetRefResolver = (): void => {
     setSceneUIWidgetRefResolver(uiWidgetRefResolver);
 };
 
-const resolveFramebufferSize = (scene: SceneUIOverlayTarget): { width: number; height: number } => ({
-    width: Math.max(1, scene.canvas.width || scene.gl.drawingBufferWidth || 1),
-    height: Math.max(1, scene.canvas.height || scene.gl.drawingBufferHeight || 1),
-});
-
 const connectUIHostInput = <TPayload>(
     runtime: UIRuntime<TPayload>,
     scene: SceneUIOverlayTarget,
@@ -241,6 +241,20 @@ const connectUIHostInput = <TPayload>(
     getViewportSize?: () => { width: number; height: number }
 ): (() => void) => {
     const target = input.target;
+
+    // Cache the bounding rect to avoid per-pointermove layout reads.
+    // Invalidate on resize so the cache stays fresh.
+    let cachedRect: { left: number; top: number; width: number; height: number } | null = null;
+    const getRect = (): { left: number; top: number; width: number; height: number } => {
+        if (!cachedRect) {
+            cachedRect = target.getBoundingClientRect();
+        }
+        return cachedRect;
+    };
+    const onResize = (): void => {
+        cachedRect = null;
+    };
+    window.addEventListener('resize', onResize);
 
     // Convert client (CSS) coordinates to reference-space coordinates for the
     // UI runtime's hit-test. When a canvas config is loaded (match-width-or-height
@@ -259,7 +273,7 @@ const connectUIHostInput = <TPayload>(
     // because they render via commitToViewport(surface.width, surface.height)
     // rather than the main canvas framebuffer.
     const toReferencePoint = (event: UIHostPointerEventLike): { x: number; y: number } => {
-        const rect = target.getBoundingClientRect();
+        const rect = getRect();
         const viewport = getViewportSize
             ? getViewportSize()
             : resolveFramebufferSize(scene);
@@ -337,6 +351,7 @@ const connectUIHostInput = <TPayload>(
     }
 
     return () => {
+        window.removeEventListener('resize', onResize);
         target.removeEventListener('pointerdown', onPointerDown);
         target.removeEventListener('pointermove', onPointerMove);
         target.removeEventListener('pointerup', onPointerUp);
@@ -438,6 +453,10 @@ export function bindUIHostToScene<TPayload = unknown>(
         [Symbol.dispose]: disposeBinding,
     };
 
+    const existing = uiHostHandles.get(host);
+    if (existing) {
+        existing.dispose();
+    }
     uiHostHandles.set(host, handle as UIHostBindingHandle<unknown>);
     return handle;
 }
@@ -479,10 +498,16 @@ export interface UIHostWorldBindingOptions<TPayload = unknown>
 }
 
 const MAX_WORLD_TEXTURE_SIZE = 2048;
+const SURFACE_SIZE_STEP = 64;
+
+const quantizeSurfaceSize = (value: number): number => {
+    const clamped = Math.max(1, Math.min(MAX_WORLD_TEXTURE_SIZE, value));
+    return Math.ceil(clamped / SURFACE_SIZE_STEP) * SURFACE_SIZE_STEP;
+};
 
 const resolveWorldSurfaceSize = (host: UIHost): { width: number; height: number } => ({
-    width: Math.min(MAX_WORLD_TEXTURE_SIZE, Math.max(1, Math.round(host.worldWidth * host.textureScale))),
-    height: Math.min(MAX_WORLD_TEXTURE_SIZE, Math.max(1, Math.round(host.worldHeight * host.textureScale))),
+    width: quantizeSurfaceSize(host.worldWidth * host.textureScale),
+    height: quantizeSurfaceSize(host.worldHeight * host.textureScale),
 });
 
 /**
@@ -525,8 +550,7 @@ export function bindUIHostToWorld<TPayload = unknown>(
         const frame = runtime.commitToViewport(surface.width, surface.height);
         scene.gl.bindFramebuffer(scene.gl.FRAMEBUFFER, surface.framebuffer);
         scene.gl.viewport(0, 0, surface.width, surface.height);
-        scene.gl.clearColor(0, 0, 0, 0);
-        scene.gl.clear(scene.gl.COLOR_BUFFER_BIT);
+        scene.gl.clearBufferfv(scene.gl.COLOR, 0, [0, 0, 0, 0]);
         scene.gl.bindFramebuffer(scene.gl.FRAMEBUFFER, null);
         uiRenderer.render(frame, { framebuffer: surface.framebuffer });
 
@@ -592,6 +616,10 @@ export function bindUIHostToWorld<TPayload = unknown>(
         [Symbol.dispose]: disposeBinding,
     };
 
+    const existing = uiHostHandles.get(host);
+    if (existing) {
+        existing.dispose();
+    }
     uiHostHandles.set(host, handle as UIHostBindingHandle<unknown>);
     return handle;
 }

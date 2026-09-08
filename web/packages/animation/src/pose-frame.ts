@@ -1,5 +1,5 @@
 import { AnimationValidationError } from './errors';
-import { quatAccumulateWeighted, quatApplyToVec3, quatCopy, quatFinalizeWeighted, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Add, vec3Lerp, vec3Multiply } from './math';
+import { SoaVec3Buffer, SoaQuatBuffer } from '@axrone/numeric';
 import type { AnimationCurveBindingDefinition } from './types';
 import type { AnimationRig } from './rig';
 
@@ -223,7 +223,7 @@ export class AnimationWorldPose {
 
             const parentTranslationOffset = parentIndex * 3;
             const parentRotationOffset = parentIndex * 4;
-            vec3Multiply(
+            SoaVec3Buffer.vec3Multiply(
                 this._scratchVector,
                 0,
                 pose.translations,
@@ -231,7 +231,7 @@ export class AnimationWorldPose {
                 this.scales,
                 parentTranslationOffset
             );
-            quatApplyToVec3(
+            SoaQuatBuffer.quatApplyToVec3(
                 this._scratchVector,
                 0,
                 this.rotations,
@@ -239,7 +239,7 @@ export class AnimationWorldPose {
                 this._scratchVector,
                 0
             );
-            vec3Add(
+            SoaVec3Buffer.vec3Add(
                 this.translations,
                 localTranslationOffset,
                 this.translations,
@@ -247,7 +247,7 @@ export class AnimationWorldPose {
                 this._scratchVector,
                 0
             );
-            quatMultiply(
+            SoaQuatBuffer.quatMultiply(
                 this.rotations,
                 localRotationOffset,
                 this.rotations,
@@ -255,8 +255,8 @@ export class AnimationWorldPose {
                 pose.rotations,
                 localRotationOffset
             );
-            quatNormalize(this.rotations, localRotationOffset, this.rotations, localRotationOffset);
-            vec3Multiply(
+            SoaQuatBuffer.quatNormalize(this.rotations, localRotationOffset, this.rotations, localRotationOffset);
+            SoaVec3Buffer.vec3Multiply(
                 this.scales,
                 localTranslationOffset,
                 this.scales,

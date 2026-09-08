@@ -115,7 +115,16 @@ export const attachInputBrowserTarget = (
             return false;
         }
 
-        pointerLockElement.requestPointerLock();
+        try {
+            const result = pointerLockElement.requestPointerLock();
+            if (result && typeof (result as Promise<void>).catch === 'function') {
+                (result as Promise<void>).catch(() => {
+                    // Pointer lock request failed (e.g., user gesture required, already locked)
+                });
+            }
+        } catch {
+            // Synchronous failure (e.g., not supported)
+        }
         return true;
     };
 
@@ -215,7 +224,7 @@ export const attachInputBrowserTarget = (
             pressed: true,
             repeat: event.repeat,
         });
-    });
+    }, listenerOptions);
 
     add<KeyboardEvent>(keyboardTarget, 'keyup', (event) => {
         preventIfNeeded(event);
@@ -225,7 +234,7 @@ export const attachInputBrowserTarget = (
             pressed: false,
             repeat: event.repeat,
         });
-    });
+    }, listenerOptions);
 
     add<InputEvent>(
         keyboardTarget,
@@ -291,6 +300,14 @@ export const attachInputBrowserTarget = (
             const point = resolvePoint(event.clientX, event.clientY, event.movementX, event.movementY);
             if (pointerLock.requestOnMouseDown) {
                 requestPointerLock();
+            }
+
+            if (typeof (event.target as Element)?.setPointerCapture === 'function' && event.pointerId !== undefined) {
+                try {
+                    (event.target as Element).setPointerCapture(event.pointerId);
+                } catch {
+                    // Pointer capture may fail if already captured or invalid pointer
+                }
             }
 
             host.dispatch({

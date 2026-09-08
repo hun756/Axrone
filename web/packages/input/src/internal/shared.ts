@@ -423,7 +423,7 @@ export const modifiersToMask = (modifiers: readonly InputModifierKey[]): number 
 export const applyDeadzone = (value: number, deadzone: number): number =>
     Math.abs(value) <= deadzone ? 0 : value;
 
-export const magnitude = (x: number, y: number): number => Math.hypot(x, y);
+export const magnitude = (x: number, y: number): number => Math.sqrt(x * x + y * y);
 
 export const applyScalarProcessors = (
     value: number,

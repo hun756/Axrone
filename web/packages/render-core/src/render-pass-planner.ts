@@ -644,7 +644,7 @@ export class RenderPassPlanner<TNative = unknown> {
         for (let i = 0; i < this._effectsAfter.length; i++) {
             const effect = this._effectsAfter.at(i);
             const target =
-                i % 2 === 0
+                currentColor === ping
                     ? (pong as RenderResourceName<'post'>)
                     : (ping as RenderResourceName<'post'>);
             order = this._pushPass(order, {

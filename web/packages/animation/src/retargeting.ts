@@ -1,5 +1,5 @@
 import { AnimationRetargetingError, AnimationValidationError } from './errors';
-import { quatCopy, quatInvert, quatMultiply, quatNormalize, vec3Copy } from './math';
+import { SoaVec3Buffer, SoaQuatBuffer } from '@axrone/numeric';
 import { AnimationFrame, type AnimationCurveLayout } from './pose';
 import { AnimationRig } from './rig';
 import type {
@@ -49,8 +49,8 @@ export class AnimationRetargeter {
                 const targetRotationOffset = targetIndex * 4;
                 const inverse = new Float32Array(4);
                 const rotationOffset = new Float32Array(4);
-                quatInvert(inverse, 0, this.sourceRig.restRotations, sourceRotationOffset);
-                quatMultiply(
+                SoaQuatBuffer.quatInvert(inverse, 0, this.sourceRig.restRotations, sourceRotationOffset);
+                SoaQuatBuffer.quatMultiply(
                     rotationOffset,
                     0,
                     this.targetRig.restRotations,
@@ -58,7 +58,7 @@ export class AnimationRetargeter {
                     inverse,
                     0
                 );
-                quatNormalize(rotationOffset, 0, rotationOffset, 0);
+                SoaQuatBuffer.quatNormalize(rotationOffset, 0, rotationOffset, 0);
                 return Object.freeze({
                     sourceIndex,
                     targetIndex,
@@ -86,7 +86,7 @@ export class AnimationRetargeter {
             const targetRotationOffset = mapping.targetIndex * 4;
             switch (mapping.translationMode) {
                 case 'none':
-                    vec3Copy(
+                    SoaVec3Buffer.vec3Copy(
                         targetFrame.pose.translations,
                         targetTranslationOffset,
                         this.targetRig.restTranslations,
@@ -94,7 +94,7 @@ export class AnimationRetargeter {
                     );
                     break;
                 case 'absolute':
-                    vec3Copy(
+                    SoaVec3Buffer.vec3Copy(
                         targetFrame.pose.translations,
                         targetTranslationOffset,
                         sourceFrame.pose.translations,
@@ -114,7 +114,7 @@ export class AnimationRetargeter {
 
             switch (mapping.rotationMode) {
                 case 'copy':
-                    quatCopy(
+                    SoaQuatBuffer.quatCopy(
                         targetFrame.pose.rotations,
                         targetRotationOffset,
                         sourceFrame.pose.rotations,
@@ -123,7 +123,7 @@ export class AnimationRetargeter {
                     break;
                 case 'offset':
                 default:
-                    quatMultiply(
+                    SoaQuatBuffer.quatMultiply(
                         targetFrame.pose.rotations,
                         targetRotationOffset,
                         mapping.rotationOffset,
@@ -131,7 +131,7 @@ export class AnimationRetargeter {
                         sourceFrame.pose.rotations,
                         sourceRotationOffset
                     );
-                    quatNormalize(
+                    SoaQuatBuffer.quatNormalize(
                         targetFrame.pose.rotations,
                         targetRotationOffset,
                         targetFrame.pose.rotations,

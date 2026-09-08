@@ -208,62 +208,41 @@ describe('RaycastStatistics', () => {
         expect(stats.cacheHits).toBe(0);
         expect(stats.hitRate).toBe(0);
         expect(stats.cacheHitRate).toBe(0);
-        expect(stats.averageTestsPerRay).toBe(0);
-        expect(stats.frameRaycasts).toBe(0);
     });
 
     it('recordRaycast increments counters correctly', () => {
         const stats = new RaycastStatistics();
-        stats.recordRaycast(true, 3);
-        stats.recordRaycast(false, 1);
+        stats.recordRaycast(true);
+        stats.recordRaycast(false);
         expect(stats.totalRaycasts).toBe(2);
         expect(stats.hitCount).toBe(1);
         expect(stats.missCount).toBe(1);
-        expect(stats.frameRaycasts).toBe(2);
     });
 
     it('hitRate computes correctly', () => {
         const stats = new RaycastStatistics();
-        stats.recordRaycast(true, 1);
-        stats.recordRaycast(true, 1);
-        stats.recordRaycast(false, 1);
+        stats.recordRaycast(true);
+        stats.recordRaycast(true);
+        stats.recordRaycast(false);
         expect(stats.hitRate).toBeCloseTo(2 / 3, 5);
     });
 
     it('cacheHitRate computes correctly', () => {
         const stats = new RaycastStatistics();
-        stats.recordRaycast(true, 1);
-        stats.recordRaycast(false, 1);
+        stats.recordRaycast(true);
+        stats.recordRaycast(false);
         stats.recordCacheHit();
         expect(stats.cacheHitRate).toBeCloseTo(0.5, 5);
     });
 
-    it('averageTestsPerRay computes correctly', () => {
-        const stats = new RaycastStatistics();
-        stats.recordRaycast(true, 4);
-        stats.recordRaycast(false, 2);
-        expect(stats.averageTestsPerRay).toBeCloseTo(3, 5);
-    });
-
-    it('endFrame resets frameRaycasts', () => {
-        const stats = new RaycastStatistics();
-        stats.recordRaycast(true, 1);
-        stats.recordRaycast(true, 1);
-        expect(stats.frameRaycasts).toBe(2);
-        stats.endFrame();
-        expect(stats.frameRaycasts).toBe(0);
-        expect(stats.totalRaycasts).toBe(2);
-    });
-
     it('reset zeroes all counters', () => {
         const stats = new RaycastStatistics();
-        stats.recordRaycast(true, 5);
+        stats.recordRaycast(true);
         stats.recordCacheHit();
         stats.reset();
         expect(stats.totalRaycasts).toBe(0);
         expect(stats.hitCount).toBe(0);
         expect(stats.missCount).toBe(0);
         expect(stats.cacheHits).toBe(0);
-        expect(stats.averageTestsPerRay).toBe(0);
     });
 });

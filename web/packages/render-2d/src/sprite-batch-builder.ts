@@ -1,4 +1,5 @@
 import { clamp01 } from '@axrone/numeric';
+import { transformPoint2D } from '@axrone/render-core';
 import {
     RENDER_2D_SPRITE_INDICES_PER_QUAD,
     RENDER_2D_SPRITE_VERTEX_STRIDE,
@@ -107,6 +108,21 @@ const cloneMask = (
               ...(value.cornerRadius !== undefined ? { cornerRadius: value.cornerRadius } : {}),
           })
         : null;
+
+const createBatchKeyCacheKey = (
+    sourceKey: string,
+    clipRect: Render2DRectLike | null,
+    mask: Render2DSpriteMask | null
+): string => {
+    let key = sourceKey;
+    if (clipRect) {
+        key += `|c:${clipRect.x},${clipRect.y},${clipRect.width},${clipRect.height}`;
+    }
+    if (mask) {
+        key += `|m:${mask.shape},${mask.size.width},${mask.size.height}`;
+    }
+    return key;
+};
 
 const areSourcesEqual = (
     left: Render2DSpriteSource,
@@ -308,23 +324,13 @@ const writeVertex = (
     uintView[offset + 5] = color;
 };
 
-const transformPoint = (
-    matrix: ArrayLike<number>,
-    localX: number,
-    localY: number,
-    out: Float32Array
-): Float32Array => {
-    out[0] = (matrix[0] ?? 0) * localX + (matrix[1] ?? 0) * localY + (matrix[3] ?? 0);
-    out[1] = (matrix[4] ?? 0) * localX + (matrix[5] ?? 0) * localY + (matrix[7] ?? 0);
-    out[2] = (matrix[8] ?? 0) * localX + (matrix[9] ?? 0) * localY + (matrix[11] ?? 0);
-    return out;
-};
-
 export class Render2DSpriteBatchBuilder {
     private readonly _maxBatchQuads: number;
+    private readonly _validateInputs: boolean;
     private readonly _batches: MutableRender2DSpriteBatchRange[] = [];
     private readonly _renderableSubmissions: Render2DSpriteSubmission[] = [];
     private readonly _submissionQuadCounts: number[] = [];
+    private readonly _keyCache = new Map<string, Render2DSpriteBatchKey>();
     private _vertexBuffer = new ArrayBuffer(0);
     private _vertexBytes = new Uint8Array(0);
     private _vertexFloatView = new Float32Array(0);
@@ -350,6 +356,7 @@ export class Render2DSpriteBatchBuilder {
 
     constructor(options: Render2DSpriteBatchBuilderOptions = {}) {
         this._maxBatchQuads = options.maxBatchQuads ?? DEFAULT_MAX_BATCH_QUADS;
+        this._validateInputs = options.validateInputs ?? true;
 
         if (!Number.isInteger(this._maxBatchQuads) || this._maxBatchQuads <= 0) {
             throw new Render2DValidationError('maxBatchQuads must be a positive integer');
@@ -361,12 +368,15 @@ export class Render2DSpriteBatchBuilder {
     ): Render2DSpriteBatchBuildResult {
         this._renderableSubmissions.length = 0;
         this._submissionQuadCounts.length = 0;
+        this._keyCache.clear();
 
         let spriteCount = 0;
         let quadCount = 0;
 
         for (const submission of submissions) {
-            validateSubmission(submission);
+            if (this._validateInputs) {
+                validateSubmission(submission);
+            }
             if (!isRenderableSubmission(submission)) {
                 continue;
             }
@@ -421,12 +431,20 @@ export class Render2DSpriteBatchBuilder {
                 this._batches[batchIndex]!.quadCount + submissionQuadCount > this._maxBatchQuads
             ) {
                 batchIndex += 1;
-                const key = {
-                    source: cloneSource(submission.source),
-                    sourceKey: getRender2DSpriteSourceKey(submission.source),
-                    clipRect: cloneRect(submissionClipRect),
-                    mask: cloneMask(submission.mask),
-                } satisfies Render2DSpriteBatchKey;
+                const sourceKey = getRender2DSpriteSourceKey(submission.source);
+                const cacheKey = createBatchKeyCacheKey(sourceKey, submissionClipRect, submission.mask ?? null);
+
+                let key = this._keyCache.get(cacheKey);
+                if (!key) {
+                    key = {
+                        source: cloneSource(submission.source),
+                        sourceKey,
+                        clipRect: cloneRect(submissionClipRect),
+                        mask: cloneMask(submission.mask),
+                    } satisfies Render2DSpriteBatchKey;
+                    this._keyCache.set(cacheKey, key);
+                }
+
                 this._batches[batchIndex] = {
                     key,
                     spriteOffset,
@@ -722,7 +740,7 @@ export class Render2DSpriteBatchBuilder {
         const vertexBase = quadIndex * RENDER_2D_SPRITE_VERTICES_PER_QUAD;
         const indexBase = quadIndex * RENDER_2D_SPRITE_INDICES_PER_QUAD;
 
-        const point = transformPoint(submission.worldMatrix, minX, minY, this._pointScratch);
+        const point = transformPoint2D(submission.worldMatrix, minX, minY, this._pointScratch);
         writeVertex(
             this._vertexFloatView,
             this._vertexUintView,
@@ -735,7 +753,7 @@ export class Render2DSpriteBatchBuilder {
             color
         );
 
-        transformPoint(submission.worldMatrix, maxX, minY, this._pointScratch);
+        transformPoint2D(submission.worldMatrix, maxX, minY, this._pointScratch);
         writeVertex(
             this._vertexFloatView,
             this._vertexUintView,
@@ -748,7 +766,7 @@ export class Render2DSpriteBatchBuilder {
             color
         );
 
-        transformPoint(submission.worldMatrix, maxX, maxY, this._pointScratch);
+        transformPoint2D(submission.worldMatrix, maxX, maxY, this._pointScratch);
         writeVertex(
             this._vertexFloatView,
             this._vertexUintView,
@@ -761,7 +779,7 @@ export class Render2DSpriteBatchBuilder {
             color
         );
 
-        transformPoint(submission.worldMatrix, minX, maxY, this._pointScratch);
+        transformPoint2D(submission.worldMatrix, minX, maxY, this._pointScratch);
         writeVertex(
             this._vertexFloatView,
             this._vertexUintView,

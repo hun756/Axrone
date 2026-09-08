@@ -24,7 +24,7 @@ const GL_TYPE = {
     UNSIGNED_INT: 0x1405,
     FLOAT: 0x1406,
     HALF_FLOAT: 0x140b,
-    UNSIGNED_INT_24_8: 0x84F9,
+    UNSIGNED_INT_24_8: 0x84FA,
     FLOAT_32_UNSIGNED_INT_24_8_REV: 0x8dad,
 } as const;
 

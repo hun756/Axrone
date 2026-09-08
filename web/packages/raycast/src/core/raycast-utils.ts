@@ -403,11 +403,11 @@ export function createSphereCastOrigins3D(
     samples: number = 8
 ): Vec3[] {
     const origins: Vec3[] = [];
-    const up = Vec3.create(0, 1, 0);
-    const right = Vec3.cross(direction, up);
-    Vec3.normalize(right, right);
-    const actualUp = Vec3.cross(right, direction);
-    Vec3.normalize(actualUp, actualUp);
+    const up = Math.abs(direction.y) < 0.9
+        ? Vec3.create(0, 1, 0)
+        : Vec3.create(1, 0, 0);
+    const right = Vec3.normalize(Vec3.cross(direction, up));
+    const actualUp = Vec3.normalize(Vec3.cross(right, direction));
 
     for (let i = 0; i < samples; i++) {
         const angle = (Math.PI * 2 * i) / samples;

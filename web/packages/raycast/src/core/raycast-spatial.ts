@@ -1,29 +1,19 @@
 import { Vec3, IVec3Like, EPSILON } from '@axrone/numeric';
 import { Octree } from '@axrone/geometry';
 
-const GRID_INITIAL_CAPACITY = 256;
-// Spatial coordinate packing: 21 bits per axis (covers ±1M units at 1.0 cell size)
-// Uses BigInt-free approach: pack into two 32-bit numbers to avoid float issues
 const COORD_BITS = 21;
 const COORD_MASK = (1 << COORD_BITS) - 1;
-const COORD_OFFSET = 1 << (COORD_BITS - 1); // bias to handle negatives
+const COORD_OFFSET = 1 << (COORD_BITS - 1);
 
 function packCellKey(x: number, y: number, z: number): number {
-    // Bias coordinates to non-negative range
     const bx = (x + COORD_OFFSET) & COORD_MASK;
     const by = (y + COORD_OFFSET) & COORD_MASK;
     const bz = (z + COORD_OFFSET) & COORD_MASK;
-    // FNV-1a style mix into a 32-bit integer
-    let h = 0x811c9dc5;
-    h = Math.imul(h ^ bx, 0x01000193);
-    h = Math.imul(h ^ by, 0x01000193);
-    h = Math.imul(h ^ bz, 0x01000193);
-    return h >>> 0;
+    return (bx << 42) | (by << 21) | bz;
 }
 
 interface GridCell<T> {
     readonly items: Set<T>;
-    // Store canonical coords for collision resolution
     readonly x: number;
     readonly y: number;
     readonly z: number;
@@ -46,19 +36,18 @@ export class SpatialHashGrid3D<T> {
     }
 
     public insert(item: T, min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): void {
-        const cellKeys = this._getCellKeys(min, max);
         if (!this._itemCells.has(item)) {
             this._itemCells.set(item, new Set());
         }
         const itemCells = this._itemCells.get(item)!;
 
-        for (const { key, x, y, z } of cellKeys) {
+        this._forEachCellKey(min, max, (key, x, y, z) => {
             if (!this._grid.has(key)) {
                 this._grid.set(key, { items: new Set<T>(), x, y, z });
             }
             this._grid.get(key)!.items.add(item);
             itemCells.add(key);
-        }
+        });
     }
 
     public remove(item: T): void {
@@ -83,14 +72,13 @@ export class SpatialHashGrid3D<T> {
     }
 
     public query(min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): T[] {
-        const cellKeys = this._getCellKeys(min, max);
         const results = new Set<T>();
-        for (const { key } of cellKeys) {
+        this._forEachCellKey(min, max, (key) => {
             const cell = this._grid.get(key);
             if (cell) {
                 for (const item of cell.items) results.add(item);
             }
-        }
+        });
         return Array.from(results);
     }
 
@@ -177,18 +165,20 @@ export class SpatialHashGrid3D<T> {
         };
     }
 
-    private _getCellKeys(min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): { key: number; x: number; y: number; z: number }[] {
+    private _forEachCellKey(
+        min: Readonly<IVec3Like>,
+        max: Readonly<IVec3Like>,
+        callback: (key: number, x: number, y: number, z: number) => void
+    ): void {
         const minCell = this._getCellCoords(min);
         const maxCell = this._getCellCoords(max);
-        const keys: { key: number; x: number; y: number; z: number }[] = [];
         for (let cx = minCell.x; cx <= maxCell.x; cx++) {
             for (let cy = minCell.y; cy <= maxCell.y; cy++) {
                 for (let cz = minCell.z; cz <= maxCell.z; cz++) {
-                    keys.push({ key: packCellKey(cx, cy, cz), x: cx, y: cy, z: cz });
+                    callback(packCellKey(cx, cy, cz), cx, cy, cz);
                 }
             }
         }
-        return keys;
     }
 
     private _cellBoundary(cell: number, direction: number): number {
@@ -198,7 +188,6 @@ export class SpatialHashGrid3D<T> {
 
 export class SpatialOctree<T> {
     private readonly _octree: Octree<T>;
-    private readonly _itemBounds = new Map<T, readonly [IVec3Like, IVec3Like]>();
 
     constructor(
         center: Readonly<IVec3Like>,
@@ -227,14 +216,11 @@ export class SpatialOctree<T> {
     }
 
     public insert(item: T, min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): void {
-        this._itemBounds.set(item, [min, max]);
         this._octree.insert([min, max], item);
     }
 
     public remove(item: T): boolean {
-        const removed = this._octree.remove(item);
-        this._itemBounds.delete(item);
-        return removed;
+        return this._octree.remove(item);
     }
 
     public query(min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): T[] {
@@ -253,7 +239,6 @@ export class SpatialOctree<T> {
 
     public clear(): void {
         this._octree.clear();
-        this._itemBounds.clear();
     }
 
     public get itemCount(): number {

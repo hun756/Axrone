@@ -1,6 +1,7 @@
 import type { IHasher, HashFactoryOptions } from './interfaces';
 import { createHasher } from './factory';
 import type { HashValue, HashAlgorithmName, Seed32, Seed64, Hash32 } from './types';
+import { HashInvalidInputError } from './errors';
 
 const SHARED_ENCODER = new TextEncoder();
 
@@ -68,7 +69,8 @@ export class HashBuilder<H extends HashValue = Hash32> {
         else if (typeof data === 'number') this._hasher.updateF64(data);
         else if (typeof data === 'bigint') this._hasher.updateI64(data);
         else if (typeof data === 'boolean') this._hasher.updateBoolean(data);
-        else this._hasher.updateBytes(data);
+        else if (data instanceof Uint8Array) this._hasher.updateBytes(data);
+        else throw new HashInvalidInputError(`Unsupported update type: ${typeof data}`);
         return this;
     }
 
