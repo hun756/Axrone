@@ -42,10 +42,15 @@ import {
  *
  * **Motor overshoot caveat:** When a per-axis motor drives toward its angular
  * or linear limit, the sequential impulse solver stalls the motor at the
- * limit row, but a small overshoot (~0.05–0.1 rad for angular, proportional
- * for linear) is expected. This is inherent to the iterative solver — the
- * motor impulse applied before the limit row is resolved causes brief
- * exceedance. For tighter precision, increase `velocityIterations`.
+ * limit row, but a small overshoot is expected. This is inherent to the
+ * iterative solver — the motor impulse applied before the limit row is
+ * resolved causes brief exceedance.
+ *
+ * **Measured values** (diagnostic test via `createGenericConstraint`, angular
+ * motor speed 10 rad/s, limit π/4 rad, 120 steps at 1/60 s): steady-state
+ * angle ≈ 0.810 rad, overshoot ≈ 0.025 rad (~1.4°), angular velocity stalled
+ * to ≈ 0.5 rad/s. Peak overshoot during transient ≈ 0.13 rad. For tighter
+ * precision, increase `velocityIterations`.
  *
  * All distance units are METRES (ADR 0004). Angles are in radians.
  *

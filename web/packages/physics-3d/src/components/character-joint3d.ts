@@ -24,10 +24,18 @@ import {
  *
  * **Motor overshoot caveat:** When the twist motor drives toward the twist
  * limit, the sequential impulse solver stalls the motor at the limit row,
- * but a small overshoot (~0.03–0.05 rad) is expected. This is inherent to
- * the iterative solver — the motor impulse applied before the limit row is
- * resolved causes brief exceedance. For tighter precision, increase
- * `velocityIterations`.
+ * but a small overshoot is expected. This is inherent to the iterative
+ * solver — the motor impulse applied before the limit row is resolved
+ * causes brief exceedance.
+ *
+ * **Estimated range** (not directly measured at steady state via the
+ * high-level API — the cone-twist motor's effective torque is limited by
+ * the relaxation factor and solver coupling, so the twist does not reliably
+ * reach the limit in world.step() simulation; low-level solver tests in
+ * physics-world-3d-constraints-cone-twist.test.ts scenario 6 confirm stall
+ * semantics with maxTwist ≤ limit + 0.05 rad). Overshoot is expected to be
+ * in the range of ~0.03–0.05 rad when the motor does reach the limit.
+ * For tighter precision, increase `velocityIterations`.
  *
  * All distance units are METRES (ADR 0004). Angles are in radians.
  *
