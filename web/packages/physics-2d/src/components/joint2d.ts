@@ -186,13 +186,16 @@ export abstract class Joint2D extends Component {
         fallbackY: number = 0
     ): IVec2Like {
         if (Array.isArray(value) && value.length >= 2) {
-            return { x: value[0], y: value[1] };
+            return {
+                x: Number.isFinite(value[0]) ? value[0] : fallbackX,
+                y: Number.isFinite(value[1]) ? value[1] : fallbackY,
+            };
         }
         if (value && typeof value === 'object') {
             const v = value as Record<string, unknown>;
             return {
-                x: typeof v.x === 'number' ? v.x : fallbackX,
-                y: typeof v.y === 'number' ? v.y : fallbackY,
+                x: typeof v.x === 'number' && Number.isFinite(v.x) ? v.x : fallbackX,
+                y: typeof v.y === 'number' && Number.isFinite(v.y) ? v.y : fallbackY,
             };
         }
         return { x: fallbackX, y: fallbackY };
