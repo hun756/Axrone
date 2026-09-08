@@ -323,14 +323,22 @@ export class PhysicsWorld3DContactRuntime {
         // ─── Prepare Jacobian constraints (once per step, outside iteration loop) ───
         const stepDt = dt ?? (1 / 60);
         this._solverBodies.clear();
-        this._jacobianCache = prepareAllConstraints(
-            this._host.constraintManager.getAllConstraintIds(),
-            this._host.constraintManager,
-            this._host.constraintDescriptors,
-            this._host.bodyManager,
-            this._solverBodies,
-            stepDt,
-        );
+        // Early-exit guard: when no constraints exist, skip prepareAllConstraints
+        // entirely to avoid allocating a new Map every step. Clear the existing
+        // cache in-place (zero allocation) instead.
+        const constraintIds = this._host.constraintManager.getAllConstraintIds();
+        if (constraintIds.length > 0) {
+            this._jacobianCache = prepareAllConstraints(
+                constraintIds,
+                this._host.constraintManager,
+                this._host.constraintDescriptors,
+                this._host.bodyManager,
+                this._solverBodies,
+                stepDt,
+            );
+        } else {
+            this._jacobianCache.clear();
+        }
 
         for (let i = 0; i < velIters; i++) {
             for (const m of manifolds.values()) this._solveContactVelocity(m);
