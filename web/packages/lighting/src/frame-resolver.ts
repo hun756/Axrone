@@ -1,4 +1,4 @@
-import { Vec3 } from '@axrone/numeric';
+import { SoaVec3Buffer, Vec3 } from '@axrone/numeric';
 import type { Disposable, Mutable } from '@axrone/utility';
 import type { ReadonlyTuple3 } from '@axrone/utility';
 import { brandLightingRigId, brandLightingVersion } from './brands';
@@ -737,26 +737,16 @@ export class LightingFrameResolver implements Disposable {
 
     #writeDirectional(light: DirectionalLightDefinition, slot: number): void {
         const offset = slot * 3;
-        this.#directionalDirectionsBase[offset] = light.direction.x;
-        this.#directionalDirectionsBase[offset + 1] = light.direction.y;
-        this.#directionalDirectionsBase[offset + 2] = light.direction.z;
-        this.#directionalColorsBase[offset] = light.color.x;
-        this.#directionalColorsBase[offset + 1] = light.color.y;
-        this.#directionalColorsBase[offset + 2] = light.color.z;
-        this.#directionalAmbientColorsBase[offset] = light.ambient.x;
-        this.#directionalAmbientColorsBase[offset + 1] = light.ambient.y;
-        this.#directionalAmbientColorsBase[offset + 2] = light.ambient.z;
+        SoaVec3Buffer.vec3Set(this.#directionalDirectionsBase, offset, light.direction.x, light.direction.y, light.direction.z);
+        SoaVec3Buffer.vec3Set(this.#directionalColorsBase, offset, light.color.x, light.color.y, light.color.z);
+        SoaVec3Buffer.vec3Set(this.#directionalAmbientColorsBase, offset, light.ambient.x, light.ambient.y, light.ambient.z);
         this.#directionalIntensitiesBase[slot] = light.intensity;
     }
 
     #writePoint(light: PointLightDefinition, slot: number): void {
         const offset = slot * 3;
-        this.#pointPositionsBase[offset] = light.position.x;
-        this.#pointPositionsBase[offset + 1] = light.position.y;
-        this.#pointPositionsBase[offset + 2] = light.position.z;
-        this.#pointColorsBase[offset] = light.color.x;
-        this.#pointColorsBase[offset + 1] = light.color.y;
-        this.#pointColorsBase[offset + 2] = light.color.z;
+        SoaVec3Buffer.vec3Set(this.#pointPositionsBase, offset, light.position.x, light.position.y, light.position.z);
+        SoaVec3Buffer.vec3Set(this.#pointColorsBase, offset, light.color.x, light.color.y, light.color.z);
         this.#pointIntensitiesBase[slot] = light.intensity;
         this.#pointRangesBase[slot] = light.range;
         this.#pointAttenuationsBase[slot] = light.attenuation;
@@ -764,15 +754,9 @@ export class LightingFrameResolver implements Disposable {
 
     #writeSpot(light: SpotLightDefinition, slot: number): void {
         const offset = slot * 3;
-        this.#spotPositionsBase[offset] = light.position.x;
-        this.#spotPositionsBase[offset + 1] = light.position.y;
-        this.#spotPositionsBase[offset + 2] = light.position.z;
-        this.#spotDirectionsBase[offset] = light.direction.x;
-        this.#spotDirectionsBase[offset + 1] = light.direction.y;
-        this.#spotDirectionsBase[offset + 2] = light.direction.z;
-        this.#spotColorsBase[offset] = light.color.x;
-        this.#spotColorsBase[offset + 1] = light.color.y;
-        this.#spotColorsBase[offset + 2] = light.color.z;
+        SoaVec3Buffer.vec3Set(this.#spotPositionsBase, offset, light.position.x, light.position.y, light.position.z);
+        SoaVec3Buffer.vec3Set(this.#spotDirectionsBase, offset, light.direction.x, light.direction.y, light.direction.z);
+        SoaVec3Buffer.vec3Set(this.#spotColorsBase, offset, light.color.x, light.color.y, light.color.z);
         this.#spotIntensitiesBase[slot] = light.intensity;
         this.#spotRangesBase[slot] = light.range;
         this.#spotInnerConeCosinesBase[slot] = light.innerConeCosine;
@@ -782,12 +766,8 @@ export class LightingFrameResolver implements Disposable {
     #writeLocalPoint(light: PointLightDefinition, slot: number): void {
         const offset = slot * 3;
         this.#localLightKindsBase[slot] = LightTypeCode[LightKind.Point];
-        this.#localLightPositionsBase[offset] = light.position.x;
-        this.#localLightPositionsBase[offset + 1] = light.position.y;
-        this.#localLightPositionsBase[offset + 2] = light.position.z;
-        this.#localLightColorsBase[offset] = light.color.x;
-        this.#localLightColorsBase[offset + 1] = light.color.y;
-        this.#localLightColorsBase[offset + 2] = light.color.z;
+        SoaVec3Buffer.vec3Set(this.#localLightPositionsBase, offset, light.position.x, light.position.y, light.position.z);
+        SoaVec3Buffer.vec3Set(this.#localLightColorsBase, offset, light.color.x, light.color.y, light.color.z);
         this.#localLightIntensitiesBase[slot] = light.intensity;
         this.#localLightRangesBase[slot] = light.range;
         this.#localLightAttenuationsBase[slot] = light.attenuation;
@@ -798,15 +778,9 @@ export class LightingFrameResolver implements Disposable {
     #writeLocalSpot(light: SpotLightDefinition, slot: number): void {
         const offset = slot * 3;
         this.#localLightKindsBase[slot] = LightTypeCode[LightKind.Spot];
-        this.#localLightPositionsBase[offset] = light.position.x;
-        this.#localLightPositionsBase[offset + 1] = light.position.y;
-        this.#localLightPositionsBase[offset + 2] = light.position.z;
-        this.#localLightDirectionsBase[offset] = light.direction.x;
-        this.#localLightDirectionsBase[offset + 1] = light.direction.y;
-        this.#localLightDirectionsBase[offset + 2] = light.direction.z;
-        this.#localLightColorsBase[offset] = light.color.x;
-        this.#localLightColorsBase[offset + 1] = light.color.y;
-        this.#localLightColorsBase[offset + 2] = light.color.z;
+        SoaVec3Buffer.vec3Set(this.#localLightPositionsBase, offset, light.position.x, light.position.y, light.position.z);
+        SoaVec3Buffer.vec3Set(this.#localLightDirectionsBase, offset, light.direction.x, light.direction.y, light.direction.z);
+        SoaVec3Buffer.vec3Set(this.#localLightColorsBase, offset, light.color.x, light.color.y, light.color.z);
         this.#localLightIntensitiesBase[slot] = light.intensity;
         this.#localLightRangesBase[slot] = light.range;
         this.#localLightInnerConeCosinesBase[slot] = light.innerConeCosine;
