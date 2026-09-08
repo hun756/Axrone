@@ -690,7 +690,7 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     private _integratePositions(dt: number): void {
-        integratePositionsImpl(this._bodyManager, dt, this._autoClearForces);
+        integratePositionsImpl(this._bodyManager, dt, this._autoClearForces, this._maxTranslation);
     }
 
     /**

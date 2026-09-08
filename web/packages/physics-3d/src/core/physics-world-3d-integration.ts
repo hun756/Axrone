@@ -78,13 +78,20 @@ export function integrateVelocities(
 /**
  * Integrates velocities into positions (linear + angular via quaternion integration).
  * Optionally clears force accumulators when autoClearForces is enabled.
+ *
+ * @param maxTranslation - Maximum position translation per step in metres per step (m/step).
+ *   Bodies exceeding this per-step displacement are scaled down preserving direction
+ *   (Box2D anti-tunneling semantics). Default: `PhysicsConstants.MAX_TRANSLATION` (2.0 m/step).
+ *   @see ADR 0004
  */
 export function integratePositions(
     bodyManager: BodyManager3D,
     dt: number,
-    autoClearForces: boolean
+    autoClearForces: boolean,
+    maxTranslation: number = PhysicsConstants.MAX_TRANSLATION
 ): void {
     const bodyIds = bodyManager.getBodyIds();
+    const maxTransSq = maxTranslation * maxTranslation;
 
     for (const bodyId of bodyIds) {
         if (bodyManager.getBodyType(bodyId) === BODY_TYPE_STATIC) continue;
@@ -96,10 +103,24 @@ export function integratePositions(
         const rotation = bodyManager.getRotation(bodyId);
         const angularVelocity = bodyManager.getAngularVelocity(bodyId);
 
+        // Compute position delta
+        let dx = velocity.x * dt;
+        let dy = velocity.y * dt;
+        let dz = velocity.z * dt;
+
+        // Clamp position delta to maxTranslation per step (Box2D anti-tunneling)
+        const transSq = dx * dx + dy * dy + dz * dz;
+        if (transSq > maxTransSq) {
+            const scale = maxTranslation / Math.sqrt(transSq);
+            dx *= scale;
+            dy *= scale;
+            dz *= scale;
+        }
+
         bodyManager.setPosition(bodyId, {
-            x: position.x + velocity.x * dt,
-            y: position.y + velocity.y * dt,
-            z: position.z + velocity.z * dt,
+            x: position.x + dx,
+            y: position.y + dy,
+            z: position.z + dz,
         });
 
         const angularSpeed = Math.sqrt(
