@@ -72,6 +72,7 @@ export class GearJoint2D extends Joint2D {
     private _jointB: Joint2D | null = null;
     private _ratio: number = 1;
     private _pendingCreation: boolean = false;
+    private _pendingWarned: boolean = false;
 
     get jointA(): Joint2D | null {
         return this._jointA;
@@ -118,14 +119,25 @@ export class GearJoint2D extends Joint2D {
      * Attempt to resolve deferred constraint creation.
      * Returns `true` if the constraint was successfully created.
      *
-     * Call this from the game loop or physics bridge when gear joints
-     * are in pending state.
+     * If resolution fails (referenced joints haven't created constraints yet),
+     * a `console.warn` is emitted **once** per pending episode to avoid spam.
+     * The warning resets when resolution eventually succeeds.
      */
     tryResolve(): boolean {
         if (!this._pendingCreation) return true;
         const idA = this._resolveConstraintId(this._jointA);
         const idB = this._resolveConstraintId(this._jointB);
-        if (idA === null || idB === null) return false;
+        if (idA === null || idB === null) {
+            // Log a warning once per pending episode to avoid console spam.
+            if (!this._pendingWarned) {
+                this._pendingWarned = true;
+                console.warn(
+                    'GearJoint2D: referenced joint(s) have not created constraints yet — ' +
+                    'gear coupling remains pending. Ensure both joints are initialised before the gear joint.'
+                );
+            }
+            return false;
+        }
 
         this._physicsWorld = this.getPhysicsWorld();
         if (!this._physicsWorld) return false;
@@ -143,6 +155,7 @@ export class GearJoint2D extends Joint2D {
                 collideConnected: this._enableCollision,
             });
         this._pendingCreation = false;
+        this._pendingWarned = false;
         return true;
     }
 
