@@ -234,7 +234,8 @@ export interface IPhysicsProfiler3D {
     solveVelocityTime: number;
     solvePositionTime: number;
     sleepTime: number;
-    ccdTime: number;
+    // ccdTime removed: 3D CCD is not implemented (separate scope).
+    // Consistent with enableCCD removal (commit d2f7310f).
 }
 
 // IQueryFilter3D — defined here (physics-3d type section) because it is only

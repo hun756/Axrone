@@ -157,7 +157,6 @@ export class PhysicsWorld3D implements Disposable {
                 solveVelocityTime: 0,
                 solvePositionTime: 0,
                 sleepTime: 0,
-                ccdTime: 0,
             };
         }
 
