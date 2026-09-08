@@ -459,3 +459,91 @@ describe('ConeTwist motor — type safety verification', () => {
         expect(motorRows.length).toBe(0);
     });
 });
+
+// ─── 7. ConeTwist motor reaches twist limit with character-joint softness ─────
+// Discriminating test: the character-joint component passes softness=1 in the
+// def. Previously the motor row inherited this softness, which dampened the
+// motor impulse to ~5% of its intended value via the kernel's
+// `softness * prevImpulse` term. The motor could not reach the twist limit.
+// Fix: motor row softness is always 0 (matching hinge/configurable pattern).
+
+describe('ConeTwist motor — reaches twist limit in world simulation', () => {
+    it('motor with character-joint softness=1 reaches the twist limit', () => {
+        const bodyA = makeSolverBody(1, { ...ZERO });
+        bodyA.invMass = 0; // static
+        const bodyB = makeSolverBody(2, { ...ZERO });
+
+        const twistLimit = Math.PI / 4; // 45°
+        const motorSpeed = 20; // rad/s
+        const maxMotorTorque = 500; // N·m
+
+        // This def mirrors what CharacterJoint3D._createConstraint produces:
+        // softness=1 (the character joint's hardcoded value).
+        const def: IConeTwistConstraintDef3D = {
+            bodyIdA: 1 as BodyId3D,
+            bodyIdB: 2 as BodyId3D,
+            localFrameA: { position: { ...ZERO }, rotation: { ...IDENTITY } },
+            localFrameB: { position: { ...ZERO }, rotation: { ...IDENTITY } },
+            swingSpan1: Math.PI / 2, // wide swing cone (won't engage)
+            swingSpan2: Math.PI / 2,
+            twistSpan: twistLimit * 2, // symmetric: [-π/4, +π/4]
+            softness: 1, // ← character joint's hardcoded value
+            motorSpeed,
+            maxMotorTorque,
+        };
+
+        const dt = 1 / 60;
+        const upper = twistLimit; // twistSpan/2 = π/4
+
+        // Simulate 300 steps (5 seconds) — same parameters as Emil's measurement
+        for (let step = 0; step < 300; step++) {
+            const rows = runPrepareConeTwist(def, bodyA, bodyB, dt);
+            solveRows(rows, bodyA, bodyB, 10);
+            integrateBody(bodyB, dt);
+        }
+
+        // Measure twist angle via quaternion decomposition
+        const conjA: IQuatLike = { x: -bodyA.rotation.x, y: -bodyA.rotation.y, z: -bodyA.rotation.z, w: bodyA.rotation.w };
+        const qRel = Quat.multiply(conjA, bodyB.rotation);
+        const twist = 2 * Math.atan2(qRel.x, qRel.w);
+
+        // Motor MUST reach near the twist limit (within 0.15 rad = ~8.6°)
+        // Before fix: twist ≈ 0.667 rad (38°) — failed to reach 0.7854 (45°)
+        // After fix: twist should be ≥ 0.73 rad (within 0.06 of limit)
+        expect(Math.abs(twist)).toBeGreaterThan(upper - 0.15);
+        // Must not blow past the limit significantly (overshoot < 0.12 rad)
+        expect(Math.abs(twist)).toBeLessThanOrEqual(upper + 0.12);
+        // Angular velocity should be stalled (motor can't push past limit)
+        expect(Math.abs(bodyB.angularVelocity.x)).toBeLessThan(5.0);
+    });
+
+    it('motor row has zero softness even when def softness is nonzero', () => {
+        const bodyA = makeSolverBody(1, { ...ZERO });
+        bodyA.invMass = 0;
+        const bodyB = makeSolverBody(2, { ...ZERO });
+
+        const def: IConeTwistConstraintDef3D = {
+            bodyIdA: 1 as BodyId3D,
+            bodyIdB: 2 as BodyId3D,
+            localFrameA: { position: { ...ZERO }, rotation: { ...IDENTITY } },
+            localFrameB: { position: { ...ZERO }, rotation: { ...IDENTITY } },
+            swingSpan1: Math.PI / 6,
+            swingSpan2: Math.PI / 6,
+            twistSpan: Math.PI / 3,
+            softness: 1, // character joint value
+            motorSpeed: 10,
+            maxMotorTorque: 100,
+        };
+
+        const rows = runPrepareConeTwist(def, bodyA, bodyB);
+        const motorRows = rows.filter(r => r.hasMotor);
+        expect(motorRows.length).toBe(1);
+        // Motor row softness must be 0 (not inherited from def)
+        expect(motorRows[0].softness).toBe(0);
+        // Non-motor rows should still have the def softness
+        const nonMotorRows = rows.filter(r => !r.hasMotor);
+        for (const r of nonMotorRows) {
+            expect(r.softness).toBe(1);
+        }
+    });
+});
