@@ -40,6 +40,29 @@ const enum RigidbodyConstraints3D {
     FreezeAll = 0x3f,
 }
 
+/**
+ * Collision detection mode for Rigidbody3D.
+ *
+ * **CAVEAT — CCD is NOT implemented in the 3D solver.** Setting this to
+ * `Continuous`, `ContinuousDynamic`, or `ContinuousSpeculative` does NOT
+ * change simulation behaviour. The `bullet` flag is stored on the body
+ * descriptor and queryable via `isBullet()`, but the 3D step loop has no
+ * CCD/TOI pass — fast bodies can tunnel through thin geometry regardless.
+ *
+ * To mitigate tunneling in 3D:
+ * - `IPhysicsWorldConfig.maxTranslation` (default 2.0 m/step, ADR 0004)
+ *   clamps per-step position delta.
+ * - Higher `velocityIterations` improve contact resolution.
+ * - Thicken thin walls where possible.
+ *
+ * In contrast, **2D CCD IS implemented** (`physics-2d` `continuous-collision.ts`:
+ * AABB-swept TOI bisection + conservative advancement, gated by
+ * `IPhysicsWorldConfig.continuousPhysics`, sub-stepping via `MAX_SUB_STEPS`).
+ * This asymmetry is intentional — the 2D solver mirrors Box2D's CCD pipeline.
+ *
+ * `IPhysicsWorld3DConfig.enableCCD` is declared in the config interface
+ * but **not read** by the 3D world constructor — a second silent no-op.
+ */
 const enum CollisionDetectionMode3D {
     Discrete = 0,
     Continuous = 1,
@@ -224,6 +247,15 @@ export class Rigidbody3D extends Component {
         this._interpolation = value;
     }
 
+    /**
+     * Collision detection mode.
+     *
+     * **CAVEAT:** In the 3D solver, all modes are equivalent to `Discrete` —
+     * no CCD/TOI algorithm is implemented. The value is stored locally and
+     * passed as `bullet: true` in the body descriptor when non-Discrete, but
+     * the solver never reads the flag. See `CollisionDetectionMode3D` for
+     * mitigation strategies and 2D/3D asymmetry details.
+     */
     get collisionDetection(): CollisionDetectionMode3D {
         return this._collisionDetection;
     }
