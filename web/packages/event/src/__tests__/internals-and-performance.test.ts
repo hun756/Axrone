@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { EventEmitter, performance } from '@axrone/event';
+import { EventEmitter } from '@axrone/event';
+import { performance } from '../internal/performance';
 import {
     EVENT_EMITTER_TAP,
     hasEventTapSupport,

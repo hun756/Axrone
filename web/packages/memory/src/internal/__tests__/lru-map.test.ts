@@ -205,4 +205,40 @@ describe('LruMap', () => {
         const oldest = cache.peekOldest();
         expect(oldest).toBeDefined();
     });
+
+    it('H10: recency wraparound normalizes heap and preserves eviction order', () => {
+        const cache = new LruMap<string, number>({ capacity: 3, order: 'least-recently-used' });
+
+        // Insert A, B, C (recency 1, 2, 3)
+        cache.set('a', 1);
+        cache.set('b', 2);
+        cache.set('c', 3);
+
+        // Force sequence to near-wraparound
+        (cache as any)._debugSetSequence(4294967294);
+
+        // Insert D (recency 4294967295)
+        cache.set('d', 4);
+        // A should be evicted (oldest), B/C/D remain
+        expect(cache.has('a')).toBe(false);
+        expect(cache.has('b')).toBe(true);
+        expect(cache.has('c')).toBe(true);
+        expect(cache.has('d')).toBe(true);
+
+        // Touch B (wraps sequence to 1)
+        cache.touch('b');
+
+        // Insert E (recency 2)
+        cache.set('e', 5);
+        // C should be evicted (oldest after normalization), B/D/E remain
+        expect(cache.has('c')).toBe(false);
+        expect(cache.has('b')).toBe(true);
+        expect(cache.has('d')).toBe(true);
+        expect(cache.has('e')).toBe(true);
+
+        // Verify oldest is D (recency 4294967295 normalized to 3, then B touched to 1, E inserted at 2)
+        // After normalization: B=1, E=2, D=3 → oldest is D
+        const oldest = cache.peekOldest();
+        expect(oldest?.key).toBe('d');
+    });
 });

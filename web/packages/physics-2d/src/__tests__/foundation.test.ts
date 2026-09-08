@@ -275,3 +275,62 @@ describe('buildCollisionMatrix', () => {
         expect(matrix.get('a:b')).toBe(handler);
     });
 });
+
+// ─── P1-26: Error hierarchy acceptance tests ────────────────────────────────
+
+describe('P1-26: Error hierarchy unification', () => {
+    it('ShapeError is catchable via instanceof PhysicsError', async () => {
+        const { ShapeManager2D } = await import('../core/shape-manager');
+        const sm = new ShapeManager2D(64);
+        sm[Symbol.dispose]();
+        try {
+            sm['createCircle'](1n as any, { center: { x: 0, y: 0 }, radius: 1 });
+            expect.unreachable('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(PhysicsError);
+            expect((e as PhysicsError).code).toBe('INVALID_STATE');
+            expect((e as PhysicsError).name).toBe('ShapeError');
+        }
+    });
+
+    it('ShapeError from shape-not-found is catchable via instanceof PhysicsError', async () => {
+        const { ShapeManager2D } = await import('../core/shape-manager');
+        const sm = new ShapeManager2D(64);
+        try {
+            sm.getShapeType(999n as any);
+            expect.unreachable('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(PhysicsError);
+            expect((e as PhysicsError).code).toBe('SHAPE_NOT_FOUND');
+            expect((e as PhysicsError).context).toEqual({ shapeId: 999n });
+        }
+    });
+
+    it('ShapeError has timestamp and context like PhysicsError', async () => {
+        const { ShapeManager2D } = await import('../core/shape-manager');
+        const sm = new ShapeManager2D(64);
+        try {
+            sm.getShapeType(42n as any);
+            expect.unreachable('should have thrown');
+        } catch (e) {
+            const pe = e as PhysicsError;
+            expect(pe.timestamp).toBeGreaterThan(0);
+            expect(Object.isFrozen(pe.context)).toBe(true);
+            expect(pe.withContext).toBeTypeOf('function');
+        }
+    });
+
+    it('BodyPhysicsError is catchable via instanceof PhysicsError', async () => {
+        const { BodyManager2D } = await import('../core/body-manager');
+        const bm = new BodyManager2D(2);
+        bm.createBody({});
+        bm.createBody({});
+        try {
+            bm.createBody({});
+            expect.unreachable('should have thrown');
+        } catch (e) {
+            expect(e).toBeInstanceOf(PhysicsError);
+            expect((e as PhysicsError).code).toBe('CAPACITY_EXCEEDED');
+        }
+    });
+});

@@ -1,4 +1,5 @@
 import { Transform, type Actor } from '@axrone/ecs-runtime';
+import { transformPoint2D } from '@axrone/render-core';
 import {
     RENDER_2D_SPRITE_VERTEX_STRIDE,
     Render2DSpriteBatchBuilder,
@@ -59,18 +60,6 @@ const intersectClipRects = (
     }
 
     return { x, y, width, height };
-};
-
-const transformWorldPoint = (
-    matrix: ArrayLike<number>,
-    localX: number,
-    localY: number,
-    out: Float32Array
-): Float32Array => {
-    out[0] = (matrix[0] ?? 0) * localX + (matrix[1] ?? 0) * localY + (matrix[3] ?? 0);
-    out[1] = (matrix[4] ?? 0) * localX + (matrix[5] ?? 0) * localY + (matrix[7] ?? 0);
-    out[2] = (matrix[8] ?? 0) * localX + (matrix[9] ?? 0) * localY + (matrix[11] ?? 0);
-    return out;
 };
 
 const projectWorldPoint = (
@@ -173,7 +162,9 @@ export class SceneSpriteBatchRuntime {
     private _defaultShader: SceneShaderResource | null = null;
     private _vertexArray: WebGLVertexArrayObject | null = null;
     private _vertexBuffer: WebGLBuffer | null = null;
+    private _vertexBufferSize = 0;
     private _indexBuffer: WebGLBuffer | null = null;
+    private _indexBufferSize = 0;
     private _scissorEnabled = false;
     private _activeClipRect: Render2DRectLike | null = null;
     private _activeMask: Render2DSpriteMask | null = null;
@@ -442,20 +433,35 @@ export class SceneSpriteBatchRuntime {
     private _upload(buildResult: Render2DSpriteBatchBuildResult): void {
         this._options.gl.bindVertexArray(this._vertexArray);
         this._options.gl.bindBuffer(this._options.gl.ARRAY_BUFFER, this._vertexBuffer);
-        this._options.gl.bufferData(
-            this._options.gl.ARRAY_BUFFER,
-            buildResult.vertexData,
-            this._options.gl.DYNAMIC_DRAW
-        );
+
+        const vertexByteLength = buildResult.vertexByteLength;
+        if (this._vertexBufferSize === vertexByteLength) {
+            this._options.gl.bufferSubData(this._options.gl.ARRAY_BUFFER, 0, buildResult.vertexData);
+        } else {
+            this._options.gl.bufferData(
+                this._options.gl.ARRAY_BUFFER,
+                buildResult.vertexData,
+                this._options.gl.DYNAMIC_DRAW
+            );
+            this._vertexBufferSize = vertexByteLength;
+        }
+
         this._options.gl.bindBuffer(
             this._options.gl.ELEMENT_ARRAY_BUFFER,
             this._indexBuffer
         );
-        this._options.gl.bufferData(
-            this._options.gl.ELEMENT_ARRAY_BUFFER,
-            buildResult.indexData,
-            this._options.gl.DYNAMIC_DRAW
-        );
+
+        const indexByteLength = buildResult.indexData.byteLength;
+        if (this._indexBufferSize === indexByteLength) {
+            this._options.gl.bufferSubData(this._options.gl.ELEMENT_ARRAY_BUFFER, 0, buildResult.indexData);
+        } else {
+            this._options.gl.bufferData(
+                this._options.gl.ELEMENT_ARRAY_BUFFER,
+                buildResult.indexData,
+                this._options.gl.DYNAMIC_DRAW
+            );
+            this._indexBufferSize = indexByteLength;
+        }
     }
 
     private _drawBatch(
@@ -696,7 +702,7 @@ export class SceneSpriteBatchRuntime {
 
         for (let index = 0; index < corners.length; index += 1) {
             const corner = corners[index]!;
-            const worldPoint = transformWorldPoint(
+            const worldPoint = transformPoint2D(
                 worldMatrix,
                 corner[0],
                 corner[1],

@@ -1,14 +1,7 @@
 import { EventMap, EventKey, EventCallback, UnsubscribeFn, EventPriority } from './definition';
 import { IEventEmitter, EventEmitter } from './event-emitter';
 import { SubscriptionOptions } from './interfaces';
-
-function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
-    return (
-        (typeof value === 'object' || typeof value === 'function') &&
-        value !== null &&
-        typeof (value as PromiseLike<T>).then === 'function'
-    );
-}
+import { isPromiseLike } from './internal/utils';
 
 export function createHooks<T extends EventMap>(): {
     on: <K extends EventKey<T>>(
@@ -72,7 +65,7 @@ export const EventUtils = {
     debounce: <T>(callback: EventCallback<T>, wait: number): EventCallback<T> => {
         const delay = Math.max(0, wait);
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
-        let lastData: T;
+        let lastData: T | undefined;
 
         return (data: T) => {
             lastData = data;
@@ -83,7 +76,20 @@ export const EventUtils = {
 
             timeoutId = setTimeout(() => {
                 timeoutId = undefined;
-                void callback(lastData);
+                const dataToEmit = lastData as T;
+                lastData = undefined;
+
+                try {
+                    const result = callback(dataToEmit);
+                    if (isPromiseLike<void>(result)) {
+                        // Log instead of silently discarding — silent catches hide listener bugs
+                        result.catch((err: unknown) => {
+                            console.warn('[event] deferred listener rejected:', err);
+                        });
+                    }
+                } catch {
+                    // Prevent synchronous throws from propagating through the timer
+                }
             }, delay);
         };
     },
@@ -91,21 +97,22 @@ export const EventUtils = {
     throttle: <T>(callback: EventCallback<T>, limit: number): EventCallback<T> => {
         const duration = Math.max(0, limit);
         let throttled = false;
-        let lastResult: void | Promise<void>;
 
         return (data: T) => {
             if (!throttled || duration === 0) {
                 throttled = duration > 0;
-                lastResult = callback(data);
 
                 if (duration > 0) {
                     setTimeout(() => {
                         throttled = false;
                     }, duration);
                 }
+
+                return callback(data);
             }
 
-            return lastResult;
+            // Suppressed: do not return a stale result from a previous call
+            return undefined;
         };
     },
 

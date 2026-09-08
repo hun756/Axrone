@@ -169,7 +169,7 @@ describe('toShapeMaterial', () => {
 
     it('uses defaults when no material or overrides', () => {
         const m = toShapeMaterial({});
-        expect(m.friction).toBe(0.2);
+        expect(m.friction).toBe(0.4);
         expect(m.restitution).toBe(0);
         expect(m.density).toBe(1);
     });

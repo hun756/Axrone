@@ -58,10 +58,8 @@ function buildSizeCurve(sizeCurve: readonly number[] | undefined, startSize: num
 }
 
 function hexToColor(hex: string): ImmutableColor {
-    const r = parseInt(hex.slice(1, 3), 16) / 255;
-    const g = parseInt(hex.slice(3, 5), 16) / 255;
-    const b = parseInt(hex.slice(5, 7), 16) / 255;
-    return { r, g, b, a: 1 };
+    const c = Color.fromHex(hex);
+    return { r: c.r, g: c.g, b: c.b, a: c.a };
 }
 
 function packColor(r: number, g: number, b: number, a: number): number {

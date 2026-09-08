@@ -42,7 +42,9 @@ export class AudioPlaybackRuntime<TSchema extends AudioAssetSchema = AudioAssetS
         gainNode.connect(attenuationNode);
 
         let spatialNode: StereoPannerNode | PannerNode | undefined;
+        let panNode: StereoPannerNode | undefined;
         let outputNode: AudioNode = attenuationNode;
+        const canStereoPan = typeof this.context.createStereoPanner === 'function';
 
         if (source.spatial?.mode === '3d') {
             const panner = this.context.createPanner();
@@ -50,7 +52,15 @@ export class AudioPlaybackRuntime<TSchema extends AudioAssetSchema = AudioAssetS
             attenuationNode.connect(panner);
             outputNode = panner;
             spatialNode = panner;
-        } else if (typeof this.context.createStereoPanner === 'function') {
+
+            // A PannerNode takes a position, not a left/right offset, so an authored pan has
+            // to pass through a StereoPanner after it. Only allocate one when it is needed.
+            if (canStereoPan && source.pan !== 0) {
+                panNode = this.context.createStereoPanner();
+                panner.connect(panNode);
+                outputNode = panNode;
+            }
+        } else if (canStereoPan) {
             const stereoPanner = this.context.createStereoPanner();
             attenuationNode.connect(stereoPanner);
             outputNode = stereoPanner;
@@ -65,6 +75,7 @@ export class AudioPlaybackRuntime<TSchema extends AudioAssetSchema = AudioAssetS
             gainNode,
             attenuationNode,
             spatialNode,
+            panNode,
             outputNode,
             clip: options.clip,
             durationSeconds: options.durationSeconds,
@@ -99,7 +110,7 @@ export class AudioPlaybackRuntime<TSchema extends AudioAssetSchema = AudioAssetS
 
         source.active.sourceNode.playbackRate.value = source.playbackRate;
         source.active.sourceNode.detune.value = source.detuneCents;
-        syncPlaybackSpatialState(source.active, source, listener);
+        syncPlaybackSpatialState(source.active, source, listener, this.context.currentTime);
     }
 
     reconnectPlayback(playback: InternalPlayback<TSchema>, busNode: AudioNode): void {
@@ -113,5 +124,6 @@ export class AudioPlaybackRuntime<TSchema extends AudioAssetSchema = AudioAssetS
         disconnectNode(playback.gainNode);
         disconnectNode(playback.attenuationNode);
         disconnectNode(playback.spatialNode);
+        disconnectNode(playback.panNode);
     }
 }

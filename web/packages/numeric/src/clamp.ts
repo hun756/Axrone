@@ -84,9 +84,6 @@ export function clamp<const Min extends number, const Max extends number>(
 export function clamp(value: number, min: number, max: number): number;
 
 export function clamp(value: number, min: number, max: number): number {
-    validateNumber(value, 'Value');
-    validateBounds(min, max);
-
     return min <= max ? fastClamp(value, min, max) : fastClamp(value, max, min);
 }
 

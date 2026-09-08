@@ -223,6 +223,28 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         return this;
     }
 
+    dispose(): void {
+        this.stop();
+
+        if (this._animFrameId) {
+            cancelAnimationFrame(this._animFrameId);
+            this._animFrameId = undefined;
+        }
+
+        for (const item of this._timelineItems) {
+            item.target.stop();
+        }
+        this._timelineItems = [];
+        this._duration = 0;
+        this._currentTime = 0;
+        this._isPlaying = false;
+        this._isPaused = false;
+        this._autoUpdate = false;
+        this._clockMode = undefined;
+        this._status = 'idle';
+        super.dispose();
+    }
+
     private _startInternalLoop(): void {
         if (this._animFrameId !== undefined) return;
         this._lastUpdateTime = performance.now();

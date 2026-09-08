@@ -1,5 +1,9 @@
 import { StackNode } from './types';
 
+/**
+ * Iterator over stack elements from top to bottom.
+ * @stable
+ */
 export class StackIterator<T> implements IterableIterator<T> {
     private current: StackNode<T> | null;
     private readonly checksum: number;

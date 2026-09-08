@@ -43,13 +43,14 @@ const collectViolatingFiles = (
         .sort((left, right) => left.localeCompare(right));
 
 describe('ui package boundary', () => {
-    it('keeps @axrone/ui dependent only on @axrone/utility', () => {
-        expect(listAxroneDependencies('ui')).toEqual(['@axrone/utility']);
+    it('keeps @axrone/ui dependent only on @axrone/numeric and @axrone/utility', () => {
+        expect(listAxroneDependencies('ui')).toEqual(['@axrone/numeric', '@axrone/utility']);
     });
 
     it('keeps @axrone/ui-webgl2 dependencies within the allowed set', () => {
         expect(listAxroneDependencies('ui-webgl2')).toEqual([
             '@axrone/game-loop',
+            '@axrone/numeric',
             '@axrone/render-core',
             '@axrone/scene-runtime',
             '@axrone/ui',

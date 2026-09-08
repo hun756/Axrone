@@ -343,8 +343,12 @@ export class NormalDistribution implements IDistribution<number> {
         }
 
         for (let i = count - (count % 2); i < count; i++) {
-            const [value, _] = this.sample(engine.getState());
-            result[i] = value;
+            let u1 = engine.next01();
+            if (u1 <= 0) u1 = Number.MIN_VALUE;
+            const u2 = engine.next01();
+            const r = Math.sqrt(-2.0 * Math.log(u1));
+            const theta = 2.0 * Math.PI * u2;
+            result[i] = this._mean + this._stdDev * r * Math.cos(theta);
         }
 
         return [result, engine.getState()];

@@ -1,15 +1,30 @@
+import { BufferOverflowError } from '../../buffering/errors';
+import { InvalidCapacityError } from '../../containers/queue/errors';
+
 const SERIALIZED_TAG = 'CircularBuffer@1' as const;
 
 declare const __capacityBrand: unique symbol;
 type Capacity = number & { readonly [__capacityBrand]: never };
 
+/**
+ * Overflow behavior for CircularBuffer: 'overwrite' drops oldest items, 'reject' throws.
+ * @stable
+ */
 type OverflowPolicy = 'overwrite' | 'reject';
 
+/**
+ * Configuration options for CircularBuffer.
+ * @stable
+ */
 type CircularBufferOptions<T> = Readonly<{
     overflowPolicy?: OverflowPolicy;
     onOverflow?: (item: T) => void;
 }>;
 
+/**
+ * Serialized representation of a CircularBuffer for JSON round-tripping.
+ * @stable
+ */
 type SerializedCircularBuffer<T> = Readonly<{
     $tag: typeof SERIALIZED_TAG;
     capacity: number;
@@ -39,31 +54,16 @@ class CircularBufferError extends Error {
     }
 }
 
-class BufferOverflowError extends CircularBufferError {
-    readonly capacity: number;
-    constructor(capacity: number) {
-        super(`Buffer overflow: capacity ${capacity} reached`, 'ERR_CB_OVERFLOW');
-        this.capacity = capacity;
-    }
-}
-
 class BufferEmptyError extends CircularBufferError {
     constructor() {
         super('Buffer is empty', 'ERR_CB_EMPTY');
     }
 }
 
-class InvalidCapacityError extends CircularBufferError {
-    readonly value: unknown;
-    constructor(value: unknown) {
-        super(
-            `Invalid capacity: expected positive integer, received ${JSON.stringify(value)}`,
-            'ERR_CB_INVALID_CAPACITY'
-        );
-        this.value = value;
-    }
-}
-
+/**
+ * Read-only view of a CircularBuffer.
+ * @stable
+ */
 interface ReadonlyCircularBuffer<T> extends Iterable<T> {
     readonly capacity: number;
     readonly size: number;
@@ -102,6 +102,10 @@ interface ReadonlyCircularBuffer<T> extends Iterable<T> {
     asReadonly(): ReadonlyCircularBuffer<T>;
 }
 
+/**
+ * Fixed-capacity ring buffer with O(1) push/pop at both ends and configurable overflow policy.
+ * @stable
+ */
 class CircularBuffer<T> implements ReadonlyCircularBuffer<T> {
     readonly #buf: (T | undefined)[];
     readonly #cap: number;
@@ -249,7 +253,10 @@ class CircularBuffer<T> implements ReadonlyCircularBuffer<T> {
             const n = items.length;
             if (n === 0) return this.#size;
             if (this.#policy === 'reject' && n > this.#cap - this.#size) {
-                throw new BufferOverflowError(this.#cap);
+                throw new BufferOverflowError(
+                    `Buffer overflow: capacity ${this.#cap} reached`,
+                    this.#cap
+                );
             }
             if (n >= this.#cap && !this.#onOverflow) {
                 const offset = n - this.#cap;
@@ -461,7 +468,11 @@ class CircularBuffer<T> implements ReadonlyCircularBuffer<T> {
 
     #pushBack(item: T): void {
         if (this.#size === this.#cap) {
-            if (this.#policy === 'reject') throw new BufferOverflowError(this.#cap);
+            if (this.#policy === 'reject')
+                throw new BufferOverflowError(
+                    `Buffer overflow: capacity ${this.#cap} reached`,
+                    this.#cap
+                );
             const dropped = this.#buf[this.#head] as T;
             this.#buf[this.#head] = item;
             this.#head = (this.#head + 1) % this.#cap;
@@ -474,7 +485,11 @@ class CircularBuffer<T> implements ReadonlyCircularBuffer<T> {
 
     #pushFront(item: T): void {
         if (this.#size === this.#cap) {
-            if (this.#policy === 'reject') throw new BufferOverflowError(this.#cap);
+            if (this.#policy === 'reject')
+                throw new BufferOverflowError(
+                    `Buffer overflow: capacity ${this.#cap} reached`,
+                    this.#cap
+                );
             this.#head = (this.#head - 1 + this.#cap) % this.#cap;
             const dropped = this.#buf[this.#head] as T;
             this.#onOverflow?.(dropped);
@@ -487,6 +502,10 @@ class CircularBuffer<T> implements ReadonlyCircularBuffer<T> {
     }
 }
 
+/**
+ * Factory function to create a CircularBuffer instance.
+ * @stable
+ */
 function createCircularBuffer<T>(
     capacity: number,
     options?: CircularBufferOptions<T>
@@ -497,9 +516,7 @@ function createCircularBuffer<T>(
 export {
     CircularBuffer,
     CircularBufferError,
-    BufferOverflowError,
     BufferEmptyError,
-    InvalidCapacityError,
     createCircularBuffer,
     type CircularBufferOptions,
     type ReadonlyCircularBuffer,

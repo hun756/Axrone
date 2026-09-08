@@ -480,31 +480,22 @@ describe('Mat4', () => {
             expect(matrix.data).toEqual(smallValues);
         });
 
-        test('should handle NaN values', () => {
+        test('should reject NaN values', () => {
             const nanValues = Array(16).fill(NaN);
-
-            const matrix = new Mat4(nanValues);
-
-            expect(matrix.data.every((val) => isNaN(val))).toBe(true);
+            expect(() => new Mat4(nanValues)).toThrow(/must be a finite number/);
         });
 
-        test('should handle Infinity values', () => {
+        test('should reject Infinity values', () => {
             const infinityValues = Array(16).fill(Infinity);
-
-            const matrix = new Mat4(infinityValues);
-
-            expect(matrix.data).toEqual(infinityValues);
+            expect(() => new Mat4(infinityValues)).toThrow(/must be a finite number/);
         });
 
-        test('should handle mixed special values', () => {
-            const mixedValues = [
+        test('should handle valid special values', () => {
+            const validValues = [
                 0,
                 -0,
                 1,
                 -1,
-                Infinity,
-                -Infinity,
-                NaN,
                 Number.EPSILON,
                 Number.MAX_VALUE,
                 Number.MIN_VALUE,
@@ -514,16 +505,18 @@ describe('Mat4', () => {
                 Math.E,
                 0.1 + 0.2,
                 42,
+                -42,
+                0.5,
+                -0.5,
             ];
 
-            const matrix = new Mat4(mixedValues);
+            const matrix = new Mat4(validValues);
 
             expect(matrix.data.length).toBe(16);
             expect(matrix.data[0]).toBe(0);
             expect(matrix.data[1]).toBe(-0);
-            expect(matrix.data[4]).toBe(Infinity);
-            expect(matrix.data[5]).toBe(-Infinity);
-            expect(isNaN(matrix.data[6])).toBe(true);
+            expect(matrix.data[4]).toBe(Number.EPSILON);
+            expect(matrix.data[5]).toBe(Number.MAX_VALUE);
         });
     });
 });

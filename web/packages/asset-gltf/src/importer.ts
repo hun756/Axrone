@@ -708,7 +708,7 @@ export const createGltfImporter = <
     const materialShaderId = options.materialShaderId ?? 'gltf/pbr';
     const fallbackSamplerId = options.defaultSamplerId ?? DEFAULT_SAMPLER_ID;
 
-    const importer = {
+    const importer: GltfImporter<TSchema> = {
         id: options.id ?? 'asset.gltf',
         sourceKinds: ['bytes', 'text', 'json', 'custom'],
         extensions: ['gltf', 'glb'],

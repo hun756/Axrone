@@ -14,8 +14,10 @@ import type {
     WidgetKey,
     WidgetLayoutInput,
     WidgetRole,
+    WidgetStrokeData,
     WidgetStyleInput,
 } from '../types';
+import { clamp } from '@axrone/numeric';
 import {
     BLACK,
     EMPTY_FOCUS_INPUT,
@@ -24,7 +26,6 @@ import {
     EMPTY_STYLE_INPUT,
     TRANSPARENT,
     WHITE,
-    clamp,
     cloneData,
     normalizeColor,
     normalizeIndex,
@@ -79,6 +80,7 @@ export const compileWidgetStyle = (input: WidgetStyleInput): ResolvedWidgetStyle
     borderWidth: Math.max(0, input.borderWidth ?? 0),
     radius: normalizeCorners(input.radius),
     color: normalizeColor(input.color, BLACK),
+    strokes: input.strokes ? [...input.strokes] : EMPTY_STROKES,
 });
 
 export const compileWidgetText = (
@@ -174,6 +176,7 @@ const resolveSpans = (
 };
 
 const EMPTY_SPANS: readonly ResolvedRichTextSpan[] = Object.freeze([]);
+const EMPTY_STROKES: readonly WidgetStrokeData[] = Object.freeze([]);
 
 export const compileWidgetImage = (input: WidgetImageInput | null): ResolvedWidgetImage | null => {
     if (!input) {
@@ -222,6 +225,8 @@ export const compileWidgetImage = (input: WidgetImageInput | null): ResolvedWidg
     };
 };
 
+const DEFAULT_FOCUS_RING_COLOR = normalizeColor('#60a5faff', WHITE);
+
 export const compileWidgetFocus = (
     input: WidgetFocusPolicyInput,
     interactive: boolean
@@ -231,7 +236,7 @@ export const compileWidgetFocus = (
     scope: input.scope ?? false,
     cycle: input.cycle ?? false,
     order: input.order ?? 0,
-    ringColor: normalizeColor(input.ringColor, '#60a5faff'),
+    ringColor: normalizeColor(input.ringColor, DEFAULT_FOCUS_RING_COLOR),
     ringWidth: input.ringWidth ?? 2,
     ringOffset: input.ringOffset ?? 2,
 });

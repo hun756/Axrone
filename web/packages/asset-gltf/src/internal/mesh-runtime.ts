@@ -61,11 +61,12 @@ interface ResolvedPrimitiveGeometry {
 
 type DracoDecoderModuleFactory = NonNullable<GltfDracoDecoderOptions['moduleFactory']>;
 type DracoDecoderModuleConfig = Parameters<DracoDecoderModuleFactory>[0];
+type DracoDecoderModule = Awaited<ReturnType<DracoDecoderModuleFactory>>;
 
-let dracoDecoderModulePromise: Promise<any> | undefined;
+let dracoDecoderModulePromise: Promise<DracoDecoderModule> | undefined;
 let browserDracoDecoderModuleFactoryPromise: Promise<DracoDecoderModuleFactory> | undefined;
-const dracoDecoderModulePromisesByWasmUrl = new Map<string, Promise<any>>();
-const dracoDecoderModulePromisesByFactory = new WeakMap<DracoDecoderModuleFactory, Promise<any>>();
+const dracoDecoderModulePromisesByWasmUrl = new Map<string, Promise<DracoDecoderModule>>();
+const dracoDecoderModulePromisesByFactory = new WeakMap<DracoDecoderModuleFactory, Promise<DracoDecoderModule>>();
 
 const isSupportedAttributeSemantic = (value: string): value is SupportedAttributeSemantic =>
     (SUPPORTED_ATTRIBUTE_SEMANTICS as readonly string[]).includes(value);
@@ -130,7 +131,7 @@ const loadBrowserDracoDecoderModuleFactory = async (): Promise<DracoDecoderModul
 
 const loadConfiguredDracoDecoderModule = async (
     options: GltfDracoDecoderOptions
-): Promise<any> => {
+): Promise<DracoDecoderModule> => {
     const moduleFactory = options.moduleFactory ?? (await loadBrowserDracoDecoderModuleFactory());
     const cacheKey = options.wasmUrl;
 
@@ -166,7 +167,7 @@ const loadConfiguredDracoDecoderModule = async (
     return promise;
 };
 
-const loadDracoDecoderModule = async (runtime: GltfResourceRuntime): Promise<any> => {
+const loadDracoDecoderModule = async (runtime: GltfResourceRuntime): Promise<DracoDecoderModule> => {
     if (runtime.dracoDecoder?.moduleFactory || runtime.dracoDecoder?.wasmUrl) {
         return loadConfiguredDracoDecoderModule(runtime.dracoDecoder);
     }

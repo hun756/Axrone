@@ -25,11 +25,16 @@ const cloneSerializableInternal = (value: unknown, freeze: boolean): unknown => 
     }
 
     if (ArrayBuffer.isView(value)) {
-        return cloneArrayBufferView(value);
+        return maybeFreeze(cloneArrayBufferView(value), freeze);
     }
 
     if (value instanceof ArrayBuffer) {
-        return value.slice(0);
+        return maybeFreeze(value.slice(0), freeze);
+    }
+
+    // Non-JSON-serializable types: return as-is (not cloned) to prevent silent corruption
+    if (value instanceof Date || value instanceof Map || value instanceof Set) {
+        return value;
     }
 
     if (!isRecord(value)) {

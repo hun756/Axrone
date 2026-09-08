@@ -115,9 +115,9 @@ describe('SingletonError', () => {
         });
 
         it('invalidState formats expected states', () => {
-            const err = SingletonError.invalidState('svc', 'disposed', ['resolved', 'initializing']);
+            const err = SingletonError.invalidState('svc', 'disposed', ['resolved', 'computing']);
             expect(err.code).toBe(SingletonErrorCode.INVALID_STATE);
-            expect(err.message).toContain('resolved, initializing');
+            expect(err.message).toContain('resolved, computing');
             expect(err.message).toContain('disposed');
         });
 

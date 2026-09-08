@@ -8,12 +8,7 @@ export const BUFFER_DEFAULTS = {
 } as const;
 
 export const POOL_DEFAULTS = {
-    MAX_SIZE: 1024,
     BUCKET_COUNT: 32,
-    MIN_BUCKET_SIZE: 32,
-    MAX_BUCKET_SIZE: 1024 * 1024,
-    INITIAL_CAPACITY_PER_BUCKET: 16,
-    MAX_CAPACITY_PER_BUCKET: 256,
 } as const;
 
 export const STRING_DEFAULTS = {
@@ -23,6 +18,4 @@ export const STRING_DEFAULTS = {
 
 export const PERFORMANCE_DEFAULTS = {
     CACHE_SIZE: 64,
-    BATCH_SIZE: 1024,
-    PREFETCH_SIZE: 256,
 } as const;

@@ -133,7 +133,7 @@ export interface IMaterial {
     readonly spinningFriction?: Friction;
 }
 
-export interface IRaycastResult2D {
+export interface ISingleRaycastResult2D {
     readonly hit: boolean;
     readonly bodyId: BodyId;
     readonly shapeId: ShapeId;
@@ -142,7 +142,7 @@ export interface IRaycastResult2D {
     readonly fraction: number;
 }
 
-export interface IRaycastResult3D {
+export interface ISingleRaycastResult3D {
     readonly hit: boolean;
     readonly bodyId: BodyId;
     readonly shapeId: ShapeId;
@@ -216,11 +216,34 @@ export const PhysicsConstants = Object.freeze({
     ANGULAR_SLEEP_TOLERANCE: (2.0 / 180.0) * Math.PI,
     ALLOWED_PENETRATION: 0.01,
     CONTACT_PERSISTENT_THRESHOLD_SQ: 0.01,
-    EPSILON: 1e-10,
+    EPSILON: 1e-6,
 });
 
-export type Vec2Pool = Float64Array;
-export type Vec3Pool = Float64Array;
-export type TransformPool = Float64Array;
-export type VelocityPool = Float64Array;
-export type MassDataPool = Float64Array;
+// ---------------------------------------------------------------------------
+// Collision pair key
+// ---------------------------------------------------------------------------
+
+/**
+ * Branded numeric pair key for deterministic contact/collision pair lookup.
+ *
+ * Formula: `lo * 0x100000 + hi` where `lo = min(a,b)` and `hi = max(a,b)`.
+ *
+ * **Overflow limit:** `0x100000 = 1 048 576`.  Safe for engines with
+ * `maxBodies ≤ 1024` because `1024 × 1024 = 1 048 576`.  If the engine
+ * configuration exceeds this bound the key space may collide.
+ */
+export type CollisionPairKey = number & { readonly __collisionPairKeyBrand: unique symbol };
+
+/**
+ * Compute a deterministic collision pair key from two shape/body IDs.
+ *
+ * The result is order-independent: `makeCollisionPairKey(a, b) === makeCollisionPairKey(b, a)`.
+ *
+ * **Overflow:** safe for IDs in `[0, 0x100000)` (≈ 1 M).  See {@link CollisionPairKey}.
+ */
+export function makeCollisionPairKey(a: number, b: number): CollisionPairKey {
+    const lo = a < b ? a : b;
+    const hi = a < b ? b : a;
+    return (lo * 0x100000 + hi) as CollisionPairKey;
+}
+

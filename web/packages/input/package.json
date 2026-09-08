@@ -18,10 +18,11 @@
     "scripts": {
         "build": "rollup -c rollup.config.mjs",
         "clean": "rimraf dist",
-        "test": "vitest run"
+        "test": "vitest run src/__tests__"
     },
     "dependencies": {
-        "@axrone/event": "^0.1.0",
+        "@axrone/event": "^2.0.0",
+        "@axrone/numeric": "^0.0.1",
         "@axrone/utility": "^0.0.1"
     }
 }

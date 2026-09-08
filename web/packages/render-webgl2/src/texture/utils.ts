@@ -1,4 +1,4 @@
-import { Vec2, Vec3, Vec4 } from '@axrone/numeric';
+import { Vec2, Vec3, Vec4, Color } from '@axrone/numeric';
 import { Djb2 } from '@axrone/hash';
 import type { ContextSource, IGLContext } from '../context';
 import { isGLContext, resolveContext } from '../context';
@@ -24,7 +24,7 @@ const GL_TYPE = {
     UNSIGNED_INT: 0x1405,
     FLOAT: 0x1406,
     HALF_FLOAT: 0x140b,
-    UNSIGNED_INT_24_8: 0x84F9,
+    UNSIGNED_INT_24_8: 0x84FA,
     FLOAT_32_UNSIGNED_INT_24_8_REV: 0x8dad,
 } as const;
 
@@ -895,16 +895,12 @@ export class TextureUtils {
     }
 
     public static colorToVec4(color: string): Vec4 {
-        if (color.startsWith('#')) {
-            const hex = color.slice(1);
-            const r = parseInt(hex.slice(0, 2), 16) / 255;
-            const g = parseInt(hex.slice(2, 4), 16) / 255;
-            const b = parseInt(hex.slice(4, 6), 16) / 255;
-            const a = hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1;
-            return new Vec4(r, g, b, a);
+        try {
+            const c = Color.fromHex(color);
+            return new Vec4(c.r, c.g, c.b, c.a);
+        } catch {
+            return new Vec4(1, 1, 1, 1);
         }
-
-        return new Vec4(1, 1, 1, 1);
     }
 
     public static isExtensionAvailableForContext(ctx: IGLContext, name: string): boolean {

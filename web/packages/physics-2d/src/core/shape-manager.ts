@@ -9,6 +9,7 @@ import type {
     IMassData2D,
     Mass,
     Inertia,
+    ICollisionFilter,
 } from '../types';
 import { ShapeType, CollisionFilter } from '../types';
 import type {
@@ -18,20 +19,12 @@ import type {
     ICapsuleShapeDef2D,
     ISegmentShapeDef,
 } from '../types';
+import { IndexPool, PhysicsError, type ErrorCode } from './foundation';
 
-const enum ShapeManagerError {
-    INVALID_STATE = 'INVALID_STATE',
-    SHAPE_NOT_FOUND = 'SHAPE_NOT_FOUND',
-    CAPACITY_EXCEEDED = 'CAPACITY_EXCEEDED',
-    INVALID_SHAPE = 'INVALID_SHAPE',
-}
-
-class ShapeError extends Error {
-    readonly code: ShapeManagerError;
-    constructor(message: string, code: ShapeManagerError) {
-        super(message);
+class ShapeError extends PhysicsError<ErrorCode> {
+    constructor(message: string, code: ErrorCode, context: Record<string, unknown> = {}) {
+        super(message, code, context);
         this.name = 'ShapeError';
-        this.code = code;
         Object.setPrototypeOf(this, ShapeError.prototype);
     }
 }
@@ -76,19 +69,23 @@ export class ShapeManager2D implements Disposable {
     private _polygonCount: number = 0;
     private _segmentCount: number = 0;
     private _capsuleCount: number = 0;
+    private readonly _circlePool: IndexPool;
+    private readonly _boxPool: IndexPool;
+    private readonly _polygonPool: IndexPool;
+    private readonly _segmentPool: IndexPool;
+    private readonly _capsulePool: IndexPool;
     private _disposed: boolean = false;
 
     constructor(maxShapes: number = 2048) {
         this._maxShapes = maxShapes;
-        const quarterMax = Math.ceil(maxShapes / 4);
 
         this._shapeMetadata = new Map();
-        this._circleData = new Float64Array(quarterMax * CIRCLE_SHAPE_SIZE);
-        this._boxData = new Float64Array(quarterMax * BOX_SHAPE_SIZE);
-        this._polygonData = new Float64Array(quarterMax * POLYGON_MAX_VERTICES * 2);
-        this._polygonVertexCounts = new Uint8Array(quarterMax);
-        this._segmentData = new Float64Array(quarterMax * 4);
-        this._capsuleData = new Float64Array(quarterMax * 4);
+        this._circleData = new Float64Array(maxShapes * CIRCLE_SHAPE_SIZE);
+        this._boxData = new Float64Array(maxShapes * BOX_SHAPE_SIZE);
+        this._polygonData = new Float64Array(maxShapes * POLYGON_MAX_VERTICES * 2);
+        this._polygonVertexCounts = new Uint8Array(maxShapes);
+        this._segmentData = new Float64Array(maxShapes * 4);
+        this._capsuleData = new Float64Array(maxShapes * 4);
 
         this._shapeToCircleIndex = new Map();
         this._shapeToBoxIndex = new Map();
@@ -96,6 +93,12 @@ export class ShapeManager2D implements Disposable {
         this._shapeToSegmentIndex = new Map();
         this._shapeToCapsuleIndex = new Map();
         this._bodyToShapes = new Map();
+
+        this._circlePool = new IndexPool(maxShapes);
+        this._boxPool = new IndexPool(maxShapes);
+        this._polygonPool = new IndexPool(maxShapes);
+        this._segmentPool = new IndexPool(maxShapes);
+        this._capsulePool = new IndexPool(maxShapes);
     }
 
     get shapeCount(): number {
@@ -107,7 +110,7 @@ export class ShapeManager2D implements Disposable {
         this._assertCapacity();
 
         const shapeId = this._nextShapeId++ as ShapeId;
-        const index = this._circleCount++;
+        const index = this._circlePool.acquire();
         const offset = index * CIRCLE_SHAPE_SIZE;
 
         const center = def.center ?? def.offset ?? { x: 0, y: 0 };
@@ -125,7 +128,7 @@ export class ShapeManager2D implements Disposable {
         this._assertCapacity();
 
         const shapeId = this._nextShapeId++ as ShapeId;
-        const index = this._boxCount++;
+        const index = this._boxPool.acquire();
         const offset = index * BOX_SHAPE_SIZE;
 
         const center = def.center ?? def.offset ?? { x: 0, y: 0 };
@@ -135,7 +138,7 @@ export class ShapeManager2D implements Disposable {
         if (halfWidth === undefined || halfHeight === undefined) {
             throw new ShapeError(
                 'Box must have halfWidth/halfHeight or width/height',
-                ShapeManagerError.INVALID_SHAPE
+                'INVALID_SHAPE'
             );
         }
         this._boxData[offset] = center.x;
@@ -157,12 +160,12 @@ export class ShapeManager2D implements Disposable {
         if (vertices.length < 3 || vertices.length > POLYGON_MAX_VERTICES) {
             throw new ShapeError(
                 `Polygon must have 3-${POLYGON_MAX_VERTICES} vertices`,
-                ShapeManagerError.INVALID_SHAPE
+                'INVALID_SHAPE'
             );
         }
 
         const shapeId = this._nextShapeId++ as ShapeId;
-        const index = this._polygonCount++;
+        const index = this._polygonPool.acquire();
         const offset = index * POLYGON_MAX_VERTICES * 2;
 
         for (let i = 0; i < vertices.length; i++) {
@@ -181,7 +184,7 @@ export class ShapeManager2D implements Disposable {
         this._assertCapacity();
 
         const shapeId = this._nextShapeId++ as ShapeId;
-        const index = this._segmentCount++;
+        const index = this._segmentPool.acquire();
         const offset = index * 4;
 
         this._segmentData[offset] = def.start.x;
@@ -199,7 +202,7 @@ export class ShapeManager2D implements Disposable {
         this._assertCapacity();
 
         const shapeId = this._nextShapeId++ as ShapeId;
-        const index = this._capsuleCount++;
+        const index = this._capsulePool.acquire();
         const offset = index * 4;
 
         const center = def.center ?? def.offset ?? { x: 0, y: 0 };
@@ -218,7 +221,7 @@ export class ShapeManager2D implements Disposable {
 
         const metadata = this._shapeMetadata.get(shapeId);
         if (!metadata) {
-            throw new ShapeError(`Shape ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
 
         const bodyShapes = this._bodyToShapes.get(metadata.bodyId);
@@ -226,6 +229,35 @@ export class ShapeManager2D implements Disposable {
             bodyShapes.delete(shapeId);
             if (bodyShapes.size === 0) {
                 this._bodyToShapes.delete(metadata.bodyId);
+            }
+        }
+
+        // Release per-type index back to the pool
+        switch (metadata.type) {
+            case ShapeType.Circle: {
+                const idx = this._shapeToCircleIndex.get(shapeId);
+                if (idx !== undefined) this._circlePool.release(idx);
+                break;
+            }
+            case ShapeType.Box: {
+                const idx = this._shapeToBoxIndex.get(shapeId);
+                if (idx !== undefined) this._boxPool.release(idx);
+                break;
+            }
+            case ShapeType.Polygon: {
+                const idx = this._shapeToPolygonIndex.get(shapeId);
+                if (idx !== undefined) this._polygonPool.release(idx);
+                break;
+            }
+            case ShapeType.Segment: {
+                const idx = this._shapeToSegmentIndex.get(shapeId);
+                if (idx !== undefined) this._segmentPool.release(idx);
+                break;
+            }
+            case ShapeType.Capsule: {
+                const idx = this._shapeToCapsuleIndex.get(shapeId);
+                if (idx !== undefined) this._capsulePool.release(idx);
+                break;
             }
         }
 
@@ -241,7 +273,7 @@ export class ShapeManager2D implements Disposable {
     getShapeType(shapeId: ShapeId): ShapeType {
         const metadata = this._shapeMetadata.get(shapeId);
         if (!metadata) {
-            throw new ShapeError(`Shape ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         return metadata.type;
     }
@@ -249,15 +281,39 @@ export class ShapeManager2D implements Disposable {
     getBodyId(shapeId: ShapeId): BodyId {
         const metadata = this._shapeMetadata.get(shapeId);
         if (!metadata) {
-            throw new ShapeError(`Shape ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         return metadata.bodyId;
+    }
+
+    getShapeMaterial(shapeId: ShapeId): IMaterial {
+        const metadata = this._shapeMetadata.get(shapeId);
+        if (!metadata) {
+            throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
+        }
+        return metadata.material;
+    }
+
+    getShapeFilter(shapeId: ShapeId): ICollisionFilter {
+        const metadata = this._shapeMetadata.get(shapeId);
+        if (!metadata) {
+            throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
+        }
+        return metadata.filter;
+    }
+
+    isShapeSensor(shapeId: ShapeId): boolean {
+        const metadata = this._shapeMetadata.get(shapeId);
+        if (!metadata) {
+            throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
+        }
+        return metadata.isSensor;
     }
 
     getCircleData(shapeId: ShapeId): { center: IVec2Like; radius: number } {
         const index = this._shapeToCircleIndex.get(shapeId);
         if (index === undefined) {
-            throw new ShapeError(`Circle ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Circle ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         const offset = index * CIRCLE_SHAPE_SIZE;
         return {
@@ -274,7 +330,7 @@ export class ShapeManager2D implements Disposable {
     } {
         const index = this._shapeToBoxIndex.get(shapeId);
         if (index === undefined) {
-            throw new ShapeError(`Box ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Box ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         const offset = index * BOX_SHAPE_SIZE;
         return {
@@ -288,7 +344,7 @@ export class ShapeManager2D implements Disposable {
     getPolygonData(shapeId: ShapeId): { vertices: IVec2Like[] } {
         const index = this._shapeToPolygonIndex.get(shapeId);
         if (index === undefined) {
-            throw new ShapeError(`Polygon ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Polygon ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         const vertexCount = this._polygonVertexCounts[index];
         const offset = index * POLYGON_MAX_VERTICES * 2;
@@ -305,7 +361,7 @@ export class ShapeManager2D implements Disposable {
     getCapsuleData(shapeId: ShapeId): { p1: IVec2Like; p2: IVec2Like; radius: number } {
         const index = this._shapeToCapsuleIndex.get(shapeId);
         if (index === undefined) {
-            throw new ShapeError(`Capsule ${shapeId} not found`, ShapeManagerError.SHAPE_NOT_FOUND);
+            throw new ShapeError(`Capsule ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });
         }
         const offset = index * 4;
         const centerX = this._capsuleData[offset];
@@ -379,7 +435,7 @@ export class ShapeManager2D implements Disposable {
         }
     ): void {
         const material: IMaterial = def.material ?? {
-            friction: (def.friction ?? 0.2) as Friction,
+            friction: (def.friction ?? 0.4) as Friction,
             restitution: (def.restitution ?? 0) as Restitution,
             density: (def.density ?? 1) as Density,
         };
@@ -410,13 +466,13 @@ export class ShapeManager2D implements Disposable {
 
     private _assertNotDisposed(): void {
         if (this._disposed) {
-            throw new ShapeError('Manager is disposed', ShapeManagerError.INVALID_STATE);
+            throw new ShapeError('Manager is disposed', 'INVALID_STATE');
         }
     }
 
     private _assertCapacity(): void {
         if (this._shapeCount >= this._maxShapes) {
-            throw new ShapeError('Shape capacity exceeded', ShapeManagerError.CAPACITY_EXCEEDED);
+            throw new ShapeError('Shape capacity exceeded', 'CAPACITY_EXCEEDED');
         }
     }
 

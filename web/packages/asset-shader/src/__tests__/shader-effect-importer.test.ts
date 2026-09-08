@@ -164,6 +164,112 @@ describe('asset-shader effect import pipeline', () => {
         ).toThrow('Shader effect payload.version must be 2 when keywords, property bindings, or techniques are used');
     });
 
+    it('preserves all inspector fields including order, tooltip, readOnly, and visibleWhen', () => {
+        const effect = normalizeShaderEffectJsonSource(
+            {
+                kind: 'json',
+                uri: 'content/full-inspector.effect.json',
+                data: {},
+            } as AssetImportSource,
+            {
+                format: 'axrone.shader/effect',
+                version: 1,
+                id: 'full-inspector',
+                properties: [
+                    {
+                        name: 'u_Albedo',
+                        type: 'vec4',
+                        inspector: {
+                            label: 'Albedo Color',
+                            group: 'Surface',
+                            control: 'color',
+                            min: 0,
+                            max: 1,
+                            step: 0.01,
+                            options: [
+                                { label: 'Warm', value: 0 },
+                                { label: 'Cool', value: 1 },
+                            ],
+                            hidden: false,
+                            order: 3,
+                            tooltip: 'Controls the base albedo color of the surface',
+                            readOnly: true,
+                            visibleWhen: 'SURFACE_MODE == OPAQUE',
+                        },
+                    },
+                ],
+                vertex: {
+                    main: ['gl_Position = vec4(0.0);'],
+                },
+                fragment: {
+                    precision: 'highp',
+                    outputs: [{ name: 'o_Color', type: 'vec4' }],
+                    main: ['o_Color = vec4(1.0);'],
+                },
+            },
+        );
+
+        const inspector = effect.properties?.[0]?.inspector;
+        expect(inspector).toBeDefined();
+        // Existing fields (8)
+        expect(inspector?.label).toBe('Albedo Color');
+        expect(inspector?.group).toBe('Surface');
+        expect(inspector?.control).toBe('color');
+        expect(inspector?.min).toBe(0);
+        expect(inspector?.max).toBe(1);
+        expect(inspector?.step).toBe(0.01);
+        expect(inspector?.options).toEqual([
+            { label: 'Warm', value: 0 },
+            { label: 'Cool', value: 1 },
+        ]);
+        expect(inspector?.hidden).toBe(false);
+        // Newly preserved fields (4)
+        expect(inspector?.order).toBe(3);
+        expect(inspector?.tooltip).toBe('Controls the base albedo color of the surface');
+        expect(inspector?.readOnly).toBe(true);
+        expect(inspector?.visibleWhen).toBe('SURFACE_MODE == OPAQUE');
+    });
+
+    it('coerces undefined optional inspector fields to undefined rather than dropping them', () => {
+        const effect = normalizeShaderEffectJsonSource(
+            {
+                kind: 'json',
+                uri: 'content/minimal-inspector.effect.json',
+                data: {},
+            } as AssetImportSource,
+            {
+                format: 'axrone.shader/effect',
+                version: 1,
+                id: 'minimal-inspector',
+                properties: [
+                    {
+                        name: 'u_Roughness',
+                        type: 'float',
+                        inspector: {
+                            control: 'slider',
+                        },
+                    },
+                ],
+                vertex: {
+                    main: ['gl_Position = vec4(0.0);'],
+                },
+                fragment: {
+                    precision: 'highp',
+                    outputs: [{ name: 'o_Color', type: 'vec4' }],
+                    main: ['o_Color = vec4(1.0);'],
+                },
+            },
+        );
+
+        const inspector = effect.properties?.[0]?.inspector;
+        expect(inspector).toBeDefined();
+        expect(inspector?.control).toBe('slider');
+        expect(inspector?.order).toBeUndefined();
+        expect(inspector?.tooltip).toBeUndefined();
+        expect(inspector?.readOnly).toBeUndefined();
+        expect(inspector?.visibleWhen).toBeUndefined();
+    });
+
     it('claims only canonical shader asset extensions', async () => {
         const database = new AssetDatabase<AssetShaderImportSchema>({
             pipeline: createAssetShaderImportPipeline(),

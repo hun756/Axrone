@@ -1,4 +1,4 @@
-import { clamp, quatAccumulateWeighted, quatFinalizeWeighted, quatIdentity, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Lerp } from './math';
+import { clamp, SoaVec3Buffer, SoaQuatBuffer } from '@axrone/numeric';
 import { AnimationFrame, AnimationMask } from './pose-frame';
 import { type BlendWeight, asBlendWeight, unblendWeight } from './blend-types';
 
@@ -25,7 +25,7 @@ export const blendFrame = (
         }
         const translationOffset = boneIndex * 3;
         const rotationOffset = boneIndex * 4;
-        vec3Lerp(
+        SoaVec3Buffer.vec3Lerp(
             target.pose.translations,
             translationOffset,
             base.pose.translations,
@@ -34,7 +34,7 @@ export const blendFrame = (
             translationOffset,
             alpha
         );
-        quatSlerp(
+        SoaQuatBuffer.quatSlerp(
             target.pose.rotations,
             rotationOffset,
             base.pose.rotations,
@@ -43,7 +43,7 @@ export const blendFrame = (
             rotationOffset,
             alpha
         );
-        vec3Lerp(
+        SoaVec3Buffer.vec3Lerp(
             target.pose.scales,
             translationOffset,
             base.pose.scales,
@@ -99,7 +99,7 @@ export const blendWeightedFrames = (
             sx += frame.pose.scales[translationOffset]! * weight;
             sy += frame.pose.scales[translationOffset + 1]! * weight;
             sz += frame.pose.scales[translationOffset + 2]! * weight;
-            quatAccumulateWeighted(
+            SoaQuatBuffer.quatAccumulateWeighted(
                 target.pose.rotations,
                 rotationOffset,
                 referenceRotationScratch,
@@ -122,7 +122,7 @@ export const blendWeightedFrames = (
         target.pose.scales[translationOffset] = sx * inverseWeight;
         target.pose.scales[translationOffset + 1] = sy * inverseWeight;
         target.pose.scales[translationOffset + 2] = sz * inverseWeight;
-        quatFinalizeWeighted(
+        SoaQuatBuffer.quatFinalizeWeighted(
             target.pose.rotations,
             rotationOffset,
             target.pose.rotations,
@@ -185,11 +185,11 @@ export const applyAdditiveFrame = (
             (additive.pose.scales[translationOffset + 1]! - restFrame.pose.scales[translationOffset + 1]!) * alpha;
         target.pose.scales[translationOffset + 2] +=
             (additive.pose.scales[translationOffset + 2]! - restFrame.pose.scales[translationOffset + 2]!) * alpha;
-        quatIdentity(additiveScratch.scaledRotation, 0);
-        quatInvert(additiveScratch.inverseRest, 0, restFrame.pose.rotations, rotationOffset);
-        quatMultiply(additiveScratch.deltaRotation, 0, additiveScratch.inverseRest, 0, additive.pose.rotations, rotationOffset);
-        quatSlerp(additiveScratch.scaledRotation, 0, additiveScratch.scaledRotation, 0, additiveScratch.deltaRotation, 0, alpha);
-        quatMultiply(
+        SoaQuatBuffer.quatIdentity(additiveScratch.scaledRotation, 0);
+        SoaQuatBuffer.quatInvert(additiveScratch.inverseRest, 0, restFrame.pose.rotations, rotationOffset);
+        SoaQuatBuffer.quatMultiply(additiveScratch.deltaRotation, 0, additiveScratch.inverseRest, 0, additive.pose.rotations, rotationOffset);
+        SoaQuatBuffer.quatSlerp(additiveScratch.scaledRotation, 0, additiveScratch.scaledRotation, 0, additiveScratch.deltaRotation, 0, alpha);
+        SoaQuatBuffer.quatMultiply(
             target.pose.rotations,
             rotationOffset,
             base.pose.rotations,
@@ -197,7 +197,7 @@ export const applyAdditiveFrame = (
             additiveScratch.scaledRotation,
             0
         );
-        quatNormalize(target.pose.rotations, rotationOffset, target.pose.rotations, rotationOffset);
+        SoaQuatBuffer.quatNormalize(target.pose.rotations, rotationOffset, target.pose.rotations, rotationOffset);
     }
 
     for (let curveIndex = 0; curveIndex < target.curves.values.length; curveIndex += 1) {

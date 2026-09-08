@@ -6,6 +6,8 @@ import { SceneCameraFrameStateCollector } from '../camera-frame-state';
 import { SceneDrawExecutionContextCache } from './draw-execution-context';
 import { SceneDrawExecutor } from './draw-executor';
 import { SceneFrameUniformBinder } from '../frame-uniform-binder';
+import { SceneFogUniformBinder } from '../fog-uniform-binder';
+import { DEFAULT_SCENE_FOG_STATE, type SceneFogState } from '../fog-state';
 import { SceneLightingCollector } from '../lighting-collector';
 import { SceneLightingUniformBinder } from '../lighting-uniform-binder';
 import { resolveSceneMaterialPass } from '../material-registry';
@@ -48,6 +50,8 @@ export interface SceneRenderRuntimeOptions {
     readonly pipeline?: SceneRenderPipelineSettings;
     /** Optional GL state cache — when provided, texture unbinds and raw-GL guards stay in sync. */
     readonly stateCache?: IGLStateCache;
+    /** Initial fog state; updated at runtime via `setFogState`. */
+    readonly fog?: SceneFogState;
 }
 
 export interface SceneRenderRuntimeParams {
@@ -81,10 +85,12 @@ export class SceneRenderRuntime {
     private readonly _uniformWriter: SceneUniformWriter;
     private readonly _frameUniformBinder: SceneFrameUniformBinder;
     private readonly _lightingUniformBinder: SceneLightingUniformBinder;
+    private readonly _fogUniformBinder: SceneFogUniformBinder;
     private readonly _skinningUniformBinder: SceneSkinningUniformBinder;
     private readonly _morphMeshRuntime: SceneMorphMeshRuntime;
     private readonly _drawExecutor: SceneDrawExecutor;
     private readonly _renderPipeline: SceneRenderPipeline;
+    private _fogState: SceneFogState;
     private _planningStats: SceneRenderPlanningStats = SceneRenderRuntime._EMPTY_PLANNING_STATS;
     private readonly _textureUniformSetter = (
         shader: Parameters<SceneUniformWriter['write']>[0],
@@ -105,7 +111,9 @@ export class SceneRenderRuntime {
         this._uniformWriter = new SceneUniformWriter(_options.gl);
         this._frameUniformBinder = new SceneFrameUniformBinder(this._uniformWriter);
         this._lightingUniformBinder = new SceneLightingUniformBinder(this._uniformWriter);
+        this._fogUniformBinder = new SceneFogUniformBinder(this._uniformWriter);
         this._skinningUniformBinder = new SceneSkinningUniformBinder(this._uniformWriter);
+        this._fogState = _options.fog ?? DEFAULT_SCENE_FOG_STATE;
         this._morphMeshRuntime = new SceneMorphMeshRuntime({
             gl: _options.gl,
             createMeshResource: _options.createMeshResource,
@@ -118,6 +126,7 @@ export class SceneRenderRuntime {
             renderStateApplier: this._renderStateApplier,
             frameUniformBinder: this._frameUniformBinder,
             lightingUniformBinder: this._lightingUniformBinder,
+            fogUniformBinder: this._fogUniformBinder,
             skinningUniformBinder: this._skinningUniformBinder,
             materialTextureBinder: this._materialTextureBinder,
             uniformWriter: this._uniformWriter,
@@ -238,6 +247,7 @@ export class SceneRenderRuntime {
                 renderPass,
                 cameraFrame,
                 lighting,
+                fog: this._fogState,
                 elapsedSeconds: params.elapsedSeconds,
                 deltaSeconds: params.deltaSeconds,
                 frame: params.frame,
@@ -332,6 +342,19 @@ export class SceneRenderRuntime {
 
     releaseBaseMesh(meshId: string): void {
         this._morphMeshRuntime.releaseBaseMesh(meshId);
+    }
+
+    /**
+     * Updates the fog state used for subsequent render calls. When fog is
+     * enabled the draw executor resolves the FOG shader variant and writes
+     * fog uniforms to every mesh draw call.
+     */
+    setFogState(fog: SceneFogState): void {
+        this._fogState = fog;
+    }
+
+    get fogState(): SceneFogState {
+        return this._fogState;
     }
 
     clear(): void {

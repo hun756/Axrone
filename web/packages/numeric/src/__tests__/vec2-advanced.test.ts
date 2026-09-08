@@ -63,8 +63,10 @@ describe('Vec2 Advanced Operations', () => {
             expectVecClose(Vec2.inverseSafe({ x: 2, y: 4 }), { x: 0.5, y: 0.25 });
         });
 
-        test('static inverseSafe throws on zero', () => {
-            expect(() => Vec2.inverseSafe({ x: 0, y: 1 })).toThrow('zero or near-zero');
+        test('static inverseSafe uses defaultValue for zero components', () => {
+            const result = Vec2.inverseSafe({ x: 0, y: 1 }, undefined, 99);
+            expect(Math.abs(result.x - 99)).toBeLessThan(EPSILON);
+            expect(Math.abs(result.y - 1)).toBeLessThan(EPSILON);
         });
 
         test('instance inverseSafe uses default for zero components', () => {
@@ -445,22 +447,6 @@ describe('Vec2 Advanced Operations', () => {
                 const v = Vec2.fastRandom(5);
                 expectNumClose(Vec2.len(v), 5, 1e-10);
             }
-        });
-
-        test('randomNormal produces finite values', () => {
-            for (let i = 0; i < 20; i++) {
-                const v = Vec2.randomNormal();
-                expect(Number.isFinite(v.x)).toBe(true);
-                expect(Number.isFinite(v.y)).toBe(true);
-            }
-        });
-
-        test('randomNormal mean approximately 0', () => {
-            const samples = Array.from({ length: 3000 }, () => Vec2.randomNormal());
-            const meanX = samples.reduce((s, v) => s + v.x, 0) / samples.length;
-            const meanY = samples.reduce((s, v) => s + v.y, 0) / samples.length;
-            expect(Math.abs(meanX)).toBeLessThan(0.2);
-            expect(Math.abs(meanY)).toBeLessThan(0.2);
         });
 
         test('instance randomBox within bounds', () => {

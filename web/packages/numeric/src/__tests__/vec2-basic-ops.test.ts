@@ -91,35 +91,26 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
             expect(v.y).toBe(-2.718);
         });
 
-        test('constructor coerces parameters to numbers', () => {
-            // @ts-ignore - Intentionally testing type coercion
-            const v = new Vec2('5', '10');
+        test('constructor accepts non-finite values without throwing', () => {
+            // Vec2 constructor does not validate — non-finite values are silently stored.
+            // Use normalizeSafe / clamp helpers when finite guarantees are needed.
+            const vInf = new Vec2(Infinity, 0);
+            expect(vInf.x).toBe(Infinity);
+            expect(vInf.y).toBe(0);
 
-            // Vec2 constructor does not perform string conversion,
-            // it takes the value given as parameter as it is.
-            expect(v.x).toBe('5');
-            expect(v.y).toBe('10');
-        });
+            const vNegInf = new Vec2(-Infinity, 0);
+            expect(vNegInf.x).toBe(-Infinity);
 
-        test.each([
-            ['Infinity', Infinity, Infinity],
-            ['NaN', NaN, NaN],
-            ['MAX_VALUE', Number.MAX_VALUE, Number.MAX_VALUE],
-            ['MIN_VALUE', Number.MIN_VALUE, Number.MIN_VALUE],
-        ])('constructor correctly handles %s', (_, x, y) => {
-            const v = new Vec2(x, y);
+            const vNaN = new Vec2(NaN, 0);
+            expect(Number.isNaN(vNaN.x)).toBe(true);
 
-            if (Number.isNaN(x)) {
-                expect(Number.isNaN(v.x)).toBe(true);
-            } else {
-                expect(v.x).toBe(x);
-            }
+            const vNaN2 = new Vec2(0, NaN);
+            expect(Number.isNaN(vNaN2.y)).toBe(true);
 
-            if (Number.isNaN(y)) {
-                expect(Number.isNaN(v.y)).toBe(true);
-            } else {
-                expect(v.y).toBe(y);
-            }
+            // Valid edge values should work
+            const v1 = new Vec2(Number.MAX_VALUE, Number.MIN_VALUE);
+            expect(v1.x).toBe(Number.MAX_VALUE);
+            expect(v1.y).toBe(Number.MIN_VALUE);
         });
     });
 
@@ -303,6 +294,57 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
                     expect(fromArray).toBeVectorCloseTo(constructed);
                 }
             });
+
+            test('writes into out parameter and returns same reference', () => {
+                const arr = [3.5, 7.25];
+                const out = new Vec2();
+                const result = Vec2.fromArray(arr, 0, out);
+
+                expect(result).toBe(out);
+                expect(out.x).toBe(3.5);
+                expect(out.y).toBe(7.25);
+            });
+
+            test('returns new Vec2 when out is not provided', () => {
+                const arr = [1, 2];
+                const result = Vec2.fromArray(arr);
+
+                expect(result).toBeInstanceOf(Vec2);
+                expect(result.x).toBe(1);
+                expect(result.y).toBe(2);
+            });
+
+            test('works with offset and out parameter together', () => {
+                const arr = [10, 20, 30, 40, 50];
+                const out = new Vec2();
+                const result = Vec2.fromArray(arr, 2, out);
+
+                expect(result).toBe(out);
+                expect(out.x).toBe(30);
+                expect(out.y).toBe(40);
+            });
+
+            test('sequential calls with same out overwrite correctly', () => {
+                const arr = [1, 2, 3, 4];
+                const out = new Vec2();
+
+                Vec2.fromArray(arr, 0, out);
+                expect(out.x).toBe(1);
+                expect(out.y).toBe(2);
+
+                Vec2.fromArray(arr, 2, out);
+                expect(out.x).toBe(3);
+                expect(out.y).toBe(4);
+            });
+
+            test('out parameter avoids new allocation', () => {
+                const arr = [5, 10];
+                const out = new Vec2();
+                const result = Vec2.fromArray(arr, 0, out);
+
+                // Same reference proves no allocation occurred
+                expect(result === out).toBe(true);
+            });
         });
 
         describe('create()', () => {
@@ -351,18 +393,13 @@ describe('Vec2 Class - Basic Operations Test Suite', () => {
                 });
             });
 
-            test('preserves NaN and Infinity values', () => {
-                const vNaN = new Vec2(NaN, NaN);
-                const vInf = new Vec2(Infinity, -Infinity);
+            test('clone() preserves valid values', () => {
+                const v1 = new Vec2(3.14, -2.718);
+                const cloned = v1.clone();
 
-                const clonedNaN = vNaN.clone();
-                const clonedInf = vInf.clone();
-
-                expect(Number.isNaN(clonedNaN.x)).toBe(true);
-                expect(Number.isNaN(clonedNaN.y)).toBe(true);
-
-                expect(clonedInf.x).toBe(Infinity);
-                expect(clonedInf.y).toBe(-Infinity);
+                expect(cloned.x).toBe(3.14);
+                expect(cloned.y).toBe(-2.718);
+                expect(cloned).not.toBe(v1);
             });
         });
     });

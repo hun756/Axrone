@@ -2,7 +2,6 @@ import {
     EPSILON,
     assertFiniteNumber,
     assertPositiveNumber,
-    clamp01,
     distanceSquared,
     isConvexPolygon,
     isSimplePolygon,
@@ -35,7 +34,7 @@ import type {
     TriangleShape,
     TriangleShapeInput,
 } from './types';
-import type { IVec2Like } from '@axrone/numeric';
+import { clamp01, type IVec2Like } from "@axrone/numeric";
 
 const normalizeAppearance = (
     input: ShapeAppearanceInput = {},

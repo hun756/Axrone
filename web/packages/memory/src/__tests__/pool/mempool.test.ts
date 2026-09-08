@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryPool, MemoryPoolError, PoolableObject } from './../../pool/mempool';
 
 describe('MemoryPool', () => {
@@ -114,10 +114,14 @@ describe('MemoryPool', () => {
     });
 
     it('should support tryAcquireAsync with timeout', async () => {
+        vi.useFakeTimers();
         const pool = createPool({ initialCapacity: 1, maxCapacity: 1, autoExpand: false });
         pool.acquire();
-        const result = await pool.tryAcquireAsync(50);
+        const promise = pool.tryAcquireAsync(50);
+        await vi.advanceTimersByTimeAsync(50);
+        const result = await promise;
         expect(result).toBeNull();
+        vi.useRealTimers();
     });
 
     it('should force compact and not throw', () => {
@@ -166,30 +170,38 @@ describe('MemoryPool', () => {
     });
 
     it('should handle factory errors gracefully', () => {
-        const pool = createPool({
+        expect(() => createPool({
             initialCapacity: 1,
             factory: () => {
                 throw new Error('factory fail');
             },
-        });
-        expect(() => pool.acquire()).toThrow();
+        })).toThrow();
     });
 
-    it('should evict objects with LRU policy', () => {
-        const pool = createPool({
-            initialCapacity: 2,
-            maxCapacity: 2,
-            evictionPolicy: 'lru',
-        });
-        const obj1 = pool.acquire();
-        pool.release(obj1);
-        const obj2 = pool.acquire();
-        pool.release(obj2);
-        // Both slots are now free, fill up pool
+    it('should expand before evicting live objects', () => {
+        const pool = createPool({ initialCapacity: 2, evictionPolicy: 'lru' });
+        const a = pool.acquire();
+        const b = pool.acquire();
+        pool.acquire();
+
+        expect(pool.isFromPool(a)).toBe(true);
+        expect(pool.isFromPool(b)).toBe(true);
+        expect(a.__poolStatus).toBe('allocated');
+        expect(b.__poolStatus).toBe('allocated');
+        expect(pool.getAllocatedCount()).toBe(3);
+    });
+
+    it('should keep free list consistent across shrink compaction', () => {
+        const pool = createPool({ initialCapacity: 8, preallocate: true });
         pool.acquire();
         pool.acquire();
-        // Next acquire should evict LRU
-        expect(() => pool.acquire()).not.toThrow();
+        pool.resize(4);
+
+        const obj = pool.acquire();
+        expect(obj).toBeDefined();
+        expect(pool.getAllocatedCount()).toBe(3);
+        expect(pool.getTotalCount()).toBe(4);
+        expect(() => pool.release(obj)).not.toThrow();
     });
 
     it('should not leak memory on rapid acquire/release cycles', () => {
@@ -203,6 +215,7 @@ describe('MemoryPool', () => {
     });
 
     it('should support asyncFactory and preallocate', async () => {
+        vi.useFakeTimers();
         let created = 0;
         const pool = new MemoryPool<TestObject>({
             initialCapacity: 2,
@@ -214,11 +227,13 @@ describe('MemoryPool', () => {
             factory: () => new TestObject(),
         });
         // Wait for preallocation
-        await new Promise((r) => setTimeout(r, 50));
+        await vi.advanceTimersByTimeAsync(50);
         expect(created).toBeGreaterThanOrEqual(2);
+        vi.useRealTimers();
     });
 
     it('should respect TTL eviction policy', async () => {
+        vi.useFakeTimers();
         const pool = createPool({
             initialCapacity: 1,
             evictionPolicy: 'ttl',
@@ -226,8 +241,9 @@ describe('MemoryPool', () => {
         });
         const obj = pool.acquire();
         pool.release(obj);
-        await new Promise((r) => setTimeout(r, 20));
+        await vi.advanceTimersByTimeAsync(20);
         expect(() => pool.acquire()).not.toThrow();
+        vi.useRealTimers();
     });
 
     it('should not allow operations after dispose', () => {
@@ -276,5 +292,254 @@ describe('MemoryPool', () => {
         const obj = pool.acquire();
         pool.release(obj);
         expect(resetCalled).toBe(false);
+    });
+
+    describe('onOutOfMemory callback', () => {
+        it('should call onOutOfMemory when pool is fully depleted with no eviction', () => {
+            const onOutOfMemory = vi.fn();
+            const pool = createPool({
+                initialCapacity: 2,
+                maxCapacity: 2,
+                autoExpand: false,
+                evictionPolicy: 'none',
+                onOutOfMemory,
+            });
+
+            const obj1 = pool.acquire();
+            const obj2 = pool.acquire();
+
+            // Pool is now fully depleted — next acquire should trigger onOutOfMemory
+            expect(() => pool.acquire()).toThrow(MemoryPoolError);
+            expect(onOutOfMemory).toHaveBeenCalledTimes(1);
+            expect(onOutOfMemory).toHaveBeenCalledWith(1, 0);
+
+            pool.release(obj1);
+            pool.release(obj2);
+        });
+
+        it('should call onOutOfMemory with correct requested and available args', () => {
+            const onOutOfMemory = vi.fn();
+            const pool = createPool({
+                initialCapacity: 1,
+                maxCapacity: 1,
+                autoExpand: false,
+                evictionPolicy: 'none',
+                onOutOfMemory,
+            });
+
+            pool.acquire();
+            expect(() => pool.acquire()).toThrow();
+            expect(onOutOfMemory).toHaveBeenCalledWith(1, 0);
+        });
+
+        it('should not call onOutOfMemory when pool can still expand', () => {
+            const onOutOfMemory = vi.fn();
+            const pool = createPool({
+                initialCapacity: 1,
+                maxCapacity: 10,
+                autoExpand: true,
+                onOutOfMemory,
+            });
+
+            // Should auto-expand without triggering onOutOfMemory
+            const obj1 = pool.acquire();
+            const obj2 = pool.acquire();
+            expect(onOutOfMemory).not.toHaveBeenCalled();
+
+            pool.release(obj1);
+            pool.release(obj2);
+        });
+    });
+
+    describe('Expansion strategies', () => {
+        it('fibonacci strategy grows pool following fibonacci sequence', () => {
+            const pool = createPool({
+                initialCapacity: 4,
+                maxCapacity: 100,
+                autoExpand: true,
+                expansionStrategy: 'fibonacci',
+            });
+
+            // Initial capacity is 4. Acquire all 4 to fill the pool.
+            const objs: TestObject[] = [];
+            for (let i = 0; i < 4; i++) {
+                objs.push(pool.acquire());
+            }
+            expect(pool.getTotalCount()).toBe(4);
+
+            // 5th acquire triggers expansion. Fibonacci above 4 is 5.
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(5);
+
+            // 6th acquire triggers another expansion. Fibonacci above 5 is 8.
+            // Pool now has 8 total slots, 6 allocated, 2 free.
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(8);
+
+            // 2 more acquires use the remaining free slots (no expansion).
+            objs.push(pool.acquire());
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(8);
+            expect(pool.getAllocatedCount()).toBe(8);
+
+            // 9th acquire triggers expansion. Fibonacci above 8 is 13.
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(13);
+
+            objs.forEach((o) => pool.release(o));
+        });
+
+        it('prime strategy grows pool to prime-based capacity', () => {
+            const pool = createPool({
+                initialCapacity: 4,
+                maxCapacity: 200,
+                autoExpand: true,
+                expansionStrategy: 'prime',
+                expansionFactor: 2,
+            });
+
+            const objs: TestObject[] = [];
+            for (let i = 0; i < 4; i++) {
+                objs.push(pool.acquire());
+            }
+
+            // 5th acquire triggers expansion.
+            // prime(4 * 2) = prime(8) = 11 (next prime >= 8)
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(11);
+
+            objs.forEach((o) => pool.release(o));
+        });
+
+        it('fixed strategy grows pool by fixed increment', () => {
+            const pool = createPool({
+                initialCapacity: 4,
+                maxCapacity: 100,
+                autoExpand: true,
+                expansionStrategy: 'fixed',
+                expansionRate: 8,
+            });
+
+            const objs: TestObject[] = [];
+            for (let i = 0; i < 4; i++) {
+                objs.push(pool.acquire());
+            }
+
+            // 5th acquire triggers expansion: 4 + 8 = 12
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(12);
+
+            objs.forEach((o) => pool.release(o));
+        });
+
+        it('multiplicative strategy grows pool by factor', () => {
+            const pool = createPool({
+                initialCapacity: 4,
+                maxCapacity: 100,
+                autoExpand: true,
+                expansionStrategy: 'multiplicative',
+                expansionFactor: 2,
+            });
+
+            const objs: TestObject[] = [];
+            for (let i = 0; i < 4; i++) {
+                objs.push(pool.acquire());
+            }
+
+            // 5th acquire triggers expansion: ceil(4 * 2) = 8
+            objs.push(pool.acquire());
+            expect(pool.getTotalCount()).toBe(8);
+
+            objs.forEach((o) => pool.release(o));
+        });
+    });
+
+    it('should resolve waiter when object is released', async () => {
+        const pool = createPool({ initialCapacity: 1, maxCapacity: 1 });
+        const obj1 = pool.acquire();
+
+        // Start async acquire — will wait because pool is at max capacity
+        const acquirePromise = pool.acquireAsync();
+
+        // Release obj1 — should resolve the waiter with the same object
+        pool.release(obj1);
+
+        const obj2 = await acquirePromise;
+        expect(obj2).toBe(obj1);
+    });
+
+    it('should reject pending waiters on dispose', async () => {
+        const pool = createPool({ initialCapacity: 1, maxCapacity: 1 });
+        pool.acquire(); // Fill pool to capacity
+
+        // Start async acquire — will wait because pool is full
+        const acquirePromise = pool.acquireAsync();
+
+        // Dispose pool — should reject the pending waiter
+        pool[Symbol.dispose]();
+
+        await expect(acquirePromise).rejects.toThrow(MemoryPoolError);
+    });
+
+    describe('dispose onEvict notification', () => {
+        it('should call onEvict for each allocated object when pool is disposed', () => {
+            const evicted: TestObject[] = [];
+            const pool = createPool({
+                initialCapacity: 4,
+                onEvict: (obj: TestObject) => {
+                    evicted.push(obj);
+                },
+            });
+
+            const obj1 = pool.acquire();
+            const obj2 = pool.acquire();
+            const obj3 = pool.acquire();
+
+            // Release one so it is free — only 2 are allocated at dispose time
+            pool.release(obj3);
+
+            expect(pool.getAllocatedCount()).toBe(2);
+
+            pool[Symbol.dispose]();
+
+            // onEvict must fire for the 2 still-allocated objects, not the free one
+            expect(evicted).toHaveLength(2);
+            expect(evicted).toContain(obj1);
+            expect(evicted).toContain(obj2);
+            expect(evicted).not.toContain(obj3);
+        });
+
+        it('should not throw if onEvict handler throws during dispose', () => {
+            const pool = createPool({
+                initialCapacity: 2,
+                onEvict: () => {
+                    throw new Error('onEvict boom');
+                },
+            });
+
+            pool.acquire();
+            pool.acquire();
+
+            // Must not throw even though onEvict throws
+            expect(() => pool[Symbol.dispose]()).not.toThrow();
+        });
+
+        it('should not call onEvict for free slots during dispose', () => {
+            const evictCount = { value: 0 };
+            const pool = createPool({
+                initialCapacity: 3,
+                onEvict: () => {
+                    evictCount.value++;
+                },
+            });
+
+            const obj = pool.acquire();
+            pool.release(obj);
+
+            pool[Symbol.dispose]();
+
+            // All objects are free — onEvict should not fire
+            expect(evictCount.value).toBe(0);
+        });
     });
 });

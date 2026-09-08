@@ -15,15 +15,6 @@ export class EventError extends BaseError {
     }
 }
 
-export class EventNotFoundError extends EventError {
-    readonly eventName: string;
-
-    constructor(eventName: string) {
-        super(`Event "${eventName}" not found`);
-        this.eventName = eventName;
-    }
-}
-
 export class EventQueueFullError extends EventError {
     readonly eventName: string;
 
@@ -40,7 +31,9 @@ export class EventHandlerError extends EventError {
     constructor(eventName: string, originalError: unknown) {
         const message =
             originalError instanceof Error ? originalError.message : String(originalError);
-        super(`Handler error for "${eventName}": ${message}`);
+        super(`Handler error for "${eventName}": ${message}`, {
+            cause: originalError instanceof Error ? originalError : new Error(String(originalError)),
+        });
         this.eventName = eventName;
         this.originalError = originalError;
 

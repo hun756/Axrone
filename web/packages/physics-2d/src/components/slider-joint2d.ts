@@ -2,6 +2,16 @@ import { script } from '@axrone/ecs-runtime/decorators';
 import { Vec2 } from '@axrone/numeric';
 import { Joint2D } from './joint2d';
 
+/**
+ * Slider/prismatic joint: constrains body B to slide along a local axis
+ * of body A. Locks rotation and lateral movement.
+ *
+ * Maps to solver `Prismatic` case.
+ * **Solver**: FULL — lateral lock + rotation lock + optional translation limit
+ * + optional motor. Velocity + position correction active.
+ *
+ * @see JOINT_CAPABILITY_2D
+ */
 @script({
     scriptName: 'SliderJoint2D',
     priority: 80,
@@ -138,14 +148,34 @@ export class SliderJoint2D extends Joint2D {
 
     deserialize(data: Record<string, any>): void {
         super.deserialize(data);
-        this._anchor = new Vec2(data.anchor?.x ?? 0, data.anchor?.y ?? 0);
-        this._axis = new Vec2(data.axis?.x ?? 1, data.axis?.y ?? 0);
+        // Vec2 fields: Editor writes ARRAY [x,y], engine uses OBJECT {x,y}.
+        // normalizeVec2Value accepts both formats for backward compatibility.
+        if (data.anchor !== undefined) {
+            const v = this.normalizeVec2Value(data.anchor);
+            this._anchor.x = v.x;
+            this._anchor.y = v.y;
+        }
+        if (data.axis !== undefined) {
+            const v = this.normalizeVec2Value(data.axis, 1, 0);
+            this._axis.x = v.x;
+            this._axis.y = v.y;
+            this._axis.normalize();
+        }
         this._useMotor = data.useMotor ?? false;
         this._motor = {
             speed: data.motorSpeed ?? 0,
             maxForce: data.maxMotorForce ?? 10000,
         };
         this._useLimits = data.useLimits ?? false;
-        this._limits = data.limits ?? { min: -1, max: 1 };
+        // Accept both flat keys (limitsMin/limitsMax from Editor) and nested
+        // object (limits: { min, max } from legacy scenes). Flat keys win.
+        if (data.limitsMin !== undefined || data.limitsMax !== undefined) {
+            this._limits = {
+                min: data.limitsMin ?? this._limits.min,
+                max: data.limitsMax ?? this._limits.max,
+            };
+        } else {
+            this._limits = data.limits ?? { min: -1, max: 1 };
+        }
     }
 }

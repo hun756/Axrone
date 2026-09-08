@@ -585,3 +585,64 @@ describe('AudioComponentBinder', () => {
         });
     });
 });
+
+// update() used to discard every command failure with a bare catch, so a source with an
+// unresolvable clip silently did nothing: no rejection, no console output, no diagnostic
+// attributable to the component. Failures are now collected and returned.
+describe('AudioComponentBinder command failures', () => {
+    const createBinderFixture = () => {
+        const context = new FakeAudioContext();
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        const binder = new AudioComponentBinder(system);
+        return { context, system, binder };
+    };
+
+    const attachFailingSource = (binder: AudioComponentBinder, sourceId: string) => {
+        const component = new AudioSourceComponent({
+            sourceId,
+            clip: { kind: 'url', url: 'https://example.invalid/missing.mp3' },
+        });
+        binder.attachSource(component);
+        return component;
+    };
+
+    it('returns a failure for a command whose clip cannot resolve', async () => {
+        const { binder } = createBinderFixture();
+        const component = attachFailingSource(binder, 'broken');
+        component.play();
+
+        const failures = await binder.update();
+
+        expect(failures).toHaveLength(1);
+        expect(failures[0].command).toBe('play');
+        expect(failures[0].component).toBe(component);
+        expect(failures[0].error).toBeInstanceOf(Error);
+    });
+
+    it('keeps draining the queue after a failure', async () => {
+        const { binder } = createBinderFixture();
+        const first = attachFailingSource(binder, 'first-broken');
+        const second = attachFailingSource(binder, 'second-broken');
+        first.play();
+        second.play();
+
+        const failures = await binder.update();
+
+        expect(failures.map((failure) => failure.component)).toEqual([first, second]);
+    });
+
+    it('returns an empty list when nothing fails', async () => {
+        const { binder } = createBinderFixture();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const component = new AudioSourceComponent({
+            sourceId: 'fine',
+            clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer },
+        });
+        binder.attachSource(component);
+        component.play();
+
+        const failures = await binder.update();
+
+        expect(failures).toEqual([]);
+    });
+});

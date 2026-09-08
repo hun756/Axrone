@@ -517,7 +517,8 @@ describe('Collision Algorithms', () => {
             ];
 
             const result = GJK2D.testIntersection(shape, square, transformA, transformB);
-            expect(typeof result).toBe('boolean');
+            // Collinear shape and square overlap at the same transform
+            expect(result).toBe(true);
         });
 
         it('handles near-miss collision', () => {
@@ -536,6 +537,95 @@ describe('Collision Algorithms', () => {
 
             const result = GJK2D.testIntersection(squareA, squareB, transformA, transformB);
             expect(result).toBe(false);
+        });
+    });
+
+    describe('EPA2D - ENGINEERING_FIXES #6: Duplicate Point Guard', () => {
+        const transformA = { position: { x: 0, y: 0 }, rotation: 0 };
+        const transformB = { position: { x: 0, y: 0 }, rotation: 0 };
+
+        it('terminates with degenerate simplex containing duplicate points', () => {
+            const squareA = [
+                { x: -1, y: -1 },
+                { x: 1, y: -1 },
+                { x: 1, y: 1 },
+                { x: -1, y: 1 },
+            ];
+            const squareB = [
+                { x: -0.5, y: -0.5 },
+                { x: 1.5, y: -0.5 },
+                { x: 1.5, y: 1.5 },
+                { x: -0.5, y: 1.5 },
+            ];
+
+            // Degenerate simplex: two points are nearly identical
+            const simplex = [
+                { x: 0.0, y: 0.0 },
+                { x: 1e-12, y: 1e-12 },  // nearly duplicate of point 0
+                { x: 0.5, y: 1.0 },
+            ];
+
+            const result = EPA2D.findPenetrationDepth(squareA, squareB, transformA, transformB, simplex);
+
+            expect(Number.isFinite(result.depth)).toBe(true);
+            expect(Number.isNaN(result.depth)).toBe(false);
+            expect(Number.isNaN(result.normal.x)).toBe(false);
+            expect(Number.isNaN(result.normal.y)).toBe(false);
+        });
+
+        it('terminates when support produces a point already in polytope', () => {
+            // Two identical squares → Minkowski difference is symmetric,
+            // support points may coincide with existing polytope vertices
+            const square = [
+                { x: -1, y: -1 },
+                { x: 1, y: -1 },
+                { x: 1, y: 1 },
+                { x: -1, y: 1 },
+            ];
+
+            // Simplex where a support direction will yield a point already present
+            const simplex = [
+                { x: 0, y: 0 },
+                { x: 0, y: 2 },
+                { x: 2, y: 0 },
+            ];
+
+            const result = EPA2D.findPenetrationDepth(square, square, transformA, transformB, simplex);
+
+            expect(Number.isFinite(result.depth)).toBe(true);
+            expect(Number.isNaN(result.depth)).toBe(false);
+            expect(Number.isNaN(result.normal.x)).toBe(false);
+            expect(Number.isNaN(result.normal.y)).toBe(false);
+            expect(result.depth).toBeGreaterThanOrEqual(0);
+        });
+
+        it('does not produce NaN with collinear simplex points', () => {
+            const squareA = [
+                { x: -2, y: -2 },
+                { x: 2, y: -2 },
+                { x: 2, y: 2 },
+                { x: -2, y: 2 },
+            ];
+            const squareB = [
+                { x: -1, y: -1 },
+                { x: 1, y: -1 },
+                { x: 1, y: 1 },
+                { x: -1, y: 1 },
+            ];
+
+            // Collinear simplex: all points on a line → degenerate polytope
+            const simplex = [
+                { x: 0, y: 0 },
+                { x: 0.5, y: 0 },
+                { x: 1.0, y: 0 },
+            ];
+
+            const result = EPA2D.findPenetrationDepth(squareA, squareB, transformA, transformB, simplex);
+
+            expect(Number.isFinite(result.depth)).toBe(true);
+            expect(Number.isNaN(result.depth)).toBe(false);
+            expect(Number.isNaN(result.normal.x)).toBe(false);
+            expect(Number.isNaN(result.normal.y)).toBe(false);
         });
     });
 });

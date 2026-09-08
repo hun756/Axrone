@@ -9,9 +9,10 @@ import type {
 } from './singleton-core';
 import { __singleton_brand, __singleton_state_brand } from './singleton-core';
 import { SingletonError } from './singleton-errors';
+import { computeDeferredSync } from '../internal/deferred-core';
 
 const UNINITIALIZED: SingletonState = 'uninitialized';
-const INITIALIZING: SingletonState = 'initializing';
+const COMPUTING: SingletonState = 'computing';
 const RESOLVED: SingletonState = 'resolved';
 const DISPOSING: SingletonState = 'disposing';
 const DISPOSED: SingletonState = 'disposed';
@@ -87,17 +88,6 @@ export class SingletonImpl<T> implements ISingleton<T> {
             throw SingletonError.disposed(this.key);
         }
 
-        if (this.state === FAULTED) {
-            throw this.exception ?? SingletonError.initializationFailed(this.key);
-        }
-
-        if (this.state === INITIALIZING) {
-            throw SingletonError.invalidOperation(
-                'Circular dependency detected during initialization',
-                this.key
-            );
-        }
-
         if (!this.hasValue) {
             this.initialize();
         }
@@ -107,7 +97,7 @@ export class SingletonImpl<T> implements ISingleton<T> {
     }
 
     tryGetInstance(): T | null {
-        if (this.state === DISPOSED || this.state === FAULTED || this.state === INITIALIZING) {
+        if (this.state === DISPOSED || this.state === FAULTED || this.state === COMPUTING) {
             return null;
         }
 
@@ -227,25 +217,16 @@ export class SingletonImpl<T> implements ISingleton<T> {
             throw SingletonError.disposed(this.key);
         }
 
-        if (this.state === INITIALIZING) {
-            throw SingletonError.invalidOperation(
-                'Circular dependency detected during initialization',
-                this.key
-            );
-        }
-
-        this.state = INITIALIZING;
-
-        try {
-            this.value = this.factory!();
-            this.hasValue = true;
-            this.createdAt = Date.now();
-            this.state = RESOLVED;
-            this.factory = null;
-        } catch (error) {
-            this.exception = error instanceof Error ? error : new Error(String(error));
-            this.state = FAULTED;
-            throw SingletonError.initializationFailed(this.key, this.exception);
-        }
+        computeDeferredSync(this, {
+            circularError: () =>
+                SingletonError.invalidOperation(
+                    'Circular dependency detected during initialization',
+                    this.key
+                ),
+            wrapError: (err) => SingletonError.initializationFailed(this.key, err),
+            afterCompute: () => {
+                this.createdAt = Date.now();
+            },
+        });
     }
 }

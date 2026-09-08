@@ -1,8 +1,10 @@
 import type { UIRuntime } from '../runtime';
 import type { PercentageString } from '../types';
 import type { UIProgressBarHandle, UIProgressBarOptions } from './types';
-import { attachToParent, clamp, createTextBlock, disposeWidget, formatNumericValue, normalizeRange } from './internals';
+import { clamp } from '@axrone/numeric';
+import { attachToParent, createTextBlock, formatNumericValue, normalizeRange } from './internals';
 import { resolveTheme, resolveVariantPalette } from './theme';
+import { createStatefulControl } from './stateful-control';
 
 export const createUIProgressBar = <TRuntime>(
     runtime: UIRuntime<TRuntime>,
@@ -17,6 +19,10 @@ export const createUIProgressBar = <TRuntime>(
         max: range.max,
         value: clamp(options.value ?? range.min, range.min, range.max),
         showValue: options.showValue ?? true,
+        disabled: false,
+        hovered: false,
+        pressed: false,
+        focused: false,
         variant: options.variant ?? 'primary',
     };
     const root = runtime.createWidget({
@@ -69,7 +75,15 @@ export const createUIProgressBar = <TRuntime>(
     runtime.appendChild(root, track);
     runtime.appendChild(track, fill);
 
-    const apply = (): void => {
+    let applyRef: () => void = () => {};
+    const apply = () => applyRef();
+
+    const sc = createStatefulControl<typeof state>(runtime, {
+        state,
+        apply,
+    });
+
+    applyRef = (): void => {
         const palette = resolveVariantPalette(theme, state.variant);
         const percent = state.max === state.min ? 0 : (state.value - state.min) / (state.max - state.min);
         const percentString = `${clamp(percent * 100, 0, 100)}%` as PercentageString;
@@ -129,7 +143,7 @@ export const createUIProgressBar = <TRuntime>(
             apply();
         },
         dispose() {
-            disposeWidget(runtime, root);
+            sc.dispose(root);
         },
     };
 };

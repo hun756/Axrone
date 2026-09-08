@@ -1,4 +1,4 @@
-import { Vec3, Mat4 } from '@axrone/numeric';
+import { Vec3, Mat4, SoaVec3Buffer } from '@axrone/numeric';
 import type { IGLContext } from '../context';
 import {
     VertexAttributeType,
@@ -552,40 +552,28 @@ export class MeshGenerationUtils {
         positions: Float32Array,
         indices: Uint16Array | Uint32Array
     ): Float32Array {
-        const vertexCount = positions.length / 3;
         const normals = new Float32Array(positions.length);
+        const edge1 = new Float32Array(3);
+        const edge2 = new Float32Array(3);
+        const faceNormal = new Float32Array(3);
 
         for (let i = 0; i < indices.length; i += 3) {
             const i0 = indices[i] * 3;
             const i1 = indices[i + 1] * 3;
             const i2 = indices[i + 2] * 3;
 
-            const v0 = new Vec3(positions[i0], positions[i0 + 1], positions[i0 + 2]);
-            const v1 = new Vec3(positions[i1], positions[i1 + 1], positions[i1 + 2]);
-            const v2 = new Vec3(positions[i2], positions[i2 + 1], positions[i2 + 2]);
+            SoaVec3Buffer.vec3Subtract(edge1, 0, positions, i1, positions, i0);
+            SoaVec3Buffer.vec3Subtract(edge2, 0, positions, i2, positions, i0);
+            SoaVec3Buffer.vec3Cross(faceNormal, 0, edge1, 0, edge2, 0);
+            SoaVec3Buffer.vec3Normalize(faceNormal, 0, faceNormal, 0);
 
-            const edge1 = Vec3.subtract(v1, v0);
-            const edge2 = Vec3.subtract(v2, v0);
-            const faceNormal = Vec3.normalize(Vec3.cross(edge1, edge2));
-
-            normals[i0] += faceNormal.x;
-            normals[i0 + 1] += faceNormal.y;
-            normals[i0 + 2] += faceNormal.z;
-
-            normals[i1] += faceNormal.x;
-            normals[i1 + 1] += faceNormal.y;
-            normals[i1 + 2] += faceNormal.z;
-
-            normals[i2] += faceNormal.x;
-            normals[i2 + 1] += faceNormal.y;
-            normals[i2 + 2] += faceNormal.z;
+            SoaVec3Buffer.vec3Add(normals, i0, normals, i0, faceNormal, 0);
+            SoaVec3Buffer.vec3Add(normals, i1, normals, i1, faceNormal, 0);
+            SoaVec3Buffer.vec3Add(normals, i2, normals, i2, faceNormal, 0);
         }
 
         for (let i = 0; i < normals.length; i += 3) {
-            const normal = Vec3.normalize(new Vec3(normals[i], normals[i + 1], normals[i + 2]));
-            normals[i] = normal.x;
-            normals[i + 1] = normal.y;
-            normals[i + 2] = normal.z;
+            SoaVec3Buffer.vec3Normalize(normals, i, normals, i);
         }
 
         return normals;
@@ -603,14 +591,22 @@ export class MeshGenerationUtils {
         const tan1 = new Float32Array(vertexCount * 3);
         const tan2 = new Float32Array(vertexCount * 3);
 
+        const edge1 = new Float32Array(3);
+        const edge2 = new Float32Array(3);
+        const sdir = new Float32Array(3);
+        const tdir = new Float32Array(3);
+
         for (let i = 0; i < indices.length; i += 3) {
             const i1 = indices[i];
             const i2 = indices[i + 1];
             const i3 = indices[i + 2];
 
-            const v1 = new Vec3(positions[i1 * 3], positions[i1 * 3 + 1], positions[i1 * 3 + 2]);
-            const v2 = new Vec3(positions[i2 * 3], positions[i2 * 3 + 1], positions[i2 * 3 + 2]);
-            const v3 = new Vec3(positions[i3 * 3], positions[i3 * 3 + 1], positions[i3 * 3 + 2]);
+            const o1 = i1 * 3;
+            const o2 = i2 * 3;
+            const o3 = i3 * 3;
+
+            SoaVec3Buffer.vec3Subtract(edge1, 0, positions, o2, positions, o1);
+            SoaVec3Buffer.vec3Subtract(edge2, 0, positions, o3, positions, o1);
 
             const w1 = texCoords[i1 * 2];
             const w2 = texCoords[i2 * 2];
@@ -619,71 +615,49 @@ export class MeshGenerationUtils {
             const h2 = texCoords[i2 * 2 + 1];
             const h3 = texCoords[i3 * 2 + 1];
 
-            const x1 = v2.x - v1.x;
-            const x2 = v3.x - v1.x;
-            const y1 = v2.y - v1.y;
-            const y2 = v3.y - v1.y;
-            const z1 = v2.z - v1.z;
-            const z2 = v3.z - v1.z;
-
             const s1 = w2 - w1;
             const s2 = w3 - w1;
             const t1 = h2 - h1;
             const t2 = h3 - h1;
 
             const r = 1.0 / (s1 * t2 - s2 * t1);
-            const sdir = new Vec3(
-                (t2 * x1 - t1 * x2) * r,
-                (t2 * y1 - t1 * y2) * r,
-                (t2 * z1 - t1 * z2) * r
-            );
-            const tdir = new Vec3(
-                (s1 * x2 - s2 * x1) * r,
-                (s1 * y2 - s2 * y1) * r,
-                (s1 * z2 - s2 * z1) * r
-            );
 
-            tan1[i1 * 3] += sdir.x;
-            tan1[i1 * 3 + 1] += sdir.y;
-            tan1[i1 * 3 + 2] += sdir.z;
-            tan1[i2 * 3] += sdir.x;
-            tan1[i2 * 3 + 1] += sdir.y;
-            tan1[i2 * 3 + 2] += sdir.z;
-            tan1[i3 * 3] += sdir.x;
-            tan1[i3 * 3 + 1] += sdir.y;
-            tan1[i3 * 3 + 2] += sdir.z;
+            sdir[0] = (t2 * edge1[0] - t1 * edge2[0]) * r;
+            sdir[1] = (t2 * edge1[1] - t1 * edge2[1]) * r;
+            sdir[2] = (t2 * edge1[2] - t1 * edge2[2]) * r;
 
-            tan2[i1 * 3] += tdir.x;
-            tan2[i1 * 3 + 1] += tdir.y;
-            tan2[i1 * 3 + 2] += tdir.z;
-            tan2[i2 * 3] += tdir.x;
-            tan2[i2 * 3 + 1] += tdir.y;
-            tan2[i2 * 3 + 2] += tdir.z;
-            tan2[i3 * 3] += tdir.x;
-            tan2[i3 * 3 + 1] += tdir.y;
-            tan2[i3 * 3 + 2] += tdir.z;
+            tdir[0] = (s1 * edge2[0] - s2 * edge1[0]) * r;
+            tdir[1] = (s1 * edge2[1] - s2 * edge1[1]) * r;
+            tdir[2] = (s1 * edge2[2] - s2 * edge1[2]) * r;
+
+            SoaVec3Buffer.vec3Add(tan1, o1, tan1, o1, sdir, 0);
+            SoaVec3Buffer.vec3Add(tan1, o2, tan1, o2, sdir, 0);
+            SoaVec3Buffer.vec3Add(tan1, o3, tan1, o3, sdir, 0);
+
+            SoaVec3Buffer.vec3Add(tan2, o1, tan2, o1, tdir, 0);
+            SoaVec3Buffer.vec3Add(tan2, o2, tan2, o2, tdir, 0);
+            SoaVec3Buffer.vec3Add(tan2, o3, tan2, o3, tdir, 0);
         }
 
+        const temp = new Float32Array(3);
+        const cross = new Float32Array(3);
+
         for (let i = 0; i < vertexCount; i++) {
-            const n = new Vec3(normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2]);
-            const t = new Vec3(tan1[i * 3], tan1[i * 3 + 1], tan1[i * 3 + 2]);
+            const no = i * 3;
+            const to = i * 4;
 
-            const dotProduct = Vec3.dot(n, t);
-            const scaled = Vec3.multiplyScalar(n, dotProduct);
-            const tangent = Vec3.normalize(Vec3.subtract(t, scaled));
+            const dotProduct = SoaVec3Buffer.vec3Dot(normals, no, tan1, no);
+            SoaVec3Buffer.vec3Scale(temp, 0, normals, no, dotProduct);
+            SoaVec3Buffer.vec3Subtract(temp, 0, tan1, no, temp, 0);
+            SoaVec3Buffer.vec3Normalize(temp, 0, temp, 0);
 
-            const handedness =
-                Vec3.dot(
-                    Vec3.cross(n, t),
-                    new Vec3(tan2[i * 3], tan2[i * 3 + 1], tan2[i * 3 + 2])
-                ) < 0.0
-                    ? -1.0
-                    : 1.0;
+            SoaVec3Buffer.vec3Cross(cross, 0, normals, no, tan1, no);
+            const handedness = SoaVec3Buffer.vec3Dot(cross, 0, tan2, no) < 0.0 ? -1.0 : 1.0;
 
-            tangents[i * 4] = tangent.x;
-            tangents[i * 4 + 1] = tangent.y;
-            tangents[i * 4 + 2] = tangent.z;
-            tangents[i * 4 + 3] = handedness;
+            tangents[to] = temp[0];
+            tangents[to + 1] = temp[1];
+            tangents[to + 2] = temp[2];
+            tangents[to + 3] = handedness;
         }
 
         return tangents;

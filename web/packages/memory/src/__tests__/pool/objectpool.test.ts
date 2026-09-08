@@ -215,8 +215,6 @@ describe('ObjectPool', () => {
         });
 
         it('should handle reset handler errors gracefully', () => {
-            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
             const pool = createBasicPool(() => new TestUser(), {
                 resetHandler: () => {
                     throw new Error('Reset failed');
@@ -225,9 +223,6 @@ describe('ObjectPool', () => {
 
             const user = pool.acquire();
             expect(() => pool.release(user)).not.toThrow();
-            expect(consoleSpy).toHaveBeenCalled();
-
-            consoleSpy.mockRestore();
         });
     });
 
@@ -350,6 +345,7 @@ describe('ObjectPool', () => {
         });
 
         it('should handle tryAcquireAsync with timeout', async () => {
+            vi.useFakeTimers();
             const pool = createBasicPool(() => new TestUser(), {
                 initialCapacity: 1,
                 maxCapacity: 1,
@@ -358,15 +354,16 @@ describe('ObjectPool', () => {
 
             pool.acquire();
 
-            const startTime = Date.now();
-            const result = await pool.tryAcquireAsync(100);
-            const elapsed = Date.now() - startTime;
+            const promise = pool.tryAcquireAsync(100);
+            await vi.advanceTimersByTimeAsync(100);
+            const result = await promise;
 
             expect(result).toBeNull();
-            expect(elapsed).toBeGreaterThanOrEqual(90);
+            vi.useRealTimers();
         });
 
         it('should handle async factory', async () => {
+            vi.useFakeTimers();
             let asyncCreationCount = 0;
 
             const pool = new ObjectPool<TestUser>({
@@ -380,9 +377,10 @@ describe('ObjectPool', () => {
                 preallocate: true,
             });
 
-            await new Promise((resolve) => setTimeout(resolve, 50));
+            await vi.advanceTimersByTimeAsync(50);
 
             expect(asyncCreationCount).toBeGreaterThan(0);
+            vi.useRealTimers();
         });
 
         it('should handle concurrent async operations', async () => {

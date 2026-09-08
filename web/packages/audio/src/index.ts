@@ -32,7 +32,6 @@ export type {
     AudioMessageResolver,
     AudioMixerSnapshot,
     AudioMixerSnapshotBusState,
-    AudioPatch,
     AudioPanningModel,
     AudioPcmClipAssetData,
     AudioPlaybackHandle,
@@ -129,3 +128,4 @@ export {
 } from './system';
 
 export { AudioComponentBinder } from './component-binder';
+export type { AudioBinderCommandFailure } from './component-binder';

@@ -1,6 +1,9 @@
 import type { IHasher, HashFactoryOptions } from './interfaces';
 import { createHasher } from './factory';
 import type { HashValue, HashAlgorithmName, Seed32, Seed64, Hash32 } from './types';
+import { HashInvalidInputError } from './errors';
+
+const SHARED_ENCODER = new TextEncoder();
 
 export class HashBuilder<H extends HashValue = Hash32> {
     private _hasher: IHasher<H>;
@@ -22,36 +25,42 @@ export class HashBuilder<H extends HashValue = Hash32> {
         if (this._domain !== undefined) opts.domain = this._domain;
         this._hasher = createHasher<H>(algorithm, opts);
         if (this._domain) {
-            const tagBytes = new TextEncoder().encode(this._domain);
+            const tagBytes = SHARED_ENCODER.encode(this._domain);
             this._hasher.updateBytes(tagBytes);
         }
         return this;
     }
 
+    private _applyConfig(): void {
+        if (this._domain) {
+            this._hasher.updateBytes(SHARED_ENCODER.encode(this._domain));
+        }
+        if (this._key) {
+            this._hasher.updateBytes(this._key);
+        }
+        if (this._seed !== undefined) {
+            this._hasher.updateHash(this._seed as unknown as HashValue);
+        }
+    }
+
     withSeed(seed: Seed32 | Seed64): this {
         this._seed = seed;
         this._hasher.reset();
-        this._hasher.updateHash(seed as unknown as HashValue);
-        if (this._domain) {
-            this._hasher.updateBytes(new TextEncoder().encode(this._domain));
-        }
+        this._applyConfig();
         return this;
     }
 
     withKey(key: Uint8Array): this {
         this._key = key;
         this._hasher.reset();
-        this._hasher.updateBytes(key);
-        if (this._domain) {
-            this._hasher.updateBytes(new TextEncoder().encode(this._domain));
-        }
+        this._applyConfig();
         return this;
     }
 
     withDomain(tag: string): this {
         this._domain = tag;
         this._hasher.reset();
-        this._hasher.updateBytes(new TextEncoder().encode(tag));
+        this._applyConfig();
         return this;
     }
 
@@ -60,7 +69,8 @@ export class HashBuilder<H extends HashValue = Hash32> {
         else if (typeof data === 'number') this._hasher.updateF64(data);
         else if (typeof data === 'bigint') this._hasher.updateI64(data);
         else if (typeof data === 'boolean') this._hasher.updateBoolean(data);
-        else this._hasher.updateBytes(data);
+        else if (data instanceof Uint8Array) this._hasher.updateBytes(data);
+        else throw new HashInvalidInputError(`Unsupported update type: ${typeof data}`);
         return this;
     }
 
@@ -91,9 +101,7 @@ export class HashBuilder<H extends HashValue = Hash32> {
 
     reset(): this {
         this._hasher.reset();
-        if (this._domain) this._hasher.updateBytes(new TextEncoder().encode(this._domain));
-        if (this._key) this._hasher.updateBytes(this._key);
-        if (this._seed) this._hasher.updateHash(this._seed as unknown as HashValue);
+        this._applyConfig();
         return this;
     }
 }

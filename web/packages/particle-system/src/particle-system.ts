@@ -115,6 +115,7 @@ export class ParticleSystem implements IParticleSystem {
 
             this._particles.deallocate();
             this._spatialIndex.clear();
+            this._eventEmitter.dispose();
 
             this._emitters.clear();
             this._modules.clear();

@@ -69,9 +69,9 @@ export class ShapeModule extends BaseModule<'shape'> {
 
         if (config.randomizePosition) {
             const noise = 0.1;
-            position.x += (Math.random() - 0.5) * noise;
-            position.y += (Math.random() - 0.5) * noise;
-            position.z += (Math.random() - 0.5) * noise;
+            position.x += (this._random.float() - 0.5) * noise;
+            position.y += (this._random.float() - 0.5) * noise;
+            position.z += (this._random.float() - 0.5) * noise;
         }
 
         return position;
@@ -98,8 +98,8 @@ export class ShapeModule extends BaseModule<'shape'> {
         }
 
         if (config.randomizeDirection) {
-            const randomAngle = Math.random() * Math.PI * 2;
-            const randomPitch = (Math.random() - 0.5) * Math.PI * 0.5;
+            const randomAngle = this._random.float() * Math.PI * 2;
+            const randomPitch = (this._random.float() - 0.5) * Math.PI * 0.5;
 
             direction.x += Math.cos(randomAngle) * Math.cos(randomPitch) * 0.5;
             direction.y += Math.sin(randomPitch) * 0.5;
@@ -133,11 +133,11 @@ export class ShapeModule extends BaseModule<'shape'> {
     }
 
     private _applySpherePosition(position: IVec3Like, radius: number, thickness: number): void {
-        const phi = Math.random() * Math.PI * 2;
-        const cosTheta = Math.random() * 2 - 1;
+        const phi = this._random.float() * Math.PI * 2;
+        const cosTheta = this._random.float() * 2 - 1;
         const sinTheta = Math.sqrt(1 - cosTheta * cosTheta);
 
-        const r = radius * (thickness + (1 - thickness) * Math.random());
+        const r = radius * (thickness + (1 - thickness) * this._random.float());
 
         position.x += r * sinTheta * Math.cos(phi);
         position.y += r * cosTheta;
@@ -145,11 +145,11 @@ export class ShapeModule extends BaseModule<'shape'> {
     }
 
     private _applyHemispherePosition(position: IVec3Like, radius: number, thickness: number): void {
-        const phi = Math.random() * Math.PI * 2;
-        const cosTheta = Math.random();
+        const phi = this._random.float() * Math.PI * 2;
+        const cosTheta = this._random.float();
         const sinTheta = Math.sqrt(1 - cosTheta * cosTheta);
 
-        const r = radius * (thickness + (1 - thickness) * Math.random());
+        const r = radius * (thickness + (1 - thickness) * this._random.float());
 
         position.x += r * sinTheta * Math.cos(phi);
         position.y += r * cosTheta;
@@ -157,17 +157,17 @@ export class ShapeModule extends BaseModule<'shape'> {
     }
 
     private _applyCirclePosition(position: IVec3Like, radius: number, thickness: number): void {
-        const angle = Math.random() * Math.PI * 2;
-        const r = radius * (thickness + (1 - thickness) * Math.random());
+        const angle = this._random.float() * Math.PI * 2;
+        const r = radius * (thickness + (1 - thickness) * this._random.float());
 
         position.x += r * Math.cos(angle);
         position.z += r * Math.sin(angle);
     }
 
     private _applyBoxPosition(position: IVec3Like, size: IVec3Like): void {
-        position.x += (Math.random() - 0.5) * size.x;
-        position.y += (Math.random() - 0.5) * size.y;
-        position.z += (Math.random() - 0.5) * size.z;
+        position.x += (this._random.float() - 0.5) * size.x;
+        position.y += (this._random.float() - 0.5) * size.y;
+        position.z += (this._random.float() - 0.5) * size.z;
     }
 
     private _applyConePosition(
@@ -176,11 +176,11 @@ export class ShapeModule extends BaseModule<'shape'> {
         angle: number,
         length: number
     ): void {
-        const height = Math.random() * length;
+        const height = this._random.float() * length;
         const coneRadius = radius * (height / length) * Math.tan(angle * 0.5);
 
-        const phi = Math.random() * Math.PI * 2;
-        const r = coneRadius * Math.random();
+        const phi = this._random.float() * Math.PI * 2;
+        const r = coneRadius * this._random.float();
 
         position.x += r * Math.cos(phi);
         position.y += height;
@@ -188,12 +188,12 @@ export class ShapeModule extends BaseModule<'shape'> {
     }
 
     private _applyLinePosition(position: IVec3Like, length: number): void {
-        position.y += (Math.random() - 0.5) * length;
+        position.y += (this._random.float() - 0.5) * length;
     }
 
     private _getRadialDirection(): IVec3Like {
-        const phi = Math.random() * Math.PI * 2;
-        const cosTheta = Math.random() * 2 - 1;
+        const phi = this._random.float() * Math.PI * 2;
+        const cosTheta = this._random.float() * 2 - 1;
         const sinTheta = Math.sqrt(1 - cosTheta * cosTheta);
 
         return {
@@ -205,8 +205,8 @@ export class ShapeModule extends BaseModule<'shape'> {
 
     private _getConeDirection(angle: number): IVec3Like {
         const maxAngle = angle * 0.5;
-        const theta = Math.random() * maxAngle;
-        const phi = Math.random() * Math.PI * 2;
+        const theta = this._random.float() * maxAngle;
+        const phi = this._random.float() * Math.PI * 2;
 
         const sinTheta = Math.sin(theta);
         const cosTheta = Math.cos(theta);

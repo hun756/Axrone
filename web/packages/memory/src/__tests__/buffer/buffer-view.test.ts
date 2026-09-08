@@ -45,7 +45,7 @@ describe('BufferView — professional tests', () => {
         expect(() => (v as any).getInt32()).toThrow();
     });
 
-    it('toTypedArray returns a copy/TypedArray matching the view capacity', () => {
+    it('toTypedArray returns a typed array over the raw buffer data', () => {
         const b = ByteBuffer.alloc(32);
         const v = BufferView.createUint8View(b);
         v.setValues(0, [1, 2, 3, 4]);
@@ -54,12 +54,8 @@ describe('BufferView — professional tests', () => {
         const ta = v.toTypedArray();
 
         expect(ta).toBeInstanceOf(Uint8Array);
-
-        expect(ta.length).toBeGreaterThanOrEqual(0);
-        expect(ta.length).toBeLessThanOrEqual(v.capacity);
-        if (ta.length >= 4) {
-            expect(Array.from(ta).slice(0, 4)).toEqual([1, 2, 3, 4]);
-        }
+        expect(ta.length).toBe(v.capacity);
+        expect(Array.from(ta).slice(0, 4)).toEqual([1, 2, 3, 4]);
     });
 
     it('slice returns a new BufferView with correct bounds', () => {

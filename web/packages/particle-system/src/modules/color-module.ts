@@ -2,6 +2,7 @@ import type { ColorConfiguration } from '../core/configuration';
 import type { IParticleBuffer } from '../core/interfaces';
 import type { ParticleId } from '../types';
 import { BaseModule } from './base-module';
+import { SoaVec3Buffer } from '@axrone/numeric';
 
 interface ColorState {
     initialColor: { r: number; g: number; b: number; a: number };
@@ -169,9 +170,7 @@ export class ColorModule extends BaseModule<'color'> {
         const velocities = particles.velocities as Float32Array;
         const i3 = particleIndex * 3;
 
-        const velMagnitude = Math.sqrt(
-            velocities[i3] ** 2 + velocities[i3 + 1] ** 2 + velocities[i3 + 2] ** 2
-        );
+        const velMagnitude = SoaVec3Buffer.vec3Length(velocities, i3);
 
         if (Math.abs(velMagnitude - state.lastVelocityMagnitude) < 0.1) {
             return this._addColors(baseColor, state.velocityColorCache);
@@ -226,9 +225,9 @@ export class ColorModule extends BaseModule<'color'> {
         baseColor: { r: number; g: number; b: number; a: number },
         variation: number
     ): { r: number; g: number; b: number; a: number } {
-        const randomR = (Math.random() - 0.5) * variation;
-        const randomG = (Math.random() - 0.5) * variation;
-        const randomB = (Math.random() - 0.5) * variation;
+        const randomR = (this._random.float() - 0.5) * variation;
+        const randomG = (this._random.float() - 0.5) * variation;
+        const randomB = (this._random.float() - 0.5) * variation;
 
         return {
             r: baseColor.r + randomR,

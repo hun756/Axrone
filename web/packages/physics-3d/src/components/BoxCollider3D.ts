@@ -18,9 +18,10 @@ export class BoxCollider3D extends Collider3D {
 
     protected override _createShape(): void {
         if (!this._rigidbody) return;
+        const s = this._getWorldScale();
         const def: IBoxShapeDef3D = {
-            center: this._center,
-            halfExtents: { x: this._size.x * 0.5, y: this._size.y * 0.5, z: this._size.z * 0.5 },
+            center: { x: this._center.x * s.x, y: this._center.y * s.y, z: this._center.z * s.z },
+            halfExtents: { x: this._size.x * 0.5 * Math.abs(s.x), y: this._size.y * 0.5 * Math.abs(s.y), z: this._size.z * 0.5 * Math.abs(s.z) },
         };
         if (this._world) {
             this._shapeId = this._world.createBoxShape(
@@ -30,11 +31,13 @@ export class BoxCollider3D extends Collider3D {
                 this._getFilter(),
                 { isSensor: this.isTrigger }
             );
+            this._notifyShapeChanged();
             return;
         }
 
         if (!this._shapeManager) return;
         this._shapeId = this._shapeManager.createBox(this._rigidbody.bodyId, def, this._getMaterial(), this._getFilter());
+        this._notifyShapeChanged();
     }
 
     protected override _updateShape(): void {

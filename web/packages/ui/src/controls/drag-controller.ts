@@ -1,7 +1,8 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
-import { clamp } from './internals';
+import { clamp } from '@axrone/numeric';
+import { asString, asNumber, asBoolean } from './internals';
 
 /**
  * Declarative drag controller for `.ui.json` authored draggable widgets.
@@ -49,15 +50,6 @@ type DragContext = WidgetControllerContext<
     DragControllerState,
     UIRuntime
 >;
-
-const asBoolean = (value: unknown, fallback: boolean): boolean =>
-    typeof value === 'boolean' ? value : fallback;
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
 
 const resolveAxis = (props: DragControllerProps): DragAxis => {
     const axis = asString(props.axis);
@@ -181,6 +173,17 @@ export const dragController: WidgetController<
                     // Apply ghost opacity.
                     applyGhostOpacity(typed, true);
 
+                    // Dispatch onDragStart callback.
+                    const onStart = asString(props.onDragStart);
+                    if (onStart) {
+                        typed.runtime.emitControllerEvent(typed.widget as WidgetId, onStart, {
+                            x: box.x,
+                            y: box.y,
+                            pointerX: event.x,
+                            pointerY: event.y,
+                        });
+                    }
+
                     return true;
                 }
                 case 'move': {
@@ -196,6 +199,29 @@ export const dragController: WidgetController<
                     }
                     state.dragging = false;
                     applyGhostOpacity(typed, false);
+
+                    // Dispatch onDragEnd and onDrop callbacks.
+                    const onEnd = asString(props.onDragEnd);
+                    if (onEnd) {
+                        const finalBox = typed.runtime.getLayoutBox(typed.widget as WidgetId);
+                        typed.runtime.emitControllerEvent(typed.widget as WidgetId, onEnd, {
+                            x: finalBox.x,
+                            y: finalBox.y,
+                            pointerX: event.x,
+                            pointerY: event.y,
+                        });
+                    }
+                    const onDrop = asString(props.onDrop);
+                    if (onDrop) {
+                        const finalBox = typed.runtime.getLayoutBox(typed.widget as WidgetId);
+                        typed.runtime.emitControllerEvent(typed.widget as WidgetId, onDrop, {
+                            x: finalBox.x,
+                            y: finalBox.y,
+                            pointerX: event.x,
+                            pointerY: event.y,
+                        });
+                    }
+
                     return true;
                 }
                 case 'leave': {
@@ -216,6 +242,20 @@ export const dragController: WidgetController<
                             },
                         });
                     }
+
+                    // Dispatch onDragEnd callback (cancelled — no onDrop).
+                    const onCancelEnd = asString(props.onDragEnd);
+                    if (onCancelEnd) {
+                        const restoredBox = state.originalPosition
+                            ? { x: state.originalPosition.x, y: state.originalPosition.y }
+                            : typed.runtime.getLayoutBox(typed.widget as WidgetId);
+                        typed.runtime.emitControllerEvent(typed.widget as WidgetId, onCancelEnd, {
+                            x: restoredBox.x,
+                            y: restoredBox.y,
+                            cancelled: true,
+                        });
+                    }
+
                     return true;
                 }
                 default:

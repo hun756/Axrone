@@ -1,5 +1,8 @@
 import type { IVec2Like } from '@axrone/numeric';
 import type { Brand } from '@axrone/utility';
+import { makeCollisionPairKey, type CollisionPairKey } from '@axrone/physics-core';
+
+export { makeCollisionPairKey, type CollisionPairKey };
 
 export type { Brand };
 
@@ -25,7 +28,9 @@ export type ErrorCode =
     | 'CAPACITY_EXCEEDED'
     | 'INVALID_ARGUMENT'
     | 'DUPLICATE'
-    | 'PERMISSION_DENIED';
+    | 'PERMISSION_DENIED'
+    | 'SHAPE_NOT_FOUND'
+    | 'INVALID_SHAPE';
 
 export class PhysicsError<TCode extends ErrorCode = ErrorCode> extends Error {
     readonly code: TCode;
@@ -77,14 +82,6 @@ export function assertCapacity(current: number, max: number, name: string): void
 
 export type ReadonlyVec2 = Readonly<IVec2Like>;
 export type IVec2Output = IVec2Like;
-
-export type CollisionPairKey = Brand<number, 'CollisionPairKey'>;
-
-export function makeCollisionPairKey(a: number, b: number): CollisionPairKey {
-    const lo = a < b ? a : b;
-    const hi = a < b ? b : a;
-    return (lo * 0x100000 + hi) as CollisionPairKey;
-}
 
 export interface ISoAFieldDescriptor {
     readonly offset: number;
@@ -188,4 +185,45 @@ export function buildCollisionMatrix<
         matrix.set(`${a}:${b}`, fn);
     }
     return matrix as CollisionMatrix<TShapeKind, TFn>;
+}
+
+/**
+ * Lightweight free-list for recycling integer indices into parallel typed arrays.
+ * Eliminates silent corruption from monotonic slot consumption under spawn/destroy churn.
+ */
+export class IndexPool {
+    private readonly _free: number[] = [];
+    private _next: number = 0;
+    private readonly _capacity: number;
+
+    constructor(capacity: number) {
+        this._capacity = capacity;
+    }
+
+    acquire(): number {
+        if (this._free.length > 0) {
+            return this._free.pop()!;
+        }
+        if (this._next >= this._capacity) {
+            throw new PhysicsError('IndexPool capacity exceeded', 'CAPACITY_EXCEEDED');
+        }
+        return this._next++;
+    }
+
+    release(index: number): void {
+        this._free.push(index);
+    }
+
+    get available(): number {
+        return this._free.length + (this._capacity - this._next);
+    }
+
+    get inUse(): number {
+        return this._next - this._free.length;
+    }
+
+    reset(): void {
+        this._free.length = 0;
+        this._next = 0;
+    }
 }

@@ -312,3 +312,156 @@ describe('syncPlaybackSpatialState', () => {
         expect(panner.positionX.value).toBe(5);
     });
 });
+
+// A node created by another realm's AudioContext (Worker / OffscreenCanvas / iframe) has
+// the full PannerNode surface but a different constructor identity, so `instanceof`
+// rejects it and the source silently loses spatialization. Detection must key on shape.
+describe('syncPlaybackSpatialState — realm-agnostic panner detection', () => {
+    const makeSource = (pan: number): AudioSpatialSourceState => ({
+        muted: false,
+        volume: 1,
+        pan,
+        spatial: { mode: '3d', position: { x: 7, y: 8, z: 9 } },
+    });
+
+    const makeListener = (): AudioSpatialListenerState => ({
+        enabled: true,
+        position: { x: 0, y: 0, z: 0 },
+        forward: { x: 0, y: 0, z: -1 },
+        up: { x: 0, y: 1, z: 0 },
+    });
+
+    it('writes position to a foreign-realm panner that is not instanceof PannerNode', () => {
+        const foreignPanner = {
+            distanceModel: 'inverse',
+            panningModel: 'equalpower',
+            refDistance: 1,
+            maxDistance: 10000,
+            rolloffFactor: 1,
+            coneInnerAngle: 360,
+            coneOuterAngle: 360,
+            coneOuterGain: 0,
+            positionX: new FakeAudioParam(0),
+            positionY: new FakeAudioParam(0),
+            positionZ: new FakeAudioParam(0),
+            orientationX: new FakeAudioParam(1),
+            orientationY: new FakeAudioParam(0),
+            orientationZ: new FakeAudioParam(0),
+        };
+
+        expect(foreignPanner).not.toBeInstanceOf(PannerNode);
+
+        const playback: AudioSpatialPlaybackNodes = {
+            gainNode: new FakeGainNode() as unknown as GainNode,
+            attenuationNode: new FakeGainNode() as unknown as GainNode,
+            spatialNode: foreignPanner as unknown as PannerNode,
+        };
+
+        syncPlaybackSpatialState(playback, makeSource(0), makeListener());
+
+        expect(foreignPanner.positionX.value).toBe(7);
+        expect(foreignPanner.positionY.value).toBe(8);
+        expect(foreignPanner.positionZ.value).toBe(9);
+    });
+
+    it('still drives the legacy setPosition API when positionX is absent', () => {
+        const calls: number[][] = [];
+        const legacyPanner = {
+            distanceModel: 'inverse',
+            panningModel: 'equalpower',
+            setPosition: (x: number, y: number, z: number) => calls.push([x, y, z]),
+            setOrientation: (x: number, y: number, z: number) => calls.push([x, y, z]),
+        };
+
+        const playback: AudioSpatialPlaybackNodes = {
+            gainNode: new FakeGainNode() as unknown as GainNode,
+            attenuationNode: new FakeGainNode() as unknown as GainNode,
+            spatialNode: legacyPanner as unknown as PannerNode,
+        };
+
+        syncPlaybackSpatialState(playback, makeSource(0), makeListener());
+
+        expect(calls[0]).toEqual([7, 8, 9]);
+    });
+
+    it('writes pan on a foreign-realm stereo panner', () => {
+        const foreignStereo = { pan: new FakeAudioParam(0) };
+
+        const playback: AudioSpatialPlaybackNodes = {
+            gainNode: new FakeGainNode() as unknown as GainNode,
+            attenuationNode: new FakeGainNode() as unknown as GainNode,
+            spatialNode: foreignStereo as unknown as StereoPannerNode,
+        };
+
+        syncPlaybackSpatialState(playback, { muted: false, volume: 1, pan: -0.4 }, makeListener());
+
+        expect(foreignStereo.pan.value).toBe(-0.4);
+    });
+});
+
+// Snapping AudioParam.value once per frame is audible as zipper noise on a moving source.
+// Writes now ramp, and an unchanged value is skipped so a static voice costs nothing.
+describe('syncPlaybackSpatialState — ramps writes and skips unchanged', () => {
+    const makeRig = () => {
+        const gainNode = new FakeGainNode();
+        const attenuationNode = new FakeGainNode();
+        const stereo = new FakeStereoPannerNode();
+        return {
+            gainNode,
+            stereo,
+            playback: {
+                gainNode: gainNode as unknown as GainNode,
+                attenuationNode: attenuationNode as unknown as GainNode,
+                spatialNode: stereo as unknown as StereoPannerNode,
+            } as AudioSpatialPlaybackNodes,
+        };
+    };
+
+    const sourceOf = (volume: number, pan = 0): AudioSpatialSourceState => ({
+        muted: false,
+        volume,
+        pan,
+    });
+
+    it('snaps the first write because there is no baseline to ramp from', () => {
+        const { playback, gainNode } = makeRig();
+
+        syncPlaybackSpatialState(playback, sourceOf(0.8), undefined, 10);
+
+        expect(gainNode.gain.events.map((event) => event.type)).toEqual(['cancel', 'set']);
+        expect(gainNode.gain.value).toBe(0.8);
+    });
+
+    it('ramps a changed value towards the audio clock', () => {
+        const { playback, gainNode } = makeRig();
+        syncPlaybackSpatialState(playback, sourceOf(0.8), undefined, 10);
+
+        syncPlaybackSpatialState(playback, sourceOf(0.4), undefined, 20);
+
+        const last = gainNode.gain.events.at(-1)!;
+        expect(last.type).toBe('ramp');
+        if (last.type === 'ramp') {
+            expect(last.value).toBe(0.4);
+            expect(last.atTime).toBeGreaterThan(20);
+        }
+    });
+
+    it('writes nothing when neither gain nor pan moved', () => {
+        const { playback, gainNode, stereo } = makeRig();
+        syncPlaybackSpatialState(playback, sourceOf(0.8, 0.3), undefined, 10);
+        const writesBefore = gainNode.gain.events.length + stereo.pan.events.length;
+
+        syncPlaybackSpatialState(playback, sourceOf(0.8, 0.3), undefined, 20);
+
+        expect(gainNode.gain.events.length + stereo.pan.events.length).toBe(writesBefore);
+    });
+
+    it('still writes pan on a stereo panner when only pan changed', () => {
+        const { playback, stereo } = makeRig();
+        syncPlaybackSpatialState(playback, sourceOf(0.8, 0.3), undefined, 10);
+
+        syncPlaybackSpatialState(playback, sourceOf(0.8, -0.6), undefined, 20);
+
+        expect(stereo.pan.value).toBe(-0.6);
+    });
+});

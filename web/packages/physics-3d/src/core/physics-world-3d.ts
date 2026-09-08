@@ -7,7 +7,7 @@ import type {
     IMaterial,
     IPhysicsBody3D,
     IPhysicsWorldStatistics,
-    IRaycastResult3D,
+    ISingleRaycastResult3D,
     IShape3D,
     Mass,
 } from '../types';
@@ -50,50 +50,56 @@ import {
 import { PhysicsWorld3DContactRuntime } from './physics-world-3d-contact-runtime';
 import {
     BODY_TYPE_DYNAMIC,
-    BODY_TYPE_STATIC,
     CONSTRAINT_TYPE_CONE_TWIST,
     CONSTRAINT_TYPE_FIXED,
     CONSTRAINT_TYPE_GENERIC,
     CONSTRAINT_TYPE_HINGE,
     CONSTRAINT_TYPE_SLIDER,
     CONSTRAINT_TYPE_SPRING,
-    IDENTITY_ROTATION,
-    SHAPE_TYPE_BOX,
-    SHAPE_TYPE_CAPSULE,
-    SHAPE_TYPE_CONE,
-    SHAPE_TYPE_CONVEX_HULL,
-    SHAPE_TYPE_CYLINDER,
-    SHAPE_TYPE_HEIGHTFIELD,
-    SHAPE_TYPE_SPHERE,
-    SHAPE_TYPE_TRIANGLE_MESH,
     type IAabb3D,
     type IConstraintDescriptor3D,
     type IShapeDescriptor3D,
     type IShapeOptions3D,
     type IShapeRayHit3D,
     type SupportedConstraintDef3D,
-    type SupportedShapeDef3D,
-    clamp,
-    componentMax,
-    componentMin,
-    cylinderConeLocalHalfExtents,
-    expandAabb,
-    getAxisVector,
-    getBoxWorldExtents,
-    getHeightFieldLocalVertex,
     inverseTransformPoint3D,
     inverseVec3,
-    intersectsAabb,
-    linePointDistanceSquared,
-    makeFilter,
-    makeMaterial,
-    midpointVec3,
-    rayAabbHit,
-    raySphereHit,
-    rayTriangleHit,
-    supportsQueryFilter,
     transformPoint3D,
 } from './physics-world-3d-shared';
+import { PhysicsConstants } from '../types';
+import {
+    computeShapeMassData,
+} from './physics-world-3d-shape-mass-properties';
+import {
+    computeShapeAabb as computeShapeAabbImpl,
+    getShapeWorldCenter as getShapeWorldCenterImpl,
+    rayCastShape as rayCastShapeImpl,
+    testPointShape as testPointShapeImpl,
+} from './physics-world-3d-shape-geometry';
+import {
+    integratePositions as integratePositionsImpl,
+    integrateVelocities as integrateVelocitiesImpl,
+} from './physics-world-3d-integration';
+import {
+    queryAABB as queryAABBImpl,
+    queryAABBAll as queryAABBAllImpl,
+    queryPoint as queryPointImpl,
+    queryPointAll as queryPointAllImpl,
+    raycast as raycastImpl,
+    rayCastAll as rayCastAllImpl,
+    rayCastClosest as rayCastClosestImpl,
+    shiftOrigin as shiftOriginImpl,
+} from './physics-world-3d-queries';
+import {
+    createBoxShape as createBoxShapeImpl,
+    createCapsuleShape as createCapsuleShapeImpl,
+    createConeShape as createConeShapeImpl,
+    createConvexHullShape as createConvexHullShapeImpl,
+    createCylinderShape as createCylinderShapeImpl,
+    createHeightFieldShape as createHeightFieldShapeImpl,
+    createSphereShape as createSphereShapeImpl,
+    createTriangleMeshShape as createTriangleMeshShapeImpl,
+} from './physics-world-3d-shape-factory';
 
 export { BodyManager3D, ShapeManager3D, ConstraintManager3D } from './physics-managers-3d';
 
@@ -116,6 +122,18 @@ export class PhysicsWorld3D implements Disposable {
     private _collisionFilter: ICollisionFilter | null = null;
     private _autoClearForces = true;
     private _disposed = false;
+    private readonly _sleepTimes = new Map<BodyId3D, number>();
+    /** Previous transform for kinematic bodies — detects actual movement. (P1-4) */
+    private readonly _kinematicPrevPos = new Map<BodyId3D, { x: number; y: number; z: number }>();
+    private readonly _kinematicPrevRot = new Map<BodyId3D, { x: number; y: number; z: number; w: number }>();
+
+    // ADR 0004: Config-driven physics limits (metre-based)
+    /** Maximum linear velocity in metres per second (m/s). @see ADR 0004 */
+    private readonly _maxVelocity: number;
+    /** Maximum angular velocity in radians per second (rad/s). @see ADR 0004 */
+    private readonly _maxAngularVelocity: number;
+    /** Maximum position translation per step in metres per step (m/step). @see ADR 0004 */
+    private readonly _maxTranslation: number;
 
     constructor(config: IPhysicsWorld3DConfig = {}) {
         this.config = config;
@@ -139,12 +157,12 @@ export class PhysicsWorld3D implements Disposable {
                 solveVelocityTime: 0,
                 solvePositionTime: 0,
                 sleepTime: 0,
-                ccdTime: 0,
             };
         }
 
         this._contactRuntime = new PhysicsWorld3DContactRuntime({
             bodyManager: this._bodyManager,
+            constraintManager: this._constraintManager,
             shapeDescriptors: this._shapeDescriptors,
             constraintDescriptors: this._constraintDescriptors,
             getProfiler: () => this._profiler,
@@ -154,6 +172,22 @@ export class PhysicsWorld3D implements Disposable {
             getShapeWorldCenter: (descriptor) => this._getShapeWorldCenter(descriptor),
             getConstraintAnchor: (def, firstBody) => this._getConstraintAnchor(def, firstBody),
         });
+
+        // P1-4: Kinematic transform tracking — wake sleeping contact neighbors
+        // when a kinematic body actually moves.
+        this._bodyManager.onKinematicTransformChange((bodyId) => {
+            this._wakeKinematicContacts(bodyId);
+        });
+
+        // ADR 0004: Config-driven physics limits (metre-based)
+        const cfg = config as IPhysicsWorld3DConfig & {
+            maxVelocity?: number;
+            maxAngularVelocity?: number;
+            maxTranslation?: number;
+        };
+        this._maxVelocity = cfg.maxVelocity ?? PhysicsConstants.MAX_VELOCITY;
+        this._maxAngularVelocity = cfg.maxAngularVelocity ?? PhysicsConstants.MAX_ANGULAR_VELOCITY;
+        this._maxTranslation = cfg.maxTranslation ?? PhysicsConstants.MAX_TRANSLATION;
     }
 
     get gravity(): Readonly<IVec3Like> {
@@ -176,6 +210,10 @@ export class PhysicsWorld3D implements Disposable {
         }
 
         this._bodyViews.delete(bodyId);
+        this._kinematicPrevPos.delete(bodyId);
+        this._kinematicPrevRot.delete(bodyId);
+        this._sleepTimes.delete(bodyId);
+        this._contactRuntime.removeBodyState(bodyId);
         this._bodyManager.destroyBody(bodyId);
     }
 
@@ -210,18 +248,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createSphere(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_SPHERE,
-            def: { ...def, kind: SHAPE_TYPE_SPHERE },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createSphereShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createBoxShape(
@@ -231,18 +258,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createBox(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_BOX,
-            def: { ...def, kind: SHAPE_TYPE_BOX },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createBoxShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createCapsuleShape(
@@ -252,18 +268,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createCapsule(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_CAPSULE,
-            def: { ...def, kind: SHAPE_TYPE_CAPSULE },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createCapsuleShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createCylinderShape(
@@ -273,18 +278,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createCylinder(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_CYLINDER,
-            def: { ...def, kind: SHAPE_TYPE_CYLINDER },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createCylinderShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createConeShape(
@@ -294,18 +288,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createCone(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_CONE,
-            def: { ...def, kind: SHAPE_TYPE_CONE },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createConeShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createConvexHullShape(
@@ -315,18 +298,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createConvexHull(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_CONVEX_HULL,
-            def: { ...def, vertices: def.vertices.map(Vec3.copy), kind: SHAPE_TYPE_CONVEX_HULL },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createConvexHullShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createTriangleMeshShape(
@@ -336,22 +308,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createTriangleMesh(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_TRIANGLE_MESH,
-            def: {
-                vertices: def.vertices.map(Vec3.copy),
-                indices: [...def.indices],
-                kind: SHAPE_TYPE_TRIANGLE_MESH,
-            },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createTriangleMeshShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     createHeightFieldShape(
@@ -361,26 +318,7 @@ export class PhysicsWorld3D implements Disposable {
         filter?: ICollisionFilter3D,
         options?: IShapeOptions3D
     ): ShapeId3D {
-        const shapeId = this._shapeManager.createHeightField(bodyId, def, material, filter);
-        this._shapeDescriptors.set(shapeId, {
-            id: shapeId,
-            bodyId,
-            type: SHAPE_TYPE_HEIGHTFIELD,
-            def: {
-                heights: new Float32Array(def.heights),
-                width: def.width,
-                depth: def.depth,
-                scaleX: def.scaleX,
-                scaleY: def.scaleY,
-                scaleZ: def.scaleZ,
-                kind: SHAPE_TYPE_HEIGHTFIELD,
-            },
-            material: makeMaterial(material),
-            isSensor: options?.isSensor ?? false,
-            filter: makeFilter(filter),
-            ...(options?.userData !== undefined ? { userData: options.userData } : {}),
-        });
-        return shapeId;
+        return createHeightFieldShapeImpl(this._shapeManager, this._shapeDescriptors, bodyId, def, material, filter, options);
     }
 
     destroyShape(shapeId: ShapeId3D): void {
@@ -496,6 +434,13 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     destroyConstraint(constraintId: ConstraintId3D): void {
+        const descriptor = this._constraintDescriptors.get(constraintId);
+        if (descriptor && !descriptor.collideConnected) {
+            this._contactRuntime.unregisterJointCollisionPair(
+                descriptor.def.bodyIdA,
+                descriptor.def.bodyIdB
+            );
+        }
         this._constraintViews.delete(constraintId);
         this._constraintDescriptors.delete(constraintId);
         this._constraintManager.destroyConstraint(constraintId);
@@ -532,9 +477,34 @@ export class PhysicsWorld3D implements Disposable {
 
         const t0 = performance.now();
 
+        // 1. Integrate forces → velocities (gravity, damping, force accumulators)
         this._integrateVelocities(deltaTime);
+
+        // 2. Broadphase + narrowphase → collect contact manifolds
+        this._contactRuntime.collectManifolds();
+
+        // 3. Warm start: apply cached impulses from previous frame
+        this._contactRuntime.warmStart();
+
+        // 4. Velocity solve: sequential impulse iterations
+        this._contactRuntime.solveVelocity(velocityIterations, deltaTime);
+
+        // 5. Integrate positions: position += velocity * dt
         this._integratePositions(deltaTime);
-        this._solveConstraints(deltaTime, velocityIterations, positionIterations);
+
+        // 6. Position solve: Baumgarte correction
+        this._contactRuntime.solvePosition(positionIterations);
+
+        // 7. Persist warm impulses for next frame (after full solve, before events)
+        this._contactRuntime.persistWarmImpulses();
+
+        // 8. Fire contact events
+        this._contactRuntime.dispatchEvents();
+
+        // 9. World-level sleeping check
+        if (this.config.allowSleep !== false) {
+            this._updateSleeping(deltaTime);
+        }
 
         if (this._profiler) {
             this._profiler.stepTime = performance.now() - t0;
@@ -566,18 +536,7 @@ export class PhysicsWorld3D implements Disposable {
         callback: RaycastCallback3D,
         filter?: IQueryFilter3D
     ): void {
-        for (const result of this.rayCastAll(origin, direction, maxDistance, filter)) {
-            // Box2D-style continuation contract: returning 0 terminates the query.
-            const continuation = callback(
-                result.shapeId,
-                result.point,
-                result.normal,
-                result.fraction
-            );
-            if (continuation === 0) {
-                break;
-            }
-        }
+        raycastImpl(origin, direction, maxDistance, callback, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager, filter);
     }
 
     rayCastClosest(
@@ -585,8 +544,8 @@ export class PhysicsWorld3D implements Disposable {
         direction: Readonly<IVec3Like>,
         maxFraction: number,
         filter?: IQueryFilter3D
-    ): IRaycastResult3D | null {
-        return this.rayCastAll(origin, direction, maxFraction, filter)[0] ?? null;
+    ): ISingleRaycastResult3D | null {
+        return rayCastClosestImpl(origin, direction, maxFraction, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager, filter);
     }
 
     rayCastAll(
@@ -594,39 +553,12 @@ export class PhysicsWorld3D implements Disposable {
         direction: Readonly<IVec3Like>,
         maxFraction: number,
         filter?: IQueryFilter3D
-    ): readonly IRaycastResult3D[] {
-        const results: IRaycastResult3D[] = [];
-
-        for (const descriptor of this._shapeDescriptors.values()) {
-            if (!supportsQueryFilter(descriptor.filter, filter)) {
-                continue;
-            }
-
-            const hit = this._rayCastShape(descriptor, origin, direction, maxFraction);
-            if (!hit) {
-                continue;
-            }
-
-            results.push({
-                hit: true,
-                bodyId: descriptor.bodyId,
-                shapeId: descriptor.id,
-                point: Vec3.add(origin, Vec3.multiplyScalar(direction, hit.fraction)),
-                normal: hit.normal,
-                fraction: hit.fraction,
-            });
-        }
-
-        results.sort((left, right) => left.fraction - right.fraction);
-        return results;
+    ): readonly ISingleRaycastResult3D[] {
+        return rayCastAllImpl(origin, direction, maxFraction, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager, filter);
     }
 
     queryAABB(min: Readonly<IVec3Like>, max: Readonly<IVec3Like>, callback: IAABBQueryCallback): void {
-        for (const shapeId of this.queryAABBAll(min, max)) {
-            if (!callback(shapeId)) {
-                break;
-            }
-        }
+        queryAABBImpl(min, max, callback, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager);
     }
 
     queryAABBAll(
@@ -634,54 +566,23 @@ export class PhysicsWorld3D implements Disposable {
         max: Readonly<IVec3Like>,
         filter?: IQueryFilter3D
     ): readonly ShapeId3D[] {
-        const queryBounds = { min: Vec3.copy(min), max: Vec3.copy(max) };
-        const shapeIds: ShapeId3D[] = [];
-
-        for (const descriptor of this._shapeDescriptors.values()) {
-            if (!supportsQueryFilter(descriptor.filter, filter)) {
-                continue;
-            }
-            if (intersectsAabb(this._computeShapeAabb(descriptor), queryBounds)) {
-                shapeIds.push(descriptor.id);
-            }
-        }
-
-        return shapeIds;
+        return queryAABBAllImpl(min, max, filter, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager);
     }
 
     queryPoint(point: Readonly<IVec3Like>, callback: IAABBQueryCallback): void {
-        for (const shapeId of this.queryPointAll(point)) {
-            if (!callback(shapeId)) {
-                break;
-            }
-        }
+        queryPointImpl(point, callback, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager);
     }
 
     queryPointAll(point: Readonly<IVec3Like>, filter?: IQueryFilter3D): readonly ShapeId3D[] {
-        const shapeIds: ShapeId3D[] = [];
-
-        for (const descriptor of this._shapeDescriptors.values()) {
-            if (!supportsQueryFilter(descriptor.filter, filter)) {
-                continue;
-            }
-            if (this._testPointShape(descriptor, point)) {
-                shapeIds.push(descriptor.id);
-            }
-        }
-
-        return shapeIds;
+        return queryPointAllImpl(point, filter, this._shapeDescriptors, this._contactRuntime.broadphase, this._bodyManager);
     }
 
     shiftOrigin(newOrigin: Readonly<IVec3Like>): void {
-        for (const bodyId of this._bodyManager.getBodyIds()) {
-            const position = this._bodyManager.getPosition(bodyId);
-            this._bodyManager.setPosition(bodyId, Vec3.subtract(position, newOrigin));
-        }
+        shiftOriginImpl(newOrigin, this._bodyManager);
     }
 
     clearForces(): void {
-        // The current 3D runtime applies forces directly into velocity state,
-        // so there is no accumulated force buffer to clear yet.
+        this._bodyManager.clearForceAccumulators();
     }
 
     wakeAllBodies(): void {
@@ -691,6 +592,7 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     getStatistics(): IPhysicsWorldStatistics {
+        const tree = this._contactRuntime.broadphase;
         return {
             bodyCount: this._bodyManager.bodyCount,
             shapeCount: this._shapeManager.shapeCount,
@@ -698,9 +600,9 @@ export class PhysicsWorld3D implements Disposable {
             contactCount: this._contactRuntime.contactCount,
             proxyCount: this._shapeManager.shapeCount,
             islandCount: this._contactRuntime.islandCount,
-            treeHeight: 0,
-            treeBalance: 0,
-            treeQuality: 0,
+            treeHeight: tree.getHeight(),
+            treeBalance: tree.getTreeBalance(),
+            treeQuality: tree.getTreeQuality(),
             stepTime: this._profiler?.stepTime ?? 0,
             collisionTime: this._profiler?.collisionTime ?? 0,
             solveTime: this._profiler?.solveTime ?? 0,
@@ -726,15 +628,15 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     getTreeHeight(): number {
-        return 0;
+        return this._contactRuntime.broadphase.getHeight();
     }
 
     getTreeBalance(): number {
-        return 0;
+        return this._contactRuntime.broadphase.getTreeBalance();
     }
 
     getTreeQuality(): number {
-        return 0;
+        return this._contactRuntime.broadphase.getTreeQuality();
     }
 
     validate(): boolean {
@@ -742,116 +644,85 @@ export class PhysicsWorld3D implements Disposable {
     }
 
     private _integrateVelocities(dt: number): void {
-        const bodyIds = this._bodyManager.getBodyIds();
-        const gravityX = this._gravity.x * dt;
-        const gravityY = this._gravity.y * dt;
-        const gravityZ = this._gravity.z * dt;
+        integrateVelocitiesImpl(this._bodyManager, this._gravity, dt, this._maxVelocity, this._maxAngularVelocity);
+    }
 
-        for (const bodyId of bodyIds) {
+
+    /**
+     * World-level sleeping: bodies with low kinetic energy for SLEEP_TIME
+     * are put to sleep to skip integration/solving.
+     */
+    private _updateSleeping(dt: number): void {
+        const linTolSq = PhysicsConstants.LINEAR_SLEEP_TOLERANCE * PhysicsConstants.LINEAR_SLEEP_TOLERANCE;
+        const angTolSq = PhysicsConstants.ANGULAR_SLEEP_TOLERANCE * PhysicsConstants.ANGULAR_SLEEP_TOLERANCE;
+        const sleepTime = PhysicsConstants.SLEEP_TIME;
+
+        for (const bodyId of this._bodyManager.getBodyIds()) {
             if (this._bodyManager.getBodyType(bodyId) !== BODY_TYPE_DYNAMIC) continue;
             if (!this._bodyManager.isEnabled(bodyId)) continue;
             if (!this._bodyManager.isAwake(bodyId)) continue;
+            if (!(this._bodyManager.getBodyFlags(bodyId) & BodyFlags.AutoSleep)) {
+                this._sleepTimes.delete(bodyId);
+                continue;
+            }
 
-            const gravityScale = this._bodyManager.getGravityScale(bodyId);
-            const velocity = this._bodyManager.getLinearVelocity(bodyId);
-            const angularVelocity = this._bodyManager.getAngularVelocity(bodyId);
-            const linearDamping = Math.max(0, 1 - this._bodyManager.getLinearDamping(bodyId) * dt);
-            const angularDamping = Math.max(0, 1 - this._bodyManager.getAngularDamping(bodyId) * dt);
+            const lv = this._bodyManager.getLinearVelocity(bodyId);
+            const av = this._bodyManager.getAngularVelocity(bodyId);
+            const lvSq = lv.x * lv.x + lv.y * lv.y + lv.z * lv.z;
+            const avSq = av.x * av.x + av.y * av.y + av.z * av.z;
 
-            this._bodyManager.setLinearVelocity(bodyId, {
-                x: (velocity.x + gravityX * gravityScale) * linearDamping,
-                y: (velocity.y + gravityY * gravityScale) * linearDamping,
-                z: (velocity.z + gravityZ * gravityScale) * linearDamping,
-            });
-
-            this._bodyManager.setAngularVelocity(bodyId, {
-                x: this._bodyManager.isFixedRotation(bodyId) ? 0 : angularVelocity.x * angularDamping,
-                y: this._bodyManager.isFixedRotation(bodyId) ? 0 : angularVelocity.y * angularDamping,
-                z: this._bodyManager.isFixedRotation(bodyId) ? 0 : angularVelocity.z * angularDamping,
-            });
+            if (lvSq > linTolSq || avSq > angTolSq) {
+                this._sleepTimes.set(bodyId, 0);
+            } else {
+                const t = (this._sleepTimes.get(bodyId) ?? 0) + dt;
+                this._sleepTimes.set(bodyId, t);
+                if (t >= sleepTime) {
+                    this._bodyManager.setAwake(bodyId, false);
+                    // Zero velocities without re-waking (wake=false bypasses the
+                    // raw-API wake added in Wave 3a). Sleep takes priority.
+                    this._bodyManager.setLinearVelocity(bodyId, { x: 0, y: 0, z: 0 }, false);
+                    this._bodyManager.setAngularVelocity(bodyId, { x: 0, y: 0, z: 0 }, false);
+                    this._sleepTimes.delete(bodyId);
+                }
+            }
         }
-    }
-
-    private _solveConstraints(
-        deltaTime: number,
-        velocityIterations: number,
-        positionIterations: number
-    ): void {
-        this._contactRuntime.solve(deltaTime, velocityIterations, positionIterations);
     }
 
     private _integratePositions(dt: number): void {
-        const bodyIds = this._bodyManager.getBodyIds();
+        integratePositionsImpl(this._bodyManager, dt, this._autoClearForces, this._maxTranslation);
+    }
 
-        for (const bodyId of bodyIds) {
-            if (this._bodyManager.getBodyType(bodyId) === BODY_TYPE_STATIC) continue;
-            if (!this._bodyManager.isEnabled(bodyId)) continue;
-            if (!this._bodyManager.isAwake(bodyId)) continue;
+    /**
+     * P1-4: When a kinematic body moves, wake sleeping dynamic bodies
+     * that are in contact with it. Uses contact index for precise targeting.
+     */
+    private _wakeKinematicContacts(bodyId: BodyId3D): void {
+        const pos = this._bodyManager.getPosition(bodyId);
+        const rot = this._bodyManager.getRotation(bodyId);
+        const prevPos = this._kinematicPrevPos.get(bodyId);
+        const prevRot = this._kinematicPrevRot.get(bodyId);
+        this._kinematicPrevPos.set(bodyId, { x: pos.x, y: pos.y, z: pos.z });
+        this._kinematicPrevRot.set(bodyId, { x: rot.x, y: rot.y, z: rot.z, w: rot.w });
 
-            const position = this._bodyManager.getPosition(bodyId);
-            const velocity = this._bodyManager.getLinearVelocity(bodyId);
-            const rotation = this._bodyManager.getRotation(bodyId);
-            const angularVelocity = this._bodyManager.getAngularVelocity(bodyId);
-
-            this._bodyManager.setPosition(bodyId, {
-                x: position.x + velocity.x * dt,
-                y: position.y + velocity.y * dt,
-                z: position.z + velocity.z * dt,
-            });
-
-            const angularSpeed = Math.sqrt(
-                angularVelocity.x * angularVelocity.x +
-                    angularVelocity.y * angularVelocity.y +
-                    angularVelocity.z * angularVelocity.z
-            );
-
-            if (angularSpeed > 1e-10 && !this._bodyManager.isFixedRotation(bodyId)) {
-                const halfAngle = angularSpeed * dt * 0.5;
-                const s = Math.sin(halfAngle) / angularSpeed;
-                const c = Math.cos(halfAngle);
-
-                const dqx = angularVelocity.x * s;
-                const dqy = angularVelocity.y * s;
-                const dqz = angularVelocity.z * s;
-                const dqw = c;
-
-                const newW =
-                    dqw * rotation.w -
-                    dqx * rotation.x -
-                    dqy * rotation.y -
-                    dqz * rotation.z;
-                const newX =
-                    dqw * rotation.x +
-                    dqx * rotation.w +
-                    dqy * rotation.z -
-                    dqz * rotation.y;
-                const newY =
-                    dqw * rotation.y -
-                    dqx * rotation.z +
-                    dqy * rotation.w +
-                    dqz * rotation.x;
-                const newZ =
-                    dqw * rotation.z +
-                    dqx * rotation.y -
-                    dqy * rotation.x +
-                    dqz * rotation.w;
-
-                const length = Math.sqrt(
-                    newX * newX + newY * newY + newZ * newZ + newW * newW
-                );
-                const inverseLength = length > 1e-10 ? 1 / length : 0;
-
-                this._bodyManager.setRotation(bodyId, {
-                    x: newX * inverseLength,
-                    y: newY * inverseLength,
-                    z: newZ * inverseLength,
-                    w: newW * inverseLength,
-                });
-            }
+        // Early exit: no actual movement
+        if (prevPos && prevPos.x === pos.x && prevPos.y === pos.y && prevPos.z === pos.z &&
+            prevRot && prevRot.x === rot.x && prevRot.y === rot.y && prevRot.z === rot.z && prevRot.w === rot.w) {
+            return;
         }
 
-        if (this._autoClearForces) {
-            this.clearForces();
+        // Rebuild body contact index from current manifolds
+        this._contactRuntime.rebuildBodyContactIndex();
+
+        // Wake sleeping dynamic neighbors via contact graph
+        const pairKeys = this._contactRuntime.getContactPairKeysForBody(bodyId);
+        if (!pairKeys) return;
+        for (const pairKey of pairKeys) {
+            const bodies = this._contactRuntime.getManifoldBodyIds(pairKey);
+            if (!bodies) continue;
+            const otherId = bodies.bodyIdA === bodyId ? bodies.bodyIdB : bodies.bodyIdA;
+            if (this._bodyManager.getBodyType(otherId) === BODY_TYPE_DYNAMIC && !this._bodyManager.isAwake(otherId)) {
+                this._bodyManager.setAwake(otherId, true);
+            }
         }
     }
 
@@ -868,6 +739,9 @@ export class PhysicsWorld3D implements Disposable {
             collideConnected: def.collideConnected ?? false,
             ...(def.userData !== undefined ? { userData: def.userData } : {}),
         });
+        if (!def.collideConnected) {
+            this._contactRuntime.registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -1080,7 +954,7 @@ export class PhysicsWorld3D implements Disposable {
                 return descriptor.userData;
             },
             computeAABB: () => this._computeShapeAabb(descriptor),
-            computeMassData: (density) => this._computeShapeMassData(descriptor, density),
+            computeMassData: (density) => computeShapeMassData(descriptor, density),
             testPoint: (point) => this._testPointShape(descriptor, point),
             rayCast: (origin, direction, maxFraction) => {
                 const hit = this._rayCastShape(descriptor, origin, direction, maxFraction);
@@ -1148,7 +1022,7 @@ export class PhysicsWorld3D implements Disposable {
             if (!descriptor) {
                 continue;
             }
-            const massData = this._computeShapeMassData(descriptor, descriptor.material.density);
+            const massData = computeShapeMassData(descriptor, descriptor.material.density);
             shapeMassData.push(massData);
             totalMass += massData.mass;
             center = Vec3.add(center, Vec3.multiplyScalar(massData.center, massData.mass));
@@ -1194,379 +1068,23 @@ export class PhysicsWorld3D implements Disposable {
         };
     }
 
-    private _computeShapeMassData(descriptor: IShapeDescriptor3D, density: number): IMassData3D {
-        const safeDensity = Math.max(0, density);
-        switch (descriptor.def.kind) {
-            case SHAPE_TYPE_SPHERE: {
-                const radius = descriptor.def.radius;
-                const mass = ((4 / 3) * Math.PI * radius * radius * radius) * safeDensity;
-                const inertia = (2 / 5) * mass * radius * radius;
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor: { x: inertia, y: inertia, z: inertia },
-                    inverseInertiaTensor: inverseVec3({ x: inertia, y: inertia, z: inertia }),
-                    center: Vec3.copy(descriptor.def.center),
-                };
-            }
-            case SHAPE_TYPE_BOX: {
-                const halfExtents = descriptor.def.halfExtents;
-                const fullExtents = Vec3.multiplyScalar(halfExtents, 2);
-                const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
-                const inertiaTensor = {
-                    x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
-                    y: (mass * (fullExtents.x * fullExtents.x + fullExtents.z * fullExtents.z)) / 12,
-                    z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
-                };
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor,
-                    inverseInertiaTensor: inverseVec3(inertiaTensor),
-                    center: Vec3.copy(descriptor.def.center),
-                };
-            }
-            case SHAPE_TYPE_CAPSULE: {
-                const segment = Vec3.subtract(descriptor.def.p2, descriptor.def.p1);
-                const segmentLength = Vec3.len(segment);
-                const radius = descriptor.def.radius;
-                const cylinderMass = Math.PI * radius * radius * segmentLength * safeDensity;
-                const sphereMass = ((4 / 3) * Math.PI * radius * radius * radius) * safeDensity;
-                const mass = cylinderMass + sphereMass;
-                const inertia = radius * radius * mass;
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor: { x: inertia, y: inertia, z: inertia },
-                    inverseInertiaTensor: inverseVec3({ x: inertia, y: inertia, z: inertia }),
-                    center: midpointVec3(descriptor.def.p1, descriptor.def.p2),
-                };
-            }
-            case SHAPE_TYPE_CYLINDER: {
-                const radius = descriptor.def.radius;
-                const height = descriptor.def.height;
-                const mass = Math.PI * radius * radius * height * safeDensity;
-                const radial = (mass * (3 * radius * radius + height * height)) / 12;
-                const axial = 0.5 * mass * radius * radius;
-                const axis = descriptor.def.axis ?? 1;
-                const inertiaTensor =
-                    axis === 0
-                        ? { x: axial, y: radial, z: radial }
-                        : axis === 2
-                          ? { x: radial, y: radial, z: axial }
-                          : { x: radial, y: axial, z: radial };
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor,
-                    inverseInertiaTensor: inverseVec3(inertiaTensor),
-                    center: Vec3.copy(descriptor.def.center),
-                };
-            }
-            case SHAPE_TYPE_CONE: {
-                const radius = descriptor.def.radius;
-                const height = descriptor.def.height;
-                const mass = ((Math.PI * radius * radius * height) / 3) * safeDensity;
-                const axis = descriptor.def.axis ?? 1;
-                const transverse = ((3 / 20) * mass * radius * radius) + ((3 / 5) * mass * height * height);
-                const axial = (3 / 10) * mass * radius * radius;
-                const inertiaTensor =
-                    axis === 0
-                        ? { x: axial, y: transverse, z: transverse }
-                        : axis === 2
-                          ? { x: transverse, y: transverse, z: axial }
-                          : { x: transverse, y: axial, z: transverse };
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor,
-                    inverseInertiaTensor: inverseVec3(inertiaTensor),
-                    center: Vec3.copy(descriptor.def.center),
-                };
-            }
-            case SHAPE_TYPE_CONVEX_HULL: {
-                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
-                const fullExtents = Vec3.subtract(bounds.max, bounds.min);
-                const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
-                const inertiaTensor = {
-                    x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
-                    y: (mass * (fullExtents.x * fullExtents.x + fullExtents.z * fullExtents.z)) / 12,
-                    z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
-                };
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor,
-                    inverseInertiaTensor: inverseVec3(inertiaTensor),
-                    center: midpointVec3(bounds.min, bounds.max),
-                };
-            }
-            case SHAPE_TYPE_TRIANGLE_MESH: {
-                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
-                const fullExtents = Vec3.subtract(bounds.max, bounds.min);
-                const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
-                const inertiaTensor = {
-                    x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
-                    y: (mass * (fullExtents.x * fullExtents.x + fullExtents.z * fullExtents.z)) / 12,
-                    z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
-                };
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor,
-                    inverseInertiaTensor: inverseVec3(inertiaTensor),
-                    center: midpointVec3(bounds.min, bounds.max),
-                };
-            }
-            case SHAPE_TYPE_HEIGHTFIELD: {
-                const bounds = this._computeLocalHeightFieldBounds(descriptor.def);
-                const fullExtents = Vec3.subtract(bounds.max, bounds.min);
-                const mass = fullExtents.x * fullExtents.y * fullExtents.z * safeDensity;
-                const inertiaTensor = {
-                    x: (mass * (fullExtents.y * fullExtents.y + fullExtents.z * fullExtents.z)) / 12,
-                    y: (mass * (fullExtents.x * fullExtents.x + fullExtents.z * fullExtents.z)) / 12,
-                    z: (mass * (fullExtents.x * fullExtents.x + fullExtents.y * fullExtents.y)) / 12,
-                };
-                return {
-                    mass: mass as Mass,
-                    inverseMass: mass > 0 ? 1 / mass : 0,
-                    inertiaTensor,
-                    inverseInertiaTensor: inverseVec3(inertiaTensor),
-                    center: midpointVec3(bounds.min, bounds.max),
-                };
-            }
-            default:
-                return {
-                    mass: 0 as Mass,
-                    inverseMass: 0,
-                    inertiaTensor: { x: 0, y: 0, z: 0 },
-                    inverseInertiaTensor: { x: 0, y: 0, z: 0 },
-                    center: { x: 0, y: 0, z: 0 },
-                };
-        }
-    }
+
 
     private _computeShapeAabb(descriptor: IShapeDescriptor3D): IAabb3D {
-        const position = this._bodyManager.getPosition(descriptor.bodyId);
-        const rotation = this._bodyManager.getRotation(descriptor.bodyId);
-        switch (descriptor.def.kind) {
-            case SHAPE_TYPE_SPHERE: {
-                const center = transformPoint3D(descriptor.def.center, position, rotation);
-                const radius = descriptor.def.radius;
-                return {
-                    min: { x: center.x - radius, y: center.y - radius, z: center.z - radius },
-                    max: { x: center.x + radius, y: center.y + radius, z: center.z + radius },
-                };
-            }
-            case SHAPE_TYPE_BOX: {
-                const center = transformPoint3D(descriptor.def.center, position, rotation);
-                const worldRotation = Quat.multiply(rotation, descriptor.def.rotation ?? IDENTITY_ROTATION);
-                const extents = getBoxWorldExtents(descriptor.def.halfExtents, worldRotation);
-                return {
-                    min: Vec3.subtract(center, extents),
-                    max: Vec3.add(center, extents),
-                };
-            }
-            case SHAPE_TYPE_CAPSULE: {
-                const p1 = transformPoint3D(descriptor.def.p1, position, rotation);
-                const p2 = transformPoint3D(descriptor.def.p2, position, rotation);
-                const radius = descriptor.def.radius;
-                return {
-                    min: {
-                        x: Math.min(p1.x, p2.x) - radius,
-                        y: Math.min(p1.y, p2.y) - radius,
-                        z: Math.min(p1.z, p2.z) - radius,
-                    },
-                    max: {
-                        x: Math.max(p1.x, p2.x) + radius,
-                        y: Math.max(p1.y, p2.y) + radius,
-                        z: Math.max(p1.z, p2.z) + radius,
-                    },
-                };
-            }
-            case SHAPE_TYPE_CYLINDER: {
-                const center = transformPoint3D(descriptor.def.center, position, rotation);
-                const axis = descriptor.def.axis ?? 1;
-                const localHalfExtents = cylinderConeLocalHalfExtents(axis, descriptor.def.radius, descriptor.def.height);
-                const extents = getBoxWorldExtents(localHalfExtents, rotation);
-                return {
-                    min: Vec3.subtract(center, extents),
-                    max: Vec3.add(center, extents),
-                };
-            }
-            case SHAPE_TYPE_CONE: {
-                const center = transformPoint3D(descriptor.def.center, position, rotation);
-                const axis = descriptor.def.axis ?? 1;
-                const localHalfExtents = cylinderConeLocalHalfExtents(axis, descriptor.def.radius, descriptor.def.height);
-                const extents = getBoxWorldExtents(localHalfExtents, rotation);
-                return {
-                    min: Vec3.subtract(center, extents),
-                    max: Vec3.add(center, extents),
-                };
-            }
-            case SHAPE_TYPE_CONVEX_HULL:
-            case SHAPE_TYPE_TRIANGLE_MESH: {
-                let bounds: IAabb3D | null = null;
-                for (const vertex of descriptor.def.vertices) {
-                    const worldVertex = transformPoint3D(vertex, position, rotation);
-                    bounds = bounds
-                        ? expandAabb(bounds, worldVertex)
-                        : { min: Vec3.copy(worldVertex), max: Vec3.copy(worldVertex) };
-                }
-                return bounds ?? { min: Vec3.copy(position), max: Vec3.copy(position) };
-            }
-            case SHAPE_TYPE_HEIGHTFIELD: {
-                const localBounds = this._computeLocalHeightFieldBounds(descriptor.def);
-                const corners: readonly IVec3Like[] = [
-                    { x: localBounds.min.x, y: localBounds.min.y, z: localBounds.min.z },
-                    { x: localBounds.min.x, y: localBounds.min.y, z: localBounds.max.z },
-                    { x: localBounds.min.x, y: localBounds.max.y, z: localBounds.min.z },
-                    { x: localBounds.min.x, y: localBounds.max.y, z: localBounds.max.z },
-                    { x: localBounds.max.x, y: localBounds.min.y, z: localBounds.min.z },
-                    { x: localBounds.max.x, y: localBounds.min.y, z: localBounds.max.z },
-                    { x: localBounds.max.x, y: localBounds.max.y, z: localBounds.min.z },
-                    { x: localBounds.max.x, y: localBounds.max.y, z: localBounds.max.z },
-                ];
-                let bounds: IAabb3D | null = null;
-                for (const corner of corners) {
-                    const worldCorner = transformPoint3D(corner, position, rotation);
-                    bounds = bounds
-                        ? expandAabb(bounds, worldCorner)
-                        : { min: Vec3.copy(worldCorner), max: Vec3.copy(worldCorner) };
-                }
-                return bounds ?? { min: Vec3.copy(position), max: Vec3.copy(position) };
-            }
-            default:
-                return { min: Vec3.copy(position), max: Vec3.copy(position) };
-        }
+        return computeShapeAabbImpl(
+            descriptor,
+            this._bodyManager.getPosition(descriptor.bodyId),
+            this._bodyManager.getRotation(descriptor.bodyId)
+        );
     }
 
     private _testPointShape(descriptor: IShapeDescriptor3D, point: Readonly<IVec3Like>): boolean {
-        const position = this._bodyManager.getPosition(descriptor.bodyId);
-        const rotation = this._bodyManager.getRotation(descriptor.bodyId);
-
-        switch (descriptor.def.kind) {
-            case SHAPE_TYPE_SPHERE: {
-                const center = transformPoint3D(descriptor.def.center, position, rotation);
-                return Vec3.lengthSquared(Vec3.subtract(point, center)) <= descriptor.def.radius ** 2;
-            }
-            case SHAPE_TYPE_BOX: {
-                const bodyLocal = inverseTransformPoint3D(point, position, rotation);
-                const centered = Vec3.subtract(bodyLocal, descriptor.def.center);
-                const localRotation = descriptor.def.rotation ?? IDENTITY_ROTATION;
-                const localPoint = Quat.rotateVector(Quat.conjugate(localRotation), centered);
-                return (
-                    Math.abs(localPoint.x) <= descriptor.def.halfExtents.x &&
-                    Math.abs(localPoint.y) <= descriptor.def.halfExtents.y &&
-                    Math.abs(localPoint.z) <= descriptor.def.halfExtents.z
-                );
-            }
-            case SHAPE_TYPE_CAPSULE: {
-                const localPoint = inverseTransformPoint3D(point, position, rotation);
-                return (
-                    linePointDistanceSquared(localPoint, descriptor.def.p1, descriptor.def.p2) <=
-                    descriptor.def.radius ** 2
-                );
-            }
-            case SHAPE_TYPE_CYLINDER: {
-                const localPoint = inverseTransformPoint3D(point, position, rotation);
-                const centered = Vec3.subtract(localPoint, descriptor.def.center);
-                const axis = descriptor.def.axis ?? 1;
-                const halfHeight = descriptor.def.height * 0.5;
-                if (axis === 0) {
-                    return (
-                        Math.abs(centered.x) <= halfHeight &&
-                        centered.y * centered.y + centered.z * centered.z <= descriptor.def.radius ** 2
-                    );
-                }
-                if (axis === 2) {
-                    return (
-                        Math.abs(centered.z) <= halfHeight &&
-                        centered.x * centered.x + centered.y * centered.y <= descriptor.def.radius ** 2
-                    );
-                }
-                return (
-                    Math.abs(centered.y) <= halfHeight &&
-                    centered.x * centered.x + centered.z * centered.z <= descriptor.def.radius ** 2
-                );
-            }
-            case SHAPE_TYPE_CONE: {
-                const localPoint = inverseTransformPoint3D(point, position, rotation);
-                const centered = Vec3.subtract(localPoint, descriptor.def.center);
-                const axis = descriptor.def.axis ?? 1;
-                const halfHeight = descriptor.def.height * 0.5;
-                const axial = axis === 0 ? centered.x : axis === 2 ? centered.z : centered.y;
-                if (axial < -halfHeight || axial > halfHeight) {
-                    return false;
-                }
-                const normalizedHeight = (axial + halfHeight) / descriptor.def.height;
-                const allowedRadius = descriptor.def.radius * (1 - normalizedHeight);
-                const radialSquared =
-                    axis === 0
-                        ? centered.y * centered.y + centered.z * centered.z
-                        : axis === 2
-                          ? centered.x * centered.x + centered.y * centered.y
-                          : centered.x * centered.x + centered.z * centered.z;
-                return radialSquared <= allowedRadius * allowedRadius;
-            }
-            case SHAPE_TYPE_CONVEX_HULL: {
-                const localPoint = inverseTransformPoint3D(point, position, rotation);
-                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
-                return (
-                    localPoint.x >= bounds.min.x &&
-                    localPoint.x <= bounds.max.x &&
-                    localPoint.y >= bounds.min.y &&
-                    localPoint.y <= bounds.max.y &&
-                    localPoint.z >= bounds.min.z &&
-                    localPoint.z <= bounds.max.z
-                );
-            }
-            case SHAPE_TYPE_TRIANGLE_MESH: {
-                const localPoint = inverseTransformPoint3D(point, position, rotation);
-                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
-                if (
-                    localPoint.x < bounds.min.x ||
-                    localPoint.x > bounds.max.x ||
-                    localPoint.y < bounds.min.y ||
-                    localPoint.y > bounds.max.y ||
-                    localPoint.z < bounds.min.z ||
-                    localPoint.z > bounds.max.z
-                ) {
-                    return false;
-                }
-
-                let hitCount = 0;
-                const localDirection = { x: 1, y: 0, z: 0 };
-                for (let index = 0; index + 2 < descriptor.def.indices.length; index += 3) {
-                    const a = descriptor.def.vertices[descriptor.def.indices[index]];
-                    const b = descriptor.def.vertices[descriptor.def.indices[index + 1]];
-                    const c = descriptor.def.vertices[descriptor.def.indices[index + 2]];
-                    const hit = rayTriangleHit(
-                        localPoint,
-                        localDirection,
-                        a,
-                        b,
-                        c,
-                        Number.POSITIVE_INFINITY
-                    );
-                    if (hit && hit.fraction <= 1e-6) {
-                        return true;
-                    }
-                    if (hit) {
-                        hitCount += 1;
-                    }
-                }
-
-                return (hitCount & 1) === 1;
-            }
-            case SHAPE_TYPE_HEIGHTFIELD: {
-                const localPoint = inverseTransformPoint3D(point, position, rotation);
-                const sampledHeight = this._sampleHeightFieldHeight(descriptor.def, localPoint.x, localPoint.z);
-                return sampledHeight !== null && localPoint.y <= sampledHeight + 1e-4;
-            }
-            default:
-                return false;
-        }
+        return testPointShapeImpl(
+            descriptor,
+            point,
+            this._bodyManager.getPosition(descriptor.bodyId),
+            this._bodyManager.getRotation(descriptor.bodyId)
+        );
     }
 
     private _rayCastShape(
@@ -1575,143 +1093,22 @@ export class PhysicsWorld3D implements Disposable {
         direction: Readonly<IVec3Like>,
         maxFraction: number
     ): IShapeRayHit3D | null {
-        const position = this._bodyManager.getPosition(descriptor.bodyId);
-        const rotation = this._bodyManager.getRotation(descriptor.bodyId);
-
-        switch (descriptor.def.kind) {
-            case SHAPE_TYPE_SPHERE: {
-                const center = transformPoint3D(descriptor.def.center, position, rotation);
-                return raySphereHit(origin, direction, center, descriptor.def.radius, maxFraction);
-            }
-            case SHAPE_TYPE_BOX: {
-                const worldRotation = Quat.multiply(rotation, descriptor.def.rotation ?? IDENTITY_ROTATION);
-                const center = transformPoint3D(descriptor.def.center, position, rotation);
-                const localOrigin = inverseTransformPoint3D(origin, center, worldRotation);
-                const localDirection = Quat.rotateVector(Quat.conjugate(worldRotation), direction);
-                const hit = rayAabbHit(
-                    localOrigin,
-                    localDirection,
-                    Vec3.multiplyScalar(descriptor.def.halfExtents, -1),
-                    descriptor.def.halfExtents,
-                    maxFraction
-                );
-                if (!hit) {
-                    return null;
-                }
-                return { fraction: hit.fraction, normal: Quat.rotateVector(worldRotation, hit.normal) };
-            }
-            case SHAPE_TYPE_TRIANGLE_MESH: {
-                let closestHit: IShapeRayHit3D | null = null;
-                for (let index = 0; index + 2 < descriptor.def.indices.length; index += 3) {
-                    const a = transformPoint3D(
-                        descriptor.def.vertices[descriptor.def.indices[index]],
-                        position,
-                        rotation
-                    );
-                    const b = transformPoint3D(
-                        descriptor.def.vertices[descriptor.def.indices[index + 1]],
-                        position,
-                        rotation
-                    );
-                    const c = transformPoint3D(
-                        descriptor.def.vertices[descriptor.def.indices[index + 2]],
-                        position,
-                        rotation
-                    );
-                    const hit = rayTriangleHit(origin, direction, a, b, c, maxFraction);
-                    if (!hit || (closestHit && hit.fraction >= closestHit.fraction)) {
-                        continue;
-                    }
-                    closestHit = hit;
-                }
-                return closestHit;
-            }
-            case SHAPE_TYPE_HEIGHTFIELD: {
-                let closestHit: IShapeRayHit3D | null = null;
-                for (let zIndex = 0; zIndex < descriptor.def.depth - 1; zIndex += 1) {
-                    for (let xIndex = 0; xIndex < descriptor.def.width - 1; xIndex += 1) {
-                        const topLeft = transformPoint3D(
-                            getHeightFieldLocalVertex(descriptor.def, xIndex, zIndex),
-                            position,
-                            rotation
-                        );
-                        const topRight = transformPoint3D(
-                            getHeightFieldLocalVertex(descriptor.def, xIndex + 1, zIndex),
-                            position,
-                            rotation
-                        );
-                        const bottomLeft = transformPoint3D(
-                            getHeightFieldLocalVertex(descriptor.def, xIndex, zIndex + 1),
-                            position,
-                            rotation
-                        );
-                        const bottomRight = transformPoint3D(
-                            getHeightFieldLocalVertex(descriptor.def, xIndex + 1, zIndex + 1),
-                            position,
-                            rotation
-                        );
-
-                        const firstHit = rayTriangleHit(
-                            origin,
-                            direction,
-                            topLeft,
-                            topRight,
-                            bottomLeft,
-                            maxFraction
-                        );
-                        if (firstHit && (!closestHit || firstHit.fraction < closestHit.fraction)) {
-                            closestHit = firstHit;
-                        }
-
-                        const secondHit = rayTriangleHit(
-                            origin,
-                            direction,
-                            bottomLeft,
-                            topRight,
-                            bottomRight,
-                            maxFraction
-                        );
-                        if (secondHit && (!closestHit || secondHit.fraction < closestHit.fraction)) {
-                            closestHit = secondHit;
-                        }
-                    }
-                }
-                return closestHit;
-            }
-            default: {
-                const aabb = this._computeShapeAabb(descriptor);
-                const hit = rayAabbHit(origin, direction, aabb.min, aabb.max, maxFraction);
-                return hit ? { fraction: hit.fraction, normal: hit.normal } : null;
-            }
-        }
+        return rayCastShapeImpl(
+            descriptor,
+            origin,
+            direction,
+            maxFraction,
+            this._bodyManager.getPosition(descriptor.bodyId),
+            this._bodyManager.getRotation(descriptor.bodyId)
+        );
     }
 
     private _getShapeWorldCenter(descriptor: IShapeDescriptor3D): IVec3Like {
-        const position = this._bodyManager.getPosition(descriptor.bodyId);
-        const rotation = this._bodyManager.getRotation(descriptor.bodyId);
-        switch (descriptor.def.kind) {
-            case SHAPE_TYPE_SPHERE:
-            case SHAPE_TYPE_BOX:
-            case SHAPE_TYPE_CYLINDER:
-            case SHAPE_TYPE_CONE:
-                return transformPoint3D(descriptor.def.center, position, rotation);
-            case SHAPE_TYPE_CAPSULE:
-                return transformPoint3D(midpointVec3(descriptor.def.p1, descriptor.def.p2), position, rotation);
-            case SHAPE_TYPE_CONVEX_HULL: {
-                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
-                return transformPoint3D(midpointVec3(bounds.min, bounds.max), position, rotation);
-            }
-            case SHAPE_TYPE_TRIANGLE_MESH: {
-                const bounds = this._computeLocalConvexBounds(descriptor.def.vertices);
-                return transformPoint3D(midpointVec3(bounds.min, bounds.max), position, rotation);
-            }
-            case SHAPE_TYPE_HEIGHTFIELD: {
-                const bounds = this._computeLocalHeightFieldBounds(descriptor.def);
-                return transformPoint3D(midpointVec3(bounds.min, bounds.max), position, rotation);
-            }
-            default:
-                return Vec3.copy(position);
-        }
+        return getShapeWorldCenterImpl(
+            descriptor,
+            this._bodyManager.getPosition(descriptor.bodyId),
+            this._bodyManager.getRotation(descriptor.bodyId)
+        );
     }
 
     private _getConstraintAnchor(def: SupportedConstraintDef3D, firstBody: boolean): IVec3Like {
@@ -1734,66 +1131,6 @@ export class PhysicsWorld3D implements Disposable {
         );
     }
 
-    private _computeLocalConvexBounds(vertices: readonly IVec3Like[]): IAabb3D {
-        let bounds: IAabb3D | null = null;
-        for (const vertex of vertices) {
-            bounds = bounds
-                ? expandAabb(bounds, vertex)
-                : { min: Vec3.copy(vertex), max: Vec3.copy(vertex) };
-        }
-        return bounds ?? { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
-    }
-
-    private _computeLocalHeightFieldBounds(def: Readonly<IHeightFieldShapeDef3D>): IAabb3D {
-        let bounds: IAabb3D | null = null;
-        for (let zIndex = 0; zIndex < def.depth; zIndex += 1) {
-            for (let xIndex = 0; xIndex < def.width; xIndex += 1) {
-                const vertex = getHeightFieldLocalVertex(def, xIndex, zIndex);
-                bounds = bounds
-                    ? expandAabb(bounds, vertex)
-                    : { min: Vec3.copy(vertex), max: Vec3.copy(vertex) };
-            }
-        }
-
-        return bounds ?? { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
-    }
-
-    private _sampleHeightFieldHeight(
-        def: Readonly<IHeightFieldShapeDef3D>,
-        x: number,
-        z: number
-    ): number | null {
-        if (def.width < 2 || def.depth < 2 || def.scaleX <= 0 || def.scaleZ <= 0) {
-            return null;
-        }
-
-        const halfWidth = (def.width - 1) * 0.5;
-        const halfDepth = (def.depth - 1) * 0.5;
-        const gridX = x / def.scaleX + halfWidth;
-        const gridZ = z / def.scaleZ + halfDepth;
-
-        if (gridX < 0 || gridZ < 0 || gridX > def.width - 1 || gridZ > def.depth - 1) {
-            return null;
-        }
-
-        const x0 = Math.min(def.width - 2, Math.max(0, Math.floor(gridX)));
-        const z0 = Math.min(def.depth - 2, Math.max(0, Math.floor(gridZ)));
-        const localX = gridX - x0;
-        const localZ = gridZ - z0;
-
-        const topLeft = def.heights[z0 * def.width + x0] * def.scaleY;
-        const topRight = def.heights[z0 * def.width + x0 + 1] * def.scaleY;
-        const bottomLeft = def.heights[(z0 + 1) * def.width + x0] * def.scaleY;
-        const bottomRight = def.heights[(z0 + 1) * def.width + x0 + 1] * def.scaleY;
-
-        if (localX + localZ <= 1) {
-            return topLeft + (topRight - topLeft) * localX + (bottomLeft - topLeft) * localZ;
-        }
-
-        const u = 1 - localX;
-        const v = 1 - localZ;
-        return bottomRight + (bottomLeft - bottomRight) * u + (topRight - bottomRight) * v;
-    }
 
     [Symbol.dispose](): void {
         if (this._disposed) return;

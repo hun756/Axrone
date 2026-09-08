@@ -21,6 +21,7 @@ export interface IBoxCastQuery3D extends IShapecastQuery3D {
 export interface ICapsuleCastQuery3D extends IShapecastQuery3D {
     readonly radius: number;
     readonly height: number;
+    readonly axis?: Readonly<IVec3Like>;
 }
 
 export class ShapeCaster3D {
@@ -113,14 +114,35 @@ export class ShapeCaster3D {
             [0, 0, 0],
         ];
 
-        for (const [x, y, z] of offsets) {
-            const offset = Vec3.create(
-                x * query.extents.x,
-                y * query.extents.y,
-                z * query.extents.z
-            );
+        const cosX = query.rotation ? Math.cos(query.rotation.x) : 1;
+        const sinX = query.rotation ? Math.sin(query.rotation.x) : 0;
+        const cosY = query.rotation ? Math.cos(query.rotation.y) : 1;
+        const sinY = query.rotation ? Math.sin(query.rotation.y) : 0;
+        const cosZ = query.rotation ? Math.cos(query.rotation.z) : 1;
+        const sinZ = query.rotation ? Math.sin(query.rotation.z) : 0;
 
-            const rayOrigin = Vec3.add(query.origin, offset);
+        for (const [x, y, z] of offsets) {
+            let ox = x * query.extents.x;
+            let oy = y * query.extents.y;
+            let oz = z * query.extents.z;
+
+            if (query.rotation) {
+                const y1 = oy * cosX - oz * sinX;
+                const z1 = oy * sinX + oz * cosX;
+                const x2 = ox * cosY + z1 * sinY;
+                const z2 = -ox * sinY + z1 * cosY;
+                const x3 = x2 * cosZ - y1 * sinZ;
+                const y3 = x2 * sinZ + y1 * cosZ;
+                ox = x3;
+                oy = y3;
+                oz = z2;
+            }
+
+            const rayOrigin = Vec3.create(
+                query.origin.x + ox,
+                query.origin.y + oy,
+                query.origin.z + oz
+            );
             const hit = this._raycastSystem.raycast(
                 rayOrigin,
                 query.direction,
@@ -142,14 +164,14 @@ export class ShapeCaster3D {
         let closestHit: IRaycastHit3D | null = null;
         let closestDistance = Number.MAX_VALUE;
 
-        const up = Vec3.create(0, 1, 0);
+        const axis = query.axis || Vec3.create(0, 1, 0);
         const sphereOffsets = [0, halfHeight, -halfHeight];
 
         for (const offset of sphereOffsets) {
             const sphereOrigin = Vec3.create(
-                query.origin.x,
-                query.origin.y + offset,
-                query.origin.z
+                query.origin.x + axis.x * offset,
+                query.origin.y + axis.y * offset,
+                query.origin.z + axis.z * offset
             );
 
             const sphereQuery: ISphereCastQuery3D = {
@@ -168,10 +190,6 @@ export class ShapeCaster3D {
         }
 
         return closestHit;
-    }
-
-    private _computeSphereSamples(_radius: number): number {
-        return 8; // kept for potential subclass override
     }
 }
 
@@ -203,11 +221,11 @@ export class MultiRaycaster3D {
             return hits;
         }
 
-        const up = Vec3.create(0, 1, 0);
-        const right = Vec3.cross(centerDirection, up);
-        Vec3.normalize(right, right);
-        const actualUp = Vec3.cross(right, centerDirection);
-        Vec3.normalize(actualUp, actualUp);
+        const up = Math.abs(centerDirection.y) < 0.9
+            ? Vec3.create(0, 1, 0)
+            : Vec3.create(1, 0, 0);
+        const right = Vec3.normalize(Vec3.cross(centerDirection, up));
+        const actualUp = Vec3.normalize(Vec3.cross(right, centerDirection));
 
         for (let i = 0; i < rayCount; i++) {
             const angle = (i / (rayCount - 1) - 0.5) * spreadAngle;
@@ -241,11 +259,11 @@ export class MultiRaycaster3D {
         const centerHit = this._raycastSystem.raycast(origin, direction, maxDistance, layerMask);
         if (centerHit) hits.push(centerHit);
 
-        const up = Vec3.create(0, 1, 0);
-        const right = Vec3.cross(direction, up);
-        Vec3.normalize(right, right);
-        const actualUp = Vec3.cross(right, direction);
-        Vec3.normalize(actualUp, actualUp);
+        const up = Math.abs(direction.y) < 0.9
+            ? Vec3.create(0, 1, 0)
+            : Vec3.create(1, 0, 0);
+        const right = Vec3.normalize(Vec3.cross(direction, up));
+        const actualUp = Vec3.normalize(Vec3.cross(right, direction));
 
         const ringCount = Math.ceil(Math.sqrt(samples));
         const raysPerRing = Math.ceil(samples / ringCount);
@@ -316,17 +334,19 @@ export class MultiRaycaster3D {
         height: number,
         columns: number,
         rows: number
-    ): IRaycastHit3D[][] {
-        const grid: IRaycastHit3D[][] = Array.from({ length: rows }, () => []);
+    ): (IRaycastHit3D | null)[][] {
+        const grid: (IRaycastHit3D | null)[][] = Array.from({ length: rows }, () =>
+            new Array<IRaycastHit3D | null>(columns).fill(null)
+        );
 
-        const up = Vec3.create(0, 1, 0);
-        const right = Vec3.cross(direction, up);
-        Vec3.normalize(right, right);
-        const actualUp = Vec3.cross(right, direction);
-        Vec3.normalize(actualUp, actualUp);
+        const up = Math.abs(direction.y) < 0.9
+            ? Vec3.create(0, 1, 0)
+            : Vec3.create(1, 0, 0);
+        const right = Vec3.normalize(Vec3.cross(direction, up));
+        const actualUp = Vec3.normalize(Vec3.cross(right, direction));
 
-        const stepX = width / (columns - 1);
-        const stepY = height / (rows - 1);
+        const stepX = columns > 1 ? width / (columns - 1) : 0;
+        const stepY = rows > 1 ? height / (rows - 1) : 0;
         const startX = -width * 0.5;
         const startY = -height * 0.5;
 
@@ -347,7 +367,7 @@ export class MultiRaycaster3D {
                     maxDistance,
                     layerMask
                 );
-                if (hit) grid[row].push(hit);
+                grid[row][col] = hit;
             }
         }
 

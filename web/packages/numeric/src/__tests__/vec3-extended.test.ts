@@ -146,9 +146,12 @@ describe('Vec3 - Additional Coverage', () => {
             expect(Math.abs(v.z - 0.2)).toBeLessThan(EPSILON);
         });
 
-        test('static inverseSafe throws on any zero component', () => {
-            // Static inverseSafe throws if ANY component is zero
-            expect(() => Vec3.inverseSafe({ x: 0, y: 4, z: 5 })).toThrow('zero or near-zero');
+        test('static inverseSafe uses defaultValue for zero components', () => {
+            // Static inverseSafe now uses defaultValue for zero components (aligned with instance version)
+            const result = Vec3.inverseSafe({ x: 0, y: 4, z: 5 }, undefined, 99);
+            expect(Math.abs(result.x - 99)).toBeLessThan(EPSILON);
+            expect(Math.abs(result.y - 0.25)).toBeLessThan(EPSILON);
+            expect(Math.abs(result.z - 0.2)).toBeLessThan(EPSILON);
         });
     });
 

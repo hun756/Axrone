@@ -42,6 +42,14 @@ export interface RigidbodyConfig2D {
 export class Rigidbody2D extends Component {
     private static readonly _tempQuat = Quat.IDENTITY.clone();
 
+    /** @internal Bridge world provider — set by PhysicsBridge2D at construction. */
+    private static _bridgeWorldProvider: (() => PhysicsWorld2D | null) | null = null;
+
+    /** @internal Called by PhysicsBridge2D to provide its world directly. */
+    static _setBridgeWorldProvider(provider: (() => PhysicsWorld2D | null) | null): void {
+        Rigidbody2D._bridgeWorldProvider = provider;
+    }
+
     private _bodyId: BodyId | null = null;
     private _physicsWorld: PhysicsWorld2D | null = null;
     private _transform: Transform | null = null;
@@ -392,6 +400,15 @@ export class Rigidbody2D extends Component {
 
     private getPhysicsWorld(): PhysicsWorld2D | null {
         if (this._physicsWorld) return this._physicsWorld;
+        // 1. Check bridge provider first (bridge-managed world)
+        if (Rigidbody2D._bridgeWorldProvider) {
+            const bridgeWorld = Rigidbody2D._bridgeWorldProvider();
+            if (bridgeWorld) {
+                this._physicsWorld = bridgeWorld;
+                return this._physicsWorld;
+            }
+        }
+        // 2. Fall back to PhysicsWorld2DComponent singleton
         const worldComponent = PhysicsWorld2DComponent.instance;
         if (worldComponent?.physicsWorld) {
             this._physicsWorld = worldComponent.physicsWorld;

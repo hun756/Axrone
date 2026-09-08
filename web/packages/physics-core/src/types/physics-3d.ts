@@ -16,7 +16,7 @@ import type {
     ITransform3D,
     IVelocity3D,
     IContactManifold3D,
-    IRaycastResult3D,
+    ISingleRaycastResult3D,
     SolverFlags,
     BodyFlags,
 } from '../types';
@@ -168,8 +168,22 @@ export interface IConeTwistConstraintDef3D {
     readonly swingSpan2?: number;
     readonly twistSpan?: number;
     readonly softness?: number;
+    /**
+     * NOT consumed by the solver. The framework uses PhysicsConstants.BAUMGARTE_FACTOR
+     * uniformly across all modules. Present for Editor/API compatibility only.
+     * @see CharacterJoint3D — passes hardcoded 0.3; has no effect on simulation.
+     */
     readonly biasFactor?: number;
+    /**
+     * NOT consumed by the solver. The framework does not apply per-constraint
+     * relaxation. Present for Editor/API compatibility only.
+     * @see CharacterJoint3D — passes hardcoded 1; has no effect on simulation.
+     */
     readonly relaxationFactor?: number;
+    /** Twist motor target velocity (rad/s). Undefined = motor disabled. */
+    readonly motorSpeed?: number;
+    /** Maximum twist motor torque (N·m). Undefined or zero = motor disabled. */
+    readonly maxMotorTorque?: number;
     readonly collideConnected?: boolean;
     readonly userData?: unknown;
 }
@@ -187,6 +201,14 @@ export interface IGenericConstraintDef3D {
     readonly angularStiffness?: IVec3Like;
     readonly linearDamping?: IVec3Like;
     readonly angularDamping?: IVec3Like;
+    /** Per-axis linear motor target speed (m/s). Undefined = no linear motor. */
+    readonly motorSpeed?: IVec3Like;
+    /** Per-axis linear motor max force (N). Undefined or zero component = no motor on that axis. */
+    readonly maxMotorForce?: IVec3Like;
+    /** Per-axis angular motor target speed (rad/s). Undefined = no angular motor. */
+    readonly angularMotorSpeed?: IVec3Like;
+    /** Per-axis angular motor max torque (N·m). Undefined or zero component = no motor on that axis. */
+    readonly angularMaxMotorTorque?: IVec3Like;
     readonly collideConnected?: boolean;
     readonly userData?: unknown;
 }
@@ -210,7 +232,6 @@ export interface IPhysicsWorld3DConfig {
     readonly maxConstraints?: number;
     readonly maxContacts?: number;
     readonly solverIterations?: number;
-    readonly enableCCD?: boolean;
     readonly enableProfiler?: boolean;
 }
 
@@ -223,19 +244,13 @@ export interface IPhysicsProfiler3D {
     solveVelocityTime: number;
     solvePositionTime: number;
     sleepTime: number;
-    ccdTime: number;
+    // ccdTime removed: 3D CCD is not implemented (separate scope).
+    // Consistent with enableCCD removal (commit d2f7310f).
 }
 
-export interface IContactListener3D {
-    onCollisionBegin?(manifold: IContactManifold3D): void;
-    onCollisionStay?(manifold: IContactManifold3D): void;
-    onCollisionEnd?(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void;
-    onTriggerEnter?(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void;
-    onTriggerExit?(bodyIdA: BodyId3D, bodyIdB: BodyId3D): void;
-}
-
-export type RaycastCallback3D = (result: IRaycastResult3D) => boolean;
-
+// IQueryFilter3D — defined here (physics-3d type section) because it is only
+// consumed by the physics-3d package.  Kept in physics-core solely so that the
+// physics-3d barrel (`export * from '@axrone/physics-core'`) re-exports it.
 export interface IQueryFilter3D {
     readonly categoryBits?: number;
     readonly maskBits?: number;

@@ -162,8 +162,16 @@ describe('SpringJoint3D', () => {
 describe('SliderJoint3D', () => {
     function create() { return new SliderJoint3D(); }
 
-    it('can be created', () => {
-        expect(() => create()).not.toThrow();
+    it('has default constraintId -1', () => { expect(create().constraintId).toBe(-1); });
+    it('has default connectedBody null', () => { expect(create().connectedBody).toBeNull(); });
+    it('has default useLimits false', () => { expect(create().useLimits).toBe(false); });
+    it('has default useMotor false', () => { expect(create().useMotor).toBe(false); });
+    it('has default useSpring false', () => { expect(create().useSpring).toBe(false); });
+    it('has default limits at zero', () => {
+        const j = create();
+        expect(j.limits.min).toBe(0);
+        expect(j.limits.max).toBe(0);
+        expect(j.limits.bounciness).toBe(0);
     });
 });
 
@@ -272,8 +280,8 @@ describe('CharacterJoint3D', () => {
     });
 
     describe('twist limits', () => {
-        it('has default lowTwistLimit', () => {
-            expect(create().lowTwistLimit.limit).toBeDefined();
+        it('has default lowTwistLimit at 0', () => {
+            expect(create().lowTwistLimit.limit).toBe(0);
         });
         it('sets lowTwistLimit', () => {
             const j = create();

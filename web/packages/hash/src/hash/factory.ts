@@ -3,6 +3,7 @@ import {
     type Hash32, type Hash64, type Hash256, type Hash512,
     type HashValue, type Seed32, type HashAlgorithmName, type HashAlgorithmMetadata
 } from './types';
+import { HashAlgorithmNotFoundError } from './errors';
 import { Fnv1a32, Fnv1_32, Fnv1a64, Djb2, Djb2a, Sdbm, Crc32, Crc32c, Murmur3_32, Murmur2_64, XxHash32, XxHash64, Sha1, Sha256, Sha384, Sha512 } from './algorithms';
 
 type AnyCtor<H extends HashValue> = new (seed?: Seed32, ...rest: any[]) => IHasher<H>;
@@ -17,11 +18,12 @@ function createFactory<H extends HashValue>(
     crypto: boolean,
     family: 'fast' | 'cryptographic' | 'keyed' | 'checksum' | 'universal',
     category: 'non-crypto' | 'crypto' | 'checksum' | 'universal',
-    description: string
+    description: string,
+    async: boolean = false
 ): IHashFactory<H> {
     const metadata: HashAlgorithmMetadata = {
         name, family, category, outputSize, blockSize, seedable, keyed,
-        cryptographicallySecure: crypto, description,
+        cryptographicallySecure: crypto, async, description,
     };
     return {
         metadata,
@@ -49,6 +51,31 @@ function createFactory<H extends HashValue>(
             h.updateString(input);
             return h.digest();
         },
+        async hashAsync(input: Uint8Array | string, options?: HashFactoryOptions) {
+            const h = this.create(options);
+            if (typeof input === 'string') h.updateString(input);
+            else h.updateBytes(input);
+            if (typeof (h as any).digestAsync === 'function') {
+                return (h as any).digestAsync();
+            }
+            return h.digest();
+        },
+        async hashBytesAsync(input: Uint8Array, options?: HashFactoryOptions) {
+            const h = this.create(options);
+            h.updateBytes(input);
+            if (typeof (h as any).digestAsync === 'function') {
+                return (h as any).digestAsync();
+            }
+            return h.digest();
+        },
+        async hashStringAsync(input: string, options?: HashFactoryOptions) {
+            const h = this.create(options);
+            h.updateString(input);
+            if (typeof (h as any).digestAsync === 'function') {
+                return (h as any).digestAsync();
+            }
+            return h.digest();
+        },
     };
 }
 
@@ -67,10 +94,10 @@ export const FACTORIES: ReadonlyMap<HashAlgorithmName, IHashFactory<any>> = (() 
     m.set('murmur2-64', createFactory<Hash64>('murmur2-64', Murmur2_64 as AnyCtor<Hash64>, 64, 8, true, false, false, 'fast', 'non-crypto', 'MurmurHash2 64-bit'));
     m.set('xxhash32', createFactory<Hash32>('xxhash32', XxHash32 as AnyCtor<Hash32>, 32, 16, true, false, false, 'fast', 'non-crypto', 'xxHash32'));
     m.set('xxhash64', createFactory<Hash64>('xxhash64', XxHash64 as AnyCtor<Hash64>, 64, 32, true, false, false, 'fast', 'non-crypto', 'xxHash64'));
-    m.set('sha-1', createFactory<Hash256>('sha-1', Sha1 as AnyCtor<Hash256>, 160, 64, false, false, false, 'cryptographic', 'crypto', 'SHA-1 (insecure)'));
-    m.set('sha-256', createFactory<Hash256>('sha-256', Sha256 as AnyCtor<Hash256>, 256, 64, false, false, true, 'cryptographic', 'crypto', 'SHA-256'));
-    m.set('sha-384', createFactory<Hash512>('sha-384', Sha384 as AnyCtor<Hash512>, 384, 128, false, false, true, 'cryptographic', 'crypto', 'SHA-384'));
-    m.set('sha-512', createFactory<Hash512>('sha-512', Sha512 as AnyCtor<Hash512>, 512, 128, false, false, true, 'cryptographic', 'crypto', 'SHA-512'));
+    m.set('sha-1', createFactory<Hash256>('sha-1', Sha1 as AnyCtor<Hash256>, 160, 64, false, false, false, 'cryptographic', 'crypto', 'SHA-1 (insecure)', true));
+    m.set('sha-256', createFactory<Hash256>('sha-256', Sha256 as AnyCtor<Hash256>, 256, 64, false, false, true, 'cryptographic', 'crypto', 'SHA-256', true));
+    m.set('sha-384', createFactory<Hash512>('sha-384', Sha384 as AnyCtor<Hash512>, 384, 128, false, false, true, 'cryptographic', 'crypto', 'SHA-384', true));
+    m.set('sha-512', createFactory<Hash512>('sha-512', Sha512 as AnyCtor<Hash512>, 512, 128, false, false, true, 'cryptographic', 'crypto', 'SHA-512', true));
 
     return m;
 })();
@@ -78,9 +105,7 @@ export const FACTORIES: ReadonlyMap<HashAlgorithmName, IHashFactory<any>> = (() 
 export function getFactory<H extends HashValue>(name: HashAlgorithmName): IHashFactory<H> {
     const f = FACTORIES.get(name);
     if (!f) {
-        const err = new Error(`Hash algorithm '${name}' not found in registry`) as Error & { code?: string };
-        err.code = 'HASH_ALGORITHM_NOT_FOUND';
-        throw err;
+        throw new HashAlgorithmNotFoundError(`Hash algorithm '${name}' not found in registry`);
     }
     return f as IHashFactory<H>;
 }
@@ -117,6 +142,18 @@ export function hashString<H extends HashValue>(name: HashAlgorithmName, input: 
     return getFactory<H>(name).hashString(input, options) as H;
 }
 
+export async function hashAsync<H extends HashValue>(name: HashAlgorithmName, input: Uint8Array | string, options?: HashFactoryOptions): Promise<H> {
+    return getFactory<H>(name).hashAsync(input, options) as Promise<H>;
+}
+
+export async function hashBytesAsync<H extends HashValue>(name: HashAlgorithmName, bytes: Uint8Array, options?: HashFactoryOptions): Promise<H> {
+    return getFactory<H>(name).hashBytesAsync(bytes, options) as Promise<H>;
+}
+
+export async function hashStringAsync<H extends HashValue>(name: HashAlgorithmName, input: string, options?: HashFactoryOptions): Promise<H> {
+    return getFactory<H>(name).hashStringAsync(input, options) as Promise<H>;
+}
+
 export function registerCustomAlgorithm<H extends HashValue>(
     name: HashAlgorithmName,
     ctor: new (seed?: Seed32) => IHasher<H>,
@@ -132,7 +169,8 @@ export function registerCustomAlgorithm<H extends HashValue>(
         metadata.cryptographicallySecure,
         metadata.family,
         metadata.category,
-        metadata.description
+        metadata.description,
+        metadata.async
     );
     (FACTORIES as Map<HashAlgorithmName, IHashFactory<any>>).set(name, factory);
 }

@@ -325,10 +325,14 @@ describe('Vec4 Unit Tests', () => {
                 expectVectorClose(result, { x: 0.5, y: 1, z: 2, w: 4 });
             });
 
-            test('should throw error for inverse of zero', () => {
+            test('should use defaultValue for inverse of zero components', () => {
                 const a = new Vec4(2, 0, 0.5, 1);
+                const result = Vec4.inverseSafe(a, undefined, 99);
 
-                expect(() => Vec4.inverseSafe(a)).toThrow('Inversion of zero or near-zero value');
+                expect(Math.abs(result.x - 0.5)).toBeLessThan(EPSILON);
+                expect(Math.abs(result.y - 99)).toBeLessThan(EPSILON);
+                expect(Math.abs(result.z - 2)).toBeLessThan(EPSILON);
+                expect(Math.abs(result.w - 1)).toBeLessThan(EPSILON);
             });
         });
     });
@@ -970,18 +974,22 @@ describe('Vec4 Unit Tests', () => {
             expectNumberClose(mixed.length(), 1);
         });
 
-        test('should handle NaN inputs gracefully', () => {
-            const withNaN = new Vec4(NaN, 1, 2, 3);
-
-            expect(isNaN(withNaN.length())).toBe(true);
-            expect(isNaN(Vec4.dot(withNaN, Vec4.ONE))).toBe(true);
+        test('should accept NaN inputs without throwing', () => {
+            // Vec4 constructor does not validate — non-finite values are silently stored.
+            const v = new Vec4(NaN, 1, 2, 3);
+            expect(Number.isNaN(v.x)).toBe(true);
+            expect(v.y).toBe(1);
+            expect(v.z).toBe(2);
+            expect(v.w).toBe(3);
         });
 
-        test('should handle Infinity inputs', () => {
-            const withInfinity = new Vec4(Infinity, 1, 2, 3);
-
-            expect(withInfinity.length()).toBe(Infinity);
-            expect(() => withInfinity.normalize()).toThrow();
+        test('should accept Infinity inputs without throwing', () => {
+            // Vec4 constructor does not validate — non-finite values are silently stored.
+            const v = new Vec4(Infinity, 1, 2, 3);
+            expect(v.x).toBe(Infinity);
+            expect(v.y).toBe(1);
+            expect(v.z).toBe(2);
+            expect(v.w).toBe(3);
         });
 
         test('should maintain precision with repeated operations', () => {

@@ -5,6 +5,17 @@ import type {
     AudioSourceComponentCommand,
 } from './types';
 
+/**
+ * A queued component command that failed while being applied to the AudioSystem.
+ * The system already emits `source:error` for playback failures; this is the caller-facing
+ * half, so a game loop can surface or count them instead of having them discarded.
+ */
+export interface AudioBinderCommandFailure<TSchema extends AudioAssetSchema = AudioAssetSchema> {
+    readonly component: AudioSourceComponent<TSchema>;
+    readonly command: AudioSourceComponentCommand<TSchema>['kind'];
+    readonly error: unknown;
+}
+
 export class AudioComponentBinder<TSchema extends AudioAssetSchema = AudioAssetSchema> {
     readonly #listeners = new Set<AudioListenerComponent>();
     readonly #sources = new Set<AudioSourceComponent<TSchema>>();
@@ -34,7 +45,9 @@ export class AudioComponentBinder<TSchema extends AudioAssetSchema = AudioAssetS
         this.#sources.clear();
     }
 
-    async update(): Promise<void> {
+    async update(): Promise<readonly AudioBinderCommandFailure<TSchema>[]> {
+        const failures: AudioBinderCommandFailure<TSchema>[] = [];
+
         for (const listener of this.#listeners) {
             this.system.upsertListener(listener.toDescriptor());
             if (listener.active) {
@@ -49,13 +62,16 @@ export class AudioComponentBinder<TSchema extends AudioAssetSchema = AudioAssetS
             for (const command of commands) {
                 try {
                     await this.#dispatchSourceCommand(source, command);
-                } catch {
-                    // command failed; source state is already synced from upsertSource
+                } catch (error) {
+                    // Recorded, not swallowed: keep draining the queue so one unresolvable
+                    // clip cannot stall every other source's commands this frame.
+                    failures.push({ component: source, command: command.kind, error });
                 }
             }
         }
 
         this.system.refreshSpatialAudio();
+        return failures;
     }
 
     async #dispatchSourceCommand(

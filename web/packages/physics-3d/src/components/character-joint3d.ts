@@ -10,6 +10,35 @@ import {
     type ISoftJointLimitSpring3D,
 } from './joint3d';
 
+/**
+ * Character joint — registers a CONE_TWIST constraint (type 4).
+ *
+ * **Solver status: FULL.** The cone-twist solver module implements
+ * the full 6-row scheme — 3 anchor rows, cone swing limits via quaternion
+ * swing-twist decomposition, and independent twist limit/motor rows.
+ * Swing, twist limits, and twist motor are fully functional.
+ *
+ * Motor: The twist motor (`motorSpeed`/`maxMotorTorque`) drives the twist
+ * rate toward the target velocity, with impulse capped by maxMotorTorque.
+ * The motor row is solved BEFORE the twist limit row (Box2D stall semantics).
+ *
+ * **Motor overshoot caveat:** When the twist motor drives toward the twist
+ * limit, the sequential impulse solver stalls the motor at the limit row.
+ *
+ * **Measured overshoot** (world simulation, 300 steps at dt=1/60, motorSpeed
+ * 20 rad/s, maxMotorTorque 500 N·m, twistLimit π/4): twist reaches 0.7854 rad
+ * (exactly the limit), overshoot ≈ 0.000 rad, stalled angVel ≈ 0.000 rad/s.
+ * Low-level solver tests (scenario 6) confirm stall semantics with
+ * maxTwist ≤ limit + 0.05 rad. For tighter precision, increase
+ * `velocityIterations`.
+ *
+ * All distance units are METRES (ADR 0004). Angles are in radians.
+ *
+ * @see JOINT_CAPABILITY_3D
+ * @remarks Solver: physics-world-3d-constraints-cone-twist.ts (unit-tested
+ * against 26 direct-prepare scenarios including cone apex singularity and
+ * twist motor stall).
+ */
 @script({ scriptName: 'CharacterJoint3D' })
 export class CharacterJoint3D extends Joint3D {
     private _swingAxis: Vec3 = new Vec3(1, 0, 0);
@@ -26,6 +55,8 @@ export class CharacterJoint3D extends Joint3D {
     private _enableProjection: boolean = false;
     private _projectionDistance: number = 0.1;
     private _projectionAngle: number = 180;
+    private _motorSpeed: number = 0;
+    private _maxMotorTorque: number = 0;
 
     get swingAxis(): Readonly<Vec3> {
         return this._swingAxis;
@@ -109,6 +140,22 @@ export class CharacterJoint3D extends Joint3D {
     set projectionAngle(value: number) {
         this._projectionAngle = Math.max(0, value);
     }
+    /** Twist motor target velocity (rad/s). */
+    get motorSpeed(): number {
+        return this._motorSpeed;
+    }
+    set motorSpeed(value: number) {
+        this._motorSpeed = value;
+        this._updateConstraint();
+    }
+    /** Maximum twist motor torque (N·m). Zero disables the motor. */
+    get maxMotorTorque(): number {
+        return this._maxMotorTorque;
+    }
+    set maxMotorTorque(value: number) {
+        this._maxMotorTorque = Math.max(0, value);
+        this._updateConstraint();
+    }
 
     protected override _createConstraint(ownerBody: Rigidbody3D): void {
         if (!this._constraintManager || !this._connectedBody) return;
@@ -121,13 +168,84 @@ export class CharacterJoint3D extends Joint3D {
             swingSpan2: this._swing2Limit.limit,
             twistSpan: this._highTwistLimit.limit - this._lowTwistLimit.limit,
             softness: 1,
+            // biasFactor and relaxationFactor are NOT consumed by the solver.
+            // The framework uses uniform BAUMGARTE_FACTOR and no per-constraint
+            // relaxation. These values are passed for API completeness only.
             biasFactor: 0.3,
             relaxationFactor: 1,
+            motorSpeed: this._motorSpeed,
+            maxMotorTorque: this._maxMotorTorque,
             collideConnected: this._enableCollision,
         };
         this._constraintId = this._constraintManager.createConeTwist(def);
     }
     protected override _updateConstraint(): void {
         this._recreateConstraint();
+    }
+
+    /**
+     * Serialize character-joint-specific properties.
+     *
+     * Editor key mapping (components.rs `character_joint_3d_properties`):
+     * - `swingAxis: [x,y,z]`
+     * - `lowTwistLimit`, `highTwistLimit`, `swing1Limit`, `swing2Limit`:
+     *   `{ limit, bounciness, contactDistance }`
+     * - `twistLimitSpring`, `swingLimitSpring`: `{ spring, damper }`
+     * - `enableProjection`, `projectionDistance` (metres), `projectionAngle`
+     *
+     * Engine-only (not in Editor default JSON but wired to solver):
+     * - `motorSpeed` (rad/s), `maxMotorTorque` (N·m)
+     */
+    override serialize(): Record<string, any> {
+        return {
+            ...super.serialize(),
+            swingAxis: { x: this._swingAxis.x, y: this._swingAxis.y, z: this._swingAxis.z },
+            lowTwistLimit: { limit: this._lowTwistLimit.limit, bounciness: this._lowTwistLimit.bounciness, contactDistance: this._lowTwistLimit.contactDistance },
+            highTwistLimit: { limit: this._highTwistLimit.limit, bounciness: this._highTwistLimit.bounciness, contactDistance: this._highTwistLimit.contactDistance },
+            swing1Limit: { limit: this._swing1Limit.limit, bounciness: this._swing1Limit.bounciness, contactDistance: this._swing1Limit.contactDistance },
+            swing2Limit: { limit: this._swing2Limit.limit, bounciness: this._swing2Limit.bounciness, contactDistance: this._swing2Limit.contactDistance },
+            twistLimitSpring: { spring: this._twistLimitSpring.spring, damper: this._twistLimitSpring.damper },
+            swingLimitSpring: { spring: this._swingLimitSpring.spring, damper: this._swingLimitSpring.damper },
+            enableProjection: this._enableProjection,
+            projectionDistance: this._projectionDistance,
+            projectionAngle: this._projectionAngle,
+            motorSpeed: this._motorSpeed,
+            maxMotorTorque: this._maxMotorTorque,
+        };
+    }
+
+    override deserialize(data: Record<string, any>): void {
+        super.deserialize(data);
+        // swingAxis: Vec3 — Editor writes ARRAY [x,y,z], accept both formats.
+        if (data.swingAxis !== undefined) {
+            const v = this.normalizeVec3Value(data.swingAxis, 1, 0, 0);
+            this._swingAxis.x = v.x;
+            this._swingAxis.y = v.y;
+            this._swingAxis.z = v.z;
+        }
+        const softLimitKeys = ['lowTwistLimit', 'highTwistLimit', 'swing1Limit', 'swing2Limit'] as const;
+        const softLimitTargets = [this._lowTwistLimit, this._highTwistLimit, this._swing1Limit, this._swing2Limit] as const;
+        for (let i = 0; i < softLimitKeys.length; i++) {
+            const src = data[softLimitKeys[i]];
+            if (src && typeof src === 'object') {
+                if (src.limit !== undefined) softLimitTargets[i].limit = src.limit;
+                if (src.bounciness !== undefined) softLimitTargets[i].bounciness = src.bounciness;
+                if (src.contactDistance !== undefined) softLimitTargets[i].contactDistance = src.contactDistance;
+            }
+        }
+        const springKeys = ['twistLimitSpring', 'swingLimitSpring'] as const;
+        const springTargets = [this._twistLimitSpring, this._swingLimitSpring] as const;
+        for (let i = 0; i < springKeys.length; i++) {
+            const src = data[springKeys[i]];
+            if (src && typeof src === 'object') {
+                if (src.spring !== undefined) springTargets[i].spring = src.spring;
+                if (src.damper !== undefined) springTargets[i].damper = src.damper;
+            }
+        }
+        if (data.enableProjection !== undefined) this._enableProjection = !!data.enableProjection;
+        if (data.projectionDistance !== undefined) this._projectionDistance = Math.max(0, data.projectionDistance);
+        if (data.projectionAngle !== undefined) this._projectionAngle = Math.max(0, data.projectionAngle);
+        if (data.motorSpeed !== undefined) this._motorSpeed = data.motorSpeed;
+        if (data.maxMotorTorque !== undefined) this._maxMotorTorque = Math.max(0, data.maxMotorTorque);
     }
 }

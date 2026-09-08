@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
     resolveCanvasScale,
     canvasScaleToTransform,
@@ -246,6 +246,35 @@ describe('@axrone/ui canvas-scaler', () => {
             );
             expect(mapped.x).toBe(111);
             expect(mapped.y).toBe(222);
+        });
+    });
+
+    describe('unknown scale mode warn dedup', () => {
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        it('warns only once per unknown scale mode', () => {
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const canvas = {
+                referenceWidth: 1920,
+                referenceHeight: 1080,
+                scaleMode: 'unknown-test-mode' as unknown as UICanvasConfig['scaleMode'],
+                matchBias: 0.5,
+            } as UICanvasConfig;
+
+            // First call: warns.
+            resolveCanvasScale(canvas, 960, 540);
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+
+            // Second call with same mode: no additional warn.
+            resolveCanvasScale(canvas, 1920, 1080);
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+
+            // Different unknown mode: warns once.
+            const canvas2 = { ...canvas, scaleMode: 'another-unknown' as unknown as UICanvasConfig['scaleMode'] };
+            resolveCanvasScale(canvas2, 960, 540);
+            expect(warnSpy).toHaveBeenCalledTimes(2);
         });
     });
 });

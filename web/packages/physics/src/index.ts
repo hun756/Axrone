@@ -22,6 +22,8 @@ export type {
     IRaycastHit3D,
     IRaycastQuery2D,
     IRaycastQuery3D,
+    IRaycastResult2D,
+    IRaycastResult3D,
     RaycastPredicate2D,
     RaycastPredicate3D,
     IBarycentricCoords,

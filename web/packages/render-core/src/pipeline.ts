@@ -1,3 +1,4 @@
+import { clamp } from '@axrone/numeric';
 import {
     RenderExecutionError,
     RenderPipelineError,
@@ -176,12 +177,11 @@ const DEFAULT_LIGHT_BAKING: NormalizedLightBakingSettings = Object.freeze({
     throttleFrames: 4,
 });
 
+const EMPTY_WARNINGS: readonly string[] = Object.freeze([]);
+
 const DEFAULT_GI: RenderGlobalIlluminationSettings = Object.freeze({
     mode: 'disabled',
 });
-
-const clamp = (value: number, min: number, max: number): number =>
-    value < min ? min : value > max ? max : value;
 
 const ensureFinite = (value: number, fallback: number): number =>
     Number.isFinite(value) ? value : fallback;
@@ -675,21 +675,22 @@ export class RenderPipeline<TNative = unknown> implements IDisposable {
             probeUpdates,
             volumetrics
         );
+        const frozenViewport = Object.freeze({ ...input.viewport });
         const context: RenderExecutionContext<TNative> = {
             frame,
-            viewport: Object.freeze({ ...input.viewport }),
+            viewport: frozenViewport,
             camera: input.camera,
             graph: this._graph,
             statistics,
         };
         const result: RenderFrameResult<TNative> = {
             frame,
-            viewport: Object.freeze({ ...input.viewport }),
+            viewport: frozenViewport,
             passes: this._summarizePasses(livePasses),
             resources: this._graph.listTextures(),
             statistics,
             degraded,
-            warnings: Object.freeze(this._warnings.toArray()),
+            warnings: this._warnings.length === 0 ? EMPTY_WARNINGS : Object.freeze(this._warnings.toArray()),
         };
 
         return {

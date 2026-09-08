@@ -2,6 +2,42 @@ import { describe, expect, it } from 'vitest';
 import { LazyFactoryImpl } from '../lazy/lazy-factory';
 
 describe('LazyFactoryImpl', () => {
+    describe('cache bounds', () => {
+        it('keeps unbounded cache and access order aligned', () => {
+            const factory = new LazyFactoryImpl<string, number>(
+                (key: string) => key.length,
+                (key: string) => key,
+                Number.POSITIVE_INFINITY
+            );
+
+            for (let i = 0; i < 2000; i++) {
+                factory.getOrAdd(`key-${i}`);
+            }
+
+            expect(factory.cacheSize).toBe(2000);
+            expect(factory.invalidate('key-0')).toBe(true);
+            expect(factory.invalidate('key-1999')).toBe(true);
+        });
+
+        it('evicts least recently used entries at the cache bound', () => {
+            const factory = new LazyFactoryImpl<string, number>(
+                (key: string) => key.length,
+                (key: string) => key,
+                3
+            );
+
+            factory.getOrAdd('a');
+            factory.getOrAdd('b');
+            factory.getOrAdd('c');
+            factory.getOrAdd('a');
+            factory.getOrAdd('d');
+
+            expect(factory.cacheSize).toBe(3);
+            expect(factory.invalidate('a')).toBe(true);
+            expect(factory.invalidate('b')).toBe(false);
+        });
+    });
+
     describe('getOrAdd()', () => {
         it('caches by key and returns same value on repeated calls', () => {
             let callCount = 0;

@@ -1,3 +1,5 @@
+import { Fnv1a32 } from '@axrone/hash';
+
 export type CompareResult = -1 | 0 | 1;
 
 export type Comparable<T extends string> = number & { readonly __brand: T };
@@ -71,14 +73,12 @@ export class InvalidOperationError extends Error {
 export const FNV_PRIME = 16777619;
 export const FNV_OFFSET_BASIS = 2166136261;
 
+const _fnvHasher = new Fnv1a32();
+
 const fnvHash = (data: string): number => {
-    let h = FNV_OFFSET_BASIS;
-    for (let i = 0; i < data.length; i++) {
-        const c = data.charCodeAt(i);
-        h = Math.imul(h ^ (c & 0xff), FNV_PRIME) >>> 0;
-        h = Math.imul(h ^ ((c >>> 8) & 0xff), FNV_PRIME) >>> 0;
-    }
-    return h;
+    _fnvHasher.reset();
+    _fnvHasher.updateString(data);
+    return _fnvHasher.digest() as number;
 };
 
 export function isEquatable(obj: unknown): obj is Equatable {

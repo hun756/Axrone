@@ -1,5 +1,7 @@
+/** @stable */
 export type PoolObjectStatus = 'free' | 'allocated' | 'reserved';
 
+/** @stable */
 export interface PoolableObject {
     __poolId?: number;
     __poolStatus?: PoolObjectStatus;
@@ -8,16 +10,83 @@ export interface PoolableObject {
     reset(): void;
 }
 
+/**
+ * Controls how a memory pool grows when it needs more capacity.
+ *
+ * Each strategy produces a different sequence of pool sizes, trading off
+ * predictability, memory overhead, and allocator-friendliness.
+ *
+ * - `'fixed'` — Adds a constant number of slots per expansion (controlled by
+ *   `expansionRate`, defaulting to 32). Growth is linear: N, N+k, N+2k, …
+ *   Best for workloads with a known, stable object count where overshooting
+ *   would waste memory. Predictable and simple, but may require many expansion
+ *   cycles for rapidly growing workloads.
+ *
+ * - `'multiplicative'` — Multiplies current capacity by `expansionFactor`
+ *   (default 2×). Growth is exponential: N, 2N, 4N, 8N, …
+ *   This is the default strategy and suits most general-purpose pools. It
+ *   gives O(log N) expansions total and amortises allocation cost well. The
+ *   downside is that power-of-two sizes can cause hash-table clustering if
+ *   pool indices are used as hash keys.
+ *
+ * - `'fibonacci'` — Expands to the next Fibonacci number above current
+ *   capacity: … 34, 55, 89, 144, 233, 377, …
+ *   The golden-ratio growth (~1.618×) is gentler than 2× doubling, so the pool
+ *   overshoots less on each expansion. Fibonacci sizes also appear in
+ *   natural/generative workloads (particle systems, fractal geometry, spatial
+ *   subdivision). Retained as a user-selectable option for these specialised
+ *   cases.
+ *
+ * - `'prime'` — Expands to the next prime number above `current * expansionFactor`.
+ *   Prime-sized capacities are hash-table-friendly: when pool slot indices feed
+ *   into modular hashing (e.g. open-addressing hash maps built on top of the
+ *   pool), prime table sizes guarantee uniform distribution for any hash
+ *   function, avoiding the clustering that power-of-two sizes cause. Prime
+ *   growth also produces irregular expansion steps that can reduce resonance
+ *   with periodic allocation patterns, leading to smoother GC pressure in
+ *   long-running applications.
+ *
+ * @see {@link MemoryPoolOptions.expansionStrategy}
+ * @see {@link MemoryPoolOptions.expansionFactor}
+ * @see {@link MemoryPoolOptions.expansionRate}
+ *
+ * @stable
+ */
 export type PoolExpansionStrategy = 'fixed' | 'multiplicative' | 'fibonacci' | 'prime';
 
+/** @stable */
 export type PoolAllocationStrategy =
     | 'first-available'
     | 'least-recently-used'
     | 'most-recently-used'
     | 'round-robin';
 
+/** @stable */
 export type PoolEvictionPolicy = 'none' | 'lru' | 'ttl' | 'fifo';
 
+/** @stable */
+export const POOL_OPTION_DEFAULTS = {
+    initialCapacity: 32,
+    maxCapacity: 4096,
+    minFree: 0,
+    highWatermarkRatio: 0.8,
+    lowWatermarkRatio: 0.2,
+    expansionStrategy: 'multiplicative',
+    expansionFactor: 2,
+    expansionRate: 0,
+    allocationStrategy: 'first-available',
+    evictionPolicy: 'none',
+    ttl: 0,
+    resetOnRecycle: true,
+    preallocate: true,
+    autoExpand: true,
+    compactionThreshold: 128,
+    compactionTriggerRatio: 0.5,
+    enableMetrics: false,
+    enableInstrumentation: false,
+} as const;
+
+/** @stable */
 export interface MemoryPoolOptions<T extends PoolableObject> {
     readonly initialCapacity?: number;
     readonly maxCapacity?: number;
@@ -44,12 +113,11 @@ export interface MemoryPoolOptions<T extends PoolableObject> {
     readonly enableMetrics?: boolean;
     readonly enableInstrumentation?: boolean;
     readonly name?: string;
-    readonly maxObjectAge?: number;
-    readonly threadSafe?: boolean;
     readonly asyncFactory?: () => Promise<T>;
     readonly estimatedObjectSize?: number;
 }
 
+/** @stable */
 export interface PoolPerformanceMetrics {
     readonly name: string;
     readonly capacity: number;
@@ -91,6 +159,7 @@ export interface PoolPerformanceMetrics {
     };
 }
 
+/** @stable */
 export interface MemoryPoolOperations<T extends PoolableObject> {
     acquire(): T;
     release(obj: T): void;
@@ -108,6 +177,7 @@ export interface MemoryPoolOperations<T extends PoolableObject> {
     [Symbol.dispose](): void;
 }
 
+/** @stable */
 export interface AsyncMemoryPoolOperations<T extends PoolableObject> {
     acquireAsync(): Promise<T>;
     releaseAsync(obj: T): Promise<void>;
@@ -117,6 +187,7 @@ export interface AsyncMemoryPoolOperations<T extends PoolableObject> {
     drainAsync(): Promise<void>;
 }
 
+/** @stable */
 export const MemoryPoolErrorCode = {
     POOL_DEPLETED: 'POOL_DEPLETED',
     POOL_DISPOSED: 'POOL_DISPOSED',
@@ -130,9 +201,11 @@ export const MemoryPoolErrorCode = {
     INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
+/** @stable */
 export type MemoryPoolErrorCode =
     (typeof MemoryPoolErrorCode)[keyof typeof MemoryPoolErrorCode];
 
+/** @stable */
 export class MemoryPoolError extends Error {
     readonly code: MemoryPoolErrorCode;
     readonly poolName?: string;
@@ -155,6 +228,7 @@ export class MemoryPoolError extends Error {
     }
 }
 
+/** @stable */
 export type PoolSlot<T extends PoolableObject> = {
     obj: T | undefined;
     status: PoolObjectStatus;

@@ -1,4 +1,8 @@
 import type { Comparator, HeapOrder } from '../containers/queue/binary-heap';
+import { heapSiftUp, heapSiftDown } from './heap-sift';
+import type { HeapComesBefore, HeapOnMove } from './heap-sift';
+import { getParentIndex, numericComparator } from '../containers/queue/utils';
+import type { HeapIndex } from '../containers/queue/types';
 
 export type { Comparator, HeapOrder };
 
@@ -25,7 +29,6 @@ interface HeapNode<K, V> {
     key: K;
     value: V;
     handle: HeapHandle<K, V>;
-    heapIndex: number;
 }
 
 export class HeapHandle<K = unknown, V = unknown> {
@@ -68,10 +71,11 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
     readonly #isMinHeap: boolean;
     #nodes: HeapNode<K, V>[];
     #handleToIndex: Map<HeapHandle<K, V>, number>;
-    #freeNodeIndices: number[];
     #size: number = 0;
     #nextHandleId: number = 1;
     #modCount: number = 0;
+    readonly #comesBeforeFn: HeapComesBefore<HeapNode<K, V>>;
+    readonly #onMoveFn: HeapOnMove<HeapNode<K, V>>;
 
     constructor(options: IndexedHeapOptions<K, V>) {
         const compare = options.compare;
@@ -84,7 +88,11 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
         const initialCapacity = Math.max(0, options.initialCapacity ?? 0);
         this.#nodes = new Array(initialCapacity);
         this.#handleToIndex = new Map();
-        this.#freeNodeIndices = [];
+        this.#comesBeforeFn = (a: HeapNode<K, V>, b: HeapNode<K, V>): boolean =>
+            this.#comesBeforeByKey(a.key, b.key);
+        this.#onMoveFn = (node: HeapNode<K, V>, newIndex: number): void => {
+            this.#handleToIndex.set(node.handle, newIndex);
+        };
     }
 
     get size(): number {
@@ -111,7 +119,6 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
                 this.#nodes[i] = undefined as unknown as HeapNode<K, V>;
             }
             this.#handleToIndex.clear();
-            this.#freeNodeIndices.length = 0;
             this.#size = 0;
         }
         this.#modCount++;
@@ -220,7 +227,7 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
             this.#size = lastIndex;
 
             if (index > 0) {
-                const parentIndex = (index - 1) >>> 1;
+                const parentIndex = getParentIndex(index as HeapIndex) as number;
                 if (this.#comesBefore(index, parentIndex)) {
                     this.#siftUp(index);
                 } else {
@@ -277,17 +284,11 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
         }
     }
 
-    [Symbol.iterator](): Iterator<IndexedHeapEntryView<K, V>> {
-        const snapshot = this.toSortedArray();
-        let index = 0;
-        return {
-            next(): IteratorResult<IndexedHeapEntryView<K, V>> {
-                if (index >= snapshot.length) {
-                    return { value: undefined as unknown as IndexedHeapEntryView<K, V>, done: true };
-                }
-                return { value: snapshot[index++], done: false };
-            },
-        };
+    *[Symbol.iterator](): Iterator<IndexedHeapEntryView<K, V>> {
+        for (let i = 0; i < this.#size; i++) {
+            const node = this.#nodes[i]!;
+            yield { key: node.key, value: node.value };
+        }
     }
 
     #viewAt(heapIndex: number): IndexedHeapEntryView<K, V> {
@@ -296,18 +297,14 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
     }
 
     #insertAtEnd(key: K, value: V, handle: HeapHandle<K, V>): void {
-        const recycled = this.#freeNodeIndices.pop();
         const heapIndex = this.#size;
         const node: HeapNode<K, V> = {
             key,
             value,
             handle,
-            heapIndex,
         };
 
-        if (recycled !== undefined) {
-            this.#nodes[recycled] = node;
-        } else if (heapIndex < this.#nodes.length) {
+        if (heapIndex < this.#nodes.length) {
             this.#nodes[heapIndex] = node;
         } else {
             this.#nodes.push(node);
@@ -317,52 +314,11 @@ export class IndexedHeap<K, V> implements Iterable<IndexedHeapEntryView<K, V>> {
     }
 
     #siftUp(startIndex: number): void {
-        const nodes = this.#nodes;
-        const item = nodes[startIndex]!;
-        let index = startIndex;
-
-        while (index > 0) {
-            const parentIndex = (index - 1) >>> 1;
-            const parent = nodes[parentIndex]!;
-            if (!this.#comesBeforeByKey(item.key, parent.key)) break;
-            nodes[index] = parent;
-            this.#handleToIndex.set(parent.handle, index);
-            index = parentIndex;
-        }
-        nodes[index] = item;
-        this.#handleToIndex.set(item.handle, index);
+        heapSiftUp(this.#nodes, startIndex, this.#comesBeforeFn, this.#onMoveFn);
     }
 
     #siftDown(startIndex: number): void {
-        const nodes = this.#nodes;
-        const size = this.#size;
-        const half = size >>> 1;
-        const item = nodes[startIndex]!;
-        let index = startIndex;
-
-        while (index < half) {
-            let bestIndex = (index << 1) + 1;
-            const left = nodes[bestIndex]!;
-            let bestKey = left.key;
-            const rightIndex = bestIndex + 1;
-
-            if (rightIndex < size) {
-                const right = nodes[rightIndex]!;
-                if (this.#comesBeforeByKey(right.key, bestKey)) {
-                    bestIndex = rightIndex;
-                    bestKey = right.key;
-                }
-            }
-
-            if (!this.#comesBeforeByKey(bestKey, item.key)) break;
-
-            const best = nodes[bestIndex]!;
-            nodes[index] = best;
-            this.#handleToIndex.set(best.handle, index);
-            index = bestIndex;
-        }
-        nodes[index] = item;
-        this.#handleToIndex.set(item.handle, index);
+        heapSiftDown(this.#nodes, this.#size, startIndex, this.#comesBeforeFn, this.#onMoveFn);
     }
 
     #comesBefore(i: number, j: number): boolean {
@@ -384,4 +340,4 @@ export const createMinHeap = <K, V>(compare: Comparator<K>): IndexedHeap<K, V> =
 export const createMaxHeap = <K, V>(compare: Comparator<K>): IndexedHeap<K, V> =>
     new IndexedHeap<K, V>({ compare, order: 'max' });
 
-export const numericCompare = (a: number, b: number): number => a - b;
+export const numericCompare = numericComparator;

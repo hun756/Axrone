@@ -5,23 +5,24 @@ import { UINT64_MAX, hex } from './constants';
 export const createSeedFromTime = (): IRandomState => {
     const now = BigInt(Date.now());
     const pid = typeof process !== 'undefined' && process.pid ? BigInt(process.pid) : 0n;
-    const entropy = crypto?.getRandomValues
-        ? BigInt(
-              '0x' +
-                  Array.from(crypto.getRandomValues(new Uint8Array(8)))
-                      .map((b) => hex[b])
-                      .join('')
-          )
-        : 0n;
+    const entropy =
+        typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? BigInt(
+                  '0x' +
+                      Array.from(crypto.getRandomValues(new Uint8Array(8)))
+                          .map((b) => hex[b])
+                          .join('')
+              )
+            : 0n;
 
     const high = now << 32n;
     const mid = pid << 16n;
     const low = entropy & 0xffffn;
 
-    const seed = high | mid | low;
+    const seed = (high | mid | low) & UINT64_MAX;
 
     return {
-        vector: [seed, seed ^ 0xdeadbeefn, seed ^ 0x12345678n, seed ^ 0x87654321n],
+        vector: [seed, seed ^ 0xdeadbeefn, seed ^ 0x12345678n, seed ^ 0x87654321n, 0n, 0n],
         counter: 0n,
         engine: RandomEngineType.XOROSHIRO128_PLUS_PLUS,
     };
@@ -164,7 +165,7 @@ export const hashSeedToState = (seed: SeedSource): IRandomState => {
     }
 
     return {
-        vector: [s0, s1, s2, s3],
+        vector: [s0, s1, s2, s3, 0n, 0n],
         counter: 0n,
         engine: RandomEngineType.XOROSHIRO128_PLUS_PLUS,
     };

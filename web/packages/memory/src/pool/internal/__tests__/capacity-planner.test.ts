@@ -68,9 +68,11 @@ describe('CapacityPlanner', () => {
             const freeList = new Set([0, 1, 2, 3]);
 
             planner.shrink(slots, freeList, 2);
-            // After shrink, compact reindexes; removed slots become undefined
-            // The compact method preserves undefined entries in the array
-            expect(freeList.size).toBeGreaterThanOrEqual(2);
+            // shrink removes the 2 oldest free slots (lastAccessed 10, 20),
+            // then compact reindexes the remaining 2 free slots to indices 0, 1
+            expect(slots.length).toBe(2);
+            expect(freeList.size).toBe(2);
+            expect([...freeList].sort((a, b) => a - b)).toEqual([0, 1]);
         });
 
         it('throws if shrinking below allocated count', () => {
@@ -110,6 +112,10 @@ describe('CapacityPlanner', () => {
             expect(slots.length).toBe(2);
             expect(slots[0]!.status).toBe('allocated');
             expect(slots[1]!.status).toBe('free');
+            // The free slot was reindexed from 2 to 1 after removing the undefined hole
+            expect(freeList.size).toBe(1);
+            expect(freeList.has(1)).toBe(true);
+            expect(freeList.has(2)).toBe(false);
         });
     });
 

@@ -2,6 +2,8 @@ export * from './types';
 export * from './errors';
 export * from './bits';
 export * from './mixers';
+export * from './mixing';
+export * from './hex';
 export * from './interfaces';
 export * from './algorithms';
 export * from './factory';

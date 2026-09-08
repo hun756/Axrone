@@ -1,4 +1,3 @@
-import { BoxMullerFactory } from './box-muller';
 import type { EqualityComparer } from '@axrone/utility';
 import { Fnv1a32 } from '@axrone/hash';
 
@@ -25,6 +24,18 @@ export const floatEquals = (a: number, b: number, epsilon: number = EPSILON): bo
     Math.abs(a - b) < epsilon;
 
 /**
+ * Ensures a number is finite (not NaN or Infinity).
+ * Throws a descriptive error if the value is not finite.
+ * Use at API boundaries to catch invalid inputs early.
+ */
+export const ensureFinite = (value: number, name: string = 'value'): number => {
+    if (!Number.isFinite(value)) {
+        throw new Error(`${name} must be a finite number, got ${value}`);
+    }
+    return value;
+};
+
+/**
  * EqualityComparer<number> with configurable epsilon.
  * Hash uses FNV-1a with float quantization (same strategy as Vec2/Vec3/Vec4).
  */
@@ -43,10 +54,3 @@ export class NumberEqualityComparer implements EqualityComparer<number> {
         return new Fnv1a32().updateF32(obj).digest();
     }
 }
-
-// general box-muller optimization
-export const standardNormalDist = BoxMullerFactory.createStandard({
-    algorithm: 'polar',
-    useCache: true,
-    optimizeFor: 'speed',
-});

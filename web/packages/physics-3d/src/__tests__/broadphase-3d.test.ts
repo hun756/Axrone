@@ -191,4 +191,60 @@ describe('DynamicAABBTree3D', () => {
             expect(tree.getHeight()).toBeGreaterThan(0);
         });
     });
+
+    describe('leafCount', () => {
+        it('starts at 0', () => {
+            expect(tree.leafCount).toBe(0);
+        });
+
+        it('increments on createProxy and decrements on destroyProxy', () => {
+            const a = tree.createProxy(box(0, 0, 0, 1, 1, 1), 'a');
+            const b = tree.createProxy(box(5, 0, 0, 1, 1, 1), 'b');
+            expect(tree.leafCount).toBe(2);
+            tree.destroyProxy(a);
+            expect(tree.leafCount).toBe(1);
+            tree.destroyProxy(b);
+            expect(tree.leafCount).toBe(0);
+        });
+    });
+
+    describe('getTreeQuality', () => {
+        it('returns 1.0 for an empty tree', () => {
+            expect(tree.getTreeQuality()).toBe(1.0);
+        });
+
+        it('returns 1.0 for a single leaf', () => {
+            tree.createProxy(box(0, 0, 0, 1, 1, 1), 'only');
+            expect(tree.getTreeQuality()).toBe(1.0);
+        });
+
+        it('returns a reasonable ratio after many insertions', () => {
+            for (let i = 0; i < 16; i++) {
+                tree.createProxy(box(i * 3, 0, 0, 0.5, 0.5, 0.5), `q${i}`);
+            }
+            const quality = tree.getTreeQuality();
+            expect(quality).toBeGreaterThanOrEqual(1.0);
+            expect(quality).toBeLessThan(10);
+        });
+    });
+
+    describe('getTreeBalance', () => {
+        it('returns 1.0 for an empty tree', () => {
+            expect(tree.getTreeBalance()).toBe(1.0);
+        });
+
+        it('returns 1.0 for a single leaf', () => {
+            tree.createProxy(box(0, 0, 0, 1, 1, 1), 'only');
+            expect(tree.getTreeBalance()).toBe(1.0);
+        });
+
+        it('returns a value in (0, 1] after many insertions', () => {
+            for (let i = 0; i < 16; i++) {
+                tree.createProxy(box(i * 3, 0, 0, 0.5, 0.5, 0.5), `b${i}`);
+            }
+            const balance = tree.getTreeBalance();
+            expect(balance).toBeGreaterThan(0);
+            expect(balance).toBeLessThanOrEqual(1.0);
+        });
+    });
 });

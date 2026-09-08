@@ -110,8 +110,8 @@ describe('P1 Performance Refactor Regression Tests', () => {
 
     describe('Hash determinism for canonical values', () => {
         test('Color hash is deterministic and stable', () => {
-            const a = Color.fromHSL(0.5, 0.5, 0.5, new Color());
-            const b = Color.fromHSL(0.5, 0.5, 0.5, new Color());
+            const a = Color.fromHSL(0.5, 0.5, 0.5, 1);
+            const b = Color.fromHSL(0.5, 0.5, 0.5, 1);
             expect(a.getHashCode()).toBe(b.getHashCode());
         });
 

@@ -8,6 +8,8 @@ export type { SceneRuntimeKernelOptions } from './scene-runtime-kernel';
 export { SceneRuntimeKernel } from './scene-runtime-kernel';
 export { SceneRuntimeFacade } from './scene-runtime-facade';
 export { SceneSnapshotFacade } from './scene-snapshot-facade';
+export type { SceneFogState, SceneFogMode } from './fog-state';
+export { DEFAULT_SCENE_FOG_STATE, resolveSceneFogState } from './fog-state';
 export type {
     AnimationStreamingBridgeOptions,
     AnimationStreamingBridgeWorld,

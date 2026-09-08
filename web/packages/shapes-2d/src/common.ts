@@ -1,5 +1,5 @@
 import type { IVec2Like } from '@axrone/numeric';
-import { GEOMETRIC_EPSILON } from '@axrone/numeric';
+import { GEOMETRIC_EPSILON, clamp, clamp01 } from "@axrone/numeric";
 import { Fnv1a32 } from '@axrone/hash';
 import type {
     GradientSpread,
@@ -18,11 +18,6 @@ export const DEFAULT_MAX_CURVE_SEGMENTS = 128;
 export const DEFAULT_GRADIENT_LOOKUP_SIZE = 256;
 export const DEFAULT_REGISTRY_MAX_SHAPES = 2048;
 export const DEFAULT_REGISTRY_MAX_COMPILED = 4096;
-
-export const clamp = (value: number, min: number, max: number): number =>
-    value < min ? min : value > max ? max : value;
-
-export const clamp01 = (value: number): number => clamp(value, 0, 1);
 
 export const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);

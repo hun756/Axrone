@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Color, floatEquals, Mat2, Mat4, Vec2 } from '../../src';
+import { Color, encodeValue, floatEquals, Mat2, Mat4, Vec2, Vec3, Vec4 } from '../../src';
 
 describe('P0 regression: Mat4.lookAt', () => {
     it('places eye at the origin of camera space', () => {
@@ -159,5 +159,52 @@ describe('P0 regression: Color.SILVER', () => {
         const lightGray = Color.LIGHT_GRAY;
         const same = floatEquals(silver.r, lightGray.r) && floatEquals(silver.g, lightGray.g) && floatEquals(silver.b, lightGray.b);
         expect(same).toBe(false);
+    });
+});
+
+describe('P0 regression: Vec3/Vec4.slerp antiparallel', () => {
+    it('Vec3.slerp handles antiparallel vectors without NaN', () => {
+        const a = new Vec3(1, 0, 0);
+        const b = new Vec3(-2, 0, 0);
+        const r = Vec3.slerp(a, b, 0.5);
+        expect(Number.isFinite(r.x)).toBe(true);
+        expect(Number.isFinite(r.y)).toBe(true);
+        expect(Number.isFinite(r.z)).toBe(true);
+    });
+
+    it('Vec4.slerp handles antiparallel vectors without NaN', () => {
+        const a = new Vec4(1, 0, 0, 0);
+        const b = new Vec4(-2, 0, 0, 0);
+        const r = Vec4.slerp(a, b, 0.5);
+        expect(Number.isFinite(r.x)).toBe(true);
+        expect(Number.isFinite(r.y)).toBe(true);
+        expect(Number.isFinite(r.z)).toBe(true);
+        expect(Number.isFinite(r.w)).toBe(true);
+    });
+});
+
+describe('P0 regression: Mat4.orthographic validation', () => {
+    it('throws when left equals right', () => {
+        expect(() => Mat4.orthographic(0, 0, -1, 1, -1, 1)).toThrow(/Left and right planes cannot be equal/);
+    });
+
+    it('throws when bottom equals top', () => {
+        expect(() => Mat4.orthographic(-1, 1, 0, 0, -1, 1)).toThrow(/Bottom and top planes cannot be equal/);
+    });
+});
+
+describe('P0 regression: encodeValue cycle detection', () => {
+    it('detects circular references', () => {
+        const obj: any = { a: 1 };
+        obj.self = obj;
+        expect(() => encodeValue(obj)).toThrow(/circular reference detected/);
+    });
+
+    it('respects depth limit', () => {
+        let obj: any = { value: 0 };
+        for (let i = 0; i < 150; i++) {
+            obj = { nested: obj };
+        }
+        expect(() => encodeValue(obj)).toThrow(/maximum depth/);
     });
 });

@@ -98,17 +98,13 @@ export const stableStringify = (value: unknown, seen = new WeakSet<object>()): s
 
     if (value instanceof ArrayBuffer || isTypedArrayView(value)) {
         const bytes = getBytes(value as ArrayBuffer | ArrayBufferView);
-        let result = '[';
+        const hexParts: string[] = new Array(bytes.length);
 
         for (let index = 0; index < bytes.length; index += 1) {
-            if (index > 0) {
-                result += ',';
-            }
-
-            result += bytes[index]!.toString(16).padStart(2, '0');
+            hexParts[index] = bytes[index]!.toString(16).padStart(2, '0');
         }
 
-        return `${Object.prototype.toString.call(value)}:${result}]`;
+        return `${Object.prototype.toString.call(value)}:[${hexParts.join(',')}]`;
     }
 
     if (Array.isArray(value)) {

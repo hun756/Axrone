@@ -1,5 +1,7 @@
+import { clamp } from '@axrone/numeric';
 import { FontLoadError } from '../errors';
 import type { DynamicFontRuntimeInfo, FontStyle, FontWeight } from '../types';
+import { normalizeWeight } from '../runtime/internals';
 
 export const METRIC_EM_SIZE = 1000;
 const MIN_RASTER_SIZE = 8;
@@ -9,10 +11,7 @@ export type CanvasLike = HTMLCanvasElement | OffscreenCanvas;
 export type CanvasRenderingContext2DLike = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 export const normalizeWeightToken = (weight: FontWeight | undefined): string => {
-    if (weight === undefined) {
-        return '400';
-    }
-    return String(weight);
+    return String(normalizeWeight(weight));
 };
 
 export const normalizeStyleToken = (style: FontStyle | undefined): string => style ?? 'normal';
@@ -57,7 +56,7 @@ export const getBoundingHeight = (metrics: TextMetrics, fallbackSize: number): n
 };
 
 export const quantizeRasterSize = (fontSize: number): number =>
-    Math.max(MIN_RASTER_SIZE, Math.min(MAX_RASTER_SIZE, Math.round(fontSize)));
+    clamp(Math.round(fontSize), MIN_RASTER_SIZE, MAX_RASTER_SIZE);
 
 export const quoteFontFamilyToken = (family: string): string => {
     const trimmed = family.trim();

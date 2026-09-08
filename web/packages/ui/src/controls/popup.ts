@@ -1,3 +1,4 @@
+import { clamp } from '@axrone/numeric';
 import type { UIRuntime } from '../runtime';
 import type { LayoutBox, WidgetId } from '../types';
 
@@ -242,8 +243,8 @@ export const createPopupManager = (runtime: UIRuntime): PopupManager => {
 
         // Clamp to root bounds so the popup is never partially off-screen
         // when neither the preferred nor the flipped position fits entirely.
-        const clampedLeft = Math.max(rootBox.x, Math.min(left, rootBox.x + rootBox.width - popupWidth));
-        const clampedTop = Math.max(rootBox.y, Math.min(top, rootBox.y + rootBox.height - popupHeight));
+        const clampedLeft = clamp(left, rootBox.x, rootBox.x + rootBox.width - popupWidth);
+        const clampedTop = clamp(top, rootBox.y, rootBox.y + rootBox.height - popupHeight);
 
         runtime.updateWidget(popupWidget, {
             layout: {

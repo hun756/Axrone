@@ -1,3 +1,5 @@
+import { clamp } from '@axrone/numeric';
+import { isPlainObject, deepFreeze } from '@axrone/utility';
 import { InvalidUIAssetError } from '../errors';
 import type { UICanvasConfig, UICanvasScaleMode, UIAsset, UISafeAreaInset } from '../types/ui-asset';
 import type { WidgetSerializableKey } from '../types/foundation';
@@ -12,10 +14,6 @@ const VALID_SCALE_MODES: ReadonlySet<UICanvasScaleMode> = new Set<UICanvasScaleM
 ]);
 
 const CURRENT_ASSET_VERSION = 1;
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function requireString(obj: Record<string, unknown>, key: string, context: string): string {
     const value = obj[key];
@@ -71,7 +69,7 @@ function parseCanvasConfig(value: unknown, context: string): UICanvasConfig {
     }
     const rawBias = value['matchBias'];
     const matchBias = typeof rawBias === 'number' && Number.isFinite(rawBias)
-        ? Math.max(0, Math.min(1, rawBias))
+        ? clamp(rawBias, 0, 1)
         : 0.5;
     const safeAreaInset = parseSafeAreaInset(value['safeAreaInset'], `${context}.canvas`);
 
@@ -110,6 +108,7 @@ function parseWidgetSnapshot(value: unknown, context: string): WidgetSnapshot {
         text: isPlainObject(value['text']) ? (value['text'] as unknown as WidgetSnapshot['text']) : undefined,
         image: isPlainObject(value['image']) ? (value['image'] as unknown as WidgetSnapshot['image']) : undefined,
         focus: isPlainObject(value['focus']) ? (value['focus'] as WidgetSnapshot['focus']) : undefined,
+        material: isPlainObject(value['material']) ? deepFreeze({ ...value['material'] }) as Record<string, unknown> : undefined,
         children,
     } as WidgetSnapshot;
 }

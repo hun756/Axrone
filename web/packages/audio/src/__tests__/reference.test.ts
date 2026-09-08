@@ -45,6 +45,27 @@ describe('reference — MASTER_AUDIO_BUS_ID', () => {
     });
 });
 
+describe('reference — normalizeAudioBusId is case-insensitive', () => {
+    it('resolves the Editor-authored "Master" default to the pre-created master bus', () => {
+        expect(normalizeAudioBusId('Master')).toBe(MASTER_AUDIO_BUS_ID);
+    });
+
+    it('case-folds after trimming', () => {
+        expect(normalizeAudioBusId('  MiXeD-Case  ')).toBe('mixed-case');
+    });
+
+    it('maps every casing of a name onto one bus identity', () => {
+        expect(normalizeAudioBusId('SFX')).toBe(normalizeAudioBusId('sfx'));
+        expect(normalizeAudioBusId('Music')).toBe(normalizeAudioBusId('MUSIC'));
+    });
+
+    it('leaves non-bus identifiers case-sensitive', () => {
+        expect(normalizeAudioSourceId('Laser')).not.toBe(normalizeAudioSourceId('laser'));
+        expect(normalizeAudioClipId('Click')).not.toBe(normalizeAudioClipId('click'));
+        expect(normalizeAudioListenerId('Main')).not.toBe(normalizeAudioListenerId('main'));
+    });
+});
+
 describe('reference — normalize identifier helpers', () => {
     const normalizers = [
         { name: 'normalizeAudioBusId', fn: normalizeAudioBusId },

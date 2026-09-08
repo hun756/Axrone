@@ -15,6 +15,8 @@ export interface IVec2Like {
 }
 
 export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
+    private static _hasher = new Fnv1a32();
+
     constructor(
         public x: number = 0,
         public y: number = 0
@@ -34,7 +36,9 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         return new Vec2(v.x, v.y);
     }
 
-    static fromArray(arr: ArrayLike<number>, offset: number = 0): Vec2 {
+    static fromArray(arr: ArrayLike<number>, offset?: number): Vec2;
+    static fromArray<V extends IVec2Like>(arr: ArrayLike<number>, offset: number, out: V): V;
+    static fromArray<V extends IVec2Like>(arr: ArrayLike<number>, offset: number = 0, out?: V): Vec2 | V {
         if (offset < 0) {
             throw new RangeError('Offset cannot be negative');
         }
@@ -45,7 +49,16 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
             );
         }
 
-        return new Vec2(Number(arr[offset]), Number(arr[offset + 1]));
+        const x = Number(arr[offset]);
+        const y = Number(arr[offset + 1]);
+
+        if (out) {
+            out.x = x;
+            out.y = y;
+            return out;
+        }
+
+        return new Vec2(x, y);
     }
 
     static create(x: number = 0, y: number = 0): Vec2 {
@@ -72,7 +85,7 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     }
 
     getHashCode(): number {
-        return new Fnv1a32().updateF32(this.x).updateF32(this.y).digest();
+        return Vec2._hasher.reset().updateF32(this.x).updateF32(this.y).digest();
     }
 
     hashInto<H extends HashValue = any>(hasher: IHasher<H>): void {
@@ -181,6 +194,24 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         }
     }
 
+    static divideSafe<T extends IVec2Like, U extends IVec2Like, V extends IVec2Like>(
+        a: Readonly<T>,
+        b: Readonly<U>,
+        out?: V,
+        defaultValue: number = 0
+    ): V {
+        if (out) {
+            out.x = Math.abs(b.x) < EPSILON ? defaultValue : a.x / b.x;
+            out.y = Math.abs(b.y) < EPSILON ? defaultValue : a.y / b.y;
+            return out;
+        } else {
+            return {
+                x: Math.abs(b.x) < EPSILON ? defaultValue : a.x / b.x,
+                y: Math.abs(b.y) < EPSILON ? defaultValue : a.y / b.y,
+            } as V;
+        }
+    }
+
     static divideScalar<T extends IVec2Like, V extends IVec2Like>(
         a: Readonly<T>,
         b: number,
@@ -201,11 +232,14 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
 
     static negate<T extends IVec2Like, V extends IVec2Like>(a: Readonly<T>, out?: V): V {
         if (out) {
-            out.x = -a.x;
-            out.y = -a.y;
+            out.x = a.x === 0 ? 0 : -a.x;
+            out.y = a.y === 0 ? 0 : -a.y;
             return out;
         } else {
-            return { x: -a.x, y: -a.y } as V;
+            return {
+                x: a.x === 0 ? 0 : -a.x,
+                y: a.y === 0 ? 0 : -a.y,
+            } as V;
         }
     }
 
@@ -226,10 +260,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
     ): V {
         const vx = v.x;
         const vy = v.y;
-
-        if (Math.abs(vx) < EPSILON || Math.abs(vy) < EPSILON) {
-            throw new Error('Inversion of zero or near-zero value');
-        }
 
         if (out) {
             out.x = Math.abs(vx) < EPSILON ? defaultValue : 1 / vx;
@@ -283,6 +313,30 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
         const length = Math.sqrt(v.x * v.x + v.y * v.y);
         if (length < EPSILON) {
             throw new Error('Cannot normalize a zero-length vector');
+        }
+
+        if (out) {
+            out.x = v.x / length;
+            out.y = v.y / length;
+            return out;
+        } else {
+            return { x: v.x / length, y: v.y / length } as V;
+        }
+    }
+
+    static normalizeSafe<T extends IVec2Like, V extends IVec2Like>(
+        v: Readonly<T>,
+        out?: V
+    ): V {
+        const length = Math.sqrt(v.x * v.x + v.y * v.y);
+        if (length < EPSILON) {
+            if (out) {
+                out.x = 0;
+                out.y = 0;
+                return out;
+            } else {
+                return { x: 0, y: 0 } as V;
+            }
         }
 
         if (out) {
@@ -673,19 +727,6 @@ export class Vec2 implements IVec2Like, ICloneable<Vec2>, Equatable {
                 x: Math.cos(angle) * scale,
                 y: Math.sin(angle) * scale,
             } as V;
-        }
-    }
-
-    static randomNormal<T extends IVec2Like, V extends IVec2Like>(scale: number = 1, out?: V): V {
-        const x = sampleStandardNormal() * scale;
-        const y = sampleStandardNormal() * scale;
-
-        if (out) {
-            out.x = x;
-            out.y = y;
-            return out;
-        } else {
-            return { x, y } as V;
         }
     }
 

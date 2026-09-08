@@ -133,7 +133,10 @@ describe('RayCast3D', () => {
             };
             r.setHitResult(hit);
             expect(r.hasHit).toBe(true);
-            expect(r.hitPoint).toBeDefined();
+            expect(r.hitPoint).not.toBeNull();
+            expect(r.hitPoint!.x).toBeCloseTo(1, 5);
+            expect(r.hitPoint!.y).toBeCloseTo(2, 5);
+            expect(r.hitPoint!.z).toBeCloseTo(3, 5);
             expect(r.hitDistance).toBe(5);
             expect(r.hitActorId).toBe('target');
         });

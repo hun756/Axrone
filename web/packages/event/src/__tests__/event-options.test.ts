@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_OPTIONS, MEMORY_USAGE_SYMBOLS, type EventOptions } from '@axrone/event';
+import { DEFAULT_OPTIONS, type EventOptions } from '@axrone/event';
 
 describe('EventEmitter - Event Options', () => {
     describe('EventOptions Interface', () => {
@@ -18,7 +18,6 @@ describe('EventEmitter - Event Options', () => {
                 captureRejections: false,
                 maxListeners: 20,
                 weakReferences: true,
-                immediateDispatch: false,
                 concurrencyLimit: 8,
                 bufferSize: 500,
                 gcIntervalMs: 30000,
@@ -26,7 +25,6 @@ describe('EventEmitter - Event Options', () => {
             expect(completeOptions.captureRejections).toBe(false);
             expect(completeOptions.maxListeners).toBe(20);
             expect(completeOptions.weakReferences).toBe(true);
-            expect(completeOptions.immediateDispatch).toBe(false);
             expect(completeOptions.concurrencyLimit).toBe(8);
             expect(completeOptions.bufferSize).toBe(500);
             expect(completeOptions.gcIntervalMs).toBe(30000);
@@ -46,7 +44,6 @@ describe('EventEmitter - Event Options', () => {
             expect(options.maxListeners).toBe(10);
             expect(options.captureRejections).toBeUndefined();
             expect(options.weakReferences).toBeUndefined();
-            expect(options.immediateDispatch).toBeUndefined();
             expect(options.concurrencyLimit).toBeUndefined();
             expect(options.bufferSize).toBeUndefined();
             expect(options.gcIntervalMs).toBeUndefined();
@@ -57,7 +54,6 @@ describe('EventEmitter - Event Options', () => {
                 captureRejections: true,
                 maxListeners: 25,
                 weakReferences: false,
-                immediateDispatch: true,
                 concurrencyLimit: Infinity,
                 bufferSize: 1000,
                 gcIntervalMs: 60000,
@@ -66,7 +62,6 @@ describe('EventEmitter - Event Options', () => {
             expect(typeof options.captureRejections).toBe('boolean');
             expect(typeof options.maxListeners).toBe('number');
             expect(typeof options.weakReferences).toBe('boolean');
-            expect(typeof options.immediateDispatch).toBe('boolean');
             expect(typeof options.concurrencyLimit).toBe('number');
             expect(typeof options.bufferSize).toBe('number');
             expect(typeof options.gcIntervalMs).toBe('number');
@@ -93,7 +88,6 @@ describe('EventEmitter - Event Options', () => {
                 if ('maxListeners' in obj && typeof obj.maxListeners !== 'number') return false;
                 if ('weakReferences' in obj && typeof obj.weakReferences !== 'boolean')
                     return false;
-                if ('immediateDispatch' in obj && typeof obj.immediateDispatch !== 'boolean')
                     return false;
                 if ('concurrencyLimit' in obj && typeof obj.concurrencyLimit !== 'number')
                     return false;
@@ -115,7 +109,6 @@ describe('DEFAULT_OPTIONS Constant', () => {
         expect(DEFAULT_OPTIONS.captureRejections).toBe(false);
         expect(DEFAULT_OPTIONS.maxListeners).toBe(10);
         expect(DEFAULT_OPTIONS.weakReferences).toBe(false);
-        expect(DEFAULT_OPTIONS.immediateDispatch).toBe(true);
         expect(DEFAULT_OPTIONS.concurrencyLimit).toBe(Infinity);
         expect(DEFAULT_OPTIONS.bufferSize).toBe(1000);
         expect(DEFAULT_OPTIONS.gcIntervalMs).toBe(60000);
@@ -126,7 +119,6 @@ describe('DEFAULT_OPTIONS Constant', () => {
             'captureRejections',
             'maxListeners',
             'weakReferences',
-            'immediateDispatch',
             'concurrencyLimit',
             'bufferSize',
             'gcIntervalMs',
@@ -148,7 +140,6 @@ describe('DEFAULT_OPTIONS Constant', () => {
         expect(DEFAULT_OPTIONS.captureRejections).toBe(false);
         expect(DEFAULT_OPTIONS.weakReferences).toBe(false);
 
-        expect(DEFAULT_OPTIONS.immediateDispatch).toBe(true);
         expect(DEFAULT_OPTIONS.concurrencyLimit).toBe(Infinity);
 
         expect(DEFAULT_OPTIONS.maxListeners).toBeGreaterThan(0);
@@ -160,7 +151,6 @@ describe('DEFAULT_OPTIONS Constant', () => {
         expect(typeof DEFAULT_OPTIONS.captureRejections).toBe('boolean');
         expect(typeof DEFAULT_OPTIONS.maxListeners).toBe('number');
         expect(typeof DEFAULT_OPTIONS.weakReferences).toBe('boolean');
-        expect(typeof DEFAULT_OPTIONS.immediateDispatch).toBe('boolean');
         expect(typeof DEFAULT_OPTIONS.concurrencyLimit).toBe('number');
         expect(typeof DEFAULT_OPTIONS.bufferSize).toBe('number');
         expect(typeof DEFAULT_OPTIONS.gcIntervalMs).toBe('number');
@@ -178,8 +168,6 @@ describe('DEFAULT_OPTIONS Constant', () => {
                     userOptions.captureRejections ?? DEFAULT_OPTIONS.captureRejections,
                 maxListeners: userOptions.maxListeners ?? DEFAULT_OPTIONS.maxListeners,
                 weakReferences: userOptions.weakReferences ?? DEFAULT_OPTIONS.weakReferences,
-                immediateDispatch:
-                    userOptions.immediateDispatch ?? DEFAULT_OPTIONS.immediateDispatch,
                 concurrencyLimit: userOptions.concurrencyLimit ?? DEFAULT_OPTIONS.concurrencyLimit,
                 bufferSize: userOptions.bufferSize ?? DEFAULT_OPTIONS.bufferSize,
                 gcIntervalMs: userOptions.gcIntervalMs ?? DEFAULT_OPTIONS.gcIntervalMs,
@@ -192,105 +180,5 @@ describe('DEFAULT_OPTIONS Constant', () => {
         expect(merged.maxListeners).toBe(20);
         expect(merged.captureRejections).toBe(DEFAULT_OPTIONS.captureRejections);
         expect(merged.bufferSize).toBe(DEFAULT_OPTIONS.bufferSize);
-    });
-});
-
-describe('MEMORY_USAGE_SYMBOLS Constant', () => {
-    it('should contain correct symbol keys', () => {
-        const expectedKeys = [
-            'staticSubscriptions',
-            'subscriptionMaps',
-            'priorityQueues',
-            'eventBuffer',
-        ];
-
-        expectedKeys.forEach((key) => {
-            expect(key in MEMORY_USAGE_SYMBOLS).toBe(true);
-            expect(typeof MEMORY_USAGE_SYMBOLS[key as keyof typeof MEMORY_USAGE_SYMBOLS]).toBe(
-                'symbol'
-            );
-        });
-    });
-
-    it('should have unique symbols', () => {
-        const symbols = Object.values(MEMORY_USAGE_SYMBOLS);
-        const symbolSet = new Set(symbols);
-
-        expect(symbols.length).toBe(symbolSet.size);
-        expect(symbols.length).toBe(4);
-    });
-
-    it('should have correct descriptions for each symbol', () => {
-        expect(MEMORY_USAGE_SYMBOLS.staticSubscriptions.description).toBe('staticSubscriptions');
-        expect(MEMORY_USAGE_SYMBOLS.subscriptionMaps.description).toBe('subscriptionMaps');
-        expect(MEMORY_USAGE_SYMBOLS.priorityQueues.description).toBe('priorityQueues');
-        expect(MEMORY_USAGE_SYMBOLS.eventBuffer.description).toBe('eventBuffer');
-    });
-
-    it('should be immutable (as const)', () => {
-        expect(() => {
-            (MEMORY_USAGE_SYMBOLS as any).newSymbol = Symbol('new');
-        }).toThrow();
-    });
-
-    it('should be usable as object keys', () => {
-        const memoryTracker = {
-            [MEMORY_USAGE_SYMBOLS.staticSubscriptions]: 1024,
-            [MEMORY_USAGE_SYMBOLS.subscriptionMaps]: 2048,
-            [MEMORY_USAGE_SYMBOLS.priorityQueues]: 512,
-            [MEMORY_USAGE_SYMBOLS.eventBuffer]: 4096,
-        };
-
-        expect(memoryTracker[MEMORY_USAGE_SYMBOLS.staticSubscriptions]).toBe(1024);
-        expect(memoryTracker[MEMORY_USAGE_SYMBOLS.subscriptionMaps]).toBe(2048);
-        expect(memoryTracker[MEMORY_USAGE_SYMBOLS.priorityQueues]).toBe(512);
-        expect(memoryTracker[MEMORY_USAGE_SYMBOLS.eventBuffer]).toBe(4096);
-    });
-
-    it('should provide collision-free property keys', () => {
-        const mixedObject = {
-            staticSubscriptions: 'string value',
-            [MEMORY_USAGE_SYMBOLS.staticSubscriptions]: 'symbol value',
-        };
-
-        expect(mixedObject.staticSubscriptions).toBe('string value');
-        expect(mixedObject[MEMORY_USAGE_SYMBOLS.staticSubscriptions]).toBe('symbol value');
-
-        expect(Object.keys(mixedObject)).toContain('staticSubscriptions');
-        expect(Object.getOwnPropertySymbols(mixedObject)).toContain(
-            MEMORY_USAGE_SYMBOLS.staticSubscriptions
-        );
-    });
-
-    it('should be usable for memory usage tracking', () => {
-        class MemoryTracker {
-            private usage: Record<symbol, number> = {};
-
-            track(component: symbol, bytes: number): void {
-                this.usage[component] = bytes;
-            }
-
-            getUsage(component: symbol): number {
-                return this.usage[component] || 0;
-            }
-
-            getTotalUsage(): number {
-                return Object.getOwnPropertySymbols(this.usage).reduce(
-                    (sum: number, symbol: symbol) => sum + (this.usage[symbol] || 0),
-                    0
-                );
-            }
-        }
-
-        const tracker = new MemoryTracker();
-
-        tracker.track(MEMORY_USAGE_SYMBOLS.staticSubscriptions, 2048);
-        tracker.track(MEMORY_USAGE_SYMBOLS.subscriptionMaps, 4096);
-        tracker.track(MEMORY_USAGE_SYMBOLS.priorityQueues, 1024);
-        tracker.track(MEMORY_USAGE_SYMBOLS.eventBuffer, 8192);
-
-        expect(tracker.getUsage(MEMORY_USAGE_SYMBOLS.staticSubscriptions)).toBe(2048);
-        expect(tracker.getUsage(MEMORY_USAGE_SYMBOLS.subscriptionMaps)).toBe(4096);
-        expect(tracker.getTotalUsage()).toBe(15360);
     });
 });

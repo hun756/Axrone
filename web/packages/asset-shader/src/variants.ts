@@ -136,6 +136,8 @@ export interface BuildShaderVariantOptions {
     readonly preserveLineMarkers?: boolean;
 }
 
+const variantCache = new WeakMap<RenderShaderEffectDefinition, Map<string, ShaderVariant>>();
+
 /** Compile a single variant of an effect for a given keyword selection. */
 export const buildShaderVariant = (
     effect: RenderShaderEffectDefinition,
@@ -143,6 +145,16 @@ export const buildShaderVariant = (
 ): ShaderVariant => {
     const keywords = effect.keywords ?? [];
     const selection = options.selection ?? defaultShaderKeywordSelection(keywords);
+    const key = `${shaderVariantKey(selection)}|lm=${options.preserveLineMarkers ? '1' : '0'}`;
+
+    let cacheByKey = variantCache.get(effect);
+    if (cacheByKey) {
+        const cached = cacheByKey.get(key);
+        if (cached) {
+            return cached;
+        }
+    }
+
     const defines = selectionToShaderDefines(keywords, selection);
     const sink = createDiagnosticSink();
     const compiled: CompiledRenderShaderEffect = compileRenderShaderEffect(effect);
@@ -169,9 +181,9 @@ export const buildShaderVariant = (
         preserveLineMarkers: options.preserveLineMarkers,
     });
 
-    return {
+    const variant: ShaderVariant = {
         id: effect.id,
-        key: shaderVariantKey(selection),
+        key,
         selection,
         defines,
         vertexSource: vertexFinal.code,
@@ -179,6 +191,14 @@ export const buildShaderVariant = (
         uniformNames: compiled.uniformNames,
         diagnostics: sink.diagnostics,
     };
+
+    if (!cacheByKey) {
+        cacheByKey = new Map();
+        variantCache.set(effect, cacheByKey);
+    }
+    cacheByKey.set(key, variant);
+
+    return variant;
 };
 
 /** Compile every variant in the effect's keyword space. */

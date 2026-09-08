@@ -151,17 +151,16 @@ export class WebGLGeometry implements IGeometry {
                 return this;
             },
             addVertexBuffer: (buffer: IVertexBuffer) => {
-                console.warn('addVertexBuffer not fully implemented');
+                throw new MeshError('addVertexBuffer is not yet implemented', MeshErrorCode.INVALID_OPERATION);
             },
             setIndexBuffer: (buffer: IIndexBuffer) => {
-                console.warn('setIndexBuffer not fully implemented');
+                throw new MeshError('setIndexBuffer is not yet implemented', MeshErrorCode.INVALID_OPERATION);
             },
             removeVertexBuffer: (buffer: IVertexBuffer): boolean => {
-                console.warn('removeVertexBuffer not fully implemented');
-                return false;
+                throw new MeshError('removeVertexBuffer is not yet implemented', MeshErrorCode.INVALID_OPERATION);
             },
             clearVertexBuffers: () => {
-                console.warn('clearVertexBuffers not fully implemented');
+                throw new MeshError('clearVertexBuffers is not yet implemented', MeshErrorCode.INVALID_OPERATION);
             },
             dispose: () => {
                 gl.deleteVertexArray(vao);

@@ -162,9 +162,17 @@ describe('PoolMetricsCollector', () => {
             expect(collector.internal.releases).toBe(0);
         });
 
-        it('snapshot throws when disabled', () => {
+        it('snapshot returns a zeroed snapshot when disabled', () => {
             const collector = new PoolMetricsCollector('test', false);
-            expect(() => collector.snapshot(100, 80, 0, 0)).toThrow(MemoryPoolError);
+            const snap = collector.snapshot(100, 80, 4096, 0.1);
+            expect(snap.allocations).toBe(0);
+            expect(snap.releases).toBe(0);
+            expect(snap.highWaterMark).toBe(0);
+            expect(snap.capacity).toBe(100);
+            expect(snap.available).toBe(80);
+            expect(snap.allocated).toBe(20);
+            expect(snap.peakMemoryUsage).toBe(4096);
+            expect(snap.utilizationRatio).toBe(0.2);
         });
 
         it('newTimer returns null', () => {

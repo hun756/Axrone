@@ -3,57 +3,35 @@ import type {
     BodyId,
     ShapeId,
     ConstraintId,
-    IslandId,
     SolverFlags,
-    IRaycastResult2D,
-    IRaycastResult3D,
-    IContactManifold2D,
-    IContactManifold3D,
+    ISingleRaycastResult2D,
 } from './primitives';
 import type {
     IPhysicsBody2D,
-    IPhysicsBody3D,
     IPhysicsBodyDef2D,
-    IPhysicsBodyDef3D,
     IShape2D,
-    IShape3D,
     ICircleShapeDef,
-    ISphereShapeDef,
     IBoxShapeDef2D,
-    IBoxShapeDef3D,
     IPolygonShapeDef,
-    IConvexHullShapeDef,
     ICapsuleShapeDef2D,
-    ICapsuleShapeDef3D,
     ISegmentShapeDef,
-    ICylinderShapeDef,
-    IConeShapeDef,
 } from './physics-body';
 import type {
     IConstraint2D,
-    IConstraint3D,
     IDistanceConstraintDef2D,
-    IDistanceConstraintDef3D,
     IRevoluteConstraintDef2D,
-    IRevoluteConstraintDef3D,
     IPrismaticConstraintDef2D,
-    IPrismaticConstraintDef3D,
     IWeldConstraintDef2D,
-    IWeldConstraintDef3D,
     IWheelConstraintDef2D,
     IMotorConstraintDef2D,
-    IMotorConstraintDef3D,
     IMouseConstraintDef2D,
     IGearConstraintDef,
     IRopeConstraintDef2D,
-    IRopeConstraintDef3D,
 } from './constraints';
 import type {
     IContactListener2D,
-    IContactListener3D,
     ICollisionFilter,
     RaycastCallback2D,
-    RaycastCallback3D,
 } from './collision';
 
 export interface IPhysicsWorldConfig {
@@ -77,17 +55,29 @@ export interface IPhysicsWorldConfig {
     readonly contactCapacity?: number;
     /** Legacy alias for `maxConstraints` used in tests */
     readonly constraintCapacity?: number;
-    readonly broadphaseType?: BroadphaseType;
     readonly enableProfiler?: boolean;
-}
-
-export const enum BroadphaseType {
-    BruteForce = 0,
-    SweepAndPrune = 1,
-    DynamicAABBTree = 2,
-    SpatialHash = 3,
-    Quadtree = 4,
-    Octree = 5,
+    /**
+     * Maximum linear velocity in metres per second (m/s).
+     * Bodies exceeding this speed are scaled down to this magnitude.
+     * Default: `PhysicsConstants.MAX_VELOCITY` (200 m/s ≈ 720 km/h).
+     * @see ADR 0004 — Physics World Unit Convention
+     */
+    readonly maxVelocity?: number;
+    /**
+     * Maximum angular velocity in radians per second (rad/s).
+     * Bodies exceeding this angular speed are clamped to this magnitude.
+     * Default: `PhysicsConstants.MAX_ANGULAR_VELOCITY` (250 rad/s).
+     * @see ADR 0004 — Physics World Unit Convention
+     */
+    readonly maxAngularVelocity?: number;
+    /**
+     * Maximum position translation per solver step in metres per step (m/step).
+     * Anti-tunneling clamp: limits how far a body can move in a single step.
+     * This is NOT a velocity limit — it operates on position delta (velocity × dt).
+     * Default: `PhysicsConstants.MAX_TRANSLATION` (2.0 m/step).
+     * @see ADR 0004 — Physics World Unit Convention
+     */
+    readonly maxTranslation?: number;
 }
 
 export interface IPhysicsWorldStatistics {
@@ -117,22 +107,6 @@ export interface IPhysicsProfiler {
     solveVelocityTime: number;
     solvePositionTime: number;
     sleepTime: number;
-}
-
-export interface IIsland2D {
-    readonly id: IslandId;
-    readonly bodies: readonly BodyId[];
-    readonly contacts: readonly IContactManifold2D[];
-    readonly constraints: readonly ConstraintId[];
-    readonly isSleeping: boolean;
-}
-
-export interface IIsland3D {
-    readonly id: IslandId;
-    readonly bodies: readonly BodyId[];
-    readonly contacts: readonly IContactManifold3D[];
-    readonly constraints: readonly ConstraintId[];
-    readonly isSleeping: boolean;
 }
 
 export interface IQueryFilter {
@@ -193,13 +167,13 @@ export interface IPhysicsWorld2D extends Disposable {
         direction: Readonly<IVec2Like>,
         maxFraction: number,
         filter?: IQueryFilter
-    ): IRaycastResult2D | null;
+    ): ISingleRaycastResult2D | null;
     rayCastAll(
         origin: Readonly<IVec2Like>,
         direction: Readonly<IVec2Like>,
         maxFraction: number,
         filter?: IQueryFilter
-    ): readonly IRaycastResult2D[];
+    ): readonly ISingleRaycastResult2D[];
 
     queryAABB(
         min: Readonly<IVec2Like>,
@@ -234,91 +208,3 @@ export interface IPhysicsWorld2D extends Disposable {
     dump(): void;
 }
 
-export interface IPhysicsWorld3D extends Disposable {
-    readonly config: Readonly<IPhysicsWorldConfig>;
-    readonly gravity: Readonly<IVec3Like>;
-
-    step(deltaTime: number, velocityIterations?: number, positionIterations?: number): void;
-
-    createBody(def: IPhysicsBodyDef3D): BodyId;
-    destroyBody(bodyId: BodyId): void;
-    getBody(bodyId: BodyId): IPhysicsBody3D | null;
-    getBodies(): ReadonlyMap<BodyId, IPhysicsBody3D>;
-
-    createSphereShape(bodyId: BodyId, def: ISphereShapeDef): ShapeId;
-    createBoxShape(bodyId: BodyId, def: IBoxShapeDef3D): ShapeId;
-    createCapsuleShape(bodyId: BodyId, def: ICapsuleShapeDef3D): ShapeId;
-    createCylinderShape(bodyId: BodyId, def: ICylinderShapeDef): ShapeId;
-    createConeShape(bodyId: BodyId, def: IConeShapeDef): ShapeId;
-    createConvexHullShape(bodyId: BodyId, def: IConvexHullShapeDef): ShapeId;
-    destroyShape(shapeId: ShapeId): void;
-    getShape(shapeId: ShapeId): IShape3D | null;
-
-    createDistanceConstraint(def: IDistanceConstraintDef3D): ConstraintId;
-    createRevoluteConstraint(def: IRevoluteConstraintDef3D): ConstraintId;
-    createPrismaticConstraint(def: IPrismaticConstraintDef3D): ConstraintId;
-    createWeldConstraint(def: IWeldConstraintDef3D): ConstraintId;
-    createMotorConstraint(def: IMotorConstraintDef3D): ConstraintId;
-    createRopeConstraint(def: IRopeConstraintDef3D): ConstraintId;
-    destroyConstraint(constraintId: ConstraintId): void;
-    getConstraint(constraintId: ConstraintId): IConstraint3D | null;
-
-    setGravity(gravity: Readonly<IVec3Like>): void;
-    getGravity(): Readonly<IVec3Like>;
-
-    setContactListener(listener: IContactListener3D | null): void;
-    setCollisionFilter(filter: ICollisionFilter | null): void;
-
-    rayCast(
-        origin: Readonly<IVec3Like>,
-        direction: Readonly<IVec3Like>,
-        maxFraction: number,
-        callback: RaycastCallback3D
-    ): void;
-    rayCastClosest(
-        origin: Readonly<IVec3Like>,
-        direction: Readonly<IVec3Like>,
-        maxFraction: number,
-        filter?: IQueryFilter
-    ): IRaycastResult3D | null;
-    rayCastAll(
-        origin: Readonly<IVec3Like>,
-        direction: Readonly<IVec3Like>,
-        maxFraction: number,
-        filter?: IQueryFilter
-    ): readonly IRaycastResult3D[];
-
-    queryAABB(
-        min: Readonly<IVec3Like>,
-        max: Readonly<IVec3Like>,
-        callback: IAABBQueryCallback
-    ): void;
-    queryAABBAll(
-        min: Readonly<IVec3Like>,
-        max: Readonly<IVec3Like>,
-        filter?: IQueryFilter
-    ): readonly ShapeId[];
-
-    queryPoint(point: Readonly<IVec3Like>, callback: IAABBQueryCallback): void;
-    queryPointAll(point: Readonly<IVec3Like>, filter?: IQueryFilter): readonly ShapeId[];
-
-    shiftOrigin(newOrigin: Readonly<IVec3Like>): void;
-    clearForces(): void;
-    wakeAllBodies(): void;
-
-    getStatistics(): IPhysicsWorldStatistics;
-    getProfiler(): IPhysicsProfiler | null;
-
-    setAutoClearForces(flag: boolean): void;
-    getAutoClearForces(): boolean;
-
-    getProxyCount(): number;
-    getTreeHeight(): number;
-    getTreeBalance(): number;
-    getTreeQuality(): number;
-
-    validate(): boolean;
-    dump(): void;
-}
-
-export type PhysicsWorld = IPhysicsWorld2D | IPhysicsWorld3D;

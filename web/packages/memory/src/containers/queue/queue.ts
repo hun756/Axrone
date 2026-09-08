@@ -2,6 +2,10 @@ import { EmptyQueueError, InvalidCapacityError } from './errors';
 import { Capacity, QueueSize } from './types';
 import { createCapacity, createQueueSize } from './utils';
 
+/**
+ * Configuration options for Queue.
+ * @stable
+ */
 export interface QueueOptions {
     readonly initialCapacity?: Capacity;
     readonly autoTrim?: boolean;
@@ -39,6 +43,10 @@ function normalizeShrinkThreshold(value?: number): number {
     return value;
 }
 
+/**
+ * Dynamic array-backed FIFO queue with optional auto-trim and growth control.
+ * @stable
+ */
 export class Queue<T> implements Iterable<T> {
     private storage: Array<T | undefined>;
     private readonly autoTrimEnabled: boolean;

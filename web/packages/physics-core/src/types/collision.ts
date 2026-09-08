@@ -2,8 +2,6 @@ import type { IVec2Like, IVec3Like } from '@axrone/numeric';
 import type {
     BodyId,
     ShapeId,
-    ContactId,
-    ManifoldId,
     Impulse,
     IContactManifold2D,
     IContactManifold3D,
@@ -99,113 +97,6 @@ export interface IContactListener3D {
     onSensorExit?(event: ISensorEvent3D): void;
 }
 
-export interface IContactEdge2D {
-    readonly contactId: ContactId;
-    readonly otherBodyId: BodyId;
-    readonly prev: IContactEdge2D | null;
-    readonly next: IContactEdge2D | null;
-}
-
-export interface IContactEdge3D {
-    readonly contactId: ContactId;
-    readonly otherBodyId: BodyId;
-    readonly prev: IContactEdge3D | null;
-    readonly next: IContactEdge3D | null;
-}
-
-export interface IContact2D {
-    readonly id: ContactId;
-    readonly manifold: IContactManifold2D;
-    readonly edgeA: IContactEdge2D;
-    readonly edgeB: IContactEdge2D;
-    readonly friction: number;
-    readonly restitution: number;
-    readonly tangentSpeed: number;
-    readonly isEnabled: boolean;
-    readonly isTouching: boolean;
-    readonly childIndexA: number;
-    readonly childIndexB: number;
-}
-
-export interface IContact3D {
-    readonly id: ContactId;
-    readonly manifold: IContactManifold3D;
-    readonly edgeA: IContactEdge3D;
-    readonly edgeB: IContactEdge3D;
-    readonly friction: number;
-    readonly restitution: number;
-    readonly rollingFriction: number;
-    readonly spinningFriction: number;
-    readonly isEnabled: boolean;
-    readonly isTouching: boolean;
-}
-
-export interface IRayInput2D {
-    readonly origin: Readonly<IVec2Like>;
-    readonly direction: Readonly<IVec2Like>;
-    readonly maxFraction: number;
-}
-
-export interface IRayInput3D {
-    readonly origin: Readonly<IVec3Like>;
-    readonly direction: Readonly<IVec3Like>;
-    readonly maxFraction: number;
-}
-
-export interface IShapeQueryInput2D {
-    readonly shapeId: ShapeId;
-    readonly transform: { position: IVec2Like; rotation: number };
-}
-
-export interface IShapeQueryInput3D {
-    readonly shapeId: ShapeId;
-    readonly transform: { position: IVec3Like; rotation: IVec3Like };
-}
-
-export interface IOverlapResult2D {
-    readonly bodyId: BodyId;
-    readonly shapeId: ShapeId;
-}
-
-export interface IOverlapResult3D {
-    readonly bodyId: BodyId;
-    readonly shapeId: ShapeId;
-}
-
-export interface IClosestPointInput2D {
-    readonly pointA: Readonly<IVec2Like>;
-    readonly pointB: Readonly<IVec2Like>;
-    readonly shapeIdA: ShapeId;
-    readonly shapeIdB: ShapeId;
-    readonly transformA: { position: IVec2Like; rotation: number };
-    readonly transformB: { position: IVec2Like; rotation: number };
-}
-
-export interface IClosestPointResult2D {
-    readonly pointA: IVec2Like;
-    readonly pointB: IVec2Like;
-    readonly normal: IVec2Like;
-    readonly distance: number;
-    readonly iterations: number;
-}
-
-export interface IClosestPointInput3D {
-    readonly pointA: Readonly<IVec3Like>;
-    readonly pointB: Readonly<IVec3Like>;
-    readonly shapeIdA: ShapeId;
-    readonly shapeIdB: ShapeId;
-    readonly transformA: { position: IVec3Like; rotation: IVec3Like };
-    readonly transformB: { position: IVec3Like; rotation: IVec3Like };
-}
-
-export interface IClosestPointResult3D {
-    readonly pointA: IVec3Like;
-    readonly pointB: IVec3Like;
-    readonly normal: IVec3Like;
-    readonly distance: number;
-    readonly iterations: number;
-}
-
 export interface ITimeOfImpactInput2D {
     readonly shapeIdA: ShapeId;
     readonly shapeIdB: ShapeId;
@@ -262,23 +153,6 @@ export interface ISimplex2D {
     readonly vertices: ISupportPoint2D[];
     readonly count: number;
 }
-
-export interface ICollisionPair {
-    readonly shapeIdA: ShapeId;
-    readonly shapeIdB: ShapeId;
-}
-
-export type CollisionCallback2D = (
-    shapeIdA: ShapeId,
-    shapeIdB: ShapeId,
-    manifold: IContactManifold2D
-) => void;
-
-export type CollisionCallback3D = (
-    shapeIdA: ShapeId,
-    shapeIdB: ShapeId,
-    manifold: IContactManifold3D
-) => void;
 
 export type RaycastCallback2D = (
     shapeId: ShapeId,

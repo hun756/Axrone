@@ -1,3 +1,4 @@
+/** @stable */
 export abstract class QueueError extends Error {
     abstract readonly code: string;
 
@@ -10,6 +11,7 @@ export abstract class QueueError extends Error {
     }
 }
 
+/** @stable */
 export class EmptyQueueError extends QueueError {
     readonly code = 'EMPTY_QUEUE' as const;
 
@@ -18,6 +20,7 @@ export class EmptyQueueError extends QueueError {
     }
 }
 
+/** @stable */
 export class InvalidCapacityError extends QueueError {
     readonly code = 'INVALID_CAPACITY' as const;
 

@@ -1,7 +1,8 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { EPSILON } from './common';
+import { EPSILON, ensureFinite } from './common';
 import { clamp, clamp01 } from './clamp';
 import { Fnv1a32, IHasher, HashValue, IHashable } from '@axrone/hash';
+import { rand } from '@axrone/random';
 
 export interface IColorLike {
     r: number;
@@ -156,12 +157,20 @@ const D65_Y = 1.0;
 const D65_Z = 1.08883;
 
 export class Color implements IColorLike, ICloneable<Color>, Equatable {
+    private static _hasher = new Fnv1a32();
+
     constructor(
         public r: number = 0,
         public g: number = 0,
         public b: number = 0,
         public a: number = 1
     ) {
+        // Validate inputs to catch NaN/Infinity early
+        ensureFinite(r, 'Color.r');
+        ensureFinite(g, 'Color.g');
+        ensureFinite(b, 'Color.b');
+        ensureFinite(a, 'Color.a');
+
         this.r = clamp01(r);
         this.g = clamp01(g);
         this.b = clamp01(b);
@@ -278,11 +287,19 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         );
     }
 
+    /**
+     * Creates a Color from RGB values in the 0-1 range.
+     * For 0-255 range, use fromRGBBytes instead.
+     */
     static fromRGB(r: number, g: number, b: number, a: number = 1): Color {
-        if (r > 1 || g > 1 || b > 1) {
-            return new Color(r / 255, g / 255, b / 255, a > 1 ? a / 255 : a);
-        }
         return new Color(r, g, b, a);
+    }
+
+    /**
+     * Creates a Color from RGB values in the 0-255 range.
+     */
+    static fromRGBBytes(r: number, g: number, b: number, a: number = 255): Color {
+        return new Color(r / 255, g / 255, b / 255, a / 255);
     }
 
     static fromHSL(h: number, s: number, l: number, a: number = 1): Color {
@@ -411,7 +428,8 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     }
 
     getHashCode(): number {
-        return new Fnv1a32()
+        return Color._hasher
+            .reset()
             .updateF32(this.r)
             .updateF32(this.g)
             .updateF32(this.b)
@@ -911,6 +929,14 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         }
     }
 
+    /**
+     * Converts a color to grayscale using Rec.601 coefficients (0.299R + 0.587G + 0.114B)
+     * on **gamma-encoded sRGB** values. Use this for display-referred operations like
+     * desaturation effects or rendering pipeline conversions.
+     *
+     * For WCAG contrast calculations or any physically-correct luminance measurement,
+     * use {@link luminance} instead, which linearizes the color first.
+     */
     static grayscale<T extends IColorLike, U extends IColorLike>(color: Readonly<T>, out?: U): U {
         const gray = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
 
@@ -936,6 +962,56 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         mode: ColorBlendMode,
         out?: V
     ): V {
+        // HSL blend modes require full-color conversion
+        if (
+            mode === ColorBlendMode.HUE ||
+            mode === ColorBlendMode.SATURATION ||
+            mode === ColorBlendMode.COLOR ||
+            mode === ColorBlendMode.LUMINOSITY
+        ) {
+            const baseHSL = base instanceof Color ? base.toHSL() : Color.from(base).toHSL();
+            const overlayHSL =
+                overlay instanceof Color ? overlay.toHSL() : Color.from(overlay).toHSL();
+
+            let h: number, s: number, l: number;
+
+            switch (mode) {
+                case ColorBlendMode.HUE:
+                    h = overlayHSL.h;
+                    s = baseHSL.s;
+                    l = baseHSL.l;
+                    break;
+                case ColorBlendMode.SATURATION:
+                    h = baseHSL.h;
+                    s = overlayHSL.s;
+                    l = baseHSL.l;
+                    break;
+                case ColorBlendMode.COLOR:
+                    h = overlayHSL.h;
+                    s = overlayHSL.s;
+                    l = baseHSL.l;
+                    break;
+                case ColorBlendMode.LUMINOSITY:
+                    h = baseHSL.h;
+                    s = baseHSL.s;
+                    l = overlayHSL.l;
+                    break;
+            }
+
+            const result = Color.fromHSL(h!, s!, l!, overlayHSL.a);
+
+            if (out) {
+                out.r = result.r;
+                out.g = result.g;
+                out.b = result.b;
+                out.a = result.a;
+                return out;
+            } else {
+                return { r: result.r, g: result.g, b: result.b, a: result.a } as V;
+            }
+        }
+
+        // Per-channel blend modes
         const blendFunc = BLEND_FUNCTIONS[mode];
         if (!blendFunc) {
             throw new Error(`Unsupported blend mode: ${mode}`);
@@ -957,6 +1033,14 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
         }
     }
 
+    /**
+     * Computes the **photometric luminance** using Rec.709 coefficients (0.2126R + 0.7152G + 0.0722B)
+     * on **linearized sRGB** values. This is the correct luminance for WCAG contrast ratio
+     * calculations and any physically-meaningful brightness measurement.
+     *
+     * For display-referred grayscale conversion, use {@link grayscale} instead, which
+     * works on gamma-encoded values directly.
+     */
     static luminance<T extends IColorLike>(color: Readonly<T>): number {
         const r = _sRGBToLinear(color.r);
         const g = _sRGBToLinear(color.g);
@@ -1075,27 +1159,27 @@ export class Color implements IColorLike, ICloneable<Color>, Equatable {
     }
 
     static random(alpha: number = 1): Color {
-        return new Color(Math.random(), Math.random(), Math.random(), alpha);
+        return new Color(rand.float(), rand.float(), rand.float(), alpha);
     }
 
     static randomHue(saturation: number = 1, lightness: number = 0.5, alpha: number = 1): Color {
-        return Color.fromHSL(Math.random() * 360, saturation, lightness, alpha);
+        return Color.fromHSL(rand.float() * 360, saturation, lightness, alpha);
     }
 
     static randomPastel(alpha: number = 1): Color {
         return Color.fromHSL(
-            Math.random() * 360,
-            0.3 + Math.random() * 0.4,
-            0.7 + Math.random() * 0.3,
+            rand.float() * 360,
+            0.3 + rand.float() * 0.4,
+            0.7 + rand.float() * 0.3,
             alpha
         );
     }
 
     static randomVibrant(alpha: number = 1): Color {
         return Color.fromHSL(
-            Math.random() * 360,
-            0.8 + Math.random() * 0.2,
-            0.4 + Math.random() * 0.3,
+            rand.float() * 360,
+            0.8 + rand.float() * 0.2,
+            0.4 + rand.float() * 0.3,
             alpha
         );
     }
@@ -1201,10 +1285,11 @@ const BLEND_FUNCTIONS: Readonly<Record<ColorBlendMode, BlendFn>> = Object.freeze
     [ColorBlendMode.LIGHTEN]: (a, b) => Math.max(a, b),
     [ColorBlendMode.DIFFERENCE]: (a, b) => Math.abs(a - b),
     [ColorBlendMode.EXCLUSION]: (a, b) => a + b - 2 * a * b,
-    [ColorBlendMode.HUE]: (_a, b) => b,
-    [ColorBlendMode.SATURATION]: (_a, b) => b,
-    [ColorBlendMode.COLOR]: (_a, b) => b,
-    [ColorBlendMode.LUMINOSITY]: (_a, b) => b,
+    // HSL blend modes handled in blend() method
+    [ColorBlendMode.HUE]: (_a, _b) => _b,
+    [ColorBlendMode.SATURATION]: (_a, _b) => _b,
+    [ColorBlendMode.COLOR]: (_a, _b) => _b,
+    [ColorBlendMode.LUMINOSITY]: (_a, _b) => _b,
 });
 
 export class ColorComparer implements Comparer<Color> {

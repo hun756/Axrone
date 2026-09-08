@@ -8,7 +8,7 @@ import type {
     ICapsuleShapeDef2D,
     ISegmentShapeDef,
     IShape2D,
-    IRaycastResult2D,
+    ISingleRaycastResult2D,
     IQueryFilter,
     Density,
     IMassData2D,
@@ -298,12 +298,12 @@ export class PhysicsWorld2DShapeStore {
         direction: Readonly<IVec2Like>,
         maxFraction: number,
         filter?: IQueryFilter
-    ): readonly IRaycastResult2D[] {
+    ): readonly ISingleRaycastResult2D[] {
         if (maxFraction <= 0 || lengthSquared(direction) <= GEOMETRY_EPSILON) {
             return [];
         }
 
-        const results: IRaycastResult2D[] = [];
+        const results: ISingleRaycastResult2D[] = [];
         for (const [shapeId, descriptor] of this._descriptors) {
             if (!this._canQueryShape(shapeId, descriptor, filter)) {
                 continue;
@@ -699,7 +699,7 @@ export class PhysicsWorld2DShapeStore {
         origin: Readonly<IVec2Like>,
         direction: Readonly<IVec2Like>,
         maxFraction: number
-    ): IRaycastResult2D | null {
+    ): ISingleRaycastResult2D | null {
         const descriptor = this._descriptors.get(shapeId)!;
         let result:
             | {

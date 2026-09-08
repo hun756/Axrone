@@ -51,15 +51,15 @@ describe('RaycastEngine2D — dispatch correctness (regression for broken hit pi
     it('returns a hit for a Capsule', () => {
         const sys = createRaycastSystem2D();
         sys.registerShape(bid(1), sid(12), ALL, ShapeType.Capsule, {
-            p1: { x: 4, y: -1 },
-            p2: { x: 4, y: 1 },
+            p0: { x: 4, y: -1 },
+            p1: { x: 4, y: 1 },
             radius: 1,
         });
 
         const hit = sys.raycast(v2(-5, 0), v2(1, 0), 100, ALL);
 
         expect(hit).not.toBeNull();
-        expect(hit!.distance).toBeCloseTo(9, 3);
+        expect(hit!.distance).toBeCloseTo(8, 3);
     });
 
     it('returns a hit for a Polygon', () => {
@@ -157,6 +157,22 @@ describe('RaycastSystem2D — predicate filtering', () => {
     });
 });
 
+describe('RaycastSystem2D — closest-hit semantics', () => {
+    it('returns the closest hit even when far shape is registered first', () => {
+        const sys = createRaycastSystem2D();
+        // Register far shape first
+        sys.registerShape(bid(1), sid(11), ALL, ShapeType.Circle, { center: { x: 20, y: 0 }, radius: 1 });
+        // Register near shape second
+        sys.registerShape(bid(2), sid(10), ALL, ShapeType.Circle, { center: { x: 5, y: 0 }, radius: 1 });
+        sys.clearCache();
+
+        const hit = sys.raycast(v2(-5, 0), v2(1, 0), 100, ALL);
+        expect(hit).not.toBeNull();
+        expect(hit!.shapeId).toBe(sid(10)); // near shape, not far
+        expect(hit!.distance).toBeCloseTo(9, 5);
+    });
+});
+
 describe('RaycastSystem2D — raycastSingle', () => {
     it('returns the closest hit via raycastSingle', () => {
         const sys = createRaycastSystem2D();
@@ -192,6 +208,22 @@ describe('RaycastSystem3D — predicate filtering', () => {
     });
 });
 
+describe('RaycastSystem3D — closest-hit semantics', () => {
+    it('returns the closest hit even when far shape is registered first', () => {
+        const sys = createRaycastSystem3D();
+        // Register far shape first
+        sys.registerShape(bid(1), sid(11), ALL, ShapeType.Sphere, { center: { x: 20, y: 0, z: 0 }, radius: 1 });
+        // Register near shape second
+        sys.registerShape(bid(2), sid(10), ALL, ShapeType.Sphere, { center: { x: 5, y: 0, z: 0 }, radius: 1 });
+        sys.clearCache();
+
+        const hit = sys.raycast(v3(-5, 0, 0), v3(1, 0, 0), 100, ALL);
+        expect(hit).not.toBeNull();
+        expect(hit!.shapeId).toBe(sid(10)); // near shape, not far
+        expect(hit!.distance).toBeCloseTo(9, 5);
+    });
+});
+
 describe('RaycastSystem3D — unregisterShape', () => {
     it('unregistered shape no longer receives hits in 3D', () => {
         const sys = createRaycastSystem3D();
@@ -201,5 +233,28 @@ describe('RaycastSystem3D — unregisterShape', () => {
         sys.unregisterShape(sid(10));
         sys.clearCache(); // cache would otherwise return the stale hit
         expect(sys.raycast(v3(-5, 0, 0), v3(1, 0, 0), 100, ALL)).toBeNull();
+    });
+});
+
+describe('RaycastSystem3D — TriangleMesh', () => {
+    it('hits a triangle mesh and populates triangleIndex and barycentric', () => {
+        const sys = createRaycastSystem3D();
+        sys.registerShape(bid(1), sid(30), ALL, ShapeType.TriangleMesh, {
+            vertices: [
+                { x: 0, y: 0, z: 0 },
+                { x: 2, y: 0, z: 0 },
+                { x: 0, y: 2, z: 0 },
+            ],
+            indices: [0, 1, 2],
+        });
+
+        const hit = sys.raycast(v3(0.5, 0.5, -5), v3(0, 0, 1), 100, ALL);
+        expect(hit).not.toBeNull();
+        expect(hit!.distance).toBeCloseTo(5, 3);
+        expect(hit!.triangleIndex).toBe(0);
+        expect(hit!.barycentric).not.toBeNull();
+        expect(hit!.barycentric!.u).toBeGreaterThanOrEqual(0);
+        expect(hit!.barycentric!.v).toBeGreaterThanOrEqual(0);
+        expect(hit!.barycentric!.u + hit!.barycentric!.v).toBeLessThanOrEqual(1);
     });
 });

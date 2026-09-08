@@ -124,6 +124,18 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
         return this;
     }
 
+    dispose(): void {
+        this.stop();
+        this._detachCurrentCompletion?.();
+        this._detachCurrentCompletion = undefined;
+        this._tweens = [];
+        this._currentIndex = -1;
+        this._isPlaying = false;
+        this._isPaused = false;
+        this._status = 'idle';
+        super.dispose();
+    }
+
     onComplete(callback: VoidCallback): this {
         this.on('complete', callback);
         return this;

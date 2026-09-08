@@ -370,5 +370,223 @@ describe('DynamicAABBTree2D', () => {
             expect(results.length).toBeLessThan(10);
         });
     });
+
+    describe('Tree Rebalance', () => {
+        /** Helper: collect all leaf proxy ids reachable from root via DFS. */
+        function collectReachableLeaves(t: DynamicAABBTree2D): Set<number> {
+            const found = new Set<number>();
+            const queryAll = new AABB2D({ x: -1e9, y: -1e9 }, { x: 1e9, y: 1e9 });
+            t.query((id) => {
+                found.add(id);
+                return true;
+            }, queryAll);
+            return found;
+        }
+
+        it('keeps tree balanced after many insert/remove cycles (a)', () => {
+            const ids: number[] = [];
+            // Insert 200 proxies in a degenerate pattern (sequential x)
+            for (let i = 0; i < 200; i++) {
+                const aabb = new AABB2D({ x: i, y: 0 }, { x: i + 1, y: 1 });
+                ids.push(tree.createProxy(aabb, { id: i }));
+            }
+
+            // Remove half to create holes
+            for (let i = 0; i < 100; i++) {
+                tree.destroyProxy(ids[i * 2]);
+            }
+
+            // Rebalance
+            tree.rebalance();
+
+            const quality = tree.getTreeQuality();
+            // After rebuild, quality should be ≤ 1.5 (perfectly balanced = 1.0)
+            expect(quality).toBeLessThanOrEqual(1.5);
+            expect(quality).toBeGreaterThanOrEqual(1.0);
+        });
+
+        it('destroyProxy is safe after rebalance — regression for _removeLeaf crash (b)', () => {
+            const ids: number[] = [];
+            for (let i = 0; i < 50; i++) {
+                const aabb = new AABB2D({ x: i * 3, y: i * 3 }, { x: i * 3 + 1, y: i * 3 + 1 });
+                ids.push(tree.createProxy(aabb, { id: i }));
+            }
+
+            // Force rebalance
+            tree.rebalance();
+
+            // Destroy every other proxy — must NOT throw
+            expect(() => {
+                for (let i = 0; i < ids.length; i += 2) {
+                    tree.destroyProxy(ids[i]);
+                }
+            }).not.toThrow();
+
+            // Remaining proxies still queryable
+            const remaining = new Set<number>();
+            tree.query((id) => { remaining.add(id); return true; },
+                new AABB2D({ x: -1e9, y: -1e9 }, { x: 1e9, y: 1e9 }));
+            expect(remaining.size).toBe(25);
+        });
+
+        it('all leaves reachable from root after rebalance — no orphans (c)', () => {
+            const ids: number[] = [];
+            for (let i = 0; i < 100; i++) {
+                const aabb = new AABB2D({ x: i, y: i }, { x: i + 1, y: i + 1 });
+                ids.push(tree.createProxy(aabb, { id: i }));
+            }
+
+            // Remove some to create asymmetric tree
+            for (let i = 0; i < 30; i++) {
+                tree.destroyProxy(ids[i]);
+            }
+
+            tree.rebalance();
+
+            // All surviving proxies must be reachable
+            const reachable = collectReachableLeaves(tree);
+            const expectedIds = new Set(ids.slice(30));
+            expect(reachable.size).toBe(expectedIds.size);
+            for (const id of expectedIds) {
+                expect(reachable.has(id)).toBe(true);
+            }
+        });
+
+        it('getTreeQuality improves or stays same after rebalance (d)', () => {
+            // Build a degenerate tree: insert in sorted order
+            for (let i = 0; i < 128; i++) {
+                const aabb = new AABB2D({ x: i * 10, y: 0 }, { x: i * 10 + 1, y: 1 });
+                tree.createProxy(aabb, { id: i });
+            }
+
+            // Remove alternating to create imbalance
+            const ids: number[] = [];
+            tree.query((id) => { ids.push(id); return true; },
+                new AABB2D({ x: -1e9, y: -1e9 }, { x: 1e9, y: 1e9 }));
+            for (let i = 0; i < ids.length; i += 2) {
+                tree.destroyProxy(ids[i]);
+            }
+
+            const qualityBefore = tree.getTreeQuality();
+            tree.rebalance();
+            const qualityAfter = tree.getTreeQuality();
+
+            expect(qualityAfter).toBeLessThanOrEqual(qualityBefore);
+            expect(qualityAfter).toBeLessThanOrEqual(1.5);
+        });
+
+        it('rebalance preserves query results — correctness unchanged (e)', () => {
+            const ids: number[] = [];
+            for (let i = 0; i < 80; i++) {
+                const x = (i % 10) * 5;
+                const y = Math.floor(i / 10) * 5;
+                const aabb = new AABB2D({ x, y }, { x: x + 2, y: y + 2 });
+                ids.push(tree.createProxy(aabb, { id: i }));
+            }
+
+            // Remove a few
+            for (let i = 0; i < 10; i++) {
+                tree.destroyProxy(ids[i]);
+            }
+
+            // Query before rebalance
+            const queryAABB = new AABB2D({ x: 10, y: 10 }, { x: 30, y: 30 });
+            const resultsBefore = new Set<number>();
+            tree.query((id) => { resultsBefore.add(id); return true; }, queryAABB);
+
+            // Rebalance
+            tree.rebalance();
+
+            // Query after rebalance — must be identical
+            const resultsAfter = new Set<number>();
+            tree.query((id) => { resultsAfter.add(id); return true; }, queryAABB);
+
+            expect(resultsAfter.size).toBe(resultsBefore.size);
+            for (const id of resultsBefore) {
+                expect(resultsAfter.has(id)).toBe(true);
+            }
+        });
+
+        it('getTreeQuality returns 1.0 for empty or single-leaf tree', () => {
+            expect(tree.getTreeQuality()).toBe(1.0);
+            const aabb = new AABB2D({ x: 0, y: 0 }, { x: 1, y: 1 });
+            tree.createProxy(aabb, {});
+            expect(tree.getTreeQuality()).toBe(1.0);
+        });
+
+        it('rebalance on empty tree is a no-op', () => {
+            expect(() => tree.rebalance()).not.toThrow();
+            expect(tree.getHeight()).toBe(0);
+        });
+
+        it('auto-rebalance triggers after enough operations', () => {
+            // Insert 300 proxies — auto-rebalance fires at op 256
+            const ids: number[] = [];
+            for (let i = 0; i < 300; i++) {
+                const aabb = new AABB2D({ x: i, y: i }, { x: i + 1, y: i + 1 });
+                ids.push(tree.createProxy(aabb, { id: i }));
+            }
+
+            // After auto-rebalance (at op 256) + 44 more inserts, tree should be decent.
+            // But let's verify explicit rebalance works after pure inserts too:
+            tree.rebalance();
+            const quality = tree.getTreeQuality();
+            expect(quality).toBeLessThanOrEqual(2.0);
+
+            // All leaves still reachable with correct proxy IDs
+            const reachable = collectReachableLeaves(tree);
+            expect(reachable.size).toBe(300);
+            for (const id of ids) {
+                expect(reachable.has(id)).toBe(true);
+            }
+        });
+
+        it('getTreeBalance returns 1.0 for empty or single-leaf tree', () => {
+            expect(tree.getTreeBalance()).toBe(1.0);
+            const aabb = new AABB2D({ x: 0, y: 0 }, { x: 1, y: 1 });
+            tree.createProxy(aabb, {});
+            expect(tree.getTreeBalance()).toBe(1.0);
+        });
+
+        it('getTreeBalance: balanced tree has higher ratio than degenerate', () => {
+            const balancedTree = new DynamicAABBTree2D(64);
+            const degenerateTree = new DynamicAABBTree2D(64);
+
+            // Balanced: insert in checkerboard pattern
+            for (let i = 0; i < 32; i++) {
+                const x = (i % 8) * 10;
+                const y = Math.floor(i / 8) * 10;
+                const aabb = new AABB2D({ x, y }, { x: x + 1, y: y + 1 });
+                balancedTree.createProxy(aabb, { id: i });
+            }
+
+            // Degenerate: insert in sorted order (creates long chain)
+            for (let i = 0; i < 32; i++) {
+                const aabb = new AABB2D({ x: i * 10, y: 0 }, { x: i * 10 + 1, y: 1 });
+                degenerateTree.createProxy(aabb, { id: i });
+            }
+
+            const balancedRatio = balancedTree.getTreeBalance();
+            const degenerateRatio = degenerateTree.getTreeBalance();
+
+            expect(balancedRatio).toBeGreaterThan(0);
+            expect(degenerateRatio).toBeGreaterThan(0);
+            expect(balancedRatio).toBeGreaterThanOrEqual(degenerateRatio);
+        });
+
+        it('getTreeBalance improves or stays same after rebalance', () => {
+            for (let i = 0; i < 64; i++) {
+                const aabb = new AABB2D({ x: i * 10, y: 0 }, { x: i * 10 + 1, y: 1 });
+                tree.createProxy(aabb, { id: i });
+            }
+
+            const balanceBefore = tree.getTreeBalance();
+            tree.rebalance();
+            const balanceAfter = tree.getTreeBalance();
+
+            expect(balanceAfter).toBeGreaterThanOrEqual(balanceBefore);
+            expect(balanceAfter).toBeLessThanOrEqual(1.0);
+        });
+    });
 });
 

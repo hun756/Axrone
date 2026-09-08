@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { createRegisteredAudioClipSelector } from '../asset';
 import { createAudioSystem } from '../system';
 import {
     FakeAudioBuffer,
@@ -72,8 +73,11 @@ describe('AudioSystem integration', () => {
 
         await system.playSource('laser');
 
-        const musicBusGain = context.gainNodes[1];
-        const sfxBusGain = context.gainNodes[2];
+        // Node creation order: [0] system global-volume gain, [1] master bus, then buses in
+        // upsert order. The differential assertion is the durable guard if that shifts again.
+        const firstBusOffset = 2;
+        const musicBusGain = context.gainNodes[firstBusOffset];
+        const sfxBusGain = context.gainNodes[firstBusOffset + 1];
         const playbackPanner = context.stereoPannerNodes.at(-1);
 
         expect(playbackPanner?.connections[0]).toBe(musicBusGain);
@@ -81,6 +85,7 @@ describe('AudioSystem integration', () => {
 
         system.updateSource('laser', { busId: 'sfx' });
 
+        expect(playbackPanner?.connections[0]).not.toBe(musicBusGain);
         expect(playbackPanner?.connections[0]).toBe(sfxBusGain);
         expect(system.getSource('laser')?.busId).toBe('sfx');
     });
@@ -366,5 +371,548 @@ describe('AudioSystem integration', () => {
 
         // After stop, nodes should be disconnected
         expect(sourceNode!.connections.length).toBe(0);
+    });
+});
+
+// The old recursive AudioPatch type made every nested field optional, so the incomplete
+// spatial patch below compiled while the registry replaced spatial wholesale — silently
+// destroying position, orientation and panningModel. The patch aliases are now honest
+// shallow Partials, which turns that data loss into a type error.
+describe('AudioSystem patch semantics — nested replacement is explicit', () => {
+    const createFixture = () => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        return {
+            system: createAudioSystem({ context: context as unknown as AudioContext }),
+            clip: { kind: 'buffer' as const, buffer: buffer as unknown as AudioBuffer },
+        };
+    };
+
+    it('leaves sibling spatial fields intact when a top-level primitive is patched', () => {
+        const { system, clip } = createFixture();
+        system.upsertSource({
+            id: 'p',
+            clip,
+            spatial: {
+                mode: '3d',
+                position: { x: 1, y: 2, z: 3 },
+                orientation: { x: 0, y: 0, z: -1 },
+                panningModel: 'HRTF',
+            },
+        });
+
+        const updated = system.updateSource('p', { volume: 0.25 });
+
+        expect(updated.volume).toBe(0.25);
+        expect(updated.spatial).toEqual({
+            mode: '3d',
+            position: { x: 1, y: 2, z: 3 },
+            orientation: { x: 0, y: 0, z: -1 },
+            panningModel: 'HRTF',
+        });
+    });
+
+    it('replaces spatial wholesale when a complete value is supplied', () => {
+        const { system, clip } = createFixture();
+        system.upsertSource({
+            id: 'q',
+            clip,
+            spatial: { mode: '3d', position: { x: 1, y: 2, z: 3 }, panningModel: 'HRTF' },
+        });
+
+        const updated = system.updateSource('q', {
+            spatial: { mode: '2d', position: { x: 8, y: 0, z: 0 }, pan: 0.5 },
+        });
+
+        expect(updated.spatial).toEqual({ mode: '2d', position: { x: 8, y: 0, z: 0 }, pan: 0.5 });
+    });
+
+    it('rejects an incomplete spatial patch at compile time', () => {
+        const { system, clip } = createFixture();
+        system.upsertSource({ id: 'r', clip });
+
+        // Self-validating: if the patch type ever regresses to deep-partial this line stops
+        // erroring, and the unused-directive error breaks the build.
+        // @ts-expect-error spatial requires a complete AudioSpatialization (mode is mandatory)
+        system.updateSource('r', { spatial: { attenuation: { refDistance: 5 } } });
+
+        // The guard is the compiler, not the runtime — the call above still executes, and
+        // cloneSpatialization keys on `mode === '2d'`, so an incomplete value coerces into a
+        // 3d spatial that has lost position, orientation and panningModel. Pinning the exact
+        // shape keeps the contract honest: a future real deep merge changes this on purpose.
+        expect(JSON.stringify(system.getSource('r')?.spatial)).toBe(
+            '{"mode":"3d","attenuation":{"refDistance":5}}'
+        );
+    });
+});
+
+// A play request may carry a timed stop (durationSeconds) so only part of a long clip is
+// heard. pauseSource dropped it: resume restarted the node without a duration and the rest
+// of the clip played, turning a 0.5s sting into its full length.
+describe('AudioSystem sub-clip scheduling survives pause and resume', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const createSting = async (durationSeconds: number) => {
+        const context = new FakeAudioContext();
+        // 2 second clip
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertSource({
+            id: 'sting',
+            clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer },
+        });
+        await system.playSource('sting', { durationSeconds });
+        return { context, system };
+    };
+
+    it('resumes with only the time left in the sub-clip', async () => {
+        const { context, system } = await createSting(0.5);
+        const sourceNode = context.bufferSourceNodes.at(-1)!;
+        expect(sourceNode.startCalls.at(-1)?.duration).toBeCloseTo(0.5, 5);
+
+        context.advance(0.3);
+        system.pauseSource('sting');
+        await system.resumeSource('sting');
+
+        const resumedNode = context.bufferSourceNodes.at(-1)!;
+        expect(resumedNode).not.toBe(sourceNode);
+        expect(resumedNode.startCalls.at(-1)?.offset).toBeCloseTo(0.3, 5);
+        expect(resumedNode.startCalls.at(-1)?.duration).toBeCloseTo(0.2, 5);
+    });
+
+    it('resumes without a timed stop when the original play had none', async () => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertSource({
+            id: 'music',
+            clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer },
+        });
+        await system.playSource('music');
+
+        context.advance(0.4);
+        system.pauseSource('music');
+        await system.resumeSource('music');
+
+        expect(context.bufferSourceNodes.at(-1)!.startCalls.at(-1)?.duration).toBeUndefined();
+    });
+
+    it('clears a pending sub-clip stop when the source is stopped', async () => {
+        const { context, system } = await createSting(0.5);
+        context.advance(0.1);
+        system.pauseSource('sting');
+        system.stopSource('sting');
+
+        await system.playSource('sting');
+        expect(context.bufferSourceNodes.at(-1)!.startCalls.at(-1)?.duration).toBeUndefined();
+    });
+});
+
+// AudioMixerSnapshot and AudioSystemSnapshot both carry a `buses` array, so the mixer guard
+// accepted a whole system snapshot and applied it bus-by-bus. The two shapes now carry
+// explicit discriminators, which also matters because snapshots are the save/load format.
+describe('AudioSystem snapshot type guards discriminate', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const createSystem = () =>
+        createAudioSystem({ context: new FakeAudioContext() as unknown as AudioContext });
+
+    it('rejects a system snapshot handed to applyMixerSnapshot', () => {
+        const system = createSystem();
+
+        expect(() => system.applyMixerSnapshot(system.snapshot() as never)).toThrow(
+            /snapshot/i
+        );
+    });
+
+    it('rejects a mixer snapshot handed to restore', async () => {
+        const system = createSystem();
+
+        await expect(system.restore(system.captureMixerSnapshot() as never)).rejects.toThrow(
+            /snapshot/i
+        );
+    });
+
+    it('carries a discriminator on every snapshot it produces', () => {
+        const system = createSystem();
+
+        expect(system.captureMixerSnapshot().kind).toBe('audio.mixer-snapshot');
+        expect(system.snapshot().kind).toBe('audio.system-snapshot');
+    });
+
+    it('still round-trips its own system snapshot through restore', async () => {
+        const system = createSystem();
+        system.upsertBus({ id: 'sfx', volume: 0.4 });
+        const snapshot = system.snapshot();
+
+        const target = createSystem();
+        await target.restore(snapshot);
+
+        expect(target.getBus('sfx')?.volume).toBe(0.4);
+    });
+});
+
+// The audit measured a play against an unresolvable clip reporting playbackState 'idle',
+// zero console errors and playbackErrorCount 0 — total silence. Resolution now happens
+// inside the guarded region, so every failure path emits source:error and throws a typed
+// AudioSourceError that carries the original cause.
+describe('AudioSystem playback failure reporting', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const createSystem = () =>
+        createAudioSystem({ context: new FakeAudioContext() as unknown as AudioContext });
+
+    it('emits source:error when a clip cannot be resolved', async () => {
+        const system = createSystem();
+        system.upsertSource({ id: 'ghost', clip: createRegisteredAudioClipSelector('nope') });
+
+        const errors: Array<{ operation: string; reason: unknown }> = [];
+        system.events.on('source:error', (event) => errors.push(event));
+
+        await expect(system.playSource('ghost')).rejects.toMatchObject({
+            code: 'audio.source.play-failed',
+        });
+
+        expect(errors).toHaveLength(1);
+        expect(errors[0].operation).toBe('play');
+        expect(system.getDiagnostics().counters.playbackErrorCount).toBe(1);
+    });
+
+    it('keeps the original failure reachable as the cause', async () => {
+        const system = createSystem();
+        system.upsertSource({ id: 'ghost2', clip: createRegisteredAudioClipSelector('nope') });
+
+        const error = await system.playSource('ghost2').then(
+            () => null,
+            (reason: unknown) => reason as Error & { cause?: Error }
+        );
+
+        expect(error).not.toBeNull();
+        expect(error!.cause?.constructor.name).toBe('AudioAssetError');
+    });
+
+    it('reports a resume failure with the resume operation', async () => {
+        const system = createSystem();
+        system.upsertSource({ id: 'resumer', clip: createRegisteredAudioClipSelector('nope') });
+
+        const errors: string[] = [];
+        system.events.on('source:error', (event) => errors.push(event.operation));
+
+        await expect(system.resumeSource('resumer')).rejects.toMatchObject({
+            code: 'audio.source.resume-failed',
+        });
+
+        expect(errors).toEqual(['resume']);
+    });
+});
+
+// The binder re-applies every component descriptor each frame. Before change detection that
+// produced one source:upserted per source per frame — the audit measured 1800 events from 30
+// idle sources over 60 frames — and re-armed autoplay on each pass.
+describe('AudioSystem source upserts report only real changes', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const createFixture = () => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        return {
+            system: createAudioSystem({ context: context as unknown as AudioContext }),
+            clip: { kind: 'buffer' as const, buffer: buffer as unknown as AudioBuffer },
+        };
+    };
+
+    const countUpserts = (system: ReturnType<typeof createAudioSystem>) => {
+        let upserts = 0;
+        system.events.on('source:upserted', () => {
+            upserts += 1;
+        });
+        return () => upserts;
+    };
+
+    it('emits nothing when an identical descriptor is re-applied 60 times', () => {
+        const { system, clip } = createFixture();
+        const descriptor = { id: 'static', clip, volume: 0.5, pan: 0.2, loop: true };
+        system.upsertSource(descriptor);
+        const upserts = countUpserts(system);
+
+        for (let frame = 0; frame < 60; frame += 1) {
+            system.upsertSource(descriptor);
+        }
+
+        expect(upserts()).toBe(0);
+    });
+
+    it('treats an equal-valued spatial block rebuilt as a new object as unchanged', () => {
+        const { system, clip } = createFixture();
+        const spatial = () => ({
+            mode: '3d' as const,
+            position: { x: 1, y: 2, z: 3 },
+            orientation: { x: 0, y: 0, z: -1 },
+            attenuation: { model: 'inverse' as const, refDistance: 2, maxDistance: 200 },
+            panningModel: 'HRTF' as const,
+        });
+        system.upsertSource({ id: 'mover', clip, spatial: spatial() });
+        const upserts = countUpserts(system);
+
+        for (let frame = 0; frame < 60; frame += 1) {
+            system.upsertSource({ id: 'mover', clip, spatial: spatial() });
+        }
+
+        expect(upserts()).toBe(0);
+    });
+
+    it('emits exactly once when a moved position is applied', () => {
+        const { system, clip } = createFixture();
+        system.upsertSource({ id: 'mover2', clip, spatial: { mode: '3d', position: { x: 1, y: 2, z: 3 } } });
+        const upserts = countUpserts(system);
+
+        system.upsertSource({ id: 'mover2', clip, spatial: { mode: '3d', position: { x: 1, y: 2, z: 4 } } });
+        system.upsertSource({ id: 'mover2', clip, spatial: { mode: '3d', position: { x: 1, y: 2, z: 4 } } });
+
+        expect(upserts()).toBe(1);
+    });
+
+    it('still returns the full state for an unchanged upsert', () => {
+        const { system, clip } = createFixture();
+        system.upsertSource({ id: 'readable', clip, volume: 0.75 });
+        const upserts = countUpserts(system);
+
+        const state = system.upsertSource({ id: 'readable', clip, volume: 0.75 });
+
+        expect(upserts()).toBe(0);
+        expect(state.volume).toBe(0.75);
+        expect(state.id).toBe('readable');
+    });
+});
+
+// Web Audio suspends without being asked — autoplay policy, tab backgrounding, lost audio
+// focus. status only moved through explicit suspend()/resume(), so a context the browser had
+// suspended kept reporting 'running' to any game that asked.
+describe('AudioSystem tracks browser-driven context state', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const createOn = (state: AudioContextState = 'running') => {
+        const context = new FakeAudioContext();
+        context.state = state;
+        return { context, system: createAudioSystem({ context: context as unknown as AudioContext }) };
+    };
+
+    it('starts suspended when the context is suspended, without announcing it', () => {
+        const seen: string[] = [];
+        const context = new FakeAudioContext();
+        context.state = 'suspended';
+        const probe = createAudioSystem({ context: context as unknown as AudioContext });
+        probe.events.on('audio:*', (event) => seen.push(event.type));
+
+        // Nothing emitted during construction is guaranteed only if the same construction
+        // path also reports the right status.
+        expect(probe.status).toBe('suspended');
+        expect(seen.filter((type) => type.startsWith('system:'))).toEqual([]);
+    });
+
+    it('reports suspended and emits when the browser suspends mid-session', () => {
+        const { context, system } = createOn();
+        const seen: string[] = [];
+        system.events.on('system:suspended', () => seen.push('suspended'));
+
+        context.setState('suspended');
+
+        expect(system.status).toBe('suspended');
+        expect(seen).toEqual(['suspended']);
+    });
+
+    it('returns to idle and emits when the browser resumes with nothing playing', () => {
+        const { context, system } = createOn();
+        context.setState('suspended');
+        const seen: string[] = [];
+        system.events.on('system:resumed', () => seen.push('resumed'));
+
+        context.setState('running');
+
+        expect(system.status).toBe('idle');
+        expect(seen).toEqual(['resumed']);
+    });
+
+    it('reports running on resume while a voice is active', async () => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertSource({
+            id: 'pad',
+            clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer },
+        });
+        await system.playSource('pad');
+
+        context.setState('suspended');
+        expect(system.status).toBe('suspended');
+
+        context.setState('running');
+        expect(system.status).toBe('running');
+    });
+
+    it('ignores state changes after dispose', async () => {
+        const { context, system } = createOn();
+        const seen: string[] = [];
+        system.events.on('audio:*', (event) => seen.push(event.type));
+
+        await system.dispose();
+        seen.length = 0;
+        context.setState('suspended');
+
+        expect(seen).toEqual([]);
+        expect(system.status).toBe('disposed');
+    });
+});
+
+// A PannerNode takes a position, not a left/right offset, and playback used to allocate
+// either a Panner or a StereoPanner — so `pan` on a 3D source did nothing, silently.
+describe('AudioSystem 3D sources honour an authored pan', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const play3D = async (pan?: number) => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertSource({
+            id: 'positional',
+            clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer },
+            ...(pan === undefined ? {} : { pan }),
+            spatial: { mode: '3d', position: { x: 3, y: 0, z: 0 } },
+        });
+        await system.playSource('positional');
+        system.refreshSpatialAudio();
+        return { context, system };
+    };
+
+    it('routes a non-zero pan through a dedicated stereo stage', async () => {
+        const { context } = await play3D(-0.6);
+
+        expect(context.pannerNodes).toHaveLength(1);
+        expect(context.stereoPannerNodes.some((node) => node.pan.value === -0.6)).toBe(true);
+    });
+
+    it('spends no extra node on a 3D voice that has no pan', async () => {
+        const { context } = await play3D();
+
+        // only the master bus creates a stereo panner at construction
+        expect(context.stereoPannerNodes).toHaveLength(1);
+        expect(context.pannerNodes).toHaveLength(1);
+    });
+});
+
+// globalVolume used to be stored, clamped and snapshotted but reached no node: master gain is
+// owned by the bus registry, so the one knob a settings menu would bind did nothing.
+describe('AudioSystem listener globalVolume drives output', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    it('attenuates the whole mix to silence at zero', () => {
+        const context = new FakeAudioContext();
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+
+        system.upsertListener({ id: 'main', active: true, globalVolume: 0 });
+
+        // gainNodes[0] is the system-level global gain stage.
+        expect(context.gainNodes[0].gain.value).toBe(0);
+        expect(system.activeListener?.globalVolume).toBe(0);
+    });
+
+    it('restores unity when the active listener volume returns to one', () => {
+        const context = new FakeAudioContext();
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertListener({ id: 'main', active: true, globalVolume: 0.25 });
+        expect(context.gainNodes[0].gain.value).toBe(0.25);
+
+        system.upsertListener({ id: 'main', active: true, globalVolume: 1 });
+
+        expect(context.gainNodes[0].gain.value).toBe(1);
+    });
+
+    it('follows the active listener when a different one takes over', () => {
+        const context = new FakeAudioContext();
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertListener({ id: 'quiet', active: true, globalVolume: 0.1 });
+        system.upsertListener({ id: 'loud', globalVolume: 0.9 });
+
+        system.setActiveListener('loud');
+
+        expect(context.gainNodes[0].gain.value).toBe(0.9);
+    });
+});
+
+// Exceeding a browser's simultaneous-voice capacity degrades the audio thread silently —
+// dropouts, no error — so the ceiling has to be enforced by the system, not discovered by QA.
+describe('AudioSystem real-voice ceiling', () => {
+    beforeAll(() => {
+        installFakeAudioGlobals();
+    });
+
+    const playMany = async (maxRealVoices: number, plays: number) => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const system = createAudioSystem({
+            context: context as unknown as AudioContext,
+            maxRealVoices,
+        });
+        for (let i = 0; i < plays; i += 1) {
+            system.upsertSource({
+                id: `v${i}`,
+                clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer },
+                volume: 0.2 + i / 100,
+            });
+            await system.playSource(`v${i}`);
+        }
+        return { context, system };
+    };
+
+    it('never holds more playing voices than the ceiling', async () => {
+        const { system } = await playMany(3, 12);
+
+        expect(system.getDiagnostics().activePlaybackCount).toBeLessThanOrEqual(3);
+    });
+
+    it('counts every steal it performs', async () => {
+        const { system } = await playMany(3, 12);
+
+        expect(system.getDiagnostics().voiceStealCount).toBe(9);
+    });
+
+    it('spends far fewer audio nodes than one chain per request', async () => {
+        const { context } = await playMany(4, 40);
+
+        // 40 unbounded plays would allocate ~160 nodes (source + 2 gains + panner each).
+        expect(context.bufferSourceNodes.length).toBe(40);
+        expect(context.gainNodes.length).toBeLessThan(40 * 4);
+    });
+
+    it('leaves the loudest voices standing', async () => {
+        const { system } = await playMany(2, 5);
+
+        const audible = ['v3', 'v4'].filter((id) => system.getSource(id)?.playbackState === 'playing');
+        expect(audible).toEqual(['v3', 'v4']);
+    });
+
+    it('is unlimited when the ceiling is omitted', async () => {
+        const context = new FakeAudioContext();
+        const buffer = new FakeAudioBuffer(2, 96000, 48000);
+        const system = createAudioSystem({ context: context as unknown as AudioContext });
+        system.upsertSource({ id: 'only', clip: { kind: 'buffer', buffer: buffer as unknown as AudioBuffer } });
+        await system.playSource('only');
+
+        expect(system.getDiagnostics().voiceStealCount).toBe(0);
+        expect(system.getDiagnostics().activePlaybackCount).toBe(1);
     });
 });

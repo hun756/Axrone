@@ -6,8 +6,11 @@ import {
 import type { ColorInput } from '../types';
 import type { UIControlTheme, UIControlVariant } from './types';
 
+/** @deprecated Use `AXRONE_DEFAULT_UI_FONT_FAMILY` from `@axrone/ui/font`. */
 export const AXRONE_FALLBACK_UI_FONT_FAMILY = AXRONE_DEFAULT_UI_FONT_FAMILY;
+/** @deprecated Use `createDefaultUIFontAsset` from `@axrone/ui/font`. */
 export const createFallbackUIFontAsset = createDefaultUIFontAsset;
+/** @deprecated Use `ensureDefaultUIFont` from `@axrone/ui/font`. */
 export const ensureFallbackUIFont = ensureDefaultUIFont;
 
 export const defaultUIControlTheme: Readonly<UIControlTheme> = Object.freeze({

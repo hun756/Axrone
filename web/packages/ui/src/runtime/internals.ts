@@ -1,5 +1,5 @@
+import { clamp } from '@axrone/numeric';
 import type {
-    ColorInput,
     LayoutBox,
     ReadonlyColor,
     ResolvedTextBlock,
@@ -12,6 +12,9 @@ import type {
     WidgetStyleInput,
 } from '../types';
 import { isPlainObject } from '@axrone/utility';
+import { normalizeColor } from '../types/color';
+
+export { normalizeColor };
 
 export const EMPTY_RECORD_OBJECT: Readonly<Record<string, unknown>> = Object.freeze({});
 export const EMPTY_LAYOUT_INPUT: WidgetLayoutInput = Object.freeze({});
@@ -20,21 +23,6 @@ export const EMPTY_FOCUS_INPUT: WidgetFocusPolicyInput = Object.freeze({});
 export const TRANSPARENT: ReadonlyColor = Object.freeze({ r: 0, g: 0, b: 0, a: 0 });
 export const BLACK: ReadonlyColor = Object.freeze({ r: 0, g: 0, b: 0, a: 1 });
 export const WHITE: ReadonlyColor = Object.freeze({ r: 1, g: 1, b: 1, a: 1 });
-
-export const clamp = (value: number, min: number, max: number): number => {
-    if (value < min) {
-        return min;
-    }
-    if (value > max) {
-        return max;
-    }
-    return value;
-};
-
-const isColorLike = (
-    value: ColorInput
-): value is { readonly r: number; readonly g: number; readonly b: number; readonly a?: number } =>
-    typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export const cloneData = <TValue>(value: TValue): TValue => {
     if (value === null || value === undefined) {
@@ -57,61 +45,6 @@ export const cloneData = <TValue>(value: TValue): TValue => {
         return undefined as TValue;
     }
     return value;
-};
-
-const colorFromNumber = (value: number): ReadonlyColor => ({
-    r: ((value >>> 24) & 0xff) / 255,
-    g: ((value >>> 16) & 0xff) / 255,
-    b: ((value >>> 8) & 0xff) / 255,
-    a: (value & 0xff) / 255,
-});
-
-const colorFromHex = (value: string): ReadonlyColor => {
-    const hex = value.replace('#', '').trim();
-    if (hex.length === 3) {
-        return {
-            r: Number.parseInt(hex[0] + hex[0], 16) / 255,
-            g: Number.parseInt(hex[1] + hex[1], 16) / 255,
-            b: Number.parseInt(hex[2] + hex[2], 16) / 255,
-            a: 1,
-        };
-    }
-    if (hex.length === 6 || hex.length === 8) {
-        return {
-            r: Number.parseInt(hex.slice(0, 2), 16) / 255,
-            g: Number.parseInt(hex.slice(2, 4), 16) / 255,
-            b: Number.parseInt(hex.slice(4, 6), 16) / 255,
-            a: hex.length === 8 ? Number.parseInt(hex.slice(6, 8), 16) / 255 : 1,
-        };
-    }
-    return TRANSPARENT;
-};
-
-export const normalizeColor = (input: ColorInput | undefined, fallback: ReadonlyColor): ReadonlyColor => {
-    if (input === undefined) {
-        return fallback;
-    }
-    if (typeof input === 'number') {
-        return colorFromNumber(input >>> 0);
-    }
-    if (typeof input === 'string') {
-        return colorFromHex(input);
-    }
-    if (Array.isArray(input)) {
-        if (input.length === 3) {
-            return { r: input[0], g: input[1], b: input[2], a: 1 };
-        }
-        return { r: input[0], g: input[1], b: input[2], a: input[3] };
-    }
-    if (!isColorLike(input)) {
-        return fallback;
-    }
-    return {
-        r: input.r,
-        g: input.g,
-        b: input.b,
-        a: input.a ?? 1,
-    };
 };
 
 export const normalizeWeight = (value: ResolvedTextBlock['weight'] | TextBlockInput['weight']): number => {

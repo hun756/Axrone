@@ -23,7 +23,10 @@ describe('scene-runtime glTF shader effects', () => {
         ).toBe('select');
         expect(definition.fragmentSource).toContain('uniform vec4 _BaseColorFactor;');
         expect(definition.fragmentSource).toContain('vec3 linearToSrgb(vec3 color)');
-        expect(definition.fragmentSource).toContain('o_Color = vec4(linearToSrgb(baseColor.rgb), baseColor.a);');
+        expect(definition.fragmentSource).toContain('o_Color = vec4(linearToSrgb(finalColor), baseColor.a);');
+        expect(definition.fragmentSource).toContain('#ifdef FOG');
+        expect(definition.fragmentSource).toContain('applyFog(finalColor, v_WorldPosition, u_CameraPosition)');
+        expect(definition.fragmentSource).toContain('in vec3 v_WorldPosition;');
     });
 
     it('builds the built-in pbr shader from structured effect metadata with uniform arrays', () => {

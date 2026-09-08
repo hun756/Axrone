@@ -33,10 +33,19 @@ export class AllocationSelector {
                 return this.#firstAvailable();
             }
             case 'round-robin': {
-                const freeIds = Array.from(this.#freeList);
-                const id = freeIds[this.#roundRobinIndex % freeIds.length];
-                this.#roundRobinIndex = (this.#roundRobinIndex + 1) % freeIds.length;
-                return id;
+                // Zero-allocation: iterate the Set directly instead of
+                // allocating an intermediate array with Array.from on every pick.
+                const size = this.#freeList.size;
+                const target = this.#roundRobinIndex % size;
+                let index = 0;
+                for (const id of this.#freeList) {
+                    if (index === target) {
+                        this.#roundRobinIndex = (this.#roundRobinIndex + 1) % size;
+                        return id;
+                    }
+                    index++;
+                }
+                return this.#firstAvailable(); // fallback
             }
             case 'first-available':
             default:

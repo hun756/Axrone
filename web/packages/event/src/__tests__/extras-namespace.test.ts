@@ -344,15 +344,6 @@ describe('namespaceEvents - Comprehensive', () => {
         });
     });
 
-    describe('getMemoryUsage() delegation', () => {
-        it('should delegate to source', () => {
-            namespaced.on('ns:test:event', vi.fn() as any);
-            const usage = namespaced.getMemoryUsage();
-            expect(usage).toHaveProperty('total');
-            expect(usage.total).toBeGreaterThan(0);
-        });
-    });
-
     describe('maxListeners delegation', () => {
         it('should delegate maxListeners getter/setter', () => {
             expect(namespaced.maxListeners).toBe(10);

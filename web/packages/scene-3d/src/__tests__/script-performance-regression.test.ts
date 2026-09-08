@@ -648,7 +648,7 @@ describe('Script Performance Regression', () => {
             pool[Symbol.dispose]();
         });
 
-        it('pool with metrics disabled throws on getMetrics', async () => {
+        it('pool with metrics disabled returns zeroed snapshot', async () => {
             const { MemoryPool } = await import('@axrone/memory');
 
             let nextId = 0;
@@ -664,8 +664,11 @@ describe('Script Performance Regression', () => {
             const obj = pool.acquire();
             pool.release(obj);
 
-            // But getMetrics throws when metrics are disabled
-            expect(() => pool.getMetrics()).toThrow();
+            // But getMetrics returns zeros when metrics are disabled
+            const metrics = pool.getMetrics();
+            expect(metrics.allocations).toBe(0);
+            expect(metrics.releases).toBe(0);
+            expect(metrics.highWaterMark).toBe(0);
 
             pool[Symbol.dispose]();
         });

@@ -338,6 +338,8 @@ export class WebGLShaderCompiler implements IShaderCompiler {
             throw new ShaderInstanceBackendError('BACKEND_UNAVAILABLE', 'en', { reason: 'Failed to create WebGL program' });
         }
 
+        const attachedShaders: WebGLShader[] = [];
+
         try {
             if (pass.stage.includes(ShaderStage.VERTEX)) {
                 const vertexSource = this.sourceGenerator.generateShaderSource(
@@ -348,6 +350,7 @@ export class WebGLShaderCompiler implements IShaderCompiler {
                 );
                 const vertexShader = this.compileShader(this.gl.VERTEX_SHADER, vertexSource);
                 this.gl.attachShader(program, vertexShader);
+                attachedShaders.push(vertexShader);
             }
 
             if (pass.stage.includes(ShaderStage.FRAGMENT)) {
@@ -359,6 +362,7 @@ export class WebGLShaderCompiler implements IShaderCompiler {
                 );
                 const fragmentShader = this.compileShader(this.gl.FRAGMENT_SHADER, fragmentSource);
                 this.gl.attachShader(program, fragmentShader);
+                attachedShaders.push(fragmentShader);
             }
 
             const parallelExt = this._ctx.extensions.tryGet('KHR_parallel_shader_compile') as unknown as { COMPLETION_STATUS_KHR?: number } | null;
@@ -387,6 +391,11 @@ export class WebGLShaderCompiler implements IShaderCompiler {
 
             return program;
         } catch (error) {
+            // Clean up attached shaders before deleting program
+            for (const shader of attachedShaders) {
+                this.gl.detachShader(program, shader);
+                this.gl.deleteShader(shader);
+            }
             this.gl.deleteProgram(program);
             throw error;
         }

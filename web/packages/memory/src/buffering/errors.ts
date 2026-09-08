@@ -13,6 +13,7 @@ abstract class BaseBufferError extends Error {
     }
 }
 
+/** @stable */
 export class BufferOverflowError extends BaseBufferError {
     constructor(
         message = 'Buffer overflow',
@@ -23,6 +24,7 @@ export class BufferOverflowError extends BaseBufferError {
     }
 }
 
+/** @stable */
 export class BufferUnderflowError extends BaseBufferError {
     constructor(
         message = 'Buffer underflow',
@@ -33,18 +35,21 @@ export class BufferUnderflowError extends BaseBufferError {
     }
 }
 
+/** @stable */
 export class ReadOnlyBufferError extends BaseBufferError {
     constructor(message = 'Buffer is read-only') {
         super('ReadOnlyBufferError', message, 'BUFFER_READONLY');
     }
 }
 
+/** @stable */
 export class InvalidMarkError extends BaseBufferError {
     constructor(message = 'Mark not defined') {
         super('InvalidMarkError', message, 'INVALID_MARK');
     }
 }
 
+/** @stable */
 export class BufferAlignmentError extends BaseBufferError {
     constructor(
         message = 'Invalid buffer alignment',
@@ -54,12 +59,14 @@ export class BufferAlignmentError extends BaseBufferError {
     }
 }
 
+/** @stable */
 export class BufferReleasedError extends BaseBufferError {
     constructor(message = 'Buffer has been released to pool') {
         super('BufferReleasedError', message, 'BUFFER_RELEASED');
     }
 }
 
+/** @stable */
 export class BufferStateError extends BaseBufferError {
     constructor(
         message: string,
@@ -70,6 +77,7 @@ export class BufferStateError extends BaseBufferError {
     }
 }
 
+/** @stable */
 export class BufferCapacityError extends BaseBufferError {
     constructor(
         message: string,

@@ -219,7 +219,12 @@ export class Animator extends Component {
                 if (!this._isStreamingBlocked(streaming)) {
                     this._applyFrame(this._controller.currentFrame);
                 }
-            } catch {}
+            } catch (error) {
+                console.warn(
+                    `[Animator] clipId setter: controller.play("${this._currentClipId}") failed:`,
+                    error instanceof Error ? error.message : String(error),
+                );
+            }
         }
     }
 
@@ -320,7 +325,12 @@ export class Animator extends Component {
         this._playing = true;
         try {
             controller.play(clipId);
-        } catch {}
+        } catch (error) {
+            console.warn(
+                `[Animator] play: controller.play("${clipId}") failed:`,
+                error instanceof Error ? error.message : String(error),
+            );
+        }
         if (this._time > 0) {
             controller.seek(this._time);
         }
@@ -345,7 +355,12 @@ export class Animator extends Component {
                 if (this._currentClipId) {
                     try {
                         controller.play(this._currentClipId);
-                    } catch {}
+                    } catch (error) {
+                        console.warn(
+                            `[Animator] stop: controller.play("${this._currentClipId}") failed:`,
+                            error instanceof Error ? error.message : String(error),
+                        );
+                    }
                 }
                 controller.seek(0);
                 const streaming = this._syncStreamingState(controller);

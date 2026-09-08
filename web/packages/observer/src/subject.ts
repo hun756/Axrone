@@ -1,3 +1,4 @@
+import { CircularBuffer } from '@axrone/memory';
 import {
     createNotificationData,
     createObserverId,
@@ -59,97 +60,19 @@ const isPromiseLike = <T = unknown>(value: unknown): value is PromiseLike<T> =>
 const normalizeError = (error: unknown): Error =>
     error instanceof Error ? error : new Error(typeof error === 'string' ? error : String(error));
 
-class RingBuffer<T> {
-    readonly maxSize: number;
-    readonly #items: Array<T | undefined>;
-    #start = 0;
-    #size = 0;
-
-    constructor(maxSize: number) {
-        this.maxSize = maxSize;
-        this.#items = new Array<T | undefined>(maxSize);
-    }
-
-    add(value: T): void {
-        if (this.maxSize === 0) {
-            return;
-        }
-
-        if (this.#size < this.maxSize) {
-            this.#items[(this.#start + this.#size) % this.maxSize] = value;
-            this.#size++;
-            return;
-        }
-
-        this.#items[this.#start] = value;
-        this.#start = (this.#start + 1) % this.maxSize;
-    }
-
-    toArray(): T[] {
-        const result = new Array<T>(this.#size);
-
-        for (let index = 0; index < this.#size; index++) {
-            result[index] = this.#items[(this.#start + index) % this.maxSize] as T;
-        }
-
-        return result;
-    }
-
-    last(count: number): T[] {
-        if (count <= 0 || this.#size === 0) {
-            return [];
-        }
-
-        const size = count >= this.#size ? this.#size : count;
-        const result = new Array<T>(size);
-        const offset = this.#size - size;
-
-        for (let index = 0; index < size; index++) {
-            result[index] = this.#items[
-                (this.#start + offset + index) % this.maxSize
-            ] as T;
-        }
-
-        return result;
-    }
-
-    takeAll(): T[] {
-        const snapshot = this.toArray();
-        this.clear();
-        return snapshot;
-    }
-
-    clear(): void {
-        for (let index = 0; index < this.#size; index++) {
-            this.#items[(this.#start + index) % this.maxSize] = undefined;
-        }
-
-        this.#start = 0;
-        this.#size = 0;
-    }
-
-    size(): number {
-        return this.#size;
-    }
-
-    isFull(): boolean {
-        return this.#size >= this.maxSize;
-    }
-}
-
 class NotificationBuffer<T = any> implements IObserverBuffer<T> {
-    readonly #buffer: RingBuffer<NotificationData<T>>;
+    readonly #buffer: CircularBuffer<NotificationData<T>>;
 
     constructor(maxSize: number) {
-        this.#buffer = new RingBuffer(maxSize);
+        this.#buffer = new CircularBuffer(maxSize);
     }
 
     add(data: NotificationData<T>): void {
-        this.#buffer.add(data);
+        this.#buffer.push(data);
     }
 
     flush(): ReadonlyArray<NotificationData<T>> {
-        return this.#buffer.takeAll();
+        return this.#buffer.drain();
     }
 
     clear(): void {
@@ -157,11 +80,11 @@ class NotificationBuffer<T = any> implements IObserverBuffer<T> {
     }
 
     size(): number {
-        return this.#buffer.size();
+        return this.#buffer.size;
     }
 
     isFull(): boolean {
-        return this.#buffer.isFull();
+        return this.#buffer.isFull;
     }
 
     getAll(): ReadonlyArray<NotificationData<T>> {
@@ -170,16 +93,16 @@ class NotificationBuffer<T = any> implements IObserverBuffer<T> {
 }
 
 class ReplayBuffer<T = any> implements IReplayBuffer<T> {
-    readonly #buffer: RingBuffer<T>;
+    readonly #buffer: CircularBuffer<T>;
     readonly maxSize: number;
 
     constructor(maxSize: number) {
         this.maxSize = maxSize;
-        this.#buffer = new RingBuffer<T>(maxSize);
+        this.#buffer = new CircularBuffer<T>(maxSize);
     }
 
     add(data: T): void {
-        this.#buffer.add(data);
+        this.#buffer.push(data);
     }
 
     getAll(): ReadonlyArray<T> {
@@ -187,7 +110,10 @@ class ReplayBuffer<T = any> implements IReplayBuffer<T> {
     }
 
     getLast(count: number): ReadonlyArray<T> {
-        return this.#buffer.last(count);
+        if (count <= 0 || this.#buffer.size === 0) {
+            return [];
+        }
+        return this.#buffer.slice(-count);
     }
 
     clear(): void {
@@ -195,7 +121,7 @@ class ReplayBuffer<T = any> implements IReplayBuffer<T> {
     }
 
     size(): number {
-        return this.#buffer.size();
+        return this.#buffer.size;
     }
 }
 
@@ -216,7 +142,7 @@ class ObserverRecord<TInput = any, TDispatch = TInput> implements IObserverSubsc
     isActive = true;
     debounceTimer?: TimeoutHandle;
     bufferTimer?: TimeoutHandle;
-    buffer?: RingBuffer<TDispatch>;
+    buffer?: CircularBuffer<TDispatch>;
     notificationBuffer?: NotificationBuffer<TDispatch>;
     throttleLastExecution = 0;
     readonly #strongCallback?: ObserverCallback<TDispatch>;
@@ -247,7 +173,7 @@ class ObserverRecord<TInput = any, TDispatch = TInput> implements IObserverSubsc
         }
 
         if (options.buffering.enabled) {
-            this.buffer = new RingBuffer<TDispatch>(options.buffering.maxSize);
+            this.buffer = new CircularBuffer<TDispatch>(options.buffering.maxSize);
             this.notificationBuffer = new NotificationBuffer<TDispatch>(options.buffering.maxSize);
         }
     }
@@ -595,7 +521,7 @@ export class Subject<T = any> implements ISubject<T> {
         let bufferedNotifications = 0;
 
         for (const observer of this._observers.values()) {
-            bufferedNotifications += observer.buffer?.size() ?? 0;
+            bufferedNotifications += observer.buffer?.size ?? 0;
         }
 
         return {
@@ -1014,10 +940,10 @@ export class Subject<T = any> implements ISubject<T> {
     }
 
     protected _enqueueBufferedValue(observer: ObserverRecord<T, any>, data: unknown): void {
-        observer.buffer?.add(data);
+        observer.buffer?.push(data as TDispatch);
         observer.notificationBuffer?.add(createNotificationData(this.id, 'update', data));
 
-        if (observer.buffer?.isFull()) {
+        if (observer.buffer?.isFull) {
             this._flushObserverBuffer(observer);
             return;
         }
@@ -1031,7 +957,7 @@ export class Subject<T = any> implements ISubject<T> {
     }
 
     protected _flushObserverBuffer(observer: ObserverRecord<T, any>): void {
-        if (!observer.isActive || !observer.buffer || observer.buffer.size() === 0) {
+        if (!observer.isActive || !observer.buffer || observer.buffer.size === 0) {
             return;
         }
 
@@ -1040,7 +966,7 @@ export class Subject<T = any> implements ISubject<T> {
             observer.bufferTimer = undefined;
         }
 
-        const batch = observer.buffer.takeAll();
+        const batch = observer.buffer.drain();
         observer.notificationBuffer?.flush();
 
         const task = this._dispatchObserverAsync(observer, batch);

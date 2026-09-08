@@ -2,12 +2,11 @@ import { Component } from '@axrone/ecs-runtime';
 import type { ComponentConfig } from '@axrone/ecs-runtime';
 import type { Transform } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
-import { Vec3 } from '@axrone/numeric';
+import { Vec3, clamp } from '@axrone/numeric';
 import {
     DEFAULT_LISTENER_FORWARD,
     DEFAULT_LISTENER_POSITION,
     DEFAULT_LISTENER_UP,
-    clamp,
     cloneMetadata,
     normalizeDspBuffer,
     normalizeSampleRate,

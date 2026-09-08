@@ -8,22 +8,19 @@ export type {
     EventNames,
     OptionalData,
     EventOptions,
+    EventDispatchItem,
+    EventDispatchResult,
 } from './definition';
 
 export {
-    isValidEventName,
-    isValidCallback,
-    isValidPriority,
     PRIORITY_VALUES,
     DEFAULT_PRIORITY,
     DEFAULT_OPTIONS,
-    MEMORY_USAGE_SYMBOLS,
 } from './definition';
 
 export {
     BaseError,
     EventError,
-    EventNotFoundError,
     EventQueueFullError,
     EventHandlerError,
 } from './errors';
@@ -66,9 +63,6 @@ export {
     createEventProxy,
     mergeEmitters,
     namespaceEvents,
-    TypedEventRegistry,
 } from './extras';
-
-export { performance } from './performance';
 
 export { createHooks, EventUtils } from './utility';

@@ -205,6 +205,7 @@ export class AudioBusRegistry {
 
     captureSnapshot(id?: string): AudioMixerSnapshot {
         return Object.freeze({
+            kind: 'audio.mixer-snapshot' as const,
             id,
             buses: Object.freeze(
                 [...this.#buses.values()].map((bus) =>

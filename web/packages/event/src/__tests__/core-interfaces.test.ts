@@ -194,7 +194,11 @@ describe('EventEmitter - Core Interfaces', () => {
         });
 
         it('should handle batch emit operations', async () => {
-            mockPublisher.emitBatch.mockResolvedValue([true, false, true]);
+            mockPublisher.emitBatch.mockResolvedValue([
+                { success: true },
+                { success: false },
+                { success: true },
+            ]);
 
             const events = [
                 { event: 'test:batch' as const, data: { index: 1 } },
@@ -205,7 +209,7 @@ describe('EventEmitter - Core Interfaces', () => {
             const results = await mockPublisher.emitBatch(events);
 
             expect(mockPublisher.emitBatch).toHaveBeenCalledWith(events);
-            expect(results).toEqual([true, false, true]);
+            expect(results).toEqual([{ success: true }, { success: false }, { success: true }]);
         });
 
         it('should handle emit failures gracefully', async () => {
@@ -305,7 +309,6 @@ describe('EventEmitter - Core Interfaces', () => {
                 getSubscriptions: vi.fn(),
                 hasSubscription: vi.fn(),
                 getMetrics: vi.fn(),
-                getMemoryUsage: vi.fn(),
             };
         });
 
@@ -356,10 +359,11 @@ describe('EventEmitter - Core Interfaces', () => {
             expect(hasSubscription).toBe(true);
         });
 
-        it('should handle metrics and memory usage', () => {
+        it('should handle metrics', () => {
             const mockMetrics: EventMetrics = {
                 emit: {
                     count: 10,
+                    mode: 'sync',
                     timing: { avg: 2.5, max: 10.0, min: 0.5, total: 25.0 },
                 },
                 execution: {
@@ -369,17 +373,9 @@ describe('EventEmitter - Core Interfaces', () => {
                 },
             };
 
-            const mockMemoryUsage = {
-                subscriptions: 1024,
-                queue: 512,
-                total: 1536,
-            };
-
             mockObserver.getMetrics.mockReturnValue(mockMetrics);
-            mockObserver.getMemoryUsage.mockReturnValue(mockMemoryUsage);
 
             expect(mockObserver.getMetrics('test:event')).toEqual(mockMetrics);
-            expect(mockObserver.getMemoryUsage()).toEqual(mockMemoryUsage);
         });
 
         it('should handle maxListeners property correctly', () => {
@@ -416,7 +412,6 @@ describe('EventEmitter - Core Interfaces', () => {
                 getSubscriptions: vi.fn(),
                 hasSubscription: vi.fn(),
                 getMetrics: vi.fn(),
-                getMemoryUsage: vi.fn(),
 
                 // IEventBuffer
                 getQueuedEvents: vi.fn(),
@@ -518,7 +513,6 @@ describe('EventEmitter - Core Interfaces', () => {
                 'getSubscriptions',
                 'hasSubscription',
                 'getMetrics',
-                'getMemoryUsage',
                 // IEventBuffer
                 'getQueuedEvents',
                 'getPendingCount',

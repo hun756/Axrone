@@ -1,5 +1,5 @@
 import { AnimationIkError, AnimationValidationError } from './errors';
-import { quatCopy, quatFromTo, quatInvert, quatMultiply, quatNormalize, quatSlerp, vec3Length, vec3Normalize, vec3Subtract } from './math';
+import { SoaVec3Buffer, SoaQuatBuffer } from '@axrone/numeric';
 import { AnimationWorldPose, type AnimationPose } from './pose';
 import type { AnimationRig } from './rig';
 import type { AnimationIkJobDefinition, AnimationIkLayerDefinition, AnimationIkTarget } from './types';
@@ -177,17 +177,17 @@ export class AnimationIkLayer {
 
         for (let iteration = 0; iteration < job.maxIterations; iteration += 1) {
             const tipOffset = job.tipIndex * 3;
-            vec3Subtract(this._scratchVectors, 0, job.targetPosition, 0, this._worldPose.translations, tipOffset);
-            if (vec3Length(this._scratchVectors, 0) <= job.precision) {
+            SoaVec3Buffer.vec3Subtract(this._scratchVectors, 0, job.targetPosition, 0, this._worldPose.translations, tipOffset);
+            if (SoaVec3Buffer.vec3Length(this._scratchVectors, 0) <= job.precision) {
                 break;
             }
 
             for (let chainIndex = job.chain.length - 2; chainIndex >= 0; chainIndex -= 1) {
                 const boneIndex = job.chain[chainIndex]!;
                 const boneTranslationOffset = boneIndex * 3;
-                vec3Subtract(this._scratchVectors, 0, this._worldPose.translations, tipOffset, this._worldPose.translations, boneTranslationOffset);
-                vec3Subtract(this._scratchVectors, 3, job.targetPosition, 0, this._worldPose.translations, boneTranslationOffset);
-                if (vec3Length(this._scratchVectors, 0) <= IK_CONVERGENCE_EPSILON || vec3Length(this._scratchVectors, 3) <= IK_CONVERGENCE_EPSILON) {
+                SoaVec3Buffer.vec3Subtract(this._scratchVectors, 0, this._worldPose.translations, tipOffset, this._worldPose.translations, boneTranslationOffset);
+                SoaVec3Buffer.vec3Subtract(this._scratchVectors, 3, job.targetPosition, 0, this._worldPose.translations, boneTranslationOffset);
+                if (SoaVec3Buffer.vec3Length(this._scratchVectors, 0) <= IK_CONVERGENCE_EPSILON || SoaVec3Buffer.vec3Length(this._scratchVectors, 3) <= IK_CONVERGENCE_EPSILON) {
                     continue;
                 }
 
@@ -210,8 +210,8 @@ export class AnimationIkLayer {
             positions[index * 3 + 1] = this._worldPose.translations[boneIndex * 3 + 1]!;
             positions[index * 3 + 2] = this._worldPose.translations[boneIndex * 3 + 2]!;
             if (index > 0) {
-                vec3Subtract(this._scratchVectors, 0, positions, index * 3, positions, (index - 1) * 3);
-                lengths[index - 1] = vec3Length(this._scratchVectors, 0);
+                SoaVec3Buffer.vec3Subtract(this._scratchVectors, 0, positions, index * 3, positions, (index - 1) * 3);
+                lengths[index - 1] = SoaVec3Buffer.vec3Length(this._scratchVectors, 0);
                 totalLength += lengths[index - 1]!;
             }
         }
@@ -219,11 +219,11 @@ export class AnimationIkLayer {
         const rootBaseX = positions[0]!;
         const rootBaseY = positions[1]!;
         const rootBaseZ = positions[2]!;
-        vec3Subtract(this._scratchVectors, 0, job.targetPosition, 0, positions, 0);
-        const rootDistance = vec3Length(this._scratchVectors, 0);
+        SoaVec3Buffer.vec3Subtract(this._scratchVectors, 0, job.targetPosition, 0, positions, 0);
+        const rootDistance = SoaVec3Buffer.vec3Length(this._scratchVectors, 0);
 
         if (rootDistance >= totalLength) {
-            vec3Normalize(this._scratchVectors, 0, this._scratchVectors, 0, 1, 0, 0);
+            SoaVec3Buffer.vec3Normalize(this._scratchVectors, 0, this._scratchVectors, 0, 1, 0, 0);
             for (let index = 1; index < chainLength; index += 1) {
                 positions[index * 3] = positions[(index - 1) * 3]! + this._scratchVectors[0]! * lengths[index - 1]!;
                 positions[index * 3 + 1] = positions[(index - 1) * 3 + 1]! + this._scratchVectors[1]! * lengths[index - 1]!;
@@ -236,8 +236,8 @@ export class AnimationIkLayer {
                 positions[(chainLength - 1) * 3 + 2] = job.targetPosition[2]!;
 
                 for (let index = chainLength - 2; index >= 0; index -= 1) {
-                    vec3Subtract(this._scratchVectors, 0, positions, index * 3, positions, (index + 1) * 3);
-                    vec3Normalize(this._scratchVectors, 0, this._scratchVectors, 0, 1, 0, 0);
+                    SoaVec3Buffer.vec3Subtract(this._scratchVectors, 0, positions, index * 3, positions, (index + 1) * 3);
+                    SoaVec3Buffer.vec3Normalize(this._scratchVectors, 0, this._scratchVectors, 0, 1, 0, 0);
                     positions[index * 3] = positions[(index + 1) * 3]! + this._scratchVectors[0]! * lengths[index]!;
                     positions[index * 3 + 1] = positions[(index + 1) * 3 + 1]! + this._scratchVectors[1]! * lengths[index]!;
                     positions[index * 3 + 2] = positions[(index + 1) * 3 + 2]! + this._scratchVectors[2]! * lengths[index]!;
@@ -247,14 +247,14 @@ export class AnimationIkLayer {
                 positions[1] = rootBaseY;
                 positions[2] = rootBaseZ;
                 for (let index = 1; index < chainLength; index += 1) {
-                    vec3Subtract(this._scratchVectors, 0, positions, index * 3, positions, (index - 1) * 3);
-                    vec3Normalize(this._scratchVectors, 0, this._scratchVectors, 0, 1, 0, 0);
+                    SoaVec3Buffer.vec3Subtract(this._scratchVectors, 0, positions, index * 3, positions, (index - 1) * 3);
+                    SoaVec3Buffer.vec3Normalize(this._scratchVectors, 0, this._scratchVectors, 0, 1, 0, 0);
                     positions[index * 3] = positions[(index - 1) * 3]! + this._scratchVectors[0]! * lengths[index - 1]!;
                     positions[index * 3 + 1] = positions[(index - 1) * 3 + 1]! + this._scratchVectors[1]! * lengths[index - 1]!;
                     positions[index * 3 + 2] = positions[(index - 1) * 3 + 2]! + this._scratchVectors[2]! * lengths[index - 1]!;
                 }
 
-                vec3Subtract(
+                SoaVec3Buffer.vec3Subtract(
                     this._scratchVectors,
                     0,
                     job.targetPosition,
@@ -262,7 +262,7 @@ export class AnimationIkLayer {
                     positions,
                     (chainLength - 1) * 3
                 );
-                if (vec3Length(this._scratchVectors, 0) <= job.precision) {
+                if (SoaVec3Buffer.vec3Length(this._scratchVectors, 0) <= job.precision) {
                     break;
                 }
             }
@@ -271,9 +271,9 @@ export class AnimationIkLayer {
         for (let chainIndex = 0; chainIndex < chainLength - 1; chainIndex += 1) {
             const boneIndex = job.chain[chainIndex]!;
             const currentChildIndex = job.chain[chainIndex + 1]!;
-            vec3Subtract(this._scratchVectors, 0, this._worldPose.translations, currentChildIndex * 3, this._worldPose.translations, boneIndex * 3);
-            vec3Subtract(this._scratchVectors, 3, positions, (chainIndex + 1) * 3, positions, chainIndex * 3);
-            if (vec3Length(this._scratchVectors, 0) <= IK_CONVERGENCE_EPSILON || vec3Length(this._scratchVectors, 3) <= IK_CONVERGENCE_EPSILON) {
+            SoaVec3Buffer.vec3Subtract(this._scratchVectors, 0, this._worldPose.translations, currentChildIndex * 3, this._worldPose.translations, boneIndex * 3);
+            SoaVec3Buffer.vec3Subtract(this._scratchVectors, 3, positions, (chainIndex + 1) * 3, positions, chainIndex * 3);
+            if (SoaVec3Buffer.vec3Length(this._scratchVectors, 0) <= IK_CONVERGENCE_EPSILON || SoaVec3Buffer.vec3Length(this._scratchVectors, 3) <= IK_CONVERGENCE_EPSILON) {
                 continue;
             }
             this._applyBoneCorrection(boneIndex, pose, weight);
@@ -282,8 +282,8 @@ export class AnimationIkLayer {
 
     private _applyBoneCorrection(boneIndex: number, pose: AnimationPose, weight: number): void {
         const boneRotationOffset = boneIndex * 4;
-        quatFromTo(this._scratchQuaternion, 0, this._scratchVectors, 0, this._scratchVectors, 3, this._scratchVectors);
-        quatMultiply(
+        SoaQuatBuffer.quatFromTo(this._scratchQuaternion, 0, this._scratchVectors, 0, this._scratchVectors, 3, this._scratchVectors);
+        SoaQuatBuffer.quatMultiply(
             this._scratchQuaternionB,
             0,
             this._scratchQuaternion,
@@ -293,10 +293,10 @@ export class AnimationIkLayer {
         );
         const parentIndex = this._rig.parentIndices[boneIndex]!;
         if (parentIndex >= 0) {
-            quatInvert(this._scratchQuaternionC, 0, this._worldPose.rotations, parentIndex * 4);
-            quatMultiply(this._scratchQuaternionB, 0, this._scratchQuaternionC, 0, this._scratchQuaternionB, 0);
+            SoaQuatBuffer.quatInvert(this._scratchQuaternionC, 0, this._worldPose.rotations, parentIndex * 4);
+            SoaQuatBuffer.quatMultiply(this._scratchQuaternionB, 0, this._scratchQuaternionC, 0, this._scratchQuaternionB, 0);
         }
-        quatSlerp(
+        SoaQuatBuffer.quatSlerp(
             pose.rotations,
             boneRotationOffset,
             pose.rotations,
@@ -305,7 +305,7 @@ export class AnimationIkLayer {
             0,
             weight
         );
-        quatNormalize(pose.rotations, boneRotationOffset, pose.rotations, boneRotationOffset);
+        SoaQuatBuffer.quatNormalize(pose.rotations, boneRotationOffset, pose.rotations, boneRotationOffset);
         this._worldPose.update(this._rig, pose);
     }
 
@@ -313,12 +313,12 @@ export class AnimationIkLayer {
         this._worldPose.update(this._rig, pose);
         const tipRotationOffset = job.tipIndex * 4;
         const parentIndex = this._rig.parentIndices[job.tipIndex]!;
-        quatCopy(this._scratchQuaternion, 0, job.targetRotation, 0);
+        SoaQuatBuffer.quatCopy(this._scratchQuaternion, 0, job.targetRotation, 0);
         if (parentIndex >= 0) {
-            quatInvert(this._scratchQuaternionB, 0, this._worldPose.rotations, parentIndex * 4);
-            quatMultiply(this._scratchQuaternion, 0, this._scratchQuaternionB, 0, this._scratchQuaternion, 0);
+            SoaQuatBuffer.quatInvert(this._scratchQuaternionB, 0, this._worldPose.rotations, parentIndex * 4);
+            SoaQuatBuffer.quatMultiply(this._scratchQuaternion, 0, this._scratchQuaternionB, 0, this._scratchQuaternion, 0);
         }
-        quatSlerp(
+        SoaQuatBuffer.quatSlerp(
             pose.rotations,
             tipRotationOffset,
             pose.rotations,
@@ -327,6 +327,6 @@ export class AnimationIkLayer {
             0,
             weight
         );
-        quatNormalize(pose.rotations, tipRotationOffset, pose.rotations, tipRotationOffset);
+        SoaQuatBuffer.quatNormalize(pose.rotations, tipRotationOffset, pose.rotations, tipRotationOffset);
     }
 }

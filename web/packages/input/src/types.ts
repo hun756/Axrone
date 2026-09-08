@@ -123,12 +123,31 @@ export interface InputButtonActionDefinition extends InputActionDefinitionBase<'
     readonly interactions?: readonly InputButtonInteraction[];
 }
 
+/**
+ * Axis action definition.
+ *
+ * Deadzone/scale/invert can be configured at three layers with the following precedence:
+ * 1. Binding fields (InputControlBinding.deadzone/scale/invert) — applied first during evaluation
+ * 2. Action definition (InputAxisActionDefinition.deadzone) — applied during state commit
+ * 3. Processors (InputDeadzoneProcessor, InputScaleProcessor, InputInvertProcessor) — applied last
+ *
+ * For most use cases, configure at the action level. Use binding fields for per-binding overrides.
+ * Use processors for complex transformations (curves, clamps, etc.).
+ */
 export interface InputAxisActionDefinition extends InputActionDefinitionBase<'axis'> {
     readonly deadzone?: number;
     readonly clamp?: readonly [min: number, max: number];
     readonly combine?: 'sum' | 'max-abs' | 'latest';
 }
 
+/**
+ * Vector2 action definition.
+ *
+ * Deadzone/normalize can be configured at three layers with the following precedence:
+ * 1. Binding fields (InputDualAxisBinding.deadzone/scale/normalize, InputDirectionalBinding.normalize/scale) — applied first
+ * 2. Action definition (InputVector2ActionDefinition.deadzone/normalize) — applied during state commit
+ * 3. Processors (InputNormalizeVector2Processor, InputScaleVector2Processor, etc.) — applied last
+ */
 export interface InputVector2ActionDefinition extends InputActionDefinitionBase<'vector2'> {
     readonly deadzone?: number;
     readonly normalize?: boolean;
