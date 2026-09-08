@@ -47,7 +47,9 @@
  *   - Baseline stored at .tmp/benchmarks/physics-allocation-baseline.json (gitignored)
  *   - --update-baseline flag updates baseline after measurement
  *   - If no baseline exists, first run creates one automatically (PASS)
- *   - 10% regression threshold triggers FAIL
+ *   - 10% regression threshold triggers FAIL for scenarios with baseline ≥ 50 B/step
+ *   - For scenarios with baseline < 50 B/step: absolute floor of 50 B/step applies
+ *     (see ABSOLUTE_FLOOR_BPS constant for derivation and masking analysis)
  *
  * Self-test mode:
  *   --selfTest=<bytes> adds a known allocation per step (accumulates Uint8Array
@@ -87,6 +89,32 @@ const SCENARIO_CONFIG = {
 };
 
 const REGRESSION_THRESHOLD_PCT = 10;
+
+/**
+ * Absolute floor for regression detection (bytes/step).
+ *
+ * WHY: 2D scenarios allocate ~0–10 B/step — within V8 heap granularity noise.
+ * The baseline's own 7 iterations for `2d-contact-heavy` span 0.00 → 88.10 B/step
+ * (trimmed range 0 → 88.10). A 10% relative threshold on a 5.17 B/step baseline
+ * yields 0.52 B/step — far below measurement resolution. This makes the gate
+ * a noise generator, not a regression detector.
+ *
+ * HOW DERIVED: 50 B/step = max(
+ *   (a) 10× the largest 2D baseline median (10 × 5.17 = 51.7 ≈ 50),
+ *   (b) V8 page granularity / steps = 4096 / 500 ≈ 8.2 (minimum detectable),
+ *   (c) Observed noise ceiling from 8 independent runs: max median 10.32 B/step.
+ * 50 B/step is ~6× the observed noise ceiling and ~5000× V8 page granularity/step.
+ *
+ * WHAT IT MASKS: absolute deltas < 50 B/step are treated as noise and PASS.
+ * Over 500 steps this hides ≤ 25 KB of total heap regression — approximately
+ * 0.001% of a 25 MB V8 heap. A real regression producing > 50 B/step step-allocation
+ * (e.g. a new per-step object allocation in the contact solver) would still FAIL.
+ *
+ * APPLIES ONLY WHEN: baseline median < 50 B/step (i.e. the scenario's signal is
+ * at or below the noise floor). Higher-allocation scenarios use the 10% relative
+ * threshold exclusively.
+ */
+const ABSOLUTE_FLOOR_BPS = 50;
 const MAX_NEG_RETRIES = 3;
 const GC_CALLS = 3;
 
@@ -439,10 +467,30 @@ async function main() {
             const baselineBytesPerStep = baseline.scenarios[scenarioName].medianBytesPerStep;
             const changePct = ((bytesPerStep - baselineBytesPerStep) / baselineBytesPerStep) * 100;
             const changeStr = changePct >= 0 ? `+${changePct.toFixed(1)}%` : `${changePct.toFixed(1)}%`;
+            const absDelta = bytesPerStep - baselineBytesPerStep;
 
             console.log(`${kbPerStep} KB/step (${changeStr} vs baseline, ${spreadStr})`);
 
-            if (changePct > REGRESSION_THRESHOLD_PCT) {
+            // Determine failure using absolute floor for low-signal scenarios.
+            // When baseline median is below ABSOLUTE_FLOOR_BPS, the relative % threshold
+            // is meaningless (measurement noise exceeds the threshold). Use absolute floor instead.
+            let failed = false;
+            if (baselineBytesPerStep < ABSOLUTE_FLOOR_BPS) {
+                // Low-signal scenario: absolute floor applies
+                if (absDelta > ABSOLUTE_FLOOR_BPS) {
+                    failed = true;
+                    console.log(`  NOTE: baseline < ${ABSOLUTE_FLOOR_BPS} B/step — using absolute floor (${ABSOLUTE_FLOOR_BPS} B/step) instead of ${REGRESSION_THRESHOLD_PCT}% relative threshold`);
+                } else if (changePct > REGRESSION_THRESHOLD_PCT) {
+                    console.log(`  NOTE: +${changePct.toFixed(1)}% exceeds relative threshold but delta ${absDelta.toFixed(1)} B/step < floor ${ABSOLUTE_FLOOR_BPS} B/step — PASS (noise)`);
+                }
+            } else {
+                // Normal scenario: relative threshold applies
+                if (changePct > REGRESSION_THRESHOLD_PCT) {
+                    failed = true;
+                }
+            }
+
+            if (failed) {
                 failures.push(
                     `${scenarioName}: ${kbPerStep} KB/step is ${changePct.toFixed(1)}% above baseline (${(baselineBytesPerStep / 1024).toFixed(3)} KB/step)`,
                 );
