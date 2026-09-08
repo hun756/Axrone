@@ -5,20 +5,55 @@
  * performance regressions. Uses --expose-gc for accurate measurement.
  *
  * Scenarios:
- *   - 2d-50body-step: 50 dynamic bodies, 120 steps
- *   - 2d-contact-heavy: 10-box stack (contact-heavy), 120 steps
+ *   - 2d-50body-step: 50 dynamic bodies, 500 steps
+ *   - 2d-contact-heavy: 10-box stack (contact-heavy), 500 steps
  *   - 3d-50body-step: 50 dynamic bodies, 120 steps
  *   - 3d-sphere-stack: 10-sphere stack, 120 steps
  *
+ * Why different step counts:
+ *   2D scenarios allocate ~60-80 B/step. At 120 steps the total heap delta
+ *   is ~7-10 KB, which is within GC timing noise. At 500 steps the delta
+ *   is ~30-40 KB, giving a better signal-to-noise ratio.
+ *   3D scenarios allocate ~200 B/step. At 120 steps the delta is ~24 KB
+ *   with 0% spread across 5 independent process runs — already reliable.
+ *   Changing 3D step count would needlessly shift the baseline.
+ *
  * Measurement method:
- *   - 5 iterations per scenario, drop min/max, median of remaining 3
- *   - global.gc() before/after each iteration
- *   - heapUsed delta / steps = bytes per step
+ *   - 2D: 7 iterations, drop min/max, median of 5
+ *   - 3D: 5 iterations, drop min/max, median of 3
+ *   - No warm-up phase — warm-up stabilizes JIT but eliminates the allocation
+ *     signal we're trying to measure (lazy init, first-pass IC stubs allocate)
+ *   - Aggressive GC discipline: 3x gc() before + settle, 3x gc() after + settle
+ *   - Negative samples (GC interference) are rejected and retried (max 3 retries)
+ *   - Spread is computed from trimmed values (after dropping min/max), not raw
+ *     min/max, because extreme values are GC artifacts, not real allocation variance
+ *
+ * Negative sample handling (option A — reject & retry):
+ *   A negative B/step means heap shrank during measurement → GC collected more
+ *   than was allocated between snapshots. This invalidates the sample. We retry
+ *   up to MAX_NEG_RETRIES times with additional GC settling between retries.
+ *   If all retries produce negative values, the iteration is excluded from median
+ *   calculation. This is preferred over:
+ *     (B) clamping to 0 — would bias median downward, masking real allocation
+ *     (C) skip without retry — reduces effective sample count unnecessarily
+ *
+ * GC discipline:
+ *   V8 has multiple collector generations (young/old/code/map). A single gc()
+ *   call may not run all collectors. We call gc() 3 times before measurement
+ *   to ensure all generations are settled, then read heapUsed. After the step
+ *   loop we repeat 3x gc() before reading. This minimizes GC noise.
  *
  * Baseline:
- *   - First run writes baseline to .tmp/benchmarks/physics-allocation-baseline.json
- *   - Subsequent runs compare against baseline (10% regression threshold)
- *   - --update-baseline flag updates baseline on regression
+ *   - Baseline stored at .tmp/benchmarks/physics-allocation-baseline.json (gitignored)
+ *   - --update-baseline flag updates baseline after measurement
+ *   - If no baseline exists, first run creates one automatically (PASS)
+ *   - 10% regression threshold triggers FAIL
+ *
+ * Self-test mode:
+ *   --selfTest=<bytes> adds a known allocation per step (accumulates Uint8Array
+ *   buffers of <bytes> each step, kept alive via reference array). This proves
+ *   the gate can detect regressions of known magnitude. Without --selfTest,
+ *   no extra allocation occurs.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -43,17 +78,26 @@ const defaultReportPath = path.resolve(
     'physics-allocation-report.json',
 );
 
-const ITERATIONS = 5;
-const STEPS = 120;
+// ── Per-scenario configuration ──────────────────────────────────────────────
+const SCENARIO_CONFIG = {
+    '2d-50body-step':   { steps: 500, iterations: 7 },
+    '2d-contact-heavy': { steps: 500, iterations: 7 },
+    '3d-50body-step':   { steps: 120,  iterations: 5 },
+    '3d-sphere-stack':  { steps: 120,  iterations: 5 },
+};
+
 const REGRESSION_THRESHOLD_PCT = 10;
+const MAX_NEG_RETRIES = 3;
+const GC_CALLS = 3;
 
 // ── CLI argument parsing ────────────────────────────────────────────────────
 const { values: cli } = parseArgs({
     options: {
         baseline: { type: 'string' },
         report: { type: 'string' },
-        updateBaseline: { type: 'boolean' },
+        'update-baseline': { type: 'boolean' },
         scenario: { type: 'string' },
+        selfTest: { type: 'string' },
     },
     strict: true,
     allowPositionals: false,
@@ -62,13 +106,17 @@ const { values: cli } = parseArgs({
 const baselinePath = path.resolve(workspaceDir, cli.baseline ?? defaultBaselinePath);
 const reportPath = path.resolve(workspaceDir, cli.report ?? defaultReportPath);
 const scenarioFilter = cli.scenario ? cli.scenario.split(',').map((s) => s.trim()) : null;
+const selfTestBytes = cli.selfTest ? parseInt(cli.selfTest, 10) : 0;
+
+if (cli.selfTest && (isNaN(selfTestBytes) || selfTestBytes < 0)) {
+    console.error(`Invalid --selfTest value: ${cli.selfTest} (must be a non-negative integer)`);
+    process.exit(1);
+}
 
 // ── GC requirement check ────────────────────────────────────────────────────
-// If --expose-gc was not passed, re-spawn ourselves with it.
 if (typeof global.gc !== 'function') {
     console.log('Respawning with --expose-gc for accurate allocation measurement...');
     const args = ['--expose-gc', fileURLToPath(import.meta.url)];
-    // Forward original CLI args
     for (const [key, value] of Object.entries(cli)) {
         if (value === true) {
             args.push(`--${key}`);
@@ -83,9 +131,20 @@ if (typeof global.gc !== 'function') {
     process.exit(result.status ?? 1);
 }
 
+// ── GC discipline helpers ───────────────────────────────────────────────────
+
+/**
+ * Run multiple GC passes to settle all V8 collector generations.
+ * V8 has young generation (scavenger), old generation (mark-sweep-compact),
+ * code space, and map space. A single gc() may not collect all.
+ */
+function settleGC() {
+    for (let i = 0; i < GC_CALLS; i++) {
+        global.gc();
+    }
+}
+
 // ── Scenario definitions ────────────────────────────────────────────────────
-// Each scenario sets up a world, then measures allocation during step() calls.
-// Setup allocation is NOT measured — only the step loop.
 
 async function runScenario2D50Body() {
     const { PhysicsWorld2D } = await import('@axrone/physics-2d');
@@ -93,7 +152,6 @@ async function runScenario2D50Body() {
 
     const world = new PhysicsWorld2D({ gravity: { x: 0, y: -9.81 } });
 
-    // Create 50 dynamic bodies with circle shapes scattered around
     for (let i = 0; i < 50; i++) {
         const bodyId = world.createBody({
             type: BodyType.Dynamic,
@@ -105,7 +163,7 @@ async function runScenario2D50Body() {
     return {
         world,
         stepFn: () => world.step(1 / 60),
-        steps: STEPS,
+        steps: SCENARIO_CONFIG['2d-50body-step'].steps,
     };
 }
 
@@ -115,14 +173,12 @@ async function runScenario2DContactHeavy() {
 
     const world = new PhysicsWorld2D({ gravity: { x: 0, y: -9.81 } });
 
-    // Ground
     const groundId = world.createBody({
         type: BodyType.Static,
         position: { x: 0, y: 0 },
     });
     world.createBoxShape(groundId, { halfWidth: 50, halfHeight: 1 });
 
-    // 10 boxes stacked
     for (let i = 0; i < 10; i++) {
         const bodyId = world.createBody({
             type: BodyType.Dynamic,
@@ -134,7 +190,7 @@ async function runScenario2DContactHeavy() {
     return {
         world,
         stepFn: () => world.step(1 / 60),
-        steps: STEPS,
+        steps: SCENARIO_CONFIG['2d-contact-heavy'].steps,
     };
 }
 
@@ -144,7 +200,6 @@ async function runScenario3D50Body() {
 
     const world = new PhysicsWorld3D({ gravity: { x: 0, y: -9.81, z: 0 } });
 
-    // Create 50 dynamic bodies with sphere shapes
     for (let i = 0; i < 50; i++) {
         const bodyId = world.createBody({
             type: BodyType.Dynamic,
@@ -159,7 +214,7 @@ async function runScenario3D50Body() {
     return {
         world,
         stepFn: () => world.step(1 / 60),
-        steps: STEPS,
+        steps: SCENARIO_CONFIG['3d-50body-step'].steps,
     };
 }
 
@@ -169,7 +224,6 @@ async function runScenario3DSphereStack() {
 
     const world = new PhysicsWorld3D({ gravity: { x: 0, y: -9.81, z: 0 } });
 
-    // 10 spheres stacked
     for (let i = 0; i < 10; i++) {
         const bodyId = world.createBody({
             type: BodyType.Dynamic,
@@ -184,7 +238,7 @@ async function runScenario3DSphereStack() {
     return {
         world,
         stepFn: () => world.step(1 / 60),
-        steps: STEPS,
+        steps: SCENARIO_CONFIG['3d-sphere-stack'].steps,
     };
 }
 
@@ -197,43 +251,109 @@ const scenarios = {
 
 // ── Measurement ─────────────────────────────────────────────────────────────
 
+/**
+ * Measure allocation per scenario with negative-sample rejection.
+ *
+ * For each iteration:
+ *   1. Settle GC (3x gc())
+ *   2. Read heapUsed (before)
+ *   3. Run step loop (with optional selfTest allocation per step)
+ *   4. Settle GC (3x gc())
+ *   5. Read heapUsed (after)
+ *   6. Compute bytesPerStep = (after - before) / steps
+ *   7. If negative → retry up to MAX_NEG_RETRIES times
+ *   8. If still negative after retries → exclude from median
+ *
+ * Median: sort valid results, drop min/max, take middle value.
+ * Spread: computed from trimmed values (after dropping min/max) to avoid
+ *         GC outlier distortion.
+ */
 function measureAllocation(scenarioSetup, iterations, steps) {
     const results = [];
+    const excludedCount = [];
+
+    // Self-test leak accumulator — keeps references alive to force measurable allocation
+    const selfTestLeaks = selfTestBytes > 0 ? [] : null;
 
     for (let i = 0; i < iterations; i++) {
-        global.gc();
-        global.gc();
+        let bytesPerStep = null;
+        let retries = 0;
 
-        const before = process.memoryUsage().heapUsed;
+        while (retries <= MAX_NEG_RETRIES) {
+            // Pre-measurement GC settle
+            settleGC();
 
-        for (let s = 0; s < steps; s++) {
-            scenarioSetup.stepFn();
+            const before = process.memoryUsage().heapUsed;
+
+            // Measured step loop
+            for (let s = 0; s < steps; s++) {
+                scenarioSetup.stepFn();
+
+                // Self-test: intentionally allocate bytes that survive GC
+                if (selfTestLeaks) {
+                    selfTestLeaks.push(new Uint8Array(selfTestBytes));
+                }
+            }
+
+            // Post-measurement GC settle
+            settleGC();
+
+            const after = process.memoryUsage().heapUsed;
+            const totalBytes = after - before;
+            bytesPerStep = totalBytes / steps;
+
+            if (bytesPerStep >= 0) {
+                break; // Valid sample
+            }
+
+            retries++;
+            if (retries <= MAX_NEG_RETRIES) {
+                // Extra settle before retry
+                settleGC();
+            }
         }
 
-        global.gc();
-        global.gc();
-
-        const after = process.memoryUsage().heapUsed;
-        const totalBytes = after - before;
-        const bytesPerStep = totalBytes / steps;
-
-        results.push({
-            totalBytes,
-            bytesPerStep,
-        });
+        if (bytesPerStep < 0) {
+            excludedCount.push(i);
+        } else {
+            results.push({
+                totalBytes: bytesPerStep * steps,
+                bytesPerStep,
+            });
+        }
     }
 
-    // Sort by bytesPerStep, drop min/max, take median of remaining 3
+    if (results.length < 3) {
+        console.warn(
+            `\n  WARNING: Only ${results.length} valid iterations (excluded ${excludedCount.length}). ` +
+            `Median may be unreliable.`,
+        );
+    }
+
+    // Sort by bytesPerStep, drop min/max, take median of remaining
     results.sort((a, b) => a.bytesPerStep - b.bytesPerStep);
-    const trimmed = results.slice(1, -1);
+    const trimmed = results.length > 2
+        ? results.slice(1, -1)
+        : results;
     const median = trimmed[Math.floor(trimmed.length / 2)];
+
+    // Spread from trimmed values (excludes GC outlier min/max)
+    const trimmedMin = trimmed[0]?.bytesPerStep ?? null;
+    const trimmedMax = trimmed[trimmed.length - 1]?.bytesPerStep ?? null;
+    const spreadPct = (trimmedMin !== null && trimmedMin > 0 && trimmedMax !== null)
+        ? ((trimmedMax - trimmedMin) / trimmedMin * 100)
+        : null;
 
     return {
         iterations: results,
+        excludedIterations: excludedCount,
         median: {
             totalBytes: median.totalBytes,
             bytesPerStep: median.bytesPerStep,
         },
+        trimmedMin,
+        trimmedMax,
+        spreadPct,
     };
 }
 
@@ -241,8 +361,16 @@ function measureAllocation(scenarioSetup, iterations, steps) {
 
 async function main() {
     console.log('Physics Allocation Regression Harness');
-    console.log(`Iterations: ${ITERATIONS}, Steps per iteration: ${STEPS}`);
+    if (selfTestBytes > 0) {
+        console.log(`*** SELF-TEST MODE: injecting ${selfTestBytes} bytes/step allocation ***`);
+    }
     console.log(`Regression threshold: ${REGRESSION_THRESHOLD_PCT}%`);
+    console.log(`GC discipline: ${GC_CALLS}x gc() per settle, negative retry: ${MAX_NEG_RETRIES}`);
+    console.log('');
+
+    for (const [name, cfg] of Object.entries(SCENARIO_CONFIG)) {
+        console.log(`  ${name}: ${cfg.steps} steps, ${cfg.iterations} iterations`);
+    }
     console.log('');
 
     // Ensure output directory exists
@@ -262,9 +390,10 @@ async function main() {
 
     const report = {
         timestamp: new Date().toISOString(),
-        iterations: ITERATIONS,
-        steps: STEPS,
         regressionThresholdPct: REGRESSION_THRESHOLD_PCT,
+        gcCallsPerSettle: GC_CALLS,
+        maxNegRetries: MAX_NEG_RETRIES,
+        selfTestBytes: selfTestBytes || undefined,
         scenarios: {},
     };
 
@@ -282,35 +411,48 @@ async function main() {
     }
 
     for (const scenarioName of scenarioNames) {
-        process.stdout.write(`Running scenario: ${scenarioName}... `);
+        const cfg = SCENARIO_CONFIG[scenarioName];
+        process.stdout.write(`Running scenario: ${scenarioName} (${cfg.steps} steps, ${cfg.iterations} iters)... `);
 
         const setup = await scenarios[scenarioName]();
-        const measurement = measureAllocation(setup, ITERATIONS, setup.steps);
+        const measurement = measureAllocation(setup, cfg.iterations, cfg.steps);
 
         report.scenarios[scenarioName] = {
+            steps: cfg.steps,
+            iterations: cfg.iterations,
             medianBytesPerStep: measurement.median.bytesPerStep,
             medianTotalBytes: measurement.median.totalBytes,
+            trimmedMinBytesPerStep: measurement.trimmedMin,
+            trimmedMaxBytesPerStep: measurement.trimmedMax,
+            spreadPct: measurement.spreadPct,
+            excludedIterations: measurement.excludedIterations,
             iterations: measurement.iterations,
         };
 
         const bytesPerStep = measurement.median.bytesPerStep;
-        const kbPerStep = (bytesPerStep / 1024).toFixed(2);
+        const kbPerStep = (bytesPerStep / 1024).toFixed(3);
+        const spreadStr = measurement.spreadPct !== null
+            ? `spread ${measurement.spreadPct.toFixed(1)}%`
+            : 'spread N/A';
 
-        // Compare against baseline
         if (baseline && baseline.scenarios[scenarioName]) {
             const baselineBytesPerStep = baseline.scenarios[scenarioName].medianBytesPerStep;
             const changePct = ((bytesPerStep - baselineBytesPerStep) / baselineBytesPerStep) * 100;
             const changeStr = changePct >= 0 ? `+${changePct.toFixed(1)}%` : `${changePct.toFixed(1)}%`;
 
-            console.log(`${kbPerStep} KB/step (${changeStr} vs baseline)`);
+            console.log(`${kbPerStep} KB/step (${changeStr} vs baseline, ${spreadStr})`);
 
             if (changePct > REGRESSION_THRESHOLD_PCT) {
                 failures.push(
-                    `${scenarioName}: ${kbPerStep} KB/step is ${changePct.toFixed(1)}% above baseline (${(baselineBytesPerStep / 1024).toFixed(2)} KB/step)`,
+                    `${scenarioName}: ${kbPerStep} KB/step is ${changePct.toFixed(1)}% above baseline (${(baselineBytesPerStep / 1024).toFixed(3)} KB/step)`,
                 );
             }
         } else {
-            console.log(`${kbPerStep} KB/step (no baseline)`);
+            console.log(`${kbPerStep} KB/step (no baseline, ${spreadStr})`);
+        }
+
+        if (measurement.excludedIterations.length > 0) {
+            console.log(`  Excluded ${measurement.excludedIterations.length} iteration(s) due to negative samples: [${measurement.excludedIterations.join(', ')}]`);
         }
     }
 
@@ -319,7 +461,7 @@ async function main() {
     console.log(`\nReport written to ${reportPath}`);
 
     // Update baseline if requested or if no baseline exists
-    if (cli.updateBaseline || !baseline) {
+    if (cli['update-baseline'] || !baseline) {
         const baselineDir = path.dirname(baselinePath);
         if (!fs.existsSync(baselineDir)) {
             fs.mkdirSync(baselineDir, { recursive: true });
@@ -334,7 +476,7 @@ async function main() {
         for (const failure of failures) {
             console.error(`  - ${failure}`);
         }
-        if (!cli.updateBaseline) {
+        if (cli['update-baseline']) {
             console.error('\nRun with --update-baseline to update the baseline if the regression is expected.');
         }
         process.exit(1);
