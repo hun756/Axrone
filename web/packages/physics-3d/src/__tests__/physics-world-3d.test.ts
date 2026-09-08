@@ -16,7 +16,7 @@ describe('PhysicsWorld3D modular structure', () => {
     });
 
     it('steps dynamic bodies through the extracted manager boundary', () => {
-        const world = new PhysicsWorld3D({ gravity: { x: 0, y: -10, z: 0 } });
+        const world = new PhysicsWorld3D({ gravity: { x: 0, y: -10, z: 0 }, maxTranslation: 10 } as any);
         const bodyId = world.getBodyManager().createBody({
             type: 2,
             position: { x: 0, y: 10, z: 0 },

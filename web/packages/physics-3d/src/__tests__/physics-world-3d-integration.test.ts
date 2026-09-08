@@ -1057,4 +1057,192 @@ describe('PhysicsWorld3D Integration', () => {
             expect(lv.x).toBeCloseTo(10, 1);
         });
     });
+
+    describe('maxTranslation per-step position clamp (ADR 0004)', () => {
+        it('clamps per-step position delta preserving direction', () => {
+            // velocity=30 m/s along (3,4,0), dt=1/60 → delta=(0.5, 0.667, 0)
+            // magnitude = 30/60 = 0.5 m/step. With maxTranslation=0.3, should clamp.
+            const world = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxTranslation: 0.3,
+            } as any);
+
+            const body = world.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                linearVelocity: { x: 18, y: 24, z: 0 }, // speed=30, direction (3,4,0)
+            });
+            world.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            world.step(1 / 60);
+
+            const pos = world.getBodyManager().getPosition(body);
+            // delta = (18/60, 24/60, 0) = (0.3, 0.4, 0), magnitude = 0.5
+            // clamped to 0.3: scale = 0.3/0.5 = 0.6 → (0.18, 0.24, 0)
+            const dx = pos.x;
+            const dy = pos.y;
+            const dz = pos.z;
+            const transMag = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            expect(transMag).toBeCloseTo(0.3, 4);
+
+            // Direction preserved: ratio x/y = 18/24 = 3/4
+            expect(dz).toBeCloseTo(0, 10);
+            const ratio = dx / dy;
+            expect(ratio).toBeCloseTo(3 / 4, 5);
+            expect(dx).toBeGreaterThan(0);
+            expect(dy).toBeGreaterThan(0);
+        });
+
+        it('does NOT clamp position when below limit (negative control)', () => {
+            const world = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxTranslation: 10.0, // very generous limit
+            } as any);
+
+            const body = world.createBody({
+                type: 2,
+                position: { x: 1, y: 2, z: 3 },
+                linearVelocity: { x: 3, y: 4, z: 0 }, // speed=5, delta=5/60≈0.083
+            });
+            world.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            world.step(1 / 60);
+
+            const pos = world.getBodyManager().getPosition(body);
+            // delta = (3/60, 4/60, 0) ≈ (0.05, 0.0667, 0), magnitude ≈ 0.083
+            // Well below 10.0 limit — position should change normally
+            expect(pos.x).toBeCloseTo(1 + 3 / 60, 4);
+            expect(pos.y).toBeCloseTo(2 + 4 / 60, 4);
+            expect(pos.z).toBeCloseTo(3, 4);
+        });
+
+        it('uses default 2.0 m/step when config not provided', () => {
+            const world = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxVelocity: Infinity, // prevent velocity clamp from interfering
+            } as any);
+
+            const body = world.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                linearVelocity: { x: 240, y: 0, z: 0 }, // delta = 240/60 = 4.0 m/step
+            });
+            world.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            world.step(1 / 60);
+
+            const pos = world.getBodyManager().getPosition(body);
+            // delta would be 4.0, but default maxTranslation=2.0 clamps it
+            expect(pos.x).toBeCloseTo(2.0, 4);
+            expect(pos.y).toBeCloseTo(0, 10);
+            expect(pos.z).toBeCloseTo(0, 10);
+        });
+
+        it('handles degenerate config: maxTranslation 0 prevents all position change', () => {
+            const zeroWorld = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxVelocity: Infinity,
+                maxTranslation: 0,
+            } as any);
+
+            const body = zeroWorld.createBody({
+                type: 2,
+                position: { x: 5, y: 10, z: 15 },
+                linearVelocity: { x: 100, y: 200, z: 300 },
+            });
+            zeroWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            zeroWorld.step(1 / 60);
+
+            const pos = zeroWorld.getBodyManager().getPosition(body);
+            // maxTranslation=0 → transSq > 0 for any non-zero delta → scale = 0/sqrt = 0
+            expect(pos.x).toBeCloseTo(5, 5);
+            expect(pos.y).toBeCloseTo(10, 5);
+            expect(pos.z).toBeCloseTo(15, 5);
+        });
+
+        it('handles degenerate config: negative maxTranslation does not clamp (consistent with 2D)', () => {
+            const negWorld = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxVelocity: Infinity,
+                maxTranslation: -1,
+            } as any);
+
+            const body = negWorld.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                linearVelocity: { x: 6, y: 0, z: 0 }, // delta = 0.1
+            });
+            negWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            negWorld.step(1 / 60);
+
+            const pos = negWorld.getBodyManager().getPosition(body);
+            // negative maxTranslation: transSq > maxTransSq (0.01 > 1) is false → no clamp
+            expect(pos.x).toBeCloseTo(6 / 60, 4);
+        });
+
+        it('handles degenerate config: Infinity does not clamp', () => {
+            const infWorld = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxVelocity: Infinity,
+                maxTranslation: Infinity,
+            } as any);
+
+            const body = infWorld.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                linearVelocity: { x: 6000, y: 0, z: 0 }, // delta = 100
+            });
+            infWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            infWorld.step(1 / 60);
+
+            const pos = infWorld.getBodyManager().getPosition(body);
+            // Infinity * Infinity = Infinity, transSq > Infinity is false → no clamp
+            expect(pos.x).toBeCloseTo(100, 0);
+        });
+
+        it('handles degenerate config: NaN does not clamp (consistent with 2D)', () => {
+            const nanWorld = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxVelocity: Infinity,
+                maxTranslation: NaN,
+            } as any);
+
+            const body = nanWorld.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                linearVelocity: { x: 6, y: 0, z: 0 },
+            });
+            nanWorld.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            nanWorld.step(1 / 60);
+
+            const pos = nanWorld.getBodyManager().getPosition(body);
+            // NaN * NaN = NaN, transSq > NaN is false → no clamp
+            expect(pos.x).toBeCloseTo(6 / 60, 4);
+        });
+    });
 });
