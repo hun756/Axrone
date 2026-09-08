@@ -167,6 +167,15 @@ export class SliderJoint2D extends Joint2D {
             maxForce: data.maxMotorForce ?? 10000,
         };
         this._useLimits = data.useLimits ?? false;
-        this._limits = data.limits ?? { min: -1, max: 1 };
+        // Accept both flat keys (limitsMin/limitsMax from Editor) and nested
+        // object (limits: { min, max } from legacy scenes). Flat keys win.
+        if (data.limitsMin !== undefined || data.limitsMax !== undefined) {
+            this._limits = {
+                min: data.limitsMin ?? this._limits.min,
+                max: data.limitsMax ?? this._limits.max,
+            };
+        } else {
+            this._limits = data.limits ?? { min: -1, max: 1 };
+        }
     }
 }

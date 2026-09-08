@@ -621,3 +621,73 @@ describe('Scalar property round-trip for all joints', () => {
         expect(joint.frequency).toBe(10);
     });
 });
+
+// ─── Flat limit key deserialization (Editor ↔ Engine contract) ─────────────
+
+describe('Flat limit key deserialization', () => {
+    it('HingeJoint2D accepts flat limitsMin/limitsMax keys', () => {
+        const joint = new HingeJoint2D();
+        joint.deserialize({
+            useLimits: true,
+            limitsMin: -45,
+            limitsMax: 90,
+        });
+        expect(joint.useLimits).toBe(true);
+        expect(joint.limits.min).toBe(-45);
+        expect(joint.limits.max).toBe(90);
+    });
+
+    it('HingeJoint2D flat keys take precedence over nested limits object', () => {
+        const joint = new HingeJoint2D();
+        joint.deserialize({
+            limitsMin: -30,
+            limitsMax: 60,
+            limits: { min: -999, max: 999 },
+        });
+        expect(joint.limits.min).toBe(-30);
+        expect(joint.limits.max).toBe(60);
+    });
+
+    it('HingeJoint2D still accepts nested limits object (backward compat)', () => {
+        const joint = new HingeJoint2D();
+        joint.deserialize({
+            useLimits: true,
+            limits: { min: -45, max: 90 },
+        });
+        expect(joint.limits.min).toBe(-45);
+        expect(joint.limits.max).toBe(90);
+    });
+
+    it('SliderJoint2D accepts flat limitsMin/limitsMax keys', () => {
+        const joint = new SliderJoint2D();
+        joint.deserialize({
+            useLimits: true,
+            limitsMin: -2,
+            limitsMax: 5,
+        });
+        expect(joint.useLimits).toBe(true);
+        expect(joint.limits.min).toBe(-2);
+        expect(joint.limits.max).toBe(5);
+    });
+
+    it('SliderJoint2D flat keys take precedence over nested limits object', () => {
+        const joint = new SliderJoint2D();
+        joint.deserialize({
+            limitsMin: -3,
+            limitsMax: 7,
+            limits: { min: -999, max: 999 },
+        });
+        expect(joint.limits.min).toBe(-3);
+        expect(joint.limits.max).toBe(7);
+    });
+
+    it('SliderJoint2D still accepts nested limits object (backward compat)', () => {
+        const joint = new SliderJoint2D();
+        joint.deserialize({
+            useLimits: true,
+            limits: { min: -2, max: 5 },
+        });
+        expect(joint.limits.min).toBe(-2);
+        expect(joint.limits.max).toBe(5);
+    });
+});
