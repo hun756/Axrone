@@ -364,14 +364,18 @@ export abstract class Joint3D extends Component {
         fallbackZ: number = 0
     ): IVec3Like {
         if (Array.isArray(value) && value.length >= 3) {
-            return { x: value[0], y: value[1], z: value[2] };
+            return {
+                x: Number.isFinite(value[0]) ? value[0] : fallbackX,
+                y: Number.isFinite(value[1]) ? value[1] : fallbackY,
+                z: Number.isFinite(value[2]) ? value[2] : fallbackZ,
+            };
         }
         if (value && typeof value === 'object') {
             const v = value as Record<string, unknown>;
             return {
-                x: typeof v.x === 'number' ? v.x : fallbackX,
-                y: typeof v.y === 'number' ? v.y : fallbackY,
-                z: typeof v.z === 'number' ? v.z : fallbackZ,
+                x: typeof v.x === 'number' && Number.isFinite(v.x) ? v.x : fallbackX,
+                y: typeof v.y === 'number' && Number.isFinite(v.y) ? v.y : fallbackY,
+                z: typeof v.z === 'number' && Number.isFinite(v.z) ? v.z : fallbackZ,
             };
         }
         return { x: fallbackX, y: fallbackY, z: fallbackZ };
@@ -390,15 +394,20 @@ export abstract class Joint3D extends Component {
         fallbackW: number = 1
     ): { x: number; y: number; z: number; w: number } {
         if (Array.isArray(value) && value.length >= 4) {
-            return { x: value[0], y: value[1], z: value[2], w: value[3] };
+            return {
+                x: Number.isFinite(value[0]) ? value[0] : fallbackX,
+                y: Number.isFinite(value[1]) ? value[1] : fallbackY,
+                z: Number.isFinite(value[2]) ? value[2] : fallbackZ,
+                w: Number.isFinite(value[3]) ? value[3] : fallbackW,
+            };
         }
         if (value && typeof value === 'object') {
             const v = value as Record<string, unknown>;
             return {
-                x: typeof v.x === 'number' ? v.x : fallbackX,
-                y: typeof v.y === 'number' ? v.y : fallbackY,
-                z: typeof v.z === 'number' ? v.z : fallbackZ,
-                w: typeof v.w === 'number' ? v.w : fallbackW,
+                x: typeof v.x === 'number' && Number.isFinite(v.x) ? v.x : fallbackX,
+                y: typeof v.y === 'number' && Number.isFinite(v.y) ? v.y : fallbackY,
+                z: typeof v.z === 'number' && Number.isFinite(v.z) ? v.z : fallbackZ,
+                w: typeof v.w === 'number' && Number.isFinite(v.w) ? v.w : fallbackW,
             };
         }
         return { x: fallbackX, y: fallbackY, z: fallbackZ, w: fallbackW };
