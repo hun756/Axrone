@@ -1,4 +1,4 @@
-import { composeMatrix, mat4Invert, mat4Multiply } from './math';
+import { composeMatrix, mat4Invert, mat4Multiply } from '@axrone/numeric';
 import type { AnimationWorldPose } from './pose';
 import type { AnimationRig } from './rig';
 
