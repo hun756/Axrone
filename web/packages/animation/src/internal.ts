@@ -1,13 +1,12 @@
+import { tuple2, tuple3, tuple4 } from '@axrone/utility';
 import type { AnimationTrackDefinition } from './types';
 
-export const freezeTuple2 = <T>(a: T, b: T): readonly [T, T] =>
-    Object.freeze([a, b]) as readonly [T, T];
-
-export const freezeTuple3 = <T>(a: T, b: T, c: T): readonly [T, T, T] =>
-    Object.freeze([a, b, c]) as readonly [T, T, T];
-
-export const freezeTuple4 = <T>(a: T, b: T, c: T, d: T): readonly [T, T, T, T] =>
-    Object.freeze([a, b, c, d]) as readonly [T, T, T, T];
+// Re-export zero-cost tuple utilities for backward compatibility within this package.
+// These replace the previous Object.freeze-based implementations with compile-time-only
+// readonly guarantees, eliminating runtime freeze overhead.
+export const freezeTuple2 = tuple2;
+export const freezeTuple3 = tuple3;
+export const freezeTuple4 = tuple4;
 
 export const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);
@@ -15,10 +14,10 @@ export const isFiniteNumber = (value: unknown): value is number =>
 const EMPTY_SPREAD: Readonly<Record<string, never>> = Object.freeze({}) as Readonly<Record<string, never>>;
 
 export const spreadIfFinite = (key: string, value: unknown): Readonly<Record<string, unknown>> =>
-    isFiniteNumber(value) ? Object.freeze({ [key]: value }) : EMPTY_SPREAD;
+    isFiniteNumber(value) ? { [key]: value } as Readonly<Record<string, unknown>> : EMPTY_SPREAD;
 
 export const spreadIfNonEmptyString = (key: string, value: unknown): Readonly<Record<string, unknown>> =>
-    typeof value === 'string' && value.length > 0 ? Object.freeze({ [key]: value }) : EMPTY_SPREAD;
+    typeof value === 'string' && value.length > 0 ? { [key]: value } as Readonly<Record<string, unknown>> : EMPTY_SPREAD;
 
 export const getTrackComponentCount = (track: AnimationTrackDefinition): number => {
     if (typeof track.valueComponentCount === 'number' && Number.isFinite(track.valueComponentCount)) {
