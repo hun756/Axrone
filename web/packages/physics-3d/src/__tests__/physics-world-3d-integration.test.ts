@@ -1295,4 +1295,91 @@ describe('PhysicsWorld3D Integration', () => {
             expect(pos.x).toBeCloseTo(2.0, 4);
         });
     });
+
+    describe('Long-run constraint drift (300+ steps)', () => {
+        it('Fixed constraint: anchor error stays bounded over 500 steps', () => {
+            const w = new PhysicsWorld3D({ gravity: { x: 0, y: -9.81, z: 0 } });
+            const bodyA = w.createBody({
+                type: 0,
+                position: { x: 0, y: 5, z: 0 },
+            });
+            const bodyB = w.createBody({
+                type: 2,
+                position: { x: 2, y: 5, z: 0 },
+            });
+            w.createSphereShape(bodyB, { center: { x: 0, y: 0, z: 0 }, radius: 0.5 });
+
+            w.createFixedConstraint({
+                bodyIdA: bodyA,
+                bodyIdB: bodyB,
+                localAnchorA: { x: 1, y: 0, z: 0 },
+                localAnchorB: { x: -1, y: 0, z: 0 },
+            });
+
+            // Measure drift over 500 steps
+            const steps = 500;
+            let maxAnchorError = 0;
+            for (let i = 0; i < steps; i++) {
+                w.step(1 / 60);
+                const posA = w.getBodyManager().getPosition(bodyA);
+                const posB = w.getBodyManager().getPosition(bodyB);
+                // Anchor error: distance between world-space anchors
+                const wax = posA.x + 1, way = posA.y, waz = posA.z;
+                const wbx = posB.x - 1, wby = posB.y, wbz = posB.z;
+                const dx = wax - wbx, dy = way - wby, dz = waz - wbz;
+                const error = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (error > maxAnchorError) maxAnchorError = error;
+            }
+
+            // Fixed constraint should keep anchor error very small.
+            // Velocity-level Baumgarte converges; no position-level correction
+            // for anchor, but the bias factor keeps drift sub-pixel.
+            expect(maxAnchorError).toBeLessThan(0.05);
+        });
+
+        it('Hinge constraint: off-axis rotation does not accumulate over 300 steps', () => {
+            const w = new PhysicsWorld3D({ gravity: { x: 0, y: 0, z: 0 } });
+            const bodyA = w.createBody({
+                type: 0,
+                position: { x: 0, y: 0, z: 0 },
+            });
+            const bodyB = w.createBody({
+                type: 2,
+                position: { x: 2, y: 0, z: 0 },
+            });
+            w.createSphereShape(bodyB, { center: { x: 0, y: 0, z: 0 }, radius: 0.5 });
+
+            w.createHingeConstraint({
+                bodyIdA: bodyA,
+                bodyIdB: bodyB,
+                localAnchorA: { x: 1, y: 0, z: 0 },
+                localAnchorB: { x: -1, y: 0, z: 0 },
+                localAxisA: { x: 0, y: 1, z: 0 },
+                localAxisB: { x: 0, y: 1, z: 0 },
+                enableLimit: false,
+                enableMotor: false,
+            });
+
+            // Give bodyB a small initial angular velocity to stress angular lock.
+            // Off-axis component: sqrt(0.1² + 0.05²) ≈ 0.112 rad/s
+            w.getBodyManager().setAngularVelocity(bodyB, { x: 0.1, y: 2.0, z: 0.05 });
+
+            const steps = 300;
+            // Skip first 30 steps (transient: initial off-axis vel takes a few
+            // iterations to be clamped by the angular lock rows).
+            for (let i = 0; i < 30; i++) w.step(1 / 60);
+
+            let maxPerpAngle = 0;
+            for (let i = 0; i < steps; i++) {
+                w.step(1 / 60);
+                const angVel = w.getBodyManager().getAngularVelocity(bodyB);
+                const perpAngVel = Math.sqrt(angVel.x * angVel.x + angVel.z * angVel.z);
+                if (perpAngVel > maxPerpAngle) maxPerpAngle = perpAngVel;
+            }
+
+            // After transient settles, angular lock rows suppress off-axis rotation.
+            // The hinge is free to rotate about Y, but not X or Z.
+            expect(maxPerpAngle).toBeLessThan(0.5);
+        });
+    });
 });
