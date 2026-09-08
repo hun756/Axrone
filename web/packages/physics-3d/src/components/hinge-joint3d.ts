@@ -148,6 +148,9 @@ export class HingeJoint3D extends Joint3D {
                 min: this._limits.min,
                 max: this._limits.max,
                 bounciness: this._limits.bounciness,
+                // Editor key present in components.rs schema. NOT consumed by the
+                // solver — bounciness is applied via contactDistance-based soft
+                // limits. Hardcoded 0 for serialization round-trip compatibility.
                 bounceThresholdVelocity: 0,
                 contactDistance: this._limits.contactDistance,
             },

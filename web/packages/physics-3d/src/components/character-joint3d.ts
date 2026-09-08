@@ -168,6 +168,9 @@ export class CharacterJoint3D extends Joint3D {
             swingSpan2: this._swing2Limit.limit,
             twistSpan: this._highTwistLimit.limit - this._lowTwistLimit.limit,
             softness: 1,
+            // biasFactor and relaxationFactor are NOT consumed by the solver.
+            // The framework uses uniform BAUMGARTE_FACTOR and no per-constraint
+            // relaxation. These values are passed for API completeness only.
             biasFactor: 0.3,
             relaxationFactor: 1,
             motorSpeed: this._motorSpeed,

@@ -168,7 +168,17 @@ export interface IConeTwistConstraintDef3D {
     readonly swingSpan2?: number;
     readonly twistSpan?: number;
     readonly softness?: number;
+    /**
+     * NOT consumed by the solver. The framework uses PhysicsConstants.BAUMGARTE_FACTOR
+     * uniformly across all modules. Present for Editor/API compatibility only.
+     * @see CharacterJoint3D — passes hardcoded 0.3; has no effect on simulation.
+     */
     readonly biasFactor?: number;
+    /**
+     * NOT consumed by the solver. The framework does not apply per-constraint
+     * relaxation. Present for Editor/API compatibility only.
+     * @see CharacterJoint3D — passes hardcoded 1; has no effect on simulation.
+     */
     readonly relaxationFactor?: number;
     /** Twist motor target velocity (rad/s). Undefined = motor disabled. */
     readonly motorSpeed?: number;
