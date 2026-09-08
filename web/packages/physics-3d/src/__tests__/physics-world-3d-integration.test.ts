@@ -1244,5 +1244,55 @@ describe('PhysicsWorld3D Integration', () => {
             // NaN * NaN = NaN, transSq > NaN is false → no clamp
             expect(pos.x).toBeCloseTo(6 / 60, 4);
         });
+
+        it('world-level wiring: constructor config → _integratePositions → clamp', () => {
+            // Verifies the full chain: PhysicsWorld3D config → _maxTranslation →
+            // _integratePositions → integratePositionsImpl clamp. If anyone breaks
+            // the wiring, this test catches it.
+            const world = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+                maxTranslation: 0.5,
+            } as any);
+
+            const body = world.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                linearVelocity: { x: 60, y: 0, z: 0 }, // delta = 60/60 = 1.0 m/step
+            });
+            world.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            world.step(1 / 60);
+
+            const pos = world.getBodyManager().getPosition(body);
+            // delta would be 1.0, but maxTranslation=0.5 clamps it
+            expect(pos.x).toBeCloseTo(0.5, 4);
+            expect(pos.y).toBeCloseTo(0, 10);
+            expect(pos.z).toBeCloseTo(0, 10);
+        });
+
+        it('world-level wiring: default maxTranslation is 2.0 (ADR 0004)', () => {
+            const world = new PhysicsWorld3D({
+                gravity: { x: 0, y: 0, z: 0 },
+            });
+
+            const body = world.createBody({
+                type: 2,
+                position: { x: 0, y: 0, z: 0 },
+                linearVelocity: { x: 240, y: 0, z: 0 }, // delta = 4.0 m/step
+            });
+            world.createSphereShape(body, {
+                center: { x: 0, y: 0, z: 0 },
+                radius: 0.5,
+            });
+
+            world.step(1 / 60);
+
+            const pos = world.getBodyManager().getPosition(body);
+            // Default maxTranslation=2.0 clamps delta from 4.0 to 2.0
+            expect(pos.x).toBeCloseTo(2.0, 4);
+        });
     });
 });
