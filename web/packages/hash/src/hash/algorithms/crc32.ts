@@ -1,8 +1,9 @@
 import type { BytesLike } from '../../../types';
-import { float32ToBits, float64ToBitsPair, writeU32LE } from '../bits';
+import { writeU32LE, encodeBase64 } from '../bits';
+import { u32ToHex } from '../hex';
 import { asHash32, asSeed32, type Hash32, type Seed32, type HashAlgorithmMetadata } from '../types';
-import { Fnv1a32 } from './fnv';
 import type { IHasher } from '../interfaces';
+import { HasherBase } from '../base';
 
 const CRC32_METADATA: HashAlgorithmMetadata = {
     name: 'crc32',
@@ -13,6 +14,7 @@ const CRC32_METADATA: HashAlgorithmMetadata = {
     seedable: true,
     keyed: false,
     cryptographicallySecure: false,
+    async: false,
     description: 'CRC-32 (IEEE 802.3, used in zlib/PNG)',
 };
 
@@ -28,35 +30,141 @@ const CRC32_TABLE: Uint32Array = (() => {
     return t;
 })();
 
-export class Crc32 extends Fnv1a32 {
+export class Crc32 extends HasherBase<Hash32> {
+    readonly algorithm: string = CRC32_METADATA.name;
+    readonly metadata: Readonly<HashAlgorithmMetadata> = CRC32_METADATA;
+    private _h: number = 0;
+    private _initialSeed: number = 0;
+    private _finalDigest: Hash32 | undefined;
+
     constructor(seed: Seed32 = asSeed32(0)) {
-        super(seed);
-        (this as any).algorithm = CRC32_METADATA.name;
-        (this as any).metadata = CRC32_METADATA;
-        (this as any)._h = ((seed as number) >>> 0) ^ 0xffffffff;
+        super();
+        this._initialSeed = (seed as number) >>> 0;
+        this._h = this._initialSeed ^ 0xffffffff;
     }
 
-    override updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {
+    get seed(): Seed32 { return asSeed32(this._initialSeed); }
+
+    updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {
         this._checkFinalized();
         const end = length === undefined ? bytes.length : offset + length;
         for (let i = offset; i < end; i++) {
-            (this as any)._h = ((this as any)._h >>> 8) ^ CRC32_TABLE[(((this as any)._h as number) ^ (bytes[i]! & 0xff)) & 0xff]!;
+            this._h = ((this._h >>> 8) ^ CRC32_TABLE[(this._h ^ (bytes[i]! & 0xff)) & 0xff]!) >>> 0;
         }
-        (this as any)._byteLength += end - offset;
+        this._byteLength += end - offset;
         return this;
     }
 
-    override digest(): Hash32 {
-        (this as any)._finalized = true;
-        (this as any)._h = ((this as any)._h as number) ^ 0xffffffff;
-        return asHash32((this as any)._h as number);
+    updateString(input: string): this {
+        this._checkFinalized();
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            this._h = ((this._h >>> 8) ^ CRC32_TABLE[(this._h ^ (c & 0xff)) & 0xff]!) >>> 0;
+            this._h = ((this._h >>> 8) ^ CRC32_TABLE[(this._h ^ ((c >>> 8) & 0xff)) & 0xff]!) >>> 0;
+        }
+        this._byteLength += input.length * 2;
+        return this;
     }
 
-    override reset(seed: Seed32 = asSeed32(0)): this {
-        (this as any)._h = ((seed as number) >>> 0) ^ 0xffffffff;
-        (this as any)._byteLength = 0;
-        (this as any)._finalized = false;
+    updateBoolean(value: boolean): this {
+        this._checkFinalized();
+        this._h = ((this._h >>> 8) ^ CRC32_TABLE[(this._h ^ (value ? 1 : 0)) & 0xff]!) >>> 0;
+        this._byteLength += 1;
         return this;
+    }
+
+    updateI64(value: bigint): this {
+        this._checkFinalized();
+        const buf = new Uint8Array(8);
+        let v = value;
+        for (let i = 0; i < 8; i++) { buf[i] = Number(v & 0xffn); v >>= 8n; }
+        return this.updateBytes(buf);
+    }
+
+    updateU32(value: number): this {
+        this._checkFinalized();
+        const v = value >>> 0;
+        this._h = ((this._h >>> 8) ^ CRC32_TABLE[(this._h ^ (v & 0xff)) & 0xff]!) >>> 0;
+        this._h = ((this._h >>> 8) ^ CRC32_TABLE[(this._h ^ ((v >>> 8) & 0xff)) & 0xff]!) >>> 0;
+        this._h = ((this._h >>> 8) ^ CRC32_TABLE[(this._h ^ ((v >>> 16) & 0xff)) & 0xff]!) >>> 0;
+        this._h = ((this._h >>> 8) ^ CRC32_TABLE[(this._h ^ ((v >>> 24) & 0xff)) & 0xff]!) >>> 0;
+        this._byteLength += 4;
+        return this;
+    }
+
+    updateHash(value: Hash32 | bigint): this {
+        this._checkFinalized();
+        if (typeof value === 'number') return this.updateU32(value);
+        const buf = new Uint8Array(8);
+        let v = value;
+        for (let i = 0; i < 8; i++) { buf[i] = Number(v & 0xffn); v >>= 8n; }
+        return this.updateBytes(buf);
+    }
+
+    updateHashable<H2 extends import('../types').HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
+        value.hashInto(this as unknown as IHasher<H2>);
+        return this;
+    }
+
+    updateAny(value: unknown): this {
+        if (value === null || value === undefined) {
+            this._h = ((this._h >>> 8) ^ CRC32_TABLE[this._h & 0xff]!) >>> 0;
+            this._byteLength += 1;
+            return this;
+        }
+        if (typeof value === 'number') {
+            if (Number.isInteger(value)) return this.updateI32(value);
+            return this.updateF64(value);
+        }
+        if (typeof value === 'bigint') return this.updateI64(value);
+        if (typeof value === 'string') return this.updateString(value);
+        if (typeof value === 'boolean') return this.updateBoolean(value);
+        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this.updateBytes(value as unknown as ArrayLike<number>);
+        return this;
+    }
+
+    digest(): Hash32 {
+        if (this._finalDigest !== undefined) return this._finalDigest;
+        this._finalized = true;
+        this._finalDigest = asHash32(this._h ^ 0xffffffff);
+        return this._finalDigest;
+    }
+
+    digestBytes(): Uint8Array {
+        const h = this.digest();
+        const out = new Uint8Array(4);
+        writeU32LE(h as number, out, 0);
+        return out;
+    }
+
+    digestHex(uppercase: boolean = false): string {
+        return u32ToHex(this.digest() as number, uppercase);
+    }
+
+    digestBase64(): string {
+        return encodeBase64(this.digestBytes());
+    }
+
+    digestBigInt<H2 extends bigint = bigint>(): H2 {
+        return BigInt(this.digest() as number) as H2;
+    }
+
+    reset(seed: Seed32 = asSeed32(0)): this {
+        this._initialSeed = (seed as number) >>> 0;
+        this._h = this._initialSeed ^ 0xffffffff;
+        this._byteLength = 0;
+        this._finalized = false;
+        this._finalDigest = undefined;
+        return this;
+    }
+
+    clone(): IHasher<Hash32> {
+        const c = new Crc32(this.seed);
+        c._h = this._h;
+        c._byteLength = this._byteLength;
+        c._finalized = this._finalized;
+        if (this._finalDigest !== undefined) c._finalDigest = this._finalDigest;
+        return c;
     }
 }
 
@@ -78,34 +186,140 @@ const CRC32C_TABLE: Uint32Array = (() => {
     return t;
 })();
 
-export class Crc32c extends Fnv1a32 {
+export class Crc32c extends HasherBase<Hash32> {
+    readonly algorithm: string = CRC32C_METADATA.name;
+    readonly metadata: Readonly<HashAlgorithmMetadata> = CRC32C_METADATA;
+    private _h: number = 0;
+    private _initialSeed: number = 0;
+    private _finalDigest: Hash32 | undefined;
+
     constructor(seed: Seed32 = asSeed32(0)) {
-        super(seed);
-        (this as any).algorithm = CRC32C_METADATA.name;
-        (this as any).metadata = CRC32C_METADATA;
-        (this as any)._h = ((seed as number) >>> 0) ^ 0xffffffff;
+        super();
+        this._initialSeed = (seed as number) >>> 0;
+        this._h = this._initialSeed ^ 0xffffffff;
     }
 
-    override updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {
+    get seed(): Seed32 { return asSeed32(this._initialSeed); }
+
+    updateBytes(bytes: BytesLike, offset: number = 0, length?: number): this {
         this._checkFinalized();
         const end = length === undefined ? bytes.length : offset + length;
         for (let i = offset; i < end; i++) {
-            (this as any)._h = ((this as any)._h >>> 8) ^ CRC32C_TABLE[(((this as any)._h as number) ^ (bytes[i]! & 0xff)) & 0xff]!;
+            this._h = ((this._h >>> 8) ^ CRC32C_TABLE[(this._h ^ (bytes[i]! & 0xff)) & 0xff]!) >>> 0;
         }
-        (this as any)._byteLength += end - offset;
+        this._byteLength += end - offset;
         return this;
     }
 
-    override digest(): Hash32 {
-        (this as any)._finalized = true;
-        (this as any)._h = ((this as any)._h as number) ^ 0xffffffff;
-        return asHash32((this as any)._h as number);
+    updateString(input: string): this {
+        this._checkFinalized();
+        for (let i = 0; i < input.length; i++) {
+            const c = input.charCodeAt(i);
+            this._h = ((this._h >>> 8) ^ CRC32C_TABLE[(this._h ^ (c & 0xff)) & 0xff]!) >>> 0;
+            this._h = ((this._h >>> 8) ^ CRC32C_TABLE[(this._h ^ ((c >>> 8) & 0xff)) & 0xff]!) >>> 0;
+        }
+        this._byteLength += input.length * 2;
+        return this;
     }
 
-    override reset(seed: Seed32 = asSeed32(0)): this {
-        (this as any)._h = ((seed as number) >>> 0) ^ 0xffffffff;
-        (this as any)._byteLength = 0;
-        (this as any)._finalized = false;
+    updateBoolean(value: boolean): this {
+        this._checkFinalized();
+        this._h = ((this._h >>> 8) ^ CRC32C_TABLE[(this._h ^ (value ? 1 : 0)) & 0xff]!) >>> 0;
+        this._byteLength += 1;
         return this;
+    }
+
+    updateI64(value: bigint): this {
+        this._checkFinalized();
+        const buf = new Uint8Array(8);
+        let v = value;
+        for (let i = 0; i < 8; i++) { buf[i] = Number(v & 0xffn); v >>= 8n; }
+        return this.updateBytes(buf);
+    }
+
+    updateU32(value: number): this {
+        this._checkFinalized();
+        const v = value >>> 0;
+        this._h = ((this._h >>> 8) ^ CRC32C_TABLE[(this._h ^ (v & 0xff)) & 0xff]!) >>> 0;
+        this._h = ((this._h >>> 8) ^ CRC32C_TABLE[(this._h ^ ((v >>> 8) & 0xff)) & 0xff]!) >>> 0;
+        this._h = ((this._h >>> 8) ^ CRC32C_TABLE[(this._h ^ ((v >>> 16) & 0xff)) & 0xff]!) >>> 0;
+        this._h = ((this._h >>> 8) ^ CRC32C_TABLE[(this._h ^ ((v >>> 24) & 0xff)) & 0xff]!) >>> 0;
+        this._byteLength += 4;
+        return this;
+    }
+
+    updateHash(value: Hash32 | bigint): this {
+        this._checkFinalized();
+        if (typeof value === 'number') return this.updateU32(value);
+        const buf = new Uint8Array(8);
+        let v = value;
+        for (let i = 0; i < 8; i++) { buf[i] = Number(v & 0xffn); v >>= 8n; }
+        return this.updateBytes(buf);
+    }
+
+    updateHashable<H2 extends import('../types').HashValue>(value: { hashInto(hasher: IHasher<H2>): void }): this {
+        value.hashInto(this as unknown as IHasher<H2>);
+        return this;
+    }
+
+    updateAny(value: unknown): this {
+        if (value === null || value === undefined) {
+            this._h = ((this._h >>> 8) ^ CRC32C_TABLE[this._h & 0xff]!) >>> 0;
+            this._byteLength += 1;
+            return this;
+        }
+        if (typeof value === 'number') {
+            if (Number.isInteger(value)) return this.updateI32(value);
+            return this.updateF64(value);
+        }
+        if (typeof value === 'bigint') return this.updateI64(value);
+        if (typeof value === 'string') return this.updateString(value);
+        if (typeof value === 'boolean') return this.updateBoolean(value);
+        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this.updateBytes(value as unknown as ArrayLike<number>);
+        return this;
+    }
+
+    digest(): Hash32 {
+        if (this._finalDigest !== undefined) return this._finalDigest;
+        this._finalized = true;
+        this._finalDigest = asHash32(this._h ^ 0xffffffff);
+        return this._finalDigest;
+    }
+
+    digestBytes(): Uint8Array {
+        const h = this.digest();
+        const out = new Uint8Array(4);
+        writeU32LE(h as number, out, 0);
+        return out;
+    }
+
+    digestHex(uppercase: boolean = false): string {
+        return u32ToHex(this.digest() as number, uppercase);
+    }
+
+    digestBase64(): string {
+        return encodeBase64(this.digestBytes());
+    }
+
+    digestBigInt<H2 extends bigint = bigint>(): H2 {
+        return BigInt(this.digest() as number) as H2;
+    }
+
+    reset(seed: Seed32 = asSeed32(0)): this {
+        this._initialSeed = (seed as number) >>> 0;
+        this._h = this._initialSeed ^ 0xffffffff;
+        this._byteLength = 0;
+        this._finalized = false;
+        this._finalDigest = undefined;
+        return this;
+    }
+
+    clone(): IHasher<Hash32> {
+        const c = new Crc32c(this.seed);
+        c._h = this._h;
+        c._byteLength = this._byteLength;
+        c._finalized = this._finalized;
+        if (this._finalDigest !== undefined) c._finalDigest = this._finalDigest;
+        return c;
     }
 }

@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { Rigidbody2D, RigidbodyType2D } from '../../components/rigidbody2d';
+import { PhysicsWorld2D } from '../../core/physics-world';
+import { PhysicsWorld2DComponent } from '../../components/physics-world-2d-component';
+import { BodyType } from '@axrone/physics-core';
 
 describe('Rigidbody2D', () => {
     function create() { return new Rigidbody2D(); }
@@ -136,36 +139,113 @@ describe('Rigidbody2D', () => {
             expect(create().getRotation()).toBe(0);
         });
 
-        it('setPosition does not throw', () => {
+        it('setPosition is no-op without world (returns silently)', () => {
             const rb = create();
-            expect(() => rb.setPosition({ x: 1, y: 2 } as any)).not.toThrow();
+            rb.setPosition({ x: 1, y: 2 } as any);
+            // Without world, getPosition still returns zero (no effect)
+            expect(rb.getPosition().x).toBe(0);
+            expect(rb.getPosition().y).toBe(0);
         });
 
-        it('setRotation does not throw', () => {
+        it('setRotation is no-op without world (returns silently)', () => {
             const rb = create();
-            expect(() => rb.setRotation(1.5)).not.toThrow();
+            rb.setRotation(1.5);
+            expect(rb.getRotation()).toBe(0);
         });
     });
 
     describe('force/impulse methods without physics world', () => {
-        it('applyForce does not throw', () => {
-            expect(() => create().applyForce({ x: 1, y: 0 } as any)).not.toThrow();
+        it('applyForce is no-op without world', () => {
+            const rb = create();
+            rb.applyForce({ x: 1, y: 0 } as any);
+            // Without world, velocity stays zero
+            expect(rb.linearVelocity.x).toBe(0);
+            expect(rb.linearVelocity.y).toBe(0);
         });
 
-        it('applyForceToCenter does not throw', () => {
-            expect(() => create().applyForceToCenter({ x: 1, y: 0 } as any)).not.toThrow();
+        it('applyForceToCenter is no-op without world', () => {
+            const rb = create();
+            rb.applyForceToCenter({ x: 1, y: 0 } as any);
+            expect(rb.linearVelocity.x).toBe(0);
         });
 
-        it('applyTorque does not throw', () => {
-            expect(() => create().applyTorque(5)).not.toThrow();
+        it('applyTorque is no-op without world', () => {
+            const rb = create();
+            rb.applyTorque(5);
+            expect(rb.angularVelocity).toBe(0);
         });
 
-        it('applyLinearImpulse does not throw', () => {
-            expect(() => create().applyLinearImpulse({ x: 1, y: 0 } as any)).not.toThrow();
+        it('applyLinearImpulse is no-op without world', () => {
+            const rb = create();
+            rb.applyLinearImpulse({ x: 1, y: 0 } as any);
+            expect(rb.linearVelocity.x).toBe(0);
         });
 
-        it('applyAngularImpulse does not throw', () => {
-            expect(() => create().applyAngularImpulse(1)).not.toThrow();
+        it('applyAngularImpulse is no-op without world', () => {
+            const rb = create();
+            rb.applyAngularImpulse(1);
+            expect(rb.angularVelocity).toBe(0);
+        });
+    });
+
+    describe('with physics world (manual wiring)', () => {
+        let world: PhysicsWorld2D;
+        let worldComponent: PhysicsWorld2DComponent;
+
+        afterEach(() => {
+            worldComponent.onDestroy();
+        });
+
+        function createConnectedRb(): { rb: Rigidbody2D; bodyId: any; world: PhysicsWorld2D } {
+            // Set up world component singleton
+            worldComponent = new PhysicsWorld2DComponent();
+            worldComponent.gravity = { x: 0, y: -10 } as any;
+            worldComponent.awake();
+            world = worldComponent.physicsWorld!;
+
+            // Create body in the world
+            const bodyId = world.getBodyManager().createBody({
+                type: BodyType.Dynamic,
+                position: { x: 0, y: 10 },
+                rotation: 0,
+            });
+            world.getBodyManager().setMassData(bodyId, 1, 0.1, { x: 0, y: 0 });
+
+            // Create component and manually wire internal state
+            const rb = new Rigidbody2D();
+            (rb as any)._physicsWorld = world;
+            (rb as any)._bodyId = bodyId;
+
+            return { rb, bodyId, world };
+        }
+
+        it('linearVelocity setter changes body velocity in world', () => {
+            const { rb, world } = createConnectedRb();
+            rb.linearVelocity = { x: 5, y: 3 } as any;
+            const vel = world.getBodyManager().getLinearVelocity((rb as any)._bodyId);
+            expect(vel.x).toBeCloseTo(5);
+            expect(vel.y).toBeCloseTo(3);
+        });
+
+        it('setPosition changes body position in world', () => {
+            const { rb, world } = createConnectedRb();
+            rb.setPosition({ x: 50, y: 50 } as any);
+            const pos = world.getBodyManager().getPosition((rb as any)._bodyId);
+            expect(pos.x).toBeCloseTo(50);
+            expect(pos.y).toBeCloseTo(50);
+        });
+
+        it('getPosition returns body position from world', () => {
+            const { rb, world } = createConnectedRb();
+            world.getBodyManager().setPosition((rb as any)._bodyId, { x: 25, y: 30 });
+            const pos = rb.getPosition();
+            expect(pos.x).toBeCloseTo(25);
+            expect(pos.y).toBeCloseTo(30);
+        });
+
+        it('isAwake returns true for connected dynamic body', () => {
+            const { rb } = createConnectedRb();
+            expect(rb.isAwake()).toBe(true);
         });
     });
 

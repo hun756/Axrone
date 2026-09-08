@@ -1,7 +1,8 @@
+import type { Brand } from '@axrone/utility';
 import type { RenderPassKind, ResolvedRenderPass } from '@axrone/render-core/types';
 import { GLContextError } from './context/errors';
 
-export type FrameGraphNodeId = string & { readonly __brand: 'FrameGraphNode' };
+export type FrameGraphNodeId = Brand<string, 'FrameGraphNode'>;
 
 export interface FrameGraphPassNode {
     readonly id: FrameGraphNodeId;

@@ -377,6 +377,290 @@ const collideBoxCircle = (a: BoxShapeData, b: CircleShapeData, ctx: CollisionCon
     collideCircleBox(b, a, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, m);
 const collidePolygonCapsule = (a: PolygonShapeData, b: CapsuleShapeData, ctx: CollisionContext, m: WritableManifold) =>
     collideCapsulePolygon(b, a, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, m);
+
+// Segment collision functions
+interface SegmentShapeData {
+    p1: IVec2Like;
+    p2: IVec2Like;
+}
+
+const collideSegmentCircle = (
+    segment: SegmentShapeData,
+    circle: CircleShapeData,
+    ctx: CollisionContext,
+    manifold: WritableManifold
+): void => {
+    const worldP1: IVec2Like = { x: 0, y: 0 };
+    const worldP2: IVec2Like = { x: 0, y: 0 };
+    transformPointTo(worldP1, segment.p1, ctx.transformA);
+    transformPointTo(worldP2, segment.p2, ctx.transformA);
+
+    const worldCenter: IVec2Like = { x: 0, y: 0 };
+    transformPointTo(worldCenter, circle.center, ctx.transformB);
+
+    const closest = closestPointOnSegment(worldCenter, worldP1, worldP2);
+    const dx = worldCenter.x - closest.x;
+    const dy = worldCenter.y - closest.y;
+    const distSq = dx * dx + dy * dy;
+    const radius = circle.radius;
+
+    if (distSq > radius * radius) {
+        manifold.pointCount = 0;
+        return;
+    }
+
+    const dist = Math.sqrt(distSq);
+    const penetration = radius - dist;
+
+    // Normal points from segment to circle
+    if (dist > 1e-6) {
+        setNormal(manifold.normal, dx / dist, dy / dist);
+    } else {
+        // Degenerate case: circle center on segment
+        setNormal(manifold.normal, 0, 1);
+    }
+
+    manifold.pointCount = 1;
+    const point = manifold.points[0];
+    const worldContactPt = closest;
+    inverseTransformPointTo(point.localPointA, worldContactPt, ctx.transformA);
+    inverseTransformPointTo(point.localPointB, worldCenter, ctx.transformB);
+    point.separation = -penetration;
+};
+
+const collideCircleSegment = (
+    circle: CircleShapeData,
+    segment: SegmentShapeData,
+    ctx: CollisionContext,
+    manifold: WritableManifold
+): void => {
+    collideSegmentCircle(segment, circle, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, manifold);
+    // Flip normal to point from circle to segment
+    manifold.normal.x = -manifold.normal.x;
+    manifold.normal.y = -manifold.normal.y;
+};
+
+const collideSegmentCapsule = (
+    segment: SegmentShapeData,
+    capsule: CapsuleShapeData,
+    ctx: CollisionContext,
+    manifold: WritableManifold
+): void => {
+    const worldP1: IVec2Like = { x: 0, y: 0 };
+    const worldP2: IVec2Like = { x: 0, y: 0 };
+    transformPointTo(worldP1, segment.p1, ctx.transformA);
+    transformPointTo(worldP2, segment.p2, ctx.transformA);
+
+    const worldC1: IVec2Like = { x: 0, y: 0 };
+    const worldC2: IVec2Like = { x: 0, y: 0 };
+    transformPointTo(worldC1, capsule.p1, ctx.transformB);
+    transformPointTo(worldC2, capsule.p2, ctx.transformB);
+
+    const { pointA, pointB, distSq } = closestPointsSegmentSegment(worldP1, worldP2, worldC1, worldC2);
+    if (distSq > capsule.radius * capsule.radius) {
+        manifold.pointCount = 0;
+        return;
+    }
+
+    const dx = pointB.x - pointA.x;
+    const dy = pointB.y - pointA.y;
+    const dist = Math.sqrt(distSq);
+    const penetration = capsule.radius - dist;
+
+    if (dist > 1e-6) {
+        setNormal(manifold.normal, dx / dist, dy / dist);
+    } else {
+        setNormal(manifold.normal, 0, 1);
+    }
+
+    manifold.pointCount = 1;
+    const point = manifold.points[0];
+    inverseTransformPointTo(point.localPointA, pointA, ctx.transformA);
+    inverseTransformPointTo(point.localPointB, pointB, ctx.transformB);
+    point.separation = -penetration;
+};
+
+const collideCapsuleSegment = (
+    capsule: CapsuleShapeData,
+    segment: SegmentShapeData,
+    ctx: CollisionContext,
+    manifold: WritableManifold
+): void => {
+    collideSegmentCapsule(segment, capsule, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, manifold);
+    manifold.normal.x = -manifold.normal.x;
+    manifold.normal.y = -manifold.normal.y;
+};
+
+const collideSegmentPolygon = (
+    segment: SegmentShapeData,
+    polygon: PolygonShapeData,
+    ctx: CollisionContext,
+    manifold: WritableManifold
+): void => {
+    const worldP1: IVec2Like = { x: 0, y: 0 };
+    const worldP2: IVec2Like = { x: 0, y: 0 };
+    transformPointTo(worldP1, segment.p1, ctx.transformA);
+    transformPointTo(worldP2, segment.p2, ctx.transformA);
+
+    const worldVertices = polygon.vertices.map((v) => {
+        const out: IVec2Like = { x: 0, y: 0 };
+        transformPointTo(out, v, ctx.transformB);
+        return out;
+    });
+
+    let minDistSq = Infinity;
+    let closestSegPt: IVec2Like = { x: 0, y: 0 };
+    let closestPolyPt: IVec2Like = { x: 0, y: 0 };
+
+    // Check segment against each polygon edge
+    for (let i = 0; i < worldVertices.length; i++) {
+        const j = (i + 1) % worldVertices.length;
+        const { pointA, pointB, distSq } = closestPointsSegmentSegment(
+            worldP1,
+            worldP2,
+            worldVertices[i],
+            worldVertices[j]
+        );
+        if (distSq < minDistSq) {
+            minDistSq = distSq;
+            closestSegPt = pointA;
+            closestPolyPt = pointB;
+        }
+    }
+
+    // Check if segment endpoints are inside polygon (simplified)
+    const dx = closestPolyPt.x - closestSegPt.x;
+    const dy = closestPolyPt.y - closestSegPt.y;
+    const dist = Math.sqrt(minDistSq);
+
+    if (dist > 1e-6) {
+        setNormal(manifold.normal, dx / dist, dy / dist);
+    } else {
+        setNormal(manifold.normal, 0, 1);
+    }
+
+    manifold.pointCount = 1;
+    const point = manifold.points[0];
+    inverseTransformPointTo(point.localPointA, closestSegPt, ctx.transformA);
+    inverseTransformPointTo(point.localPointB, closestPolyPt, ctx.transformB);
+    point.separation = -dist;
+};
+
+const collidePolygonSegment = (
+    polygon: PolygonShapeData,
+    segment: SegmentShapeData,
+    ctx: CollisionContext,
+    manifold: WritableManifold
+): void => {
+    collideSegmentPolygon(segment, polygon, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, manifold);
+    manifold.normal.x = -manifold.normal.x;
+    manifold.normal.y = -manifold.normal.y;
+};
+
+const collideSegmentBox = (
+    segment: SegmentShapeData,
+    box: BoxShapeData,
+    ctx: CollisionContext,
+    manifold: WritableManifold
+): void => {
+    const worldP1: IVec2Like = { x: 0, y: 0 };
+    const worldP2: IVec2Like = { x: 0, y: 0 };
+    transformPointTo(worldP1, segment.p1, ctx.transformA);
+    transformPointTo(worldP2, segment.p2, ctx.transformA);
+
+    const boxWorldVertices = getBoxVertices(box).map((v) => {
+        const p: IVec2Like = { x: v.x + box.center.x, y: v.y + box.center.y };
+        const out: IVec2Like = { x: 0, y: 0 };
+        transformPointTo(out, p, ctx.transformB);
+        return out;
+    });
+
+    let minDistSq = Infinity;
+    let closestSegPt: IVec2Like = { x: 0, y: 0 };
+    let closestBoxPt: IVec2Like = { x: 0, y: 0 };
+
+    for (let i = 0; i < boxWorldVertices.length; i++) {
+        const j = (i + 1) % boxWorldVertices.length;
+        const { pointA, pointB, distSq } = closestPointsSegmentSegment(
+            worldP1,
+            worldP2,
+            boxWorldVertices[i],
+            boxWorldVertices[j]
+        );
+        if (distSq < minDistSq) {
+            minDistSq = distSq;
+            closestSegPt = pointA;
+            closestBoxPt = pointB;
+        }
+    }
+
+    const dx = closestBoxPt.x - closestSegPt.x;
+    const dy = closestBoxPt.y - closestSegPt.y;
+    const dist = Math.sqrt(minDistSq);
+
+    if (dist > 1e-6) {
+        setNormal(manifold.normal, dx / dist, dy / dist);
+    } else {
+        setNormal(manifold.normal, 0, 1);
+    }
+
+    manifold.pointCount = 1;
+    const point = manifold.points[0];
+    inverseTransformPointTo(point.localPointA, closestSegPt, ctx.transformA);
+    inverseTransformPointTo(point.localPointB, closestBoxPt, ctx.transformB);
+    point.separation = -dist;
+};
+
+const collideBoxSegment = (
+    box: BoxShapeData,
+    segment: SegmentShapeData,
+    ctx: CollisionContext,
+    manifold: WritableManifold
+): void => {
+    collideSegmentBox(segment, box, { ...ctx, transformA: ctx.transformB, transformB: ctx.transformA }, manifold);
+    manifold.normal.x = -manifold.normal.x;
+    manifold.normal.y = -manifold.normal.y;
+};
+
+const collideSegmentSegment = (
+    segmentA: SegmentShapeData,
+    segmentB: SegmentShapeData,
+    ctx: CollisionContext,
+    manifold: WritableManifold
+): void => {
+    const worldA1: IVec2Like = { x: 0, y: 0 };
+    const worldA2: IVec2Like = { x: 0, y: 0 };
+    transformPointTo(worldA1, segmentA.p1, ctx.transformA);
+    transformPointTo(worldA2, segmentA.p2, ctx.transformA);
+
+    const worldB1: IVec2Like = { x: 0, y: 0 };
+    const worldB2: IVec2Like = { x: 0, y: 0 };
+    transformPointTo(worldB1, segmentB.p1, ctx.transformB);
+    transformPointTo(worldB2, segmentB.p2, ctx.transformB);
+
+    const { pointA, pointB, distSq } = closestPointsSegmentSegment(worldA1, worldA2, worldB1, worldB2);
+
+    if (distSq > 1e-6) {
+        manifold.pointCount = 0;
+        return;
+    }
+
+    const dx = pointB.x - pointA.x;
+    const dy = pointB.y - pointA.y;
+    const dist = Math.sqrt(distSq);
+
+    if (dist > 1e-6) {
+        setNormal(manifold.normal, dx / dist, dy / dist);
+    } else {
+        setNormal(manifold.normal, 0, 1);
+    }
+
+    manifold.pointCount = 1;
+    const point = manifold.points[0];
+    inverseTransformPointTo(point.localPointA, pointA, ctx.transformA);
+    inverseTransformPointTo(point.localPointB, pointB, ctx.transformB);
+    point.separation = -dist;
+};
 const collideBoxPolygon = collidePolygonPolygon;
 const collidePolygonBox = collideBoxPolygon;
 const collideCapsuleBox = (a: CapsuleShapeData, b: BoxShapeData, ctx: CollisionContext, m: WritableManifold) =>
@@ -390,11 +674,11 @@ type CollisionFn = (
 ) => void;
 
 const COLLISION_MATRIX: ReadonlyArray<ReadonlyArray<CollisionFn | null>> = [
-    [collideCircleCircle as CollisionFn, collideCircleCapsule as CollisionFn, collideCirclePolygon as CollisionFn, collideCircleBox as CollisionFn, null],
-    [collideCapsuleCircle as CollisionFn, collideCapsuleCapsule as CollisionFn, collideCapsulePolygon as CollisionFn, collideCapsuleBox as CollisionFn, null],
-    [collidePolygonCircle as CollisionFn, collidePolygonCapsule as CollisionFn, collidePolygonPolygon as CollisionFn, collidePolygonBox as CollisionFn, null],
-    [collideBoxCircle as CollisionFn, collideBoxCapsule as CollisionFn, collideBoxPolygon as CollisionFn, collideBoxBox as CollisionFn, null],
-    [null, null, null, null, null],
+    [collideCircleCircle as CollisionFn, collideCircleCapsule as CollisionFn, collideCirclePolygon as CollisionFn, collideCircleBox as CollisionFn, collideCircleSegment as CollisionFn],
+    [collideCapsuleCircle as CollisionFn, collideCapsuleCapsule as CollisionFn, collideCapsulePolygon as CollisionFn, collideCapsuleBox as CollisionFn, collideCapsuleSegment as CollisionFn],
+    [collidePolygonCircle as CollisionFn, collidePolygonCapsule as CollisionFn, collidePolygonPolygon as CollisionFn, collidePolygonBox as CollisionFn, collidePolygonSegment as CollisionFn],
+    [collideBoxCircle as CollisionFn, collideBoxCapsule as CollisionFn, collideBoxPolygon as CollisionFn, collideBoxBox as CollisionFn, collideBoxSegment as CollisionFn],
+    [collideSegmentCircle as CollisionFn, collideSegmentCapsule as CollisionFn, collideSegmentPolygon as CollisionFn, collideSegmentBox as CollisionFn, collideSegmentSegment as CollisionFn],
 ] as const;
 
 export class Narrowphase2D {

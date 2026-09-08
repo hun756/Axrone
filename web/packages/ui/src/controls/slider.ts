@@ -5,13 +5,13 @@ import { clamp } from '@axrone/numeric';
 import {
     attachToParent,
     createTextBlock,
-    disposeWidget,
     formatNumericValue,
     isPointInside,
     normalizeRange,
     normalizeSteppedValue,
 } from './internals';
 import { resolveTheme, resolveVariantPalette } from './theme';
+import { createStatefulControl } from './stateful-control';
 
 export const createUISlider = <TRuntime>(
     runtime: UIRuntime<TRuntime>,
@@ -29,8 +29,10 @@ export const createUISlider = <TRuntime>(
         value: normalizeSteppedValue(options.value ?? range.min, range.min, range.max, options.step ?? 0.01),
         showValue: options.showValue ?? true,
         disabled: options.disabled ?? false,
-        dragging: false,
+        hovered: false,
+        pressed: false,
         focused: false,
+        dragging: false,
         variant: options.variant ?? 'primary',
         onChange: options.onChange,
     };
@@ -115,6 +117,20 @@ export const createUISlider = <TRuntime>(
     runtime.appendChild(track, thumb);
 
     let handle: UISliderHandle;
+    let applyRef: () => void = () => {};
+    const apply = () => applyRef();
+
+    const sc = createStatefulControl<typeof state>(runtime, {
+        state,
+        apply,
+        handlers: {
+            blur: () => {
+                state.focused = false;
+                state.dragging = false;
+                apply();
+            },
+        },
+    });
 
     const setValueInternal = (value: number, emit: boolean): void => {
         const nextValue = normalizeSteppedValue(value, state.min, state.max, state.step);
@@ -135,7 +151,7 @@ export const createUISlider = <TRuntime>(
         setValueInternal(state.min + (state.max - state.min) * ratio, true);
     };
 
-    const apply = (): void => {
+    applyRef = (): void => {
         const palette = resolveVariantPalette(theme, state.variant);
         const ratio = state.max === state.min ? 0 : (state.value - state.min) / (state.max - state.min);
         const percent = clamp(ratio * 100, 0, 100);
@@ -143,15 +159,10 @@ export const createUISlider = <TRuntime>(
             ? `${state.label}: ${formatNumericValue(state.value, state.step)}`
             : state.label || (state.showValue ? formatNumericValue(state.value, state.step) : '');
 
+        sc.syncDisabled(root, options.focus ?? {});
         runtime.updateWidget(root, {
-            enabled: !state.disabled,
-            interactive: !state.disabled,
-            focus: {
-                focusable: !state.disabled,
-                ...(options.focus ?? {}),
-            },
             handlers: {
-                pointerDown: (event) => {
+                pointerDown: (event: Readonly<UIPointerEvent>) => {
                     if (state.disabled) {
                         return false;
                     }
@@ -162,14 +173,14 @@ export const createUISlider = <TRuntime>(
                     }
                     return true;
                 },
-                pointerMove: (event) => {
+                pointerMove: (event: Readonly<UIPointerEvent>) => {
                     if (!state.dragging || state.disabled) {
                         return false;
                     }
                     updateFromPointer(event);
                     return true;
                 },
-                pointerUp: (event) => {
+                pointerUp: (event: Readonly<UIPointerEvent>) => {
                     if (!state.dragging || state.disabled) {
                         return false;
                     }
@@ -206,15 +217,8 @@ export const createUISlider = <TRuntime>(
                             return false;
                     }
                 },
-                focus: () => {
-                    state.focused = true;
-                    apply();
-                },
-                blur: () => {
-                    state.focused = false;
-                    state.dragging = false;
-                    apply();
-                },
+                focus: sc.handlers.focus,
+                blur: sc.handlers.blur,
             },
         });
 
@@ -302,10 +306,11 @@ export const createUISlider = <TRuntime>(
         setDisabled(disabled) {
             state.disabled = disabled;
             state.dragging = false;
+            sc.syncDisabled(root, options.focus ?? {});
             apply();
         },
         dispose() {
-            disposeWidget(runtime, root);
+            sc.dispose(root);
         },
     };
 

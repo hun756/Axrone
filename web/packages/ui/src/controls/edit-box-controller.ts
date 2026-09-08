@@ -2,6 +2,8 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
+import { asString, asNumber, asBoolean } from './internals';
+import { defaultUIControlTheme } from './theme';
 
 /**
  * Declarative edit-box controller for `.ui.json` authored text inputs.
@@ -17,7 +19,7 @@ import { clamp } from '@axrone/numeric';
  *     maxLength,        // max character count (default: Infinity)
  *     placeholderKey,   // named binding -> placeholder text widget
  *     valueKey,         // named binding -> value text widget
- *     focusColor,       // border color when focused (default: '#0a74daff')
+ *     focusColor,       // border color when focused (default: theme.accentColor)
  *     blurColor,        // border color when not focused (default: '#334155ff')
  *   }
  *
@@ -42,7 +44,6 @@ export interface EditBoxControllerState {
     focused: boolean;
     selectionStart: number;
     selectionEnd: number;
-    initialized: boolean;
 }
 
 type EditBoxContext = WidgetControllerContext<
@@ -51,16 +52,7 @@ type EditBoxContext = WidgetControllerContext<
     UIRuntime
 >;
 
-const asBoolean = (value: unknown, fallback: boolean): boolean =>
-    typeof value === 'boolean' ? value : fallback;
-
-const asNumber = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const asString = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
-
-const DEFAULT_FOCUS_COLOR = '#0a74daff';
+const DEFAULT_FOCUS_COLOR = defaultUIControlTheme.accentColor;
 const DEFAULT_BLUR_COLOR = '#334155ff';
 const PASSWORD_BULLET = '\u2022';
 
@@ -277,13 +269,11 @@ export const editBoxController: WidgetController<
             focused: false,
             selectionStart: 0,
             selectionEnd: 0,
-            initialized: false,
         };
     },
     mount: (context) => {
         const typed = context as EditBoxContext;
         applyVisuals(typed);
-        typed.state.initialized = true;
     },
     update: (context, previousProps) => {
         const typed = context as EditBoxContext;

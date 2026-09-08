@@ -1,6 +1,6 @@
 import { Vec2, clamp, SOLVER_EPSILON as NUMERIC_SOLVER_EPSILON, type IVec2Like } from '@axrone/numeric';
 import type { BodyId, ConstraintId } from '../types';
-import { ConstraintType } from '../types';
+import { ConstraintType, PhysicsConstants } from '../types';
 import type { ConstraintManager2D } from './constraint-manager';
 import type { BodyManager2D } from './body-manager';
 
@@ -28,8 +28,10 @@ interface JacobianRow {
 }
 
 const SOLVER_EPSILON = NUMERIC_SOLVER_EPSILON;
-const BAUMGARTE = 0.2;
-const POSITION_SLOP = 0.005;
+const BAUMGARTE = PhysicsConstants.BAUMGARTE_FACTOR;
+const POSITION_SLOP = PhysicsConstants.LINEAR_SLOP;
+/** Early-exit threshold for position solver convergence (EF#4). */
+const POSITION_SOLVER_TOLERANCE = 0.001;
 
 const _scratchA: IVec2Like = { x: 0, y: 0 };
 const _scratchB: IVec2Like = { x: 0, y: 0 };
@@ -50,6 +52,11 @@ export class ConstraintSolver2D {
         this._bodyManager = bodyManager;
     }
 
+    /**
+     * @deprecated Use phased API instead: prepareConstraints() → solveVelocityConstraints()
+     * → solvePositionConstraints() → commitBodies(). This monolithic method exists only
+     * for backward compatibility and will be removed in a future version.
+     */
     solveConstraints(
         constraints: readonly ConstraintId[],
         deltaTime: number,
@@ -121,6 +128,7 @@ export class ConstraintSolver2D {
                 }
             }
         }
+        this._lastSolvedConstraintCount = this._jacobianCache.size;
     }
 
     solvePositionConstraints(iterations: number): boolean {
@@ -173,12 +181,12 @@ export class ConstraintSolver2D {
                 }
             }
 
-            if (minError <= 0.001) {
+            if (minError <= POSITION_SOLVER_TOLERANCE) {
                 return true;
             }
         }
 
-        return minError <= 0.005;
+        return minError <= POSITION_SLOP;
     }
 
     commitBodies(): void {
@@ -201,6 +209,46 @@ export class ConstraintSolver2D {
 
     getSolverBody(bodyId: BodyId): SolverBody | undefined {
         return this._bodyMap.get(bodyId);
+    }
+
+    /**
+     * Write back velocity corrections from the constraint solver's internal body map
+     * to an external velocity array. Used by IslandSolver2D to sync joint-correction
+     * impulses before position integration.
+     */
+    writeBackVelocities(
+        velocities: Float64Array,
+        bodyStack: readonly BodyId[],
+        bodyIndex: Map<BodyId, number>
+    ): void {
+        for (const [bodyId, solverBody] of this._bodyMap) {
+            const idx = bodyIndex.get(bodyId);
+            if (idx === undefined) continue;
+            const offset = idx * 3;
+            velocities[offset] = solverBody.linearVelocity.x;
+            velocities[offset + 1] = solverBody.linearVelocity.y;
+            velocities[offset + 2] = solverBody.angularVelocity;
+        }
+    }
+
+    /**
+     * Write back position corrections from the constraint solver's internal body map
+     * to an external position array. Used by IslandSolver2D to sync joint position
+     * corrections before the final body commit.
+     */
+    writeBackPositions(
+        positions: Float64Array,
+        bodyStack: readonly BodyId[],
+        bodyIndex: Map<BodyId, number>
+    ): void {
+        for (const [bodyId, solverBody] of this._bodyMap) {
+            const idx = bodyIndex.get(bodyId);
+            if (idx === undefined) continue;
+            const offset = idx * 3;
+            positions[offset] = solverBody.position.x;
+            positions[offset + 1] = solverBody.position.y;
+            positions[offset + 2] = solverBody.rotation;
+        }
     }
 
     clearCache(): void {

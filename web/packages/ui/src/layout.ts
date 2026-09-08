@@ -71,12 +71,38 @@ export class UILayoutEngine<TNode> {
     private layoutPasses = 0;
     private viewportWidth = 0;
     private viewportHeight = 0;
+    private readonly measureCache = new Map<TNode, Map<number, Map<number, SizeLike>>>();
 
     compute(adapter: LayoutTreeAdapter<TNode>, viewport: Readonly<SizeLike>): void {
         this.layoutPasses = 0;
+        this.measureCache.clear();
         this.viewportWidth = viewport.width;
         this.viewportHeight = viewport.height;
         this.layoutNode(adapter, adapter.root, 0, 0, viewport.width, viewport.height, viewport.width, viewport.height);
+    }
+
+    /**
+     * Re-layout a single subtree using its existing box position and size as
+     * constraints. This is an optimization for style/position-only changes
+     * where the parent's allocation has not changed.
+     */
+    computeSubtree(
+        adapter: LayoutTreeAdapter<TNode>,
+        viewport: Readonly<SizeLike>,
+        node: TNode,
+        x: number,
+        y: number,
+        availableWidth: number,
+        availableHeight: number
+    ): void {
+        this.viewportWidth = viewport.width;
+        this.viewportHeight = viewport.height;
+        // Clear the measure cache so re-measured nodes pick up updated layout inputs.
+        this.measureCache.clear();
+        // Do NOT force the node's size — let it measure itself within the
+        // available space so that updated layout properties (e.g. width change)
+        // are honoured.
+        this.layoutNode(adapter, node, x, y, availableWidth, availableHeight);
     }
 
     getLayoutPassCount(): number {
@@ -89,6 +115,16 @@ export class UILayoutEngine<TNode> {
         availableWidth: number,
         availableHeight: number
     ): SizeLike {
+        let nodeCache = this.measureCache.get(node);
+        if (nodeCache) {
+            const widthCache = nodeCache.get(availableWidth);
+            if (widthCache) {
+                const cached = widthCache.get(availableHeight);
+                if (cached) {
+                    return cached;
+                }
+            }
+        }
         this.layoutPasses += 1;
         if (!adapter.isVisible(node)) {
             return { width: 0, height: 0 };
@@ -131,10 +167,21 @@ export class UILayoutEngine<TNode> {
                 height = width / layout.aspectRatio;
             }
         }
-        return {
+        const result = {
             width: clamp(width, layout.minWidth, layout.maxWidth),
             height: clamp(height, layout.minHeight, layout.maxHeight),
         };
+        if (!nodeCache) {
+            nodeCache = new Map();
+            this.measureCache.set(node, nodeCache);
+        }
+        let widthCache = nodeCache.get(availableWidth);
+        if (!widthCache) {
+            widthCache = new Map();
+            nodeCache.set(availableWidth, widthCache);
+        }
+        widthCache.set(availableHeight, result);
+        return result;
     }
 
     private measureChildren(
@@ -203,9 +250,10 @@ export class UILayoutEngine<TNode> {
         forcedHeight?: number
     ): SizeLike {
         const layout = adapter.getLayout(node);
+        const base = this.measureNode(adapter, node, availableWidth, availableHeight);
         const measured = {
-            width: forcedWidth ?? this.measureNode(adapter, node, availableWidth, availableHeight).width,
-            height: forcedHeight ?? this.measureNode(adapter, node, availableWidth, availableHeight).height,
+            width: forcedWidth ?? base.width,
+            height: forcedHeight ?? base.height,
         };
         const box = createBox(
             x,

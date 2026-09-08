@@ -461,5 +461,81 @@ describe('BodyManager2D', () => {
             expect(manager.getRotation(bodyId)).toBeCloseTo(Math.PI * 100);
         });
     });
+
+    describe('Wake Semantics', () => {
+        it('setLinearVelocity wakes a sleeping body by default', () => {
+            const bodyId = manager.createBody({
+                type: BodyType.Dynamic,
+                awake: false,
+                allowSleep: true,
+            });
+            expect(manager.isAwake(bodyId)).toBe(false);
+            manager.setLinearVelocity(bodyId, { x: 5, y: 0 });
+            expect(manager.isAwake(bodyId)).toBe(true);
+            const vel = manager.getLinearVelocity(bodyId);
+            expect(vel.x).toBe(5);
+        });
+
+        it('setAngularVelocity wakes a sleeping body by default', () => {
+            const bodyId = manager.createBody({
+                type: BodyType.Dynamic,
+                awake: false,
+                allowSleep: true,
+            });
+            expect(manager.isAwake(bodyId)).toBe(false);
+            manager.setAngularVelocity(bodyId, 3);
+            expect(manager.isAwake(bodyId)).toBe(true);
+            expect(manager.getAngularVelocity(bodyId)).toBe(3);
+        });
+
+        it('setLinearVelocity with wake=false does NOT wake a sleeping body', () => {
+            const bodyId = manager.createBody({
+                type: BodyType.Dynamic,
+                awake: false,
+                allowSleep: true,
+            });
+            expect(manager.isAwake(bodyId)).toBe(false);
+            manager.setLinearVelocity(bodyId, { x: 10, y: 0 }, false);
+            expect(manager.isAwake(bodyId)).toBe(false);
+            // Velocity is still written, just no wake
+            const vel = manager.getLinearVelocity(bodyId);
+            expect(vel.x).toBe(10);
+        });
+
+        it('setAngularVelocity with wake=false does NOT wake a sleeping body', () => {
+            const bodyId = manager.createBody({
+                type: BodyType.Dynamic,
+                awake: false,
+                allowSleep: true,
+            });
+            expect(manager.isAwake(bodyId)).toBe(false);
+            manager.setAngularVelocity(bodyId, 7, false);
+            expect(manager.isAwake(bodyId)).toBe(false);
+            expect(manager.getAngularVelocity(bodyId)).toBe(7);
+        });
+
+        it('setLinearVelocity is idempotent for already-awake body', () => {
+            const bodyId = manager.createBody({
+                type: BodyType.Dynamic,
+                awake: true,
+            });
+            expect(manager.isAwake(bodyId)).toBe(true);
+            manager.setLinearVelocity(bodyId, { x: 1, y: 0 });
+            expect(manager.isAwake(bodyId)).toBe(true);
+            // sleepTime should be reset to 0
+            expect(manager.getSleepTime(bodyId)).toBe(0);
+        });
+
+        it('setAngularVelocity is idempotent for already-awake body', () => {
+            const bodyId = manager.createBody({
+                type: BodyType.Dynamic,
+                awake: true,
+            });
+            expect(manager.isAwake(bodyId)).toBe(true);
+            manager.setAngularVelocity(bodyId, 2);
+            expect(manager.isAwake(bodyId)).toBe(true);
+            expect(manager.getSleepTime(bodyId)).toBe(0);
+        });
+    });
 });
 

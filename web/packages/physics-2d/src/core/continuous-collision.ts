@@ -1,6 +1,6 @@
 import { Vec2, clamp, type IVec2Like } from '@axrone/numeric';
 import { AABB2D } from '@axrone/geometry';
-import type { BodyId, ShapeId, IRaycastResult2D } from '../types';
+import type { BodyId, ShapeId, ISingleRaycastResult2D } from '../types';
 import { GJK2D } from './collision-algorithms';
 
 const _scratch2DA: IVec2Like = { x: 0, y: 0 };

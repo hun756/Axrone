@@ -32,24 +32,26 @@ export class CapsuleCollider3D extends Collider3D {
 
     protected override _createShape(): void {
         if (!this._rigidbody) return;
+        const s = this._getWorldScale();
         const hh = (this._height - this._radius * 2) * 0.5;
         let p1: IVec3Like;
         let p2: IVec3Like;
         switch (this._direction) {
             case CapsuleDirection3D.XAxis:
-                p1 = { x: this._center.x - hh, y: this._center.y, z: this._center.z };
-                p2 = { x: this._center.x + hh, y: this._center.y, z: this._center.z };
+                p1 = { x: (this._center.x - hh) * s.x, y: this._center.y * s.y, z: this._center.z * s.z };
+                p2 = { x: (this._center.x + hh) * s.x, y: this._center.y * s.y, z: this._center.z * s.z };
                 break;
             case CapsuleDirection3D.YAxis:
-                p1 = { x: this._center.x, y: this._center.y - hh, z: this._center.z };
-                p2 = { x: this._center.x, y: this._center.y + hh, z: this._center.z };
+                p1 = { x: this._center.x * s.x, y: (this._center.y - hh) * s.y, z: this._center.z * s.z };
+                p2 = { x: this._center.x * s.x, y: (this._center.y + hh) * s.y, z: this._center.z * s.z };
                 break;
             case CapsuleDirection3D.ZAxis:
-                p1 = { x: this._center.x, y: this._center.y, z: this._center.z - hh };
-                p2 = { x: this._center.x, y: this._center.y, z: this._center.z + hh };
+                p1 = { x: this._center.x * s.x, y: this._center.y * s.y, z: (this._center.z - hh) * s.z };
+                p2 = { x: this._center.x * s.x, y: this._center.y * s.y, z: (this._center.z + hh) * s.z };
                 break;
         }
-        const def: ICapsuleShapeDef3D = { p1, p2, radius: this._radius };
+        const rScale = Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.z));
+        const def: ICapsuleShapeDef3D = { p1, p2, radius: this._radius * rScale };
         if (this._world) {
             this._shapeId = this._world.createCapsuleShape(
                 this._rigidbody.bodyId,
@@ -58,11 +60,13 @@ export class CapsuleCollider3D extends Collider3D {
                 this._getFilter(),
                 { isSensor: this.isTrigger }
             );
+            this._notifyShapeChanged();
             return;
         }
 
         if (!this._shapeManager) return;
         this._shapeId = this._shapeManager.createCapsule(this._rigidbody.bodyId, def, this._getMaterial(), this._getFilter());
+        this._notifyShapeChanged();
     }
 
     protected override _updateShape(): void {

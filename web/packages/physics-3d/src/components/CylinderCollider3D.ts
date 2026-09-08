@@ -32,10 +32,18 @@ export class CylinderCollider3D extends Collider3D {
 
     protected override _createShape(): void {
         if (!this._rigidbody) return;
+        const s = this._getWorldScale();
+        const rScale = Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.z));
+        let hScale: number;
+        switch (this._axis) {
+            case CapsuleDirection3D.XAxis: hScale = Math.abs(s.x); break;
+            case CapsuleDirection3D.ZAxis: hScale = Math.abs(s.z); break;
+            default: hScale = Math.abs(s.y); break;
+        }
         const def: ICylinderShapeDef3D = {
-            center: this._center,
-            radius: this._radius,
-            height: this._height,
+            center: { x: this._center.x * s.x, y: this._center.y * s.y, z: this._center.z * s.z },
+            radius: this._radius * rScale,
+            height: this._height * hScale,
             axis: this._axis,
         };
         if (this._world) {
@@ -46,11 +54,13 @@ export class CylinderCollider3D extends Collider3D {
                 this._getFilter(),
                 { isSensor: this.isTrigger }
             );
+            this._notifyShapeChanged();
             return;
         }
 
         if (!this._shapeManager) return;
         this._shapeId = this._shapeManager.createCylinder(this._rigidbody.bodyId, def, this._getMaterial(), this._getFilter());
+        this._notifyShapeChanged();
     }
 
     protected override _updateShape(): void {

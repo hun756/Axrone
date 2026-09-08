@@ -12,6 +12,7 @@ import { BodyFlags } from '../types';
 import {
     SoAManager,
     PhysicsError,
+    type ErrorCode,
     assertFound,
     assertCapacity,
     type ManagerState,
@@ -44,9 +45,10 @@ type BodyField = keyof BodySchema;
 type BodyManagerState = ManagerState;
 
 class BodyPhysicsError extends PhysicsError {
-    constructor(message: string, code: Parameters<typeof PhysicsError.prototype.withContext>[0] extends never ? never : never) {
-        super(message, code as any);
+    constructor(message: string, code: ErrorCode = 'INVALID_STATE', context: Record<string, unknown> = {}) {
+        super(message, code, context);
         this.name = 'BodyPhysicsError';
+        Object.setPrototypeOf(this, BodyPhysicsError.prototype);
     }
 }
 
@@ -61,6 +63,10 @@ export class BodyManager2D extends SoAManager<BodySchema> {
     private readonly _gravityScales: Float32Array;
     private readonly _dampingData: Float32Array;
     private readonly _userData: Map<BodyId, unknown>;
+    /** Called when a STATIC body's position or rotation changes. (RB-1 fix) */
+    private _onStaticTransformChange: ((bodyId: BodyId) => void) | null = null;
+    /** Called when a KINEMATIC body's position or rotation changes. (P1-4) */
+    private _onKinematicTransformChange: ((bodyId: BodyId) => void) | null = null;
 
     constructor(maxBodies: number = 1024) {
         super(maxBodies, BODY_SCHEMA);
@@ -163,6 +169,13 @@ export class BodyManager2D extends SoAManager<BodySchema> {
 
     setPosition(bodyId: BodyId, position: ReadonlyVec2): void {
         this._writeVec2(this._resolveIndex(bodyId), 'posX', position);
+        const bodyType = this.getBodyType(bodyId);
+        if (this._onStaticTransformChange && bodyType === 0) {
+            this._onStaticTransformChange(bodyId);
+        }
+        if (this._onKinematicTransformChange && bodyType === 1) {
+            this._onKinematicTransformChange(bodyId);
+        }
     }
 
     getRotation(bodyId: BodyId): number {
@@ -171,22 +184,37 @@ export class BodyManager2D extends SoAManager<BodySchema> {
 
     setRotation(bodyId: BodyId, rotation: number): void {
         this._writeScalar(this._resolveIndex(bodyId), 'rotation', rotation);
+        const bodyType = this.getBodyType(bodyId);
+        if (this._onStaticTransformChange && bodyType === 0) {
+            this._onStaticTransformChange(bodyId);
+        }
+        if (this._onKinematicTransformChange && bodyType === 1) {
+            this._onKinematicTransformChange(bodyId);
+        }
     }
 
     getLinearVelocity(bodyId: BodyId, out?: IVec2Output): IVec2Output {
         return this._readVec2(this._resolveIndex(bodyId), 'velX', out);
     }
 
-    setLinearVelocity(bodyId: BodyId, velocity: ReadonlyVec2): void {
+    setLinearVelocity(bodyId: BodyId, velocity: ReadonlyVec2, wake = true): void {
         this._writeVec2(this._resolveIndex(bodyId), 'velX', velocity);
+        // Wake the body so the new velocity takes effect immediately.
+        // Internal callers (e.g. island-solver body commit, sleep path) pass
+        // wake=false to avoid conflicting with the sleep system.
+        if (wake) this.setAwake(bodyId, true);
     }
 
     getAngularVelocity(bodyId: BodyId): number {
         return this._readScalar(this._resolveIndex(bodyId), 'angVel');
     }
 
-    setAngularVelocity(bodyId: BodyId, velocity: number): void {
+    setAngularVelocity(bodyId: BodyId, velocity: number, wake = true): void {
         this._writeScalar(this._resolveIndex(bodyId), 'angVel', velocity);
+        // Wake the body so the new angular velocity takes effect immediately.
+        // Internal callers (e.g. island-solver body commit, sleep path) pass
+        // wake=false to avoid conflicting with the sleep system.
+        if (wake) this.setAwake(bodyId, true);
     }
 
     applyForce(bodyId: BodyId, force: ReadonlyVec2, point?: ReadonlyVec2): void {
@@ -392,8 +420,34 @@ export class BodyManager2D extends SoAManager<BodySchema> {
         }
     }
 
+    /** Read accumulated force for a body. */
+    getForce(bodyId: BodyId, out?: IVec2Output): IVec2Output {
+        return this._readVec2(this._resolveIndex(bodyId), 'forceX', out);
+    }
+
+    /** Read accumulated torque for a body. */
+    getTorque(bodyId: BodyId): number {
+        return this._readScalar(this._resolveIndex(bodyId), 'torque');
+    }
+
     getBodyIds(): IterableIterator<BodyId> {
         return this._bodyIdToIndex.keys();
+    }
+
+    /**
+     * Register a callback invoked whenever a STATIC body's position or rotation
+     * is written. Used by PhysicsWorld2D to invalidate the static AABB cache. (RB-1)
+     */
+    onStaticTransformChange(callback: (bodyId: BodyId) => void): void {
+        this._onStaticTransformChange = callback;
+    }
+
+    /**
+     * Register a callback invoked whenever a KINEMATIC body's position or rotation
+     * is written. Used by PhysicsWorld2D to wake sleeping contact neighbors. (P1-4)
+     */
+    onKinematicTransformChange(callback: (bodyId: BodyId) => void): void {
+        this._onKinematicTransformChange = callback;
     }
 
     hasBody(bodyId: BodyId): boolean {

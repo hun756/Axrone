@@ -12,7 +12,7 @@ import type {
     IGearConstraintDef,
     IRopeConstraintDef2D,
 } from '../types';
-import { PhysicsError } from './foundation';
+import { PhysicsError, IndexPool } from './foundation';
 
 interface ConstraintMetadata {
     readonly type: ConstraintType;
@@ -66,22 +66,30 @@ export class ConstraintManager2D implements Disposable {
     private _mouseCount: number = 0;
     private _gearCount: number = 0;
     private _ropeCount: number = 0;
+    private readonly _distancePool: IndexPool;
+    private readonly _revolutePool: IndexPool;
+    private readonly _prismaticPool: IndexPool;
+    private readonly _weldPool: IndexPool;
+    private readonly _wheelPool: IndexPool;
+    private readonly _motorPool: IndexPool;
+    private readonly _mousePool: IndexPool;
+    private readonly _gearPool: IndexPool;
+    private readonly _ropePool: IndexPool;
     private _disposed: boolean = false;
 
     constructor(maxConstraints: number = 512) {
         this._maxConstraints = maxConstraints;
-        const quarterMax = Math.ceil(maxConstraints / 4);
 
         this._metadata = new Map();
-        this._distanceData = new Float64Array(quarterMax * DISTANCE_STRIDE);
-        this._revoluteData = new Float64Array(quarterMax * REVOLUTE_STRIDE);
-        this._prismaticData = new Float64Array(quarterMax * PRISMATIC_STRIDE);
-        this._weldData = new Float64Array(quarterMax * WELD_STRIDE);
-        this._wheelData = new Float64Array(quarterMax * WHEEL_STRIDE);
-        this._motorData = new Float64Array(quarterMax * MOTOR_STRIDE);
-        this._mouseData = new Float64Array(quarterMax * MOUSE_STRIDE);
-        this._gearData = new Float64Array(quarterMax * GEAR_STRIDE);
-        this._ropeData = new Float64Array(quarterMax * ROPE_STRIDE);
+        this._distanceData = new Float64Array(maxConstraints * DISTANCE_STRIDE);
+        this._revoluteData = new Float64Array(maxConstraints * REVOLUTE_STRIDE);
+        this._prismaticData = new Float64Array(maxConstraints * PRISMATIC_STRIDE);
+        this._weldData = new Float64Array(maxConstraints * WELD_STRIDE);
+        this._wheelData = new Float64Array(maxConstraints * WHEEL_STRIDE);
+        this._motorData = new Float64Array(maxConstraints * MOTOR_STRIDE);
+        this._mouseData = new Float64Array(maxConstraints * MOUSE_STRIDE);
+        this._gearData = new Float64Array(maxConstraints * GEAR_STRIDE);
+        this._ropeData = new Float64Array(maxConstraints * ROPE_STRIDE);
 
         this._constraintToDistanceIndex = new Map();
         this._constraintToRevoluteIndex = new Map();
@@ -93,6 +101,16 @@ export class ConstraintManager2D implements Disposable {
         this._constraintToGearIndex = new Map();
         this._constraintToRopeIndex = new Map();
         this._bodyToConstraints = new Map();
+
+        this._distancePool = new IndexPool(maxConstraints);
+        this._revolutePool = new IndexPool(maxConstraints);
+        this._prismaticPool = new IndexPool(maxConstraints);
+        this._weldPool = new IndexPool(maxConstraints);
+        this._wheelPool = new IndexPool(maxConstraints);
+        this._motorPool = new IndexPool(maxConstraints);
+        this._mousePool = new IndexPool(maxConstraints);
+        this._gearPool = new IndexPool(maxConstraints);
+        this._ropePool = new IndexPool(maxConstraints);
     }
 
     get constraintCount(): number {
@@ -108,7 +126,7 @@ export class ConstraintManager2D implements Disposable {
         this._assertCapacity();
 
         const constraintId = this._nextConstraintId++ as ConstraintId;
-        const index = this._distanceCount++;
+        const index = this._distancePool.acquire();
         const offset = index * DISTANCE_STRIDE;
 
         this._distanceData[offset] = def.localAnchorA.x;
@@ -132,7 +150,7 @@ export class ConstraintManager2D implements Disposable {
         this._assertCapacity();
 
         const constraintId = this._nextConstraintId++ as ConstraintId;
-        const index = this._revoluteCount++;
+        const index = this._revolutePool.acquire();
         const offset = index * REVOLUTE_STRIDE;
 
         this._revoluteData[offset] = def.localAnchorA.x;
@@ -160,7 +178,7 @@ export class ConstraintManager2D implements Disposable {
         this._assertCapacity();
 
         const constraintId = this._nextConstraintId++ as ConstraintId;
-        const index = this._prismaticCount++;
+        const index = this._prismaticPool.acquire();
         const offset = index * PRISMATIC_STRIDE;
 
         this._prismaticData[offset] = def.localAnchorA.x;
@@ -190,7 +208,7 @@ export class ConstraintManager2D implements Disposable {
         this._assertCapacity();
 
         const constraintId = this._nextConstraintId++ as ConstraintId;
-        const index = this._weldCount++;
+        const index = this._weldPool.acquire();
         const offset = index * WELD_STRIDE;
 
         this._weldData[offset] = def.localAnchorA.x;
@@ -212,7 +230,7 @@ export class ConstraintManager2D implements Disposable {
         this._assertCapacity();
 
         const constraintId = this._nextConstraintId++ as ConstraintId;
-        const index = this._wheelCount++;
+        const index = this._wheelPool.acquire();
         const offset = index * WHEEL_STRIDE;
 
         this._wheelData[offset] = def.localAnchorA.x;
@@ -240,7 +258,7 @@ export class ConstraintManager2D implements Disposable {
         this._assertCapacity();
 
         const constraintId = this._nextConstraintId++ as ConstraintId;
-        const index = this._motorCount++;
+        const index = this._motorPool.acquire();
         const offset = index * MOTOR_STRIDE;
 
         this._motorData[offset] = def.linearOffset.x;
@@ -264,7 +282,7 @@ export class ConstraintManager2D implements Disposable {
         this._assertCapacity();
 
         const constraintId = this._nextConstraintId++ as ConstraintId;
-        const index = this._mouseCount++;
+        const index = this._mousePool.acquire();
         const offset = index * MOUSE_STRIDE;
 
         this._mouseData[offset] = def.target.x;
@@ -286,7 +304,7 @@ export class ConstraintManager2D implements Disposable {
         this._assertCapacity();
 
         const constraintId = this._nextConstraintId++ as ConstraintId;
-        const index = this._gearCount++;
+        const index = this._gearPool.acquire();
         const offset = index * GEAR_STRIDE;
 
         this._gearData[offset] = def.constraintIdA;
@@ -303,7 +321,7 @@ export class ConstraintManager2D implements Disposable {
         this._assertCapacity();
 
         const constraintId = this._nextConstraintId++ as ConstraintId;
-        const index = this._ropeCount++;
+        const index = this._ropePool.acquire();
         const offset = index * ROPE_STRIDE;
 
         this._ropeData[offset] = def.localAnchorA.x;
@@ -325,6 +343,55 @@ export class ConstraintManager2D implements Disposable {
 
         this._removeFromBody(metadata.bodyIdA, constraintId);
         this._removeFromBody(metadata.bodyIdB, constraintId);
+
+        // Release per-type index back to the pool
+        switch (metadata.type) {
+            case ConstraintType.Distance: {
+                const idx = this._constraintToDistanceIndex.get(constraintId);
+                if (idx !== undefined) this._distancePool.release(idx);
+                break;
+            }
+            case ConstraintType.Revolute: {
+                const idx = this._constraintToRevoluteIndex.get(constraintId);
+                if (idx !== undefined) this._revolutePool.release(idx);
+                break;
+            }
+            case ConstraintType.Prismatic: {
+                const idx = this._constraintToPrismaticIndex.get(constraintId);
+                if (idx !== undefined) this._prismaticPool.release(idx);
+                break;
+            }
+            case ConstraintType.Weld: {
+                const idx = this._constraintToWeldIndex.get(constraintId);
+                if (idx !== undefined) this._weldPool.release(idx);
+                break;
+            }
+            case ConstraintType.Wheel: {
+                const idx = this._constraintToWheelIndex.get(constraintId);
+                if (idx !== undefined) this._wheelPool.release(idx);
+                break;
+            }
+            case ConstraintType.Motor: {
+                const idx = this._constraintToMotorIndex.get(constraintId);
+                if (idx !== undefined) this._motorPool.release(idx);
+                break;
+            }
+            case ConstraintType.Mouse: {
+                const idx = this._constraintToMouseIndex.get(constraintId);
+                if (idx !== undefined) this._mousePool.release(idx);
+                break;
+            }
+            case ConstraintType.Gear: {
+                const idx = this._constraintToGearIndex.get(constraintId);
+                if (idx !== undefined) this._gearPool.release(idx);
+                break;
+            }
+            case ConstraintType.Rope: {
+                const idx = this._constraintToRopeIndex.get(constraintId);
+                if (idx !== undefined) this._ropePool.release(idx);
+                break;
+            }
+        }
 
         this._metadata.delete(constraintId);
         this._constraintToDistanceIndex.delete(constraintId);

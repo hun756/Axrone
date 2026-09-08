@@ -8,8 +8,6 @@ import {
 } from './shared';
 
 export class DefaultEqualityComparer<T> implements EqualityComparer<T> {
-    private static readonly HASH_CACHE = new WeakMap<object, number>();
-
     equals(a: T, b: T): boolean {
         if (a === b) return true;
         if (a === null || a === undefined || b === null || b === undefined) return false;
@@ -43,28 +41,18 @@ export class DefaultEqualityComparer<T> implements EqualityComparer<T> {
             return 0;
         }
 
-        if (DefaultEqualityComparer.HASH_CACHE.has(obj as object)) {
-            return DefaultEqualityComparer.HASH_CACHE.get(obj as object)!;
-        }
-
-        let hash: number;
-
         if (isEquatable(obj)) {
-            hash = obj.getHashCode();
+            return obj.getHashCode();
         } else if (obj instanceof Date) {
-            hash = obj.getTime() | 0;
+            return obj.getTime() | 0;
         } else {
-            hash = hashObject(obj);
+            return hashObject(obj);
         }
-
-        DefaultEqualityComparer.HASH_CACHE.set(obj as object, hash);
-        return hash;
     }
 }
 
 export class DeepEqualityComparer<T> implements EqualityComparer<T> {
     private readonly options: Readonly<EqualityComparerOptions>;
-    private static readonly HASH_CACHE = new WeakMap<object, number>();
     private static readonly DEFAULT_INSTANCE = new DeepEqualityComparer();
 
     static readonly default = DeepEqualityComparer.DEFAULT_INSTANCE;
@@ -74,10 +62,10 @@ export class DeepEqualityComparer<T> implements EqualityComparer<T> {
     }
 
     equals(a: T, b: T): boolean {
-        return this.deepEquals(a, b, new Set());
+        return this.deepEquals(a, b, new Map());
     }
 
-    private deepEquals(a: unknown, b: unknown, visited: Set<unknown>): boolean {
+    private deepEquals(a: unknown, b: unknown, visited: Map<object, Set<object>>): boolean {
         if (a === b) return true;
         if (a === null || a === undefined || b === null || b === undefined) return false;
 
@@ -103,11 +91,16 @@ export class DeepEqualityComparer<T> implements EqualityComparer<T> {
         const aObj = a as object;
         const bObj = b as object;
 
-        if (visited.has(aObj) && visited.has(bObj)) return true;
-        if (visited.has(aObj) || visited.has(bObj)) return false;
+        // Check if we've visited this specific pair (a, b)
+        const bSetForA = visited.get(aObj);
+        if (bSetForA?.has(bObj)) return true;
 
-        visited.add(aObj);
-        visited.add(bObj);
+        // Track this pair
+        if (!bSetForA) {
+            visited.set(aObj, new Set([bObj]));
+        } else {
+            bSetForA.add(bObj);
+        }
 
         if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
         if (a instanceof RegExp && b instanceof RegExp) return a.toString() === b.toString();
@@ -167,7 +160,7 @@ export class DeepEqualityComparer<T> implements EqualityComparer<T> {
         }
 
         return aKeys.every((key) => {
-            if (!Object.prototype.hasOwnProperty.call(b, key)) return !this.options.strict;
+            if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
             return this.deepEquals(
                 (a as Record<string, unknown>)[key],
                 (b as Record<string, unknown>)[key],
@@ -183,13 +176,7 @@ export class DeepEqualityComparer<T> implements EqualityComparer<T> {
             return hashObject(obj);
         }
 
-        if (DeepEqualityComparer.HASH_CACHE.has(obj as object)) {
-            return DeepEqualityComparer.HASH_CACHE.get(obj as object)!;
-        }
-
-        const hash = this.deepHash(obj, new Set());
-        DeepEqualityComparer.HASH_CACHE.set(obj as object, hash);
-        return hash;
+        return this.deepHash(obj, new Set());
     }
 
     private deepHash(obj: unknown, visited: Set<unknown>): number {
@@ -212,9 +199,11 @@ export class DeepEqualityComparer<T> implements EqualityComparer<T> {
         if (obj instanceof RegExp) return hashString(obj.toString());
 
         if (obj instanceof Set) {
-            return [...obj].reduce((hash, item) => {
-                return hash ^ this.deepHash(item, visited);
-            }, FNV_OFFSET_BASIS);
+            let hash = FNV_OFFSET_BASIS;
+            for (const item of obj) {
+                hash = (hash + this.deepHash(item, visited)) | 0;
+            }
+            return hash;
         }
 
         if (obj instanceof Map) {

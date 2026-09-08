@@ -20,7 +20,7 @@ describe('Murmur3 32-bit', () => {
         it('"abc"', () => {
             const h = new Murmur3_32();
             h.updateBytes(enc.encode('abc'));
-            expect(h.digest()).toBe(0xcfb8023e);
+            expect(h.digest()).toBe(0xb3dd93fa);
         });
 
         it('"abcd"', () => {
@@ -68,7 +68,7 @@ describe('Murmur3 32-bit', () => {
             h.updateBytes(enc.encode('a'));
             h.reset();
             h.updateBytes(enc.encode('abc'));
-            expect(h.digest()).toBe(0xcfb8023e);
+            expect(h.digest()).toBe(0xb3dd93fa);
         });
 
         it('clone', () => {
@@ -179,7 +179,7 @@ describe('Murmur3 32-bit', () => {
             // "abc" is 3 bytes
             const h = new Murmur3_32();
             h.updateBytes(enc.encode('abc'));
-            expect(h.digest()).toBe(0xcfb8023e);
+            expect(h.digest()).toBe(0xb3dd93fa);
         });
 
         it('metadata is correct', () => {

@@ -11,6 +11,7 @@ export interface IHasher<H extends HashValue = Hash32> {
 
     updateBytes(bytes: BytesLike, offset?: number, length?: number): this;
     updateString(input: string): this;
+    updateStringUtf16(input: string): this;
     updateBoolean(value: boolean): this;
     updateI8(value: number): this;
     updateI16(value: number): this;
@@ -36,6 +37,10 @@ export interface IHasher<H extends HashValue = Hash32> {
     clone(): IHasher<H>;
 }
 
+export interface IDigestAsync<H extends HashValue> {
+    digestAsync(): Promise<H>;
+}
+
 export interface IHashable<H extends HashValue = Hash32> {
     hashInto<H2 extends HashValue = H>(hasher: IHasher<H2>): void;
     getHashCode(hasher?: IHasher<H>): H;
@@ -46,6 +51,7 @@ export interface IHMAC<H extends HashValue = Hash32> {
     readonly key: BytesLike;
     update(bytes: BytesLike, offset?: number, length?: number): this;
     updateString(input: string): this;
+    updateStringUtf16(input: string): this;
     digest(): H;
     digestBytes(): Uint8Array;
     digestHex(): string;
@@ -55,11 +61,14 @@ export interface IHMAC<H extends HashValue = Hash32> {
 }
 
 export interface IHashFactory<H extends HashValue = Hash32> {
-    readonly metadata: HashAlgorithmMetadata;
+    readonly metadata: Readonly<HashAlgorithmMetadata>;
     create(options?: HashFactoryOptions): IHasher<H>;
     hash(input: BytesLike | string, options?: HashFactoryOptions): H;
     hashBytes(input: BytesLike, options?: HashFactoryOptions): H;
     hashString(input: string, options?: HashFactoryOptions): H;
+    hashAsync(input: BytesLike | string, options?: HashFactoryOptions): Promise<H>;
+    hashBytesAsync(input: BytesLike, options?: HashFactoryOptions): Promise<H>;
+    hashStringAsync(input: string, options?: HashFactoryOptions): Promise<H>;
 }
 
 export interface HashFactoryOptions {

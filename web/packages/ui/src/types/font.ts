@@ -191,7 +191,12 @@ export interface GlyphAtlasEntry {
     readonly v0: number;
     readonly u1: number;
     readonly v1: number;
-    readonly data?: ArrayBuffer | ArrayBufferView | null;
+    /**
+     * CPU-side bitmap data. Nullable to allow releasing the data after GPU
+     * upload to prevent memory retention. Set to null after the renderer
+     * uploads the glyph to the GPU.
+     */
+    data?: ArrayBuffer | ArrayBufferView | null;
 }
 
 export interface GlyphAtlasPageSnapshot {

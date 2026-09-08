@@ -629,7 +629,11 @@ export class ShaderInstance implements IShaderInstance {
         // targets the wrong program ("location is not from the associated
         // program"). Track the context-level current program instead.
         if (ShaderInstance.contextCurrentProgram !== program) {
-            this._ctx?.state.useProgram(program) ?? gl.useProgram(program);
+            if (this._ctx) {
+                this._ctx.state.useProgram(program);
+            } else {
+                gl.useProgram(program);
+            }
             ShaderInstance.contextCurrentProgram = program;
             this.programBindCount++;
         }
@@ -842,7 +846,11 @@ export class ShaderInstance implements IShaderInstance {
             const source = buffer as unknown as { buffer?: ArrayBuffer; byteOffset?: number };
             const data = source.buffer ?? (buffer as unknown as ArrayBuffer);
             const size = data.byteLength;
-            this._ctx?.state.bindBuffer(gl.UNIFORM_BUFFER, glBuffer) ?? gl.bindBuffer(gl.UNIFORM_BUFFER, glBuffer);
+            if (this._ctx) {
+                this._ctx.state.bindBuffer(gl.UNIFORM_BUFFER, glBuffer);
+            } else {
+                gl.bindBuffer(gl.UNIFORM_BUFFER, glBuffer);
+            }
             const capacity = this.uniformBufferCapacities.get(bufferName) ?? 0;
             if (capacity >= size && capacity > 0) {
                 gl.bufferSubData(gl.UNIFORM_BUFFER, 0, new Uint8Array(data, 0, size));
@@ -853,7 +861,11 @@ export class ShaderInstance implements IShaderInstance {
                 gl.bufferData(gl.UNIFORM_BUFFER, 0, gl.DYNAMIC_DRAW);
                 this.uniformBufferCapacities.set(bufferName, 0);
             }
-            this._ctx?.state.bindBufferBase(gl.UNIFORM_BUFFER, binding, glBuffer) ?? gl.bindBufferBase(gl.UNIFORM_BUFFER, binding, glBuffer);
+            if (this._ctx) {
+                this._ctx.state.bindBufferBase(gl.UNIFORM_BUFFER, binding, glBuffer);
+            } else {
+                gl.bindBufferBase(gl.UNIFORM_BUFFER, binding, glBuffer);
+            }
         }
         this.dirtyBuffers.clear();
     }
@@ -883,11 +895,59 @@ export class ShaderInstance implements IShaderInstance {
         variable: IUniformBlock['variables'][number],
         value: ShaderUniformValue
     ): void {
+        // Seek to the variable's offset in the buffer (std140 layout)
+        const offset = variable.bufferOffset ?? 0;
+        buffer.seek(offset);
+
         const size = getShaderDataTypeSize(variable.type);
+
         if (typeof value === 'number') {
             buffer.putFloat32(value);
             const pad = size - 4;
             for (let i = 0; i < pad; i += 4) buffer.putFloat32(0);
+        } else if (typeof value === 'boolean') {
+            buffer.putInt32(value ? 1 : 0);
+            const pad = size - 4;
+            for (let i = 0; i < pad; i += 4) buffer.putInt32(0);
+        } else if (value instanceof Float32Array || value instanceof Int32Array || value instanceof Uint32Array) {
+            // Typed array — write element by element
+            for (let i = 0; i < value.length; i++) {
+                if (value instanceof Float32Array) {
+                    buffer.putFloat32(value[i]);
+                } else {
+                    buffer.putInt32(value[i]);
+                }
+            }
+            // Pad remaining space
+            const written = value.length * 4;
+            const pad = size - written;
+            for (let i = 0; i < pad; i += 4) buffer.putFloat32(0);
+        } else if (Array.isArray(value)) {
+            // Plain array
+            for (let i = 0; i < value.length; i++) {
+                buffer.putFloat32(value[i]);
+            }
+            const written = value.length * 4;
+            const pad = size - written;
+            for (let i = 0; i < pad; i += 4) buffer.putFloat32(0);
+        } else if (value !== null && typeof value === 'object') {
+            // Vec2/Vec3/Vec4/Mat4 from @axrone/numeric
+            const v = value as any;
+            if ('data' in v && Array.isArray(v.data)) {
+                // Mat4
+                for (const component of v.data) {
+                    buffer.putFloat32(component);
+                }
+            } else if ('x' in v && 'y' in v) {
+                // Vec2/Vec3/Vec4
+                buffer.putFloat32(v.x);
+                buffer.putFloat32(v.y);
+                if ('z' in v) buffer.putFloat32(v.z);
+                if ('w' in v) buffer.putFloat32(v.w);
+                const written = ('w' in v ? 4 : 'z' in v ? 3 : 2) * 4;
+                const pad = size - written;
+                for (let i = 0; i < pad; i += 4) buffer.putFloat32(0);
+            }
         }
     }
 

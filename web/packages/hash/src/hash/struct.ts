@@ -2,6 +2,12 @@ import type { IHasher, IHashable } from './interfaces';
 import { createHasher } from './factory';
 import type { HashValue, HashAlgorithmName } from './types';
 import { fmix32 } from './mixers';
+import { fnv1aMix32, fnv1aMixU32, FNV_PRIME_32 } from './mixing';
+
+const STRUCT_F64_BUF = new Float64Array(1);
+const STRUCT_I32_BUF = new Int32Array(STRUCT_F64_BUF.buffer);
+const STRUCT_F32_BUF = new Float32Array(1);
+const STRUCT_F32_I32_BUF = new Int32Array(STRUCT_F32_BUF.buffer);
 
 export class StructState {
     private _h: number;
@@ -20,10 +26,7 @@ export class StructState {
     }
 
     mixIn(value: number): this {
-        this._h = (Math.imul(this._h ^ (value & 0xff), 0x01000193)) >>> 0;
-        this._h = (Math.imul(this._h ^ ((value >>> 8) & 0xff), 0x01000193)) >>> 0;
-        this._h = (Math.imul(this._h ^ ((value >>> 16) & 0xff), 0x01000193)) >>> 0;
-        this._h = (Math.imul(this._h ^ ((value >>> 24) & 0xff), 0x01000193)) >>> 0;
+        this._h = fnv1aMixU32(this._h, value);
         this._byteLength += 4;
         return this;
     }
@@ -31,24 +34,22 @@ export class StructState {
     mixString(value: string): this {
         for (let i = 0; i < value.length; i++) {
             const c = value.charCodeAt(i);
-            this._h = Math.imul(this._h ^ (c & 0xff), 0x01000193) >>> 0;
-            this._h = Math.imul(this._h ^ ((c >>> 8) & 0xff), 0x01000193) >>> 0;
+            this._h = fnv1aMix32(this._h, c & 0xff);
+            this._h = fnv1aMix32(this._h, (c >>> 8) & 0xff);
         }
         this._byteLength += value.length * 2;
         return this;
     }
 
     mixBoolean(value: boolean): this {
-        this._h = Math.imul(this._h ^ (value ? 1 : 0), 0x01000193) >>> 0;
+        this._h = fnv1aMix32(this._h, value ? 1 : 0);
         this._byteLength += 1;
         return this;
     }
 
     mixNumber(value: number): this {
-        const buf = new Float64Array(1);
-        const ibuf = new Int32Array(buf.buffer);
-        buf[0] = value;
-        this.mixIn(ibuf[0]!).mixIn(ibuf[1]!);
+        STRUCT_F64_BUF[0] = value;
+        this.mixIn(STRUCT_I32_BUF[0]!).mixIn(STRUCT_I32_BUF[1]!);
         return this;
     }
 
@@ -61,10 +62,8 @@ export class StructState {
     }
 
     mixF32(value: number): this {
-        const buf = new Float32Array(1);
-        const ibuf = new Int32Array(buf.buffer);
-        buf[0] = value;
-        return this.mixIn(ibuf[0]!);
+        STRUCT_F32_BUF[0] = value;
+        return this.mixIn(STRUCT_F32_I32_BUF[0]!);
     }
 
     mixF64(value: number): this {
@@ -77,7 +76,7 @@ export class StructState {
         }
         let v = value as bigint;
         for (let i = 0; i < 8; i++) {
-            this._h = Math.imul(this._h ^ Number(v & 0xffn), 0x01000193) >>> 0;
+            this._h = fnv1aMix32(this._h, Number(v & 0xffn));
             v >>= 8n;
         }
         this._byteLength += 8;
@@ -86,7 +85,7 @@ export class StructState {
 
     mixStruct(value: unknown): this {
         if (value === null || value === undefined) {
-            this._h = Math.imul(this._h, 0x01000193) >>> 0;
+            this._h = fnv1aMix32(this._h, 0);
             return this;
         }
         if (typeof value === 'object' && value !== null && 'hashInto' in value) {
@@ -95,7 +94,7 @@ export class StructState {
             hashable.hashInto(h);
             return this.mixHash(h.digest());
         }
-        return this;
+        throw new Error(`structHash: cannot hash plain object of type ${typeof value}. Implement IHashable interface or use mixIn/mixString/mixNumber.`);
     }
 
     digest(): number {

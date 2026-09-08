@@ -1,4 +1,5 @@
 import { Vec3, Quat, type IVec3Like, type IQuatLike } from '@axrone/numeric';
+import { transformPoint3D, transformDirection3D } from '../core/physics-world-3d-shared';
 import { script } from '@axrone/ecs-runtime/decorators';
 import { Component } from '@axrone/ecs-runtime';
 import type {
@@ -39,6 +40,30 @@ const enum RigidbodyConstraints3D {
     FreezeAll = 0x3f,
 }
 
+/**
+ * Collision detection mode for Rigidbody3D.
+ *
+ * **CAVEAT — CCD is NOT implemented in the 3D solver.** Setting this to
+ * `Continuous`, `ContinuousDynamic`, or `ContinuousSpeculative` does NOT
+ * change simulation behaviour. The `bullet` flag is stored on the body
+ * descriptor and queryable via `isBullet()`, but the 3D step loop has no
+ * CCD/TOI pass — fast bodies can tunnel through thin geometry regardless.
+ *
+ * To mitigate tunneling in 3D:
+ * - `IPhysicsWorldConfig.maxTranslation` (default 2.0 m/step, ADR 0004)
+ *   clamps per-step position delta.
+ * - Higher `velocityIterations` improve contact resolution.
+ * - Thicken thin walls where possible.
+ *
+ * In contrast, **2D CCD IS implemented** (`physics-2d` `continuous-collision.ts`:
+ * AABB-swept TOI bisection + conservative advancement, gated by
+ * `IPhysicsWorldConfig.continuousPhysics`, sub-stepping via `MAX_SUB_STEPS`).
+ * This asymmetry is intentional — the 2D solver mirrors Box2D's CCD pipeline.
+ *
+ * `IPhysicsWorld3DConfig.enableCCD` was removed from the config interface —
+ * it was declared but never read, a silent no-op that misled users.
+ * CCD implementation for 3D remains unimplemented (see caveat above).
+ */
 const enum CollisionDetectionMode3D {
     Discrete = 0,
     Continuous = 1,
@@ -77,6 +102,14 @@ interface IRigidbody3DConfig {
     sleepThreshold?: number;
 }
 
+/**
+ * 3D physics body component.
+ *
+ * IMPORTANT: Setting `mass` to 0 does NOT make a body static. The body type
+ * is controlled by the `bodyType` property (or `type` in the config). A body
+ * with `mass: 0` is clamped to 0.0001 and remains dynamic. To create a static
+ * body, set `bodyType` to `Static` (0) or pass `type: 0` in the config.
+ */
 @script({ scriptName: 'Rigidbody3D', description: '3D physics body component' })
 export class Rigidbody3D extends Component {
     private _bodyId: BodyId3D = -1 as BodyId3D;
@@ -125,6 +158,13 @@ export class Rigidbody3D extends Component {
         this._syncBodyType();
     }
 
+    /**
+     * Mass of the body (always > 0, minimum 0.0001).
+     *
+     * IMPORTANT: Setting mass to 0 does NOT change the body type to static.
+     * The value is clamped to 0.0001 and the body remains dynamic. To create
+     * a static body, set `bodyType` to Static (0) instead.
+     */
     get mass(): number {
         return this._mass;
     }
@@ -208,6 +248,15 @@ export class Rigidbody3D extends Component {
         this._interpolation = value;
     }
 
+    /**
+     * Collision detection mode.
+     *
+     * **CAVEAT:** In the 3D solver, all modes are equivalent to `Discrete` —
+     * no CCD/TOI algorithm is implemented. The value is stored locally and
+     * passed as `bullet: true` in the body descriptor when non-Discrete, but
+     * the solver never reads the flag. See `CollisionDetectionMode3D` for
+     * mitigation strategies and 2D/3D asymmetry details.
+     */
     get collisionDetection(): CollisionDetectionMode3D {
         return this._collisionDetection;
     }
@@ -377,6 +426,8 @@ export class Rigidbody3D extends Component {
         this._bodyManager = world.getBodyManager();
         this._applyConfig(config);
         this._createBody();
+        // Compute initial inertia from any colliders already attached
+        this._updateInertiaFromColliders();
     }
 
     addForce(force: IVec3Like, mode: ForceMode3D = ForceMode3D.Force): void {
@@ -550,10 +601,12 @@ export class Rigidbody3D extends Component {
 
     sleep(): void {
         if (!this._bodyManager || this._bodyId === -1) return;
-        this._isSleeping = true;
-        this._bodyManager.setAwake(this._bodyId, false);
+        // Zero velocities BEFORE sleeping — setLinearVelocity/setAngularVelocity
+        // wake the body (Wave 3a), so they must run before setAwake(false).
         this._bodyManager.setLinearVelocity(this._bodyId, Vec3.ZERO);
         this._bodyManager.setAngularVelocity(this._bodyId, Vec3.ZERO);
+        this._isSleeping = true;
+        this._bodyManager.setAwake(this._bodyId, false);
     }
 
     wakeUp(): void {
@@ -612,6 +665,21 @@ export class Rigidbody3D extends Component {
         }
         this._bodyManager = null;
         this._world = null;
+    }
+
+    /**
+     * Recompute inertia tensor from attached collider geometries.
+     * Call this after colliders are added or removed from this body.
+     */
+    _updateInertiaFromColliders(): void {
+        if (!this._bodyManager || !this._world || this._bodyId === -1) return;
+        if (this._type !== Rigidbody3DType.Dynamic) return;
+        const shapeManager = this._world.getShapeManager();
+        const inertia = this._bodyManager.computeInertiaForBody(this._bodyId, shapeManager);
+        this._inertiaTensor.x = inertia.x;
+        this._inertiaTensor.y = inertia.y;
+        this._inertiaTensor.z = inertia.z;
+        this._bodyManager.setInertiaTensor(this._bodyId, inertia);
     }
 
     private _applyConfig(config: IRigidbody3DConfig): void {
@@ -785,30 +853,11 @@ export class Rigidbody3D extends Component {
     }
 
     private _transformDirection(localDir: IVec3Like): IVec3Like {
-        const rot = this.rotation;
-        const rx = rot.x * 2;
-        const ry = rot.y * 2;
-        const rz = rot.z * 2;
-        const wx = rot.w * rx;
-        const wy = rot.w * ry;
-        const wz = rot.w * rz;
-        const xx = rot.x * rx;
-        const xy = rot.x * ry;
-        const xz = rot.x * rz;
-        const yy = rot.y * ry;
-        const yz = rot.y * rz;
-        const zz = rot.z * rz;
-        return {
-            x: (1 - (yy + zz)) * localDir.x + (xy - wz) * localDir.y + (xz + wy) * localDir.z,
-            y: (xy + wz) * localDir.x + (1 - (xx + zz)) * localDir.y + (yz - wx) * localDir.z,
-            z: (xz - wy) * localDir.x + (yz + wx) * localDir.y + (1 - (xx + yy)) * localDir.z,
-        };
+        return transformDirection3D(localDir, this.rotation);
     }
 
     private _transformPoint(localPoint: IVec3Like): IVec3Like {
-        const worldDir = this._transformDirection(localPoint);
-        const pos = this.position;
-        return { x: pos.x + worldDir.x, y: pos.y + worldDir.y, z: pos.z + worldDir.z };
+        return transformPoint3D(localPoint, this.position, this.rotation);
     }
 
     private _addTorqueFromForceAtPosition(force: IVec3Like, position: IVec3Like): void {

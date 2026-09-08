@@ -67,10 +67,15 @@ export class Random implements IRandomGenerator {
             return min + Math.floor(range * this.engine.next01());
         }
 
+        // Use rejection sampling for large ranges to avoid modulo bias
         const bigRange = BigInt(range);
-        const value = (this.engine.nextUint64() % bigRange) + BigInt(min);
+        const limit = (BigInt(1) << 64n) - ((BigInt(1) << 64n) % bigRange);
+        let value: bigint;
+        do {
+            value = this.engine.nextUint64();
+        } while (value >= limit);
 
-        return Number(value);
+        return Number((value % bigRange) + BigInt(min));
     };
 
     public boolean = (probability: number = 0.5): boolean => {
@@ -164,9 +169,10 @@ export class Random implements IRandomGenerator {
 
     public uuid = (): string => {
         const bytes = new Uint8Array(16);
+        const view = new DataView(bytes.buffer);
 
-        for (let i = 0; i < 16; i++) {
-            bytes[i] = this.int(0, 255);
+        for (let i = 0; i < 4; i++) {
+            view.setUint32(i * 4, this.engine.nextUint32(), true);
         }
 
         bytes[6] = (bytes[6] & 0x0f) | 0x40;
@@ -201,9 +207,15 @@ export class Random implements IRandomGenerator {
         validateInteger(length, 'length');
 
         const result = new Uint8Array(length);
+        const view = new DataView(result.buffer);
+        let i = 0;
 
-        for (let i = 0; i < length; i++) {
-            result[i] = this.int(0, 255);
+        for (; i + 4 <= length; i += 4) {
+            view.setUint32(i, this.engine.nextUint32(), true);
+        }
+
+        for (; i < length; i++) {
+            result[i] = this.engine.nextUint32() & 0xff;
         }
 
         return result;
@@ -346,12 +358,22 @@ export class Random implements IRandomGenerator {
             throw new Error('Cannot analyze empty sequence');
         }
 
-        const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-        const variance =
-            values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+        let sum = 0;
+        let sumSq = 0;
+        let min = values[0];
+        let max = values[0];
+
+        for (let i = 0; i < values.length; i++) {
+            const v = values[i];
+            sum += v;
+            sumSq += v * v;
+            if (v < min) min = v;
+            if (v > max) max = v;
+        }
+
+        const mean = sum / values.length;
+        const variance = sumSq / values.length - mean * mean;
         const standardDeviation = Math.sqrt(variance);
-        const min = Math.min(...values);
-        const max = Math.max(...values);
 
         return {
             mean,
@@ -388,6 +410,8 @@ export class Random implements IRandomGenerator {
                 currentState.vector[1] ^ (currentState.counter << 1n),
                 currentState.vector[2] ^ (currentState.counter << 2n),
                 currentState.vector[3] ^ (currentState.counter << 3n),
+                currentState.vector[4] ^ (currentState.counter << 4n),
+                currentState.vector[5] ^ (currentState.counter << 5n),
             ];
             this.setSeed(new BigInt64Array(derivedSeed));
         }
@@ -398,7 +422,12 @@ export class Random implements IRandomGenerator {
     };
 
     public setState = (state: IRandomState): void => {
-        if (this.engine.getState().engine !== state.engine) {
+        try {
+            if (this.engine.getState().engine !== state.engine) {
+                this.engine = createEngineFactory(state.engine)();
+            }
+        } catch {
+            // Engine doesn't support getState (e.g., CryptoEngine) — switch if needed
             this.engine = createEngineFactory(state.engine)();
         }
 
@@ -416,6 +445,8 @@ export class Random implements IRandomGenerator {
                 currentState.vector[1] ^ (currentState.counter << 1n),
                 currentState.vector[2] ^ (currentState.counter << 2n),
                 currentState.vector[3] ^ (currentState.counter << 3n),
+                currentState.vector[4] ^ (currentState.counter << 4n),
+                currentState.vector[5] ^ (currentState.counter << 5n),
             ],
             counter: 0n,
             engine: currentState.engine,

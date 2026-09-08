@@ -15,6 +15,7 @@ import type {
     BodyId3D,
     IPhysicsWorld3DConfig,
 } from '@axrone/physics-core';
+import { makeCollisionPairKey } from '@axrone/physics-core';
 
 type AnyWorld = World<any>;
 type AnyActor = Actor<AnyWorld>;
@@ -22,13 +23,20 @@ type AnyActor = Actor<AnyWorld>;
 /**
  * Interface for user script components that want to receive physics collision events.
  * Implement these methods on any Component subclass to receive callbacks.
+ * Generic over rigidbody/event types so both 2D and 3D bridges can use the same contract.
+ * Defaults preserve the original 3D signature for backward compatibility.
  */
-export interface IPhysicsCollisionHandler {
-    onCollisionEnter?(other: Rigidbody3D, event: ICollisionEvent3D): void;
-    onCollisionStay?(other: Rigidbody3D, event: ICollisionEvent3D): void;
-    onCollisionExit?(other: Rigidbody3D, event: ICollisionEvent3D): void;
-    onSensorEnter?(other: Rigidbody3D, event: ISensorEvent3D): void;
-    onSensorExit?(other: Rigidbody3D, event: ISensorEvent3D): void;
+export interface IPhysicsCollisionHandler<
+    TRigidbody = Rigidbody3D,
+    TCollisionEvent = ICollisionEvent3D,
+    TSensorEvent = ISensorEvent3D,
+> {
+    onCollisionEnter?(other: TRigidbody, event: TCollisionEvent): void;
+    onCollisionStay?(other: TRigidbody, event: TCollisionEvent): void;
+    onCollisionExit?(other: TRigidbody, event: TCollisionEvent): void;
+    onSensorEnter?(other: TRigidbody, event: TSensorEvent): void;
+    onSensorStay?(other: TRigidbody, event: TSensorEvent): void;
+    onSensorExit?(other: TRigidbody, event: TSensorEvent): void;
 }
 
 interface ContactPair {
@@ -36,8 +44,8 @@ interface ContactPair {
     readonly bodyIdB: BodyId3D;
 }
 
-function makePairKey(a: BodyId3D, b: BodyId3D): string {
-    return a < b ? `${a}:${b}` : `${b}:${a}`;
+function makePairKey(a: BodyId3D, b: BodyId3D): number {
+    return makeCollisionPairKey(Number(a), Number(b));
 }
 
 export interface PhysicsBridge3DOptions {
@@ -60,8 +68,8 @@ export class PhysicsBridge3D implements GameLoopSystem<SceneLoopState>, IContact
     private readonly _initializedCharacterControllers = new WeakSet<CharacterController>();
     private readonly _bodyIdToComponent = new Map<BodyId3D, Rigidbody3D>();
     private readonly _componentToActor = new Map<Rigidbody3D, AnyActor>();
-    private readonly _activeContactPairs = new Set<string>();
-    private readonly _activeTriggerPairs = new Set<string>();
+    private readonly _activeContactPairs = new Set<number>();
+    private readonly _activeTriggerPairs = new Set<number>();
 
     private _disposed = false;
 

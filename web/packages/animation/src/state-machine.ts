@@ -12,7 +12,7 @@ import { collectMotionClipActivities } from './blend-tree';
 import { assertNever, AnimationStateMachineError, AnimationValidationError } from './errors';
 import { AnimationParameterStore } from './parameters';
 import { blendFrame, type AnimationFrame } from './pose';
-import { quatIdentity, quatSlerp } from './math';
+import { SoaQuatBuffer } from '@axrone/numeric';
 import { AnimationClip } from './clip';
 import type {
     AnimationConditionDefinition,
@@ -475,7 +475,7 @@ export const extractLayerRootDelta = (
 ): void => {
     if (rootBoneIndex < 0) {
         outTranslation.fill(0);
-        quatIdentity(outRotation, 0);
+        SoaQuatBuffer.quatIdentity(outRotation, 0);
         return;
     }
     if (!runtime.transition) {
@@ -537,8 +537,8 @@ export const extractLayerRootDelta = (
     outTranslation[2] =
         sourceTranslation[2]! +
         (targetTranslation[2]! - sourceTranslation[2]!) * runtime.transition.progress;
-    quatIdentity(outRotation, 0);
-    quatSlerp(outRotation, 0, sourceRotation, 0, targetRotation, 0, runtime.transition.progress);
+    SoaQuatBuffer.quatIdentity(outRotation, 0);
+    SoaQuatBuffer.quatSlerp(outRotation, 0, sourceRotation, 0, targetRotation, 0, runtime.transition.progress);
 }
 
 export const collectLayerEvents = (

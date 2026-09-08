@@ -29,14 +29,14 @@ import type {
     IContactManifold2D,
     ICollisionFilter,
     RaycastCallback2D,
-    IRaycastResult2D,
+    ISingleRaycastResult2D,
     IQueryFilter,
     IAABBQueryCallback,
     IPhysicsBody2D,
     IShape2D,
     IConstraint2D,
 } from '../types';
-import { ConstraintType, SolverFlags } from '../types';
+import { ConstraintType, SolverFlags, PhysicsConstants } from '../types';
 
 import { BodyManager2D } from './body-manager';
 import { ShapeManager2D } from './shape-manager';
@@ -45,10 +45,12 @@ import { ContactManager2D } from './contact-manager';
 import { IslandSolver2D } from './island-solver';
 import { Narrowphase2D } from './narrowphase';
 import { DynamicAABBTree2D } from './broadphase';
+import { ContinuousCollisionDetection } from './continuous-collision';
 import { createPhysicsBody2DView } from './physics-world-2d-body-view';
 import { PhysicsWorld2DConstraintStore } from './physics-world-2d-constraint-store';
 import { PhysicsWorld2DShapeStore } from './physics-world-2d-shape-store';
 import type { IConstraintDescriptor2D } from './physics-world-2d-helpers';
+import { makeCollisionPairKey } from './foundation';
 
 const NULL_VEC: IVec2Like = { x: 0, y: 0 };
 
@@ -112,11 +114,34 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     private readonly _shapeProxyMap = new Map<ShapeId, number>();
     private readonly _shapePreviousCenter = new Map<ShapeId, { x: number; y: number }>();
     private readonly _contactPairCache = new Map<number, ContactId>();
+    /**
+     * Counter-based index: tracks how many constraints with `collideConnected=false`
+     * connect each body pair. When count > 0, the pair is suppressed from contact generation.
+     * Uses canonical `makeCollisionPairKey` with body IDs.
+     */
+    private readonly _jointCollisionCounts = new Map<number, number>();
+    /** Cached AABB for static-body shapes; only recomputed when dirty. (P1-2) */
+    private readonly _staticAabbCache = new Map<ShapeId, AABB2D>();
+    /** Static shapes whose AABB needs recomputation. */
+    private readonly _staticAabbDirty = new Set<ShapeId>();
+    /** Previous transform for kinematic bodies — detects actual movement. (P1-4) */
+    private readonly _kinematicPrevPos = new Map<BodyId, { x: number; y: number }>();
+    private readonly _kinematicPrevRot = new Map<BodyId, number>();
 
     private _autoClearForces = true;
     private _profiler: IPhysicsProfiler | null = null;
     private _disposed = false;
     private _stepTime = 0;
+    // P1-6: Cache config-driven flags
+    private readonly _warmStarting: boolean;
+    private readonly _continuousPhysics: boolean;
+    private readonly _subStepping: boolean;
+    private readonly _defaultVelIters: number;
+    private readonly _defaultPosIters: number;
+    // ADR 0004: Config-driven physics limits (metre-based)
+    private readonly _maxVelocity: number;
+    private readonly _maxAngularVelocity: number;
+    private readonly _maxTranslation: number;
 
     constructor(config: IPhysicsWorldConfig = {}) {
         this.config = config;
@@ -133,6 +158,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._shapeManager = new ShapeManager2D(maxShapes);
         this._constraintManager = new ConstraintManager2D(maxConstraints);
         this._contactManager = new ContactManager2D(maxContacts);
+        this._contactManager.setSensorChecker((shapeId) => this._shapeManager.isShapeSensor(shapeId));
         this._shapeStore = new PhysicsWorld2DShapeStore(this._bodyManager, this._shapeManager);
         this._constraintStore = new PhysicsWorld2DConstraintStore(
             this._bodyManager,
@@ -142,11 +168,26 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._solver = new IslandSolver2D(
             this._bodyManager,
             this._contactManager,
-            this._constraintManager
+            this._constraintManager,
+            this._shapeManager,
+            maxBodies
         );
 
         this._narrowphase = new Narrowphase2D();
         this._broadphase = new DynamicAABBTree2D(1024);
+
+        // RB-1: Centralized static AABB cache invalidation.
+        // Whenever a STATIC body's transform is written (via bodyManager.setPosition /
+        // setRotation), mark its shapes dirty so the next _updateBroadphase recomputes.
+        this._bodyManager.onStaticTransformChange((bodyId) => {
+            this._markStaticDirty(bodyId);
+        });
+
+        // P1-4: Kinematic transform tracking — wake sleeping contact neighbors
+        // when a kinematic body actually moves.
+        this._bodyManager.onKinematicTransformChange((bodyId) => {
+            this._wakeKinematicContacts(bodyId);
+        });
 
         if (config.enableProfiler) {
             this._profiler = {
@@ -161,6 +202,18 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 sleepTime: 0,
             };
         }
+
+        // P1-6: Wire up previously decorative config fields
+        this._warmStarting = config.warmStarting ?? true;
+        this._continuousPhysics = config.continuousPhysics ?? true;
+        this._subStepping = config.subStepping ?? false;
+        this._defaultVelIters = config.solverIterations ?? 8;
+        this._defaultPosIters = config.positionIterations ?? 3;
+
+        // ADR 0004: Config-driven physics limits (metre-based)
+        this._maxVelocity = config.maxVelocity ?? PhysicsConstants.MAX_VELOCITY;
+        this._maxAngularVelocity = config.maxAngularVelocity ?? PhysicsConstants.MAX_ANGULAR_VELOCITY;
+        this._maxTranslation = config.maxTranslation ?? PhysicsConstants.MAX_TRANSLATION;
     }
 
     get gravity(): Readonly<IVec2Like> {
@@ -187,39 +240,186 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         return this._solver;
     }
 
-    step(deltaTime: number, velocityIterations: number = 8, positionIterations: number = 3): void {
+    step(deltaTime: number, velocityIterations?: number, positionIterations?: number): void {
         if (this._disposed) return;
 
         const t0 = performance.now();
-        const solverFlags = this.config.solverFlags ?? SolverFlags.Default;
         const allowSleep = this.config.allowSleep ?? true;
 
-        this._updateBroadphase();
-        this._detectCollisions();
+        // P1-6: Resolve iteration defaults from config
+        const velIters = velocityIterations ?? this._defaultVelIters;
+        const posIters = positionIterations ?? this._defaultPosIters;
 
-        this._solver.solveIslands(
-            deltaTime,
-            velocityIterations,
-            positionIterations,
-            allowSleep,
-            solverFlags,
-            { x: this._gravity.x, y: this._gravity.y },
-            this._profiler ?? undefined
-        );
+        // P1-6: Build solver flags — warmStarting from config
+        let solverFlags = this.config.solverFlags ?? SolverFlags.Default;
+        if (this._warmStarting) {
+            solverFlags |= SolverFlags.WarmStarting;
+        } else {
+            solverFlags &= ~SolverFlags.WarmStarting;
+        }
+
+        // P1-6: Sub-stepping — split large dt into smaller fixed steps
+        const subSteps = this._subStepping
+            ? Math.min(Math.ceil(deltaTime / (1.0 / 60.0)), PhysicsConstants.MAX_SUB_STEPS)
+            : 1;
+        const subDt = deltaTime / subSteps;
+
+        // Phase timing — only measured when profiler is attached (zero overhead otherwise)
+        const prof = this._profiler;
+        let broadphaseAccum = 0;
+        let narrowphaseAccum = 0;
+        if (prof) {
+            prof.solveVelocityTime = 0;
+            prof.solvePositionTime = 0;
+        }
+
+        for (let sub = 0; sub < subSteps; sub++) {
+            if (prof) {
+                const tb = performance.now();
+                this._updateBroadphase();
+                broadphaseAccum += performance.now() - tb;
+            } else {
+                this._updateBroadphase();
+            }
+
+            // P1-6: continuousPhysics gates the CCD pass
+            if (this._continuousPhysics) {
+                this._performCCD(subDt);
+            }
+
+            if (prof) {
+                const tn = performance.now();
+                this._detectCollisions();
+                narrowphaseAccum += performance.now() - tn;
+            } else {
+                this._detectCollisions();
+            }
+
+            this._solver.solveIslands(
+                subDt,
+                velIters,
+                posIters,
+                allowSleep,
+                solverFlags,
+                { x: this._gravity.x, y: this._gravity.y },
+                prof ?? undefined,
+                {
+                    maxVelocity: this._maxVelocity,
+                    maxAngularVelocity: this._maxAngularVelocity,
+                    maxTranslation: this._maxTranslation,
+                }
+            );
+        }
 
         if (this._autoClearForces) {
             this.clearForces();
         }
 
         this._stepTime = performance.now() - t0;
-        if (this._profiler) {
-            this._profiler.stepTime = this._stepTime;
+        if (prof) {
+            prof.stepTime = this._stepTime;
+            prof.broadphaseTime = broadphaseAccum;
+            prof.narrowphaseTime = narrowphaseAccum;
+            prof.collisionTime = narrowphaseAccum;
+            prof.solveTime = (prof.solveVelocityTime ?? 0) + (prof.solvePositionTime ?? 0);
+        }
+    }
+
+    /**
+     * Continuous Collision Detection pass for bullet-flagged bodies.
+     * Prevents tunneling by computing time-of-impact and clamping movement.
+     */
+    private _performCCD(deltaTime: number): void {
+        const BodyFlagsBullet = 1 << 2; // BodyFlags.Bullet
+        for (const bodyId of this._bodyManager.getBodyIds()) {
+            const flags = this._bodyManager.getFlags(bodyId);
+            if ((flags & BodyFlagsBullet) === 0) continue;
+
+            const velocity = this._bodyManager.getLinearVelocity(bodyId);
+            const speedSq = velocity.x * velocity.x + velocity.y * velocity.y;
+            if (speedSq < 1e-8) continue;
+
+            // Get all shapes for this bullet body
+            const bodyShapes = this._shapeManager.getShapesForBody(bodyId);
+            for (const shapeId of bodyShapes) {
+                const currentAabb = this._computeShapeAabb(shapeId);
+                if (!currentAabb) continue;
+
+                // Compute swept AABB (expand by velocity * dt)
+                const sweptMin = {
+                    x: Math.min(currentAabb.min.x, currentAabb.min.x + velocity.x * deltaTime),
+                    y: Math.min(currentAabb.min.y, currentAabb.min.y + velocity.y * deltaTime),
+                };
+                const sweptMax = {
+                    x: Math.max(currentAabb.max.x, currentAabb.max.x + velocity.x * deltaTime),
+                    y: Math.max(currentAabb.max.y, currentAabb.max.y + velocity.y * deltaTime),
+                };
+                const sweptAabb = new AABB2D(sweptMin, sweptMax);
+
+                // Query broadphase for potential colliders in swept volume
+                const candidates: number[] = [];
+                this._broadphase.query((proxyId) => {
+                    const otherShapeId = this._broadphase.getUserData(proxyId);
+                    if (otherShapeId && otherShapeId !== shapeId) {
+                        const otherDesc = this._shapeStore.getDescriptor(otherShapeId);
+                        if (otherDesc && otherDesc.bodyId !== bodyId) {
+                            candidates.push(proxyId);
+                        }
+                    }
+                    return true;
+                }, sweptAabb);
+
+                // Check TOI for each candidate
+                for (const proxyId of candidates) {
+                    const otherShapeId = this._broadphase.getUserData(proxyId);
+                    if (!otherShapeId) continue;
+                    const otherAabb = this._computeShapeAabb(otherShapeId);
+                    if (!otherAabb) continue;
+
+                    const otherBodyId = this._shapeStore.getDescriptor(otherShapeId)?.bodyId;
+                    if (!otherBodyId) continue;
+                    const otherVel = this._bodyManager.getLinearVelocity(otherBodyId);
+
+                    const ccdResult = ContinuousCollisionDetection.computeTimeOfImpact(
+                        currentAabb,
+                        velocity,
+                        otherAabb,
+                        otherVel,
+                        deltaTime
+                    );
+
+                    if (ccdResult.hit && ccdResult.toi < deltaTime) {
+                        // Clamp body position to TOI
+                        const position = this._bodyManager.getPosition(bodyId);
+                        const clampedPos = {
+                            x: position.x + velocity.x * ccdResult.toi,
+                            y: position.y + velocity.y * ccdResult.toi,
+                        };
+                        this._bodyManager.setPosition(bodyId, clampedPos);
+                        // Break after first TOI found for this shape
+                        break;
+                    }
+                }
+            }
         }
     }
 
     private _updateBroadphase(): void {
         for (const [shapeId] of this._shapeStore.entries()) {
-            const shapeAabb = this._computeShapeAabb(shapeId);
+            const descriptor = this._shapeStore.getDescriptor(shapeId);
+            const bodyType = descriptor ? this._bodyManager.getBodyType(descriptor.bodyId) : 2;
+            const isStatic = bodyType === 0;
+
+            let shapeAabb: AABB2D | null;
+            if (isStatic && !this._staticAabbDirty.has(shapeId) && this._staticAabbCache.has(shapeId)) {
+                shapeAabb = this._staticAabbCache.get(shapeId)!;
+            } else {
+                shapeAabb = this._computeShapeAabb(shapeId);
+                if (isStatic && shapeAabb) {
+                    this._staticAabbCache.set(shapeId, shapeAabb);
+                    this._staticAabbDirty.delete(shapeId);
+                }
+            }
             if (!shapeAabb) continue;
 
             const currentCenterX = (shapeAabb.min.x + shapeAabb.max.x) * 0.5;
@@ -263,13 +463,33 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 const typeB = this._bodyManager.getBodyType(descriptorB.bodyId);
                 if (typeA === 0 && typeB === 0) return true;
 
-                const lo = shapeIdA < shapeIdB ? shapeIdA : shapeIdB;
-                const hi = shapeIdA < shapeIdB ? shapeIdB : shapeIdA;
-                const pairKey = (lo as number) * 0x100000 + (hi as number);
+                // Apply collision filter bits
+                const filterA = this._shapeManager.getShapeFilter(shapeIdA);
+                const filterB = this._shapeManager.getShapeFilter(shapeIdB);
+                if (
+                    (filterA.categoryBits & filterB.maskBits) === 0 ||
+                    (filterB.categoryBits & filterA.maskBits) === 0
+                ) {
+                    return true;
+                }
+
+                // collideConnected filter: skip pairs joined by a non-colliding constraint
+                // Early exit: when no joints exist, the index is empty — skip entirely.
+                if (this._jointCollisionCounts.size > 0) {
+                    const bodyPairKey = makeCollisionPairKey(
+                        descriptorA.bodyId as number,
+                        descriptorB.bodyId as number
+                    );
+                    if (this._jointCollisionCounts.has(bodyPairKey)) return true;
+                }
+
+                const pairKey = makeCollisionPairKey(shapeIdA as number, shapeIdB as number);
 
                 if (visitedPairs.has(pairKey)) return true;
                 visitedPairs.add(pairKey);
 
+                const lo = shapeIdA < shapeIdB ? shapeIdA : shapeIdB;
+                const hi = shapeIdA < shapeIdB ? shapeIdB : shapeIdA;
                 candidatePairs.push({ shapeIdA: lo, shapeIdB: hi });
                 return true;
             }, aabbA);
@@ -288,7 +508,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             const descriptorB = this._shapeStore.getDescriptor(pair.shapeIdB);
             if (!descriptorA || !descriptorB) continue;
 
-            const pairKey = (pair.shapeIdA as number) * 0x100000 + (pair.shapeIdB as number);
+            const pairKey = makeCollisionPairKey(pair.shapeIdA as number, pair.shapeIdB as number);
             const existingContactId = this._contactPairCache.get(pairKey);
 
             const posA = this._bodyManager.getPosition(descriptorA.bodyId);
@@ -320,11 +540,15 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             if (manifold.pointCount > 0) {
                 let contactId = existingContactId;
                 if (!contactId || !this._contactManager.getContactData(contactId)) {
+                    const materialA = this._shapeManager.getShapeMaterial(pair.shapeIdA);
+                    const materialB = this._shapeManager.getShapeMaterial(pair.shapeIdB);
                     contactId = this._contactManager.createContact(
                         pair.shapeIdA,
                         pair.shapeIdB,
                         descriptorA.bodyId,
-                        descriptorB.bodyId
+                        descriptorB.bodyId,
+                        materialA,
+                        materialB
                     );
                     this._contactPairCache.set(pairKey, contactId);
                 }
@@ -397,6 +621,8 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         }
 
         this._bodyViews.delete(bodyId);
+        this._kinematicPrevPos.delete(bodyId);
+        this._kinematicPrevRot.delete(bodyId);
         this._bodyManager.destroyBody(bodyId);
     }
 
@@ -432,6 +658,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const shapeId = this._shapeManager.createCircle(bodyId, def);
         this._shapeStore.registerCircle(shapeId, bodyId, def);
         this._shapeStore.resetBodyMassData(bodyId);
+        this._markStaticDirty(bodyId);
         return shapeId;
     }
 
@@ -439,6 +666,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const shapeId = this._shapeManager.createBox(bodyId, def);
         this._shapeStore.registerBox(shapeId, bodyId, def);
         this._shapeStore.resetBodyMassData(bodyId);
+        this._markStaticDirty(bodyId);
         return shapeId;
     }
 
@@ -446,6 +674,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const shapeId = this._shapeManager.createPolygon(bodyId, def);
         this._shapeStore.registerPolygon(shapeId, bodyId, def);
         this._shapeStore.resetBodyMassData(bodyId);
+        this._markStaticDirty(bodyId);
         return shapeId;
     }
 
@@ -453,6 +682,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const shapeId = this._shapeManager.createCapsule(bodyId, def);
         this._shapeStore.registerCapsule(shapeId, bodyId, def);
         this._shapeStore.resetBodyMassData(bodyId);
+        this._markStaticDirty(bodyId);
         return shapeId;
     }
 
@@ -460,7 +690,59 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         const shapeId = this._shapeManager.createSegment(bodyId, def);
         this._shapeStore.registerSegment(shapeId, bodyId, def);
         this._shapeStore.resetBodyMassData(bodyId);
+        this._markStaticDirty(bodyId);
         return shapeId;
+    }
+
+    private _registerJointCollisionPair(bodyIdA: BodyId, bodyIdB: BodyId): void {
+        const key = makeCollisionPairKey(bodyIdA as number, bodyIdB as number);
+        this._jointCollisionCounts.set(key, (this._jointCollisionCounts.get(key) ?? 0) + 1);
+    }
+
+    private _unregisterJointCollisionPair(bodyIdA: BodyId, bodyIdB: BodyId): void {
+        const key = makeCollisionPairKey(bodyIdA as number, bodyIdB as number);
+        const count = this._jointCollisionCounts.get(key);
+        if (count === undefined) return;
+        if (count <= 1) {
+            this._jointCollisionCounts.delete(key);
+        } else {
+            this._jointCollisionCounts.set(key, count - 1);
+        }
+    }
+
+    private _markStaticDirty(bodyId: BodyId): void {
+        const shapes = this._shapeManager.getShapesForBody(bodyId);
+        for (const shapeId of shapes) {
+            this._staticAabbDirty.add(shapeId);
+        }
+    }
+
+    /**
+     * P1-4: When a kinematic body moves, wake sleeping dynamic bodies
+     * that are in contact with it. Uses contact graph for precise targeting.
+     */
+    private _wakeKinematicContacts(bodyId: BodyId): void {
+        const pos = this._bodyManager.getPosition(bodyId);
+        const rot = this._bodyManager.getRotation(bodyId);
+        const prevPos = this._kinematicPrevPos.get(bodyId);
+        const prevRot = this._kinematicPrevRot.get(bodyId);
+        this._kinematicPrevPos.set(bodyId, { x: pos.x, y: pos.y });
+        this._kinematicPrevRot.set(bodyId, rot);
+
+        // Early exit: no actual movement
+        if (prevPos && prevPos.x === pos.x && prevPos.y === pos.y && prevRot === rot) {
+            return;
+        }
+
+        // Wake sleeping dynamic neighbors via contact graph
+        for (const contactId of this._contactManager.getContactsForBody(bodyId)) {
+            const contactBodies = this._contactManager.getContactBodies(contactId);
+            if (!contactBodies) continue;
+            const otherId = contactBodies.bodyIdA === bodyId ? contactBodies.bodyIdB : contactBodies.bodyIdA;
+            if (this._bodyManager.getBodyType(otherId) === 2 && !this._bodyManager.isAwake(otherId)) {
+                this._bodyManager.setAwake(otherId, true);
+            }
+        }
     }
 
     destroyShape(shapeId: ShapeId): void {
@@ -474,6 +756,8 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             this._shapeProxyMap.delete(shapeId);
         }
         this._shapePreviousCenter.delete(shapeId);
+        this._staticAabbCache.delete(shapeId);
+        this._staticAabbDirty.delete(shapeId);
 
         if (descriptor && this._bodyManager.hasBody(descriptor.bodyId)) {
             this._shapeStore.resetBodyMassData(descriptor.bodyId);
@@ -505,6 +789,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             stiffness: def.stiffness ?? null,
             damping: def.damping ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -518,6 +805,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             motorSpeed: def.motorSpeed ?? null,
             maxMotorTorque: def.maxMotorTorque ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -534,6 +824,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             motorSpeed: def.motorSpeed ?? null,
             maxMotorForce: def.maxMotorForce ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -547,6 +840,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             stiffness: def.stiffness ?? null,
             damping: def.damping ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -564,6 +860,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             motorSpeed: def.motorSpeed ?? null,
             maxMotorTorque: def.maxMotorTorque ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -577,6 +876,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             maxTorque: def.maxTorque ?? null,
             correctionFactor: def.correctionFactor ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -589,6 +891,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             damping: def.damping ?? null,
             maxForce: def.maxForce ?? null,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -600,6 +905,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             constraintIdB: def.constraintIdB,
             ratio: def.ratio ?? 1,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -611,6 +919,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             localAnchorB: cloneVec(def.localAnchorB),
             maxLength: def.maxLength,
         });
+        if (!def.collideConnected) {
+            this._registerJointCollisionPair(def.bodyIdA, def.bodyIdB);
+        }
         return constraintId;
     }
 
@@ -621,6 +932,11 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 this._constraintManager.destroyConstraint(constraintId);
             }
             return;
+        }
+
+        // Unregister collideConnected suppression before destroying
+        if (!descriptor.collideConnected) {
+            this._unregisterJointCollisionPair(descriptor.bodyIdA, descriptor.bodyIdB);
         }
 
         if (descriptor.storage === 'manager' && this._constraintManager.hasConstraint(constraintId)) {
@@ -676,7 +992,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         direction: Readonly<IVec2Like>,
         maxFraction: number,
         filter?: IQueryFilter
-    ): IRaycastResult2D | null {
+    ): ISingleRaycastResult2D | null {
         const hits = this._shapeStore.rayCastAll(origin, direction, maxFraction, filter);
         return hits.length > 0 ? hits[0] : null;
     }
@@ -686,7 +1002,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         direction: Readonly<IVec2Like>,
         maxFraction: number,
         filter?: IQueryFilter
-    ): readonly IRaycastResult2D[] {
+    ): readonly ISingleRaycastResult2D[] {
         return this._shapeStore.rayCastAll(origin, direction, maxFraction, filter);
     }
 
@@ -725,6 +1041,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
                 x: position.x - newOrigin.x,
                 y: position.y - newOrigin.y,
             });
+            this._markStaticDirty(bodyId);
         }
     }
 
@@ -745,15 +1062,15 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
             constraintCount: this._constraintStore.size,
             contactCount: this._contactManager.contactCount,
             proxyCount: this.getProxyCount(),
-            islandCount: 0,
-            treeHeight: 0,
-            treeBalance: 0,
-            treeQuality: 0,
+            islandCount: this._solver.lastIslandCount,
+            treeHeight: this._broadphase.getHeight(),
+            treeBalance: this._broadphase.getTreeBalance(),
+            treeQuality: this._broadphase.getTreeQuality(),
             stepTime: this._stepTime,
-            collisionTime: 0,
-            solveTime: 0,
-            broadphaseTime: 0,
-            narrowphaseTime: 0,
+            collisionTime: this._profiler?.collisionTime ?? 0,
+            solveTime: this._profiler?.solveTime ?? 0,
+            broadphaseTime: this._profiler?.broadphaseTime ?? 0,
+            narrowphaseTime: this._profiler?.narrowphaseTime ?? 0,
         };
     }
 
@@ -774,15 +1091,15 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     }
 
     getTreeHeight(): number {
-        return 0;
+        return this._broadphase.getHeight();
     }
 
     getTreeBalance(): number {
-        return 0;
+        return this._broadphase.getTreeBalance();
     }
 
     getTreeQuality(): number {
-        return 0;
+        return this._broadphase.getTreeQuality();
     }
 
     validate(): boolean {
@@ -798,6 +1115,9 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
         this._bodyViews.clear();
         this._shapeStore.clear();
         this._constraintStore.clear();
+        this._staticAabbCache.clear();
+        this._staticAabbDirty.clear();
+        this._jointCollisionCounts.clear();
 
         this._bodyManager[Symbol.dispose]();
         this._shapeManager[Symbol.dispose]();

@@ -2,11 +2,10 @@ import type { RotationConfiguration } from '../core/configuration';
 import type { IParticleBuffer } from '../core/interfaces';
 import type { ICurve } from '../interfaces';
 import type { IQuatLike } from '@axrone/numeric';
-import { Quat } from '@axrone/numeric';
+import { Quat, SoaVec3Buffer } from '@axrone/numeric';
 import { BaseModule } from './base-module';
 import { CurveEvaluator } from '../curve-evaluator';
 
-// Scratch objects for zero-allocation in the per-particle hot path
 const _scratchQuat = new Quat();
 const _scratchRotQuat = new Quat();
 const _scratchNewQuat = new Quat();
@@ -318,10 +317,7 @@ export class RotationModule extends BaseModule<'rotation'> {
         normalizedAge: number,
         seed: number
     ): [number, number, number] {
-        const vx = velocities[i3];
-        const vy = velocities[i3 + 1];
-        const vz = velocities[i3 + 2];
-        const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+        const speed = SoaVec3Buffer.vec3Length(velocities, i3);
 
         const speedFactor = speed * 0.1;
         const baseRotation = this._calculateLifetimeRotation(config, normalizedAge, seed);
@@ -381,15 +377,7 @@ export class RotationModule extends BaseModule<'rotation'> {
         normalizedAge: number,
         seed: number
     ): [number, number, number] {
-        const centerX = 0;
-        const centerY = 0;
-        const centerZ = 0;
-
-        const px = positions[i3] - centerX;
-        const py = positions[i3 + 1] - centerY;
-        const pz = positions[i3 + 2] - centerZ;
-
-        const radius = Math.sqrt(px * px + py * py + pz * pz);
+        const radius = SoaVec3Buffer.vec3Length(positions, i3);
         const orbitalSpeed = this._evaluateCurve(config.angularVelocity, normalizedAge, seed);
 
         if (radius > 0) {
@@ -462,7 +450,6 @@ export class RotationModule extends BaseModule<'rotation'> {
         particleIndex: number,
         deltaTime: number
     ): void {
-        // Read current quaternion from array into scratch (zero allocation)
         _scratchQuat.x = this._quaternions[i4];
         _scratchQuat.y = this._quaternions[i4 + 1];
         _scratchQuat.z = this._quaternions[i4 + 2];

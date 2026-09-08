@@ -56,14 +56,14 @@ describe('hashSeedToState', () => {
     it('long string seed (>32 bytes) produces valid state', () => {
         const longStr = 'a'.repeat(100);
         const state = hashSeedToState(longStr);
-        expect(state.vector).toHaveLength(4);
+        expect(state.vector).toHaveLength(6);
         expect(state.counter).toBe(0n);
     });
 
     it('Uint8Array seed produces valid state', () => {
         const arr = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
         const state = hashSeedToState(arr);
-        expect(state.vector).toHaveLength(4);
+        expect(state.vector).toHaveLength(6);
         expect(state.counter).toBe(0n);
         const allZero = state.vector.every((v) => v === 0n);
         expect(allZero).toBe(false);
@@ -79,7 +79,7 @@ describe('hashSeedToState', () => {
     it('Int32Array seed produces valid state', () => {
         const arr = new Int32Array([100, -200, 300]);
         const state = hashSeedToState(arr);
-        expect(state.vector).toHaveLength(4);
+        expect(state.vector).toHaveLength(6);
         expect(state.counter).toBe(0n);
         const allZero = state.vector.every((v) => v === 0n);
         expect(allZero).toBe(false);
@@ -94,7 +94,7 @@ describe('hashSeedToState', () => {
     it('BigInt64Array seed produces valid state', () => {
         const arr = new BigInt64Array([1n, 2n, 3n, 4n]);
         const state = hashSeedToState(arr);
-        expect(state.vector).toHaveLength(4);
+        expect(state.vector).toHaveLength(6);
         expect(state.counter).toBe(0n);
     });
 
@@ -109,8 +109,8 @@ describe('hashSeedToState', () => {
         const a = hashSeedToState(null);
         const b = hashSeedToState(null);
         // Both should be valid states
-        expect(a.vector).toHaveLength(4);
-        expect(b.vector).toHaveLength(4);
+        expect(a.vector).toHaveLength(6);
+        expect(b.vector).toHaveLength(6);
         expect(a.counter).toBe(0n);
         expect(b.counter).toBe(0n);
     });
@@ -119,7 +119,7 @@ describe('hashSeedToState', () => {
         const seeds = [42, 'test', new Uint8Array([1]), new Int32Array([1]), new BigInt64Array([1n])];
         for (const seed of seeds) {
             const state = hashSeedToState(seed);
-            expect(state.vector).toHaveLength(4);
+            expect(state.vector).toHaveLength(6);
             expect(typeof state.counter).toBe('bigint');
             expect(state.counter).toBe(0n);
             expect(state.engine).toBe(RandomEngineType.XOROSHIRO128_PLUS_PLUS);
@@ -141,7 +141,7 @@ describe('hashSeedToState', () => {
 describe('createSeedFromTime', () => {
     it('produces valid state shape', () => {
         const state = createSeedFromTime();
-        expect(state.vector).toHaveLength(4);
+        expect(state.vector).toHaveLength(6);
         expect(state.counter).toBe(0n);
         expect(state.engine).toBe(RandomEngineType.XOROSHIRO128_PLUS_PLUS);
     });

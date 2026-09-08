@@ -1,3 +1,4 @@
+import type { Brand } from '@axrone/utility';
 import type { Entity, ActorId } from '../types/core';
 import type { ComponentType, ComponentMetadata } from '../types/component';
 import type { World } from './world';
@@ -14,8 +15,8 @@ export interface EventBus<T extends string = string> {
 }
 
 export type ActorState = 'initializing' | 'active' | 'inactive' | 'destroying' | 'destroyed';
-export type ActorLayer = number & { readonly __brand: unique symbol };
-export type ActorTag = string & { readonly __brand: unique symbol };
+export type ActorLayer = Brand<number, 'ActorLayer'>;
+export type ActorTag = Brand<string, 'ActorTag'>;
 
 export class ActorError extends Error {
     constructor(

@@ -53,8 +53,9 @@ export class ChaCha20Engine implements IRandomEngine {
         const remainingSteps = stepsAfterCurrentBlock & 0xfn;
 
         if (fullBlocksToSkip > 0n) {
-            const currentBlockCount = this.state[12] + (this.state[13] << 32);
-            const newBlockCount = BigInt(currentBlockCount) + fullBlocksToSkip;
+            const currentBlockCount =
+                BigInt(this.state[12]) | (BigInt(this.state[13]) << 32n);
+            const newBlockCount = currentBlockCount + fullBlocksToSkip;
 
             this.state[12] = Number(newBlockCount & 0xffffffffn);
             this.state[13] = Number((newBlockCount >> 32n) & 0xffffffffn);
@@ -72,10 +73,12 @@ export class ChaCha20Engine implements IRandomEngine {
     public getState = (): IRandomState => {
         return {
             vector: [
-                BigInt(this.state[0]) | (BigInt(this.state[1]) << 32n),
-                BigInt(this.state[2]) | (BigInt(this.state[3]) << 32n),
                 BigInt(this.state[4]) | (BigInt(this.state[5]) << 32n),
                 BigInt(this.state[6]) | (BigInt(this.state[7]) << 32n),
+                BigInt(this.state[8]) | (BigInt(this.state[9]) << 32n),
+                BigInt(this.state[10]) | (BigInt(this.state[11]) << 32n),
+                BigInt(this.state[12]) | (BigInt(this.state[13]) << 32n),
+                BigInt(this.state[14]) | (BigInt(this.state[15]) << 32n),
             ],
             counter: this.counter,
             engine: this.engineType,
@@ -83,14 +86,23 @@ export class ChaCha20Engine implements IRandomEngine {
     };
 
     public setState = (state: IRandomState): void => {
-        this.state[0] = Number(state.vector[0] & 0xffffffffn);
-        this.state[1] = Number((state.vector[0] >> 32n) & 0xffffffffn);
-        this.state[2] = Number(state.vector[1] & 0xffffffffn);
-        this.state[3] = Number((state.vector[1] >> 32n) & 0xffffffffn);
-        this.state[4] = Number(state.vector[2] & 0xffffffffn);
-        this.state[5] = Number((state.vector[2] >> 32n) & 0xffffffffn);
-        this.state[6] = Number(state.vector[3] & 0xffffffffn);
-        this.state[7] = Number((state.vector[3] >> 32n) & 0xffffffffn);
+        this.state[0] = 0x61707865;
+        this.state[1] = 0x3320646e;
+        this.state[2] = 0x79622d32;
+        this.state[3] = 0x6b206574;
+
+        this.state[4] = Number(state.vector[0] & 0xffffffffn);
+        this.state[5] = Number((state.vector[0] >> 32n) & 0xffffffffn);
+        this.state[6] = Number(state.vector[1] & 0xffffffffn);
+        this.state[7] = Number((state.vector[1] >> 32n) & 0xffffffffn);
+        this.state[8] = Number(state.vector[2] & 0xffffffffn);
+        this.state[9] = Number((state.vector[2] >> 32n) & 0xffffffffn);
+        this.state[10] = Number(state.vector[3] & 0xffffffffn);
+        this.state[11] = Number((state.vector[3] >> 32n) & 0xffffffffn);
+        this.state[12] = Number(state.vector[4] & 0xffffffffn);
+        this.state[13] = Number((state.vector[4] >> 32n) & 0xffffffffn);
+        this.state[14] = Number(state.vector[5] & 0xffffffffn);
+        this.state[15] = Number((state.vector[5] >> 32n) & 0xffffffffn);
 
         this.counter = state.counter;
         this.index = 16;
@@ -121,7 +133,7 @@ export class ChaCha20Engine implements IRandomEngine {
 
         if (seed === null) {
             if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-                const randomBytes = new Uint8Array(32);
+                const randomBytes = new Uint8Array(48);
                 crypto.getRandomValues(randomBytes);
 
                 // Key: 8 words (32 bytes)
@@ -135,14 +147,14 @@ export class ChaCha20Engine implements IRandomEngine {
                         0;
                 }
 
-                // Nonce and counter: 4 words (16 bytes)
+                // Counter and nonce: 4 words (16 bytes)
                 for (let i = 0; i < 4; i++) {
                     const idx = 32 + i * 4;
                     this.state[12 + i] =
-                        ((randomBytes[idx % randomBytes.length] << 0) |
-                            (randomBytes[(idx + 1) % randomBytes.length] << 8) |
-                            (randomBytes[(idx + 2) % randomBytes.length] << 16) |
-                            (randomBytes[(idx + 3) % randomBytes.length] << 24)) >>>
+                        ((randomBytes[idx] << 0) |
+                            (randomBytes[idx + 1] << 8) |
+                            (randomBytes[idx + 2] << 16) |
+                            (randomBytes[idx + 3] << 24)) >>>
                         0;
                 }
             } else {

@@ -10,6 +10,31 @@ import {
     type ISoftJointLimitSpring3D,
 } from './joint3d';
 
+/**
+ * Slider (Prismatic) joint — registers a SLIDER constraint (type 3).
+ *
+ * **Solver status: PARTIAL.** The Jacobian constraint solver enforces all 5 DOF:
+ * - 2 lateral linear rows: lock translation perpendicular to the slide axis
+ * - 3 angular lock rows: lock all rotation (slider must not rotate)
+ * - 1 axial limit/motor row: translation along slide axis with optional
+ *   distance limits (`lowerLimit`/`upperLimit`) and a linear motor
+ *   (`motorSpeed`/`maxMotorForce`).
+ *
+ * The slide axis is defined by `localAxisA` in body A's local frame.
+ * Body B slides along this axis relative to body A. Lateral motion and
+ * all rotation are constrained.
+ *
+ * **Motor + limit interaction:** When the motor is active and the slider
+ * reaches a limit boundary, the motor cannot push past the limit (Box2D
+ * behavior). The motor can still pull away from the limit.
+ *
+ * **CAVEAT — `useSpring`/`spring` NOT wired:** The component exposes
+ * `useSpring` and `spring` (spring/damper) properties, but these are
+ * NOT passed to the constraint definition. Setting them has NO EFFECT.
+ * This is a known gap — the solver does not yet implement slider spring.
+ *
+ * @see JOINT_CAPABILITY_3D
+ */
 @script({ scriptName: 'SliderJoint3D' })
 export class SliderJoint3D extends Joint3D {
     private _useLimits: boolean = false;
@@ -95,5 +120,65 @@ export class SliderJoint3D extends Joint3D {
     }
     protected override _updateConstraint(): void {
         this._recreateConstraint();
+    }
+
+    /**
+     * Serialize slider-specific properties.
+     *
+     * Editor key mapping (components.rs `slider_joint_3d_properties`):
+     * - `useLimits: boolean`, `limits: { min, max, bounciness, contactDistance }`
+     * - `useMotor: boolean`, `motor: { targetVelocity, force, freeSpin }`
+     * - `useSpring: boolean`, `spring: { spring, damper }`
+     *
+     * NOTE: `useSpring`/`spring` are serialized but NOT wired to the solver
+     * (see JOINT_CAPABILITY_3D — Slider is PARTIAL).
+     */
+    override serialize(): Record<string, any> {
+        return {
+            ...super.serialize(),
+            useLimits: this._useLimits,
+            limits: {
+                min: this._limits.min,
+                max: this._limits.max,
+                bounciness: this._limits.bounciness,
+                contactDistance: this._limits.contactDistance,
+            },
+            useMotor: this._useMotor,
+            motor: {
+                targetVelocity: this._motor.targetVelocity,
+                force: this._motor.force,
+                freeSpin: this._motor.freeSpin,
+            },
+            useSpring: this._useSpring,
+            spring: {
+                spring: this._spring.spring,
+                damper: this._spring.damper,
+            },
+        };
+    }
+
+    override deserialize(data: Record<string, any>): void {
+        super.deserialize(data);
+        if (data.useLimits !== undefined) this._useLimits = !!data.useLimits;
+        const limits = data.limits;
+        if (limits && typeof limits === 'object') {
+            if (limits.min !== undefined) this._limits.min = limits.min;
+            if (limits.max !== undefined) this._limits.max = limits.max;
+            if (limits.bounciness !== undefined) this._limits.bounciness = Math.max(0, Math.min(1, limits.bounciness));
+            if (limits.contactDistance !== undefined) this._limits.contactDistance = Math.max(0, limits.contactDistance);
+        }
+        if (data.useMotor !== undefined) this._useMotor = !!data.useMotor;
+        const motor = data.motor;
+        if (motor && typeof motor === 'object') {
+            if (motor.targetVelocity !== undefined) this._motor.targetVelocity = motor.targetVelocity;
+            if (motor.force !== undefined) this._motor.force = Math.max(0, motor.force);
+            if (motor.freeSpin !== undefined) this._motor.freeSpin = !!motor.freeSpin;
+        }
+        if (data.useSpring !== undefined) this._useSpring = !!data.useSpring;
+        const spring = data.spring;
+        if (spring && typeof spring === 'object') {
+            if (spring.spring !== undefined) this._spring.spring = Math.max(0, spring.spring);
+            if (spring.damper !== undefined) this._spring.damper = Math.max(0, spring.damper);
+        }
     }
 }

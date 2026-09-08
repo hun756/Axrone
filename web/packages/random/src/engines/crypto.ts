@@ -1,6 +1,6 @@
 import { Float64, UInt32, UInt64 } from '../../types';
 import { IRandomEngine, IRandomState, RandomEngineType } from '../types';
-import { UINT64_MAX, INV_UINT32_MAX, hex } from '../constants';
+import { UINT64_MAX, INV_UINT32_MAX } from '../constants';
 import { Xoshiro256PlusPlus } from './xoshiro256-plus-plus';
 
 export class CryptoEngine implements IRandomEngine {
@@ -11,11 +11,13 @@ export class CryptoEngine implements IRandomEngine {
     private counter: UInt64;
     private readonly engineType = RandomEngineType.CRYPTO;
     private readonly buffer: Uint8Array;
+    private readonly dataView: DataView;
     private bufferPosition: number;
     private readonly bufferSize = 1024;
 
     constructor() {
         this.buffer = new Uint8Array(this.bufferSize);
+        this.dataView = new DataView(this.buffer.buffer);
         this.bufferPosition = this.bufferSize;
 
         this.s0 = 0n;
@@ -38,7 +40,7 @@ export class CryptoEngine implements IRandomEngine {
             this.refillBuffer();
         }
 
-        const value = new DataView(this.buffer.buffer).getUint32(this.bufferPosition, true);
+        const value = this.dataView.getUint32(this.bufferPosition, true);
         this.bufferPosition += 4;
 
         return value >>> 0;
@@ -51,9 +53,8 @@ export class CryptoEngine implements IRandomEngine {
             this.refillBuffer();
         }
 
-        const view = new DataView(this.buffer.buffer);
-        const lo = BigInt(view.getUint32(this.bufferPosition, true));
-        const hi = BigInt(view.getUint32(this.bufferPosition + 4, true));
+        const lo = BigInt(this.dataView.getUint32(this.bufferPosition, true));
+        const hi = BigInt(this.dataView.getUint32(this.bufferPosition + 4, true));
         this.bufferPosition += 8;
 
         return ((hi << 32n) | lo) & UINT64_MAX;
@@ -75,45 +76,17 @@ export class CryptoEngine implements IRandomEngine {
     };
 
     public getState = (): IRandomState => {
-        return {
-            vector: [
-                BigInt(
-                    '0x' +
-                        Array.from(this.buffer.slice(0, 8))
-                            .map((b) => hex[b])
-                            .join('')
-                ),
-                BigInt(
-                    '0x' +
-                        Array.from(this.buffer.slice(8, 16))
-                            .map((b) => hex[b])
-                            .join('')
-                ),
-                BigInt(
-                    '0x' +
-                        Array.from(this.buffer.slice(16, 24))
-                            .map((b) => hex[b])
-                            .join('')
-                ),
-                BigInt(
-                    '0x' +
-                        Array.from(this.buffer.slice(24, 32))
-                            .map((b) => hex[b])
-                            .join('')
-                ),
-            ],
-            counter: this.counter,
-            engine: this.engineType,
-        };
+        throw new Error('CryptoEngine does not support state serialization (non-reproducible)');
     };
 
-    public setState = (state: IRandomState): void => {
-        this.counter = state.counter;
-        this.refillBuffer();
+    public setState = (_state: IRandomState): void => {
+        throw new Error('CryptoEngine does not support state restoration (non-reproducible)');
     };
 
     public clone = (): IRandomEngine => {
         const copy = new CryptoEngine();
+        copy.buffer.set(this.buffer);
+        copy.bufferPosition = this.bufferPosition;
         copy.counter = this.counter;
         return copy;
     };

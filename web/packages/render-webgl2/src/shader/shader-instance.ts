@@ -209,6 +209,26 @@ const toScalar = (value: ShaderUniformValue): number | boolean | Float32Array | 
     if (value instanceof Int32Array) return value;
     if (value instanceof Uint32Array) return value;
     if (Array.isArray(value)) return value as ReadonlyArray<number>;
+
+    // Handle Vec2/Vec3/Vec4/Mat4 types from @axrone/numeric
+    if (typeof value === 'object' && value !== null) {
+        // Mat4 has a data property
+        if ('data' in value && Array.isArray((value as any).data)) {
+            return (value as any).data as ReadonlyArray<number>;
+        }
+        // Vec2/Vec3/Vec4 have x, y, z, w properties
+        const v = value as any;
+        if ('x' in v && 'y' in v) {
+            if ('z' in v) {
+                if ('w' in v) {
+                    return [v.x, v.y, v.z, v.w] as ReadonlyArray<number>;
+                }
+                return [v.x, v.y, v.z] as ReadonlyArray<number>;
+            }
+            return [v.x, v.y] as ReadonlyArray<number>;
+        }
+    }
+
     return null;
 };
 

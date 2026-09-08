@@ -775,9 +775,13 @@ describe('Narrowphase2D', () => {
                 manifold
             );
 
-            if (manifold.pointCount > 0) {
-                expect(manifold.points).toBeDefined();
-            }
+            // Two overlapping boxes (A at 0,0 and B at 1.5,0, both halfWidth=1) → must generate contacts
+            expect(manifold.pointCount).toBeGreaterThan(0);
+            expect(manifold.points).toBeDefined();
+            expect(manifold.points.length).toBeGreaterThanOrEqual(manifold.pointCount);
+            // Contact normal should be a unit vector (boxes overlap on x-axis → normal along x)
+            const nLen = manifold.normal.x * manifold.normal.x + manifold.normal.y * manifold.normal.y;
+            expect(nLen).toBeCloseTo(1, 3);
         });
     });
 });

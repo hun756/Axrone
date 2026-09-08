@@ -10,6 +10,7 @@ import {
     IRaycastResult2D,
     IRaycastResult3D,
     RaycastFlags,
+    RaycastLayer,
     LayerMask,
     RaycastPredicate2D,
     RaycastPredicate3D,
@@ -30,7 +31,6 @@ export interface IRaycastBroadphaseSource2D {
     getAABB(proxyId: number): IAABB<IVec2Like>;
 }
 
-const RAYCAST_HIT_POOL_SIZE = 512;
 const DEFAULT_MAX_HITS = 128;
 const RAY_HIT_EPSILON = 1e-4;
 
@@ -111,43 +111,6 @@ class RaycastHit3D implements IRaycastHit3D {
             ? { u: other.barycentric.u, v: other.barycentric.v }
             : null;
         this.layer = other.layer;
-    }
-}
-
-class ObjectPool<T> {
-    private readonly _pool: T[] = [];
-    private readonly _factory: () => T;
-    private readonly _reset: (item: T) => void;
-
-    constructor(factory: () => T, reset: (item: T) => void, initialSize: number) {
-        this._factory = factory;
-        this._reset = reset;
-
-        for (let i = 0; i < initialSize; i++) {
-            this._pool.push(factory());
-        }
-    }
-
-    public acquire(): T {
-        if (this._pool.length > 0) {
-            return this._pool.pop()!;
-        }
-        return this._factory();
-    }
-
-    public release(item: T): void {
-        this._reset(item);
-        this._pool.push(item);
-    }
-
-    public releaseAll(items: T[]): void {
-        for (const item of items) {
-            this.release(item);
-        }
-    }
-
-    public get size(): number {
-        return this._pool.length;
     }
 }
 
@@ -243,38 +206,21 @@ export class RaycastResult3D implements IRaycastResult3D {
     }
 }
 
-interface ShapeData2D {
+interface ShapeData {
     bodyId: BodyId;
     shapeId: ShapeId;
     layer: LayerMask;
     type: ShapeType;
     data: unknown;
-}
-
-interface ShapeData3D {
-    bodyId: BodyId;
-    shapeId: ShapeId;
-    layer: LayerMask;
-    type: ShapeType;
-    data: unknown;
+    active: boolean;
 }
 
 export class Raycaster2D {
-    private readonly _hitPool: ObjectPool<RaycastHit2D>;
     private readonly _tempHit: RaycastHit2D = new RaycastHit2D();
     private readonly _invDirection: Vec2 = Vec2.ZERO.clone();
-    private readonly _aabbTestResult = { tMin: 0, tMax: 0 };
 
-    private _shapes: ShapeData2D[] = [];
+    private _shapes: Map<ShapeId, ShapeData> = new Map();
     private _broadphase: IRaycastBroadphaseSource2D | null = null;
-
-    constructor() {
-        this._hitPool = new ObjectPool(
-            () => new RaycastHit2D(),
-            (hit) => hit.reset(),
-            RAYCAST_HIT_POOL_SIZE
-        );
-    }
 
     public setBroadphase(broadphase: IRaycastBroadphaseSource2D): void {
         this._broadphase = broadphase;
@@ -287,14 +233,16 @@ export class Raycaster2D {
         type: ShapeType,
         data: unknown
     ): void {
-        this._shapes.push({ bodyId, shapeId, layer, type, data });
+        this._shapes.set(shapeId, { bodyId, shapeId, layer, type, data, active: true });
+    }
+
+    public setShapeActive(shapeId: ShapeId, active: boolean): void {
+        const shape = this._shapes.get(shapeId);
+        if (shape) shape.active = active;
     }
 
     public unregisterShape(shapeId: ShapeId): void {
-        const index = this._shapes.findIndex((s) => s.shapeId === shapeId);
-        if (index !== -1) {
-            this._shapes.splice(index, 1);
-        }
+        this._shapes.delete(shapeId);
     }
 
     public raycast(query: IRaycastQuery2D, predicate?: RaycastPredicate2D): RaycastResult2D {
@@ -308,33 +256,43 @@ export class Raycaster2D {
         this._computeInvDirection(ray.direction, this._invDirection);
 
         const candidates = this._broadphaseQuery(ray, query.layerMask);
+        let bestDistance = Number.MAX_VALUE;
 
         for (const shape of candidates) {
             if ((shape.layer & query.layerMask) === 0) continue;
+            if ((query.flags & RaycastFlags.IgnoreTriggers) !== 0 && (shape.layer & RaycastLayer.Trigger) !== 0) continue;
+            if ((query.flags & RaycastFlags.IncludeInactive) === 0 && !shape.active) continue;
             if (predicate && !predicate(shape.bodyId, shape.shapeId)) continue;
 
-            const hit = this._hitPool.acquire();
-            const intersected = this._intersectShape2D(ray, shape, query.flags, hit);
+            const intersected = this._intersectShape2D(ray, shape, query.flags, this._tempHit);
             if (intersected) {
-                result.addHit(hit);
-                this._hitPool.release(hit);
-
-                if (stopAtFirst) break;
-                if (result.hitCount >= maxHits) break;
-            } else {
-                this._hitPool.release(hit);
+                if ((query.flags & RaycastFlags.IgnoreBackfaces) !== 0) {
+                    const dot = ray.direction.x * this._tempHit.normal.x + ray.direction.y * this._tempHit.normal.y;
+                    if (dot > 0) continue;
+                }
+                if ((query.flags & RaycastFlags.PreciseHitNormal) !== 0) {
+                    const nLen = Math.sqrt(this._tempHit.normal.x * this._tempHit.normal.x + this._tempHit.normal.y * this._tempHit.normal.y);
+                    if (nLen > EPSILON) {
+                        this._tempHit.normal.x /= nLen;
+                        this._tempHit.normal.y /= nLen;
+                    }
+                }
+                if (closestOnly) {
+                    if (this._tempHit.distance < bestDistance) {
+                        bestDistance = this._tempHit.distance;
+                        result.clear();
+                        result.addHit(this._tempHit);
+                    }
+                } else {
+                    result.addHit(this._tempHit);
+                    if (stopAtFirst) break;
+                    if (result.hitCount >= maxHits) break;
+                }
             }
         }
 
-        if ((query.flags & RaycastFlags.SortByDistance) !== 0) {
+        if (!closestOnly && (query.flags & RaycastFlags.SortByDistance) !== 0) {
             result.sort();
-        }
-
-        if (closestOnly && result.hitCount > 1) {
-            const closestHit = result.hits[0];
-            result.clear();
-            this._tempHit.copyFrom(closestHit as RaycastHit2D);
-            result.addHit(this._tempHit);
         }
 
         return result;
@@ -367,15 +325,15 @@ export class Raycaster2D {
         out.y = Math.abs(direction.y) > EPSILON ? 1.0 / direction.y : Number.MAX_VALUE;
     }
 
-    private _broadphaseQuery(ray: IRay2D, layerMask: LayerMask): ShapeData2D[] {
+    private _broadphaseQuery(ray: IRay2D, layerMask: LayerMask): ShapeData[] {
         if (this._broadphase) {
-            const candidates: ShapeData2D[] = [];
+            const candidates: ShapeData[] = [];
             const invDir = this._invDirection;
             const aabbResult = { tMin: 0, tMax: 0 };
             this._broadphase.query(
                 (proxyId) => {
                     const userData = this._broadphase!.getUserData(proxyId) as ShapeId;
-                    const shape = this._shapes.find((s) => s.shapeId === userData);
+                    const shape = this._shapes.get(userData);
                     if (shape && (shape.layer & layerMask) !== 0) {
                         const aabb = this._broadphase!.getAABB(proxyId);
                         if (
@@ -404,12 +362,18 @@ export class Raycaster2D {
             );
             return candidates;
         }
-        return this._shapes.filter((s) => (s.layer & layerMask) !== 0);
+        const result: ShapeData[] = [];
+        for (const shape of this._shapes.values()) {
+            if ((shape.layer & layerMask) !== 0) {
+                result.push(shape);
+            }
+        }
+        return result;
     }
 
     private _intersectShape2D(
         ray: IRay2D,
-        shape: ShapeData2D,
+        shape: ShapeData,
         flags: RaycastFlags,
         out: RaycastHit2D
     ): boolean {
@@ -457,20 +421,20 @@ export class Raycaster2D {
                 break;
             }
             case ShapeType.Capsule: {
-                const d = shape.data as { p1: { x: number; y: number }; p2: { x: number; y: number }; radius: number };
+                const d = shape.data as { p0: { x: number; y: number }; p1: { x: number; y: number }; radius: number };
                 result = RayPrimitiveIntersector2D.intersectCapsule(
-                    ray.origin, ray.direction, d.p1, d.p2, d.radius, ray.length
+                    ray.origin, ray.direction, d.p0, d.p1, d.radius, ray.length
                 );
                 if (!result.hit) return false;
                 out.point.x = ray.origin.x + ray.direction.x * result.distance;
                 out.point.y = ray.origin.y + ray.direction.y * result.distance;
                 // Normal: closest point on segment axis to hit point
-                const abx = d.p2.x - d.p1.x;
-                const aby = d.p2.y - d.p1.y;
+                const abx = d.p1.x - d.p0.x;
+                const aby = d.p1.y - d.p0.y;
                 const ab2 = abx * abx + aby * aby;
-                const t = ab2 > EPSILON ? Math.max(0, Math.min(1, ((out.point.x - d.p1.x) * abx + (out.point.y - d.p1.y) * aby) / ab2)) : 0;
-                const closestX = d.p1.x + abx * t;
-                const closestY = d.p1.y + aby * t;
+                const t = ab2 > EPSILON ? Math.max(0, Math.min(1, ((out.point.x - d.p0.x) * abx + (out.point.y - d.p0.y) * aby) / ab2)) : 0;
+                const closestX = d.p0.x + abx * t;
+                const closestY = d.p0.y + aby * t;
                 const nx = out.point.x - closestX;
                 const ny = out.point.y - closestY;
                 const nLen = Math.sqrt(nx * nx + ny * ny);
@@ -521,20 +485,10 @@ export class Raycaster2D {
 }
 
 export class Raycaster3D {
-    private readonly _hitPool: ObjectPool<RaycastHit3D>;
     private readonly _tempHit: RaycastHit3D = new RaycastHit3D();
     private readonly _invDirection: Vec3 = Vec3.ZERO.clone();
-    private readonly _aabbTestResult = { tMin: 0, tMax: 0 };
 
-    private _shapes: ShapeData3D[] = [];
-
-    constructor() {
-        this._hitPool = new ObjectPool(
-            () => new RaycastHit3D(),
-            (hit) => hit.reset(),
-            RAYCAST_HIT_POOL_SIZE
-        );
-    }
+    private _shapes: Map<ShapeId, ShapeData> = new Map();
 
     public registerShape(
         bodyId: BodyId,
@@ -543,14 +497,16 @@ export class Raycaster3D {
         type: ShapeType,
         data: unknown
     ): void {
-        this._shapes.push({ bodyId, shapeId, layer, type, data });
+        this._shapes.set(shapeId, { bodyId, shapeId, layer, type, data, active: true });
+    }
+
+    public setShapeActive(shapeId: ShapeId, active: boolean): void {
+        const shape = this._shapes.get(shapeId);
+        if (shape) shape.active = active;
     }
 
     public unregisterShape(shapeId: ShapeId): void {
-        const index = this._shapes.findIndex((s) => s.shapeId === shapeId);
-        if (index !== -1) {
-            this._shapes.splice(index, 1);
-        }
+        this._shapes.delete(shapeId);
     }
 
     public raycast(query: IRaycastQuery3D, predicate?: RaycastPredicate3D): RaycastResult3D {
@@ -564,33 +520,44 @@ export class Raycaster3D {
         this._computeInvDirection(ray.direction, this._invDirection);
 
         const candidates = this._broadphaseQuery(ray, query.layerMask);
+        let bestDistance = Number.MAX_VALUE;
 
         for (const shape of candidates) {
             if ((shape.layer & query.layerMask) === 0) continue;
+            if ((query.flags & RaycastFlags.IgnoreTriggers) !== 0 && (shape.layer & RaycastLayer.Trigger) !== 0) continue;
+            if ((query.flags & RaycastFlags.IncludeInactive) === 0 && !shape.active) continue;
             if (predicate && !predicate(shape.bodyId, shape.shapeId)) continue;
 
-            const hit = this._hitPool.acquire();
-            const intersected = this._intersectShape3D(ray, shape, query.flags, hit);
+            const intersected = this._intersectShape3D(ray, shape, query.flags, this._tempHit);
             if (intersected) {
-                result.addHit(hit);
-                this._hitPool.release(hit);
-
-                if (stopAtFirst) break;
-                if (result.hitCount >= maxHits) break;
-            } else {
-                this._hitPool.release(hit);
+                if ((query.flags & RaycastFlags.IgnoreBackfaces) !== 0) {
+                    const dot = ray.direction.x * this._tempHit.normal.x + ray.direction.y * this._tempHit.normal.y + ray.direction.z * this._tempHit.normal.z;
+                    if (dot > 0) continue;
+                }
+                if ((query.flags & RaycastFlags.PreciseHitNormal) !== 0) {
+                    const nLen = Math.sqrt(this._tempHit.normal.x * this._tempHit.normal.x + this._tempHit.normal.y * this._tempHit.normal.y + this._tempHit.normal.z * this._tempHit.normal.z);
+                    if (nLen > EPSILON) {
+                        this._tempHit.normal.x /= nLen;
+                        this._tempHit.normal.y /= nLen;
+                        this._tempHit.normal.z /= nLen;
+                    }
+                }
+                if (closestOnly) {
+                    if (this._tempHit.distance < bestDistance) {
+                        bestDistance = this._tempHit.distance;
+                        result.clear();
+                        result.addHit(this._tempHit);
+                    }
+                } else {
+                    result.addHit(this._tempHit);
+                    if (stopAtFirst) break;
+                    if (result.hitCount >= maxHits) break;
+                }
             }
         }
 
-        if ((query.flags & RaycastFlags.SortByDistance) !== 0) {
+        if (!closestOnly && (query.flags & RaycastFlags.SortByDistance) !== 0) {
             result.sort();
-        }
-
-        if (closestOnly && result.hitCount > 1) {
-            const closestHit = result.hits[0];
-            result.clear();
-            this._tempHit.copyFrom(closestHit as RaycastHit3D);
-            result.addHit(this._tempHit);
         }
 
         return result;
@@ -624,13 +591,19 @@ export class Raycaster3D {
         out.z = Math.abs(direction.z) > EPSILON ? 1.0 / direction.z : Number.MAX_VALUE;
     }
 
-    private _broadphaseQuery(ray: IRay3D, layerMask: LayerMask): ShapeData3D[] {
-        return this._shapes.filter((s) => (s.layer & layerMask) !== 0);
+    private _broadphaseQuery(ray: IRay3D, layerMask: LayerMask): ShapeData[] {
+        const result: ShapeData[] = [];
+        for (const shape of this._shapes.values()) {
+            if ((shape.layer & layerMask) !== 0) {
+                result.push(shape);
+            }
+        }
+        return result;
     }
 
     private _intersectShape3D(
         ray: IRay3D,
-        shape: ShapeData3D,
+        shape: ShapeData,
         flags: RaycastFlags,
         out: RaycastHit3D
     ): boolean {
@@ -701,6 +674,67 @@ export class Raycaster3D {
                 out.normal.y = nLen > EPSILON ? ny / nLen : 1;
                 out.normal.z = nLen > EPSILON ? nz / nLen : 0;
                 break;
+            }
+            case ShapeType.TriangleMesh: {
+                const d = shape.data as { vertices: { x: number; y: number; z: number }[]; indices: number[] };
+                const cullBackface = (flags & RaycastFlags.IgnoreBackfaces) !== 0;
+                let closestT = Number.MAX_VALUE;
+                let closestTriIndex = -1;
+                let closestU = 0;
+                let closestV = 0;
+
+                for (let i = 0; i < d.indices.length; i += 3) {
+                    const i0 = d.indices[i];
+                    const i1 = d.indices[i + 1];
+                    const i2 = d.indices[i + 2];
+                    const v0 = d.vertices[i0];
+                    const v1 = d.vertices[i1];
+                    const v2 = d.vertices[i2];
+
+                    const bary = { u: 0, v: 0 };
+                    const triResult = RayPrimitiveIntersector3D.intersectTriangle(
+                        ray.origin, ray.direction, v0, v1, v2, ray.length, cullBackface, bary
+                    );
+
+                    if (triResult.hit && triResult.distance < closestT) {
+                        closestT = triResult.distance;
+                        closestTriIndex = i / 3;
+                        closestU = bary.u;
+                        closestV = bary.v;
+                    }
+                }
+
+                if (closestTriIndex < 0) return false;
+
+                out.point.x = ray.origin.x + ray.direction.x * closestT;
+                out.point.y = ray.origin.y + ray.direction.y * closestT;
+                out.point.z = ray.origin.z + ray.direction.z * closestT;
+
+                const i0 = d.indices[closestTriIndex * 3];
+                const i1 = d.indices[closestTriIndex * 3 + 1];
+                const i2 = d.indices[closestTriIndex * 3 + 2];
+                const v0 = d.vertices[i0];
+                const v1 = d.vertices[i1];
+                const v2 = d.vertices[i2];
+
+                const e1x = v1.x - v0.x, e1y = v1.y - v0.y, e1z = v1.z - v0.z;
+                const e2x = v2.x - v0.x, e2y = v2.y - v0.y, e2z = v2.z - v0.z;
+                const nx = e1y * e2z - e1z * e2y;
+                const ny = e1z * e2x - e1x * e2z;
+                const nz = e1x * e2y - e1y * e2x;
+                const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                out.normal.x = nLen > EPSILON ? nx / nLen : 0;
+                out.normal.y = nLen > EPSILON ? ny / nLen : 0;
+                out.normal.z = nLen > EPSILON ? nz / nLen : 1;
+
+                out.distance = closestT;
+                out.fraction = closestT / ray.length;
+                out.triangleIndex = closestTriIndex;
+                out.barycentric = { u: closestU, v: closestV };
+                out.bodyId = shape.bodyId;
+                out.shapeId = shape.shapeId;
+                out.layer = shape.layer;
+                return true;
             }
             default:
                 return false;

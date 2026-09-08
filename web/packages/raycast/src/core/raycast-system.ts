@@ -20,8 +20,7 @@ import {
     RaycastBatcher3D,
     RaycastStatistics,
 } from './raycast-optimization';
-import { SpatialHashGrid3D, SpatialOctree } from './raycast-spatial';
-import { InvalidRayError, RaycastQueryError } from './raycast-errors';
+import { InvalidRayError } from './raycast-errors';
 import type { BodyId, ShapeId } from '../types/primitives';
 
 const DEFAULT_MAX_DISTANCE = 1000;
@@ -77,7 +76,7 @@ export class RaycastSystem2D {
             this._cache.set(origin, direction, maxDistance, layerMask, hit);
         }
 
-        this._statistics.recordRaycast(hit !== null, 1);
+        this._statistics.recordRaycast(hit !== null);
 
         return hit;
     }
@@ -130,10 +129,17 @@ export class RaycastSystem2D {
         data: unknown
     ): void {
         this._raycaster.registerShape(bodyId, shapeId, layer, type, data);
+        this._cache.invalidate();
     }
 
     public unregisterShape(shapeId: ShapeId): void {
         this._raycaster.unregisterShape(shapeId);
+        this._cache.invalidate();
+    }
+
+    public setShapeActive(shapeId: ShapeId, active: boolean): void {
+        this._raycaster.setShapeActive(shapeId, active);
+        this._cache.invalidate();
     }
 
     public flushBatch(): void {
@@ -142,7 +148,6 @@ export class RaycastSystem2D {
 
     public advanceFrame(): void {
         this._cache.advanceFrame();
-        this._statistics.endFrame();
     }
 
     public clearCache(): void {
@@ -213,11 +218,8 @@ export class RaycastSystem3D {
     private readonly _cache: RaycastCache3D;
     private readonly _batcher: RaycastBatcher3D;
     private readonly _statistics: RaycastStatistics;
-    private readonly _spatialGrid: SpatialHashGrid3D<ShapeId> | null = null;
-    private readonly _octree: SpatialOctree<ShapeId> | null = null;
     private _enableCache: boolean = true;
     private _enableBatching: boolean = false;
-    private _spatialAcceleration: 'none' | 'grid' | 'octree' | 'bvh' = 'none';
 
     constructor() {
         this._raycaster = new Raycaster3D();
@@ -261,7 +263,7 @@ export class RaycastSystem3D {
             this._cache.set(origin, direction, maxDistance, layerMask, hit);
         }
 
-        this._statistics.recordRaycast(hit !== null, 1);
+        this._statistics.recordRaycast(hit !== null);
 
         return hit;
     }
@@ -314,10 +316,17 @@ export class RaycastSystem3D {
         data: unknown
     ): void {
         this._raycaster.registerShape(bodyId, shapeId, layer, type, data);
+        this._cache.invalidate();
     }
 
     public unregisterShape(shapeId: ShapeId): void {
         this._raycaster.unregisterShape(shapeId);
+        this._cache.invalidate();
+    }
+
+    public setShapeActive(shapeId: ShapeId, active: boolean): void {
+        this._raycaster.setShapeActive(shapeId, active);
+        this._cache.invalidate();
     }
 
     public flushBatch(): void {
@@ -326,7 +335,6 @@ export class RaycastSystem3D {
 
     public advanceFrame(): void {
         this._cache.advanceFrame();
-        this._statistics.endFrame();
     }
 
     public clearCache(): void {
@@ -347,14 +355,6 @@ export class RaycastSystem3D {
 
     public get enableBatching(): boolean {
         return this._enableBatching;
-    }
-
-    public set spatialAcceleration(value: 'none' | 'grid' | 'octree' | 'bvh') {
-        this._spatialAcceleration = value;
-    }
-
-    public get spatialAcceleration(): 'none' | 'grid' | 'octree' | 'bvh' {
-        return this._spatialAcceleration;
     }
 
     public get statistics(): RaycastStatistics {

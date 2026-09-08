@@ -150,11 +150,16 @@ describe('CylinderCollider3D', () => {
 });
 
 describe('MeshCollider3D', () => {
-    it('can be created', () => {
-        expect(() => new MeshCollider3D()).not.toThrow();
-    });
     it('has convex true by default', () => {
         const c = new MeshCollider3D();
         expect((c as any).convex).toBe(true);
+    });
+    it('has default isTrigger false', () => {
+        const c = new MeshCollider3D();
+        expect(c.isTrigger).toBe(false);
+    });
+    it('has default contactOffset 0.01', () => {
+        const c = new MeshCollider3D();
+        expect(c.contactOffset).toBe(0.01);
     });
 });

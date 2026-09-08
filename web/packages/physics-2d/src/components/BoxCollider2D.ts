@@ -46,26 +46,24 @@ export class BoxCollider2D extends Collider2D {
         this._physicsWorld = this.getPhysicsWorld();
         if (!this._physicsWorld) return;
 
-        this._shapeId = (this._physicsWorld as any).getShapeManager().createBox(
-            this._rigidbody.bodyId,
-            {
-                center: { x: this._offset.x, y: this._offset.y },
-                halfWidth: this._size.x * 0.5,
-                halfHeight: this._size.y * 0.5,
-                rotation: this._angle,
-            },
-            {
-                friction: this._material.friction as any,
-                restitution: this._material.restitution as any,
+        this._shapeId = this._physicsWorld.createBoxShape(this._rigidbody.bodyId, {
+            center: { x: this._offset.x, y: this._offset.y },
+            halfWidth: this._size.x * 0.5,
+            halfHeight: this._size.y * 0.5,
+            rotation: this._angle,
+            material: {
+                friction: this._material.friction,
+                restitution: this._material.restitution,
                 density: this._material.density,
             },
-            this._collisionFilter
-        );
+            isSensor: this._isTrigger,
+            filter: this._collisionFilter,
+        });
     }
 
     protected destroyPhysicsShape(): void {
         if (!this._shapeId || !this._physicsWorld) return;
-        (this._physicsWorld as any).getShapeManager().destroyShape(this._shapeId);
+        this._physicsWorld.destroyShape(this._shapeId);
         this._shapeId = null;
     }
 

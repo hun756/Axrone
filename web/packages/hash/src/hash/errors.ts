@@ -15,12 +15,6 @@ export type HashErrorCode =
     | 'HASH_CRYPTO_OPERATION_FAILED'
     | 'HASH_KEY_REQUIRED'
     | 'HASH_KEY_NOT_ALLOWED'
-    | 'HASH_RESEED_LIMIT_EXCEEDED'
-    | 'HASH_BLOOM_CAPACITY_EXCEEDED'
-    | 'HASH_BLOOM_INVALID_PARAMS'
-    | 'HASH_HLL_INVALID_PARAMS'
-    | 'HASH_TREE_INVALID_PARAMS'
-    | 'HASH_MERKLE_PROOF_INVALID'
     | 'HASH_GENERIC';
 
 export class HashError extends Error {
@@ -159,53 +153,5 @@ export class HashKeyNotAllowedError extends HashError {
     constructor(message: string = 'Hash algorithm does not support keys') {
         super(message, 'HASH_KEY_NOT_ALLOWED');
         Object.setPrototypeOf(this, HashKeyNotAllowedError.prototype);
-    }
-}
-
-export class HashReseedLimitError extends HashError {
-    public override readonly name: string = 'HashReseedLimitError';
-    constructor(message: string = 'PRNG reseed limit exceeded') {
-        super(message, 'HASH_RESEED_LIMIT_EXCEEDED');
-        Object.setPrototypeOf(this, HashReseedLimitError.prototype);
-    }
-}
-
-export class HashBloomCapacityError extends HashError {
-    public override readonly name: string = 'HashBloomCapacityError';
-    constructor(message: string = 'Bloom filter capacity exceeded') {
-        super(message, 'HASH_BLOOM_CAPACITY_EXCEEDED');
-        Object.setPrototypeOf(this, HashBloomCapacityError.prototype);
-    }
-}
-
-export class HashBloomInvalidParamsError extends HashError {
-    public override readonly name: string = 'HashBloomInvalidParamsError';
-    constructor(message: string = 'Invalid Bloom filter parameters') {
-        super(message, 'HASH_BLOOM_INVALID_PARAMS');
-        Object.setPrototypeOf(this, HashBloomInvalidParamsError.prototype);
-    }
-}
-
-export class HashHLLInvalidParamsError extends HashError {
-    public override readonly name: string = 'HashHLLInvalidParamsError';
-    constructor(message: string = 'Invalid HyperLogLog parameters') {
-        super(message, 'HASH_HLL_INVALID_PARAMS');
-        Object.setPrototypeOf(this, HashHLLInvalidParamsError.prototype);
-    }
-}
-
-export class HashTreeInvalidParamsError extends HashError {
-    public override readonly name: string = 'HashTreeInvalidParamsError';
-    constructor(message: string = 'Invalid Merkle tree parameters') {
-        super(message, 'HASH_TREE_INVALID_PARAMS');
-        Object.setPrototypeOf(this, HashTreeInvalidParamsError.prototype);
-    }
-}
-
-export class HashMerkleProofError extends HashError {
-    public override readonly name: string = 'HashMerkleProofError';
-    constructor(message: string = 'Invalid Merkle proof') {
-        super(message, 'HASH_MERKLE_PROOF_INVALID');
-        Object.setPrototypeOf(this, HashMerkleProofError.prototype);
     }
 }

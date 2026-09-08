@@ -6,7 +6,7 @@ import { Joint3D } from './joint3d';
 @script({ scriptName: 'FixedJoint3D' })
 export class FixedJoint3D extends Joint3D {
     protected override _createConstraint(ownerBody: Rigidbody3D): void {
-        if (!this._constraintManager || !this._connectedBody) return;
+        if (!this._constraintManager || !this._connectedBody || !this._world) return;
         const def: IFixedConstraintDef3D = {
             bodyIdA: ownerBody.bodyId,
             bodyIdB: this._connectedBody.bodyId,
@@ -14,7 +14,8 @@ export class FixedJoint3D extends Joint3D {
             localAnchorB: this._connectedAnchor,
             collideConnected: this._enableCollision,
         };
-        this._constraintId = this._constraintManager.createFixed(def);
+        // Use world API to ensure constraint descriptor is registered for the solver framework
+        this._constraintId = this._world.createFixedConstraint(def);
     }
     protected override _updateConstraint(): void {
         this._recreateConstraint();

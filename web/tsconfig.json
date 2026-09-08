@@ -16,6 +16,7 @@
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "skipLibCheck": true,
+    "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
       "@axrone/hash": [

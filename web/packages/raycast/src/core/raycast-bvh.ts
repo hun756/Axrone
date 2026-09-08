@@ -45,6 +45,9 @@ export class BoundingVolumeHierarchy {
     private _orderedPrimitives: BVHPrimitive[] = [];
     private _buildInfo: BVHBuildInfo = { nodeCount: 0, maxDepth: 0, leafCount: 0 };
     private _splitMethod: SplitMethod = SplitMethod.SAH;
+    private readonly _stackNode: Int32Array = new Int32Array(MAX_DEPTH);
+    private readonly _stackTMin: Float64Array = new Float64Array(MAX_DEPTH);
+    private readonly _stackTMax: Float64Array = new Float64Array(MAX_DEPTH);
 
     constructor(splitMethod: SplitMethod = SplitMethod.SAH) {
         this._splitMethod = splitMethod;
@@ -76,47 +79,61 @@ export class BoundingVolumeHierarchy {
             return false;
         }
 
-        const nodesToVisit: { nodeIndex: number; tMin: number; tMax: number }[] = [];
-        let toVisitOffset = 0;
+        let stackPtr = 0;
         let currentNodeIndex = 0;
         let foundHit = false;
 
-        const dirIsNeg = [invDirection.x < 0, invDirection.y < 0, invDirection.z < 0];
+        const dirIsNegX = invDirection.x < 0;
+        const dirIsNegY = invDirection.y < 0;
+        const dirIsNegZ = invDirection.z < 0;
+
+        let curTMin = 0;
+        let curTMax = maxDistance;
 
         while (true) {
             const node = this._nodes[currentNodeIndex];
 
-            const aabbHitResult = { tMin: 0, tMax: 0 };
-            if (
-                this._intersectAABB(origin, invDirection, node.bounds, maxDistance, aabbHitResult)
-            ) {
+            const aabbResult = { tMin: 0, tMax: 0 };
+            if (this._intersectAABB(origin, invDirection, node.bounds, maxDistance, aabbResult)) {
+                const tMin = aabbResult.tMin;
+                const tMax = aabbResult.tMax;
+
                 if (node.primCount > 0) {
                     for (let i = 0; i < node.primCount; i++) {
                         const primIndex = this._orderedPrimitives[node.firstPrimIndex + i].index;
-                        if (callback(primIndex, aabbHitResult.tMin, aabbHitResult.tMax)) {
+                        if (callback(primIndex, tMin, tMax)) {
                             foundHit = true;
                         }
                     }
 
-                    if (toVisitOffset === 0) break;
-                    const next = nodesToVisit[--toVisitOffset];
-                    currentNodeIndex = next.nodeIndex;
+                    if (stackPtr === 0) break;
+                    stackPtr--;
+                    currentNodeIndex = this._stackNode[stackPtr];
                 } else {
                     const axis = node.splitAxis;
-                    const firstChild = dirIsNeg[axis] ? node.right : node.left;
-                    const secondChild = dirIsNeg[axis] ? node.left : node.right;
+                    let firstChild: number;
+                    let secondChild: number;
+                    if (axis === 0) {
+                        firstChild = dirIsNegX ? node.right : node.left;
+                        secondChild = dirIsNegX ? node.left : node.right;
+                    } else if (axis === 1) {
+                        firstChild = dirIsNegY ? node.right : node.left;
+                        secondChild = dirIsNegY ? node.left : node.right;
+                    } else {
+                        firstChild = dirIsNegZ ? node.right : node.left;
+                        secondChild = dirIsNegZ ? node.left : node.right;
+                    }
 
-                    nodesToVisit[toVisitOffset++] = {
-                        nodeIndex: secondChild,
-                        tMin: aabbHitResult.tMin,
-                        tMax: aabbHitResult.tMax,
-                    };
+                    this._stackNode[stackPtr] = secondChild;
+                    this._stackTMin[stackPtr] = tMin;
+                    this._stackTMax[stackPtr] = tMax;
+                    stackPtr++;
                     currentNodeIndex = firstChild;
                 }
             } else {
-                if (toVisitOffset === 0) break;
-                const next = nodesToVisit[--toVisitOffset];
-                currentNodeIndex = next.nodeIndex;
+                if (stackPtr === 0) break;
+                stackPtr--;
+                currentNodeIndex = this._stackNode[stackPtr];
             }
         }
 

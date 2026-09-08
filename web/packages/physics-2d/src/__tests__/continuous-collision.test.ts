@@ -194,7 +194,9 @@ describe('ContinuousCollisionDetection', () => {
                 1.0
             );
 
-            expect(typeof result.hit).toBe('boolean');
+            // Shapes at same position but with rotation — conservative advancement returns no hit
+            // (rotation-only motion with zero velocity doesn't trigger collision in this implementation)
+            expect(result.hit).toBe(false);
         });
 
         it('returns no hit for separated trajectories', () => {
@@ -389,7 +391,8 @@ describe('Raycaster2D', () => {
 
             const result = Raycaster2D.raycastCircle(origin, direction, center, radius);
 
-            expect(typeof result.hit).toBe('boolean');
+            // Ray starts inside the circle — implementation returns false for inside-out rays
+            expect(result.hit).toBe(false);
         });
     });
 
@@ -518,7 +521,8 @@ describe('Raycaster2D', () => {
 
             const result = Raycaster2D.raycastAABB(origin, direction, aabb);
 
-            expect(typeof result.hit).toBe('boolean');
+            // Zero-length direction — implementation treats as degenerate case, returns true
+            expect(result.hit).toBe(true);
         });
 
         it('handles ray parallel to AABB edge', () => {
@@ -539,7 +543,8 @@ describe('Raycaster2D', () => {
 
             const result = Raycaster2D.raycastCircle(origin, direction, center, radius);
 
-            expect(typeof result.hit).toBe('boolean');
+            // Ray from (-1,0) toward (+1,0), circle r=1e-6 at origin → ray passes through
+            expect(result.hit).toBe(true);
         });
 
         it('handles very large circle', () => {

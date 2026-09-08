@@ -26,7 +26,7 @@ import {
     type AnimationCompiledStateMachine,
     type AnimationLayerRuntime,
 } from './state-machine';
-import { quatCopy } from './math';
+import { SoaQuatBuffer } from '@axrone/numeric';
 import type {
     AnimationClipDefinition,
     AnimationControllerClipActivity,
@@ -287,7 +287,7 @@ export class AnimationController<
 
     dispose(): void {
         this._rootMotionTranslation.fill(0);
-        quatCopy(this._rootMotionRotation, 0, [0, 0, 0, 1], 0);
+        SoaQuatBuffer.quatCopy(this._rootMotionRotation, 0, [0, 0, 0, 1], 0);
     }
 
     private _resolveLayerIndex(layerId: string | undefined): number {
@@ -302,7 +302,7 @@ export class AnimationController<
     private _composeCurrentFrame(updateRootMotion: boolean): void {
         this.currentFrame.reset(this.rig, this._restFrame.curves.values);
         this._rootMotionTranslation.fill(0);
-        quatCopy(this._rootMotionRotation, 0, [0, 0, 0, 1], 0);
+        SoaQuatBuffer.quatCopy(this._rootMotionRotation, 0, [0, 0, 0, 1], 0);
         const events = this._eventScratch;
         events.length = 0;
         const activeClips = this._activeClipScratch;
@@ -409,7 +409,7 @@ export class AnimationController<
                     }
                 }
                 if (this._rootMotionConfig.extractRotation !== false) {
-                    quatCopy(
+                    SoaQuatBuffer.quatCopy(
                         this.currentFrame.pose.rotations,
                         rotationOffset,
                         this.rig.restRotations,
@@ -423,7 +423,7 @@ export class AnimationController<
                 }
             }
             if (this._rootMotionConfig.extractRotation === false) {
-                quatCopy(this._rootMotionRotation, 0, [0, 0, 0, 1], 0);
+                SoaQuatBuffer.quatCopy(this._rootMotionRotation, 0, [0, 0, 0, 1], 0);
             }
         }
 

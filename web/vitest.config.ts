@@ -13,6 +13,7 @@ export default defineConfig({
             'examples/**/*.{test,spec}.{js,ts}',
             'packages/**/*.{test,spec}.{js,ts}',
             'packages/**/__tests__/**/*.{test,spec}.{js,ts}',
+            'tests/**/*.{test,spec}.{js,ts}',
         ],
         exclude: [
             // Compiled test copies under dist/ are stale build artifacts;

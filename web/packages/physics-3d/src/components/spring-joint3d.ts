@@ -72,6 +72,36 @@ export class SpringJoint3D extends Joint3D {
         this._recreateConstraint();
     }
 
+    /**
+     * Serialize spring-specific properties.
+     *
+     * Editor key mapping (components.rs `spring_joint_3d_properties`):
+     * - `minDistance`, `maxDistance` (metres, METRE convention ADR 0004)
+     * - `spring` (stiffness, number), `damper` (number)
+     * - `tolerance`, `autoConfigureDistance`
+     */
+    override serialize(): Record<string, any> {
+        return {
+            ...super.serialize(),
+            minDistance: this._minDistance,
+            maxDistance: this._maxDistance,
+            spring: this._spring,
+            damper: this._damper,
+            tolerance: this._tolerance,
+            autoConfigureDistance: this._autoConfigureDistance,
+        };
+    }
+
+    override deserialize(data: Record<string, any>): void {
+        super.deserialize(data);
+        if (data.minDistance !== undefined) this._minDistance = Math.max(0, data.minDistance);
+        if (data.maxDistance !== undefined) this._maxDistance = Math.max(0, data.maxDistance);
+        if (data.spring !== undefined) this._spring = Math.max(0, data.spring);
+        if (data.damper !== undefined) this._damper = Math.max(0, data.damper);
+        if (data.tolerance !== undefined) this._tolerance = Math.max(0, data.tolerance);
+        if (data.autoConfigureDistance !== undefined) this._autoConfigureDistance = !!data.autoConfigureDistance;
+    }
+
     private _configureDistance(): void {
         if (!this._connectedBody || !this.transform) return;
         const worldAnchor = this._getWorldAnchor();

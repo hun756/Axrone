@@ -1,4 +1,5 @@
 import { Vec3, Quat, clamp } from '@axrone/numeric';
+export { clamp } from '@axrone/numeric';
 import type { IQuatLike, IVec3Like } from '@axrone/numeric';
 import type {
     ContactId,
@@ -129,7 +130,7 @@ export interface IMutableContactManifold3D extends IContactManifold3D {
 }
 
 export interface IResolvedContactManifold3D extends IMutableContactManifold3D {
-    readonly pairKey: string;
+    readonly pairKey: number;
     readonly descriptorA: IShapeDescriptor3D;
     readonly descriptorB: IShapeDescriptor3D;
     readonly sensor: boolean;
@@ -142,15 +143,19 @@ export interface IShapePairCandidate3D {
     readonly descriptorB: IShapeDescriptor3D;
     readonly aabbA: IAabb3D;
     readonly aabbB: IAabb3D;
-    readonly pairKey: string;
+    readonly pairKey: number;
 }
 
 export const IDENTITY_ROTATION: IQuatLike = { x: 0, y: 0, z: 0, w: 1 };
+// Canonical 3D material defaults (P1-28): friction=0.4, restitution=0, density=1.
+// ShapeManager3D._createShape uses these same defaults — both paths (component
+// via Collider3D and raw via BodyManager3D/ShapeManager3D) produce identical results.
 export const DEFAULT_MATERIAL: IMaterial = {
     friction: 0.4 as unknown as Friction,
     restitution: 0 as unknown as Restitution,
     density: 1 as unknown as Density,
 };
+// Canonical 3D filter defaults (P1-28): maskBits=0xffff (all layers).
 export const DEFAULT_FILTER: ICollisionFilter3D = { categoryBits: 1, maskBits: 0xffff, groupIndex: 0 };
 
 export function componentMin(a: Readonly<IVec3Like>, b: Readonly<IVec3Like>): IVec3Like {
@@ -198,6 +203,13 @@ export function transformPoint3D(
     rotation: Readonly<IQuatLike>
 ): IVec3Like {
     return Vec3.add(Quat.rotateVector(rotation, point), position);
+}
+
+export function transformDirection3D(
+    direction: Readonly<IVec3Like>,
+    rotation: Readonly<IQuatLike>
+): IVec3Like {
+    return Quat.rotateVector(rotation, direction);
 }
 
 export function inverseTransformPoint3D(
