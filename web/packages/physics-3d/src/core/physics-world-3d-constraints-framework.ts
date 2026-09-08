@@ -212,6 +212,15 @@ export function commitSolverBodies3D(
  *
  * This avoids the acos branch cut at ±π and handles the wrap-around correctly.
  *
+ * **Approximation caveat:** `cosHalf` uses only `qRel.w`, not `|qRel.xyz|`.
+ * When the relative rotation contains off-axis components (i.e. rotation about
+ * axes other than the requested one), the returned angle is approximate — the
+ * w-component absorbs energy from off-axis rotation, slightly distorting the
+ * measured on-axis angle. This is acceptable in Hinge and Configurable joints
+ * because the angular-lock rows actively suppress off-axis rotation, keeping
+ * the approximation error small. If used in a context without lock rows, be
+ * aware that the angle may drift from the true on-axis projection.
+ *
  * @param qRel - Relative rotation quaternion (quatB * conj(quatA) or similar)
  * @param axis - World-space hinge axis (unit vector)
  * @returns Signed angle in [-π, π]
