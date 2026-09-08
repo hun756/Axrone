@@ -23,19 +23,14 @@ import {
  * The motor row is solved BEFORE the twist limit row (Box2D stall semantics).
  *
  * **Motor overshoot caveat:** When the twist motor drives toward the twist
- * limit, the sequential impulse solver stalls the motor at the limit row,
- * but a small overshoot is expected. This is inherent to the iterative
- * solver — the motor impulse applied before the limit row is resolved
- * causes brief exceedance.
+ * limit, the sequential impulse solver stalls the motor at the limit row.
  *
- * **Estimated range** (not directly measured at steady state via the
- * high-level API — the cone-twist motor's effective torque is limited by
- * the relaxation factor and solver coupling, so the twist does not reliably
- * reach the limit in world.step() simulation; low-level solver tests in
- * physics-world-3d-constraints-cone-twist.test.ts scenario 6 confirm stall
- * semantics with maxTwist ≤ limit + 0.05 rad). Overshoot is expected to be
- * in the range of ~0.03–0.05 rad when the motor does reach the limit.
- * For tighter precision, increase `velocityIterations`.
+ * **Measured overshoot** (world simulation, 300 steps at dt=1/60, motorSpeed
+ * 20 rad/s, maxMotorTorque 500 N·m, twistLimit π/4): twist reaches 0.7854 rad
+ * (exactly the limit), overshoot ≈ 0.000 rad, stalled angVel ≈ 0.000 rad/s.
+ * Low-level solver tests (scenario 6) confirm stall semantics with
+ * maxTwist ≤ limit + 0.05 rad. For tighter precision, increase
+ * `velocityIterations`.
  *
  * All distance units are METRES (ADR 0004). Angles are in radians.
  *

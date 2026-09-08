@@ -509,7 +509,7 @@ describe('ConeTwist motor — reaches twist limit in world simulation', () => {
 
         // Motor MUST reach near the twist limit (within 0.15 rad = ~8.6°)
         // Before fix: twist ≈ 0.667 rad (38°) — failed to reach 0.7854 (45°)
-        // After fix: twist should be ≥ 0.73 rad (within 0.06 of limit)
+        // After fix: twist = 0.7854 rad (measured, zero overshoot)
         expect(Math.abs(twist)).toBeGreaterThan(upper - 0.15);
         // Must not blow past the limit significantly (overshoot < 0.12 rad)
         expect(Math.abs(twist)).toBeLessThanOrEqual(upper + 0.12);
