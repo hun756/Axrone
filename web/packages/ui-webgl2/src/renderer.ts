@@ -24,6 +24,7 @@ import type {
     WebGL2UIRenderOptions,
 } from './types';
 import { createProgram } from './shader-source';
+import { diagWarn } from './diag';
 import { QUAD_VERTEX_SOURCE, QUAD_FRAGMENT_SOURCE, TEXT_VERTEX_SOURCE, TEXT_FRAGMENT_SOURCE, IMAGE_VERTEX_SOURCE, IMAGE_FRAGMENT_SOURCE } from './shaders';
 import { UNIT_QUAD, writeBlendedColor, writeStrokeColor } from './webgl-utils';
 import { resolveSliceSpans, sliceImageCommand, createSliceSpanTriple, ZERO_RADII } from './nine-slice';
@@ -179,6 +180,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     private activeImageTexture: WebGLTexture | null = null;
     private activeImageSampler: WebGLSampler | null = null;
     private activeTextPageKey: number | null = null;
+    private textDrawCalls = 0;
     private activeQuadClip: RectLike | null = null;
     private activeImageClip: RectLike | null = null;
     private activeTextClip: RectLike | null = null;
@@ -190,6 +192,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     private glTouchedGroups = 0;
     private currentGLTextureUnit = -1;
     private lastViewportHeight = 0;
+    private missingGlyphDataWarned = false;
 
     constructor(options: WebGL2UIRendererOptions<TPayload>) {
         this.gl = options.gl;
@@ -338,6 +341,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.activeImageClip = null;
         this.activeImageSampler = null;
         this.activeTextClip = null;
+        this.textDrawCalls = 0;
         this.activeImageTexture = null;
         this.activeTextPageKey = null;
 
@@ -361,10 +365,10 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                         this.flushImageBatch(frame.viewportHeight);
                         hasPendingImages = false;
                     }
-                    if (hasPendingText) {
-                        this.flushTextBatch(frame.viewportHeight);
-                        hasPendingText = false;
-                    }
+                    // NOTE: Do NOT flush text here — quads are backgrounds and
+                    // text must remain batched to draw AFTER all quads in the
+                    // same clip region. Flushing text before quads causes the
+                    // quads to overdraw the text (invisible labels on fills).
                     if (!sameClipRect(this.activeQuadClip, command.clip)) {
                         this.flushQuadBatch(frame.viewportHeight);
                         this.activeQuadClip = command.clip ?? null;
@@ -395,10 +399,8 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                         this.flushImageBatch(frame.viewportHeight);
                         hasPendingImages = false;
                     }
-                    if (hasPendingText) {
-                        this.flushTextBatch(frame.viewportHeight);
-                        hasPendingText = false;
-                    }
+                    // NOTE: Do NOT flush text here — strokes share the quad
+                    // pipeline and text must draw after them.
                     if (!this.activeQuadClip || !sameClipRect(this.activeQuadClip, command.clip)) {
                         this.flushQuadBatch(frame.viewportHeight);
                         this.activeQuadClip = command.clip ?? null;
@@ -429,6 +431,13 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             this.flushQuadBatch(frame.viewportHeight);
             this.flushImageBatch(frame.viewportHeight);
             this.flushTextBatch(frame.viewportHeight);
+            // [DIAG] Per-frame summary
+            diagWarn(
+                `[DIAG][FRAME] quads=${this.statisticsState.quadCount} images=${this.statisticsState.imageCount} ` +
+                `glyphs=${this.statisticsState.glyphCount} uploaded=${this.statisticsState.uploadedGlyphCount} ` +
+                `custom=${this.statisticsState.customCommandCount} drawCalls=${this.statisticsState.drawCalls} ` +
+                `textDrawCalls=${this.textDrawCalls} totalCmds=${frame.commands.length}`
+            );
         } finally {
             this.currentFrame = null;
             this.restoreGLState();
@@ -679,14 +688,39 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     }
 
     private pushTextCommand(command: TextRenderCommand, viewportHeight: number): void {
+        // [DIAG] Per-text-command summary
+        const glyphTotal = command.layout.glyphs.length;
+        let diagSkipped = 0;
+        let diagDrawn = 0;
+        const diagSkipReasons: Record<string, number> = {};
         for (const glyph of command.layout.glyphs) {
             if (!this.pushGlyph(command, glyph, viewportHeight)) {
-                this.flushTextBatch(viewportHeight);
-                if (!this.pushGlyph(command, glyph, viewportHeight)) {
-                    throw new Error('Glyph batch capacity exceeded.');
+                diagSkipped++;
+                // No atlas entry or no pixel data — silently skip (whitespace, etc.)
+                if (!glyph.atlasEntry || !glyph.atlasEntry.data) {
+                    continue;
                 }
+                const reason = (this.activeTextPageKey !== null && this.activeTextPageKey !== createGlyphPageKey(glyph.atlasEntry)) ? 'pageSwitch'
+                    : (this.activeTextClip !== null && !sameClipRect(this.activeTextClip, command.clip)) ? 'clipChange'
+                    : 'batchFull';
+                diagSkipReasons[reason] = (diagSkipReasons[reason] ?? 0) + 1;
+                this.flushTextBatch(viewportHeight);
+                // Retry only when the batch was the bottleneck (page/clip already flushed).
+                if (!this.pushGlyph(command, glyph, viewportHeight)) {
+                    // Still cannot write — glyph data exists but batch is full or
+                    // page/clip mismatch persists. Skip silently instead of throwing.
+                    diagSkipped++;
+                    diagDrawn--; // undo the increment below
+                }
+            } else {
+                diagDrawn++;
             }
         }
+        diagWarn(
+            `[DIAG][GLYPH] text widget=${command.widget} x=${command.x.toFixed(1)} y=${command.y.toFixed(1)} ` +
+            `glyphs: drawn=${diagDrawn} skipped=${diagSkipped} total=${glyphTotal}` +
+            (diagSkipped > 0 ? ` reasons=${JSON.stringify(diagSkipReasons)}` : '')
+        );
     }
 
     private pushImageCommand(command: ImageRenderCommand, frame: Readonly<UIFrame<TPayload>>): void {
@@ -878,7 +912,8 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     ): boolean {
         const entry = glyph.atlasEntry;
         if (!entry) {
-            return true;
+            // No atlas entry — glyph cannot be rendered.
+            return false;
         }
         const pageKey = createGlyphPageKey(entry);
         if (this.activeTextPageKey !== null && this.activeTextPageKey !== pageKey) {
@@ -889,7 +924,17 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         }
         const page = this.ensureGlyphPage(entry);
         if (page === null) {
-            return true;
+            // Atlas entry exists but GPU re-upload failed (data lost after eviction
+            // or entry created without pixel data). Return false so the caller
+            // correctly accounts for the skipped glyph.
+            if (!this.missingGlyphDataWarned) {
+                // eslint-disable-next-line no-console
+                console.warn('[WebGL2UIRenderer] Glyph atlas entry has no data — glyph will be skipped. This indicates a post-eviction re-upload failure.');
+                this.missingGlyphDataWarned = true;
+            }
+            // [DIAG]
+            diagWarn(`[DIAG][GLYPH] pushGlyph: page=null for widget=${command.widget} entry.data=${entry.data ? 'present' : 'NULL'} pageKey=${createGlyphPageKey(entry)}`);
+            return false;
         }
         const base = this.textCount * TEXT_FLOATS_PER_INSTANCE;
         if (base + TEXT_FLOATS_PER_INSTANCE > this.textBatch.length) {
@@ -930,6 +975,10 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             return;
         }
         this.applyClip(this.activeQuadClip, viewportHeight);
+        // [DIAG][FLUSH] quad pass
+        diagWarn(
+            `[DIAG][FLUSH] pass=quad count=${this.quadCount} clip=${JSON.stringify(this.activeQuadClip)} frame=${this.statisticsState.drawCalls}`
+        );
         this.captureGLState(GL_STATE_PROGRAM);
         this.glTouchedGroups |= GL_STATE_PROGRAM;
         this.gl.useProgram(this.quadProgram);
@@ -956,6 +1005,10 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             return;
         }
         this.applyClip(this.activeImageClip, viewportHeight);
+        // [DIAG][FLUSH] image pass
+        diagWarn(
+            `[DIAG][FLUSH] pass=image count=${this.imageCount} clip=${JSON.stringify(this.activeImageClip)} tex=${this.activeImageTexture ? 'bound' : 'null'}`
+        );
         this.captureGLState(GL_STATE_PROGRAM);
         this.glTouchedGroups |= GL_STATE_PROGRAM;
         this.gl.useProgram(this.imageProgram);
@@ -993,11 +1046,24 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             return;
         }
         this.applyClip(this.activeTextClip, viewportHeight);
+        // [DIAG][FLUSH] text pass
+        diagWarn(
+            `[DIAG][FLUSH] pass=text count=${this.textCount} clip=${JSON.stringify(this.activeTextClip)} pageKey=${this.activeTextPageKey}`
+        );
         this.captureGLState(GL_STATE_PROGRAM);
         this.glTouchedGroups |= GL_STATE_PROGRAM;
         this.gl.useProgram(this.textProgram);
         this.gl.uniform2f(this.textViewportUniform, this.currentFrame.viewportWidth, this.currentFrame.viewportHeight);
         this.bindUnit0Texture(page.texture);
+        // Unbind any sampler object left by the image batch on unit 0.
+        // WebGL2 sampler objects override the texture's own sampling state;
+        // if the image pass bound a sampler (e.g. with different wrap/filter
+        // modes), the text shader would sample the atlas through it and
+        // produce invisible or corrupted glyphs. Binding null restores the
+        // texture's own sampler parameters.
+        this.captureGLState(GL_STATE_UNIT0_SAMPLER);
+        this.glTouchedGroups |= GL_STATE_UNIT0_SAMPLER;
+        this.gl.bindSampler?.(0, null);
         this.gl.uniform1i(this.textAtlasUniform, 0);
         this.captureGLState(GL_STATE_VERTEX_ARRAY | GL_STATE_ARRAY_BUFFER);
         this.glTouchedGroups |= GL_STATE_VERTEX_ARRAY | GL_STATE_ARRAY_BUFFER;
@@ -1011,6 +1077,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.gl.drawArraysInstanced(this.gl.TRIANGLE_STRIP, 0, 4, this.textCount);
         this.gl.bindVertexArray(null);
         this.statisticsState.drawCalls += 1;
+        this.textDrawCalls += 1;
         this.textCount = 0;
         this.activeTextPageKey = null;
     }
@@ -1203,6 +1270,8 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         if (!page) {
             const texture = this.gl.createTexture();
             if (!texture) {
+                // [DIAG]
+                diagWarn('[DIAG][GLYPH] ensureGlyphPage: createTexture returned null');
                 return null;
             }
             this.bindUnit0Texture(texture);
@@ -1264,10 +1333,17 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 this.gl.UNSIGNED_BYTE,
                 packed
             );
+            // [DIAG] Check for GL errors after texSubImage2D
+            const glErr = this.gl.getError();
+            if (glErr !== 0) {
+                diagWarn(`[DIAG][GL ERROR] texSubImage2D after upload: glError=0x${glErr.toString(16)} page=${key} entry=${entry.width}x${entry.height} fmt=${entry.format}`);
+            }
             page.uploadedGlyphs.add(glyphKey);
             this.statisticsState.uploadedGlyphCount += 1;
-            // Drop CPU bitmap after GPU upload to prevent memory retention
-            entry.data = null;
+            // NOTE: We intentionally retain entry.data after GPU upload.
+            // Clearing it (entry.data = null) would save CPU memory but makes
+            // re-upload impossible after atlas page eviction, causing silent
+            // glyph loss on subsequent frames.
         }
         return page;
     }

@@ -6,6 +6,7 @@ import type {
     GlyphAtlasPageSnapshot,
 } from '../types';
 import { createAtlasEntryKey } from './source';
+import { diagWarn } from '../diag';
 
 export interface GlyphAtlasSource {
     readonly codePoint: number;
@@ -202,6 +203,12 @@ export class GlyphAtlas {
                 break;
             }
             const evicted = this.pages[lruIndex];
+            // [DIAG] Atlas page eviction — log which page and how many entries
+            diagWarn(
+                `[DIAG][ATLAS] evict page=${evicted.id} entries=${evicted.entries.size} ` +
+                `pages=${this.pages.length} maxPages=${this.maxPages} frame=${this.frameCounter} ` +
+                `lastAccess=${evicted.lastAccess}`
+            );
             // Remove all entries belonging to the evicted page from the global map.
             for (const [entryKey] of evicted.entries) {
                 this.entries.delete(entryKey);
