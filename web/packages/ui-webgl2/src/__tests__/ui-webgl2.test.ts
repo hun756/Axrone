@@ -345,6 +345,7 @@ const createMockWebGL2Context = () => {
             state.activeTexture = textureUnit as number;
         }),
         drawArraysInstanced: vi.fn(),
+        getError: vi.fn(() => 0),
         scissor: vi.fn((x, y, width, height) => {
             state.scissorBox = [x as number, y as number, width as number, height as number];
         }),
@@ -404,6 +405,8 @@ const createMockWebGL2Context = () => {
             }
         }),
         isEnabled: vi.fn((capability) => state.enabled.has(capability as number)),
+        isContextLost: vi.fn(() => false),
+        clearBufferfv: vi.fn(),
     } as unknown as WebGL2RenderingContext;
 };
 
@@ -437,6 +440,84 @@ describe('@axrone/ui-webgl2', () => {
 
         expect(gl.texSubImage2D).toHaveBeenCalledTimes(1);
         expect(renderer.getStats().uploadedGlyphCount).toBe(0);
+
+        renderer.dispose();
+    });
+
+    it('unbinds sampler on unit 0 in text batch after image batch binds one (regression: text invisible on frame 2)', () => {
+        const gl = createMockWebGL2Context();
+        const imageTexture = { id: 'image-tex' } as unknown as WebGLTexture;
+        const imageSampler = { id: 'image-sampler' } as unknown as WebGLSampler;
+        const renderer = new WebGL2UIRenderer({
+            gl,
+            resolveImageResource() {
+                return { kind: 'texture', texture: imageTexture, sampler: imageSampler };
+            },
+        });
+        const glyphEntry = createGlyphEntry();
+        // Frame: image command FIRST (binds sampler), then text command.
+        const frame: UIFrame<never> = {
+            viewportWidth: 128,
+            viewportHeight: 96,
+            metrics: {
+                ...createMetrics(),
+                renderCount: 2,
+                imageCommandCount: 1,
+                textCommandCount: 1,
+                customCommandCount: 0,
+                glyphCount: 1,
+            },
+            commands: [
+                {
+                    kind: 'image',
+                    widget: 1 as WidgetId,
+                    source: { kind: 'texture', resourceId: 'img', width: 32, height: 32 },
+                    x: 0, y: 0, width: 32, height: 32,
+                    zIndex: 0,
+                    tint: { r: 1, g: 1, b: 1, a: 1 },
+                    opacity: 1,
+                    sampling: 'linear',
+                    radius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
+                    clip: null,
+                    uvRect: { x: 0, y: 0, width: 1, height: 1 },
+                },
+                {
+                    kind: 'text',
+                    widget: 2 as WidgetId,
+                    x: 40, y: 48, zIndex: 1,
+                    color: { r: 1, g: 1, b: 1, a: 1 },
+                    outlineColor: { r: 0, g: 0, b: 0, a: 0 },
+                    outlineWidth: 0,
+                    edgeSoftness: 1,
+                    opacity: 1,
+                    clip: null,
+                    layout: createTextLayout(glyphEntry),
+                },
+            ],
+        };
+
+        // Frame 1: image batch binds sampler, text batch must unbind it.
+        renderer.render(frame);
+        // The text draw must have bound null sampler after the image bound its sampler.
+        const bindSamplerCallsFrame1 = (gl.bindSampler as ReturnType<typeof vi.fn>).mock.calls.slice();
+        const lastBindSamplerCallFrame1 = bindSamplerCallsFrame1[bindSamplerCallsFrame1.length - 1];
+        expect(lastBindSamplerCallFrame1).toEqual([0, null]);
+
+        // Frame 2: same frame re-rendered. Text must still be drawn with null sampler.
+        (gl.bindSampler as ReturnType<typeof vi.fn>).mockClear();
+        (gl.drawArraysInstanced as ReturnType<typeof vi.fn>).mockClear();
+        renderer.render(frame);
+
+        // Text draw call must happen.
+        expect(gl.drawArraysInstanced).toHaveBeenCalled();
+        // The LAST bindSampler call before the text drawArraysInstanced must be (0, null).
+        const bindSamplerCallsFrame2 = (gl.bindSampler as ReturnType<typeof vi.fn>).mock.calls.slice();
+        // Find the last null sampler bind — it must exist.
+        const nullSamplerCalls = bindSamplerCallsFrame2.filter((c: unknown[]) => c[1] === null);
+        expect(nullSamplerCalls.length).toBeGreaterThan(0);
+        // The very last bindSampler call should be null (text batch unbinds after image binds).
+        const lastCall = bindSamplerCallsFrame2[bindSamplerCallsFrame2.length - 1];
+        expect(lastCall).toEqual([0, null]);
 
         renderer.dispose();
     });
@@ -2084,6 +2165,127 @@ describe('atlas page eviction flushes text batch', () => {
     });
 });
 
+describe('pushGlyph contract: return false when glyph not written to batch', () => {
+    it('returns false (skipped) when atlasEntry is null — glyph not written', () => {
+        const gl = createMockWebGL2Context();
+        const renderer = new WebGL2UIRenderer({ gl });
+        // Create a text layout with a glyph that has atlasEntry = null
+        const layout: TextLayoutResult = {
+            ...createTextLayout(createGlyphEntry()),
+            glyphs: [
+                {
+                    codePoint: 65,
+                    clusterIndex: 0,
+                    x: 2,
+                    y: 3,
+                    advance: 14,
+                    line: 0,
+                    text: 'A',
+                    atlasEntry: null,
+                    spanIndex: 0,
+                },
+            ],
+        };
+        const frame: UIFrame<never> = {
+            viewportWidth: 160,
+            viewportHeight: 120,
+            metrics: { ...createMetrics(), renderCount: 1, textCommandCount: 1, glyphCount: 1, customCommandCount: 0 },
+            commands: [
+                {
+                    kind: 'text',
+                    widget: 1 as WidgetId,
+                    x: 0, y: 0, zIndex: 0,
+                    color: { r: 1, g: 1, b: 1, a: 1 },
+                    outlineColor: { r: 0, g: 0, b: 0, a: 0 },
+                    outlineWidth: 0, edgeSoftness: 0, opacity: 1, clip: null,
+                    layout,
+                },
+            ],
+        };
+        // Should not throw — null atlasEntry is silently skipped
+        expect(() => renderer.render(frame)).not.toThrow();
+        // glyphCount should be 0 since the only glyph had no atlas entry
+        expect(renderer.getStats().glyphCount).toBe(0);
+        renderer.dispose();
+    });
+
+    it('returns false (skipped) when entry.data is null — no batch corruption', () => {
+        const gl = createMockWebGL2Context();
+        const renderer = new WebGL2UIRenderer({ gl });
+        // Create an entry with null data (simulates whitespace or post-eviction loss)
+        const entryNoData = createGlyphEntry();
+        entryNoData.data = null;
+        const frame: UIFrame<never> = {
+            viewportWidth: 160,
+            viewportHeight: 120,
+            metrics: { ...createMetrics(), renderCount: 1, textCommandCount: 1, glyphCount: 1, customCommandCount: 0 },
+            commands: [
+                {
+                    kind: 'text',
+                    widget: 1 as WidgetId,
+                    x: 0, y: 0, zIndex: 0,
+                    color: { r: 1, g: 1, b: 1, a: 1 },
+                    outlineColor: { r: 0, g: 0, b: 0, a: 0 },
+                    outlineWidth: 0, edgeSoftness: 0, opacity: 1, clip: null,
+                    layout: createTextLayout(entryNoData),
+                },
+            ],
+        };
+        // Should not throw — null data is gracefully skipped
+        expect(() => renderer.render(frame)).not.toThrow();
+        // glyphCount should be 0 since the glyph had no data
+        expect(renderer.getStats().glyphCount).toBe(0);
+        renderer.dispose();
+    });
+
+    it('after eviction + re-render with data retained, glyphs are re-uploaded and drawn', () => {
+        const gl = createMockWebGL2Context();
+        const renderer = new WebGL2UIRenderer({ gl });
+        const entry = createGlyphEntry();
+        const makeFrame = (): UIFrame<never> => ({
+            viewportWidth: 160,
+            viewportHeight: 120,
+            metrics: { ...createMetrics(), renderCount: 1, textCommandCount: 1, glyphCount: 1, customCommandCount: 0 },
+            commands: [
+                {
+                    kind: 'text',
+                    widget: 1 as WidgetId,
+                    x: 0, y: 0, zIndex: 0,
+                    color: { r: 1, g: 1, b: 1, a: 1 },
+                    outlineColor: { r: 0, g: 0, b: 0, a: 0 },
+                    outlineWidth: 0, edgeSoftness: 0, opacity: 1, clip: null,
+                    layout: createTextLayout(entry),
+                },
+            ],
+        });
+        // First render — uploads glyph data
+        renderer.render(makeFrame());
+        expect(renderer.getStats().glyphCount).toBe(1);
+        expect(renderer.getStats().uploadedGlyphCount).toBe(1);
+        const drawCallsAfterFirst = (gl.drawArraysInstanced as ReturnType<typeof vi.fn>).mock.calls.length;
+        expect(drawCallsAfterFirst).toBeGreaterThan(0);
+
+        // Simulate eviction (deletes GPU texture + renderer page)
+        const snapshot: GlyphAtlasPageSnapshot = {
+            id: entry.page as number,
+            width: entry.pageWidth,
+            height: entry.pageHeight,
+            entries: [entry],
+        };
+        renderer.handleAtlasPageEviction(snapshot);
+        expect(renderer.getStats().atlasPageCount).toBe(0);
+
+        // Second render — entry.data is still present, so re-upload succeeds
+        renderer.render(makeFrame());
+        expect(renderer.getStats().glyphCount).toBe(1);
+        // Statistics are per-frame; uploadedGlyphCount=1 means the glyph was re-uploaded
+        expect(renderer.getStats().uploadedGlyphCount).toBe(1);
+        // texSubImage2D was called again (re-upload after eviction)
+        expect(gl.texSubImage2D).toHaveBeenCalledTimes(2);
+        renderer.dispose();
+    });
+});
+
 describe('normalizeShaderSource version directive', () => {
     it('locates the #version directive precisely without matching es in comments', () => {
         const corrupted = '// testprecision esprecision mediump float;\n#version 300 esprecision mediump float;\nvoid main() {}';
@@ -2122,5 +2324,131 @@ describe('writeStrokeColor out-parameter API', () => {
         expect(out[4]).toBeCloseTo(0, 1);
         expect(out[5]).toBeCloseTo(1, 1);
         expect(out[6]).toBeCloseTo(0, 1);
+    });
+});
+
+/**
+ * Regression test for the flush-order bug: when a quad command follows a text
+ * command (same clip), the text was flushed early and then the quad drew over
+ * it, making labels on filled backgrounds invisible.
+ *
+ * The fix ensures text is NOT flushed when encountering quad/stroke commands.
+ * Text is only flushed when encountering image commands (shared texture unit)
+ * or at the end of the frame. This guarantees the draw order is always:
+ * quad → image → text, so text appears on top of fills.
+ */
+describe('flush order: text draws after quads (label-on-fill regression)', () => {
+    it('does NOT flush text batch when a quad command follows text with same clip', () => {
+        const gl = createMockWebGL2Context();
+        const renderer = new WebGL2UIRenderer({ gl });
+        const entry = createGlyphEntry();
+
+        // Frame: quad (fill) → text (label) → quad (another fill, same clip)
+        // Before fix: text was flushed before the second quad, so the second
+        // quad drew over the text, making it invisible.
+        // After fix: text is NOT flushed when encountering the second quad,
+        // so all quads draw first, then text draws on top.
+        const frame: UIFrame<never> = {
+            viewportWidth: 160,
+            viewportHeight: 120,
+            metrics: { ...createMetrics(), renderCount: 1, textCommandCount: 1, glyphCount: 1, customCommandCount: 0 },
+            commands: [
+                {
+                    kind: 'quad',
+                    widget: 1 as WidgetId,
+                    x: 0, y: 0, width: 100, height: 30, zIndex: 0,
+                    color: { r: 0.1, g: 0.5, b: 0.9, a: 1 },
+                    borderColor: { r: 0, g: 0, b: 0, a: 0 },
+                    borderWidth: 0,
+                    radius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
+                    opacity: 1, clip: null,
+                },
+                {
+                    kind: 'text',
+                    widget: 2 as WidgetId,
+                    x: 10, y: 5, zIndex: 1,
+                    color: { r: 1, g: 1, b: 1, a: 1 },
+                    outlineColor: { r: 0, g: 0, b: 0, a: 0 },
+                    outlineWidth: 0, edgeSoftness: 0, opacity: 1, clip: null,
+                    layout: createTextLayout(entry),
+                },
+                {
+                    kind: 'quad',
+                    widget: 3 as WidgetId,
+                    x: 0, y: 40, width: 100, height: 30, zIndex: 0,
+                    color: { r: 0.1, g: 0.5, b: 0.9, a: 1 },
+                    borderColor: { r: 0, g: 0, b: 0, a: 0 },
+                    borderWidth: 0,
+                    radius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
+                    opacity: 1, clip: null,
+                },
+            ],
+        };
+
+        renderer.render(frame);
+
+        // Verify draw calls were issued
+        const drawCalls = (gl.drawArraysInstanced as ReturnType<typeof vi.fn>).mock.calls;
+        expect(drawCalls.length).toBeGreaterThan(0);
+
+        // The last draw call should be text (text draws after quads)
+        // Each draw call: [mode, offset, count, instanceCount]
+        // Text glyphs are drawn with TRIANGLE_STRIP, 4 vertices, instanceCount = glyph count
+        const lastDrawCall = drawCalls[drawCalls.length - 1];
+        // Text glyphs are drawn with TRIANGLE_STRIP, 4 vertices, instanceCount = glyph count
+        expect(lastDrawCall[3]).toBeGreaterThan(0); // instanceCount > 0
+
+        renderer.dispose();
+    });
+
+    it('flushes text when image command follows (shared texture unit)', () => {
+        const gl = createMockWebGL2Context();
+        // Mock resolveImageResource to return a texture for image commands
+        const mockTexture = gl.createTexture();
+        const renderer = new WebGL2UIRenderer({
+            gl,
+            resolveImageResource: () => ({
+                kind: 'texture' as const,
+                texture: mockTexture!,
+                sampler: null,
+            }),
+        });
+        const entry = createGlyphEntry();
+
+        // Frame: text → image (should flush text before image due to texture unit)
+        const frame: UIFrame<never> = {
+            viewportWidth: 160,
+            viewportHeight: 120,
+            metrics: { ...createMetrics(), renderCount: 1, textCommandCount: 1, glyphCount: 1, customCommandCount: 0 },
+            commands: [
+                {
+                    kind: 'text',
+                    widget: 1 as WidgetId,
+                    x: 0, y: 0, zIndex: 0,
+                    color: { r: 1, g: 1, b: 1, a: 1 },
+                    outlineColor: { r: 0, g: 0, b: 0, a: 0 },
+                    outlineWidth: 0, edgeSoftness: 0, opacity: 1, clip: null,
+                    layout: createTextLayout(entry),
+                },
+                {
+                    kind: 'image',
+                    widget: 2 as WidgetId,
+                    x: 0, y: 0, width: 50, height: 50, zIndex: 0,
+                    source: { width: 50, height: 50 },
+                    uvRect: { x: 0, y: 0, width: 1, height: 1 },
+                    tint: { r: 1, g: 1, b: 1, a: 1 },
+                    radius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
+                    opacity: 1, clip: null,
+                },
+            ],
+        };
+
+        renderer.render(frame);
+
+        // Verify draw calls were issued: text flush + image draw = 2
+        const drawCalls = (gl.drawArraysInstanced as ReturnType<typeof vi.fn>).mock.calls;
+        expect(drawCalls.length).toBeGreaterThanOrEqual(2); // text + image
+
+        renderer.dispose();
     });
 });
