@@ -3,6 +3,11 @@ import { vi, expect } from 'vitest';
 (global as any).expect = expect;
 (global as any).vi = vi;
 
+// Enable engine [DIAG] logs during vitest so tests that assert on
+// diagnostic output can observe them. The diagWarn() helper in each
+// package checks `globalThis.__AXRONE_DIAG__ === true`.
+(globalThis as any).__AXRONE_DIAG__ = true;
+
 if (!(global as any).WebGL2RenderingContext) {
     let nextWebGL2Constant = 0x2000;
     (global as any).WebGL2RenderingContext = new Proxy(class WebGL2RenderingContext {}, {
