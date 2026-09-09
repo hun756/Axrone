@@ -7,6 +7,7 @@ import {
     WidgetTreeIntegrityError,
 } from './errors';
 import { FontRegistry, ensureDefaultUIFont } from './font';
+import { diagWarn } from './diag';
 import { UILayoutEngine, compileLayoutInput } from './layout';
 import type { LayoutTreeAdapter } from './layout';
 import {
@@ -621,6 +622,7 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             this.structuralDirty = false;
             this.lastLayoutPasses = this.layoutEngine.getLayoutPassCount();
         }
+        this.fonts.tickAtlases();
         return this.renderFrame();
     }
 
@@ -653,6 +655,9 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             this.structuralDirty = false;
             this.lastLayoutPasses = this.layoutEngine.getLayoutPassCount();
         }
+        // Advance the LRU frame counter on all glyph atlases so eviction
+        // can correctly identify the least-recently-used page.
+        this.fonts.tickAtlases();
         // Render frame at reference resolution
         const frame = this.renderFrame();
         // Compute canvas scale from reference to actual viewport
@@ -1313,13 +1318,39 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         }
         const width = this.contentWidth[index];
         if (!this.textLayouts[index] || this.textLayoutWidths[index] !== width) {
-            this.textLayouts[index] = this.measureTextWithAutoSize(text, {
-                width,
-                height: this.contentHeight[index],
-            });
-            this.textLayoutWidths[index] = width;
+            // When the layout phase measured text with unbounded (Infinity)
+            // width, the cached layout reflects the natural single-line
+            // extent. If that extent fits within the actual contentWidth,
+            // reuse it directly — re-measuring with contentWidth as maxWidth
+            // can yield a different wrapping at the word boundary due to
+            // floating-point precision divergence between the two measurement
+            // contexts, producing a spurious 2-line result that overflows the
+            // single-line box height and overlaps the next row.
+            const layoutWidth = this.textLayoutWidths[index];
+            const layoutResult = this.textLayouts[index];
+            const layoutHadInfinity = layoutResult && (layoutWidth === undefined || !Number.isFinite(layoutWidth));
+            if (layoutHadInfinity && layoutResult.lines.length === 1 && layoutResult.width <= width + 1e-4) {
+                // Reuse the layout-phase result; tag the width so subsequent
+                // render calls for the same contentWidth skip re-measure.
+                this.textLayoutWidths[index] = width;
+            } else {
+                this.textLayouts[index] = this.measureTextWithAutoSize(text, {
+                    width,
+                    height: this.contentHeight[index],
+                });
+                this.textLayoutWidths[index] = width;
+            }
         }
-        return this.textLayouts[index];
+        const result = this.textLayouts[index];
+        if (result) {
+            // [DIAG] Text layout resolution summary
+            diagWarn(
+                `[DIAG][TEXT] idx=${index} value="${text.value.slice(0, 30)}" ` +
+                `contentW=${width.toFixed(1)} lines=${result.lines.length} glyphs=${result.glyphs.length} ` +
+                `measuredW=${result.width.toFixed(1)} measuredH=${result.height.toFixed(1)}`
+            );
+        }
+        return result;
     }
 
     private hitTest(x: number, y: number): WidgetId | null {
