@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-08T07:48:34.594Z",
+  "generatedAt": "2026-09-09T05:39:41.874Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -3996,6 +3996,7 @@
         "factorial",
         "hashSeedToState",
         "hex",
+        "logGamma",
         "rand",
         "validateInteger",
         "validateNonNegative",
@@ -8828,6 +8829,7 @@
         "TAB_VIEW_CONTROLLER_TYPE",
         "TOGGLE_SWITCH_CONTROLLER_TYPE",
         "TOOLTIP_HOST_CONTROLLER_TYPE",
+        "TRANSPARENT_COLOR",
         "TextLayoutEngine",
         "UIError",
         "UIErrorCode",
@@ -8845,6 +8847,7 @@
         "compileLayoutInput",
         "compileLength",
         "createAnchoredLayout",
+        "createAtlasEntryKey",
         "createBrowserDynamicFontRuntimeFactory",
         "createBrowserSystemFontFaceRuntime",
         "createDefaultUIFontAsset",
@@ -8866,6 +8869,7 @@
         "createUISlider",
         "createUIToggle",
         "createUIWidget",
+        "createUploadedGlyphKey",
         "createWidgetFactory",
         "defaultUIControlTheme",
         "defineWidget",
@@ -8888,6 +8892,8 @@
         "isWidgetDragging",
         "mapViewportPointToCanvas",
         "normalizeAnchor",
+        "normalizeColor",
+        "normalizeColorToTuple",
         "normalizeCorners",
         "normalizeEdges",
         "parseRichTextMarkup",
@@ -8904,6 +8910,8 @@
         "setEditBoxValue",
         "sliderController",
         "tabViewController",
+        "toByteArray",
+        "toUint8Array",
         "toggleSwitchController",
         "tooltipHostController",
         "validateUIAsset"
@@ -9288,12 +9296,16 @@
             "AXRONE_DEFAULT_UI_FONT_CSS_FAMILY",
             "AXRONE_DEFAULT_UI_FONT_FAMILY",
             "FontRegistry",
+            "createAtlasEntryKey",
             "createBrowserDynamicFontRuntimeFactory",
             "createBrowserSystemFontFaceRuntime",
             "createDefaultUIFontAsset",
             "createSystemFontFaceAsset",
+            "createUploadedGlyphKey",
             "ensureDefaultUIFont",
-            "ensureSystemUIFont"
+            "ensureSystemUIFont",
+            "toByteArray",
+            "toUint8Array"
           ],
           "typeExports": [
             "DynamicFontFaceAsset",
@@ -9417,7 +9429,11 @@
         },
         {
           "path": "@axrone/ui/types",
-          "exports": [],
+          "exports": [
+            "TRANSPARENT_COLOR",
+            "normalizeColor",
+            "normalizeColorToTuple"
+          ],
           "typeExports": [
             "AffineTransform2D",
             "AlignMode",
@@ -9592,6 +9608,7 @@
         "getUIHostRuntime",
         "intersectRayWithUIQuad",
         "orientQuadTowardCamera",
+        "resolveFramebufferSize",
         "resolveUIWidgetRef",
         "toColumnMajorMatrix"
       ],
@@ -9659,7 +9676,8 @@
           "path": "@axrone/ui-webgl2/scene",
           "exports": [
             "attachUIOverlayToScene",
-            "createSceneUIResourceResolver"
+            "createSceneUIResourceResolver",
+            "resolveFramebufferSize"
           ],
           "typeExports": [
             "SceneUIOverlayHandle",
@@ -9857,7 +9875,11 @@
         "tryCatchAsync",
         "tryDecode",
         "tryEncode",
-        "tryResolve"
+        "tryResolve",
+        "tuple",
+        "tuple2",
+        "tuple3",
+        "tuple4"
       ],
       "typeExports": [
         "AbstractConstructor",
@@ -10087,6 +10109,10 @@
       "package": "@axrone/scene-runtime"
     },
     {
+      "kind": "GearJoint2D",
+      "package": "@axrone/physics-2d"
+    },
+    {
       "kind": "Hierarchy",
       "package": "@axrone/scene-runtime"
     },
@@ -10121,6 +10147,14 @@
     {
       "kind": "MeshRenderer",
       "package": "@axrone/scene-runtime"
+    },
+    {
+      "kind": "MotorJoint2D",
+      "package": "@axrone/physics-2d"
+    },
+    {
+      "kind": "MouseJoint2D",
+      "package": "@axrone/physics-2d"
     },
     {
       "kind": "OrbitCameraController",
@@ -10165,6 +10199,10 @@
     {
       "kind": "Rigidbody3D",
       "package": "@axrone/physics-3d"
+    },
+    {
+      "kind": "RopeJoint2D",
+      "package": "@axrone/physics-2d"
     },
     {
       "kind": "SliderJoint2D",
@@ -10217,6 +10255,10 @@
     {
       "kind": "UIHost",
       "package": "@axrone/scene-runtime"
+    },
+    {
+      "kind": "WheelJoint2D",
+      "package": "@axrone/physics-2d"
     }
   ],
   "symbols": [
@@ -15023,7 +15065,7 @@
     {
       "name": "ButtonImageSourceInput",
       "package": "@axrone/ui",
-      "kind": "interface"
+      "kind": "type"
     },
     {
       "name": "ButtonTransitionMode",
@@ -15333,7 +15375,7 @@
     {
       "name": "CheckboxImageSourceInput",
       "package": "@axrone/ui",
-      "kind": "interface"
+      "kind": "type"
     },
     {
       "name": "CheckboxMarkStyle",
@@ -16661,6 +16703,11 @@
       "kind": "const"
     },
     {
+      "name": "createAtlasEntryKey",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "createAudioClipAssetReference",
       "package": "@axrone/audio",
       "kind": "const"
@@ -17929,6 +17976,11 @@
       "name": "createUnlitColorShaderDefinition",
       "package": "@axrone/scene-3d",
       "kind": "const"
+    },
+    {
+      "name": "createUploadedGlyphKey",
+      "package": "@axrone/ui",
+      "kind": "unknown"
     },
     {
       "name": "createUVSphere",
@@ -26531,6 +26583,11 @@
       "kind": "class"
     },
     {
+      "name": "logGamma",
+      "package": "@axrone/random",
+      "kind": "const"
+    },
+    {
       "name": "LruEntryView",
       "package": "@axrone/memory",
       "kind": "interface"
@@ -27288,6 +27345,16 @@
     {
       "name": "normalizeAudioSourceId",
       "package": "@axrone/audio",
+      "kind": "const"
+    },
+    {
+      "name": "normalizeColor",
+      "package": "@axrone/ui",
+      "kind": "const"
+    },
+    {
+      "name": "normalizeColorToTuple",
+      "package": "@axrone/ui",
       "kind": "const"
     },
     {
@@ -29233,7 +29300,7 @@
     {
       "name": "RectLike",
       "package": "@axrone/ui",
-      "kind": "interface"
+      "kind": "type"
     },
     {
       "name": "reflect",
@@ -30659,6 +30726,11 @@
       "name": "ResolvedWidgetStyle",
       "package": "@axrone/ui",
       "kind": "interface"
+    },
+    {
+      "name": "resolveFramebufferSize",
+      "package": "@axrone/ui-webgl2",
+      "kind": "const"
     },
     {
       "name": "resolveFromCatalog",
@@ -36861,6 +36933,11 @@
       "kind": "function"
     },
     {
+      "name": "toByteArray",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "toColumnMajorMatrix",
       "package": "@axrone/ui-webgl2",
       "kind": "function"
@@ -36961,6 +37038,11 @@
       "kind": "type"
     },
     {
+      "name": "toUint8Array",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "TrailAlignment",
       "package": "@axrone/scene-3d",
       "kind": "unknown"
@@ -37051,6 +37133,11 @@
       "kind": "type"
     },
     {
+      "name": "TRANSPARENT_COLOR",
+      "package": "@axrone/ui",
+      "kind": "const"
+    },
+    {
       "name": "traverseAsync",
       "package": "@axrone/memory",
       "kind": "const"
@@ -37119,6 +37206,26 @@
       "name": "tryResolve",
       "package": "@axrone/utility",
       "kind": "function"
+    },
+    {
+      "name": "tuple",
+      "package": "@axrone/utility",
+      "kind": "const"
+    },
+    {
+      "name": "tuple2",
+      "package": "@axrone/utility",
+      "kind": "const"
+    },
+    {
+      "name": "tuple3",
+      "package": "@axrone/utility",
+      "kind": "const"
+    },
+    {
+      "name": "tuple4",
+      "package": "@axrone/utility",
+      "kind": "const"
     },
     {
       "name": "tween",
@@ -37423,7 +37530,7 @@
     {
       "name": "UIErrorCode",
       "package": "@axrone/ui",
-      "kind": "unknown"
+      "kind": "const"
     },
     {
       "name": "UIFrame",
@@ -41204,6 +41311,12 @@
       "package": "@axrone/observer"
     },
     {
+      "name": "createAtlasEntryKey",
+      "kind": "const",
+      "code": "declare const createAtlasEntryKey: (codePoint: number, rasterSize?: number) => number;",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "createAudioClipAssetReference",
       "kind": "const",
       "code": "declare const createAudioClipAssetReference: (id: AssetId) => AssetReference<\"audioClip\">;",
@@ -42464,6 +42577,12 @@
       "package": "@axrone/scene-3d"
     },
     {
+      "name": "createUploadedGlyphKey",
+      "kind": "const",
+      "code": "declare const createUploadedGlyphKey: (entry: GlyphAtlasEntry) => number;",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "createUVSphere",
       "kind": "const",
       "code": "declare const createUVSphere: (config?: Partial<ISphereConfig>) => IGeometryBuffers;",
@@ -42526,7 +42645,7 @@
     {
       "name": "CryptoEngine",
       "kind": "class",
-      "code": "declare class CryptoEngine implements IRandomEngine { constructor(); next01: () => Float64; nextUint32: () => UInt32; nextUint64: () => UInt64; jumpAhead: (steps?: UInt64) => void; getState: () => IRandomState; setState: (state: IRandomState) => void; clone: () => IRandomEngine; … }",
+      "code": "declare class CryptoEngine implements IRandomEngine { constructor(); next01: () => Float64; nextUint32: () => UInt32; nextUint64: () => UInt64; jumpAhead: (steps?: UInt64) => void; getState: () => IRandomState; setState: (_state: IRandomState) => void; clone: () => IRandomEngine; … }",
       "package": "@axrone/random"
     },
     {
@@ -45884,6 +46003,12 @@
       "package": "@axrone/profiler"
     },
     {
+      "name": "logGamma",
+      "kind": "const",
+      "code": "declare const logGamma: (x: number) => number;",
+      "package": "@axrone/random"
+    },
+    {
       "name": "LruHandle",
       "kind": "class",
       "code": "declare class LruHandle<K = unknown, V = unknown> { constructor(id: number, owner: LruMap<K, V>); get id(): number; get owner(): LruMap<K, V>; get isValid(): boolean; invalidate(): void; equals(other: LruHandle<K, V>): boolean; … }",
@@ -46338,6 +46463,18 @@
       "kind": "const",
       "code": "declare const normalizeAudioSourceId: (value: string | AudioSourceId) => AudioSourceId;",
       "package": "@axrone/audio"
+    },
+    {
+      "name": "normalizeColor",
+      "kind": "const",
+      "code": "declare const normalizeColor: (input: ColorInput | undefined, fallback: ReadonlyColor) => ReadonlyColor;",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "normalizeColorToTuple",
+      "kind": "const",
+      "code": "declare const normalizeColorToTuple: (input: ColorInput | undefined, fallback: ReadonlyColor) => readonly [number, number, number, number];",
+      "package": "@axrone/ui"
     },
     {
       "name": "normalizeCorners",
@@ -47622,6 +47759,12 @@
       "kind": "const",
       "code": "declare const resolveDirectChildWeight: (parameters: AnimationParameterStore, parameter: string | undefined, weight: number) => number;",
       "package": "@axrone/animation"
+    },
+    {
+      "name": "resolveFramebufferSize",
+      "kind": "const",
+      "code": "declare const resolveFramebufferSize: (scene: SceneUIOverlayTarget) => { width: number; height: number; }",
+      "package": "@axrone/ui-webgl2"
     },
     {
       "name": "resolveFromCatalog",
@@ -49430,6 +49573,12 @@
       "package": "@axrone/hash"
     },
     {
+      "name": "toByteArray",
+      "kind": "const",
+      "code": "declare const toByteArray: (value: ArrayBuffer | ArrayBufferView) => Uint8Array;",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "toColumnMajorMatrix",
       "kind": "function",
       "code": "declare function toColumnMajorMatrix(source: RowMajorMatrixLike | ArrayLike<number>): Float32Array;",
@@ -49472,6 +49621,12 @@
       "package": "@axrone/asset-shader"
     },
     {
+      "name": "toUint8Array",
+      "kind": "const",
+      "code": "declare const toUint8Array: (value: ArrayBuffer | ArrayBufferView) => Uint8Array;",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "TrailModule",
       "kind": "class",
       "code": "declare class TrailModule extends BaseModule<'trail'> { constructor(configuration: TrailConfiguration); getTrails(): ReadonlyMap<ParticleId, Trail>; getTrailVertices(particleId: ParticleId): readonly TrailVertex[]; getActiveTrailCount(): number; getTotalVertexCount(): number; … }",
@@ -49494,6 +49649,12 @@
       "kind": "class",
       "code": "declare class TransformError extends ObserverError { constructor(originalError: unknown, transformFunction: Function, inputData: unknown); … }",
       "package": "@axrone/observer"
+    },
+    {
+      "name": "TRANSPARENT_COLOR",
+      "kind": "const",
+      "code": "declare const TRANSPARENT_COLOR: ReadonlyColor;",
+      "package": "@axrone/ui"
     },
     {
       "name": "traverseAsync",
@@ -49565,6 +49726,30 @@
       "name": "tryResolve",
       "kind": "function",
       "code": "declare function tryResolve<T>(singleton: ISingleton<T>): T | null;",
+      "package": "@axrone/utility"
+    },
+    {
+      "name": "tuple",
+      "kind": "const",
+      "code": "declare const tuple: <const T extends readonly unknown[]>(...elements: T) => T;",
+      "package": "@axrone/utility"
+    },
+    {
+      "name": "tuple2",
+      "kind": "const",
+      "code": "declare const tuple2: <const A, const B>(a: A, b: B) => readonly [A, B];",
+      "package": "@axrone/utility"
+    },
+    {
+      "name": "tuple3",
+      "kind": "const",
+      "code": "declare const tuple3: <const A, const B, const C>(a: A, b: B, c: C) => readonly [A, B, C];",
+      "package": "@axrone/utility"
+    },
+    {
+      "name": "tuple4",
+      "kind": "const",
+      "code": "declare const tuple4: <const A, const B, const C, const D>(a: A, b: B, c: C, d: D) => readonly [A, B, C, D];",
       "package": "@axrone/utility"
     },
     {
@@ -49640,6 +49825,12 @@
       "package": "@axrone/ui"
     },
     {
+      "name": "UIErrorCode",
+      "kind": "const",
+      "code": "declare const UIErrorCode: { readonly InvalidArgument: \"UI_INVALID_ARGUMENT\"; readonly WidgetNotFound: \"UI_WIDGET_NOT_FOUND\"; readonly TreeIntegrity: \"UI_TREE_INTEGRITY\"; readonly FontLoadFailed: \"UI_FONT_LOAD_FAILED\"; readonly FontFamilyNotFound: \"UI_FONT_FAMILY_NOT_FOUND\"; readonly FontFaceNotFou…",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "UIHost",
       "kind": "class",
       "code": "declare class UIHost extends Component { constructor(config?: UIHostConfig); get assetId(): string; set assetId(value: string); get renderMode(): UIHostRenderMode; set renderMode(value: UIHostRenderMode); get receiveInput(): boolean; set receiveInput(value: boolean); get worldWidth(): number; set w…",
@@ -49648,7 +49839,7 @@
     {
       "name": "UILayoutEngine",
       "kind": "class",
-      "code": "declare class UILayoutEngine<TNode> { compute(adapter: LayoutTreeAdapter<TNode>, viewport: Readonly<SizeLike>): void; getLayoutPassCount(): number; … }",
+      "code": "declare class UILayoutEngine<TNode> { compute(adapter: LayoutTreeAdapter<TNode>, viewport: Readonly<SizeLike>): void; computeSubtree(adapter: LayoutTreeAdapter<TNode>, viewport: Readonly<SizeLike>, node: TNode, x: number, y: number, availableWidth: number, availableHeight: number): void; getLayoutP…",
       "package": "@axrone/ui"
     },
     {
@@ -50020,7 +50211,7 @@
     {
       "name": "WebGL2UIRenderer",
       "kind": "class",
-      "code": "declare class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayload> { constructor(options: WebGL2UIRendererOptions<TPayload>); getStats(): WebGL2UIRendererStatistics; render(frame: Readonly<UIFrame<TPayload>>, options?: WebGL2UIRenderOptions): void; dispose(): void; … }",
+      "code": "declare class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayload> { constructor(options: WebGL2UIRendererOptions<TPayload>); getStats(): WebGL2UIRendererStatistics; handleAtlasPageEviction(snapshot: GlyphAtlasPageSnapshot): void; render(frame: Readonly<UIFrame<TPayload>>, options?…",
       "package": "@axrone/ui-webgl2"
     },
     {
