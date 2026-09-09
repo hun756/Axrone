@@ -24,7 +24,6 @@ import type {
     WebGL2UIRenderOptions,
 } from './types';
 import { createProgram } from './shader-source';
-import { diagWarn } from './diag';
 import { QUAD_VERTEX_SOURCE, QUAD_FRAGMENT_SOURCE, TEXT_VERTEX_SOURCE, TEXT_FRAGMENT_SOURCE, IMAGE_VERTEX_SOURCE, IMAGE_FRAGMENT_SOURCE } from './shaders';
 import { UNIT_QUAD, writeBlendedColor, writeStrokeColor } from './webgl-utils';
 import { resolveSliceSpans, sliceImageCommand, createSliceSpanTriple, ZERO_RADII } from './nine-slice';
@@ -431,13 +430,6 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             this.flushQuadBatch(frame.viewportHeight);
             this.flushImageBatch(frame.viewportHeight);
             this.flushTextBatch(frame.viewportHeight);
-            // [DIAG] Per-frame summary
-            diagWarn(
-                `[DIAG][FRAME] quads=${this.statisticsState.quadCount} images=${this.statisticsState.imageCount} ` +
-                `glyphs=${this.statisticsState.glyphCount} uploaded=${this.statisticsState.uploadedGlyphCount} ` +
-                `custom=${this.statisticsState.customCommandCount} drawCalls=${this.statisticsState.drawCalls} ` +
-                `textDrawCalls=${this.textDrawCalls} totalCmds=${frame.commands.length}`
-            );
         } finally {
             this.currentFrame = null;
             this.restoreGLState();
@@ -688,39 +680,20 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
     }
 
     private pushTextCommand(command: TextRenderCommand, viewportHeight: number): void {
-        // [DIAG] Per-text-command summary
-        const glyphTotal = command.layout.glyphs.length;
-        let diagSkipped = 0;
-        let diagDrawn = 0;
-        const diagSkipReasons: Record<string, number> = {};
         for (const glyph of command.layout.glyphs) {
             if (!this.pushGlyph(command, glyph, viewportHeight)) {
-                diagSkipped++;
                 // No atlas entry or no pixel data — silently skip (whitespace, etc.)
                 if (!glyph.atlasEntry || !glyph.atlasEntry.data) {
                     continue;
                 }
-                const reason = (this.activeTextPageKey !== null && this.activeTextPageKey !== createGlyphPageKey(glyph.atlasEntry)) ? 'pageSwitch'
-                    : (this.activeTextClip !== null && !sameClipRect(this.activeTextClip, command.clip)) ? 'clipChange'
-                    : 'batchFull';
-                diagSkipReasons[reason] = (diagSkipReasons[reason] ?? 0) + 1;
                 this.flushTextBatch(viewportHeight);
                 // Retry only when the batch was the bottleneck (page/clip already flushed).
                 if (!this.pushGlyph(command, glyph, viewportHeight)) {
                     // Still cannot write — glyph data exists but batch is full or
                     // page/clip mismatch persists. Skip silently instead of throwing.
-                    diagSkipped++;
-                    diagDrawn--; // undo the increment below
                 }
-            } else {
-                diagDrawn++;
             }
         }
-        diagWarn(
-            `[DIAG][GLYPH] text widget=${command.widget} x=${command.x.toFixed(1)} y=${command.y.toFixed(1)} ` +
-            `glyphs: drawn=${diagDrawn} skipped=${diagSkipped} total=${glyphTotal}` +
-            (diagSkipped > 0 ? ` reasons=${JSON.stringify(diagSkipReasons)}` : '')
-        );
     }
 
     private pushImageCommand(command: ImageRenderCommand, frame: Readonly<UIFrame<TPayload>>): void {
@@ -932,8 +905,6 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 console.warn('[WebGL2UIRenderer] Glyph atlas entry has no data — glyph will be skipped. This indicates a post-eviction re-upload failure.');
                 this.missingGlyphDataWarned = true;
             }
-            // [DIAG]
-            diagWarn(`[DIAG][GLYPH] pushGlyph: page=null for widget=${command.widget} entry.data=${entry.data ? 'present' : 'NULL'} pageKey=${createGlyphPageKey(entry)}`);
             return false;
         }
         const base = this.textCount * TEXT_FLOATS_PER_INSTANCE;
@@ -975,10 +946,6 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             return;
         }
         this.applyClip(this.activeQuadClip, viewportHeight);
-        // [DIAG][FLUSH] quad pass
-        diagWarn(
-            `[DIAG][FLUSH] pass=quad count=${this.quadCount} clip=${JSON.stringify(this.activeQuadClip)} frame=${this.statisticsState.drawCalls}`
-        );
         this.captureGLState(GL_STATE_PROGRAM);
         this.glTouchedGroups |= GL_STATE_PROGRAM;
         this.gl.useProgram(this.quadProgram);
@@ -1005,10 +972,6 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             return;
         }
         this.applyClip(this.activeImageClip, viewportHeight);
-        // [DIAG][FLUSH] image pass
-        diagWarn(
-            `[DIAG][FLUSH] pass=image count=${this.imageCount} clip=${JSON.stringify(this.activeImageClip)} tex=${this.activeImageTexture ? 'bound' : 'null'}`
-        );
         this.captureGLState(GL_STATE_PROGRAM);
         this.glTouchedGroups |= GL_STATE_PROGRAM;
         this.gl.useProgram(this.imageProgram);
@@ -1046,10 +1009,6 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             return;
         }
         this.applyClip(this.activeTextClip, viewportHeight);
-        // [DIAG][FLUSH] text pass
-        diagWarn(
-            `[DIAG][FLUSH] pass=text count=${this.textCount} clip=${JSON.stringify(this.activeTextClip)} pageKey=${this.activeTextPageKey}`
-        );
         this.captureGLState(GL_STATE_PROGRAM);
         this.glTouchedGroups |= GL_STATE_PROGRAM;
         this.gl.useProgram(this.textProgram);
@@ -1270,8 +1229,6 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         if (!page) {
             const texture = this.gl.createTexture();
             if (!texture) {
-                // [DIAG]
-                diagWarn('[DIAG][GLYPH] ensureGlyphPage: createTexture returned null');
                 return null;
             }
             this.bindUnit0Texture(texture);
@@ -1333,11 +1290,6 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 this.gl.UNSIGNED_BYTE,
                 packed
             );
-            // [DIAG] Check for GL errors after texSubImage2D
-            const glErr = this.gl.getError();
-            if (glErr !== 0) {
-                diagWarn(`[DIAG][GL ERROR] texSubImage2D after upload: glError=0x${glErr.toString(16)} page=${key} entry=${entry.width}x${entry.height} fmt=${entry.format}`);
-            }
             page.uploadedGlyphs.add(glyphKey);
             this.statisticsState.uploadedGlyphCount += 1;
             // NOTE: We intentionally retain entry.data after GPU upload.

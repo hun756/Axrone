@@ -7,7 +7,6 @@ import {
     WidgetTreeIntegrityError,
 } from './errors';
 import { FontRegistry, ensureDefaultUIFont } from './font';
-import { diagWarn } from './diag';
 import { UILayoutEngine, compileLayoutInput } from './layout';
 import type { LayoutTreeAdapter } from './layout';
 import {
@@ -1342,14 +1341,6 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             }
         }
         const result = this.textLayouts[index];
-        if (result) {
-            // [DIAG] Text layout resolution summary
-            diagWarn(
-                `[DIAG][TEXT] idx=${index} value="${text.value.slice(0, 30)}" ` +
-                `contentW=${width.toFixed(1)} lines=${result.lines.length} glyphs=${result.glyphs.length} ` +
-                `measuredW=${result.width.toFixed(1)} measuredH=${result.height.toFixed(1)}`
-            );
-        }
         return result;
     }
 
