@@ -768,7 +768,7 @@ public static unsafe partial class SimdFloat32
                 Vector256<uint> sign = (bits & signMask) >> 16;
                 Vector256<uint> exp = (bits & expMask) - Vector256.Create(0x38000000u);
                 Vector256<uint> mant = (bits & mantMask) >> 13;
-                Vector256.ConditionalSelect(Vector256.LessThan((Vector256<int>)(bits & expMask), Vector256.Create(0x38000000u)), sign, sign | exp | mant).AsUInt16().StoreUnsafe(ref dst, i);
+                Vector256.ConditionalSelect(Vector256.LessThan((bits & expMask).AsInt32(), Vector256.Create(0x38000000)).AsUInt32(), sign, sign | exp | mant).AsUInt16().StoreUnsafe(ref dst, i);
             }
         }
         for (; i < length; ++i)
