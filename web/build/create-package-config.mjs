@@ -17,12 +17,23 @@ const builtinModuleIds = new Set([
     ...builtinModules.map((moduleName) => `node:${moduleName}`),
 ]);
 
-const createExternalMatcher = (packageJson, additionalExternalIds) => {
+const createExternalMatcher = (packageDir, packageJson, additionalExternalIds) => {
     const packageIds = new Set([
         ...Object.keys(packageJson.dependencies ?? {}),
         ...Object.keys(packageJson.peerDependencies ?? {}),
         ...additionalExternalIds,
     ]);
+
+    // The dts pass resolves bare specifiers of sibling packages (via tsconfig
+    // paths or package exports) to absolute file paths, which bypasses the
+    // bare-specifier check below and made rollup-plugin-dts inline sibling
+    // package type declarations (Actor/World/Vec3 copies in every consumer
+    // dist). Resolved files outside this package's directory therefore must
+    // stay external too.
+    const isInsideOwnPackage = (resolvedId) => {
+        const relative = path.relative(packageDir, resolvedId);
+        return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+    };
 
     return (id) => {
         if (builtinModuleIds.has(id)) {
@@ -35,8 +46,203 @@ const createExternalMatcher = (packageJson, additionalExternalIds) => {
             }
         }
 
+        if (path.isAbsolute(id)) {
+            return !isInsideOwnPackage(id);
+        }
+
         return false;
     };
+};
+
+const EXPORT_CLAUSE_PATTERN = /export\s+(?:type\s+)?\{([^}]*)\}\s*(?:from\s*['"]([^'"]+)['"])?/g;
+const EXPORT_STAR_PATTERN = /export\s+(?:type\s+)?\*\s+from\s*['"]([^'"]+)['"]/g;
+const IMPORT_CLAUSE_PATTERN = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;
+const EXPORT_DECLARATION_PATTERN =
+    /export\s+(?:declare\s+)?(?:default\s+)?(?:abstract\s+)?(?:async\s+)?(?:class|function\s*\*?|const|let|var|interface|enum|type)\s+([A-Za-z_$][\w$]*)/g;
+
+const resolveRelativeModule = (specifier, importerFile) => {
+    if (!specifier.startsWith('.')) {
+        return null;
+    }
+    const base = path.resolve(path.dirname(importerFile), specifier);
+    const candidates = [base, `${base}.ts`, `${base}.tsx`, path.join(base, 'index.ts')];
+    for (const candidate of candidates) {
+        try {
+            if (fs.statSync(candidate).isFile()) {
+                return candidate;
+            }
+        } catch {
+            // Probe the next candidate.
+        }
+    }
+    return null;
+};
+
+// Entry names may contain slashes ('core/index' -> dist/core/index.d.ts), so
+// cross-entry references must be spelled relative to the referencing entry's
+// own dist location, not blindly with a './' prefix.
+const entryDistSpecifier = (fromEntryName, toEntryName) => {
+    const relative = path.posix.relative(path.posix.dirname(fromEntryName), toEntryName);
+    return relative.startsWith('../') ? relative : `./${relative}`;
+};
+
+const parseClauseNames = (clause) =>
+    clause
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0)
+        .map((part) => part.replace(/^type\s+/, ''))
+        .map((part) =>
+            part.includes(' as ') ? part.slice(part.lastIndexOf(' as ') + 4).trim() : part
+        )
+        .filter((name) => /^[A-Za-z_$][\w$]*$/.test(name));
+
+// Graph walk for one entry: which internal modules it reaches and which names
+// its files pull from each of them (import and re-export clauses). Never
+// descends into another entry of the same package — declarations behind
+// another entry are not inlined into this bundle.
+const collectEntryGraph = (entryFile, entryAbsolutePaths) => {
+    const modules = new Set();
+    const namesByModule = new Map();
+    const visited = new Set();
+
+    const recordNames = (modulePath, names) => {
+        if (names.length === 0) {
+            return;
+        }
+        let bucket = namesByModule.get(modulePath);
+        if (!bucket) {
+            bucket = new Set();
+            namesByModule.set(modulePath, bucket);
+        }
+        for (const name of names) {
+            bucket.add(name);
+        }
+    };
+
+    const visit = (file) => {
+        if (visited.has(file)) {
+            return;
+        }
+        visited.add(file);
+        let source;
+        try {
+            source = fs.readFileSync(file, 'utf8');
+        } catch {
+            return;
+        }
+
+        for (const match of source.matchAll(EXPORT_CLAUSE_PATTERN)) {
+            if (!match[2]) {
+                continue;
+            }
+            const target = resolveRelativeModule(match[2], file);
+            if (!target) {
+                continue;
+            }
+            modules.add(target);
+            recordNames(target, parseClauseNames(match[1]));
+            if (target !== entryFile && entryAbsolutePaths.has(target)) {
+                continue;
+            }
+            visit(target);
+        }
+        for (const match of source.matchAll(IMPORT_CLAUSE_PATTERN)) {
+            const target = resolveRelativeModule(match[2], file);
+            if (!target) {
+                continue;
+            }
+            modules.add(target);
+            recordNames(target, parseClauseNames(match[1]));
+        }
+        for (const match of source.matchAll(EXPORT_STAR_PATTERN)) {
+            const target = resolveRelativeModule(match[1], file);
+            if (!target) {
+                continue;
+            }
+            modules.add(target);
+            if (target !== entryFile && entryAbsolutePaths.has(target)) {
+                continue;
+            }
+            visit(target);
+        }
+    };
+
+    visit(entryFile);
+    return { modules, namesByModule };
+};
+
+// Export-chain walk: the names an entry actually exports, following only
+// export statements (imports never contribute to a surface). With
+// stopAtEntries the walk yields exactly the names inlined into this bundle's
+// dist d.ts (used for the barrel check of rule 2); otherwise it follows
+// re-export chains across entry files too (owner coverage for rule 3).
+//
+// Named re-export clauses filter the walk: `export { A } from './x'` only
+// exposes A from x's surface, never x's other declarations. Star re-exports
+// pass every name through.
+const collectEntryExportSurface = (entryFile, entryAbsolutePaths, stopAtEntries) => {
+    const surfaceNames = new Set();
+    const visited = new Set();
+
+    const visit = (file, allowedNames) => {
+        const filterKey = allowedNames ? [...allowedNames].sort().join('|') : '*';
+        const visitedKey = `${file}::${filterKey}`;
+        if (visited.has(visitedKey)) {
+            return;
+        }
+        visited.add(visitedKey);
+        let source;
+        try {
+            source = fs.readFileSync(file, 'utf8');
+        } catch {
+            return;
+        }
+
+        for (const match of source.matchAll(EXPORT_DECLARATION_PATTERN)) {
+            if (!allowedNames || allowedNames.has(match[1])) {
+                surfaceNames.add(match[1]);
+            }
+        }
+        for (const match of source.matchAll(EXPORT_CLAUSE_PATTERN)) {
+            const names = parseClauseNames(match[1]);
+            const effective = allowedNames
+                ? names.filter((name) => allowedNames.has(name))
+                : names;
+            for (const name of effective) {
+                surfaceNames.add(name);
+            }
+            if (!match[2] || effective.length === 0) {
+                continue;
+            }
+            const target = resolveRelativeModule(match[2], file);
+            if (!target) {
+                continue;
+            }
+            if (stopAtEntries && target !== entryFile && entryAbsolutePaths.has(target)) {
+                continue;
+            }
+            // A named clause always restricts what its target contributes,
+            // even when this file itself was reached without a filter.
+            visit(target, new Set(effective));
+        }
+        for (const match of source.matchAll(EXPORT_STAR_PATTERN)) {
+            if (allowedNames && allowedNames.size === 0) {
+                continue;
+            }
+            const target = resolveRelativeModule(match[1], file);
+            if (!target) {
+                continue;
+            }
+            if (stopAtEntries && target !== entryFile && entryAbsolutePaths.has(target)) {
+                continue;
+            }
+            visit(target, allowedNames);
+        }
+    };
+
+    visit(entryFile, null);
+    return { surfaceNames };
 };
 
 export const createMultiEntryConfig = ({
@@ -50,12 +256,75 @@ export const createMultiEntryConfig = ({
         ? path.join(packageDir, 'tsconfig.build.json')
         : defaultTsconfigPath;
     const distDir = path.join(packageDir, 'dist');
-    const isExternal = createExternalMatcher(packageJson, external);
+    const isExternal = createExternalMatcher(packageDir, packageJson, external);
 
     const jsInput = {};
     for (const [name, relativePath] of Object.entries(entries)) {
         jsInput[name] = path.join(packageDir, relativePath);
     }
+
+    const entryNamesByRelativePath = new Map(
+        Object.entries(entries).map(([name, relativePath]) => [
+            relativePath.replace(/\\/g, '/'),
+            name,
+        ])
+    );
+
+    // --- Shared-declaration routing for the dts pass ------------------------
+    // Each entry is flattened into its own dist/<name>.d.ts bundle. When two
+    // entries re-export the same internal module, each bundle inlines its own
+    // copy of the declarations and consumers star-exporting both surfaces see
+    // two distinct declarations of one name (TS2308). The resolveId rules
+    // below keep a single canonical copy per name:
+    //   1. relative import that IS another entry   -> './<entry>' specifier
+    //   2. clause whose names the barrel exports   -> package root specifier
+    //   3. module shared with an earlier non-index entry exporting the same
+    //      names                                    -> that entry's specifier
+    // The canonical surface keeps the inlined copy; everyone else references
+    // it. Runtime output is untouched (dts pass only).
+    const entryAbsolutePaths = new Set(
+        Object.values(entries).map((entryPath) => path.join(packageDir, entryPath))
+    );
+    const entryGraphs = new Map(
+        Object.entries(entries).map(([name, relativePath]) => [
+            name,
+            collectEntryGraph(path.join(packageDir, relativePath), entryAbsolutePaths),
+        ])
+    );
+    const entryExportSurfaces = new Map(
+        Object.entries(entries).map(([name, relativePath]) => [
+            name,
+            collectEntryExportSurface(
+                path.join(packageDir, relativePath),
+                entryAbsolutePaths,
+                false
+            ),
+        ])
+    );
+    const barrelInlinedSurface = entries.index
+        ? collectEntryExportSurface(
+              path.join(packageDir, entries.index),
+              entryAbsolutePaths,
+              true
+          )
+        : null;
+    const packageRootSpecifier = packageJson.name;
+
+    const findCanonicalOwnerEntry = (modulePath, names) => {
+        for (const [entryName, surface] of entryExportSurfaces) {
+            if (entryName === 'index') {
+                continue;
+            }
+            if (!entryGraphs.get(entryName).modules.has(modulePath)) {
+                continue;
+            }
+            if (![...names].every((clauseName) => surface.surfaceNames.has(clauseName))) {
+                continue;
+            }
+            return entryName;
+        }
+        return null;
+    };
 
     return [
         {
@@ -97,8 +366,101 @@ export const createMultiEntryConfig = ({
             output: {
                 file: path.join(distDir, `${name}.d.ts`),
                 format: 'es',
+                // Backstop: if a resolved file outside this package was
+                // externalized (cross-package relative import), emit a valid
+                // package specifier instead of an absolute build-machine path.
+                paths: (id) => {
+                    if (!path.isAbsolute(id)) {
+                        return id;
+                    }
+
+                    const relative = path.relative(workspaceDir, id).replace(/\\/g, '/');
+                    const packageDirName = relative.match(/^packages\/([^/]+)\//)?.[1];
+                    return packageDirName ? `@axrone/${packageDirName}` : id;
+                },
             },
             plugins: [
+                {
+                    name: 'axrone-dts-external-specifiers',
+                    resolveId: {
+                        order: 'pre',
+                        handler: async function (source, importer) {
+                            // Keep every external import as its original bare
+                            // specifier: bundling only this package's own
+                            // sources prevents sibling package type
+                            // declarations from being inlined into dist d.ts
+                            // (nominal duplicates like Actor/World/Vec3).
+                            if (
+                                builtinModuleIds.has(source) ||
+                                (!path.isAbsolute(source) && !source.startsWith('.'))
+                            ) {
+                                return { id: source, external: true };
+                            }
+
+                            // Imports that resolve to another published entry
+                            // of this package are re-exported via that entry's
+                            // dist specifier instead of being inlined, so the
+                            // barrel and the subpath entry expose the SAME
+                            // declarations (no TS2308 ambiguity for consumers
+                            // star-exporting both).
+                            if (!path.isAbsolute(source) && source.startsWith('.')) {
+                                const resolved = await this.resolve(source, importer, {
+                                    skipSelf: true,
+                                });
+                                const resolvedId =
+                                    typeof resolved === 'string' ? resolved : resolved?.id;
+                                if (resolvedId) {
+                                    const relative = path
+                                        .relative(packageDir, resolvedId)
+                                        .replace(/\\/g, '/');
+                                    const entryName = entryNamesByRelativePath.get(relative);
+                                    if (entryName) {
+                                        return {
+                                            id: entryDistSpecifier(name, entryName),
+                                            external: true,
+                                        };
+                                    }
+
+                                    // The barrel itself is the canonical inlined
+                                    // copy; only subpath entries route shared
+                                    // declarations elsewhere.
+                                    if (name !== 'index') {
+                                        const clauseNames = entryGraphs
+                                            .get(name)
+                                            ?.namesByModule.get(resolvedId);
+                                        if (clauseNames && clauseNames.size > 0) {
+                                            if (
+                                                barrelInlinedSurface &&
+                                                [...clauseNames].every((clauseName) =>
+                                                    barrelInlinedSurface.surfaceNames.has(
+                                                        clauseName
+                                                    )
+                                                )
+                                            ) {
+                                                return {
+                                                    id: packageRootSpecifier,
+                                                    external: true,
+                                                };
+                                            }
+                                            const ownerEntry = findCanonicalOwnerEntry(
+                                                resolvedId,
+                                                clauseNames
+                                            );
+                                            if (ownerEntry && ownerEntry !== name) {
+                                                return {
+                                                    id: entryDistSpecifier(name, ownerEntry),
+                                                    external: true,
+                                                };
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            return null;
+                        },
+                    },
+                },
                 dts({
                     tsconfig: packageTsconfigPath,
                 }),
