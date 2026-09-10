@@ -1,5 +1,6 @@
 namespace Axrone.Collections;
 
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
@@ -33,9 +34,23 @@ public readonly record struct BufferCapacity : IEquatable<BufferCapacity>, IComp
     public static implicit operator int(BufferCapacity capacity) => (int)capacity.Value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public uint ToUInt32() => Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int ToInt32() => (int)Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static BufferCapacity FromUInt32(uint value) => new(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int CompareTo(BufferCapacity other) => Value.CompareTo(other.Value);
 
-    public override string ToString() => Value.ToString();
+    public static bool operator <(BufferCapacity left, BufferCapacity right) => left.Value < right.Value;
+    public static bool operator <=(BufferCapacity left, BufferCapacity right) => left.Value <= right.Value;
+    public static bool operator >(BufferCapacity left, BufferCapacity right) => left.Value > right.Value;
+    public static bool operator >=(BufferCapacity left, BufferCapacity right) => left.Value >= right.Value;
+
+    public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
 }
 
 /// <summary>
@@ -63,5 +78,16 @@ public readonly record struct SequenceNumber(nuint Value) : IComparable<Sequence
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator SequenceNumber(nuint value) => new(value);
 
-    public override string ToString() => Value.ToString();
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public nuint ToUIntPtr() => Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static SequenceNumber FromUIntPtr(nuint value) => new(value);
+
+    public static bool operator <(SequenceNumber left, SequenceNumber right) => left.Value < right.Value;
+    public static bool operator <=(SequenceNumber left, SequenceNumber right) => left.Value <= right.Value;
+    public static bool operator >(SequenceNumber left, SequenceNumber right) => left.Value > right.Value;
+    public static bool operator >=(SequenceNumber left, SequenceNumber right) => left.Value >= right.Value;
+
+    public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
 }
