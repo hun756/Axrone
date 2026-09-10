@@ -31,6 +31,8 @@
     <NoWarn>$(NoWarn);CA1815</NoWarn>
     <!-- CS8601: Null reference assignment — ring buffer dequeue pattern uses MaybeNull -->
     <NoWarn>$(NoWarn);CS8601</NoWarn>
+    <!-- CA1711: Type name ends with Queue — intentional for VyukovBoundedBatchQueue -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
