@@ -1287,4 +1287,31 @@ public static unsafe class SimdInt32
         }
         for (; i < length; ++i) Unsafe.Add(ref dRef, (nint)i) = (Unsafe.Add(ref aRef, (nint)i) * Unsafe.Add(ref bRef, (nint)i)) + Unsafe.Add(ref cRef, (nint)i);
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void BitwiseNot(ReadOnlySpan<int> source, Span<int> destination)
+    {
+        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        nuint length = (nuint)source.Length;
+        if (length == 0) return;
+        ref int src = ref MemoryMarshal.GetReference(source);
+        ref int dst = ref MemoryMarshal.GetReference(destination);
+        nuint i = 0;
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count)
+        {
+            nuint step = (nuint)Vector512<int>.Count, limit = length - step + 1;
+            for (; i < limit; i += step) (~Vector512.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
+        }
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count)
+        {
+            nuint step = (nuint)Vector256<int>.Count, limit = length - step + 1;
+            for (; i < limit; i += step) (~Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
+        }
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count)
+        {
+            nuint step = (nuint)Vector128<int>.Count, limit = length - step + 1;
+            for (; i < limit; i += step) (~Vector128.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
+        }
+        for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = ~Unsafe.Add(ref src, (nint)i);
+    }
 }
