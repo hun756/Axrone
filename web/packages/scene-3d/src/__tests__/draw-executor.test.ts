@@ -46,6 +46,7 @@ describe('SceneDrawExecutor', () => {
         const renderStateApplier = { apply: vi.fn() };
         const frameUniformBinder = { apply: vi.fn() };
         const lightingUniformBinder = { apply: vi.fn() };
+        const fogUniformBinder = { apply: vi.fn() };
         const skinningUniformBinder = { apply: vi.fn() };
         const materialTextureBinder = {
             bind: vi.fn(),
@@ -80,6 +81,7 @@ describe('SceneDrawExecutor', () => {
             renderStateApplier,
             frameUniformBinder,
             lightingUniformBinder,
+            fogUniformBinder,
             skinningUniformBinder,
             materialTextureBinder,
             uniformWriter,
@@ -113,6 +115,7 @@ describe('SceneDrawExecutor', () => {
                     position: new Vec3(0, 0, 5),
                 },
                 lighting: {} as any,
+                fog: {} as any,
                 elapsedSeconds: 1,
                 deltaSeconds: 0.016,
                 frame: 9,
@@ -128,6 +131,8 @@ describe('SceneDrawExecutor', () => {
         expect(applyMissingVertexAttributeDefaults).toHaveBeenCalledWith(mesh);
         expect(frameUniformBinder.apply).toHaveBeenCalledTimes(1);
         expect(lightingUniformBinder.apply).toHaveBeenCalledTimes(1);
+        expect(fogUniformBinder.apply).toHaveBeenCalledTimes(1);
+        expect(fogUniformBinder.apply).toHaveBeenCalledWith(shader, {});
         expect(skinningUniformBinder.apply).toHaveBeenCalledTimes(1);
         expect(materialTextureBinder.bind).toHaveBeenCalledTimes(1);
         expect(materialTextureBinder.unbind).toHaveBeenCalledTimes(1);
