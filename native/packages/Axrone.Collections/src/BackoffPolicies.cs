@@ -12,7 +12,7 @@ public readonly struct AdaptiveSpinBackoff : IBackoffPolicy
     public static void Initialize(out int state) => state = 0;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void Step(ref int state)
+    public static void Advance(ref int state)
     {
         if ((uint)state < 10)
         {
@@ -43,7 +43,7 @@ public readonly struct AggressiveSpinBackoff : IBackoffPolicy
     public static void Initialize(out int state) => state = 0;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void Step(ref int state) => Thread.SpinWait(4);
+    public static void Advance(ref int state) => Thread.SpinWait(4);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Reset(ref int state) => state = 0;
@@ -59,7 +59,7 @@ public readonly struct YieldingBackoff : IBackoffPolicy
     public static void Initialize(out int state) => state = 0;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void Step(ref int state)
+    public static void Advance(ref int state)
     {
         Thread.Yield();
         state++;
