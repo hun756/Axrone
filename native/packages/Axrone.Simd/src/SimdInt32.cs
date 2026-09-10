@@ -1369,4 +1369,17 @@ public static unsafe class SimdInt32
         }
         for (; i < length; ++i) Unsafe.Add(ref dRef, (nint)i) = value;
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void Gather(ReadOnlySpan<int> source, ReadOnlySpan<int> indices, Span<int> destination)
+    {
+        if (destination.Length < indices.Length) ThrowHelper.ThrowDestinationTooSmall();
+        nuint count = (nuint)indices.Length;
+        if (count == 0) return;
+        ref int src = ref MemoryMarshal.GetReference(source);
+        ref int idx = ref MemoryMarshal.GetReference(indices);
+        ref int dst = ref MemoryMarshal.GetReference(destination);
+        for (nuint i = 0; i < count; ++i)
+            Unsafe.Add(ref dst, (nint)i) = Unsafe.Add(ref src, Unsafe.Add(ref idx, (nint)i));
+    }
 }
