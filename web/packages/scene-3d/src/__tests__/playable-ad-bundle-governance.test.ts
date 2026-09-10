@@ -181,23 +181,14 @@ describe('Package Size Inventory', () => {
 		}
 	});
 
-	it('no single package should exceed 500 KB uncompressed in dist/', () => {
+	it('no single package should exceed 2 MB uncompressed in dist/', () => {
 		const violations: string[] = [];
 		for (const [pkg, size] of packageDistSizes) {
-			if (size > MAX_SINGLE_PACKAGE_UNCOMPRESSED_BYTES) {
+			if (size > 2 * 1024 * 1024) {
 				violations.push(`${pkg}: ${(size / 1024).toFixed(1)} KB`);
 			}
 		}
-		// Note: some packages legitimately exceed 500 KB (scene-runtime, ecs-runtime, etc.)
-		// This test documents which ones do and flags them for review
-		if (violations.length > 0) {
-			// Soft assertion — log but don't fail for known large packages
-			console.warn(
-				`Packages exceeding ${MAX_SINGLE_PACKAGE_UNCOMPRESSED_BYTES / 1024} KB uncompressed:\n${violations.join('\n')}`,
-			);
-		}
-		// The test passes — it serves as an inventory/audit mechanism
-		expect(true).toBe(true);
+		expect(violations).toEqual([]);
 	});
 
 	it('total engine JS payload should be under 15 MB uncompressed', () => {
@@ -358,9 +349,6 @@ describe('Budget Governance', () => {
 	});
 
 	it('should flag packages approaching budget limit (> 80%)', () => {
-		// For playable-ad, the budget is 2 MB gzip.
-		// Check if any individual package's dist size exceeds 80% of budget uncompressed.
-		// This is a forward-looking warning — uncompressed size correlates with gzip size.
 		const warningThreshold = BUDGETS['playable-ad'].gzipBytes * BUDGET_WARNING_THRESHOLD;
 		const approaching: string[] = [];
 
@@ -370,13 +358,7 @@ describe('Budget Governance', () => {
 			}
 		}
 
-		// Log but don't fail — this is an early warning system
-		if (approaching.length > 0) {
-			console.warn(
-				`Packages approaching playable-ad budget (> ${BUDGET_WARNING_THRESHOLD * 100}%):\n${approaching.join('\n')}`,
-			);
-		}
-		expect(true).toBe(true);
+		expect(approaching.length).toBeLessThan(5);
 	});
 
 	it('total engine JS payload should be within web-mobile budget', () => {
@@ -461,14 +443,11 @@ describe('Asset Budget', () => {
 
 	it('texture atlas total should be within mobile budget (128 MB)', () => {
 		if (!fs.existsSync(ASSETS_DIR)) {
-			// Assets directory may not exist in all checkouts
-			expect(true).toBe(true);
 			return;
 		}
 
 		const texturesDir = path.join(ASSETS_DIR, 'Textures');
 		if (!fs.existsSync(texturesDir)) {
-			expect(true).toBe(true);
 			return;
 		}
 
@@ -478,13 +457,11 @@ describe('Asset Budget', () => {
 
 	it('audio assets should be within playable-ad budget (4 MB)', () => {
 		if (!fs.existsSync(ASSETS_DIR)) {
-			expect(true).toBe(true);
 			return;
 		}
 
 		const audioDir = path.join(ASSETS_DIR, 'Audio');
 		if (!fs.existsSync(audioDir)) {
-			expect(true).toBe(true);
 			return;
 		}
 
@@ -494,13 +471,11 @@ describe('Asset Budget', () => {
 
 	it('model assets should be tracked and within reasonable bounds', () => {
 		if (!fs.existsSync(ASSETS_DIR)) {
-			expect(true).toBe(true);
 			return;
 		}
 
 		const modelsDir = path.join(ASSETS_DIR, 'Models');
 		if (!fs.existsSync(modelsDir)) {
-			expect(true).toBe(true);
 			return;
 		}
 

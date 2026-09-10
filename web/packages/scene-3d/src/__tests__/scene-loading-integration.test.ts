@@ -303,8 +303,7 @@ describe('Main.scene.json — Static Validation', () => {
                     current = entityMap.get(current.parentId);
                 }
             }
-            // If we get here, no cycles were found
-            expect(true).toBe(true);
+            expect(sceneFile.entities.length).toBeGreaterThan(0);
         });
 
         it('has exactly 2 levels (root + one level of children)', () => {
