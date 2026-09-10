@@ -1,7 +1,9 @@
-namespace Axrone.Collections;
+namespace Axrone.Utility;
 
-using System.Runtime.CompilerServices;
-
+/// <summary>
+/// A cache-line-aligned 64-bit atomic counter that avoids false sharing
+/// by isolating the backing storage on its own 128-byte aligned allocation.
+/// </summary>
 public sealed unsafe class AlignedCounter : IDisposable
 {
     private long* _value;
