@@ -351,9 +351,9 @@ public static unsafe class SimdInt32
         if (length == 0) return 0;
         ref int src = ref MemoryMarshal.GetReference(source);
         nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count)
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count * 2)
         {
-            Vector512<int> acc0 = Vector512.LoadUnsafe(in src, 0), acc1 = Vector512<int>.Zero;
+            Vector512<int> acc0 = Vector512<int>.Zero, acc1 = Vector512<int>.Zero;
             nuint step = (nuint)Vector512<int>.Count, limit = length - (step * 2) + 1;
             for (; i < limit; i += step * 2)
             {
@@ -366,9 +366,9 @@ public static unsafe class SimdInt32
             for (nuint j = i; j < length; ++j) sum += Unsafe.Add(ref src, (nint)j);
             return sum;
         }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count)
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count * 2)
         {
-            Vector256<int> acc0 = Vector256.LoadUnsafe(in src, 0), acc1 = Vector256<int>.Zero;
+            Vector256<int> acc0 = Vector256<int>.Zero, acc1 = Vector256<int>.Zero;
             nuint step = (nuint)Vector256<int>.Count, limit = length - (step * 2) + 1;
             for (; i < limit; i += step * 2) { acc0 += Vector256.LoadUnsafe(in src, i); acc1 += Vector256.LoadUnsafe(in src, i + step); }
             nuint singleLimit = length - step + 1;
@@ -377,9 +377,9 @@ public static unsafe class SimdInt32
             for (nuint j = i; j < length; ++j) sum += Unsafe.Add(ref src, (nint)j);
             return sum;
         }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count)
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count * 2)
         {
-            Vector128<int> acc0 = Vector128.LoadUnsafe(in src, 0), acc1 = Vector128<int>.Zero;
+            Vector128<int> acc0 = Vector128<int>.Zero, acc1 = Vector128<int>.Zero;
             nuint step = (nuint)Vector128<int>.Count, limit = length - (step * 2) + 1;
             for (; i < limit; i += step * 2) { acc0 += Vector128.LoadUnsafe(in src, i); acc1 += Vector128.LoadUnsafe(in src, i + step); }
             nuint singleLimit = length - step + 1;
@@ -402,7 +402,7 @@ public static unsafe class SimdInt32
         ref int lRef = ref MemoryMarshal.GetReference(left);
         ref int rRef = ref MemoryMarshal.GetReference(right);
         nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count)
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count * 2)
         {
             Vector512<int> acc0 = Vector512<int>.Zero, acc1 = Vector512<int>.Zero;
             nuint step = (nuint)Vector512<int>.Count, limit = length - (step * 2) + 1;
@@ -417,7 +417,7 @@ public static unsafe class SimdInt32
             for (nuint j = i; j < length; ++j) dot += Unsafe.Add(ref lRef, (nint)j) * Unsafe.Add(ref rRef, (nint)j);
             return dot;
         }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count)
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count * 2)
         {
             Vector256<int> acc0 = Vector256<int>.Zero, acc1 = Vector256<int>.Zero;
             nuint step = (nuint)Vector256<int>.Count, limit = length - (step * 2) + 1;
@@ -432,7 +432,7 @@ public static unsafe class SimdInt32
             for (nuint j = i; j < length; ++j) dot += Unsafe.Add(ref lRef, (nint)j) * Unsafe.Add(ref rRef, (nint)j);
             return dot;
         }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count)
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count * 2)
         {
             Vector128<int> acc0 = Vector128<int>.Zero, acc1 = Vector128<int>.Zero;
             nuint step = (nuint)Vector128<int>.Count, limit = length - (step * 2) + 1;

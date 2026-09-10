@@ -120,6 +120,32 @@ public class SimdFloat64Tests
         result.Max.Should().Be(999.0);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(7)]
+    [InlineData(8)]
+    [InlineData(9)]
+    [InlineData(15)]
+    [InlineData(16)]
+    [InlineData(17)]
+    [InlineData(31)]
+    [InlineData(33)]
+    public void ComputeExtrema_SmallAndBoundarySizes_MatchesScalar(int size)
+    {
+        double[] src = new double[size];
+        for (int i = 0; i < size; i++)
+            src[i] = (i * 13 + 5) % 17 - 8.0;
+
+        ExtremaPair<double> result = SimdFloat64.ComputeExtrema(src);
+
+        result.Min.Should().Be(src.Min());
+        result.Max.Should().Be(src.Max());
+    }
+
     [Fact]
     public void ComputeExtrema_EmptySpan_Throws()
     {

@@ -232,7 +232,7 @@ public static unsafe partial class SimdFloat32
         ref float src = ref MemoryMarshal.GetReference(source);
         nuint i = 0;
 
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count)
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count * 2)
         {
             nuint step = (nuint)Vector512<float>.Count;
             Vector512<float> vMin0 = Vector512.LoadUnsafe(in src, 0);
@@ -279,7 +279,7 @@ public static unsafe partial class SimdFloat32
             return new ExtremaPair<float>(min, max);
         }
 
-        if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count * 2)
         {
             nuint step = (nuint)Vector256<float>.Count;
             Vector256<float> vMin0 = Vector256.LoadUnsafe(in src, 0);

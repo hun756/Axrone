@@ -164,7 +164,16 @@ public class SimdInt32Tests
     // ── ComputeSum ───────────────────────────────────────────────────────
 
     [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    [InlineData(8)]
+    [InlineData(9)]
+    [InlineData(15)]
     [InlineData(16)]
+    [InlineData(17)]
+    [InlineData(31)]
+    [InlineData(32)]
+    [InlineData(33)]
     [InlineData(64)]
     [InlineData(256)]
     public void ComputeSum_ReturnsCorrectTotal(int size)
@@ -184,7 +193,16 @@ public class SimdInt32Tests
     // ── ComputeDotProduct ────────────────────────────────────────────────
 
     [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    [InlineData(8)]
+    [InlineData(9)]
+    [InlineData(15)]
     [InlineData(16)]
+    [InlineData(17)]
+    [InlineData(31)]
+    [InlineData(32)]
+    [InlineData(33)]
     [InlineData(64)]
     [InlineData(256)]
     public void ComputeDotProduct_ReturnsCorrectValue(int size)
