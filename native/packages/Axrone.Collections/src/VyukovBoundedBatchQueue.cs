@@ -96,7 +96,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
                         return QueueOperationStatus.Full;
                     }
 
-                    TBackoff.Step(ref backoffState);
+                    TBackoff.Advance(ref backoffState);
                     continue;
                 }
 
@@ -110,7 +110,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
                     return QueueOperationStatus.Success;
                 }
 
-                TBackoff.Step(ref backoffState);
+                TBackoff.Advance(ref backoffState);
             }
         }
     }
@@ -149,7 +149,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
                 }
                 else
                 {
-                    TBackoff.Step(ref backoffState);
+                    TBackoff.Advance(ref backoffState);
                 }
             }
         }
@@ -216,7 +216,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
                         return QueueOperationStatus.Empty;
                     }
 
-                    TBackoff.Step(ref backoffState);
+                    TBackoff.Advance(ref backoffState);
                     continue;
                 }
 
@@ -230,7 +230,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
                     return QueueOperationStatus.Success;
                 }
 
-                TBackoff.Step(ref backoffState);
+                TBackoff.Advance(ref backoffState);
             }
         }
     }
@@ -281,7 +281,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
                 }
                 else
                 {
-                    TBackoff.Step(ref backoffState);
+                    TBackoff.Advance(ref backoffState);
                 }
             }
         }
