@@ -747,4 +747,36 @@ public static unsafe partial class SimdFloat32
         for (; i < count; ++i)
             Unsafe.Add(ref dst, (nint)i) = Unsafe.Add(ref src, Unsafe.Add(ref idx, (nint)i));
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Span<byte> PackFloatToHalf(ReadOnlySpan<float> source)
+    {
+        nuint length = (nuint)source.Length;
+        byte[] result = GC.AllocateUninitializedArray<byte>((int)length * 2);
+        ref ushort dst = ref Unsafe.As<byte, ushort>(ref MemoryMarshal.GetArrayDataReference(result));
+        ref float src = ref MemoryMarshal.GetReference(source);
+        nuint i = 0;
+        if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        {
+            Vector256<uint> signMask = Vector256.Create(0x80000000u);
+            Vector256<uint> expMask = Vector256.Create(0x7F800000u);
+            Vector256<uint> mantMask = Vector256.Create(0x007FE000u);
+            nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector256<uint> bits = Vector256.LoadUnsafe(in src, i).AsUInt32();
+                Vector256<uint> sign = (bits & signMask) >> 16;
+                Vector256<uint> exp = (bits & expMask) - Vector256.Create(0x38000000u);
+                Vector256<uint> mant = (bits & mantMask) >> 13;
+                Vector256.ConditionalSelect(Vector256.LessThan((Vector256<int>)(bits & expMask), Vector256.Create(0x38000000u)), sign, sign | exp | mant).AsUInt16().StoreUnsafe(ref dst, i);
+            }
+        }
+        for (; i < length; ++i)
+        {
+            uint bits = BitConverter.SingleToUInt32Bits(Unsafe.Add(ref src, (nint)i));
+            ushort h = (ushort)(((bits >> 16) & 0x8000u) | (((bits & 0x7F800000u) - 0x38000000u) >> 13) | ((bits & 0x007FE000u) >> 13));
+            Unsafe.Add(ref dst, (nint)i) = h;
+        }
+        return result;
+    }
 }
