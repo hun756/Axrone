@@ -56,6 +56,7 @@ export class SpriteAnimator extends Component {
     private readonly _preserveAnchor: boolean;
     private readonly _preserveSourceSize: boolean;
     private readonly _preserveSliceBorder: boolean;
+    private _renderer: SpriteRenderer | null = null;
 
     constructor(config: SpriteAnimatorConfig = {}) {
         super();
@@ -140,6 +141,7 @@ export class SpriteAnimator extends Component {
     }
 
     override awake(): void {
+        this._renderer = this.getComponent(SpriteRenderer);
         this._applyCurrentFrame();
     }
 
@@ -150,15 +152,14 @@ export class SpriteAnimator extends Component {
     override update(deltaTime: number): void {
         const clip = this.currentClip;
         if (!clip || clip.frames.length === 0) {
-            this._applyCurrentFrame();
             return;
         }
-
-        this._applyCurrentFrame();
 
         if (!this._playing || this._speed <= 0 || clip.frames.length === 1 || deltaTime <= 0) {
             return;
         }
+
+        this._applyCurrentFrame();
 
         const shouldLoop = this._loop ?? clip.loop;
         let remainingMs = Math.max(0, deltaTime * this._speed);
@@ -280,20 +281,19 @@ export class SpriteAnimator extends Component {
 
     private _applyCurrentFrame(): void {
         const frame = this.currentFrame;
-        if (!frame) {
+        if (!frame || !this._renderer) {
             return;
         }
 
-        const renderer = this.getComponent(SpriteRenderer);
-        if (!renderer) {
-            return;
+        if (this._preserveSize && this._preserveAnchor && this._preserveSourceSize && this._preserveSliceBorder) {
+            this._renderer.applyFrame(frame);
+        } else {
+            this._renderer.applyFrame(frame, {
+                preserveSize: this._preserveSize,
+                preserveAnchor: this._preserveAnchor,
+                preserveSourceSize: this._preserveSourceSize,
+                preserveSliceBorder: this._preserveSliceBorder,
+            });
         }
-
-        renderer.applyFrame(frame, {
-            preserveSize: this._preserveSize,
-            preserveAnchor: this._preserveAnchor,
-            preserveSourceSize: this._preserveSourceSize,
-            preserveSliceBorder: this._preserveSliceBorder,
-        });
     }
 }
