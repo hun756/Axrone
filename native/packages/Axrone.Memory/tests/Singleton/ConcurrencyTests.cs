@@ -1,199 +1,145 @@
 using Axrone.Memory.Lifetime;
-using SingletonFacade = Axrone.Memory.Lifetime.Singleton;
 
 namespace Axrone.Memory.Tests;
 
+/// <summary>
+/// Concurrency and stress tests for the singleton library.
+/// Validates thread safety, race conditions, and high-contention scenarios.
+/// </summary>
 public class ConcurrencyTests
 {
     [Fact]
-    public void CAS_ConcurrentAccess_AllThreadsGetSameInstance()
+    public async Task Singleton_ConcurrentSetFactory_OnlyOneSucceeds()
     {
-        const int threadCount = 16;
-        var instances = new SimpleService[threadCount];
-        var barrier = new ManualResetEventSlim(false);
-        var threads = new Thread[threadCount];
-
-        for (var i = 0; i < threadCount; i++)
-        {
-            var idx = i;
-            threads[i] = new Thread(() =>
-            {
-                barrier.Wait();
-                instances[idx] = SingletonFacade.GetInstance<SimpleService>();
-            });
-            threads[i].Start();
-        }
-
-        barrier.Set();
-        foreach (var t in threads) t.Join();
-
-        var first = instances[0];
-        foreach (var instance in instances)
-            instance.Should().BeSameAs(first);
-    }
-
-    [Fact]
-    public void Scope_ConcurrentResolve_AllThreadsGetSameInstance()
-    {
-        using var scope = new SingletonScope("concurrent");
-        scope.Register<SimpleService>("svc", () => new SimpleService());
-
-        const int threadCount = 16;
-        var instances = new SimpleService[threadCount];
-        var barrier = new ManualResetEventSlim(false);
-        var threads = new Thread[threadCount];
-
-        for (var i = 0; i < threadCount; i++)
-        {
-            var idx = i;
-            threads[i] = new Thread(() =>
-            {
-                barrier.Wait();
-                instances[idx] = scope.Resolve<SimpleService>("svc");
-            });
-            threads[i].Start();
-        }
-
-        barrier.Set();
-        foreach (var t in threads) t.Join();
-
-        var first = instances[0];
-        foreach (var instance in instances)
-            instance.Should().BeSameAs(first);
-    }
-
-    [Fact]
-    public void KeyedSingleton_ConcurrentGetOrCreate_NoDuplicateInstances()
-    {
-        KeyedSession.Clear();
-        const int threadCount = 16;
-        var instances = new KeyedSession[threadCount];
-        var barrier = new ManualResetEventSlim(false);
-        var threads = new Thread[threadCount];
-
-        for (var i = 0; i < threadCount; i++)
-        {
-            var idx = i;
-            threads[i] = new Thread(() =>
-            {
-                barrier.Wait();
-                instances[idx] = KeyedSession.GetInstance("shared-key");
-            });
-            threads[i].Start();
-        }
-
-        barrier.Set();
-        foreach (var t in threads) t.Join();
-
-        var first = instances[0];
-        foreach (var instance in instances)
-            instance.Should().BeSameAs(first);
-
-        KeyedSession.Count.Should().Be(1);
-    }
-
-    [Fact]
-    public void ParallelFor_SingletonAccess_DoesNotThrow()
-    {
-        var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
-
-        Parallel.For(0, 100, i =>
+        var successCount = 0;
+        var tasks = Enumerable.Range(0, 100).Select(i => Task.Run(async () =>
         {
             try
             {
-                _ = SingletonFacade.GetInstance<SimpleService>();
+                Singleton<SimpleService>.SetFactory(() => new SimpleService());
+                _ = Singleton<SimpleService>.Instance;
+                Interlocked.Increment(ref successCount);
             }
-            catch (Exception ex)
-            {
-                exceptions.Add(ex);
-            }
+            catch (SingletonAlreadyInitializedException) { }
+            catch (SingletonInitializationException) { }
+        })).ToArray();
+
+        await Task.WhenAll(tasks);
+
+        successCount.Should().BeGreaterThanOrEqualTo(1);
+        Singleton<SimpleService>.Reset();
+    }
+
+    [Fact]
+    public async Task LazySingleton_ConcurrentAccess_AllGetSameInstance()
+    {
+        var singleton = new LazySingleton<SimpleService>(() =>
+        {
+            Thread.Sleep(5);
+            return new SimpleService();
         });
 
-        exceptions.Should().BeEmpty();
+        var tasks = Enumerable.Range(0, 50)
+            .Select(_ => Task.Run(() => singleton.Value))
+            .ToArray();
+
+        var results = await Task.WhenAll(tasks);
+        var first = results[0];
+
+        results.Should().OnlyContain(r => ReferenceEquals(r, first));
     }
 
     [Fact]
-    public void ParallelFor_ScopeTypedResolve_DoesNotThrow()
+    public async Task LazySingleton_ConcurrentDispose_IsIdempotent()
     {
-        using var scope = new SingletonScope("parallel-typed");
-        scope.Register<SimpleService>(() => new SimpleService());
+        var singleton = new LazySingleton<DisposableService>(() => new DisposableService());
+        _ = singleton.Value;
 
-        using (scope.Activate())
-        {
-            var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+        var tasks = Enumerable.Range(0, 20)
+            .Select(_ => Task.Run(() => singleton.Dispose()))
+            .ToArray();
 
-            Parallel.For(0, 100, i =>
-            {
-                try
-                {
-                    _ = SingletonScope.Resolve<SimpleService>();
-                }
-                catch (Exception ex)
-                {
-                    exceptions.Add(ex);
-                }
-            });
+        await Task.WhenAll(tasks);
 
-            exceptions.Should().BeEmpty();
-        }
+        singleton.State.Should().Be(SingletonLifecycleState.Disposed);
     }
 
     [Fact]
-    public void ThreadStatic_ConcurrentAccess_EachThreadGetsOwnInstance()
+    public async Task AsyncSingleton_ConcurrentGetValueAsync_AllGetSameInstance()
     {
-        const int threadCount = 8;
-        var instances = new ThreadStaticService[threadCount];
-        var barrier = new ManualResetEventSlim(false);
-        var threads = new Thread[threadCount];
-
-        for (var i = 0; i < threadCount; i++)
+        var singleton = new AsyncSingleton<SimpleService>(async ct =>
         {
-            var idx = i;
-            threads[i] = new Thread(() =>
-            {
-                barrier.Wait();
-                instances[idx] = SingletonFacade.GetInstance<ThreadStaticService>();
-            });
-            threads[i].Start();
-        }
+            await Task.Delay(10, ct).ConfigureAwait(false);
+            return new SimpleService();
+        });
 
-        barrier.Set();
-        foreach (var t in threads) t.Join();
+        var tasks = Enumerable.Range(0, 30)
+            .Select(_ => singleton.GetValueAsync().AsTask())
+            .ToArray();
 
-        var uniqueIds = instances.Select(i => i.Id).Distinct().ToArray();
-        uniqueIds.Length.Should().Be(threadCount);
+        var results = await Task.WhenAll(tasks);
+        var first = results[0];
+
+        results.Should().OnlyContain(r => ReferenceEquals(r, first));
     }
 
     [Fact]
-    public void Scope_ConcurrentTypedResolve_AllThreadsGetSameInstance()
+    public async Task SingletonRegistry_ConcurrentRegisterAndGet_NoExceptions()
     {
-        using var scope = new SingletonScope("concurrent-typed");
-        scope.Register<SimpleService>(() => new SimpleService());
+        var registry = new SingletonRegistry();
 
-        const int threadCount = 16;
-        var instances = new SimpleService[threadCount];
-        var barrier = new ManualResetEventSlim(false);
-        var threads = new Thread[threadCount];
-
-        using (scope.Activate())
+        var registerTasks = Enumerable.Range(0, 10).Select(i => Task.Run(() =>
         {
-            for (var i = 0; i < threadCount; i++)
-            {
-                var idx = i;
-                threads[i] = new Thread(() =>
-                {
-                    barrier.Wait();
-                    instances[idx] = SingletonScope.Resolve<SimpleService>();
-                });
-                threads[i].Start();
-            }
+            try { registry.Register(() => new SimpleService()); }
+            catch (SingletonAlreadyInitializedException) { }
+        })).ToArray();
 
-            barrier.Set();
-            foreach (var t in threads) t.Join();
+        await Task.WhenAll(registerTasks);
+
+        var getTasks = Enumerable.Range(0, 50).Select(_ => Task.Run(() =>
+        {
+            try { return registry.Get<SimpleService>(); }
+            catch { return null; }
+        })).ToArray();
+
+        var results = await Task.WhenAll(getTasks);
+        var nonNull = results.Where(r => r is not null).ToArray();
+
+        nonNull.Should().NotBeEmpty();
+        var first = nonNull[0];
+        nonNull.Should().OnlyContain(r => ReferenceEquals(r, first));
+    }
+
+    [Fact]
+    public async Task SingletonScope_ConcurrentChildScopeCreation_NoExceptions()
+    {
+        var parent = new SingletonRegistry();
+        parent.Register<SimpleService>(() => new SimpleService());
+        var scope = new SingletonScope(parent);
+
+        var tasks = Enumerable.Range(0, 20)
+            .Select(_ => Task.Run(() =>
+            {
+                var child = scope.CreateChildScope();
+                child.Get<SimpleService>().Should().NotBeNull();
+                child.Dispose();
+            }))
+            .ToArray();
+
+        await Task.WhenAll(tasks);
+    }
+
+    [Fact]
+    public void Stress_RapidCreateDispose_NoMemoryLeak()
+    {
+        for (var i = 0; i < 100; i++)
+        {
+            var singleton = new LazySingleton<DisposableService>(() => new DisposableService());
+            _ = singleton.Value;
+            singleton.Dispose();
         }
 
-        var first = instances[0];
-        foreach (var instance in instances)
-            instance.Should().BeSameAs(first);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
     }
 }

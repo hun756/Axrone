@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Hash</RootNamespace>
+    <AssemblyName>Axrone.Hash</AssemblyName>
+    <Description>High-performance hashing library with non-crypto and cryptographic algorithms for the Axrone engine.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1724: Type name conflicts with namespace — intentional -->
+    <NoWarn>$(NoWarn);CA1724</NoWarn>
+    <!-- CA1000: Static members on generic types — intentional for hash algorithm API -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1028: Enum storage type — byte chosen for minimal memory footprint -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Struct Equals/GetHashCode — digest structs use custom equality -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA2231: Struct should override Equals — digest structs implement IEquatable -->
+    <NoWarn>$(NoWarn);CA2231</NoWarn>
+    <!-- CA1068: CancellationToken must be last parameter — intentional API design -->
+    <NoWarn>$(NoWarn);CA1068</NoWarn>
+    <!-- CA1711: Type name ends in 'Algorithm' — intentional naming -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
+    <!-- CA1036: Comparison operators — digest structs use SequenceCompareTo, operators not needed -->
+    <NoWarn>$(NoWarn);CA1036</NoWarn>
+    <!-- CA2225: Implicit operator alternatives — HashDigest.AsSpan() serves as named alternative -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1707: Underscores in enum names — Murmur3_128, Sha3_256 etc. follow algorithm naming conventions -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <!-- CA1008: Enum needs None=0 — HashAlgorithmId starts at 1, no default value needed -->
+    <NoWarn>$(NoWarn);CA1008</NoWarn>
+    <!-- CA1067: Must override Equals — digest structs use FixedTimeEquals via IEquatable, object.Equals not overridden by design -->
+    <NoWarn>$(NoWarn);CA1067</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Hash.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+
+</Project>

@@ -1,30 +1,29 @@
 namespace Axrone.Memory.Lifetime;
 
-/// <summary>
-/// Thrown when a singleton instance cannot be created — factory returned null,
-/// constructor threw, or initialization failed.
-/// </summary>
-public sealed class SingletonCreationException : Exception
+public class SingletonException : Exception
 {
-    /// <summary>The type that failed to initialize.</summary>
-    public Type? TargetType { get; }
+    public SingletonException() { }
+    public SingletonException(string message) : base(message) { }
+    public SingletonException(string message, Exception? innerException) : base(message, innerException) { }
+}
 
-    public SingletonCreationException() { }
+public sealed class SingletonInitializationException : SingletonException
+{
+    public SingletonInitializationException() { }
+    public SingletonInitializationException(string message) : base(message) { }
+    public SingletonInitializationException(string message, Exception? innerException) : base(message, innerException) { }
+}
 
-    public SingletonCreationException(string message) : base(message) { }
+public sealed class SingletonDisposedException : SingletonException
+{
+    public SingletonDisposedException() { }
+    public SingletonDisposedException(string message) : base(message) { }
+    public SingletonDisposedException(string message, Exception? innerException) : base(message, innerException) { }
+}
 
-    public SingletonCreationException(string message, Exception innerException)
-        : base(message, innerException) { }
-
-    public SingletonCreationException(string message, Type targetType)
-        : base(message)
-    {
-        TargetType = targetType;
-    }
-
-    public SingletonCreationException(string message, Type targetType, Exception innerException)
-        : base(message, innerException)
-    {
-        TargetType = targetType;
-    }
+public sealed class SingletonAlreadyInitializedException : SingletonException
+{
+    public SingletonAlreadyInitializedException() { }
+    public SingletonAlreadyInitializedException(string message) : base(message) { }
+    public SingletonAlreadyInitializedException(string message, Exception? innerException) : base(message, innerException) { }
 }

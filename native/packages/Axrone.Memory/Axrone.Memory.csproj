@@ -3,7 +3,7 @@
   <PropertyGroup>
     <RootNamespace>Axrone.Memory</RootNamespace>
     <AssemblyName>Axrone.Memory</AssemblyName>
-    <Description>Zero-allocation memory pool and allocator for the Axrone engine.</Description>
+    <Description>Memory pools, object pools, and allocator primitives for the Axrone engine.</Description>
   </PropertyGroup>
 
   <PropertyGroup Label="AotCompatibility">
@@ -17,7 +17,7 @@
   <PropertyGroup Label="SuppressedRules">
     <!-- CA1724: Type name conflicts with namespace — intentional module naming -->
     <NoWarn>$(NoWarn);CA1724</NoWarn>
-    <!-- CA1000: Static members on generic types — intentional for Singleton/KeyedSingleton API -->
+    <!-- CA1000: Static members on generic types — intentional for Singleton&lt;T&gt;/SingletonAuto&lt;T&gt; API -->
     <NoWarn>$(NoWarn);CA1000</NoWarn>
     <!-- CA1031: Catching general exceptions — intentional for shutdown teardown -->
     <NoWarn>$(NoWarn);CA1031</NoWarn>
@@ -43,10 +43,49 @@
     <NoWarn>$(NoWarn);CA1720</NoWarn>
     <!-- CA1028: Enum storage type — byte/uint chosen for memory layout compatibility -->
     <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1716: Get method name — intentional API design for registry pattern -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
+    <!-- CA1065: Property throws — intentional for singleton access before configuration -->
+    <NoWarn>$(NoWarn);CA1065</NoWarn>
+    <!-- CA1849: .Result usage — intentional for sync-over-async in disposal paths -->
+    <NoWarn>$(NoWarn);CA1849</NoWarn>
+    <!-- IL2091: AOT trim annotations — Lazy&lt;T&gt; generic constraints are satisfied at runtime -->
+    <NoWarn>$(NoWarn);IL2091</NoWarn>
+    <!-- CA1512: Use ThrowIfNegativeOrZero — explicit throw is intentional for custom messages -->
+    <NoWarn>$(NoWarn);CA1512</NoWarn>
+    <!-- CA2208: paramName casing — options property names are intentional for record init -->
+    <NoWarn>$(NoWarn);CA2208</NoWarn>
+    <!-- CA1051: Do not declare visible instance fields — struct fields are intentional for perf -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1062: Validate arguments of public methods — pool internals trust callers -->
+    <NoWarn>$(NoWarn);CA1062</NoWarn>
+    <!-- CA1033: Interface methods should be callable by child types — pool design choice -->
+    <NoWarn>$(NoWarn);CA1033</NoWarn>
+    <!-- CA1816: GC.SuppressFinalize — pool types don't need finalizers -->
+    <NoWarn>$(NoWarn);CA1816</NoWarn>
+    <!-- CA1822: Mark members as static — instance members are intentional for pool design -->
+    <NoWarn>$(NoWarn);CA1822</NoWarn>
+    <!-- CA1825: Avoid zero-length array allocations — Array.Empty not always appropriate -->
+    <NoWarn>$(NoWarn);CA1825</NoWarn>
+    <!-- CA1850: Prefer static HashAlgorithm instance — pool creates per-instance for thread safety -->
+    <NoWarn>$(NoWarn);CA1850</NoWarn>
+    <!-- CA1854: Prefer 'TryGetValue' — pool internal patterns use different access patterns -->
+    <NoWarn>$(NoWarn);CA1854</NoWarn>
+    <!-- CA5394: Do not use insecure randomness — pool doesn't use randomness -->
+    <NoWarn>$(NoWarn);CA5394</NoWarn>
+    <!-- CA1027: Mark enums with FlagsAttribute — pool enums are not flags -->
+    <NoWarn>$(NoWarn);CA1027</NoWarn>
+    <!-- CA1008: Enum needs None=0 — pool enums intentionally start at non-zero values -->
+    <NoWarn>$(NoWarn);CA1008</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
     <InternalsVisibleTo Include="Axrone.Memory.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Collections/Axrone.Collections.csproj" />
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
   </ItemGroup>
 
   <ItemGroup>

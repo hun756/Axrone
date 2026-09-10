@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Collections</RootNamespace>
+    <AssemblyName>Axrone.Collections</AssemblyName>
+    <Description>High-performance lock-free concurrent collections for the Axrone engine.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1724: Type name conflicts with namespace — intentional -->
+    <NoWarn>$(NoWarn);CA1724</NoWarn>
+    <!-- CA1000: Static members on generic types — intentional for collection API -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1063: Dispose pattern — ring buffer uses Interlocked.Exchange for disposal -->
+    <NoWarn>$(NoWarn);CA1063</NoWarn>
+    <!-- CA1816: GC.SuppressFinalize — no finalizer needed -->
+    <NoWarn>$(NoWarn);CA1816</NoWarn>
+    <!-- CA2213: Disposable fields — wait strategy is not owned -->
+    <NoWarn>$(NoWarn);CA2213</NoWarn>
+    <!-- CA1028: Enum storage type — byte chosen for minimal memory in hot-path structs -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Struct Equals/GetHashCode — lightweight result struct, equality not needed -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CS8601: Null reference assignment — ring buffer dequeue pattern uses MaybeNull -->
+    <NoWarn>$(NoWarn);CS8601</NoWarn>
+    <!-- CA1711: Type name ends with Queue — intentional for VyukovBoundedBatchQueue -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Collections.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+
+</Project>

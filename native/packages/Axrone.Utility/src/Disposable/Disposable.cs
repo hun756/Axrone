@@ -78,3 +78,51 @@ public struct DisposalTracker
             throw new ObjectDisposedException(objectName);
     }
 }
+
+/// <summary>
+/// Thread-safe composite disposable using <see cref="ConcurrentStack{T}"/>.
+/// Disposes in reverse registration order. Safe for concurrent Add/Dispose from multiple threads.
+/// </summary>
+public sealed class ConcurrentCompositeDisposable : IDisposable, IAsyncDisposable
+{
+    private readonly ConcurrentStack<IDisposable> _disposables = new();
+    private int _disposed;
+
+    public int Count => _disposables.Count;
+    public bool IsDisposed => Volatile.Read(ref _disposed) == 1;
+
+    public void Add(IDisposable disposable)
+    {
+        ArgumentNullException.ThrowIfNull(disposable);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        _disposables.Push(disposable);
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+        while (_disposables.TryPop(out var disposable))
+        {
+            try { disposable.Dispose(); }
+            catch { }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+        while (_disposables.TryPop(out var disposable))
+        {
+            try
+            {
+                if (disposable is IAsyncDisposable asyncDisposable)
+                    await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+                else
+                    disposable.Dispose();
+            }
+            catch { }
+        }
+    }
+}
