@@ -76,6 +76,12 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
     readonly physicsBridge2D: PhysicsBridge2D | null;
     readonly profiler: SceneRuntimeProfiler;
 
+    private readonly _executePhaseCallback: (phase: SystemPhase, delta: number) => void;
+    private readonly _fixedUpdateActorsCallback: (delta: number) => void;
+    private readonly _updateActorsCallback: (delta: number) => void;
+    private readonly _lateUpdateActorsCallback: (delta: number) => void;
+    private readonly _renderCallback: (delta: number) => void;
+
     constructor(options: SceneRuntimeKernelOptions<R>) {
         const sceneOptions = options.options ?? {};
         const surface = resolveSceneSurface(sceneOptions);
@@ -190,46 +196,47 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
             enabled: profilerOptions.enabled ?? sceneOptions.profiler === true,
         });
 
+        this._executePhaseCallback = (phase, delta) => {
+            const profilerPhase = resolveProfilerPhase(phase);
+            if (profilerPhase === null) {
+                this.systems.executePhase(phase, delta);
+                return;
+            }
+            this.profiler.capturePhaseSample(profilerPhase);
+            this.profiler.timePhase(profilerPhase, () => this.systems.executePhase(phase, delta));
+        };
+
+        this._fixedUpdateActorsCallback = (delta) => {
+            this.profiler.capturePhaseSample('fixedUpdate');
+            this.profiler.timePhase('fixedUpdate', () => this.actorLifecycleRunner.fixedUpdate(delta));
+        };
+
+        this._updateActorsCallback = (delta) => {
+            this.profiler.capturePhaseSample('update');
+            this.profiler.timePhase('update', () => this.actorLifecycleRunner.update(delta));
+        };
+
+        this._lateUpdateActorsCallback = (delta) => {
+            this.profiler.capturePhaseSample('update');
+            this.profiler.timePhase('update', () => this.actorLifecycleRunner.lateUpdate(delta));
+        };
+
+        this._renderCallback = (delta) => {
+            this.profiler.capturePhaseSample('render');
+            this.profiler.timePhase('render', () => this.render(delta));
+            const stats = this.renderRuntime.stats;
+            this.profiler.attachRenderStats({
+                drawCalls: stats.drawCalls,
+                trianglesSubmitted: stats.trianglesSubmitted,
+            });
+        };
+
         const baseLoopSystems = createSceneLoopSystems({
-            executePhase: (phase, delta) => {
-                const profilerPhase = resolveProfilerPhase(phase);
-                const execute = () => {
-                    this.systems.executePhase(phase, delta);
-                };
-                if (profilerPhase === null) {
-                    execute();
-                    return;
-                }
-                this.profiler.capturePhaseSample(profilerPhase);
-                this.profiler.timePhase(profilerPhase, execute);
-            },
-            fixedUpdateActors: (delta) => {
-                this.profiler.capturePhaseSample('fixedUpdate');
-                this.profiler.timePhase('fixedUpdate', () =>
-                    this.actorLifecycleRunner.fixedUpdate(delta)
-                );
-            },
-            updateActors: (delta) => {
-                this.profiler.capturePhaseSample('update');
-                this.profiler.timePhase('update', () => this.actorLifecycleRunner.update(delta));
-            },
-            lateUpdateActors: (delta) => {
-                this.profiler.capturePhaseSample('update');
-                this.profiler.timePhase('update', () =>
-                    this.actorLifecycleRunner.lateUpdate(delta)
-                );
-            },
-            render: (delta) => {
-                this.profiler.capturePhaseSample('render');
-                this.profiler.timePhase('render', () => {
-                    this.render(delta);
-                });
-                const stats = this.renderRuntime.stats;
-                this.profiler.attachRenderStats({
-                    drawCalls: stats.drawCalls,
-                    trianglesSubmitted: stats.trianglesSubmitted,
-                });
-            },
+            executePhase: this._executePhaseCallback,
+            fixedUpdateActors: this._fixedUpdateActorsCallback,
+            updateActors: this._updateActorsCallback,
+            lateUpdateActors: this._lateUpdateActorsCallback,
+            render: this._renderCallback,
         });
 
         const loopSystems: readonly GameLoopSystem<SceneLoopState>[] = [
