@@ -31,6 +31,8 @@
     <NoWarn>$(NoWarn);CA1008</NoWarn>
     <!-- CA1707: Underscores in names — intentional naming -->
     <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <!-- CA1716: Reserved keyword conflicts — Select, Fill, base, step are intentional SIMD API names -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
