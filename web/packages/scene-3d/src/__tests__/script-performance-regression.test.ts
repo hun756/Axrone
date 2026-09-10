@@ -6,70 +6,20 @@ import {
     installWebGL2Constants,
     ManualScheduler,
 } from '../../../../tests/shared/test-harness';
+import {
+    ANY_ALLOCATION_PATTERN,
+    VECTOR_ALLOCATION_PATTERN,
+    extractMethodBody,
+    forceGcIfAvailable,
+    hasMemoryApi,
+    linearSlope,
+    median,
+    readHeapBytes,
+    runFrames,
+} from './perf-test-utils';
 
 let Scene: typeof import('@axrone/scene-3d').Scene;
 let FollowCameraController: typeof import('@axrone/scene-3d').FollowCameraController;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Read heap usage from the best available source.
- * Returns null when no memory API is reachable (e.g. some CI envs).
- */
-function readHeapBytes(): number | null {
-    // Chromium / browser
-    const perfMemory = (performance as unknown as Record<string, unknown>).memory as
-        | Record<string, number>
-        | undefined;
-    if (perfMemory && typeof perfMemory.usedJSHeapSize === 'number') {
-        return perfMemory.usedJSHeapSize;
-    }
-    // Node.js
-    if (typeof process !== 'undefined' && typeof process.memoryUsage === 'function') {
-        return process.memoryUsage().heapUsed;
-    }
-    return null;
-}
-
-/**
- * Run `count` scheduler frames starting at `startMs`, incrementing by `stepMs`.
- */
-function runFrames(scheduler: ManualScheduler, count: number, startMs = 0, stepMs = 16): void {
-    for (let i = 0; i < count; i++) {
-        scheduler.flush(startMs + i * stepMs);
-    }
-}
-
-/**
- * Returns true when a memory measurement API is available.
- */
-function hasMemoryApi(): boolean {
-    return readHeapBytes() !== null;
-}
-
-/**
- * Compute the linear regression slope of an array of numbers.
- * Returns bytes-per-index growth rate. A positive slope indicates growth.
- */
-function linearSlope(samples: number[]): number {
-    const n = samples.length;
-    if (n < 2) return 0;
-    let sumX = 0;
-    let sumY = 0;
-    let sumXY = 0;
-    let sumXX = 0;
-    for (let i = 0; i < n; i++) {
-        sumX += i;
-        sumY += samples[i]!;
-        sumXY += i * samples[i]!;
-        sumXX += i * i;
-    }
-    const denom = n * sumXX - sumX * sumX;
-    if (denom === 0) return 0;
-    return (n * sumXY - sumX * sumY) / denom;
-}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -425,7 +375,7 @@ describe('Script Performance Regression', () => {
     // ─── Group 4: Frame Time Budget ─────────────────────────────────────
 
     describe('Frame Time Budget', () => {
-        it('average frame time stays under 5ms for logic/update phase', () => {
+        it('median frame time stays under 5ms for logic/update phase', () => {
             const canvas = document.createElement('canvas');
             const scene = new Scene(createSceneOptions(scheduler, canvas));
 
@@ -441,6 +391,9 @@ describe('Script Performance Regression', () => {
 
             scene.start(0);
             runFrames(scheduler, 10, 0);
+            // Collect setup garbage before the timed region so a background
+            // collection cannot poison the samples.
+            forceGcIfAvailable();
 
             const frameTimes: number[] = [];
             for (let i = 0; i < 60; i++) {
@@ -450,9 +403,10 @@ describe('Script Performance Regression', () => {
                 frameTimes.push(t1 - t0);
             }
 
-            const avgFrameTime =
-                frameTimes.reduce((sum, t) => sum + t, 0) / frameTimes.length;
-            expect(avgFrameTime).toBeLessThan(5);
+            // Median is the robust estimator here: a single GC/scheduler
+            // spike drags the mean but not the median.
+            const medianFrameTime = median(frameTimes);
+            expect(medianFrameTime).toBeLessThan(5);
 
             scene.dispose();
         });
@@ -472,6 +426,7 @@ describe('Script Performance Regression', () => {
 
             scene.start(0);
             runFrames(scheduler, 10, 0);
+            forceGcIfAvailable();
 
             for (let i = 0; i < 60; i++) {
                 targetTransform.position = new Vec3(
@@ -503,6 +458,7 @@ describe('Script Performance Regression', () => {
 
             scene.start(0);
             runFrames(scheduler, 10, 0);
+            forceGcIfAvailable();
 
             const firstBatch: number[] = [];
             for (let i = 0; i < 50; i++) {
@@ -518,11 +474,13 @@ describe('Script Performance Regression', () => {
                 lastBatch.push(performance.now() - t0);
             }
 
-            const avgFirst = firstBatch.reduce((s, t) => s + t, 0) / firstBatch.length;
-            const avgLast = lastBatch.reduce((s, t) => s + t, 0) / lastBatch.length;
+            // Median-based comparison: means are dragged by isolated spikes
+            // (GC, timer coalescing) that have nothing to do with degradation.
+            const medianFirst = median(firstBatch);
+            const medianLast = median(lastBatch);
 
             // Last batch should not be more than 2x the first batch
-            expect(avgLast).toBeLessThan(avgFirst * 2 + 1);
+            expect(medianLast).toBeLessThan(medianFirst * 2 + 1);
 
             scene.dispose();
         });
@@ -760,16 +718,14 @@ describe('Script Performance Regression', () => {
         it('FollowCameraController.lateUpdate does not contain `new` expressions', () => {
             const controllerSource = FollowCameraController.toString();
 
-            const lateUpdateMatch = controllerSource.match(
-                /lateUpdate\s*\([^)]*\)\s*\{[\s\S]*?\n\s{4}\}/,
-            );
+            // Mandatory extraction: throws (fails) when the method body
+            // cannot be located — no silent skips.
+            const lateUpdateBody = extractMethodBody(controllerSource, 'lateUpdate');
 
-            if (lateUpdateMatch) {
-                const lateUpdateBody = lateUpdateMatch[0];
-                const newExpressions = lateUpdateBody.match(/\bnew\s+\w+/g);
-                expect(newExpressions).toBeNull();
-            }
-            // If we can't extract the method (minified), pass with a note
+            // The transpiled source allocates as `new __vite_ssr_import_x__.Vec3`,
+            // so the naive `\bnew\s+Vec3\b` pattern would miss real allocations.
+            const newExpressions = lateUpdateBody.match(ANY_ALLOCATION_PATTERN);
+            expect(newExpressions).toBeNull();
         });
 
         it('FollowCameraController pre-allocates all temporary vectors in constructor', () => {
@@ -791,16 +747,18 @@ describe('Script Performance Regression', () => {
             expect(classSource).toContain('_resolveDesiredTarget');
             expect(classSource).toContain('_composeDesiredPosition');
 
-            // Verify private hot-path methods don't use `new Vec3` or `new Quat`
-            const privateMethodPattern =
-                /_(?:resolveDesiredTarget|composeDesiredPosition|resolveUp|applyCameraTransform)\s*\([^)]*\)\s*\{[\s\S]*?\n\s{4}\}/g;
-            const matches = classSource.match(privateMethodPattern);
-
-            if (matches) {
-                for (const methodBody of matches) {
-                    expect(methodBody.match(/\bnew\s+Vec3\b/)).toBeNull();
-                    expect(methodBody.match(/\bnew\s+Quat\b/)).toBeNull();
-                }
+            for (const method of [
+                '_resolveDesiredTarget',
+                '_composeDesiredPosition',
+                '_resolveUp',
+                '_applyCameraTransform',
+            ]) {
+                // Mandatory extraction — each listed method MUST be found.
+                const methodBody = extractMethodBody(classSource, method);
+                expect(
+                    methodBody.match(VECTOR_ALLOCATION_PATTERN),
+                    `${method} must not allocate Vec3/Quat`,
+                ).toBeNull();
             }
         });
     });
