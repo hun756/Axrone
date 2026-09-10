@@ -221,6 +221,9 @@ export {
 	SceneShaderError,
 } from './errors';
 
+export type { SceneCapabilityGuardHost } from './scene-capability-guard';
+export { requireRegisteredComponent } from './scene-capability-guard';
+
 export type {
 	SceneRuntimeFrameRecord,
 	SceneRuntimePhysicsStats,

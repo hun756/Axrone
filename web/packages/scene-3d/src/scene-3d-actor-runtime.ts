@@ -6,11 +6,12 @@ import {
 } from '@axrone/ecs-runtime';
 import type { World } from '@axrone/ecs-runtime';
 import type { ComponentRegistry } from '@axrone/ecs-runtime';
+import { type SceneRegistry } from '@axrone/scene-runtime';
 import {
-    SceneCapabilityError,
-    type SceneRegistry,
-} from '@axrone/scene-runtime';
-import { Camera, type CameraConfig } from '@axrone/scene-runtime/scene-facade';
+    Camera,
+    type CameraConfig,
+    requireRegisteredComponent,
+} from '@axrone/scene-runtime/scene-facade';
 import { MeshRenderer, type MeshRendererConfig } from '@axrone/scene-runtime/scene-3d-support';
 
 export interface SceneProfilerProbe {
@@ -67,7 +68,8 @@ export class Scene3DActorRuntime<R extends ComponentRegistry = Record<string, ne
         actorConfig: ActorConfig = {},
         cameraConfig: CameraConfig = {}
     ): Actor<World<SceneRegistry<R>>> {
-        this._requireRegisteredComponent(
+        requireRegisteredComponent(
+            this._actors,
             Camera,
             'camera actor creation requires the 3D scene capability/profile'
         );
@@ -80,7 +82,8 @@ export class Scene3DActorRuntime<R extends ComponentRegistry = Record<string, ne
         actorConfig: ActorConfig = {},
         rendererConfig: MeshRendererConfig = {}
     ): Actor<World<SceneRegistry<R>>> {
-        this._requireRegisteredComponent(
+        requireRegisteredComponent(
+            this._actors,
             MeshRenderer,
             'renderable actor creation requires the 3D scene capability/profile'
         );
@@ -93,7 +96,8 @@ export class Scene3DActorRuntime<R extends ComponentRegistry = Record<string, ne
         configs: readonly SceneRenderableActorCreateOptions[],
         profiling?: SceneProfilerProbe
     ): readonly SceneRenderableActorInstance<R>[] {
-        this._requireRegisteredComponent(
+        requireRegisteredComponent(
+            this._actors,
             MeshRenderer,
             'renderable actor creation requires the 3D scene capability/profile'
         );
@@ -127,16 +131,5 @@ export class Scene3DActorRuntime<R extends ComponentRegistry = Record<string, ne
 
             return created;
         });
-    }
-
-    private _requireRegisteredComponent(
-        componentType: typeof Camera | typeof MeshRenderer,
-        message: string
-    ): void {
-        if (this._actors.isComponentRegistered(componentType)) {
-            return;
-        }
-
-        throw new SceneCapabilityError(message);
     }
 }
