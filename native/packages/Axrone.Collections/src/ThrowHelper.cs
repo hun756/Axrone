@@ -14,6 +14,16 @@ internal static class ThrowHelper
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidBufferCapacity(uint capacity)
+    {
+        throw new ArgumentOutOfRangeException(
+            nameof(capacity),
+            capacity,
+            $"BufferCapacity {capacity} must be a power of 2 between {BufferCapacity.MinCapacity} and {BufferCapacity.MaxCapacity}.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowInvalidAlignment(nuint value)
     {
         throw new ArgumentException($"Alignment value {value} must be a power of two and at least {IntPtr.Size}.", nameof(value));
