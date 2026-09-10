@@ -1,12 +1,18 @@
-namespace Axrone.Collections;
+namespace Axrone.Utility;
 
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
+/// <summary>
+/// Strongly-typed, self-validating capacity for batch-oriented buffers.
+/// Accepts any value in [1, 0x3FFFFFFF]; alignment to power-of-two is the consumer's concern.
+/// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly record struct BatchCapacity
+public readonly record struct BatchCapacity : IEquatable<BatchCapacity>
 {
     public const int MaximumCapacity = 0x3FFFFFFF;
+
     public int Value { get; }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -33,10 +39,17 @@ public readonly record struct BatchCapacity
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static BatchCapacity FromInt32(int value) => new(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static BatchCapacity FromBatchCapacity(int value) => new(value);
 }
 
+/// <summary>
+/// Strongly-typed, self-validating memory alignment restricted to powers of two
+/// that are at least pointer-sized. Provides cache-line presets.
+/// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 8)]
-public readonly record struct MemoryAlignment
+public readonly record struct MemoryAlignment : IEquatable<MemoryAlignment>
 {
     public nuint Value { get; }
 
@@ -46,9 +59,7 @@ public readonly record struct MemoryAlignment
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public MemoryAlignment(nuint value)
     {
-        nuint minAlignment;
-        unsafe { minAlignment = (nuint)sizeof(nuint); }
-        if (value < minAlignment || (value & (value - 1)) != 0)
+        if (value < (nuint)IntPtr.Size || (value & (value - 1)) != 0)
         {
             ThrowHelper.ThrowInvalidAlignment(value);
         }
@@ -63,4 +74,7 @@ public readonly record struct MemoryAlignment
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static MemoryAlignment FromUIntPtr(nuint value) => new(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static MemoryAlignment FromMemoryAlignment(nuint value) => new(value);
 }
