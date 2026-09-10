@@ -44,6 +44,8 @@
         "bench:engine:quick": "node ./scripts/engine-benchmark-runner.mjs --iterations=3 --warmup=1 --durationSec=5 --objectCounts=2600 --comparisonModes=no-culling",
         "bench:engine:startup": "node ./scripts/engine-benchmark-runner.mjs --iterations=3 --warmup=1 --durationSec=5 --objectCounts=19600 --comparisonModes=no-culling --isolateRuns",
         "test:coverage": "vitest --coverage",
+        "typecheck": "tsc --noEmit --strict",
+        "typecheck:scene-runtime": "cd packages/scene-runtime && tsc --noEmit --strict",
         "test:all": "yarn test && yarn test:architecture && yarn test:browser && yarn test:webgl",
         "ci:engine-hardening": "yarn test && yarn test:architecture && yarn verify:engine-hardening",
         "ci:physics-allocation": "node --expose-gc ./scripts/physics-allocation-governance.mjs",
