@@ -21,9 +21,18 @@ public readonly record struct BatchCapacity
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator nuint(BatchCapacity capacity) => (nuint)capacity.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int ToInt32() => Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static BatchCapacity FromBatchCapacity(int value) => new(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public nuint ToUIntPtr() => (nuint)Value;
 }
 
-[StructLayout(LayoutKind.Sequential, Pack = sizeof(nuint))]
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
 public readonly record struct MemoryAlignment
 {
     public nuint Value { get; }
@@ -34,7 +43,7 @@ public readonly record struct MemoryAlignment
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public MemoryAlignment(nuint value)
     {
-        if (value < (nuint)sizeof(nuint) || (value & (value - 1)) != 0)
+        if (value < (nuint)IntPtr.Size || (value & (value - 1)) != 0)
         {
             ThrowHelper.ThrowInvalidAlignment(value);
         }
@@ -43,6 +52,12 @@ public readonly record struct MemoryAlignment
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator nuint(MemoryAlignment alignment) => alignment.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public nuint ToUIntPtr() => Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static MemoryAlignment FromMemoryAlignment(nuint value) => new(value);
 }
 
 internal static class ThrowHelper
