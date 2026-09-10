@@ -57,14 +57,14 @@ public interface IBatchQueue<T> : IBatchEnqueue<T>, IBatchDequeue<T>, IBoundedQu
 public interface IBackoffPolicy
 {
     static abstract void Initialize(out int state);
-    static abstract void Step(ref int state);
+    static abstract void Advance(ref int state);
     static abstract void Reset(ref int state);
 }
 
 /// <summary>
 /// Zero-allocation visitor contract allowing stack-only ref structs to consume individual elements.
 /// </summary>
-public interface ISlotConsumer<T, in TState> where TState : allows ref struct
+public interface ISlotConsumer<T, TState> where TState : allows ref struct
 {
     void Consume(in T item, ref TState state);
 }
@@ -72,7 +72,7 @@ public interface ISlotConsumer<T, in TState> where TState : allows ref struct
 /// <summary>
 /// Zero-allocation visitor contract allowing stack-only ref structs to consume contiguous spans.
 /// </summary>
-public interface ISpanVisitor<T, in TState> where TState : allows ref struct
+public interface ISpanVisitor<T, TState> where TState : allows ref struct
 {
     void Visit(ReadOnlySpan<T> batch, ref TState state);
 }
