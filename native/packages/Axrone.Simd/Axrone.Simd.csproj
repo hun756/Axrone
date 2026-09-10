@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Simd</RootNamespace>
+    <AssemblyName>Axrone.Simd</AssemblyName>
+    <Description>High-performance SIMD-accelerated vector operations for the Axrone engine.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1724: Type name conflicts with namespace — intentional -->
+    <NoWarn>$(NoWarn);CA1724</NoWarn>
+    <!-- CA1000: Static members on generic types — intentional for SIMD API -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1051: Do not declare visible instance fields — struct fields intentional for perf -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1815: Struct Equals/GetHashCode — SIMD value types use custom equality -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA2231: Struct should override Equals — implements IEquatable -->
+    <NoWarn>$(NoWarn);CA2231</NoWarn>
+    <!-- CA1068: CancellationToken parameter ordering — intentional API design -->
+    <NoWarn>$(NoWarn);CA1068</NoWarn>
+    <!-- CA1008: Enum needs None=0 — intentional enum design -->
+    <NoWarn>$(NoWarn);CA1008</NoWarn>
+    <!-- CA1707: Underscores in names — intentional naming -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Simd.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="reference/**" />
+  </ItemGroup>
+
+</Project>
