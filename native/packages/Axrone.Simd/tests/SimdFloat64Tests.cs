@@ -266,4 +266,24 @@ public class SimdFloat64Tests
                 $"at index {i}: exp({src[i]})");
         }
     }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(8)]
+    [InlineData(16)]
+    [InlineData(100)]
+    public void VectorLog_ProducesCorrectResult(int size)
+    {
+        double[] src = new double[size];
+        for (int i = 0; i < size; i++)
+            src[i] = (i + 1) * 0.5; // positive values: 0.5, 1.0, 1.5, ...
+        double[] dst = new double[size];
+
+        SimdFloat64.VectorLog(src, dst);
+
+        for (int i = 0; i < size; i++)
+            dst[i].Should().BeApproximately(Math.Log(src[i]), Math.Max(Tolerance, Math.Abs(Math.Log(src[i])) * RelativeTolerance),
+                $"at index {i}: log({src[i]})");
+    }
 }

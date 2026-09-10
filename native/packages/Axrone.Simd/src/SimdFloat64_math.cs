@@ -249,30 +249,91 @@ public static unsafe partial class SimdFloat64
         for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = ExpScalar(Unsafe.Add(ref src, (nint)i));
     }
 
+    private const double Sqrt2 = 1.4142135623730951;
+    private const double DenormScale = 18014398509481984.0; // 2^54: maps any double denormal to a normal
+    private const long ExpMask = 0x7FF0000000000000L;
+    private const long MantMask = 0x000FFFFFFFFFFFFFL;
+    private const long ExpBias = 0x3FF0000000000000L;
+
+    // ln(x) = e*ln2 + ln(1+f), m in [sqrt(2)/2, sqrt(2)), f = m-1, s = f/(2+f), ln(1+f) = 2s*(1 + z*(1/3 + z*(1/5 + ...)))
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector512<double> LogKernel512(Vector512<double> x)
     {
-        Vector512<double> v = x, n = Vector512<double>.Zero;
-        Vector512<double> one = Vector512.Create(1.0), two = Vector512.Create(2.0), half = Vector512.Create(0.5);
-        for (int iter = 0; iter < 1200; ++iter)
-        {
-            Vector512<double> g = Vector512.GreaterThanOrEqual(v, two);
-            if (Vector512.Equals(g, Vector512<long>.Zero)) break;
-            v = Vector512.ConditionalSelect(g, v * half, v);
-            n += Vector512.ConditionalSelect(g, one, Vector512<double>.Zero);
-        }
-        for (int iter = 0; iter < 1200; ++iter)
-        {
-            Vector512<double> l = Vector512.LessThan(v, one);
-            if (Vector512.Equals(l, Vector512<long>.Zero)) break;
-            v = Vector512.ConditionalSelect(l, v * two, v);
-            n -= Vector512.ConditionalSelect(l, one, Vector512<double>.Zero);
-        }
-        Vector512<double> u = v - one;
-        Vector512<double> poly = Vector512.Create(-0.020835085);
-        poly = poly * u + Vector512.Create(0.0277272808); poly = poly * u + Vector512.Create(-0.0397820075);
-        poly = poly * u + Vector512.Create(0.0667107478); poly = poly * u + Vector512.Create(-0.117496403);
-        poly = poly * u + Vector512.Create(0.333331568);
-        return n * Vector512.Create(0.6931471805599453) + (poly * u + one) * u;
+        Vector512<long> bits = x.AsInt64();
+        Vector512<long> expField = bits & Vector512.Create(ExpMask);
+        Vector512<long> subMask = Vector512.Equals(expField, Vector512<long>.Zero);
+        Vector512<double> xs = Vector512.ConditionalSelect(subMask.AsDouble(), x * Vector512.Create(DenormScale), x);
+        Vector512<long> bits2 = xs.AsInt64();
+        Vector512<long> e = ((bits2 & Vector512.Create(ExpMask)) >> 52) - Vector512.Create(1023L)
+            - Vector512.ConditionalSelect(subMask, Vector512.Create(54L), Vector512<long>.Zero);
+        Vector512<double> m = (bits2 & Vector512.Create(MantMask) | Vector512.Create(ExpBias)).AsDouble();
+        Vector512<double> ge = Vector512.GreaterThanOrEqual(m, Vector512.Create(Sqrt2));
+        m = Vector512.ConditionalSelect(ge, m * Vector512.Create(0.5), m);
+        e = Vector512.ConditionalSelect(ge.AsInt64(), e + Vector512.Create(1L), e);
+        Vector512<double> f = m - Vector512.Create(1.0);
+        Vector512<double> s = f / (f + Vector512.Create(2.0));
+        Vector512<double> z = s * s;
+        Vector512<double> p = Vector512.Create(1.0 / 33.0);
+        p = p * z + Vector512.Create(1.0 / 31.0);
+        p = p * z + Vector512.Create(1.0 / 29.0);
+        p = p * z + Vector512.Create(1.0 / 27.0);
+        p = p * z + Vector512.Create(1.0 / 25.0);
+        p = p * z + Vector512.Create(1.0 / 23.0);
+        p = p * z + Vector512.Create(1.0 / 21.0);
+        p = p * z + Vector512.Create(1.0 / 19.0);
+        p = p * z + Vector512.Create(1.0 / 17.0);
+        p = p * z + Vector512.Create(1.0 / 15.0);
+        p = p * z + Vector512.Create(1.0 / 13.0);
+        p = p * z + Vector512.Create(1.0 / 11.0);
+        p = p * z + Vector512.Create(1.0 / 9.0);
+        p = p * z + Vector512.Create(1.0 / 7.0);
+        p = p * z + Vector512.Create(1.0 / 5.0);
+        p = p * z + Vector512.Create(1.0 / 3.0);
+        Vector512<double> lnF = (Vector512.Create(2.0) * s) * (p * z + Vector512.Create(1.0));
+        Vector512<double> result = Vector512.ConvertToDouble(e) * Vector512.Create(0.6931471805599453) + lnF;
+        result = Vector512.ConditionalSelect(Vector512.LessThanOrEqual(x, Vector512<double>.Zero), Vector512.Create(double.NegativeInfinity), result);
+        result = Vector512.ConditionalSelect(Vector512.Equals(expField, Vector512.Create(ExpMask)).AsDouble(), x, result);
+        return result;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector256<double> LogKernel256(Vector256<double> x)
+    {
+        Vector256<long> bits = x.AsInt64();
+        Vector256<long> expField = bits & Vector256.Create(ExpMask);
+        Vector256<long> subMask = Vector256.Equals(expField, Vector256<long>.Zero);
+        Vector256<double> xs = Vector256.ConditionalSelect(subMask.AsDouble(), x * Vector256.Create(DenormScale), x);
+        Vector256<long> bits2 = xs.AsInt64();
+        Vector256<long> e = ((bits2 & Vector256.Create(ExpMask)) >> 52) - Vector256.Create(1023L)
+            - Vector256.ConditionalSelect(subMask, Vector256.Create(54L), Vector256<long>.Zero);
+        Vector256<double> m = (bits2 & Vector256.Create(MantMask) | Vector256.Create(ExpBias)).AsDouble();
+        Vector256<double> ge = Vector256.GreaterThanOrEqual(m, Vector256.Create(Sqrt2));
+        m = Vector256.ConditionalSelect(ge, m * Vector256.Create(0.5), m);
+        e = Vector256.ConditionalSelect(ge.AsInt64(), e + Vector256.Create(1L), e);
+        Vector256<double> f = m - Vector256.Create(1.0);
+        Vector256<double> s = f / (f + Vector256.Create(2.0));
+        Vector256<double> z = s * s;
+        Vector256<double> p = Vector256.Create(1.0 / 33.0);
+        p = p * z + Vector256.Create(1.0 / 31.0);
+        p = p * z + Vector256.Create(1.0 / 29.0);
+        p = p * z + Vector256.Create(1.0 / 27.0);
+        p = p * z + Vector256.Create(1.0 / 25.0);
+        p = p * z + Vector256.Create(1.0 / 23.0);
+        p = p * z + Vector256.Create(1.0 / 21.0);
+        p = p * z + Vector256.Create(1.0 / 19.0);
+        p = p * z + Vector256.Create(1.0 / 17.0);
+        p = p * z + Vector256.Create(1.0 / 15.0);
+        p = p * z + Vector256.Create(1.0 / 13.0);
+        p = p * z + Vector256.Create(1.0 / 11.0);
+        p = p * z + Vector256.Create(1.0 / 9.0);
+        p = p * z + Vector256.Create(1.0 / 7.0);
+        p = p * z + Vector256.Create(1.0 / 5.0);
+        p = p * z + Vector256.Create(1.0 / 3.0);
+        Vector256<double> lnF = (Vector256.Create(2.0) * s) * (p * z + Vector256.Create(1.0));
+        Vector256<double> result = Vector256.ConvertToDouble(e) * Vector256.Create(0.6931471805599453) + lnF;
+        result = Vector256.ConditionalSelect(Vector256.LessThanOrEqual(x, Vector256<double>.Zero), Vector256.Create(double.NegativeInfinity), result);
+        result = Vector256.ConditionalSelect(Vector256.Equals(expField, Vector256.Create(ExpMask)).AsDouble(), x, result);
+        return result;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -292,31 +353,40 @@ public static unsafe partial class SimdFloat64
         else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<double>.Count)
         {
             nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step)
-            {
-                Vector256<double> v = Vector256.LoadUnsafe(in src, i), nn = Vector256<double>.Zero;
-                Vector256<double> one = Vector256.Create(1.0), two = Vector256.Create(2.0), half = Vector256.Create(0.5);
-                for (int it = 0; it < 1200; ++it) { var g = Vector256.GreaterThanOrEqual(v, two); if (Vector256.Equals(g, Vector256<long>.Zero)) break; v = Vector256.ConditionalSelect(g, v * half, v); nn += Vector256.ConditionalSelect(g, one, Vector256<double>.Zero); }
-                for (int it = 0; it < 1200; ++it) { var l = Vector256.LessThan(v, one); if (Vector256.Equals(l, Vector256<long>.Zero)) break; v = Vector256.ConditionalSelect(l, v * two, v); nn -= Vector256.ConditionalSelect(l, one, Vector256<double>.Zero); }
-                Vector256<double> u2 = v - one;
-                Vector256<double> q2 = Vector256.Create(-0.020835085);
-                q2 = q2 * u2 + Vector256.Create(0.0277272808); q2 = q2 * u2 + Vector256.Create(-0.0397820075);
-                q2 = q2 * u2 + Vector256.Create(0.0667107478); q2 = q2 * u2 + Vector256.Create(-0.117496403);
-                q2 = q2 * u2 + Vector256.Create(0.333331568);
-                (nn * Vector256.Create(0.6931471805599453) + (q2 * u2 + one) * u2).StoreUnsafe(ref dst, i);
-            }
+            for (; i < limit; i += step) LogKernel256(Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
-        for (; i < length; ++i)
-        {
-            double x = Unsafe.Add(ref src, (nint)i);
-            if (x <= 0) { Unsafe.Add(ref dst, (nint)i) = double.NegativeInfinity; continue; }
-            double v = x, nn = 0;
-            for (int it = 0; it < 1200 && v >= 2; ++it) { v *= 0.5; nn += 1; }
-            for (int it = 0; it < 1200 && v < 1; ++it) { v *= 2; nn -= 1; }
-            double u = v - 1;
-            double poly = (((((-0.020835085 * u + 0.0277272808) * u - 0.0397820075) * u + 0.0667107478) * u - 0.117496403) * u + 0.333331568) * u + 1.0;
-            Unsafe.Add(ref dst, (nint)i) = nn * 0.6931471805599453 + poly * u;
-        }
+        for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = LogScalar(Unsafe.Add(ref src, (nint)i));
+    }
+
+    private static double LogScalar(double x)
+    {
+        if (x <= 0.0) return double.NegativeInfinity;
+        long bits = BitConverter.DoubleToInt64Bits(x);
+        if ((bits & ExpMask) == ExpMask) return x;
+        long e = ((bits & ExpMask) >> 52) - 1023;
+        if ((bits & ExpMask) == 0) { x *= DenormScale; bits = BitConverter.DoubleToInt64Bits(x); e = ((bits & ExpMask) >> 52) - 1023 - 54; }
+        double m = BitConverter.Int64BitsToDouble((bits & MantMask) | ExpBias);
+        if (m >= Sqrt2) { m *= 0.5; e += 1; }
+        double f = m - 1.0;
+        double s = f / (f + 2.0);
+        double z = s * s;
+        double p = 1.0 / 33.0;
+        p = p * z + 1.0 / 31.0;
+        p = p * z + 1.0 / 29.0;
+        p = p * z + 1.0 / 27.0;
+        p = p * z + 1.0 / 25.0;
+        p = p * z + 1.0 / 23.0;
+        p = p * z + 1.0 / 21.0;
+        p = p * z + 1.0 / 19.0;
+        p = p * z + 1.0 / 17.0;
+        p = p * z + 1.0 / 15.0;
+        p = p * z + 1.0 / 13.0;
+        p = p * z + 1.0 / 11.0;
+        p = p * z + 1.0 / 9.0;
+        p = p * z + 1.0 / 7.0;
+        p = p * z + 1.0 / 5.0;
+        p = p * z + 1.0 / 3.0;
+        return e * 0.6931471805599453 + (2.0 * s) * (p * z + 1.0);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
