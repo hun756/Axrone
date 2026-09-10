@@ -13,6 +13,10 @@ import {
 import { Camera, type CameraConfig } from '@axrone/scene-runtime/scene-facade';
 import { MeshRenderer, type MeshRendererConfig } from '@axrone/scene-runtime/scene-3d-support';
 
+export interface SceneProfilerProbe {
+    resolveHotRefsMs?: number;
+}
+
 interface SceneActorBatchComponentEntry {
     readonly type: ComponentConstructor;
     readonly args?: readonly unknown[];
@@ -27,7 +31,7 @@ interface Scene3DActorRuntimeHost<R extends ComponentRegistry = Record<string, n
     createActor(config?: ActorConfig): Actor<World<SceneRegistry<R>>>;
     createActorsWithComponents(
         configs: readonly SceneActorBatchEntry[],
-        profiling?: Record<string, number>
+        profiling?: SceneProfilerProbe
     ): readonly Actor<World<SceneRegistry<R>>>[];
     runInStructureBatch<T>(callback: () => T): T;
     isComponentRegistered(componentTypeOrName: string | ComponentConstructor): boolean;
@@ -87,7 +91,7 @@ export class Scene3DActorRuntime<R extends ComponentRegistry = Record<string, ne
 
     createRenderableActors(
         configs: readonly SceneRenderableActorCreateOptions[],
-        profiling?: Record<string, number>
+        profiling?: SceneProfilerProbe
     ): readonly SceneRenderableActorInstance<R>[] {
         this._requireRegisteredComponent(
             MeshRenderer,
