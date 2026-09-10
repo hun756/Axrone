@@ -227,7 +227,8 @@ public class SimdInt32Tests
 
         int idx = SimdInt32.FindFirstGreaterThan(src, threshold);
 
-        idx.Should().Be(threshold + 1);
+        int expectedIdx = Array.FindIndex(src, v => v > threshold);
+        idx.Should().Be(expectedIdx);
     }
 
     [Fact]

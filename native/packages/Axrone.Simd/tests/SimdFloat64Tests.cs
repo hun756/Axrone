@@ -166,7 +166,8 @@ public class SimdFloat64Tests
 
         int idx = SimdFloat64.FindFirstGreaterThan(src, threshold);
 
-        idx.Should().Be((int)threshold + 1);
+        int expectedIdx = Array.FindIndex(src, v => v > threshold);
+        idx.Should().Be(expectedIdx);
     }
 
     [Fact]
