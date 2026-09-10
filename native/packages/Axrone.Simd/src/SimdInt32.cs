@@ -1118,4 +1118,34 @@ public static unsafe class SimdInt32
         }
         for (; i < length; ++i) Unsafe.Add(ref dRef, (nint)i) = Math.Max(Unsafe.Add(ref lRef, (nint)i), Unsafe.Add(ref rRef, (nint)i));
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void VectorClamp(ReadOnlySpan<int> source, int min, int max, Span<int> destination)
+    {
+        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        nuint length = (nuint)source.Length;
+        if (length == 0) return;
+        ref int sRef = ref MemoryMarshal.GetReference(source);
+        ref int dRef = ref MemoryMarshal.GetReference(destination);
+        nuint i = 0;
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count)
+        {
+            Vector512<int> vMin = Vector512.Create(min), vMax = Vector512.Create(max);
+            nuint step = (nuint)Vector512<int>.Count, limit = length - step + 1;
+            for (; i < limit; i += step) Vector512.Min(Vector512.Max(Vector512.LoadUnsafe(in sRef, i), vMin), vMax).StoreUnsafe(ref dRef, i);
+        }
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count)
+        {
+            Vector256<int> vMin = Vector256.Create(min), vMax = Vector256.Create(max);
+            nuint step = (nuint)Vector256<int>.Count, limit = length - step + 1;
+            for (; i < limit; i += step) Vector256.Min(Vector256.Max(Vector256.LoadUnsafe(in sRef, i), vMin), vMax).StoreUnsafe(ref dRef, i);
+        }
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count)
+        {
+            Vector128<int> vMin = Vector128.Create(min), vMax = Vector128.Create(max);
+            nuint step = (nuint)Vector128<int>.Count, limit = length - step + 1;
+            for (; i < limit; i += step) Vector128.Min(Vector128.Max(Vector128.LoadUnsafe(in sRef, i), vMin), vMax).StoreUnsafe(ref dRef, i);
+        }
+        for (; i < length; ++i) Unsafe.Add(ref dRef, (nint)i) = Math.Clamp(Unsafe.Add(ref sRef, (nint)i), min, max);
+    }
 }
