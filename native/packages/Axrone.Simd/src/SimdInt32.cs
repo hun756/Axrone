@@ -1232,4 +1232,59 @@ public static unsafe class SimdInt32
         }
         for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = (Unsafe.Add(ref src, (nint)i) * multiplier) + offset;
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void VectorFma(ReadOnlySpan<int> a, ReadOnlySpan<int> b, ReadOnlySpan<int> c, Span<int> destination)
+    {
+        if (a.Length != b.Length || a.Length != c.Length || destination.Length < a.Length) ThrowHelper.ThrowMismatchedSpans();
+        nuint length = (nuint)a.Length;
+        if (length == 0) return;
+        ref int aRef = ref MemoryMarshal.GetReference(a);
+        ref int bRef = ref MemoryMarshal.GetReference(b);
+        ref int cRef = ref MemoryMarshal.GetReference(c);
+        ref int dRef = ref MemoryMarshal.GetReference(destination);
+        nuint i = 0;
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count * 2)
+        {
+            nuint step = (nuint)Vector512<int>.Count, limit = length - (step * 2) + 1;
+            for (; i < limit; i += step * 2)
+            {
+                ((Vector512.LoadUnsafe(in aRef, i) * Vector512.LoadUnsafe(in bRef, i)) + Vector512.LoadUnsafe(in cRef, i)).StoreUnsafe(ref dRef, i);
+                ((Vector512.LoadUnsafe(in aRef, i + step) * Vector512.LoadUnsafe(in bRef, i + step)) + Vector512.LoadUnsafe(in cRef, i + step)).StoreUnsafe(ref dRef, i + step);
+            }
+            nuint singleLimit = length - step + 1;
+            for (; i < singleLimit; i += step) ((Vector512.LoadUnsafe(in aRef, i) * Vector512.LoadUnsafe(in bRef, i)) + Vector512.LoadUnsafe(in cRef, i)).StoreUnsafe(ref dRef, i);
+        }
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count * 2)
+        {
+            nuint step = (nuint)Vector256<int>.Count, limit = length - (step * 2) + 1;
+            for (; i < limit; i += step * 2)
+            {
+                ((Vector256.LoadUnsafe(in aRef, i) * Vector256.LoadUnsafe(in bRef, i)) + Vector256.LoadUnsafe(in cRef, i)).StoreUnsafe(ref dRef, i);
+                ((Vector256.LoadUnsafe(in aRef, i + step) * Vector256.LoadUnsafe(in bRef, i + step)) + Vector256.LoadUnsafe(in cRef, i + step)).StoreUnsafe(ref dRef, i + step);
+            }
+            nuint singleLimit = length - step + 1;
+            for (; i < singleLimit; i += step) ((Vector256.LoadUnsafe(in aRef, i) * Vector256.LoadUnsafe(in bRef, i)) + Vector256.LoadUnsafe(in cRef, i)).StoreUnsafe(ref dRef, i);
+        }
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count * 2)
+        {
+            nuint step = (nuint)Vector128<int>.Count, limit = length - (step * 2) + 1;
+            for (; i < limit; i += step * 2)
+            {
+                ((Vector128.LoadUnsafe(in aRef, i) * Vector128.LoadUnsafe(in bRef, i)) + Vector128.LoadUnsafe(in cRef, i)).StoreUnsafe(ref dRef, i);
+                ((Vector128.LoadUnsafe(in aRef, i + step) * Vector128.LoadUnsafe(in bRef, i + step)) + Vector128.LoadUnsafe(in cRef, i + step)).StoreUnsafe(ref dRef, i + step);
+            }
+            nuint singleLimit = length - step + 1;
+            for (; i < singleLimit; i += step) ((Vector128.LoadUnsafe(in aRef, i) * Vector128.LoadUnsafe(in bRef, i)) + Vector128.LoadUnsafe(in cRef, i)).StoreUnsafe(ref dRef, i);
+        }
+        nuint scalarLimit = length >= 4 ? length - 3 : 0;
+        for (; i < scalarLimit; i += 4)
+        {
+            Unsafe.Add(ref dRef, (nint)(i + 0)) = (Unsafe.Add(ref aRef, (nint)(i + 0)) * Unsafe.Add(ref bRef, (nint)(i + 0))) + Unsafe.Add(ref cRef, (nint)(i + 0));
+            Unsafe.Add(ref dRef, (nint)(i + 1)) = (Unsafe.Add(ref aRef, (nint)(i + 1)) * Unsafe.Add(ref bRef, (nint)(i + 1))) + Unsafe.Add(ref cRef, (nint)(i + 1));
+            Unsafe.Add(ref dRef, (nint)(i + 2)) = (Unsafe.Add(ref aRef, (nint)(i + 2)) * Unsafe.Add(ref bRef, (nint)(i + 2))) + Unsafe.Add(ref cRef, (nint)(i + 2));
+            Unsafe.Add(ref dRef, (nint)(i + 3)) = (Unsafe.Add(ref aRef, (nint)(i + 3)) * Unsafe.Add(ref bRef, (nint)(i + 3))) + Unsafe.Add(ref cRef, (nint)(i + 3));
+        }
+        for (; i < length; ++i) Unsafe.Add(ref dRef, (nint)i) = (Unsafe.Add(ref aRef, (nint)i) * Unsafe.Add(ref bRef, (nint)i)) + Unsafe.Add(ref cRef, (nint)i);
+    }
 }
