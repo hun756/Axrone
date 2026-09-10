@@ -8,3 +8,4 @@ global using System.Runtime.InteropServices;
 global using System.Runtime.Intrinsics;
 global using System.Threading;
 global using Axrone.Utility;
+global using Axrone.Utility.Internal;
