@@ -23,13 +23,13 @@ internal struct SequenceBarrierCoordinator
     public SequenceNumber EnqueuePos
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        readonly get => new(Volatile.Read(ref Unsafe.AsRef(in _enqueuePos)));
+        get => new(Volatile.Read(ref Unsafe.AsRef(in _enqueuePos)));
     }
 
     public SequenceNumber DequeuePos
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        readonly get => new(Volatile.Read(ref Unsafe.AsRef(in _dequeuePos)));
+        get => new(Volatile.Read(ref Unsafe.AsRef(in _dequeuePos)));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -41,7 +41,7 @@ internal struct SequenceBarrierCoordinator
         => Interlocked.CompareExchange(ref _dequeuePos, target.Value, expected.Value) == expected.Value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly int ComputeCount(uint capacity)
+    public int ComputeCount(uint capacity)
     {
         nuint enq = Volatile.Read(ref Unsafe.AsRef(in _enqueuePos));
         nuint deq = Volatile.Read(ref Unsafe.AsRef(in _dequeuePos));
