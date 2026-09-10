@@ -7,13 +7,14 @@ using System.Threading.Tasks.Sources;
 /// Specialized pooled state machine for asynchronous batch operations.
 /// Implements IValueTaskSource&lt;int&gt; for zero-allocation async batch enqueue/dequeue.
 /// </summary>
-internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>
+internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>, IPooledWaiterNode<AsyncBatchWaiter<T>>
 {
     private ManualResetValueTaskSourceCore<int> _core;
     private CancellationTokenRegistration _registration;
-    private AsyncBatchWaiterPool<T>? _pool;
+    private LockFreeStackPool<AsyncBatchWaiter<T>>? _pool;
 
-    internal AsyncBatchWaiter<T>? Next;
+    public AsyncBatchWaiter<T>? Next { get; set; }
+
     internal ReadOnlyMemory<T> MemoryIn;
     internal Memory<T> MemoryOut;
     internal bool IsEnqueue;
@@ -26,7 +27,7 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Reset(AsyncBatchWaiterPool<T> pool, bool isEnqueue)
+    public void OnRented(LockFreeStackPool<AsyncBatchWaiter<T>> pool, bool isEnqueue)
     {
         _core.Reset();
         _pool = pool;
@@ -81,13 +82,14 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>
 /// Specialized pooled state machine for asynchronous single-item operations.
 /// Implements both IValueTaskSource&lt;T&gt; (dequeue) and IValueTaskSource (enqueue).
 /// </summary>
-internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
+internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource, IPooledWaiterNode<AsyncItemWaiter<T>>
 {
     private ManualResetValueTaskSourceCore<T> _core;
     private CancellationTokenRegistration _registration;
-    private AsyncItemWaiterPool<T>? _pool;
+    private LockFreeStackPool<AsyncItemWaiter<T>>? _pool;
 
-    internal AsyncItemWaiter<T>? Next;
+    public AsyncItemWaiter<T>? Next { get; set; }
+
     internal T Item = default!;
     internal bool IsEnqueue;
 
@@ -99,7 +101,7 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Reset(AsyncItemWaiterPool<T> pool, bool isEnqueue)
+    public void OnRented(LockFreeStackPool<AsyncItemWaiter<T>> pool, bool isEnqueue)
     {
         _core.Reset();
         _pool = pool;
@@ -162,94 +164,6 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
 }
 
 /// <summary>
-/// Lock-free stack pool for AsyncBatchWaiter instances. Eliminates per-operation allocations.
-/// </summary>
-internal sealed class AsyncBatchWaiterPool<T>
-{
-    private AsyncBatchWaiter<T>? _head;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public AsyncBatchWaiter<T> Rent(bool isEnqueue)
-    {
-        AsyncBatchWaiter<T>? node;
-        while (true)
-        {
-            node = Volatile.Read(ref _head);
-            if (node == null)
-            {
-                node = new AsyncBatchWaiter<T>();
-                break;
-            }
-
-            if (Interlocked.CompareExchange(ref _head, node.Next, node) == node)
-            {
-                break;
-            }
-        }
-
-        node.Reset(this, isEnqueue);
-        return node;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Return(AsyncBatchWaiter<T> node)
-    {
-        while (true)
-        {
-            node.Next = Volatile.Read(ref _head);
-            if (Interlocked.CompareExchange(ref _head, node, node.Next) == node.Next)
-            {
-                break;
-            }
-        }
-    }
-}
-
-/// <summary>
-/// Lock-free stack pool for AsyncItemWaiter instances. Eliminates per-operation allocations.
-/// </summary>
-internal sealed class AsyncItemWaiterPool<T>
-{
-    private AsyncItemWaiter<T>? _head;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public AsyncItemWaiter<T> Rent(bool isEnqueue)
-    {
-        AsyncItemWaiter<T>? node;
-        while (true)
-        {
-            node = Volatile.Read(ref _head);
-            if (node == null)
-            {
-                node = new AsyncItemWaiter<T>();
-                break;
-            }
-
-            if (Interlocked.CompareExchange(ref _head, node.Next, node) == node)
-            {
-                break;
-            }
-        }
-
-        node.Reset(this, isEnqueue);
-        return node;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Return(AsyncItemWaiter<T> node)
-    {
-        while (true)
-        {
-            node.Next = Volatile.Read(ref _head);
-            if (Interlocked.CompareExchange(ref _head, node, node.Next) == node.Next)
-            {
-                break;
-            }
-        }
-    }
-}
-
-/// <summary>
 /// Decoupled, lock-re-entrancy-free asynchronous coordinator.
 /// Never executes CAS loops or payload transfers while holding the synchronization primitive.
 /// Drain-under-lock → fulfill-outside-lock → re-queue-unfulfilled pattern.
@@ -257,8 +171,8 @@ internal sealed class AsyncItemWaiterPool<T>
 internal sealed class AsyncBatchQueueCoordinator<T>
 {
     private readonly Lock _syncLock = new();
-    private readonly AsyncBatchWaiterPool<T> _batchPool = new();
-    private readonly AsyncItemWaiterPool<T> _itemPool = new();
+    private readonly LockFreeStackPool<AsyncBatchWaiter<T>> _batchPool = new();
+    private readonly LockFreeStackPool<AsyncItemWaiter<T>> _itemPool = new();
 
     private AsyncBatchWaiter<T>? _batchEnqHead, _batchEnqTail;
     private AsyncBatchWaiter<T>? _batchDeqHead, _batchDeqTail;
