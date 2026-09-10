@@ -1341,4 +1341,32 @@ public static unsafe class SimdInt32
         }
         for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = (float)Unsafe.Add(ref src, (nint)i);
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void Fill(Span<int> destination, int value)
+    {
+        nuint length = (nuint)destination.Length;
+        if (length == 0) return;
+        ref int dRef = ref MemoryMarshal.GetReference(destination);
+        nuint i = 0;
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count)
+        {
+            Vector512<int> v = Vector512.Create(value);
+            nuint step = (nuint)Vector512<int>.Count, limit = length - step + 1;
+            for (; i < limit; i += step) v.StoreUnsafe(ref dRef, i);
+        }
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count)
+        {
+            Vector256<int> v = Vector256.Create(value);
+            nuint step = (nuint)Vector256<int>.Count, limit = length - step + 1;
+            for (; i < limit; i += step) v.StoreUnsafe(ref dRef, i);
+        }
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count)
+        {
+            Vector128<int> v = Vector128.Create(value);
+            nuint step = (nuint)Vector128<int>.Count, limit = length - step + 1;
+            for (; i < limit; i += step) v.StoreUnsafe(ref dRef, i);
+        }
+        for (; i < length; ++i) Unsafe.Add(ref dRef, (nint)i) = value;
+    }
 }
