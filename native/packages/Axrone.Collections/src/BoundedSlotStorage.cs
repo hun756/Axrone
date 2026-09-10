@@ -13,7 +13,7 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
     private readonly uint _capacity;
     private readonly nuint _mask;
     private readonly nuint* _sequences;
-    private readonly T* _nativeItems;
+    private readonly nint _nativePointer;
     private readonly T[]? _managedItems;
     private int _isDisposed;
 
@@ -26,6 +26,7 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
         _capacity = capacity.Value;
         _mask = (nuint)_capacity - 1;
 
+        // Allocate 64-byte aligned off-heap memory for monotonic sequences
         nuint seqBytes = (nuint)_capacity * (nuint)sizeof(nuint);
         _sequences = (nuint*)NativeMemory.AllocZeroed(seqBytes, 64);
 
@@ -37,12 +38,12 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
         if (!RuntimeHelpers.IsReferenceOrContainsReferences<T>())
         {
             nuint itemBytes = (nuint)_capacity * (nuint)Unsafe.SizeOf<T>();
-            _nativeItems = (T*)NativeMemory.AllocZeroed(itemBytes, 64);
+            _nativePointer = (nint)NativeMemory.AllocZeroed(itemBytes, 64);
             _managedItems = null;
         }
         else
         {
-            _nativeItems = null;
+            _nativePointer = 0;
             _managedItems = GC.AllocateUninitializedArray<T>((int)_capacity);
         }
     }
@@ -51,9 +52,9 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
     public ref T GetItemRef(SequenceNumber position)
     {
         nuint index = position.Value & _mask;
-        if (_nativeItems != null)
+        if (_nativePointer != 0)
         {
-            return ref _nativeItems[index];
+            return ref Unsafe.Add(ref Unsafe.AsRef<T>((void*)_nativePointer), (nint)index);
         }
         return ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(_managedItems!), (nint)index);
     }
@@ -81,10 +82,11 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private void WriteSlice(ReadOnlySpan<T> slice, nuint offset)
     {
-        if (_nativeItems != null)
+        if (_nativePointer != 0)
         {
-            Span<T> dest = new(_nativeItems + offset, slice.Length);
-            slice.CopyTo(dest);
+            ReadOnlySpan<T> src = slice;
+            Span<T> dest = new((void*)(_nativePointer + (nint)offset * Unsafe.SizeOf<T>()), slice.Length);
+            src.CopyTo(dest);
         }
         else
         {
@@ -117,16 +119,18 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private void ReadSlice(Span<T> slice, nuint offset)
     {
-        if (_nativeItems != null)
+        if (_nativePointer != 0)
         {
-            ReadOnlySpan<T> src = new(_nativeItems + offset, slice.Length);
+            ReadOnlySpan<T> src = new((void*)(_nativePointer + (nint)offset * Unsafe.SizeOf<T>()), slice.Length);
             src.CopyTo(slice);
         }
         else
         {
             ref T target = ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(_managedItems!), (nint)offset);
-            ReadOnlySpan<T> src = MemoryMarshal.CreateReadOnlySpan(ref target, slice.Length);
+            Span<T> src = MemoryMarshal.CreateSpan(ref target, slice.Length);
             src.CopyTo(slice);
+
+            // GC root clearing to eliminate memory loitering
             src.Clear();
         }
     }
@@ -187,9 +191,9 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
             NativeMemory.AlignedFree(_sequences);
         }
 
-        if (_nativeItems != null)
+        if (_nativePointer != 0)
         {
-            NativeMemory.AlignedFree(_nativeItems);
+            NativeMemory.AlignedFree((void*)_nativePointer);
         }
 
         if (_managedItems != null)
