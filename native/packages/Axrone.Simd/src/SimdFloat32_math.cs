@@ -115,40 +115,87 @@ public static unsafe partial class SimdFloat32
             Unsafe.Add(ref dst, Unsafe.Add(ref idx, (nint)i)) = Unsafe.Add(ref src, (nint)i);
     }
 
+    private const float Log2Ef = 1.4426950408889634f;
+    private const float Ln2Hif = 0.693359375f;      // 355/512, exactly representable: n * Ln2Hif is exact
+    private const float Ln2Lof = -2.12194440e-4f;   // ln2 - Ln2Hif
+    private const float ExpClampf = 87f;            // keeps 2^n in normal range, results never need denormals
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector512<float> ExpKernel512(Vector512<float> x)
     {
-        const float LOG2E = 1.4426950408889634f;
-        Vector512<float> clamped = Vector512.Max(Vector512.Min(x, Vector512.Create(87f)), Vector512.Create(-87f));
-        Vector512<float> t = clamped * Vector512.Create(LOG2E);
-        Vector512<int> k = Vector512.Floor(t).AsInt32() - Vector512.Create(1);
-        Vector512<float> f = t - Vector512.ConvertToSingle(k);
-        Vector512<int> biased = k + Vector512.Create(127);
-        Vector512<float> pow2 = Vector512.ShiftLeft(biased, 23).AsSingle();
-        Vector512<float> u = f * Vector512.Create(0.6931471805599453f);
-        Vector512<float> c5 = Vector512.Create(0.00833333333333333f);
-        Vector512<float> poly = c5;
-        poly = poly * u + Vector512.Create(0.0416666666666667f);
-        poly = poly * u + Vector512.Create(0.166666666666667f);
-        poly = poly * u + Vector512.Create(0.5f);
-        poly = poly * u + Vector512.Create(1f);
-        return pow2 * (poly * u + Vector512.Create(1f));
+        Vector512<float> clamped = Vector512.Max(Vector512.Min(x, Vector512.Create(ExpClampf)), Vector512.Create(-ExpClampf));
+        Vector512<float> t = clamped * Vector512.Create(Log2Ef);
+        Vector512<int> n = Vector512.ConvertToInt32(Vector512.Round(t));
+        Vector512<float> nf = Vector512.ConvertToSingle(n);
+        Vector512<float> r = (clamped - nf * Vector512.Create(Ln2Hif)) - nf * Vector512.Create(Ln2Lof);
+        Vector512<float> p = Vector512.Create(1f / 5040f);
+        p = p * r + Vector512.Create(1f / 720f);
+        p = p * r + Vector512.Create(1f / 120f);
+        p = p * r + Vector512.Create(1f / 24f);
+        p = p * r + Vector512.Create(1f / 6f);
+        p = p * r + Vector512.Create(0.5f);
+        p = p * r + Vector512.Create(1f);
+        p = p * r + Vector512.Create(1f);
+        Vector512<int> biased = Vector512.Min(Vector512.Max(n, Vector512.Create(-126)), Vector512.Create(127)) + Vector512.Create(127);
+        return Vector512.ShiftLeft(biased, 23).AsSingle() * p;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector256<float> ExpKernel256(Vector256<float> x)
+    {
+        Vector256<float> clamped = Vector256.Max(Vector256.Min(x, Vector256.Create(ExpClampf)), Vector256.Create(-ExpClampf));
+        Vector256<float> t = clamped * Vector256.Create(Log2Ef);
+        Vector256<int> n = Vector256.ConvertToInt32(Vector256.Round(t));
+        Vector256<float> nf = Vector256.ConvertToSingle(n);
+        Vector256<float> r = (clamped - nf * Vector256.Create(Ln2Hif)) - nf * Vector256.Create(Ln2Lof);
+        Vector256<float> p = Vector256.Create(1f / 5040f);
+        p = p * r + Vector256.Create(1f / 720f);
+        p = p * r + Vector256.Create(1f / 120f);
+        p = p * r + Vector256.Create(1f / 24f);
+        p = p * r + Vector256.Create(1f / 6f);
+        p = p * r + Vector256.Create(0.5f);
+        p = p * r + Vector256.Create(1f);
+        p = p * r + Vector256.Create(1f);
+        Vector256<int> biased = Vector256.Min(Vector256.Max(n, Vector256.Create(-126)), Vector256.Create(127)) + Vector256.Create(127);
+        return Vector256.ShiftLeft(biased, 23).AsSingle() * p;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector128<float> ExpKernel128(Vector128<float> x)
+    {
+        Vector128<float> clamped = Vector128.Max(Vector128.Min(x, Vector128.Create(ExpClampf)), Vector128.Create(-ExpClampf));
+        Vector128<float> t = clamped * Vector128.Create(Log2Ef);
+        Vector128<int> n = Vector128.ConvertToInt32(Vector128.Round(t));
+        Vector128<float> nf = Vector128.ConvertToSingle(n);
+        Vector128<float> r = (clamped - nf * Vector128.Create(Ln2Hif)) - nf * Vector128.Create(Ln2Lof);
+        Vector128<float> p = Vector128.Create(1f / 5040f);
+        p = p * r + Vector128.Create(1f / 720f);
+        p = p * r + Vector128.Create(1f / 120f);
+        p = p * r + Vector128.Create(1f / 24f);
+        p = p * r + Vector128.Create(1f / 6f);
+        p = p * r + Vector128.Create(0.5f);
+        p = p * r + Vector128.Create(1f);
+        p = p * r + Vector128.Create(1f);
+        Vector128<int> biased = Vector128.Min(Vector128.Max(n, Vector128.Create(-126)), Vector128.Create(127)) + Vector128.Create(127);
+        return Vector128.ShiftLeft(biased, 23).AsSingle() * p;
     }
 
     private static float ExpScalar(float x)
     {
-        x = Math.Max(-87f, Math.Min(87f, x));
-        float t = x * 1.4426950408889634f;
-        int k = (int)Math.Floor(t) - 1;
-        float f = t - k;
-        float u = f * 0.6931471805599453f;
-        float poly = ((((0.00833333333333333f * u + 0.0416666666666667f) * u + 0.166666666666667f) * u + 0.5f) * u + 1f) * u + 1f;
-        return pow2f(k) * poly;
-    }
-
-    private static float pow2f(int k)
-    {
-        k = Math.Max(-126, Math.Min(127, k));
-        return BitConverter.Int32BitsToSingle((k + 127) << 23);
+        x = Math.Max(-ExpClampf, Math.Min(ExpClampf, x));
+        float t = x * Log2Ef;
+        int n = (int)MathF.Round(t);
+        float r = (x - n * Ln2Hif) - n * Ln2Lof;
+        float p = 1f / 5040f;
+        p = p * r + 1f / 720f;
+        p = p * r + 1f / 120f;
+        p = p * r + 1f / 24f;
+        p = p * r + 1f / 6f;
+        p = p * r + 0.5f;
+        p = p * r + 1f;
+        p = p * r + 1f;
+        int biased = Math.Clamp(n, -126, 127) + 127;
+        return BitConverter.Int32BitsToSingle(biased << 23) * p;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -167,49 +214,13 @@ public static unsafe partial class SimdFloat32
         }
         else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
         {
-            Vector256<float> vLog2E = Vector256.Create(1.4426950408889634f);
-            Vector256<float> vLn2 = Vector256.Create(0.6931471805599453f);
-            Vector256<float> vClamp = Vector256.Create(87f);
             nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
-            for (; i < limit; i += step)
-            {
-                Vector256<float> x = Vector256.Max(Vector256.Min(Vector256.LoadUnsafe(in src, i), vClamp), -vClamp);
-                Vector256<float> tt = x * vLog2E;
-                Vector256<int> k2 = Vector256.Floor(tt).AsInt32() - Vector256.Create(1);
-                Vector256<float> f2 = tt - Vector256.ConvertToSingle(k2);
-                Vector256<int> b2 = k2 + Vector256.Create(127);
-                Vector256<float> p2 = Vector256.ShiftLeft(b2, 23).AsSingle();
-                Vector256<float> u2 = f2 * vLn2;
-                Vector256<float> q2 = Vector256.Create(0.00833333333333333f);
-                q2 = q2 * u2 + Vector256.Create(0.0416666666666667f);
-                q2 = q2 * u2 + Vector256.Create(0.166666666666667f);
-                q2 = q2 * u2 + Vector256.Create(0.5f);
-                q2 = q2 * u2 + Vector256.Create(1f);
-                (p2 * (q2 * u2 + Vector256.Create(1f))).StoreUnsafe(ref dst, i);
-            }
+            for (; i < limit; i += step) ExpKernel256(Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
         else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
         {
-            Vector128<float> vLog2E = Vector128.Create(1.4426950408889634f);
-            Vector128<float> vLn2 = Vector128.Create(0.6931471805599453f);
-            Vector128<float> vClamp = Vector128.Create(87f);
             nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
-            for (; i < limit; i += step)
-            {
-                Vector128<float> x = Vector128.Max(Vector128.Min(Vector128.LoadUnsafe(in src, i), vClamp), -vClamp);
-                Vector128<float> tt = x * vLog2E;
-                Vector128<int> k2 = Vector128.Floor(tt).AsInt32() - Vector128.Create(1);
-                Vector128<float> f2 = tt - Vector128.ConvertToSingle(k2);
-                Vector128<int> b2 = k2 + Vector128.Create(127);
-                Vector128<float> p2 = Vector128.ShiftLeft(b2, 23).AsSingle();
-                Vector128<float> u2 = f2 * vLn2;
-                Vector128<float> q2 = Vector128.Create(0.00833333333333333f);
-                q2 = q2 * u2 + Vector128.Create(0.0416666666666667f);
-                q2 = q2 * u2 + Vector128.Create(0.166666666666667f);
-                q2 = q2 * u2 + Vector128.Create(0.5f);
-                q2 = q2 * u2 + Vector128.Create(1f);
-                (p2 * (q2 * u2 + Vector128.Create(1f))).StoreUnsafe(ref dst, i);
-            }
+            for (; i < limit; i += step) ExpKernel128(Vector128.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
         for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = ExpScalar(Unsafe.Add(ref src, (nint)i));
     }
@@ -330,39 +341,13 @@ public static unsafe partial class SimdFloat32
         {
             nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
-            {
-                Vector256<float> neg = Vector256.Create(0f) - Vector256.LoadUnsafe(in src, i);
-                Vector256<float> clamped = Vector256.Max(Vector256.Min(neg, Vector256.Create(87f)), Vector256.Create(-87f));
-                Vector256<float> t = clamped * Vector256.Create(1.4426950408889634f);
-                Vector256<int> k = Vector256.Floor(t).AsInt32() - Vector256.Create(1);
-                Vector256<float> f = t - Vector256.ConvertToSingle(k);
-                Vector256<float> p2 = Vector256.ShiftLeft(k + Vector256.Create(127), 23).AsSingle();
-                Vector256<float> u = f * Vector256.Create(0.6931471805599453f);
-                Vector256<float> poly = Vector256.Create(0.00833333333333333f);
-                poly = poly * u + Vector256.Create(0.0416666666666667f); poly = poly * u + Vector256.Create(0.166666666666667f);
-                poly = poly * u + Vector256.Create(0.5f); poly = poly * u + Vector256.Create(1f);
-                Vector256<float> e = p2 * (poly * u + Vector256.Create(1f));
-                (Vector256.Create(1f) / (Vector256.Create(1f) + e)).StoreUnsafe(ref dst, i);
-            }
+                (Vector256.Create(1f) / (Vector256.Create(1f) + ExpKernel256(Vector256.Create(0f) - Vector256.LoadUnsafe(in src, i)))).StoreUnsafe(ref dst, i);
         }
         else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
         {
             nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
-            {
-                Vector128<float> neg = Vector128.Create(0f) - Vector128.LoadUnsafe(in src, i);
-                Vector128<float> clamped = Vector128.Max(Vector128.Min(neg, Vector128.Create(87f)), Vector128.Create(-87f));
-                Vector128<float> t = clamped * Vector128.Create(1.4426950408889634f);
-                Vector128<int> k = Vector128.Floor(t).AsInt32() - Vector128.Create(1);
-                Vector128<float> f = t - Vector128.ConvertToSingle(k);
-                Vector128<float> p2 = Vector128.ShiftLeft(k + Vector128.Create(127), 23).AsSingle();
-                Vector128<float> u = f * Vector128.Create(0.6931471805599453f);
-                Vector128<float> poly = Vector128.Create(0.00833333333333333f);
-                poly = poly * u + Vector128.Create(0.0416666666666667f); poly = poly * u + Vector128.Create(0.166666666666667f);
-                poly = poly * u + Vector128.Create(0.5f); poly = poly * u + Vector128.Create(1f);
-                Vector128<float> e = p2 * (poly * u + Vector128.Create(1f));
-                (Vector128.Create(1f) / (Vector128.Create(1f) + e)).StoreUnsafe(ref dst, i);
-            }
+                (Vector128.Create(1f) / (Vector128.Create(1f) + ExpKernel128(Vector128.Create(0f) - Vector128.LoadUnsafe(in src, i)))).StoreUnsafe(ref dst, i);
         }
         for (; i < length; ++i)
         {
@@ -397,15 +382,7 @@ public static unsafe partial class SimdFloat32
             for (; i < limit; i += step)
             {
                 Vector256<float> x = Vector256.Max(Vector256.Min(Vector256.LoadUnsafe(in src, i), Vector256.Create(9f)), Vector256.Create(-9f));
-                Vector256<float> cx = x * Vector256.Create(1.4426950408889634f * 2f);
-                Vector256<int> k = Vector256.Floor(cx).AsInt32() - Vector256.Create(1);
-                Vector256<float> f = cx - Vector256.ConvertToSingle(k);
-                Vector256<float> p2 = Vector256.ShiftLeft(k + Vector256.Create(127), 23).AsSingle();
-                Vector256<float> u = f * Vector256.Create(0.6931471805599453f);
-                Vector256<float> poly = Vector256.Create(0.00833333333333333f);
-                poly = poly * u + Vector256.Create(0.0416666666666667f); poly = poly * u + Vector256.Create(0.166666666666667f);
-                poly = poly * u + Vector256.Create(0.5f); poly = poly * u + Vector256.Create(1f);
-                Vector256<float> p = p2 * (poly * u + Vector256.Create(1f));
+                Vector256<float> p = ExpKernel256(x * Vector256.Create(2f));
                 ((p - Vector256.Create(1f)) / (p + Vector256.Create(1f))).StoreUnsafe(ref dst, i);
             }
         }
@@ -415,15 +392,7 @@ public static unsafe partial class SimdFloat32
             for (; i < limit; i += step)
             {
                 Vector128<float> x = Vector128.Max(Vector128.Min(Vector128.LoadUnsafe(in src, i), Vector128.Create(9f)), Vector128.Create(-9f));
-                Vector128<float> cx = x * Vector128.Create(1.4426950408889634f * 2f);
-                Vector128<int> k = Vector128.Floor(cx).AsInt32() - Vector128.Create(1);
-                Vector128<float> f = cx - Vector128.ConvertToSingle(k);
-                Vector128<float> p2 = Vector128.ShiftLeft(k + Vector128.Create(127), 23).AsSingle();
-                Vector128<float> u = f * Vector128.Create(0.6931471805599453f);
-                Vector128<float> poly = Vector128.Create(0.00833333333333333f);
-                poly = poly * u + Vector128.Create(0.0416666666666667f); poly = poly * u + Vector128.Create(0.166666666666667f);
-                poly = poly * u + Vector128.Create(0.5f); poly = poly * u + Vector128.Create(1f);
-                Vector128<float> p = p2 * (poly * u + Vector128.Create(1f));
+                Vector128<float> p = ExpKernel128(x * Vector128.Create(2f));
                 ((p - Vector128.Create(1f)) / (p + Vector128.Create(1f))).StoreUnsafe(ref dst, i);
             }
         }
