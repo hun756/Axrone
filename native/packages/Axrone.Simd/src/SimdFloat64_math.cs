@@ -99,34 +99,127 @@ public static unsafe partial class SimdFloat64
             Unsafe.Add(ref dst, Unsafe.Add(ref idx, (nint)i)) = Unsafe.Add(ref src, (nint)i);
     }
 
+    private const double Log2E = 1.4426950408889634;
+    private const double Ln2Hi = 0.6931471803691238166;  // high part of ln2: n * Ln2Hi is exact
+    private const double Ln2Lo = 1.9082149292705877e-10; // ln2 - Ln2Hi
+    private const double ExpClamp = 709.0;               // keeps 2^n in normal range at the lower end
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector512<double> ExpKernel512(Vector512<double> x)
     {
-        const double LOG2E = 1.4426950408889634;
-        const double LN2 = 0.6931471805599453;
-        Vector512<double> clamped = Vector512.Max(Vector512.Min(x, Vector512.Create(709.0)), Vector512.Create(-709.0));
-        Vector512<double> t = clamped * Vector512.Create(LOG2E);
-        Vector512<long> k = Vector512.Floor(t).AsInt64() - Vector512.Create(1L);
-        Vector512<double> f = t - Vector512.ConvertToDouble(k);
-        Vector512<long> biased = k + Vector512.Create(1023L);
-        Vector512<double> pow2 = Vector512.ShiftLeft(biased, 52).AsDouble();
-        Vector512<double> u = f * Vector512.Create(LN2);
-        Vector512<double> poly = Vector512.Create(0.00833333333333333);
-        poly = poly * u + Vector512.Create(0.0416666666666667);
-        poly = poly * u + Vector512.Create(0.166666666666667);
-        poly = poly * u + Vector512.Create(0.5);
-        poly = poly * u + Vector512.Create(1.0);
-        return pow2 * (poly * u + Vector512.Create(1.0));
+        Vector512<double> clamped = Vector512.Min(Vector512.Max(x, Vector512.Create(-ExpClamp)), Vector512.Create(ExpClamp));
+        Vector512<double> t = clamped * Vector512.Create(Log2E);
+        Vector512<long> n = Vector512.ConvertToInt64(Vector512.Round(t));
+        Vector512<double> nf = Vector512.ConvertToDouble(n);
+        Vector512<double> r = (clamped - nf * Vector512.Create(Ln2Hi)) - nf * Vector512.Create(Ln2Lo);
+        Vector512<double> p = Vector512.Create(1.0 / 87178291200.0);
+        p = p * r + Vector512.Create(1.0 / 479001600.0);
+        p = p * r + Vector512.Create(1.0 / 39916800.0);
+        p = p * r + Vector512.Create(1.0 / 3628800.0);
+        p = p * r + Vector512.Create(1.0 / 362880.0);
+        p = p * r + Vector512.Create(1.0 / 40320.0);
+        p = p * r + Vector512.Create(1.0 / 5040.0);
+        p = p * r + Vector512.Create(1.0 / 720.0);
+        p = p * r + Vector512.Create(1.0 / 120.0);
+        p = p * r + Vector512.Create(1.0 / 24.0);
+        p = p * r + Vector512.Create(1.0 / 6.0);
+        p = p * r + Vector512.Create(0.5);
+        p = p * r + Vector512.Create(1.0);
+        p = p * r + Vector512.Create(1.0);
+        // 2^n via exponent-field write; biased <= 0 means the result is subnormal (musl-style split)
+        Vector512<long> biased = n + Vector512.Create(1023L);
+        Vector512<long> subMask = Vector512.LessThanOrEqual(biased, Vector512<long>.Zero);
+        Vector512<long> expVal = Vector512.ConditionalSelect(subMask, n + Vector512.Create(1077L), biased);
+        Vector512<double> pow2 = Vector512.ShiftLeft(expVal, 52).AsDouble()
+            * Vector512.ConditionalSelect(subMask.AsDouble(), Vector512.Create(5.551115123125783e-17), Vector512<double>.One);
+        return pow2 * p;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector256<double> ExpKernel256(Vector256<double> x)
+    {
+        Vector256<double> clamped = Vector256.Min(Vector256.Max(x, Vector256.Create(-ExpClamp)), Vector256.Create(ExpClamp));
+        Vector256<double> t = clamped * Vector256.Create(Log2E);
+        Vector256<long> n = Vector256.ConvertToInt64(Vector256.Round(t));
+        Vector256<double> nf = Vector256.ConvertToDouble(n);
+        Vector256<double> r = (clamped - nf * Vector256.Create(Ln2Hi)) - nf * Vector256.Create(Ln2Lo);
+        Vector256<double> p = Vector256.Create(1.0 / 87178291200.0);
+        p = p * r + Vector256.Create(1.0 / 479001600.0);
+        p = p * r + Vector256.Create(1.0 / 39916800.0);
+        p = p * r + Vector256.Create(1.0 / 3628800.0);
+        p = p * r + Vector256.Create(1.0 / 362880.0);
+        p = p * r + Vector256.Create(1.0 / 40320.0);
+        p = p * r + Vector256.Create(1.0 / 5040.0);
+        p = p * r + Vector256.Create(1.0 / 720.0);
+        p = p * r + Vector256.Create(1.0 / 120.0);
+        p = p * r + Vector256.Create(1.0 / 24.0);
+        p = p * r + Vector256.Create(1.0 / 6.0);
+        p = p * r + Vector256.Create(0.5);
+        p = p * r + Vector256.Create(1.0);
+        p = p * r + Vector256.Create(1.0);
+        Vector256<long> biased = n + Vector256.Create(1023L);
+        Vector256<long> subMask = Vector256.LessThanOrEqual(biased, Vector256<long>.Zero);
+        Vector256<long> expVal = Vector256.ConditionalSelect(subMask, n + Vector256.Create(1077L), biased);
+        Vector256<double> pow2 = Vector256.ShiftLeft(expVal, 52).AsDouble()
+            * Vector256.ConditionalSelect(subMask.AsDouble(), Vector256.Create(5.551115123125783e-17), Vector256<double>.One);
+        return pow2 * p;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector128<double> ExpKernel128(Vector128<double> x)
+    {
+        Vector128<double> clamped = Vector128.Min(Vector128.Max(x, Vector128.Create(-ExpClamp)), Vector128.Create(ExpClamp));
+        Vector128<double> t = clamped * Vector128.Create(Log2E);
+        Vector128<long> n = Vector128.ConvertToInt64(Vector128.Round(t));
+        Vector128<double> nf = Vector128.ConvertToDouble(n);
+        Vector128<double> r = (clamped - nf * Vector128.Create(Ln2Hi)) - nf * Vector128.Create(Ln2Lo);
+        Vector128<double> p = Vector128.Create(1.0 / 87178291200.0);
+        p = p * r + Vector128.Create(1.0 / 479001600.0);
+        p = p * r + Vector128.Create(1.0 / 39916800.0);
+        p = p * r + Vector128.Create(1.0 / 3628800.0);
+        p = p * r + Vector128.Create(1.0 / 362880.0);
+        p = p * r + Vector128.Create(1.0 / 40320.0);
+        p = p * r + Vector128.Create(1.0 / 5040.0);
+        p = p * r + Vector128.Create(1.0 / 720.0);
+        p = p * r + Vector128.Create(1.0 / 120.0);
+        p = p * r + Vector128.Create(1.0 / 24.0);
+        p = p * r + Vector128.Create(1.0 / 6.0);
+        p = p * r + Vector128.Create(0.5);
+        p = p * r + Vector128.Create(1.0);
+        p = p * r + Vector128.Create(1.0);
+        Vector128<long> biased = n + Vector128.Create(1023L);
+        Vector128<long> subMask = Vector128.LessThanOrEqual(biased, Vector128<long>.Zero);
+        Vector128<long> expVal = Vector128.ConditionalSelect(subMask, n + Vector128.Create(1077L), biased);
+        Vector128<double> pow2 = Vector128.ShiftLeft(expVal, 52).AsDouble()
+            * Vector128.ConditionalSelect(subMask.AsDouble(), Vector128.Create(5.551115123125783e-17), Vector128<double>.One);
+        return pow2 * p;
     }
 
     private static double ExpScalar(double x)
     {
-        x = Math.Max(-709.0, Math.Min(709.0, x));
-        double t = x * 1.4426950408889634;
-        long k = (long)Math.Floor(t) - 1;
-        double f = t - k;
-        double u = f * 0.6931471805599453;
-        double poly = ((((0.00833333333333333 * u + 0.0416666666666667) * u + 0.166666666666667) * u + 0.5) * u + 1.0) * u + 1.0;
-        return BitConverter.Int64BitsToDouble((Math.Max(-1022L, Math.Min(1023L, k)) + 1023L) << 52) * poly;
+        x = Math.Max(-ExpClamp, Math.Min(ExpClamp, x));
+        double t = x * Log2E;
+        long n = (long)Math.Round(t);
+        double r = (x - n * Ln2Hi) - n * Ln2Lo;
+        double p = 1.0 / 87178291200.0;
+        p = p * r + 1.0 / 479001600.0;
+        p = p * r + 1.0 / 39916800.0;
+        p = p * r + 1.0 / 3628800.0;
+        p = p * r + 1.0 / 362880.0;
+        p = p * r + 1.0 / 40320.0;
+        p = p * r + 1.0 / 5040.0;
+        p = p * r + 1.0 / 720.0;
+        p = p * r + 1.0 / 120.0;
+        p = p * r + 1.0 / 24.0;
+        p = p * r + 1.0 / 6.0;
+        p = p * r + 0.5;
+        p = p * r + 1.0;
+        p = p * r + 1.0;
+        long biased = n + 1023;
+        double pow2 = biased > 0
+            ? BitConverter.Int64BitsToDouble(biased << 52)
+            : BitConverter.Int64BitsToDouble((n + 1077) << 52) * 5.551115123125783e-17;
+        return pow2 * p;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -145,39 +238,13 @@ public static unsafe partial class SimdFloat64
         }
         else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<double>.Count)
         {
-            Vector256<double> vLog2E = Vector256.Create(1.4426950408889634), vLn2 = Vector256.Create(0.6931471805599453), vClamp = Vector256.Create(709.0);
             nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step)
-            {
-                Vector256<double> x = Vector256.Max(Vector256.Min(Vector256.LoadUnsafe(in src, i), vClamp), -vClamp);
-                Vector256<double> tt = x * vLog2E;
-                Vector256<long> k2 = Vector256.Floor(tt).AsInt64() - Vector256.Create(1L);
-                Vector256<double> f2 = tt - Vector256.ConvertToDouble(k2);
-                Vector256<double> p2 = Vector256.ShiftLeft(k2 + Vector256.Create(1023L), 52).AsDouble();
-                Vector256<double> u2 = f2 * vLn2;
-                Vector256<double> q2 = Vector256.Create(0.00833333333333333);
-                q2 = q2 * u2 + Vector256.Create(0.0416666666666667); q2 = q2 * u2 + Vector256.Create(0.166666666666667);
-                q2 = q2 * u2 + Vector256.Create(0.5); q2 = q2 * u2 + Vector256.Create(1.0);
-                (p2 * (q2 * u2 + Vector256.Create(1.0))).StoreUnsafe(ref dst, i);
-            }
+            for (; i < limit; i += step) ExpKernel256(Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
         else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
         {
-            Vector128<double> vLog2E = Vector128.Create(1.4426950408889634), vLn2 = Vector128.Create(0.6931471805599453), vClamp = Vector128.Create(709.0);
             nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step)
-            {
-                Vector128<double> x = Vector128.Max(Vector128.Min(Vector128.LoadUnsafe(in src, i), vClamp), -vClamp);
-                Vector128<double> tt = x * vLog2E;
-                Vector128<long> k2 = Vector128.Floor(tt).AsInt64() - Vector128.Create(1L);
-                Vector128<double> f2 = tt - Vector128.ConvertToDouble(k2);
-                Vector128<double> p2 = Vector128.ShiftLeft(k2 + Vector128.Create(1023L), 52).AsDouble();
-                Vector128<double> u2 = f2 * vLn2;
-                Vector128<double> q2 = Vector128.Create(0.00833333333333333);
-                q2 = q2 * u2 + Vector128.Create(0.0416666666666667); q2 = q2 * u2 + Vector128.Create(0.166666666666667);
-                q2 = q2 * u2 + Vector128.Create(0.5); q2 = q2 * u2 + Vector128.Create(1.0);
-                (p2 * (q2 * u2 + Vector128.Create(1.0))).StoreUnsafe(ref dst, i);
-            }
+            for (; i < limit; i += step) ExpKernel128(Vector128.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
         for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = ExpScalar(Unsafe.Add(ref src, (nint)i));
     }
@@ -274,19 +341,7 @@ public static unsafe partial class SimdFloat64
         {
             nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
-            {
-                Vector256<double> neg = Vector256.Create(0.0) - Vector256.LoadUnsafe(in src, i);
-                Vector256<double> clamped = Vector256.Max(Vector256.Min(neg, Vector256.Create(709.0)), Vector256.Create(-709.0));
-                Vector256<double> t = clamped * Vector256.Create(1.4426950408889634);
-                Vector256<long> k = Vector256.Floor(t).AsInt64() - Vector256.Create(1L);
-                Vector256<double> p2 = Vector256.ShiftLeft(k + Vector256.Create(1023L), 52).AsDouble();
-                Vector256<double> u = (t - Vector256.ConvertToDouble(k)) * Vector256.Create(0.6931471805599453);
-                Vector256<double> poly = Vector256.Create(0.00833333333333333);
-                poly = poly * u + Vector256.Create(0.0416666666666667); poly = poly * u + Vector256.Create(0.166666666666667);
-                poly = poly * u + Vector256.Create(0.5); poly = poly * u + Vector256.Create(1.0);
-                Vector256<double> e = p2 * (poly * u + Vector256.Create(1.0));
-                (Vector256.Create(1.0) / (Vector256.Create(1.0) + e)).StoreUnsafe(ref dst, i);
-            }
+                (Vector256.Create(1.0) / (Vector256.Create(1.0) + ExpKernel256(Vector256.Create(0.0) - Vector256.LoadUnsafe(in src, i)))).StoreUnsafe(ref dst, i);
         }
         for (; i < length; ++i)
             Unsafe.Add(ref dst, (nint)i) = 1.0 / (1.0 + Math.Exp(-Unsafe.Add(ref src, (nint)i)));
@@ -316,15 +371,7 @@ public static unsafe partial class SimdFloat64
             nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
             {
-                Vector256<double> x = Vector256.Max(Vector256.Min(Vector256.LoadUnsafe(in src, i), Vector256.Create(19.0)), Vector256.Create(-19.0));
-                Vector256<double> cx = x * Vector256.Create(1.4426950408889634 * 2.0);
-                Vector256<long> k = Vector256.Floor(cx).AsInt64() - Vector256.Create(1L);
-                Vector256<double> p2 = Vector256.ShiftLeft(k + Vector256.Create(1023L), 52).AsDouble();
-                Vector256<double> u = (cx - Vector256.ConvertToDouble(k)) * Vector256.Create(0.6931471805599453);
-                Vector256<double> poly = Vector256.Create(0.00833333333333333);
-                poly = poly * u + Vector256.Create(0.0416666666666667); poly = poly * u + Vector256.Create(0.166666666666667);
-                poly = poly * u + Vector256.Create(0.5); poly = poly * u + Vector256.Create(1.0);
-                Vector256<double> p = p2 * (poly * u + Vector256.Create(1.0));
+                Vector256<double> p = ExpKernel256(Vector256.LoadUnsafe(in src, i) * Vector256.Create(2.0));
                 ((p - Vector256.Create(1.0)) / (p + Vector256.Create(1.0))).StoreUnsafe(ref dst, i);
             }
         }
