@@ -1,5 +1,7 @@
 namespace Axrone.Memory;
 
+using Axrone.Utility.Disposable;
+
 #if DEBUG
 internal sealed class LeakTracker : IDisposable
 {
@@ -8,7 +10,7 @@ internal sealed class LeakTracker : IDisposable
 
     private readonly string _allocationStackTrace;
     private readonly string _slotType;
-    private int _isDisposed;
+    private DisposalTracker _tracker;
 
     public LeakTracker(string slotType)
     {
@@ -22,7 +24,7 @@ internal sealed class LeakTracker : IDisposable
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _isDisposed, 1) == 0)
+        if (_tracker.TryDispose())
         {
             Interlocked.Decrement(ref s_activeTrackers);
             GC.SuppressFinalize(this);
@@ -31,7 +33,7 @@ internal sealed class LeakTracker : IDisposable
 
     ~LeakTracker()
     {
-        if (Volatile.Read(ref _isDisposed) == 0)
+        if (!_tracker.IsDisposed)
         {
             Interlocked.Increment(ref s_totalLeaks);
             System.Diagnostics.Debug.WriteLine(

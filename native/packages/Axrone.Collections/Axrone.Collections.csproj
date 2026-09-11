@@ -33,6 +33,8 @@
     <NoWarn>$(NoWarn);CS8601</NoWarn>
     <!-- CA1711: Type name ends with Queue — intentional for VyukovBoundedBatchQueue -->
     <NoWarn>$(NoWarn);CA1711</NoWarn>
+    <!-- CA1508: Dead code null checks — false positive for lock-protected concurrent fields -->
+    <NoWarn>$(NoWarn);CA1508</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

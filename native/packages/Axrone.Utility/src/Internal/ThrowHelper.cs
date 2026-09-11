@@ -2,6 +2,9 @@ namespace Axrone.Utility.Internal;
 
 public static class ThrowHelper
 {
+    private const int MaxBatchCapacity = 0x3FFFFFFF;
+    private const uint MaxBufferCapacity = 1u << 30;
+
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowArgumentNullException(string paramName)
@@ -49,5 +52,86 @@ public static class ThrowHelper
     public static void ThrowNotSupportedException(string message)
     {
         throw new NotSupportedException(message);
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidCapacity(int value)
+    {
+        throw new ArgumentOutOfRangeException(nameof(value), value, $"Capacity {value} must be between 1 and {MaxBatchCapacity}.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidBufferCapacity(uint capacity)
+    {
+        throw new ArgumentOutOfRangeException(nameof(capacity), capacity, $"Buffer capacity {capacity} must be a power of 2 between 2 and {MaxBufferCapacity}.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidAlignment(nuint value)
+    {
+        throw new ArgumentException($"Alignment value {value} must be a power of two and at least {IntPtr.Size} bytes.", nameof(value));
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowObjectDisposed()
+    {
+        throw new ObjectDisposedException("The object has been disposed.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowConcurrentWaitNotSupported()
+    {
+        throw new InvalidOperationException("Concurrent wait operations are not supported. Only a single waiter is allowed at a time.");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ValidateBinarySpans<T1, T2>(ReadOnlySpan<T1> left, ReadOnlySpan<T1> right, ReadOnlySpan<T2> destination)
+    {
+        if (left.Length != right.Length || destination.Length < left.Length) ThrowMismatchedSpans();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ValidateTernarySpans<T>(ReadOnlySpan<T> a, ReadOnlySpan<T> b, ReadOnlySpan<T> c, ReadOnlySpan<T> destination)
+    {
+        if (a.Length != b.Length || a.Length != c.Length || destination.Length < a.Length) ThrowMismatchedSpans();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ValidateDestinationSpan<T1, T2>(ReadOnlySpan<T1> source, ReadOnlySpan<T2> destination)
+    {
+        if (destination.Length < source.Length) ThrowDestinationTooSmall();
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowDestinationTooSmall()
+    {
+        throw new ArgumentException("Destination span is insufficiently sized for vectorized output.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowMismatchedSpans()
+    {
+        throw new ArgumentException("Span operands must possess equal lengths for lock-step vectorized operations.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowEmptySequence()
+    {
+        throw new InvalidOperationException("Cannot compute a reduction over an empty sequence.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInsufficientMemory(string message)
+    {
+        throw new InsufficientMemoryException(message);
     }
 }
