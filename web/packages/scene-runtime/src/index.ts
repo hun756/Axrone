@@ -49,6 +49,10 @@ export {
 	getDefaultSceneRuntimeProfile,
 	resolveSceneRegistryFromProfile,
 } from './scene-profile';
+
+/** @deprecated Use `CORE_SCENE_RUNTIME_PROFILE_ID` instead. */
+export { CORE_SCENE_RUNTIME_PROFILE_ID as CORE_SCENE_PROFILE_ID } from './scene-profile';
+
 export type { SceneActorRuntimeOptions } from './scene-actor-runtime';
 export { SceneActorRuntime } from './scene-actor-runtime';
 export type {
