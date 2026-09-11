@@ -8,6 +8,7 @@ public class SimdFloat32Tests
 {
     private const float Tolerance = 1e-4f;
     private const float LooseTolerance = 1e-2f;
+    private const float RelativeTolerance = 1e-5f;
 
     #region Arithmetic
 
@@ -366,10 +367,18 @@ public class SimdFloat32Tests
     }
 
     [Theory]
+    [InlineData(1)]
     [InlineData(3)]
     [InlineData(4)]
+    [InlineData(7)]
     [InlineData(8)]
+    [InlineData(9)]
+    [InlineData(15)]
     [InlineData(16)]
+    [InlineData(17)]
+    [InlineData(31)]
+    [InlineData(32)]
+    [InlineData(33)]
     [InlineData(100)]
     public void ComputeExtrema_ProducesCorrectMinMax(int size)
     {
@@ -641,8 +650,12 @@ public class SimdFloat32Tests
         SimdFloat32.VectorExp(src, dst);
 
         for (int i = 0; i < size; i++)
-            dst[i].Should().BeApproximately(MathF.Exp(src[i]), LooseTolerance,
+        {
+            // absolute tolerance is physically impossible above ~2^24 scale (float spacing exceeds it)
+            float expected = MathF.Exp(src[i]);
+            dst[i].Should().BeApproximately(expected, Math.Max(LooseTolerance, MathF.Abs(expected) * RelativeTolerance),
                 $"at index {i}: exp({src[i]})");
+        }
     }
 
     [Theory]

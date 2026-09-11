@@ -11,3 +11,4 @@ global using System.Threading;
 global using System.Threading.Tasks;
 global using Axrone.Collections;
 global using Axrone.Utility.Disposable;
+global using Axrone.Utility.Internal;

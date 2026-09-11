@@ -1,5 +1,7 @@
 namespace Axrone.Memory;
 
+using Axrone.Utility.Disposable;
+
 public sealed class PooledBufferSlot<T> : IMemoryOwner<T>, IPooledBufferToken<T>
 {
     private readonly IPoolBucketRegistry<T> _registry;
@@ -144,7 +146,7 @@ internal sealed class DynamicSingleBufferOwner<T> : IMemoryOwner<T>, IPooledBuff
     private readonly Action<long> _decrementCallback;
     private readonly long _byteSize;
     private uint _generation;
-    private int _isDisposed;
+    private DisposalTracker _tracker;
 
     public DynamicSingleBufferOwner(
         Memory<T> memory,
@@ -159,7 +161,7 @@ internal sealed class DynamicSingleBufferOwner<T> : IMemoryOwner<T>, IPooledBuff
         _decrementCallback = decrementCallback;
         _byteSize = byteSize;
         _generation = 1;
-        _isDisposed = 0;
+        _tracker = default;
     }
 
     public Memory<T> Memory
@@ -167,7 +169,7 @@ internal sealed class DynamicSingleBufferOwner<T> : IMemoryOwner<T>, IPooledBuff
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
-            if (Volatile.Read(ref _isDisposed) != 0)
+            if (_tracker.IsDisposed)
             {
                 ThrowDisposed();
             }
@@ -180,7 +182,7 @@ internal sealed class DynamicSingleBufferOwner<T> : IMemoryOwner<T>, IPooledBuff
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
-            if (Volatile.Read(ref _isDisposed) != 0)
+            if (_tracker.IsDisposed)
             {
                 ThrowDisposed();
             }
@@ -190,7 +192,7 @@ internal sealed class DynamicSingleBufferOwner<T> : IMemoryOwner<T>, IPooledBuff
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsLeaseValid(uint leaseId) =>
-        Volatile.Read(ref _isDisposed) == 0 && Volatile.Read(ref _generation) == leaseId;
+        Volatile.Read(ref Unsafe.As<DisposalTracker, int>(ref _tracker)) == 0 && Volatile.Read(ref _generation) == leaseId;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Return(uint leaseId) => Dispose();
@@ -198,7 +200,7 @@ internal sealed class DynamicSingleBufferOwner<T> : IMemoryOwner<T>, IPooledBuff
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _isDisposed, 1) == 0)
+        if (_tracker.TryDispose())
         {
             Interlocked.Increment(ref _generation);
             _decrementCallback(_byteSize);

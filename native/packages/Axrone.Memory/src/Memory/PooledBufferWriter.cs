@@ -24,7 +24,7 @@ public sealed class PooledBufferWriter<T> : IBufferWriter<T>, IDisposable
     public void Advance(int count)
     {
         _tracker.ThrowIfDisposed(nameof(PooledBufferWriter<T>));
-        if (count < 0 || _elementsWritten + count > _currentLease.Length) throw new ArgumentOutOfRangeException(nameof(count));
+        if (count < 0 || _elementsWritten + count > _currentLease.Length) ThrowHelper.ThrowArgumentOutOfRangeException(nameof(count));
         _elementsWritten += count;
     }
 

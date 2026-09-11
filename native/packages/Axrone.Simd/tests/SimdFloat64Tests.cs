@@ -3,6 +3,7 @@ namespace Axrone.Simd.Tests;
 public class SimdFloat64Tests
 {
     private const double Tolerance = 1e-9;
+    private const double RelativeTolerance = 1e-12;
 
     private static double[] Range(int length, double start = 1.0) =>
         Enumerable.Range(0, length).Select(i => start + i).ToArray();
@@ -120,6 +121,32 @@ public class SimdFloat64Tests
         result.Max.Should().Be(999.0);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(7)]
+    [InlineData(8)]
+    [InlineData(9)]
+    [InlineData(15)]
+    [InlineData(16)]
+    [InlineData(17)]
+    [InlineData(31)]
+    [InlineData(33)]
+    public void ComputeExtrema_SmallAndBoundarySizes_MatchesScalar(int size)
+    {
+        double[] src = new double[size];
+        for (int i = 0; i < size; i++)
+            src[i] = (i * 13 + 5) % 17 - 8.0;
+
+        ExtremaPair<double> result = SimdFloat64.ComputeExtrema(src);
+
+        result.Min.Should().Be(src.Min());
+        result.Max.Should().Be(src.Max());
+    }
+
     [Fact]
     public void ComputeExtrema_EmptySpan_Throws()
     {
@@ -140,7 +167,8 @@ public class SimdFloat64Tests
 
         int idx = SimdFloat64.FindFirstGreaterThan(src, threshold);
 
-        idx.Should().Be((int)threshold + 1);
+        int expectedIdx = Array.FindIndex(src, v => v > threshold);
+        idx.Should().Be(expectedIdx);
     }
 
     [Fact]
@@ -211,5 +239,51 @@ public class SimdFloat64Tests
     public void Fill_EmptySpan_DoesNotThrow()
     {
         SimdFloat64.Fill(Span<double>.Empty, 1.0);
+    }
+
+    // ── VectorExp ────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(8)]
+    [InlineData(16)]
+    [InlineData(100)]
+    public void VectorExp_ProducesCorrectResult(int size)
+    {
+        double[] src = new double[size];
+        for (int i = 0; i < size; i++)
+            src[i] = (i - size / 2) * 0.5; // range around zero
+        double[] dst = new double[size];
+
+        SimdFloat64.VectorExp(src, dst);
+
+        for (int i = 0; i < size; i++)
+        {
+            // absolute tolerance is physically impossible above ~2^53 scale (double spacing exceeds it)
+            double expected = Math.Exp(src[i]);
+            dst[i].Should().BeApproximately(expected, Math.Max(Tolerance, Math.Abs(expected) * RelativeTolerance),
+                $"at index {i}: exp({src[i]})");
+        }
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(8)]
+    [InlineData(16)]
+    [InlineData(100)]
+    public void VectorLog_ProducesCorrectResult(int size)
+    {
+        double[] src = new double[size];
+        for (int i = 0; i < size; i++)
+            src[i] = (i + 1) * 0.5; // positive values: 0.5, 1.0, 1.5, ...
+        double[] dst = new double[size];
+
+        SimdFloat64.VectorLog(src, dst);
+
+        for (int i = 0; i < size; i++)
+            dst[i].Should().BeApproximately(Math.Log(src[i]), Math.Max(Tolerance, Math.Abs(Math.Log(src[i])) * RelativeTolerance),
+                $"at index {i}: log({src[i]})");
     }
 }

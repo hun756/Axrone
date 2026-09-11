@@ -20,12 +20,12 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
 
         if (options.MinimumBlockSize <= 0 || !BitOperations.IsPow2(options.MinimumBlockSize))
         {
-            throw new ArgumentOutOfRangeException(nameof(options.MinimumBlockSize), "MinimumBlockSize must be a power of two.");
+            ThrowHelper.ThrowArgumentOutOfRangeException(nameof(options.MinimumBlockSize), "MinimumBlockSize must be a power of two.");
         }
 
         if (options.MaximumBlockSize < options.MinimumBlockSize || !BitOperations.IsPow2(options.MaximumBlockSize))
         {
-            throw new ArgumentOutOfRangeException(nameof(options.MaximumBlockSize), "MaximumBlockSize must be a power of two greater than or equal to MinimumBlockSize.");
+            ThrowHelper.ThrowArgumentOutOfRangeException(nameof(options.MaximumBlockSize), "MaximumBlockSize must be a power of two greater than or equal to MinimumBlockSize.");
         }
 
         _minimumBlockSize = options.MinimumBlockSize;
@@ -127,7 +127,7 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     {
         if (exactLength <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(exactLength));
+            ThrowHelper.ThrowArgumentOutOfRangeException(nameof(exactLength));
         }
 
         ThrowIfDisposed();

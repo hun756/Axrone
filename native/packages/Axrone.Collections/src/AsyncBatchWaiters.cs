@@ -7,13 +7,14 @@ using System.Threading.Tasks.Sources;
 /// Specialized pooled state machine for asynchronous batch operations.
 /// Implements IValueTaskSource&lt;int&gt; for zero-allocation async batch enqueue/dequeue.
 /// </summary>
-internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>
+internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>, IPooledWaiterNode<AsyncBatchWaiter<T>>
 {
     private ManualResetValueTaskSourceCore<int> _core;
     private CancellationTokenRegistration _registration;
-    private AsyncBatchWaiterPool<T>? _pool;
+    private LockFreeStackPool<AsyncBatchWaiter<T>>? _pool;
 
-    internal AsyncBatchWaiter<T>? Next;
+    public AsyncBatchWaiter<T>? Next { get; set; }
+
     internal ReadOnlyMemory<T> MemoryIn;
     internal Memory<T> MemoryOut;
     internal bool IsEnqueue;
@@ -26,7 +27,7 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Reset(AsyncBatchWaiterPool<T> pool, bool isEnqueue)
+    public void OnRented(LockFreeStackPool<AsyncBatchWaiter<T>> pool, bool isEnqueue)
     {
         _core.Reset();
         _pool = pool;
@@ -81,13 +82,14 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>
 /// Specialized pooled state machine for asynchronous single-item operations.
 /// Implements both IValueTaskSource&lt;T&gt; (dequeue) and IValueTaskSource (enqueue).
 /// </summary>
-internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
+internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource, IPooledWaiterNode<AsyncItemWaiter<T>>
 {
     private ManualResetValueTaskSourceCore<T> _core;
     private CancellationTokenRegistration _registration;
-    private AsyncItemWaiterPool<T>? _pool;
+    private LockFreeStackPool<AsyncItemWaiter<T>>? _pool;
 
-    internal AsyncItemWaiter<T>? Next;
+    public AsyncItemWaiter<T>? Next { get; set; }
+
     internal T Item = default!;
     internal bool IsEnqueue;
 
@@ -99,7 +101,7 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Reset(AsyncItemWaiterPool<T> pool, bool isEnqueue)
+    public void OnRented(LockFreeStackPool<AsyncItemWaiter<T>> pool, bool isEnqueue)
     {
         _core.Reset();
         _pool = pool;
@@ -162,94 +164,6 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
 }
 
 /// <summary>
-/// Lock-free stack pool for AsyncBatchWaiter instances. Eliminates per-operation allocations.
-/// </summary>
-internal sealed class AsyncBatchWaiterPool<T>
-{
-    private AsyncBatchWaiter<T>? _head;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public AsyncBatchWaiter<T> Rent(bool isEnqueue)
-    {
-        AsyncBatchWaiter<T>? node;
-        while (true)
-        {
-            node = Volatile.Read(ref _head);
-            if (node == null)
-            {
-                node = new AsyncBatchWaiter<T>();
-                break;
-            }
-
-            if (Interlocked.CompareExchange(ref _head, node.Next, node) == node)
-            {
-                break;
-            }
-        }
-
-        node.Reset(this, isEnqueue);
-        return node;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Return(AsyncBatchWaiter<T> node)
-    {
-        while (true)
-        {
-            node.Next = Volatile.Read(ref _head);
-            if (Interlocked.CompareExchange(ref _head, node, node.Next) == node.Next)
-            {
-                break;
-            }
-        }
-    }
-}
-
-/// <summary>
-/// Lock-free stack pool for AsyncItemWaiter instances. Eliminates per-operation allocations.
-/// </summary>
-internal sealed class AsyncItemWaiterPool<T>
-{
-    private AsyncItemWaiter<T>? _head;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public AsyncItemWaiter<T> Rent(bool isEnqueue)
-    {
-        AsyncItemWaiter<T>? node;
-        while (true)
-        {
-            node = Volatile.Read(ref _head);
-            if (node == null)
-            {
-                node = new AsyncItemWaiter<T>();
-                break;
-            }
-
-            if (Interlocked.CompareExchange(ref _head, node.Next, node) == node)
-            {
-                break;
-            }
-        }
-
-        node.Reset(this, isEnqueue);
-        return node;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Return(AsyncItemWaiter<T> node)
-    {
-        while (true)
-        {
-            node.Next = Volatile.Read(ref _head);
-            if (Interlocked.CompareExchange(ref _head, node, node.Next) == node.Next)
-            {
-                break;
-            }
-        }
-    }
-}
-
-/// <summary>
 /// Decoupled, lock-re-entrancy-free asynchronous coordinator.
 /// Never executes CAS loops or payload transfers while holding the synchronization primitive.
 /// Drain-under-lock → fulfill-outside-lock → re-queue-unfulfilled pattern.
@@ -257,8 +171,8 @@ internal sealed class AsyncItemWaiterPool<T>
 internal sealed class AsyncBatchQueueCoordinator<T>
 {
     private readonly Lock _syncLock = new();
-    private readonly AsyncBatchWaiterPool<T> _batchPool = new();
-    private readonly AsyncItemWaiterPool<T> _itemPool = new();
+    private readonly LockFreeStackPool<AsyncBatchWaiter<T>> _batchPool = new();
+    private readonly LockFreeStackPool<AsyncItemWaiter<T>> _itemPool = new();
 
     private AsyncBatchWaiter<T>? _batchEnqHead, _batchEnqTail;
     private AsyncBatchWaiter<T>? _batchDeqHead, _batchDeqTail;
@@ -342,19 +256,16 @@ internal sealed class AsyncBatchQueueCoordinator<T>
             return;
         }
 
-        // 1. Drain under lock (sub-nanosecond pointer swaps)
         AsyncBatchWaiter<T>? batchWaiters;
         AsyncItemWaiter<T>? itemWaiters;
         using (_syncLock.EnterScope())
         {
             batchWaiters = _batchEnqHead;
             _batchEnqHead = _batchEnqTail = null;
-
             itemWaiters = _itemEnqHead;
             _itemEnqHead = _itemEnqTail = null;
         }
 
-        // 2. Fulfill OUTSIDE the lock (no contention amplification)
         AsyncBatchWaiter<T>? unfulfilledBatchHead = null, unfulfilledBatchTail = null;
         while (batchWaiters != null)
         {
@@ -364,21 +275,9 @@ internal sealed class AsyncBatchQueueCoordinator<T>
 
             int enqueued = queue.TryEnqueueBatch(current.MemoryIn.Span);
             if (enqueued > 0)
-            {
                 current.Complete(enqueued);
-            }
             else
-            {
-                if (unfulfilledBatchTail == null)
-                {
-                    unfulfilledBatchHead = unfulfilledBatchTail = current;
-                }
-                else
-                {
-                    unfulfilledBatchTail.Next = current;
-                    unfulfilledBatchTail = current;
-                }
-            }
+                AppendUnfulfilled(ref unfulfilledBatchHead, ref unfulfilledBatchTail, current);
         }
 
         AsyncItemWaiter<T>? unfulfilledItemHead = null, unfulfilledItemTail = null;
@@ -389,43 +288,14 @@ internal sealed class AsyncBatchQueueCoordinator<T>
             current.Next = null;
 
             if (queue.TryEnqueue(current.Item))
-            {
                 current.Complete(default!);
-            }
             else
-            {
-                if (unfulfilledItemTail == null)
-                {
-                    unfulfilledItemHead = unfulfilledItemTail = current;
-                }
-                else
-                {
-                    unfulfilledItemTail.Next = current;
-                    unfulfilledItemTail = current;
-                }
-            }
+                AppendUnfulfilled(ref unfulfilledItemHead, ref unfulfilledItemTail, current);
         }
 
-        // 3. Re-queue unfulfilled nodes preserving order
-        if (unfulfilledBatchHead != null || unfulfilledItemHead != null)
-        {
-            using (_syncLock.EnterScope())
-            {
-                if (unfulfilledBatchHead != null)
-                {
-                    unfulfilledBatchTail!.Next = _batchEnqHead;
-                    _batchEnqHead = unfulfilledBatchHead;
-                    _batchEnqTail ??= unfulfilledBatchTail;
-                }
-
-                if (unfulfilledItemHead != null)
-                {
-                    unfulfilledItemTail!.Next = _itemEnqHead;
-                    _itemEnqHead = unfulfilledItemHead;
-                    _itemEnqTail ??= unfulfilledItemTail;
-                }
-            }
-        }
+        RequeueUnfulfilled(
+            ref _batchEnqHead, ref _batchEnqTail, unfulfilledBatchHead, unfulfilledBatchTail,
+            ref _itemEnqHead, ref _itemEnqTail, unfulfilledItemHead, unfulfilledItemTail);
     }
 
     public void SignalDequeueWaiters<TQueue>(TQueue queue) where TQueue : IBatchDequeue<T>
@@ -435,19 +305,16 @@ internal sealed class AsyncBatchQueueCoordinator<T>
             return;
         }
 
-        // 1. Drain under lock
         AsyncBatchWaiter<T>? batchWaiters;
         AsyncItemWaiter<T>? itemWaiters;
         using (_syncLock.EnterScope())
         {
             batchWaiters = _batchDeqHead;
             _batchDeqHead = _batchDeqTail = null;
-
             itemWaiters = _itemDeqHead;
             _itemDeqHead = _itemDeqTail = null;
         }
 
-        // 2. Fulfill OUTSIDE the lock
         AsyncBatchWaiter<T>? unfulfilledBatchHead = null, unfulfilledBatchTail = null;
         while (batchWaiters != null)
         {
@@ -457,21 +324,9 @@ internal sealed class AsyncBatchQueueCoordinator<T>
 
             int dequeued = queue.TryDequeueBatch(current.MemoryOut.Span);
             if (dequeued > 0)
-            {
                 current.Complete(dequeued);
-            }
             else
-            {
-                if (unfulfilledBatchTail == null)
-                {
-                    unfulfilledBatchHead = unfulfilledBatchTail = current;
-                }
-                else
-                {
-                    unfulfilledBatchTail.Next = current;
-                    unfulfilledBatchTail = current;
-                }
-            }
+                AppendUnfulfilled(ref unfulfilledBatchHead, ref unfulfilledBatchTail, current);
         }
 
         AsyncItemWaiter<T>? unfulfilledItemHead = null, unfulfilledItemTail = null;
@@ -482,41 +337,52 @@ internal sealed class AsyncBatchQueueCoordinator<T>
             current.Next = null;
 
             if (queue.TryDequeue(out T? item))
-            {
                 current.Complete(item);
-            }
             else
-            {
-                if (unfulfilledItemTail == null)
-                {
-                    unfulfilledItemHead = unfulfilledItemTail = current;
-                }
-                else
-                {
-                    unfulfilledItemTail.Next = current;
-                    unfulfilledItemTail = current;
-                }
-            }
+                AppendUnfulfilled(ref unfulfilledItemHead, ref unfulfilledItemTail, current);
         }
 
-        // 3. Re-queue unfulfilled nodes
-        if (unfulfilledBatchHead != null || unfulfilledItemHead != null)
-        {
-            using (_syncLock.EnterScope())
-            {
-                if (unfulfilledBatchHead != null)
-                {
-                    unfulfilledBatchTail!.Next = _batchDeqHead;
-                    _batchDeqHead = unfulfilledBatchHead;
-                    _batchDeqTail ??= unfulfilledBatchTail;
-                }
+        RequeueUnfulfilled(
+            ref _batchDeqHead, ref _batchDeqTail, unfulfilledBatchHead, unfulfilledBatchTail,
+            ref _itemDeqHead, ref _itemDeqTail, unfulfilledItemHead, unfulfilledItemTail);
+    }
 
-                if (unfulfilledItemHead != null)
-                {
-                    unfulfilledItemTail!.Next = _itemDeqHead;
-                    _itemDeqHead = unfulfilledItemHead;
-                    _itemDeqTail ??= unfulfilledItemTail;
-                }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void AppendUnfulfilled<TNode>(ref TNode? head, ref TNode? tail, TNode node)
+        where TNode : class, IPooledWaiterNode<TNode>, new()
+    {
+        if (tail == null)
+            head = tail = node;
+        else
+        {
+            tail.Next = node;
+            tail = node;
+        }
+    }
+
+    private void RequeueUnfulfilled<TBatch, TItem>(
+        ref TBatch? batchHead, ref TBatch? batchTail, TBatch? unfulfilledBatchHead, TBatch? unfulfilledBatchTail,
+        ref TItem? itemHead, ref TItem? itemTail, TItem? unfulfilledItemHead, TItem? unfulfilledItemTail)
+        where TBatch : class, IPooledWaiterNode<TBatch>, new()
+        where TItem : class, IPooledWaiterNode<TItem>, new()
+    {
+        if (unfulfilledBatchHead == null && unfulfilledItemHead == null)
+            return;
+
+        using (_syncLock.EnterScope())
+        {
+            if (unfulfilledBatchHead != null)
+            {
+                unfulfilledBatchTail!.Next = batchHead;
+                batchHead = unfulfilledBatchHead;
+                batchTail ??= unfulfilledBatchTail;
+            }
+
+            if (unfulfilledItemHead != null)
+            {
+                unfulfilledItemTail!.Next = itemHead;
+                itemHead = unfulfilledItemHead;
+                itemTail ??= unfulfilledItemTail;
             }
         }
     }

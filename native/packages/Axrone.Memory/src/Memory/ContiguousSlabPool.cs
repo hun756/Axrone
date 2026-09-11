@@ -16,8 +16,8 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
 
     public ContiguousSlabPool(int blockSize, int blockCount, MemoryClearMode clearMode = MemoryClearMode.Never)
     {
-        if (blockSize <= 0) throw new ArgumentOutOfRangeException(nameof(blockSize));
-        if (blockCount <= 0) throw new ArgumentOutOfRangeException(nameof(blockCount));
+        if (blockSize <= 0) ThrowHelper.ThrowArgumentOutOfRangeException(nameof(blockSize));
+        if (blockCount <= 0) ThrowHelper.ThrowArgumentOutOfRangeException(nameof(blockCount));
 
         _blockSize = blockSize;
         _blockCount = blockCount;
@@ -27,7 +27,7 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
         _backingPointer = NativeMemory.AlignedAlloc(totalBytes, 64);
         if (_backingPointer == null)
         {
-            throw new InsufficientMemoryException($"Failed to allocate {totalBytes} contiguous slab memory bytes.");
+            ThrowHelper.ThrowInsufficientMemory($"Failed to allocate {totalBytes} contiguous slab memory bytes.");
         }
 
         _rootManager = new NativeBlockMemoryManager<T>((T*)_backingPointer, blockSize * blockCount, 64);
@@ -49,7 +49,7 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
     {
         if (minBufferSize <= 0) minBufferSize = _blockSize;
         ThrowIfDisposed();
-        if (minBufferSize > _blockSize) throw new ArgumentOutOfRangeException(nameof(minBufferSize), "Requested length exceeds fixed slab size.");
+        if (minBufferSize > _blockSize) ThrowHelper.ThrowArgumentOutOfRangeException(nameof(minBufferSize), "Requested length exceeds fixed slab size.");
 
         if (_freeSlotQueue.TryDequeue(out PooledBufferSlot<T>? slot))
         {
@@ -68,7 +68,7 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
     {
         if (length <= 0) length = _blockSize;
         ThrowIfDisposed();
-        if ((uint)length > (uint)_blockSize) throw new ArgumentOutOfRangeException(nameof(length));
+        if ((uint)length > (uint)_blockSize) ThrowHelper.ThrowArgumentOutOfRangeException(nameof(length));
 
         if (_freeSlotQueue.TryDequeue(out PooledBufferSlot<T>? slot))
         {
