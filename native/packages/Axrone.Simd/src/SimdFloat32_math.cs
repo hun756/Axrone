@@ -90,7 +90,7 @@ public static unsafe partial class SimdFloat32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Gather(ReadOnlySpan<float> source, ReadOnlySpan<int> indices, Span<float> destination)
     {
-        if (destination.Length < indices.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, indices);
         nuint count = (nuint)indices.Length;
         if (count == 0) return;
         ref float src = ref MemoryMarshal.GetReference(source);
@@ -201,7 +201,7 @@ public static unsafe partial class SimdFloat32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorExp(ReadOnlySpan<float> source, Span<float> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref float src = ref MemoryMarshal.GetReference(source);
@@ -347,7 +347,7 @@ public static unsafe partial class SimdFloat32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorLog(ReadOnlySpan<float> source, Span<float> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref float src = ref MemoryMarshal.GetReference(source);
@@ -374,7 +374,7 @@ public static unsafe partial class SimdFloat32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorSigmoid(ReadOnlySpan<float> source, Span<float> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref float src = ref MemoryMarshal.GetReference(source);
@@ -412,7 +412,7 @@ public static unsafe partial class SimdFloat32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorTanh(ReadOnlySpan<float> source, Span<float> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref float src = ref MemoryMarshal.GetReference(source);
@@ -460,7 +460,7 @@ public static unsafe partial class SimdFloat32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorReLU(ReadOnlySpan<float> source, Span<float> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref float src = ref MemoryMarshal.GetReference(source);
@@ -497,7 +497,7 @@ public static unsafe partial class SimdFloat32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorRSqrt(ReadOnlySpan<float> source, Span<float> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref float src = ref MemoryMarshal.GetReference(source);
@@ -558,7 +558,7 @@ public static unsafe partial class SimdFloat32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Softmax(ReadOnlySpan<float> source, Span<float> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref float src = ref MemoryMarshal.GetReference(source);
@@ -723,7 +723,7 @@ public static unsafe partial class SimdFloat32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Swizzle(ReadOnlySpan<float> source, ReadOnlySpan<int> indices, Span<float> destination)
     {
-        if (destination.Length < indices.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, indices);
         nuint count = (nuint)indices.Length;
         if (count == 0) return;
         ref float src = ref MemoryMarshal.GetReference(source);

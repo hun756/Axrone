@@ -90,12 +90,6 @@ public static class ThrowHelper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ValidateBinarySpans<T>(ReadOnlySpan<T> left, ReadOnlySpan<T> right, ReadOnlySpan<T> destination)
-    {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowMismatchedSpans();
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ValidateBinarySpans<T1, T2>(ReadOnlySpan<T1> left, ReadOnlySpan<T1> right, ReadOnlySpan<T2> destination)
     {
         if (left.Length != right.Length || destination.Length < left.Length) ThrowMismatchedSpans();
@@ -105,12 +99,6 @@ public static class ThrowHelper
     public static void ValidateTernarySpans<T>(ReadOnlySpan<T> a, ReadOnlySpan<T> b, ReadOnlySpan<T> c, ReadOnlySpan<T> destination)
     {
         if (a.Length != b.Length || a.Length != c.Length || destination.Length < a.Length) ThrowMismatchedSpans();
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ValidateDestinationSpan<T>(ReadOnlySpan<T> source, ReadOnlySpan<T> destination)
-    {
-        if (destination.Length < source.Length) ThrowDestinationTooSmall();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

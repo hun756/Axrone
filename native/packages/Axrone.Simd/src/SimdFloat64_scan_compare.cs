@@ -406,7 +406,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static ScanResult FilterLessThan(ReadOnlySpan<double> source, double threshold, Span<double> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return ScanResult.Success(0);
         ref double src = ref MemoryMarshal.GetReference(source);
@@ -474,7 +474,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static ScanResult FilterEqual(ReadOnlySpan<double> source, double value, Span<double> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return ScanResult.Success(0);
         ref double src = ref MemoryMarshal.GetReference(source);
@@ -576,7 +576,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Select(ReadOnlySpan<double> condition, double trueValue, double falseValue, Span<double> destination)
     {
-        if (destination.Length < condition.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, condition);
         nuint length = (nuint)condition.Length;
         if (length == 0) return;
         ref double cRef = ref MemoryMarshal.GetReference(condition);
@@ -610,7 +610,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void CompareLessThan(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref double lRef = ref MemoryMarshal.GetReference(left);
@@ -642,7 +642,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void CompareGreaterThan(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref double lRef = ref MemoryMarshal.GetReference(left);
@@ -674,7 +674,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void CompareEqual(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref double lRef = ref MemoryMarshal.GetReference(left);
@@ -706,7 +706,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void CompareNotEqual(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref double lRef = ref MemoryMarshal.GetReference(left);
@@ -738,7 +738,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void CompareLessThanOrEqual(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref double lRef = ref MemoryMarshal.GetReference(left);
@@ -770,7 +770,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void CompareGreaterThanOrEqual(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref double lRef = ref MemoryMarshal.GetReference(left);

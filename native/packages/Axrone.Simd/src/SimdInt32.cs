@@ -7,7 +7,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Add(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref int lRef = ref MemoryMarshal.GetReference(left);
@@ -64,7 +64,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Subtract(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref int lRef = ref MemoryMarshal.GetReference(left);
@@ -121,7 +121,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Multiply(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref int lRef = ref MemoryMarshal.GetReference(left);
@@ -178,7 +178,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Negate(ReadOnlySpan<int> source, Span<int> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref int src = ref MemoryMarshal.GetReference(source);
@@ -223,7 +223,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Abs(ReadOnlySpan<int> source, Span<int> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref int src = ref MemoryMarshal.GetReference(source);
@@ -256,7 +256,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Clamp(ReadOnlySpan<int> source, int min, int max, Span<int> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref int src = ref MemoryMarshal.GetReference(source);
@@ -293,7 +293,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ElementWiseMax(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref int lRef = ref MemoryMarshal.GetReference(left);
@@ -343,7 +343,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ElementWiseMin(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref int lRef = ref MemoryMarshal.GetReference(left);
@@ -802,7 +802,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void CompareEqual(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref int lRef = ref MemoryMarshal.GetReference(left);
@@ -834,7 +834,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void CompareGreaterThan(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref int lRef = ref MemoryMarshal.GetReference(left);
@@ -868,7 +868,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorAnd(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref int lRef = ref MemoryMarshal.GetReference(left);
@@ -896,7 +896,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorOr(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref int lRef = ref MemoryMarshal.GetReference(left);
@@ -924,7 +924,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorXor(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref int lRef = ref MemoryMarshal.GetReference(left);
@@ -952,7 +952,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ShiftLeft(ReadOnlySpan<int> source, int count, Span<int> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref int src = ref MemoryMarshal.GetReference(source);
@@ -979,7 +979,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ShiftRight(ReadOnlySpan<int> source, int count, Span<int> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref int src = ref MemoryMarshal.GetReference(source);
@@ -1006,7 +1006,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void CompareLessThan(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
         ref int lRef = ref MemoryMarshal.GetReference(left);
@@ -1034,7 +1034,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void TransformLinear(ReadOnlySpan<int> source, int multiplier, int offset, Span<int> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref int src = ref MemoryMarshal.GetReference(source);
@@ -1090,7 +1090,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorFma(ReadOnlySpan<int> a, ReadOnlySpan<int> b, ReadOnlySpan<int> c, Span<int> destination)
     {
-        if (a.Length != b.Length || a.Length != c.Length || destination.Length < a.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateTernarySpans(a, b, a, destination);
         nuint length = (nuint)a.Length;
         if (length == 0) return;
         ref int aRef = ref MemoryMarshal.GetReference(a);
@@ -1145,7 +1145,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void BitwiseNot(ReadOnlySpan<int> source, Span<int> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref int src = ref MemoryMarshal.GetReference(source);
@@ -1172,7 +1172,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ConvertToFloat(ReadOnlySpan<int> source, Span<float> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
         ref int src = ref MemoryMarshal.GetReference(source);
@@ -1227,7 +1227,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Gather(ReadOnlySpan<int> source, ReadOnlySpan<int> indices, Span<int> destination)
     {
-        if (destination.Length < indices.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, indices);
         nuint count = (nuint)indices.Length;
         if (count == 0) return;
         ref int src = ref MemoryMarshal.GetReference(source);

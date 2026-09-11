@@ -5,7 +5,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void TransformLinear(ReadOnlySpan<double> source, double multiplier, double offset, Span<double> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
 
@@ -95,7 +95,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorAdd(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
 
@@ -180,7 +180,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorSubtract(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
 
@@ -247,7 +247,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorMultiply(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
 
@@ -332,7 +332,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorDivide(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
     {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(left, right, destination);
         nuint length = (nuint)left.Length;
         if (length == 0) return;
 
@@ -399,7 +399,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorNegate(ReadOnlySpan<double> source, Span<double> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
 
@@ -462,7 +462,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorAbs(ReadOnlySpan<double> source, Span<double> destination)
     {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
+        ThrowHelper.ValidateDestinationSpan(destination, source);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
 
@@ -502,7 +502,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorFma(ReadOnlySpan<double> a, ReadOnlySpan<double> b, ReadOnlySpan<double> c, Span<double> destination)
     {
-        if (a.Length != b.Length || a.Length != c.Length || destination.Length < a.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateTernarySpans(a, b, a, destination);
         nuint length = (nuint)a.Length;
         if (length == 0) return;
 
@@ -588,7 +588,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorFms(ReadOnlySpan<double> a, ReadOnlySpan<double> b, ReadOnlySpan<double> c, Span<double> destination)
     {
-        if (a.Length != b.Length || a.Length != c.Length || destination.Length < a.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateTernarySpans(a, b, a, destination);
         nuint length = (nuint)a.Length;
         if (length == 0) return;
 
@@ -656,7 +656,7 @@ public static unsafe partial class SimdFloat64
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorLerp(ReadOnlySpan<double> a, ReadOnlySpan<double> b, double t, Span<double> destination)
     {
-        if (a.Length != b.Length || destination.Length < a.Length) ThrowHelper.ThrowMismatchedSpans();
+        ThrowHelper.ValidateBinarySpans(a, b, destination);
         nuint length = (nuint)a.Length;
         if (length == 0) return;
 
