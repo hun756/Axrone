@@ -120,7 +120,7 @@ export class MeshRenderer extends Component {
     private _resolvedJointTransforms: readonly (Transform | null)[] | null = null;
     private _resolvedJointWorldMatrices: ArrayLike<number>[] | null = null;
     private _skinPaletteCache: Float32Array | null = null;
-    private _jointResolutionAttempts = 0;
+    private _jointResolutionFirstAttemptMs: number | null = null;
     private _jointResolutionWarned = false;
 
     constructor(config: MeshRendererConfig = {}) {
@@ -240,7 +240,7 @@ export class MeshRenderer extends Component {
         this._resolvedJointTransforms = null;
         this._resolvedJointWorldMatrices = null;
         this._skinPaletteCache = null;
-        this._jointResolutionAttempts = 0;
+        this._jointResolutionFirstAttemptMs = null;
         this._jointResolutionWarned = false;
     }
 
@@ -405,11 +405,14 @@ export class MeshRenderer extends Component {
             return this._resolvedJointTransforms as readonly Transform[];
         }
 
-        if (this._jointResolutionAttempts >= 60) {
-            return null;
+        if (this._jointResolutionFirstAttemptMs !== null) {
+            const elapsedMs = performance.now() - this._jointResolutionFirstAttemptMs;
+            if (elapsedMs >= 1000) {
+                return null;
+            }
+        } else {
+            this._jointResolutionFirstAttemptMs = performance.now();
         }
-
-        this._jointResolutionAttempts += 1;
 
         const actors = (this.world as { getAllActors?: () => readonly { getComponent: (type: any) => any }[] } | undefined)?.getAllActors?.() ?? [];
         const transformsByNodeId = new Map<string, Transform>();
