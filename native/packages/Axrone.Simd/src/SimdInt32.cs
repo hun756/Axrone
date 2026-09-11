@@ -184,20 +184,38 @@ public static unsafe class SimdInt32
         ref int src = ref MemoryMarshal.GetReference(source);
         ref int dst = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count)
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count * 2)
         {
-            nuint step = (nuint)Vector512<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) (Vector512<int>.Zero - Vector512.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
+            nuint step = (nuint)Vector512<int>.Count, limit = length - (step * 2) + 1;
+            for (; i < limit; i += step * 2)
+            {
+                (Vector512<int>.Zero - Vector512.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
+                (Vector512<int>.Zero - Vector512.LoadUnsafe(in src, i + step)).StoreUnsafe(ref dst, i + step);
+            }
+            nuint singleLimit = length - step + 1;
+            for (; i < singleLimit; i += step) (Vector512<int>.Zero - Vector512.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count)
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count * 2)
         {
-            nuint step = (nuint)Vector256<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) (Vector256<int>.Zero - Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
+            nuint step = (nuint)Vector256<int>.Count, limit = length - (step * 2) + 1;
+            for (; i < limit; i += step * 2)
+            {
+                (Vector256<int>.Zero - Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
+                (Vector256<int>.Zero - Vector256.LoadUnsafe(in src, i + step)).StoreUnsafe(ref dst, i + step);
+            }
+            nuint singleLimit = length - step + 1;
+            for (; i < singleLimit; i += step) (Vector256<int>.Zero - Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count)
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count * 2)
         {
-            nuint step = (nuint)Vector128<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) (Vector128<int>.Zero - Vector128.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
+            nuint step = (nuint)Vector128<int>.Count, limit = length - (step * 2) + 1;
+            for (; i < limit; i += step * 2)
+            {
+                (Vector128<int>.Zero - Vector128.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
+                (Vector128<int>.Zero - Vector128.LoadUnsafe(in src, i + step)).StoreUnsafe(ref dst, i + step);
+            }
+            nuint singleLimit = length - step + 1;
+            for (; i < singleLimit; i += step) (Vector128<int>.Zero - Vector128.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
         for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = -Unsafe.Add(ref src, (nint)i);
     }
@@ -282,23 +300,38 @@ public static unsafe class SimdInt32
         ref int rRef = ref MemoryMarshal.GetReference(right);
         ref int dRef = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count)
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count * 2)
         {
-            nuint step = (nuint)Vector512<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step)
+            nuint step = (nuint)Vector512<int>.Count, limit = length - (step * 2) + 1;
+            for (; i < limit; i += step * 2)
+            {
                 Vector512.Max(Vector512.LoadUnsafe(in lRef, i), Vector512.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
+                Vector512.Max(Vector512.LoadUnsafe(in lRef, i + step), Vector512.LoadUnsafe(in rRef, i + step)).StoreUnsafe(ref dRef, i + step);
+            }
+            nuint singleLimit = length - step + 1;
+            for (; i < singleLimit; i += step) Vector512.Max(Vector512.LoadUnsafe(in lRef, i), Vector512.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
         }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count)
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count * 2)
         {
-            nuint step = (nuint)Vector256<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step)
+            nuint step = (nuint)Vector256<int>.Count, limit = length - (step * 2) + 1;
+            for (; i < limit; i += step * 2)
+            {
                 Vector256.Max(Vector256.LoadUnsafe(in lRef, i), Vector256.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
+                Vector256.Max(Vector256.LoadUnsafe(in lRef, i + step), Vector256.LoadUnsafe(in rRef, i + step)).StoreUnsafe(ref dRef, i + step);
+            }
+            nuint singleLimit = length - step + 1;
+            for (; i < singleLimit; i += step) Vector256.Max(Vector256.LoadUnsafe(in lRef, i), Vector256.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
         }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count)
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count * 2)
         {
-            nuint step = (nuint)Vector128<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step)
+            nuint step = (nuint)Vector128<int>.Count, limit = length - (step * 2) + 1;
+            for (; i < limit; i += step * 2)
+            {
                 Vector128.Max(Vector128.LoadUnsafe(in lRef, i), Vector128.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
+                Vector128.Max(Vector128.LoadUnsafe(in lRef, i + step), Vector128.LoadUnsafe(in rRef, i + step)).StoreUnsafe(ref dRef, i + step);
+            }
+            nuint singleLimit = length - step + 1;
+            for (; i < singleLimit; i += step) Vector128.Max(Vector128.LoadUnsafe(in lRef, i), Vector128.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
         }
         for (; i < length; ++i)
         {
@@ -317,23 +350,38 @@ public static unsafe class SimdInt32
         ref int rRef = ref MemoryMarshal.GetReference(right);
         ref int dRef = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count)
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count * 2)
         {
-            nuint step = (nuint)Vector512<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step)
+            nuint step = (nuint)Vector512<int>.Count, limit = length - (step * 2) + 1;
+            for (; i < limit; i += step * 2)
+            {
                 Vector512.Min(Vector512.LoadUnsafe(in lRef, i), Vector512.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
+                Vector512.Min(Vector512.LoadUnsafe(in lRef, i + step), Vector512.LoadUnsafe(in rRef, i + step)).StoreUnsafe(ref dRef, i + step);
+            }
+            nuint singleLimit = length - step + 1;
+            for (; i < singleLimit; i += step) Vector512.Min(Vector512.LoadUnsafe(in lRef, i), Vector512.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
         }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count)
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count * 2)
         {
-            nuint step = (nuint)Vector256<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step)
+            nuint step = (nuint)Vector256<int>.Count, limit = length - (step * 2) + 1;
+            for (; i < limit; i += step * 2)
+            {
                 Vector256.Min(Vector256.LoadUnsafe(in lRef, i), Vector256.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
+                Vector256.Min(Vector256.LoadUnsafe(in lRef, i + step), Vector256.LoadUnsafe(in rRef, i + step)).StoreUnsafe(ref dRef, i + step);
+            }
+            nuint singleLimit = length - step + 1;
+            for (; i < singleLimit; i += step) Vector256.Min(Vector256.LoadUnsafe(in lRef, i), Vector256.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
         }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count)
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count * 2)
         {
-            nuint step = (nuint)Vector128<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step)
+            nuint step = (nuint)Vector128<int>.Count, limit = length - (step * 2) + 1;
+            for (; i < limit; i += step * 2)
+            {
                 Vector128.Min(Vector128.LoadUnsafe(in lRef, i), Vector128.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
+                Vector128.Min(Vector128.LoadUnsafe(in lRef, i + step), Vector128.LoadUnsafe(in rRef, i + step)).StoreUnsafe(ref dRef, i + step);
+            }
+            nuint singleLimit = length - step + 1;
+            for (; i < singleLimit; i += step) Vector128.Min(Vector128.LoadUnsafe(in lRef, i), Vector128.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
         }
         for (; i < length; ++i)
         {
@@ -953,200 +1001,6 @@ public static unsafe class SimdInt32
             for (; i < limit; i += step) (Vector128.LoadUnsafe(in src, i) >> count).StoreUnsafe(ref dst, i);
         }
         for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = Unsafe.Add(ref src, (nint)i) >> count;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void VectorAbs(ReadOnlySpan<int> source, Span<int> destination)
-    {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
-        nuint length = (nuint)source.Length;
-        if (length == 0) return;
-        ref int src = ref MemoryMarshal.GetReference(source);
-        ref int dst = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count)
-        {
-            nuint step = (nuint)Vector512<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) Vector512.Abs(Vector512.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
-        }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count)
-        {
-            nuint step = (nuint)Vector256<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) Vector256.Abs(Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
-        }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count)
-        {
-            nuint step = (nuint)Vector128<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) Vector128.Abs(Vector128.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
-        }
-        for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = Math.Abs(Unsafe.Add(ref src, (nint)i));
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void VectorNegate(ReadOnlySpan<int> source, Span<int> destination)
-    {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
-        nuint length = (nuint)source.Length;
-        if (length == 0) return;
-        ref int src = ref MemoryMarshal.GetReference(source);
-        ref int dst = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count * 2)
-        {
-            nuint step = (nuint)Vector512<int>.Count, limit = length - (step * 2) + 1;
-            for (; i < limit; i += step * 2)
-            {
-                (Vector512<int>.Zero - Vector512.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
-                (Vector512<int>.Zero - Vector512.LoadUnsafe(in src, i + step)).StoreUnsafe(ref dst, i + step);
-            }
-            nuint singleLimit = length - step + 1;
-            for (; i < singleLimit; i += step) (Vector512<int>.Zero - Vector512.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
-        }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count * 2)
-        {
-            nuint step = (nuint)Vector256<int>.Count, limit = length - (step * 2) + 1;
-            for (; i < limit; i += step * 2)
-            {
-                (Vector256<int>.Zero - Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
-                (Vector256<int>.Zero - Vector256.LoadUnsafe(in src, i + step)).StoreUnsafe(ref dst, i + step);
-            }
-            nuint singleLimit = length - step + 1;
-            for (; i < singleLimit; i += step) (Vector256<int>.Zero - Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
-        }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count * 2)
-        {
-            nuint step = (nuint)Vector128<int>.Count, limit = length - (step * 2) + 1;
-            for (; i < limit; i += step * 2)
-            {
-                (Vector128<int>.Zero - Vector128.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
-                (Vector128<int>.Zero - Vector128.LoadUnsafe(in src, i + step)).StoreUnsafe(ref dst, i + step);
-            }
-            nuint singleLimit = length - step + 1;
-            for (; i < singleLimit; i += step) (Vector128<int>.Zero - Vector128.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
-        }
-        for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = -Unsafe.Add(ref src, (nint)i);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void VectorMin(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
-    {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
-        nuint length = (nuint)left.Length;
-        if (length == 0) return;
-        ref int lRef = ref MemoryMarshal.GetReference(left);
-        ref int rRef = ref MemoryMarshal.GetReference(right);
-        ref int dRef = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count * 2)
-        {
-            nuint step = (nuint)Vector512<int>.Count, limit = length - (step * 2) + 1;
-            for (; i < limit; i += step * 2)
-            {
-                Vector512.Min(Vector512.LoadUnsafe(in lRef, i), Vector512.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
-                Vector512.Min(Vector512.LoadUnsafe(in lRef, i + step), Vector512.LoadUnsafe(in rRef, i + step)).StoreUnsafe(ref dRef, i + step);
-            }
-            nuint singleLimit = length - step + 1;
-            for (; i < singleLimit; i += step) Vector512.Min(Vector512.LoadUnsafe(in lRef, i), Vector512.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
-        }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count * 2)
-        {
-            nuint step = (nuint)Vector256<int>.Count, limit = length - (step * 2) + 1;
-            for (; i < limit; i += step * 2)
-            {
-                Vector256.Min(Vector256.LoadUnsafe(in lRef, i), Vector256.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
-                Vector256.Min(Vector256.LoadUnsafe(in lRef, i + step), Vector256.LoadUnsafe(in rRef, i + step)).StoreUnsafe(ref dRef, i + step);
-            }
-            nuint singleLimit = length - step + 1;
-            for (; i < singleLimit; i += step) Vector256.Min(Vector256.LoadUnsafe(in lRef, i), Vector256.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
-        }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count * 2)
-        {
-            nuint step = (nuint)Vector128<int>.Count, limit = length - (step * 2) + 1;
-            for (; i < limit; i += step * 2)
-            {
-                Vector128.Min(Vector128.LoadUnsafe(in lRef, i), Vector128.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
-                Vector128.Min(Vector128.LoadUnsafe(in lRef, i + step), Vector128.LoadUnsafe(in rRef, i + step)).StoreUnsafe(ref dRef, i + step);
-            }
-            nuint singleLimit = length - step + 1;
-            for (; i < singleLimit; i += step) Vector128.Min(Vector128.LoadUnsafe(in lRef, i), Vector128.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
-        }
-        for (; i < length; ++i) Unsafe.Add(ref dRef, (nint)i) = Math.Min(Unsafe.Add(ref lRef, (nint)i), Unsafe.Add(ref rRef, (nint)i));
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void VectorMax(ReadOnlySpan<int> left, ReadOnlySpan<int> right, Span<int> destination)
-    {
-        if (left.Length != right.Length || destination.Length < left.Length) ThrowHelper.ThrowMismatchedSpans();
-        nuint length = (nuint)left.Length;
-        if (length == 0) return;
-        ref int lRef = ref MemoryMarshal.GetReference(left);
-        ref int rRef = ref MemoryMarshal.GetReference(right);
-        ref int dRef = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count * 2)
-        {
-            nuint step = (nuint)Vector512<int>.Count, limit = length - (step * 2) + 1;
-            for (; i < limit; i += step * 2)
-            {
-                Vector512.Max(Vector512.LoadUnsafe(in lRef, i), Vector512.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
-                Vector512.Max(Vector512.LoadUnsafe(in lRef, i + step), Vector512.LoadUnsafe(in rRef, i + step)).StoreUnsafe(ref dRef, i + step);
-            }
-            nuint singleLimit = length - step + 1;
-            for (; i < singleLimit; i += step) Vector512.Max(Vector512.LoadUnsafe(in lRef, i), Vector512.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
-        }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count * 2)
-        {
-            nuint step = (nuint)Vector256<int>.Count, limit = length - (step * 2) + 1;
-            for (; i < limit; i += step * 2)
-            {
-                Vector256.Max(Vector256.LoadUnsafe(in lRef, i), Vector256.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
-                Vector256.Max(Vector256.LoadUnsafe(in lRef, i + step), Vector256.LoadUnsafe(in rRef, i + step)).StoreUnsafe(ref dRef, i + step);
-            }
-            nuint singleLimit = length - step + 1;
-            for (; i < singleLimit; i += step) Vector256.Max(Vector256.LoadUnsafe(in lRef, i), Vector256.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
-        }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count * 2)
-        {
-            nuint step = (nuint)Vector128<int>.Count, limit = length - (step * 2) + 1;
-            for (; i < limit; i += step * 2)
-            {
-                Vector128.Max(Vector128.LoadUnsafe(in lRef, i), Vector128.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
-                Vector128.Max(Vector128.LoadUnsafe(in lRef, i + step), Vector128.LoadUnsafe(in rRef, i + step)).StoreUnsafe(ref dRef, i + step);
-            }
-            nuint singleLimit = length - step + 1;
-            for (; i < singleLimit; i += step) Vector128.Max(Vector128.LoadUnsafe(in lRef, i), Vector128.LoadUnsafe(in rRef, i)).StoreUnsafe(ref dRef, i);
-        }
-        for (; i < length; ++i) Unsafe.Add(ref dRef, (nint)i) = Math.Max(Unsafe.Add(ref lRef, (nint)i), Unsafe.Add(ref rRef, (nint)i));
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void VectorClamp(ReadOnlySpan<int> source, int min, int max, Span<int> destination)
-    {
-        if (destination.Length < source.Length) ThrowHelper.ThrowDestinationTooSmall();
-        nuint length = (nuint)source.Length;
-        if (length == 0) return;
-        ref int sRef = ref MemoryMarshal.GetReference(source);
-        ref int dRef = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<int>.Count)
-        {
-            Vector512<int> vMin = Vector512.Create(min), vMax = Vector512.Create(max);
-            nuint step = (nuint)Vector512<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) Vector512.Min(Vector512.Max(Vector512.LoadUnsafe(in sRef, i), vMin), vMax).StoreUnsafe(ref dRef, i);
-        }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<int>.Count)
-        {
-            Vector256<int> vMin = Vector256.Create(min), vMax = Vector256.Create(max);
-            nuint step = (nuint)Vector256<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) Vector256.Min(Vector256.Max(Vector256.LoadUnsafe(in sRef, i), vMin), vMax).StoreUnsafe(ref dRef, i);
-        }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<int>.Count)
-        {
-            Vector128<int> vMin = Vector128.Create(min), vMax = Vector128.Create(max);
-            nuint step = (nuint)Vector128<int>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) Vector128.Min(Vector128.Max(Vector128.LoadUnsafe(in sRef, i), vMin), vMax).StoreUnsafe(ref dRef, i);
-        }
-        for (; i < length; ++i) Unsafe.Add(ref dRef, (nint)i) = Math.Clamp(Unsafe.Add(ref sRef, (nint)i), min, max);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
