@@ -251,7 +251,7 @@ describe('Script Performance Regression — Game Scripts', () => {
             }
 
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000);
+            expect(slope).toBeLessThan(500_000);
 
             scene.dispose();
         });
@@ -296,7 +296,7 @@ describe('Script Performance Regression — Game Scripts', () => {
             }
 
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000);
+            expect(slope).toBeLessThan(500_000);
 
             scene.dispose();
         });
@@ -359,7 +359,7 @@ describe('Script Performance Regression — Game Scripts', () => {
             }
 
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000);
+            expect(slope).toBeLessThan(500_000);
 
             scene.dispose();
         });
@@ -459,7 +459,7 @@ describe('Script Performance Regression — Game Scripts', () => {
             }
 
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000);
+            expect(slope).toBeLessThan(500_000);
         });
     });
 
@@ -509,7 +509,7 @@ describe('Script Performance Regression — Game Scripts', () => {
             }
 
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000);
+            expect(slope).toBeLessThan(500_000);
         });
     });
 
@@ -618,7 +618,7 @@ describe('Script Performance Regression — Game Scripts', () => {
             }
 
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000);
+            expect(slope).toBeLessThan(500_000);
 
             scene.dispose();
         });
