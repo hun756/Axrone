@@ -30,8 +30,15 @@ const createExternalMatcher = (packageDir, packageJson, additionalExternalIds) =
     // package type declarations (Actor/World/Vec3 copies in every consumer
     // dist). Resolved files outside this package's directory therefore must
     // stay external too.
+    const realPackageDir = fs.realpathSync(packageDir);
     const isInsideOwnPackage = (resolvedId) => {
-        const relative = path.relative(packageDir, resolvedId);
+        let realResolved;
+        try {
+            realResolved = fs.realpathSync(resolvedId);
+        } catch {
+            realResolved = resolvedId;
+        }
+        const relative = path.relative(realPackageDir, realResolved);
         return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
     };
 
@@ -60,6 +67,22 @@ const IMPORT_CLAUSE_PATTERN = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]([^
 const EXPORT_DECLARATION_PATTERN =
     /export\s+(?:declare\s+)?(?:default\s+)?(?:abstract\s+)?(?:async\s+)?(?:class|function\s*\*?|const|let|var|interface|enum|type)\s+([A-Za-z_$][\w$]*)/g;
 
+const sourceFileCache = new Map();
+const readSourceCached = (filePath) => {
+    const cached = sourceFileCache.get(filePath);
+    if (cached !== undefined) {
+        return cached;
+    }
+    let content;
+    try {
+        content = fs.readFileSync(filePath, 'utf8');
+    } catch {
+        content = null;
+    }
+    sourceFileCache.set(filePath, content);
+    return content;
+};
+
 const resolveRelativeModule = (specifier, importerFile) => {
     if (!specifier.startsWith('.')) {
         return null;
@@ -69,7 +92,7 @@ const resolveRelativeModule = (specifier, importerFile) => {
     for (const candidate of candidates) {
         try {
             if (fs.statSync(candidate).isFile()) {
-                return candidate;
+                return fs.realpathSync(candidate);
             }
         } catch {
             // Probe the next candidate.
@@ -125,10 +148,8 @@ const collectEntryGraph = (entryFile, entryAbsolutePaths) => {
             return;
         }
         visited.add(file);
-        let source;
-        try {
-            source = fs.readFileSync(file, 'utf8');
-        } catch {
+        const source = readSourceCached(file);
+        if (source === null) {
             return;
         }
 
@@ -192,10 +213,8 @@ const collectEntryExportSurface = (entryFile, entryAbsolutePaths, stopAtEntries)
             return;
         }
         visited.add(visitedKey);
-        let source;
-        try {
-            source = fs.readFileSync(file, 'utf8');
-        } catch {
+        const source = readSourceCached(file);
+        if (source === null) {
             return;
         }
 
@@ -374,9 +393,17 @@ export const createMultiEntryConfig = ({
                         return id;
                     }
 
-                    const relative = path.relative(workspaceDir, id).replace(/\\/g, '/');
-                    const packageDirName = relative.match(/^packages\/([^/]+)\//)?.[1];
-                    return packageDirName ? `@axrone/${packageDirName}` : id;
+                    const normalizedWorkspace = workspaceDir.replace(/\\/g, '/');
+                    const normalizedId = id.replace(/\\/g, '/');
+                    const prefix = `${normalizedWorkspace}/packages/`;
+                    if (normalizedId.startsWith(prefix)) {
+                        const remainder = normalizedId.slice(prefix.length);
+                        const packageDirName = remainder.split('/')[0];
+                        if (packageDirName) {
+                            return `@axrone/${packageDirName}`;
+                        }
+                    }
+                    return id;
                 },
             },
             plugins: [
