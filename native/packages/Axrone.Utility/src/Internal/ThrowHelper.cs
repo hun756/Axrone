@@ -127,4 +127,11 @@ public static class ThrowHelper
     {
         throw new InvalidOperationException("Cannot compute a reduction over an empty sequence.");
     }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInsufficientMemory(string message)
+    {
+        throw new InsufficientMemoryException(message);
+    }
 }

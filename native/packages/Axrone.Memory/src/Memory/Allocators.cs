@@ -78,7 +78,7 @@ public sealed unsafe class NativeAlignedBlockAllocator<T> : IBlockAllocator<T> w
 
     [DoesNotReturn]
     private static void ThrowAllocationFailed(nuint bytes) =>
-        throw new InsufficientMemoryException($"Failed to allocate {bytes} bytes with 64-byte alignment.");
+        ThrowHelper.ThrowInsufficientMemory($"Failed to allocate {bytes} bytes with 64-byte alignment.");
 }
 
 internal sealed unsafe class NativeBlockMemoryManager<T> : MemoryManager<T> where T : unmanaged
@@ -145,5 +145,5 @@ internal sealed unsafe class NativeBlockMemoryManager<T> : MemoryManager<T> wher
 
     [DoesNotReturn]
     private static void ThrowIndexOutOfRange() =>
-        throw new ArgumentOutOfRangeException("elementIndex");
+        ThrowHelper.ThrowArgumentOutOfRangeException("elementIndex");
 }
