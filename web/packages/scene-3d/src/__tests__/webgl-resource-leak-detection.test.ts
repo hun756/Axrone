@@ -491,8 +491,8 @@ describe('T-13: WebGL Resource Leak Detection', () => {
             }
 
             const slope = linearSlope(samples);
-            // Node.js V8 heap naturally expands; allow up to 5 MB per sample-step
-            expect(slope).toBeLessThan(5_000_000);
+            // Node.js V8 heap naturally expands; allow up to 500 KB per sample-step
+            expect(slope).toBeLessThan(500_000);
 
             scene.dispose();
         });
@@ -523,7 +523,7 @@ describe('T-13: WebGL Resource Leak Detection', () => {
             }
 
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000);
+            expect(slope).toBeLessThan(500_000);
         });
     });
 
