@@ -227,6 +227,10 @@ export class SpriteAnimator extends Component {
         return this;
     }
 
+    override onDestroy(): void {
+        this._renderer = null;
+    }
+
     override serialize(): Record<string, unknown> {
         return {
             atlas: this._atlas ? serializeSpriteAtlasDefinition(this._atlas) : null,
