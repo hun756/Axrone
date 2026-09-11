@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { builtinModules } from 'node:module';
+import { builtinModules, createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import commonjs from '@rollup/plugin-commonjs';
 import resolve from '@rollup/plugin-node-resolve';
@@ -61,11 +61,8 @@ const createExternalMatcher = (packageDir, packageJson, additionalExternalIds) =
     };
 };
 
-const EXPORT_CLAUSE_PATTERN = /export\s+(?:type\s+)?\{([^}]*)\}\s*(?:from\s*['"]([^'"]+)['"])?/g;
-const EXPORT_STAR_PATTERN = /export\s+(?:type\s+)?\*\s+from\s*['"]([^'"]+)['"]/g;
-const IMPORT_CLAUSE_PATTERN = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;
-const EXPORT_DECLARATION_PATTERN =
-    /export\s+(?:declare\s+)?(?:default\s+)?(?:abstract\s+)?(?:async\s+)?(?:class|function\s*\*?|const|let|var|interface|enum|type)\s+([A-Za-z_$][\w$]*)/g;
+const require = createRequire(import.meta.url);
+const ts = require('typescript');
 
 const sourceFileCache = new Map();
 const readSourceCached = (filePath) => {
@@ -81,6 +78,81 @@ const readSourceCached = (filePath) => {
     }
     sourceFileCache.set(filePath, content);
     return content;
+};
+
+const astCache = new Map();
+const parseModuleStructure = (filePath) => {
+    const cached = astCache.get(filePath);
+    if (cached) {
+        return cached;
+    }
+    const source = readSourceCached(filePath);
+    if (source === null) {
+        return null;
+    }
+    const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+
+    const exportClauses = [];
+    const exportStars = [];
+    const importClauses = [];
+    const exportDeclarations = [];
+
+    for (const statement of sourceFile.statements) {
+        if (ts.isExportDeclaration(statement)) {
+            const moduleSpecifier = statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
+                ? statement.moduleSpecifier.text
+                : null;
+            if (statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+                const names = statement.exportClause.elements.map((element) => {
+                    const propertyName = element.propertyName;
+                    return propertyName ? propertyName.text : element.name.text;
+                });
+                if (moduleSpecifier) {
+                    exportClauses.push({ names, moduleSpecifier });
+                }
+            } else if (!statement.exportClause && moduleSpecifier) {
+                exportStars.push({ moduleSpecifier });
+            }
+        } else if (ts.isImportDeclaration(statement)) {
+            const moduleSpecifier = statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
+                ? statement.moduleSpecifier.text
+                : null;
+            if (moduleSpecifier && statement.importClause) {
+                const namedBindings = statement.importClause.namedBindings;
+                if (namedBindings && ts.isNamedImports(namedBindings)) {
+                    const names = namedBindings.elements.map((element) => {
+                        const propertyName = element.propertyName;
+                        return propertyName ? propertyName.text : element.name.text;
+                    });
+                    importClauses.push({ names, moduleSpecifier });
+                }
+            }
+        } else if (
+            ts.isClassDeclaration(statement) ||
+            ts.isFunctionDeclaration(statement) ||
+            ts.isInterfaceDeclaration(statement) ||
+            ts.isTypeAliasDeclaration(statement) ||
+            ts.isEnumDeclaration(statement)
+        ) {
+            const hasExport = statement.modifiers?.some((mod) => mod.kind === ts.SyntaxKind.ExportKeyword);
+            if (hasExport && statement.name) {
+                exportDeclarations.push(statement.name.text);
+            }
+        } else if (ts.isVariableStatement(statement)) {
+            const hasExport = statement.modifiers?.some((mod) => mod.kind === ts.SyntaxKind.ExportKeyword);
+            if (hasExport) {
+                for (const declaration of statement.declarationList.declarations) {
+                    if (ts.isIdentifier(declaration.name)) {
+                        exportDeclarations.push(declaration.name.text);
+                    }
+                }
+            }
+        }
+    }
+
+    const result = { exportClauses, exportStars, importClauses, exportDeclarations };
+    astCache.set(filePath, result);
+    return result;
 };
 
 const resolveRelativeModule = (specifier, importerFile) => {
@@ -108,17 +180,6 @@ const entryDistSpecifier = (fromEntryName, toEntryName) => {
     const relative = path.posix.relative(path.posix.dirname(fromEntryName), toEntryName);
     return relative.startsWith('../') ? relative : `./${relative}`;
 };
-
-const parseClauseNames = (clause) =>
-    clause
-        .split(',')
-        .map((part) => part.trim())
-        .filter((part) => part.length > 0)
-        .map((part) => part.replace(/^type\s+/, ''))
-        .map((part) =>
-            part.includes(' as ') ? part.slice(part.lastIndexOf(' as ') + 4).trim() : part
-        )
-        .filter((name) => /^[A-Za-z_$][\w$]*$/.test(name));
 
 // Graph walk for one entry: which internal modules it reaches and which names
 // its files pull from each of them (import and re-export clauses). Never
@@ -148,36 +209,33 @@ const collectEntryGraph = (entryFile, entryAbsolutePaths) => {
             return;
         }
         visited.add(file);
-        const source = readSourceCached(file);
-        if (source === null) {
+        const structure = parseModuleStructure(file);
+        if (structure === null) {
             return;
         }
 
-        for (const match of source.matchAll(EXPORT_CLAUSE_PATTERN)) {
-            if (!match[2]) {
-                continue;
-            }
-            const target = resolveRelativeModule(match[2], file);
+        for (const clause of structure.exportClauses) {
+            const target = resolveRelativeModule(clause.moduleSpecifier, file);
             if (!target) {
                 continue;
             }
             modules.add(target);
-            recordNames(target, parseClauseNames(match[1]));
+            recordNames(target, clause.names);
             if (target !== entryFile && entryAbsolutePaths.has(target)) {
                 continue;
             }
             visit(target);
         }
-        for (const match of source.matchAll(IMPORT_CLAUSE_PATTERN)) {
-            const target = resolveRelativeModule(match[2], file);
+        for (const clause of structure.importClauses) {
+            const target = resolveRelativeModule(clause.moduleSpecifier, file);
             if (!target) {
                 continue;
             }
             modules.add(target);
-            recordNames(target, parseClauseNames(match[1]));
+            recordNames(target, clause.names);
         }
-        for (const match of source.matchAll(EXPORT_STAR_PATTERN)) {
-            const target = resolveRelativeModule(match[1], file);
+        for (const star of structure.exportStars) {
+            const target = resolveRelativeModule(star.moduleSpecifier, file);
             if (!target) {
                 continue;
             }
@@ -213,28 +271,27 @@ const collectEntryExportSurface = (entryFile, entryAbsolutePaths, stopAtEntries)
             return;
         }
         visited.add(visitedKey);
-        const source = readSourceCached(file);
-        if (source === null) {
+        const structure = parseModuleStructure(file);
+        if (structure === null) {
             return;
         }
 
-        for (const match of source.matchAll(EXPORT_DECLARATION_PATTERN)) {
-            if (!allowedNames || allowedNames.has(match[1])) {
-                surfaceNames.add(match[1]);
+        for (const name of structure.exportDeclarations) {
+            if (!allowedNames || allowedNames.has(name)) {
+                surfaceNames.add(name);
             }
         }
-        for (const match of source.matchAll(EXPORT_CLAUSE_PATTERN)) {
-            const names = parseClauseNames(match[1]);
+        for (const clause of structure.exportClauses) {
             const effective = allowedNames
-                ? names.filter((name) => allowedNames.has(name))
-                : names;
+                ? clause.names.filter((name) => allowedNames.has(name))
+                : clause.names;
             for (const name of effective) {
                 surfaceNames.add(name);
             }
-            if (!match[2] || effective.length === 0) {
+            if (effective.length === 0) {
                 continue;
             }
-            const target = resolveRelativeModule(match[2], file);
+            const target = resolveRelativeModule(clause.moduleSpecifier, file);
             if (!target) {
                 continue;
             }
@@ -245,11 +302,11 @@ const collectEntryExportSurface = (entryFile, entryAbsolutePaths, stopAtEntries)
             // even when this file itself was reached without a filter.
             visit(target, new Set(effective));
         }
-        for (const match of source.matchAll(EXPORT_STAR_PATTERN)) {
+        for (const star of structure.exportStars) {
             if (allowedNames && allowedNames.size === 0) {
                 continue;
             }
-            const target = resolveRelativeModule(match[1], file);
+            const target = resolveRelativeModule(star.moduleSpecifier, file);
             if (!target) {
                 continue;
             }
