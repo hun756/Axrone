@@ -82,6 +82,14 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
     private readonly _lateUpdateActorsCallback: (delta: number) => void;
     private readonly _renderCallback: (delta: number) => void;
 
+    private _currentDelta = 0;
+    private _currentSystemPhase: SystemPhase | null = null;
+    private readonly _executePhaseInner: () => void;
+    private readonly _fixedUpdateInner: () => void;
+    private readonly _updateInner: () => void;
+    private readonly _lateUpdateInner: () => void;
+    private readonly _renderInner: () => void;
+
     constructor(options: SceneRuntimeKernelOptions<R>) {
         const sceneOptions = options.options ?? {};
         const surface = resolveSceneSurface(sceneOptions);
@@ -196,34 +204,46 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
             enabled: profilerOptions.enabled ?? sceneOptions.profiler === true,
         });
 
+        this._executePhaseInner = () => this.systems.executePhase(this._currentSystemPhase!, this._currentDelta);
+        this._fixedUpdateInner = () => this.actorLifecycleRunner.fixedUpdate(this._currentDelta);
+        this._updateInner = () => this.actorLifecycleRunner.update(this._currentDelta);
+        this._lateUpdateInner = () => this.actorLifecycleRunner.lateUpdate(this._currentDelta);
+        this._renderInner = () => this.render(this._currentDelta);
+
         this._executePhaseCallback = (phase, delta) => {
             const profilerPhase = resolveProfilerPhase(phase);
             if (profilerPhase === null) {
                 this.systems.executePhase(phase, delta);
                 return;
             }
+            this._currentDelta = delta;
+            this._currentSystemPhase = phase;
             this.profiler.capturePhaseSample(profilerPhase);
-            this.profiler.timePhase(profilerPhase, () => this.systems.executePhase(phase, delta));
+            this.profiler.timePhase(profilerPhase, this._executePhaseInner);
         };
 
         this._fixedUpdateActorsCallback = (delta) => {
+            this._currentDelta = delta;
             this.profiler.capturePhaseSample('fixedUpdate');
-            this.profiler.timePhase('fixedUpdate', () => this.actorLifecycleRunner.fixedUpdate(delta));
+            this.profiler.timePhase('fixedUpdate', this._fixedUpdateInner);
         };
 
         this._updateActorsCallback = (delta) => {
+            this._currentDelta = delta;
             this.profiler.capturePhaseSample('update');
-            this.profiler.timePhase('update', () => this.actorLifecycleRunner.update(delta));
+            this.profiler.timePhase('update', this._updateInner);
         };
 
         this._lateUpdateActorsCallback = (delta) => {
+            this._currentDelta = delta;
             this.profiler.capturePhaseSample('update');
-            this.profiler.timePhase('update', () => this.actorLifecycleRunner.lateUpdate(delta));
+            this.profiler.timePhase('update', this._lateUpdateInner);
         };
 
         this._renderCallback = (delta) => {
+            this._currentDelta = delta;
             this.profiler.capturePhaseSample('render');
-            this.profiler.timePhase('render', () => this.render(delta));
+            this.profiler.timePhase('render', this._renderInner);
             const stats = this.renderRuntime.stats;
             this.profiler.attachRenderStats({
                 drawCalls: stats.drawCalls,
