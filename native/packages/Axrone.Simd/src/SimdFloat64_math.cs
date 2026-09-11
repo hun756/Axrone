@@ -4,100 +4,53 @@ public static unsafe partial class SimdFloat64
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Fill(Span<double> destination, double value)
-    {
-        nuint length = (nuint)destination.Length;
-        if (length == 0) return;
-        ref double dRef = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<double>.Count)
-        {
-            Vector512<double> v = Vector512.Create(value);
-            nuint step = (nuint)Vector512<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) v.StoreUnsafe(ref dRef, i);
-        }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<double>.Count)
-        {
-            Vector256<double> v = Vector256.Create(value);
-            nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) v.StoreUnsafe(ref dRef, i);
-        }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
-        {
-            Vector128<double> v = Vector128.Create(value);
-            nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) v.StoreUnsafe(ref dRef, i);
-        }
-        for (; i < length; ++i) Unsafe.Add(ref dRef, (nint)i) = value;
-    }
+        => SimdFloatingPointOps<double>.Fill(destination, value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void FillLinear(Span<double> destination, double start, double step)
-    {
-        nuint length = (nuint)destination.Length;
-        if (length == 0) return;
-        ref double dRef = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<double>.Count)
-        {
-            Vector512<double> vStart = Vector512.Create(start);
-            Vector512<double> indices = Vector512.Create(0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0);
-            Vector512<double> vStep = Vector512.Create(step);
-            nuint vc = (nuint)Vector512<double>.Count;
-            Vector512<double> vInc = Vector512.Create((double)vc * step);
-            nuint vLimit = (length / vc) * vc;
-            for (; i < vLimit; i += vc) { (vStart + indices * vStep).StoreUnsafe(ref dRef, i); vStart += vInc; }
-        }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<double>.Count)
-        {
-            Vector256<double> vStart = Vector256.Create(start);
-            Vector256<double> indices = Vector256.Create(0.0, 1.0, 2.0, 3.0);
-            Vector256<double> vStep = Vector256.Create(step);
-            nuint vc = (nuint)Vector256<double>.Count;
-            Vector256<double> vInc = Vector256.Create((double)vc * step);
-            nuint vLimit = (length / vc) * vc;
-            for (; i < vLimit; i += vc) { (vStart + indices * vStep).StoreUnsafe(ref dRef, i); vStart += vInc; }
-        }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
-        {
-            Vector128<double> vStart = Vector128.Create(start);
-            Vector128<double> indices = Vector128.Create(0.0, 1.0);
-            Vector128<double> vStep = Vector128.Create(step);
-            nuint vc = (nuint)Vector128<double>.Count;
-            Vector128<double> vInc = Vector128.Create((double)vc * step);
-            nuint vLimit = (length / vc) * vc;
-            for (; i < vLimit; i += vc) { (vStart + indices * vStep).StoreUnsafe(ref dRef, i); vStart += vInc; }
-        }
-        double val = start + (double)i * step;
-        for (; i < length; ++i) { Unsafe.Add(ref dRef, (nint)i) = val; val += step; }
-    }
+        => SimdFloatingPointOps<double>.FillLinear(destination, start, step);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Gather(ReadOnlySpan<double> source, ReadOnlySpan<int> indices, Span<double> destination)
-    {
-        ThrowHelper.ValidateDestinationSpan(destination, indices);
-        nuint count = (nuint)indices.Length;
-        if (count == 0) return;
-        ref double src = ref MemoryMarshal.GetReference(source);
-        ref int idx = ref MemoryMarshal.GetReference(indices);
-        ref double dst = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        for (; i < count; ++i)
-            Unsafe.Add(ref dst, (nint)i) = Unsafe.Add(ref src, Unsafe.Add(ref idx, (nint)i));
-    }
+        => SimdFloatingPointOps<double>.Gather(source, indices, destination);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Scatter(ReadOnlySpan<double> source, ReadOnlySpan<int> indices, Span<double> destination)
-    {
-        if (source.Length > destination.Length) ThrowHelper.ThrowDestinationTooSmall();
-        nuint count = (nuint)indices.Length;
-        if (count == 0) return;
-        ref double src = ref MemoryMarshal.GetReference(source);
-        ref int idx = ref MemoryMarshal.GetReference(indices);
-        ref double dst = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        for (; i < count; ++i)
-            Unsafe.Add(ref dst, Unsafe.Add(ref idx, (nint)i)) = Unsafe.Add(ref src, (nint)i);
-    }
+        => SimdFloatingPointOps<double>.Scatter(source, indices, destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void VectorReLU(ReadOnlySpan<double> source, Span<double> destination)
+        => SimdFloatingPointOps<double>.VectorReLU(source, destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void VectorRSqrt(ReadOnlySpan<double> source, Span<double> destination)
+        => SimdFloatingPointOps<double>.VectorRSqrt(source, destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void Softmax(ReadOnlySpan<double> source, Span<double> destination)
+        => SimdFloatingPointOps<double>.Softmax(source, destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void Mat4x4Multiply(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
+        => SimdFloatingPointOps<double>.Mat4x4Multiply(left, right, destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void CrossProduct(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
+        => SimdFloatingPointOps<double>.CrossProduct(left, right, destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void QuaternionMultiply(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
+        => SimdFloatingPointOps<double>.QuaternionMultiply(left, right, destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void QuaternionSlerp(ReadOnlySpan<double> from, ReadOnlySpan<double> to, double t, Span<double> destination)
+        => SimdFloatingPointOps<double>.QuaternionSlerp(from, to, t, destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void Swizzle(ReadOnlySpan<double> source, ReadOnlySpan<int> indices, Span<double> destination)
+        => SimdFloatingPointOps<double>.Swizzle(source, indices, destination);
+
+    // ── Type-specific: VectorExp ────────────────────────────────────────
 
     private const double Log2E = 1.4426950408889634;
     private const double Ln2Hi = 0.6931471803691238166;  // high part of ln2: n * Ln2Hi is exact
@@ -249,6 +202,8 @@ public static unsafe partial class SimdFloat64
         for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = ExpScalar(Unsafe.Add(ref src, (nint)i));
     }
 
+    // ── Type-specific: VectorLog ────────────────────────────────────────
+
     private const double Sqrt2 = 1.4142135623730951;
     private const double DenormScale = 18014398509481984.0; // 2^54: maps any double denormal to a normal
     private const long ExpMask = 0x7FF0000000000000L;
@@ -389,6 +344,8 @@ public static unsafe partial class SimdFloat64
         return e * 0.6931471805599453 + (2.0 * s) * (p * z + 1.0);
     }
 
+    // ── Type-specific: VectorSigmoid ────────────────────────────────────
+
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorSigmoid(ReadOnlySpan<double> source, Span<double> destination)
     {
@@ -416,6 +373,8 @@ public static unsafe partial class SimdFloat64
         for (; i < length; ++i)
             Unsafe.Add(ref dst, (nint)i) = 1.0 / (1.0 + Math.Exp(-Unsafe.Add(ref src, (nint)i)));
     }
+
+    // ── Type-specific: VectorTanh ───────────────────────────────────────
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorTanh(ReadOnlySpan<double> source, Span<double> destination)
@@ -453,62 +412,7 @@ public static unsafe partial class SimdFloat64
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void VectorReLU(ReadOnlySpan<double> source, Span<double> destination)
-    {
-        ThrowHelper.ValidateDestinationSpan(destination, source);
-        nuint length = (nuint)source.Length;
-        if (length == 0) return;
-        ref double src = ref MemoryMarshal.GetReference(source);
-        ref double dst = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<double>.Count)
-        {
-            Vector512<double> zero = Vector512<double>.Zero;
-            nuint step = (nuint)Vector512<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) Vector512.Max(Vector512.LoadUnsafe(in src, i), zero).StoreUnsafe(ref dst, i);
-        }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<double>.Count)
-        {
-            Vector256<double> zero = Vector256<double>.Zero;
-            nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) Vector256.Max(Vector256.LoadUnsafe(in src, i), zero).StoreUnsafe(ref dst, i);
-        }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
-        {
-            Vector128<double> zero = Vector128<double>.Zero;
-            nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) Vector128.Max(Vector128.LoadUnsafe(in src, i), zero).StoreUnsafe(ref dst, i);
-        }
-        for (; i < length; ++i) { double v = Unsafe.Add(ref src, (nint)i); Unsafe.Add(ref dst, (nint)i) = v > 0 ? v : 0; }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void VectorRSqrt(ReadOnlySpan<double> source, Span<double> destination)
-    {
-        ThrowHelper.ValidateDestinationSpan(destination, source);
-        nuint length = (nuint)source.Length;
-        if (length == 0) return;
-        ref double src = ref MemoryMarshal.GetReference(source);
-        ref double dst = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<double>.Count)
-        {
-            nuint step = (nuint)Vector512<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) (Vector512.Create(1.0) / Vector512.Sqrt(Vector512.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
-        }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<double>.Count)
-        {
-            nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) (Vector256.Create(1.0) / Vector256.Sqrt(Vector256.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
-        }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
-        {
-            nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) (Vector128.Create(1.0) / Vector128.Sqrt(Vector128.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
-        }
-        for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = 1.0 / Math.Sqrt(Unsafe.Add(ref src, (nint)i));
-    }
+    // ── Type-specific: VectorPow ────────────────────────────────────────
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorPow(ReadOnlySpan<double> @base, ReadOnlySpan<double> exponent, Span<double> destination)
@@ -528,153 +432,5 @@ public static unsafe partial class SimdFloat64
         }
         for (; i < length; ++i)
             Unsafe.Add(ref dRef, (nint)i) = Math.Pow(Unsafe.Add(ref bRef, (nint)i), Unsafe.Add(ref eRef, (nint)i));
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void Softmax(ReadOnlySpan<double> source, Span<double> destination)
-    {
-        ThrowHelper.ValidateDestinationSpan(destination, source);
-        nuint length = (nuint)source.Length;
-        if (length == 0) return;
-        ref double src = ref MemoryMarshal.GetReference(source);
-        ref double dst = ref MemoryMarshal.GetReference(destination);
-        double maxVal = double.NegativeInfinity;
-        for (nuint j = 0; j < length; ++j) { double v = Unsafe.Add(ref src, (nint)j); if (v > maxVal) maxVal = v; }
-        double sum = 0;
-        for (nuint j = 0; j < length; ++j) { double e = Math.Exp(Unsafe.Add(ref src, (nint)j) - maxVal); Unsafe.Add(ref dst, (nint)j) = e; sum += e; }
-        double inv = 1.0 / sum;
-        nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<double>.Count)
-        {
-            Vector512<double> vInv = Vector512.Create(inv);
-            nuint step = (nuint)Vector512<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) (Vector512.LoadUnsafe(in dst, i) * vInv).StoreUnsafe(ref dst, i);
-        }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<double>.Count)
-        {
-            Vector256<double> vInv = Vector256.Create(inv);
-            nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) (Vector256.LoadUnsafe(in dst, i) * vInv).StoreUnsafe(ref dst, i);
-        }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
-        {
-            Vector128<double> vInv = Vector128.Create(inv);
-            nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
-            for (; i < limit; i += step) (Vector128.LoadUnsafe(in dst, i) * vInv).StoreUnsafe(ref dst, i);
-        }
-        for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) *= inv;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void Mat4x4Multiply(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
-    {
-        if (left.Length < 16 || right.Length < 16 || destination.Length < 16) ThrowHelper.ThrowMismatchedSpans();
-        ref double l = ref MemoryMarshal.GetReference(left);
-        ref double r = ref MemoryMarshal.GetReference(right);
-        ref double d = ref MemoryMarshal.GetReference(destination);
-        if (Vector128.IsHardwareAccelerated)
-        {
-            for (int col = 0; col < 4; ++col)
-            {
-                Vector128<double> r0 = Vector128.Create(Unsafe.Add(ref l, (nint)(col * 4 + 0))) * Vector128.LoadUnsafe(in r, (nuint)(col * 4));
-                r0 += Vector128.Create(Unsafe.Add(ref l, (nint)(col * 4 + 1))) * Vector128.LoadUnsafe(in r, (nuint)(col * 4 + 2));
-                r0 += Vector128.Create(Unsafe.Add(ref l, (nint)(col * 4 + 2))) * Vector128.LoadUnsafe(in r, (nuint)(col * 4 + 4));
-                r0 += Vector128.Create(Unsafe.Add(ref l, (nint)(col * 4 + 3))) * Vector128.LoadUnsafe(in r, (nuint)(col * 4 + 6));
-                r0.StoreUnsafe(ref d, (nuint)(col * 2));
-                Vector128<double> r1 = Vector128.Create(Unsafe.Add(ref l, (nint)(col * 4 + 0))) * Vector128.LoadUnsafe(in r, (nuint)(col * 4 + 1));
-                r1 += Vector128.Create(Unsafe.Add(ref l, (nint)(col * 4 + 1))) * Vector128.LoadUnsafe(in r, (nuint)(col * 4 + 3));
-                r1 += Vector128.Create(Unsafe.Add(ref l, (nint)(col * 4 + 2))) * Vector128.LoadUnsafe(in r, (nuint)(col * 4 + 5));
-                r1 += Vector128.Create(Unsafe.Add(ref l, (nint)(col * 4 + 3))) * Vector128.LoadUnsafe(in r, (nuint)(col * 4 + 7));
-                r1.StoreUnsafe(ref d, (nuint)(col * 2 + 1));
-            }
-        }
-        else
-        {
-            for (int col = 0; col < 4; ++col)
-                for (int row = 0; row < 4; ++row)
-                {
-                    double sum = 0;
-                    for (int k = 0; k < 4; ++k) sum += Unsafe.Add(ref l, (nint)(k * 4 + col)) * Unsafe.Add(ref r, (nint)(row + k * 4));
-                    Unsafe.Add(ref d, (nint)(row + col * 4)) = sum;
-                }
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void CrossProduct(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
-    {
-        if (left.Length < 3 || right.Length < 3 || destination.Length < 3) ThrowHelper.ThrowMismatchedSpans();
-        ref double l = ref MemoryMarshal.GetReference(left);
-        ref double r = ref MemoryMarshal.GetReference(right);
-        double lx = Unsafe.Add(ref l, 0), ly = Unsafe.Add(ref l, 1), lz = Unsafe.Add(ref l, 2);
-        double rx = Unsafe.Add(ref r, 0), ry = Unsafe.Add(ref r, 1), rz = Unsafe.Add(ref r, 2);
-        ref double d = ref MemoryMarshal.GetReference(destination);
-        Unsafe.Add(ref d, 0) = ly * rz - lz * ry;
-        Unsafe.Add(ref d, 1) = lz * rx - lx * rz;
-        Unsafe.Add(ref d, 2) = lx * ry - ly * rx;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void QuaternionMultiply(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
-    {
-        if (left.Length < 4 || right.Length < 4 || destination.Length < 4) ThrowHelper.ThrowMismatchedSpans();
-        ref double l = ref MemoryMarshal.GetReference(left);
-        ref double r = ref MemoryMarshal.GetReference(right);
-        double lx = Unsafe.Add(ref l, 0), ly = Unsafe.Add(ref l, 1), lz = Unsafe.Add(ref l, 2), lw = Unsafe.Add(ref l, 3);
-        double rx = Unsafe.Add(ref r, 0), ry = Unsafe.Add(ref r, 1), rz = Unsafe.Add(ref r, 2), rw = Unsafe.Add(ref r, 3);
-        ref double d = ref MemoryMarshal.GetReference(destination);
-        Unsafe.Add(ref d, 0) = lw * rx + lx * rw + ly * rz - lz * ry;
-        Unsafe.Add(ref d, 1) = lw * ry - lx * rz + ly * rw + lz * rx;
-        Unsafe.Add(ref d, 2) = lw * rz + lx * ry - ly * rx + lz * rw;
-        Unsafe.Add(ref d, 3) = lw * rw - lx * rx - ly * ry - lz * rz;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void QuaternionSlerp(ReadOnlySpan<double> from, ReadOnlySpan<double> to, double t, Span<double> destination)
-    {
-        if (from.Length < 4 || to.Length < 4 || destination.Length < 4) ThrowHelper.ThrowMismatchedSpans();
-        ref double a = ref MemoryMarshal.GetReference(from);
-        ref double b = ref MemoryMarshal.GetReference(to);
-        double dot = Unsafe.Add(ref a, 0) * Unsafe.Add(ref b, 0) + Unsafe.Add(ref a, 1) * Unsafe.Add(ref b, 1)
-                   + Unsafe.Add(ref a, 2) * Unsafe.Add(ref b, 2) + Unsafe.Add(ref a, 3) * Unsafe.Add(ref b, 3);
-        double bx = Unsafe.Add(ref b, 0), by = Unsafe.Add(ref b, 1), bz = Unsafe.Add(ref b, 2), bw = Unsafe.Add(ref b, 3);
-        if (dot < 0) { dot = -dot; bx = -bx; by = -by; bz = -bz; bw = -bw; }
-        ref double d = ref MemoryMarshal.GetReference(destination);
-        if (dot > 0.9995)
-        {
-            Unsafe.Add(ref d, 0) = Unsafe.Add(ref a, 0) + t * (bx - Unsafe.Add(ref a, 0));
-            Unsafe.Add(ref d, 1) = Unsafe.Add(ref a, 1) + t * (by - Unsafe.Add(ref a, 1));
-            Unsafe.Add(ref d, 2) = Unsafe.Add(ref a, 2) + t * (bz - Unsafe.Add(ref a, 2));
-            Unsafe.Add(ref d, 3) = Unsafe.Add(ref a, 3) + t * (bw - Unsafe.Add(ref a, 3));
-            double len = Math.Sqrt(Unsafe.Add(ref d, 0) * Unsafe.Add(ref d, 0) + Unsafe.Add(ref d, 1) * Unsafe.Add(ref d, 1)
-                                 + Unsafe.Add(ref d, 2) * Unsafe.Add(ref d, 2) + Unsafe.Add(ref d, 3) * Unsafe.Add(ref d, 3));
-            double inv = 1.0 / len;
-            Unsafe.Add(ref d, 0) *= inv; Unsafe.Add(ref d, 1) *= inv; Unsafe.Add(ref d, 2) *= inv; Unsafe.Add(ref d, 3) *= inv;
-        }
-        else
-        {
-            double theta = Math.Acos(Math.Clamp(dot, -1.0, 1.0));
-            double sinTheta = Math.Sin(theta);
-            double w0 = Math.Sin((1.0 - t) * theta) / sinTheta;
-            double w1 = Math.Sin(t * theta) / sinTheta;
-            Unsafe.Add(ref d, 0) = w0 * Unsafe.Add(ref a, 0) + w1 * bx;
-            Unsafe.Add(ref d, 1) = w0 * Unsafe.Add(ref a, 1) + w1 * by;
-            Unsafe.Add(ref d, 2) = w0 * Unsafe.Add(ref a, 2) + w1 * bz;
-            Unsafe.Add(ref d, 3) = w0 * Unsafe.Add(ref a, 3) + w1 * bw;
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void Swizzle(ReadOnlySpan<double> source, ReadOnlySpan<int> indices, Span<double> destination)
-    {
-        ThrowHelper.ValidateDestinationSpan(destination, indices);
-        nuint count = (nuint)indices.Length;
-        if (count == 0) return;
-        ref double src = ref MemoryMarshal.GetReference(source);
-        ref int idx = ref MemoryMarshal.GetReference(indices);
-        ref double dst = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        for (; i < count; ++i)
-            Unsafe.Add(ref dst, (nint)i) = Unsafe.Add(ref src, Unsafe.Add(ref idx, (nint)i));
     }
 }
