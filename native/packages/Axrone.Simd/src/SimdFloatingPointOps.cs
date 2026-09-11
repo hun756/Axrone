@@ -435,16 +435,7 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Swizzle(ReadOnlySpan<T> source, ReadOnlySpan<int> indices, Span<T> destination)
-    {
-        ThrowHelper.ValidateDestinationSpan(indices, destination);
-        nuint count = (nuint)indices.Length;
-        if (count == 0) return;
-        ref T src = ref MemoryMarshal.GetReference(source);
-        ref int idx = ref MemoryMarshal.GetReference(indices);
-        ref T dst = ref MemoryMarshal.GetReference(destination);
-        for (nuint i = 0; i < count; ++i)
-            Unsafe.Add(ref dst, (nint)i) = Unsafe.Add(ref src, Unsafe.Add(ref idx, (nint)i));
-    }
+        => Gather(source, indices, destination);
 
     // ── Math ────────────────────────────────────────────────────────────
 
