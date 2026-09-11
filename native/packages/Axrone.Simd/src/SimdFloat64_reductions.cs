@@ -456,7 +456,7 @@ public static unsafe partial class SimdFloat64
                 accS += v; accQ += v * v;
             }
             double sum = Vector512.Sum(accS) + ScalarTailSumD(ref src, i, length);
-            double sumSq = Vector512.Sum(accQ) + ScalarTailSquareSumD(ref src, i, length);
+            double sumSq = Vector512.Sum(accQ) + ScalarTailSquareSum(ref src, i, length);
             double n = (double)length; double mean = sum / n;
             return (sumSq / n) - (mean * mean);
         }
@@ -480,7 +480,7 @@ public static unsafe partial class SimdFloat64
                 accS += v; accQ += v * v;
             }
             double sum = Vector256.Sum(accS) + ScalarTailSumD(ref src, i, length);
-            double sumSq = Vector256.Sum(accQ) + ScalarTailSquareSumD(ref src, i, length);
+            double sumSq = Vector256.Sum(accQ) + ScalarTailSquareSum(ref src, i, length);
             double n = (double)length; double mean = sum / n;
             return (sumSq / n) - (mean * mean);
         }
@@ -504,7 +504,7 @@ public static unsafe partial class SimdFloat64
                 accS += v; accQ += v * v;
             }
             double sum = Vector128.Sum(accS) + ScalarTailSumD(ref src, i, length);
-            double sumSq = Vector128.Sum(accQ) + ScalarTailSquareSumD(ref src, i, length);
+            double sumSq = Vector128.Sum(accQ) + ScalarTailSquareSum(ref src, i, length);
             double n = (double)length; double mean = sum / n;
             return (sumSq / n) - (mean * mean);
         }
@@ -528,22 +528,6 @@ public static unsafe partial class SimdFloat64
         for (; i < limit; i += 2) { s0 += Unsafe.Add(ref src, (nint)(i + 0)); s1 += Unsafe.Add(ref src, (nint)(i + 1)); }
         double acc = s0 + s1;
         for (; i < length; ++i) acc += Unsafe.Add(ref src, (nint)i);
-        return acc;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static double ScalarTailSquareSumD(ref double src, nuint start, nuint length)
-    {
-        double s0 = 0.0, s1 = 0.0;
-        nuint i = start;
-        nuint limit = length >= 2 ? length - 1 : 0;
-        for (; i < limit; i += 2)
-        {
-            double v0 = Unsafe.Add(ref src, (nint)(i + 0)); double v1 = Unsafe.Add(ref src, (nint)(i + 1));
-            s0 += v0 * v0; s1 += v1 * v1;
-        }
-        double acc = s0 + s1;
-        for (; i < length; ++i) { double v = Unsafe.Add(ref src, (nint)i); acc += v * v; }
         return acc;
     }
 
