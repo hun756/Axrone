@@ -8,6 +8,7 @@ public class SimdFloat32Tests
 {
     private const float Tolerance = 1e-4f;
     private const float LooseTolerance = 1e-2f;
+    private const float RelativeTolerance = 1e-5f;
 
     #region Arithmetic
 
@@ -649,8 +650,12 @@ public class SimdFloat32Tests
         SimdFloat32.VectorExp(src, dst);
 
         for (int i = 0; i < size; i++)
-            dst[i].Should().BeApproximately(MathF.Exp(src[i]), LooseTolerance,
+        {
+            // absolute tolerance is physically impossible above ~2^24 scale (float spacing exceeds it)
+            float expected = MathF.Exp(src[i]);
+            dst[i].Should().BeApproximately(expected, Math.Max(LooseTolerance, MathF.Abs(expected) * RelativeTolerance),
                 $"at index {i}: exp({src[i]})");
+        }
     }
 
     [Theory]

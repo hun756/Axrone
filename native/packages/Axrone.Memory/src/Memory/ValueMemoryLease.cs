@@ -119,5 +119,5 @@ public readonly struct ValueMemoryLease<T> : IDisposable, IEquatable<ValueMemory
 
     [DoesNotReturn]
     private static void ThrowArgumentOutOfRange() =>
-        throw new ArgumentOutOfRangeException("start");
+        ThrowHelper.ThrowArgumentOutOfRangeException("start");
 }

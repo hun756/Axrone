@@ -19,12 +19,12 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
 
     public MonotonicArenaBuffer(nint segmentCapacity = 1048576)
     {
-        if (segmentCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(segmentCapacity));
+        if (segmentCapacity <= 0) ThrowHelper.ThrowArgumentOutOfRangeException(nameof(segmentCapacity));
 
         _segmentCapacity = AlignTo64(segmentCapacity);
         _segments = new ArenaSegment[4];
         void* initialAlloc = NativeMemory.AlignedAlloc((nuint)_segmentCapacity, 64);
-        if (initialAlloc == null) throw new InsufficientMemoryException("Failed to allocate initial arena chunk.");
+        if (initialAlloc == null) ThrowHelper.ThrowInsufficientMemory("Failed to allocate initial arena chunk.");
 
         _segments[0] = new ArenaSegment { MemoryBlock = initialAlloc, ByteCapacity = _segmentCapacity };
         _activeSegmentCount = 1;
@@ -85,7 +85,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
             else
             {
                 void* newBlock = NativeMemory.AlignedAlloc((nuint)newCapacity, 64);
-                if (newBlock == null) throw new InsufficientMemoryException($"Failed to allocate arena chunk of {newCapacity} bytes.");
+                if (newBlock == null) ThrowHelper.ThrowInsufficientMemory($"Failed to allocate arena chunk of {newCapacity} bytes.");
 
                 if (_activeSegmentCount == _segments.Length) Array.Resize(ref _segments, _segments.Length * 2);
 

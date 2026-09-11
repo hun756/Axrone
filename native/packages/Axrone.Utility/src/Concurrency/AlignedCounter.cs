@@ -7,7 +7,7 @@ namespace Axrone.Utility;
 public sealed unsafe class AlignedCounter : IDisposable
 {
     private long* _value;
-    private int _disposed;
+    private DisposalTracker _tracker;
 
     public long Value
     {
@@ -44,7 +44,7 @@ public sealed unsafe class AlignedCounter : IDisposable
 
     private void Release()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        if (_tracker.TryDispose())
         {
             long* ptr = _value;
             _value = null;

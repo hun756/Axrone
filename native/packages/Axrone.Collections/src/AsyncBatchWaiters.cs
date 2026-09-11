@@ -256,19 +256,16 @@ internal sealed class AsyncBatchQueueCoordinator<T>
             return;
         }
 
-        // 1. Drain under lock (sub-nanosecond pointer swaps)
         AsyncBatchWaiter<T>? batchWaiters;
         AsyncItemWaiter<T>? itemWaiters;
         using (_syncLock.EnterScope())
         {
             batchWaiters = _batchEnqHead;
             _batchEnqHead = _batchEnqTail = null;
-
             itemWaiters = _itemEnqHead;
             _itemEnqHead = _itemEnqTail = null;
         }
 
-        // 2. Fulfill OUTSIDE the lock (no contention amplification)
         AsyncBatchWaiter<T>? unfulfilledBatchHead = null, unfulfilledBatchTail = null;
         while (batchWaiters != null)
         {
@@ -278,21 +275,9 @@ internal sealed class AsyncBatchQueueCoordinator<T>
 
             int enqueued = queue.TryEnqueueBatch(current.MemoryIn.Span);
             if (enqueued > 0)
-            {
                 current.Complete(enqueued);
-            }
             else
-            {
-                if (unfulfilledBatchTail == null)
-                {
-                    unfulfilledBatchHead = unfulfilledBatchTail = current;
-                }
-                else
-                {
-                    unfulfilledBatchTail.Next = current;
-                    unfulfilledBatchTail = current;
-                }
-            }
+                AppendUnfulfilled(ref unfulfilledBatchHead, ref unfulfilledBatchTail, current);
         }
 
         AsyncItemWaiter<T>? unfulfilledItemHead = null, unfulfilledItemTail = null;
@@ -303,43 +288,14 @@ internal sealed class AsyncBatchQueueCoordinator<T>
             current.Next = null;
 
             if (queue.TryEnqueue(current.Item))
-            {
                 current.Complete(default!);
-            }
             else
-            {
-                if (unfulfilledItemTail == null)
-                {
-                    unfulfilledItemHead = unfulfilledItemTail = current;
-                }
-                else
-                {
-                    unfulfilledItemTail.Next = current;
-                    unfulfilledItemTail = current;
-                }
-            }
+                AppendUnfulfilled(ref unfulfilledItemHead, ref unfulfilledItemTail, current);
         }
 
-        // 3. Re-queue unfulfilled nodes preserving order
-        if (unfulfilledBatchHead != null || unfulfilledItemHead != null)
-        {
-            using (_syncLock.EnterScope())
-            {
-                if (unfulfilledBatchHead != null)
-                {
-                    unfulfilledBatchTail!.Next = _batchEnqHead;
-                    _batchEnqHead = unfulfilledBatchHead;
-                    _batchEnqTail ??= unfulfilledBatchTail;
-                }
-
-                if (unfulfilledItemHead != null)
-                {
-                    unfulfilledItemTail!.Next = _itemEnqHead;
-                    _itemEnqHead = unfulfilledItemHead;
-                    _itemEnqTail ??= unfulfilledItemTail;
-                }
-            }
-        }
+        RequeueUnfulfilled(
+            ref _batchEnqHead, ref _batchEnqTail, unfulfilledBatchHead, unfulfilledBatchTail,
+            ref _itemEnqHead, ref _itemEnqTail, unfulfilledItemHead, unfulfilledItemTail);
     }
 
     public void SignalDequeueWaiters<TQueue>(TQueue queue) where TQueue : IBatchDequeue<T>
@@ -349,19 +305,16 @@ internal sealed class AsyncBatchQueueCoordinator<T>
             return;
         }
 
-        // 1. Drain under lock
         AsyncBatchWaiter<T>? batchWaiters;
         AsyncItemWaiter<T>? itemWaiters;
         using (_syncLock.EnterScope())
         {
             batchWaiters = _batchDeqHead;
             _batchDeqHead = _batchDeqTail = null;
-
             itemWaiters = _itemDeqHead;
             _itemDeqHead = _itemDeqTail = null;
         }
 
-        // 2. Fulfill OUTSIDE the lock
         AsyncBatchWaiter<T>? unfulfilledBatchHead = null, unfulfilledBatchTail = null;
         while (batchWaiters != null)
         {
@@ -371,21 +324,9 @@ internal sealed class AsyncBatchQueueCoordinator<T>
 
             int dequeued = queue.TryDequeueBatch(current.MemoryOut.Span);
             if (dequeued > 0)
-            {
                 current.Complete(dequeued);
-            }
             else
-            {
-                if (unfulfilledBatchTail == null)
-                {
-                    unfulfilledBatchHead = unfulfilledBatchTail = current;
-                }
-                else
-                {
-                    unfulfilledBatchTail.Next = current;
-                    unfulfilledBatchTail = current;
-                }
-            }
+                AppendUnfulfilled(ref unfulfilledBatchHead, ref unfulfilledBatchTail, current);
         }
 
         AsyncItemWaiter<T>? unfulfilledItemHead = null, unfulfilledItemTail = null;
@@ -396,41 +337,52 @@ internal sealed class AsyncBatchQueueCoordinator<T>
             current.Next = null;
 
             if (queue.TryDequeue(out T? item))
-            {
                 current.Complete(item);
-            }
             else
-            {
-                if (unfulfilledItemTail == null)
-                {
-                    unfulfilledItemHead = unfulfilledItemTail = current;
-                }
-                else
-                {
-                    unfulfilledItemTail.Next = current;
-                    unfulfilledItemTail = current;
-                }
-            }
+                AppendUnfulfilled(ref unfulfilledItemHead, ref unfulfilledItemTail, current);
         }
 
-        // 3. Re-queue unfulfilled nodes
-        if (unfulfilledBatchHead != null || unfulfilledItemHead != null)
-        {
-            using (_syncLock.EnterScope())
-            {
-                if (unfulfilledBatchHead != null)
-                {
-                    unfulfilledBatchTail!.Next = _batchDeqHead;
-                    _batchDeqHead = unfulfilledBatchHead;
-                    _batchDeqTail ??= unfulfilledBatchTail;
-                }
+        RequeueUnfulfilled(
+            ref _batchDeqHead, ref _batchDeqTail, unfulfilledBatchHead, unfulfilledBatchTail,
+            ref _itemDeqHead, ref _itemDeqTail, unfulfilledItemHead, unfulfilledItemTail);
+    }
 
-                if (unfulfilledItemHead != null)
-                {
-                    unfulfilledItemTail!.Next = _itemDeqHead;
-                    _itemDeqHead = unfulfilledItemHead;
-                    _itemDeqTail ??= unfulfilledItemTail;
-                }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void AppendUnfulfilled<TNode>(ref TNode? head, ref TNode? tail, TNode node)
+        where TNode : class, IPooledWaiterNode<TNode>, new()
+    {
+        if (tail == null)
+            head = tail = node;
+        else
+        {
+            tail.Next = node;
+            tail = node;
+        }
+    }
+
+    private void RequeueUnfulfilled<TBatch, TItem>(
+        ref TBatch? batchHead, ref TBatch? batchTail, TBatch? unfulfilledBatchHead, TBatch? unfulfilledBatchTail,
+        ref TItem? itemHead, ref TItem? itemTail, TItem? unfulfilledItemHead, TItem? unfulfilledItemTail)
+        where TBatch : class, IPooledWaiterNode<TBatch>, new()
+        where TItem : class, IPooledWaiterNode<TItem>, new()
+    {
+        if (unfulfilledBatchHead == null && unfulfilledItemHead == null)
+            return;
+
+        using (_syncLock.EnterScope())
+        {
+            if (unfulfilledBatchHead != null)
+            {
+                unfulfilledBatchTail!.Next = batchHead;
+                batchHead = unfulfilledBatchHead;
+                batchTail ??= unfulfilledBatchTail;
+            }
+
+            if (unfulfilledItemHead != null)
+            {
+                unfulfilledItemTail!.Next = itemHead;
+                itemHead = unfulfilledItemHead;
+                itemTail ??= unfulfilledItemTail;
             }
         }
     }

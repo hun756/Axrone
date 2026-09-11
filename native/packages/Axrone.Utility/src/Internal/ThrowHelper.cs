@@ -89,6 +89,24 @@ public static class ThrowHelper
         throw new InvalidOperationException("Concurrent wait operations are not supported. Only a single waiter is allowed at a time.");
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ValidateBinarySpans<T1, T2>(ReadOnlySpan<T1> left, ReadOnlySpan<T1> right, ReadOnlySpan<T2> destination)
+    {
+        if (left.Length != right.Length || destination.Length < left.Length) ThrowMismatchedSpans();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ValidateTernarySpans<T>(ReadOnlySpan<T> a, ReadOnlySpan<T> b, ReadOnlySpan<T> c, ReadOnlySpan<T> destination)
+    {
+        if (a.Length != b.Length || a.Length != c.Length || destination.Length < a.Length) ThrowMismatchedSpans();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ValidateDestinationSpan<T1, T2>(ReadOnlySpan<T1> source, ReadOnlySpan<T2> destination)
+    {
+        if (destination.Length < source.Length) ThrowDestinationTooSmall();
+    }
+
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowDestinationTooSmall()
@@ -108,5 +126,12 @@ public static class ThrowHelper
     public static void ThrowEmptySequence()
     {
         throw new InvalidOperationException("Cannot compute a reduction over an empty sequence.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInsufficientMemory(string message)
+    {
+        throw new InsufficientMemoryException(message);
     }
 }

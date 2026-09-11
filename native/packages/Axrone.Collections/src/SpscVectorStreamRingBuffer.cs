@@ -2,6 +2,7 @@ namespace Axrone.Collections;
 
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using Axrone.Utility.Disposable;
 
 public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T : unmanaged
 {
@@ -10,7 +11,7 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
     private readonly int _mask;
     private readonly long* _head;
     private readonly long* _tail;
-    private int _disposed;
+    private DisposalTracker _tracker;
 
     public int Capacity => _capacity;
 
@@ -105,7 +106,7 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
 
     private void Release()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        if (_tracker.TryDispose())
         {
             _storage.Dispose();
             if (_head != null) NativeMemory.AlignedFree(_head);
