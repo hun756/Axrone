@@ -240,6 +240,8 @@ export class MeshRenderer extends Component {
         this._resolvedJointTransforms = null;
         this._resolvedJointWorldMatrices = null;
         this._skinPaletteCache = null;
+        this._jointResolutionAttempts = 0;
+        this._jointResolutionWarned = false;
     }
 
     get hasSkin(): boolean {
