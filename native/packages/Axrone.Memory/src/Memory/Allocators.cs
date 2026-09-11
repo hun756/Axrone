@@ -1,6 +1,7 @@
 namespace Axrone.Memory;
 
 using System.Runtime.InteropServices;
+using Axrone.Utility.Disposable;
 
 public sealed class ManagedArrayBlockAllocator<T> : IBlockAllocator<T>
 {
@@ -85,7 +86,7 @@ internal sealed unsafe class NativeBlockMemoryManager<T> : MemoryManager<T> wher
     private readonly T* _pointer;
     private readonly int _length;
     private readonly nuint _alignment;
-    private int _isDisposed;
+    private DisposalTracker _tracker;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NativeBlockMemoryManager(T* pointer, int length, nuint alignment)
@@ -110,7 +111,7 @@ internal sealed unsafe class NativeBlockMemoryManager<T> : MemoryManager<T> wher
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override Span<T> GetSpan()
     {
-        if (Volatile.Read(ref _isDisposed) != 0)
+        if (_tracker.IsDisposed)
         {
             ThrowDisposed();
         }
@@ -120,7 +121,7 @@ internal sealed unsafe class NativeBlockMemoryManager<T> : MemoryManager<T> wher
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override MemoryHandle Pin(int elementIndex = 0)
     {
-        if (Volatile.Read(ref _isDisposed) != 0)
+        if (_tracker.IsDisposed)
         {
             ThrowDisposed();
         }
@@ -135,7 +136,7 @@ internal sealed unsafe class NativeBlockMemoryManager<T> : MemoryManager<T> wher
 
     protected override void Dispose(bool disposing)
     {
-        Interlocked.Exchange(ref _isDisposed, 1);
+        _tracker.TryDispose();
     }
 
     [DoesNotReturn]

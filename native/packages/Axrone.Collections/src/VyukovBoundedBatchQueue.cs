@@ -3,6 +3,7 @@ namespace Axrone.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using Axrone.Utility.Disposable;
 
 /// <summary>
 /// Ultra-high-performance, bounded, batch-oriented MPMC queue with static policy specialization.
@@ -19,7 +20,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
     private readonly BoundedSlotStorage<T> _storage;
     private readonly AsyncBatchQueueCoordinator<T> _asyncCoordinator;
     private SequenceBarrierCoordinator _barrier;
-    private int _isDisposed;
+    private DisposalTracker _tracker;
 
     public uint Capacity => _capacity.Value;
     public int Count => _barrier.ComputeCount(_capacity.Value);
@@ -62,7 +63,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
     {
         enqueuedCount = 0;
         if (items.IsEmpty) return QueueOperationStatus.Success;
-        if (Volatile.Read(ref _isDisposed) != 0) return QueueOperationStatus.Disposed;
+        if (_tracker.IsDisposed) return QueueOperationStatus.Disposed;
 
         uint requested = (uint)items.Length;
         if (requested > _capacity.Value) requested = _capacity.Value;
@@ -118,7 +119,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private QueueOperationStatus TryEnqueueInternal(in T item)
     {
-        if (Volatile.Read(ref _isDisposed) != 0) return QueueOperationStatus.Disposed;
+        if (_tracker.IsDisposed) return QueueOperationStatus.Disposed;
 
         TBackoff.Initialize(out int backoffState);
         nuint mask = _storage.Mask;
@@ -183,7 +184,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
     {
         dequeuedCount = 0;
         if (destination.IsEmpty) return QueueOperationStatus.Success;
-        if (Volatile.Read(ref _isDisposed) != 0) return QueueOperationStatus.Disposed;
+        if (_tracker.IsDisposed) return QueueOperationStatus.Disposed;
 
         uint requested = (uint)destination.Length;
         if (requested > _capacity.Value) requested = _capacity.Value;
@@ -238,7 +239,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private QueueOperationStatus TryDequeueInternal([MaybeNullWhen(false)] out T item)
     {
-        if (Volatile.Read(ref _isDisposed) != 0)
+        if (_tracker.IsDisposed)
         {
             item = default;
             return QueueOperationStatus.Disposed;
@@ -414,7 +415,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _isDisposed, 1) != 0) return;
+        if (!_tracker.TryDispose()) return;
         _storage.Dispose();
     }
 }

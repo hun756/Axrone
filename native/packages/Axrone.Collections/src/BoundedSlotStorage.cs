@@ -2,6 +2,7 @@ namespace Axrone.Collections;
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Axrone.Utility.Disposable;
 
 /// <summary>
 /// Cacheline-aligned storage engine managing dual off-heap and on-heap topological splits.
@@ -15,7 +16,7 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
     private readonly nuint* _sequences;
     private readonly nint _nativePointer;
     private readonly T[]? _managedItems;
-    private int _isDisposed;
+    private DisposalTracker _tracker;
 
     public uint Capacity => _capacity;
     public nuint Mask => _mask;
@@ -184,7 +185,7 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _isDisposed, 1) != 0) return;
+        if (!_tracker.TryDispose()) return;
 
         if (_sequences != null)
         {
