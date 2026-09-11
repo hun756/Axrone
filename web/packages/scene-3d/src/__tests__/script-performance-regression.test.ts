@@ -80,9 +80,9 @@ describe('Script Performance Regression', () => {
             }
 
             // The slope should be bounded — no unbounded leak.
-            // Node.js V8 heap naturally expands; allow up to 5 MB per sample-step.
+            // Node.js V8 heap naturally expands; allow up to 500 KB per sample-step.
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000);
+            expect(slope).toBeLessThan(500_000);
 
             scene.dispose();
         });
@@ -123,7 +123,7 @@ describe('Script Performance Regression', () => {
             }
 
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000);
+            expect(slope).toBeLessThan(500_000);
 
             scene.dispose();
         });
@@ -159,7 +159,7 @@ describe('Script Performance Regression', () => {
             }
 
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000);
+            expect(slope).toBeLessThan(500_000);
 
             scene.dispose();
         });
@@ -205,7 +205,7 @@ describe('Script Performance Regression', () => {
 
             // The slope across 10 dispose/create cycles should be near zero
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000); // < 5 MB per cycle
+            expect(slope).toBeLessThan(500_000); // < 500 KB per cycle
         });
 
         it('heap does not grow monotonically across scene load/dispose cycles', async () => {
@@ -284,7 +284,7 @@ describe('Script Performance Regression', () => {
             }
 
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000); // < 5 MB per cycle
+            expect(slope).toBeLessThan(500_000); // < 500 KB per cycle
         });
     });
 
@@ -323,7 +323,7 @@ describe('Script Performance Regression', () => {
 
             // Linear slope should be bounded — no unbounded leak
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000); // < 5 MB per 100-frame step
+            expect(slope).toBeLessThan(500_000); // < 500 KB per 100-frame step
 
             scene.dispose();
         });
@@ -673,8 +673,8 @@ describe('Script Performance Regression', () => {
 
             // Slope should be bounded — no unbounded leak
             const slope = linearSlope(samples);
-            // Allow up to 5 MB per sample step (Node.js V8 noise)
-            expect(slope).toBeLessThan(5_000_000);
+            // Allow up to 500 KB per sample step (Node.js V8 noise)
+            expect(slope).toBeLessThan(500_000);
 
             scene.dispose();
         });
@@ -705,8 +705,8 @@ describe('Script Performance Regression', () => {
             }
 
             const slope = linearSlope(samples);
-            // Allow up to 5 MB per round (generous for Node.js)
-            expect(slope).toBeLessThan(5_000_000);
+            // Allow up to 500 KB per round (generous for Node.js)
+            expect(slope).toBeLessThan(500_000);
 
             scene.dispose();
         });
@@ -811,7 +811,7 @@ describe('Script Performance Regression', () => {
             }
 
             const slope = linearSlope(samples);
-            expect(slope).toBeLessThan(5_000_000);
+            expect(slope).toBeLessThan(500_000);
 
             scene.dispose();
         });
@@ -863,6 +863,13 @@ describe('Script Performance Regression', () => {
     // ─── Group 9: Memory API Availability Guard ────────────────────────
 
     describe('Memory API Availability', () => {
+        it('memory API must be available in CI environments', () => {
+            const isCI = typeof process !== 'undefined' && (process.env.CI === 'true' || process.env.CI === '1');
+            if (isCI) {
+                expect(hasMemoryApi()).toBe(true);
+            }
+        });
+
         it('readHeapBytes returns a positive number or null', () => {
             const result = readHeapBytes();
             if (result !== null) {
