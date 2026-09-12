@@ -214,6 +214,12 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
             _upgradeSemaphore.Release();
         }
 
+        if (Volatile.Read(ref _writerQueued) > 0)
+        {
+            _writeSemaphore.Wait();
+            _writeSemaphore.Release();
+        }
+
         if (_supportRecursion && _recursiveData is not null)
         {
             _recursiveData.Value = (READ_LOCK, 1);
@@ -257,6 +263,12 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         finally
         {
             _upgradeSemaphore.Release();
+        }
+
+        if (Volatile.Read(ref _writerQueued) > 0)
+        {
+            await _writeSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            _writeSemaphore.Release();
         }
 
         if (_supportRecursion && _recursiveData is not null)
