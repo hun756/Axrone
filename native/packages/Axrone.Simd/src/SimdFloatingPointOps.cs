@@ -635,34 +635,45 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
     {
         nuint length = (nuint)source.Length;
         if (length == 0) return T.Zero;
+        if (length == 1) return T.Zero;
+
+        T mean = ComputeMean(source);
         ref T src = ref MemoryMarshal.GetReference(source);
         nuint i = 0;
+        Vector<T> meanVec = Vector.Create(mean);
+
         if (Vector.IsHardwareAccelerated && length >= (nuint)Vector<T>.Count * 2)
         {
-            Vector<T> accS = Vector<T>.Zero, accQ = Vector<T>.Zero;
+            Vector<T> accQ = Vector<T>.Zero;
             nuint step = (nuint)Vector<T>.Count, limit = length - (step * 2) + 1;
             for (; i < limit; i += step * 2)
             {
-                Vector<T> v0 = Vector.LoadUnsafe(in src, i);
-                Vector<T> v1 = Vector.LoadUnsafe(in src, i + step);
-                accS += v0 + v1;
-                accQ += v0 * v0 + v1 * v1;
+                Vector<T> d0 = Vector.LoadUnsafe(in src, i) - meanVec;
+                Vector<T> d1 = Vector.LoadUnsafe(in src, i + step) - meanVec;
+                accQ += d0 * d0 + d1 * d1;
             }
             nuint singleLimit = length - step + 1;
             for (; i < singleLimit; i += step)
             {
-                Vector<T> v = Vector.LoadUnsafe(in src, i);
-                accS += v; accQ += v * v;
+                Vector<T> d = Vector.LoadUnsafe(in src, i) - meanVec;
+                accQ += d * d;
             }
-            T sum = Vector.Sum(accS), sumSq = Vector.Sum(accQ);
-            for (nuint j = i; j < length; ++j) { T v = Unsafe.Add(ref src, (nint)j); sum += v; sumSq += v * v; }
-            T n = T.CreateChecked(length); T mean = sum / n;
-            return sumSq / n - mean * mean;
+            T sumSqDev = Vector.Sum(accQ);
+            for (nuint j = i; j < length; ++j)
+            {
+                T d = Unsafe.Add(ref src, (nint)j) - mean;
+                sumSqDev += d * d;
+            }
+            return sumSqDev / T.CreateChecked(length);
         }
-        T s = T.Zero, sq = T.Zero;
-        for (nuint j = 0; j < length; ++j) { T v = Unsafe.Add(ref src, (nint)j); s += v; sq += v * v; }
-        T mean2 = s / T.CreateChecked(length);
-        return sq / T.CreateChecked(length) - mean2 * mean2;
+
+        T acc = T.Zero;
+        for (nuint j = 0; j < length; ++j)
+        {
+            T d = Unsafe.Add(ref src, (nint)j) - mean;
+            acc += d * d;
+        }
+        return acc / T.CreateChecked(length);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
