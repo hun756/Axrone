@@ -1230,11 +1230,16 @@ public static unsafe class SimdInt32
         ThrowHelper.ValidateDestinationSpan(destination, indices);
         nuint count = (nuint)indices.Length;
         if (count == 0) return;
+        int srcLen = source.Length;
         ref int src = ref MemoryMarshal.GetReference(source);
         ref int idx = ref MemoryMarshal.GetReference(indices);
         ref int dst = ref MemoryMarshal.GetReference(destination);
         for (nuint i = 0; i < count; ++i)
-            Unsafe.Add(ref dst, (nint)i) = Unsafe.Add(ref src, Unsafe.Add(ref idx, (nint)i));
+        {
+            int index = Unsafe.Add(ref idx, (nint)i);
+            if ((uint)index >= (uint)srcLen) ThrowHelper.ThrowIndexOutOfRange();
+            Unsafe.Add(ref dst, (nint)i) = Unsafe.Add(ref src, (nint)index);
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -1243,10 +1248,15 @@ public static unsafe class SimdInt32
         if (source.Length > destination.Length) ThrowHelper.ThrowDestinationTooSmall();
         nuint count = (nuint)indices.Length;
         if (count == 0) return;
+        int dstLen = destination.Length;
         ref int src = ref MemoryMarshal.GetReference(source);
         ref int idx = ref MemoryMarshal.GetReference(indices);
         ref int dst = ref MemoryMarshal.GetReference(destination);
         for (nuint i = 0; i < count; ++i)
-            Unsafe.Add(ref dst, Unsafe.Add(ref idx, (nint)i)) = Unsafe.Add(ref src, (nint)i);
+        {
+            int index = Unsafe.Add(ref idx, (nint)i);
+            if ((uint)index >= (uint)dstLen) ThrowHelper.ThrowIndexOutOfRange();
+            Unsafe.Add(ref dst, (nint)index) = Unsafe.Add(ref src, (nint)i);
+        }
     }
 }

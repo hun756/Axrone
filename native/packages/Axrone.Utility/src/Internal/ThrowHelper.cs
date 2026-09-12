@@ -169,4 +169,11 @@ public static class ThrowHelper
     {
         throw new ObjectDisposedException(objectName, "The aligned memory resource has already been disposed.");
     }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowIndexOutOfRange()
+    {
+        throw new IndexOutOfRangeException("Gather/Scatter index is outside the bounds of the source or destination span.");
+    }
 }
