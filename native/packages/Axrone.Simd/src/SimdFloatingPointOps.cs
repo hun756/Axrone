@@ -467,10 +467,98 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         ThrowHelper.ValidateDestinationSpan(source, destination);
         nuint length = (nuint)source.Length;
         if (length == 0) return;
+
+        if (typeof(T) == typeof(float))
+        {
+            ReadOnlySpan<float> src = System.Runtime.InteropServices.MemoryMarshal.Cast<T, float>(source);
+            Span<float> dst = System.Runtime.InteropServices.MemoryMarshal.Cast<T, float>(destination);
+            VectorRSqrtFloat(src, dst);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            ReadOnlySpan<double> src = System.Runtime.InteropServices.MemoryMarshal.Cast<T, double>(source);
+            Span<double> dst = System.Runtime.InteropServices.MemoryMarshal.Cast<T, double>(destination);
+            VectorRSqrtDouble(src, dst);
+        }
+        else
+        {
+            VectorRSqrtScalar(source, destination);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void VectorRSqrtFloat(ReadOnlySpan<float> source, Span<float> destination)
+    {
+        nuint length = (nuint)source.Length;
+        ref float src = ref MemoryMarshal.GetReference(source);
+        ref float dst = ref MemoryMarshal.GetReference(destination);
+        nuint i = 0;
+
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count)
+        {
+            Vector512<float> one = Vector512<float>.One;
+            nuint step = (nuint)Vector512<float>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                (one / Vector512.Sqrt(Vector512.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
+        }
+        if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        {
+            Vector256<float> one = Vector256<float>.One;
+            nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                (one / Vector256.Sqrt(Vector256.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
+        }
+        if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
+        {
+            Vector128<float> one = Vector128<float>.One;
+            nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                (one / Vector128.Sqrt(Vector128.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
+        }
+        for (; i < length; ++i)
+            Unsafe.Add(ref dst, (nint)i) = 1f / MathF.Sqrt(Unsafe.Add(ref src, (nint)i));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void VectorRSqrtDouble(ReadOnlySpan<double> source, Span<double> destination)
+    {
+        nuint length = (nuint)source.Length;
+        ref double src = ref MemoryMarshal.GetReference(source);
+        ref double dst = ref MemoryMarshal.GetReference(destination);
+        nuint i = 0;
+
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<double>.Count)
+        {
+            Vector512<double> one = Vector512<double>.One;
+            nuint step = (nuint)Vector512<double>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                (one / Vector512.Sqrt(Vector512.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
+        }
+        if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<double>.Count)
+        {
+            Vector256<double> one = Vector256<double>.One;
+            nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                (one / Vector256.Sqrt(Vector256.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
+        }
+        if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
+        {
+            Vector128<double> one = Vector128<double>.One;
+            nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                (one / Vector128.Sqrt(Vector128.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
+        }
+        for (; i < length; ++i)
+            Unsafe.Add(ref dst, (nint)i) = 1.0 / Math.Sqrt(Unsafe.Add(ref src, (nint)i));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void VectorRSqrtScalar(ReadOnlySpan<T> source, Span<T> destination)
+    {
+        nuint length = (nuint)source.Length;
         ref T src = ref MemoryMarshal.GetReference(source);
         ref T dst = ref MemoryMarshal.GetReference(destination);
-        nuint i = 0;
-        for (; i < length; ++i)
+        for (nuint i = 0; i < length; ++i)
         {
             T value = Unsafe.Add(ref src, (nint)i);
             T sqrt = typeof(T) == typeof(float)
