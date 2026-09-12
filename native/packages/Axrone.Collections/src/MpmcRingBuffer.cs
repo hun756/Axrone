@@ -221,8 +221,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
         if (timeout == TimeSpan.Zero) return Result.Failure(s_bufferFull);
 
         long startTimestamp = Stopwatch.GetTimestamp();
-        IWaitStrategy waitStrategy = _waitStrategy;
-        waitStrategy.Reset();
+        SpinWait spinner = new();
 
         while (true)
         {
@@ -232,7 +231,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
             if (timeout != Timeout.InfiniteTimeSpan && Stopwatch.GetElapsedTime(startTimestamp) >= timeout)
                 return Result.Failure(s_bufferTimeout);
 
-            waitStrategy.Wait();
+            spinner.SpinOnce();
             if (TryEnqueue(item)) return Result.Success();
         }
     }
@@ -244,14 +243,13 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 
         if (TryEnqueue(item)) return;
 
-        IWaitStrategy waitStrategy = _waitStrategy;
-        waitStrategy.Reset();
+        SpinWait spinner = new();
 
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            waitStrategy.Wait();
+            spinner.SpinOnce();
             if (TryEnqueue(item)) return;
         }
     }
@@ -287,8 +285,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
             return Result<T>.Failure(s_bufferEmpty);
 
         long startTimestamp = Stopwatch.GetTimestamp();
-        IWaitStrategy waitStrategy = _waitStrategy;
-        waitStrategy.Reset();
+        SpinWait spinner = new();
 
         while (true)
         {
@@ -298,7 +295,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
             if (timeout != Timeout.InfiniteTimeSpan && Stopwatch.GetElapsedTime(startTimestamp) >= timeout)
                 return Result<T>.Failure(s_bufferTimeout);
 
-            waitStrategy.Wait();
+            spinner.SpinOnce();
             if (TryDequeue(out T? item))
                 return Result<T>.Success(item);
         }
@@ -311,14 +308,13 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 
         if (TryDequeue(out T? immediateItem)) return immediateItem;
 
-        IWaitStrategy waitStrategy = _waitStrategy;
-        waitStrategy.Reset();
+        SpinWait spinner = new();
 
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            waitStrategy.Wait();
+            spinner.SpinOnce();
             if (TryDequeue(out T? item)) return item;
         }
     }
