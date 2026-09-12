@@ -304,12 +304,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 if (Volatile.Read(ref _rented) >= _maximumCapacity
                     && !_allowExpansion)
                 {
-                    if (_throwOnExhaustion)
-                    {
-                        RecordExhaustion();
-                        ThrowHelper.ThrowInvalidOperationException(
-                            "The pool is exhausted and cannot allocate more items.");
-                    }
+                    RecordExhaustion();
+                    ThrowHelper.ThrowInvalidOperationException(
+                        "The pool is exhausted and pool expansion is disabled. Cannot allocate more items.");
                 }
                 return CreateNewInstance(sw);
             }
@@ -331,12 +328,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 if (Volatile.Read(ref _rented) >= _maximumCapacity
                     && !_allowExpansion)
                 {
-                    if (_throwOnExhaustion)
-                    {
-                        RecordExhaustion();
-                        ThrowHelper.ThrowInvalidOperationException(
-                            "The pool is exhausted and cannot allocate more items.");
-                    }
+                    RecordExhaustion();
+                    ThrowHelper.ThrowInvalidOperationException(
+                        "The pool is exhausted and pool expansion is disabled. Cannot allocate more items.");
                 }
                 return CreateNewInstance(sw);
             }
@@ -932,12 +926,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 if (Volatile.Read(ref _rented) >= _maximumCapacity
                     && !_allowExpansion)
                 {
-                    if (_throwOnExhaustion)
-                    {
-                        RecordExhaustion();
-                        ThrowHelper.ThrowInvalidOperationException(
-                            "The pool is exhausted and cannot allocate more items.");
-                    }
+                    RecordExhaustion();
+                    ThrowHelper.ThrowInvalidOperationException(
+                        "The pool is exhausted and pool expansion is disabled. Cannot allocate more items.");
                 }
                 return CreateNewInstance(sw);
             }
@@ -959,12 +950,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 if (Volatile.Read(ref _rented) >= _maximumCapacity
                     && !_allowExpansion)
                 {
-                    if (_throwOnExhaustion)
-                    {
-                        RecordExhaustion();
-                        ThrowHelper.ThrowInvalidOperationException(
-                            "The pool is exhausted and cannot allocate more items.");
-                    }
+                    RecordExhaustion();
+                    ThrowHelper.ThrowInvalidOperationException(
+                        "The pool is exhausted and pool expansion is disabled. Cannot allocate more items.");
                 }
                 return CreateNewInstance(sw);
             }
