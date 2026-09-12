@@ -416,6 +416,12 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
     public void Dispose()
     {
         if (!_tracker.TryDispose()) return;
+
+        // Memory barrier ensures the disposed flag is visible to all threads before we free resources.
+        // This reduces (but doesn't eliminate) the window where an in-flight operation might access freed memory.
+        // Callers must ensure no operations are in-flight when calling Dispose for complete safety.
+        Thread.MemoryBarrier();
+
         _storage.Dispose();
     }
 }
