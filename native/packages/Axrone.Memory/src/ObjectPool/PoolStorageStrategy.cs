@@ -244,14 +244,14 @@ internal sealed class ShardedPoolStorage<T> : IPoolStorage<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Enqueue(in PooledItem<T> item)
     {
-        int idx = Math.Abs(Environment.CurrentManagedThreadId % _shards.Length);
+        int idx = ((Environment.CurrentManagedThreadId % _shards.Length) + _shards.Length) % _shards.Length;
         _shards[idx].Enqueue(in item);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryDequeue(out PooledItem<T> item)
     {
-        int idx = Math.Abs(Environment.CurrentManagedThreadId % _shards.Length);
+        int idx = ((Environment.CurrentManagedThreadId % _shards.Length) + _shards.Length) % _shards.Length;
         if (_shards[idx].TryDequeue(out item))
             return true;
         for (int i = 0; i < _shards.Length; i++)
@@ -309,7 +309,7 @@ internal sealed class BoundedChannelPoolStorage<T> : IPoolStorage<T> where T : c
     {
         var options = new BoundedChannelOptions(capacity > 0 ? capacity : Environment.ProcessorCount * 32)
         {
-            FullMode = BoundedChannelFullMode.Wait,
+            FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = false,
             SingleWriter = false,
             AllowSynchronousContinuations = true,
@@ -322,9 +322,8 @@ internal sealed class BoundedChannelPoolStorage<T> : IPoolStorage<T> where T : c
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Enqueue(in PooledItem<T> item)
     {
-        while (!_channel.Writer.TryWrite(item))
-            Thread.SpinWait(8);
-        Interlocked.Increment(ref _count);
+        if (_channel.Writer.TryWrite(item))
+            Interlocked.Increment(ref _count);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
