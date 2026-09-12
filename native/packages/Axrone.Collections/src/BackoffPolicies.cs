@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Adaptive spin-wait backoff optimized for multicore pipeline topologies.
-/// Progresses through SpinWait → long spin → yield phases.
+/// Progresses through SpinWait → long spin → yield → sleep phases.
 /// </summary>
 public readonly struct AdaptiveSpinBackoff : IBackoffPolicy
 {
@@ -22,9 +22,13 @@ public readonly struct AdaptiveSpinBackoff : IBackoffPolicy
         {
             Thread.SpinWait(1024);
         }
-        else
+        else if ((uint)state < 30)
         {
             Thread.Yield();
+        }
+        else
+        {
+            Thread.Sleep(1);
         }
         state++;
     }
