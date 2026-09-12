@@ -174,6 +174,6 @@ public static class ThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowIndexOutOfRange()
     {
-        throw new IndexOutOfRangeException("Gather/Scatter index is outside the bounds of the source or destination span.");
+        throw new ArgumentOutOfRangeException("Gather/Scatter index is outside the bounds of the source or destination span.");
     }
 }
