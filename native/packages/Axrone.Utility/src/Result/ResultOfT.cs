@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Enterprise.Patterns.Result;
+namespace Axrone.Utility.Result;
 
 /// <summary>Represents the outcome of an operation that either succeeded with a value of type <typeparamref name="TValue"/> or failed with error information.</summary>
 /// <typeparam name="TValue">The type of the success value.</typeparam>

@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Enterprise.Patterns.Result;
+namespace Axrone.Utility.Result;
 
 /// <summary>Allocation-optimized, immutable, read-only collection of <see cref="Error"/> values. Uses optimized storage: a single field for 0 or 1 error, an array for 2+.</summary>
 [DebuggerDisplay("Count = {Count}")]

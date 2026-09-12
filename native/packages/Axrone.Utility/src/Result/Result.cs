@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Enterprise.Patterns.Result;
+namespace Axrone.Utility.Result;
 
 /// <summary>Represents the outcome of an operation that either succeeded or failed, carrying error information on failure.</summary>
 /// <remarks>This is a non-generic result that does not carry a value on success. For results that carry a value, use <see cref="Result{TValue}"/>.</remarks>

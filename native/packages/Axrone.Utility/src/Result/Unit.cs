@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Enterprise.Patterns.Result;
+namespace Axrone.Utility.Result;
 
 /// <summary>Represents a void-equivalent value for use in <see cref="Result{TValue}"/> when no value is produced.</summary>
 [StructLayout(LayoutKind.Sequential, Size = 1)]
