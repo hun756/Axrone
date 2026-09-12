@@ -328,7 +328,8 @@ public static unsafe partial class SimdFloat64
         p = p * z + Vector512.Create(1.0 / 3.0);
         Vector512<double> lnF = (Vector512.Create(2.0) * s) * (p * z + Vector512.Create(1.0));
         Vector512<double> result = Vector512.ConvertToDouble(e) * Vector512.Create(0.6931471805599453) + lnF;
-        result = Vector512.ConditionalSelect(Vector512.LessThanOrEqual(x, Vector512<double>.Zero), Vector512.Create(double.NegativeInfinity), result);
+        result = Vector512.ConditionalSelect(Vector512.LessThan(x, Vector512<double>.Zero), Vector512.Create(double.NaN), result);
+        result = Vector512.ConditionalSelect(Vector512.Equals(x, Vector512<double>.Zero), Vector512.Create(double.NegativeInfinity), result);
         result = Vector512.ConditionalSelect(Vector512.Equals(expField, Vector512.Create(ExpMask)).AsDouble(), x, result);
         return result;
     }
@@ -368,7 +369,8 @@ public static unsafe partial class SimdFloat64
         p = p * z + Vector256.Create(1.0 / 3.0);
         Vector256<double> lnF = (Vector256.Create(2.0) * s) * (p * z + Vector256.Create(1.0));
         Vector256<double> result = Vector256.ConvertToDouble(e) * Vector256.Create(0.6931471805599453) + lnF;
-        result = Vector256.ConditionalSelect(Vector256.LessThanOrEqual(x, Vector256<double>.Zero), Vector256.Create(double.NegativeInfinity), result);
+        result = Vector256.ConditionalSelect(Vector256.LessThan(x, Vector256<double>.Zero), Vector256.Create(double.NaN), result);
+        result = Vector256.ConditionalSelect(Vector256.Equals(x, Vector256<double>.Zero), Vector256.Create(double.NegativeInfinity), result);
         result = Vector256.ConditionalSelect(Vector256.Equals(expField, Vector256.Create(ExpMask)).AsDouble(), x, result);
         return result;
     }
@@ -408,7 +410,8 @@ public static unsafe partial class SimdFloat64
         p = p * z + Vector128.Create(1.0 / 3.0);
         Vector128<double> lnF = (Vector128.Create(2.0) * s) * (p * z + Vector128.Create(1.0));
         Vector128<double> result = Vector128.ConvertToDouble(e) * Vector128.Create(0.6931471805599453) + lnF;
-        result = Vector128.ConditionalSelect(Vector128.LessThanOrEqual(x, Vector128<double>.Zero), Vector128.Create(double.NegativeInfinity), result);
+        result = Vector128.ConditionalSelect(Vector128.LessThan(x, Vector128<double>.Zero), Vector128.Create(double.NaN), result);
+        result = Vector128.ConditionalSelect(Vector128.Equals(x, Vector128<double>.Zero), Vector128.Create(double.NegativeInfinity), result);
         result = Vector128.ConditionalSelect(Vector128.Equals(expField, Vector128.Create(ExpMask)).AsDouble(), x, result);
         return result;
     }
@@ -442,7 +445,8 @@ public static unsafe partial class SimdFloat64
 
     private static double LogScalar(double x)
     {
-        if (x <= 0.0) return double.NegativeInfinity;
+        if (x < 0.0) return double.NaN;
+        if (x == 0.0) return double.NegativeInfinity;
         long bits = BitConverter.DoubleToInt64Bits(x);
         if ((bits & ExpMask) == ExpMask) return x;
         long e = ((bits & ExpMask) >> 52) - 1023;
