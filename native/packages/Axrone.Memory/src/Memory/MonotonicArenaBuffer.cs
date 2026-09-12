@@ -17,6 +17,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     private byte* _currentSegmentBase;
     private nint _currentSegmentCapacity;
     private long _currentOffset;
+    private long _segmentGeneration;
     private DisposalTracker _tracker;
 
     public MonotonicArenaBuffer(nint segmentCapacity = 1048576)
@@ -60,14 +61,17 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
 
         nint alignedAllocationSize = Alignment.CacheLine64.AlignUp(byteCount);
 
-        // Lock-free fast path: atomic bump pointer
+        // Lock-free fast path: snapshot generation, atomic bump, verify generation unchanged
+        long genBefore = Volatile.Read(ref _segmentGeneration);
         nint offset = (nint)Interlocked.Add(ref _currentOffset, (long)alignedAllocationSize);
-        if (offset <= Volatile.Read(ref _currentSegmentCapacity))
+        long genAfter = Volatile.Read(ref _segmentGeneration);
+
+        if (genBefore == genAfter && offset <= Volatile.Read(ref _currentSegmentCapacity))
         {
             return _currentSegmentBase + (offset - alignedAllocationSize);
         }
 
-        // Slow path: segment overflow, expansion lock required
+        // Slow path: segment overflow or generation changed, expansion lock required
         return AllocateOverflowSlow(alignedAllocationSize);
     }
 
@@ -99,6 +103,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
             }
 
             _currentOffset = (long)alignedSize;
+            _segmentGeneration++;
             return _currentSegmentBase;
         }
     }
@@ -117,6 +122,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
                 _currentSegmentBase = (byte*)_segments[0].MemoryBlock;
                 _currentSegmentCapacity = _segments[0].ByteCapacity;
                 _currentOffset = 0;
+                _segmentGeneration++;
             }
         }
     }
