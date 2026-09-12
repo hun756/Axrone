@@ -524,7 +524,27 @@ public static unsafe partial class SimdFloat32
         for (; i < length; ++i)
         {
             uint bits = BitConverter.SingleToUInt32Bits(Unsafe.Add(ref src, (nint)i));
-            ushort h = (ushort)(((bits >> 16) & 0x8000u) | (((bits & 0x7F800000u) - 0x38000000u) >> 13) | ((bits & 0x007FE000u) >> 13));
+            uint sign = (bits >> 16) & 0x8000u;
+            uint exp = (bits >> 23) & 0xFFu;
+            uint mant = bits & 0x007FFFFFu;
+
+            ushort h;
+            if (exp == 0xFF)
+            {
+                h = mant != 0 ? (ushort)(sign | 0x7E00u) : (ushort)(sign | 0x7C00u);
+            }
+            else if (exp >= 0x70)
+            {
+                int shiftedExp = (int)((exp - 0x70u) << 10);
+                if (shiftedExp >= 0x7C00)
+                    h = (ushort)(sign | 0x7BFF);
+                else
+                    h = (ushort)(sign | shiftedExp | (mant >> 13));
+            }
+            else
+            {
+                h = (ushort)sign;
+            }
             Unsafe.Add(ref dst, (nint)i) = h;
         }
         return result;

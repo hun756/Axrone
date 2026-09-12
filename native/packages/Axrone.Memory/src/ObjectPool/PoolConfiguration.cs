@@ -100,7 +100,7 @@ public readonly struct PoolConfiguration
         InitialCapacity = Environment.ProcessorCount * 2,
         MaximumCapacity = Environment.ProcessorCount * 32,
         IdleTimeout = TimeSpan.FromMinutes(5),
-        Strategy = PoolingStrategy.ThreadLocal,
+        Strategy = PoolingStrategy.CentralizedQueue,
         TrackLeaks = false,
         ClearOnReturn = true,
         ThrowOnExhaustion = false,
