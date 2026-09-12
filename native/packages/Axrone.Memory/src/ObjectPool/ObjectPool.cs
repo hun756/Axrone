@@ -404,9 +404,17 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         {
             Interlocked.Increment(ref _metrics.RecycleFailureCount);
             _metrics.LastException = ex;
-            _handler.OnDispose?.Invoke(item);
+            try
+            {
+                _handler.OnDispose?.Invoke(item);
+            }
+            catch { Interlocked.Increment(ref _metrics.DisposeFailureCount); }
+            Interlocked.Increment(ref _metrics.TotalDestroyed);
             Interlocked.Decrement(ref _count);
             Interlocked.Decrement(ref _rented);
+            if (instanceId != 0L) _objectInfo.TryRemove(instanceId, out _);
+            if (_diagnosticsLevel >= DiagnosticsLevel.Basic)
+                RecordEvent($"Reset failed for instance {instanceId}: {ex.Message}");
             return;
         }
         finally
@@ -1027,9 +1035,17 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         {
             Interlocked.Increment(ref _metrics.RecycleFailureCount);
             _metrics.LastException = ex;
-            _handler.OnDispose?.Invoke(item);
+            try
+            {
+                _handler.OnDispose?.Invoke(item);
+            }
+            catch { Interlocked.Increment(ref _metrics.DisposeFailureCount); }
+            Interlocked.Increment(ref _metrics.TotalDestroyed);
             Interlocked.Decrement(ref _count);
             Interlocked.Decrement(ref _rented);
+            if (instanceId != 0L) _objectInfo.TryRemove(instanceId, out _);
+            if (_diagnosticsLevel >= DiagnosticsLevel.Basic)
+                RecordEvent($"Reset failed for instance {instanceId}: {ex.Message}");
             return;
         }
         finally
