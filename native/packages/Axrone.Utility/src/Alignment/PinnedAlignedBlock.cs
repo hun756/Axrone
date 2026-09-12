@@ -46,7 +46,7 @@ public sealed unsafe class PinnedAlignedBlock : IAlignedBlock
     public PinnedAlignedBlock(ByteSize byteSize, Alignment alignment, bool zeroInitialize)
     {
         nuint requiredBytes = byteSize.Value + alignment.Value;
-        byte[] storage = GC.AllocateArray<byte>(checked((int)requiredBytes), pinned: true);
+        byte[] storage = new byte[checked((int)requiredBytes)];
 
         GCHandle handle = GCHandle.Alloc(storage, GCHandleType.Pinned);
         void* rawBase = (void*)handle.AddrOfPinnedObject();
