@@ -70,13 +70,6 @@ public static class ThrowHelper
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowInvalidAlignment(nuint value)
-    {
-        throw new ArgumentException($"Alignment value {value} must be a power of two and at least {IntPtr.Size} bytes.", nameof(value));
-    }
-
-    [DoesNotReturn]
-    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowObjectDisposed()
     {
         throw new ObjectDisposedException("The object has been disposed.");
