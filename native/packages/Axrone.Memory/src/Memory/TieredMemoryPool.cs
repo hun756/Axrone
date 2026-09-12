@@ -12,6 +12,8 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     private readonly int _globalQueueCapacity;
     private readonly Timer? _trimTimer;
     private readonly int _autoTrimPercentage;
+    private long _oversizedActiveBytes;
+    private long _oversizedActiveCount;
     private DisposalTracker _tracker;
 
     public TieredMemoryPool(BufferPoolOptions? options = null, IBlockAllocator<T>? customAllocator = null)
@@ -250,16 +252,17 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
         cell.TotalRentedBytes += byteSize;
         cell.ActiveAllocations++;
 
+        Interlocked.Add(ref _oversizedActiveBytes, byteSize);
+        Interlocked.Increment(ref _oversizedActiveCount);
+
         return new DynamicSingleBufferOwner<T>(
             raw,
             token,
             _allocator,
             bytes =>
             {
-                ref var rc = ref PoolCounterStore.Current.Cell;
-                rc.TotalAllocatedBytes -= bytes;
-                rc.TotalRentedBytes -= bytes;
-                rc.ActiveAllocations--;
+                Interlocked.Add(ref _oversizedActiveBytes, -bytes);
+                Interlocked.Decrement(ref _oversizedActiveCount);
             },
             byteSize);
     }
