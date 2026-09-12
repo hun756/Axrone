@@ -635,9 +635,9 @@ public static unsafe partial class SimdFloat32
             }
             else if (exp >= 0x70)
             {
-                int shiftedExp = (int)((exp - 0x70u) << 10);
-                if (shiftedExp >= 0x7C00)
-                    h = (ushort)(sign | 0x7BFF);
+                uint shiftedExp = (exp - 0x70u) << 10;
+                if (shiftedExp >= 0x7C00u)
+                    h = (ushort)(sign | 0x7BFFu);
                 else
                     h = (ushort)(sign | shiftedExp | (mant >> 13));
             }
