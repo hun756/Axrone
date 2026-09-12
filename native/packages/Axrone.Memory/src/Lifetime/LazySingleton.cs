@@ -97,6 +97,8 @@ public sealed class LazySingleton<T> : ISingleton<T>, IDisposable, IAsyncDisposa
 
     public void Dispose()
     {
+        T? targetToDispose = null;
+
         lock (_disposeGate)
         {
             var current = (SingletonLifecycleState)Volatile.Read(ref _state);
@@ -111,15 +113,7 @@ public sealed class LazySingleton<T> : ISingleton<T>, IDisposable, IAsyncDisposa
             {
                 try
                 {
-                    var val = _lazy.Value;
-                    if (val is IDisposable disposable)
-                    {
-                        disposable.Dispose();
-                    }
-                    else if (val is IAsyncDisposable asyncDisposable)
-                    {
-                        asyncDisposable.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
-                    }
+                    targetToDispose = _lazy.Value;
                 }
                 catch
                 {
@@ -127,6 +121,18 @@ public sealed class LazySingleton<T> : ISingleton<T>, IDisposable, IAsyncDisposa
             }
 
             Volatile.Write(ref _state, (int)SingletonLifecycleState.Disposed);
+        }
+
+        if (targetToDispose is not null)
+        {
+            if (targetToDispose is IAsyncDisposable asyncDisposable)
+            {
+                asyncDisposable.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
+            }
+            else if (targetToDispose is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
     }
 

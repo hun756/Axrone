@@ -86,21 +86,15 @@ public static class Singleton<T> where T : class
 
     public static void Reset()
     {
+        T? targetToDispose = default;
+
         lock (s_gate)
         {
             if (s_lazy is not null && s_lazy.IsValueCreated)
             {
                 try
                 {
-                    var instance = s_lazy.Value;
-                    if (instance is IDisposable disposable)
-                    {
-                        disposable.Dispose();
-                    }
-                    else if (instance is IAsyncDisposable asyncDisposable)
-                    {
-                        asyncDisposable.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
-                    }
+                    targetToDispose = s_lazy.Value;
                 }
                 catch
                 {
@@ -109,6 +103,18 @@ public static class Singleton<T> where T : class
 
             s_lazy = null;
             Volatile.Write(ref s_state, (int)SingletonLifecycleState.Uninitialized);
+        }
+
+        if (targetToDispose is not null)
+        {
+            if (targetToDispose is IAsyncDisposable asyncDisposable)
+            {
+                asyncDisposable.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
+            }
+            else if (targetToDispose is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
     }
 }
