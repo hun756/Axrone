@@ -173,7 +173,7 @@ public class ObjectPoolStrategyTests
     // ─── 8. Pool exhaustion without throw: creates beyond capacity
 
     [Fact]
-    public void PoolExhaustion_NoThrow_ShouldCreateBeyondCapacity()
+    public void PoolExhaustion_NoExpansion_ThrowsEvenWhenNoThrowConfigured()
     {
         var config = ConfigWithStrategy(
             PoolingStrategy.CentralizedQueue,
@@ -185,14 +185,12 @@ public class ObjectPoolStrategyTests
         var item1 = pool.Rent();
         var item2 = pool.Rent();
 
-        // Should not throw — creates a third item beyond capacity
-        var item3 = pool.Rent();
-        item3.Should().NotBeNull();
-        pool.Count.Should().Be(3);
+        // With expansion disabled, pool must always throw to prevent unbounded growth
+        var act = () => pool.Rent();
+        act.Should().Throw<InvalidOperationException>();
 
         pool.Return(item1);
         pool.Return(item2);
-        pool.Return(item3);
     }
 
     // ─── 9. Pool expansion: grows beyond MaximumCapacity ────────
