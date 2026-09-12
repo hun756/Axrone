@@ -123,7 +123,7 @@ public sealed unsafe class AlignedArenaAllocator : IDisposable
                 _baseAddress = null;
                 if (ptr != null)
                 {
-                    NativeMemory.Free(ptr);
+                    NativeMemory.AlignedFree(ptr);
                 }
             }
         }

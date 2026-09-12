@@ -86,7 +86,7 @@ public sealed unsafe class NativeAlignedBlock : IAlignedBlock
             _pointer = null;
             if (ptr != null)
             {
-                NativeMemory.Free(ptr);
+                NativeMemory.AlignedFree(ptr);
             }
         }
     }
