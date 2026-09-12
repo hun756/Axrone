@@ -46,3 +46,6 @@ export {
     getSceneUIWidgetRefResolver,
     setSceneUIWidgetRefResolver,
 } from './ui-widget-ref';
+
+export type { SceneCapabilityGuardHost } from './scene-capability-guard';
+export { requireRegisteredComponent } from './scene-capability-guard';

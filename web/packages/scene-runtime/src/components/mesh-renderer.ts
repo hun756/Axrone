@@ -120,6 +120,8 @@ export class MeshRenderer extends Component {
     private _resolvedJointTransforms: readonly (Transform | null)[] | null = null;
     private _resolvedJointWorldMatrices: ArrayLike<number>[] | null = null;
     private _skinPaletteCache: Float32Array | null = null;
+    private _jointResolutionFirstAttemptMs: number | null = null;
+    private _jointResolutionWarned = false;
 
     constructor(config: MeshRendererConfig = {}) {
         super();
@@ -238,6 +240,8 @@ export class MeshRenderer extends Component {
         this._resolvedJointTransforms = null;
         this._resolvedJointWorldMatrices = null;
         this._skinPaletteCache = null;
+        this._jointResolutionFirstAttemptMs = null;
+        this._jointResolutionWarned = false;
     }
 
     get hasSkin(): boolean {
@@ -401,6 +405,15 @@ export class MeshRenderer extends Component {
             return this._resolvedJointTransforms as readonly Transform[];
         }
 
+        if (this._jointResolutionFirstAttemptMs !== null) {
+            const elapsedMs = performance.now() - this._jointResolutionFirstAttemptMs;
+            if (elapsedMs >= 1000) {
+                return null;
+            }
+        } else {
+            this._jointResolutionFirstAttemptMs = performance.now();
+        }
+
         const actors = (this.world as { getAllActors?: () => readonly { getComponent: (type: any) => any }[] } | undefined)?.getAllActors?.() ?? [];
         const transformsByNodeId = new Map<string, Transform>();
 
@@ -425,21 +438,24 @@ export class MeshRenderer extends Component {
         );
 
         if (this._resolvedJointTransforms.some((entry) => entry === null)) {
-            const missingIndices: number[] = [];
-            const missingNodeIds: string[] = [];
-            for (let i = 0; i < this._resolvedJointTransforms.length; i++) {
-                if (this._resolvedJointTransforms[i] === null) {
-                    missingIndices.push(i);
-                    missingNodeIds.push(this._skin.jointNodeIds[i]!);
+            if (!this._jointResolutionWarned) {
+                this._jointResolutionWarned = true;
+                const missingIndices: number[] = [];
+                const missingNodeIds: string[] = [];
+                for (let i = 0; i < this._resolvedJointTransforms.length; i++) {
+                    if (this._resolvedJointTransforms[i] === null) {
+                        missingIndices.push(i);
+                        missingNodeIds.push(this._skin.jointNodeIds[i]!);
+                    }
                 }
+                const availableNodeIds = [...transformsByNodeId.keys()].slice(0, 10);
+                console.warn(
+                    `[MeshRenderer] _resolveJointTransforms: ${missingIndices.length}/${this._skin.jointNodeIds.length} joint(s) not resolved. ` +
+                    `Missing: [${missingNodeIds.slice(0, 5).join(', ')}${missingNodeIds.length > 5 ? '...' : ''}]. ` +
+                    `Available: [${availableNodeIds.join(', ')}${transformsByNodeId.size > 10 ? '...' : ''}]. ` +
+                    `Skinning will be disabled for this mesh. instanceId=${instanceId ?? 'null'}.`,
+                );
             }
-            const availableNodeIds = [...transformsByNodeId.keys()].slice(0, 10);
-            console.warn(
-                `[MeshRenderer] _resolveJointTransforms: ${missingIndices.length}/${this._skin.jointNodeIds.length} joint(s) not resolved. ` +
-                `Missing: [${missingNodeIds.slice(0, 5).join(', ')}${missingNodeIds.length > 5 ? '...' : ''}]. ` +
-                `Available: [${availableNodeIds.join(', ')}${transformsByNodeId.size > 10 ? '...' : ''}]. ` +
-                `Skinning will be disabled for this mesh. instanceId=${instanceId ?? 'null'}.`,
-            );
             this._resolvedJointWorldMatrices = null;
             return null;
         }

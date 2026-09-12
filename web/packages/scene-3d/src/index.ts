@@ -29,6 +29,7 @@ export type {
 	Scene3DActorRuntimeOptions,
 	SceneRenderableActorCreateOptions,
 	SceneRenderableActorInstance,
+	SceneProfilerProbe,
 } from './scene-3d-actor-runtime';
 export { Scene3DActorRuntime } from './scene-3d-actor-runtime';
 export { createScene } from './scene-factory';

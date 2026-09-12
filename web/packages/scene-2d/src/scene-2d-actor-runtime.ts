@@ -1,13 +1,16 @@
-import { Transform, type Actor, type ActorConfig, type ComponentConstructor } from '@axrone/ecs-runtime';
+import { Transform, type Actor, type ActorConfig } from '@axrone/ecs-runtime';
 import type { World } from '@axrone/ecs-runtime';
 import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
 import {
-    SceneCapabilityError,
     type SceneActorRuntime,
     type SceneRegistry,
 } from '@axrone/scene-runtime';
-import { Camera, type CameraConfig } from '@axrone/scene-runtime/scene-facade';
+import {
+    Camera,
+    type CameraConfig,
+    requireRegisteredComponent,
+} from '@axrone/scene-runtime/scene-facade';
 import {
     SpriteAnimator,
     type SpriteAnimatorConfig,
@@ -34,7 +37,8 @@ export class Scene2DActorRuntime<R extends ComponentRegistry = Record<string, ne
         actorConfig: ActorConfig = {},
         cameraConfig: CameraConfig = {}
     ): Actor<World<SceneRegistry<R>>> {
-        this._requireRegisteredComponent(
+        requireRegisteredComponent(
+            this._actors,
             Camera,
             'camera actor creation requires the 2D scene capability/profile'
         );
@@ -65,7 +69,8 @@ export class Scene2DActorRuntime<R extends ComponentRegistry = Record<string, ne
         actorConfig: ActorConfig = {},
         spriteConfig: SpriteRendererConfig = {}
     ): Actor<World<SceneRegistry<R>>> {
-        this._requireRegisteredComponent(
+        requireRegisteredComponent(
+            this._actors,
             SpriteRenderer,
             'sprite actor creation requires the 2D scene capability/profile'
         );
@@ -79,11 +84,13 @@ export class Scene2DActorRuntime<R extends ComponentRegistry = Record<string, ne
         spriteConfig: SpriteRendererConfig = {},
         animatorConfig: SpriteAnimatorConfig = {}
     ): Actor<World<SceneRegistry<R>>> {
-        this._requireRegisteredComponent(
+        requireRegisteredComponent(
+            this._actors,
             SpriteRenderer,
             'animated sprite creation requires the 2D scene capability/profile'
         );
-        this._requireRegisteredComponent(
+        requireRegisteredComponent(
+            this._actors,
             SpriteAnimator,
             'animated sprite creation requires the 2D scene capability/profile'
         );
@@ -97,23 +104,13 @@ export class Scene2DActorRuntime<R extends ComponentRegistry = Record<string, ne
         actorConfig: ActorConfig = {},
         maskConfig: SpriteMaskConfig = {}
     ): Actor<World<SceneRegistry<R>>> {
-        this._requireRegisteredComponent(
+        requireRegisteredComponent(
+            this._actors,
             SpriteMask,
             'mask actor creation requires the 2D scene capability/profile'
         );
         const actor = this._actors.createActor(actorConfig);
         actor.addComponent(SpriteMask, maskConfig);
         return actor;
-    }
-
-    private _requireRegisteredComponent(
-        componentType: ComponentConstructor,
-        message: string
-    ): void {
-        if (this._actors.isComponentRegistered(componentType)) {
-            return;
-        }
-
-        throw new SceneCapabilityError(message);
     }
 }

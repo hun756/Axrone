@@ -14,7 +14,7 @@ import { type MeshRendererConfig } from '@axrone/scene-runtime/scene-3d-support'
 import { getDefaultSceneRuntimeProfile } from './profile';
 import {
     Scene3DActorRuntime,
-    type Scene3DActorRuntimeOptions,
+    type SceneProfilerProbe,
     type SceneRenderableActorCreateOptions,
     type SceneRenderableActorInstance,
 } from './scene-3d-actor-runtime';
@@ -26,9 +26,9 @@ export class Scene<R extends ComponentRegistry = Record<string, never>> extends 
         super({
             ...options,
             profile: options.profile ?? getDefaultSceneRuntimeProfile<R>(),
-        } as any);
+        });
         this._actors3d = new Scene3DActorRuntime({
-            actors: this._kernel.actors as unknown as Scene3DActorRuntimeOptions<R>['actors'],
+            actors: this._kernel.actors,
         });
     }
 
@@ -50,7 +50,7 @@ export class Scene<R extends ComponentRegistry = Record<string, never>> extends 
 
     createRenderableActors(
         configs: readonly SceneRenderableActorCreateOptions[],
-        profiling?: Record<string, number>
+        profiling?: SceneProfilerProbe
     ): readonly SceneRenderableActorInstance<R>[] {
         this.assertNotDisposed();
         return this._actors3d.createRenderableActors(configs, profiling);
