@@ -120,7 +120,7 @@ public sealed class ConcurrentCompositeDisposable : IDisposable, IAsyncDisposabl
         while (_disposables.TryPop(out var disposable))
         {
             try { disposable.Dispose(); }
-            catch { }
+            catch (Exception) { }
         }
     }
 
@@ -137,7 +137,7 @@ public sealed class ConcurrentCompositeDisposable : IDisposable, IAsyncDisposabl
                 else
                     disposable.Dispose();
             }
-            catch { }
+            catch (Exception) { }
         }
     }
 }
