@@ -12,11 +12,11 @@ public readonly struct Digest32 : IHashDigest<Digest32>
     [UnscopedRef]
     public ReadOnlySpan<byte> AsSpan() => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<uint, byte>(ref Unsafe.AsRef(in Value)), ByteCount);
 
-    public void CopyTo(Span<byte> destination) => BinaryPrimitives.WriteUInt32BigEndian(destination, Value);
+    public void CopyTo(Span<byte> destination) => AsSpan().CopyTo(destination);
 
     public bool TryCopyTo(Span<byte> destination)
     {
-        if (destination.Length >= ByteCount) { BinaryPrimitives.WriteUInt32BigEndian(destination, Value); return true; }
+        if (destination.Length >= ByteCount) { AsSpan().CopyTo(destination); return true; }
         return false;
     }
 
@@ -26,9 +26,13 @@ public readonly struct Digest32 : IHashDigest<Digest32>
         return new Digest32(MemoryMarshal.Read<uint>(span));
     }
 
-    public bool Equals(Digest32 other) => CryptographicOperations.FixedTimeEquals(AsSpan(), other.AsSpan());
+    public bool Equals(Digest32 other) => Value == other.Value;
+    public override bool Equals(object? obj) => obj is Digest32 other && Equals(other);
     public int CompareTo(Digest32 other) => AsSpan().SequenceCompareTo(other.AsSpan());
     public override int GetHashCode() => HashCode.Combine(Value);
+
+    public static bool operator ==(Digest32 left, Digest32 right) => left.Value == right.Value;
+    public static bool operator !=(Digest32 left, Digest32 right) => left.Value != right.Value;
 
     public override string ToString() => ToString(null, null);
     public string ToString(string? format, IFormatProvider? formatProvider) =>
@@ -67,11 +71,11 @@ public readonly struct Digest64 : IHashDigest<Digest64>
     [UnscopedRef]
     public ReadOnlySpan<byte> AsSpan() => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<ulong, byte>(ref Unsafe.AsRef(in Value)), ByteCount);
 
-    public void CopyTo(Span<byte> destination) => BinaryPrimitives.WriteUInt64BigEndian(destination, Value);
+    public void CopyTo(Span<byte> destination) => AsSpan().CopyTo(destination);
 
     public bool TryCopyTo(Span<byte> destination)
     {
-        if (destination.Length >= ByteCount) { BinaryPrimitives.WriteUInt64BigEndian(destination, Value); return true; }
+        if (destination.Length >= ByteCount) { AsSpan().CopyTo(destination); return true; }
         return false;
     }
 
@@ -81,9 +85,13 @@ public readonly struct Digest64 : IHashDigest<Digest64>
         return new Digest64(MemoryMarshal.Read<ulong>(span));
     }
 
-    public bool Equals(Digest64 other) => CryptographicOperations.FixedTimeEquals(AsSpan(), other.AsSpan());
+    public bool Equals(Digest64 other) => Value == other.Value;
+    public override bool Equals(object? obj) => obj is Digest64 other && Equals(other);
     public int CompareTo(Digest64 other) => AsSpan().SequenceCompareTo(other.AsSpan());
     public override int GetHashCode() => HashCode.Combine(Value);
+
+    public static bool operator ==(Digest64 left, Digest64 right) => left.Value == right.Value;
+    public static bool operator !=(Digest64 left, Digest64 right) => left.Value != right.Value;
 
     public override string ToString() => ToString(null, null);
     public string ToString(string? format, IFormatProvider? formatProvider) =>
