@@ -61,22 +61,22 @@ public static class FloatCompare
         return diff <= largest * relEpsilon;
     }
 
-    /// <summary>Three-way comparison for floats with epsilon.</summary>
+    /// <summary>Three-way comparison for floats with epsilon. NaN sorts after all non-NaN values.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int Compare(float a, float b, float epsilon = DefaultFloatEpsilon)
     {
         if (AlmostEqual(a, b, epsilon)) return 0;
-        if (float.IsNaN(a)) return float.IsNaN(b) ? 0 : 1;
+        if (float.IsNaN(a)) return 1;
         if (float.IsNaN(b)) return -1;
         return a < b ? -1 : 1;
     }
 
-    /// <summary>Three-way comparison for doubles with epsilon.</summary>
+    /// <summary>Three-way comparison for doubles with epsilon. NaN sorts after all non-NaN values.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int Compare(double a, double b, double epsilon = DefaultDoubleEpsilon)
     {
         if (AlmostEqual(a, b, epsilon)) return 0;
-        if (double.IsNaN(a)) return double.IsNaN(b) ? 0 : 1;
+        if (double.IsNaN(a)) return 1;
         if (double.IsNaN(b)) return -1;
         return a < b ? -1 : 1;
     }
