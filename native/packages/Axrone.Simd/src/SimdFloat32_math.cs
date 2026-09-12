@@ -578,6 +578,18 @@ public static unsafe partial class SimdFloat32
                 (sign | exp | mant).AsSingle().StoreUnsafe(ref dst, i);
             }
         }
+        if (Vector128.IsHardwareAccelerated && count >= (nuint)Vector128<ushort>.Count)
+        {
+            nuint step = (nuint)Vector128<ushort>.Count, limit = count - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector128<ushort> h = Vector128.LoadUnsafe(in src, i);
+                Vector128<uint> sign = (h.AsUInt32() & Vector128.Create(0x80008000u)) << 16;
+                Vector128<uint> exp = ((h.AsUInt32() & Vector128.Create(0x7C007C00u)) + Vector128.Create(0x38003800u)) & Vector128.Create(0x7F807F80u);
+                Vector128<uint> mant = (h.AsUInt32() & Vector128.Create(0x03FF03FFu)) << 13;
+                (sign | exp | mant).AsSingle().StoreUnsafe(ref dst, i);
+            }
+        }
         for (; i < count; ++i)
         {
             uint h = Unsafe.Add(ref src, (nint)i);
