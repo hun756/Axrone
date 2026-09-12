@@ -49,8 +49,6 @@ public sealed unsafe class AlignedArenaAllocator : IDisposable
         ThrowIfDisposed();
 
         nuint requested = size.Value;
-        nuint align = alignment.Value;
-        nuint mask = align - 1;
 
         nuint baseAddr = (nuint)_baseAddress;
         nuint currentOffset = Volatile.Read(ref _position.Offset);
@@ -58,7 +56,7 @@ public sealed unsafe class AlignedArenaAllocator : IDisposable
         while (true)
         {
             nuint currentAddress = baseAddr + currentOffset;
-            nuint alignedAddress = (currentAddress + mask) & ~mask;
+            nuint alignedAddress = alignment.AlignUp(currentAddress);
             nuint newOffset = (alignedAddress - baseAddr) + requested;
 
             if (newOffset > _capacity)
