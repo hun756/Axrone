@@ -141,8 +141,9 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
     {
         get
         {
+            const int MaxRetries = 1000;
             SpinWait spinner = new();
-            while (true)
+            for (int attempt = 0; attempt < MaxRetries; attempt++)
             {
                 long headBefore = Volatile.Read(ref _positions.DequeuePosition);
                 long tail = Volatile.Read(ref _positions.EnqueuePosition);
@@ -158,6 +159,13 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 
                 spinner.SpinOnce();
             }
+
+            long finalHead = Volatile.Read(ref _positions.DequeuePosition);
+            long finalTail = Volatile.Read(ref _positions.EnqueuePosition);
+            long bestEffort = finalTail - finalHead;
+            if (bestEffort < 0) return 0;
+            if (bestEffort > _capacity) return _capacity;
+            return (int)bestEffort;
         }
     }
 
