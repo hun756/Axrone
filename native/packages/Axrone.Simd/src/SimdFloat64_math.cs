@@ -28,7 +28,85 @@ public static unsafe partial class SimdFloat64
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Softmax(ReadOnlySpan<double> source, Span<double> destination)
-        => SimdFloatingPointOps<double>.Softmax(source, destination);
+    {
+        ThrowHelper.ValidateDestinationSpan(destination, source);
+        nuint length = (nuint)source.Length;
+        if (length == 0) return;
+        ref double src = ref MemoryMarshal.GetReference(source);
+        ref double dst = ref MemoryMarshal.GetReference(destination);
+
+        double maxVal = Unsafe.Add(ref src, 0);
+        for (nuint k = 1; k < length; ++k)
+        {
+            double v = Unsafe.Add(ref src, (nint)k);
+            if (v > maxVal) maxVal = v;
+        }
+
+        double sum = 0;
+        nuint i = 0;
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<double>.Count)
+        {
+            nuint step = (nuint)Vector512<double>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector512<double> e = ExpKernel512(Vector512.LoadUnsafe(in src, i) - Vector512.Create(maxVal));
+                e.StoreUnsafe(ref dst, i);
+                sum += Vector512.Sum(e);
+            }
+        }
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<double>.Count)
+        {
+            nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector256<double> e = ExpKernel256(Vector256.LoadUnsafe(in src, i) - Vector256.Create(maxVal));
+                e.StoreUnsafe(ref dst, i);
+                sum += Vector256.Sum(e);
+            }
+        }
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
+        {
+            nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector128<double> e = ExpKernel128(Vector128.LoadUnsafe(in src, i) - Vector128.Create(maxVal));
+                e.StoreUnsafe(ref dst, i);
+                sum += Vector128.Sum(e);
+            }
+        }
+        for (; i < length; ++i)
+        {
+            double e = ExpScalar(Unsafe.Add(ref src, (nint)i) - maxVal);
+            Unsafe.Add(ref dst, (nint)i) = e;
+            sum += e;
+        }
+
+        double invSum = 1.0 / sum;
+        nuint i2 = 0;
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<double>.Count)
+        {
+            Vector512<double> vInv = Vector512.Create(invSum);
+            nuint step = (nuint)Vector512<double>.Count, limit = length - step + 1;
+            for (; i2 < limit; i2 += step)
+                (Vector512.LoadUnsafe(in dst, i2) * vInv).StoreUnsafe(ref dst, i2);
+        }
+        if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<double>.Count)
+        {
+            Vector256<double> vInv = Vector256.Create(invSum);
+            nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
+            for (; i2 < limit; i2 += step)
+                (Vector256.LoadUnsafe(in dst, i2) * vInv).StoreUnsafe(ref dst, i2);
+        }
+        if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
+        {
+            Vector128<double> vInv = Vector128.Create(invSum);
+            nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
+            for (; i2 < limit; i2 += step)
+                (Vector128.LoadUnsafe(in dst, i2) * vInv).StoreUnsafe(ref dst, i2);
+        }
+        for (; i2 < length; ++i2)
+            Unsafe.Add(ref dst, (nint)i2) = Unsafe.Add(ref dst, (nint)i2) * invSum;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Mat4x4Multiply(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
@@ -295,6 +373,46 @@ public static unsafe partial class SimdFloat64
         return result;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector128<double> LogKernel128(Vector128<double> x)
+    {
+        Vector128<long> bits = x.AsInt64();
+        Vector128<long> expField = bits & Vector128.Create(ExpMask);
+        Vector128<long> subMask = Vector128.Equals(expField, Vector128.Create<long>(0));
+        Vector128<double> xs = Vector128.ConditionalSelect(subMask.AsDouble(), x * Vector128.Create(DenormScale), x);
+        Vector128<long> bits2 = xs.AsInt64();
+        Vector128<long> e = ((bits2 & Vector128.Create(ExpMask)) >> 52) - Vector128.Create(1023L)
+            - Vector128.ConditionalSelect(subMask, Vector128.Create(54L), Vector128<long>.Zero);
+        Vector128<double> m = (bits2 & Vector128.Create(MantMask) | Vector128.Create(ExpBias)).AsDouble();
+        Vector128<double> ge = Vector128.GreaterThanOrEqual(m, Vector128.Create(Sqrt2));
+        m = Vector128.ConditionalSelect(ge, m * Vector128.Create(0.5), m);
+        e = Vector128.ConditionalSelect(ge.AsInt64(), e + Vector128.Create(1L), e);
+        Vector128<double> f = m - Vector128.Create(1.0);
+        Vector128<double> s = f / (f + Vector128.Create(2.0));
+        Vector128<double> z = s * s;
+        Vector128<double> p = Vector128.Create(1.0 / 33.0);
+        p = p * z + Vector128.Create(1.0 / 31.0);
+        p = p * z + Vector128.Create(1.0 / 29.0);
+        p = p * z + Vector128.Create(1.0 / 27.0);
+        p = p * z + Vector128.Create(1.0 / 25.0);
+        p = p * z + Vector128.Create(1.0 / 23.0);
+        p = p * z + Vector128.Create(1.0 / 21.0);
+        p = p * z + Vector128.Create(1.0 / 19.0);
+        p = p * z + Vector128.Create(1.0 / 17.0);
+        p = p * z + Vector128.Create(1.0 / 15.0);
+        p = p * z + Vector128.Create(1.0 / 13.0);
+        p = p * z + Vector128.Create(1.0 / 11.0);
+        p = p * z + Vector128.Create(1.0 / 9.0);
+        p = p * z + Vector128.Create(1.0 / 7.0);
+        p = p * z + Vector128.Create(1.0 / 5.0);
+        p = p * z + Vector128.Create(1.0 / 3.0);
+        Vector128<double> lnF = (Vector128.Create(2.0) * s) * (p * z + Vector128.Create(1.0));
+        Vector128<double> result = Vector128.ConvertToDouble(e) * Vector128.Create(0.6931471805599453) + lnF;
+        result = Vector128.ConditionalSelect(Vector128.LessThanOrEqual(x, Vector128<double>.Zero), Vector128.Create(double.NegativeInfinity), result);
+        result = Vector128.ConditionalSelect(Vector128.Equals(expField, Vector128.Create(ExpMask)).AsDouble(), x, result);
+        return result;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorLog(ReadOnlySpan<double> source, Span<double> destination)
     {
@@ -313,6 +431,11 @@ public static unsafe partial class SimdFloat64
         {
             nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
             for (; i < limit; i += step) LogKernel256(Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
+        }
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
+        {
+            nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
+            for (; i < limit; i += step) LogKernel128(Vector128.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
         for (; i < length; ++i) Unsafe.Add(ref dst, (nint)i) = LogScalar(Unsafe.Add(ref src, (nint)i));
     }
@@ -374,6 +497,12 @@ public static unsafe partial class SimdFloat64
             for (; i < limit; i += step)
                 (Vector256.Create(1.0) / (Vector256.Create(1.0) + ExpKernel256(Vector256.Create(0.0) - Vector256.LoadUnsafe(in src, i)))).StoreUnsafe(ref dst, i);
         }
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
+        {
+            nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                (Vector128.Create(1.0) / (Vector128.Create(1.0) + ExpKernel128(Vector128.Create(0.0) - Vector128.LoadUnsafe(in src, i)))).StoreUnsafe(ref dst, i);
+        }
         for (; i < length; ++i)
             Unsafe.Add(ref dst, (nint)i) = 1.0 / (1.0 + Math.Exp(-Unsafe.Add(ref src, (nint)i)));
     }
@@ -406,6 +535,16 @@ public static unsafe partial class SimdFloat64
             {
                 Vector256<double> p = ExpKernel256(Vector256.LoadUnsafe(in src, i) * Vector256.Create(2.0));
                 ((p - Vector256.Create(1.0)) / (p + Vector256.Create(1.0))).StoreUnsafe(ref dst, i);
+            }
+        }
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
+        {
+            nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector128<double> x = Vector128.Max(Vector128.Min(Vector128.LoadUnsafe(in src, i), Vector128.Create(19.0)), Vector128.Create(-19.0));
+                Vector128<double> p = ExpKernel128(x * Vector128.Create(2.0));
+                ((p - Vector128.Create(1.0)) / (p + Vector128.Create(1.0))).StoreUnsafe(ref dst, i);
             }
         }
         for (; i < length; ++i)
@@ -445,6 +584,50 @@ public static unsafe partial class SimdFloat64
                             Unsafe.Add(ref Unsafe.As<Vector512<double>, double>(ref result), (nint)j) =
                                 Math.Pow(Unsafe.Add(ref Unsafe.As<Vector512<double>, double>(ref b), (nint)j),
                                          Unsafe.Add(ref Unsafe.As<Vector512<double>, double>(ref e), (nint)j));
+                    }
+                }
+                result.StoreUnsafe(ref dRef, i);
+            }
+        }
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<double>.Count)
+        {
+            nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector256<double> b = Vector256.LoadUnsafe(in bRef, i);
+                Vector256<double> e = Vector256.LoadUnsafe(in eRef, i);
+                Vector256<double> result = ExpKernel256(e * LogKernel256(b));
+                Vector256<double> negBase = Vector256.LessThan(b, Vector256<double>.Zero);
+                if (negBase != Vector256<double>.Zero)
+                {
+                    for (nuint j = 0; j < step; j++)
+                    {
+                        if (Unsafe.Add(ref Unsafe.As<Vector256<double>, double>(ref negBase), (nint)j) != 0.0)
+                            Unsafe.Add(ref Unsafe.As<Vector256<double>, double>(ref result), (nint)j) =
+                                Math.Pow(Unsafe.Add(ref Unsafe.As<Vector256<double>, double>(ref b), (nint)j),
+                                         Unsafe.Add(ref Unsafe.As<Vector256<double>, double>(ref e), (nint)j));
+                    }
+                }
+                result.StoreUnsafe(ref dRef, i);
+            }
+        }
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
+        {
+            nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector128<double> b = Vector128.LoadUnsafe(in bRef, i);
+                Vector128<double> e = Vector128.LoadUnsafe(in eRef, i);
+                Vector128<double> result = ExpKernel128(e * LogKernel128(b));
+                Vector128<double> negBase = Vector128.LessThan(b, Vector128<double>.Zero);
+                if (negBase != Vector128<double>.Zero)
+                {
+                    for (nuint j = 0; j < step; j++)
+                    {
+                        if (Unsafe.Add(ref Unsafe.As<Vector128<double>, double>(ref negBase), (nint)j) != 0.0)
+                            Unsafe.Add(ref Unsafe.As<Vector128<double>, double>(ref result), (nint)j) =
+                                Math.Pow(Unsafe.Add(ref Unsafe.As<Vector128<double>, double>(ref b), (nint)j),
+                                         Unsafe.Add(ref Unsafe.As<Vector128<double>, double>(ref e), (nint)j));
                     }
                 }
                 result.StoreUnsafe(ref dRef, i);

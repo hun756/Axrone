@@ -470,13 +470,6 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         ref T src = ref MemoryMarshal.GetReference(source);
         ref T dst = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
-        if (Vector.IsHardwareAccelerated && length >= (nuint)Vector<T>.Count)
-        {
-            Vector<T> vOne = Vector.Create(T.One);
-            nuint step = (nuint)Vector<T>.Count, limit = length - step + 1;
-            for (; i < limit; i += step)
-                (vOne / Vector.Sqrt(Vector.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
-        }
         for (; i < length; ++i)
         {
             T value = Unsafe.Add(ref src, (nint)i);
