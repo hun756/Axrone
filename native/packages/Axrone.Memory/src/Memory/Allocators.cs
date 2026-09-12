@@ -68,8 +68,8 @@ public sealed unsafe class NativeAlignedBlockAllocator<T> : IBlockAllocator<T> w
     {
         if (lifetimeToken is NativeBlockMemoryManager<T> manager)
         {
-            NativeMemory.AlignedFree(manager.Pointer);
             ((IDisposable)manager).Dispose();
+            NativeMemory.AlignedFree(manager.Pointer);
         }
     }
 
