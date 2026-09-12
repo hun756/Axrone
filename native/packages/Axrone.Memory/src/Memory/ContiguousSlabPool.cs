@@ -32,7 +32,7 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
             ThrowHelper.ThrowInsufficientMemory($"Failed to allocate {totalBytes} contiguous slab memory bytes.");
         }
 
-        _rootManager = new NativeBlockMemoryManager<T>((T*)_backingPointer, blockSize * blockCount, (nuint)Alignment.CacheLine64Bytes);
+        _rootManager = new NativeBlockMemoryManager<T>((T*)_backingPointer, checked(blockSize * blockCount), (nuint)Alignment.CacheLine64Bytes);
         _slotArray = new PooledBufferSlot<T>[blockCount];
         _freeSlotQueue = new MpmcRingBuffer<PooledBufferSlot<T>>(Math.Max(2, blockCount));
 
