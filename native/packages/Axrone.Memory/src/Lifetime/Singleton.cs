@@ -13,6 +13,12 @@ public static class Singleton<T> where T : class
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
+            var currentState = (SingletonLifecycleState)Volatile.Read(ref s_state);
+            if (currentState is SingletonLifecycleState.Disposing or SingletonLifecycleState.Disposed)
+            {
+                throw new SingletonDisposedException(typeof(T).FullName ?? nameof(T));
+            }
+
             var lazy = Volatile.Read(ref s_lazy);
             if (lazy is null)
             {
