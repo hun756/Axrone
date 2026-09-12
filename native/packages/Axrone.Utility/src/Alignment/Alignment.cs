@@ -59,6 +59,9 @@ public readonly record struct Alignment : IComparable<Alignment>, IEquatable<Ali
     public static Alignment CacheLine128 => new(128, true);
     public static Alignment Page4K => new(4096, true);
 
+    public const int CacheLine64Bytes = 64;
+    public const int CacheLine128Bytes = 128;
+
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public nuint AlignUp(nuint address)
     {
