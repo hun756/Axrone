@@ -15,47 +15,56 @@ internal interface IPooledWaiterNode<TSelf>
 }
 
 /// <summary>
-/// Lock-free Treiber-stack pool for waiter nodes. Eliminates per-operation allocations:
-/// Rent pops an idle node (or allocates when empty), Return pushes it back via CAS.
+/// Thread-safe stack pool for waiter nodes. Eliminates per-operation allocations:
+/// Rent pops an idle node (or allocates when empty), Return pushes it back.
+/// Uses a spinlock to prevent ABA problems that affect lock-free Treiber stacks.
 /// </summary>
 internal sealed class LockFreeStackPool<TNode>
     where TNode : class, IPooledWaiterNode<TNode>, new()
 {
     private TNode? _head;
+    private SpinLock _lock = new(enableThreadOwnerTracking: false);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TNode Rent(bool isEnqueue)
     {
-        TNode? node;
-        while (true)
+        bool taken = false;
+        try
         {
-            node = Volatile.Read(ref _head);
+            _lock.Enter(ref taken);
+            TNode? node = _head;
             if (node == null)
             {
+                _head = null;
                 node = new TNode();
-                break;
             }
-
-            if (Interlocked.CompareExchange(ref _head, node.Next, node) == node)
+            else
             {
-                break;
+                _head = node.Next;
+                node.Next = null;
             }
+            node.OnRented(this, isEnqueue);
+            return node;
         }
-
-        node.OnRented(this, isEnqueue);
-        return node;
+        finally
+        {
+            if (taken) _lock.Exit();
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Return(TNode node)
     {
-        while (true)
+        bool taken = false;
+        try
         {
-            node.Next = Volatile.Read(ref _head);
-            if (Interlocked.CompareExchange(ref _head, node, node.Next) == node.Next)
-            {
-                break;
-            }
+            _lock.Enter(ref taken);
+            node.Next = _head;
+            _head = node;
+        }
+        finally
+        {
+            if (taken) _lock.Exit();
         }
     }
 }
