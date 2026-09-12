@@ -1,4 +1,4 @@
-using Enterprise.Patterns.Result;
+using Axrone.Utility.Result;
 
 namespace Axrone.Utility.Tests.ResultMonad;
 

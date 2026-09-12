@@ -1,5 +1,5 @@
 // Result monad
-global using Enterprise.Patterns.Result;
+global using Axrone.Utility.Result;
 
 // Disposable patterns
 global using Axrone.Utility.Disposable;

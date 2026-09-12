@@ -1,5 +1,5 @@
 using Axrone.Utility.Alignment;
-using Enterprise.Patterns.Result;
+using Axrone.Utility.Result;
 
 namespace Axrone.Collections;
 
