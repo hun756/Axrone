@@ -1,5 +1,7 @@
 namespace Axrone.Memory;
 
+using Axrone.Utility.Alignment;
+
 public sealed unsafe class MonotonicArenaBuffer : IDisposable
 {
     private struct ArenaSegment
@@ -21,7 +23,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     {
         if (segmentCapacity <= 0) ThrowHelper.ThrowArgumentOutOfRangeException(nameof(segmentCapacity));
 
-        _segmentCapacity = AlignTo64(segmentCapacity);
+        _segmentCapacity = Alignment.CacheLine64.AlignUp(segmentCapacity);
         _segments = new ArenaSegment[4];
         void* initialAlloc = NativeMemory.AlignedAlloc((nuint)_segmentCapacity, 64);
         if (initialAlloc == null) ThrowHelper.ThrowInsufficientMemory("Failed to allocate initial arena chunk.");
@@ -56,7 +58,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
         ThrowIfDisposed();
         if (byteCount <= 0) return null;
 
-        nint alignedAllocationSize = AlignTo64(byteCount);
+        nint alignedAllocationSize = Alignment.CacheLine64.AlignUp(byteCount);
 
         // Lock-free fast path: atomic bump pointer
         nint offset = (nint)Interlocked.Add(ref _currentOffset, (long)alignedAllocationSize);
@@ -140,9 +142,6 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
             }
         }
     }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static nint AlignTo64(nint size) => (size + 63) & ~63;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfDisposed() => _tracker.ThrowIfDisposed(nameof(MonotonicArenaBuffer));
