@@ -248,6 +248,7 @@ public sealed class Float32VectorEngine : IVectorTransformer<float>, IVectorRedu
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
     }
 }
 
@@ -493,5 +494,6 @@ public sealed class Float64VectorEngine : IVectorTransformer<double>, IVectorRed
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
     }
 }
