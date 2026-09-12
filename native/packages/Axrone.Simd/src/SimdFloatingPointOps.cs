@@ -1278,6 +1278,156 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
     public static void Mat4x4Multiply(ReadOnlySpan<T> left, ReadOnlySpan<T> right, Span<T> destination)
     {
         if (left.Length < 16 || right.Length < 16 || destination.Length < 16) ThrowHelper.ThrowMismatchedSpans();
+
+        if (typeof(T) == typeof(float))
+        {
+            Mat4x4MultiplyFloat(
+                System.Runtime.InteropServices.MemoryMarshal.Cast<T, float>(left),
+                System.Runtime.InteropServices.MemoryMarshal.Cast<T, float>(right),
+                System.Runtime.InteropServices.MemoryMarshal.Cast<T, float>(destination));
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            Mat4x4MultiplyDouble(
+                System.Runtime.InteropServices.MemoryMarshal.Cast<T, double>(left),
+                System.Runtime.InteropServices.MemoryMarshal.Cast<T, double>(right),
+                System.Runtime.InteropServices.MemoryMarshal.Cast<T, double>(destination));
+        }
+        else
+        {
+            Mat4x4MultiplyScalar(left, right, destination);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void Mat4x4MultiplyFloat(ReadOnlySpan<float> left, ReadOnlySpan<float> right, Span<float> destination)
+    {
+        ref float l = ref MemoryMarshal.GetReference(left);
+        ref float r = ref MemoryMarshal.GetReference(right);
+        ref float d = ref MemoryMarshal.GetReference(destination);
+
+        if (Vector128.IsHardwareAccelerated)
+        {
+            Vector128<float> l0 = Vector128.LoadUnsafe(in l, 0);
+            Vector128<float> l1 = Vector128.LoadUnsafe(in l, 4);
+            Vector128<float> l2 = Vector128.LoadUnsafe(in l, 8);
+            Vector128<float> l3 = Vector128.LoadUnsafe(in l, 12);
+
+            for (int col = 0; col < 4; col++)
+            {
+                Vector128<float> rCol = Vector128.Create(
+                    Unsafe.Add(ref r, col),
+                    Unsafe.Add(ref r, 4 + col),
+                    Unsafe.Add(ref r, 8 + col),
+                    Unsafe.Add(ref r, 12 + col));
+
+                Vector128<float> d0 = l0 * rCol;
+                Vector128<float> d1 = l1 * rCol;
+                Vector128<float> d2 = l2 * rCol;
+                Vector128<float> d3 = l3 * rCol;
+
+                Unsafe.Add(ref d, col) = d0.GetElement(0) + d0.GetElement(1) + d0.GetElement(2) + d0.GetElement(3);
+                Unsafe.Add(ref d, 4 + col) = d1.GetElement(0) + d1.GetElement(1) + d1.GetElement(2) + d1.GetElement(3);
+                Unsafe.Add(ref d, 8 + col) = d2.GetElement(0) + d2.GetElement(1) + d2.GetElement(2) + d2.GetElement(3);
+                Unsafe.Add(ref d, 12 + col) = d3.GetElement(0) + d3.GetElement(1) + d3.GetElement(2) + d3.GetElement(3);
+            }
+        }
+        else
+        {
+            Mat4x4MultiplyScalarFloat(left, right, destination);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void Mat4x4MultiplyDouble(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
+    {
+        ref double l = ref MemoryMarshal.GetReference(left);
+        ref double r = ref MemoryMarshal.GetReference(right);
+        ref double d = ref MemoryMarshal.GetReference(destination);
+
+        if (Vector128.IsHardwareAccelerated)
+        {
+            Vector128<double> l0 = Vector128.LoadUnsafe(in l, 0);
+            Vector128<double> l1 = Vector128.LoadUnsafe(in l, 2);
+            Vector128<double> l2 = Vector128.LoadUnsafe(in l, 4);
+            Vector128<double> l3 = Vector128.LoadUnsafe(in l, 6);
+            Vector128<double> l4 = Vector128.LoadUnsafe(in l, 8);
+            Vector128<double> l5 = Vector128.LoadUnsafe(in l, 10);
+            Vector128<double> l6 = Vector128.LoadUnsafe(in l, 12);
+            Vector128<double> l7 = Vector128.LoadUnsafe(in l, 14);
+
+            for (int col = 0; col < 4; col++)
+            {
+                Vector128<double> rCol0 = Vector128.Create(Unsafe.Add(ref r, col), Unsafe.Add(ref r, 4 + col));
+                Vector128<double> rCol1 = Vector128.Create(Unsafe.Add(ref r, 8 + col), Unsafe.Add(ref r, 12 + col));
+
+                Vector128<double> t0 = l0 * rCol0;
+                Vector128<double> t1 = l1 * rCol1;
+                Vector128<double> t2 = l2 * rCol0;
+                Vector128<double> t3 = l3 * rCol1;
+                Vector128<double> t4 = l4 * rCol0;
+                Vector128<double> t5 = l5 * rCol1;
+                Vector128<double> t6 = l6 * rCol0;
+                Vector128<double> t7 = l7 * rCol1;
+
+                double d0 = t0.GetElement(0) + t0.GetElement(1) + t1.GetElement(0) + t1.GetElement(1);
+                double d1 = t2.GetElement(0) + t2.GetElement(1) + t3.GetElement(0) + t3.GetElement(1);
+                double d2 = t4.GetElement(0) + t4.GetElement(1) + t5.GetElement(0) + t5.GetElement(1);
+                double d3 = t6.GetElement(0) + t6.GetElement(1) + t7.GetElement(0) + t7.GetElement(1);
+
+                Unsafe.Add(ref d, col) = d0;
+                Unsafe.Add(ref d, 4 + col) = d1;
+                Unsafe.Add(ref d, 8 + col) = d2;
+                Unsafe.Add(ref d, 12 + col) = d3;
+            }
+        }
+        else
+        {
+            Mat4x4MultiplyScalarDouble(left, right, destination);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void Mat4x4MultiplyScalarFloat(ReadOnlySpan<float> left, ReadOnlySpan<float> right, Span<float> destination)
+    {
+        ref float l = ref MemoryMarshal.GetReference(left);
+        ref float r = ref MemoryMarshal.GetReference(right);
+        ref float d = ref MemoryMarshal.GetReference(destination);
+
+        for (int row = 0; row < 4; row++)
+        {
+            for (int col = 0; col < 4; col++)
+            {
+                float sum = 0f;
+                for (int k = 0; k < 4; k++)
+                    sum += Unsafe.Add(ref l, row * 4 + k) * Unsafe.Add(ref r, k * 4 + col);
+                Unsafe.Add(ref d, row * 4 + col) = sum;
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void Mat4x4MultiplyScalarDouble(ReadOnlySpan<double> left, ReadOnlySpan<double> right, Span<double> destination)
+    {
+        ref double l = ref MemoryMarshal.GetReference(left);
+        ref double r = ref MemoryMarshal.GetReference(right);
+        ref double d = ref MemoryMarshal.GetReference(destination);
+
+        for (int row = 0; row < 4; row++)
+        {
+            for (int col = 0; col < 4; col++)
+            {
+                double sum = 0.0;
+                for (int k = 0; k < 4; k++)
+                    sum += Unsafe.Add(ref l, row * 4 + k) * Unsafe.Add(ref r, k * 4 + col);
+                Unsafe.Add(ref d, row * 4 + col) = sum;
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void Mat4x4MultiplyScalar(ReadOnlySpan<T> left, ReadOnlySpan<T> right, Span<T> destination)
+    {
         ref T lRef = ref MemoryMarshal.GetReference(left);
         ref T rRef = ref MemoryMarshal.GetReference(right);
         ref T dRef = ref MemoryMarshal.GetReference(destination);
