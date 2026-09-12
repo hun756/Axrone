@@ -158,7 +158,7 @@ public readonly struct ErrorCollection : IReadOnlyList<Error>, IEquatable<ErrorC
         return _count switch
         {
             0 => ReadOnlySpan<Error>.Empty,
-            1 => ToArray(),
+            1 => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in _single), 1),
             _ => _multiple.AsSpan(0, _count)
         };
     }
