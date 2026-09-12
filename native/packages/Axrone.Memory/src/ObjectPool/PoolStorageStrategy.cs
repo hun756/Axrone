@@ -322,8 +322,9 @@ internal sealed class BoundedChannelPoolStorage<T> : IPoolStorage<T> where T : c
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Enqueue(in PooledItem<T> item)
     {
-        if (_channel.Writer.TryWrite(item))
-            Interlocked.Increment(ref _count);
+        while (!_channel.Writer.TryWrite(item))
+            Thread.SpinWait(8);
+        Interlocked.Increment(ref _count);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -378,13 +379,8 @@ internal sealed class BoundedChannelPoolStorage<T> : IPoolStorage<T> where T : c
             if (ReferenceEquals(items[i].Instance, instance))
                 found = true;
 
-            if (!_channel.Writer.TryWrite(items[i]))
-            {
-                for (int spin = 0; spin < 100 && !_channel.Writer.TryWrite(items[i]); spin++)
-                    Thread.SpinWait(10);
-
-                _channel.Writer.TryWrite(items[i]);
-            }
+            while (!_channel.Writer.TryWrite(items[i]))
+                Thread.SpinWait(8);
 
             Interlocked.Increment(ref _count);
         }
