@@ -97,8 +97,8 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
 
     public void Dispose()
     {
-        Release();
         GC.SuppressFinalize(this);
+        Release();
     }
 
     private void Release()
