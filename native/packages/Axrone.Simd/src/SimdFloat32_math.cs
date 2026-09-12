@@ -42,7 +42,8 @@ public static unsafe partial class SimdFloat32
         p = p * r + Vector512.Create(1f);
         p = p * r + Vector512.Create(1f);
         Vector512<int> biased = Vector512.Min(Vector512.Max(n, Vector512.Create(-126)), Vector512.Create(127)) + Vector512.Create(127);
-        return Vector512.ShiftLeft(biased, 23).AsSingle() * p;
+        Vector512<float> result = Vector512.ShiftLeft(biased, 23).AsSingle() * p;
+        return Vector512.ConditionalSelect(Vector512.Equals(x, x), result, x);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -62,7 +63,8 @@ public static unsafe partial class SimdFloat32
         p = p * r + Vector256.Create(1f);
         p = p * r + Vector256.Create(1f);
         Vector256<int> biased = Vector256.Min(Vector256.Max(n, Vector256.Create(-126)), Vector256.Create(127)) + Vector256.Create(127);
-        return Vector256.ShiftLeft(biased, 23).AsSingle() * p;
+        Vector256<float> result = Vector256.ShiftLeft(biased, 23).AsSingle() * p;
+        return Vector256.ConditionalSelect(Vector256.Equals(x, x), result, x);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -82,11 +84,13 @@ public static unsafe partial class SimdFloat32
         p = p * r + Vector128.Create(1f);
         p = p * r + Vector128.Create(1f);
         Vector128<int> biased = Vector128.Min(Vector128.Max(n, Vector128.Create(-126)), Vector128.Create(127)) + Vector128.Create(127);
-        return Vector128.ShiftLeft(biased, 23).AsSingle() * p;
+        Vector128<float> result = Vector128.ShiftLeft(biased, 23).AsSingle() * p;
+        return Vector128.ConditionalSelect(Vector128.Equals(x, x), result, x);
     }
 
     private static float ExpScalar(float x)
     {
+        if (float.IsNaN(x)) return x;
         x = Math.Max(-ExpClampf, Math.Min(ExpClampf, x));
         float t = x * Log2Ef;
         int n = (int)MathF.Round(t);
