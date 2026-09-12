@@ -268,11 +268,10 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
                 (a0 + (b0 - a0) * vT).StoreUnsafe(ref dRef, i);
             }
         }
-        T oneMinusT = T.One - t;
         for (; i < length; ++i)
         {
             T aVal = Unsafe.Add(ref aRef, (nint)i), bVal = Unsafe.Add(ref bRef, (nint)i);
-            Unsafe.Add(ref dRef, (nint)i) = aVal * oneMinusT + bVal * t;
+            Unsafe.Add(ref dRef, (nint)i) = aVal + (bVal - aVal) * t;
         }
     }
 
