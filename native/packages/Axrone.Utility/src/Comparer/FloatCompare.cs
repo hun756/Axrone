@@ -19,7 +19,8 @@ public static class FloatCompare
     public static bool AlmostEqual(float a, float b, float epsilon = DefaultFloatEpsilon)
     {
         if (a == b) return true;
-        if (float.IsNaN(a) && float.IsNaN(b)) return true;
+        if (float.IsNaN(a) || float.IsNaN(b)) return false;
+        if (float.IsInfinity(a) || float.IsInfinity(b)) return false;
         return MathF.Abs(a - b) <= epsilon;
     }
 
@@ -28,7 +29,8 @@ public static class FloatCompare
     public static bool AlmostEqual(double a, double b, double epsilon = DefaultDoubleEpsilon)
     {
         if (a == b) return true;
-        if (double.IsNaN(a) && double.IsNaN(b)) return true;
+        if (double.IsNaN(a) || double.IsNaN(b)) return false;
+        if (double.IsInfinity(a) || double.IsInfinity(b)) return false;
         return Math.Abs(a - b) <= epsilon;
     }
 
@@ -38,6 +40,8 @@ public static class FloatCompare
     /// </summary>
     public static bool AlmostEqualRelative(float a, float b, float relEpsilon = 1e-4f, float absEpsilon = DefaultFloatEpsilon)
     {
+        if (float.IsNaN(a) || float.IsNaN(b)) return false;
+        if (float.IsInfinity(a) || float.IsInfinity(b)) return a == b;
         var diff = MathF.Abs(a - b);
         if (diff <= absEpsilon) return true;
         var largest = MathF.Max(MathF.Abs(a), MathF.Abs(b));
@@ -49,6 +53,8 @@ public static class FloatCompare
     /// </summary>
     public static bool AlmostEqualRelative(double a, double b, double relEpsilon = 1e-6, double absEpsilon = DefaultDoubleEpsilon)
     {
+        if (double.IsNaN(a) || double.IsNaN(b)) return false;
+        if (double.IsInfinity(a) || double.IsInfinity(b)) return a == b;
         var diff = Math.Abs(a - b);
         if (diff <= absEpsilon) return true;
         var largest = Math.Max(Math.Abs(a), Math.Abs(b));
