@@ -2,10 +2,12 @@
 
 namespace Axrone.Simd;
 
+using Axrone.Utility.Alignment;
+
 public sealed class Float32VectorEngine : IVectorTransformer<float>, IVectorReducer<float>, IVectorScanner<float>, IDisposable
 {
-    private readonly AlignedCounter _transformsExecuted = new();
-    private readonly AlignedCounter _reductionsExecuted = new();
+    private AlignedAtomicCounter128 _transformsExecuted;
+    private AlignedAtomicCounter128 _reductionsExecuted;
 
     public long TransformsExecuted => _transformsExecuted.Value;
     public long ReductionsExecuted => _reductionsExecuted.Value;
@@ -246,15 +248,13 @@ public sealed class Float32VectorEngine : IVectorTransformer<float>, IVectorRedu
 
     public void Dispose()
     {
-        _transformsExecuted.Dispose();
-        _reductionsExecuted.Dispose();
     }
 }
 
 public sealed class Float64VectorEngine : IVectorTransformer<double>, IVectorReducer<double>, IVectorScanner<double>, IDisposable
 {
-    private readonly AlignedCounter _transformsExecuted = new();
-    private readonly AlignedCounter _reductionsExecuted = new();
+    private AlignedAtomicCounter128 _transformsExecuted;
+    private AlignedAtomicCounter128 _reductionsExecuted;
 
     public long TransformsExecuted => _transformsExecuted.Value;
     public long ReductionsExecuted => _reductionsExecuted.Value;
@@ -493,7 +493,5 @@ public sealed class Float64VectorEngine : IVectorTransformer<double>, IVectorRed
 
     public void Dispose()
     {
-        _transformsExecuted.Dispose();
-        _reductionsExecuted.Dispose();
     }
 }

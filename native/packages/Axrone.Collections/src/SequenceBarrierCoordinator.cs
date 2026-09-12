@@ -2,6 +2,7 @@ namespace Axrone.Collections;
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Axrone.Utility.Alignment;
 
 /// <summary>
 /// Cacheline-isolated concurrency barrier eliminating destructive false sharing.
@@ -12,12 +13,10 @@ using System.Runtime.InteropServices;
 [StructLayout(LayoutKind.Explicit, Size = 384)]
 internal struct SequenceBarrierCoordinator
 {
-    private const int CacheLineBoundary = 128;
-
-    [FieldOffset(CacheLineBoundary * 1)]
+    [FieldOffset(Alignment.CacheLine128Bytes * 1)]
     private nuint _enqueuePos;
 
-    [FieldOffset(CacheLineBoundary * 2)]
+    [FieldOffset(Alignment.CacheLine128Bytes * 2)]
     private nuint _dequeuePos;
 
     public SequenceNumber EnqueuePos

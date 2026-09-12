@@ -1,4 +1,5 @@
 using System.Buffers;
+using Axrone.Utility.Alignment;
 
 namespace Axrone.Simd.Tests;
 
@@ -83,80 +84,97 @@ public class InfrastructureTests
         (a != b).Should().BeTrue();
     }
 
-    // ── MemoryAlignment ──────────────────────────────────────────────────
+    // ── Alignment ─────────────────────────────────────────────────────────
 
     [Fact]
-    public void MemoryAlignment_ValidPowerOfTwo_StoresCorrectly()
+    public void Alignment_ValidPowerOfTwo_StoresCorrectly()
     {
-        var align = new MemoryAlignment(64);
-        align.Value.Should().Be((nuint)64);
-        align.ToUIntPtr().Should().Be((nuint)64);
+        var align = new Alignment(64);
+        align.Value.Should().Be(64u);
     }
 
     [Fact]
-    public void MemoryAlignment_CacheLine64_HasCorrectValue()
+    public void Alignment_CacheLine64_HasCorrectValue()
     {
-        MemoryAlignment.CacheLine64.Value.Should().Be((nuint)64);
+        Alignment.CacheLine64.Value.Should().Be(64u);
     }
 
     [Fact]
-    public void MemoryAlignment_CacheLine128_HasCorrectValue()
+    public void Alignment_CacheLine128_HasCorrectValue()
     {
-        MemoryAlignment.CacheLine128.Value.Should().Be((nuint)128);
+        Alignment.CacheLine128.Value.Should().Be(128u);
     }
 
     [Fact]
-    public void MemoryAlignment_ImplicitConversion_ReturnsValue()
+    public void Alignment_Mask_ReturnsValueMinusOne()
     {
-        var align = new MemoryAlignment(32);
-        nuint value = align;
-        value.Should().Be((nuint)32);
+        var align = new Alignment(64);
+        align.Mask.Should().Be((nuint)63);
     }
 
     [Fact]
-    public void MemoryAlignment_NonPowerOfTwo_Throws()
+    public void Alignment_Shift_ReturnsLog2()
     {
-        var act = () => new MemoryAlignment(3);
-        act.Should().Throw<ArgumentException>();
+        var align = new Alignment(64);
+        align.Shift.Should().Be(6);
     }
 
     [Fact]
-    public void MemoryAlignment_Zero_Throws()
+    public void Alignment_NonPowerOfTwo_Throws()
     {
-        var act = () => new MemoryAlignment(0);
-        act.Should().Throw<ArgumentException>();
+        var act = () => new Alignment(3);
+        act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]
-    public void MemoryAlignment_BelowIntPtrSize_Throws()
+    public void Alignment_Zero_Throws()
     {
-        // On 64-bit, IntPtr.Size is 8, so alignment of 4 should fail
-        if (IntPtr.Size > 4)
-        {
-            var act = () => new MemoryAlignment(4);
-            act.Should().Throw<ArgumentException>();
-        }
+        var act = () => new Alignment(0);
+        act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]
-    public void MemoryAlignment_AtIntPtrSize_Succeeds()
+    public void Alignment_TryCreate_ValidValue_ReturnsTrue()
     {
-        var align = new MemoryAlignment((nuint)IntPtr.Size);
-        align.Value.Should().Be((nuint)IntPtr.Size);
+        Alignment.TryCreate(128, out var align).Should().BeTrue();
+        align.Value.Should().Be(128u);
     }
 
     [Fact]
-    public void MemoryAlignment_FromMemoryAlignment_Factory_Works()
+    public void Alignment_TryCreate_InvalidValue_ReturnsFalse()
     {
-        var align = MemoryAlignment.FromMemoryAlignment(256);
-        align.Value.Should().Be((nuint)256);
+        Alignment.TryCreate(7, out _).Should().BeFalse();
     }
 
     [Fact]
-    public void MemoryAlignment_Equality_SameValues_AreEqual()
+    public void Alignment_AlignUp_RoundsCorrectly()
     {
-        var a = new MemoryAlignment(64);
-        var b = new MemoryAlignment(64);
+        var align = new Alignment(64);
+        align.AlignUp((nuint)65).Should().Be((nuint)128);
+        align.AlignUp((nuint)64).Should().Be((nuint)64);
+    }
+
+    [Fact]
+    public void Alignment_AlignDown_RoundsCorrectly()
+    {
+        var align = new Alignment(64);
+        align.AlignDown((nuint)65).Should().Be((nuint)64);
+        align.AlignDown((nuint)127).Should().Be((nuint)64);
+    }
+
+    [Fact]
+    public void Alignment_IsAligned_DetectsCorrectly()
+    {
+        var align = new Alignment(64);
+        align.IsAligned((nuint)64).Should().BeTrue();
+        align.IsAligned((nuint)65).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Alignment_Equality_SameValues_AreEqual()
+    {
+        var a = new Alignment(64);
+        var b = new Alignment(64);
         a.Should().Be(b);
         (a == b).Should().BeTrue();
     }

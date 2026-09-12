@@ -1,5 +1,7 @@
 namespace Axrone.Memory;
 
+using Axrone.Utility.Alignment;
+
 public sealed unsafe class MonotonicArenaBuffer : IDisposable
 {
     private struct ArenaSegment
@@ -21,9 +23,9 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     {
         if (segmentCapacity <= 0) ThrowHelper.ThrowArgumentOutOfRangeException(nameof(segmentCapacity));
 
-        _segmentCapacity = AlignTo64(segmentCapacity);
+        _segmentCapacity = Alignment.CacheLine64.AlignUp(segmentCapacity);
         _segments = new ArenaSegment[4];
-        void* initialAlloc = NativeMemory.AlignedAlloc((nuint)_segmentCapacity, 64);
+        void* initialAlloc = NativeMemory.AlignedAlloc((nuint)_segmentCapacity, (nuint)Alignment.CacheLine64Bytes);
         if (initialAlloc == null) ThrowHelper.ThrowInsufficientMemory("Failed to allocate initial arena chunk.");
 
         _segments[0] = new ArenaSegment { MemoryBlock = initialAlloc, ByteCapacity = _segmentCapacity };
@@ -46,7 +48,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     {
         nint byteCount = checked((nint)count * (nint)sizeof(T));
         void* pointer = AllocateBytes(byteCount);
-        NativeBlockMemoryManager<T> manager = new((T*)pointer, count, 64);
+        NativeBlockMemoryManager<T> manager = new((T*)pointer, count, (nuint)Alignment.CacheLine64Bytes);
         return manager.Memory;
     }
 
@@ -56,7 +58,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
         ThrowIfDisposed();
         if (byteCount <= 0) return null;
 
-        nint alignedAllocationSize = AlignTo64(byteCount);
+        nint alignedAllocationSize = Alignment.CacheLine64.AlignUp(byteCount);
 
         // Lock-free fast path: atomic bump pointer
         nint offset = (nint)Interlocked.Add(ref _currentOffset, (long)alignedAllocationSize);
@@ -84,7 +86,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
             }
             else
             {
-                void* newBlock = NativeMemory.AlignedAlloc((nuint)newCapacity, 64);
+                void* newBlock = NativeMemory.AlignedAlloc((nuint)newCapacity, (nuint)Alignment.CacheLine64Bytes);
                 if (newBlock == null) ThrowHelper.ThrowInsufficientMemory($"Failed to allocate arena chunk of {newCapacity} bytes.");
 
                 if (_activeSegmentCount == _segments.Length) Array.Resize(ref _segments, _segments.Length * 2);
@@ -140,9 +142,6 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
             }
         }
     }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static nint AlignTo64(nint size) => (size + 63) & ~63;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfDisposed() => _tracker.ThrowIfDisposed(nameof(MonotonicArenaBuffer));
