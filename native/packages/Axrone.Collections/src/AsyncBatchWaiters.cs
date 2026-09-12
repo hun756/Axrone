@@ -267,30 +267,44 @@ internal sealed class AsyncBatchQueueCoordinator<T>
         }
 
         AsyncBatchWaiter<T>? unfulfilledBatchHead = null, unfulfilledBatchTail = null;
+        bool batchSaturated = false;
         while (batchWaiters != null)
         {
             AsyncBatchWaiter<T> current = batchWaiters;
             batchWaiters = batchWaiters.Next;
             current.Next = null;
 
-            int enqueued = queue.TryEnqueueBatch(current.MemoryIn.Span);
-            if (enqueued > 0)
-                current.Complete(enqueued);
-            else
-                AppendUnfulfilled(ref unfulfilledBatchHead, ref unfulfilledBatchTail, current);
+            if (!batchSaturated)
+            {
+                int enqueued = queue.TryEnqueueBatch(current.MemoryIn.Span);
+                if (enqueued > 0)
+                {
+                    current.Complete(enqueued);
+                    continue;
+                }
+                batchSaturated = true;
+            }
+            AppendUnfulfilled(ref unfulfilledBatchHead, ref unfulfilledBatchTail, current);
         }
 
         AsyncItemWaiter<T>? unfulfilledItemHead = null, unfulfilledItemTail = null;
+        bool itemSaturated = false;
         while (itemWaiters != null)
         {
             AsyncItemWaiter<T> current = itemWaiters;
             itemWaiters = itemWaiters.Next;
             current.Next = null;
 
-            if (queue.TryEnqueue(current.Item))
-                current.Complete(default!);
-            else
-                AppendUnfulfilled(ref unfulfilledItemHead, ref unfulfilledItemTail, current);
+            if (!itemSaturated)
+            {
+                if (queue.TryEnqueue(current.Item))
+                {
+                    current.Complete(default!);
+                    continue;
+                }
+                itemSaturated = true;
+            }
+            AppendUnfulfilled(ref unfulfilledItemHead, ref unfulfilledItemTail, current);
         }
 
         RequeueUnfulfilled(
@@ -316,30 +330,44 @@ internal sealed class AsyncBatchQueueCoordinator<T>
         }
 
         AsyncBatchWaiter<T>? unfulfilledBatchHead = null, unfulfilledBatchTail = null;
+        bool batchSaturated = false;
         while (batchWaiters != null)
         {
             AsyncBatchWaiter<T> current = batchWaiters;
             batchWaiters = batchWaiters.Next;
             current.Next = null;
 
-            int dequeued = queue.TryDequeueBatch(current.MemoryOut.Span);
-            if (dequeued > 0)
-                current.Complete(dequeued);
-            else
-                AppendUnfulfilled(ref unfulfilledBatchHead, ref unfulfilledBatchTail, current);
+            if (!batchSaturated)
+            {
+                int dequeued = queue.TryDequeueBatch(current.MemoryOut.Span);
+                if (dequeued > 0)
+                {
+                    current.Complete(dequeued);
+                    continue;
+                }
+                batchSaturated = true;
+            }
+            AppendUnfulfilled(ref unfulfilledBatchHead, ref unfulfilledBatchTail, current);
         }
 
         AsyncItemWaiter<T>? unfulfilledItemHead = null, unfulfilledItemTail = null;
+        bool itemSaturated = false;
         while (itemWaiters != null)
         {
             AsyncItemWaiter<T> current = itemWaiters;
             itemWaiters = itemWaiters.Next;
             current.Next = null;
 
-            if (queue.TryDequeue(out T? item))
-                current.Complete(item);
-            else
-                AppendUnfulfilled(ref unfulfilledItemHead, ref unfulfilledItemTail, current);
+            if (!itemSaturated)
+            {
+                if (queue.TryDequeue(out T? item))
+                {
+                    current.Complete(item);
+                    continue;
+                }
+                itemSaturated = true;
+            }
+            AppendUnfulfilled(ref unfulfilledItemHead, ref unfulfilledItemTail, current);
         }
 
         RequeueUnfulfilled(
