@@ -1,3 +1,4 @@
+using Axrone.Utility.Alignment;
 using Enterprise.Patterns.Result;
 
 namespace Axrone.Collections;
@@ -8,7 +9,7 @@ internal struct PaddedRingPosition
     [FieldOffset(0)]
     public long EnqueuePosition;
 
-    [FieldOffset(128)]
+    [FieldOffset(Alignment.CacheLine128Bytes)]
     public long DequeuePosition;
 }
 
