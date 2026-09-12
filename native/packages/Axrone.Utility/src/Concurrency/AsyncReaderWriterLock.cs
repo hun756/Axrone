@@ -51,6 +51,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     private int _readerCount;
     private int _upgraderCount;
     private int _writerCount;
+    private int _writerQueued;
     private volatile int _disposeState;
 
     /// <summary>
@@ -203,14 +204,14 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
             }
         }
 
-        _writeSemaphore.Wait();
+        _upgradeSemaphore.Wait();
         try
         {
             Interlocked.Increment(ref _readerCount);
         }
         finally
         {
-            _writeSemaphore.Release();
+            _upgradeSemaphore.Release();
         }
 
         if (_supportRecursion && _recursiveData is not null)
@@ -248,14 +249,14 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
             }
         }
 
-        await _writeSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _upgradeSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             Interlocked.Increment(ref _readerCount);
         }
         finally
         {
-            _writeSemaphore.Release();
+            _upgradeSemaphore.Release();
         }
 
         if (_supportRecursion && _recursiveData is not null)
@@ -437,8 +438,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         _writeSemaphore.Wait();
         try
         {
-            WaitForReadersToDrain();
-            Interlocked.Increment(ref _writerCount);
+            Interlocked.Increment(ref _writerQueued);
+            try
+            {
+                WaitForReadersToDrain();
+                Interlocked.Increment(ref _writerCount);
+            }
+            catch
+            {
+                Interlocked.Decrement(ref _writerQueued);
+                throw;
+            }
         }
         catch
         {
@@ -771,6 +781,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         }
 
         Interlocked.Decrement(ref _writerCount);
+        Interlocked.Decrement(ref _writerQueued);
         _writeSemaphore.Release();
     }
 
