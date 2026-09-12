@@ -27,3 +27,10 @@ public sealed class SingletonAlreadyInitializedException : SingletonException
     public SingletonAlreadyInitializedException(string message) : base(message) { }
     public SingletonAlreadyInitializedException(string message, Exception? innerException) : base(message, innerException) { }
 }
+
+public sealed class SingletonNotFoundException : SingletonException
+{
+    public SingletonNotFoundException() { }
+    public SingletonNotFoundException(string message) : base(message) { }
+    public SingletonNotFoundException(string message, Exception? innerException) : base(message, innerException) { }
+}
