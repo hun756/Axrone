@@ -17,12 +17,20 @@ public static class FloatCompare
     /// <summary>Compare two floats with absolute epsilon tolerance.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool AlmostEqual(float a, float b, float epsilon = DefaultFloatEpsilon)
-        => MathF.Abs(a - b) <= epsilon;
+    {
+        if (a == b) return true;
+        if (float.IsNaN(a) && float.IsNaN(b)) return true;
+        return MathF.Abs(a - b) <= epsilon;
+    }
 
     /// <summary>Compare two doubles with absolute epsilon tolerance.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool AlmostEqual(double a, double b, double epsilon = DefaultDoubleEpsilon)
-        => Math.Abs(a - b) <= epsilon;
+    {
+        if (a == b) return true;
+        if (double.IsNaN(a) && double.IsNaN(b)) return true;
+        return Math.Abs(a - b) <= epsilon;
+    }
 
     /// <summary>
     /// Compare two floats with relative + absolute epsilon (ULP-aware).
@@ -52,6 +60,8 @@ public static class FloatCompare
     public static int Compare(float a, float b, float epsilon = DefaultFloatEpsilon)
     {
         if (AlmostEqual(a, b, epsilon)) return 0;
+        if (float.IsNaN(a)) return float.IsNaN(b) ? 0 : 1;
+        if (float.IsNaN(b)) return -1;
         return a < b ? -1 : 1;
     }
 
@@ -60,6 +70,8 @@ public static class FloatCompare
     public static int Compare(double a, double b, double epsilon = DefaultDoubleEpsilon)
     {
         if (AlmostEqual(a, b, epsilon)) return 0;
+        if (double.IsNaN(a)) return double.IsNaN(b) ? 0 : 1;
+        if (double.IsNaN(b)) return -1;
         return a < b ? -1 : 1;
     }
 
