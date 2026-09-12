@@ -3,51 +3,6 @@ namespace Axrone.Utility.Alignment;
 public static unsafe class MemoryAligner
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static nuint AlignUp(nuint address, Alignment alignment) => alignment.AlignUp(address);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static nuint AlignDown(nuint address, Alignment alignment) => alignment.AlignDown(address);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsAligned(nuint address, Alignment alignment) => alignment.IsAligned(address);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void* AlignUp(void* p, Alignment alignment) => alignment.AlignUp(p);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void* AlignDown(void* p, Alignment alignment) => alignment.AlignDown(p);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsAligned(void* p, Alignment alignment) => alignment.IsAligned(p);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong AlignUp(ulong address, Alignment alignment) => alignment.AlignUp(address);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong AlignDown(ulong address, Alignment alignment) => alignment.AlignDown(address);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsAligned(ulong address, Alignment alignment) => alignment.IsAligned(address);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static long AlignUp(long address, Alignment alignment) => alignment.AlignUp(address);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static long AlignDown(long address, Alignment alignment) => alignment.AlignDown(address);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsAligned(long address, Alignment alignment) => alignment.IsAligned(address);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static nint AlignUp(nint address, Alignment alignment) => alignment.AlignUp(address);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static nint AlignDown(nint address, Alignment alignment) => alignment.AlignDown(address);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsAligned(nint address, Alignment alignment) => alignment.IsAligned(address);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static nuint AlignUp<TPolicy>(nuint address) where TPolicy : struct, IAlignmentPolicy<TPolicy> =>
         TPolicy.AlignUp(address);
 
