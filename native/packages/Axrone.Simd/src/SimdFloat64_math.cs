@@ -85,7 +85,8 @@ public static unsafe partial class SimdFloat64
         Vector512<long> expVal = Vector512.ConditionalSelect(subMask, n + Vector512.Create(1077L), biased);
         Vector512<double> pow2 = Vector512.ShiftLeft(expVal, 52).AsDouble()
             * Vector512.ConditionalSelect(subMask.AsDouble(), Vector512.Create(5.551115123125783e-17), Vector512<double>.One);
-        return pow2 * p;
+        Vector512<double> result = pow2 * p;
+        return Vector512.ConditionalSelect(Vector512.Equals(x, x), result, x);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -115,7 +116,8 @@ public static unsafe partial class SimdFloat64
         Vector256<long> expVal = Vector256.ConditionalSelect(subMask, n + Vector256.Create(1077L), biased);
         Vector256<double> pow2 = Vector256.ShiftLeft(expVal, 52).AsDouble()
             * Vector256.ConditionalSelect(subMask.AsDouble(), Vector256.Create(5.551115123125783e-17), Vector256<double>.One);
-        return pow2 * p;
+        Vector256<double> result = pow2 * p;
+        return Vector256.ConditionalSelect(Vector256.Equals(x, x), result, x);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -145,11 +147,13 @@ public static unsafe partial class SimdFloat64
         Vector128<long> expVal = Vector128.ConditionalSelect(subMask, n + Vector128.Create(1077L), biased);
         Vector128<double> pow2 = Vector128.ShiftLeft(expVal, 52).AsDouble()
             * Vector128.ConditionalSelect(subMask.AsDouble(), Vector128.Create(5.551115123125783e-17), Vector128<double>.One);
-        return pow2 * p;
+        Vector128<double> result = pow2 * p;
+        return Vector128.ConditionalSelect(Vector128.Equals(x, x), result, x);
     }
 
     private static double ExpScalar(double x)
     {
+        if (double.IsNaN(x)) return x;
         x = Math.Max(-ExpClamp, Math.Min(ExpClamp, x));
         double t = x * Log2E;
         long n = (long)Math.Round(t);
@@ -428,7 +432,23 @@ public static unsafe partial class SimdFloat64
         {
             nuint step = (nuint)Vector512<double>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
-                ExpKernel512(Vector512.LoadUnsafe(in eRef, i) * LogKernel512(Vector512.LoadUnsafe(in bRef, i))).StoreUnsafe(ref dRef, i);
+            {
+                Vector512<double> b = Vector512.LoadUnsafe(in bRef, i);
+                Vector512<double> e = Vector512.LoadUnsafe(in eRef, i);
+                Vector512<double> result = ExpKernel512(e * LogKernel512(b));
+                Vector512<double> negBase = Vector512.LessThan(b, Vector512<double>.Zero);
+                if (negBase != Vector512<double>.Zero)
+                {
+                    for (nuint j = 0; j < step; j++)
+                    {
+                        if (Unsafe.Add(ref Unsafe.As<Vector512<double>, double>(ref negBase), (nint)j) != 0.0)
+                            Unsafe.Add(ref Unsafe.As<Vector512<double>, double>(ref result), (nint)j) =
+                                Math.Pow(Unsafe.Add(ref Unsafe.As<Vector512<double>, double>(ref b), (nint)j),
+                                         Unsafe.Add(ref Unsafe.As<Vector512<double>, double>(ref e), (nint)j));
+                    }
+                }
+                result.StoreUnsafe(ref dRef, i);
+            }
         }
         for (; i < length; ++i)
             Unsafe.Add(ref dRef, (nint)i) = Math.Pow(Unsafe.Add(ref bRef, (nint)i), Unsafe.Add(ref eRef, (nint)i));
