@@ -396,14 +396,42 @@ public static unsafe partial class SimdFloat32
             {
                 Vector512<float> b = Vector512.LoadUnsafe(in bRef, i);
                 Vector512<float> e = Vector512.LoadUnsafe(in eRef, i);
-                (ExpKernel512(e * LogKernel512(b))).StoreUnsafe(ref dRef, i);
+                Vector512<float> result = ExpKernel512(e * LogKernel512(b));
+                Vector512<float> negBase = Vector512.LessThan(b, Vector512<float>.Zero);
+                if (negBase != Vector512<float>.Zero)
+                {
+                    for (nuint j = 0; j < step; j++)
+                    {
+                        if (Unsafe.Add(ref Unsafe.As<Vector512<float>, float>(ref negBase), (nint)j) != 0f)
+                            Unsafe.Add(ref Unsafe.As<Vector512<float>, float>(ref result), (nint)j) =
+                                MathF.Pow(Unsafe.Add(ref Unsafe.As<Vector512<float>, float>(ref b), (nint)j),
+                                          Unsafe.Add(ref Unsafe.As<Vector512<float>, float>(ref e), (nint)j));
+                    }
+                }
+                result.StoreUnsafe(ref dRef, i);
             }
         }
         else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
         {
             nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
-                (ExpKernel256(Vector256.LoadUnsafe(in eRef, i) * LogKernel256(Vector256.LoadUnsafe(in bRef, i)))).StoreUnsafe(ref dRef, i);
+            {
+                Vector256<float> b = Vector256.LoadUnsafe(in bRef, i);
+                Vector256<float> e = Vector256.LoadUnsafe(in eRef, i);
+                Vector256<float> result = ExpKernel256(e * LogKernel256(b));
+                Vector256<float> negBase = Vector256.LessThan(b, Vector256<float>.Zero);
+                if (negBase != Vector256<float>.Zero)
+                {
+                    for (nuint j = 0; j < step; j++)
+                    {
+                        if (Unsafe.Add(ref Unsafe.As<Vector256<float>, float>(ref negBase), (nint)j) != 0f)
+                            Unsafe.Add(ref Unsafe.As<Vector256<float>, float>(ref result), (nint)j) =
+                                MathF.Pow(Unsafe.Add(ref Unsafe.As<Vector256<float>, float>(ref b), (nint)j),
+                                          Unsafe.Add(ref Unsafe.As<Vector256<float>, float>(ref e), (nint)j));
+                    }
+                }
+                result.StoreUnsafe(ref dRef, i);
+            }
         }
         for (; i < length; ++i)
             Unsafe.Add(ref dRef, (nint)i) = MathF.Pow(Unsafe.Add(ref bRef, (nint)i), Unsafe.Add(ref eRef, (nint)i));
