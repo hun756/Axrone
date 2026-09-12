@@ -499,8 +499,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
                 try
                 {
-                    WaitForReadersToDrain();
-                    Interlocked.Increment(ref _writerCount);
+                    Interlocked.Increment(ref _writerQueued);
+                    try
+                    {
+                        WaitForReadersToDrain();
+                        Interlocked.Increment(ref _writerCount);
+                    }
+                    catch
+                    {
+                        Interlocked.Decrement(ref _writerQueued);
+                        throw;
+                    }
                 }
                 catch
                 {
@@ -520,8 +529,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         try
         {
-            WaitForReadersToDrain();
-            Interlocked.Increment(ref _writerCount);
+            Interlocked.Increment(ref _writerQueued);
+            try
+            {
+                WaitForReadersToDrain();
+                Interlocked.Increment(ref _writerCount);
+            }
+            catch
+            {
+                Interlocked.Decrement(ref _writerQueued);
+                throw;
+            }
         }
         catch
         {
@@ -578,8 +596,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
                 try
                 {
-                    WaitForReadersToDrain();
-                    Interlocked.Increment(ref _writerCount);
+                    Interlocked.Increment(ref _writerQueued);
+                    try
+                    {
+                        WaitForReadersToDrain();
+                        Interlocked.Increment(ref _writerCount);
+                    }
+                    catch
+                    {
+                        Interlocked.Decrement(ref _writerQueued);
+                        throw;
+                    }
                 }
                 catch
                 {
@@ -601,8 +628,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         try
         {
-            WaitForReadersToDrain();
-            Interlocked.Increment(ref _writerCount);
+            Interlocked.Increment(ref _writerQueued);
+            try
+            {
+                WaitForReadersToDrain();
+                Interlocked.Increment(ref _writerCount);
+            }
+            catch
+            {
+                Interlocked.Decrement(ref _writerQueued);
+                throw;
+            }
         }
         catch
         {
@@ -653,8 +689,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
                 await _writeSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    WaitForReadersToDrain();
-                    Interlocked.Increment(ref _writerCount);
+                    Interlocked.Increment(ref _writerQueued);
+                    try
+                    {
+                        WaitForReadersToDrain();
+                        Interlocked.Increment(ref _writerCount);
+                    }
+                    catch
+                    {
+                        Interlocked.Decrement(ref _writerQueued);
+                        throw;
+                    }
                 }
                 catch
                 {
@@ -670,8 +715,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         await _writeSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            WaitForReadersToDrain();
-            Interlocked.Increment(ref _writerCount);
+            Interlocked.Increment(ref _writerQueued);
+            try
+            {
+                WaitForReadersToDrain();
+                Interlocked.Increment(ref _writerCount);
+            }
+            catch
+            {
+                Interlocked.Decrement(ref _writerQueued);
+                throw;
+            }
         }
         catch
         {

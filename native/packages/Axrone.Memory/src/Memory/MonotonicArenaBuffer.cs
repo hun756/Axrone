@@ -49,7 +49,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     {
         nint byteCount = checked((nint)count * (nint)sizeof(T));
         void* pointer = AllocateBytes(byteCount);
-        NativeBlockMemoryManager<T> manager = new((T*)pointer, count, (nuint)Alignment.CacheLine64Bytes);
+        ArenaBackedMemoryManager<T> manager = new((T*)pointer, count, this);
         return manager.Memory;
     }
 
@@ -150,5 +150,37 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ThrowIfDisposed() => _tracker.ThrowIfDisposed(nameof(MonotonicArenaBuffer));
+    internal void ThrowIfDisposed() => _tracker.ThrowIfDisposed(nameof(MonotonicArenaBuffer));
+}
+
+internal sealed unsafe class ArenaBackedMemoryManager<T> : MemoryManager<T> where T : unmanaged
+{
+    private readonly T* _pointer;
+    private readonly int _length;
+    private readonly MonotonicArenaBuffer _arena;
+
+    public ArenaBackedMemoryManager(T* pointer, int length, MonotonicArenaBuffer arena)
+    {
+        _pointer = pointer;
+        _length = length;
+        _arena = arena;
+    }
+
+    public override Span<T> GetSpan()
+    {
+        _arena.ThrowIfDisposed();
+        return new Span<T>(_pointer, _length);
+    }
+
+    public override MemoryHandle Pin(int elementIndex = 0)
+    {
+        _arena.ThrowIfDisposed();
+        if ((uint)elementIndex > (uint)_length)
+            ThrowHelper.ThrowArgumentOutOfRangeException(nameof(elementIndex));
+        return new MemoryHandle(_pointer + elementIndex);
+    }
+
+    public override void Unpin() { }
+
+    protected override void Dispose(bool disposing) { }
 }
