@@ -25,7 +25,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
 
         _segmentCapacity = Alignment.CacheLine64.AlignUp(segmentCapacity);
         _segments = new ArenaSegment[4];
-        void* initialAlloc = NativeMemory.AlignedAlloc((nuint)_segmentCapacity, 64);
+        void* initialAlloc = NativeMemory.AlignedAlloc((nuint)_segmentCapacity, (nuint)Alignment.CacheLine64Bytes);
         if (initialAlloc == null) ThrowHelper.ThrowInsufficientMemory("Failed to allocate initial arena chunk.");
 
         _segments[0] = new ArenaSegment { MemoryBlock = initialAlloc, ByteCapacity = _segmentCapacity };
@@ -48,7 +48,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     {
         nint byteCount = checked((nint)count * (nint)sizeof(T));
         void* pointer = AllocateBytes(byteCount);
-        NativeBlockMemoryManager<T> manager = new((T*)pointer, count, 64);
+        NativeBlockMemoryManager<T> manager = new((T*)pointer, count, (nuint)Alignment.CacheLine64Bytes);
         return manager.Memory;
     }
 
@@ -86,7 +86,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
             }
             else
             {
-                void* newBlock = NativeMemory.AlignedAlloc((nuint)newCapacity, 64);
+                void* newBlock = NativeMemory.AlignedAlloc((nuint)newCapacity, (nuint)Alignment.CacheLine64Bytes);
                 if (newBlock == null) ThrowHelper.ThrowInsufficientMemory($"Failed to allocate arena chunk of {newCapacity} bytes.");
 
                 if (_activeSegmentCount == _segments.Length) Array.Resize(ref _segments, _segments.Length * 2);
