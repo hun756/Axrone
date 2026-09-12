@@ -134,4 +134,39 @@ public static class ThrowHelper
     {
         throw new InsufficientMemoryException(message);
     }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidAlignment(uint value)
+    {
+        throw new ArgumentOutOfRangeException(nameof(value), value, "Alignment must be a non-zero power of two.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowTypeTooLargeForCacheLine(int typeSize, int maxAllowed)
+    {
+        throw new InvalidOperationException($"Type size of {typeSize} bytes exceeds the maximum allowable cacheline constraint of {maxAllowed} bytes.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowOutOfMemory(nuint bytes, nuint alignment)
+    {
+        throw new InsufficientMemoryException($"Failed to allocate {bytes} bytes with alignment boundary {alignment}.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowNegativeCount()
+    {
+        throw new ArgumentOutOfRangeException("count", "Count cannot be negative.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowDestinationTooShort()
+    {
+        throw new ArgumentException("Destination span is shorter than the source span.", "destinations");
+    }
 }
