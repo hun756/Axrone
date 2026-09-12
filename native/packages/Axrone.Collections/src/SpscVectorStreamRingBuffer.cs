@@ -10,8 +10,8 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
     private readonly NativeAlignedBlock _storage;
     private readonly int _capacity;
     private readonly int _mask;
-    private readonly long* _head;
-    private readonly long* _tail;
+    private AlignedAtomicCounter128 _head;
+    private AlignedAtomicCounter128 _tail;
     private DisposalTracker _tracker;
 
     public int Capacity => _capacity;
@@ -23,11 +23,6 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
         _mask = cap - 1;
         _storage = NativeAlignedMemoryAllocator.Shared.Allocate(
             new ByteSize((nuint)cap * (nuint)sizeof(T)), Alignment.CacheLine64, zeroInitialize: true);
-
-        _head = (long*)NativeMemory.AlignedAlloc(128, 128);
-        _tail = (long*)NativeMemory.AlignedAlloc(128, 128);
-        NativeMemory.Clear(_head, 128);
-        NativeMemory.Clear(_tail, 128);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -36,8 +31,8 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
         int count = source.Length;
         if (count > _capacity) return false;
 
-        long currentTail = Volatile.Read(ref *_tail);
-        long currentHead = Volatile.Read(ref *_head);
+        long currentTail = _tail.Value;
+        long currentHead = _head.Value;
 
         if ((currentTail - currentHead) + count > _capacity)
         {
@@ -58,15 +53,15 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
             source[contiguous..].CopyTo(buffer[..(count - contiguous)]);
         }
 
-        Volatile.Write(ref *_tail, currentTail + count);
+        _tail.Add(count);
         return true;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public bool TryRead(Span<T> destination, out int elementsRead)
     {
-        long currentHead = Volatile.Read(ref *_head);
-        long currentTail = Volatile.Read(ref *_tail);
+        long currentHead = _head.Value;
+        long currentTail = _tail.Value;
         long available = currentTail - currentHead;
 
         if (available <= 0)
@@ -90,7 +85,7 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
             buffer[..(toRead - contiguous)].CopyTo(destination[contiguous..]);
         }
 
-        Volatile.Write(ref *_head, currentHead + toRead);
+        _head.Add(toRead);
         elementsRead = toRead;
         return true;
     }
@@ -111,8 +106,6 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
         if (_tracker.TryDispose())
         {
             _storage.Dispose();
-            if (_head != null) NativeMemory.AlignedFree(_head);
-            if (_tail != null) NativeMemory.AlignedFree(_tail);
         }
     }
 }
