@@ -437,6 +437,28 @@ public static unsafe partial class SimdFloat32
                 result.StoreUnsafe(ref dRef, i);
             }
         }
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
+        {
+            nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector128<float> b = Vector128.LoadUnsafe(in bRef, i);
+                Vector128<float> e = Vector128.LoadUnsafe(in eRef, i);
+                Vector128<float> result = ExpKernel128(e * LogKernel128(b));
+                Vector128<float> negBase = Vector128.LessThan(b, Vector128<float>.Zero);
+                if (negBase != Vector128<float>.Zero)
+                {
+                    for (nuint j = 0; j < step; j++)
+                    {
+                        if (Unsafe.Add(ref Unsafe.As<Vector128<float>, float>(ref negBase), (nint)j) != 0f)
+                            Unsafe.Add(ref Unsafe.As<Vector128<float>, float>(ref result), (nint)j) =
+                                MathF.Pow(Unsafe.Add(ref Unsafe.As<Vector128<float>, float>(ref b), (nint)j),
+                                          Unsafe.Add(ref Unsafe.As<Vector128<float>, float>(ref e), (nint)j));
+                    }
+                }
+                result.StoreUnsafe(ref dRef, i);
+            }
+        }
         for (; i < length; ++i)
             Unsafe.Add(ref dRef, (nint)i) = MathF.Pow(Unsafe.Add(ref bRef, (nint)i), Unsafe.Add(ref eRef, (nint)i));
     }
