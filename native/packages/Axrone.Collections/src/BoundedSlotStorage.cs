@@ -205,4 +205,19 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
 
         GC.SuppressFinalize(this);
     }
+
+    ~BoundedSlotStorage()
+    {
+        if (_tracker.IsDisposed) return;
+
+        if (_sequences != null)
+        {
+            NativeMemory.AlignedFree(_sequences);
+        }
+
+        if (_nativePointer != 0)
+        {
+            NativeMemory.AlignedFree((void*)_nativePointer);
+        }
+    }
 }

@@ -154,6 +154,13 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
     {
         if (_tracker.TryDispose())
         {
+            long active = Volatile.Read(ref _activeRentals);
+            if (active > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot dispose ContiguousSlabPool with {active} active rental(s). Return all rented blocks before disposing.");
+            }
+
             for (int i = 0; i < _slotArray.Length; i++) _slotArray[i].FinalizeEviction();
             _freeSlotQueue.Dispose();
             ((IDisposable)_rootManager).Dispose();
