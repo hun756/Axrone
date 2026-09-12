@@ -4,14 +4,14 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 
 /// <summary>
-/// CRTP contract for nodes pooled by <see cref="LockFreeStackPool{TNode}"/>.
+/// CRTP contract for nodes pooled by <see cref="SpinLockStackPool{TNode}"/>.
 /// </summary>
 internal interface IPooledWaiterNode<TSelf>
     where TSelf : class, IPooledWaiterNode<TSelf>, new()
 {
     TSelf? Next { get; set; }
 
-    void OnRented(LockFreeStackPool<TSelf> pool, bool isEnqueue);
+    void OnRented(SpinLockStackPool<TSelf> pool, bool isEnqueue);
 }
 
 /// <summary>
@@ -19,7 +19,7 @@ internal interface IPooledWaiterNode<TSelf>
 /// Rent pops an idle node (or allocates when empty), Return pushes it back.
 /// Uses a spinlock to prevent ABA problems that affect lock-free Treiber stacks.
 /// </summary>
-internal sealed class LockFreeStackPool<TNode>
+internal sealed class SpinLockStackPool<TNode>
     where TNode : class, IPooledWaiterNode<TNode>, new()
 {
     private TNode? _head;

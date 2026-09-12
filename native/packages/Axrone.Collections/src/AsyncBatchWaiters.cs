@@ -11,7 +11,7 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>, IPooledWaiter
 {
     private ManualResetValueTaskSourceCore<int> _core;
     private CancellationTokenRegistration _registration;
-    private LockFreeStackPool<AsyncBatchWaiter<T>>? _pool;
+    private SpinLockStackPool<AsyncBatchWaiter<T>>? _pool;
 
     public AsyncBatchWaiter<T>? Next { get; set; }
 
@@ -27,7 +27,7 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>, IPooledWaiter
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void OnRented(LockFreeStackPool<AsyncBatchWaiter<T>> pool, bool isEnqueue)
+    public void OnRented(SpinLockStackPool<AsyncBatchWaiter<T>> pool, bool isEnqueue)
     {
         _core.Reset();
         _pool = pool;
@@ -86,7 +86,7 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
 {
     private ManualResetValueTaskSourceCore<T> _core;
     private CancellationTokenRegistration _registration;
-    private LockFreeStackPool<AsyncItemWaiter<T>>? _pool;
+    private SpinLockStackPool<AsyncItemWaiter<T>>? _pool;
 
     public AsyncItemWaiter<T>? Next { get; set; }
 
@@ -101,7 +101,7 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void OnRented(LockFreeStackPool<AsyncItemWaiter<T>> pool, bool isEnqueue)
+    public void OnRented(SpinLockStackPool<AsyncItemWaiter<T>> pool, bool isEnqueue)
     {
         _core.Reset();
         _pool = pool;
@@ -171,8 +171,8 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
 internal sealed class AsyncBatchQueueCoordinator<T>
 {
     private readonly Lock _syncLock = new();
-    private readonly LockFreeStackPool<AsyncBatchWaiter<T>> _batchPool = new();
-    private readonly LockFreeStackPool<AsyncItemWaiter<T>> _itemPool = new();
+    private readonly SpinLockStackPool<AsyncBatchWaiter<T>> _batchPool = new();
+    private readonly SpinLockStackPool<AsyncItemWaiter<T>> _itemPool = new();
 
     private AsyncBatchWaiter<T>? _batchEnqHead, _batchEnqTail;
     private AsyncBatchWaiter<T>? _batchDeqHead, _batchDeqTail;
