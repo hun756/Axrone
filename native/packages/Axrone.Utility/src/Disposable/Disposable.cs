@@ -111,6 +111,19 @@ public sealed class ConcurrentCompositeDisposable : IDisposable, IAsyncDisposabl
         ArgumentNullException.ThrowIfNull(disposable);
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         _disposables.Push(disposable);
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            IDisposable? orphaned = null;
+            try
+            {
+                if (_disposables.TryPop(out orphaned))
+                    orphaned?.Dispose();
+            }
+            finally
+            {
+                orphaned = null;
+            }
+        }
     }
 
     public void Dispose()
