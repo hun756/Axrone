@@ -164,6 +164,7 @@ public static unsafe partial class SimdFloat64
         Vector512<double> pow2 = Vector512.ShiftLeft(expVal, 52).AsDouble()
             * Vector512.ConditionalSelect(subMask.AsDouble(), Vector512.Create(5.551115123125783e-17), Vector512<double>.One);
         Vector512<double> result = pow2 * p;
+        result = Vector512.ConditionalSelect(Vector512.Equals(x, Vector512.Create(double.NegativeInfinity)), Vector512<double>.Zero, result);
         return Vector512.ConditionalSelect(Vector512.Equals(x, x), result, x);
     }
 
@@ -195,6 +196,7 @@ public static unsafe partial class SimdFloat64
         Vector256<double> pow2 = Vector256.ShiftLeft(expVal, 52).AsDouble()
             * Vector256.ConditionalSelect(subMask.AsDouble(), Vector256.Create(5.551115123125783e-17), Vector256<double>.One);
         Vector256<double> result = pow2 * p;
+        result = Vector256.ConditionalSelect(Vector256.Equals(x, Vector256.Create(double.NegativeInfinity)), Vector256<double>.Zero, result);
         return Vector256.ConditionalSelect(Vector256.Equals(x, x), result, x);
     }
 
@@ -226,12 +228,15 @@ public static unsafe partial class SimdFloat64
         Vector128<double> pow2 = Vector128.ShiftLeft(expVal, 52).AsDouble()
             * Vector128.ConditionalSelect(subMask.AsDouble(), Vector128.Create(5.551115123125783e-17), Vector128<double>.One);
         Vector128<double> result = pow2 * p;
+        result = Vector128.ConditionalSelect(Vector128.Equals(x, Vector128.Create(double.NegativeInfinity)), Vector128<double>.Zero, result);
         return Vector128.ConditionalSelect(Vector128.Equals(x, x), result, x);
     }
 
     private static double ExpScalar(double x)
     {
         if (double.IsNaN(x)) return x;
+        if (double.IsNegativeInfinity(x)) return 0.0;
+        if (double.IsPositiveInfinity(x)) return x;
         x = Math.Max(-ExpClamp, Math.Min(ExpClamp, x));
         double t = x * Log2E;
         long n = (long)Math.Round(t);
