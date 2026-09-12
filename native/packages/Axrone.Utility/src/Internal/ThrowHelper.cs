@@ -169,4 +169,11 @@ public static class ThrowHelper
     {
         throw new ArgumentException("Destination span is shorter than the source span.", "destinations");
     }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowObjectDisposed(string objectName)
+    {
+        throw new ObjectDisposedException(objectName, "The aligned memory resource has already been disposed.");
+    }
 }
