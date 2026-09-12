@@ -25,39 +25,54 @@ public sealed class ActionDisposable : IDisposable
 
 /// <summary>
 /// Accumulates multiple <see cref="IDisposable"/> instances and disposes them in reverse order.
+/// Thread-safe for concurrent Add and Dispose calls.
 /// </summary>
 public sealed class CompositeDisposable : IDisposable
 {
     private readonly List<IDisposable> _disposables = [];
-    private bool _disposed;
+    private readonly object _gate = new();
+    private int _disposed;
 
-    public int Count => _disposables.Count;
-    public bool IsDisposed => _disposed;
+    public int Count
+    {
+        get { lock (_gate) { return _disposables.Count; } }
+    }
+
+    public bool IsDisposed => Volatile.Read(ref _disposed) == 1;
 
     public void Add(IDisposable disposable)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(disposable);
-        _disposables.Add(disposable);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed == 1, this);
+            _disposables.Add(disposable);
+        }
     }
 
     public void AddRange(IEnumerable<IDisposable> disposables)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(disposables);
-        foreach (var d in disposables)
-            _disposables.Add(d);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed == 1, this);
+            foreach (var d in disposables)
+                _disposables.Add(d);
+        }
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        IDisposable[] snapshot;
+        lock (_gate)
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
+            snapshot = [.. _disposables];
+            _disposables.Clear();
+        }
 
-        for (var i = _disposables.Count - 1; i >= 0; i--)
-            _disposables[i].Dispose();
-
-        _disposables.Clear();
+        for (var i = snapshot.Length - 1; i >= 0; i--)
+            snapshot[i].Dispose();
     }
 }
 
