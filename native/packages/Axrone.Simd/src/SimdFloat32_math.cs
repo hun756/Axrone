@@ -445,7 +445,73 @@ public static unsafe partial class SimdFloat32
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Softmax(ReadOnlySpan<float> source, Span<float> destination)
-        => SimdFloatingPointOps<float>.Softmax(source, destination);
+    {
+        ThrowHelper.ValidateDestinationSpan(destination, source);
+        nuint length = (nuint)source.Length;
+        if (length == 0) return;
+        ref float src = ref MemoryMarshal.GetReference(source);
+        ref float dst = ref MemoryMarshal.GetReference(destination);
+
+        float maxVal = float.NegativeInfinity;
+        for (nuint j = 0; j < length; ++j)
+        {
+            float v = Unsafe.Add(ref src, (nint)j);
+            if (v > maxVal) maxVal = v;
+        }
+
+        nuint i = 0;
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count)
+        {
+            Vector512<float> vMax = Vector512.Create(maxVal);
+            nuint step = (nuint)Vector512<float>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                ExpKernel512(Vector512.LoadUnsafe(in src, i) - vMax).StoreUnsafe(ref dst, i);
+        }
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        {
+            Vector256<float> vMax = Vector256.Create(maxVal);
+            nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                ExpKernel256(Vector256.LoadUnsafe(in src, i) - vMax).StoreUnsafe(ref dst, i);
+        }
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
+        {
+            Vector128<float> vMax = Vector128.Create(maxVal);
+            nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                ExpKernel128(Vector128.LoadUnsafe(in src, i) - vMax).StoreUnsafe(ref dst, i);
+        }
+        for (; i < length; ++i)
+            Unsafe.Add(ref dst, (nint)i) = ExpScalar(Unsafe.Add(ref src, (nint)i) - maxVal);
+
+        float sum = SimdFloatingPointOps<float>.ComputeSum(destination);
+        float invSum = 1f / sum;
+
+        i = 0;
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count)
+        {
+            Vector512<float> vInv = Vector512.Create(invSum);
+            nuint step = (nuint)Vector512<float>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                (Vector512.LoadUnsafe(in dst, i) * vInv).StoreUnsafe(ref dst, i);
+        }
+        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        {
+            Vector256<float> vInv = Vector256.Create(invSum);
+            nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                (Vector256.LoadUnsafe(in dst, i) * vInv).StoreUnsafe(ref dst, i);
+        }
+        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
+        {
+            Vector128<float> vInv = Vector128.Create(invSum);
+            nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+                (Vector128.LoadUnsafe(in dst, i) * vInv).StoreUnsafe(ref dst, i);
+        }
+        for (; i < length; ++i)
+            Unsafe.Add(ref dst, (nint)i) *= invSum;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Mat4x4Multiply(ReadOnlySpan<float> left, ReadOnlySpan<float> right, Span<float> destination)
