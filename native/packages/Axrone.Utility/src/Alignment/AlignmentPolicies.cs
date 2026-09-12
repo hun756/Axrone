@@ -48,14 +48,6 @@ public readonly struct Vector256AlignmentPolicy : IAlignmentPolicy<Vector256Alig
     [MethodImpl(MethodImplOptions.AggressiveInlining)] public static bool IsAligned(nuint address) => (address & 31) == 0;
 }
 
-public readonly struct Vector512AlignmentPolicy : IAlignmentPolicy<Vector512AlignmentPolicy>
-{
-    public static Alignment TargetAlignment => Alignment.Vector512;
-    [MethodImpl(MethodImplOptions.AggressiveInlining)] public static nuint AlignUp(nuint address) => (address + 63) & ~((nuint)63);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)] public static nuint AlignDown(nuint address) => address & ~((nuint)63);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)] public static bool IsAligned(nuint address) => (address & 63) == 0;
-}
-
 public readonly struct CacheLine64AlignmentPolicy : IAlignmentPolicy<CacheLine64AlignmentPolicy>
 {
     public static Alignment TargetAlignment => Alignment.CacheLine64;
