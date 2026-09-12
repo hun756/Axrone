@@ -7,7 +7,7 @@ using Axrone.Utility.Disposable;
 
 public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T : unmanaged
 {
-    private readonly AlignedMemoryBlock<T> _storage;
+    private readonly NativeAlignedBlock _storage;
     private readonly int _capacity;
     private readonly int _mask;
     private readonly long* _head;
@@ -21,7 +21,8 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
         int cap = (int)BitOperations.RoundUpToPowerOf2((uint)capacity.Value);
         _capacity = cap;
         _mask = cap - 1;
-        _storage = new AlignedMemoryBlock<T>(new BatchCapacity(cap), Alignment.CacheLine64);
+        _storage = NativeAlignedMemoryAllocator.Shared.Allocate(
+            new ByteSize((nuint)cap * (nuint)sizeof(T)), Alignment.CacheLine64, zeroInitialize: true);
 
         _head = (long*)NativeMemory.AlignedAlloc(128, 128);
         _tail = (long*)NativeMemory.AlignedAlloc(128, 128);
@@ -45,7 +46,7 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
 
         int offset = (int)(currentTail & _mask);
         int contiguous = _capacity - offset;
-        Span<T> buffer = _storage.Span;
+        Span<T> buffer = _storage.AsSpan<T>();
 
         if (count <= contiguous)
         {
@@ -77,7 +78,7 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
         int toRead = (int)Math.Min((long)destination.Length, available);
         int offset = (int)(currentHead & _mask);
         int contiguous = _capacity - offset;
-        ReadOnlySpan<T> buffer = _storage.ReadOnlySpan;
+        ReadOnlySpan<T> buffer = _storage.AsReadOnlySpan<T>();
 
         if (toRead <= contiguous)
         {
