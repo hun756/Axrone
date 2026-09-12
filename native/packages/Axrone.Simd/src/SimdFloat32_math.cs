@@ -575,36 +575,102 @@ public static unsafe partial class SimdFloat32
         ref ushort src = ref Unsafe.As<byte, ushort>(ref MemoryMarshal.GetReference(source));
         ref float dst = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
+
         if (Vector256.IsHardwareAccelerated && count >= (nuint)Vector256<ushort>.Count)
         {
-            nuint step = (nuint)Vector256<ushort>.Count, limit = count - step + 1;
+            Vector256<uint> signMask = Vector256.Create(0x8000u);
+            Vector256<uint> expMask = Vector256.Create(0x7C00u);
+            Vector256<uint> mantMask13 = Vector256.Create(0x03FFu);
+            Vector256<uint> bias = Vector256.Create(0x38000000u);
+            Vector256<uint> infExp = Vector256.Create(0x7F800000u);
+            nuint step = (nuint)Vector256<ushort>.Count;
+            nuint halfStep = (nuint)Vector256<float>.Count;
+            nuint limit = count - step + 1;
             for (; i < limit; i += step)
             {
                 Vector256<ushort> h = Vector256.LoadUnsafe(in src, i);
-                Vector256<uint> sign = (h.AsUInt32() & Vector256.Create(0x80008000u)) << 16;
-                Vector256<uint> exp = ((h.AsUInt32() & Vector256.Create(0x7C007C00u)) + Vector256.Create(0x38003800u)) & Vector256.Create(0x7F807F80u);
-                Vector256<uint> mant = (h.AsUInt32() & Vector256.Create(0x03FF03FFu)) << 13;
-                (sign | exp | mant).AsSingle().StoreUnsafe(ref dst, i);
+                Vector256<uint> lo = Vector256.WidenLower(h);
+                Vector256<uint> hi = Vector256.WidenUpper(h);
+                ConvertHalfVec256(lo, signMask, expMask, mantMask13, bias, infExp).StoreUnsafe(ref dst, i);
+                ConvertHalfVec256(hi, signMask, expMask, mantMask13, bias, infExp).StoreUnsafe(ref dst, i + halfStep);
             }
         }
         if (Vector128.IsHardwareAccelerated && count >= (nuint)Vector128<ushort>.Count)
         {
-            nuint step = (nuint)Vector128<ushort>.Count, limit = count - step + 1;
+            Vector128<uint> signMask = Vector128.Create(0x8000u);
+            Vector128<uint> expMask = Vector128.Create(0x7C00u);
+            Vector128<uint> mantMask13 = Vector128.Create(0x03FFu);
+            Vector128<uint> bias = Vector128.Create(0x38000000u);
+            Vector128<uint> infExp = Vector128.Create(0x7F800000u);
+            nuint step = (nuint)Vector128<ushort>.Count;
+            nuint halfStep = (nuint)Vector128<float>.Count;
+            nuint limit = count - step + 1;
             for (; i < limit; i += step)
             {
                 Vector128<ushort> h = Vector128.LoadUnsafe(in src, i);
-                Vector128<uint> sign = (h.AsUInt32() & Vector128.Create(0x80008000u)) << 16;
-                Vector128<uint> exp = ((h.AsUInt32() & Vector128.Create(0x7C007C00u)) + Vector128.Create(0x38003800u)) & Vector128.Create(0x7F807F80u);
-                Vector128<uint> mant = (h.AsUInt32() & Vector128.Create(0x03FF03FFu)) << 13;
-                (sign | exp | mant).AsSingle().StoreUnsafe(ref dst, i);
+                Vector128<uint> lo = Vector128.WidenLower(h);
+                Vector128<uint> hi = Vector128.WidenUpper(h);
+                ConvertHalfVec128(lo, signMask, expMask, mantMask13, bias, infExp).StoreUnsafe(ref dst, i);
+                ConvertHalfVec128(hi, signMask, expMask, mantMask13, bias, infExp).StoreUnsafe(ref dst, i + halfStep);
             }
         }
         for (; i < count; ++i)
         {
             uint h = Unsafe.Add(ref src, (nint)i);
-            uint f = ((h & 0x8000u) << 16) | (((h & 0x7C00u) + 0x38000000u) & 0x7F800000u) | ((h & 0x03FFu) << 13);
+            uint sign = (h & 0x8000u) << 16;
+            uint exp = h & 0x7C00u;
+            uint mant = h & 0x03FFu;
+
+            uint f;
+            if (exp == 0x7C00u)
+            {
+                f = sign | 0x7F800000u | (mant << 13);
+            }
+            else if (exp == 0u)
+            {
+                if (mant == 0u)
+                {
+                    Unsafe.Add(ref dst, (nint)i) = BitConverter.UInt32BitsToSingle(sign);
+                    continue;
+                }
+                int e = -1;
+                uint m = mant;
+                while ((m & 0x0400u) == 0u) { m <<= 1; e--; }
+                m &= 0x03FFu;
+                f = sign | (uint)((e + 127 + 14) << 23) | (m << 13);
+            }
+            else
+            {
+                f = sign | ((exp << 13) + 0x38000000u) | (mant << 13);
+            }
             Unsafe.Add(ref dst, (nint)i) = BitConverter.UInt32BitsToSingle(f);
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector256<float> ConvertHalfVec256(
+        Vector256<uint> h, Vector256<uint> signMask, Vector256<uint> expMask,
+        Vector256<uint> mantMask13, Vector256<uint> bias, Vector256<uint> infExp)
+    {
+        Vector256<uint> sign = (h & signMask) << 16;
+        Vector256<uint> exp = h & expMask;
+        Vector256<uint> mant = (h & mantMask13) << 13;
+        Vector256<uint> floatExp = Vector256.ConditionalSelect(
+            Vector256.Equals(exp, expMask), infExp, (exp << 13) + bias);
+        return (sign | floatExp | mant).AsSingle();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector128<float> ConvertHalfVec128(
+        Vector128<uint> h, Vector128<uint> signMask, Vector128<uint> expMask,
+        Vector128<uint> mantMask13, Vector128<uint> bias, Vector128<uint> infExp)
+    {
+        Vector128<uint> sign = (h & signMask) << 16;
+        Vector128<uint> exp = h & expMask;
+        Vector128<uint> mant = (h & mantMask13) << 13;
+        Vector128<uint> floatExp = Vector128.ConditionalSelect(
+            Vector128.Equals(exp, expMask), infExp, (exp << 13) + bias);
+        return (sign | floatExp | mant).AsSingle();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
