@@ -43,38 +43,3 @@ public readonly record struct BatchCapacity : IEquatable<BatchCapacity>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static BatchCapacity FromBatchCapacity(int value) => new(value);
 }
-
-/// <summary>
-/// Strongly-typed, self-validating memory alignment restricted to powers of two
-/// that are at least pointer-sized. Provides cache-line presets.
-/// </summary>
-[StructLayout(LayoutKind.Sequential, Pack = 8)]
-public readonly record struct MemoryAlignment : IEquatable<MemoryAlignment>
-{
-    public nuint Value { get; }
-
-    public static readonly MemoryAlignment CacheLine64 = new(64);
-    public static readonly MemoryAlignment CacheLine128 = new(128);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public MemoryAlignment(nuint value)
-    {
-        if (value < (nuint)IntPtr.Size || (value & (value - 1)) != 0)
-        {
-            ThrowHelper.ThrowInvalidAlignment(value);
-        }
-        Value = value;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator nuint(MemoryAlignment alignment) => alignment.Value;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public nuint ToUIntPtr() => Value;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static MemoryAlignment FromUIntPtr(nuint value) => new(value);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static MemoryAlignment FromMemoryAlignment(nuint value) => new(value);
-}

@@ -2,6 +2,7 @@ namespace Axrone.Collections;
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Axrone.Utility.Alignment;
 using Axrone.Utility.Disposable;
 
 public interface IAlignedMemoryBlock<T> : IDisposable where T : unmanaged
@@ -17,7 +18,7 @@ public sealed unsafe class AlignedMemoryBlock<T> : IAlignedMemoryBlock<T> where 
 {
     private nint _pointer;
     private readonly BatchCapacity _capacity;
-    private readonly MemoryAlignment _alignment;
+    private readonly Alignment _alignment;
     private DisposalTracker _tracker;
 
     public nuint Alignment => _alignment.Value;
@@ -51,7 +52,7 @@ public sealed unsafe class AlignedMemoryBlock<T> : IAlignedMemoryBlock<T> where 
         get => Span;
     }
 
-    public AlignedMemoryBlock(BatchCapacity capacity, MemoryAlignment alignment)
+    public AlignedMemoryBlock(BatchCapacity capacity, Alignment alignment)
     {
         _capacity = capacity;
         _alignment = alignment;

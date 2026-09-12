@@ -2,6 +2,7 @@ namespace Axrone.Collections;
 
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using Axrone.Utility.Alignment;
 using Axrone.Utility.Disposable;
 
 public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T : unmanaged
@@ -20,7 +21,7 @@ public sealed unsafe class SpscVectorStreamRingBuffer<T> : IDisposable where T :
         int cap = (int)BitOperations.RoundUpToPowerOf2((uint)capacity.Value);
         _capacity = cap;
         _mask = cap - 1;
-        _storage = new AlignedMemoryBlock<T>(new BatchCapacity(cap), MemoryAlignment.CacheLine64);
+        _storage = new AlignedMemoryBlock<T>(new BatchCapacity(cap), Alignment.CacheLine64);
 
         _head = (long*)NativeMemory.AlignedAlloc(128, 128);
         _tail = (long*)NativeMemory.AlignedAlloc(128, 128);
