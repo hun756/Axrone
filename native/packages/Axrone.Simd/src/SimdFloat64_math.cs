@@ -542,7 +542,8 @@ public static unsafe partial class SimdFloat64
             nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
             {
-                Vector256<double> p = ExpKernel256(Vector256.LoadUnsafe(in src, i) * Vector256.Create(2.0));
+                Vector256<double> x = Vector256.Max(Vector256.Min(Vector256.LoadUnsafe(in src, i), Vector256.Create(19.0)), Vector256.Create(-19.0));
+                Vector256<double> p = ExpKernel256(x * Vector256.Create(2.0));
                 ((p - Vector256.Create(1.0)) / (p + Vector256.Create(1.0))).StoreUnsafe(ref dst, i);
             }
         }
