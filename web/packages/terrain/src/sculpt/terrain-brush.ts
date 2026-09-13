@@ -78,7 +78,33 @@ export const applyTerrainBrushStamp = ({
         flattenTarget = heights[sampleZ * resolution + sampleX]!;
     }
 
-    const source = brush.kind === 'smooth' ? new Float32Array(heights) : heights;
+    // For smooth brush, snapshot only the region we'll read (expanded AABB for 3×3 neighborhoods).
+    let source: Float32Array;
+    let sourceOffsetX = 0;
+    let sourceOffsetZ = 0;
+    let sourceWidth = 0;
+
+    if (brush.kind === 'smooth') {
+        const snapMinX = Math.max(0, minX - 1);
+        const snapMaxX = Math.min(lastIndex, maxX + 1);
+        const snapMinZ = Math.max(0, minZ - 1);
+        const snapMaxZ = Math.min(lastIndex, maxZ + 1);
+        sourceWidth = snapMaxX - snapMinX + 1;
+        const sourceHeight = snapMaxZ - snapMinZ + 1;
+        source = new Float32Array(sourceWidth * sourceHeight);
+        sourceOffsetX = snapMinX;
+        sourceOffsetZ = snapMinZ;
+
+        for (let z = snapMinZ; z <= snapMaxZ; z += 1) {
+            const srcRow = z * resolution + snapMinX;
+            const dstRow = (z - snapMinZ) * sourceWidth;
+            for (let x = 0; x < sourceWidth; x += 1) {
+                source[dstRow + x] = heights[srcRow + x]!;
+            }
+        }
+    } else {
+        source = heights;
+    }
 
     for (let gridZ = minZ; gridZ <= maxZ; gridZ += 1) {
         for (let gridX = minX; gridX <= maxX; gridX += 1) {
@@ -127,7 +153,10 @@ export const applyTerrainBrushStamp = ({
                                 continue;
                             }
 
-                            total += source[neighborZ * resolution + neighborX]!;
+                            // Read from snapshot with adjusted coordinates.
+                            const snapX = neighborX - sourceOffsetX;
+                            const snapZ = neighborZ - sourceOffsetZ;
+                            total += source[snapZ * sourceWidth + snapX]!;
                             count += 1;
                         }
                     }
