@@ -689,11 +689,14 @@ describe('checkbox-toggle controller — real asset integration', () => {
 
 		const mark = runtime.getBoundWidget('widget-13-mark');
 		expect(mark).not.toBeNull();
-		const markRect = runtime.getLayoutBox(mark!);
 
 		// Reference-space geometry: the command rect is the mark's pixel box, so the
 		// renderer maps normalized points through it instead of re-scaling twice.
+		// commit() first so the layout pass runs after the mark transitions from
+		// invisible→visible; reading getLayoutBox before commit would return stale
+		// data from the previous layout pass (when the mark was still hidden).
 		const reference = runtime.commit();
+		const markRect = runtime.getLayoutBox(mark!);
 		const referenceStroke = reference.commands.find(
 			(cmd): cmd is StrokeRenderCommand => cmd.kind === 'stroke',
 		);
