@@ -87,7 +87,6 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
     private readonly Slot[] _slots;
     private readonly int _capacity;
     private readonly long _mask;
-    private readonly IWaitStrategy _waitStrategy;
     private readonly bool _autoClearOnDispose;
 
     private readonly ProducerEndpoint _producerEndpoint;
@@ -118,7 +117,6 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 
         _capacity = actualCapacity;
         _mask = actualCapacity - 1;
-        _waitStrategy = options.WaitStrategy ?? new AdaptiveWaitStrategy();
         _autoClearOnDispose = options.AutoClearOnDispose;
 
         _slots = new Slot[actualCapacity];
