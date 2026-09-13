@@ -422,6 +422,7 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
         // Callers must ensure no operations are in-flight when calling Dispose for complete safety.
         Thread.MemoryBarrier();
 
+        _asyncCoordinator.Dispose();
         _storage.Dispose();
     }
 }

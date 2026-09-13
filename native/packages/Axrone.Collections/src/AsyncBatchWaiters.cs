@@ -58,6 +58,13 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>, IPooledWaiter
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Fail(Exception exception)
+    {
+        _registration.Dispose();
+        _core.SetException(exception);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetResult(short token)
     {
         try
@@ -128,6 +135,13 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
     {
         _registration.Dispose();
         _core.SetResult(result);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Fail(Exception exception)
+    {
+        _registration.Dispose();
+        _core.SetException(exception);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -412,6 +426,52 @@ internal sealed class AsyncBatchQueueCoordinator<T>
                 itemHead = unfulfilledItemHead;
                 itemTail ??= unfulfilledItemTail;
             }
+        }
+    }
+
+    public void Dispose()
+    {
+        AsyncBatchWaiter<T>? batchEnq;
+        AsyncBatchWaiter<T>? batchDeq;
+        AsyncItemWaiter<T>? itemEnq;
+        AsyncItemWaiter<T>? itemDeq;
+
+        using (_syncLock.EnterScope())
+        {
+            batchEnq = _batchEnqHead;
+            batchDeq = _batchDeqHead;
+            itemEnq = _itemEnqHead;
+            itemDeq = _itemDeqHead;
+            _batchEnqHead = _batchEnqTail = null;
+            _batchDeqHead = _batchDeqTail = null;
+            _itemEnqHead = _itemEnqTail = null;
+            _itemDeqHead = _itemDeqTail = null;
+        }
+
+        var disposed = new ObjectDisposedException(typeof(AsyncBatchQueueCoordinator<T>).Name);
+        FailBatchChain(batchEnq, disposed);
+        FailBatchChain(batchDeq, disposed);
+        FailItemChain(itemEnq, disposed);
+        FailItemChain(itemDeq, disposed);
+    }
+
+    private static void FailBatchChain(AsyncBatchWaiter<T>? head, Exception exception)
+    {
+        while (head != null)
+        {
+            var next = head.Next;
+            head.Fail(exception);
+            head = next;
+        }
+    }
+
+    private static void FailItemChain(AsyncItemWaiter<T>? head, Exception exception)
+    {
+        while (head != null)
+        {
+            var next = head.Next;
+            head.Fail(exception);
+            head = next;
         }
     }
 }
