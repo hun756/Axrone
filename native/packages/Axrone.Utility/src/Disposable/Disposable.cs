@@ -113,15 +113,18 @@ public sealed class ConcurrentCompositeDisposable : IDisposable, IAsyncDisposabl
         _disposables.Push(disposable);
         if (Volatile.Read(ref _disposed) != 0)
         {
-            IDisposable? orphaned = null;
-            try
+#pragma warning disable CA2000 // popped is either disposed immediately or pushed back for later disposal
+            if (_disposables.TryPop(out var popped))
+#pragma warning restore CA2000
             {
-                if (_disposables.TryPop(out orphaned))
-                    orphaned?.Dispose();
-            }
-            finally
-            {
-                orphaned = null;
+                if (ReferenceEquals(popped, disposable))
+                {
+                    disposable.Dispose();
+                }
+                else
+                {
+                    _disposables.Push(popped);
+                }
             }
         }
     }
