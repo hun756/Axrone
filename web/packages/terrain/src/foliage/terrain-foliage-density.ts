@@ -6,6 +6,7 @@ import type {
     TerrainSplatResolution,
 } from '../types';
 import { isTerrainSplatResolution, validateTerrainDescriptor } from '../types';
+import { smoothstep } from '../internal/math';
 
 /**
  * Foliage density maps: single-channel Uint8 buffers (one per foliage layer)
@@ -57,8 +58,6 @@ export interface TerrainFoliageDensityStamp {
     /** True removes density instead of adding it (eraser). */
     readonly erase?: boolean;
 }
-
-const smoothstep = (t: number): number => t * t * (3 - 2 * t);
 
 /**
  * Paints one density stamp in place. Returns `true` when at least one texel

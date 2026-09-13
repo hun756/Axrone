@@ -9,6 +9,7 @@ import {
     isTerrainSplatResolution,
     validateTerrainDescriptor,
 } from '../types';
+import { smoothstep } from '../internal/math';
 
 /**
  * Splat weight buffers: RGBA texels where each channel carries one layer's
@@ -60,8 +61,6 @@ export interface TerrainSplatBrushStamp {
     readonly localX: number;
     readonly localZ: number;
 }
-
-const smoothstep = (t: number): number => t * t * (3 - 2 * t);
 
 /**
  * Paints one brush stamp of the target layer into the weight buffer in

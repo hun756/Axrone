@@ -5,6 +5,7 @@ import type {
     TerrainDescriptor,
 } from '../types';
 import { validateTerrainDescriptor } from '../types';
+import { smoothstep } from '../internal/math';
 
 /**
  * Working-buffer brush stamp. Sculpt sessions hold a mutable copy of the
@@ -21,9 +22,6 @@ export interface TerrainBrushStamp {
     readonly localX: number;
     readonly localZ: number;
 }
-
-const smoothstep = (t: number): number => t * t * (3 - 2 * t);
-
 
 /**
  * Applies a single brush stamp in place. Returns `true` when at least one
