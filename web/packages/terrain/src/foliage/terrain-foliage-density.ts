@@ -5,7 +5,7 @@ import type {
     TerrainDescriptor,
     TerrainSplatResolution,
 } from '../types';
-import { isTerrainSplatResolution, validateTerrainDescriptor } from '../types';
+import { TERRAIN_FOLIAGE_DENSITY_STAMP_SCALE, isTerrainSplatResolution, validateTerrainDescriptor } from '../types';
 import { smoothstep } from '../internal/math';
 
 /**
@@ -93,8 +93,8 @@ export const applyTerrainFoliageDensityStamp = ({
         return false;
     }
 
-    // strength 1 tam agirlikli texeli tek stamp'te ~%45 hedefe yaklastirir.
-    const stampScale = brush.strength * 0.45;
+    // Strength 1 at full weight approaches target by TERRAIN_FOLIAGE_DENSITY_STAMP_SCALE per stamp.
+    const stampScale = brush.strength * TERRAIN_FOLIAGE_DENSITY_STAMP_SCALE;
     let changed = false;
 
     for (let texelZ = minZ; texelZ <= maxZ; texelZ += 1) {

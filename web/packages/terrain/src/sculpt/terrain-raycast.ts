@@ -1,14 +1,11 @@
 import type { TerrainDescriptor, TerrainRaycastHit } from '../types';
-import { validateTerrainDescriptor } from '../types';
+import { TERRAIN_RAYCAST_DEFAULT_MAX_DISTANCE, TERRAIN_RAYCAST_REFINE_STEPS, validateTerrainDescriptor } from '../types';
 import type { TerrainHeightmap } from '../heightmap/terrain-heightmap';
 
 export interface TerrainRay {
     readonly origin: { readonly x: number; readonly y: number; readonly z: number };
     readonly direction: { readonly x: number; readonly y: number; readonly z: number };
 }
-
-const DEFAULT_MAX_DISTANCE = 10_000;
-const REFINE_STEPS = 24;
 
 /** Compute t range where ray is inside the XZ footprint AABB. Returns null if no intersection. */
 const rayFootprintSlab = (
@@ -89,7 +86,7 @@ export const raycastTerrainHeightmap = (
     heightmap: TerrainHeightmap,
     descriptor: TerrainDescriptor,
     ray: TerrainRay,
-    maxDistance: number = DEFAULT_MAX_DISTANCE
+    maxDistance: number = TERRAIN_RAYCAST_DEFAULT_MAX_DISTANCE
 ): TerrainRaycastHit | null => {
     validateTerrainDescriptor(descriptor);
 
@@ -123,7 +120,7 @@ export const raycastTerrainHeightmap = (
             // Crossing found — bisect [previousT, t] down to the surface.
             let low = previousT;
             let high = t;
-            for (let refine = 0; refine < REFINE_STEPS; refine += 1) {
+            for (let refine = 0; refine < TERRAIN_RAYCAST_REFINE_STEPS; refine += 1) {
                 const middle = (low + high) * 0.5;
                 if (isRayAboveTerrain(heightmap, descriptor, halfWidth, halfLength, ray.origin, direction, middle)) {
                     low = middle;

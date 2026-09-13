@@ -4,7 +4,7 @@ import type {
     ResolvedTerrainBrushOptions,
     TerrainDescriptor,
 } from '../types';
-import { validateTerrainDescriptor } from '../types';
+import { validateTerrainDescriptor, TERRAIN_BRUSH_HEIGHT_STAMP_SCALE } from '../types';
 import { smoothstep } from '../internal/math';
 
 /**
@@ -63,9 +63,9 @@ export const applyTerrainBrushStamp = ({
         return false;
     }
 
-    // Normalized step magnitude: strength 1 moves a sample by ~4% of the
-    // full height range per stamp, keeping drags controllable.
-    const stampDelta = brush.strength * 0.04;
+    // Normalized step magnitude: strength 1 moves a sample by TERRAIN_BRUSH_HEIGHT_STAMP_SCALE
+    // of the full height range per stamp, keeping drags controllable.
+    const stampDelta = brush.strength * TERRAIN_BRUSH_HEIGHT_STAMP_SCALE;
     let changed = false;
 
     // Flatten/smooth reference values are derived from the pre-stamp buffer.
