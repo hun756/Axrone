@@ -358,17 +358,17 @@ const applyMarkVisuals = (context: CheckboxContext): boolean => {
         const markTints = asRecord(props.markTints);
         if (markVisible) {
             applyTintToChild(runtime, mark, visualState, markTints);
-            runtime.updateWidget(mark, { enabled: true });
+            runtime.updateWidget(mark, { style: { visible: true }, enabled: true });
         } else {
-            runtime.updateWidget(mark, { enabled: false });
+            runtime.updateWidget(mark, { style: { visible: false }, enabled: false });
         }
     } else if (transition === 'sprite') {
         const markSprites = asRecord(props.markSprites);
         if (markVisible) {
             applySpriteToChild(runtime, mark, visualState, markSprites, state.originalMarkSource);
-            runtime.updateWidget(mark, { enabled: true });
+            runtime.updateWidget(mark, { style: { visible: true }, enabled: true });
         } else {
-            runtime.updateWidget(mark, { enabled: false });
+            runtime.updateWidget(mark, { style: { visible: false }, enabled: false });
         }
     } else {
         // Color transition mode: use strokes for mark styles (check/cross/dash)
@@ -382,6 +382,7 @@ const applyMarkVisuals = (context: CheckboxContext): boolean => {
             // Dot uses background fill with radius for circular shape.
             runtime.updateWidget(mark, {
                 style: {
+                    visible: markVisible,
                     background: proceduralMark ? markColor : '#00000000',
                     radius: Number.isFinite(markSize) ? markSize * 0.5 : CHECKBOX_DOT_RADIUS,
                     strokes: [],
@@ -392,6 +393,7 @@ const applyMarkVisuals = (context: CheckboxContext): boolean => {
             // Stroke-based marks: transparent background, strokes render the shape.
             runtime.updateWidget(mark, {
                 style: {
+                    visible: markVisible,
                     background: '#00000000',
                     strokes: strokes ?? [],
                 },
