@@ -346,9 +346,6 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
 
         try {
             if (options && 'framebuffer' in options) {
-                // Offscreen target (world-space UI). The previously bound
-                // framebuffer is captured lazily here and restored on the way
-                // out by restoreGLState().
                 this.captureGLState(GL_STATE_FRAMEBUFFER);
                 this.glTouchedGroups |= GL_STATE_FRAMEBUFFER;
                 this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, options.framebuffer ?? null);
@@ -357,12 +354,14 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
 
             let hasPendingImages = false;
             let hasPendingText = false;
+            let pendingImageZIndex = -1;
 
             for (const command of frame.commands) {
                 if (command.kind === 'quad') {
-                    if (hasPendingImages) {
+                    if (hasPendingImages && pendingImageZIndex < command.zIndex) {
                         this.flushImageBatch(frame.viewportHeight);
                         hasPendingImages = false;
+                        pendingImageZIndex = -1;
                     }
                     // NOTE: Do NOT flush text here — quads are backgrounds and
                     // text must remain batched to draw AFTER all quads in the
@@ -381,6 +380,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                         hasPendingText = false;
                     }
                     hasPendingImages = true;
+                    pendingImageZIndex = command.zIndex;
                     this.pushImageCommand(command, frame);
                     continue;
                 }
@@ -388,15 +388,17 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                     if (hasPendingImages) {
                         this.flushImageBatch(frame.viewportHeight);
                         hasPendingImages = false;
+                        pendingImageZIndex = -1;
                     }
                     hasPendingText = true;
                     this.pushTextCommand(command, frame.viewportHeight);
                     continue;
                 }
                 if (command.kind === 'stroke') {
-                    if (hasPendingImages) {
+                    if (hasPendingImages && pendingImageZIndex < command.zIndex) {
                         this.flushImageBatch(frame.viewportHeight);
                         hasPendingImages = false;
+                        pendingImageZIndex = -1;
                     }
                     // NOTE: Do NOT flush text here — strokes share the quad
                     // pipeline and text must draw after them.
@@ -409,6 +411,8 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 }
                 this.flushQuadBatch(frame.viewportHeight);
                 this.flushImageBatch(frame.viewportHeight);
+                hasPendingImages = false;
+                pendingImageZIndex = -1;
                 this.flushTextBatch(frame.viewportHeight);
                 if (this.customCommandRenderer) {
                     this.statisticsState.customCommandCount += 1;
@@ -430,6 +434,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
             this.flushQuadBatch(frame.viewportHeight);
             this.flushImageBatch(frame.viewportHeight);
             this.flushTextBatch(frame.viewportHeight);
+            // Frame-complete: all batch state is reset by the flush methods.
         } finally {
             this.currentFrame = null;
             this.restoreGLState();
