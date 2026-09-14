@@ -23,6 +23,7 @@ import {
     polygonSignedArea,
     toIndexArray,
     triangulateEarClipping,
+    triangulatePolygonWithHoles,
 } from './common';
 import type {
     CircleShape,
@@ -98,29 +99,12 @@ const buildPolygonMesh = (polygon: PolygonShape): ShapeMesh2D => {
         return createMesh(outer, Array.from(indices as ArrayLike<number>));
     }
 
-    const outerOffset = outer.length;
-    let allPositions = new Float32Array(outerOffset);
-    allPositions.set(outer, 0);
-    const indices: number[] = [];
-    const holeOffset: number[] = [];
-    let runningOffset = outerOffset;
-
-    for (let h = 0; h < polygon.holes.length; h++) {
-        const hole = polygonRingToFloat32(polygon.holes[h]!.points);
-        const newPositions = new Float32Array(allPositions.length + hole.length);
-        newPositions.set(allPositions, 0);
-        newPositions.set(hole, allPositions.length);
-        allPositions = newPositions;
-        holeOffset.push(runningOffset);
-        runningOffset += hole.length;
-    }
-
-    const outerCount = outer.length / 2;
-    for (let i = 1; i < outerCount - 1; i++) {
-        indices.push(0, i, i + 1);
-    }
-
-    return createMesh(allPositions, indices);
+    const holeRings = polygon.holes.map((hole) => polygonRingToFloat32(hole!.points));
+    const triangulated = triangulatePolygonWithHoles(outer, holeRings);
+    return createMesh(
+        triangulated.positions,
+        Array.from(triangulated.indices as ArrayLike<number>)
+    );
 };
 
 const buildRingMesh = (outer: Float32Array, inner: Float32Array | null): ShapeMesh2D => {
