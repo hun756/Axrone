@@ -1477,11 +1477,17 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
     {
         if (start.Length < 4 || end.Length < 4 || destination.Length < 4) ThrowHelper.ThrowMismatchedSpans();
         ref T s = ref MemoryMarshal.GetReference(start);
-        ref T e = ref MemoryMarshal.GetReference(end);
         ref T d = ref MemoryMarshal.GetReference(destination);
+        T e0 = Unsafe.Add(ref MemoryMarshal.GetReference(end), 0);
+        T e1 = Unsafe.Add(ref MemoryMarshal.GetReference(end), 1);
+        T e2 = Unsafe.Add(ref MemoryMarshal.GetReference(end), 2);
+        T e3 = Unsafe.Add(ref MemoryMarshal.GetReference(end), 3);
         T dot = T.Zero;
-        for (int i = 0; i < 4; i++) dot += Unsafe.Add(ref s, i) * Unsafe.Add(ref e, i);
-        if (dot < T.Zero) { dot = -dot; for (int i = 0; i < 4; i++) Unsafe.Add(ref e, i) = -Unsafe.Add(ref e, i); }
+        dot += Unsafe.Add(ref s, 0) * e0;
+        dot += Unsafe.Add(ref s, 1) * e1;
+        dot += Unsafe.Add(ref s, 2) * e2;
+        dot += Unsafe.Add(ref s, 3) * e3;
+        if (dot < T.Zero) { dot = -dot; e0 = -e0; e1 = -e1; e2 = -e2; e3 = -e3; }
         T scale0, scale1;
         if (dot < T.CreateChecked(0.9995))
         {
@@ -1507,7 +1513,9 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
             scale0 = T.One - t;
             scale1 = t;
         }
-        for (int i = 0; i < 4; i++)
-            Unsafe.Add(ref d, i) = scale0 * Unsafe.Add(ref s, i) + scale1 * Unsafe.Add(ref e, i);
+        Unsafe.Add(ref d, 0) = scale0 * Unsafe.Add(ref s, 0) + scale1 * e0;
+        Unsafe.Add(ref d, 1) = scale0 * Unsafe.Add(ref s, 1) + scale1 * e1;
+        Unsafe.Add(ref d, 2) = scale0 * Unsafe.Add(ref s, 2) + scale1 * e2;
+        Unsafe.Add(ref d, 3) = scale0 * Unsafe.Add(ref s, 3) + scale1 * e3;
     }
 }
