@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-13T17:09:20.609Z",
+  "generatedAt": "2026-09-13T20:58:18.019Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -8538,11 +8538,18 @@
       "exports": [
         "DEFAULT_TERRAIN_BRUSH_OPTIONS",
         "DEFAULT_TERRAIN_NOISE_OPTIONS",
+        "TERRAIN_BRUSH_HEIGHT_STAMP_SCALE",
+        "TERRAIN_BRUSH_KINDS",
+        "TERRAIN_FOLIAGE_CANDIDATES_PER_TEXEL",
+        "TERRAIN_FOLIAGE_DENSITY_STAMP_SCALE",
         "TERRAIN_MAX_FOLIAGE_INSTANCES",
         "TERRAIN_MAX_FOLIAGE_LAYERS",
         "TERRAIN_MAX_LAYERS",
+        "TERRAIN_RAYCAST_DEFAULT_MAX_DISTANCE",
+        "TERRAIN_RAYCAST_REFINE_STEPS",
         "TERRAIN_RESOLUTIONS",
         "TERRAIN_SPLAT_RESOLUTIONS",
+        "TERRAIN_SPLAT_STAMP_SCALE",
         "TerrainError",
         "TerrainErrorCode",
         "TerrainHeightmap",
@@ -8619,10 +8626,17 @@
           "exports": [
             "DEFAULT_TERRAIN_BRUSH_OPTIONS",
             "DEFAULT_TERRAIN_NOISE_OPTIONS",
+            "TERRAIN_BRUSH_HEIGHT_STAMP_SCALE",
+            "TERRAIN_BRUSH_KINDS",
+            "TERRAIN_FOLIAGE_CANDIDATES_PER_TEXEL",
+            "TERRAIN_FOLIAGE_DENSITY_STAMP_SCALE",
             "TERRAIN_MAX_FOLIAGE_LAYERS",
             "TERRAIN_MAX_LAYERS",
+            "TERRAIN_RAYCAST_DEFAULT_MAX_DISTANCE",
+            "TERRAIN_RAYCAST_REFINE_STEPS",
             "TERRAIN_RESOLUTIONS",
             "TERRAIN_SPLAT_RESOLUTIONS",
+            "TERRAIN_SPLAT_STAMP_SCALE",
             "isTerrainResolution",
             "isTerrainSplatResolution",
             "resolveTerrainBrushOptions",
@@ -36929,6 +36943,26 @@
       "kind": "unknown"
     },
     {
+      "name": "TERRAIN_BRUSH_HEIGHT_STAMP_SCALE",
+      "package": "@axrone/terrain",
+      "kind": "unknown"
+    },
+    {
+      "name": "TERRAIN_BRUSH_KINDS",
+      "package": "@axrone/terrain",
+      "kind": "unknown"
+    },
+    {
+      "name": "TERRAIN_FOLIAGE_CANDIDATES_PER_TEXEL",
+      "package": "@axrone/terrain",
+      "kind": "unknown"
+    },
+    {
+      "name": "TERRAIN_FOLIAGE_DENSITY_STAMP_SCALE",
+      "package": "@axrone/terrain",
+      "kind": "unknown"
+    },
+    {
       "name": "TERRAIN_MAX_FOLIAGE_INSTANCES",
       "package": "@axrone/terrain",
       "kind": "const"
@@ -36944,12 +36978,27 @@
       "kind": "unknown"
     },
     {
+      "name": "TERRAIN_RAYCAST_DEFAULT_MAX_DISTANCE",
+      "package": "@axrone/terrain",
+      "kind": "unknown"
+    },
+    {
+      "name": "TERRAIN_RAYCAST_REFINE_STEPS",
+      "package": "@axrone/terrain",
+      "kind": "unknown"
+    },
+    {
       "name": "TERRAIN_RESOLUTIONS",
       "package": "@axrone/terrain",
       "kind": "unknown"
     },
     {
       "name": "TERRAIN_SPLAT_RESOLUTIONS",
+      "package": "@axrone/terrain",
+      "kind": "unknown"
+    },
+    {
+      "name": "TERRAIN_SPLAT_STAMP_SCALE",
       "package": "@axrone/terrain",
       "kind": "unknown"
     },
@@ -49904,6 +49953,30 @@
       "package": "@axrone/scene-runtime"
     },
     {
+      "name": "TERRAIN_BRUSH_HEIGHT_STAMP_SCALE",
+      "kind": "const",
+      "code": "declare const TERRAIN_BRUSH_HEIGHT_STAMP_SCALE = 0.04;",
+      "package": "@axrone/terrain"
+    },
+    {
+      "name": "TERRAIN_BRUSH_KINDS",
+      "kind": "const",
+      "code": "declare const TERRAIN_BRUSH_KINDS: readonly TerrainBrushKind[];",
+      "package": "@axrone/terrain"
+    },
+    {
+      "name": "TERRAIN_FOLIAGE_CANDIDATES_PER_TEXEL",
+      "kind": "const",
+      "code": "declare const TERRAIN_FOLIAGE_CANDIDATES_PER_TEXEL = 0.35;",
+      "package": "@axrone/terrain"
+    },
+    {
+      "name": "TERRAIN_FOLIAGE_DENSITY_STAMP_SCALE",
+      "kind": "const",
+      "code": "declare const TERRAIN_FOLIAGE_DENSITY_STAMP_SCALE = 0.45;",
+      "package": "@axrone/terrain"
+    },
+    {
       "name": "TERRAIN_MAX_FOLIAGE_INSTANCES",
       "kind": "const",
       "code": "declare const TERRAIN_MAX_FOLIAGE_INSTANCES = 10000;",
@@ -49922,6 +49995,18 @@
       "package": "@axrone/terrain"
     },
     {
+      "name": "TERRAIN_RAYCAST_DEFAULT_MAX_DISTANCE",
+      "kind": "const",
+      "code": "declare const TERRAIN_RAYCAST_DEFAULT_MAX_DISTANCE = 10000;",
+      "package": "@axrone/terrain"
+    },
+    {
+      "name": "TERRAIN_RAYCAST_REFINE_STEPS",
+      "kind": "const",
+      "code": "declare const TERRAIN_RAYCAST_REFINE_STEPS = 24;",
+      "package": "@axrone/terrain"
+    },
+    {
       "name": "TERRAIN_RESOLUTIONS",
       "kind": "const",
       "code": "declare const TERRAIN_RESOLUTIONS: readonly [33, 65, 129, 257];",
@@ -49931,6 +50016,12 @@
       "name": "TERRAIN_SPLAT_RESOLUTIONS",
       "kind": "const",
       "code": "declare const TERRAIN_SPLAT_RESOLUTIONS: readonly [64, 128, 256];",
+      "package": "@axrone/terrain"
+    },
+    {
+      "name": "TERRAIN_SPLAT_STAMP_SCALE",
+      "kind": "const",
+      "code": "declare const TERRAIN_SPLAT_STAMP_SCALE = 0.35;",
       "package": "@axrone/terrain"
     },
     {
