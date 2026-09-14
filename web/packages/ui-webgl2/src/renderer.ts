@@ -981,10 +981,10 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         this.glTouchedGroups |= GL_STATE_PROGRAM;
         this.gl.useProgram(this.imageProgram);
         this.gl.uniform2f(this.imageViewportUniform, this.currentFrame.viewportWidth, this.currentFrame.viewportHeight);
-        this.bindUnit0Texture(this.activeImageTexture);
         this.captureGLState(GL_STATE_UNIT0_SAMPLER);
         this.glTouchedGroups |= GL_STATE_UNIT0_SAMPLER;
-        this.gl.bindSampler?.(0, this.activeImageSampler);
+        this.bindUnit0Texture(this.activeImageTexture);
+        this.gl.bindSampler(0, this.activeImageSampler);
         this.gl.uniform1i(this.imageTextureUniform, 0);
         this.captureGLState(GL_STATE_VERTEX_ARRAY | GL_STATE_ARRAY_BUFFER);
         this.glTouchedGroups |= GL_STATE_VERTEX_ARRAY | GL_STATE_ARRAY_BUFFER;
