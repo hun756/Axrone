@@ -417,7 +417,6 @@ describe('[DIAG] Composite image rendering — C5: sprite-mode originalSource', 
 		const stateBefore = runtime.getWidgetState(
 			runtime.getBoundWidget('checkbox')!
 		) as { originalBoxSource: unknown };
-		console.log('[DIAG-C5] originalBoxSource after mount:', stateBefore.originalBoxSource);
 		expect(stateBefore.originalBoxSource).toBeNull();
 
 		// Now assign an image to the box (simulating editor assignment after mount)
@@ -432,7 +431,6 @@ describe('[DIAG] Composite image rendering — C5: sprite-mode originalSource', 
 		const imagesBefore = frameBefore.commands.filter(
 			(cmd): cmd is ImageRenderCommand => cmd.kind === 'image'
 		);
-		console.log('[DIAG-C5] Images before state change:', imagesBefore.length);
 		const assignedImageBefore = imagesBefore.find(
 			(cmd) => (cmd.source as { resourceId?: string }).resourceId === 'box_assigned.png'
 		);
@@ -444,30 +442,18 @@ describe('[DIAG] Composite image rendering — C5: sprite-mode originalSource', 
 		const imagesAfter = frameAfter.commands.filter(
 			(cmd): cmd is ImageRenderCommand => cmd.kind === 'image'
 		);
-		
-		console.log('[DIAG-C5] Images after hover:', imagesAfter.length);
-		for (const cmd of imagesAfter) {
-			const source = cmd.source as { resourceId?: string };
-			console.log(`[DIAG-C5]   - widget=${cmd.widget}, resourceId=${source.resourceId}`);
-		}
 
-		// The assigned image should still be present (originalSource fallback)
+		// HARD ASSERTION: After hover (no hover sprite defined), the assigned image
+		// source resourceId must still equal the assigned base source.
 		const assignedImageAfter = imagesAfter.find(
 			(cmd) => (cmd.source as { resourceId?: string }).resourceId === 'box_assigned.png'
 		);
-		
-		// THIS IS THE KEY TEST: if originalSource was captured as null at mount,
-		// and no sprite entry exists for 'hover' state, the source should fall back
-		// to originalSource (null), which means NO image command
-		// This documents the C5 bug: assigned image is lost because originalSource is stale
-		if (!assignedImageAfter) {
-			console.log('[DIAG-C5] *** C5 BUG CONFIRMED: Assigned image lost after state change ***');
-			console.log('[DIAG-C5] originalBoxSource was null at mount, so fallback is null');
-		}
-		
-		// Document the actual behavior
+		expect(assignedImageAfter).toBeDefined();
+
+		// Verify the widget's imageInput source is preserved
 		const finalImageInput = runtime.getWidgetImageInput(boxWidget(runtime));
-		console.log('[DIAG-C5] Final imageInput source:', JSON.stringify(finalImageInput?.source, null, 2));
+		expect(finalImageInput?.source).toBeDefined();
+		expect((finalImageInput?.source as { resourceId?: string })?.resourceId).toBe('box_assigned.png');
 	});
 
 	it('sprite mode with empty sprites map preserves originalSource from mount', () => {
@@ -488,7 +474,6 @@ describe('[DIAG] Composite image rendering — C5: sprite-mode originalSource', 
 		const state = runtime.getWidgetState(
 			runtime.getBoundWidget('checkbox')!
 		) as { originalBoxSource: { kind: string; resourceId?: string } | null };
-		console.log('[DIAG-C5] originalBoxSource:', JSON.stringify(state.originalBoxSource, null, 2));
 		expect(state.originalBoxSource).not.toBeNull();
 		expect((state.originalBoxSource as { resourceId?: string })?.resourceId).toBe('box_original.png');
 
@@ -503,6 +488,51 @@ describe('[DIAG] Composite image rendering — C5: sprite-mode originalSource', 
 			(cmd) => (cmd.source as { resourceId?: string }).resourceId === 'box_original.png'
 		);
 		expect(originalImage).toBeDefined();
+	});
+
+	it('with a state sprite present for hover, source equals the sprite source (not base)', () => {
+		const runtime = createRuntime(
+			{
+				boxKey: 'checkbox-box',
+				markKey: 'checkbox-mark',
+				labelKey: 'checkbox-label',
+				transition: 'sprite',
+				boxSprites: {
+					normal: { kind: 'texture', resourceId: 'box_normal_sprite.png', width: 20, height: 20 },
+					hover: { kind: 'texture', resourceId: 'box_hover_sprite.png', width: 20, height: 20 },
+				},
+			},
+			{
+				source: { kind: 'texture', resourceId: 'box_base.png', width: 20, height: 20 },
+			},
+		);
+
+		// Before hover: normal state sprite should be active
+		const normalFrame = runtime.commit();
+		const normalImages = normalFrame.commands.filter(
+			(cmd): cmd is ImageRenderCommand => cmd.kind === 'image'
+		);
+		const normalSprite = normalImages.find(
+			(cmd) => (cmd.source as { resourceId?: string }).resourceId === 'box_normal_sprite.png'
+		);
+		expect(normalSprite).toBeDefined();
+
+		// After hover: hover state sprite should replace normal
+		hoverCheckbox(runtime);
+		const hoverFrame = runtime.commit();
+		const hoverImages = hoverFrame.commands.filter(
+			(cmd): cmd is ImageRenderCommand => cmd.kind === 'image'
+		);
+		const hoverSprite = hoverImages.find(
+			(cmd) => (cmd.source as { resourceId?: string }).resourceId === 'box_hover_sprite.png'
+		);
+		expect(hoverSprite).toBeDefined();
+
+		// The base image should NOT be the active source when a state sprite is present
+		const baseImage = hoverImages.find(
+			(cmd) => (cmd.source as { resourceId?: string }).resourceId === 'box_base.png'
+		);
+		expect(baseImage).toBeUndefined();
 	});
 });
 
