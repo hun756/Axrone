@@ -1090,7 +1090,7 @@ public static unsafe class SimdInt32
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void VectorFma(ReadOnlySpan<int> a, ReadOnlySpan<int> b, ReadOnlySpan<int> c, Span<int> destination)
     {
-        ThrowHelper.ValidateTernarySpans(a, b, a, destination);
+        ThrowHelper.ValidateTernarySpans(a, b, c, destination);
         nuint length = (nuint)a.Length;
         if (length == 0) return;
         ref int aRef = ref MemoryMarshal.GetReference(a);
