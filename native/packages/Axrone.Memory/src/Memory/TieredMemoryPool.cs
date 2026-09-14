@@ -338,6 +338,13 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     {
         if (_tracker.TryDispose())
         {
+            // NOTE: Per-pool active rental guard is not feasible because PerThreadPartitionCache<T>
+            // is thread-static and shares slots across pool instances. A slot created by Pool A
+            // can be retrieved by Pool B from the thread cache, but its _registry still points to
+            // Pool A, so Recycle decrements Pool A's counter — making per-pool tracking unreliable.
+            // See audit finding #5 (TieredMemoryPool.Dispose rental guard) — deferred until
+            // pool-specific caches or slot registry rebinding is implemented.
+
             _trimTimer?.Dispose();
 
             for (int i = 0; i < _tier2GlobalQueues.Length; i++)
