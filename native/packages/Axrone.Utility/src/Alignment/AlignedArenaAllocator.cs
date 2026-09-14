@@ -14,6 +14,7 @@ public sealed unsafe class AlignedArenaAllocator : IDisposable
     }
 
     private PositionState _position;
+    private long _generation;
     private readonly Lock _lifecycleGate = new();
     private int _disposed;
 
@@ -51,10 +52,12 @@ public sealed unsafe class AlignedArenaAllocator : IDisposable
         nuint requested = size.Value;
 
         nuint baseAddr = (nuint)_baseAddress;
-        nuint currentOffset = Volatile.Read(ref _position.Offset);
 
         while (true)
         {
+            long genBefore = Volatile.Read(ref _generation);
+            nuint currentOffset = Volatile.Read(ref _position.Offset);
+
             nuint currentAddress = baseAddr + currentOffset;
             nuint alignedAddress = alignment.AlignUp(currentAddress);
             nuint newOffset = (alignedAddress - baseAddr) + requested;
@@ -68,11 +71,18 @@ public sealed unsafe class AlignedArenaAllocator : IDisposable
             nuint priorOffset = Interlocked.CompareExchange(ref _position.Offset, newOffset, currentOffset);
             if (priorOffset == currentOffset)
             {
+                // Validate generation unchanged — if Reset occurred, our offset may have been
+                // overwritten and another thread could have received an overlapping region.
+                if (Volatile.Read(ref _generation) != genBefore)
+                {
+                    continue; // retry from the new offset
+                }
+
                 allocated = new Span<byte>((void*)alignedAddress, checked((int)requested));
                 return true;
             }
 
-            currentOffset = priorOffset;
+            // CAS failed — another thread modified offset; retry with the new value
         }
     }
 
@@ -101,6 +111,7 @@ public sealed unsafe class AlignedArenaAllocator : IDisposable
         lock (_lifecycleGate)
         {
             Volatile.Write(ref _position.Offset, 0);
+            Interlocked.Increment(ref _generation);
         }
     }
 
