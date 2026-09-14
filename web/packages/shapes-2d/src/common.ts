@@ -544,6 +544,10 @@ export const triangulateEarClipping = (
 
     const working = new Float32Array(points.length);
     working.set(points);
+    const vertexIds = new Uint32Array(initialCount);
+    for (let i = 0; i < initialCount; i++) {
+        vertexIds[i] = i;
+    }
     let vertexCount = initialCount;
     const indices: number[] = [];
     const useUint32 = initialCount > 65535;
@@ -583,12 +587,14 @@ export const triangulateEarClipping = (
 
             if (!isEar) continue;
 
-            indices.push(a, b, c);
+            indices.push(vertexIds[a] as number, vertexIds[b] as number, vertexIds[c] as number);
             working[b * 2] = working[c * 2] as number;
             working[b * 2 + 1] = working[c * 2 + 1] as number;
+            vertexIds[b] = vertexIds[c] as number;
             for (let k = c; k < vertexCount - 1; k++) {
                 working[k * 2] = working[(k + 1) * 2] as number;
                 working[k * 2 + 1] = working[(k + 1) * 2 + 1] as number;
+                vertexIds[k] = vertexIds[k + 1] as number;
             }
             vertexCount--;
             earFound = true;
@@ -601,7 +607,7 @@ export const triangulateEarClipping = (
     }
 
     if (vertexCount === 3) {
-        indices.push(0, 1, 2);
+        indices.push(vertexIds[0] as number, vertexIds[1] as number, vertexIds[2] as number);
     }
 
     return useUint32 ? new Uint32Array(indices) : new Uint16Array(indices);
