@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { polygonAbsoluteArea, triangulateEarClipping } from '../common';
+import { polygonAbsoluteArea, polygonSignedArea, triangulateEarClipping } from '../common';
+import { ShapeValidationError } from '../errors';
 
 const triangleAreaSum = (flat: Float32Array, indices: Uint16Array | Uint32Array): number => {
     let area = 0;
@@ -24,6 +25,29 @@ const regularPolygon = (count: number, radius = 100): Float32Array => {
     }
     return flat;
 };
+
+describe('triangulateEarClipping winding and degeneracy', () => {
+    it('normalizes a clockwise ring before clipping and produces the same mesh area', () => {
+        const cw = new Float32Array(64 * 2);
+        for (let i = 0; i < 64; i++) {
+            const angle = (i / 64) * Math.PI * 2 * -1;
+            cw[i * 2] = Math.cos(angle) * 100;
+            cw[i * 2 + 1] = Math.sin(angle) * 100;
+        }
+        expect(polygonSignedArea(cw)).toBeLessThan(0);
+        const indices = triangulateEarClipping(cw);
+        expect(indices.length).toBe((64 - 2) * 3);
+        expect(Math.abs(triangleAreaSum(cw, indices))).toBeCloseTo(
+            polygonAbsoluteArea(cw),
+            4
+        );
+    });
+
+    it('throws a validation error for a degenerate zero-area ring', () => {
+        const collinear = new Float32Array([0, 0, 1, 1, 2, 2, 3, 3]);
+        expect(() => triangulateEarClipping(collinear)).toThrow(ShapeValidationError);
+    });
+});
 
 describe('triangulateEarClipping vertex remapping', () => {
     it('triangulates a counterclockwise polygon into n-2 triangles with preserved area', () => {

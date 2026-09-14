@@ -543,7 +543,11 @@ export const triangulateEarClipping = (
     }
 
     const working = new Float32Array(points.length);
-    working.set(points);
+    if (polygonSignedArea(points) < -EPSILON) {
+        working.set(normalizeContourOrientation(new Float32Array(points), true));
+    } else {
+        working.set(points);
+    }
     const vertexIds = new Uint32Array(initialCount);
     for (let i = 0; i < initialCount; i++) {
         vertexIds[i] = i;
@@ -606,9 +610,13 @@ export const triangulateEarClipping = (
         }
     }
 
-    if (vertexCount === 3) {
-        indices.push(vertexIds[0] as number, vertexIds[1] as number, vertexIds[2] as number);
+    if (vertexCount !== 3) {
+        throw new ShapeValidationError(
+            `Polygon triangulation failed with ${vertexCount} vertices remaining; ring may be degenerate`
+        );
     }
+
+    indices.push(vertexIds[0] as number, vertexIds[1] as number, vertexIds[2] as number);
 
     return useUint32 ? new Uint32Array(indices) : new Uint16Array(indices);
 };
