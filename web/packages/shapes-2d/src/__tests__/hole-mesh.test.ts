@@ -19,7 +19,7 @@ const triangleArea = (
     by: number,
     cx: number,
     cy: number
-): number => Math.abs((bx - ax) * (cy - ay) - (by - ay) * (cx - bx)) / 2;
+): number => Math.abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax)) / 2;
 
 const meshTriangleAreaSum = (mesh: TriangulatedPolygonWithHoles): number => {
     const { positions, indices } = mesh;
@@ -103,9 +103,9 @@ describe('triangulatePolygonWithHoles', () => {
     });
 
     it('meshes a concave outer ring with a hole', () => {
-        // L-shape (area 64) with a 2x2 hole at (4,4)..(6,6) → net area 60.
+        // L-shape (area 64) with a 2x2 hole at (3,1)..(5,3) → net area 60.
         const lShape = new Float32Array([0, 0, 10, 0, 10, 10, 6, 10, 6, 4, 0, 4]);
-        const hole = new Float32Array([4, 4, 4, 6, 6, 6, 6, 4]);
+        const hole = new Float32Array([3, 1, 3, 3, 5, 3, 5, 1]);
         const mesh = triangulatePolygonWithHoles(lShape, [hole]);
 
         expect(meshTriangleAreaSum(mesh)).toBeCloseTo(60, 5);
