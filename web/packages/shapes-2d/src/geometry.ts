@@ -9,6 +9,7 @@ import {
     distanceToSegmentSquared,
     expandBounds,
     float32ToPoints,
+    isConvexPolygon,
     normalizeContourOrientation,
     pointInConvexPolygon,
     pointInBounds,
@@ -208,6 +209,86 @@ const offsetConvexContour = (contour: Float32Array, distanceValue: number): Floa
     }
 
     return offset;
+};
+
+const computeStrokeOffsetPositions = (
+    contour: Float32Array,
+    outerOffset: number,
+    innerOffset: number
+): { readonly outer: Float32Array; readonly inner: Float32Array } => {
+    const count = contour.length / 2;
+    const signedArea = polygonSignedArea(contour);
+    const windingSign = signedArea >= 0 ? 1 : -1;
+
+    const outer = new Float32Array(count * 2);
+    const inner = new Float32Array(count * 2);
+
+    for (let i = 0; i < count; i++) {
+        const prev = (i + count - 1) % count;
+        const next = (i + 1) % count;
+
+        const px = contour[i * 2] as number;
+        const py = contour[i * 2 + 1] as number;
+
+        const [prevDirX, prevDirY] = normalizeEdge(
+            contour[prev * 2] as number,
+            contour[prev * 2 + 1] as number,
+            px,
+            py
+        );
+        const [nextDirX, nextDirY] = normalizeEdge(
+            px,
+            py,
+            contour[next * 2] as number,
+            contour[next * 2 + 1] as number
+        );
+
+        const prevNormalX = windingSign * prevDirY;
+        const prevNormalY = windingSign * -prevDirX;
+        const nextNormalX = windingSign * nextDirY;
+        const nextNormalY = windingSign * -nextDirX;
+
+        const miterX = prevNormalX + nextNormalX;
+        const miterY = prevNormalY + nextNormalY;
+        const miterLength = Math.sqrt(miterX * miterX + miterY * miterY);
+
+        let outerX: number;
+        let outerY: number;
+        let innerX: number;
+        let innerY: number;
+
+        if (miterLength <= EPSILON) {
+            outerX = px + prevNormalX * outerOffset;
+            outerY = py + prevNormalY * outerOffset;
+            innerX = px - prevNormalX * innerOffset;
+            innerY = py - prevNormalY * innerOffset;
+        } else {
+            const normalizedMiterX = miterX / miterLength;
+            const normalizedMiterY = miterY / miterLength;
+            const projection =
+                normalizedMiterX * prevNormalX + normalizedMiterY * prevNormalY;
+
+            if (projection > EPSILON) {
+                const scale = 1 / projection;
+                outerX = px + normalizedMiterX * outerOffset * scale;
+                outerY = py + normalizedMiterY * outerOffset * scale;
+                innerX = px - normalizedMiterX * innerOffset * scale;
+                innerY = py - normalizedMiterY * innerOffset * scale;
+            } else {
+                outerX = px + prevNormalX * outerOffset;
+                outerY = py + prevNormalY * outerOffset;
+                innerX = px - prevNormalX * innerOffset;
+                innerY = py - prevNormalY * innerOffset;
+            }
+        }
+
+        outer[i * 2] = outerX;
+        outer[i * 2 + 1] = outerY;
+        inner[i * 2] = innerX;
+        inner[i * 2 + 1] = innerY;
+    }
+
+    return { outer, inner };
 };
 
 const isValidContour = (contour: Float32Array | null): contour is Float32Array =>
@@ -500,6 +581,22 @@ export const containsStrokePoint = (
 
     const contour = getShapeContour(shape, options);
     const { outer, inner } = getStrokeOffsets(shape.stroke);
+    const isConcave = !isConvexPolygon(contour);
+
+    if (isConcave) {
+        const edgeDistance = pointToPolygonEdgeDistance(contour, point);
+        const halfWidth = shape.stroke.width * 0.5;
+
+        switch (shape.stroke.alignment) {
+            case 'inside':
+                return pointInPolygon(contour, point) && edgeDistance <= shape.stroke.width + EPSILON;
+            case 'outside':
+                return !pointInPolygon(contour, point) && edgeDistance <= shape.stroke.width + EPSILON;
+            default:
+                return edgeDistance <= halfWidth + EPSILON;
+        }
+    }
+
     const outerContour = outer <= EPSILON ? contour : offsetConvexContour(contour, outer);
     if (!pointInConvexPolygon(outerContour, point)) {
         return false;
@@ -591,19 +688,33 @@ export const buildStrokeMeshInternal = (
 
     if (shape.kind === 'polygon') {
         const outerRing = polygonRingToFloat32(shape.outer.points);
-        const { outer, inner } = getStrokeOffsets(shape.stroke);
-        const outerContour =
-            outer <= EPSILON ? outerRing : offsetConvexContour(outerRing, outer);
-        const innerContour =
-            inner <= EPSILON || shape.holes.length === 0
-                ? null
-                : offsetConvexContour(outerRing, -inner);
-        return buildRingMesh(outerContour, isValidContour(innerContour) ? innerContour : null);
+        const { outer: outerOffset, inner: innerOffset } = getStrokeOffsets(shape.stroke);
+
+        if (isConvexPolygon(outerRing)) {
+            const outerContour =
+                outerOffset <= EPSILON ? outerRing : offsetConvexContour(outerRing, outerOffset);
+            const innerContour =
+                innerOffset <= EPSILON ? null : offsetConvexContour(outerRing, -innerOffset);
+            return buildRingMesh(
+                outerContour,
+                isValidContour(innerContour) ? innerContour : null
+            );
+        }
+
+        const { outer: outerContour, inner: innerContour } = computeStrokeOffsetPositions(
+            outerRing,
+            outerOffset,
+            innerOffset
+        );
+        return buildRingMesh(
+            outerContour,
+            isValidContour(innerContour) ? innerContour : null
+        );
     }
 
     const contour = getShapeContour(shape, options);
-    const { outer, inner } = getStrokeOffsets(shape.stroke);
-    const outerContour = outer <= EPSILON ? contour : offsetConvexContour(contour, outer);
-    const innerContour = inner <= EPSILON ? null : offsetConvexContour(contour, -inner);
+    const { outer: outerOffset, inner: innerOffset } = getStrokeOffsets(shape.stroke);
+    const outerContour = outerOffset <= EPSILON ? contour : offsetConvexContour(contour, outerOffset);
+    const innerContour = innerOffset <= EPSILON ? null : offsetConvexContour(contour, -innerOffset);
     return buildRingMesh(outerContour, isValidContour(innerContour) ? innerContour : null);
 };
