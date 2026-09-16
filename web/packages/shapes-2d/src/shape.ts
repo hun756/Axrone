@@ -7,6 +7,7 @@ import {
     isConvexPolygon,
     isSimplePolygon,
     normalizeContourOrientation,
+    pointInPolygon,
     pointsToFloat32,
     polygonAbsoluteArea,
     polygonSignedArea,
@@ -122,6 +123,12 @@ export const createLineShape = (input: LineShapeInput): LineShape => {
         throw new ShapeValidationError('Zero-length lines require a stroke');
     }
 
+    if (input.stroke && input.stroke.alignment && input.stroke.alignment !== 'center') {
+        throw new ShapeValidationError(
+            `line.stroke.alignment must be "center", got "${input.stroke.alignment}"`
+        );
+    }
+
     return Object.freeze({
         kind: 'line',
         start,
@@ -210,6 +217,26 @@ export const createPolygonShape = (input: PolygonShapeInput): PolygonShape => {
                     'cw'
                 )
             );
+        }
+
+        for (let i = 0; i < holes.length; i++) {
+            const holeFlat = pointsToFloat32(holes[i]!.points);
+            const holePoint = { x: holeFlat[0] as number, y: holeFlat[1] as number };
+            if (!pointInPolygon(outerFlat, holePoint)) {
+                throw new ShapeValidationError(
+                    `polygon.holes[${i}] is not contained within the outer ring`
+                );
+            }
+
+            for (let j = 0; j < holes.length; j++) {
+                if (i === j) continue;
+                const otherFlat = pointsToFloat32(holes[j]!.points);
+                if (pointInPolygon(otherFlat, holePoint)) {
+                    throw new ShapeValidationError(
+                        `polygon.holes[${i}] overlaps with polygon.holes[${j}]`
+                    );
+                }
+            }
         }
     }
 
