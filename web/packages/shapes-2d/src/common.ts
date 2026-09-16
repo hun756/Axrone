@@ -23,7 +23,7 @@ export const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);
 
 export const normalizeNumberKey = (value: number): string =>
-    Object.is(value, -0) ? '0' : Number.isInteger(value) ? `${value}` : `${value}`;
+    Object.is(value, -0) ? '0' : `${value}`;
 
 export const assertFiniteNumber = (value: unknown, name: string): number => {
     if (!isFiniteNumber(value)) {
@@ -339,7 +339,6 @@ export const isSimplePolygon = (points: ArrayLike<number>): boolean => {
         const a1 = i * 2;
         const a2 = ((i + 1) % count) * 2;
         for (let j = i + 1; j < count; j++) {
-            if (i === j) continue;
             const b1 = j * 2;
             const b2 = ((j + 1) % count) * 2;
             if (i === 0 && j === count - 1) continue;
@@ -1218,12 +1217,6 @@ export const triangulatePolygonWithHoles = (
     };
 };
 
-export const pointInRing = (
-    outer: ArrayLike<number>,
-    holes: ReadonlyArray<ArrayLike<number>>,
-    point: Readonly<IVec2Like>
-): boolean => pointInPolygonWithHoles(outer, holes, point);
-
 export const normalizeContourOrientation = (
     contour: Float32Array,
     ccw: boolean = true
@@ -1326,11 +1319,3 @@ export const hashString = (value: string): string => {
 
 export const formatPointKey = (point: Readonly<IVec2Like>): string =>
     `${normalizeNumberKey(point.x)},${normalizeNumberKey(point.y)}`;
-
-export const formatBoundsKey = (bounds: ShapeBounds): string =>
-    `${normalizeNumberKey(bounds.minX)},${normalizeNumberKey(bounds.minY)},${normalizeNumberKey(bounds.maxX)},${normalizeNumberKey(bounds.maxY)}`;
-
-export const withFingerprintPrefix = <K extends string>(
-    prefix: K,
-    value: string
-): `${K}:${string}` => `${prefix}:${value}`;
