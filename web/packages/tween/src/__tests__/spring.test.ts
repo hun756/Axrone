@@ -276,13 +276,21 @@ describe('Spring', () => {
             const spring = new Spring(0);
             spring.setAutoUpdate(true);
             spring.setTarget({ value: 100 } as any);
-            expect((spring as any)._isRunning).toBe(true);
+            expect(spring.isPlaying()).toBe(true);
+            expect(spring.getStatus()).toBe('running');
+            spring.setAutoUpdate(false);
+            spring.stop();
         });
 
         it('collects new props', () => {
             const spring = new Spring({ x: 0 });
             spring.setTarget({ x: 100, y: 50 } as any);
-            expect((spring as any)._props.has('y')).toBe(true);
+            spring.start(0);
+            for (let time = 16; time <= 160; time += 16) {
+                spring.update(time);
+            }
+            const current = spring.getCurrent() as unknown as Record<string, number>;
+            expect(current['y']).toBeDefined();
         });
     });
 
