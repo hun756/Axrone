@@ -1,8 +1,6 @@
-import { EventEmitter } from '@axrone/event';
 import { DeepPartial } from '@axrone/utility';
 import {
     SpringConfig,
-    SpringEventMap,
     TweenableValue,
     UpdateCallback,
     VoidCallback,
@@ -12,6 +10,16 @@ import {
     getOrCreateTweenPropertyAccessor,
     TweenPropertyAccessor,
 } from './property-accessor';
+import { UnsubscribeFn } from './dispatcher';
+
+export interface SpringStep {
+    position: number;
+    velocity: number;
+    atRest: boolean;
+}
+
+/** Upper bound for a single integration step; prevents teleporting after stalls. */
+export const MAX_SPRING_DT = 0.064;
 
 export class SpringSimulation {
     private _mass: number;
@@ -32,6 +40,23 @@ export class SpringSimulation {
         target: number,
         dt: number
     ): [number, number, boolean] {
+        const out: SpringStep = { position: 0, velocity: 0, atRest: false };
+        this.stepInto(position, velocity, target, dt, out);
+        return [out.position, out.velocity, out.atRest];
+    }
+
+    /**
+     * Allocation-free integration into a caller-owned scratch record.
+     * The hot path reuses one scratch per `Spring` instead of boxing a
+     * tuple per property per frame.
+     */
+    stepInto(
+        position: number,
+        velocity: number,
+        target: number,
+        dt: number,
+        out: SpringStep
+    ): void {
         const displacement = position - target;
         const springForce = -this._stiffness * displacement;
         const dampingForce = -this._damping * velocity;
@@ -40,18 +65,19 @@ export class SpringSimulation {
         const acceleration = force / this._mass;
 
         const newVelocity = velocity + acceleration * dt;
-
         const newPosition = position + newVelocity * dt;
 
-        const isAtRest =
+        out.position = newPosition;
+        out.velocity = newVelocity;
+        out.atRest =
             Math.abs(newPosition - target) < this._precision &&
             Math.abs(newVelocity) < this._precision;
-
-        return [newPosition, newVelocity, isAtRest];
     }
 }
 
-export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMap<T>> {
+export type SpringEventType = 'start' | 'stop' | 'update' | 'complete';
+
+export class Spring<T extends TweenableValue> {
     private _target: T;
     private _current: T;
     private _velocity: Record<string, number> = Object.create(null);
@@ -62,10 +88,10 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
     private _props = new Set<string>();
     private _autoUpdate = false;
     private _propertyAccessors = new Map<string, TweenPropertyAccessor>();
+    private _listeners = new Map<SpringEventType, Array<(...args: never[]) => void>>();
+    private _stepScratch: SpringStep = { position: 0, velocity: 0, atRest: false };
 
     constructor(initial: T, config: SpringConfig = {}) {
-        super();
-
         this._current = this._deepClone(initial);
         this._target = this._deepClone(initial);
         this._simulation = new SpringSimulation(config);
@@ -191,7 +217,7 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
             this._startInternalLoop();
         }
 
-        this.emitSync('start', undefined);
+        this.emit('start');
 
         return this;
     }
@@ -199,7 +225,7 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
     updateManual(deltaTime: number): boolean {
         if (!this._isRunning) return false;
 
-        const dt = Math.min(deltaTime / 1000, 0.064);
+        const dt = Math.min(deltaTime / 1000, MAX_SPRING_DT);
         return this._simulateStep(dt);
     }
 
@@ -215,23 +241,68 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
             this._animFrameId = undefined;
         }
 
-        this.emitSync('stop', undefined);
+        this.emit('stop');
 
         return this;
     }
 
+    on(event: SpringEventType, callback: (...args: never[]) => void): UnsubscribeFn {
+        let list = this._listeners.get(event);
+        if (list === undefined) {
+            list = [];
+            this._listeners.set(event, list);
+        }
+        list.push(callback);
+        return () => this.off(event, callback);
+    }
+
+    off(event: SpringEventType, callback?: (...args: never[]) => void): boolean {
+        const list = this._listeners.get(event);
+        if (list === undefined) {
+            return false;
+        }
+        if (callback === undefined) {
+            const removed = list.length > 0;
+            this._listeners.delete(event);
+            return removed;
+        }
+        const index = list.indexOf(callback);
+        if (index < 0) {
+            return false;
+        }
+        list.splice(index, 1);
+        if (list.length === 0) {
+            this._listeners.delete(event);
+        }
+        return true;
+    }
+
+    has(event: SpringEventType): boolean {
+        return (this._listeners.get(event)?.length ?? 0) > 0;
+    }
+
+    private emit(event: SpringEventType, value?: T): void {
+        const list = this._listeners.get(event);
+        if (list === undefined) {
+            return;
+        }
+        for (let index = 0; index < list.length; index += 1) {
+            (list[index] as (value?: T) => void)(value);
+        }
+    }
+
     onUpdate(callback: UpdateCallback<T>): this {
-        this.on('update', callback);
+        this.on('update', callback as (...args: never[]) => void);
         return this;
     }
 
     onComplete(callback: VoidCallback): this {
-        this.on('complete', callback);
+        this.on('complete', callback as (...args: never[]) => void);
         return this;
     }
 
     onStart(callback: VoidCallback): this {
-        this.on('start', callback);
+        this.on('start', callback as (...args: never[]) => void);
         return this;
     }
 
@@ -244,12 +315,12 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
         }
 
         this._lastTime = undefined;
+        this._listeners.clear();
         this._props.clear();
         this._velocity = Object.create(null);
         this._propertyAccessors.clear();
         this._isRunning = false;
         this._autoUpdate = false;
-        super.dispose();
     }
 
     private _startInternalLoop(): void {
@@ -266,23 +337,25 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
             const target = accessor.get(this._target) ?? 0;
 
             if (typeof position === 'number' && typeof target === 'number') {
-                const [newPosition, newVelocity, atRest] = this._simulation.update(
+                const step = this._stepScratch;
+                this._simulation.stepInto(
                     position,
                     this._velocity[prop] ?? 0,
                     target,
-                    dt
+                    dt,
+                    step
                 );
 
-                accessor.set(this._current, newPosition);
-                this._velocity[prop] = newVelocity;
+                accessor.set(this._current, step.position);
+                this._velocity[prop] = step.velocity;
 
-                if (!atRest) {
+                if (!step.atRest) {
                     allAtRest = false;
                 }
             }
         }
 
-        this.emitSync('update', this._current as T);
+        this.emit('update', this._current);
 
         if (allAtRest) {
             this._current = this._deepClone(this._target);
@@ -292,8 +365,8 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
             }
 
             this._isRunning = false;
-            this.emitSync('update', this._current as T);
-            this.emitSync('complete', undefined);
+            this.emit('update', this._current);
+            this.emit('complete');
             return false;
         }
 
@@ -306,7 +379,7 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
         }
 
         const now = performance.now();
-        const dt = Math.min((now - this._lastTime) / 1000, 0.064);
+        const dt = Math.min((now - this._lastTime) / 1000, MAX_SPRING_DT);
         this._lastTime = now;
 
         const isStillRunning = this._simulateStep(dt);

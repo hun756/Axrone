@@ -1,5 +1,8 @@
 import type { ITween, TweenEventCallback, TweenEventType } from './types';
 
+/** Detach function returned by subscriber-style `on()` methods. */
+export type UnsubscribeFn = () => boolean;
+
 /**
  * Allocation-free event fan-out for tween lifecycles.
  *
