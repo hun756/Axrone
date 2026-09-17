@@ -8,7 +8,6 @@ import {
 } from '../runtime-utils';
 
 export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
-    protected _valuesStartRepeat: T | null = null;
     protected _twoValueBuffer: [number, number] = [0, 0];
     private _deltas: ArrayLike<number> | null = null;
 
@@ -31,7 +30,6 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
 
         this._normalizeArrays();
 
-        this._valuesStartRepeat = this._cloneArray(this._valuesStart);
         this._computeDeltas();
     }
 
@@ -166,21 +164,22 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
             this._valuesEnd = tmp;
             this._reversed = !this._reversed;
             this._computeDeltas();
-        } else if (this._valuesStartRepeat) {
-            this._valuesStart = this._cloneArray(this._valuesStartRepeat);
+            return;
+        }
 
-            const startArray = this._valuesStart as any;
-            const object = this._object as any;
+        // Non-yoyo cycles reuse the untouched start snapshot: rewind the
+        // live object without cloning. Zero steady-state allocation.
+        const startArray = this._valuesStart as any;
+        const object = this._object as any;
 
-            if (ArrayBuffer.isView(object)) {
-                const typedArray = object as any;
-                for (let i = 0; i < typedArray.length && i < startArray.length; i++) {
-                    typedArray[i] = startArray[i];
-                }
-            } else if (Array.isArray(object)) {
-                for (let i = 0; i < object.length && i < startArray.length; i++) {
-                    object[i] = startArray[i];
-                }
+        if (ArrayBuffer.isView(object)) {
+            const typedArray = object as any;
+            for (let i = 0; i < typedArray.length && i < startArray.length; i++) {
+                typedArray[i] = startArray[i];
+            }
+        } else if (Array.isArray(object)) {
+            for (let i = 0; i < object.length && i < startArray.length; i++) {
+                object[i] = startArray[i];
             }
         }
     }

@@ -13,7 +13,6 @@ import {
 import { createObjectTweenTrack, ObjectTweenTrack } from '../object-tracks';
 
 export class ObjectTween<T extends object> extends TweenCore<T> {
-    protected _valuesStartRepeat: DeepPartial<T> | null = null;
     protected _objectProps = new Set<string>();
     protected _propertyAccessors = new Map<string, TweenPropertyAccessor>();
     protected _propertyEntries: TweenPropertyAccessor[] = [];
@@ -55,12 +54,37 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
             }
         }
 
-        this._valuesStartRepeat = deepCloneTweenValue(this._valuesStart);
+        this._freezeStartArrays(this._valuesStart);
         this._compileTracks();
     }
 
-    protected _getDefaultValue(endValue: any): any {
-        if (typeof endValue === 'number') {
+    /**
+     * Detach start-snapshot arrays from live objects once at init. The
+     * `to()` path otherwise aliases the target's arrays, so cycle resets
+     * would read back mutated values. One setup-time copy buys allocation-free
+     * repeat cycles for the lifetime of the tween.
+     */
+    protected _freezeStartArrays(obj: any): void {
+        if (!obj || typeof obj !== 'object') {
+            return;
+        }
+
+        if (Array.isArray(obj) || isTweenTypedArray(obj)) {
+            return;
+        }
+
+        for (const key of Object.keys(obj)) {
+            const value = obj[key];
+
+            if (Array.isArray(value) || isTweenTypedArray(value)) {
+                obj[key] = this._deepClone(value);
+            } else if (value !== null && typeof value === 'object') {
+                this._freezeStartArrays(value);
+            }
+        }
+    }
+
+    protected _getDefaultValue(endValue: any): any {        if (typeof endValue === 'number') {
             return 0;
         }
 
@@ -116,13 +140,9 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
             return;
         }
 
-        if (!this._valuesStartRepeat) {
-            return;
-        }
-
-        this._valuesStart = deepCloneTweenValue(this._valuesStartRepeat);
-        this._compileTracks();
-
+        // Non-yoyo cycles reuse the untouched start snapshot: tracks still
+        // reference the same values, so only the live object is rewound.
+        // No clone, no recompile — zero steady-state allocation per cycle.
         for (const track of this._tracks) {
             track.reset(this._object);
         }
