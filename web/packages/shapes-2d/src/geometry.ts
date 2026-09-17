@@ -2,6 +2,9 @@ import type { IVec2Like } from '@axrone/numeric';
 import {
     EPSILON,
     TAU,
+    DEFAULT_CURVE_TOLERANCE,
+    DEFAULT_MAX_CURVE_SEGMENTS,
+    DEFAULT_MIN_CURVE_SEGMENTS,
     approximateCurveSegments,
     createBounds,
     distance,
@@ -137,6 +140,43 @@ const buildRingMesh = (outer: Float32Array, inner: Float32Array | null): ShapeMe
     return createMesh(positions, indices);
 };
 
+const combineMeshes = (meshes: ShapeMesh2D[]): ShapeMesh2D => {
+    if (meshes.length === 0) {
+        return createMesh(new Float32Array(0), []);
+    }
+    if (meshes.length === 1) {
+        return meshes[0]!;
+    }
+
+    let totalVertices = 0;
+    let totalIndices = 0;
+    for (const mesh of meshes) {
+        totalVertices += mesh.vertexCount;
+        totalIndices += mesh.indexCount;
+    }
+
+    const positions = new Float32Array(totalVertices * 2);
+    const indices = new Uint16Array(totalIndices);
+    let vertexOffset = 0;
+    let indexOffset = 0;
+    let positionOffset = 0;
+
+    for (const mesh of meshes) {
+        positions.set(mesh.positions, positionOffset);
+        const meshIndices = mesh.indices;
+        for (let i = 0; i < meshIndices.length; i++) {
+            indices[indexOffset + i] = (meshIndices[i] as number) + vertexOffset;
+        }
+        vertexOffset += mesh.vertexCount;
+        positionOffset += mesh.positions.length;
+        indexOffset += meshIndices.length;
+    }
+
+    return createMesh(positions, Array.from(indices));
+};
+
+const MITER_LIMIT = 4;
+
 const getStrokeOffsets = (
     stroke: ShapeStroke
 ): { readonly outer: number; readonly inner: number } => {
@@ -212,7 +252,7 @@ const offsetConvexContour = (contour: Float32Array, distanceValue: number): Floa
         const normalizedMiterY = miterY / miterLength;
         const projection = normalizedMiterX * prevNormalX + normalizedMiterY * prevNormalY;
 
-        if (Math.abs(projection) <= EPSILON) {
+        if (Math.abs(projection) <= EPSILON || 1 / Math.abs(projection) > MITER_LIMIT) {
             offset[index * 2] = px + prevNormalX * distanceValue;
             offset[index * 2 + 1] = py + prevNormalY * distanceValue;
             continue;
@@ -282,7 +322,7 @@ const computeStrokeOffsetPositions = (
             const projection =
                 normalizedMiterX * prevNormalX + normalizedMiterY * prevNormalY;
 
-            if (projection > EPSILON) {
+            if (projection > EPSILON && 1 / projection <= MITER_LIMIT) {
                 const scale = 1 / projection;
                 outerX = px + normalizedMiterX * outerOffset * scale;
                 outerY = py + normalizedMiterY * outerOffset * scale;
@@ -354,23 +394,73 @@ const createTriangleContour = (shape: TriangleShape): Float32Array =>
         ])
     );
 
+const contourCache = new WeakMap<Shape2D, Float32Array>();
+const contourCacheByOptions = new WeakMap<Shape2D, Map<string, Float32Array>>();
+
+const serializeContourOptions = (options: ShapeApproximationOptions): string =>
+    `${options.curveTolerance ?? DEFAULT_CURVE_TOLERANCE}|${options.minCurveSegments ?? DEFAULT_MIN_CURVE_SEGMENTS}|${options.maxCurveSegments ?? DEFAULT_MAX_CURVE_SEGMENTS}`;
+
 export const getShapeContour = (
     shape: Shape2D,
     options: ShapeApproximationOptions = {}
 ): Float32Array => {
     switch (shape.kind) {
         case 'rectangle':
-            return createRectangleContour(shape);
-        case 'circle':
-            return createEllipseContour(shape.cx, shape.cy, shape.radius, shape.radius, options);
-        case 'ellipse':
-            return createEllipseContour(shape.cx, shape.cy, shape.radiusX, shape.radiusY, options);
         case 'triangle':
-            return createTriangleContour(shape);
         case 'line':
-            return new Float32Array([shape.start.x, shape.start.y, shape.end.x, shape.end.y]);
-        case 'polygon':
-            return polygonRingToFloat32(shape.outer.points);
+        case 'polygon': {
+            const cached = contourCache.get(shape);
+            if (cached) {
+                return cached;
+            }
+            let result: Float32Array;
+            switch (shape.kind) {
+                case 'rectangle':
+                    result = createRectangleContour(shape);
+                    break;
+                case 'triangle':
+                    result = createTriangleContour(shape);
+                    break;
+                case 'line':
+                    result = new Float32Array([shape.start.x, shape.start.y, shape.end.x, shape.end.y]);
+                    break;
+                case 'polygon':
+                    result = polygonRingToFloat32(shape.outer.points);
+                    break;
+            }
+            contourCache.set(shape, result);
+            return result;
+        }
+        case 'circle': {
+            const key = serializeContourOptions(options);
+            let innerCache = contourCacheByOptions.get(shape);
+            if (!innerCache) {
+                innerCache = new Map();
+                contourCacheByOptions.set(shape, innerCache);
+            }
+            const cached = innerCache.get(key);
+            if (cached) {
+                return cached;
+            }
+            const result = createEllipseContour(shape.cx, shape.cy, shape.radius, shape.radius, options);
+            innerCache.set(key, result);
+            return result;
+        }
+        case 'ellipse': {
+            const key = serializeContourOptions(options);
+            let innerCache = contourCacheByOptions.get(shape);
+            if (!innerCache) {
+                innerCache = new Map();
+                contourCacheByOptions.set(shape, innerCache);
+            }
+            const cached = innerCache.get(key);
+            if (cached) {
+                return cached;
+            }
+            const result = createEllipseContour(shape.cx, shape.cy, shape.radiusX, shape.radiusY, options);
+            innerCache.set(key, result);
+            return result;
+        }
     }
 };
 
@@ -704,26 +794,36 @@ export const buildStrokeMeshInternal = (
         const outerRing = polygonRingToFloat32(shape.outer.points);
         const { outer: outerOffset, inner: innerOffset } = getStrokeOffsets(shape.stroke);
 
-        if (isConvexPolygon(outerRing)) {
-            const outerContour =
-                outerOffset <= EPSILON ? outerRing : offsetConvexContour(outerRing, outerOffset);
-            const innerContour =
-                innerOffset <= EPSILON ? null : offsetConvexContour(outerRing, -innerOffset);
+        const buildRingStroke = (ring: Float32Array): ShapeMesh2D => {
+            if (isConvexPolygon(ring)) {
+                const outerContour =
+                    outerOffset <= EPSILON ? ring : offsetConvexContour(ring, outerOffset);
+                const innerContour =
+                    innerOffset <= EPSILON ? null : offsetConvexContour(ring, -innerOffset);
+                return buildRingMesh(
+                    outerContour,
+                    isValidContour(innerContour) ? innerContour : null
+                );
+            }
+            const { outer: outerContour, inner: innerContour } = computeStrokeOffsetPositions(
+                ring,
+                outerOffset,
+                innerOffset
+            );
             return buildRingMesh(
                 outerContour,
                 isValidContour(innerContour) ? innerContour : null
             );
+        };
+
+        const meshes: ShapeMesh2D[] = [buildRingStroke(outerRing)];
+
+        for (const hole of shape.holes) {
+            const holeRing = polygonRingToFloat32(hole.points);
+            meshes.push(buildRingStroke(holeRing));
         }
 
-        const { outer: outerContour, inner: innerContour } = computeStrokeOffsetPositions(
-            outerRing,
-            outerOffset,
-            innerOffset
-        );
-        return buildRingMesh(
-            outerContour,
-            isValidContour(innerContour) ? innerContour : null
-        );
+        return combineMeshes(meshes);
     }
 
     const contour = getShapeContour(shape, options);
