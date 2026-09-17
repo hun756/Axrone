@@ -1,4 +1,5 @@
 import { DeepPartial } from '@axrone/utility';
+import { deepCloneTweenValue } from './runtime-utils';
 import { Easing, EasingFunction } from './easing-functions';
 import { Interpolation } from './interpolation';
 import { TweenDispatcher } from './dispatcher';
@@ -358,7 +359,10 @@ export abstract class TweenCore<T> implements ITween<T> {
     protected abstract _initStartEndValues(): void;
     protected abstract _updateProperties(progress: number): void;
     protected abstract _reset(): void;
-    protected abstract _deepClone<U>(source: U): U;
+
+    protected _deepClone<U>(source: U): U {
+        return deepCloneTweenValue(source);
+    }
 
     private _startChainedTweens(time?: number): void {
         for (const tween of this._chainedTweens) {

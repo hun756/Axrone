@@ -183,11 +183,4 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
             }
         }
     }
-
-    protected _deepClone<U>(source: U): U {
-        if (Array.isArray(source) || isTweenTypedArray(source)) {
-            return this._cloneArray(source) as unknown as U;
-        }
-        return source;
-    }
 }

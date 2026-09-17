@@ -7,7 +7,6 @@ import {
 } from '../property-accessor';
 import {
     collectTweenLeafPaths,
-    deepCloneTweenValue,
     isTweenTypedArray,
     type TweenTypedArrayConstructor,
 } from '../runtime-utils';
@@ -130,10 +129,6 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
         for (const track of this._tracks) {
             track.reset(this._object);
         }
-    }
-
-    protected _deepClone<U>(source: U): U {
-        return deepCloneTweenValue(source);
     }
 
     protected _compileTracks(): void {

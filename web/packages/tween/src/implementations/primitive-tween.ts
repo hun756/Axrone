@@ -53,8 +53,4 @@ export class PrimitiveTween extends TweenCore<number> {
             this._valuesStart = this._valuesStartRepeat;
         }
     }
-
-    protected _deepClone<U>(source: U): U {
-        return source;
-    }
 }
