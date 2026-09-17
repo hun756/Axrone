@@ -61,6 +61,9 @@ export const toPoint = (value: ShapePointInput, name: string): Readonly<IVec2Lik
     }
 
     if (value && typeof value === 'object' && 'x' in value && 'y' in value) {
+        if (Object.isFrozen(value)) {
+            return value;
+        }
         return Object.freeze({
             x: assertFiniteNumber(value.x, `${name}.x`),
             y: assertFiniteNumber(value.y, `${name}.y`),

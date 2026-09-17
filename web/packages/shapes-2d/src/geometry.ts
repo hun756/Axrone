@@ -80,12 +80,19 @@ const buildConvexFanMesh = (contour: Float32Array): ShapeMesh2D => {
     return createMesh(contour.slice(), indices);
 };
 
+const ringFloat32Cache = new WeakMap<ReadonlyArray<Readonly<IVec2Like>>, Float32Array>();
+
 const polygonRingToFloat32 = (ring: ReadonlyArray<Readonly<IVec2Like>>): Float32Array => {
+    const cached = ringFloat32Cache.get(ring);
+    if (cached) {
+        return cached;
+    }
     const buffer = new Float32Array(ring.length * 2);
     for (let i = 0; i < ring.length; i++) {
         buffer[i * 2] = (ring[i] as Readonly<IVec2Like>).x;
         buffer[i * 2 + 1] = (ring[i] as Readonly<IVec2Like>).y;
     }
+    ringFloat32Cache.set(ring, buffer);
     return buffer;
 };
 
@@ -143,21 +150,6 @@ const getStrokeOffsets = (
     }
 };
 
-const normalizeEdge = (
-    fromX: number,
-    fromY: number,
-    toX: number,
-    toY: number
-): readonly [number, number] => {
-    const dx = toX - fromX;
-    const dy = toY - fromY;
-    const length = Math.sqrt(dx * dx + dy * dy);
-    if (length <= EPSILON) {
-        return [0, 0];
-    }
-    return [dx / length, dy / length];
-};
-
 const offsetConvexContour = (contour: Float32Array, distanceValue: number): Float32Array => {
     const count = contour.length / 2;
     const area = polygonSignedArea(contour);
@@ -175,8 +167,31 @@ const offsetConvexContour = (contour: Float32Array, distanceValue: number): Floa
         const nextX = contour[next * 2]!;
         const nextY = contour[next * 2 + 1]!;
 
-        const [prevDirX, prevDirY] = normalizeEdge(prevX, prevY, px, py);
-        const [nextDirX, nextDirY] = normalizeEdge(px, py, nextX, nextY);
+        let prevDx = px - prevX;
+        let prevDy = py - prevY;
+        let prevLen = Math.sqrt(prevDx * prevDx + prevDy * prevDy);
+        let prevDirX: number;
+        let prevDirY: number;
+        if (prevLen <= EPSILON) {
+            prevDirX = 0;
+            prevDirY = 0;
+        } else {
+            prevDirX = prevDx / prevLen;
+            prevDirY = prevDy / prevLen;
+        }
+
+        let nextDx = nextX - px;
+        let nextDy = nextY - py;
+        let nextLen = Math.sqrt(nextDx * nextDx + nextDy * nextDy);
+        let nextDirX: number;
+        let nextDirY: number;
+        if (nextLen <= EPSILON) {
+            nextDirX = 0;
+            nextDirY = 0;
+        } else {
+            nextDirX = nextDx / nextLen;
+            nextDirY = nextDy / nextLen;
+        }
 
         const prevNormalX = winding >= 0 ? prevDirY : -prevDirY;
         const prevNormalY = winding >= 0 ? -prevDirX : prevDirX;
@@ -230,18 +245,17 @@ const computeStrokeOffsetPositions = (
         const px = contour[i * 2] as number;
         const py = contour[i * 2 + 1] as number;
 
-        const [prevDirX, prevDirY] = normalizeEdge(
-            contour[prev * 2] as number,
-            contour[prev * 2 + 1] as number,
-            px,
-            py
-        );
-        const [nextDirX, nextDirY] = normalizeEdge(
-            px,
-            py,
-            contour[next * 2] as number,
-            contour[next * 2 + 1] as number
-        );
+        const prevEdgeDx = px - (contour[prev * 2] as number);
+        const prevEdgeDy = py - (contour[prev * 2 + 1] as number);
+        const prevEdgeLen = Math.sqrt(prevEdgeDx * prevEdgeDx + prevEdgeDy * prevEdgeDy);
+        const prevDirX = prevEdgeLen <= EPSILON ? 0 : prevEdgeDx / prevEdgeLen;
+        const prevDirY = prevEdgeLen <= EPSILON ? 0 : prevEdgeDy / prevEdgeLen;
+
+        const nextEdgeDx = (contour[next * 2] as number) - px;
+        const nextEdgeDy = (contour[next * 2 + 1] as number) - py;
+        const nextEdgeLen = Math.sqrt(nextEdgeDx * nextEdgeDx + nextEdgeDy * nextEdgeDy);
+        const nextDirX = nextEdgeLen <= EPSILON ? 0 : nextEdgeDx / nextEdgeLen;
+        const nextDirY = nextEdgeLen <= EPSILON ? 0 : nextEdgeDy / nextEdgeLen;
 
         const prevNormalX = windingSign * prevDirY;
         const prevNormalY = windingSign * -prevDirX;
