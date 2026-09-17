@@ -190,11 +190,12 @@ describe('TweenSystem', () => {
             expect(system.getActiveTweenCount()).toBe(0);
         });
 
-        it('handles tweens without getStatus', () => {
+        it('keeps running tweens across updates', () => {
             const system = new TweenSystem();
             const mockTween = {
                 id: 0,
                 isPlaying: () => true,
+                getStatus: () => 'running' as const,
                 getTotalDuration: () => 100,
                 start: function () { return this; },
                 stop: function () { return this; },

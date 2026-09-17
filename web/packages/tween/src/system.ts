@@ -1,10 +1,8 @@
 import { IGroupable } from './types';
 
 export class TweenSystem {
-    private _tweens = new Set<IGroupable>();
-    private _tweensToAdd = new Set<IGroupable>();
-    private _tweensToRemove = new Set<IGroupable>();
-    private _isUpdating = false;
+    private _active: IGroupable[] = [];
+    private _count = 0;
     private _autoUpdate = false;
     private _lastTime = 0;
     private _animFrameId?: number;
@@ -23,77 +21,66 @@ export class TweenSystem {
     }
 
     add(tween: IGroupable): void {
-        if (this._isUpdating) {
-            this._tweensToAdd.add(tween);
-        } else {
-            this._tweens.add(tween);
+        if (this._active.indexOf(tween) >= 0) {
+            return;
         }
+        this._active[this._count] = tween;
+        this._count += 1;
 
-        if (this._autoUpdate && !this._isInternalLoopRunning() && this._tweens.size > 0) {
+        if (this._autoUpdate && !this._isInternalLoopRunning() && this._count > 0) {
             this._startInternalLoop();
         }
     }
 
     remove(tween: IGroupable): void {
-        if (this._isUpdating) {
-            this._tweensToRemove.add(tween);
-        } else {
-            this._tweens.delete(tween);
+        const index = this._active.indexOf(tween);
+        if (index < 0 || index >= this._count) {
+            return;
         }
+        this._swapAndPop(index);
     }
 
     update(time?: number): boolean {
-        if (this._tweens.size === 0 && this._tweensToAdd.size === 0) {
+        if (this._count === 0) {
             return false;
         }
 
         const now = time !== undefined ? time : performance.now();
 
-        this._isUpdating = true;
-
-        for (const tween of this._tweens) {
+        for (let index = this._count - 1; index >= 0; index -= 1) {
+            const tween = this._active[index]!;
             tween.update(now);
 
-            if (this._hasCompleted(tween)) {
-                this._tweensToRemove.add(tween);
+            if (tween.getStatus() === 'completed') {
+                this._swapAndPop(index);
             }
         }
 
-        this._isUpdating = false;
-
-        if (this._tweensToRemove.size > 0) {
-            for (const tween of this._tweensToRemove) {
-                this._tweens.delete(tween);
-            }
-            this._tweensToRemove.clear();
-        }
-
-        if (this._tweensToAdd.size > 0) {
-            for (const tween of this._tweensToAdd) {
-                this._tweens.add(tween);
-            }
-            this._tweensToAdd.clear();
-        }
-
-        return this._tweens.size > 0;
+        return this._count > 0;
     }
 
     getActiveTweenCount(): number {
-        return this._tweens.size;
+        return this._count;
     }
 
     clear(): void {
-        for (const tween of this._tweens) {
-            tween.stop();
+        for (let index = 0; index < this._count; index += 1) {
+            this._active[index]!.stop();
+            this._active[index] = undefined as unknown as IGroupable;
         }
-        this._tweens.clear();
-        this._tweensToAdd.clear();
-        this._tweensToRemove.clear();
+        this._count = 0;
 
         if (this._animFrameId !== undefined) {
             cancelAnimationFrame(this._animFrameId);
             this._animFrameId = undefined;
         }
+    }
+
+    private _swapAndPop(index: number): void {
+        const last = this._count - 1;
+        this._active[index] = this._active[last]!;
+        this._active[last] = undefined as unknown as IGroupable;
+        this._count = last;
     }
 
     private _isInternalLoopRunning(): boolean {
@@ -120,11 +107,4 @@ export class TweenSystem {
             this._animFrameId = undefined;
         }
     };
-
-    private _hasCompleted(tween: IGroupable): boolean {
-        const tweenWithStatus = tween as unknown as { getStatus?: () => string };
-        return typeof tweenWithStatus.getStatus === 'function'
-            ? tweenWithStatus.getStatus() === 'completed'
-            : false;
-    }
 }
