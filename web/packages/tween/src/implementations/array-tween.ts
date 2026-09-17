@@ -10,6 +10,7 @@ import {
 export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
     protected _valuesStartRepeat: T | null = null;
     protected _twoValueBuffer: [number, number] = [0, 0];
+    private _deltas: ArrayLike<number> | null = null;
 
     constructor(object: T, config?: TweenConfig<T>) {
         super(object, config);
@@ -31,6 +32,36 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
         this._normalizeArrays();
 
         this._valuesStartRepeat = this._cloneArray(this._valuesStart);
+        this._computeDeltas();
+    }
+
+    private _computeDeltas(): void {
+        const start = this._valuesStart as unknown as ArrayLike<number>;
+        const end = this._valuesEnd as unknown as ArrayLike<number>;
+        const startLen = start?.length ?? 0;
+        const endLen = end?.length ?? 0;
+        const len = Math.min(startLen, endLen);
+
+        if (len <= 0) {
+            this._deltas = null;
+            return;
+        }
+
+        if (isTweenTypedArray(start)) {
+            const constructor = (start as unknown as { constructor: TweenTypedArrayConstructor }).constructor;
+            const deltas = new constructor(len);
+            for (let i = 0; i < len; i++) {
+                deltas[i] = (end[i] ?? 0) - (start[i] ?? 0);
+            }
+            this._deltas = deltas;
+            return;
+        }
+
+        const deltas = new Array<number>(len);
+        for (let i = 0; i < len; i++) {
+            deltas[i] = (end[i] ?? 0) - (start[i] ?? 0);
+        }
+        this._deltas = deltas;
     }
 
     protected _normalizeArrays(): void {
@@ -83,11 +114,17 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
         const start = this._valuesStart as any;
         const end = this._valuesEnd as any;
         const object = this._object as any;
+        const deltas = this._deltas as any;
 
         if (isTweenTypedArray(object)) {
             const typedArray = object as any;
-            for (let i = 0; i < typedArray.length; i++) {
-                if (i < start.length && i < end.length) {
+            const len = Math.min(typedArray.length, start.length, end.length);
+            if (deltas && deltas.length >= len) {
+                for (let i = 0; i < len; i++) {
+                    typedArray[i] = start[i] + deltas[i] * progress;
+                }
+            } else {
+                for (let i = 0; i < len; i++) {
                     typedArray[i] = start[i] + (end[i] - start[i]) * progress;
                 }
             }
@@ -106,8 +143,13 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
                     }
                 }
             } else {
-                for (let i = 0; i < object.length; i++) {
-                    if (i < start.length && i < end.length) {
+                const len = Math.min(object.length, start.length, end.length);
+                if (deltas && deltas.length >= len) {
+                    for (let i = 0; i < len; i++) {
+                        object[i] = start[i] + deltas[i] * progress;
+                    }
+                } else {
+                    for (let i = 0; i < len; i++) {
                         object[i] = start[i] + (end[i] - start[i]) * progress;
                     }
                 }
@@ -123,6 +165,7 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
             this._valuesStart = this._valuesEnd;
             this._valuesEnd = tmp;
             this._reversed = !this._reversed;
+            this._computeDeltas();
         } else if (this._valuesStartRepeat) {
             this._valuesStart = this._cloneArray(this._valuesStartRepeat);
 
