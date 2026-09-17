@@ -2,6 +2,22 @@ using Axrone.Utility.Alignment;
 
 namespace Axrone.Memory.Arena;
 
+[StructLayout(LayoutKind.Explicit, Size = 512)]
+internal struct QuadSequence
+{
+    [FieldOffset(0)]
+    public AlignedAtomicCounter128 WriteReserved;
+
+    [FieldOffset(128)]
+    public AlignedAtomicCounter128 WriteCommitted;
+
+    [FieldOffset(256)]
+    public AlignedAtomicCounter128 ReadReserved;
+
+    [FieldOffset(384)]
+    public AlignedAtomicCounter128 ReadCommitted;
+}
+
 public sealed unsafe class ArenaMemoryRing<T, TBackoff> : IBatchReservable<T>, IAsyncStreamable<T>, IAdministrativeEndpoint, IArenaCommitTarget, IDisposable
     where T : unmanaged
     where TBackoff : struct, IBackoffPolicy
@@ -10,22 +26,6 @@ public sealed unsafe class ArenaMemoryRing<T, TBackoff> : IBatchReservable<T>, I
     private readonly int _capacity;
     private readonly int _mask;
     private readonly TBackoff _backoff;
-
-    [StructLayout(LayoutKind.Explicit, Size = 512)]
-    private struct QuadSequence
-    {
-        [FieldOffset(0)]
-        public AlignedAtomicCounter128 WriteReserved;
-
-        [FieldOffset(128)]
-        public AlignedAtomicCounter128 WriteCommitted;
-
-        [FieldOffset(256)]
-        public AlignedAtomicCounter128 ReadReserved;
-
-        [FieldOffset(384)]
-        public AlignedAtomicCounter128 ReadCommitted;
-    }
 
     private QuadSequence _sequences;
     private DisposalTracker _tracker;
