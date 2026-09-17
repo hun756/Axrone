@@ -391,16 +391,19 @@ export abstract class TweenCore<T> implements ITween<T> {
         this._eventCallbackWrappers.clear();
     }
 
-    protected _emit(event: TweenEventType, ...args: any[]): void {
+    protected _emit(event: TweenEventType, arg0?: unknown, arg1?: unknown): void {
         if (event === 'update') {
+            if (!this._events.has('update')) {
+                return;
+            }
             this._events.emitSync(event, {
-                tween: args[0],
-                elapsed: args[1],
+                tween: arg0 as ITween<T>,
+                elapsed: arg1 as number,
             } as TweenEventMap<T>[typeof event]);
             return;
         }
 
-        this._events.emitSync(event, args[0]);
+        this._events.emitSync(event, arg0 as TweenEventMap<T>[typeof event]);
     }
 
     protected abstract _initStartEndValues(): void;
