@@ -61,13 +61,12 @@ export const toPoint = (value: ShapePointInput, name: string): Readonly<IVec2Lik
     }
 
     if (value && typeof value === 'object' && 'x' in value && 'y' in value) {
-        if (Object.isFrozen(value)) {
-            return value;
+        const x = assertFiniteNumber(value.x, `${name}.x`);
+        const y = assertFiniteNumber(value.y, `${name}.y`);
+        if (Object.isFrozen(value) && (value as { x: unknown }).x === x && (value as { y: unknown }).y === y) {
+            return value as Readonly<IVec2Like>;
         }
-        return Object.freeze({
-            x: assertFiniteNumber(value.x, `${name}.x`),
-            y: assertFiniteNumber(value.y, `${name}.y`),
-        });
+        return Object.freeze({ x, y });
     }
 
     throw new ShapeValidationError(`${name} must be a point-like value`);

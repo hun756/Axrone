@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createLineShape, createPolygonShape } from '../shape';
+import { createCircleShape, createLineShape, createPolygonShape } from '../shape';
 import { ShapeValidationError } from '../errors';
 
 describe('hole containment validation', () => {
@@ -92,5 +92,28 @@ describe('line stroke alignment validation', () => {
                 stroke: { paint: '#000', width: 2, alignment: 'outside' },
             })
         ).toThrow(ShapeValidationError);
+    });
+});
+
+describe('toPoint frozen fast-path validation', () => {
+    it('rejects frozen point with NaN values', () => {
+        const frozen = Object.freeze({ x: NaN, y: 5 });
+        expect(() =>
+            createCircleShape({ cx: frozen.x, cy: frozen.y, radius: 10 })
+        ).toThrow(ShapeValidationError);
+    });
+
+    it('rejects frozen point with non-numeric values', () => {
+        const frozen = Object.freeze({ x: 'bad' as unknown as number, y: 5 });
+        expect(() =>
+            createCircleShape({ cx: frozen.x, cy: frozen.y, radius: 10 })
+        ).toThrow(ShapeValidationError);
+    });
+
+    it('accepts frozen point with valid numeric values', () => {
+        const frozen = Object.freeze({ x: 5, y: 10 });
+        expect(() =>
+            createCircleShape({ cx: frozen.x, cy: frozen.y, radius: 10 })
+        ).not.toThrow();
     });
 });
