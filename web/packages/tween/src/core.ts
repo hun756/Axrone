@@ -238,7 +238,7 @@ export abstract class TweenCore<T> implements ITween<T> {
     }
 
     chain(...tweens: ITween<any>[]): this {
-        this._chainedTweens = tweens;
+        this._chainedTweens.push(...tweens);
         return this;
     }
 
