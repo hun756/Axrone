@@ -81,7 +81,7 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
             return;
         }
 
-        for (const key in obj) {
+        for (const key of Object.keys(obj)) {
             const value = obj[key];
             const propPath = prefix ? `${prefix}.${key}` : key;
 

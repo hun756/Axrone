@@ -111,7 +111,7 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
                 this._getAccessor(propPath);
             }
         } else {
-            for (const key in obj) {
+            for (const key of Object.keys(obj)) {
                 const value = obj[key];
                 const propPath = prefix ? `${prefix}.${key}` : key;
 
@@ -150,7 +150,7 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
     private _updateTarget(current: any, target: any): void {
         if (!target || typeof target !== 'object') return;
 
-        for (const key in target) {
+        for (const key of Object.keys(target)) {
             const value = target[key];
 
             if (
@@ -159,7 +159,7 @@ export class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMa
                 !Array.isArray(value) &&
                 !ArrayBuffer.isView(value)
             ) {
-                if (!(key in current)) {
+                if (!Object.prototype.hasOwnProperty.call(current, key)) {
                     current[key] = Array.isArray(value) ? [] : {};
                 }
                 this._updateTarget(current[key], value);
