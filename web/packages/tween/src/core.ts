@@ -16,6 +16,10 @@ export abstract class TweenCore<T> implements ITween<T> {
     readonly id: number = nextTweenId();
 
     protected _object: T;
+    // Null-prototype maps: config keys are user-controlled (`constructor`,
+    // `__proto__`), so plain `{}` would collide with the prototype chain.
+    // The dictionary-mode cost is setup-only; per-frame reads go through
+    // compiled tracks, never these maps.
     protected _valuesStart = Object.create(null) as DeepPartial<T>;
     protected _valuesEnd = Object.create(null) as DeepPartial<T>;
     protected _duration = 1000;
