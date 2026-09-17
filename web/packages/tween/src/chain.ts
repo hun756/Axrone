@@ -14,6 +14,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
     private _isPaused = false;
     private _status: 'idle' | 'running' | 'paused' | 'completed' = 'idle';
     private _detachCurrentCompletion?: () => void;
+    private _lastUpdateTime?: number;
 
     constructor() {
         super();
@@ -49,6 +50,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
         this._isPaused = false;
         this._currentIndex = 0;
         this._status = 'running';
+        this._lastUpdateTime = time;
 
         this._playCurrentTween(time);
 
@@ -73,9 +75,9 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
         }
 
         this._currentIndex = -1;
+        this._lastUpdateTime = undefined;
 
         this.emitSync('stop', undefined);
-
         return this;
     }
 
@@ -118,6 +120,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
             return this;
         }
 
+        this._lastUpdateTime = time ?? performance.now();
         const currentTween = this._tweens[this._currentIndex];
         currentTween.update(time);
 
@@ -147,7 +150,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
         }
 
         const currentTween = this._tweens[this._currentIndex];
-        const completeHandler = () => this._advanceToNextTween(time);
+        const completeHandler = () => this._advanceToNextTween();
 
         this._detachCurrentCompletion?.();
         this._detachCurrentCompletion = this._subscribeToCompletion(currentTween, completeHandler);
@@ -155,7 +158,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
         currentTween.start(time);
     }
 
-    private _advanceToNextTween(time?: number): void {
+    private _advanceToNextTween(): void {
         this._detachCurrentCompletion?.();
         this._detachCurrentCompletion = undefined;
         this._currentIndex++;
@@ -166,7 +169,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
             this._status = 'completed';
             this.emitSync('complete', undefined);
         } else {
-            this._playCurrentTween(time);
+            this._playCurrentTween(this._lastUpdateTime);
         }
     }
 
