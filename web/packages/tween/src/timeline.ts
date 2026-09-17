@@ -11,6 +11,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         start: number;
         end: number;
         originalDuration: number;
+        finished: boolean;
     }> = [];
     private _duration = 0;
     private _currentTime = 0;
@@ -60,6 +61,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
             start: startPosition,
             end: endPosition,
             originalDuration: duration,
+            finished: false,
         });
 
         this._duration = Math.max(this._duration, endPosition);
@@ -81,6 +83,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         this._lastUpdateTime = time ?? (this._autoUpdate ? 0 : performance.now());
 
         for (const item of this._timelineItems) {
+            item.finished = false;
             item.target.stop();
         }
 
@@ -263,6 +266,14 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         for (const item of this._timelineItems) {
             const { target, start, end } = item;
 
+            if (item.finished) {
+                if (this._currentTime < start) {
+                    item.finished = false;
+                } else {
+                    continue;
+                }
+            }
+
             if (this._currentTime >= start && this._currentTime <= end) {
                 if (!target.isPlaying()) {
                     target.start(0);
@@ -275,12 +286,13 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
                     const tweenDuration = item.originalDuration;
                     target.update(tweenDuration);
                     target.stop();
-                } else {
+                } else if (target.getStatus() !== 'completed') {
                     target.start(0);
                     const tweenDuration = item.originalDuration;
                     target.update(tweenDuration);
                     target.stop();
                 }
+                item.finished = true;
             } else if (this._currentTime < start) {
                 if (target.isPlaying()) {
                     target.stop();
