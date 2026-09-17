@@ -5,6 +5,8 @@ export class TweenSystem {
     private _count = 0;
     private _autoUpdate = false;
     private _lastTime = 0;
+    private _lastUpdateTime?: number;
+    private _maxDelta?: number;
     private _animFrameId?: number;
 
     setAutoUpdate(enabled: boolean): void {
@@ -18,6 +20,20 @@ export class TweenSystem {
 
     getAutoUpdate(): boolean {
         return this._autoUpdate;
+    }
+
+    /**
+     * Cap the timestamp jump applied in a single `update`, in the same units
+     * as the driven clock. After a background-tab stall the excess is
+     * discarded instead of fast-forwarding every tween to its end state.
+     * `undefined` (default) preserves the legacy pass-through behavior.
+     */
+    setMaxDelta(maxDelta?: number): void {
+        this._maxDelta = maxDelta === undefined ? undefined : Math.max(0, maxDelta);
+    }
+
+    getMaxDelta(): number | undefined {
+        return this._maxDelta;
     }
 
     add(tween: IGroupable): void {
@@ -45,7 +61,16 @@ export class TweenSystem {
             return false;
         }
 
-        const now = time !== undefined ? time : performance.now();
+        let now = time !== undefined ? time : performance.now();
+
+        if (
+            this._maxDelta !== undefined &&
+            this._lastUpdateTime !== undefined &&
+            now - this._lastUpdateTime > this._maxDelta
+        ) {
+            now = this._lastUpdateTime + this._maxDelta;
+        }
+        this._lastUpdateTime = now;
 
         for (let index = this._count - 1; index >= 0; index -= 1) {
             const tween = this._active[index]!;
@@ -69,6 +94,7 @@ export class TweenSystem {
             this._active[index] = undefined as unknown as IGroupable;
         }
         this._count = 0;
+        this._lastUpdateTime = undefined;
 
         if (this._animFrameId !== undefined) {
             cancelAnimationFrame(this._animFrameId);
