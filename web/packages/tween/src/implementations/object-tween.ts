@@ -6,7 +6,9 @@ import {
     TweenPropertyAccessor,
 } from '../property-accessor';
 import {
+    BlendPair,
     collectTweenLeafPaths,
+    createBlendPair,
     isTweenTypedArray,
     type TweenTypedArrayConstructor,
 } from '../runtime-utils';
@@ -17,7 +19,7 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
     protected _propertyAccessors = new Map<string, TweenPropertyAccessor>();
     protected _propertyEntries: TweenPropertyAccessor[] = [];
     protected _tracks: ObjectTweenTrack[] = [];
-    protected _twoValueBuffer: [number, number] = [0, 0];
+    protected _twoValueBuffer: BlendPair = createBlendPair();
 
     constructor(object: T, config?: TweenConfig<T>) {
         super(object, config);

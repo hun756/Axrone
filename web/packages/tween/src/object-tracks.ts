@@ -5,6 +5,7 @@ import {
 } from './property-accessor';
 import {
     allocateSequenceLike,
+    BlendPair,
     cloneTweenArrayLike,
     isTweenTypedArray,
 } from './runtime-utils';
@@ -17,7 +18,7 @@ export interface ObjectTweenTrack {
         target: object,
         progress: number,
         interpolation: TweenInterpolationFunction,
-        twoValueBuffer: [number, number]
+        twoValueBuffer: BlendPair
     ): void;
     reset(target: object): void;
 }
@@ -64,7 +65,7 @@ class NumberTweenTrack implements ObjectTweenTrack {
         target: object,
         progress: number,
         _interpolation: TweenInterpolationFunction,
-        _twoValueBuffer: [number, number]
+        _twoValueBuffer: BlendPair
     ): void {
         const resolved = this._holderFor(target);
         if (resolved === null) {
@@ -122,7 +123,7 @@ class SequenceTweenTrack implements ObjectTweenTrack {
         target: object,
         progress: number,
         interpolation: TweenInterpolationFunction,
-        twoValueBuffer: [number, number]
+        twoValueBuffer: BlendPair
     ): void {
         const result = this._targetFor(target) as any;
 

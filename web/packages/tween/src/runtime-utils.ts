@@ -79,6 +79,15 @@ export const deepCloneTweenValue = <T>(source: T): T => {    if (source === null
 };
 
 /**
+ * Per-property blend scratch over a resolved `[start, end]` pair.
+ * Each tween owns one instance buffer (see `createBlendPair`); sharing it
+ * across tweens would break re-entrant updates.
+ */
+export type BlendPair = [number, number];
+
+export const createBlendPair = (): BlendPair => [0, 0];
+
+/**
  * Collect dotted leaf paths over own enumerable properties.
  *
  * Shared by the object tween and the spring so their traversal semantics

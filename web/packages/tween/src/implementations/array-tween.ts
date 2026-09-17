@@ -2,13 +2,15 @@ import { TweenCore } from '../core';
 import { TweenConfig } from '../types';
 import { Interpolation } from '../interpolation';
 import {
+    BlendPair,
     cloneTweenArrayLike,
+    createBlendPair,
     isTweenTypedArray,
     type TweenTypedArrayConstructor,
 } from '../runtime-utils';
 
 export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
-    protected _twoValueBuffer: [number, number] = [0, 0];
+    protected _twoValueBuffer: BlendPair = createBlendPair();
     private _deltas: ArrayLike<number> | null = null;
 
     constructor(object: T, config?: TweenConfig<T>) {
