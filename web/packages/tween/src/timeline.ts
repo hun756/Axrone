@@ -1,8 +1,8 @@
-import { EventEmitter } from '@axrone/event';
+import { EventFanOut, UnsubscribeFn } from './dispatcher';
 import { ITimeline, IGroupable, TimelineOptions, TimelineEventMap, TweenStatus, VoidCallback } from './types';
 import { nextTweenId } from './id';
 
-export class Timeline extends EventEmitter<TimelineEventMap> implements ITimeline {
+export class Timeline implements ITimeline {
     readonly id: number = nextTweenId();
 
     private _timelineItems: Array<{
@@ -22,10 +22,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
     private _autoUpdate = false;
     private _clockMode: 'manual' | 'realtime' | undefined;
     private _status: TweenStatus = 'idle';
-
-    constructor() {
-        super();
-    }
+    private _events = new EventFanOut<TimelineEventMap>();
 
     setAutoUpdate(enabled: boolean): void {
         this._autoUpdate = enabled;
@@ -88,7 +85,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
 
         this._currentTime = 0;
 
-        this.emitSync('start', undefined);
+        this._events.emit('start', undefined);
 
         if (time === undefined && this._autoUpdate) {
             this._startInternalLoop();
@@ -115,7 +112,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
             item.target.stop();
         }
 
-        this.emitSync('stop', undefined);
+        this._events.emit('stop', undefined);
 
         return this;
     }
@@ -139,7 +136,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
             }
         }
 
-        this.emitSync('pause', undefined);
+        this._events.emit('pause', undefined);
 
         return this;
     }
@@ -165,7 +162,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
             this._startInternalLoop();
         }
 
-        this.emitSync('resume', undefined);
+        this._events.emit('resume', undefined);
 
         return this;
     }
@@ -187,7 +184,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
             this._lastUpdateTime = now;
         }
 
-        this.emitSync('update', this._currentTime);
+        this._events.emit('update', this._currentTime);
 
         this._updateItems();
 
@@ -195,7 +192,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
             this._isPlaying = false;
             this._isPaused = false;
             this._status = 'completed';
-            this.emitSync('complete', undefined);
+            this._events.emit('complete', undefined);
             return this;
         }
 
@@ -213,6 +210,24 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
     setTimeScale(scale: number): this {
         this._timeScale = scale;
         return this;
+    }
+
+    on<K extends keyof TimelineEventMap & string>(
+        event: K,
+        callback: (payload: TimelineEventMap[K]) => void
+    ): UnsubscribeFn {
+        return this._events.on(event, callback);
+    }
+
+    off<K extends keyof TimelineEventMap & string>(
+        event: K,
+        callback?: (payload: TimelineEventMap[K]) => void
+    ): boolean {
+        return this._events.off(event, callback);
+    }
+
+    has<K extends keyof TimelineEventMap & string>(event: K): boolean {
+        return this._events.has(event);
     }
 
     onComplete(callback: VoidCallback): this {
@@ -244,7 +259,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         this._autoUpdate = false;
         this._clockMode = undefined;
         this._status = 'idle';
-        super.dispose();
+        this._events.clear();
     }
 
     private _startInternalLoop(): void {

@@ -1,10 +1,12 @@
-import { EventEmitter } from '@axrone/event';
 import { TweenCore } from './core';
 import { Timeline } from './timeline';
 import { IGroupable, TweenChainEventMap, TweenStatus, VoidCallback } from './types';
+import { EventFanOut, UnsubscribeFn } from './dispatcher';
 import { nextTweenId } from './id';
 
-export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGroupable {
+export type TweenChainEvent = keyof TweenChainEventMap & string;
+
+export class TweenChain implements IGroupable {
     readonly id: number = nextTweenId();
 
     private _tweens: Array<IGroupable> = [];
@@ -14,10 +16,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
     private _status: TweenStatus = 'idle';
     private _detachCurrentCompletion?: () => void;
     private _lastUpdateTime?: number;
-
-    constructor() {
-        super();
-    }
+    private _events = new EventFanOut<TweenChainEventMap>();
 
     isPlaying(): boolean {
         return this._isPlaying;
@@ -53,7 +52,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
 
         this._playCurrentTween(time);
 
-        this.emitSync('start', undefined);
+        this._events.emit('start', undefined);
 
         return this;
     }
@@ -76,7 +75,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
         this._currentIndex = -1;
         this._lastUpdateTime = undefined;
 
-        this.emitSync('stop', undefined);
+        this._events.emit('stop', undefined);
         return this;
     }
 
@@ -92,7 +91,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
             this._tweens[this._currentIndex].pause();
         }
 
-        this.emitSync('pause', undefined);
+        this._events.emit('pause', undefined);
 
         return this;
     }
@@ -109,7 +108,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
             this._tweens[this._currentIndex].resume();
         }
 
-        this.emitSync('resume', undefined);
+        this._events.emit('resume', undefined);
 
         return this;
     }
@@ -135,7 +134,19 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
         this._isPlaying = false;
         this._isPaused = false;
         this._status = 'idle';
-        super.dispose();
+        this._events.clear();
+    }
+
+    on(event: TweenChainEvent, callback: () => void): UnsubscribeFn {
+        return this._events.on(event, callback);
+    }
+
+    off(event: TweenChainEvent, callback?: () => void): boolean {
+        return this._events.off(event, callback);
+    }
+
+    has(event: TweenChainEvent): boolean {
+        return this._events.has(event);
     }
 
     onComplete(callback: VoidCallback): this {
@@ -166,7 +177,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
             this._isPlaying = false;
             this._isPaused = false;
             this._status = 'completed';
-            this.emitSync('complete', undefined);
+            this._events.emit('complete', undefined);
         } else {
             this._playCurrentTween(this._lastUpdateTime);
         }
