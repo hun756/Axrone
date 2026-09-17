@@ -1,6 +1,7 @@
 import { EventFanOut, UnsubscribeFn } from './dispatcher';
 import { ITimeline, IGroupable, TimelineOptions, TimelineEventMap, TweenStatus, VoidCallback } from './types';
 import { nextTweenId } from './id';
+import { RafLoop } from './raf-loop';
 
 export class Timeline implements ITimeline {
     readonly id: number = nextTweenId();
@@ -18,18 +19,24 @@ export class Timeline implements ITimeline {
     private _isPaused = false;
     private _timeScale = 1;
     private _lastUpdateTime = 0;
-    private _animFrameId?: number;
     private _autoUpdate = false;
     private _clockMode: 'manual' | 'realtime' | undefined;
     private _status: TweenStatus = 'idle';
     private _events = new EventFanOut<TimelineEventMap>();
+    private _loop: RafLoop;
+
+    public constructor() {
+        this._loop = new RafLoop(() => {
+            this.update();
+            return this._isPlaying && !this._isPaused;
+        });
+    }
 
     setAutoUpdate(enabled: boolean): void {
         this._autoUpdate = enabled;
 
-        if (!enabled && this._animFrameId !== undefined) {
-            cancelAnimationFrame(this._animFrameId);
-            this._animFrameId = undefined;
+        if (!enabled) {
+            this._loop.stop();
         }
     }
 
@@ -103,10 +110,7 @@ export class Timeline implements ITimeline {
         this._isPaused = false;
         this._status = 'idle';
 
-        if (this._animFrameId) {
-            cancelAnimationFrame(this._animFrameId);
-            this._animFrameId = undefined;
-        }
+        this._loop.stop();
 
         for (const item of this._timelineItems) {
             item.target.stop();
@@ -125,10 +129,7 @@ export class Timeline implements ITimeline {
         this._isPaused = true;
         this._status = 'paused';
 
-        if (this._animFrameId) {
-            cancelAnimationFrame(this._animFrameId);
-            this._animFrameId = undefined;
-        }
+        this._loop.stop();
 
         for (const item of this._timelineItems) {
             if (item.target.isPlaying()) {
@@ -248,10 +249,7 @@ export class Timeline implements ITimeline {
     dispose(): void {
         this.stop();
 
-        if (this._animFrameId) {
-            cancelAnimationFrame(this._animFrameId);
-            this._animFrameId = undefined;
-        }
+        this._loop.stop();
 
         for (const item of this._timelineItems) {
             item.target.stop();
@@ -268,17 +266,9 @@ export class Timeline implements ITimeline {
     }
 
     private _startInternalLoop(): void {
-        if (this._animFrameId !== undefined) return;
+        if (this._loop.isRunning) return;
         this._lastUpdateTime = performance.now();
-        this._internalUpdate();
-    }
-
-    private _internalUpdate(): void {
-        if (!this._isPlaying || this._isPaused || !this._autoUpdate) return;
-
-        this._animFrameId = requestAnimationFrame(() => this._internalUpdate());
-
-        this.update();
+        this._loop.start();
     }
 
     private _updateItems(): void {

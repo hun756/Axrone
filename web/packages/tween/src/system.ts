@@ -1,3 +1,4 @@
+import { RafLoop } from './raf-loop';
 import { IGroupable } from './types';
 
 export class TweenSystem {
@@ -7,14 +8,17 @@ export class TweenSystem {
     private _lastTime = 0;
     private _lastUpdateTime?: number;
     private _maxDelta?: number;
-    private _animFrameId?: number;
+    private _loop: RafLoop;
+
+    public constructor() {
+        this._loop = new RafLoop(() => this.update() > 0);
+    }
 
     setAutoUpdate(enabled: boolean): void {
         this._autoUpdate = enabled;
 
-        if (!enabled && this._animFrameId !== undefined) {
-            cancelAnimationFrame(this._animFrameId);
-            this._animFrameId = undefined;
+        if (!enabled) {
+            this._loop.stop();
         }
     }
 
@@ -95,11 +99,7 @@ export class TweenSystem {
         }
         this._count = 0;
         this._lastUpdateTime = undefined;
-
-        if (this._animFrameId !== undefined) {
-            cancelAnimationFrame(this._animFrameId);
-            this._animFrameId = undefined;
-        }
+        this._loop.stop();
     }
 
     private _swapAndPop(index: number): void {
@@ -110,27 +110,13 @@ export class TweenSystem {
     }
 
     private _isInternalLoopRunning(): boolean {
-        return this._animFrameId !== undefined;
+        return this._loop.isRunning;
     }
 
     private _startInternalLoop(): void {
         if (this._isInternalLoopRunning()) return;
 
         this._lastTime = performance.now();
-        this._tick();
+        this._loop.start();
     }
-
-    private _tick = (): void => {
-        if (!this._autoUpdate) return;
-
-        this._animFrameId = requestAnimationFrame(this._tick);
-
-        const now = performance.now();
-        const hasActiveTweens = this.update(now);
-
-        if (!hasActiveTweens) {
-            cancelAnimationFrame(this._animFrameId!);
-            this._animFrameId = undefined;
-        }
-    };
 }

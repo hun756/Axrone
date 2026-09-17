@@ -14,6 +14,7 @@ import {
 } from './property-accessor';
 import { UnsubscribeFn } from './dispatcher';
 import { nextTweenId } from './id';
+import { RafLoop } from './raf-loop';
 
 export interface SpringStep {
     position: number;
@@ -89,15 +90,16 @@ export class Spring<T extends TweenableValue> implements IGroupable {
     private _simulation: SpringSimulation;
     private _isRunning = false;
     private _status: TweenStatus = 'idle';
-    private _animFrameId?: number;
     private _lastTime?: number;
     private _props = new Set<string>();
     private _autoUpdate = false;
     private _propertyAccessors = new Map<string, TweenPropertyAccessor>();
     private _listeners = new Map<SpringEventType, Array<(...args: never[]) => void>>();
     private _stepScratch: SpringStep = { position: 0, velocity: 0, atRest: false };
+    private _loop: RafLoop;
 
     constructor(initial: T, config: SpringConfig = {}) {
+        this._loop = new RafLoop(() => this._autoStep(), true);
         this._current = this._deepClone(initial);
         this._target = this._deepClone(initial);
         this._simulation = new SpringSimulation(config);
@@ -122,9 +124,8 @@ export class Spring<T extends TweenableValue> implements IGroupable {
     setAutoUpdate(enabled: boolean): void {
         this._autoUpdate = enabled;
 
-        if (!enabled && this._animFrameId !== undefined) {
-            cancelAnimationFrame(this._animFrameId);
-            this._animFrameId = undefined;
+        if (!enabled) {
+            this._loop.stop();
         }
     }
 
@@ -279,10 +280,7 @@ export class Spring<T extends TweenableValue> implements IGroupable {
         this._isRunning = false;
         this._status = 'idle';
 
-        if (this._animFrameId !== undefined) {
-            cancelAnimationFrame(this._animFrameId);
-            this._animFrameId = undefined;
-        }
+        this._loop.stop();
 
         this.emit('stop');
 
@@ -351,11 +349,7 @@ export class Spring<T extends TweenableValue> implements IGroupable {
 
     dispose(): void {
         this.stop();
-
-        if (this._animFrameId !== undefined) {
-            cancelAnimationFrame(this._animFrameId);
-            this._animFrameId = undefined;
-        }
+        this._loop.stop();
 
         this._lastTime = undefined;
         this._listeners.clear();
@@ -368,8 +362,19 @@ export class Spring<T extends TweenableValue> implements IGroupable {
     }
 
     private _startInternalLoop(): void {
-        if (this._animFrameId !== undefined) return;
-        this._tick();
+        this._loop.start();
+    }
+
+    private _autoStep(): boolean {
+        if (!this._isRunning || this._lastTime === undefined || !this._autoUpdate) {
+            return false;
+        }
+
+        const now = performance.now();
+        const dt = Math.min((now - this._lastTime) / 1000, MAX_SPRING_DT);
+        this._lastTime = now;
+
+        return this._simulateStep(dt);
     }
 
     private _simulateStep(dt: number): boolean {
@@ -417,24 +422,6 @@ export class Spring<T extends TweenableValue> implements IGroupable {
 
         return true;
     }
-
-    private _tick = (): void => {
-        if (!this._isRunning || this._lastTime === undefined || !this._autoUpdate) {
-            return;
-        }
-
-        const now = performance.now();
-        const dt = Math.min((now - this._lastTime) / 1000, MAX_SPRING_DT);
-        this._lastTime = now;
-
-        const isStillRunning = this._simulateStep(dt);
-
-        if (isStillRunning) {
-            this._animFrameId = requestAnimationFrame(this._tick);
-        } else {
-            this._animFrameId = undefined;
-        }
-    };
 
     private _deepClone<U>(source: U): U {
         return deepCloneTweenValue(source);
