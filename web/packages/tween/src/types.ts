@@ -95,6 +95,11 @@ export type TweenConfig<T> = {
     readonly easing?: EasingFunction;
     readonly repeat?: number;
     readonly yoyo?: boolean;
+    /**
+     * Per-property blend over the resolved `[start, end]` pair.
+     * Multi-waypoint splines are out of scope: pass a custom function
+     * if you need keyframe traversal.
+     */
     readonly interpolation?: (v: ArrayLike<number>, k: number) => number;
     readonly autoStart?: boolean;
 };
