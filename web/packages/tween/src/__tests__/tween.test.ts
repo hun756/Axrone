@@ -573,6 +573,10 @@ describe('Tween System', () => {
             tw.start(0);
             tw.update(25);
 
+            expect(obj.steps[0]).toBe(0);
+
+            tw.update(100);
+
             expect(obj.steps[0]).toBe(4);
         });
     });

@@ -171,11 +171,16 @@ export class Timeline implements ITimeline {
         if (!this._isPlaying || this._isPaused) return this;
 
         if (time !== undefined) {
-            this._clockMode = 'manual';
-            this._currentTime = time * this._timeScale;
+            if (this._clockMode !== 'manual') {
+                this._clockMode = 'manual';
+                this._lastUpdateTime = 0;
+            }
+            this._currentTime += (time - this._lastUpdateTime) * this._timeScale;
+            this._lastUpdateTime = time;
         } else {
-            if (!this._clockMode) {
+            if (this._clockMode !== 'realtime') {
                 this._clockMode = 'realtime';
+                this._lastUpdateTime = performance.now();
             }
 
             const now = performance.now();
