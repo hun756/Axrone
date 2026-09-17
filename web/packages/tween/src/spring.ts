@@ -5,7 +5,7 @@ import {
     UpdateCallback,
     VoidCallback,
 } from './types';
-import { deepCloneTweenValue } from './runtime-utils';
+import { collectTweenLeafPaths, deepCloneTweenValue } from './runtime-utils';
 import {
     getOrCreateTweenPropertyAccessor,
     TweenPropertyAccessor,
@@ -105,7 +105,7 @@ export class Spring<T extends TweenableValue> {
             this._props.add('value');
             this._getAccessor('value');
         } else {
-            this._collectProps(initial, '', this._props);
+            this._collectProps(initial, this._props);
 
             for (const prop of this._props) {
                 this._velocity[prop] = initialVelocity;
@@ -126,28 +126,10 @@ export class Spring<T extends TweenableValue> {
         return this._autoUpdate;
     }
 
-    private _collectProps(obj: any, prefix: string, props: Set<string>): void {
-        if (!obj || typeof obj !== 'object') return;
-
-        if (Array.isArray(obj) || ArrayBuffer.isView(obj)) {
-            const length = Array.isArray(obj) ? obj.length : (obj as any).length;
-            for (let i = 0; i < length; i++) {
-                const propPath = prefix ? `${prefix}.${i}` : `${i}`;
-                props.add(propPath);
-                this._getAccessor(propPath);
-            }
-        } else {
-            for (const key of Object.keys(obj)) {
-                const value = obj[key];
-                const propPath = prefix ? `${prefix}.${key}` : key;
-
-                if (value !== null && typeof value === 'object') {
-                    this._collectProps(value, propPath, props);
-                } else {
-                    props.add(propPath);
-                    this._getAccessor(propPath);
-                }
-            }
+    private _collectProps(obj: any, props: Set<string>): void {
+        for (const path of collectTweenLeafPaths(obj, true)) {
+            props.add(path);
+            this._getAccessor(path);
         }
     }
 
@@ -158,7 +140,7 @@ export class Spring<T extends TweenableValue> {
             this._updateTarget(this._target, target);
         }
 
-        this._collectProps(target, '', this._props);
+        this._collectProps(target, this._props);
 
         for (const prop of this._props) {
             if (!(prop in this._velocity)) {

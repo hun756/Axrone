@@ -38,8 +38,7 @@ export const allocateSequenceLike = (
     return new Array<number>(length);
 };
 
-export const deepCloneTweenValue = <T>(source: T): T => {
-    if (source === null || source === undefined || typeof source !== 'object') {
+export const deepCloneTweenValue = <T>(source: T): T => {    if (source === null || source === undefined || typeof source !== 'object') {
         return source;
     }
 
@@ -77,4 +76,49 @@ export const deepCloneTweenValue = <T>(source: T): T => {
     }
 
     return result as T;
+};
+
+/**
+ * Collect dotted leaf paths over own enumerable properties.
+ *
+ * Shared by the object tween and the spring so their traversal semantics
+ * cannot drift apart. With `expandSequences`, arrays and typed arrays fan
+ * out to indexed leaves (`pos.0`); otherwise a sequence counts as one leaf.
+ */
+export const collectTweenLeafPaths = (root: unknown, expandSequences: boolean): string[] => {
+    const paths: string[] = [];
+
+    const visit = (node: unknown, prefix: string): void => {
+        if (node === null || typeof node !== 'object') {
+            return;
+        }
+
+        if (Array.isArray(node) || isTweenTypedArray(node)) {
+            if (!expandSequences) {
+                if (prefix !== '') {
+                    paths.push(prefix);
+                }
+                return;
+            }
+            const length = (node as ArrayLike<unknown>).length;
+            for (let index = 0; index < length; index += 1) {
+                paths.push(prefix === '' ? `${index}` : `${prefix}.${index}`);
+            }
+            return;
+        }
+
+        for (const key of Object.keys(node)) {
+            const value = (node as Record<string, unknown>)[key];
+            const path = prefix === '' ? key : `${prefix}.${key}`;
+
+            if (value !== null && typeof value === 'object') {
+                visit(value, path);
+            } else {
+                paths.push(path);
+            }
+        }
+    };
+
+    visit(root, '');
+    return paths;
 };

@@ -6,6 +6,7 @@ import {
     TweenPropertyAccessor,
 } from '../property-accessor';
 import {
+    collectTweenLeafPaths,
     deepCloneTweenValue,
     isTweenTypedArray,
     type TweenTypedArrayConstructor,
@@ -27,8 +28,8 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
         this._objectProps.clear();
         this._propertyEntries = [];
 
-        this._collectProps(this._valuesEnd, '', this._objectProps);
-        this._collectProps(this._valuesStart, '', this._objectProps);
+        this._collectProps(this._valuesEnd, this._objectProps);
+        this._collectProps(this._valuesStart, this._objectProps);
 
         for (const path of this._objectProps) {
             this._propertyEntries.push(getOrCreateTweenPropertyAccessor(this._propertyAccessors, path));
@@ -100,27 +101,10 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
         return 0;
     }
 
-    protected _collectProps(obj: any, prefix: string, props: Set<string>): void {
-        if (!obj || typeof obj !== 'object') {
-            return;
-        }
-
-        for (const key of Object.keys(obj)) {
-            const value = obj[key];
-            const propPath = prefix ? `${prefix}.${key}` : key;
-
-            if (
-                value !== null &&
-                typeof value === 'object' &&
-                !Array.isArray(value) &&
-                !isTweenTypedArray(value)
-            ) {
-                this._collectProps(value, propPath, props);
-                continue;
-            }
-
-            props.add(propPath);
-            getOrCreateTweenPropertyAccessor(this._propertyAccessors, propPath);
+    protected _collectProps(obj: any, props: Set<string>): void {
+        for (const path of collectTweenLeafPaths(obj, false)) {
+            props.add(path);
+            getOrCreateTweenPropertyAccessor(this._propertyAccessors, path);
         }
     }
 
