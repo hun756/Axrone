@@ -95,10 +95,14 @@ export const Interpolation = {
     },
 
     Step: (v: ArrayLike<number>, k: number): number => {
-        const m = v.length - 1;
-        if (m === 0) return v[0];
+        if (v.length === 0) return 0;
+        if (v.length === 1) return v[0]!;
+        if (k <= 0) return v[0]!;
 
-        return k > 0 ? v[m] : v[0];
+        const m = v.length - 1;
+        if (k >= 1) return v[m]!;
+
+        return v[Math.min(m, Math.floor(m * k))]!;
     },
 
     Smoothstep: (v: ArrayLike<number>, k: number): number => {
