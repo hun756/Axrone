@@ -133,6 +133,9 @@ export abstract class TweenCore<T> implements ITween<T> {
     }
 
     end(): this {
+        this._remainingRepeat = 0;
+        this._waitingForRepeatDelay = false;
+        this._repeatDelayEndTime = undefined;
         this.update(Infinity);
         return this;
     }
@@ -279,7 +282,11 @@ export abstract class TweenCore<T> implements ITween<T> {
         }
 
         if (this._waitingForRepeatDelay) {
-            if (this._repeatDelayEndTime && now >= this._repeatDelayEndTime) {
+            if (!Number.isFinite(now)) {
+                this._waitingForRepeatDelay = false;
+                this._remainingRepeat = 0;
+                this._repeatDelayEndTime = undefined;
+            } else if (this._repeatDelayEndTime && now >= this._repeatDelayEndTime) {
                 this._waitingForRepeatDelay = false;
                 this._reset();
                 this._updateProperties(0);
