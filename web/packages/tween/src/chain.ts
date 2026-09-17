@@ -1,10 +1,18 @@
-import { TweenCore } from './core';
-import { Timeline } from './timeline';
 import { IGroupable, TweenChainEventMap, TweenStatus, VoidCallback } from './types';
 import { EventFanOut, UnsubscribeFn } from './dispatcher';
 import { nextTweenId } from './id';
 
 export type TweenChainEvent = keyof TweenChainEventMap & string;
+
+/**
+ * Structural completion source. `TweenCore.on` returns `this` while
+ * `Timeline.on` returns an unsubscribe function; the chain accepts either
+ * shape through this single interface instead of `instanceof` branches.
+ */
+interface CompletionSource {
+    on(event: 'complete', callback: () => void): unknown;
+    off?(event: 'complete', callback: () => void): unknown;
+}
 
 export class TweenChain implements IGroupable {
     readonly id: number = nextTweenId();
@@ -184,31 +192,16 @@ export class TweenChain implements IGroupable {
     }
 
     private _subscribeToCompletion(target: IGroupable, callback: VoidCallback): () => void {
-        if (target instanceof TweenCore) {
-            target.on('complete', callback);
-            return () => {
-                target.off('complete', callback);
-            };
-        }
+        const source = target as Partial<CompletionSource>;
 
-        if (target instanceof Timeline) {
-            const unsubscribe = target.on('complete', callback);
-            return typeof unsubscribe === 'function' ? unsubscribe : () => undefined;
-        }
-
-        const eventTarget = target as {
-            on?: (event: string, callback: VoidCallback) => unknown;
-            off?: (event: string, callback: VoidCallback) => unknown;
-        };
-
-        if (typeof eventTarget.on === 'function') {
-            const subscription = eventTarget.on('complete', callback);
+        if (typeof source.on === 'function') {
+            const subscription = (source as CompletionSource).on('complete', callback);
             if (typeof subscription === 'function') {
                 return subscription as () => void;
             }
 
             return () => {
-                eventTarget.off?.('complete', callback);
+                source.off?.('complete', callback);
             };
         }
 
