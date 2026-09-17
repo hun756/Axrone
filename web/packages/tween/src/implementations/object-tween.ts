@@ -66,7 +66,7 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
      * would read back mutated values. One setup-time copy buys allocation-free
      * repeat cycles for the lifetime of the tween.
      */
-    protected _freezeStartArrays(obj: any): void {
+    protected _freezeStartArrays(obj: unknown): void {
         if (!obj || typeof obj !== 'object') {
             return;
         }
@@ -75,18 +75,20 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
             return;
         }
 
-        for (const key of Object.keys(obj)) {
-            const value = obj[key];
+        const record = obj as Record<string, unknown>;
+        for (const key of Object.keys(record)) {
+            const value = record[key];
 
             if (Array.isArray(value) || isTweenTypedArray(value)) {
-                obj[key] = this._deepClone(value);
+                record[key] = this._deepClone(value);
             } else if (value !== null && typeof value === 'object') {
                 this._freezeStartArrays(value);
             }
         }
     }
 
-    protected _getDefaultValue(endValue: any): any {        if (typeof endValue === 'number') {
+    protected _getDefaultValue(endValue: unknown): unknown {
+        if (typeof endValue === 'number') {
             return 0;
         }
 
@@ -95,14 +97,18 @@ export class ObjectTween<T extends object> extends TweenCore<T> {
         }
 
         if (isTweenTypedArray(endValue)) {
-            const typedArray = endValue as any;
-            return new (typedArray.constructor as TweenTypedArrayConstructor)(typedArray.length);
+            // Guarded above, so `.constructor` is a numeric typed-array ctor.
+            const typedArray = endValue as unknown as {
+                readonly length: number;
+                readonly constructor: TweenTypedArrayConstructor;
+            };
+            return new typedArray.constructor(typedArray.length);
         }
 
         return 0;
     }
 
-    protected _collectProps(obj: any, props: Set<string>): void {
+    protected _collectProps(obj: unknown, props: Set<string>): void {
         for (const path of collectTweenLeafPaths(obj, false)) {
             props.add(path);
             getOrCreateTweenPropertyAccessor(this._propertyAccessors, path);

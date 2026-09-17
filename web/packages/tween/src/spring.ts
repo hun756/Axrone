@@ -107,8 +107,10 @@ export class Spring<T extends TweenableValue> implements IGroupable {
         const initialVelocity = config.velocity ?? 0;
 
         if (typeof initial === 'number') {
-            this._current = { value: initial } as any;
-            this._target = { value: initial } as any;
+            // Number springs autobox into a `{ value }` holder; the box never
+            // escapes except through getCurrent, which unwraps it back.
+            this._current = { value: initial } as unknown as T;
+            this._target = { value: initial } as unknown as T;
             this._velocity['value'] = initialVelocity;
             this._props.add('value');
             this._getAccessor('value');
@@ -133,7 +135,7 @@ export class Spring<T extends TweenableValue> implements IGroupable {
         return this._autoUpdate;
     }
 
-    private _collectProps(obj: any, props: Set<string>): void {
+    private _collectProps(obj: unknown, props: Set<string>): void {
         for (const path of collectTweenLeafPaths(obj, true)) {
             props.add(path);
             this._getAccessor(path);
@@ -142,7 +144,7 @@ export class Spring<T extends TweenableValue> implements IGroupable {
 
     setTarget(target: DeepPartial<T>): this {
         if (typeof target === 'number') {
-            this._target = { value: target } as any;
+            this._target = { value: target } as unknown as T;
         } else {
             this._updateTarget(this._target, target);
         }
@@ -162,11 +164,13 @@ export class Spring<T extends TweenableValue> implements IGroupable {
         return this;
     }
 
-    private _updateTarget(current: any, target: any): void {
+    private _updateTarget(current: unknown, target: unknown): void {
         if (!target || typeof target !== 'object') return;
+        if (!current || typeof current !== 'object') return;
 
+        const currentRecord = current as Record<string, unknown>;
         for (const key of Object.keys(target)) {
-            const value = target[key];
+            const value = (target as Record<string, unknown>)[key];
 
             if (
                 value !== null &&
@@ -174,22 +178,22 @@ export class Spring<T extends TweenableValue> implements IGroupable {
                 !Array.isArray(value) &&
                 !ArrayBuffer.isView(value)
             ) {
-                if (!Object.prototype.hasOwnProperty.call(current, key)) {
-                    current[key] = Array.isArray(value) ? [] : {};
+                if (!Object.prototype.hasOwnProperty.call(currentRecord, key)) {
+                    currentRecord[key] = Array.isArray(value) ? [] : {};
                 }
-                this._updateTarget(current[key], value);
+                this._updateTarget(currentRecord[key], value);
             } else {
-                current[key] = value;
+                currentRecord[key] = value;
             }
         }
     }
 
     getCurrent(): T {
-        if (
-            typeof (this._current as any).value === 'number' &&
-            Object.keys(this._current as any).length === 1
-        ) {
-            return (this._current as any).value;
+        // Number springs store `{ value }` internally; unwrap the box here so
+        // callers see the scalar they constructed the spring with.
+        const boxed = this._current as unknown as Record<string, unknown>;
+        if (typeof boxed.value === 'number' && Object.keys(boxed).length === 1) {
+            return boxed.value as T;
         }
         return this._deepClone(this._current);
     }

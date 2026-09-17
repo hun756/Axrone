@@ -12,6 +12,9 @@ import {
 
 type TweenInterpolationFunction = (v: ArrayLike<number>, k: number) => number;
 
+/** Writable numeric sequence: arrays, typed arrays and array-likes alike. */
+type MutableSequence = ArrayLike<number> & Record<number, number>;
+
 export interface ObjectTweenTrack {
     readonly path: string;
     apply(
@@ -125,7 +128,7 @@ class SequenceTweenTrack implements ObjectTweenTrack {
         interpolation: TweenInterpolationFunction,
         twoValueBuffer: BlendPair
     ): void {
-        const result = this._targetFor(target) as any;
+        const result = this._targetFor(target) as MutableSequence;
 
         if (interpolation !== Interpolation.Linear && this._length > 1) {
             for (let index = 0; index < this._length; index += 1) {

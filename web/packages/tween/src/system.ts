@@ -12,7 +12,7 @@ export class TweenSystem {
     private _autoRemove = true;
 
     public constructor() {
-        this._loop = new RafLoop(() => this.update() > 0);
+        this._loop = new RafLoop(() => this.update());
     }
 
     setAutoUpdate(enabled: boolean): void {

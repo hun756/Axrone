@@ -1,3 +1,4 @@
+import { DeepPartial } from '@axrone/utility';
 import { TweenCore } from '../core';
 import { TweenConfig } from '../types';
 import { Interpolation } from '../interpolation';
@@ -8,6 +9,11 @@ import {
     isTweenTypedArray,
     type TweenTypedArrayConstructor,
 } from '../runtime-utils';
+
+type MutableSequence = ArrayLike<number> & Record<number, number>;
+
+// DeepPartial erases indexability, so snapshot/object views re-widen here.
+// Every cast below targets MutableSequence or a TypedArray guard — never any.
 
 export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
     protected _twoValueBuffer: BlendPair = createBlendPair();
@@ -23,11 +29,11 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
         const objLen = this._object.length;
 
         if (startLen === 0) {
-            this._valuesStart = this._cloneArray(this._object);
+            this._valuesStart = this._cloneArray(this._object as unknown as MutableSequence) as unknown as DeepPartial<T>;
         }
 
         if (endLen === 0) {
-            this._valuesEnd = this._cloneArray(this._object);
+            this._valuesEnd = this._cloneArray(this._object as unknown as MutableSequence) as unknown as DeepPartial<T>;
         }
 
         this._normalizeArrays();
@@ -65,8 +71,8 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
     }
 
     protected _normalizeArrays(): void {
-        const startArray = this._valuesStart as any;
-        const endArray = this._valuesEnd as any;
+        const startArray = this._valuesStart as unknown as MutableSequence;
+        const endArray = this._valuesEnd as unknown as MutableSequence;
 
         if (!startArray.length || !endArray.length) return;
 
@@ -74,16 +80,16 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
             const maxLen = Math.max(startArray.length, endArray.length);
 
             if (startArray.length < maxLen) {
-                this._valuesStart = this._extendArray(startArray, maxLen);
+                this._valuesStart = this._extendArray(startArray, maxLen) as unknown as DeepPartial<T>;
             }
 
             if (endArray.length < maxLen) {
-                this._valuesEnd = this._extendArray(endArray, maxLen);
+                this._valuesEnd = this._extendArray(endArray, maxLen) as unknown as DeepPartial<T>;
             }
         }
     }
 
-    protected _extendArray(array: any[], newLength: number): any {
+    protected _extendArray(array: MutableSequence, newLength: number): MutableSequence {
         const lastValue = array.length > 0 ? array[array.length - 1] : 0;
 
         if (isTweenTypedArray(array)) {
@@ -106,18 +112,18 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
         }
     }
 
-    protected _cloneArray(array: any): any {
+    protected _cloneArray(array: MutableSequence): MutableSequence {
         return cloneTweenArrayLike(array as ArrayLike<number>);
     }
 
     protected _updateProperties(progress: number): void {
-        const start = this._valuesStart as any;
-        const end = this._valuesEnd as any;
-        const object = this._object as any;
-        const deltas = this._deltas as any;
+        const start = this._valuesStart as unknown as MutableSequence;
+        const end = this._valuesEnd as unknown as MutableSequence;
+        const object = this._object as unknown as MutableSequence;
+        const deltas = this._deltas as unknown as MutableSequence;
 
         if (isTweenTypedArray(object)) {
-            const typedArray = object as any;
+            const typedArray = object as unknown as MutableSequence;
             const len = Math.min(typedArray.length, start.length, end.length);
             if (deltas && deltas.length >= len) {
                 for (let i = 0; i < len; i++) {
@@ -171,11 +177,11 @@ export class ArrayTween<T extends ArrayLike<number>> extends TweenCore<T> {
 
         // Non-yoyo cycles reuse the untouched start snapshot: rewind the
         // live object without cloning. Zero steady-state allocation.
-        const startArray = this._valuesStart as any;
-        const object = this._object as any;
+        const startArray = this._valuesStart as unknown as MutableSequence;
+        const object = this._object as unknown as MutableSequence;
 
         if (ArrayBuffer.isView(object)) {
-            const typedArray = object as any;
+            const typedArray = object as unknown as MutableSequence;
             for (let i = 0; i < typedArray.length && i < startArray.length; i++) {
                 typedArray[i] = startArray[i];
             }
