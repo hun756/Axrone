@@ -39,7 +39,6 @@ export abstract class TweenCore<T> implements ITween<T> {
     protected _clockMode: 'manual' | 'realtime' | undefined;
     protected _lastUpdateTime?: number;
     protected _pauseStartedAt?: number;
-    protected _needsManualPauseShift = false;
     protected _eventCallbackWrappers = new Map<TweenEventType, Map<TweenEventCallback<T>, (payload: any) => void>>();
 
     constructor(object: T, config?: TweenConfig<T>) {
@@ -111,7 +110,6 @@ export abstract class TweenCore<T> implements ITween<T> {
         this._clockMode = time !== undefined ? 'manual' : 'realtime';
         this._lastUpdateTime = startTime;
         this._pauseStartedAt = undefined;
-        this._needsManualPauseShift = false;
         this._repeatDelayEndTime = undefined;
         this._waitingForRepeatDelay = false;
         this._startTime = startTime;
@@ -171,6 +169,9 @@ export abstract class TweenCore<T> implements ITween<T> {
             this._pauseStartedAt !== undefined
         ) {
             if (this._clockMode === 'manual') {
+                // Manual clock: the paused span is only known when the caller
+                // passes the resume time. Without it we keep following the
+                // master clock (zero paused duration, backwards compatible).
                 if (time !== undefined) {
                     const pausedDuration = Math.max(0, time - this._pauseStartedAt);
                     this._startTime += pausedDuration;
@@ -180,10 +181,8 @@ export abstract class TweenCore<T> implements ITween<T> {
                     }
 
                     this._lastUpdateTime = time;
-                    this._pauseStartedAt = undefined;
-                } else {
-                    this._needsManualPauseShift = true;
                 }
+                this._pauseStartedAt = undefined;
             } else {
                 const now = performance.now();
                 const pausedDuration = Math.max(0, now - this._pauseStartedAt);
@@ -300,22 +299,6 @@ export abstract class TweenCore<T> implements ITween<T> {
 
         this._lastUpdateTime = now;
 
-        if (
-            this._needsManualPauseShift &&
-            this._startTime !== undefined &&
-            this._pauseStartedAt !== undefined
-        ) {
-            const pausedDuration = Math.max(0, now - this._pauseStartedAt);
-            this._startTime += pausedDuration;
-
-            if (typeof this._repeatDelayEndTime === 'number') {
-                this._repeatDelayEndTime += pausedDuration;
-            }
-
-            this._needsManualPauseShift = false;
-            this._pauseStartedAt = undefined;
-        }
-
         if (now < this._startTime) {
             return this;
         }
@@ -385,7 +368,6 @@ export abstract class TweenCore<T> implements ITween<T> {
         this._valuesEnd = Object.create(null);
         this._lastUpdateTime = undefined;
         this._pauseStartedAt = undefined;
-        this._needsManualPauseShift = false;
         this._clockMode = undefined;
         this._eventCallbackWrappers.clear();
     }
