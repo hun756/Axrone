@@ -269,7 +269,12 @@ describe('TweenCore', () => {
             tween.update(50);
             expect(eventFired).toBe(false);
             expect((tween as any)._chainedTweens).toEqual([]);
-            expect((tween as any)._eventCallbackWrappers.size).toBe(0);
+            tween.on('update', () => {
+                eventFired = true;
+            });
+            tween.start(0);
+            tween.update(50);
+            expect(eventFired).toBe(true);
         });
     });
 
