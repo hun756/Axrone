@@ -10,11 +10,10 @@ import {
     TweenEventCallback,
     TweenStatus,
 } from './types';
-
-let _nextId = 0;
+import { nextTweenId } from './id';
 
 export abstract class TweenCore<T> implements ITween<T> {
-    readonly id: number = _nextId++;
+    readonly id: number = nextTweenId();
 
     protected _object: T;
     protected _valuesStart = Object.create(null) as DeepPartial<T>;

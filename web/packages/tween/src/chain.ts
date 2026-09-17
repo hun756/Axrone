@@ -1,18 +1,17 @@
 import { EventEmitter } from '@axrone/event';
 import { TweenCore } from './core';
 import { Timeline } from './timeline';
-import { IGroupable, TweenChainEventMap, VoidCallback } from './types';
-
-let _nextId = 0;
+import { IGroupable, TweenChainEventMap, TweenStatus, VoidCallback } from './types';
+import { nextTweenId } from './id';
 
 export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGroupable {
-    readonly id: number = _nextId++;
+    readonly id: number = nextTweenId();
 
     private _tweens: Array<IGroupable> = [];
     private _currentIndex = -1;
     private _isPlaying = false;
     private _isPaused = false;
-    private _status: 'idle' | 'running' | 'paused' | 'completed' = 'idle';
+    private _status: TweenStatus = 'idle';
     private _detachCurrentCompletion?: () => void;
     private _lastUpdateTime?: number;
 
@@ -24,7 +23,7 @@ export class TweenChain extends EventEmitter<TweenChainEventMap> implements IGro
         return this._isPlaying;
     }
 
-    getStatus(): 'idle' | 'running' | 'paused' | 'completed' {
+    getStatus(): TweenStatus {
         return this._status;
     }
 

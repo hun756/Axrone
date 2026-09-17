@@ -1,10 +1,9 @@
 import { EventEmitter } from '@axrone/event';
-import { ITimeline, IGroupable, TimelineOptions, TimelineEventMap, VoidCallback } from './types';
-
-let _nextId = 0;
+import { ITimeline, IGroupable, TimelineOptions, TimelineEventMap, TweenStatus, VoidCallback } from './types';
+import { nextTweenId } from './id';
 
 export class Timeline extends EventEmitter<TimelineEventMap> implements ITimeline {
-    readonly id: number = _nextId++;
+    readonly id: number = nextTweenId();
 
     private _timelineItems: Array<{
         target: IGroupable;
@@ -22,7 +21,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
     private _animFrameId?: number;
     private _autoUpdate = false;
     private _clockMode: 'manual' | 'realtime' | undefined;
-    private _status: 'idle' | 'running' | 'paused' | 'completed' = 'idle';
+    private _status: TweenStatus = 'idle';
 
     constructor() {
         super();
@@ -45,7 +44,7 @@ export class Timeline extends EventEmitter<TimelineEventMap> implements ITimelin
         return this._isPlaying;
     }
 
-    getStatus(): 'idle' | 'running' | 'paused' | 'completed' {
+    getStatus(): TweenStatus {
         return this._status;
     }
 

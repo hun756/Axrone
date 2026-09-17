@@ -1,4 +1,5 @@
 export * from './types';
+export * from './id';
 export * from './core';
 export * from './factory';
 export * from './timeline';
