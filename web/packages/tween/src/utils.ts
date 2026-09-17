@@ -91,6 +91,14 @@ export async function waitFor(tween: ITween<any>): Promise<void> {
     }
 
     return new Promise((resolve) => {
-        tween.on('complete', () => resolve());
+        const settle = (): void => {
+            tween.off('complete', onComplete);
+            tween.off('stop', onStop);
+            resolve();
+        };
+        const onComplete = (): void => settle();
+        const onStop = (): void => settle();
+        tween.on('complete', onComplete);
+        tween.on('stop', onStop);
     });
 }
