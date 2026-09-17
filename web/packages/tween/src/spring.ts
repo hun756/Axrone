@@ -1,7 +1,9 @@
 import { DeepPartial } from '@axrone/utility';
 import {
+    IGroupable,
     SpringConfig,
     TweenableValue,
+    TweenStatus,
     UpdateCallback,
     VoidCallback,
 } from './types';
@@ -11,6 +13,7 @@ import {
     TweenPropertyAccessor,
 } from './property-accessor';
 import { UnsubscribeFn } from './dispatcher';
+import { nextTweenId } from './id';
 
 export interface SpringStep {
     position: number;
@@ -77,12 +80,15 @@ export class SpringSimulation {
 
 export type SpringEventType = 'start' | 'stop' | 'update' | 'complete';
 
-export class Spring<T extends TweenableValue> {
+export class Spring<T extends TweenableValue> implements IGroupable {
+    readonly id: number = nextTweenId();
+
     private _target: T;
     private _current: T;
     private _velocity: Record<string, number> = Object.create(null);
     private _simulation: SpringSimulation;
     private _isRunning = false;
+    private _status: TweenStatus = 'idle';
     private _animFrameId?: number;
     private _lastTime?: number;
     private _props = new Set<string>();
@@ -187,15 +193,16 @@ export class Spring<T extends TweenableValue> {
         return this._deepClone(this._current);
     }
 
-    start(): this {
+    start(time?: number): this {
         if (this._isRunning) {
             return this;
         }
 
         this._isRunning = true;
-        this._lastTime = performance.now();
+        this._status = 'running';
+        this._lastTime = time ?? performance.now();
 
-        if (this._autoUpdate) {
+        if (this._autoUpdate && time === undefined) {
             this._startInternalLoop();
         }
 
@@ -211,12 +218,66 @@ export class Spring<T extends TweenableValue> {
         return this._simulateStep(dt);
     }
 
-    stop(): this {
+    /**
+     * Millisecond-clock step so springs ride `TweenSystem`, groups and
+     * timelines like any other `IGroupable`. Shares the clamped integrator
+     * with `updateManual`; the status machine is identical.
+     */
+    update(time?: number): this {
+        if (!this._isRunning) {
+            return this;
+        }
+
+        const now = time ?? performance.now();
+        if (this._lastTime === undefined) {
+            this._lastTime = now;
+        }
+        const dt = Math.min(Math.max(0, (now - this._lastTime) / 1000), MAX_SPRING_DT);
+        this._lastTime = now;
+        this._simulateStep(dt);
+        return this;
+    }
+
+    isPlaying(): boolean {
+        return this._isRunning;
+    }
+
+    getStatus(): TweenStatus {
+        return this._status;
+    }
+
+    getTotalDuration(): number {
+        return Infinity;
+    }
+
+    pause(): this {
         if (!this._isRunning) {
             return this;
         }
 
         this._isRunning = false;
+        this._status = 'paused';
+        return this;
+    }
+
+    resume(): this {
+        if (this._isRunning || this._status !== 'paused') {
+            return this;
+        }
+
+        this._isRunning = true;
+        this._status = 'running';
+        this._lastTime = undefined;
+        return this;
+    }
+
+    stop(): this {
+        if (!this._isRunning && this._status !== 'paused') {
+            return this;
+        }
+
+        this._isRunning = false;
+        this._status = 'idle';
 
         if (this._animFrameId !== undefined) {
             cancelAnimationFrame(this._animFrameId);
@@ -302,6 +363,7 @@ export class Spring<T extends TweenableValue> {
         this._velocity = Object.create(null);
         this._propertyAccessors.clear();
         this._isRunning = false;
+        this._status = 'idle';
         this._autoUpdate = false;
     }
 
@@ -347,6 +409,7 @@ export class Spring<T extends TweenableValue> {
             }
 
             this._isRunning = false;
+            this._status = 'completed';
             this.emit('update', this._current);
             this.emit('complete');
             return false;

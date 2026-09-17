@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SpringSimulation, Spring } from '../spring';
+import { TweenSystem } from '../system';
 
 describe('SpringSimulation', () => {
     describe('basic physics', () => {
@@ -218,6 +219,55 @@ describe('Spring', () => {
             expect(spring.getAutoUpdate()).toBe(false);
             spring.setAutoUpdate(true);
             expect(spring.getAutoUpdate()).toBe(true);
+        });
+    });
+
+    describe('IGroupable contract', () => {
+        it('exposes a stable id and infinite total duration', () => {
+            const spring = new Spring(0);
+            expect(typeof spring.id).toBe('number');
+            expect(spring.getTotalDuration()).toBe(Infinity);
+            expect(spring.getStatus()).toBe('idle');
+            expect(spring.isPlaying()).toBe(false);
+        });
+
+        it('update(time) advances on a millisecond clock', () => {
+            const spring = new Spring(0);
+            spring.setTarget({ value: 100 } as any);
+            spring.start(0);
+            spring.update(16);
+            spring.update(32);
+            expect(spring.getStatus()).toBe('running');
+            expect(spring.isPlaying()).toBe(true);
+        });
+
+        it('pauses and resumes without losing the target', () => {
+            const spring = new Spring(0);
+            spring.setTarget({ value: 100 } as any);
+            spring.start(0);
+            spring.update(16);
+            spring.pause();
+            expect(spring.getStatus()).toBe('paused');
+            expect(spring.isPlaying()).toBe(false);
+            spring.resume();
+            expect(spring.getStatus()).toBe('running');
+            spring.update(32);
+            expect(spring.isPlaying()).toBe(true);
+        });
+
+        it('rides a TweenSystem until it rests', () => {
+            const system = new TweenSystem();
+            const spring = new Spring(0, { stiffness: 400, damping: 40, precision: 0.5 });
+            spring.setTarget({ value: 10 } as any);
+            spring.start(0);
+            system.add(spring);
+            for (let time = 16; time <= 10000; time += 16) {
+                if (!system.update(time)) {
+                    break;
+                }
+            }
+            expect(spring.getStatus()).toBe('completed');
+            expect(system.getActiveTweenCount()).toBe(0);
         });
     });
 
