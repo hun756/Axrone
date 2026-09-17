@@ -70,7 +70,13 @@ export abstract class TweenCore<T> implements ITween<T> {
     }
 
     getTotalDuration(): number {
-        return this._duration * (this._repeat + 1);
+        const cycles = this._repeat === Infinity ? Infinity : this._repeat + 1;
+        if (cycles === Infinity) {
+            return Infinity;
+        }
+        const repeatDelay = this._repeatDelayTime && this._repeatDelayTime > 0 ? this._repeatDelayTime : 0;
+        const repeats = this._repeat === Infinity ? 0 : this._repeat;
+        return this._duration * cycles + repeatDelay * repeats;
     }
 
     from(properties: DeepPartial<T>): this {
