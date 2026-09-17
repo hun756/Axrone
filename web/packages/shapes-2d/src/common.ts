@@ -545,14 +545,22 @@ export const triangulateEarClipping = (
     }
 
     const working = new Float32Array(points.length);
-    if (polygonSignedArea(points) < -EPSILON) {
+    const reversed = polygonSignedArea(points) < -EPSILON;
+    if (reversed) {
         working.set(normalizeContourOrientation(new Float32Array(points), true));
     } else {
         working.set(points);
     }
     const vertexIds = new Uint32Array(initialCount);
-    for (let i = 0; i < initialCount; i++) {
-        vertexIds[i] = i;
+    if (reversed) {
+        vertexIds[0] = 0;
+        for (let i = 1; i < initialCount; i++) {
+            vertexIds[i] = initialCount - i;
+        }
+    } else {
+        for (let i = 0; i < initialCount; i++) {
+            vertexIds[i] = i;
+        }
     }
     let vertexCount = initialCount;
     const indices: number[] = [];

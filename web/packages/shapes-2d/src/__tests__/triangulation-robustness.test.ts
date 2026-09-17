@@ -75,4 +75,24 @@ describe('triangulateEarClipping vertex remapping', () => {
             expect(indices[i]!).toBeGreaterThanOrEqual(0);
         }
     });
+
+    it('maps CW concave indices back to original vertex positions', () => {
+        const lShape = new Float32Array([0, 0, 10, 0, 10, 10, 6, 10, 6, 4, 0, 4]);
+        const count = lShape.length / 2;
+        const cw = new Float32Array(lShape.length);
+        for (let i = 0; i < count; i++) {
+            const src = ((count - i) % count) * 2;
+            cw[i * 2] = lShape[src]!;
+            cw[i * 2 + 1] = lShape[src + 1]!;
+        }
+        expect(polygonSignedArea(cw)).toBeLessThan(0);
+        const indices = triangulateEarClipping(cw);
+        expect(indices.length).toBe((6 - 2) * 3);
+        const area = Math.abs(triangleAreaSum(cw, indices));
+        expect(area).toBeCloseTo(64, 4);
+        for (let i = 0; i < indices.length; i++) {
+            expect(indices[i]!).toBeLessThan(6);
+            expect(indices[i]!).toBeGreaterThanOrEqual(0);
+        }
+    });
 });
