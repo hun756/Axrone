@@ -9,6 +9,7 @@ export class TweenSystem {
     private _lastUpdateTime?: number;
     private _maxDelta?: number;
     private _loop: RafLoop;
+    private _autoRemove = true;
 
     public constructor() {
         this._loop = new RafLoop(() => this.update() > 0);
@@ -38,6 +39,25 @@ export class TweenSystem {
 
     getMaxDelta(): number | undefined {
         return this._maxDelta;
+    }
+
+    /**
+     * Membership policy for finished members. The shared system evicts
+     * completed tweens by default; `TweenGroup` disables eviction so members
+     * survive completion and can be restarted as a unit.
+     */
+    setAutoRemove(enabled: boolean): void {
+        this._autoRemove = enabled;
+    }
+
+    getAutoRemove(): boolean {
+        return this._autoRemove;
+    }
+
+    forEach(member: (tween: IGroupable) => void): void {
+        for (let index = 0; index < this._count; index += 1) {
+            member(this._active[index]!);
+        }
     }
 
     add(tween: IGroupable): void {
@@ -80,7 +100,7 @@ export class TweenSystem {
             const tween = this._active[index]!;
             tween.update(now);
 
-            if (tween.getStatus() === 'completed') {
+            if (this._autoRemove && tween.getStatus() === 'completed') {
                 this._swapAndPop(index);
             }
         }

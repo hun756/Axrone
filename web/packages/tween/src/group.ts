@@ -1,57 +1,50 @@
-import { TweenCore } from './core';
+import { TweenSystem } from './system';
 import { IGroupable } from './types';
 
+/**
+ * Named membership over the shared system core. The group owns pause
+ * bookkeeping and the restartable-member policy (`autoRemove` off); driving,
+ * clamping and deferred edits come from `TweenSystem`, so the two containers
+ * cannot drift apart again.
+ */
 export class TweenGroup {
-    private _tweens = new Set<IGroupable>();
+    private _system = new TweenSystem();
     private _pausedTweens = new Set<IGroupable>();
-    private _tweensToAdd = new Set<IGroupable>();
-    private _tweensToRemove = new Set<IGroupable>();
-    private _isUpdating = false;
+
+    public constructor() {
+        this._system.setAutoRemove(false);
+    }
 
     add(tween: IGroupable): this {
-        if (this._isUpdating) {
-            this._tweensToRemove.delete(tween);
-            this._tweensToAdd.add(tween);
-        } else {
-            this._tweens.add(tween);
-        }
+        this._system.add(tween);
         return this;
     }
 
     remove(tween: IGroupable): this {
-        if (this._isUpdating) {
-            this._tweensToAdd.delete(tween);
-            this._tweensToRemove.add(tween);
-        } else {
-            this._tweens.delete(tween);
-        }
+        this._system.remove(tween);
         return this;
     }
 
     start(time?: number): this {
         this._pausedTweens.clear();
-        for (const tween of this._tweens) {
-            tween.start(time);
-        }
+        this._system.forEach((tween) => tween.start(time));
         return this;
     }
 
     stop(): this {
-        for (const tween of this._tweens) {
-            tween.stop();
-        }
+        this._system.forEach((tween) => tween.stop());
         this._pausedTweens.clear();
         return this;
     }
 
     pause(): this {
         this._pausedTweens.clear();
-        for (const tween of this._tweens) {
+        this._system.forEach((tween) => {
             if (tween.isPlaying()) {
                 this._pausedTweens.add(tween);
                 tween.pause();
             }
-        }
+        });
         return this;
     }
 
@@ -64,40 +57,17 @@ export class TweenGroup {
     }
 
     update(time?: number): this {
-        this._isUpdating = true;
-        try {
-            for (const tween of this._tweens) {
-                if (this._tweensToRemove.has(tween)) {
-                    continue;
-                }
-                tween.update(time);
-            }
-        } finally {
-            this._isUpdating = false;
-        }
-
-        if (this._tweensToRemove.size > 0) {
-            for (const tween of this._tweensToRemove) {
-                this._tweens.delete(tween);
-            }
-            this._tweensToRemove.clear();
-        }
-
-        if (this._tweensToAdd.size > 0) {
-            for (const tween of this._tweensToAdd) {
-                this._tweens.add(tween);
-            }
-            this._tweensToAdd.clear();
-        }
+        this._system.update(time);
         return this;
+    }
+
+    getSize(): number {
+        return this._system.getActiveTweenCount();
     }
 
     dispose(): void {
         this.stop();
-        this._tweens.clear();
+        this._system.clear();
         this._pausedTweens.clear();
-        this._tweensToAdd.clear();
-        this._tweensToRemove.clear();
-        this._isUpdating = false;
     }
 }
