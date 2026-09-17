@@ -153,3 +153,37 @@ const isPointInMesh = (mesh: ShapeMesh2D, px: number, py: number): boolean => {
     }
     return false;
 };
+
+describe('combineMeshes index width', () => {
+    it('produces valid indices for a polygon with many holes', () => {
+        const outerPoints = [];
+        for (let i = 0; i < 100; i++) {
+            const angle = (i / 100) * Math.PI * 2;
+            outerPoints.push({ x: Math.cos(angle) * 200, y: Math.sin(angle) * 200 });
+        }
+        const holes = [];
+        for (let h = 0; h < 20; h++) {
+            const cx = (h % 5 - 2) * 60;
+            const cy = (Math.floor(h / 5) - 1) * 60;
+            const ring = [];
+            for (let i = 0; i < 16; i++) {
+                const angle = (i / 16) * Math.PI * 2 * -1;
+                ring.push({ x: cx + Math.cos(angle) * 10, y: cy + Math.sin(angle) * 10 });
+            }
+            holes.push({ points: ring, winding: 'cw' as const });
+        }
+
+        const shape = createPolygonShape({
+            outer: { points: outerPoints, winding: 'ccw' },
+            holes,
+            stroke: { paint: '#000', width: 4 },
+        });
+
+        const mesh = buildStrokeMesh(shape)!;
+        const totalVertices = mesh.vertexCount;
+        for (let i = 0; i < mesh.indices.length; i++) {
+            expect(mesh.indices[i] as number).toBeLessThan(totalVertices);
+            expect(mesh.indices[i] as number).toBeGreaterThanOrEqual(0);
+        }
+    });
+});

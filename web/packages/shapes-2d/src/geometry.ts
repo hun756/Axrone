@@ -156,7 +156,8 @@ const combineMeshes = (meshes: ShapeMesh2D[]): ShapeMesh2D => {
     }
 
     const positions = new Float32Array(totalVertices * 2);
-    const indices = new Uint16Array(totalIndices);
+    const useUint32 = totalVertices > 65535;
+    const indices = useUint32 ? new Uint32Array(totalIndices) : new Uint16Array(totalIndices);
     let vertexOffset = 0;
     let indexOffset = 0;
     let positionOffset = 0;
